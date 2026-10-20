@@ -65,17 +65,63 @@ export interface ScoreGames {
   gamesTo?: number;
   playerScores: Cells;
   opponentScores: Cells;
+  /**
+   * Tiebreak points. Only the save check passes them (through `scoreGames`):
+   * with them, a third set at 1-0 and no points is open until
+   * `matchTiebreakConfirmed` says it was a match tiebreak (`bareMatchTiebreak`).
+   * Without them — the scorecard's own column count — 1-0 is a finished set.
+   */
+  playerTiebreaks?: Cells;
+  opponentTiebreaks?: Cells;
+  matchTiebreakConfirmed?: boolean;
 }
 
 /** The form's score, read the one way: an unparseable format is best of 3. */
 export function scoreGames(
-  formData: Pick<FormData, "bestOf" | "playerScores" | "opponentScores">,
+  formData: Pick<FormData, "bestOf" | "playerScores" | "opponentScores"> &
+    Partial<
+      Pick<
+        FormData,
+        "playerTiebreaks" | "opponentTiebreaks" | "matchTiebreakConfirmed"
+      >
+    >,
 ): ScoreGames {
   return {
     bestOf: parseInt(formData.bestOf, 10) || 3,
     playerScores: formData.playerScores,
     opponentScores: formData.opponentScores,
+    playerTiebreaks: formData.playerTiebreaks,
+    opponentTiebreaks: formData.opponentTiebreaks,
+    matchTiebreakConfirmed: formData.matchTiebreakConfirmed,
   };
+}
+
+/**
+ * Does the deciding set read 1-0 with no tiebreak points on either side?
+ *
+ * That is a match tiebreak recorded without its points — or a match that
+ * stopped one game into a real third set. The games cannot tell them apart, so
+ * the save check asks (`ScoreCheckNotice`). Only when tiebreaks are passed: a
+ * caller without them has no way to know the points are missing.
+ */
+export function bareMatchTiebreak(input: ScoreGames): boolean {
+  const i = 2;
+  if (!playsMatchTiebreak(input.bestOf, i)) return false;
+  if (!input.playerTiebreaks || !input.opponentTiebreaks) return false;
+  const p = input.playerScores[i];
+  const o = input.opponentScores[i];
+  if (p == null || o == null || Math.max(p, o) !== 1 || Math.min(p, o) !== 0)
+    return false;
+  return input.playerTiebreaks[i] == null && input.opponentTiebreaks[i] == null;
+}
+
+/**
+ * Can this set be a 1-0 match tiebreak? Only the deciding set of a best of 3 —
+ * the one format that plays a match tiebreak in place of a set. Anywhere else
+ * 1-0 is just one game into a set, so it must not open a TB box or end the set.
+ */
+export function playsMatchTiebreak(bestOf: number, index: number): boolean {
+  return bestOf === 3 && index === 2;
 }
 
 /**
@@ -85,8 +131,8 @@ export function scoreGames(
  * points don't change who took it). Anything else — 5-4, 6-5, one side still
  * blank — is unfinished.
  *
- * 1-0 is a match tiebreak played as a set, and counts as finished without its
- * points. That is how every score source spells one: a line scored courtside
+ * 1-0 in the set `playsMatchTiebreak` names (pass `matchTiebreak`) is a match
+ * tiebreak played as a set, and counts as finished without its points. That is how every score source spells one: a line scored courtside
  * arrives with games and no tiebreak points at all (`EventPreset.score`), the
  * scorecard itself opens the TB column and moves focus there the moment 1-0 is
  * typed (`isTiebreakSet`), and stored matches keep only the losing side's
@@ -100,6 +146,7 @@ export function setWinner(
   player: number | null | undefined,
   opponent: number | null | undefined,
   gamesTo = 6,
+  matchTiebreak = false,
 ): "player" | "opponent" | null {
   if (player == null || opponent == null || player === opponent) return null;
   const high = Math.max(player, opponent);
@@ -107,7 +154,7 @@ export function setWinner(
   const over =
     (high >= gamesTo && high - low >= 2) ||
     (high === gamesTo + 1 && (low === gamesTo - 1 || low === gamesTo)) ||
-    (high === 1 && low === 0);
+    (matchTiebreak && high === 1 && low === 0);
   if (!over) return null;
   return player > opponent ? "player" : "opponent";
 }
@@ -118,20 +165,25 @@ export function setWinner(
  * `scoreColumns`, `firstOpenSet` and `scoreUndecided` all read, so they cannot
  * disagree about where the match stands.
  */
-function progress({
-  bestOf,
-  gamesTo,
-  playerScores,
-  opponentScores,
-}: ScoreGames): {
+function progress(input: ScoreGames): {
   finished: number;
   decided: boolean;
 } {
+  const { bestOf, gamesTo, playerScores, opponentScores } = input;
+  // An unanswered bare 1-0 deciding set is still open (`bareMatchTiebreak`).
+  const openTiebreak =
+    !input.matchTiebreakConfirmed && bareMatchTiebreak(input);
   const toWin = Math.ceil(bestOf / 2);
   let player = 0;
   let opponent = 0;
   for (let i = 0; i < bestOf; i++) {
-    const winner = setWinner(playerScores[i], opponentScores[i], gamesTo);
+    if (openTiebreak && i === 2) return { finished: i, decided: false };
+    const winner = setWinner(
+      playerScores[i],
+      opponentScores[i],
+      gamesTo,
+      playsMatchTiebreak(bestOf, i),
+    );
     if (!winner) return { finished: i, decided: false };
     if (winner === "player") player++;
     else opponent++;

@@ -211,6 +211,7 @@ const START_OVER_FIELDS = [
   "result",
   "retiredSide",
   "stopReason",
+  "matchTiebreakConfirmed",
   "videoStartSeconds",
   "videoEndSeconds",
   "fixedCamera",

@@ -137,6 +137,7 @@ import {
 import { AnimatedHeight } from "./AnimatedHeight";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
 import {
+  bareMatchTiebreak,
   firstOpenSet,
   isStoppedResult,
   offersOneSet,
@@ -1029,6 +1030,10 @@ function DetailsStepContentImpl({
     (attachedLine?.eventKind ?? line?.eventKind) === "dual" &&
     Boolean(lineProgramKey);
   const fromLine = Boolean(attachedLine || line);
+  // An event that declared its scoring owns it; one that left it blank does
+  // not, or the required Scoring field would read "Not set" with no way to
+  // answer it and Save match would never enable.
+  const lineOwnsScoring = (attachedLine ?? line)?.adScoring != null;
   const [pendingFormat, setPendingFormat] = useState<string | null>(null);
   const admin = useAdminWizardMode();
   const lookupScope = useMemo(
@@ -1574,6 +1579,13 @@ function DetailsStepContentImpl({
                 dualLine={
                   (attachedLine?.eventKind ?? line?.eventKind) === "dual"
                 }
+                bareTiebreak={bareMatchTiebreak(scoreGames(formData))}
+                onMatchTiebreak={() => {
+                  onInputChange("result", "");
+                  onInputChange("retiredSide", undefined);
+                  onInputChange("stopReason", undefined);
+                  onInputChange("matchTiebreakConfirmed", true);
+                }}
                 // Only off a line: a preset or attached line's event owns the
                 // format, so the score check never rewrites it.
                 offerOneSet={!fromLine && offersOneSet(scoreGames(formData))}
@@ -1597,6 +1609,7 @@ function DetailsStepContentImpl({
                 playerName={subject.name}
                 opponentName={formData.opponentName}
                 onAnswer={(result, stopReason) => {
+                  onInputChange("matchTiebreakConfirmed", undefined);
                   onInputChange("result", result);
                   onInputChange("retiredSide", undefined);
                   onInputChange("stopReason", stopReason);
@@ -2173,7 +2186,7 @@ function DetailsStepContentImpl({
               onChange={changeFormat}
             />
           )}
-          {fromLine ? (
+          {lineOwnsScoring ? (
             <ReadCell
               label="Scoring"
               required
