@@ -69,7 +69,6 @@ import {
   nextReviewStop,
   openReviewItems,
   reviewStep,
-  type ReviewAnswer,
   type ReviewStep,
 } from "@/lib/services/labels/review-step";
 import {

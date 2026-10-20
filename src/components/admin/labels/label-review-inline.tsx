@@ -6,7 +6,6 @@ import {
 } from "@/lib/services/labels/review-step";
 import {
   isLiveShot,
-  liveShotsInOrder,
   type LabelPoint,
   type LabelShot,
 } from "@/lib/services/labels/session";
@@ -126,7 +125,6 @@ export function inlineReviewAnchor(
 
 // ── Copy ────────────────────────────────────────────────────────────────────
 
-/** An answer's ink: amber for the reading the data supports, Dismiss quiet. */
 /** What a note says: the end to place, else what the step's item asks. */
 export function reviewNoteText(
   step: ReviewStep | null,
