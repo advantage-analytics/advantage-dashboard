@@ -126,8 +126,10 @@ export function seededScorePoints(
       server: point.seed.server,
       winner: point.seed.winner,
       ending: point.seed.ending,
-      // A seeded point is always an ordinary game (seed.ts).
-      gameType: "game",
+      // The type the point was seeded with: `match_tiebreak` in the deciding
+      // set the entered score spells as one (seed.ts); a seed older than the
+      // key, and every other set, an ordinary game.
+      gameType: point.seed.game_type ?? "game",
     });
   }
   return seeded;

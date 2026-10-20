@@ -353,3 +353,26 @@ test.describe("stepKey and advanceAfterAnswer", () => {
     expect(next?.item.id).toBe(4);
   });
 });
+
+test("a missing-shot step's key names its slot, so answering one gap lands on the next", () => {
+  const item = {
+    id: 1 as const,
+    question: "Missing shot?",
+    tone: "data" as const,
+    state: "open" as const,
+    members: [],
+  };
+  const at = (afterShotId: string) => ({
+    item,
+    target: {
+      shotId: null,
+      place: null,
+      slot: { afterShotId, hitter: "p2" as const, kind: null },
+    },
+  });
+  expect(stepKeyOf("pt", at("s5"))).not.toBe(stepKeyOf("pt", at("s6")));
+  expect(
+    advanceAfterAnswer(stepKeyOf("pt", at("s5")), stepKeyOf("pt", at("s6"))),
+  ).toBe("advance");
+  expect(stepKeyOf("pt", { item })).toBe(stepKeyOf("pt", { item }));
+});

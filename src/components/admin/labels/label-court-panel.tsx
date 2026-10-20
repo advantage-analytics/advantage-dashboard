@@ -4,11 +4,6 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { ArrowUpDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Kbd } from "@/components/ui/kbd";
-import type {
-  ReviewAnswer,
-  ReviewAnswerKind,
-  ReviewStep,
-} from "@/lib/services/labels/review-step";
 import {
   isLetServe,
   isLiveShot,
@@ -17,8 +12,7 @@ import {
   type LabelShot,
 } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
-import { behindBaseline, type CourtPoint } from "./court-geometry";
-import { BlackTextAction, type BlackTextActionInk } from "./label-black-parts";
+import type { CourtPoint } from "./court-geometry";
 import {
   courtSlide,
   isEstimate,
@@ -33,7 +27,8 @@ import {
   courtMarksKey,
   parseCourtMarksKey,
 } from "./label-court-marks";
-import { STROKE_LABEL, type SideNames } from "./label-format";
+import type { SideNames } from "./label-format";
+import { PointInfoLine, type PointInfo } from "./label-point-info";
 import { RAIL_TONE_CLASS } from "./label-rail-tone";
 import { STROKE_KEY_HINTS } from "./stroke-keys";
 import type { VideoClock } from "./video-clock";
@@ -57,13 +52,11 @@ import type { VideoClock } from "./video-clock";
  *   switch, which calls the end's position an estimate (`unclear`).
  * - With a stroke selected, editable or not, the court shows that stroke alone
  *   at full strength; one with no coordinates yet is a blank court.
- * - With a review step on the open point (`step`, review-step.ts
- *   `reviewStep`) the panel is two columns (layout A): the step on the left —
- *   the stroke it is about, its question and "n of m", one line of
- *   explanation, its answers as text actions and what comes after it — and
- *   the court on the right, at the same box size, with the same foot. An
- *   answer goes to `onAnswer`, which makes its writes. With no step the panel
- *   is the readout, the court and the foot alone.
+ * - Not placing, with `info`: one quiet line under the header about the open
+ *   point — its score, server, how far the rally has got and what is still
+ *   to review (`pointInfoLine`, label-point-info.tsx). The review step itself
+ *   is asked in the rail (`ReviewInlineBlock`, label-review-inline.tsx), never
+ *   here: while it is open this panel follows the film and takes no click.
  */
 
 /** No point open: one shared empty list, so the marks memo holds. */
@@ -184,84 +177,8 @@ export function isPlacing(
   return editable && selectedStroke(point, placement) !== null;
 }
 
-// ── The review column ───────────────────────────────────────────────────────
-
-/** The count a point's review opened with: its id and its open items then. */
-export interface OpenedCount {
-  pointId: string | null;
-  total: number;
-}
-
-export const NO_OPENED_COUNT: OpenedCount = { pointId: null, total: 0 };
-
-/**
- * The count to keep after this render: the step's total when the point is a
- * new one (or more is open than it opened with), else what it opened with.
- * No step: nothing kept, so coming back to a point counts it afresh.
- */
-export function openedCount(
-  kept: OpenedCount,
-  pointId: string | null,
-  step: Pick<ReviewStep, "total"> | null,
-): OpenedCount {
-  if (!step) return kept.pointId === null ? kept : NO_OPENED_COUNT;
-  if (kept.pointId !== pointId || step.total > kept.total) {
-    return { pointId, total: step.total };
-  }
-  return kept;
-}
-
-/**
- * "n of m" against the count the point opened with: the items answered so
- * far plus one, of that count — answering moves 1 of 2 to 2 of 2.
- */
-export function stepCount(
-  opened: OpenedCount,
-  step: Pick<ReviewStep, "total">,
-): { index: number; total: number } {
-  const total = Math.max(opened.total, step.total);
-  return { index: total - step.total + 1, total };
-}
-
-/** An answer's ink: amber for the reading the data supports, Dismiss quiet. */
-export const ANSWER_INK: Record<ReviewAnswerKind, BlackTextActionInk> = {
-  suggested: "amber",
-  plain: "plain",
-  dismiss: "quiet",
-};
-
-/** "Shot 1 · Lee · first serve" — the stroke a step is about. */
-export function stepShotLine(
-  point: LabelPoint,
-  shotId: string | null,
-  names: SideNames,
-  ghosts = true,
-): string | null {
-  if (shotId === null) return null;
-  const live = liveShots(point, ghosts);
-  const index = live.findIndex((shot) => shot.id === shotId);
-  if (index === -1) return null;
-  const shot = live[index];
-  return [
-    `Shot ${index + 1}`,
-    shot.hitter ? names[shot.hitter] : null,
-    shot.stroke ? STROKE_LABEL[shot.stroke].toLowerCase() : null,
-  ]
-    .filter((part) => part !== null)
-    .join(" · ");
-}
-
-/** "7.1 m back · 2.4 m off centre" — a contact placed behind its baseline. */
-export function contactDepthReadout(
-  half: PlacementState["half"],
-  contact: CourtPoint,
-): string | null {
-  const back = behindBaseline(half, contact.y);
-  if (back <= 0) return null;
-  return `${back.toFixed(1)} m back · ${Math.abs(contact.x).toFixed(1)} m off centre`;
-}
-
-const TARGET_WORD: Record<PlacementTarget, string> = {
+/** The end being placed, as the switch and the placing lines name it. */
+export const TARGET_WORD: Record<PlacementTarget, string> = {
   contact: "Contact",
   landing: "Landing",
 };
@@ -273,8 +190,7 @@ export function LabelCourtPanel({
   editable,
   playingShotId = null,
   ghosts = true,
-  step = null,
-  onAnswer,
+  info = null,
   onEstimate,
   clock,
   onPlace,
@@ -295,10 +211,8 @@ export function LabelCourtPanel({
    * (`drawsGhosts`): then they take no number here, as on the rail.
    */
   ghosts?: boolean;
-  /** The open point's review step (`reviewStep`); null with nothing open. */
-  step?: ReviewStep | null;
-  /** Makes an answer's writes. Absent (read-only): the answers are not drawn. */
-  onAnswer?: (answer: ReviewAnswer) => void;
+  /** One line about the open point, drawn under the header while not placing. */
+  info?: PointInfo | null;
   /**
    * "Off screen, so this is an estimate" on the end being placed. Absent:
    * the box is not drawn.
@@ -334,14 +248,6 @@ export function LabelCourtPanel({
   const [zoomAtMount] = useState(placing);
   const [zoomSwitched, setZoomSwitched] = useState(false);
   if (!zoomSwitched && placing !== zoomAtMount) setZoomSwitched(true);
-  // "n of m": the count the point's review opened with, latched in render.
-  const pointId = point?.id ?? null;
-  const [opened, setOpened] = useState<OpenedCount>(() =>
-    openedCount(NO_OPENED_COUNT, pointId, step),
-  );
-  const keep = openedCount(opened, pointId, step);
-  if (keep !== opened) setOpened(keep);
-
   // The marks the film is showing right now, as a string snapshot: React
   // re-renders this body only when an opacity steps.
   const marksSnapshot = () => courtMarksKey(courtMarksAt(shots, clock.get()));
@@ -402,56 +308,13 @@ export function LabelCourtPanel({
     <>
       <div className="flex h-6 shrink-0 items-center gap-3 text-[10px] text-white/55">
         {placing ? (
-          <>
-            <span
-              role="group"
-              aria-label="What you are placing"
-              data-court-steps=""
-              className="inline-flex rounded-[7px] bg-white/[0.08] p-0.5"
-            >
-              {(["contact", "landing"] as const).map((target) => {
-                const on = placement.target === target;
-                return (
-                  <button
-                    key={target}
-                    type="button"
-                    aria-pressed={on}
-                    data-court-step={target}
-                    onClick={() => onTarget(target)}
-                    className={cn(
-                      "h-5 cursor-pointer rounded-[5px] px-[9px] text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                      on
-                        ? "bg-white/[0.16] font-medium text-white"
-                        : "text-white/60 hover:text-white",
-                    )}
-                  >
-                    {TARGET_WORD[target]}
-                  </button>
-                );
-              })}
-            </span>
-            {step ? null : estimate}
-            <span className="flex-1" />
-            <button
-              type="button"
-              aria-pressed={placement.flipped}
-              data-court-flip=""
-              onClick={onFlip}
-              className={cn(
-                "inline-flex h-6 cursor-pointer items-center gap-[5px] rounded-[6px] px-2 text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                placement.flipped
-                  ? "bg-white/[0.16] text-white"
-                  : "text-white/70 hover:bg-white/[0.08] hover:text-white",
-              )}
-            >
-              <ArrowUpDown
-                className="size-[13px]"
-                strokeWidth={1.6}
-                aria-hidden="true"
-              />
-              Flip side
-            </button>
-          </>
+          <CourtEndControls
+            placement={placement}
+            onTarget={onTarget}
+            onFlip={onFlip}
+          >
+            {estimate}
+          </CourtEndControls>
         ) : (
           <span
             data-court-legend=""
@@ -503,162 +366,6 @@ export function LabelCourtPanel({
     </span>
   );
 
-  if (step && point) {
-    const count = stepCount(keep, step);
-    const shotLine = stepShotLine(point, step.target.shotId, names, ghosts);
-    const score = step.item.tone === "score";
-    const contact =
-      placing &&
-      placement.target === "contact" &&
-      selected?.contactX != null &&
-      selected.contactY != null
-        ? contactDepthReadout(placement.half, {
-            x: selected.contactX,
-            y: selected.contactY,
-          })
-        : null;
-    const answers = onAnswer ? step.answers : [];
-    // The short ball's readout is the step's own line, in the box.
-    const side = placing
-      ? `${TARGET_WORD[placement.target]} · ${
-          slide?.kind === "shank" ? "across the net" : (readout.subtitle ?? "")
-        }`
-      : "Whole court";
-    return (
-      <div
-        data-court-panel=""
-        data-court-layout="review"
-        className={cn("flex min-h-0 flex-1 gap-8", RAIL_TONE_CLASS.dark)}
-      >
-        {live}
-        <div
-          data-court-review-column=""
-          className="flex w-[312px] min-w-0 shrink-0 flex-col gap-4 overflow-y-auto"
-        >
-          <div className="flex min-w-0 flex-col gap-[3px]">
-            <span
-              data-court-title=""
-              className="truncate text-[13px] leading-4 font-medium text-white"
-            >
-              Point {point.pointIndex + 1}
-            </span>
-            <span
-              data-court-subtitle=""
-              className="truncate text-[12px] leading-4 text-white/55"
-            >
-              {shotLine ?? readout.subtitle}
-            </span>
-          </div>
-          <div
-            data-court-review={step.item.id}
-            data-court-review-tone={step.item.tone}
-            className={cn(
-              "flex flex-col gap-2.5 rounded-[8px] px-4 py-3.5",
-              score ? "bg-[var(--rail-amber-wash-faint)]" : "bg-white/[0.05]",
-            )}
-          >
-            <div className="flex items-baseline justify-between gap-3">
-              <span
-                data-court-review-question=""
-                className="text-[14px] leading-5 font-medium text-white"
-              >
-                {step.question}
-              </span>
-              <span
-                data-court-review-count=""
-                className={cn(
-                  "mono tabular shrink-0 text-[11px]",
-                  score ? "text-[var(--rail-amber)]" : "text-white/55",
-                )}
-              >
-                {count.index} of {count.total}
-              </span>
-            </div>
-            <span
-              data-court-review-explanation=""
-              className="text-[12px] leading-[18px] text-white/60"
-            >
-              {step.explanation}
-            </span>
-            {/* The answer "Didn’t clear by …" says it, detail and all: the
-                readout line would say it twice. */}
-            {slide?.kind === "shank" &&
-            !step.answers.some((answer) => answer.id === "short") ? (
-              <span
-                data-court-shank=""
-                className="text-[12px] leading-[18px] font-medium text-[var(--rail-amber)]"
-              >
-                {readout.subtitle}
-              </span>
-            ) : null}
-            {estimate}
-            {contact ? (
-              <span
-                data-court-contact-readout=""
-                className="mono tabular text-[12px] text-white/75"
-              >
-                {contact}
-              </span>
-            ) : null}
-            {answers.length > 0 ? (
-              <div
-                data-court-review-answers=""
-                className="-ml-1 flex flex-wrap items-start gap-x-3.5 gap-y-2 pt-0.5"
-              >
-                {answers.map((answer) => (
-                  <span
-                    key={answer.id}
-                    className={cn(
-                      "flex min-w-0 flex-col items-start gap-0.5",
-                      answer.kind === "dismiss" && "ml-auto",
-                    )}
-                  >
-                    <BlackTextAction
-                      ink={ANSWER_INK[answer.kind]}
-                      large
-                      data-court-review-answer={answer.kind}
-                      data-court-review-answer-id={answer.id}
-                      aria-label={`${answer.label}: ${step.question}`}
-                      onClick={() => onAnswer?.(answer)}
-                    >
-                      {answer.label}
-                    </BlackTextAction>
-                    {answer.detail ? (
-                      <span
-                        data-court-review-detail=""
-                        className="px-1 text-[11px] leading-[14px] text-white/45"
-                      >
-                        {answer.detail}
-                      </span>
-                    ) : null}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </div>
-          {step.then ? (
-            <span
-              data-court-review-then=""
-              className="text-[12px] text-white/50"
-            >
-              {step.then}
-            </span>
-          ) : null}
-        </div>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <span
-            data-court-side=""
-            className="h-4 shrink-0 truncate text-[12px] leading-4 text-white/60"
-          >
-            {side}
-          </span>
-          {court}
-          {foot}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
       data-court-panel=""
@@ -680,9 +387,81 @@ export function LabelCourtPanel({
           {readout.subtitle}
         </span>
       </div>
+      {info && !placing ? <PointInfoLine info={info} /> : null}
 
       {court}
       {foot}
     </div>
+  );
+}
+
+/**
+ * The Contact / Landing switch and "Flip side", on one 24px row: the court
+ * panel's foot while it places, and the inline review block's under its
+ * court. `children` sit between the switch and Flip side (the panel's
+ * estimate box).
+ */
+export function CourtEndControls({
+  placement,
+  onTarget,
+  onFlip,
+  children,
+}: {
+  placement: PlacementState;
+  onTarget: (target: PlacementTarget) => void;
+  onFlip: () => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <>
+      <span
+        role="group"
+        aria-label="What you are placing"
+        data-court-steps=""
+        className="inline-flex rounded-[7px] bg-white/[0.08] p-0.5"
+      >
+        {(["contact", "landing"] as const).map((target) => {
+          const on = placement.target === target;
+          return (
+            <button
+              key={target}
+              type="button"
+              aria-pressed={on}
+              data-court-step={target}
+              onClick={() => onTarget(target)}
+              className={cn(
+                "h-5 cursor-pointer rounded-[5px] px-[9px] text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                on
+                  ? "bg-white/[0.16] font-medium text-white"
+                  : "text-white/60 hover:text-white",
+              )}
+            >
+              {TARGET_WORD[target]}
+            </button>
+          );
+        })}
+      </span>
+      {children}
+      <span className="flex-1" />
+      <button
+        type="button"
+        aria-pressed={placement.flipped}
+        data-court-flip=""
+        onClick={onFlip}
+        className={cn(
+          "inline-flex h-6 cursor-pointer items-center gap-[5px] rounded-[6px] px-2 text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+          placement.flipped
+            ? "bg-white/[0.16] text-white"
+            : "text-white/70 hover:bg-white/[0.08] hover:text-white",
+        )}
+      >
+        <ArrowUpDown
+          className="size-[13px]"
+          strokeWidth={1.6}
+          aria-hidden="true"
+        />
+        Flip side
+      </button>
+    </>
   );
 }

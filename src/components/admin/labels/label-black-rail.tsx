@@ -140,6 +140,7 @@ export function LabelBlackRail({
   points,
   scores,
   adScoring = true,
+  matchTiebreakSet = null,
   playOnLets,
   fileOffset = 0,
   names,
@@ -149,7 +150,9 @@ export function LabelBlackRail({
   editable = false,
   selectedShotId = null,
   armedSlotAfterShotId = null,
+  reviewInline = null,
   onSelectShot,
+  onExitReview,
   onPatchPoint,
   onPatchShot,
   operations,
@@ -207,6 +210,12 @@ export function LabelBlackRail({
   /** `labelScores(points, adScoring)`, computed once by the console. */
   scores: LabelScores;
   adScoring?: boolean;
+  /**
+   * The deciding set the entered score spells as a match tiebreak
+   * (set-scores.ts `matchTiebreakSet`), computed once by the console: the
+   * fold offers it and the shift and pull slots leave it alone.
+   */
+  matchTiebreakSet?: number | null;
   /** `session.playOnLets`: false offers `Let` on a serve row's result. */
   playOnLets?: boolean;
   /** `LabelVideo.startTimeSeconds`: rows print times on the file's clock. */
@@ -220,8 +229,19 @@ export function LabelBlackRail({
   selectedShotId?: string | null;
   /** The "Missing shot?" slot a flag jump armed (`EditContext`). */
   armedSlotAfterShotId?: string | null;
+  /**
+   * The console's inline review block for the open point
+   * (`ReviewInlineBlock`), drawn in its well under the stroke it is about.
+   */
+  reviewInline?: {
+    pointId: string;
+    afterShotId: string | null;
+    node: React.ReactNode;
+  } | null;
   /** `target` opens the court on that end: a position cell was clicked. */
   onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
+  /** A click into the row a flag jump selected: leave review mode. */
+  onExitReview?: () => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   /** Absent: no ⋯ menu, no tick, no Add shot — the rows are read-only. */
@@ -334,6 +354,7 @@ export function LabelBlackRail({
       selectedShotId,
       armedSlotAfterShotId,
       onSelectShot,
+      onExitReview,
       onPatchPoint,
       onPatchShot,
       operations: editable ? operations : undefined,
@@ -344,6 +365,7 @@ export function LabelBlackRail({
       points,
       scores: pointScores,
       adScoring,
+      matchTiebreakSet,
       playOnLets,
       tone,
       fileOffset,
@@ -354,6 +376,7 @@ export function LabelBlackRail({
       selectedShotId,
       armedSlotAfterShotId,
       onSelectShot,
+      onExitReview,
       onPatchPoint,
       onPatchShot,
       operations,
@@ -364,6 +387,7 @@ export function LabelBlackRail({
       points,
       pointScores,
       adScoring,
+      matchTiebreakSet,
       playOnLets,
       tone,
       fileOffset,
@@ -378,16 +402,17 @@ export function LabelBlackRail({
     () => openPointSuggestions(points, marks),
     [points, marks],
   );
-  // The tiebreak at 6–6, by the first point it folds: on editable sessions.
+  // The tiebreak at 6–6 and the entered match tiebreak, by the first point
+  // each folds: on editable sessions.
   const foldBefore = useMemo(
     () =>
       new Map(
-        (editable ? tiebreakFolds(points, adScoring) : []).map((fold) => [
-          fold.pointIds[0],
-          fold,
-        ]),
+        (editable
+          ? tiebreakFolds(points, adScoring, matchTiebreakSet)
+          : []
+        ).map((fold) => [fold.pointIds[0], fold]),
       ),
-    [editable, points, adScoring],
+    [editable, points, adScoring, matchTiebreakSet],
   );
   // A game band in the air, and the point its drop would land above — set
   // only where `planGameBoundary` has something to move.
@@ -434,14 +459,20 @@ export function LabelBlackRail({
   // The games that run over, by their first leftover point. Read off the
   // labeller's own rows, so on every editable session — marks on or off.
   const overflowBefore = useMemo(
-    () => (editable ? overflowBeforePoints(points, adScoring) : NO_OVERFLOW),
-    [editable, points, adScoring],
+    () =>
+      editable
+        ? overflowBeforePoints(points, adScoring, matchTiebreakSet)
+        : NO_OVERFLOW,
+    [editable, points, adScoring, matchTiebreakSet],
   );
   // The games that end short, by their last live point. On the same sessions
   // as the slot above.
   const underflowAfter = useMemo(
-    () => (editable ? underflowAfterPoints(points, adScoring) : NO_UNDERFLOW),
-    [editable, points, adScoring],
+    () =>
+      editable
+        ? underflowAfterPoints(points, adScoring, matchTiebreakSet)
+        : NO_UNDERFLOW,
+    [editable, points, adScoring, matchTiebreakSet],
   );
   // The chip's "Go to game": the band (or slot) carrying the game's key,
   // brought to the scroller's top.
@@ -761,6 +792,11 @@ export function LabelBlackRail({
                           marks={marks}
                           playingShotId={playingShotId}
                           animate={openMoved}
+                          inline={
+                            reviewInline?.pointId === point.id
+                              ? reviewInline
+                              : null
+                          }
                         />
                       ) : null}
                     </BlackPointRow>
@@ -994,11 +1030,12 @@ export function bandOutcomeShown(
 function overflowBeforePoints(
   points: readonly LabelPoint[],
   adScoring: boolean,
+  matchTiebreakSet: number | null,
 ): ReadonlyMap<string, OverflowSlot> {
   const before = new Map<string, OverflowSlot>();
-  for (const overflow of gameOverflow(points, adScoring)) {
+  for (const overflow of gameOverflow(points, adScoring, matchTiebreakSet)) {
     const from = overflow.leftovers[0].id;
-    const plan = planGameShift(points, adScoring, from);
+    const plan = planGameShift(points, adScoring, from, matchTiebreakSet);
     before.set(from, {
       overflow,
       summary: "error" in plan ? null : plan.summary,

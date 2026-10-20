@@ -74,6 +74,11 @@ export interface EditContext {
   armedSlotAfterShotId?: string | null;
   /** `target` opens the court on that end: a position cell was clicked. */
   onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
+  /**
+   * The labeller clicked into the row a flag jump selected: their own
+   * selection now, so the console leaves review mode (nothing moves on).
+   */
+  onExitReview?: () => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   operations?: LabelRowOperations;
@@ -93,6 +98,12 @@ export interface EditContext {
   scores: ReadonlyMap<string, LabelPointScore>;
   /** `session.adScoring`. Absent means ad scoring. */
   adScoring?: boolean;
+  /**
+   * The deciding set the entered score spells as a match tiebreak
+   * (set-scores.ts `matchTiebreakSet`); null or absent for none. The fold's
+   * set, so the menu offers no "move on" there.
+   */
+  matchTiebreakSet?: number | null;
   /**
    * `session.playOnLets`. False (and absent) means lets are replayed, so a
    * serve row's result offers `Let`; true, the result is the landing's alone.

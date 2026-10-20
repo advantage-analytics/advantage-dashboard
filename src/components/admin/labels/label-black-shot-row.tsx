@@ -228,9 +228,16 @@ export function BlackShotsWell({
   marks = null,
   playingShotId = null,
   animate = true,
+  inline = null,
 }: {
   point: LabelPoint;
   edit: EditContext;
+  /**
+   * The console's inline review block (`ReviewInlineBlock`), drawn under the
+   * row of `afterShotId` — after that stroke's hint and suggestion rows — or
+   * at the well's end when null or not one of this point's strokes.
+   */
+  inline?: { afterShotId: string | null; node: React.ReactNode } | null;
   /** Animate the well's opening. Off for the point open on page load. */
   animate?: boolean;
   /** The session's marks; null draws no hint line, slot or ghost. */
@@ -278,6 +285,14 @@ export function BlackShotsWell({
   // The strokes that went as dead balls after the point, at the end of the
   // rally: from each of them, Undo puts back every one to the end at once.
   const runStart = deadBallRunStart(point.shots);
+  // The review block's row: the stroke it is about, else the well's end.
+  const inlineAfter =
+    inline && point.shots.some((shot) => shot.id === inline.afterShotId)
+      ? inline.afterShotId
+      : null;
+  const inlineRow = inline ? (
+    <Fragment key="review-inline">{inline.node}</Fragment>
+  ) : null;
   for (const [i, shot] of point.shots.entries()) {
     // A stroke the labeller added and then deleted leaves no row.
     if (isWithdrawnAdd(shot)) continue;
@@ -334,7 +349,9 @@ export function BlackShotsWell({
         />,
       );
     }
+    if (inlineAfter !== null && inlineAfter === shot.id) rows.push(inlineRow);
   }
+  if (inlineRow && inlineAfter === null) rows.push(inlineRow);
   const addArrival = rowArrival(arrive());
   return (
     <div
@@ -425,8 +442,11 @@ export function BlackShotRow({
   const lit = selected || playing;
   const fault = isFault(shot);
   const changed = shot.status === "edited" || shot.status === "added";
+  // A click on the row already selected (the one a flag jump landed on) is
+  // the labeller taking it over: review mode ends, the selection stays.
   const select = () => {
     if (!selected) onSelectShot?.(shot.id);
+    else edit.onExitReview?.();
   };
   // A position cell selects the row on its own end, even when already selected.
   const pick = (target: "contact" | "landing") =>

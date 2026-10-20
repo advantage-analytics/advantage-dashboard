@@ -836,3 +836,14 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
     ).toEqual({ error: "Invalid shot id." });
   });
 });
+
+test("a seeded game type is never part of the point reset's write", () => {
+  const plan = planPointReset({
+    status: "edited",
+    seed: { ...POINT_SEED, game_type: "match_tiebreak" },
+    shots: [],
+  });
+  if ("error" in plan) throw new Error(plan.error);
+  expect(plan.write).toEqual({ ...POINT_SEED, status: "unchanged" });
+  expect(plan.write).not.toHaveProperty("game_type");
+});

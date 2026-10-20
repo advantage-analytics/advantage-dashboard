@@ -66,6 +66,7 @@ import {
 } from "@/lib/services/labels/review-flow";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
+  nextReviewStop,
   openReviewItems,
   reviewStep,
   type ReviewAnswer,
@@ -203,6 +204,15 @@ import { LabelBlackView } from "./label-black-view";
 import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
 import { LabelCourtPanel, isPlacing } from "./label-court-panel";
+import type { PointInfo } from "./label-point-info";
+import {
+  NO_OPENED_COUNT,
+  ReviewInlineBlock,
+  inlineReviewAnchor,
+  openedCount,
+  stepCount,
+  type OpenedCount,
+} from "./label-review-inline";
 import { runReviewAnswer, type ReviewWriteHandlers } from "./review-answer";
 import { runReplay, type ReplayHandle } from "./review-replay";
 import { labelFilmStops } from "./label-film-stops";
@@ -221,7 +231,10 @@ import {
   stepFlag,
   type FlagStop,
 } from "@/lib/services/labels/flag-nav";
-import { sessionScoreMismatch } from "@/lib/services/labels/set-scores";
+import {
+  matchTiebreakSet,
+  sessionScoreMismatch,
+} from "@/lib/services/labels/set-scores";
 import {
   planTiebreakFold,
   tiebreakFolds,
@@ -392,6 +405,7 @@ export function LabelConsole({
   initialPointFocus,
   initialLayoutMode,
   initialRailWidth,
+  initialReviewMode = false,
   headerAction,
   upload = null,
 }: {
@@ -427,6 +441,8 @@ export function LabelConsole({
   initialLayoutMode?: LabelLayoutMode;
   /** The rail's width on first render, in px — for specs. */
   initialRailWidth?: number;
+  /** Start in review mode (`reviewMode`), as a flag jump would leave it. Specs only. */
+  initialReviewMode?: boolean;
   /** The header's trailing link, rendered by the page. */
   headerAction?: ReactNode;
 }) {
@@ -502,6 +518,14 @@ export function LabelConsole({
     finalScore: session.finalScore,
     videoEndsEarly: session.videoEndsEarly,
   });
+  // The deciding set the match record spells as a 10-point match tiebreak
+  // (set-scores.ts) — never the labeller's own `final_score`, which is games
+  // only. "Make it a match tiebreak" offers to fold it, and the shift and
+  // pull slots leave its vendor-cut games alone.
+  const matchTiebreakSetNumber = useMemo(
+    () => matchTiebreakSet(session.matchScore, session.bestOf),
+    [session.matchScore, session.bestOf],
+  );
   // The current point while nothing is playing: see the file comment.
   const [restPointId, setRestPointId] = useState<string | null>(() =>
     initialExpandedPointId !== undefined
@@ -521,6 +545,14 @@ export function LabelConsole({
     placementOf(session.points, initialSelectedShotId),
   );
   const [armedSlot, setArmedSlot] = useState<ArmedSlot | null>(null);
+  // Review mode: a flag jump (] [ ' ; or a header flag row, `findGap` with
+  // `arm`) enters it, and while it is on the open point's review step is
+  // asked inline in the rail (`ReviewInlineBlock`), an answer lands on the
+  // next open item — the next flagged point's too — and the inline court is
+  // the one placement surface. The labeller's own selection ends it: a row
+  // or cell click, a point row, ↑ / ↓ (`selectShot`, `togglePoint`), and
+  // nothing then advances away from what they chose. The next jump re-enters.
+  const [reviewMode, setReviewMode] = useState(initialReviewMode);
   // A step's end-of-point replay while it runs (review-replay.ts). A ref:
   // nothing renders from it, and it is let go from event handlers.
   const replay = useRef<ReplayHandle | null>(null);
@@ -542,7 +574,14 @@ export function LabelConsole({
   // about: once the rows have changed and the point asks something else,
   // the console lands on that (`advanceAfterAnswer`). Null until the next
   // such write — a refresh the labeller did not cause moves nothing.
-  const pendingAdvance = useRef<{ pointId: string; key: string } | null>(null);
+  // `force`: land whatever the rows say next, even on the same step — a
+  // stroke placed with no step about it (the one an answer added) is done
+  // with, and the console moves on from it.
+  const pendingAdvance = useRef<{
+    pointId: string;
+    key: string;
+    force?: boolean;
+  } | null>(null);
   const [saveStatus, dispatchSave] = useReducer(
     saveStatusReducer,
     INITIAL_SAVE_STATUS,
@@ -731,6 +770,7 @@ export function LabelConsole({
   // the rail, or re-follows when the point is the one already playing.
   function togglePoint(pointId: string) {
     cancelReplay();
+    setReviewMode(false);
     setArmedSlot(null);
     setPlacement(NO_PLACEMENT);
     setRestPointId(pointId);
@@ -743,12 +783,15 @@ export function LabelConsole({
   // Selecting a stroke starts an edit: it holds the rail and seeks the video to
   // the stroke; playback carries on as it was.
   // `seek: false` is a step's landing with a replay to run: the replay's own
-  // seek is the one that wins, so there is never a second.
+  // seek is the one that wins, so there is never a second. `review` is that
+  // landing's too: every other selection is the labeller's own and ends
+  // review mode.
   function selectShot(
     shotId: string,
     target?: PlacementTarget,
-    { seek = true }: { seek?: boolean } = {},
+    { seek = true, review = false }: { seek?: boolean; review?: boolean } = {},
   ) {
+    if (!review) setReviewMode(false);
     if (seek) cancelReplay();
     setArmedSlot(null);
     // Already selected: a position cell switches the court's end and nothing
@@ -781,8 +824,10 @@ export function LabelConsole({
   // An editor opening on a point row's own cells is focus landing in a form
   // control inside that row; the row's click handler ignores cell clicks, so
   // this is where that edit holds the rail.
+  // Stable, so the rail's memoised rows keep their props between renders.
+  const exitReview = useCallback(() => setReviewMode(false), []);
+
   function holdOnEditorFocus(event: FocusEvent<HTMLDivElement>) {
-    if (held) return;
     const target = event.target as Element;
     // A dropdown's trigger is a button (`SelectEditor`), not a form control.
     if (
@@ -792,6 +837,10 @@ export function LabelConsole({
     )
       return;
     if (!target.closest("[data-point-id]")) return;
+    // An edit of the labeller's own in a row ends review mode — but not the
+    // review block's own controls (its estimate box).
+    if (!target.closest("[data-review-inline]")) setReviewMode(false);
+    if (held) return;
     holdPoint(currentPointId);
   }
 
@@ -1414,7 +1463,12 @@ export function LabelConsole({
    */
   function shiftGameOverflow(fromPointId: string) {
     if (!operations) return;
-    const plan = planGameShift(points, session.adScoring, fromPointId);
+    const plan = planGameShift(
+      points,
+      session.adScoring,
+      fromPointId,
+      matchTiebreakSetNumber,
+    );
     if ("error" in plan) return refuse(plan.error);
     runGameShift(plan, () =>
       operations.shiftGameOverflow(session.id, fromPointId),
@@ -1428,10 +1482,16 @@ export function LabelConsole({
    */
   function foldTiebreak(setNumber: number) {
     if (!operations?.foldTiebreak) return;
-    const fold = tiebreakFolds(points, session.adScoring).find(
-      (f) => f.setNumber === setNumber,
-    );
-    if (!fold) return refuse("That set is not at 6–6 before an ordinary game.");
+    const fold = tiebreakFolds(
+      points,
+      session.adScoring,
+      matchTiebreakSetNumber,
+    ).find((f) => f.setNumber === setNumber);
+    if (!fold) {
+      return refuse(
+        "That set is not at 6–6 before an ordinary game, and the entered score does not make it a match tiebreak.",
+      );
+    }
     const plan = planTiebreakFold(points, fold);
     if ("error" in plan) return refuse(plan.error);
     const fold_ = operations.foldTiebreak;
@@ -1446,7 +1506,12 @@ export function LabelConsole({
    */
   function pullGamePoints(gameKey: string) {
     if (!operations) return;
-    const plan = planGamePull(points, gameKey, session.adScoring);
+    const plan = planGamePull(
+      points,
+      gameKey,
+      session.adScoring,
+      matchTiebreakSetNumber,
+    );
     if ("error" in plan) return refuse(plan.error);
     if ("kind" in plan) return refuse(GAME_PULL_ADD_POINT);
     runGameShift(plan, () => operations.pullGamePoints(session.id, gameKey));
@@ -1631,7 +1696,10 @@ export function LabelConsole({
       const after = findShot(points, target.slot.afterShotId);
       if (after?.videoTime != null) player.current?.seekTo(after.videoTime);
     } else if (target?.shotId && target.place) {
-      selectShot(target.shotId, target.place, { seek: film === null });
+      selectShot(target.shotId, target.place, {
+        seek: film === null,
+        review: true,
+      });
     } else if (target?.shotId) {
       // Nothing to place (a winner pick, the game order): the film goes to
       // the stroke and the court stays as it is — selecting it would arm
@@ -1643,7 +1711,11 @@ export function LabelConsole({
         player.current?.seekTo(shot.videoTime);
       }
     } else {
+      // A step about no stroke (a winner pick with nothing to play back, the
+      // game order): the stroke the last answer placed must not stay selected,
+      // or the block would keep asking where it was hit.
       setArmedSlot(null);
+      setPlacement(NO_PLACEMENT);
       if (film === null) seekToPointStart(point);
     }
     if (film && player.current) {
@@ -1687,6 +1759,8 @@ export function LabelConsole({
     holdPoint(target);
     if (arm) setFoldedPointId(null);
     pendingAdvance.current = null;
+    // A flag jump enters review mode; any other way here leaves it.
+    setReviewMode(Boolean(arm && editable && point && liveMarks));
     if (arm && editable && point && liveMarks) {
       landOnStep(
         point,
@@ -2350,8 +2424,11 @@ export function LabelConsole({
   // The rail's amber slots as stops, read off the rows once for the keys
   // here and the rail's header — marks or none.
   const slotJumpStops = useMemo(
-    () => (operable ? slotStops(points, session.adScoring) : NO_SLOT_STOPS),
-    [operable, points, session.adScoring],
+    () =>
+      operable
+        ? slotStops(points, session.adScoring, matchTiebreakSetNumber)
+        : NO_SLOT_STOPS,
+    [operable, points, session.adScoring, matchTiebreakSetNumber],
   );
   // The two lists the rail's header steps: what can move the score — the
   // amber flagged points, the set that doesn't add up and every amber slot
@@ -2663,12 +2740,20 @@ export function LabelConsole({
     const next = nextPlacement(placement, point, labelShotValues(shot));
     if (!next) return;
     stopReplay();
-    // A placement answers the step only on the stroke the step is about, and
-    // only once that stroke has both ends: a missing contact is placed first
-    // and its landing still to come must not be skipped by the advance, nor
-    // must a placement on some other stroke of the point move the console.
-    if (step?.target.shotId === shot.id && placesBothEnds(shot, next.patch)) {
-      noteAnswered();
+    // A placement answers the step only once its stroke has both ends: a
+    // missing contact is placed first and its landing still to come must not
+    // be skipped. On the step's own stroke the item is answered — in review
+    // mode the step is noted and the console moves on, outside it the queue
+    // only stops asking (the labeller chose this stroke; nothing lands for
+    // them). In review mode a stroke with no step about it (the one an
+    // answer added) forces the move on regardless.
+    if (placesBothEnds(shot, next.patch)) {
+      if (step?.target.shotId === shot.id) {
+        if (reviewMode) noteAnswered();
+        else closeQueuedItem();
+      } else if (reviewMode && inlineAnchor?.strokeId === shot.id) {
+        notePlaced();
+      }
     }
     setPlacement(next.state);
     void patchShot(shot.id, next.patch);
@@ -2684,7 +2769,6 @@ export function LabelConsole({
 
   // The same player, court panel and rail in both layouts, every callback
   // unchanged.
-  const placing = isPlacing(expanded, placement, editable);
   const videoPlayer = (
     <LabelVideoPlayer
       ref={player}
@@ -2734,6 +2818,17 @@ export function LabelConsole({
     [expanded, liveMarks, points, names, keep],
   );
   const stepKey = expanded ? stepKeyOf(expanded.id, step) : "";
+  // "n of m": the count the point's review opened with, latched in render.
+  const [opened, setOpened] = useState<OpenedCount>(NO_OPENED_COUNT);
+  const keptOpened = openedCount(opened, expanded?.id ?? null, step);
+  if (keptOpened !== opened) setOpened(keptOpened);
+  // Where the inline block sits in review mode, and the stroke it is about;
+  // null draws none, and the left court panel is then the labeller's.
+  const inlineAnchor =
+    reviewMode && expanded
+      ? inlineReviewAnchor(expanded, step, placement, drawsGhosts(liveMarks))
+      : null;
+  const reviewActive = inlineAnchor !== null;
   /** The step's item is answered: the queue stops asking it. */
   function closeQueuedItem() {
     if (!expanded || !step) return;
@@ -2750,22 +2845,44 @@ export function LabelConsole({
     pendingAdvance.current = { pointId: expanded.id, key: stepKey };
     closeQueuedItem();
   }
-  // Auto-advance: once a write made here has changed the rows (the
-  // optimistic apply, in the same commit as the click), the open point's
-  // step is read again. Another question still open on the point lands
-  // straight away (`landOnStep`: its stroke or slot, the court armed, its
-  // replay); nothing open leaves `]` to reach the next flagged point. Never
-  // from a refresh the labeller did not cause (`pendingAdvance` is null
-  // then), and never under a confirm or an open menu.
+  /** A stroke with no step about it placed: move on, whatever is next. */
+  function notePlaced() {
+    if (!expanded) return;
+    pendingAdvance.current = {
+      pointId: expanded.id,
+      key: stepKey,
+      force: true,
+    };
+  }
+  // Auto-advance, in review mode: once a write made here has changed the
+  // rows (the optimistic apply, in the same commit as the click), the open
+  // point's step is read again. Another question still open on the point
+  // lands straight away (`landOnStep`: its stroke or slot, the court armed,
+  // its replay); nothing open goes on to the next flagged point
+  // (`nextReviewStop`, through the same jump `]` makes). Never from a
+  // refresh the labeller did not cause (`pendingAdvance` is null then),
+  // never once they have selected something of their own (review mode off),
+  // and never under a confirm or an open menu.
   const landOnStepRef = useRef(landOnStep);
   landOnStepRef.current = landOnStep;
+  const reviewJumpRef = useRef((fromPointId: string) => void fromPointId);
+  reviewJumpRef.current = (fromPointId) => {
+    if (!liveMarks) return;
+    const stop = nextReviewStop(points, liveMarks, fromPointId, 1);
+    if (stop && stop.pointId !== fromPointId)
+      findGap(stop.pointId, { arm: true });
+  };
   useEffect(() => {
     const pending = pendingAdvance.current;
     if (!pending || !expanded || pending.pointId !== expanded.id) return;
-    const verdict = advanceAfterAnswer(pending.key, stepKey);
+    const verdict = pending.force
+      ? stepKey === ""
+        ? "done"
+        : "advance"
+      : advanceAfterAnswer(pending.key, stepKey);
     if (verdict === "stay") return;
     pendingAdvance.current = null;
-    if (verdict !== "advance" || confirm) return;
+    if (!reviewMode || confirm) return;
     if (
       document.querySelector(
         "[role='menu'], [role='dialog'], [role='alertdialog']",
@@ -2773,10 +2890,12 @@ export function LabelConsole({
     ) {
       return;
     }
-    landOnStepRef.current(expanded, step);
+    if (verdict === "advance") landOnStepRef.current(expanded, step);
+    else reviewJumpRef.current(expanded.id);
     // `step` and `expanded` move with `stepKey`; the key is the comparison.
+    // `points` is here for a forced advance, whose key does not move.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stepKey, confirm]);
+  }, [stepKey, points, confirm, reviewMode]);
   // The armed slot belongs to the open point; it goes with the point.
   if (armedSlot && armedSlot.pointId !== currentPointId) setArmedSlot(null);
   // An answer's writes, each through the console's own handler for it.
@@ -2793,7 +2912,9 @@ export function LabelConsole({
     if (!expanded) return;
     stopReplay();
     if (answer.writes.some((write) => write.write === "check")) {
-      // "Looks right" confirms the whole point: nothing left in its queue.
+      // "Looks right" confirms the whole point: nothing left in its queue,
+      // and once the tick has settled its marks the next flagged point lands.
+      noteAnswered();
       const pointId = expanded.id;
       setReviewQueue((queue) =>
         queue && queue.pointId === pointId ? { ...queue, keep: [] } : queue,
@@ -2819,16 +2940,39 @@ export function LabelConsole({
       estimatePatch(shot.unclear, placement.target, estimate),
     );
   }
+  // One line about the open point for the left panel while the film runs.
+  const pointInfo = useMemo<PointInfo | null>(() => {
+    if (!expanded) return null;
+    const live = liveShotsInOrder(expanded, drawsGhosts(liveMarks));
+    const at =
+      playing?.pointId === expanded.id
+        ? live.findIndex((shot) => shot.id === playing.shotId)
+        : -1;
+    return {
+      score: scores.points.get(expanded.id)?.scoreBefore ?? null,
+      server: expanded.server ? names[expanded.server] : null,
+      rallyLength: live.length,
+      rallySoFar: at === -1 ? null : at + 1,
+      // The same queue the review asks from (`keep`): a question an edit
+      // elsewhere on the point settled is still to review until answered.
+      openItems: liveMarks
+        ? openReviewItems(expanded, liveMarks, points, keep).length
+        : 0,
+    };
+  }, [expanded, liveMarks, playing, scores, names, points, keep]);
+  // While the inline block owns placement the left court follows the film
+  // with nothing selected: one placement surface at a time.
+  const panelPlacement = reviewActive ? NO_PLACEMENT : placement;
+  const placing = isPlacing(expanded, panelPlacement, editable);
   const courtPanel = (
     <LabelCourtPanel
       point={expanded}
       names={names}
-      placement={placement}
+      placement={panelPlacement}
       editable={editable}
       playingShotId={playing?.shotId ?? null}
       ghosts={drawsGhosts(liveMarks)}
-      step={step}
-      onAnswer={operable ? answerReview : undefined}
+      info={pointInfo}
       onEstimate={editable ? setEstimate : undefined}
       clock={clock}
       onPlace={place}
@@ -2836,6 +2980,31 @@ export function LabelConsole({
       onFlip={() => setPlacement(flipPlacement)}
     />
   );
+  // The review step, asked in the rail under the stroke it is about.
+  const reviewInline =
+    expanded && inlineAnchor
+      ? {
+          pointId: expanded.id,
+          afterShotId: inlineAnchor.shotId,
+          node: (
+            <ReviewInlineBlock
+              point={expanded}
+              names={names}
+              step={step}
+              anchor={inlineAnchor}
+              placement={placement}
+              editable={editable}
+              ghosts={drawsGhosts(liveMarks)}
+              count={step ? stepCount(keptOpened, step) : null}
+              onAnswer={operable ? answerReview : undefined}
+              onEstimate={editable ? setEstimate : undefined}
+              onPlace={place}
+              onTarget={setTarget}
+              onFlip={() => setPlacement(flipPlacement)}
+            />
+          ),
+        }
+      : null;
   const rail = (
     <LabelBlackRail
       tone={fullScreen ? "dark" : "light"}
@@ -2862,6 +3031,7 @@ export function LabelConsole({
       onFollow={followPlayback}
       points={points}
       adScoring={session.adScoring}
+      matchTiebreakSet={matchTiebreakSetNumber}
       playOnLets={session.playOnLets}
       fileOffset={fileOffset}
       names={names}
@@ -2871,7 +3041,9 @@ export function LabelConsole({
       editable={editable}
       selectedShotId={placement.shotId}
       armedSlotAfterShotId={armedSlot?.afterShotId ?? null}
+      reviewInline={reviewInline}
       onSelectShot={railHandlers.selectShot}
+      onExitReview={exitReview}
       onPatchPoint={railHandlers.patchPoint}
       onPatchShot={railHandlers.patchShot}
       operations={operable ? rowOperations : undefined}
