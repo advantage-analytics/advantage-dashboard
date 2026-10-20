@@ -331,6 +331,13 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
   const warnings: string[] = [];
   const scores = labelScores(points, adScoring);
   const bandByGame = new Map(scores.games.map((band) => [gameKey(band), band]));
+  // A label game number is a key, not an order: a game the console opens or
+  // starts mid-set takes the session's highest number plus one. Published,
+  // games are numbered in play order through the match — what the match
+  // page's per-set count reads (game-in-set.ts) — by when each first appears.
+  const playOrder = new Map(
+    scores.games.map((band, index) => [gameKey(band), index + 1]),
+  );
   const setsBefore = setsWonBefore(points, scores.games);
 
   const rows: AppliedPointRow[] = [];
@@ -478,7 +485,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     rows.push({
       point_number: rows.length + 1,
       set_number: setNumber,
-      game_number: gameNumber,
+      game_number: playOrder.get(gameKey(point)) ?? gameNumber,
       server_is_player1: server === "p1",
       won_by_player1: winner === "p1",
       // Null, not 0, off the video: AVG(rally_length) skips it.

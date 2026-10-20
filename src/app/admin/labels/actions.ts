@@ -56,6 +56,7 @@ import {
   foldLabelTiebreak,
   pullLabelGamePoints,
   shiftLabelGameOverflow,
+  splitLabelGame,
   type LabelGameShiftResult,
 } from "@/lib/services/labels/game-shift-session";
 import {
@@ -340,6 +341,21 @@ export async function shiftLabelGameOverflowAction(
 ): Promise<LabelGameShiftResult> {
   return withLabelOp("Move points to next game", () =>
     shiftLabelGameOverflow(sessionId, fromPointId),
+  );
+}
+
+/**
+ * Start a new game at a point: it and the rest of its game become a new game,
+ * served by the other player. `label_points` (and flipped strokes) only; no
+ * other game is renumbered. Refused at a game's first point and in a
+ * tiebreak.
+ */
+export async function splitLabelGameAction(
+  sessionId: string,
+  atPointId: string,
+): Promise<LabelGameShiftResult> {
+  return withLabelOp("Start a new game", () =>
+    splitLabelGame(sessionId, atPointId),
   );
 }
 
