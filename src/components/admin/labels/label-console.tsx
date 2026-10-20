@@ -46,6 +46,8 @@ import type { LabelGameWriteResult } from "@/lib/services/labels/game-operations
 import {
   applyGameShift,
   GAME_PULL_ADD_POINT,
+  gameOverflow,
+  gameUnderflow,
   planGamePull,
   planGameShift,
   planGameSplit,
@@ -55,7 +57,11 @@ import type { LabelGameShiftResult } from "@/lib/services/labels/game-shift-sess
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelPointEndingSynced } from "@/lib/services/labels/ending-session";
 import { volleyLinkWrites } from "@/lib/services/labels/volley-link";
-import { labelScores } from "@/lib/services/labels/score";
+import { gameKey, labelScores } from "@/lib/services/labels/score";
+import {
+  foldedPointIds,
+  gameServeRepeats,
+} from "@/lib/services/labels/game-serve-order";
 import {
   drawsGhosts,
   type ReviewItemId,
@@ -376,7 +382,13 @@ function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
  *   a dead ball out, which used to cost a dialog each. Three or more are
  *   never removed by themselves: the hint line offers Remove or Split, and
  *   Restore for a removal, each a click (`removeShotsAfter` /
- *   `restoreShots`). A shot write also settles its point's ending in that
+ *   `restoreShots`). One more runs without a click, on load too: a game
+ *   whose server repeats the game beside it while all its serves are the
+ *   other player's (game-serve-order.ts `autofix`) has its `server` put right
+ *   through the game band's own operation — once, never while either game is
+ *   short or runs over, and never again for a game the labeller or the fix
+ *   has set (`serverSetGames`), so ⌘Z undoes it for good. A repeat that would
+ *   switch players stays a slot. A shot write also settles its point's ending in that
  *   same call (ending-session.ts); the server's `point` is the last word over
  *   the optimistic rows here.
  * - Outside a control: Enter unfolds the open point, Space plays or pauses,
@@ -2146,6 +2158,7 @@ export function LabelConsole({
     rows: readonly LabelPoint[] = points,
   ) {
     if (!operations) return;
+    serverSetGames.current.add(gameKey(game));
     runGameOperation(
       planGameServer(rows, game, server),
       () => operations.setGameServer(session.id, game, server),
@@ -2385,6 +2398,36 @@ export function LabelConsole({
   }
 
   const operable = editable && operations !== undefined;
+
+  // A repeated server the strokes settle on their own is put right without a
+  // click (game-serve-order.ts `autofix`) — one game at a time, between
+  // writes, with no dialog open. A game whose server was set here, by hand or
+  // by this, is left alone from then on: the labeller has the last word.
+  const serverSetGames = useRef(new Set<string>());
+  const autoServeRef = useRef(() => {});
+  autoServeRef.current = () => {
+    if (!operable || confirm || saveStatus.pending > 0) return;
+    const unsettled = new Set(
+      [
+        ...gameUnderflow(points, session.adScoring, matchTiebreakSetNumber),
+        ...gameOverflow(points, session.adScoring, matchTiebreakSetNumber),
+      ].map(gameKey),
+    );
+    const folded = foldedPointIds(
+      tiebreakFolds(points, session.adScoring, matchTiebreakSetNumber),
+    );
+    const repeat = gameServeRepeats(points, folded).find(
+      (r) =>
+        r.autofix &&
+        !serverSetGames.current.has(gameKey(r.game)) &&
+        !unsettled.has(gameKey(r.game)) &&
+        !unsettled.has(gameKey(r.other.game)),
+    );
+    if (repeat) setGameServer(repeat.game, repeat.expected);
+  };
+  useEffect(() => {
+    autoServeRef.current();
+  }, [points, confirm, saveStatus.pending, operable]);
 
   // The rail's rows are memoised, so every callback they receive keeps one
   // identity for the console's life (`useLatestHandlers`) and runs whatever

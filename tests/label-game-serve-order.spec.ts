@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 import { slotStops } from "@/lib/services/labels/flag-nav";
@@ -109,6 +111,8 @@ test.describe("the same server two games in a row", () => {
       pointNumber: 5,
       // Each of game 3's serves is Kim's: given to Lee, both points switch.
       switched: 2,
+      // Switching a whole game's players is the labeller's call, not a fix.
+      autofix: false,
     });
     expect(gameServeRepeatReason(repeat, NAMES)).toBe(
       "Kim serves games 2 and 3",
@@ -124,8 +128,9 @@ test.describe("the same server two games in a row", () => {
       game: { setNumber: 1, gameNumber: 1 },
       expected: "p1",
       pointId: "p1",
-      // Its serves are already Lee's: nobody switches.
+      // Its serves are already Lee's: nobody switches, so it fixes itself.
       switched: 0,
+      autofix: true,
     });
     expect(gameServeRepeatReason(repeat, NAMES)).toBe(
       "Kim serves games 1 and 2",
@@ -186,5 +191,41 @@ test.describe("the same server two games in a row", () => {
         s.label,
       ]),
     ).toContainEqual(["p5", "Same server two games in a row"]);
+  });
+});
+
+test.describe("the console fixes a settled repeat itself", () => {
+  test("serves with no hitter settle nothing: it stays a slot", () => {
+    const rows = [...game(0, 1, "p2", "p1"), ...game(2, 2, "p2", "p2")].map(
+      (p, i) => (i < 2 ? { ...p, shots: [] } : p),
+    );
+    const [repeat] = gameServeRepeats(rows);
+    expect(repeat.autofix).toBe(false);
+  });
+
+  test("once per game, between writes, never on a short or long game", () => {
+    const source = readFileSync(
+      "src/components/admin/labels/label-console.tsx",
+      "utf8",
+    );
+    const effect = source.slice(
+      source.indexOf("const serverSetGames = useRef("),
+      source.indexOf("}, [points, confirm, saveStatus.pending, operable]);"),
+    );
+    expect(effect).toContain(
+      "if (!operable || confirm || saveStatus.pending > 0) return;",
+    );
+    expect(effect).toContain("...gameUnderflow(");
+    expect(effect).toContain("...gameOverflow(");
+    expect(effect).toContain("r.autofix &&");
+    expect(effect).toContain("!serverSetGames.current.has(gameKey(r.game))");
+    expect(effect).toContain(
+      "if (repeat) setGameServer(repeat.game, repeat.expected);",
+    );
+    // A server set by hand, or by the fix, is never set by it again.
+    const setServer = source.slice(source.indexOf("  function setGameServer("));
+    expect(setServer.slice(0, setServer.indexOf("\n  }\n"))).toContain(
+      "serverSetGames.current.add(gameKey(game));",
+    );
   });
 });

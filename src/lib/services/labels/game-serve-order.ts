@@ -16,6 +16,12 @@
  * picking them in the game band: it rewrites every `server` and switches the
  * players on each point whose serve contradicts the new one.
  *
+ * A repeat is `autofix` when the strokes settle it on their own: at least one
+ * of the flagged game's serves is the other player's and none is the stored
+ * server's, so the fix only puts `server` right and switches nobody. The
+ * console applies those by itself (label-console.tsx); one that would switch
+ * players on a whole game stays a slot for the labeller.
+ *
  * Pure: the rail draws the slot, the console runs the fix.
  */
 
@@ -48,6 +54,8 @@ export interface GameServeRepeat {
   pointNumber: number;
   /** How many points switch players when the fix runs. */
   switched: number;
+  /** The strokes settle it and nobody switches: the console fixes it itself. */
+  autofix: boolean;
 }
 
 interface SetGame {
@@ -107,6 +115,10 @@ export function gameServeRepeats(
       flagged.add(gameKey(wrong.game));
       const expected = opponent(before.server);
       const plan = planGameServer(points, wrong.game, expected);
+      const switched =
+        "error" in plan
+          ? 0
+          : plan.writes.filter((write) => "winner" in write).length;
       repeats.push({
         game: wrong.game,
         gameInSet: wrong.gameInSet,
@@ -115,10 +127,12 @@ export function gameServeRepeats(
         expected,
         pointId: wrong.live[0].id,
         pointNumber: wrong.live[0].pointIndex + 1,
-        switched:
-          "error" in plan
-            ? 0
-            : plan.writes.filter((write) => "winner" in write).length,
+        switched,
+        autofix:
+          !("error" in plan) &&
+          switched === 0 &&
+          againstServer(wrong) > 0 &&
+          servedBy(wrong, wrong.server) === 0,
       });
     }
   }
@@ -140,6 +154,13 @@ function againstServer(game: SetGame): number {
     const hitter = servingShot(point.shots)?.hitter ?? null;
     return hitter !== null && hitter !== game.server;
   }).length;
+}
+
+/** How many of the game's serving strokes are `side`'s. */
+function servedBy(game: SetGame, side: LabelSide | null): number {
+  return game.live.filter(
+    (point) => (servingShot(point.shots)?.hitter ?? null) === side,
+  ).length;
 }
 
 /** Each repeat, keyed by its game's first live point — where the rail draws it. */
