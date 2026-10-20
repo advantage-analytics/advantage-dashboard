@@ -9,7 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { scoreColumns } from "./score-state";
+import { playsMatchTiebreak, scoreColumns } from "./score-state";
 import type { FormData } from "./types";
 import { setHasData } from "./utils";
 import { FieldCaption } from "./FieldCaption";
@@ -23,12 +23,22 @@ export const FORMAT_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "5", label: "Best of 5" },
 ];
 
-/** A set whose games say a tiebreak was played — 7-6, or 1-0 for a match tiebreak. */
-export function isTiebreakSet(p: number | null, o: number | null): boolean {
+/**
+ * A set whose games say a tiebreak was played — 7-6, or 1-0 for a match
+ * tiebreak when `matchTiebreak` (`playsMatchTiebreak`) says this set can be one.
+ */
+export function isTiebreakSet(
+  p: number | null,
+  o: number | null,
+  matchTiebreak = false,
+): boolean {
   if (p === null || o === null) return false;
   const high = Math.max(p, o);
   const low = Math.min(p, o);
-  return (high >= 7 && high - low === 1) || (high === 1 && low === 0);
+  return (
+    (high >= 7 && high - low === 1) ||
+    (matchTiebreak && high === 1 && low === 0)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -290,6 +300,7 @@ export function ScoreBlock({
     isTiebreakSet(
       formData.playerScores[i] ?? null,
       formData.opponentScores[i] ?? null,
+      playsMatchTiebreak(bestOf, i),
     );
 
   const setDigit = (row: "player" | "opponent", i: number, v: string) => {
@@ -321,7 +332,7 @@ export function ScoreBlock({
       row === "player" ? typed : (formData.playerScores[i] ?? null);
     const opponentVal =
       row === "opponent" ? typed : (formData.opponentScores[i] ?? null);
-    if (isTiebreakSet(playerVal, opponentVal)) {
+    if (isTiebreakSet(playerVal, opponentVal, playsMatchTiebreak(bestOf, i))) {
       focusKey(key("p", i, true));
       return;
     }
