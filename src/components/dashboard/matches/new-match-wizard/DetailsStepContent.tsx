@@ -137,6 +137,7 @@ import {
 import { AnimatedHeight } from "./AnimatedHeight";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
 import {
+  bareMatchTiebreak,
   firstOpenSet,
   isStoppedResult,
   offersOneSet,
@@ -1029,6 +1030,16 @@ function DetailsStepContentImpl({
     (attachedLine?.eventKind ?? line?.eventKind) === "dual" &&
     Boolean(lineProgramKey);
   const fromLine = Boolean(attachedLine || line);
+  // An event that declared its scoring owns it; one that left it blank does
+  // not, or the required Scoring field would read "Not set" with no way to
+  // answer it and Save match would never enable.
+  // Preset first, as the file-parse path's `eventOwnsScoring` reads it.
+  const lineOwnsScoring = (line ?? attachedLine)?.adScoring != null;
+  // "It was a match tiebreak", still in force: the score check keeps it on
+  // screen as a settled line with Change, like every other answer.
+  const tiebreakSettled =
+    Boolean(formData.matchTiebreakConfirmed) &&
+    bareMatchTiebreak(scoreGames(formData));
   const [pendingFormat, setPendingFormat] = useState<string | null>(null);
   const admin = useAdminWizardMode();
   const lookupScope = useMemo(
@@ -1553,7 +1564,13 @@ function DetailsStepContentImpl({
           playerName={subject.name}
           opponentName={formData.opponentName}
           fromLine={fromLine}
-          onScoreChange={onScoreChange}
+          onScoreChange={(row, index, value) => {
+            // "It was a match tiebreak" answered set 3 as it read then; new
+            // games there are a new question.
+            if (index === 2 && formData.matchTiebreakConfirmed)
+              onInputChange("matchTiebreakConfirmed", undefined);
+            onScoreChange(row, index, value);
+          }}
           onTiebreakChange={onTiebreakChange}
           onSetsChange={(count) => onInputChange("numberOfSets", count)}
         />
@@ -1561,7 +1578,7 @@ function DetailsStepContentImpl({
             line, and going away on "No" all move the page below smoothly. The
             gap lives inside (`pt-4`) so an empty wrapper takes no space. */}
         <AnimatedHeight>
-          {scoreCheckVisible && (
+          {(scoreCheckVisible || tiebreakSettled) && (
             <div className="pt-4">
               <ScoreCheckNotice
                 answer={
@@ -1574,6 +1591,17 @@ function DetailsStepContentImpl({
                 dualLine={
                   (attachedLine?.eventKind ?? line?.eventKind) === "dual"
                 }
+                bareTiebreak={bareMatchTiebreak(scoreGames(formData))}
+                tiebreakSettled={tiebreakSettled}
+                onUndoMatchTiebreak={() =>
+                  onInputChange("matchTiebreakConfirmed", undefined)
+                }
+                onMatchTiebreak={() => {
+                  onInputChange("result", "");
+                  onInputChange("retiredSide", undefined);
+                  onInputChange("stopReason", undefined);
+                  onInputChange("matchTiebreakConfirmed", true);
+                }}
                 // Only off a line: a preset or attached line's event owns the
                 // format, so the score check never rewrites it.
                 offerOneSet={!fromLine && offersOneSet(scoreGames(formData))}
@@ -1597,6 +1625,7 @@ function DetailsStepContentImpl({
                 playerName={subject.name}
                 opponentName={formData.opponentName}
                 onAnswer={(result, stopReason) => {
+                  onInputChange("matchTiebreakConfirmed", undefined);
                   onInputChange("result", result);
                   onInputChange("retiredSide", undefined);
                   onInputChange("stopReason", stopReason);
@@ -2173,7 +2202,7 @@ function DetailsStepContentImpl({
               onChange={changeFormat}
             />
           )}
-          {fromLine ? (
+          {lineOwnsScoring ? (
             <ReadCell
               label="Scoring"
               required

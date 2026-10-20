@@ -111,6 +111,11 @@ export interface EditContext {
   playOnLets?: boolean;
   /** The ground the rail's rows are drawn on (`label-rail-tone.ts`); absent, dark. */
   tone?: RailTone;
+  /**
+   * `LabelVideo.startTimeSeconds`: every time a row prints or takes is on the
+   * playing file's clock (`formatFileTime`). Absent, 0 — the analysis clock.
+   */
+  fileOffset?: number;
 }
 
 /** The playing point's span on the FILE clock, which `--film-t` carries. */

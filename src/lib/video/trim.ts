@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  exceedsUploadLimit,
+  oversizeVideoMessage,
   remuxedFileName,
   type PreparedMode,
   type TrimSkipReason,
@@ -14,8 +16,10 @@ import type { TrimWorkerRequest, TrimWorkerResponse } from "./trim-protocol";
  *
  * Resolves to the file to upload and whether it is the cut. It never rejects
  * for "couldn't cut" — those resolve to the original with a reason, because a
- * larger upload is always better than no upload. It rejects only with
- * `TrimCancelledError` when the signal aborts.
+ * larger upload is always better than no upload. It rejects with
+ * `TrimCancelledError` when the signal aborts, and with `OversizeVideoError`
+ * when what it would resolve to is over the upload limit: a file the vendor
+ * refuses is the one case where no upload IS better.
  *
  * The cut lives in the Origin Private File System until the upload commits;
  * call `discardPreparedVideo` then. `sweepPreparedVideos` removes leftovers
@@ -44,7 +48,55 @@ export type PreparedVideo =
     }
   | { trimmed: false; file: File; reason: TrimSkipReason };
 
+/**
+ * The file to upload would be over `MAX_VIDEO_SIZE_BYTES`: it was picked that
+ * large and this browser couldn't bring it under. `message` is the sentence to
+ * show.
+ */
+export class OversizeVideoError extends Error {
+  constructor(
+    readonly sizeBytes: number,
+    readonly reason: TrimSkipReason,
+  ) {
+    super(oversizeVideoMessage(sizeBytes, reason));
+    this.name = "OversizeVideoError";
+  }
+}
+
 export async function prepareVideoForUpload(
+  file: File,
+  options: Parameters<typeof prepareInBrowser>[1],
+): Promise<PreparedVideo> {
+  let prepared = await prepareInBrowser(file, options);
+  if (
+    prepared.trimmed &&
+    prepared.mode === "remux" &&
+    exceedsUploadLimit(file.size) &&
+    exceedsUploadLimit(prepared.file.size)
+  ) {
+    // The copy was estimated from the window's share of the file, and this
+    // window held more than its share. The re-encode's size follows its own
+    // bitrate, so it fits where the copy didn't.
+    await discardPreparedVideo(prepared.storageName);
+    prepared = await prepareInBrowser(file, {
+      ...options,
+      forceReencode: true,
+    });
+  }
+  if (!exceedsUploadLimit(prepared.file.size)) return prepared;
+  if (prepared.trimmed) await discardPreparedVideo(prepared.storageName);
+  // A cut that came out larger than a picked file which already fit: send
+  // the original, as for any other cut that didn't work.
+  if (!exceedsUploadLimit(file.size)) {
+    return { trimmed: false, file, reason: "failed" };
+  }
+  throw new OversizeVideoError(
+    file.size,
+    prepared.trimmed ? "failed" : prepared.reason,
+  );
+}
+
+async function prepareInBrowser(
   file: File,
   {
     startSeconds,
@@ -52,6 +104,7 @@ export async function prepareVideoForUpload(
     onProgress,
     onMode,
     signal,
+    forceReencode,
   }: {
     startSeconds: number;
     endSeconds: number;
@@ -60,6 +113,8 @@ export async function prepareVideoForUpload(
     /** Fired once, before the first progress, when a file will be written. */
     onMode?: (mode: PreparedMode) => void;
     signal?: AbortSignal;
+    /** Re-encode even where a copy was estimated to fit; see `TrimInputs`. */
+    forceReencode?: boolean;
   },
 ): Promise<PreparedVideo> {
   if (signal?.aborted) throw new TrimCancelledError();
@@ -107,6 +162,7 @@ export async function prepareVideoForUpload(
       startSeconds,
       endSeconds,
       outputName: storageName,
+      forceReencode,
     } satisfies TrimWorkerRequest);
   });
   worker.terminate();

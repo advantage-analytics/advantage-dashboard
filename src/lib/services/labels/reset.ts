@@ -7,8 +7,9 @@
  * reset: an added row never had seeded values, and a vendor row seeded before
  * the column existed waits for scripts/label-backfill-seed.ts.
  *
- * A reset leaves alone a shot's `unclear` list and a point's note and checked
- * mark. Of a point's strokes it restores one thing: each one's `hitter`, back
+ * A reset leaves alone a shot's `unclear` list and a point's note. A shot
+ * reset clears its point's checked mark (reset-session.ts); a point reset of
+ * the point's own fields alone keeps it. Of a point's strokes it restores one thing: each one's `hitter`, back
  * to the stroke's own seed — the players' swap (player-swap.ts) flips every
  * hitter along with the point's winner and ended by, so a point reset that
  * put back the winner alone would leave the point contradicting its rows. A

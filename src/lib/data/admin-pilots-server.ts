@@ -41,6 +41,25 @@ export async function listAdminPilots(): Promise<AdminPilotRow[]> {
     throw new Error(`Could not read pilot usage: ${usageError.message}`);
   }
 
+  // The credit-paid part of this month's jobs. Spends carry no billing month,
+  // so they are counted by when they were made, on the same UTC month.
+  const { data: spends, error: spendsError } = await db
+    .from("video_credit_spends")
+    .select("user_id, seconds")
+    .eq("released", false)
+    .gte("created_at", `${currentBillingMonth()}T00:00:00Z`)
+    .in("user_id", ids);
+  if (spendsError) {
+    throw new Error(`Could not read pilot credit use: ${spendsError.message}`);
+  }
+  const credit = new Map<string, number>();
+  for (const row of spends ?? []) {
+    credit.set(
+      row.user_id,
+      (credit.get(row.user_id) ?? 0) + Number(row.seconds ?? 0),
+    );
+  }
+
   const used = new Map<string, number>();
   for (const row of usage ?? []) {
     const seconds = Number(row.actual_seconds ?? row.reserved_seconds ?? 0);
@@ -66,6 +85,7 @@ export async function listAdminPilots(): Promise<AdminPilotRow[]> {
             .data.publicUrl
         : null,
       usedSeconds: used.get(user.id) ?? 0,
+      creditSeconds: credit.get(user.id) ?? 0,
     };
   });
 }

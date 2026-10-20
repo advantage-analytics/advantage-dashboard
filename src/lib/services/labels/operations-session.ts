@@ -649,6 +649,28 @@ export async function writeLabelPointRestore(params: {
   return failed ? { error: failed } : { ok: true, status: plan.write.status };
 }
 
+/**
+ * The strokes of the points a move takes, a few points per request: each
+ * read is one URL's worth of ids and stays well under PostgREST's row cap,
+ * which a whole set's strokes in one select could pass and silently cut.
+ */
+const MOVED_SHOTS_CHUNK = 40;
+async function readMovedShots(
+  supabase: AdminClient,
+  pointIds: readonly string[],
+): Promise<{ shots: LabelShot[] } | { error: string }> {
+  const reads = await Promise.all(
+    chunksOf(pointIds, MOVED_SHOTS_CHUNK).map((ids) =>
+      readShotsOfPoints(supabase, ids),
+    ),
+  );
+  const failed = reads.find((read) => "error" in read);
+  if (failed && "error" in failed) return failed;
+  return {
+    shots: reads.flatMap((read) => ("shots" in read ? read.shots : [])),
+  };
+}
+
 /** The most points one move takes: a header dragged across a whole set. */
 const MAX_MOVED_POINTS = 200;
 
@@ -695,17 +717,25 @@ export async function writeLabelPointsMove(params: {
   };
   const switchServer = params.switchServer;
 
-  const { data: found, error: readError } = await supabase
-    .from("label_points")
-    .select(
-      "id, session_id, point_index, status, status_before_delete, server, set_number, game_number, serve_side, winner, ending, ended_by, seed",
-    )
-    .in("id", pointIds)
-    .returns<MoveRow[]>();
+  // In `idChunks` runs: an `.in()` list travels in the URL (see ID_CHUNK).
+  const reads = await Promise.all(
+    idChunks(pointIds).map((ids) =>
+      supabase
+        .from("label_points")
+        .select(
+          "id, session_id, point_index, status, status_before_delete, server, set_number, game_number, serve_side, winner, ending, ended_by, seed",
+        )
+        .in("id", ids)
+        .returns<MoveRow[]>(),
+    ),
+  );
+  const readError = reads.find((read) => read.error)?.error;
   if (readError) {
     return { error: `Could not read the point: ${readError.message}` };
   }
-  const rows = new Map((found ?? []).map((row) => [row.id, row]));
+  const rows = new Map(
+    reads.flatMap((read) => read.data ?? []).map((row) => [row.id, row]),
+  );
   if (pointIds.some((id) => !rows.has(id)))
     return { error: "Point not found." };
   const sessionId = rows.get(pointIds[0])!.session_id;
@@ -728,7 +758,7 @@ export async function writeLabelPointsMove(params: {
         { id: string; server: LabelSide | null; point_index: number }[]
       >(),
     switchServer
-      ? readShotsOfPoints(supabase, pointIds)
+      ? readMovedShots(supabase, pointIds)
       : Promise.resolve({ shots: [] as LabelShot[] }),
   ]);
   if ("error" in gate) return gate;

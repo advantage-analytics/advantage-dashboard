@@ -2245,15 +2245,28 @@ export function LabelConsole({
     if (!before || !operations) return Promise.resolve(null);
     // A reset can move the stroke's time, so it re-sorts like a time edit.
     const settlePoint = settlePointOf(shotId);
+    // A reset point is asked again: its check goes, as the server clears it
+    // (reset-session.ts), and comes back if the reset fails.
+    const checkedBefore = pointOfShot(points, shotId)?.checkedAt ?? null;
     return runOperation(
-      (rows) => updateShot(rows, shotId, true, applyShotReset),
+      (rows) =>
+        setCheckedOfShot(
+          updateShot(rows, shotId, true, applyShotReset),
+          shotId,
+          null,
+        ),
       () => operations.resetShot(shotId),
       (rows, result) =>
         settlePoint(
           replaceShot(rows, shotId, (s) => ({ ...s, status: result.status })),
           result,
         ),
-      (rows) => updateShot(rows, shotId, true, () => before),
+      (rows) =>
+        setCheckedOfShot(
+          updateShot(rows, shotId, true, () => before),
+          shotId,
+          checkedBefore,
+        ),
     );
   }
 
@@ -3014,6 +3027,7 @@ export function LabelConsole({
       adScoring={session.adScoring}
       matchTiebreakSet={matchTiebreakSetNumber}
       playOnLets={session.playOnLets}
+      fileOffset={fileOffset}
       names={names}
       marks={liveMarks}
       expandedPointId={unfoldedPointId}
@@ -3462,6 +3476,19 @@ function updateShot(
     );
     return { ...point, shots: resort ? orderLabelShots(shots) : shots };
   });
+}
+
+/** The checked mark of the point that holds `shotId`. */
+function setCheckedOfShot(
+  points: readonly LabelPoint[],
+  shotId: string,
+  checkedAt: string | null,
+): LabelPoint[] {
+  return points.map((point) =>
+    point.shots.some((shot) => shot.id === shotId)
+      ? { ...point, checkedAt }
+      : point,
+  );
 }
 
 function replacePoint(

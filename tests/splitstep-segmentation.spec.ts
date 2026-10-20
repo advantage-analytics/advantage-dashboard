@@ -10,6 +10,7 @@ import {
   type SplitStepRally,
   type SplitStepStroke,
 } from "@/lib/services/splitstep/derivation";
+import { FRAGMENT_MAX_GAP_S } from "@/lib/services/splitstep/derivation/segmentation";
 
 /**
  * The score-constrained segmenter over synthetic matches. Every fixture is
@@ -548,19 +549,20 @@ test.describe("proposeSegmentation", () => {
   /**
    * Cut the second point of game 1 (an ad-court serve) into two rallies at
    * the serve, `gapS` seconds apart: a lone serve stroke the vendor took for
-   * a point of its own, then the point as it was played.
+   * a point of its own, then the point as it was played. The stub keeps the
+   * point's old time and everything after it moves `gapS` later, so the stub
+   * sits a normal between-point gap after rally 1 — not close enough to read
+   * as rally 1's fragment (`FRAGMENT_MAX_GAP_S`).
    */
   function splitSecondPoint(gapS: number) {
     const { input } = build([sixTwoSet()], { score: SIX_TWO });
     const [first, second, ...rest] = input.rallies;
-    const stub = serveStroke(
-      2,
-      A,
-      second.strokes[0].videoTime - gapS,
-      "top",
-      "ad",
-    );
-    const realServe = { ...second.strokes[0], rallyId: 3 };
+    const stub = serveStroke(2, A, second.strokes[0].videoTime, "top", "ad");
+    const realServe = {
+      ...second.strokes[0],
+      rallyId: 3,
+      videoTime: second.strokes[0].videoTime + gapS,
+    };
     const rally = {
       ...second.strokes[0],
       rallyId: 3,
@@ -581,7 +583,11 @@ test.describe("proposeSegmentation", () => {
       ...rest.map((r) => ({
         ...r,
         rallyId: r.rallyId + 1,
-        strokes: r.strokes.map((s) => ({ ...s, rallyId: r.rallyId + 1 })),
+        strokes: r.strokes.map((s) => ({
+          ...s,
+          rallyId: r.rallyId + 1,
+          videoTime: s.videoTime + gapS,
+        })),
       })),
     ];
     const outcomes: RallyOutcome[] = [
@@ -623,16 +629,78 @@ test.describe("proposeSegmentation", () => {
     expect(proposal.cost).toBeGreaterThan(SEGMENT_COSTS.merge);
   });
 
+  test("a fragment under FRAGMENT_MAX_GAP_S after a played rally is merged into it", () => {
+    // Rally 1 is a played point (serve plus three groundstrokes, so the
+    // split-serve gate does not open); 3 s after its last stroke the vendor
+    // starts a one-stroke rally of its own, served from the wrong end. Only
+    // the fragment rule can merge them; left as a point of its own it would
+    // pay the end row.
+    const { input } = build([sixTwoSet()], { score: SIX_TWO });
+    const [first, ...rest] = input.rallies;
+    const serve = first.strokes[0];
+    const played = [1, 2, 3].map((n) => ({
+      ...serve,
+      strokeNumber: n + 1,
+      strokeType: "groundstroke" as const,
+      playerLabel: n % 2 === 1 ? B : A,
+      videoTime: serve.videoTime + 2 * n,
+    }));
+    const fragmentGapS = 3;
+    const fragmentStroke = serveStroke(
+      2,
+      A,
+      serve.videoTime + 6 + fragmentGapS,
+      "bottom",
+      "ad",
+    );
+    const rallies: SplitStepRally[] = [
+      { ...first, strokes: [serve, ...played] },
+      {
+        rallyId: 2,
+        strokes: [fragmentStroke],
+        server: A,
+        serves: [fragmentStroke],
+      },
+      ...rest.map((r) => ({
+        ...r,
+        rallyId: r.rallyId + 1,
+        strokes: r.strokes.map((s) => ({
+          ...s,
+          rallyId: r.rallyId + 1,
+          videoTime: s.videoTime + 10,
+        })),
+      })),
+    ];
+    const proposal = proposeSegmentation({
+      ...input,
+      rallies,
+      outcomes: [
+        input.outcomes[0],
+        { won: null, confidence: "low" },
+        ...input.outcomes.slice(1),
+      ],
+      vendorGameStarts: [
+        input.vendorGameStarts[0],
+        false,
+        ...input.vendorGameStarts.slice(1),
+      ],
+    });
+
+    expect(fragmentGapS).toBeLessThan(FRAGMENT_MAX_GAP_S);
+    expect(proposal.status).toBe("fit");
+    expect(proposal.merges).toEqual([[1, 2]]);
+    expect(proposal.costBreakdown.merge).toBe(SEGMENT_COSTS.merge);
+    expect(proposal.games).toHaveLength(8);
+  });
+
   test("two equal-cost cuts give ambiguous, with the fewer-moves cut reported", () => {
     // Game 1 closes 4–1 in five rallies and game 2 takes five more, both
     // served from the same end. The vendor cut one rally late (after rally
-    // 6); the winners of rallies 1–10 are unknown, rallies 7–10 carry no
-    // side, and the pause is split 40 s / 40 s around rally 6 so the gap
-    // evidence favours neither cut. Keeping the vendor's cut costs one side
-    // mismatch (rally 6 served from the deuce court where the sixth point of
-    // a game is served from the ad court); moving it to where the rules put
-    // it costs one boundary moved plus one dropped. Equal cost, and the cut
-    // that moves nothing wins.
+    // 6); the winners of rallies 1–10 are unknown, rallies 6–10 carry no
+    // side, and the pause is split 50 s / 50 s around rally 6 so the gap
+    // evidence favours neither cut. Vendor boundaries cost nothing, so the
+    // vendor's cut and the one the rules put a rally earlier both cost zero:
+    // equal cost, and the cut that moves no vendor boundary wins.
     const fiveHold: GameSpec = { points: ["S", "S", "R", "S", "S"] };
     const games = [fiveHold, fiveHold, ...sixTwoSet().slice(2)];
     const { input, gameStarts } = build([games], { score: SIX_TWO });
@@ -646,15 +714,15 @@ test.describe("proposeSegmentation", () => {
     );
     const times = input.rallies.map((r) => r.strokes[0].videoTime);
     const gaps = times.map((t, i) => (i === 0 ? 0 : t - times[i - 1]));
-    gaps[5] = 40;
-    gaps[6] = 40;
+    gaps[5] = 50;
+    gaps[6] = 50;
     let clock = 0;
     const retimed = gaps.map((gap) => (clock += gap));
     const rallies = input.rallies.map((rally, i) => {
       const strokes = rally.strokes.map((s) => ({
         ...s,
         videoTime: retimed[i],
-        playerX: i >= 6 && i < 10 ? null : s.playerX,
+        playerX: i >= 5 && i < 10 ? null : s.playerX,
       }));
       return { ...rally, strokes, serves: strokes };
     });
@@ -667,7 +735,7 @@ test.describe("proposeSegmentation", () => {
     });
 
     expect(proposal.status).toBe("ambiguous");
-    expect(proposal.cost).toBe(SEGMENT_COSTS.side);
+    expect(proposal.cost).toBe(0);
     expect(proposal.runnerUpCost).toBe(proposal.cost);
     expect(proposal.diff.gamesMoved).toBe(0);
     expect(proposal.games[0]).toMatchObject({

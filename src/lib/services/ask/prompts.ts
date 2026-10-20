@@ -1027,7 +1027,7 @@ ROW: First serves in ${S} {{r1.first_serve_pct}} ${S} {{r1.all_first_serve_pct}}
 ROW: Double faults ${S} {{r1.double_faults}} ${S} {{r1.all_double_faults}} ${S} {{r1.double_faults_diff}}`,
   },
   trend: {
-    when: `one value over time, when the result has one row per match in date order. ${MIN_ASK_TREND_POINTS} to ${MAX_ASK_TREND_POINTS} rows; name the date column and the value column, and the app reads every row. When the result also holds the same measure across all matches in every row (an all_ or avg_ column), name it third: the app draws it as a dashed line beside the points. A match_id column in the result links each point to its match.`,
+    when: `one value over time, when the result has one row per match in date order. ${MIN_ASK_TREND_POINTS} to ${MAX_ASK_TREND_POINTS} rows; name the date column and the value column, and the app reads every row. When the result also holds the same measure across all matches in every row (an all_ or avg_ column), name it third: the app draws it as a dashed line beside the points. When the question asks for two measures over time ("first serve and first serve won"), name the second measure's column third the same way: the app draws both lines and names each. A match_id column in the result links each point to its match.`,
     rows: [
       { played_on: "2026-06-04", first_serve_pct: 61 },
       { played_on: "2026-07-09", first_serve_pct: 63 },

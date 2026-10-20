@@ -447,8 +447,9 @@ test.describe("completeWarnings", () => {
     const fixture = labelSessionFixture();
     const session = {
       ...fixture,
+      // `serve_side` is never seeded, so the vendor's side (below) is read.
       points: fixture.points.map((p) =>
-        p.id === P2 ? { ...p, checkedAt: null } : p,
+        p.id === P2 ? { ...p, checkedAt: null, serveSide: null } : p,
       ),
     };
     const marks = withLiveScoreMarks(

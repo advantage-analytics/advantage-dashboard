@@ -8,6 +8,10 @@
  * own columns, then each stroke whose hitter goes back to its seed
  * (`writeShotSwaps`, grouped by value tuple as a swap's are) — never a
  * stroke's other values, the note or `checked_at`.
+ *
+ * A shot reset does clear its point's `checked_at`: the point the labeller
+ * checked is not the point it is once a stroke goes back to the vendor's
+ * reading, so it is asked again.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -111,6 +115,15 @@ export async function writeLabelShotReset(params: {
     "reset the shot",
   );
   if (failed) return { error: failed };
+  const { error: uncheckError } = await params.supabase
+    .from("label_points")
+    .update({ checked_at: null })
+    .eq("id", pointId);
+  if (uncheckError) {
+    return {
+      error: `The shot was reset, but its point is still checked: ${uncheckError.message}`,
+    };
+  }
   const synced = await syncEndingAfterShotChange({
     supabase: params.supabase,
     pointId,
