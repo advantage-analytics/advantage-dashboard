@@ -382,7 +382,8 @@ function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
  * - Outside a control: Enter unfolds the open point, Space plays or pauses,
  *   ← / → step points, ] / [ step the amber marks and ' / ; the grey ones.
  *   ↑ / ↓ walk the open point's strokes and ⌘ Enter checks the point — or
- *   unchecks it, when it is checked — both from inside a stroke's row too. Escape lets go of the selected stroke, then folds the open point.
+ *   unchecks it, when it is checked — both from inside a stroke's row too.
+ *   Escape lets go of the selected stroke, then folds the open point.
  *   ⌘Z is the header's Undo: the newest action rewound on the server. Space
  *   plays or pauses from anywhere but a text field, an open menu or a dialog.
  * - Two layouts (`label-layout.ts`) mount the same player, court panel and rail

@@ -354,9 +354,7 @@ export function TextEditor({
           if (event.key === "Enter") {
             event.preventDefault();
             // The blur commits (`onBlur`); unreadable text keeps the field.
-            if (draft === null || parse(draft) !== undefined) {
-              event.currentTarget.blur();
-            }
+            if (!invalid) event.currentTarget.blur();
           } else if (event.key === "Escape") {
             // Revert; the cell closes the editor as the key bubbles on.
             setDraft(null);
