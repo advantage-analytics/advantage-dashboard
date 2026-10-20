@@ -111,10 +111,10 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     );
     // Same reach as the stroke keys: never from a field, a menu or a dialog,
     // never with a modifier, never on a held key.
-    expect(source).toContain('(lower === "a" || lower === "c") &&');
-    expect(source).toContain(
-      '(lower === "a" ? addShotKey.current() : endKey.current())',
-    );
+    // The stroke keys' guard, shared: one dispatcher, one reach check.
+    expect(source).toContain("? () => addShotKey.current()");
+    expect(source).toContain("? () => endKey.current()");
+    expect(source).toMatch(/consoleKey &&\n\s+!event\.metaKey/);
   });
 });
 

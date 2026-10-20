@@ -2628,34 +2628,18 @@ export function LabelConsole({
         return;
       }
       // A stroke key reaches the selected stroke from a focused cell too (a
-      // cell is a button); a text field, a menu and a dialog keep it.
-      if (
-        isStrokeKey(key) &&
-        !event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        !event.defaultPrevented &&
-        !event.repeat
-      ) {
-        const target = event.target as Element | null;
-        if (
-          !target?.closest?.(
-            "input, select, textarea, [contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog']",
-          ) &&
-          !document.querySelector(
-            "[role='menu'], [role='dialog'], [role='alertdialog']",
-          ) &&
-          strokeKey.current(key)
-        ) {
-          event.preventDefault();
-          return;
-        }
-      }
-      // A and C: add a stroke, switch contact ↔ landing. Same reach as the
-      // stroke keys: not from a text field, a menu or a dialog.
+      // cell is a button), and so do A (add a stroke) and C (contact ↔
+      // landing); a text field, a menu and a dialog keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
+      const consoleKey = isStrokeKey(key)
+        ? () => strokeKey.current(key)
+        : lower === "a"
+          ? () => addShotKey.current()
+          : lower === "c"
+            ? () => endKey.current()
+            : null;
       if (
-        (lower === "a" || lower === "c") &&
+        consoleKey &&
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey &&
@@ -2670,7 +2654,7 @@ export function LabelConsole({
           !document.querySelector(
             "[role='menu'], [role='dialog'], [role='alertdialog']",
           ) &&
-          (lower === "a" ? addShotKey.current() : endKey.current())
+          consoleKey()
         ) {
           event.preventDefault();
           return;
