@@ -275,6 +275,10 @@ export const LabelVideoPlayer = forwardRef<
   // one has not got it. Only once playable, so it never races the first load,
   // and only on a new target, so a playhead report is not a fetch.
   const readAheadAt = useRef<number | null>(null);
+  // A re-signed URL (Reload) is a fresh element: its read-ahead starts over.
+  useEffect(() => {
+    readAheadAt.current = null;
+  }, [video?.url]);
   useEffect(() => {
     const el = videoRef.current;
     const ahead = readAheadRef.current;
