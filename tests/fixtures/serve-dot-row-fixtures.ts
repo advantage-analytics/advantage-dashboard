@@ -1,9 +1,9 @@
 /**
  * Building blocks for a fake `shots` row joined to its point, shared by
  * `home-serve-data.spec.ts` and `player-profile-serve-map.spec.ts` —
- * `loadHomeServes` and `serveMapFor` page through the same shots+points join
- * (the source comments cross-reference each other), so their test rows are
- * built from the same shapes.
+ * `loadHomeServes` and `serveMapFor` both read through
+ * `fetchServeShotsForMatches`, so their test rows are built from the same
+ * shapes.
  */
 
 /** The `points` side of a joined shots row, shaped as either loader reads it. */
@@ -36,3 +36,30 @@ export const inBox = {
   zone: null,
   result: "In",
 };
+
+/**
+ * Joined shot rows regrouped as `fetchServeShotsForMatches` reads them: one
+ * `points` row per point, its shots embedded, ordered by point id.
+ */
+export function asPointRows(
+  rows: readonly {
+    id: string;
+    point_id: string;
+    shot_number: number;
+    points: ReturnType<typeof pointMeta>;
+  }[],
+) {
+  const byPoint = new Map<
+    string,
+    ReturnType<typeof pointMeta> & { shots: Record<string, unknown>[] }
+  >();
+  for (const { points, point_id, ...shot } of rows) {
+    let point = byPoint.get(point_id);
+    if (!point) {
+      point = { ...points, shots: [] };
+      byPoint.set(point_id, point);
+    }
+    point.shots.push(shot);
+  }
+  return [...byPoint.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
+}

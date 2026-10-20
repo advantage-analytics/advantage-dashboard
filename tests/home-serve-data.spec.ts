@@ -2,16 +2,21 @@ import { expect, test } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { loadHomeServes } from "@/lib/data/home-serve-data";
-import { inBox, pointMeta } from "./fixtures/serve-dot-row-fixtures";
+import {
+  asPointRows,
+  inBox,
+  pointMeta,
+} from "./fixtures/serve-dot-row-fixtures";
 
 /**
  * `loadHomeServes` reads the personal Home's serve-placement dots (T3). The
- * shots read is serve rows only, in a total order, paged through the
- * fail-closed `fetchAllPages` — four matches of serves sit near PostgREST's
- * 1000-row cap, so a single request would silently plot a partial set.
+ * read starts at `points` (indexed on `match_id`) with each point's serve rows
+ * embedded, in a total order, paged through the fail-closed `fetchAllPages` —
+ * four matches of points pass PostgREST's 1000-row cap, so a single request
+ * would silently plot a partial set.
  *
- * The fake client below slices a real array by `.range()` so the loader has
- * to issue two pages to see every row.
+ * The fake client below slices a real array of points by `.range()` so the
+ * loader has to issue two pages to see every row.
  */
 
 type Page = { data: unknown[] | null; error: { message: string } | null };
@@ -64,18 +69,17 @@ const feedRow = {
   points: pointMeta(FEED_POINT, "match-0", true),
 };
 
-const allRows = [...serveRows, feedRow];
+const allPoints = asPointRows([...serveRows, feedRow]);
 
-function fakeClient(failShotPage?: number) {
-  const shotRanges: [number, number][] = [];
-  const shotOrder: string[] = [];
-  const shotIn: [string, unknown[]][] = [];
+function fakeClient(failPointPage?: number) {
+  const pointRanges: [number, number][] = [];
+  const pointOrder: string[] = [];
+  const pointIn: [string, unknown[]][] = [];
   const tables: string[] = [];
 
   function from(table: string) {
     tables.push(table);
     let range: [number, number] | null = null;
-    const orders: string[] = [];
     let matchFilter: unknown[] | null = null;
     const builder = {
       select: () => builder,
@@ -83,42 +87,35 @@ function fakeClient(failShotPage?: number) {
       is: () => builder,
       limit: () => builder,
       in(column: string, values: unknown[]) {
-        if (table === "shots") {
-          shotIn.push([column, values]);
-          if (column === "points.match_id") matchFilter = values;
+        if (table === "points") {
+          pointIn.push([column, values]);
+          if (column === "match_id") matchFilter = values;
         }
         return builder;
       },
-      order(column: string) {
-        orders.push(column);
-        if (table === "shots") shotOrder.push(column);
+      order(column: string, opts?: { referencedTable?: string }) {
+        if (table === "points")
+          pointOrder.push(
+            opts?.referencedTable
+              ? `${opts.referencedTable}.${column}`
+              : column,
+          );
         return builder;
       },
       range(from: number, to: number) {
         range = [from, to];
-        shotRanges.push(range);
+        pointRanges.push(range);
         return builder;
       },
       then<R>(resolve: (value: Page) => R) {
         let result: Page = { data: [], error: null };
-        if (table === "shots" && range) {
-          if (shotRanges.length === failShotPage) {
-            result = { data: null, error: { message: "shots page failed" } };
+        if (table === "points" && range) {
+          if (pointRanges.length === failPointPage) {
+            result = { data: null, error: { message: "points page failed" } };
           } else {
-            const rows = allRows
-              .filter(
-                (row) =>
-                  !matchFilter || matchFilter.includes(row.points.match_id),
-              )
-              .sort((a, b) => {
-                for (const key of orders) {
-                  const x = a[key as keyof typeof a] as string | number;
-                  const y = b[key as keyof typeof b] as string | number;
-                  if (x < y) return -1;
-                  if (x > y) return 1;
-                }
-                return 0;
-              });
+            const rows = allPoints.filter(
+              (point) => !matchFilter || matchFilter.includes(point.match_id),
+            );
             result = { data: rows.slice(range[0], range[1] + 1), error: null };
           }
         }
@@ -130,28 +127,36 @@ function fakeClient(failShotPage?: number) {
 
   return {
     client: { from } as unknown as SupabaseClient,
-    shotRanges,
-    shotOrder,
-    shotIn,
+    pointRanges,
+    pointOrder,
+    pointIn,
     tables,
   };
 }
 
-test("reads 1,200 serve rows across two pages and plots every viewer first serve", async () => {
-  const { client, shotRanges, shotOrder, shotIn, tables } = fakeClient();
+test("reads 1,200 points of serves across two pages and plots every viewer first serve", async () => {
+  const { client, pointRanges, pointOrder, pointIn, tables } = fakeClient();
 
   const { dots, matchCount } = await loadHomeServes(client, "viewer", matches);
 
-  // `initialMatches` skips the matches read entirely.
-  expect(tables.every((table) => table === "shots")).toBe(true);
-  expect(shotRanges).toEqual([
+  // `initialMatches` skips the matches read entirely; the read starts at
+  // `points`, never a scan of `shots`.
+  expect(tables.every((table) => table === "points")).toBe(true);
+  expect(pointRanges).toEqual([
     [0, 999],
     [1000, 1999],
   ]);
   // Total order, so pages never overlap or skip.
-  expect(shotOrder.slice(0, 3)).toEqual(["point_id", "shot_number", "id"]);
-  expect(shotIn).toContainEqual(["shot_type", ["First Serve", "Second Serve"]]);
-  expect(shotIn).toContainEqual(["points.match_id", matches.map((m) => m.id)]);
+  expect(pointOrder.slice(0, 3)).toEqual([
+    "id",
+    "shots.shot_number",
+    "shots.id",
+  ]);
+  expect(pointIn).toContainEqual([
+    "shots.shot_type",
+    ["First Serve", "Second Serve"],
+  ]);
+  expect(pointIn).toContainEqual(["match_id", matches.map((m) => m.id)]);
 
   expect(matchCount).toBe(MATCHES);
   expect(expectedDotIds).toHaveLength(MATCHES * (POINTS_PER_MATCH / 3));
@@ -168,18 +173,18 @@ test("a point whose only row is a Feed yields no dot", async () => {
 });
 
 test("a failed second page throws instead of plotting the first page", async () => {
-  const { client, shotRanges } = fakeClient(2);
+  const { client, pointRanges } = fakeClient(2);
 
   await expect(loadHomeServes(client, "viewer", matches)).rejects.toThrow(
-    "shots page failed",
+    "points page failed",
   );
-  expect(shotRanges).toEqual([
+  expect(pointRanges).toEqual([
     [0, 999],
     [1000, 1999],
   ]);
 });
 
-test("no matches returns no dots without reading shots", async () => {
+test("no matches returns no dots without reading points", async () => {
   const { client, tables } = fakeClient();
 
   expect(await loadHomeServes(client, "viewer", [])).toEqual({
