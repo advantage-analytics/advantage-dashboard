@@ -25,12 +25,24 @@
  *   (`replayedServeGap`). Measured over the 9 label sessions on 2026-10-09:
  *   7 fired, 5 combined by the labeller, 0 wrong on reviewed points.
  *
+ * - The side a point was served from is the labeller's before the vendor's
+ *   (`labelledServeSide`): an opening serve whose contact the labeller placed
+ *   or moved, then the point's own `serve_side`, then the vendor's tracking
+ *   (`LabelMarks.serveSides`). A server tracked on the wrong side would
+ *   otherwise read as a missing point, and every later point of the game as
+ *   wrong with it; placing the contact right clears them.
+ *
  * `withLiveScoreMarks` also runs `liveRowMarks`, the other `count` marks
  * read off the rows: "Ending can't be read" (`lastShotUnresolved`) and
  * "Fault, no second serve" (`firstServeFaultAlone`, both marks-state.ts) on
  * a point whose strokes it is handed.
  */
 
+import {
+  BASELINE_M,
+  serveCourtSide,
+} from "@/lib/services/splitstep/derivation/court";
+import { SIDE_DEAD_ZONE_M } from "@/lib/services/splitstep/derivation/flags";
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
 import { firstServeFaultAlone, lastShotUnresolved } from "./marks-state";
 import { gameDecided, gameKey, isCountedPoint, labelScores } from "./score";
@@ -57,8 +69,38 @@ export type ScoreMarkPoint = Pick<
   | "gameType"
 >;
 
-/** A score-mark point, with its strokes when the caller has them. */
-type ScoreMarkInput = ScoreMarkPoint & Partial<Pick<LabelPoint, "shots">>;
+/** A score-mark point, with its strokes and side when the caller has them. */
+type ScoreMarkInput = ScoreMarkPoint &
+  Partial<Pick<LabelPoint, "shots" | "serveSide">>;
+
+/**
+ * The side the labeller says the point was served from, or null to fall back
+ * on the vendor's: the opening serve's contact when the labeller placed it
+ * (an added serve) or moved it off its seed, read as the vendor's tracking is
+ * (`serveCourtSide`, the same dead zone at the centre mark — label contacts
+ * sit `BASELINE_M` up the length from the vendor's frame); else the point's
+ * `serve_side`, which only the labeller ever sets.
+ */
+export function labelledServeSide(
+  point: Partial<Pick<LabelPoint, "shots" | "serveSide">>,
+): LabelServeSide | null {
+  const serve = point.shots
+    ? liveShotsInOrder({ shots: point.shots }, true).find((shot) =>
+        isServeStroke(shot.stroke),
+      )
+    : undefined;
+  if (serve && serve.contactX !== null && serve.contactY !== null) {
+    const placed =
+      serve.seed === null ||
+      serve.seed.contact_x !== serve.contactX ||
+      serve.seed.contact_y !== serve.contactY;
+    if (placed && Math.abs(serve.contactX) >= SIDE_DEAD_ZONE_M) {
+      const side = serveCourtSide(serve.contactX, serve.contactY - BASELINE_M);
+      if (side) return side;
+    }
+  }
+  return point.serveSide ?? null;
+}
 
 /** At most this many live strokes for a point to read as a replayed serve. */
 const REPLAY_MAX_STROKES = 2;
@@ -161,7 +203,7 @@ export function liveScoreMarks(
     }
 
     if (point.ending !== "not_a_point") {
-      const actual = serveSides[point.id] ?? null;
+      const actual = labelledServeSide(point) ?? serveSides[point.id] ?? null;
       const expected = expectedSide(run, adScoring);
       if (
         !run.mismatched &&
