@@ -448,7 +448,23 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // back for this room.
   const source = p.initial.source ?? null;
   const [mirrorUp, setMirrorUp] = useState(source !== null);
-  const dropMirror = useCallback(() => setMirrorUp(false), []);
+  // Dropped only once this element shows a frame where it stands: not while
+  // it seeks, nor before it has one. `loadeddata` can fire for the frame at 0
+  // with the seek to the landing still under way, and dropping then left the
+  // room black. A drop asked for too early waits for `seeked` / `canplay`.
+  const mirrorDropPending = useRef(false);
+  const dropMirror = useCallback(() => {
+    const el = videoRef.current;
+    if (el && (el.seeking || el.readyState < 2)) {
+      mirrorDropPending.current = true;
+      return;
+    }
+    mirrorDropPending.current = false;
+    setMirrorUp(false);
+  }, []);
+  const settleMirrorDrop = useCallback(() => {
+    if (mirrorDropPending.current) dropMirror();
+  }, [dropMirror]);
   const mirrorRef = useRef<HTMLCanvasElement>(null);
   /**
    * The hand-off from a playing report player. It plays on under the mirror
@@ -1720,6 +1736,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               // that stalls on a cold buffer keeps the viewer's film up rather
               // than a black or dimmed one.
               onPlaying={dropMirror}
+              onCanPlay={settleMirrorDrop}
               onClick={togglePlay}
               // R1 (2026-09-22): click the film plays/pauses. Double-click no
               // longer exits — a fast click burst (click, click, dblclick)
@@ -1760,6 +1777,8 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 settling.onSeeked();
                 if (!landingRef.current.playing && !handoffRef.current.active) {
                   dropMirror();
+                } else {
+                  settleMirrorDrop();
                 }
                 mark(e.currentTarget.currentTime);
                 syncClock();
