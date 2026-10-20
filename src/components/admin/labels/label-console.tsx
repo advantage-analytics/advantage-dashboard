@@ -567,7 +567,21 @@ export function LabelConsole({
   function stopReplay() {
     // A replay that already let itself go (a jump it read as a seek) still
     // started this film: while it plays on, stop it too.
-    if (replay.current && player.current?.isPlaying()) player.current.pause();
+    if (replay.current && player.current?.isPlaying()) {
+      // Its `pause` event lands after this returns — often after a new
+      // replay has started — so it must not be read as the labeller's.
+      selfPause.current = true;
+      player.current.pause();
+    }
+    cancelReplay();
+  }
+  const selfPause = useRef(false);
+  /** A pause the labeller made lets the replay go; the console's own does not. */
+  function onFilmPause() {
+    if (selfPause.current) {
+      selfPause.current = false;
+      return;
+    }
     cancelReplay();
   }
   // The step an answer, a placement, an add or a dismiss made here was
@@ -2832,7 +2846,11 @@ export function LabelConsole({
     // only stops asking (the labeller chose this stroke; nothing lands for
     // them). In review mode a stroke with no step about it (the one an
     // answer added) forces the move on regardless.
-    if (placesBothEnds(shot, next.patch)) {
+    // A contact near the run-off's back edge only grows the box and keeps
+    // the contact armed for a deeper click: not an answer yet.
+    const growing =
+      placement.target === "contact" && next.state.target === "contact";
+    if (!growing && placesBothEnds(shot, next.patch)) {
       if (step?.target.shotId === shot.id) {
         if (reviewMode) noteAnswered();
         else closeQueuedItem();
@@ -2861,7 +2879,7 @@ export function LabelConsole({
       points={points}
       readout={readout}
       onTime={clock.set}
-      onPause={cancelReplay}
+      onPause={onFilmPause}
       clockTargetRef={rootRef}
       square={fullScreen}
     />
