@@ -48,9 +48,9 @@ import { surnameLabels } from "@/lib/data/match-utils";
  *
  * ACES ON A DERIVED MATCH. The derivation never emits 'Ace' (see
  * `services/splitstep/derivation/result-type.ts`): every unreturned serve is
- * a 'Service Winner'. Product decision (2026-09-29): on these matches an
- * unreturned serve the server won IS an ace (`isUnreturnedServe`), as the
- * head-to-head Aces row counts it. So the segment counts those, Winners
+ * a 'Service Winner', as is a return struck and missed. Product decision
+ * (2026-09-29): on these matches an unreturned serve the server won IS an
+ * ace (`isUnreturnedServe`), as the head-to-head Aces row counts it. So the segment counts those, Winners
  * leaves them out, and Winners' cut narrows to `rally-winner` — the derived
  * head-to-head Winners row's own — so the two never open the same point.
  *

@@ -1021,13 +1021,13 @@ function parseBlock(
       // drawn as a dashed second line — and a label for it. Without the
       // label the baseline is named by what its column says (all matches,
       // average, team), else by the column's own words.
-      const [x, y, baselineColumn, baselineName] = plots[0];
+      const [x, y, namedBaseline, baselineName] = plots[0];
       if (
         plots[0].length < 2 ||
         plots[0].length > 4 ||
         !COLUMN_NAME.test(x) ||
         !COLUMN_NAME.test(y) ||
-        (baselineColumn !== undefined && !COLUMN_NAME.test(baselineColumn))
+        (namedBaseline !== undefined && !COLUMN_NAME.test(namedBaseline))
       ) {
         return drop(
           "malformed",
@@ -1035,6 +1035,16 @@ function parseBlock(
           "PLOT needs a date column and a value column",
         );
       }
+      // Two measures asked for over time ("first serve and first serve
+      // won, charted") come back as two percentage columns: a block that
+      // named one of them draws the other as the second line too.
+      const baselineColumn = namedBaseline ?? trendCompanion(rows, x, y);
+      // A second line that is another measure, not the same one over all
+      // matches, names the first line too: "Each match" says nothing then.
+      const seriesLabel =
+        baselineColumn !== undefined && !sameMeasure(y, baselineColumn)
+          ? columnLabel(y)
+          : null;
       let baselineLabel: string | null = null;
       if (baselineColumn !== undefined) {
         if (baselineName !== undefined) {
@@ -1149,6 +1159,7 @@ function parseBlock(
         visual: {
           kind,
           caption,
+          ...(baseline && seriesLabel !== null ? { label: seriesLabel } : {}),
           points,
           ...(baseline ? { baseline } : {}),
         },
@@ -1757,11 +1768,63 @@ function trendColumns(
   if (measures.length === 1) return { measure: measures[0], baseline: null };
   if (measures.length !== 2) return null;
   const [a, b] = measures.map((column) => askMeasure(column));
+  // Two different shares over the same dates ("first serves in and first
+  // serve points won"): both lines, in the order the query gave them.
+  if (
+    !sameMeasure(measures[0], measures[1]) &&
+    isPercentColumn(measures[0]) &&
+    isPercentColumn(measures[1])
+  ) {
+    return { measure: measures[0], baseline: measures[1] };
+  }
   if (!a || !b || a.key !== b.key) return null;
   if ((a.qualifier === "") === (b.qualifier === "")) return null;
   return a.qualifier === ""
     ? { measure: measures[0], baseline: measures[1] }
     : { measure: measures[1], baseline: measures[0] };
+}
+
+/**
+ * Whether two columns are one measure, perhaps under a qualifier
+ * (`first_serve_pct` and `all_first_serve_pct`). Columns the dictionary
+ * cannot place are the same measure only when they are the same column.
+ */
+function sameMeasure(a: string, b: string): boolean {
+  if (a === b) return true;
+  const left = askMeasure(a);
+  const right = askMeasure(b);
+  return left !== null && right !== null && left.key === right.key;
+}
+
+/**
+ * The second line a trend block that named one share should also draw:
+ * the one other share every row carries, when there is exactly one and it
+ * is a different measure. A trend of a count, or rows with several other
+ * shares, get none — which of them was meant is not the server's to guess.
+ */
+export function trendCompanion(
+  rows: readonly AskRow[],
+  dateColumn: string,
+  valueColumn: string,
+): string | undefined {
+  if (rows.length === 0 || !isPercentColumn(valueColumn)) return undefined;
+  const others = Object.keys(rows[0]).filter(
+    (column) =>
+      column !== dateColumn &&
+      column !== valueColumn &&
+      column !== SCOPE_TOTAL_COLUMN &&
+      !POSITION_COLUMN.test(column) &&
+      isPercentColumn(column) &&
+      rows.every(
+        (row) =>
+          Object.prototype.hasOwnProperty.call(row, column) &&
+          (row[column] === null || isNumber(row[column])),
+      ) &&
+      rows.some((row) => isNumber(row[column])),
+  );
+  return others.length === 1 && !sameMeasure(valueColumn, others[0])
+    ? others[0]
+    : undefined;
 }
 
 /** `played_on` first among date columns, else the first; undefined when no column is a date on every row. */
@@ -1851,9 +1914,13 @@ export function visualFromRows(rows: readonly AskRow[]): AskVisual | null {
       }
       const qualifier =
         baseline === null ? "" : (askMeasure(baseline)?.qualifier ?? "");
+      const twoMeasures = baseline !== null && !sameMeasure(measure, baseline);
       return {
         kind: "trend",
-        caption: `${columnLabel(measure)} over time, oldest first.`,
+        caption: twoMeasures
+          ? `${columnLabel(measure)} and ${columnLabel(baseline).toLowerCase()} over time, oldest first.`
+          : `${columnLabel(measure)} over time, oldest first.`,
+        ...(twoMeasures ? { label: columnLabel(measure) } : {}),
         points,
         ...(baseline !== null
           ? {

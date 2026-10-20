@@ -153,6 +153,47 @@ test.describe('prefer "vendor-copy" (the labelling console)', () => {
   });
 });
 
+test.describe("the playback copy", () => {
+  const job = {
+    video_object_key: "videos/u/m/original.mp4",
+    trimmed_object_key: "trimmed/u/m/j.mp4",
+    start_time_seconds: "15.136",
+    playback_object_key: "playback/u/m/original.mp4",
+    playback_status: "ready",
+  };
+  const all = exists(
+    "videos/u/m/original.mp4",
+    "trimmed/u/m/j.mp4",
+    "playback/u/m/original.mp4",
+  );
+
+  test("a ready copy wins for every player, with no offset", async () => {
+    for (const prefer of ["upload", "vendor-copy"] as const) {
+      expect(await choosePlaybackFile([job], all, prefer)).toEqual({
+        blobName: "playback/u/m/original.mp4",
+        startTimeSeconds: 0,
+        source: "playback",
+      });
+    }
+  });
+
+  test("a copy still processing, failed or missing plays what it did before", async () => {
+    for (const playback_status of ["processing", "failed", null]) {
+      const choice = await choosePlaybackFile(
+        [{ ...job, playback_status }],
+        all,
+        "vendor-copy",
+      );
+      expect(choice?.source).toBe("vendor-copy");
+    }
+    const gone = await choosePlaybackFile(
+      [job],
+      exists("videos/u/m/original.mp4"),
+    );
+    expect(gone?.source).toBe("upload");
+  });
+});
+
 test.describe("analysedWindowSeconds", () => {
   test("is the job's window in whole seconds (Revelli vs Stepanov)", () => {
     expect(

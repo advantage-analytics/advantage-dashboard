@@ -1,6 +1,6 @@
 import { meanOfPresent, num, pct, presentPairs } from "./aggregate";
 import type { EvidenceCard } from "@/lib/ui/insight-evidence";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user-server";
 import { getPersonalMatchData } from "@/lib/data/personal-matches-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { viewerSide } from "./viewer-side";
@@ -858,10 +858,8 @@ function calculatePerformanceProfile(
 }
 
 export async function getOverallPerformance(): Promise<OverallPerformanceData> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // The layout's own verified lookup, not a second `getUser()` round trip.
+  const user = await getAuthUser();
 
   if (!user) return DEFAULT_PERFORMANCE;
 
