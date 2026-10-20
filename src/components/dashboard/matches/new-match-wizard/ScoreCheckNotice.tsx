@@ -44,6 +44,8 @@ export function ScoreCheckNotice({
   dualLine,
   bareTiebreak,
   onMatchTiebreak,
+  tiebreakSettled,
+  onUndoMatchTiebreak,
   offerOneSet,
   oneSetWinner,
   onOneSet,
@@ -68,6 +70,10 @@ export function ScoreCheckNotice({
   bareTiebreak: boolean;
   /** "It was a match tiebreak" — the set counts as won on its 1-0. */
   onMatchTiebreak: () => void;
+  /** "It was a match tiebreak" is in force — the settled line with Change. */
+  tiebreakSettled: boolean;
+  /** Withdraws "It was a match tiebreak" and asks again. */
+  onUndoMatchTiebreak: () => void;
   /** Offer "No, it was a one-set match" (`offersOneSet`, and not from a line). */
   offerOneSet: boolean;
   /**
@@ -101,6 +107,15 @@ export function ScoreCheckNotice({
         message={`Set to best of 1 · ${names[oneSetWinner]} wins.`}
         onChange={onUndoOneSet}
         actionLabel="Undo"
+      />
+    );
+  }
+
+  if (tiebreakSettled) {
+    return (
+      <SettledNotice
+        message="Set 3 marked as a match tiebreak."
+        onChange={onUndoMatchTiebreak}
       />
     );
   }

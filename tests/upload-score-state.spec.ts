@@ -315,6 +315,16 @@ test.describe("scoreUndecided — when Save asks whether the match ended early",
     expect(scoreUndecided(pointed)).toBe(false);
     // Only the deciding set of a best of 3.
     expect(bareMatchTiebreak({ ...bare, bestOf: 5 })).toBe(false);
+    expect(
+      bareMatchTiebreak({
+        ...bare,
+        bestOf: 5,
+        playerScores: [6, 3, 6, 3, 1],
+        opponentScores: [4, 6, 4, 6, 0],
+        playerTiebreaks: [null, null, null, null, null],
+        opponentTiebreaks: [null, null, null, null, null],
+      }),
+    ).toBe(false);
   });
 
   test("only Retired and Unfinished count as an answer", () => {

@@ -105,7 +105,7 @@ export function scoreGames(
  * caller without them has no way to know the points are missing.
  */
 export function bareMatchTiebreak(input: ScoreGames): boolean {
-  const i = 2;
+  const i = input.bestOf - 1;
   if (!playsMatchTiebreak(input.bestOf, i)) return false;
   if (!input.playerTiebreaks || !input.opponentTiebreaks) return false;
   const p = input.playerScores[i];
@@ -132,11 +132,12 @@ export function playsMatchTiebreak(bestOf: number, index: number): boolean {
  * blank — is unfinished.
  *
  * 1-0 in the set `playsMatchTiebreak` names (pass `matchTiebreak`) is a match
- * tiebreak played as a set, and counts as finished without its points. That is how every score source spells one: a line scored courtside
- * arrives with games and no tiebreak points at all (`EventPreset.score`), the
- * scorecard itself opens the TB column and moves focus there the moment 1-0 is
- * typed (`isTiebreakSet`), and stored matches keep only the losing side's
- * points, which for a 10-0 is a zero.
+ * tiebreak played as a set, and counts as finished without its points. That
+ * is how every score source spells one: a line scored courtside arrives with
+ * games and no tiebreak points at all (`EventPreset.score`), the scorecard
+ * itself opens the TB column and moves focus there the moment 1-0 is typed
+ * (`isTiebreakSet`), and stored matches keep only the losing side's points,
+ * which for a 10-0 is a zero.
  *
  * `gamesTo` is the set's length: 6 for every singles set, 8 for a doubles
  * pro-set (over at 8 with a two-game lead, 9-7 or 9-8). The default keeps
@@ -177,7 +178,8 @@ function progress(input: ScoreGames): {
   let player = 0;
   let opponent = 0;
   for (let i = 0; i < bestOf; i++) {
-    if (openTiebreak && i === 2) return { finished: i, decided: false };
+    if (openTiebreak && i === bestOf - 1)
+      return { finished: i, decided: false };
     const winner = setWinner(
       playerScores[i],
       opponentScores[i],

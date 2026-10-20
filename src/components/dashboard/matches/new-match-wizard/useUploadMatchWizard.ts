@@ -3311,7 +3311,14 @@ export function useUploadMatchWizard({
       // The write-time half of the flow's "did it end early?" question: a
       // score nobody won is saved only as Retired or Unfinished, never as a
       // plain final score that just happens to be missing a set.
-      const undecided = scoreUndecided(scoreGames(formData));
+      const undecided = scoreUndecided({
+        ...scoreGames(formData),
+        // A SwingVision import is never asked, so its bare 1-0 third set is
+        // read the way its export recorded it: a match tiebreak.
+        matchTiebreakConfirmed:
+          formData.matchTiebreakConfirmed ||
+          !asksIfEndedEarly(selectedProvider),
+      });
       if (
         !admin?.attachment &&
         undecided &&

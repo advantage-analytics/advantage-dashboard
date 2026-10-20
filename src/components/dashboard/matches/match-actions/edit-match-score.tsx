@@ -86,12 +86,10 @@ export function EditMatchScore({
   });
   const ghost = !decided && sets < Math.max(bestOf, 1) && !disabled;
   const invalid = firstInvalidSet(value, gamesTo);
+  const tieAt = (p: number | null, o: number | null, i: number) =>
+    isTiebreakSet(p, o, playsMatchTiebreak(bestOf, i));
   const tie = (i: number) =>
-    isTiebreakSet(
-      value.player[i] ?? null,
-      value.opponent[i] ?? null,
-      playsMatchTiebreak(bestOf, i),
-    );
+    tieAt(value.player[i] ?? null, value.opponent[i] ?? null, i);
 
   const setCell = (row: "player" | "opponent", i: number, raw: string) => {
     const n = raw === "" ? null : Math.min(99, Number(raw));
@@ -108,13 +106,7 @@ export function EditMatchScore({
       next.opponentTiebreaks.push(null);
     }
     next[row][i] = n;
-    if (
-      !isTiebreakSet(
-        next.player[i],
-        next.opponent[i],
-        playsMatchTiebreak(bestOf, i),
-      )
-    ) {
+    if (!tieAt(next.player[i], next.opponent[i], i)) {
       next.playerTiebreaks[i] = null;
       next.opponentTiebreaks[i] = null;
     }
@@ -134,13 +126,7 @@ export function EditMatchScore({
     onChange(next);
 
     if (n === null || raw.length !== 1 || n > gamesTo + 1) return;
-    if (
-      isTiebreakSet(
-        next.player[i],
-        next.opponent[i],
-        playsMatchTiebreak(bestOf, i),
-      )
-    ) {
+    if (tieAt(next.player[i], next.opponent[i], i)) {
       focus(key("p", i, true));
     } else if (row === "player") {
       focus(key("o", i));
