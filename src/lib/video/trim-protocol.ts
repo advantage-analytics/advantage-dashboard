@@ -9,6 +9,8 @@ export type TrimWorkerRequest =
       endSeconds: number;
       /** OPFS file name to write the cut into. */
       outputName: string;
+      /** Re-encode even where a copy was estimated to fit; see `TrimInputs`. */
+      forceReencode?: boolean;
     }
   | { type: "cancel" };
 

@@ -31,7 +31,7 @@
  *
  * The gap between rallies is read from `strokes[].videoTime`: the last stroke
  * of the previous rally to the first stroke of this one, which is how the
- * design's thresholds (30 s, 80 s) were measured. Serve-to-serve would add the
+ * thresholds (45 s, 60 s) were measured on the labels. Serve-to-serve would add the
  * previous rally's length and read long on long rallies.
  *
  * Two shapes were tried first and rejected:
@@ -47,8 +47,9 @@
  *     the same-end boundary, and it cannot use the score at all. Its end
  *     arithmetic is reused here as one cost.
  *
- * Review-only: this proposes, and the weights are first guesses against three
- * labelled matches. Nothing here changes a published row. Pure: no I/O.
+ * Review-only: this proposes, with weights tuned against eight labelled
+ * matches (see `SEGMENT_COSTS`). Nothing here changes a published row.
+ * Pure: no I/O.
  */
 
 import { serveCourtSide } from "./court";
@@ -181,23 +182,55 @@ export interface SegmentationProposal {
  *     changeover there costs 1 unit against 14 units of wrong winners.
  * No proposed metric fell below its published one on any session.
  *
+ * Recalibrated (2026-10-16) against all eight finished label sessions, read
+ * only, sweeping the rows and thresholds with leave-one-match-out. Five rows
+ * moved, and the merge gate gained `FRAGMENT_MAX_GAP_S`:
+ *
+ *   - `vendorBoundaryMoved` / `vendorBoundaryDropped` 1 → 0. Forced onto the
+ *     labelled cut, the path often paid MORE than its own proposal, and the
+ *     vendor boundaries were part of it: one match had its tiebreak cut into
+ *     eight vendor "games", and at 1 unit each the path followed them. A
+ *     vendor boundary now only breaks ties (`rank` counts `moves`).
+ *   - `flipHigh` 2 → 1. The score stream's "high-confidence" winners are
+ *     fitted to the vendor's own games, so they back the vendor's cut.
+ *   - `side` 2 → 1 and `end` 5 → 8. The end still named the server on every
+ *     labelled game; the side is noisier than the end.
+ *   - `CHANGEOVER_SHORT_GAP_S` 30 → 45 and `LONG_GAP_S` 80 → 60, from the
+ *     labelled gaps: same game median 26 s (5 of 473 at 60 s or more), new
+ *     game without a changeover at most 54 s, changeover median 109 s (45 of
+ *     52 at 60 s or more, 5 under 45 s), set break over 170 s. Neutral on
+ *     these eight; chosen from the distribution, not the fit.
+ *
+ * Result over 667 checked label rows (published → before → after): server
+ * 618 → 629 → 641; rows whose game holds the labeller's rallies 414 → 523 →
+ * 573; game-boundary F1 .765 → .853 → .908; changeover F1 .642 → .781 →
+ * .857; firings right 27/68 → 50/70. Sixteen of the twenty misses are one
+ * match whose entered score stops mid-game (5-2 with an eighth game begun):
+ * `reachesScore` wants 0–0 points at the end, so the path squeezes eight
+ * games into seven. Letting the last game stay open when the last set is
+ * unfinished takes it to 50/55 — a separate change. Held out one match at a
+ * time (with that rule on) the same family scores firings about 39/64: one
+ * off-by-one game turns ~20 rows at once, so firing precision is decided
+ * match by match and stays short of the promotion bar (index.ts). Four of
+ * eight sessions come out `ambiguous` (three before).
+ *
  * End outranks everything because the schedule named the server on every
- * labelled game; a vendor boundary is worth one unit, so of two fits with
- * equal evidence the one that moves fewer of them wins.
+ * labelled game; vendor boundaries cost nothing but still decide a tie, so
+ * of two fits with equal evidence the one that moves fewer of them wins.
  */
 export const SEGMENT_COSTS = {
   /** Serve end is not the end the schedule puts this game's server at. */
-  end: 5,
+  end: 8,
   /** Serve side is not the side the point count expects (free on a no-ad deciding point and in a tiebreak). */
-  side: 2,
+  side: 1,
   /** Outcome flipped against a high-confidence winner. */
-  flipHigh: 2,
+  flipHigh: 1,
   /** Outcome flipped against a low-confidence winner. */
   flipLow: 1,
   /** A proposed game boundary where the vendor's game key did not change. */
-  vendorBoundaryMoved: 1,
+  vendorBoundaryMoved: 0,
   /** A vendor game boundary the proposal does not keep. */
-  vendorBoundaryDropped: 1,
+  vendorBoundaryDropped: 0,
   /** A changeover (the ends swap) opened after a gap under `CHANGEOVER_SHORT_GAP_S`. */
   changeoverShortGap: 4,
   /** A gap of `LONG_GAP_S` or more crossed by anything but a changeover or a set break. */
@@ -210,14 +243,21 @@ export const SEGMENT_COSTS = {
  * The merge thresholds, from four ad→ad pairs in one labelled match. A merge
  * is allowed only when rallies i and i+1 serve from the same end and side,
  * the gap between them is under `MERGE_MAX_GAP_S`, and rally i ends on a
- * serve or has at most `MERGE_MAX_STROKES` strokes.
+ * serve or has at most `MERGE_MAX_STROKES` strokes — or when rally i+1 starts
+ * under `FRAGMENT_MAX_GAP_S` after rally i ends, whatever else holds.
  */
 export const MERGE_MAX_GAP_S = 30;
 export const MERGE_MAX_STROKES = 2;
+/**
+ * A rally starting this soon after the last one is a fragment of it (a let
+ * re-serve or a vendor split), whatever either rally's length: 11 of 23
+ * labelled merges sat under 10 s, against 2 of 473 same-game gaps.
+ */
+export const FRAGMENT_MAX_GAP_S = 10;
 /** A changeover opened after a shorter gap than this is suspect. */
-export const CHANGEOVER_SHORT_GAP_S = 30;
+export const CHANGEOVER_SHORT_GAP_S = 45;
 /** A gap this long is a changeover or a set break; anything else crossing it is suspect. */
-export const LONG_GAP_S = 80;
+export const LONG_GAP_S = 60;
 
 export type CostRow = keyof typeof SEGMENT_COSTS;
 
@@ -351,14 +391,20 @@ function readEvidence(input: SegmentationInput): RallyEvidence[] {
     const next = evidence[i + 1];
     const strokes = input.rallies[i].strokes;
     const endsOnServe = strokes.at(-1)?.strokeType === "serve";
-    here.mergeableWithNext =
+    const gap = next.gapBefore;
+    const sameSpot =
       here.end !== null &&
       here.end === next.end &&
       here.side !== null &&
-      here.side === next.side &&
-      next.gapBefore !== null &&
-      next.gapBefore < MERGE_MAX_GAP_S &&
+      here.side === next.side;
+    const splitServe =
+      gap !== null &&
+      sameSpot &&
+      gap < MERGE_MAX_GAP_S &&
       (endsOnServe || strokes.length <= MERGE_MAX_STROKES);
+    // A negative gap is overlapping stroke times, not a fragment.
+    const fragment = gap !== null && gap >= 0 && gap < FRAGMENT_MAX_GAP_S;
+    here.mergeableWithNext = splitServe || fragment;
   }
   return evidence;
 }
@@ -532,9 +578,13 @@ interface StepTally {
 /**
  * What consuming `first` — or `first` and `second` as one merged point — as
  * `outcome` from state `s` costs. The end, side, gap and vendor boundary are
- * read off `first`; the outcome off `second` when merging, since the second
- * rally is the one that was played out; a vendor boundary on `second` is a
- * boundary the merge drops. With `breakdown` each row's share is also added
+ * read off `first`; the outcome off `second` when merging. After a split
+ * serve the second rally is the one played out; after a trailing fragment
+ * it is still the right witness, because the stream records a point's
+ * winner as the score change it sees at the NEXT rally, which for a cut
+ * point is the fragment's. (Judging a fragment on the first rally instead
+ * took one labelled match from 20/21 firings right to 5/24.) A vendor
+ * boundary on `second` is a boundary the merge drops. With `breakdown` each row's share is also added
  * to it — the replay's tally.
  */
 function stepCost(
@@ -1038,7 +1088,10 @@ function rank(a: Ranked, b: Ranked): number {
 }
 
 /** No step pays more than every row at once, so no path costs more than this. */
-const MAX_STEP_COST = Object.values(SEGMENT_COSTS).reduce((a, b) => a + b, 0);
+const MAX_STEP_COST = Object.values(SEGMENT_COSTS).reduce<number>(
+  (a, b) => a + b,
+  0,
+);
 
 /** Below one unit of evidence, the runner-up is as good as the winner. */
 const AMBIGUITY_MARGIN = 1;

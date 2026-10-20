@@ -7,7 +7,11 @@ import * as jsx from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 
-import { usageFraction } from "@/lib/data/usage-format";
+import {
+  isUnlimitedCap,
+  UNLIMITED_CAP_SECONDS,
+  usageFraction,
+} from "@/lib/data/usage-format";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import {
   formatHoursCap,
@@ -65,7 +69,8 @@ const FooterMeter = (() => {
     require: (id: string): unknown => {
       if (id === "react/jsx-runtime") return jsx;
       if (id === "react") return React;
-      if (id === "@/lib/data/usage-format") return { usageFraction };
+      if (id === "@/lib/data/usage-format")
+        return { isUnlimitedCap, usageFraction };
       if (id === "@/lib/services/splitstep/config") return { formatPilotEnd };
       if (id === "./utils")
         return { formatHoursCap, formatHoursTenths, formatAllowanceSpan };
@@ -189,4 +194,17 @@ test("a small overage is said in minutes, never as 0.0 h", () => {
   expect(readout(html)).toContain("Over by 2 min");
   expect(readout(html)).not.toContain("0.0 h");
   expect(html).toContain("over the allowance by 2 minutes");
+});
+
+test("an uncapped (admin) workspace says Unlimited and draws no bar", () => {
+  const idle = render({ capSeconds: UNLIMITED_CAP_SECONDS });
+  expect(idle).toContain("Unlimited hours");
+  expect(idle).not.toContain('role="img"');
+  const priced = render({
+    capSeconds: UNLIMITED_CAP_SECONDS,
+    remainingSeconds: UNLIMITED_CAP_SECONDS,
+    selectedSeconds: 3 * HOUR,
+  });
+  expect(priced).toContain("Spends 3.0 h · Unlimited hours");
+  expect(priced).not.toContain("Over by");
 });

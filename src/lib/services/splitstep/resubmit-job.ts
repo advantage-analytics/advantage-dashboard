@@ -1053,10 +1053,11 @@ async function resolveAutoRetryWorkspace(params: {
     // Personal workspace: always permitted, matching personalWorkspace() —
     // there is no membership row to consult and the viewer is the only
     // member of their own workspace. The pilot flag is re-read so a pilot's
-    // retry draws their 10h exactly as a fresh submission would.
+    // retry draws their 10h exactly as a fresh submission would, and an
+    // admin's stays uncapped.
     const { data: owner, error: ownerError } = await supabase
       .from("users")
-      .select("individual_pilot")
+      .select("individual_pilot, is_admin")
       .eq("id", userId)
       .maybeSingle();
     if (ownerError) return null;
@@ -1071,6 +1072,7 @@ async function resolveAutoRetryWorkspace(params: {
       mark: "",
       canSubmitVideo: true,
       individualPilot: owner?.individual_pilot === true,
+      unlimitedVideo: owner?.is_admin === true,
       programStatus: null,
       playersCanUpload: false,
       uploadPolicy: "everyone",

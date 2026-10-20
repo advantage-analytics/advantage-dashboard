@@ -43,6 +43,7 @@ import {
   trimmedObjectKey,
   videoObjectKey,
 } from "../src/lib/services/splitstep/object-keys";
+import { playbackKeyFor } from "../src/lib/services/match-video/playback-copy";
 import { UploadService } from "../src/lib/services/upload/upload.service";
 
 /**
@@ -110,6 +111,16 @@ export const VIDEO_LAYOUTS: KeyLayout[] = [
       matchId: PROBE_MATCH,
       fileName: "original.mp4",
     }),
+  ),
+  layoutFrom(
+    "playback/{user}/{match}/original.mp4",
+    playbackKeyFor(
+      videoObjectKey({
+        userId: PROBE_USER,
+        matchId: PROBE_MATCH,
+        fileName: "original.mp4",
+      }),
+    )!,
   ),
   layoutFrom(
     "trimmed/{user}/{match}/{job}.mp4",

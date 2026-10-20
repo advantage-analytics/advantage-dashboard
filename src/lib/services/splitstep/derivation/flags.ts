@@ -119,6 +119,17 @@ export const POINT_FLAGS = {
    * is promoted.
    */
   SEGMENT_PROPOSAL_DIFFERS: "segment_proposal_differs",
+  /**
+   * Review-only. The last rally stroke's stored result is the vendor's call
+   * (result-type.ts `trustedLastCall`), and that call says the hitter lost a
+   * point the score fold says they won, or won one it says they lost: a ball
+   * stored Net or In beside a result_type that reads the other way. Neither is
+   * rewritten to fit the other. Measured over 22 label sessions (938 last
+   * rally strokes, 2026-10-18): on the calls kept, the call was right 45 times
+   * in 64 and the fold's rewrite 14. So when this fires, suspect the winner
+   * (or a stroke the vendor missed) before the ball.
+   */
+  LAST_CALL_CONTRADICTS_WINNER: "last_call_contradicts_winner",
 } as const;
 
 /** How close to a line the ball before a winner must land to be suspect. */
@@ -159,6 +170,15 @@ export const SHOT_FLAGS = {
 /** Net height at the posts, plus a ball radius of tolerance. */
 const NET_CLEARANCE_M = 1.07 + 0.0335;
 
+/** net_hit true while the vendor's own height_at_net_m has the ball clear. */
+export function netHitContradictsHeight(stroke: SplitStepStroke): boolean {
+  return (
+    stroke.netHit &&
+    stroke.heightAtNetM !== null &&
+    stroke.heightAtNetM > NET_CLEARANCE_M
+  );
+}
+
 /**
  * Flags for one stroke.
  *
@@ -184,11 +204,7 @@ export function flagStroke(params: {
 
   if (!stroke.in && !isLast) flags.push(SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED);
 
-  if (
-    stroke.netHit &&
-    stroke.heightAtNetM !== null &&
-    stroke.heightAtNetM > NET_CLEARANCE_M
-  ) {
+  if (netHitContradictsHeight(stroke)) {
     flags.push(SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT);
   }
 
