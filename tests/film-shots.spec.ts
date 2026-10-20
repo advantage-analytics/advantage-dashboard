@@ -10,6 +10,7 @@ import {
   shotRowCells,
   shotStops,
   shotTypeLabel,
+  stepShot,
 } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import { filmStops } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 
@@ -68,6 +69,23 @@ test("the playing shot, and nothing in the dead time between points", () => {
   expect(activeShotAt(stops, 53)?.stop.shot.id).toBe("s3");
   expect(activeShotAt(stops, 70)).toBeNull();
   expect(activeShotAt(stops, 80.5)?.stop.shot.id).toBe("t1");
+});
+
+test("↑ ↓ walk shots across points, never replaying the one on screen", () => {
+  // s1 50, s2 51.2, s3 52.4 (runs to 57.5), t1 80.
+  const stops = shotStops(filmStops(points, OFFSET), OFFSET);
+  const id = (t: number, d: -1 | 1) => stepShot(stops, t, d)?.shot.id ?? null;
+  expect(id(49, 1)).toBe("s1");
+  // From a contact just stepped to (a hair early), ↓ is the next one.
+  expect(id(51.2 - 0.03, 1)).toBe("s3");
+  // Mid-shot, ↑ is the shot before, not this shot's own contact.
+  expect(id(51.8, -1)).toBe("s1");
+  expect(id(50.5, -1)).toBeNull();
+  // ↓ crosses into the next point; ↑ from the dead time is the last shot.
+  expect(id(53, 1)).toBe("t1");
+  expect(id(70, -1)).toBe("s3");
+  expect(id(80.4, -1)).toBe("s3");
+  expect(id(80.4, 1)).toBeNull();
 });
 
 test("shots convert through the same clock as their point, once", () => {
