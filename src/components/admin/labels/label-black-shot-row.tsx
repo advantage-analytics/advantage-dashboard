@@ -62,10 +62,10 @@ import {
   STROKE_LABEL,
   STROKE_OPTIONS,
   formatCourtPoint,
-  formatVideoTime,
+  formatFileTime,
   isFault,
   parseCourtPoint,
-  parseVideoTime,
+  parseFileTime,
   sideOptions,
   spinLabel,
   spinOptions,
@@ -434,7 +434,10 @@ export function BlackShotRow({
   const patch = (value: LabelShotPatch) => onPatchShot?.(shot.id, value);
   const cell = { editable, rowSelected: selected };
   const selectCell = { ...cell, menu: tone };
-  const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
+  const time =
+    shot.videoTime !== null
+      ? formatFileTime(shot.videoTime, edit.fileOffset)
+      : null;
   const placement = shotPlacement(labelShotValues(shot));
   const serveResult = serveResultMenu(shot, edit.playOnLets);
   /** The words' ink, a step down on a fault. */
@@ -500,7 +503,7 @@ export function BlackShotRow({
             <TextEditor
               label={`Shot ${number} time`}
               text={time ?? ""}
-              parse={parseVideoTime}
+              parse={(text) => parseFileTime(text, edit.fileOffset)}
               onCommit={(value) =>
                 patch({ video_time: value as number | null })
               }
@@ -683,7 +686,10 @@ export function BlackDeletedShot({
 }) {
   const arrival = rowArrival(arrive);
   const { operations, onRestoreShots } = edit;
-  const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
+  const time =
+    shot.videoTime !== null
+      ? formatFileTime(shot.videoTime, edit.fileOffset)
+      : null;
   const reason = isLabelDeleteReason(shot.deleteReason)
     ? DELETE_REASON_LABEL[shot.deleteReason]
     : null;
@@ -772,7 +778,10 @@ export function BlackGhostShot({
   const { names, operations, onToggleGhost } = edit;
   const open = edit.openGhostIds?.has(shot.id) ?? false;
   const rowId = `label-ghost-${shot.id}`;
-  const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
+  const time =
+    shot.videoTime !== null
+      ? formatFileTime(shot.videoTime, edit.fileOffset)
+      : null;
   const hitter = sideLabel(shot.hitter, names);
   const words = hitter
     ? `1 shot removed: ${hitter} hit the fault back`
@@ -923,7 +932,8 @@ function BlackSuggestedShot({
   if ("error" in plan) return null;
   const operations = edit.editable ? edit.operations : undefined;
   const seconds = plan.write.video_time ?? suggestion.videoTime;
-  const time = seconds !== null ? formatVideoTime(seconds) : null;
+  const time =
+    seconds !== null ? formatFileTime(seconds, edit.fileOffset) : null;
   const name = sideLabel(plan.write.hitter ?? suggestion.hitter, edit.names);
   const words = name
     ? `A shot by ${name} is probably missing here`

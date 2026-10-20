@@ -152,7 +152,7 @@ export const SERVE_ROWS: H2HRowConfig[] = [
   {
     // Serve › Result "Ace" by the server: exactly `resultType` "Ace", which
     // leaves out the service winners the report counts as winners (every
-    // unreturned serve on a video match).
+    // unreturned serve and missed return on a video match).
     label: "Aces",
     key: "aces",
     cut: { serveResult: ["ace"] },
@@ -332,8 +332,9 @@ const ALL_H2H_CONFIGS: H2HRowConfig[] = H2H_GROUPS.flatMap(
 /* ── Advantage Intelligence (video-derived) rows ────────────────────────────
    The derivation (`lib/services/splitstep/derivation/result-type.ts`
    `classifyPoint()`) never emits "Ace": every unreturned serve is a "Service
-   Winner", so the published `aces` is 0 and the published `winners`
-   (LIKE '%Winner%') already counts those points. Product decision
+   Winner" (as is a return struck and missed, rally length 2), so the
+   published `aces` is 0 and the published `winners` (LIKE '%Winner%')
+   already counts those points. Product decision
    (2026-09-29): on these matches an unreturned serve the server won IS an
    ace. So two rows swap, at the widget alone — `match_stats` is untouched. */
 

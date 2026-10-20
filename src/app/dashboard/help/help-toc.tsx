@@ -18,6 +18,8 @@ const ITEMS: TocItem[] = [
   { id: "advantage-intelligence", label: "Advantage Intelligence" },
   { id: "swingvision", label: "Importing from SwingVision" },
   { id: "teams", label: "Teams" },
+  { id: "sharing", label: "Sharing a match" },
+  { id: "ask", label: "Ask" },
   { id: "claude", label: "Using Advantage in Claude" },
   { id: "shortcuts", label: "Keyboard shortcuts" },
   { id: "glossary", label: "Glossary" },

@@ -113,3 +113,24 @@ test("a point the opponent won carries the initials chip, though they also hit i
   await expect(row.locator('[data-mark="opp"]')).toBeVisible();
   await expect(row.locator('[data-mark="you"]')).toHaveCount(0);
 });
+
+test("a frozen score reads as a dash, never 0-0, and a guessed winner says so", async ({
+  page,
+}) => {
+  await page.goto(origin);
+  await expect
+    .poll(() => page.locator("html").getAttribute("data-hydrated"))
+    .toBe("true");
+
+  const row = page.locator('[data-point-id="frozen"]');
+  await expect(row).toContainText("\u2014");
+  await expect(row).toContainText("Score not read");
+  await expect(row).toContainText("Winner estimated");
+  await expect(row).not.toContainText("0-0");
+  // Its game header draws the dash where the you-first game score goes.
+  await expect(page.getByText("\u2014 · ", { exact: false })).toHaveCount(1);
+  // A point that did read keeps its score and says nothing about the winner.
+  const read = page.locator('[data-point-id="won-by-opp"]');
+  await expect(read).toContainText("15-0");
+  await expect(read).not.toContainText("Winner estimated");
+});

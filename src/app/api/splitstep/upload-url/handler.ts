@@ -340,13 +340,17 @@ export async function handleUploadUrl(
         missing: billable === null ? "billable_seconds" : "usage",
       });
     } else {
-      const overAllowance = peekRefusalMessage(peek, billable);
+      const overAllowance = peekRefusalMessage(
+        peek,
+        billable,
+        billingWorkspace,
+      );
       if (overAllowance !== null) {
         pipelineLog.info(`${LOG} refused — over allowance`, {
           matchId,
           workspaceId: billingWorkspace.id,
           billable,
-          limit: peek.limit,
+          creditSeconds: peek.creditSeconds,
           usedSeconds: peek.usedSeconds,
           capSeconds: peek.capSeconds,
         });

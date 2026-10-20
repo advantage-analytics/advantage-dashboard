@@ -22,6 +22,17 @@ const BASE: VideoProbe = {
   sizeBytes: 3_200_000_000,
 };
 
+/** The Gimena v Rosales original: over the upload limit, otherwise fine. */
+const OVERSIZE: VideoProbe = {
+  ...BASE,
+  durationSeconds: 8400,
+  fps: 60,
+  averageFps: 59.94,
+  videoCodec: "avc",
+  canConvert: true,
+  sizeBytes: 23_000_000_000,
+};
+
 /**
  * Every state the file step shows on the video path. The strips carry the
  * validator's own words — the probes are fixed, the verdicts are real.
@@ -53,6 +64,16 @@ const STATES: readonly {
     label: "Refused — 720p",
     probe: { ...BASE, width: 1280, height: 720 },
   },
+  {
+    id: "oversize",
+    label: "Accepted, compressed before upload — 23 GB, 2 h 20 min at 60 fps",
+    probe: OVERSIZE,
+  },
+  {
+    id: "oversize-refused",
+    label: "Refused — 23 GB in a browser that can't compress",
+    probe: { ...OVERSIZE, canConvert: false },
+  },
 ];
 
 function State({ label, probe }: { label: string; probe: VideoProbe | null }) {
@@ -70,7 +91,7 @@ function State({ label, probe }: { label: string; probe: VideoProbe | null }) {
             accepted
               ? {
                   name: "court-3-saturday.mp4",
-                  size: "3.2 GB",
+                  size: `${((probe?.sizeBytes ?? 0) / 1e9).toFixed(1)} GB`,
                   status: "ready",
                 }
               : null
@@ -78,6 +99,7 @@ function State({ label, probe }: { label: string; probe: VideoProbe | null }) {
           probe={accepted ? (probe as VideoProbeSummary) : null}
           warnings={accepted ? (result?.warnings ?? []) : []}
           notes={accepted ? (result?.notes ?? []) : []}
+          notices={accepted ? (result?.notices ?? []) : []}
           busy={false}
           error={result && !result.success ? (result.error ?? null) : null}
           parsingState={{

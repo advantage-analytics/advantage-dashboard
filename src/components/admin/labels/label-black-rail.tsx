@@ -141,6 +141,7 @@ export function LabelBlackRail({
   scores,
   adScoring = true,
   playOnLets,
+  fileOffset = 0,
   names,
   marks = null,
   expandedPointId,
@@ -208,6 +209,8 @@ export function LabelBlackRail({
   adScoring?: boolean;
   /** `session.playOnLets`: false offers `Let` on a serve row's result. */
   playOnLets?: boolean;
+  /** `LabelVideo.startTimeSeconds`: rows print times on the file's clock. */
+  fileOffset?: number;
   names: SideNames;
   /** The session's marks. Null draws no chip, hover line or suggestion. */
   marks?: LabelMarks | null;
@@ -343,6 +346,7 @@ export function LabelBlackRail({
       adScoring,
       playOnLets,
       tone,
+      fileOffset,
     }),
     [
       editable,
@@ -362,6 +366,7 @@ export function LabelBlackRail({
       adScoring,
       playOnLets,
       tone,
+      fileOffset,
     ],
   );
   const bandBefore = useMemo(
