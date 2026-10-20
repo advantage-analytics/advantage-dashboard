@@ -380,10 +380,10 @@ function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
  *   `restoreShots`). A shot write also settles its point's ending in that
  *   same call (ending-session.ts); the server's `point` is the last word over
  *   the optimistic rows here.
- * - Outside a control: Enter checks the open point, Space plays or pauses, ← /
- *   → step points, ] / [ step the amber marks and ' / ; the grey ones. ↑ / ↓ walk the open point's
- *   strokes and ⌘ Enter checks the point, both from inside a stroke's row
- *   too. Escape lets go of the selected stroke, then folds the open point.
+ * - Outside a control: Enter unfolds the open point, Space plays or pauses,
+ *   ← / → step points, ] / [ step the amber marks and ' / ; the grey ones.
+ *   ↑ / ↓ walk the open point's strokes and ⌘ Enter checks the point — or
+ *   unchecks it, when it is checked — both from inside a stroke's row too. Escape lets go of the selected stroke, then folds the open point.
  *   ⌘Z is the header's Undo: the newest action rewound on the server. Space
  *   plays or pauses from anywhere but a text field, an open menu or a dialog.
  * - Two layouts (`label-layout.ts`) mount the same player, court panel and rail
@@ -765,7 +765,7 @@ export function LabelConsole({
   }
 
   // Ticking the current point folds its shot rows until the labeller clicks its
-  // row or unticks it, or another point becomes current.
+  // row, presses Enter or unticks it, or another point becomes current.
   const [foldedPointId, setFoldedPointId] = useState<string | null>(null);
   if (foldedPointId !== null && foldedPointId !== currentPointId) {
     setFoldedPointId(null);
@@ -2464,10 +2464,11 @@ export function LabelConsole({
     videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
   });
 
-  // Enter marks the open point checked; Space and ← / → drive the video; ]
-  // and [ go to the next and previous open flag. Never from inside a control,
-  // where those keys already mean something.
-  const checkOpenPoint = useRef<() => void>(() => {});
+  // Enter unfolds the open point and ⌘ Enter checks or unchecks it; Space and
+  // ← / → drive the video; ] and [ go to the next and previous open flag.
+  // Never from inside a control, where those keys already mean something.
+  const unfoldOpenPoint = useRef<() => void>(() => {});
+  const toggleOpenPointCheck = useRef<() => void>(() => {});
   // `]` and `[`: the next and previous amber flag, as the header's amber list
   // does; `'` and `;`, the two keys under them, the same for the grey list.
   const stepToFlag = useRef<
@@ -2532,9 +2533,13 @@ export function LabelConsole({
     slotJumpStops,
   ]);
   useEffect(() => {
-    checkOpenPoint.current = () => {
-      if (!operable || confirm || !expanded || expanded.checkedAt) return;
-      setChecked(expanded.id, true);
+    unfoldOpenPoint.current = () => {
+      if (confirm || !expanded) return;
+      setFoldedPointId(null);
+    };
+    toggleOpenPointCheck.current = () => {
+      if (!operable || confirm || !expanded) return;
+      setChecked(expanded.id, expanded.checkedAt === null);
     };
     stepToFlag.current = (direction, kind) => {
       if (confirm) return;
@@ -2726,7 +2731,7 @@ export function LabelConsole({
         event.preventDefault();
         if (chord) {
           (document.activeElement as HTMLElement | null)?.blur?.();
-          checkOpenPoint.current();
+          toggleOpenPointCheck.current();
         } else stepShot.current(key === "ArrowDown" ? 1 : -1);
         return;
       }
@@ -2750,7 +2755,7 @@ export function LabelConsole({
       const target = event.target as Element | null;
       if (target?.closest?.(KEY_OWNER_SELECTOR)) return;
       event.preventDefault();
-      if (key === "Enter") checkOpenPoint.current();
+      if (key === "Enter") unfoldOpenPoint.current();
       else if (key === "]" || key === "[") {
         stepToFlag.current(key === "]" ? 1 : -1, "score");
       } else if (key === "'" || key === ";") {

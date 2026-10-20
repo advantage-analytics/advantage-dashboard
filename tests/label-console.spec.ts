@@ -1018,7 +1018,7 @@ test.describe("a flag jump lands on the point's review step", () => {
     // marked, and onFilmPause lets it pass rather than cancel that replay.
     expect(consoleSource).toContain("selfPause.current = true;");
     const keys = consoleSource.slice(
-      consoleSource.indexOf('if (key === "Enter") checkOpenPoint.current();'),
+      consoleSource.indexOf('if (key === "Enter") unfoldOpenPoint.current();'),
       consoleSource.indexOf('window.addEventListener("keydown", onKeyDown);'),
     );
     expect(keys.match(/cancelReplayRef\.current\(\);/g)).toHaveLength(2);

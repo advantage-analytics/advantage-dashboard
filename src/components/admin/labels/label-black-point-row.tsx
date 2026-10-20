@@ -330,7 +330,7 @@ export const BlackPointRow = memo(function BlackPointRow({
         </span>
 
         <ChromeTooltip
-          label={checked ? "Point checked" : "Mark point checked"}
+          label={checked ? "Uncheck point" : "Mark point checked"}
           side="top"
         >
           <button
