@@ -36,7 +36,7 @@ const BAND = "src/components/admin/labels/label-game-band.tsx";
 function format() {
   return createLoader().load(FORMAT) as {
     pointSentence: (point: LabelPoint, names: Names) => string;
-    pointDetail: (point: LabelPoint) => string;
+    pointDetail: (point: LabelPoint, fileOffset?: number) => string;
     formatClockTime: (seconds: number) => string;
   };
 }
@@ -244,6 +244,10 @@ test.describe("the two lines", () => {
         point({ shots: [shot("a", { stroke: "backhand", videoTime: 5 })] }),
       ),
     ).toBe("0:05 · 1 shot rally");
+    // On a trimmed file the time is the player's: 3723.6 − 3600 → 2:03.
+    expect(pointDetail(ace, 3600)).toBe(
+      "Slice First Serve Wide · 2:03 · serve only",
+    );
   });
 
   test("the clock: whole seconds, the hour only past it", () => {
@@ -1091,6 +1095,40 @@ test.describe("the black shots well", () => {
     const input = classes(tag(field, "<input"));
     expect(input).toContain("text-white");
     expect(input).not.toContain("text-white/90");
+  });
+
+  test("times read on the playing file's clock, not the analysis clock", () => {
+    // The vendor's trimmed copy starts at the job's `start_time_seconds`
+    // (Gimena v Vicente: 852.08), so every stored time sits that far ahead of
+    // the player. 940 here: the fault at 950.2 is 0:10.2 in the player.
+    const untrimmed = renderWell();
+    expect(shotRow(untrimmed, "w-fault")).toContain("15:50.2");
+
+    const html = renderWell({ fileOffset: 940 });
+    expect(shotRow(html, "w-fault")).toContain(
+      'aria-label="Shot 1 time: 0:10.2"',
+    );
+    expect(shotRow(html, "w-lit")).toContain(
+      'aria-label="Shot 4 time: 0:20.3"',
+    );
+    expect(html).not.toContain("15:50.2");
+    // The tombstone's Undo names the same clock.
+    expect(html).toContain("Undo delete shot at 0:19.6");
+
+    // The editor takes the player's time and stores the analysis clock's.
+    const all = elements(
+      well().BlackShotsWell({
+        point: rally(),
+        edit: wellEdit({ fileOffset: 852.0812548480718 }),
+      }),
+    );
+    const editor = all.find(
+      (el) => el.props.label === "Shot 3 time" && "parse" in el.props,
+    )!;
+    const parse = editor.props.parse as (text: string) => unknown;
+    expect(parse("0:01.7")).toBe(853.781);
+    expect(parse("")).toBeNull();
+    expect(parse("abc")).toBeUndefined();
   });
 
   test("a click selects the stroke, and each editor sends its patch", () => {

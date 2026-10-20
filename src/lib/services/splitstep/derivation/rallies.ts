@@ -110,8 +110,7 @@ function isResetScore(rally: SplitStepRally): boolean {
  *
  * Returns the index of the first reset rally, or null. Trailing only, and only
  * when a real set score came before it. A reset score at the START is the
- * warm-up rally (see the degraded fixture), which stays a refusal: nothing
- * about it says which game it belongs to.
+ * leading rally, which buildTranscript keeps in the opening game.
  */
 export function collapsedTailStart(rallies: SplitStepRally[]): number | null {
   let start = rallies.length;

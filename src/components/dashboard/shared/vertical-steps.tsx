@@ -137,27 +137,40 @@ const MARK_GLYPH: Record<StepMarkSize, string> = {
 /**
  * The dashed ring of `wait` and `later`: twelve dashes, drawn rather than
  * bordered. A CSS `dashed` border at 14-16px gets about four fat dashes with
- * wide gaps, which beside the spinner's dark arc read as a stalled spinner;
- * `pathLength` lets the dash count be the design's choice. Fills its box, so
- * both mark sizes share it.
+ * wide gaps, which beside the spinner's dark arc read as a stalled spinner.
+ * Fills its box, so both mark sizes share it.
+ *
+ * Each dash is its own arc of the circle, turned into place around the
+ * centre, not a `stroke-dasharray` on one circle. A dash pattern starts
+ * wherever the path does, so its dashes sat clockwise of 12, 3, 6 and 9;
+ * offsetting it split a dash across the path's seam, which renders as a
+ * hairline gap. Identical arcs are centred on every axis by construction, so
+ * the ring is even all the way round, and they keep the circle's curve. Dash
+ * length and weight are the old pattern's: 55% of each twelfth, 1.5 thick.
  */
 const RING_DASHES = 12;
-const RING_PERIOD = 100 / RING_DASHES;
+const RING_RADIUS = 5.9;
+/** Half a dash, as an angle: 55% of a twelfth of the turn. */
+const RING_HALF_DASH = ((2 * Math.PI) / RING_DASHES) * 0.55 * 0.5;
+/** One dash centred on 12 o'clock; the others are this, turned. */
+const RING_DASH_PATH = (() => {
+  const dx = RING_RADIUS * Math.sin(RING_HALF_DASH);
+  const y = 7 - RING_RADIUS * Math.cos(RING_HALF_DASH);
+  return `M ${7 - dx} ${y} A ${RING_RADIUS} ${RING_RADIUS} 0 0 1 ${7 + dx} ${y}`;
+})();
 
 function DashRing({ ink }: { ink: string }) {
   return (
     <svg viewBox="0 0 14 14" className="size-full" aria-hidden="true">
-      <circle
-        cx="7"
-        cy="7"
-        r="5.9"
-        fill="none"
-        stroke={ink}
-        strokeWidth="1.5"
-        pathLength="100"
-        strokeDasharray={`${RING_PERIOD * 0.55} ${RING_PERIOD * 0.45}`}
-        transform="rotate(-90 7 7)"
-      />
+      <g fill="none" stroke={ink} strokeWidth="1.5">
+        {Array.from({ length: RING_DASHES }, (_, i) => (
+          <path
+            key={i}
+            d={RING_DASH_PATH}
+            transform={`rotate(${(360 / RING_DASHES) * i} 7 7)`}
+          />
+        ))}
+      </g>
     </svg>
   );
 }

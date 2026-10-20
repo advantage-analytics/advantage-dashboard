@@ -4,7 +4,11 @@
  * Pure (the blob existence check is injected) so the rule can be tested
  * without Azure. The server loader is `match-video-server.ts`.
  *
- * ── The two kinds of file ───────────────────────────────────────────────────
+ * ── The three kinds of file ─────────────────────────────────────────────────
+ * - `playback_object_key` — the playback copy the Azure worker makes of OUR
+ *   file (`playback-copy.ts`): the upload with its index moved to the front,
+ *   or re-encoded to H.264 ≤1080p with a keyframe every 2 s. Same timeline as
+ *   the upload, with its audio. Preferred by every player once `ready`.
  * - `video_object_key` — OUR file: the athlete's upload, which since September
  *   2026 is cut to the selected window in the browser before upload. It keeps
  *   the original bitrate and the audio. Preferred whenever the blob exists.
@@ -27,24 +31,32 @@ export interface PlaybackJobRow {
   video_object_key: string | null;
   trimmed_object_key: string | null;
   start_time_seconds: number | string | null;
+  /** Absent on a loader that does not read them: no copy. */
+  playback_object_key?: string | null;
+  playback_status?: string | null;
 }
+
+/** The columns `choosePlaybackFile` reads, for a loader's select. */
+export const PLAYBACK_JOB_COLUMNS =
+  "video_object_key, trimmed_object_key, start_time_seconds, playback_object_key, playback_status";
 
 export interface PlaybackChoice {
   blobName: string;
   /** Seconds to subtract from `points.video_time` to seek in this file. */
   startTimeSeconds: number;
-  source: "upload" | "vendor-copy";
+  source: "playback" | "upload" | "vendor-copy";
 }
 
 /**
  * @param jobs The match's jobs, NEWEST FIRST — a resubmitted match's newest
  *   job is the analysis the page is showing.
- * @param prefer Which file to try first. `"upload"` (the default) is the rule
- *   above. `"vendor-copy"` is the admin labelling console's: the re-encode
- *   runs near 2 Mbps where an upload runs 8–12, which is about all a link to
- *   the Canada East container carries, so the upload stalls on every seek.
- *   The vendor copy is checked for existence too, since older jobs and missed
- *   copies have no blob, and our upload is the fallback.
+ * @param prefer Which file to try after a ready playback copy, which always
+ *   wins. `"upload"` (the default) is the rule above. `"vendor-copy"` is the
+ *   admin labelling console's while a job has no copy yet: an upload that
+ *   skipped the browser re-encode can run 8–20 Mbps, more than a link to the
+ *   Canada East container carries, where the vendor's runs near 2. The vendor
+ *   copy is checked for existence too, since older jobs and missed copies have
+ *   no blob, and our upload is the fallback.
  */
 export async function choosePlaybackFile(
   jobs: PlaybackJobRow[],
@@ -52,6 +64,17 @@ export async function choosePlaybackFile(
   prefer: PlaybackChoice["source"] = "upload",
 ): Promise<PlaybackChoice | null> {
   for (const job of jobs) {
+    if (
+      job.playback_status === "ready" &&
+      job.playback_object_key &&
+      (await blobExists(job.playback_object_key))
+    ) {
+      return {
+        blobName: job.playback_object_key,
+        startTimeSeconds: 0,
+        source: "playback",
+      };
+    }
     const vendorCopy = job.trimmed_object_key
       ? vendorCopyChoice(job.trimmed_object_key, job.start_time_seconds)
       : null;
