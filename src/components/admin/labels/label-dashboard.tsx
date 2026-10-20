@@ -26,6 +26,7 @@ import {
   labelSetScores,
   type LabelSetScore,
 } from "@/lib/services/labels/set-scores";
+import { PUBLISHED_PAST_TAILS } from "@/lib/services/labels/session-status";
 import { cn } from "@/lib/utils";
 
 /**
@@ -43,7 +44,8 @@ import { cn } from "@/lib/utils";
  * Read off the same pure rules the rail draws from, so the two never
  * disagree: `openFlags` / `flagGroups` for what is flagged, `labelSetScores`
  * for the score, `completeWarnings` (computed by the console, handed in as
- * `warnings`) for what a publish would refuse, `buildAppliedRows` +
+ * `warnings`) for what a publish writes partly or leaves out,
+ * `buildAppliedRows` +
  * `expectedStats` for the statistics — the rows a publish would write,
  * counted.
  *
@@ -387,12 +389,14 @@ function LeftToCheck({ points, marks, reading, onOpen }: WidgetProps) {
   );
 }
 
-/** A flag kind shows this many point numbers, then "+N". */
+/** A review item shows this many point numbers, then "+N". */
 const POINTS_SHOWN = 8;
 
 /**
- * One of the two lists the rail's header carries, laid out as a table: the
- * flag, how many are open, and the points they are on. The dot before the
+ * One of the two lists the rail's header carries, laid out as a table: each
+ * review item's question, how many points ask it, and those points. The
+ * heading counts points, each once — a point open on two items is on two
+ * rows. The dot before the
  * heading is the chip's own colour in the rail — amber or grey — and the only
  * colour on the list.
  */
@@ -409,9 +413,16 @@ function FlagList({
   empty: string;
   onOpen: (pointId?: string) => void;
 }) {
-  const count = groups.reduce((sum, group) => sum + group.count, 0);
   const rows = groups.flatMap((group) => group.rows);
-  const first = rows[0]?.points[0];
+  const listed = rows.flatMap((row) => row.points);
+  const count = new Set(listed.map((point) => point.pointId)).size;
+  // The rows run in item order, so the first point in the match is found,
+  // not read off the top row.
+  const first = listed.reduce<(typeof listed)[number] | undefined>(
+    (min, point) =>
+      min === undefined || point.pointNumber < min.pointNumber ? point : min,
+    undefined,
+  );
   return (
     <div data-flag-list={tone} className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
@@ -583,7 +594,12 @@ interface CheckItem {
   pointId?: string;
 }
 
-const REFUSES = "publishing will refuse";
+/**
+ * The endings `completeWarnings` gives a point a publish writes only partly,
+ * or leaves out. None blocks a publish any more (2026-10-18); each stays an
+ * open check.
+ */
+const PUBLISHED_PAST: readonly string[] = Object.values(PUBLISHED_PAST_TAILS);
 
 /** The route to publishing, as the things that must be true first. */
 function publishChecks({
@@ -610,9 +626,11 @@ function publishChecks({
     (sum, set) => sum + set.unfinished.length + set.overflow.length,
     0,
   );
-  // What publishing refuses beyond the score: a point it cannot write.
-  const refused = warnings.filter(
-    (warning) => warning.includes(REFUSES) && !warning.startsWith("Set "),
+  // A point the publish writes only partly, or leaves out.
+  const partial = warnings.filter(
+    (warning) =>
+      !warning.startsWith("Set ") &&
+      PUBLISHED_PAST.some((tail) => warning.endsWith(tail)),
   );
   const plural = (n: number, one: string, many = `${one}s`) =>
     `${n} ${n === 1 ? one : many}`;
@@ -633,8 +651,8 @@ function publishChecks({
           }
         : differing.length > 0
           ? {
-              // With marks on, a publish refuses a set that disagrees.
-              state: marks ? "blocking" : "open",
+              // Published as labelled either way; the record still disagrees.
+              state: "open",
               title: "Score adds up",
               detail: differing
                 .map(
@@ -649,11 +667,14 @@ function publishChecks({
               title: "Score adds up",
               detail: "Every labelled set matches the match record.",
             },
-    refused.length > 0
+    partial.length > 0
       ? {
-          state: "blocking",
+          state: "open",
           title: "Every point can be written",
-          detail: refused[0].replace(`, so ${REFUSES}`, ""),
+          detail:
+            partial.length === 1
+              ? partial[0]
+              : `${partial[0]} (and ${partial.length - 1} more)`,
         }
       : {
           state: "done",

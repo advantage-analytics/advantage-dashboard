@@ -169,6 +169,15 @@ export interface Workspace {
    */
   individualPilot?: boolean;
   /**
+   * A personal workspace whose owner is an admin (`users.is_admin`) — no
+   * monthly video cap at all. See `monthlyCapSecondsFor()`.
+   *
+   * Absent or false for everyone else, and always for a team workspace: an
+   * admin uploading into a program still spends that program's budget.
+   * Optional so a constructor that does not read the column fails closed.
+   */
+  unlimitedVideo?: boolean;
+  /**
    * `programs.pilot_eligible` — an admin put this NON-college team on the
    * pilot's program processing pool (Admin › Teams › Pilot card, through
    * `admin_set_pilot_eligible`). Raises `quotaTierFor()` to the program figure

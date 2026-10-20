@@ -11,6 +11,7 @@ import {
   leftoverIds,
   planGamePull,
   planGameShift,
+  planGameSplit,
   type GameShiftWrite,
 } from "@/lib/services/labels/game-shift";
 import {
@@ -633,6 +634,67 @@ test.describe("writeLabelGameShift", () => {
         status: "edited",
       });
     }
+  });
+
+  test("the match row is read once, score beside format, and the shift plans with the record's match-tiebreak set as the console does", async () => {
+    // Best of 1 puts the deciding set at set 1 — the fixture's — and the
+    // record spells it as a match tiebreak: 1–0 games with its points.
+    const fake = fakeClient({
+      session: {
+        status: "labelling",
+        ad_scoring: true,
+        job_id: JOB_ID,
+        match_id: MATCH_ID,
+      },
+      match: {
+        score: {
+          player1: [1],
+          player2: [0],
+          player1_tiebreaks: [10],
+          player2_tiebreaks: [7],
+        },
+        format: { best_of: 1 },
+      },
+    });
+    // Its vendor-cut games are left alone: nothing in the set is a leftover.
+    expect(
+      await writeLabelGameShift({
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        fromPointId: UUID(7),
+      }),
+    ).toEqual({
+      error: "That point sits inside its game — there is nothing to move on.",
+    });
+    expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
+      ["label_sessions", "select"],
+      ["label_points", "select"],
+      ["matches", "select"],
+    ]);
+    expect(fake.calls.find((c) => c.table === "matches")?.filters).toEqual({
+      id: MATCH_ID,
+    });
+    // The same 1–0 with no tiebreak points is a retirement: an ordinary set,
+    // and the shift goes ahead.
+    const retired = fakeClient({
+      session: {
+        status: "labelling",
+        ad_scoring: true,
+        job_id: JOB_ID,
+        match_id: MATCH_ID,
+      },
+      match: { score: { player1: [1], player2: [0] }, format: { best_of: 1 } },
+    });
+    expect(
+      await writeLabelGameShift({
+        supabase: retired.supabase,
+        sessionId: SESSION_ID,
+        fromPointId: UUID(7),
+      }),
+    ).toMatchObject({
+      ok: true,
+      writes: [expect.anything(), expect.anything()],
+    });
   });
 
   test("moved points whose strokes contradict their new server: the points' writes carry the flipped winner, then the strokes in grouped writes — label_points and label_shots", async () => {
@@ -1557,6 +1619,37 @@ test.describe("writeLabelGamePull", () => {
     ]);
   });
 
+  test("the pull plans with the record's match-tiebreak set too: its games are never short", async () => {
+    const fake = fakeClient({
+      session: {
+        status: "labelling",
+        ad_scoring: false,
+        job_id: JOB_ID,
+        match_id: MATCH_ID,
+      },
+      match: {
+        score: {
+          player1: [1],
+          player2: [0],
+          player1_tiebreaks: [10],
+          player2_tiebreaks: [7],
+        },
+        format: { best_of: 1 },
+      },
+      points: rowsOf(shortCase()),
+    });
+    expect(
+      await writeLabelGamePull({
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        gameKey: KEY,
+      }),
+    ).toEqual({
+      error: "That game is not short — there is nothing to pull in.",
+    });
+    expect(fake.calls.map((c) => c.table)).toContain("matches");
+  });
+
   test("a bad key, a game the rule declines, a complete session and a failed write each stop the run", async () => {
     const bad = fakeClient({});
     expect(
@@ -1856,5 +1949,94 @@ test.describe("an ad-scoring session's seeded games (the reproduction)", () => {
     });
     expect(gameOverflow(merged, true)).toEqual([]);
     expect(gameUnderflow(merged, true)).toEqual([]);
+  });
+});
+
+// ── Start a new game here ───────────────────────────────────────────────────
+
+test.describe("planGameSplit", () => {
+  test("the point and the rest of its game become a new game, served by the other player, numbered past every game", () => {
+    // Two games run together: Lee served 4 points, then Vargas's game began
+    // at point 5 — the vendor never cut it.
+    const points = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1", "p2", "p2"] },
+      { game: 2, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
+    ]);
+    const at = points[4];
+    const plan = planGameSplit(
+      points.map((p) => ({ ...p, shots: [] })),
+      at.id,
+    );
+    expect("ok" in plan).toBe(true);
+    if (!("ok" in plan)) return;
+    expect(plan.writes.map((w) => w.id)).toEqual([points[4].id, points[5].id]);
+    for (const write of plan.writes) {
+      expect(write).toMatchObject({
+        set_number: 1,
+        game_number: 3,
+        server: "p2",
+        game_type: "game",
+        status: "edited",
+      });
+    }
+    // No other row is touched.
+    expect(plan.writes).toHaveLength(2);
+    expect(plan.shots).toEqual([]);
+  });
+
+  test("refused at a game's first point, in a tiebreak, and on a tombstone", () => {
+    const points = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
+      { game: 2, server: "p2", type: "tiebreak", winners: ["p1", "p2", "p1"] },
+    ]).map((p) => ({ ...p, shots: [] }));
+    expect(planGameSplit(points, points[0].id)).toEqual({
+      error: "This point already starts its game.",
+    });
+    expect(planGameSplit(points, points[5].id)).toEqual({
+      error: "A tiebreak is one game — it cannot be split.",
+    });
+    const gone = points.map((p, i) =>
+      i === 2 ? { ...p, status: "deleted" as const } : p,
+    );
+    expect(planGameSplit(gone, points[2].id)).toEqual({
+      error: "Restore this point before starting a game at it.",
+    });
+  });
+
+  test("a stale tiebreak type on a point inside a regular game does not block it", () => {
+    // Points 4–5 still say tiebreak, but they share game 1's number, so the
+    // rail shows them in game 1 under its "game" header.
+    const points = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1", "p2", "p2"] },
+    ]).map((p, i) => ({
+      ...p,
+      gameType: i >= 4 ? ("match_tiebreak" as const) : p.gameType,
+      shots: [],
+    }));
+    const plan = planGameSplit(points, points[4].id);
+    if (!("ok" in plan)) throw new Error(plan.error);
+    expect(plan.writes.map((w) => w.id)).toEqual([points[4].id, points[5].id]);
+    for (const write of plan.writes) {
+      expect(write).toMatchObject({ game_number: 2, game_type: "game" });
+    }
+  });
+
+  test("the new game reads as its own game on the scoreboard, in row order", () => {
+    const points = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1", "p2", "p2"] },
+      { game: 2, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
+    ]);
+    const plan = planGameSplit(
+      points.map((p) => ({ ...p, shots: [] })),
+      points[4].id,
+    );
+    if (!("ok" in plan)) throw new Error(plan.error);
+    const after = applyGameShift(points, plan.writes);
+    const bands = labelScores(after, true).games;
+    expect(bands.map((b) => [b.gameNumber, b.gameInSet])).toEqual([
+      [1, 1],
+      [3, 2],
+      [2, 3],
+    ]);
   });
 });

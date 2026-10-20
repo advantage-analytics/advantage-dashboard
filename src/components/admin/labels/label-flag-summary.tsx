@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Flag, Scale } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import {
@@ -20,16 +20,12 @@ import {
   type OpenFlag,
   type ScoreStop,
 } from "@/lib/services/labels/flag-nav";
-import {
-  dataFlagsLabel,
-  onPointsDetail,
-  toCheckLabel,
-} from "@/lib/services/labels/marks-copy";
+import { dataFlagsLabel, toCheckLabel } from "@/lib/services/labels/marks-copy";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import type { RailTone } from "./label-rail-tone";
 
-/** A row of a long kind shows this many point numbers, then "+N". */
+/** A row of a long item shows this many point numbers, then "+N". */
 const POINTS_SHOWN = 4;
 
 /** The ink a hand-built row wears inside the menu, which renders outside the rail. */
@@ -73,12 +69,13 @@ export const SCORE_KEYS = { next: "]", prev: "[" } as const;
 export const DATA_KEYS = { next: "'", prev: ";" } as const;
 
 /**
- * The header's open marks: today's flag and count, now the jump to the next open
- * flag after `fromPointId` (`]`, and `[` back, are the console's keys for the
- * same), and a quiet chevron that opens every flag in one `FloatMenu`. The
+ * The header's open flags, one per point: today's flag and count of points,
+ * now the jump to the next flagged point after `fromPointId` (`]`, and `[`
+ * back, are the console's keys for the same), and a quiet chevron that opens
+ * every flag in one `FloatMenu`, grouped by the item each point asks. The
  * score mismatch, when there is one, leads the list (`score`) and is a stop
  * of its own (`scoreStop`): its words sit before the count as an amber chip
- * that goes to the set's last point, it counts as one flag, and the jumps
+ * that goes to the set's last point, it counts as one point, and the jumps
  * land on it. It was a 6 px dot by the chevron until 2026-10-10, and a set
  * labelled 5–5 against a 6–4 record went to publish unnoticed.
  */
@@ -94,7 +91,7 @@ export function LabelFlagSummary({
   tone = "dark",
   bulk = null,
 }: {
-  /** `openFlags(points, marks)`. */
+  /** `openFlags(points, marks)`: one per flagged point. */
   openMarks: readonly OpenFlag[];
   points: readonly Pick<LabelPoint, "id">[];
   /** Where a jump starts: the current point, else none (the top). */
@@ -130,20 +127,23 @@ export function LabelFlagSummary({
     ...(scoreStop ? [scoreStop] : []),
     ...extraStops,
   ];
-  // The total is the marks and the score — "Nothing left to check" means no
-  // flag is open. A slot between rows is a place the jumps also stop at; the
-  // jump's tooltip says how many there are, so the two numbers never
-  // disagree unexplained.
+  // The total is the flagged points and the score — "Nothing left to check"
+  // means no flag is open. A slot between rows is a place the jumps also
+  // stop at; the jump's tooltip says how many there are, so the two numbers
+  // never disagree unexplained.
   const count = openMarks.length + (scoreStop ? 1 : 0);
   const slots = extraStops.length;
-  // Points carrying an open mark: the score stop's point carries none.
-  const openPoints = new Set(openMarks.map((f) => f.pointId)).size;
   const next = stepFlag(stops, points, fromPointId, 1);
   const prev = stepFlag(stops, points, fromPointId, -1);
   const groups = flagGroups(openMarks);
   const ink = ROW_INK[tone];
 
+  // A jump from the list arms the court for the landing point's current
+  // review item (the console's `goToFlag`): the closing menu must not then
+  // hand focus back to its trigger, which would keep the keys for itself.
+  const jumped = useRef(false);
   const go = (pointId: string) => {
+    jumped.current = open;
     setOpen(false);
     onGoToPoint?.(pointId);
   };
@@ -218,9 +218,7 @@ export function LabelFlagSummary({
           label={`${data ? "Next data flag" : "Next flag"} · point ${next.pointNumber}`}
           detail={[
             flagStopLabel(next),
-            [totalLabel, onPointsDetail(openPoints)?.toLowerCase()]
-              .filter(Boolean)
-              .join(" "),
+            totalLabel,
             ...(slots > 0
               ? [
                   slots === 1
@@ -268,6 +266,11 @@ export function LabelFlagSummary({
       <FloatMenu
         open={open}
         onOpenChange={setOpen}
+        onCloseAutoFocus={(event) => {
+          if (!jumped.current) return;
+          jumped.current = false;
+          event.preventDefault();
+        }}
         align="start"
         width={300}
         tone={tone}
@@ -339,21 +342,23 @@ export function LabelFlagSummary({
           </>
         ) : null}
         {groups.length > 0 ? <FloatMenuDivider /> : null}
+        {/* One group per review item, its one row the question: a label
+            above it would only say the question twice. */}
         {groups.map((group) => (
-          <div key={group.name} role="group" aria-label={group.name}>
-            <FloatMenuLabel>
-              {group.name}{" "}
-              <span className={cn("mono tabular text-[10px]", ink.count)}>
-                {group.count}
-              </span>
-            </FloatMenuLabel>
+          <div
+            key={group.name}
+            role="group"
+            aria-label={`${group.name}, ${group.count === 1 ? "1 point" : `${group.count} points`}`}
+          >
             {group.rows.map((row) => (
               <FlagKindRow
                 key={row.code}
                 row={row}
                 next={
                   stepFlag(
-                    openMarks.filter((f) => f.code === row.code),
+                    openMarks.filter((f) =>
+                      f.items.some((item) => String(item.id) === row.code),
+                    ),
                     points,
                     fromPointId,
                     1,
@@ -394,9 +399,9 @@ function MenuKey({ tone, children }: { tone: RailTone; children: string }) {
 }
 
 /**
- * One kind of flag: its words go to the kind's next point, each number to its
- * own. The next one is drawn in amber; past `POINTS_SHOWN` the rest is "+N",
- * reached through the words.
+ * One review item: its question goes to the item's next point, each number
+ * to its own. The next one is drawn in amber; past `POINTS_SHOWN` the rest is
+ * "+N", reached through the words.
  */
 function FlagKindRow({
   row,

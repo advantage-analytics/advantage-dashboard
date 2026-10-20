@@ -41,6 +41,8 @@ export interface LabelPublishSummary {
   points: number;
   shots: number;
   insightsRequested: boolean;
+  /** What the publish went past: a point left out, or written partly. */
+  leftOut?: string[];
 }
 
 export type LabelSessionStatusResult = LabelOpResult<{
@@ -57,17 +59,18 @@ export type LabelPublish = (
 >;
 
 /**
- * Publish, refusing a labelled score that differs from the match record's.
- * Until 2026-10-10 the console accepted it on the confirm's yes, and a set
- * labelled 5–5 against a 6–4 record reached every stat. Each cause has its
- * own answer now: fix the game, say the video ends early, or correct the
- * match record. `scripts/label-apply.ts --accept-score` stays the escape
- * hatch for a score the rules of tennis can't produce.
+ * Publish whatever is still open (decided 2026-10-18): a labelled score that
+ * differs from the match record's, and points that cannot be written whole,
+ * no longer stop it. The Mark complete confirm lists each one first
+ * (`completeWarnings`) and the publish answers with what it left out.
+ * From 2026-10-10 to then the console refused a mismatched score — a set
+ * labelled 5–5 against a 6–4 record had reached every stat — so the confirm
+ * is where that now has to be read.
  */
 const publishCheckingScore: LabelPublish = async (supabase, sessionId) => {
   // Loaded on use: it reads through labels-server.ts.
   const { publishLabelSession } = await import("./apply-session");
-  return publishLabelSession({ db: supabase, sessionId, acceptScore: false });
+  return publishLabelSession({ db: supabase, sessionId, acceptScore: true });
 };
 
 const RACED = racedMessage("session");
@@ -129,6 +132,7 @@ export async function writeLabelSessionComplete(params: {
           points: result.points,
           shots: result.shots,
           insightsRequested: result.insightsRequested,
+          leftOut: result.leftOut ?? [],
         },
       };
     }

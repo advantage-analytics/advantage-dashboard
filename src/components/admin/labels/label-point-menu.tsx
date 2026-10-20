@@ -11,6 +11,7 @@ import {
   CornerDownRight,
   Merge,
   MoreHorizontal,
+  Rows2,
   RotateCcw,
   Undo2,
 } from "lucide-react";
@@ -30,7 +31,7 @@ import {
   isNonPointEnding,
   type LabelPoint,
 } from "@/lib/services/labels/session";
-import { leftoverIds } from "@/lib/services/labels/game-shift";
+import { leftoverIds, planGameSplit } from "@/lib/services/labels/game-shift";
 import {
   destinationServerIn,
   gameInSetOf,
@@ -98,7 +99,7 @@ export function pointMenuActions(
   point: LabelPoint,
   context: Pick<
     EditContext,
-    "points" | "names" | "adScoring" | "onPatchPoint"
+    "points" | "names" | "adScoring" | "matchTiebreakSet" | "onPatchPoint"
   > & {
     /** Whether a site-removed stroke is a ghost here; a stroke by default. */
     ghosts?: boolean;
@@ -120,6 +121,8 @@ export function pointMenuActions(
   countPoint: (() => void) | null;
   move: { key: string; label: string; description?: string; run: () => void }[];
   shiftOverflow: (() => void) | null;
+  /** "Start a new game here": null at a game's first point or in a tiebreak. */
+  newGame: (() => void) | null;
   reset: (() => void) | null;
   remove: () => void;
 } {
@@ -163,11 +166,22 @@ export function pointMenuActions(
     countPoint: uncounted
       ? patch(countPointPatch(point, context.ghosts ?? false))
       : null,
-    shiftOverflow: leftoverIds(context.points, context.adScoring ?? true).has(
-      point.id,
-    )
+    shiftOverflow: leftoverIds(
+      context.points,
+      context.adScoring ?? true,
+      context.matchTiebreakSet ?? null,
+    ).has(point.id)
       ? () => operations.onShiftGameOverflow(point.id)
       : null,
+    newGame:
+      operations.onStartGame &&
+      "ok" in
+        planGameSplit(
+          context.points.map((p) => ({ ...p, shots: [] })),
+          point.id,
+        )
+        ? () => operations.onStartGame?.(point.id)
+        : null,
     move: neighbourGames(context.points, point.id).map((game) => {
       const server = destinationServerIn(context.points, point.id, game);
       return {
@@ -423,6 +437,20 @@ export function PointMenu({
                       />
                     }
                     onSelect={() => setPanel("move")}
+                  />
+                ) : null}
+                {actions.newGame ? (
+                  <FloatMenuItem
+                    label="Start a new game here"
+                    description="This point and the rest of its game, served by the other player"
+                    icon={
+                      <Rows2
+                        className={iconClass}
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    }
+                    onSelect={pick(actions.newGame)}
                   />
                 ) : null}
                 {actions.shiftOverflow ? (

@@ -58,7 +58,10 @@ export interface ProgramUsage {
  * `monthlyCapSecondsFor()` answers that, the same as the spend.
  */
 export async function getPersonalUsage(
-  personal: Pick<Workspace, "id" | "kind" | "orgType" | "individualPilot">,
+  personal: Pick<
+    Workspace,
+    "id" | "kind" | "orgType" | "individualPilot" | "unlimitedVideo"
+  >,
   billingMonth: string,
 ): Promise<PersonalUsage> {
   const supabase = await createClient();

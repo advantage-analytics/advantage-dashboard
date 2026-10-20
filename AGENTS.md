@@ -155,11 +155,12 @@ internal naming only.
 **No `derivation_failed` blockers (product decision, 2026-10-17).** Once the vendor returns
 results, the match is always published: every point and shot the vendor found is shown,
 even when it is wrong. Never add a refusal to `src/lib/services/splitstep/derivation/` or
-`derive-and-publish.ts`. Where the data is unreadable, guess it (`winner_guessed`), drop
-the input that is not match play (warm-up rallies, `warmupRallies`), or flag it for review,
-and leave `Reconciliation.ok` false so nothing reads the result as verified. When an
+`derive-and-publish.ts`. Where the data is unreadable, guess it (`winner_guessed`), fold
+it into the nearest game (rallies before the first set score join the opening game,
+`leadingUnscoredRallies`), or flag it for review, and leave `Reconciliation.ok` false so
+nothing reads the result as verified. Never drop a rally: assume it was a point. When an
 existing refusal fires on a real job, replace it the same way. Job c349e3d4 was refused
-over one warm-up rally.
+over its first point, which the score stream had not read yet.
 
 ### LLM and email
 

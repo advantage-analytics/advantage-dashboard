@@ -335,8 +335,7 @@ export async function getPlayerAverageStats(
     firstReturnWonPct: avgPct("first_return_won_pct"),
     secondReturnWonPct: avgPct("second_return_won_pct"),
     returnGamesWonPct: avgPct("return_games_won_pct"),
-    netPointsWonPct:
-      netTotal > 0 ? Math.round((netWon / netTotal) * 100) : undefined,
+    netPointsWonPct: netPointsWonPct(netWon, netTotal) ?? undefined,
     shortRallyWonPct: avgPct("short_rally_won_pct"),
     mediumRallyWonPct: avgPct("medium_rally_won_pct"),
     longRallyWonPct: avgPct("long_rally_won_pct"),
@@ -666,7 +665,7 @@ const DEFAULT_STATS: PlayerStatistics = {
   unforcedErrors: 0,
   netPointsAppearances: 0,
   netPointsWon: 0,
-  netPointsWonPct: 0,
+  netPointsWonPct: null,
   breakpointsSaved: 0,
   fractions: {},
   serveWidePct: 0,
@@ -679,6 +678,19 @@ const DEFAULT_STATS: PlayerStatistics = {
   returnContactMiddlePct: 0,
   returnContactDeepPct: 0,
 };
+
+/**
+ * Net points won as a whole percentage, or `null` when the player never came
+ * to the net. A match with no net approaches has not measured this rate, and
+ * 0% would say they lost every net point they played.
+ */
+export function netPointsWonPct(
+  won: number | null,
+  appearances: number | null,
+): number | null {
+  const total = appearances ?? 0;
+  return total > 0 ? Math.round(((won ?? 0) / total) * 100) : null;
+}
 
 function frac(
   made: number | null,
@@ -798,13 +810,10 @@ function transformToPlayerStats(
     unforcedErrors: row.unforced_errors ?? 0,
     netPointsAppearances: row.net_points_appearances ?? 0,
     netPointsWon: row.net_points_won ?? 0,
-    netPointsWonPct:
-      (row.net_points_appearances ?? 0) > 0
-        ? Math.round(
-            ((row.net_points_won ?? 0) / (row.net_points_appearances ?? 1)) *
-              100,
-          )
-        : 0,
+    netPointsWonPct: netPointsWonPct(
+      row.net_points_won,
+      row.net_points_appearances,
+    ),
     breakpointsSaved: row.break_points_saved ?? 0,
     fractions: buildFractions(row),
     serveWidePct: Math.round(parseFloat(row.serve_wide_pct ?? "0")),

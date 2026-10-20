@@ -185,3 +185,20 @@ test("a failed read is the bare tag, never a skeleton or a full ring", () => {
   expect(bars(markup)).toHaveLength(0);
   expect(tip(markup).detail).toBe("About the beta");
 });
+
+test("an admin's uncapped workspace says Unlimited, never a figure", () => {
+  const cap = 2_147_483_647;
+  const markup = render({
+    hours: {
+      remainingSeconds: cap - 3 * 3600,
+      capSeconds: cap,
+      creditSeconds: 0,
+    },
+  });
+  expect(text(markup)).toBe("Beta Unlimited");
+  expect(tip(markup)).toEqual({
+    label: "Unlimited video hours",
+    detail: "Admin accounts have no monthly cap. Click for Plan.",
+  });
+  expect(markup).not.toMatch(/596\d{3}/);
+});

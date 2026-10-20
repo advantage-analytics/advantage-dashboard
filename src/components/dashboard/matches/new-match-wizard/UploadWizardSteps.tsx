@@ -134,6 +134,7 @@ export function FileStep() {
     videoProbe,
     videoWarnings,
     videoNotes,
+    videoNotices,
     isProbing,
     isUploading,
     parsingState,
@@ -187,6 +188,7 @@ export function FileStep() {
         probe={videoProbe}
         warnings={isProcessingProvider ? videoWarnings : []}
         notes={isProcessingProvider ? videoNotes : []}
+        notices={isProcessingProvider ? videoNotices : []}
         busy={isProbing || isUploading || parsingState.isParsing}
         error={uploadError}
         parsingState={parsingState}

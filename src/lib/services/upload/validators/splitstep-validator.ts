@@ -75,21 +75,13 @@ import {
   RECOMMENDED_VIDEO_FPS,
 } from "@/lib/services/splitstep/config";
 import { normaliseReason } from "@/lib/match-video/playback-format";
+import {
+  exceedsUploadLimit,
+  formatGigabytes,
+  oversizeVideoMessage,
+  uploadLimitGigabytes,
+} from "@/lib/video/trim-plan";
 import type { ValidationResult } from "../types";
-
-/**
- * Render a byte count the way the vendor's limit is written.
- *
- * Decimal, not binary. `MAX_VIDEO_SIZE_BYTES` is 8e9 - 1 because the vendor's
- * bound is decimal and exclusive, so dividing by 1024³ printed a *different*
- * number than the limit it was describing: a 8.1 GB file rendered as "7.5 GB"
- * against a maximum that also rendered as "7.5 GB" — a refusal that named the
- * same figure twice and gave the user nothing to act on. It also disagreed
- * with the "Under 8 GB" the requirements panel shows two inches away.
- */
-function formatGigabytes(bytes: number): string {
-  return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
-}
 
 /**
  * "a or b" for two, "a, b, c or d" for more. The allowlist grew from two
@@ -116,10 +108,21 @@ function hasAcceptedExtension(fileName: string): boolean {
  * Returns null when the file clears them. Kept separate because they are cheap:
  * an obviously wrong file is refused without paying for a decode.
  */
-export function checkVideoFileBasics(file: {
-  name: string;
-  size: number;
-}): ValidationResult | null {
+export function checkVideoFileBasics(
+  file: {
+    name: string;
+    size: number;
+  },
+  {
+    allowOversize = false,
+  }: {
+    /**
+     * Leave a file over the limit to `evaluateVideoProbe`, which knows whether
+     * this browser can shrink it before upload. Only the upload wizard can.
+     */
+    allowOversize?: boolean;
+  } = {},
+): ValidationResult | null {
   if (!hasAcceptedExtension(file.name)) {
     return {
       success: false,
@@ -127,7 +130,7 @@ export function checkVideoFileBasics(file: {
     };
   }
 
-  if (file.size > MAX_VIDEO_SIZE_BYTES) {
+  if (!allowOversize && file.size > MAX_VIDEO_SIZE_BYTES) {
     return {
       success: false,
       error: `File too large. This video is ${formatGigabytes(file.size)} and the maximum is ${formatGigabytes(MAX_VIDEO_SIZE_BYTES)}.`,
@@ -249,6 +252,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
 
   const warnings: string[] = [];
   const notes: string[] = [];
+  const notices: string[] = [];
 
   if (fps === null) {
     // Says three things on purpose: what we could not do, that the requirement
@@ -274,13 +278,35 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     );
   }
 
-  const conversion = conversionNotice(probe);
-  if (conversion) warnings.push(conversion);
+  if (exceedsUploadLimit(probe.sizeBytes)) {
+    // Over the limit is only uploadable once this tab has made it smaller,
+    // which takes the same re-encoder as a format conversion (trim-plan.ts).
+    if (probe.canConvert !== true) {
+      return {
+        success: false,
+        error: oversizeVideoMessage(
+          probe.sizeBytes,
+          probe.canConvert === false ? "no-encoder" : null,
+        ),
+        details,
+      };
+    }
+    // Subsumes the conversion notice: it is the same re-encode, said once.
+    // A notice, not a warning: nothing about the file is at risk, and a
+    // warning would turn the resolution row yellow over its size.
+    notices.push(
+      `This video is ${formatGigabytes(probe.sizeBytes)}, over the ${uploadLimitGigabytes()} limit, so it will be compressed in this tab when the match is saved, then uploaded. Keep the tab open: a full match can take a while.`,
+    );
+  } else {
+    const conversion = conversionNotice(probe);
+    if (conversion) warnings.push(conversion);
+  }
 
   return {
     success: true,
     warnings: warnings.length > 0 ? warnings : undefined,
     notes: notes.length > 0 ? notes : undefined,
+    notices: notices.length > 0 ? notices : undefined,
     details,
   };
 }
@@ -325,7 +351,7 @@ export function conversionNotice(probe: VideoProbe): string | null {
 export async function validateSplitStepVideo(
   file: File,
 ): Promise<ValidationResult> {
-  const basics = checkVideoFileBasics(file);
+  const basics = checkVideoFileBasics(file, { allowOversize: true });
   if (basics) return basics;
 
   let probe: VideoProbe;
@@ -346,6 +372,10 @@ export async function validateSplitStepVideo(
     // judgement the null-fps warning below makes, for the same reason: a
     // requirement we cannot check is still a requirement, and the vendor is the
     // party that actually knows.
+    if (exceedsUploadLimit(file.size)) {
+      // Unread here means unread by the worker too: nothing could shrink it.
+      return { success: false, error: oversizeVideoMessage(file.size, null) };
+    }
     if (browserCannotDecode(file)) {
       return {
         success: true,

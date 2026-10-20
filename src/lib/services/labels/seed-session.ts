@@ -14,6 +14,7 @@
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import { UUID_RE, isUuid } from "@/lib/admin/validation";
+import { readBestOf } from "@/lib/data/labels-server";
 import { buildTranscriptForJob } from "@/lib/services/splitstep/persist-transcript";
 import {
   DERIVATION_VERSION,
@@ -57,10 +58,12 @@ export async function seedLabelSessionForJob(params: {
     if ("error" in open) return open;
     if (open.sessionId) return { sessionId: open.sessionId, existing: true };
 
-    const { transcript, reason, job, raw } = await buildTranscriptForJob({
-      supabase,
-      jobId,
-    });
+    const { transcript, reason, job, raw, match } = await buildTranscriptForJob(
+      {
+        supabase,
+        jobId,
+      },
+    );
     if (!job) return { error: reason ?? "Job not found." };
     if (!transcript || !transcript.ok) {
       return {
@@ -71,7 +74,12 @@ export async function seedLabelSessionForJob(params: {
       return { error: "Job has no readable results file." };
     }
 
-    const seed = buildLabelSeed(transcript, raw as RawSplitStepStroke[]);
+    // The entered score and format travel with the transcript's own match
+    // read: a deciding set entered as 1–0 seeds as a match tiebreak.
+    const seed = buildLabelSeed(transcript, raw as RawSplitStepStroke[], {
+      score: match?.score ?? null,
+      bestOf: readBestOf(match?.format),
+    });
 
     const { data: session, error: sessionError } = await supabase
       .from("label_sessions")

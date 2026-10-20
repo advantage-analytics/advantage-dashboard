@@ -213,6 +213,7 @@ export function labelSessionFixture(): LabelSession {
     finalScore: null,
     videoEndsEarly: null,
     matchScore: { player1: [6, 4], player2: [3, 6] },
+    bestOf: 3,
     points: [
       labelPoint(P1, 0, {
         winner: "p2",
@@ -393,7 +394,11 @@ export function labelShotRow(
 /** One `from(table)` chain of the fake client, as the service built it. */
 export interface FakeLabelCall {
   table: string;
-  op: "select" | "update" | "insert";
+  /**
+   * `rpc` is `label_apply_edit`: `table` is the function, `values` its
+   * arguments (`p_session`, `p_ops`).
+   */
+  op: "select" | "update" | "insert" | "rpc";
   /** The column list of a read. */
   columns?: string;
   values?: Record<string, unknown>;
@@ -408,7 +413,40 @@ export interface FakeLabelCall {
   isNull?: string[];
 }
 
-type FakeLabelAnswer = { data: unknown; error: { message: string } | null };
+type FakeLabelAnswer = {
+  data: unknown;
+  error: { message: string; code?: string } | null;
+};
+
+/**
+ * What `label_apply_edit` answers when `answer` leaves it: every insert's row
+ * as written, with the columns the database fills.
+ */
+function appliedEdit(args: Record<string, unknown>): FakeLabelAnswer {
+  const ops = (args.p_ops ?? []) as {
+    op: string;
+    values?: Record<string, unknown>;
+  }[];
+  return {
+    data: ops
+      .filter((op) => op.op === "insert")
+      .map((op) => ({
+        session_id: args.p_session,
+        status_before_delete: null,
+        note: null,
+        dismissed: [],
+        ...op.values,
+      })),
+    error: null,
+  };
+}
+
+/** The ops of the fake's `label_apply_edit` calls, in order. */
+export function appliedOps(calls: readonly FakeLabelCall[]): unknown[] {
+  return calls
+    .filter((call) => call.op === "rpc")
+    .flatMap((call) => (call.values?.p_ops ?? []) as unknown[]);
+}
 
 /**
  * A Supabase client for the labels services' specs: it records every chain
@@ -421,6 +459,16 @@ export function fakeLabelClient(
 ) {
   const calls: FakeLabelCall[] = [];
   const supabase = {
+    rpc(fn: string, args: Record<string, unknown>) {
+      const call: FakeLabelCall = {
+        table: fn,
+        op: "rpc",
+        values: args,
+        filters: {},
+      };
+      calls.push(call);
+      return Promise.resolve(answer(call) ?? appliedEdit(args));
+    },
     from(table: string) {
       const call: FakeLabelCall = { table, op: "select", filters: {} };
       calls.push(call);

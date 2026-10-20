@@ -30,6 +30,7 @@
 
 import {
   lastEnteredSet,
+  playsMatchTiebreak,
   setWinner,
 } from "@/components/dashboard/matches/new-match-wizard/score-state";
 import { normalizeRound, roundFits, roundKindFor } from "./round-options";
@@ -187,7 +188,12 @@ export function decidedWinner(
   let p1 = 0;
   let p2 = 0;
   for (let i = 0; i < player1.length; i++) {
-    const w = setWinner(player1[i], player2[i], gamesTo);
+    const w = setWinner(
+      player1[i],
+      player2[i],
+      gamesTo,
+      playsMatchTiebreak(bestOf, i),
+    );
     if (w === "player") p1++;
     else if (w === "opponent") p2++;
   }

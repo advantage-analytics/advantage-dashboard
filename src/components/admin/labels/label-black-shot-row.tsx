@@ -48,12 +48,7 @@ import {
   BlackTextAction,
   BlackUndoButton,
 } from "./label-black-parts";
-import {
-  PencilMark,
-  PointHintLine,
-  pointHints,
-  type PointHint,
-} from "./label-black-mark";
+import { PencilMark, pointHints, type PointHint } from "./label-black-mark";
 import { placementWords, positionWords } from "./shot-position-words";
 import {
   EditableCell,
@@ -67,10 +62,10 @@ import {
   STROKE_LABEL,
   STROKE_OPTIONS,
   formatCourtPoint,
-  formatVideoTime,
+  formatFileTime,
   isFault,
   parseCourtPoint,
-  parseVideoTime,
+  parseFileTime,
   sideOptions,
   spinLabel,
   spinOptions,
@@ -233,9 +228,16 @@ export function BlackShotsWell({
   marks = null,
   playingShotId = null,
   animate = true,
+  inline = null,
 }: {
   point: LabelPoint;
   edit: EditContext;
+  /**
+   * The console's inline review block (`ReviewInlineBlock`), drawn under the
+   * row of `afterShotId` — after that stroke's hint and suggestion rows — or
+   * at the well's end when null or not one of this point's strokes.
+   */
+  inline?: { afterShotId: string | null; node: React.ReactNode } | null;
   /** Animate the well's opening. Off for the point open on page load. */
   animate?: boolean;
   /** The session's marks; null draws no hint line, slot or ghost. */
@@ -252,10 +254,9 @@ export function BlackShotsWell({
   // The next row's place in the well, for the stagger; none when the well
   // does not animate.
   const arrive = () => (animate ? rows.length + 1 : undefined);
-  // The point's hints. One about a stroke, or with an answer to click, is a
-  // dashed amber row: under its stroke, or under the rally when it is about
-  // the whole point. The rest are one quiet line, last in the well. Nothing
-  // leads the well: a line above the first stroke read as part of the point's
+  // The point's hints. One about a stroke is a dashed amber row under it;
+  // the rest are asked one at a time in the court panel. Nothing leads
+  // the well: a line above the first stroke read as part of the point's
   // header, and its answers as words rather than buttons. Their answers write
   // through the console only where it can write at all.
   const hints = pointHints(
@@ -267,11 +268,6 @@ export function BlackShotsWell({
   const live = new Set(
     point.shots.filter((s) => s.status !== "deleted").map((s) => s.id),
   );
-  const under = (hint: (typeof hints)[number]) =>
-    hint.afterShotId !== undefined && live.has(hint.afterShotId);
-  const rest = hints.filter((hint) => !under(hint));
-  const offered = rest.filter((hint) => hint.actions.length > 0);
-  const quiet = rest.filter((hint) => hint.actions.length === 0);
   const hintLineAfter = (shotId: string) => {
     for (const hint of hints) {
       if (hint.afterShotId !== shotId) continue;
@@ -289,6 +285,14 @@ export function BlackShotsWell({
   // The strokes that went as dead balls after the point, at the end of the
   // rally: from each of them, Undo puts back every one to the end at once.
   const runStart = deadBallRunStart(point.shots);
+  // The review block's row: the stroke it is about, else the well's end.
+  const inlineAfter =
+    inline && point.shots.some((shot) => shot.id === inline.afterShotId)
+      ? inline.afterShotId
+      : null;
+  const inlineRow = inline ? (
+    <Fragment key="review-inline">{inline.node}</Fragment>
+  ) : null;
   for (const [i, shot] of point.shots.entries()) {
     // A stroke the labeller added and then deleted leaves no row.
     if (isWithdrawnAdd(shot)) continue;
@@ -345,29 +349,9 @@ export function BlackShotsWell({
         />,
       );
     }
+    if (inlineAfter !== null && inlineAfter === shot.id) rows.push(inlineRow);
   }
-  for (const hint of offered) {
-    rows.push(
-      <BlackEndedSuggestion
-        key={`hint-${hint.code}`}
-        hint={hint}
-        point={point}
-        edit={edit}
-        arrive={arrive()}
-      />,
-    );
-  }
-  if (quiet.length > 0) {
-    const arrival = rowArrival(arrive());
-    rows.push(
-      <PointHintLine
-        key="hints"
-        hints={quiet}
-        className={arrival.className}
-        style={arrival.style}
-      />,
-    );
-  }
+  if (inlineRow && inlineAfter === null) rows.push(inlineRow);
   const addArrival = rowArrival(arrive());
   return (
     <div
@@ -386,6 +370,7 @@ export function BlackShotsWell({
             type="button"
             data-add-shot=""
             onClick={() => operations.onAddShot(point.id, null)}
+            aria-keyshortcuts="A"
             style={addArrival.style}
             // The row's own tracks, so the plus sits under the numbers and
             // the words under the times, at any rail width.
@@ -458,8 +443,11 @@ export function BlackShotRow({
   const lit = selected || playing;
   const fault = isFault(shot);
   const changed = shot.status === "edited" || shot.status === "added";
+  // A click on the row already selected (the one a flag jump landed on) is
+  // the labeller taking it over: review mode ends, the selection stays.
   const select = () => {
     if (!selected) onSelectShot?.(shot.id);
+    else edit.onExitReview?.();
   };
   // A position cell selects the row on its own end, even when already selected.
   const pick = (target: "contact" | "landing") =>
@@ -467,7 +455,10 @@ export function BlackShotRow({
   const patch = (value: LabelShotPatch) => onPatchShot?.(shot.id, value);
   const cell = { editable, rowSelected: selected };
   const selectCell = { ...cell, menu: tone };
-  const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
+  const time =
+    shot.videoTime !== null
+      ? formatFileTime(shot.videoTime, edit.fileOffset)
+      : null;
   const placement = shotPlacement(labelShotValues(shot));
   const serveResult = serveResultMenu(shot, edit.playOnLets);
   /** The words' ink, a step down on a fault. */
@@ -533,7 +524,7 @@ export function BlackShotRow({
             <TextEditor
               label={`Shot ${number} time`}
               text={time ?? ""}
-              parse={parseVideoTime}
+              parse={(text) => parseFileTime(text, edit.fileOffset)}
               onCommit={(value) =>
                 patch({ video_time: value as number | null })
               }
@@ -716,7 +707,10 @@ export function BlackDeletedShot({
 }) {
   const arrival = rowArrival(arrive);
   const { operations, onRestoreShots } = edit;
-  const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
+  const time =
+    shot.videoTime !== null
+      ? formatFileTime(shot.videoTime, edit.fileOffset)
+      : null;
   const reason = isLabelDeleteReason(shot.deleteReason)
     ? DELETE_REASON_LABEL[shot.deleteReason]
     : null;
@@ -805,7 +799,10 @@ export function BlackGhostShot({
   const { names, operations, onToggleGhost } = edit;
   const open = edit.openGhostIds?.has(shot.id) ?? false;
   const rowId = `label-ghost-${shot.id}`;
-  const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
+  const time =
+    shot.videoTime !== null
+      ? formatFileTime(shot.videoTime, edit.fileOffset)
+      : null;
   const hitter = sideLabel(shot.hitter, names);
   const words = hitter
     ? `1 shot removed: ${hitter} hit the fault back`
@@ -956,21 +953,27 @@ function BlackSuggestedShot({
   if ("error" in plan) return null;
   const operations = edit.editable ? edit.operations : undefined;
   const seconds = plan.write.video_time ?? suggestion.videoTime;
-  const time = seconds !== null ? formatVideoTime(seconds) : null;
+  const time =
+    seconds !== null ? formatFileTime(seconds, edit.fileOffset) : null;
   const name = sideLabel(plan.write.hitter ?? suggestion.hitter, edit.names);
   const words = name
     ? `A shot by ${name} is probably missing here`
     : "A shot is probably missing here";
   const where = time ? ` at ${time}` : "";
+  // A flag jump landed on this slot: the court panel is asking for its "Add
+  // shot", and the row says so with a solid line in place of the dashes.
+  const armed = edit.armedSlotAfterShotId === suggestion.afterShotId;
   return (
     <div
       data-row="suggested-shot"
       data-shot-suggestion={suggestion.key}
+      data-slot-armed={armed ? "" : undefined}
       style={arrival.style}
       className={cn(
         ROW_GRID,
         arrival.className,
-        "cursor-default rounded-lg bg-[var(--rail-amber-wash-faint)] outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)] outline-dashed",
+        "cursor-default rounded-lg bg-[var(--rail-amber-wash-faint)] outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)]",
+        armed ? "outline-solid" : "outline-dashed",
       )}
     >
       <Plus

@@ -7,7 +7,9 @@ import {
   STOP_REASONS,
   retiredWinner,
   firstOpenSet,
+  bareMatchTiebreak,
   offersOneSet,
+  playsMatchTiebreak,
   scoreGames,
   scoreColumns,
   scoreUndecided,
@@ -142,9 +144,31 @@ test.describe("setWinner", () => {
     expect(setWinner(3, 6)).toBe("opponent");
     expect(setWinner(7, 5)).toBe("player");
     expect(setWinner(6, 7)).toBe("opponent");
-    expect(setWinner(1, 0)).toBe("player");
-    expect(setWinner(0, 1)).toBe("opponent");
+    expect(setWinner(1, 0, 6, true)).toBe("player");
+    expect(setWinner(0, 1, 6, true)).toBe("opponent");
     expect(setWinner(8, 6)).toBe("player");
+  });
+
+  test("1-0 is a match tiebreak only in the deciding set of a best of 3", () => {
+    expect(playsMatchTiebreak(3, 2)).toBe(true);
+    expect(playsMatchTiebreak(3, 0)).toBe(false);
+    expect(playsMatchTiebreak(3, 1)).toBe(false);
+    expect(playsMatchTiebreak(1, 0)).toBe(false);
+    expect(playsMatchTiebreak(5, 4)).toBe(false);
+    // Anywhere else 1-0 is one game into a set.
+    expect(setWinner(1, 0)).toBeNull();
+    // A best of 3 opening 1-0 is still in set 1, not over.
+    expect(
+      scoreUndecided({ bestOf: 3, playerScores: [1], opponentScores: [0] }),
+    ).toBe(true);
+    // 6-4 3-6 1-0 is decided by the match tiebreak.
+    expect(
+      scoreUndecided({
+        bestOf: 3,
+        playerScores: [6, 3, 1],
+        opponentScores: [4, 6, 0],
+      }),
+    ).toBe(false);
   });
 
   test("an unfinished or half-entered set has no winner", () => {
@@ -257,15 +281,48 @@ test.describe("scoreUndecided — when Save asks whether the match ended early",
     ).toBe(false);
   });
 
-  test("a match tiebreak recorded without its points is still a finished match", () => {
-    // How a line scored courtside arrives: games only, no tiebreak points
-    // (`EventPreset.score`). Asking "did it end early?" here would push a
-    // complete match into a false Retired or Unfinished.
+  test("without tiebreak arrays, a 1-0 third set is a finished match", () => {
+    // The scorecard's column count has no points to read.
     expect(
       scoreUndecided({
         bestOf,
         playerScores: [6, 3, 1],
         opponentScores: [4, 6, 0],
+      }),
+    ).toBe(false);
+  });
+
+  test("a 1-0 third set with no points asks until it is answered", () => {
+    // A match tiebreak recorded without its points (a line scored courtside)
+    // and a match stopped one game into set 3 look the same.
+    const bare = {
+      bestOf,
+      playerScores: [6, 3, 1],
+      opponentScores: [4, 6, 0],
+      playerTiebreaks: [null, null, null],
+      opponentTiebreaks: [null, null, null],
+    };
+    expect(bareMatchTiebreak(bare)).toBe(true);
+    expect(scoreUndecided(bare)).toBe(true);
+    expect(firstOpenSet(bare)).toBe(2);
+    // "It was a match tiebreak" decides it.
+    expect(scoreUndecided({ ...bare, matchTiebreakConfirmed: true })).toBe(
+      false,
+    );
+    // So do its points — a 10-0 keeps the loser's zero.
+    const pointed = { ...bare, opponentTiebreaks: [null, null, 0] };
+    expect(bareMatchTiebreak(pointed)).toBe(false);
+    expect(scoreUndecided(pointed)).toBe(false);
+    // Only the deciding set of a best of 3.
+    expect(bareMatchTiebreak({ ...bare, bestOf: 5 })).toBe(false);
+    expect(
+      bareMatchTiebreak({
+        ...bare,
+        bestOf: 5,
+        playerScores: [6, 3, 6, 3, 1],
+        opponentScores: [4, 6, 4, 6, 0],
+        playerTiebreaks: [null, null, null, null, null],
+        opponentTiebreaks: [null, null, null, null, null],
       }),
     ).toBe(false);
   });

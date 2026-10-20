@@ -5,16 +5,20 @@
  * point is a manual label edit, so a session labelled without marks takes one
  * too.
  *
- * Writes `label_points` only: one UPDATE of `point_index` per point at or after
- * the slot, HIGHEST index first so no two rows share an index while the shift
- * is under way, then one INSERT of the new row (`winner`, `ending`, `ended_by`,
- * `serve_side` and `seed` null, no shots). No row is ever removed.
+ * Writes `label_points` only, in one transaction (`applyLabelEdit`): one
+ * UPDATE of `point_index` per point at or after the slot, then one INSERT of
+ * the new row (`winner`, `ending`, `ended_by`, `serve_side` and `seed` null, no
+ * shots). One read, one write: the session's gate and points side by side,
+ * then everything else in a single round trip. No row is ever removed.
  */
 
+import { randomUUID } from "node:crypto";
+
 import type { AdminClient } from "@/lib/supabase/admin";
+import { applyLabelEdit, type LabelEditOp } from "./apply-edit-session";
 import {
-  checkSessionOpen,
   defaultLabelWriteDependencies,
+  readSessionGate,
   type LabelWriteDependencies,
 } from "./edit-session";
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
@@ -23,7 +27,7 @@ import {
   type InsertablePoint,
   type InsertPosition,
 } from "./point-insert";
-import { LABEL_POINT_COLUMNS, toLabelPoint, type LabelPointRow } from "./rows";
+import { toLabelPoint, type LabelPointRow } from "./rows";
 import type {
   LabelGameType,
   LabelPoint,
@@ -78,15 +82,16 @@ export async function writeLabelPointInsert(params: {
   if (!anchorPointId) return { error: "Invalid point id." };
   const position = normalisePosition(params.position);
 
-  const closed = await checkSessionOpen(supabase, sessionId);
-  if (closed) return { error: closed };
-
-  const { data: rows, error } = await supabase
-    .from("label_points")
-    .select(INDEX_COLUMNS)
-    .eq("session_id", sessionId)
-    .order("point_index")
-    .returns<IndexRow[]>();
+  const [gate, { data: rows, error }] = await Promise.all([
+    readSessionGate(supabase, sessionId),
+    supabase
+      .from("label_points")
+      .select(INDEX_COLUMNS)
+      .eq("session_id", sessionId)
+      .order("point_index")
+      .returns<IndexRow[]>(),
+  ]);
+  if ("error" in gate) return gate;
   if (error) {
     return { error: `Could not read the session's points: ${error.message}` };
   }
@@ -98,24 +103,17 @@ export async function writeLabelPointInsert(params: {
   );
   if ("error" in plan) return plan;
 
-  // Highest first (the plan's order), one row at a time: an index is never
-  // taken by two rows between one update and the next.
-  for (const shift of plan.write.shifts) {
-    const { error: shiftError } = await supabase
-      .from("label_points")
-      .update({ point_index: shift.point_index })
-      .eq("id", shift.id);
-    if (shiftError) {
-      return {
-        error: `Could not make room for the point: ${shiftError.message}`,
-      };
-    }
-  }
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("label_points")
-    .insert({
-      session_id: sessionId,
+  const ops: LabelEditOp[] = plan.write.shifts.map((shift) => ({
+    op: "update",
+    table: "label_points",
+    ids: [shift.id],
+    set: { point_index: shift.point_index },
+  }));
+  ops.push({
+    op: "insert",
+    table: "label_points",
+    values: {
+      id: randomUUID(),
       ...plan.write.insert,
       serve_side: null,
       winner: null,
@@ -123,14 +121,17 @@ export async function writeLabelPointInsert(params: {
       ended_by: null,
       seed: null,
       checked_at: null,
-    })
-    .select(LABEL_POINT_COLUMNS)
-    .single<LabelPointRow>();
-  if (insertError || !inserted) {
-    return {
-      error: `Could not add the point: ${insertError?.message ?? "no row came back"}`,
-    };
-  }
+    },
+  });
+  const applied = await applyLabelEdit(
+    supabase,
+    sessionId,
+    ops,
+    "add the point",
+  );
+  if ("error" in applied) return applied;
+  const inserted = applied.inserted[0] as LabelPointRow | undefined;
+  if (!inserted) return { error: "Could not add the point: no row came back" };
   // The row read back whole, as the console draws it: an added point with no
   // seed and no shots.
   return { ok: true, point: toLabelPoint(inserted) };

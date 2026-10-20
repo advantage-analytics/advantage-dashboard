@@ -27,6 +27,7 @@ import {
 import { inner, tag } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
+  appliedOps,
   fakeLabelClient,
   labelSessionFixture,
 } from "./fixtures/label-session";
@@ -302,26 +303,12 @@ const POINT_ROWS = points().map((p) => ({
 function fakeClient(rows: {
   session?: Record<string, unknown> | null;
   points?: Record<string, unknown>[];
-  /** The shift of this row fails. */
-  failShift?: string;
+  /** The one transactional write fails with this error. */
+  failApply?: { message: string; code?: string };
 }) {
   return fakeLabelClient((call) => {
-    if (call.op === "update") {
-      return rows.failShift && call.filters.id === rows.failShift
-        ? { data: null, error: { message: "boom" } }
-        : undefined;
-    }
-    if (call.op === "insert") {
-      return {
-        data: {
-          id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-          ...call.values,
-          status_before_delete: null,
-          note: null,
-          dismissed: [],
-        },
-        error: null,
-      };
+    if (call.op === "rpc") {
+      return rows.failApply ? { data: null, error: rows.failApply } : undefined;
     }
     if (call.table === "label_sessions") {
       return {
@@ -347,7 +334,7 @@ const writes = (fake: ReturnType<typeof fakeClient>) =>
   fake.calls.filter((c) => c.op !== "select");
 
 test.describe("writeLabelPointInsert", () => {
-  test("the gate, the read, then the shifts highest first and ONE insert — label_points only", async () => {
+  test("the gate and the read side by side, then ONE transactional write: the shifts highest first and the insert", async () => {
     const fake = fakeClient({ points: UUID_ROWS });
     const result = await writeLabelPointInsert({
       supabase: fake.supabase,
@@ -376,36 +363,34 @@ test.describe("writeLabelPointInsert", () => {
     expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
       ["label_sessions", "select"],
       ["label_points", "select"],
-      ["label_points", "update"],
-      ["label_points", "update"],
-      ["label_points", "update"],
-      ["label_points", "insert"],
+      ["label_apply_edit", "rpc"],
     ]);
     expect(fake.calls[1].filters).toEqual({ session_id: SESSION_ID });
-    expect(writes(fake)).toEqual([
+    expect(fake.calls[2].values?.p_session).toBe(SESSION_ID);
+    expect(appliedOps(fake.calls)).toEqual([
       {
-        table: "label_points",
         op: "update",
-        values: { point_index: 4 },
-        filters: { id: UUID(4) },
+        table: "label_points",
+        ids: [UUID(4)],
+        set: { point_index: 4 },
       },
       {
-        table: "label_points",
         op: "update",
-        values: { point_index: 3 },
-        filters: { id: UUID(3) },
+        table: "label_points",
+        ids: [UUID(3)],
+        set: { point_index: 3 },
       },
       {
-        table: "label_points",
         op: "update",
-        values: { point_index: 2 },
-        filters: { id: UUID(2) },
+        table: "label_points",
+        ids: [UUID(2)],
+        set: { point_index: 2 },
       },
       {
-        table: "label_points",
         op: "insert",
+        table: "label_points",
         values: {
-          session_id: SESSION_ID,
+          id: expect.stringMatching(/^[0-9a-f-]{36}$/),
           point_index: 1,
           set_number: 1,
           game_number: 1,
@@ -420,7 +405,6 @@ test.describe("writeLabelPointInsert", () => {
           seed: null,
           checked_at: null,
         },
-        filters: {},
       },
     ]);
   });
@@ -443,10 +427,11 @@ test.describe("writeLabelPointInsert", () => {
     expect(blind.calls.map((c) => [c.table, c.op])).toEqual([
       ["label_sessions", "select"],
       ["label_points", "select"],
-      ["label_points", "update"],
-      ["label_points", "update"],
-      ["label_points", "insert"],
+      ["label_apply_edit", "rpc"],
     ]);
+    expect(
+      appliedOps(blind.calls).map((op) => (op as { op: string }).op),
+    ).toEqual(["update", "update", "insert"]);
   });
 
   test("a complete session is refused before anything is read or written", async () => {
@@ -475,7 +460,7 @@ test.describe("writeLabelPointInsert", () => {
     ).toEqual({ error: "Session not found." });
   });
 
-  test("bad ids, a deleted flagged point and a failed shift write nothing more", async () => {
+  test("bad ids and a deleted flagged point write nothing; a failed or raced write is reported whole", async () => {
     expect(
       await writeLabelPointInsert({
         supabase: fakeClient({}).supabase,
@@ -513,16 +498,32 @@ test.describe("writeLabelPointInsert", () => {
     });
     expect(writes(stranger)).toEqual([]);
 
-    // The first shift (the highest) fails: nothing else is written, no insert.
-    const failed = fakeClient({ points: UUID_ROWS, failShift: UUID(4) });
+    // The transaction fails: one call, and the database kept none of it.
+    const failed = fakeClient({
+      points: UUID_ROWS,
+      failApply: { message: "boom" },
+    });
     expect(
       await writeLabelPointInsert({
         supabase: failed.supabase,
         sessionId: SESSION_ID,
         anchorPointId: UUID(2),
       }),
-    ).toEqual({ error: "Could not make room for the point: boom" });
-    expect(writes(failed).map((c) => c.op)).toEqual(["update"]);
+    ).toEqual({ error: "Could not add the point: boom" });
+    expect(writes(failed).map((c) => c.op)).toEqual(["rpc"]);
+
+    // A row moved since the read (LB409): the other-tab sentence.
+    const raced = fakeClient({
+      points: UUID_ROWS,
+      failApply: { message: "1 of 2 rows", code: "LB409" },
+    });
+    expect(
+      await writeLabelPointInsert({
+        supabase: raced.supabase,
+        sessionId: SESSION_ID,
+        anchorPointId: UUID(2),
+      }),
+    ).toEqual({ error: "This row changed in another tab. Reload to see it." });
   });
 
   test("the entry point refuses without an admin, before a client is built", async () => {

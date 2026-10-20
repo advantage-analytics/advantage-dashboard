@@ -36,7 +36,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import type { LabelPoint, LabelVideo } from "@/lib/services/labels/session";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
-import { labelFilmStops, type LabelFilmStop } from "./label-film-stops";
+import {
+  labelFilmStops,
+  readAheadTarget,
+  type LabelFilmStop,
+} from "./label-film-stops";
 import { KEY_OWNER_SELECTOR } from "./label-layout";
 
 /**
@@ -48,8 +52,13 @@ import { KEY_OWNER_SELECTOR } from "./label-layout";
  * Playback rules are the tab's (`film-timeline.ts`).
  *
  * - Credential: the signed URL from `loadJobVideo`; a media error shows
- *   "Reload", which re-signs. `preload="metadata"`, since files are
- *   multi-gigabyte.
+ *   "Reload", which re-signs.
+ * - Buffering: `preload="auto"`, so the element keeps reading ahead while the
+ *   labeller is paused on a point (the link to the container measured 1–17
+ *   Mbps against a 2 Mbps film, 2026-10-19). A second, hidden element on the
+ *   same URL sits at the next point's start whenever the first one has not
+ *   buffered it (`readAheadTarget`); Chromium shares one media cache per URL,
+ *   so the click to that row lands on bytes already fetched.
  * - Stops: label points on the console's playing rule (`label-film-stops.ts`),
  *   so Previous/Next, Loop and Skip dead time walk the spans the rail lights.
  * - Left off the bar (`HIDDEN`): bookmarks, scoreboard, layout exit, "More".
@@ -70,6 +79,8 @@ export interface LabelVideoHandle {
   isPlaying: () => boolean;
   /** Start the film; a no-op while it plays. */
   play: () => void;
+  /** Stop the film where it is; a no-op while it is paused. */
+  pause: () => void;
   /** The previous (-1) or next (1) point, as the transport's glyphs step. */
   step: (direction: -1 | 1) => void;
 }
@@ -108,6 +119,8 @@ export const LabelVideoPlayer = forwardRef<
     readout?: LabelVideoReadout;
     /** The file's position on the analysis clock, on every report. */
     onTime?: (videoTime: number) => void;
+    /** The element paused, by whoever asked: the transport, a click, a seek's end. */
+    onPause?: () => void;
     /** Playable on first render — for specs. A real element starts pending. */
     initialReady?: boolean;
     /** A media error on first render — for specs. */
@@ -125,6 +138,7 @@ export const LabelVideoPlayer = forwardRef<
     points,
     readout = NO_READOUT,
     onTime,
+    onPause,
     initialReady = false,
     initialFailure = null,
     clockTargetRef,
@@ -133,6 +147,7 @@ export const LabelVideoPlayer = forwardRef<
   ref,
 ) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const readAheadRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   /** The point the film was last inside, for Loop (see `film-player.tsx`). */
   const loopStopRef = useRef<LabelFilmStop | null>(null);
@@ -256,6 +271,28 @@ export const LabelVideoPlayer = forwardRef<
     [stops, looping, skipDead, seek, pushTime],
   );
 
+  // Read-ahead: move the hidden element to the next point when the playing
+  // one has not got it. Only once playable, so it never races the first load,
+  // and only on a new target, so a playhead report is not a fetch.
+  const readAheadAt = useRef<number | null>(null);
+  // A re-signed URL (Reload) is a fresh element: its read-ahead starts over.
+  useEffect(() => {
+    readAheadAt.current = null;
+  }, [video?.url]);
+  useEffect(() => {
+    const el = videoRef.current;
+    const ahead = readAheadRef.current;
+    if (!ready || !el || !ahead) return;
+    const buffered: { start: number; end: number }[] = [];
+    for (let i = 0; i < el.buffered.length; i += 1) {
+      buffered.push({ start: el.buffered.start(i), end: el.buffered.end(i) });
+    }
+    const target = readAheadTarget(stops, currentTime, buffered);
+    if (target === null || target === readAheadAt.current) return;
+    readAheadAt.current = target;
+    ahead.currentTime = target;
+  }, [ready, stops, currentTime]);
+
   /** Metadata is in: take the duration and paint the first frame. */
   const settle = useCallback(() => {
     const el = videoRef.current;
@@ -324,6 +361,10 @@ export const LabelVideoPlayer = forwardRef<
       play() {
         const el = videoRef.current;
         if (el?.paused) void el.play().catch(noop);
+      },
+      pause() {
+        const el = videoRef.current;
+        if (el && !el.paused) el.pause();
       },
       step,
     }),
@@ -416,7 +457,7 @@ export const LabelVideoPlayer = forwardRef<
         <video
           ref={videoRef}
           src={video.url}
-          preload="metadata"
+          preload="auto"
           playsInline
           data-testid="label-video"
           data-film-seeking={settling.seeking ? "true" : undefined}
@@ -426,7 +467,10 @@ export const LabelVideoPlayer = forwardRef<
           )}
           onClick={togglePlay}
           onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
+          onPause={() => {
+            setPlaying(false);
+            onPause?.();
+          }}
           onLoadedMetadata={settle}
           onLoadedData={() => {
             settling.onLoadedData();
@@ -457,6 +501,19 @@ export const LabelVideoPlayer = forwardRef<
         >
           Your browser cannot play this video.
         </video>
+
+        {/* The read-ahead: never shown, never played, same URL. */}
+        <video
+          ref={readAheadRef}
+          src={video.url}
+          preload="auto"
+          muted
+          playsInline
+          aria-hidden="true"
+          tabIndex={-1}
+          data-label-video-read-ahead=""
+          className="hidden"
+        />
 
         {/* Over the element and `pointer-events-none`: a click still
             reaches the element, so a slow load never traps one. */}

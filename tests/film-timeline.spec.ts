@@ -106,6 +106,19 @@ test.describe("film clock", () => {
     expect(nextStop(stops, 10_000)).toBeNull();
   });
 
+  test("prev from inside a point goes back a point, never replays it", () => {
+    const stops = filmStops(points, PROVIDER);
+    // Well into b's rally: the old walk landed on b's own serve.
+    expect(prevStop(stops, stops[1].start + 4)?.point.id).toBe("a");
+    // Inside the first point there is nothing before it.
+    expect(prevStop(stops, stops[0].start + 4)).toBeNull();
+    // A seek that landed a hair early still reads as on the point.
+    expect(prevStop(stops, stops[2].start - 0.05)?.point.id).toBe("b");
+    // Where two windows touch (c's end is d's start), a seek landing a hair
+    // early on d is on d: back goes to c, never past it to b.
+    expect(prevStop(stops, stops[3].start - 0.05)?.point.id).toBe("c");
+  });
+
   test("dead time jumps to the next start, and only from dead time", () => {
     const stops = filmStops(points, PROVIDER);
     expect(deadTimeJump(stops, stops[0].start + 2)).toBeNull();

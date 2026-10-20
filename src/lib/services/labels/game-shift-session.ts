@@ -16,11 +16,12 @@
 
 import { planTiebreakFold, tiebreakFolds } from "./tiebreak-fold";
 import { readAllPages } from "@/lib/data/admin-range-read";
+import { parseMatchScore, readBestOf } from "@/lib/data/labels-server";
+import { matchTiebreakSet } from "./set-scores";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   readJobAdScoring,
   readFormatAdScoring,
-  readMatchAdScoring,
   resolveLabelAdScoring,
 } from "./ad-scoring";
 import {
@@ -37,6 +38,7 @@ import {
 import {
   planGamePull,
   planGameShift,
+  planGameSplit,
   type GameShiftWrite,
   type ShiftPoint,
 } from "./game-shift";
@@ -95,6 +97,12 @@ interface ShiftSessionRow {
   match_id: string | null;
 }
 
+/** The match row the fold reads: the entered score and the format. */
+interface MatchScoreRow {
+  score: unknown;
+  format: unknown;
+}
+
 /** One UPDATE's worth of moved points: the values, the status they were read with, their ids. */
 interface WriteGroup {
   values: Omit<GameShiftWrite, "id">;
@@ -148,14 +156,27 @@ type GamePlan =
   | { error: string };
 
 /**
- * The run both writes share: the session's gate and scoring in one read, the
- * points, the plan — twice when a point changes server — then the grouped
- * writes and the flipped strokes. `plan` is the pure rule over the rows.
+ * The run every write here shares: the session's gate and scoring in one
+ * read, the points, the plan — twice when a point changes server — then the
+ * grouped writes and the flipped strokes. `plan` is the pure rule over the
+ * rows.
+ *
+ * The match row is read once, its `score` beside its `format` (`readMatchScore`,
+ * in place of the scoring fallback's own read): the format is the scoring's
+ * last fallback, and the score hands the plan the deciding set the match
+ * record spells as a match tiebreak (set-scores.ts `matchTiebreakSet`) —
+ * the same set the console plans with, so the shift and pull leave its
+ * vendor-cut games alone as the console's slots do. A session with no match
+ * reads nothing and the plan is handed null.
  */
 async function runGamePlan(
   supabase: AdminClient,
   sessionId: string,
-  plan: (points: readonly ShiftPoint[], adScoring: boolean) => GamePlan,
+  plan: (
+    points: readonly ShiftPoint[],
+    adScoring: boolean,
+    matchTiebreakSet: number | null,
+  ) => GamePlan,
   failed: string,
 ): Promise<LabelGameShiftResult> {
   // One read of the session: its gate and what its scoring resolves from.
@@ -178,8 +199,8 @@ async function runGamePlan(
       .order("point_index")
       .returns<GameRow[]>(),
     readJobAdScoring(supabase, session),
-    // The match's format, the last fallback, beside the job's.
-    readMatchAdScoring(supabase, session),
+    // The match's score and format in one read, beside the job's.
+    readMatchScore(supabase, session.match_id),
   ]);
   if (job.error) {
     return { error: `Could not read the job's scoring: ${job.error.message}` };
@@ -199,6 +220,10 @@ async function runGamePlan(
     job.data?.ad_scoring,
     readFormatAdScoring(match.data?.format),
   );
+  const tiebreakSet = matchTiebreakSet(
+    parseMatchScore(match.data?.score ?? null),
+    readBestOf(match.data?.format),
+  );
 
   // The plan with no shots yet says whether any point moves under a new
   // server. Only then are shots read — the whole session's, not the moved
@@ -209,7 +234,7 @@ async function runGamePlan(
     ...toGamePoint(row),
     shots: [],
   }));
-  const dry = plan(shiftPoints, adScoring);
+  const dry = plan(shiftPoints, adScoring, tiebreakSet);
   if ("error" in dry) return dry;
   const byId = new Map(shiftPoints.map((point) => [point.id, point]));
   const switching = dry.writes.some(
@@ -220,7 +245,7 @@ async function runGamePlan(
     const owned = await readShotsOfSession(supabase, sessionId);
     if ("error" in owned) return owned;
     shiftPoints = withShots(shiftPoints, owned.shots);
-    const full = plan(shiftPoints, adScoring);
+    const full = plan(shiftPoints, adScoring, tiebreakSet);
     if ("error" in full) return full;
     planned = full;
   }
@@ -272,15 +297,52 @@ export async function writeLabelGameShift(params: {
   return runGamePlan(
     params.supabase,
     sessionId,
-    (points, adScoring) => planGameShift(points, adScoring, fromPointId),
+    (points, adScoring, tiebreakSet) =>
+      planGameShift(points, adScoring, fromPointId, tiebreakSet),
     "Could not move the points",
   );
 }
 
 /**
- * Make the game after 6–6 in set `setNumber` a tiebreak and fold the vendor's
- * split games into it (tiebreak-fold.ts), read and planned on the rows as
- * they stand now. Never throws.
+ * Start a new game at `atPointId` (game-shift.ts `planGameSplit`): that
+ * point and the rest of its game become a new game. Never throws.
+ */
+export async function writeLabelGameSplit(params: {
+  supabase: AdminClient;
+  sessionId: unknown;
+  atPointId: unknown;
+}): Promise<LabelGameShiftResult> {
+  const sessionId = normaliseId(params.sessionId);
+  if (!sessionId) return { error: "Invalid session id." };
+  const atPointId = normaliseId(params.atPointId);
+  if (!atPointId) return { error: "Invalid point id." };
+  return runGamePlan(
+    params.supabase,
+    sessionId,
+    (points) => planGameSplit(points, atPointId),
+    "Could not start the new game",
+  );
+}
+
+/** The match's entered score beside its format, when the session has a match. */
+async function readMatchScore(
+  supabase: AdminClient,
+  matchId: string | null,
+): Promise<{ data: MatchScoreRow | null; error: { message: string } | null }> {
+  if (!matchId) return { data: null, error: null };
+  return supabase
+    .from("matches")
+    .select("score, format")
+    .eq("id", matchId)
+    .maybeSingle<MatchScoreRow>();
+}
+
+/**
+ * Make the game after 6–6 in set `setNumber` a tiebreak — or, where the
+ * entered score spells set `setNumber` as a match tiebreak, make its first
+ * game that and fold the whole set in — folding the vendor's split games
+ * into it (tiebreak-fold.ts), read and planned on the rows as they stand
+ * now. Never throws.
  */
 export async function writeLabelTiebreakFold(params: {
   supabase: AdminClient;
@@ -300,12 +362,15 @@ export async function writeLabelTiebreakFold(params: {
   return runGamePlan(
     params.supabase,
     sessionId,
-    (points, adScoring) => {
-      const fold = tiebreakFolds(points, adScoring).find(
+    (points, adScoring, tiebreakSet) => {
+      const fold = tiebreakFolds(points, adScoring, tiebreakSet).find(
         (f) => f.setNumber === setNumber,
       );
       if (!fold) {
-        return { error: "That set is not at 6–6 before an ordinary game." };
+        return {
+          error:
+            "That set is not at 6–6 before an ordinary game, and the entered score does not make it a match tiebreak.",
+        };
       }
       return planTiebreakFold(points, fold);
     },
@@ -339,8 +404,8 @@ export async function writeLabelGamePull(params: {
   return runGamePlan(
     params.supabase,
     sessionId,
-    (points, adScoring) => {
-      const plan = planGamePull(points, key, adScoring);
+    (points, adScoring, tiebreakSet) => {
+      const plan = planGamePull(points, key, adScoring, tiebreakSet);
       return "kind" in plan ? { error: NO_PULL } : plan;
     },
     "Could not pull the points in",
@@ -380,5 +445,17 @@ export function foldLabelTiebreak(
     deps,
     (supabase) => writeLabelTiebreakFold({ supabase, sessionId, setNumber }),
     "make the tiebreak",
+  );
+}
+
+export function splitLabelGame(
+  sessionId: unknown,
+  atPointId: unknown,
+  deps: LabelWriteDependencies = defaultLabelWriteDependencies,
+): Promise<LabelGameShiftResult> {
+  return gated(
+    deps,
+    (supabase) => writeLabelGameSplit({ supabase, sessionId, atPointId }),
+    "start the new game",
   );
 }

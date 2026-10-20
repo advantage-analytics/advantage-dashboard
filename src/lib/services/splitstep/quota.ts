@@ -24,7 +24,11 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatHoursLong, secondsLeft } from "@/lib/data/usage-format";
+import {
+  formatHoursLong,
+  secondsLeft,
+  UNLIMITED_CAP_SECONDS,
+} from "@/lib/data/usage-format";
 import {
   explainVideoRefusal,
   pendingReviewRefusal,
@@ -102,13 +106,21 @@ export function quotaTierFor(
  * A pilot individual's PERSONAL workspace draws the pilot figure instead
  * (`Workspace.individualPilot`); every other workspace — including a team the
  * pilot belongs to — is unchanged.
+ *
+ * An admin's PERSONAL workspace (`Workspace.unlimitedVideo`) has no cap at
+ * all: `UNLIMITED_CAP_SECONDS`, which the reserve RPCs never reach, so free
+ * hours cover every upload and credits are never spent. A team the admin
+ * uploads into keeps its own cap — that budget is the program's, not theirs.
  */
 export function monthlyCapSecondsFor(
   workspace: Pick<
     Workspace,
-    "kind" | "orgType" | "individualPilot" | "pilotEligible"
+    "kind" | "orgType" | "individualPilot" | "pilotEligible" | "unlimitedVideo"
   >,
 ): number {
+  if (workspace.kind === "personal" && workspace.unlimitedVideo) {
+    return UNLIMITED_CAP_SECONDS;
+  }
   if (workspace.kind === "personal" && workspace.individualPilot) {
     return getPilotIndividualCapSeconds();
   }

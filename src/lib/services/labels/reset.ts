@@ -7,8 +7,9 @@
  * reset: an added row never had seeded values, and a vendor row seeded before
  * the column existed waits for scripts/label-backfill-seed.ts.
  *
- * A reset leaves alone a shot's `unclear` list and a point's note and checked
- * mark. Of a point's strokes it restores one thing: each one's `hitter`, back
+ * A reset leaves alone a shot's `unclear` list and a point's note. A shot
+ * reset clears its point's checked mark (reset-session.ts); a point reset of
+ * the point's own fields alone keeps it. Of a point's strokes it restores one thing: each one's `hitter`, back
  * to the stroke's own seed — the players' swap (player-swap.ts) flips every
  * hitter along with the point's winner and ended by, so a point reset that
  * put back the winner alone would leave the point contradicting its rows. A
@@ -36,8 +37,10 @@ import type {
 /** The columns a shot reset writes: its seed, and `kept`. */
 export type ShotResetWrite = LabelShotSeedValues & { status: "kept" };
 
-/** The columns a point reset writes: its seed, and `unchanged`. */
-export type PointResetWrite = LabelPointSeedValues & { status: "unchanged" };
+/** The columns a point reset writes: its seed (less the game type), and `unchanged`. */
+export type PointResetWrite = Omit<LabelPointSeedValues, "game_type"> & {
+  status: "unchanged";
+};
 
 /** The whole point reset: its own columns, and each stroke whose hitter goes back. */
 export type PlannedPointReset =
@@ -103,7 +106,10 @@ export function planPointReset(current: {
     if (shot.seed === null || shot.seed.hitter === shot.hitter) continue;
     shots.push(planShotHitter(shot, shot.seed.hitter));
   }
-  return { ok: true, write: { ...current.seed, status: "unchanged" }, shots };
+  // The seeded game type is for the opening scorecard, never a value Reset
+  // puts back: a game's type is set for the whole game by its own operation.
+  const { game_type: _gameType, ...values } = current.seed;
+  return { ok: true, write: { ...values, status: "unchanged" }, shots };
 }
 
 /** Whether the console offers Reset on a shot: edited, with a seed. */

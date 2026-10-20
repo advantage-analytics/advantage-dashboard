@@ -16,6 +16,7 @@ import {
   deleteLabelShot,
   markLabelPointChecked,
   moveLabelPoint,
+  moveLabelPoints,
   removeLabelShotsAfter,
   restoreLabelPoint,
   restoreLabelShot,
@@ -24,6 +25,7 @@ import {
   type LabelAddShotResult,
   type LabelCheckedResult,
   type LabelMovePointResult,
+  type LabelMovePointsResult,
   type LabelPointStatusResult,
   type LabelShotStatusResult,
   type LabelShotsRemoveResult,
@@ -56,6 +58,7 @@ import {
   foldLabelTiebreak,
   pullLabelGamePoints,
   shiftLabelGameOverflow,
+  splitLabelGame,
   type LabelGameShiftResult,
 } from "@/lib/services/labels/game-shift-session";
 import {
@@ -212,6 +215,20 @@ export async function moveLabelPointAction(
 }
 
 /**
+ * The points a dragged game header passed, into the game beside it, in one
+ * write (`moveLabelPoints`); one undo step.
+ */
+export async function moveLabelPointsAction(
+  pointIds: string[],
+  to: LabelGame,
+  switchServer: boolean,
+): Promise<LabelMovePointsResult> {
+  return withLabelOp("Move game boundary", () =>
+    moveLabelPoints(pointIds, to, switchServer),
+  );
+}
+
+/**
  * Set who serves game `game` of the session: every live point of the game
  * gets `server` — in a tiebreak, `server` serves point 1 and the rest follow
  * the 1-2-2 rotation. Returns each point as it now stands.
@@ -340,6 +357,21 @@ export async function shiftLabelGameOverflowAction(
 ): Promise<LabelGameShiftResult> {
   return withLabelOp("Move points to next game", () =>
     shiftLabelGameOverflow(sessionId, fromPointId),
+  );
+}
+
+/**
+ * Start a new game at a point: it and the rest of its game become a new game,
+ * served by the other player. `label_points` (and flipped strokes) only; no
+ * other game is renumbered. Refused at a game's first point and in a
+ * tiebreak.
+ */
+export async function splitLabelGameAction(
+  sessionId: string,
+  atPointId: string,
+): Promise<LabelGameShiftResult> {
+  return withLabelOp("Start a new game", () =>
+    splitLabelGame(sessionId, atPointId),
   );
 }
 

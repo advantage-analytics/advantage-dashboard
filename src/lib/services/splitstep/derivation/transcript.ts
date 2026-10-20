@@ -33,6 +33,7 @@ import {
 } from "./reconcile";
 import {
   classifyPoint,
+  lastCallContradictsWinner,
   lastServeIndex,
   shotNumber,
   shotResult,
@@ -135,10 +136,10 @@ export interface Transcript {
   /** Rallies inside a frozen stretch, games read from the serve. */
   frozenRallies: number[];
   /**
-   * Leading rallies before the stream read any set score: warm-up play,
-   * dropped from the transcript rather than refusing the match.
+   * Leading rallies before the stream read any set score. Kept as points in
+   * the opening game, winners guessed.
    */
-  warmupRallies: number[];
+  leadingUnscoredRallies: number[];
   /**
    * The score-constrained segmenter's proposal (segmentation.ts). Review-only:
    * it never changes a published row, it only adds
@@ -467,7 +468,7 @@ export interface BuildOptions {
 
 export function buildTranscript(options: BuildOptions): Transcript {
   const {
-    rallies: inputRallies,
+    rallies: streamRallies,
     labels,
     score,
     initialTopIsPlayer1,
@@ -476,23 +477,6 @@ export function buildTranscript(options: BuildOptions): Transcript {
     lineCalls: streamLineCalls,
     segmenter = proposeSegmentation,
   } = options;
-
-  // Warm-up play before the stream has read any set score is dropped, not
-  // refused. Nothing about it says which game it belongs to, and keeping it
-  // would open a phantom first set and push every real point one set up — but
-  // refusing the match over it (job c349e3d4, 2026-10-17: one 0:06 warm-up
-  // rally, "1 point(s) resolved no winner") threw away every real point to
-  // avoid one that was never a point. A stream that never reads a set score
-  // keeps everything: there is no scored rally to tell warm-up from play.
-  const firstScored = inputRallies.findIndex(
-    (r) => (r.strokes[0]?.predSetScore ?? null) !== null,
-  );
-  const warmupRallies =
-    firstScored > 0
-      ? inputRallies.slice(0, firstScored).map((r) => r.rallyId)
-      : [];
-  const streamRallies =
-    firstScored > 0 ? inputRallies.slice(firstScored) : inputRallies;
 
   const gameKeyOf = new Map<number, string>();
   const setKeyOf = new Map<number, string>();
@@ -592,11 +576,32 @@ export function buildTranscript(options: BuildOptions): Transcript {
     }
   }
 
+  // Rallies before the stream has read any set score are points, and are
+  // kept in the opening game: the set and game the first scored rally ended
+  // up in (after the frozen split), so no phantom set opens. Their strokes are
+  // left as the vendor labelled them — copying the opening score onto them
+  // would make them the head of a frozen stretch and seed its server
+  // alternation from them. Their winners fall to the stall guess below. Job
+  // c349e3d4 (2026-10-17) was refused for one such rally at 0:06, then had it
+  // dropped as warm-up (0.8.3); the uploader confirmed it was the first point.
+  const firstScored = rallies.findIndex(
+    (r) => (r.strokes[0]?.predSetScore ?? null) !== null,
+  );
+  const leadingUnscoredRallies =
+    firstScored > 0 ? rallies.slice(0, firstScored).map((r) => r.rallyId) : [];
+  if (firstScored > 0) {
+    const anchor = rallies[firstScored].rallyId;
+    for (const id of leadingUnscoredRallies) {
+      gameKeyOf.set(id, gameKeyOf.get(anchor) ?? "");
+      setKeyOf.set(id, setKeyOf.get(anchor) ?? "");
+    }
+  }
+
   // Anything else the stream left unresolved is a stall inside a game (the
   // score repeating for a few rallies, then moving on). The point was played,
   // so it is kept on the last stroke's guess rather than refusing the match.
   // The final rally is the exception: reconcile settles it from the entered
-  // score, which beats a guess. Leading warm-up rallies were dropped above.
+  // score, which beats a guess.
   for (let i = 0; i < winners.length - 1; i += 1) {
     if (!winners[i].winner) guess(i);
   }
@@ -622,7 +627,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     unreturnedServeRate: 0,
     guessedRallies,
     frozenRallies: frozenList,
-    warmupRallies,
+    leadingUnscoredRallies,
     segmentation: null,
   };
 
@@ -852,6 +857,9 @@ export function buildTranscript(options: BuildOptions): Transcript {
           adScoring,
           lineCalls,
         }).filter((f) => !(frozen && f === POINT_FLAGS.SCORE_SIDE_MISMATCH)),
+        ...(lastCallContradictsWinner(kept, winner)
+          ? [POINT_FLAGS.LAST_CALL_CONTRADICTS_WINNER]
+          : []),
         ...(rec.settledWinners[i]?.via === "guess"
           ? [POINT_FLAGS.WINNER_GUESSED]
           : []),
@@ -908,7 +916,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     unreturnedServeRate: rallies.length === 0 ? 0 : unreturned / rallies.length,
     guessedRallies,
     frozenRallies: frozenList,
-    warmupRallies,
+    leadingUnscoredRallies,
     segmentation,
   };
 }

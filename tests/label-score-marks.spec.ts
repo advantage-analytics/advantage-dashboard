@@ -3,9 +3,11 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { LabelMarks } from "@/lib/services/labels/marks";
-import { markSummary } from "@/lib/services/labels/marks-state";
+import { markHover } from "@/lib/services/labels/marks-copy";
+import { markSummary, reviewFlag } from "@/lib/services/labels/marks-state";
 import {
   liveRowMarks,
+  labelledServeSide,
   liveScoreMarks,
   replayedServeGap,
   withLiveScoreMarks,
@@ -413,6 +415,8 @@ test.describe("Ending can't be read", () => {
     return {
       ...seeded,
       checkedAt: null,
+      // Never seeded in a real session: only the labeller sets a side.
+      serveSide: null,
       shots: [{ ...seeded.shots[0], ...over }],
     };
   };
@@ -484,8 +488,9 @@ test.describe("the console reads them live", () => {
     const session = { ...labelSessionFixture(), matchScore: null };
     const unchecked = {
       ...session,
+      // `serve_side` is never seeded, so the vendor's side (below) is read.
       points: session.points.map((p) =>
-        p.id === P2 ? { ...p, checkedAt: null } : p,
+        p.id === P2 ? { ...p, checkedAt: null, serveSide: null } : p,
       ),
     };
     const marks: LabelMarks = {
@@ -495,12 +500,28 @@ test.describe("the console reads them live", () => {
     const html = renderBlack(unchecked, marks);
     const p2 = row(html, P2);
     expect(p2).toContain('data-mark-state="open"');
-    // The open hover reads the LABELLED score — "0–15", server first — not
-    // anything the vendor read.
+    // The chip asks the game item among the point's open items.
     expect(p2).toMatch(
-      /aria-label="[^"]*At 0–15 the serve should come from the ad side\. This one came from the deuce side\./,
+      /aria-label="Review · \d\.[^"]*6 · Game &amp; serve order/,
     );
-    expect(html).toContain('aria-label="2 flags to check"');
+    // Its evidence reads the LABELLED score — "0–15", server first — not
+    // anything the vendor read.
+    const live = withLiveScoreMarks(marks, unchecked.points, true);
+    const flag = reviewFlag(
+      unchecked.points.find((p) => p.id === P2)!,
+      live,
+      unchecked.points,
+    );
+    const game = flag?.items.find((item) => item.id === 6);
+    expect(
+      game?.members
+        .map((member) => markHover(member.mark, { p1: "Lee", p2: "Vargas" }))
+        .join(" "),
+    ).toMatch(
+      /At 0–15 the serve should come from the ad side\. This one came from the deuce side\./,
+    );
+    // Two flags on one point: one point to review.
+    expect(html).toContain('aria-label="1 point to review"');
     expect(
       markSummary(
         unchecked.points,
@@ -609,5 +630,112 @@ test.describe("Same side twice after a replayed serve", () => {
       { a: "deuce", b: "deuce" },
     );
     expect(marks.suggestions[0]).not.toHaveProperty("replayGap");
+  });
+});
+
+// ── The labeller's serve side before the vendor's ──────────────────────────
+
+test.describe("the serve side the labeller set wins", () => {
+  // Label contacts sit 11.885 m up the length from the vendor's frame: a near
+  // server stands at y ≈ 24.4, a far one at y ≈ -0.6. From the near end the
+  // deuce court is x < 0; from the far end, x > 0.
+  const NEAR_DEUCE = { contactX: -1.2, contactY: 24.4 };
+  const NEAR_AD = { contactX: 1.2, contactY: 24.4 };
+  const seedOf = (x: number | null, y: number | null): LabelShot["seed"] => ({
+    hitter: "p1",
+    stroke: "first_serve",
+    result: "in",
+    spin: null,
+    contact_x: x,
+    contact_y: y,
+    landing_x: null,
+    landing_y: null,
+    video_time: null,
+  });
+  const serve = (
+    pointId: string,
+    at: { contactX: number; contactY: number },
+    seed: LabelShot["seed"],
+  ) =>
+    labelShot(`${pointId}-serve`, pointId, {
+      stroke: "first_serve",
+      result: "in",
+      status: "edited",
+      ...at,
+      seed,
+    });
+
+  test("a serve contact moved off its seed reads its own side", () => {
+    // The vendor tracked the server on the ad side; the labeller moved the
+    // contact to the deuce side.
+    expect(
+      labelledServeSide({
+        shots: [
+          serve("p1", NEAR_DEUCE, seedOf(NEAR_AD.contactX, NEAR_AD.contactY)),
+        ],
+      }),
+    ).toBe("deuce");
+    // An added serve has no seed: its contact is the labeller's.
+    expect(labelledServeSide({ shots: [serve("p1", NEAR_AD, null)] })).toBe(
+      "ad",
+    );
+  });
+
+  test("an untouched contact, or one on the centre mark, defers to serve_side, then the vendor", () => {
+    const untouched = serve(
+      "p1",
+      NEAR_AD,
+      seedOf(NEAR_AD.contactX, NEAR_AD.contactY),
+    );
+    expect(labelledServeSide({ shots: [untouched] })).toBeNull();
+    expect(labelledServeSide({ shots: [untouched], serveSide: "deuce" })).toBe(
+      "deuce",
+    );
+    const centre = serve("p1", { contactX: 0.05, contactY: 24.4 }, null);
+    expect(labelledServeSide({ shots: [centre] })).toBeNull();
+    expect(labelledServeSide({})).toBeNull();
+  });
+
+  test("moving a mistracked serve's contact clears the false missing point and its cascade", () => {
+    // 15–0 wants the ad side. The vendor tracked point 2's server on the
+    // deuce side, which reads as a point missing before it.
+    const { points, serveSides } = game(
+      ["p1", "p1", "p1"],
+      ["deuce", "deuce", "deuce"],
+    );
+    const before = liveScoreMarks(points, true, serveSides);
+    expect(codes(before, "p2")).toContain("score_side_mismatch");
+    expect(before.suggestions.length).toBeGreaterThan(0);
+
+    // The labeller places point 2's serve on the ad side, point 3's on the
+    // deuce side: the rows now agree with the score.
+    const fixed = points.map((p, i) =>
+      i === 1
+        ? {
+            ...p,
+            shots: [
+              serve(
+                p.id,
+                NEAR_AD,
+                seedOf(NEAR_DEUCE.contactX, NEAR_DEUCE.contactY),
+              ),
+            ],
+          }
+        : p,
+    );
+    const after = liveScoreMarks(fixed, true, serveSides);
+    expect(after.points).toEqual({});
+    expect(after.suggestions).toEqual([]);
+  });
+
+  test("a point's serve_side alone also answers it", () => {
+    const { points, serveSides } = game(["p1", "p1"], ["deuce", "deuce"]);
+    expect(codes(liveScoreMarks(points, true, serveSides), "p2")).toContain(
+      "score_side_mismatch",
+    );
+    const fixed = points.map((p, i) =>
+      i === 1 ? { ...p, serveSide: "ad" as const } : p,
+    );
+    expect(liveScoreMarks(fixed, true, serveSides).points).toEqual({});
   });
 });

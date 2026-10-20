@@ -605,7 +605,7 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
     expect(built).toBe(0);
   });
 
-  test("a shot reset writes its seed and kept, compare-and-set", async () => {
+  test("a shot reset writes its seed and kept, compare-and-set, and unchecks its point", async () => {
     const fake = fakeClient({ shot: shotRow() });
     const result = await resetLabelShot(SHOT_ID.toUpperCase(), {
       requireAdmin: async () => ({ id: "admin" }),
@@ -623,6 +623,13 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
         op: "update",
         values: { ...SHOT_SEED, status: "kept" },
         filters: { id: SHOT_ID, status: "edited" },
+      },
+      // A reset point is asked again: its check goes.
+      {
+        table: "label_points",
+        op: "update",
+        values: { checked_at: null },
+        filters: { id: POINT_ID },
       },
     ]);
     // `unclear` is not part of the seed and is never written.
@@ -663,6 +670,7 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
         .map((c) => [c.table, c.values]),
     ).toEqual([
       ["label_shots", { ...SHOT_SEED, status: "kept" }],
+      ["label_points", { checked_at: null }],
       [
         "label_points",
         { ending: "winner", ended_by: "p2", winner: "p2", status: "edited" },
@@ -835,4 +843,15 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
       }),
     ).toEqual({ error: "Invalid shot id." });
   });
+});
+
+test("a seeded game type is never part of the point reset's write", () => {
+  const plan = planPointReset({
+    status: "edited",
+    seed: { ...POINT_SEED, game_type: "match_tiebreak" },
+    shots: [],
+  });
+  if ("error" in plan) throw new Error(plan.error);
+  expect(plan.write).toEqual({ ...POINT_SEED, status: "unchanged" });
+  expect(plan.write).not.toHaveProperty("game_type");
 });

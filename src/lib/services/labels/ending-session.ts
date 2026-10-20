@@ -233,6 +233,38 @@ export async function reconcileEnding(params: {
 }
 
 /**
+ * `reconcileEnding`'s decision with `keepStatus`, on a row and shots already
+ * in hand: the patch the rows call for, and the point as it would then read.
+ * Nothing when nothing is due. For an edit that writes the point in the same
+ * transaction as its shots (split), so no read follows the write.
+ */
+export function plannedReconcile(
+  row: Pick<LabelPointFields, "winner" | "ending" | "ended_by"> & {
+    status: LabelPointStatus;
+  },
+  shots: readonly LabelShot[],
+  ghosts: boolean,
+): { patch: EndingPatch; point: LabelPointEndingSynced } | null {
+  if (isNonPointEnding(row.ending)) return null;
+  const now = deriveEnding({ winner: row.winner, shots: [...shots] }, ghosts);
+  if (!now) return null;
+  const patch = endingPatchTo(
+    { ending: row.ending, endedBy: row.ended_by, winner: row.winner },
+    now,
+  );
+  if (!patch) return null;
+  return {
+    patch,
+    point: {
+      ending: "ending" in patch ? (patch.ending ?? null) : row.ending,
+      endedBy: "ended_by" in patch ? (patch.ended_by ?? null) : row.ended_by,
+      winner: "winner" in patch ? (patch.winner ?? null) : row.winner,
+      status: row.status,
+    },
+  };
+}
+
+/**
  * The sentence a write answers with when its own write landed (`landed`) but
  * the point's did not: the rows and the point disagree until a reload.
  */

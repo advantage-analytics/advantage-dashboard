@@ -2,8 +2,11 @@
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { ArrowUpDown } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Kbd } from "@/components/ui/kbd";
 import {
   isLetServe,
+  isLiveShot,
   opponent,
   type LabelPoint,
   type LabelShot,
@@ -11,7 +14,10 @@ import {
 import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
 import {
+  courtSlide,
+  isEstimate,
   placementPrompt,
+  type CourtSlide,
   type PlacementState,
   type PlacementTarget,
 } from "./court-placement";
@@ -22,6 +28,9 @@ import {
   parseCourtMarksKey,
 } from "./label-court-marks";
 import type { SideNames } from "./label-format";
+import { PointInfoLine, type PointInfo } from "./label-point-info";
+import { RAIL_TONE_CLASS } from "./label-rail-tone";
+import { STROKE_KEY_HINTS } from "./stroke-keys";
 import type { VideoClock } from "./video-clock";
 
 /**
@@ -37,9 +46,17 @@ import type { VideoClock } from "./video-clock";
  *   string key as its snapshot, so an opacity step re-renders this body and
  *   nothing else.
  * - Placing (a stroke selected, the console editable): the court zooms to the
- *   half the next click belongs on (court-placement.ts), run-off included.
+ *   half the next click belongs on (court-placement.ts), run-off included —
+ *   slid back for a deep contact, across the net for a short ball
+ *   (`courtSlide`) — with "Off screen, so this is an estimate" beside the
+ *   switch, which calls the end's position an estimate (`unclear`).
  * - With a stroke selected, editable or not, the court shows that stroke alone
  *   at full strength; one with no coordinates yet is a blank court.
+ * - Not placing, with `info`: one quiet line under the header about the open
+ *   point — its score, server, how far the rally has got and what is still
+ *   to review (`pointInfoLine`, label-point-info.tsx). The review step itself
+ *   is asked in the rail (`ReviewInlineBlock`, label-review-inline.tsx), never
+ *   here: while it is open this panel follows the film and takes no click.
  */
 
 /** No point open: one shared empty list, so the marks memo holds. */
@@ -51,20 +68,41 @@ interface CourtReadout {
 }
 
 /**
+ * The live strokes, in the rail's numbering (1…n): not deleted and, while
+ * the session draws them (`ghosts`, marks.ts `drawsGhosts`), not a stroke
+ * the site removed — the rail numbers a ghost's line not at all.
+ */
+const liveShots = (point: LabelPoint, ghosts = true) =>
+  point.shots.filter((shot) => isLiveShot(shot, ghosts));
+
+/** "Didn’t clear the net · error by Lee" — the short ball's readout. */
+export function shankReadout(hitter: string | null): string {
+  return `Didn’t clear the net${hitter ? ` · error by ${hitter}` : ""}`;
+}
+
+/** "Lee’s side · run-off to 5.5 m" — a deep contact's readout. */
+function deepReadout(own: string, runoff: number): string {
+  return `${own} · run-off to ${runoff} m`;
+}
+
+/**
  * The panel's two header lines. Placing: "Shot 3 · contact" over whose half is
  * on screen, or "Flipped to <hitter>'s side · Net" when Flip side has brought a
  * landing back across. Otherwise: "Point 15" over "Shot 3 of 4 · Ace" for the
  * playing stroke, or just the stroke count; "Court" with no point open. A let
- * serve, placed or lit, adds " · let" to the title.
+ * serve, placed or lit, adds " · let" to the title. A slid box says why: the
+ * short ball's "Didn’t clear the net · error by …", a deep contact's run-off.
  */
 function courtReadout(
   point: LabelPoint | null,
   placement: PlacementState | null,
   litShotId: string | null,
   names: SideNames,
+  slide: CourtSlide | null = null,
+  ghosts = true,
 ): CourtReadout {
   if (!point) return { title: "Court", subtitle: "No point open" };
-  const live = point.shots.filter((shot) => shot.status !== "deleted");
+  const live = liveShots(point, ghosts);
   const numberOf = (shotId: string | null) => {
     const index = live.findIndex((shot) => shot.id === shotId);
     return index === -1 ? null : index + 1;
@@ -81,11 +119,15 @@ function courtReadout(
     return {
       title: `Shot ${placing} · ${placement.target}${isLet ? " · let" : ""}`,
       subtitle:
-        placement.target === "contact"
-          ? own
-          : placement.flipped
-            ? `Flipped to ${hitter ? own : "the hitter’s side"} · Net`
-            : other,
+        slide?.kind === "shank"
+          ? shankReadout(hitter ? names[hitter] : null)
+          : slide?.kind === "deep"
+            ? deepReadout(own, slide.runoff)
+            : placement.target === "contact"
+              ? own
+              : placement.flipped
+                ? `Flipped to ${hitter ? own : "the hitter’s side"} · Net`
+                : other,
     };
   }
 
@@ -135,12 +177,21 @@ export function isPlacing(
   return editable && selectedStroke(point, placement) !== null;
 }
 
+/** The end being placed, as the switch and the placing lines name it. */
+export const TARGET_WORD: Record<PlacementTarget, string> = {
+  contact: "Contact",
+  landing: "Landing",
+};
+
 export function LabelCourtPanel({
   point,
   names,
   placement,
   editable,
   playingShotId = null,
+  ghosts = true,
+  info = null,
+  onEstimate,
   clock,
   onPlace,
   onTarget,
@@ -155,6 +206,18 @@ export function LabelCourtPanel({
   editable: boolean;
   /** The stroke on screen in the video — named in the header while nothing is selected. */
   playingShotId?: string | null;
+  /**
+   * Whether the session draws the site's removed strokes as ghosts
+   * (`drawsGhosts`): then they take no number here, as on the rail.
+   */
+  ghosts?: boolean;
+  /** One line about the open point, drawn under the header while not placing. */
+  info?: PointInfo | null;
+  /**
+   * "Off screen, so this is an estimate" on the end being placed. Absent:
+   * the box is not drawn.
+   */
+  onEstimate?: (estimate: boolean) => void;
   /** The console's video clock (analysis seconds): what the marks follow. */
   clock: VideoClock;
   /** A click on the zoomed half, in metres. */
@@ -165,15 +228,18 @@ export function LabelCourtPanel({
   const shots = point?.shots ?? NO_SHOTS;
   const selected = selectedStroke(point, placement);
   const placing = editable && selected !== null;
+  const slide = placing ? courtSlide(placement, selected) : null;
   const readout = courtReadout(
     point,
     placing ? placement : null,
     placement.shotId ?? playingShotId,
     names,
+    slide,
+    ghosts,
   );
   const selectedNumber =
     placing && selected
-      ? shots.filter((shot) => shot.status !== "deleted").indexOf(selected) + 1
+      ? liveShots(point!, ghosts).indexOf(selected) + 1
       : null;
   const prompt = placing ? placementPrompt(placement, selectedNumber) : null;
   // The court crossfades between the whole court and the zoomed half
@@ -182,7 +248,6 @@ export function LabelCourtPanel({
   const [zoomAtMount] = useState(placing);
   const [zoomSwitched, setZoomSwitched] = useState(false);
   if (!zoomSwitched && placing !== zoomAtMount) setZoomSwitched(true);
-
   // The marks the film is showing right now, as a string snapshot: React
   // re-renders this body only when an opacity steps.
   const marksSnapshot = () => courtMarksKey(courtMarksAt(shots, clock.get()));
@@ -207,93 +272,49 @@ export function LabelCourtPanel({
     return out;
   }, [placement.shotId, selected, shots, marksKey]);
 
-  return (
-    <div data-court-panel="" className="flex min-h-0 flex-1 flex-col">
-      <span aria-live="polite" className="sr-only" data-court-prompt="">
-        {prompt}
-      </span>
-
-      <div className="flex h-[34px] min-w-0 shrink-0 flex-col gap-0.5">
-        <span
-          data-court-title=""
-          className="tabular truncate text-[12px] leading-[15px] font-medium text-white"
-        >
-          {readout.title}
-        </span>
-        <span
-          data-court-subtitle=""
-          className="truncate text-[10px] leading-[13px] text-white/55"
-        >
-          {readout.subtitle}
-        </span>
-      </div>
-
-      <div
-        data-court-box=""
-        className="[container-type:size] my-2 flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+  const estimate =
+    placing && selected && onEstimate ? (
+      <label
+        data-court-estimate-box=""
+        className="flex min-w-0 cursor-pointer items-center gap-[7px] text-[11px] text-white/70"
       >
-        <LabelCourt
-          strokes={strokes}
-          view={placing ? placement.half : "whole"}
-          targetShotId={placing ? placement.shotId : null}
-          target={placing ? placement.target : null}
-          prompt={prompt}
-          onPlace={placing ? onPlace : undefined}
-          fadeOnZoom={zoomSwitched}
+        <Checkbox
+          checked={isEstimate(selected.unclear, placement.target)}
+          onChange={onEstimate}
         />
-      </div>
+        <span className="truncate">Off screen, so this is an estimate</span>
+      </label>
+    ) : null;
 
+  const court = (
+    <div
+      data-court-box=""
+      className="[container-type:size] my-2 flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+    >
+      <LabelCourt
+        strokes={strokes}
+        view={placing ? placement.half : "whole"}
+        slide={slide}
+        targetShotId={placing ? placement.shotId : null}
+        target={placing ? placement.target : null}
+        prompt={prompt}
+        onPlace={placing ? onPlace : undefined}
+        fadeOnZoom={zoomSwitched}
+      />
+    </div>
+  );
+
+  const foot = (
+    <>
       <div className="flex h-6 shrink-0 items-center gap-3 text-[10px] text-white/55">
         {placing ? (
-          <>
-            <span
-              role="group"
-              aria-label="What you are placing"
-              data-court-steps=""
-              className="inline-flex rounded-[7px] bg-white/[0.08] p-0.5"
-            >
-              {(["contact", "landing"] as const).map((target) => {
-                const on = placement.target === target;
-                return (
-                  <button
-                    key={target}
-                    type="button"
-                    aria-pressed={on}
-                    data-court-step={target}
-                    onClick={() => onTarget(target)}
-                    className={cn(
-                      "h-5 cursor-pointer rounded-[5px] px-[9px] text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                      on
-                        ? "bg-white/[0.16] font-medium text-white"
-                        : "text-white/60 hover:text-white",
-                    )}
-                  >
-                    {target === "contact" ? "Contact" : "Landing"}
-                  </button>
-                );
-              })}
-            </span>
-            <span className="flex-1" />
-            <button
-              type="button"
-              aria-pressed={placement.flipped}
-              data-court-flip=""
-              onClick={onFlip}
-              className={cn(
-                "inline-flex h-6 cursor-pointer items-center gap-[5px] rounded-[6px] px-2 text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                placement.flipped
-                  ? "bg-white/[0.16] text-white"
-                  : "text-white/70 hover:bg-white/[0.08] hover:text-white",
-              )}
-            >
-              <ArrowUpDown
-                className="size-[13px]"
-                strokeWidth={1.6}
-                aria-hidden="true"
-              />
-              Flip side
-            </button>
-          </>
+          <CourtEndControls
+            placement={placement}
+            onTarget={onTarget}
+            onFlip={onFlip}
+          >
+            {estimate}
+          </CourtEndControls>
         ) : (
           <span
             data-court-legend=""
@@ -316,6 +337,132 @@ export function LabelCourtPanel({
           </span>
         )}
       </div>
+      {placing ? (
+        <p
+          data-court-keys=""
+          className="mt-1 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 overflow-hidden text-[10px] text-white/45"
+        >
+          {STROKE_KEY_HINTS.map((hint) => (
+            <span key={hint.key} className="inline-flex items-center gap-[5px]">
+              <Kbd
+                size="sm"
+                variant="flat"
+                mono
+                className="bg-white/[0.08] text-white/60 shadow-none"
+              >
+                {hint.key}
+              </Kbd>
+              {hint.label}
+            </span>
+          ))}
+        </p>
+      ) : null}
+    </>
+  );
+
+  const live = (
+    <span aria-live="polite" className="sr-only" data-court-prompt="">
+      {prompt}
+    </span>
+  );
+
+  return (
+    <div
+      data-court-panel=""
+      className={cn("flex min-h-0 flex-1 flex-col", RAIL_TONE_CLASS.dark)}
+    >
+      {live}
+
+      <div className="flex h-[34px] min-w-0 shrink-0 flex-col gap-0.5">
+        <span
+          data-court-title=""
+          className="tabular truncate text-[12px] leading-[15px] font-medium text-white"
+        >
+          {readout.title}
+        </span>
+        <span
+          data-court-subtitle=""
+          className="truncate text-[10px] leading-[13px] text-white/55"
+        >
+          {readout.subtitle}
+        </span>
+      </div>
+      {info && !placing ? <PointInfoLine info={info} /> : null}
+
+      {court}
+      {foot}
     </div>
+  );
+}
+
+/**
+ * The Contact / Landing switch and "Flip side", on one 24px row: the court
+ * panel's foot while it places, and the inline review block's under its
+ * court. `children` sit between the switch and Flip side (the panel's
+ * estimate box).
+ */
+export function CourtEndControls({
+  placement,
+  onTarget,
+  onFlip,
+  children,
+}: {
+  placement: PlacementState;
+  onTarget: (target: PlacementTarget) => void;
+  onFlip: () => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <>
+      <span
+        role="group"
+        aria-label="What you are placing"
+        data-court-steps=""
+        className="inline-flex rounded-[7px] bg-white/[0.08] p-0.5"
+      >
+        {(["contact", "landing"] as const).map((target) => {
+          const on = placement.target === target;
+          return (
+            <button
+              key={target}
+              type="button"
+              aria-pressed={on}
+              data-court-step={target}
+              aria-keyshortcuts="C"
+              onClick={() => onTarget(target)}
+              className={cn(
+                "h-5 cursor-pointer rounded-[5px] px-[9px] text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                on
+                  ? "bg-white/[0.16] font-medium text-white"
+                  : "text-white/60 hover:text-white",
+              )}
+            >
+              {TARGET_WORD[target]}
+            </button>
+          );
+        })}
+      </span>
+      {children}
+      <span className="flex-1" />
+      <button
+        type="button"
+        aria-pressed={placement.flipped}
+        data-court-flip=""
+        onClick={onFlip}
+        className={cn(
+          "inline-flex h-6 cursor-pointer items-center gap-[5px] rounded-[6px] px-2 text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+          placement.flipped
+            ? "bg-white/[0.16] text-white"
+            : "text-white/70 hover:bg-white/[0.08] hover:text-white",
+        )}
+      >
+        <ArrowUpDown
+          className="size-[13px]"
+          strokeWidth={1.6}
+          aria-hidden="true"
+        />
+        Flip side
+      </button>
+    </>
   );
 }

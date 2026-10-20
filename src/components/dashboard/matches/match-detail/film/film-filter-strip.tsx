@@ -16,11 +16,17 @@ import {
  * point list (never inside the list's card), and only while something is
  * applied: a shared filter, a statistic's cut or "Saved only".
  *
- * The Matches page strip exactly (`matches/matches-page-content.tsx`, v3's
+ * The Matches page strip's grammar (`matches/matches-page-content.tsx`, v3's
  * Data Table rule 6): the cut stated in words — never chips, never a badge —
  * middot, "N of M points", and one quiet action. "Clear filter" clears every
  * layer; a statistic's cut on its own reads "Back to all points", the way
  * back from the number the viewer clicked.
+ *
+ * Its surface is this view's own (2026-10-19): a card on the same white,
+ * hairline and radius as the player and the point list under it, at the 12px
+ * the list's trigger reads at, rather than the Matches page's grey wash — on
+ * a page of cards the wash read as a slab dropped between the title and the
+ * film.
  *
  * The fullscreen film room does not draw it: the room has its own chrome, and
  * its points drawer keeps a header "Clear all".
@@ -47,8 +53,7 @@ export const FilmFilterStrip = memo(function FilmFilterStrip({
     <div
       role="status"
       data-film-filter-strip=""
-      className="flex shrink-0 flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-      style={{ background: "var(--surface-subtle)" }}
+      className="surface-card flex min-h-11 shrink-0 flex-wrap items-center gap-2.5 px-4 py-2.5"
     >
       <Filter
         className="size-[13px] shrink-0"
@@ -56,7 +61,10 @@ export const FilmFilterStrip = memo(function FilmFilterStrip({
         style={{ color: "var(--ink-500)" }}
         aria-hidden="true"
       />
-      <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
+      <span
+        className="text-[12px] font-medium"
+        style={{ color: "var(--ink-900)" }}
+      >
         {filmListSentence(filmFilters, names)}
       </span>
       <span
@@ -64,12 +72,14 @@ export const FilmFilterStrip = memo(function FilmFilterStrip({
         style={{ background: "var(--ink-300)" }}
         aria-hidden="true"
       />
-      <span className="text-micro tabular">{draftCountLine(shown, total)}</span>
+      <span className="tabular text-[12px]" style={{ color: "var(--ink-500)" }}>
+        {draftCountLine(shown, total)}
+      </span>
       <div className="flex-1" />
       <button
         type="button"
         onClick={filmFilters.clearAll}
-        className="cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        className="cursor-pointer rounded-[var(--radius-element)] text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
       >
         {filmStripAction(filmFilters)}
       </button>

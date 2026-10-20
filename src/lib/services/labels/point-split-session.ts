@@ -2,33 +2,30 @@
  * The console's "Split point here" (`point-split.ts`). Admin-gated like
  * edit-session.ts; not the marks gate.
  *
- * Its writes, in order, on `label_points` and `label_shots` only: one UPDATE of
- * `point_index` per later point, HIGHEST first (the rail numbers rows by it);
- * one INSERT of the new row; one UPDATE moving the shots (`label_point_id`, by
- * id list), their statuses untouched; one UPDATE per opening serve of the new
- * point that takes a new number (`serveRestrokes`), with the status the stroke
- * implies against its seed; one compare-and-set UPDATE of the
- * anchor's status and rally ids (`updateIfUnchanged` — the writes before it
- * stand when it misses); then each half's ending as its rows now derive it
- * (`reconcileEnding`, ending-session.ts) — the new point's, which starts
- * blank, and the anchor's, where its last stroke changed. No row is ever
- * removed.
+ * Its writes, on `label_points` and `label_shots` only, all in one
+ * transaction (`applyLabelEdit` — a miss anywhere leaves nothing written): one
+ * UPDATE of `point_index` per later point (the rail numbers rows by it); one
+ * INSERT of the new row, with the ending its moved strokes derive; one UPDATE
+ * moving the shots (`label_point_id`, by id list), their statuses untouched;
+ * one UPDATE per opening serve of the new point that takes a new number
+ * (`serveRestrokes`), with the status the stroke implies against its seed; and
+ * one UPDATE of the anchor's status, rally ids and ending, guarded on the
+ * status it was read with. The endings are each half's rows as they now
+ * derive (`plannedReconcile`, ending-session.ts) — worked out here from the
+ * rows read, so no read follows the write. No row is ever removed.
  */
 
+import { randomUUID } from "node:crypto";
+
 import type { AdminClient } from "@/lib/supabase/admin";
-import {
-  LABEL_SHOT_VALUE_FIELDS,
-  labelShotStatusAfterPatch,
-  parseLabelShotSeed,
-  type LabelShotValues,
-} from "./edit";
+import { applyLabelEdit, type LabelEditOp } from "./apply-edit-session";
+import { labelShotStatusAfterPatch, parseLabelShotSeed } from "./edit";
 import {
   defaultLabelWriteDependencies,
   readSessionGate,
-  updateIfUnchanged,
   type LabelWriteDependencies,
 } from "./edit-session";
-import { endingColumns, reconcileEnding } from "./ending-session";
+import { endingColumns, plannedReconcile } from "./ending-session";
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
   planPointSplit,
@@ -36,11 +33,18 @@ import {
   type SplittablePoint,
   type SplittableShot,
 } from "./point-split";
-import { LABEL_POINT_COLUMNS, toLabelPoint, type LabelPointRow } from "./rows";
+import {
+  LABEL_SHOT_COLUMNS,
+  toLabelPoint,
+  toLabelShot,
+  type LabelPointRow,
+  type LabelShotRow,
+} from "./rows";
 import type {
+  LabelEnding,
   LabelGameType,
   LabelPointStatus,
-  LabelShotStatus,
+  LabelShot,
   LabelSide,
 } from "./session";
 
@@ -56,28 +60,24 @@ interface PointRow {
   server: LabelSide | null;
   game_type: LabelGameType;
   vendor_rally_ids: number[] | null;
+  winner: LabelSide | null;
+  ending: LabelEnding | null;
+  ended_by: LabelSide | null;
 }
 
 const POINT_INDEX_COLUMNS =
-  "id, session_id, point_index, status, set_number, game_number, server, game_type, vendor_rally_ids";
+  "id, session_id, point_index, status, set_number, game_number, server, game_type, vendor_rally_ids, winner, ending, ended_by";
 
 /**
- * What the plan reads of the anchor's shots. `rally` is the frozen vendor
- * stroke's `pred_rally_id` — the id the derivation keys rallies by
- * (`parse.ts`) and the one `label_points.vendor_rally_ids` holds — as
- * PostgREST hands a JSON text path back: a string, or null on an added
- * stroke, which carries no `vendor`.
+ * The anchor's shots, whole (each half's ending is derived from them), plus
+ * `rally`: the frozen vendor stroke's `pred_rally_id` — the id the derivation
+ * keys rallies by (`parse.ts`) and the one `label_points.vendor_rally_ids`
+ * holds — as PostgREST hands a JSON text path back: a string, or null on an
+ * added stroke, which carries no `vendor`.
  */
-type ShotRow = LabelShotValues & {
-  id: string;
-  event_id: number | null;
-  status: LabelShotStatus;
-  /** Raw jsonb — parsed before the status rule trusts it. */
-  seed: unknown;
-  rally: string | null;
-};
+type ShotRow = LabelShotRow & { rally: string | null };
 
-const SHOT_COLUMNS = `id, event_id, status, seed, ${LABEL_SHOT_VALUE_FIELDS.join(", ")}, rally:vendor->>pred_rally_id`;
+const SHOT_COLUMNS = `${LABEL_SHOT_COLUMNS}, rally:vendor->>pred_rally_id`;
 
 /**
  * The session's points as the plan reads them. Only the anchor's shots are
@@ -172,56 +172,15 @@ export async function writeLabelPointSplit(params: {
   const plan = planPointSplit(points, pointId, shotId);
   if ("error" in plan) return plan;
   const { write } = plan;
-  // The plan found the anchor among the rows, so its status as read is here.
-  const anchorStatus =
-    points.find((p) => p.id === pointId)?.status ?? "deleted";
-
-  // Highest first (the plan's order), one row at a time: an index is never
-  // taken by two rows between one update and the next.
-  for (const shift of write.shifts) {
-    const { error: shiftError } = await supabase
-      .from("label_points")
-      .update({ point_index: shift.point_index })
-      .eq("id", shift.id);
-    if (shiftError) {
-      return {
-        error: `Could not make room for the point: ${shiftError.message}`,
-      };
-    }
-  }
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("label_points")
-    .insert({
-      session_id: anchor.session_id,
-      ...write.insert,
-      serve_side: null,
-      winner: null,
-      ending: null,
-      ended_by: null,
-      seed: null,
-      checked_at: null,
-    })
-    .select(LABEL_POINT_COLUMNS)
-    .single<LabelPointRow>();
-  if (insertError || !inserted) {
-    return {
-      error: `Could not add the point: ${insertError?.message ?? "no row came back"}`,
-    };
-  }
-
-  const { error: moveError } = await supabase
-    .from("label_shots")
-    .update({ label_point_id: inserted.id })
-    .in("id", write.movedShotIds);
-  if (moveError) {
-    return { error: `Could not move the shots: ${moveError.message}` };
-  }
+  const anchorRow = (rows ?? []).find((row) => row.id === pointId);
+  if (!anchorRow) return { error: "Point not found." };
+  const newId = randomUUID();
 
   // The new point opens on a first serve: its serves renumbered, each with
-  // the status its new stroke implies. Before the endings are read below — a
+  // the status its new stroke implies — before either ending is derived, as a
   // second serve made a first no longer ends the point by missing.
   const serves: NonNullable<PointSplitSaved["serves"]> = [];
+  const restroked = new Map<string, Pick<LabelShot, "stroke" | "status">>();
   for (const serve of write.serves) {
     const row = (shotRows ?? []).find((shot) => shot.id === serve.id);
     if (!row) continue;
@@ -229,65 +188,108 @@ export async function writeLabelPointSplit(params: {
       { ...row, seed: parseLabelShotSeed(row.seed) },
       { stroke: serve.stroke },
     );
-    const { error: serveError } = await supabase
-      .from("label_shots")
-      .update({ stroke: serve.stroke, status })
-      .eq("id", serve.id)
-      // The move above just put it on the new point: never a row elsewhere.
-      .eq("label_point_id", inserted.id);
-    if (serveError) {
-      return { error: `Could not renumber the serve: ${serveError.message}` };
-    }
     serves.push({ ...serve, status });
+    restroked.set(serve.id, { stroke: serve.stroke, status });
   }
 
-  // Compare-and-set on the anchor's status as read: a race here leaves the
-  // shifted rows, the new point and its moved shots as they are, and says so.
-  const anchorFailed = await updateIfUnchanged(
-    supabase,
-    "label_points",
-    pointId,
-    anchorStatus,
-    { ...write.anchor },
-    "mark the point edited",
+  // Each half's shots as they stand once the writes land.
+  const moved = new Set(write.movedShotIds);
+  const halves: { split: LabelShot[]; kept: LabelShot[] } = {
+    split: [],
+    kept: [],
+  };
+  for (const row of shotRows ?? []) {
+    const shot = { ...toLabelShot(row), ...restroked.get(row.id) };
+    if (moved.has(row.id)) halves.split.push({ ...shot, labelPointId: newId });
+    else halves.kept.push(shot);
+  }
+  // The statuses stay as the split writes them: `added` for the new point,
+  // the anchor `edited` whatever its fields say.
+  const split = plannedReconcile(
+    { winner: null, ending: null, ended_by: null, status: write.insert.status },
+    halves.split,
+    gate.ghosts,
   );
-  if (anchorFailed) return { error: anchorFailed };
+  const kept = plannedReconcile(
+    {
+      winner: anchorRow.winner,
+      ending: anchorRow.ending,
+      ended_by: anchorRow.ended_by,
+      status: write.anchor.status,
+    },
+    halves.kept,
+    gate.ghosts,
+  );
 
-  // Both halves' endings, off the rows each now holds. The statuses stay as
-  // just written: a split's anchor is `edited` whatever its fields say.
-  const split = await reconcileEnding({
-    supabase,
-    pointId: inserted.id,
-    ghosts: gate.ghosts,
-    keepStatus: true,
+  const ops: LabelEditOp[] = [
+    ...write.shifts.map((shift): LabelEditOp => ({
+      op: "update",
+      table: "label_points",
+      ids: [shift.id],
+      set: { point_index: shift.point_index },
+    })),
+    {
+      op: "insert",
+      table: "label_points",
+      values: {
+        id: newId,
+        ...write.insert,
+        serve_side: null,
+        winner: null,
+        ending: null,
+        ended_by: null,
+        seed: null,
+        checked_at: null,
+        ...split?.patch,
+      },
+    },
+  ];
+  if (write.movedShotIds.length > 0) {
+    ops.push({
+      op: "update",
+      table: "label_shots",
+      ids: write.movedShotIds,
+      set: { label_point_id: newId },
+    });
+  }
+  for (const serve of serves) {
+    ops.push({
+      op: "update",
+      table: "label_shots",
+      ids: [serve.id],
+      set: { stroke: serve.stroke, status: serve.status },
+    });
+  }
+  // Guarded on the anchor's status as read: if another tab moved it, nothing
+  // of the split is written.
+  ops.push({
+    op: "update",
+    table: "label_points",
+    ids: [pointId],
+    set: { ...write.anchor, ...kept?.patch },
+    expect_status: anchorRow.status,
   });
-  if ("error" in split) return split;
-  const kept = await reconcileEnding({
-    supabase,
-    pointId,
-    ghosts: gate.ghosts,
-    keepStatus: true,
-  });
-  if ("error" in kept) return kept;
 
-  const point = toLabelPoint(inserted);
+  const applied = await applyLabelEdit(
+    supabase,
+    anchor.session_id,
+    ops,
+    "split the point",
+  );
+  if ("error" in applied) return applied;
+  const inserted = applied.inserted[0] as LabelPointRow | undefined;
+  if (!inserted) return { error: "Could not add the point: no row came back" };
+
   return {
     ok: true,
     // The row read back whole: an added point with no seed and no shots, and
     // the ending its moved strokes derive.
-    point: split.point
-      ? {
-          ...point,
-          ending: split.point.ending,
-          endedBy: split.point.endedBy,
-          winner: split.point.winner,
-        }
-      : point,
+    point: toLabelPoint(inserted),
     ...(serves.length > 0 ? { serves } : {}),
     anchor: {
       id: pointId,
       ...write.anchor,
-      ...endingColumns(kept.point),
+      ...endingColumns(kept?.point ?? null),
     },
   };
 }

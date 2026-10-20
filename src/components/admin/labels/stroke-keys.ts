@@ -1,0 +1,112 @@
+import {
+  LABEL_SPINS,
+  isLetServe,
+  isServeStroke,
+  liveShotsInOrder,
+  type LabelShot,
+  type LabelStroke,
+} from "@/lib/services/labels/session";
+
+/**
+ * One key sets the selected stroke's Stroke or Spin, so a rally is labelled
+ * without opening a menu per cell. Pure: the console reads the key and writes
+ * the patch through its usual shot edit.
+ *
+ * - F forehand · B backhand · O overhead.
+ * - V makes the stroke a volley on its side (a forehand volley from a
+ *   forehand), or a groundstroke again from a volley. With no side yet it is
+ *   a forehand volley.
+ * - S is a serve: a second serve when the point already has a serve before
+ *   this stroke (`hasEarlierServe`; a let does not count, it is replayed),
+ *   else a first serve. Pressed on the serve it would make, it switches
+ *   first ↔ second.
+ * - 1–4 are the Spin menu's rows in order (`LABEL_SPINS`): topspin, flat,
+ *   backspin, sidespin.
+ *
+ * The answer is the change asked for; the console writes a stroke through
+ * `strokeChangePatch`, as the Stroke menu does, so a let keeps its rule. A key
+ * that would write what the stroke already holds answers null.
+ */
+export const STROKE_KEY_HINTS: readonly { key: string; label: string }[] = [
+  { key: "F", label: "forehand" },
+  { key: "B", label: "backhand" },
+  { key: "V", label: "volley" },
+  { key: "O", label: "overhead" },
+  { key: "S", label: "serve" },
+  { key: "1–4", label: "spin" },
+  // The console's own keys, not the stroke's (label-console.tsx).
+  { key: "C", label: "contact / landing" },
+  { key: "A", label: "add shot" },
+];
+
+const VOLLEY_OF: Partial<Record<LabelStroke, LabelStroke>> = {
+  forehand: "forehand_volley",
+  backhand: "backhand_volley",
+  forehand_volley: "forehand",
+  backhand_volley: "backhand",
+};
+
+function strokeFor(
+  key: string,
+  current: LabelStroke | null,
+  earlierServe: boolean,
+) {
+  switch (key) {
+    case "f":
+      return "forehand";
+    case "b":
+      return "backhand";
+    case "o":
+      return "overhead";
+    case "v":
+      return (current && VOLLEY_OF[current]) ?? "forehand_volley";
+    case "s": {
+      const serve = earlierServe ? "second_serve" : "first_serve";
+      if (current !== serve) return serve;
+      return serve === "first_serve" ? "second_serve" : "first_serve";
+    }
+    default:
+      return null;
+  }
+}
+
+export type StrokeKeyChange =
+  { stroke: LabelStroke } | { spin: (typeof LABEL_SPINS)[number] };
+
+/** The change a key asks for on `shot`, or null when it asks for nothing new. */
+export function strokeKeyChange(
+  key: string,
+  shot: Pick<LabelShot, "stroke" | "spin">,
+  earlierServe = false,
+): StrokeKeyChange | null {
+  const lower = key.toLowerCase();
+  const spinIndex = "1234".indexOf(lower);
+  if (spinIndex !== -1) {
+    const spin = LABEL_SPINS[spinIndex];
+    return shot.spin === spin ? null : { spin };
+  }
+  const stroke = strokeFor(lower, shot.stroke, earlierServe);
+  if (stroke === null || stroke === shot.stroke) return null;
+  return { stroke };
+}
+
+/** Whether a key is one of the stroke keys at all. */
+export function isStrokeKey(key: string): boolean {
+  return /^[fbvos1-4]$/i.test(key);
+}
+
+/**
+ * Whether a live serve comes before `shotId` in its point, a let aside: the
+ * serve S makes there is the second. `ghosts` is the console's own flag.
+ */
+export function hasEarlierServe(
+  point: { shots: readonly LabelShot[] },
+  shotId: string,
+  ghosts: boolean,
+): boolean {
+  for (const shot of liveShotsInOrder(point, ghosts)) {
+    if (shot.id === shotId) return false;
+    if (isServeStroke(shot.stroke) && !isLetServe(shot)) return true;
+  }
+  return false;
+}

@@ -9,7 +9,8 @@
  * ends early, as the rail's chip — and each tiebreak off its serve order
  * (`tiebreakServeOrders`). Last, how the publish will read each point
  * with no ending stored (`publishEnding`, the rule apply.ts writes by): taken
- * from its strokes, written as score only off the video, or refused.
+ * from its strokes, written as score only off the video, published with no
+ * ending, or left out — never refused.
  */
 
 import { publishEnding } from "./ending-derived";
@@ -42,6 +43,17 @@ export interface CompleteWarningInput {
 
 const plural = (n: number, one: string, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The tails `completeWarnings` ends a point's sentence with when a publish
+ * writes it only partly or leaves it out. The Labels dashboard matches on
+ * them (label-dashboard.tsx), so the wording lives here once.
+ */
+export const PUBLISHED_PAST_TAILS = {
+  leftOut: ", so it is left out",
+  noEnding: " — it publishes with no ending",
+  labelledWinner: " — it publishes with the labelled winner",
+} as const;
 
 /** The open items, most general first; empty when nothing is left. */
 export function completeWarnings(input: CompleteWarningInput): string[] {
@@ -101,7 +113,7 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
     if (mismatch) {
       warnings.push(
         // Marks off, the publish takes the score as it is (apply-session.ts).
-        `Set ${mismatch.setNumber} labelled ${mismatch.labelled}, the match record says ${mismatch.entered}${marks ? ", so publishing will refuse" : ""}`,
+        `Set ${mismatch.setNumber} labelled ${mismatch.labelled}, the match record says ${mismatch.entered}${marks ? " — it publishes as labelled" : ""}`,
       );
     }
   }
@@ -121,7 +133,7 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
       resolved.winner !== point.winner
     ) {
       warnings.push(
-        `${at}'s strokes say ${names[resolved.winner]} won, not the labelled winner, so publishing will refuse`,
+        `${at}'s strokes say ${names[resolved.winner]} won, not the labelled winner${PUBLISHED_PAST_TAILS.labelledWinner}`,
       );
     } else if (resolved.kind === "derived") {
       warnings.push(
@@ -131,11 +143,11 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
       warnings.push(
         point.winner !== null && point.server !== null
           ? `${at} isn't on the video and will publish as score only`
-          : `${at} has no strokes and no ${point.winner === null ? "winner" : "server"}, so publishing will refuse`,
+          : `${at} has no strokes and no ${point.winner === null ? "winner" : "server"}${PUBLISHED_PAST_TAILS.leftOut}`,
       );
     } else if (resolved.kind === "unresolved") {
       warnings.push(
-        `${at} has no ending its strokes can settle, so publishing will refuse`,
+        `${at} has no ending its strokes can settle${PUBLISHED_PAST_TAILS.noEnding}`,
       );
     }
   }

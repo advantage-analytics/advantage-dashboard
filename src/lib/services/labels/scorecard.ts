@@ -45,7 +45,12 @@ import {
 } from "./marks";
 import { MARK_LABEL } from "./marks-copy";
 import { isCombinedTombstone } from "./point-combine";
-import { serveAfterServeIn } from "./marks-state";
+import {
+  foldReviewItems,
+  serveAfterServeIn,
+  type MarkTone,
+  type ReviewItemId,
+} from "./marks-state";
 import { gameKey, labelScores, ordinaryGameScore } from "./score";
 import { withLiveScoreMarks, type ScoreMarkPoint } from "./score-marks";
 import type { LabelEnding, LabelShotResult } from "./seed";
@@ -121,8 +126,10 @@ export function seededScorePoints(
       server: point.seed.server,
       winner: point.seed.winner,
       ending: point.seed.ending,
-      // A seeded point is always an ordinary game (seed.ts).
-      gameType: "game",
+      // The type the point was seeded with: `match_tiebreak` in the deciding
+      // set the entered score spells as one (seed.ts); a seed older than the
+      // key, and every other set, an ordinary game.
+      gameType: point.seed.game_type ?? "game",
     });
   }
   return seeded;
@@ -355,10 +362,33 @@ export interface DeletedShotRow {
   afterOutOrNet: number;
 }
 
+/**
+ * One row of the per-item table: the points that carry a review item (or, for
+ * `"demoted"`, the points whose flag is demoted) in one tone, and how many of
+ * them the labeller changed. A point is counted once per row it belongs to,
+ * however many of the item's marks it carries.
+ */
+export interface ScorecardItemRow {
+  /** The review item, or `"demoted"` for the demoted-flag row. */
+  id: ReviewItemId | "demoted";
+  question: string;
+  tone: MarkTone;
+  /** Points carrying the item in this tone. */
+  points: number;
+  /** …whose winner the labeller changed. */
+  winnerChanged: number;
+  /** …whose ending or ended-by the labeller changed. */
+  endingChanged: number;
+  /** …that the labeller changed in any way. */
+  anythingChanged: number;
+}
+
 export interface Scorecard {
   /** Live points, and how many of them the labeller changed. */
   points: { live: number; added: number; deleted: number; changed: number };
   rows: ScorecardRow[];
+  /** The same marks folded into the review flag's items; see `ScorecardItemRow`. */
+  items: ScorecardItemRow[];
   unmarkedChanges: UnmarkedChange[];
   seededInLastStrokes: SeededInLastStroke[];
   deletedShots: DeletedShotRow[];
@@ -555,6 +585,13 @@ function combinedInto(
   return into;
 }
 
+/** The label of the demoted-flag row of the per-item table. */
+const DEMOTED_QUESTION = "Demoted: grey, open on item 4 alone";
+
+/** Sort key of an item row: the items by id, the demoted row after them. */
+const itemOrder = (id: ScorecardItemRow["id"]): number =>
+  id === "demoted" ? Infinity : id;
+
 /**
  * Build the scorecard.
  *
@@ -571,6 +608,7 @@ export function buildScorecard(
 ): Scorecard {
   const { adScoring = true, ghosts = true, vendor = new Map() } = options;
   const rows = new Map<string, ScorecardRow>();
+  const itemRows = new Map<string, ScorecardItemRow>();
   const unmarkedChanges: UnmarkedChange[] = [];
   const seededInLastStrokes: SeededInLastStroke[] = [];
   const deleted = new Map<string, DeletedShotRow>();
@@ -635,6 +673,42 @@ export function buildScorecard(
       if (change.ending) row.endingChanged += 1;
       if (change.anything) row.anythingChanged += 1;
       rows.set(key, row);
+    }
+    // The point's review flag as the session opened: its count and hint
+    // marks as open members, folded into items. A tombstone is read like any
+    // row and measured against the point it became, as above.
+    const opening = foldReviewItems(
+      pointMarks
+        .filter((mark) => mark.tier !== "hidden")
+        .map((mark) => ({ mark, state: "open" as const })),
+      point,
+      marks,
+    );
+    if (opening) {
+      const tally = (
+        id: ScorecardItemRow["id"],
+        question: string,
+        tone: MarkTone,
+      ) => {
+        const key = `${id}:${tone}`;
+        const row = itemRows.get(key) ?? {
+          id,
+          question,
+          tone,
+          points: 0,
+          winnerChanged: 0,
+          endingChanged: 0,
+          anythingChanged: 0,
+        };
+        row.points += 1;
+        if (change.winner) row.winnerChanged += 1;
+        if (change.ending) row.endingChanged += 1;
+        if (change.anything) row.anythingChanged += 1;
+        itemRows.set(key, row);
+      };
+      for (const item of opening.items)
+        tally(item.id, item.question, item.tone);
+      if (opening.demoted) tally("demoted", DEMOTED_QUESTION, "data");
     }
     const fields = fieldChanges(point);
     // A kept point answers for the phantoms combined into it, too.
@@ -773,6 +847,11 @@ export function buildScorecard(
         TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier) ||
         codeOrder.indexOf(a.code) - codeOrder.indexOf(b.code),
     ),
+    items: [...itemRows.values()].sort(
+      (a, b) =>
+        Number(b.tone === "score") - Number(a.tone === "score") ||
+        itemOrder(a.id) - itemOrder(b.id),
+    ),
     unmarkedChanges,
     seededInLastStrokes,
     deletedShots: [...deleted.values()].sort((a, b) => b.deleted - a.deleted),
@@ -886,6 +965,31 @@ export function renderScorecard(
             share(row.winnerChanged, row.marks),
             share(row.endingChanged, row.marks),
             share(row.anythingChanged, row.marks),
+          ]),
+        ),
+    "",
+    "## Items, against what the labeller changed",
+    "",
+    "The same marks folded into the review flag's items, as the session opened: a point counts once per item it carries, however many of the item's marks it has, amber items before grey. Live row marks (a stale ending, a missing last landing) are not in the opening marks, so they add no members here. The demoted row is the points whose flag is grey and open on item 4 alone for the evidence-only codes; they are also counted in their item 4 row.",
+    "",
+    card.items.length === 0
+      ? "No items."
+      : table(
+          [
+            "Item",
+            "Tone",
+            "Points",
+            "Winner changed",
+            "Ending / ended by changed",
+            "Anything changed",
+          ],
+          card.items.map((row) => [
+            `${row.id === "demoted" ? "" : `${row.id}. `}${row.question}`,
+            row.tone === "score" ? "amber" : "grey",
+            row.points,
+            share(row.winnerChanged, row.points),
+            share(row.endingChanged, row.points),
+            share(row.anythingChanged, row.points),
           ]),
         ),
     "",

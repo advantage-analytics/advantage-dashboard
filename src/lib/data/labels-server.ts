@@ -13,6 +13,7 @@ import { isUuid } from "@/lib/admin/validation";
 import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
 import {
+  PLAYBACK_JOB_COLUMNS,
   choosePlaybackFile,
   type PlaybackJobRow,
 } from "@/lib/data/match-video-choice";
@@ -544,16 +545,53 @@ export function parseFinalScore(value: unknown): number[][] | null {
 /**
  * `matches.score` as the derivation reads it (`{ player1: number[]; player2:
  * number[] }`), or null for a record without one or with a shape the console
- * cannot use. Any further keys (`winner`, tiebreaks) are left where they are.
+ * cannot use. The wizard's tiebreak arrays (`player1_tiebreaks`,
+ * `player2_tiebreaks`: one number or null per set) come through typed when
+ * they have that shape and are dropped when they do not; any further key
+ * (`winner`) is left where it is.
  */
 export function parseMatchScore(value: unknown): MatchScore | null {
   if (!value || typeof value !== "object") return null;
-  const { player1, player2 } = value as Record<string, unknown>;
+  const { player1, player2, player1_tiebreaks, player2_tiebreaks } =
+    value as Record<string, unknown>;
   const isGames = (list: unknown): list is number[] =>
     Array.isArray(list) &&
     list.every((n) => typeof n === "number" && Number.isFinite(n));
   if (!isGames(player1) || !isGames(player2)) return null;
-  return { ...(value as MatchScore), player1, player2 };
+  const isTiebreaks = (list: unknown): list is (number | null)[] =>
+    Array.isArray(list) &&
+    list.every(
+      (n) => n === null || (typeof n === "number" && Number.isFinite(n)),
+    );
+  const {
+    player1_tiebreaks: _p1,
+    player2_tiebreaks: _p2,
+    ...rest
+  } = value as Record<string, unknown>;
+  return {
+    // The record's other keys (`winner`) ride along, as they always have.
+    ...(rest as unknown as Omit<MatchScore, "player1" | "player2">),
+    player1,
+    player2,
+    ...(isTiebreaks(player1_tiebreaks)
+      ? { player1_tiebreaks: player1_tiebreaks }
+      : {}),
+    ...(isTiebreaks(player2_tiebreaks)
+      ? { player2_tiebreaks: player2_tiebreaks }
+      : {}),
+  };
+}
+
+/**
+ * `matches.format.best_of` as a whole number, else 3 — as
+ * persist-transcript.ts and apply-session.ts read it.
+ */
+export function readBestOf(format: unknown): number {
+  if (!format || typeof format !== "object") return 3;
+  const value = (format as Record<string, unknown>).best_of;
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : 3;
 }
 
 /**
@@ -612,6 +650,7 @@ export function buildLabelSession(
     finalScore: parseFinalScore(session.final_score ?? null),
     videoEndsEarly: session.video_ends_early ?? null,
     matchScore: parseMatchScore(match?.score ?? null),
+    bestOf: readBestOf(match?.format),
     points,
   };
 }
@@ -629,10 +668,11 @@ const LABEL_PLAYBACK_TTL_SECONDS = 8 * 60 * 60;
  * The labelled job's own file, signed for playback. Not `getMatchVideo`: that
  * loader goes through the viewer's own RLS and plays the NEWEST job. A label
  * session is pinned to one job, so this asks `choosePlaybackFile` about exactly
- * that job, and signs with `mintPlaybackSas`. Vendor copy FIRST, our upload as
- * the fallback (the offset rule is unchanged): measured 2026-10-14, uploads ran
- * 8–12 Mbps against a 10–15 Mbps link to the container, so the console stalled
- * on every seek; the vendor's re-encode is the same 1080p at about 2 Mbps.
+ * that job, and signs with `mintPlaybackSas`. The playback copy first — the
+ * upload's own timeline and sound, index at the front, ≤1080p H.264 (2026-10-19)
+ * — then, for a job without one yet, the vendor copy before our upload: an
+ * upload that skipped the browser re-encode can run 8–20 Mbps against a 1–17
+ * Mbps link to the container, where the vendor's re-encode runs about 2.
  */
 async function loadJobVideo(
   db: AdminClient,
@@ -642,7 +682,7 @@ async function loadJobVideo(
 
   const { data: job, error } = await db
     .from("processing_jobs")
-    .select("video_object_key, trimmed_object_key, start_time_seconds")
+    .select(PLAYBACK_JOB_COLUMNS)
     .eq("id", jobId)
     .maybeSingle<PlaybackJobRow>();
   if (error) throw new Error(`Could not read the job: ${error.message}`);

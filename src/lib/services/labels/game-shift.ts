@@ -163,11 +163,15 @@ interface Accumulator {
 /**
  * Every ordinary game with rows past the row that decided it, in the order
  * the games first appear. A tiebreak never overflows; a game decided on its
- * last row is not listed.
+ * last row is not listed. Nor is any game of `matchTiebreakSet` — the
+ * deciding set the entered score spells as a match tiebreak (set-scores.ts
+ * `matchTiebreakSet`): the vendor's cut of it into short "games" is one
+ * tiebreak to fold (tiebreak-fold.ts), never leftovers to move on.
  */
 export function gameOverflow(
   points: readonly GamePoint[],
   adScoring: boolean,
+  matchTiebreakSet: number | null = null,
 ): GameOverflow[] {
   const games: Accumulator[] = [];
   const byKey = new Map<string, Accumulator>();
@@ -187,7 +191,9 @@ export function gameOverflow(
       byKey.set(key, game);
       games.push(game);
     }
-    if (game.gameType !== "game") continue;
+    if (game.gameType !== "game" || game.setNumber === matchTiebreakSet) {
+      continue;
+    }
     if (game.decidedBy) {
       game.leftovers.push(point);
       continue;
@@ -211,9 +217,10 @@ export function gameOverflow(
 export function leftoverIds(
   points: readonly GamePoint[],
   adScoring: boolean,
+  matchTiebreakSet: number | null = null,
 ): ReadonlySet<string> {
   const ids = new Set<string>();
-  for (const game of gameOverflow(points, adScoring)) {
+  for (const game of gameOverflow(points, adScoring, matchTiebreakSet)) {
     for (const point of game.leftovers) ids.add(point.id);
   }
   return ids;
@@ -330,6 +337,8 @@ export function planGameShift(
   points: readonly ShiftPoint[],
   adScoring: boolean,
   fromPointId: string,
+  /** `gameOverflow`'s: the match-tiebreak set has no leftovers to move. */
+  matchTiebreakSet: number | null = null,
 ): PlannedGameShift {
   const from = points.find((point) => point.id === fromPointId);
   if (!from) return { error: "That point is not a point of this session." };
@@ -339,8 +348,8 @@ export function planGameShift(
   if (from.setNumber === null || from.gameNumber === null) {
     return { error: "Put this point in a game before moving it on." };
   }
-  const overflow = gameOverflow(points, adScoring).find((game) =>
-    game.leftovers.some((point) => point.id === fromPointId),
+  const overflow = gameOverflow(points, adScoring, matchTiebreakSet).find(
+    (game) => game.leftovers.some((point) => point.id === fromPointId),
   );
   if (!overflow) {
     return {
@@ -399,7 +408,7 @@ export function planGameShift(
     // A tiebreak takes the points and is never split; a game just opened
     // has nothing before the moved points to be decided by.
     if (to.gameType !== "game" || to.opened) break;
-    const next = gameOverflow(working, adScoring).find(
+    const next = gameOverflow(working, adScoring, matchTiebreakSet).find(
       (game) =>
         game.setNumber === to.setNumber && game.gameNumber === to.gameNumber,
     );
@@ -419,6 +428,79 @@ export function planGameShift(
       swapped,
     },
   };
+}
+
+/** A new game started at a point: the moved rows and flipped strokes. */
+export type PlannedGameSplit =
+  | { ok: true; writes: GameShiftWrite[]; shots: ShotSwapWrite[] }
+  | { error: string };
+
+/**
+ * "Start a new game here": the game header the vendor never drew, added
+ * above `atPointId`. That point and every live point after it in its game
+ * become a new game — same set, an ordinary game, served by the other
+ * player from the game it leaves — and a moved point whose own strokes say
+ * the old server served it switches players, as a shift's do.
+ *
+ * The new game takes the session's highest game number plus one, as a game
+ * the shift opens does, so no other row is renumbered and none reads as
+ * edited. A game number is a key, not an order: the rail reads games in row
+ * order, and the publish numbers them in play order (apply.ts).
+ *
+ * Refused on the first live point of its game (the header is already
+ * there), inside a tiebreak (a tiebreak is one game), and on a tombstone or a
+ * point with no game.
+ */
+export function planGameSplit(
+  points: readonly ShiftPoint[],
+  atPointId: string,
+): PlannedGameSplit {
+  const at = points.find((point) => point.id === atPointId);
+  if (!at) return { error: "That point is not a point of this session." };
+  if (at.status === "deleted") {
+    return { error: "Restore this point before starting a game at it." };
+  }
+  if (at.setNumber === null || at.gameNumber === null) {
+    return { error: "Put this point in a game first." };
+  }
+  const game = points
+    .filter(
+      (point) => point.status !== "deleted" && gameKey(point) === gameKey(at),
+    )
+    .sort((a, b) => a.pointIndex - b.pointIndex);
+  // The game's type is its first point's, as the rail's header reads it — a
+  // point can carry a stale type (a folded tiebreak undone by hand).
+  if ((game[0]?.gameType ?? "game") !== "game") {
+    return { error: "A tiebreak is one game — it cannot be split." };
+  }
+  const index = game.findIndex((point) => point.id === atPointId);
+  if (index <= 0) {
+    return { error: "This point already starts its game." };
+  }
+  const moved = game.slice(index);
+  let highest = 0;
+  for (const point of points) {
+    if (point.gameNumber !== null && point.gameNumber > highest) {
+      highest = point.gameNumber;
+    }
+  }
+  const server = gameFirstServer(game.slice(0, index));
+  const to: Destination = {
+    setNumber: at.setNumber,
+    gameNumber: highest + 1,
+    gameType: "game",
+    server: server ? opponent(server) : null,
+    opened: true,
+  };
+  const writes: GameShiftWrite[] = [];
+  const swaps = new Map<string, PlayerSwap | null>();
+  for (const point of moved) {
+    const { write, swap } = shiftWrite(point, to);
+    writes.push(write);
+    swaps.set(point.id, swap);
+  }
+  const { shots } = flippedShots(swaps);
+  return { ok: true, writes, shots };
 }
 
 /** The strokes the cascade's swaps flip, and how many points switched. */
@@ -512,11 +594,14 @@ function bandIsShort(band: LabelGameBand): boolean {
  * session's last game: the rail reads it as still being played
  * (`bandOutcomeShown`, label-black-rail.tsx) and never says "Unfinished" on
  * it, so no slot asks about it either — the labeller adds its points by the
- * row menu.
+ * row menu. Nor any game of `matchTiebreakSet`: the vendor's short "games"
+ * there are one match tiebreak to fold (tiebreak-fold.ts), not games to pull
+ * points into.
  */
 export function gameUnderflow(
   points: readonly GamePoint[],
   adScoring: boolean,
+  matchTiebreakSet: number | null = null,
 ): GameUnderflow[] {
   const live = liveRows(points);
   const bands = labelScores(live, adScoring).games;
@@ -526,6 +611,7 @@ export function gameUnderflow(
   for (const band of bands) lastOfSet.set(band.setNumber, gameKey(band));
   const out: GameUnderflow[] = [];
   for (const band of bands) {
+    if (band.setNumber === matchTiebreakSet) continue;
     if (!bandIsShort(band)) continue;
     const key = gameKey(band);
     if (lastOfSet.get(band.setNumber) === key) continue;
@@ -550,8 +636,10 @@ export function planGamePull(
   points: readonly ShiftPoint[],
   key: string,
   adScoring: boolean,
+  /** `gameUnderflow`'s: the match-tiebreak set has no short game to fill. */
+  matchTiebreakSet: number | null = null,
 ): PlannedGamePull {
-  const short = gameUnderflow(points, adScoring);
+  const short = gameUnderflow(points, adScoring, matchTiebreakSet);
   const from = short.find((game) => gameKey(game) === key);
   if (!from) {
     return { error: "That game is not short — there is nothing to pull in." };
