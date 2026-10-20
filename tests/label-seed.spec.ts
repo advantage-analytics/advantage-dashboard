@@ -18,6 +18,7 @@ import {
   labelShotResult,
   labelSpin,
   labelStroke,
+  seedEnding,
 } from "@/lib/services/labels/seed";
 import {
   seedLabelSession,
@@ -249,7 +250,7 @@ test.describe("buildLabelSeed", () => {
       expect(point.winner).toBe(
         settled.get(derived.rally_id) ? side(derived.won_by_player1) : null,
       );
-      expect(point.ending).toBe(labelEnding(derived.result_type));
+      expect(point.ending).toBe(seedEnding(derived.result_type, point.shots));
       expect(point.ended_by).toBe(endedBy(point.shots.map(toDerivedLike)));
     });
     // Not vacuous: the fixture resolves winners and endings for most points.
@@ -373,6 +374,94 @@ test.describe("a deciding set the entered score spells as a match tiebreak", () 
 function toDerivedLike(shot: { hitter: string; result: string | null }) {
   return { is_player1: shot.hitter === "p1", result: shot.result };
 }
+
+test.describe("seedEnding", () => {
+  // Far-side serve from the deuce court (x > 0) into the far ad box (x < 0).
+  const serve = {
+    stroke: "first_serve" as const,
+    result: "in" as const,
+    contact_x: 2,
+    contact_y: -0.5,
+    landing_x: -2,
+    landing_y: BASELINE_M + 5,
+    site_removal: null,
+  };
+  const ret = {
+    stroke: "forehand" as const,
+    result: "out" as const,
+    contact_x: -2,
+    contact_y: 2 * BASELINE_M,
+    landing_x: 5,
+    landing_y: -1,
+    site_removal: null,
+  };
+
+  test("an unreturned serve that landed in is an ace", () => {
+    expect(seedEnding("Service Winner", [serve])).toBe("ace");
+    expect(
+      seedEnding("Service Winner", [
+        { ...serve, result: "out", landing_x: 6 },
+        { ...serve, stroke: "second_serve" },
+      ]),
+    ).toBe("ace");
+  });
+
+  test("an unplaced serve called in is an ace", () => {
+    expect(
+      seedEnding("Service Winner", [
+        { ...serve, landing_x: null, landing_y: null },
+      ]),
+    ).toBe("ace");
+  });
+
+  test("a serve placed outside the box stays a service winner", () => {
+    expect(
+      seedEnding("Service Winner", [{ ...serve, landing_y: BASELINE_M + 9 }]),
+    ).toBe("service_winner");
+  });
+
+  test("a return struck and missed stays a service winner", () => {
+    expect(seedEnding("Service Winner", [serve, ret])).toBe("service_winner");
+  });
+
+  test("a site-removed stroke after the serve is no return", () => {
+    expect(
+      seedEnding("Service Winner", [
+        serve,
+        { ...ret, site_removal: "hit_after_fault" },
+      ]),
+    ).toBe("ace");
+  });
+
+  test("every other result type reads as labelEnding", () => {
+    for (const resultType of [
+      null,
+      "Ace",
+      "Double Fault",
+      "Forehand Winner",
+      "Backhand Unforced Error",
+    ]) {
+      expect(seedEnding(resultType, [serve])).toBe(labelEnding(resultType));
+    }
+  });
+
+  test("the fixture's one unreturned serve landed wide, so it stays a service winner", () => {
+    // Event 368 came down at x = 4.13 m, 1.5 cm past the singles sideline:
+    // called in by the fold, out by its own landing — "landed in" reads the
+    // landing.
+    const unreturned = seed.points.filter((point, i) => {
+      const live = point.shots.filter((s) => s.site_removal === null);
+      return (
+        transcript.points[i].result_type === "Service Winner" &&
+        live.at(-1)?.stroke?.endsWith("_serve")
+      );
+    });
+    expect(unreturned.map((p) => p.shots.at(-1)?.event_id)).toEqual([368]);
+    expect(unreturned[0].ending).toBe("service_winner");
+    const inBox = { ...unreturned[0].shots[0], landing_x: 4.1 };
+    expect(seedEnding("Service Winner", [inBox])).toBe("ace");
+  });
+});
 
 test.describe("label vocabulary", () => {
   test("result_type maps to an ending", () => {
