@@ -629,9 +629,9 @@ export function isUnreturnedServe(point: MatchPoint): boolean {
  * `isUnreturnedServe`, and never the result type — the derivation labels
  * every unreturned serve "Service Winner" and never "Ace", and the
  * head-to-head card counts these as its Aces. So an unreturned serve is an
- * ace there, and "Service winner" is never an answer: a serve the returner
- * touched is found by the return instead (Return › Result "Error"), and the
- * option is left out of the panel (`optionAvailability`).
+ * ace there, and "Service winner" is the rest of the derivation's Service
+ * Winners: a return struck and missed (rally length 2, since derivation
+ * 0.8.3). Return › Result "Error" finds those as well, by the return.
  */
 export function serveResultOf(
   point: MatchPoint,
@@ -639,7 +639,7 @@ export function serveResultOf(
 ): ServeResult | null {
   const rt = lower(point.resultType);
   if (ctx.isDerived ? isUnreturnedServe(point) : rt === "ace") return "ace";
-  if (rt === "service winner" && !ctx.isDerived) return "service-winner";
+  if (rt === "service winner") return "service-winner";
   if (rt.includes("double fault")) return "double-fault";
   const ret = point.secondShotResult;
   if (ret === "Out" || ret === "Net") return "return-error";

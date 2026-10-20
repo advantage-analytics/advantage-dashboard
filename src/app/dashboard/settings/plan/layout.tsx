@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
-// The page is a Client Component, which cannot export `metadata`; this
-// pass-through layout carries the tab title instead.
+// A pass-through layout that carries the tab title.
 export const metadata = { title: "Plan" };
 
 export default function Layout({ children }: { children: ReactNode }) {

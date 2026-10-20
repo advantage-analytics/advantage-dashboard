@@ -154,7 +154,7 @@ export interface PlayerStatistics {
   unforcedErrors: number;
   netPointsAppearances: number;
   netPointsWon: number;
-  netPointsWonPct: number;
+  netPointsWonPct: number | null;
   breakpointsSaved: number;
   fractions: Partial<Record<string, StatFraction>>;
   serveWidePct: number;

@@ -68,11 +68,24 @@ export default async function OnboardingPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: row } = await supabase
-    .from("users")
-    .select("onboarded_at, first_name")
-    .eq("id", user.id)
-    .maybeSingle();
+  const next = safeNext(typeof query.next === "string" ? query.next : null);
+  const joinToken = joinTokenFromPath(next);
+
+  // The three reads below depend only on the verified user, not on each
+  // other, so they run in one wave rather than three. The join state and the
+  // invitation list are read speculatively — each branch below uses at most
+  // one of them — because a wasted small read in parallel is cheaper than
+  // a round trip in series in front of the first screen. The "Not now" flag
+  // is known before any query, so a decline still never asks for the list.
+  const [{ data: row }, join, invites] = await Promise.all([
+    supabase
+      .from("users")
+      .select("onboarded_at, first_name")
+      .eq("id", user.id)
+      .maybeSingle(),
+    joinToken ? resolveJoinStateOnce(joinToken) : null,
+    isNotNow(query) ? [] : getPendingInvites(supabase),
+  ]);
 
   // Sent here by a join link, for the name and nothing else: joining marks the
   // account onboarded, so this is the only time the name step can run for
@@ -80,10 +93,7 @@ export default async function OnboardingPage({
   // an account that finished onboarding some other way can still be nameless
   // — and only while the link still offers a Join button, so a stale or spent
   // `next` falls through to the ordinary flow instead of a dead end.
-  const next = safeNext(typeof query.next === "string" ? query.next : null);
-  const joinToken = joinTokenFromPath(next);
-  if (joinToken) {
-    const join = await resolveJoinStateOnce(joinToken);
+  if (join) {
     if (join.kind === "link_ready" || join.kind === "ready") {
       if (hasProfileName(row?.first_name as string | null | undefined)) {
         redirect(next);
@@ -105,10 +115,6 @@ export default async function OnboardingPage({
   }
 
   if (row?.onboarded_at) redirect("/dashboard");
-
-  // The flag is known before any query runs, so a decline never pays for the
-  // list it is about to ignore.
-  const invites = isNotNow(query) ? [] : await getPendingInvites(supabase);
 
   if (invites.length > 0) {
     // Never with an empty list: this guard is what keeps `InviteOffer` from

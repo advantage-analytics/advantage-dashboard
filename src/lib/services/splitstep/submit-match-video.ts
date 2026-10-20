@@ -10,8 +10,9 @@ import {
 } from "@/lib/services/splitstep/job-liveness";
 import { markJobUploaded } from "@/lib/services/splitstep/mark-job-uploaded";
 import { refusalCodeFor } from "@/lib/services/splitstep/refusal-code";
-import { remuxedJobWindow } from "@/lib/video/trim-plan";
+import { exceedsUploadLimit, remuxedJobWindow } from "@/lib/video/trim-plan";
 import {
+  OversizeVideoError,
   TrimCancelledError,
   discardPreparedVideo,
   prepareVideoForUpload,
@@ -62,6 +63,16 @@ const LIVENESS_CHECK_MS = 30_000;
 /** How many times a forced check asks before going on without an answer. */
 const LIVENESS_COMMIT_ATTEMPTS = 3;
 
+/**
+ * Time left on a re-encode from its pace so far, or 0 while there is too
+ * little of it to say. Its rate is steady enough that a straight line holds.
+ */
+function remainingSeconds(progress: number, startedAt: number): number {
+  const elapsed = (Date.now() - startedAt) / 1000;
+  if (!startedAt || progress < 0.01 || elapsed < 15) return 0;
+  return Math.round((elapsed * (1 - progress)) / progress);
+}
+
 /** Bytes moved so far, and what that implies. */
 export interface VideoUploadProgress {
   /**
@@ -74,6 +85,11 @@ export interface VideoUploadProgress {
    * copying it: minutes of work, and worth its own word on screen.
    */
   converting?: boolean;
+  /**
+   * Set when that re-encode is there to bring a file over the upload limit
+   * under it, rather than to fix its format.
+   */
+  compressing?: boolean;
   pct: number;
   bytesUploaded: number;
   bytesTotal: number;
@@ -304,6 +320,9 @@ export async function uploadAndSubmitVideo({
 
       let lastSentTenth = -1;
       let converting = false;
+      // Over the limit, a re-encode is the compression that lets it upload.
+      const oversize = exceedsUploadLimit(pickedFile.size);
+      let convertStartedAt = 0;
       try {
         const prepared = await prepareVideoForUpload(pickedFile, {
           startSeconds: trim.startSeconds,
@@ -311,6 +330,7 @@ export async function uploadAndSubmitVideo({
           signal: controller.signal,
           onMode: (mode) => {
             converting = mode === "transcode";
+            convertStartedAt = Date.now();
           },
           onProgress: (progress) => {
             const tenth = Math.round(progress * 1000);
@@ -322,11 +342,14 @@ export async function uploadAndSubmitVideo({
               progress: {
                 stage: "preparing",
                 converting,
+                compressing: converting && oversize,
                 pct: tenth / 10,
                 bytesUploaded: 0,
                 bytesTotal: pickedFile.size,
                 speed: 0,
-                etaSeconds: 0,
+                etaSeconds: converting
+                  ? remainingSeconds(progress, convertStartedAt)
+                  : 0,
               },
             });
           },
@@ -356,6 +379,13 @@ export async function uploadAndSubmitVideo({
       } finally {
         window.clearInterval(heartbeat);
       }
+    }
+
+    // The vendor refuses a file over the limit at submit, after the whole
+    // transfer. `prepareVideoForUpload` already refuses one it couldn't shrink;
+    // this covers a caller that passed no window.
+    if (exceedsUploadLimit(file.size)) {
+      throw new OversizeVideoError(file.size, "failed");
     }
 
     // Before asking for a URL: the route records the blob name on the match's

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/server";
-import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
+import { reconcileWithinBudget } from "@/lib/data/reconcile-budget-server";
 
 import { getMatchDetailData } from "@/lib/data/match-detail-server";
 import { getMatchShareState } from "@/lib/data/match-share-server";
@@ -111,6 +111,13 @@ export async function generateMetadata({
   return { title: `${data.match.player1.name} vs ${data.match.player2.name}` };
 }
 
+/**
+ * How long this page's render waits on the vendor poll for a stuck job. Long
+ * enough for a healthy poll (one small GET) to land in what this read shows,
+ * short enough that a slow vendor costs the page at most this much.
+ */
+const RECONCILE_BUDGET_MS = 1500;
+
 export default async function MatchDetailPage({
   params,
   searchParams,
@@ -159,8 +166,16 @@ export default async function MatchDetailPage({
           .select("id")
           .eq("id", matchId)
           .maybeSingle();
+        //
+        // Bounded: a slow vendor must not hold the page's first byte. Past
+        // the budget this read shows the stored status and the poll finishes
+        // after the response — see `reconcileWithinBudget`.
         if (accessible) {
-          await reconcileBeforePageRead([matchId], "match-detail");
+          await reconcileWithinBudget(
+            [matchId],
+            "match-detail",
+            RECONCILE_BUDGET_MS,
+          );
         }
         return loadMatchAnalysis(supabase, [matchId], { reap: true });
       }),

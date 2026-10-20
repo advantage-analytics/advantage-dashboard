@@ -47,7 +47,7 @@ import { gameInSetOf, type LabelGame } from "@/lib/services/labels/operations";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
-  formatClockTime,
+  formatFileClockTime,
   pointDetail,
   pointSentence,
   withoutGhosts,
@@ -190,8 +190,8 @@ export const BlackPointRow = memo(function BlackPointRow({
   const fresh = isNewPoint(point);
   const sentence = fresh ? NEW_POINT_TITLE : pointSentence(shown, names);
   const detail = fresh
-    ? newPointDetail(point, edit.points)
-    : pointDetail(shown);
+    ? newPointDetail(point, edit.points, edit.fileOffset)
+    : pointDetail(shown, edit.fileOffset);
   // The rail's rows go along so a "Same side twice" question reads settled
   // once a point the labeller added sits between the two (marks-state.ts).
   const rowMarks = pointRowMarks(point, marks, names, sentence, edit.points);
@@ -411,12 +411,14 @@ function isNewPoint(
 /**
  * The new point's detail line: "Set who won, then add its shots · between {t1}
  * and {t2}", from the last live stroke of the live point before it and the
- * first of the one after (`formatClockTime`). With one neighbour timed it reads
- * "after t1" / "before t2"; with neither, the words alone.
+ * first of the one after (`formatFileClockTime`), on the playing file's clock
+ * (`fileOffset`). With one neighbour timed it reads "after t1" / "before t2";
+ * with neither, the words alone.
  */
 function newPointDetail(
   point: Pick<LabelPoint, "id">,
   points: readonly LabelPoint[],
+  fileOffset = 0,
 ): string {
   const at = points.findIndex((p) => p.id === point.id);
   if (at === -1) return NEW_POINT_DETAIL;
@@ -432,11 +434,12 @@ function newPointDetail(
   const t2 = after
     ? (live(after).find((shot) => shot.videoTime !== null)?.videoTime ?? null)
     : null;
+  const clock = (t: number) => formatFileClockTime(t, fileOffset);
   if (t1 !== null && t2 !== null) {
-    return `${NEW_POINT_DETAIL} · between ${formatClockTime(t1)} and ${formatClockTime(t2)}`;
+    return `${NEW_POINT_DETAIL} · between ${clock(t1)} and ${clock(t2)}`;
   }
-  if (t1 !== null) return `${NEW_POINT_DETAIL} · after ${formatClockTime(t1)}`;
-  if (t2 !== null) return `${NEW_POINT_DETAIL} · before ${formatClockTime(t2)}`;
+  if (t1 !== null) return `${NEW_POINT_DETAIL} · after ${clock(t1)}`;
+  if (t2 !== null) return `${NEW_POINT_DETAIL} · before ${clock(t2)}`;
   return NEW_POINT_DETAIL;
 }
 
@@ -791,7 +794,7 @@ export const BlackDeletedPoint = memo(function BlackDeletedPoint({
   edit: EditContext;
 }) {
   const { operations } = edit;
-  const time = pointSummary(point).time;
+  const time = pointSummary(point, edit.fileOffset).time;
   const combined = isCombinedTombstone(point);
   return (
     <div
