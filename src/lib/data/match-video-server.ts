@@ -22,7 +22,11 @@ import { type AdminClient, lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
-import { choosePlaybackFile, type PlaybackChoice } from "./match-video-choice";
+import {
+  PLAYBACK_JOB_COLUMNS,
+  choosePlaybackFile,
+  type PlaybackChoice,
+} from "./match-video-choice";
 import { activeAttachment, finalObjectExists } from "./match-video-seams";
 
 /**
@@ -401,7 +405,7 @@ function supabaseProviderVideo(
   return async (matchId) => {
     const { data: jobs } = await admin
       .from("processing_jobs")
-      .select("video_object_key, trimmed_object_key, start_time_seconds")
+      .select(PLAYBACK_JOB_COLUMNS)
       .eq("match_id", matchId)
       .or("video_object_key.not.is.null,trimmed_object_key.not.is.null")
       .order("created_at", { ascending: false })

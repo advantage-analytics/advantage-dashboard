@@ -11,6 +11,7 @@ import { LiveDots } from "@/components/ui/live-dots";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
+import { UNLIMITED_CAP_SECONDS } from "@/lib/data/usage-format";
 import {
   monthlyCapSecondsFor,
   quotaTierFor,
@@ -136,7 +137,10 @@ export function BetaWelcomeDialog({
 
             <div className="relative mt-7 flex items-end gap-3 border-t border-white/25 pt-5">
               <span className="tabular text-[56px] leading-[0.85] font-light tracking-[-2px]">
-                {terms.hours}
+                {/* An admin's personal workspace is uncapped. */}
+                {terms.hours >= UNLIMITED_CAP_SECONDS / 3600
+                  ? "∞"
+                  : terms.hours}
               </span>
               <span className="pb-1 text-[13px] leading-[1.35] text-white/85">
                 hours of match video

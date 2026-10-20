@@ -28,6 +28,11 @@ import type { RetiredSide, StopReason, StoppedResult } from "./score-state";
  * line (`oneSetWinner`) says so and keeps "Undo" rather than "Change", since
  * undoing puts the format back, not just the answer.
  *
+ * A third set at 1-0 with no tiebreak points (`bareMatchTiebreak`) asks the
+ * same question about that set: a match tiebreak recorded without its points
+ * and a match stopped one game into a real third set look the same. "It was a
+ * match tiebreak" (`onMatchTiebreak`) decides the score, so the question goes.
+ *
  * The DS warning question (`primitives.md` › Warning question): stacked text
  * answers on amber, a settled answer collapses to a grey line that keeps
  * "Change". "No" isn't an answer to record — it hands focus back to the score.
@@ -37,6 +42,10 @@ export function ScoreCheckNotice({
   retiredSide,
   stopReason,
   dualLine,
+  bareTiebreak,
+  onMatchTiebreak,
+  tiebreakSettled,
+  onUndoMatchTiebreak,
   offerOneSet,
   oneSetWinner,
   onOneSet,
@@ -57,6 +66,14 @@ export function ScoreCheckNotice({
    * hand-picked event kind) — offers "play stopped once the dual was decided".
    */
   dualLine: boolean;
+  /** The third set reads 1-0 with no points (`bareMatchTiebreak`). */
+  bareTiebreak: boolean;
+  /** "It was a match tiebreak" — the set counts as won on its 1-0. */
+  onMatchTiebreak: () => void;
+  /** "It was a match tiebreak" is in force — the settled line with Change. */
+  tiebreakSettled: boolean;
+  /** Withdraws "It was a match tiebreak" and asks again. */
+  onUndoMatchTiebreak: () => void;
   /** Offer "No, it was a one-set match" (`offersOneSet`, and not from a line). */
   offerOneSet: boolean;
   /**
@@ -90,6 +107,15 @@ export function ScoreCheckNotice({
         message={`Set to best of 1 · ${names[oneSetWinner]} wins.`}
         onChange={onUndoOneSet}
         actionLabel="Undo"
+      />
+    );
+  }
+
+  if (tiebreakSettled) {
+    return (
+      <SettledNotice
+        message="Set 3 marked as a match tiebreak."
+        onChange={onUndoMatchTiebreak}
       />
     );
   }
@@ -154,29 +180,47 @@ export function ScoreCheckNotice({
     >
       <WarningGlyph />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p>
-          <b className="font-medium">
-            This score doesn&rsquo;t finish the match.
-          </b>{" "}
-          Did it end early?
-        </p>
+        {bareTiebreak ? (
+          <p>
+            <b className="font-medium">
+              Set 3 reads 1&ndash;0 with no tiebreak points.
+            </b>{" "}
+            Was it a match tiebreak, or did play stop there?
+          </p>
+        ) : (
+          <p>
+            <b className="font-medium">
+              This score doesn&rsquo;t finish the match.
+            </b>{" "}
+            Did it end early?
+          </p>
+        )}
         <div className="-ml-2.5 flex flex-col">
+          {bareTiebreak && (
+            <Answer onClick={onMatchTiebreak}>It was a match tiebreak</Answer>
+          )}
           {dualLine && (
             <Answer onClick={() => onAnswer("Unfinished", "clinched")}>
-              Yes, play stopped once the dual was decided
+              {bareTiebreak
+                ? "Play stopped once the dual was decided"
+                : "Yes, play stopped once the dual was decided"}
             </Answer>
           )}
           <Answer onClick={() => onAnswer("Retired", "retired")}>
-            Yes, a player retired
+            {bareTiebreak ? "A player retired" : "Yes, a player retired"}
           </Answer>
           <Answer onClick={() => onAnswer("Unfinished", "time_weather")}>
-            Yes, stopped for time or weather
+            {bareTiebreak
+              ? "Play stopped for time or weather"
+              : "Yes, stopped for time or weather"}
           </Answer>
           {offerOneSet && !dualLine && (
             <Answer onClick={onOneSet}>No, it was a one-set match</Answer>
           )}
           <Answer onClick={onFinishScore}>
-            No, I&rsquo;ll finish the score
+            {bareTiebreak
+              ? "I\u2019ll add the tiebreak points"
+              : "No, I\u2019ll finish the score"}
           </Answer>
         </div>
       </div>

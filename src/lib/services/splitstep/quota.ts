@@ -24,7 +24,11 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { secondsLeft } from "@/lib/data/usage-format";
+import {
+  formatHoursLong,
+  secondsLeft,
+  UNLIMITED_CAP_SECONDS,
+} from "@/lib/data/usage-format";
 import {
   explainVideoRefusal,
   pendingReviewRefusal,
@@ -32,10 +36,9 @@ import {
 } from "@/lib/workspace/types";
 import {
   currentBillingMonth,
-  getIndividualPoolCapSeconds,
+  freeHoursReturnOn,
   getMonthlyCapSeconds,
   getPilotIndividualCapSeconds,
-  getOpenBetaCeilingSeconds,
   type AccountType,
 } from "./config";
 
@@ -103,13 +106,21 @@ export function quotaTierFor(
  * A pilot individual's PERSONAL workspace draws the pilot figure instead
  * (`Workspace.individualPilot`); every other workspace — including a team the
  * pilot belongs to — is unchanged.
+ *
+ * An admin's PERSONAL workspace (`Workspace.unlimitedVideo`) has no cap at
+ * all: `UNLIMITED_CAP_SECONDS`, which the reserve RPCs never reach, so free
+ * hours cover every upload and credits are never spent. A team the admin
+ * uploads into keeps its own cap — that budget is the program's, not theirs.
  */
 export function monthlyCapSecondsFor(
   workspace: Pick<
     Workspace,
-    "kind" | "orgType" | "individualPilot" | "pilotEligible"
+    "kind" | "orgType" | "individualPilot" | "pilotEligible" | "unlimitedVideo"
   >,
 ): number {
+  if (workspace.kind === "personal" && workspace.unlimitedVideo) {
+    return UNLIMITED_CAP_SECONDS;
+  }
   if (workspace.kind === "personal" && workspace.individualPilot) {
     return getPilotIndividualCapSeconds();
   }
@@ -238,16 +249,16 @@ export async function reserveQuota(params: {
   // the program ledger but draws the individual figure. See quotaTierFor().
   const capSeconds = monthlyCapSecondsFor(workspace);
 
-  // The individual figure also draws from a SHARED band: the pilot pool for
-  // hand-picked players, the open-beta ceiling for everyone else (see
-  // config.ts). Collegiate programs keep the plain per-account function below.
-  if (quotaTierFor(workspace) === "individual") {
-    return reservePooled({
+  // A personal workspace spends its free hours and then the player's own
+  // credits, in one transaction. Credits are personal: a team workspace —
+  // collegiate or custom org — never touches them, and there is no shared
+  // house-wide band in front of either (Cj, 2026-10-16).
+  if (workspace.kind === "personal") {
+    return reservePersonal({
       supabase,
       jobId,
       userId,
       workspace,
-      accountType,
       capSeconds,
       seconds,
       now,
@@ -298,46 +309,36 @@ export async function reserveQuota(params: {
   };
 }
 
-/**
- * Which limit a pooled reservation or peek was stopped by: the workspace's own
- * cap, the pilot pool, or the open-beta ceiling.
- */
-export type QuotaLimit = "account" | "pool_hours" | "open_hours";
-
-async function reservePooled(params: {
+async function reservePersonal(params: {
   supabase: SupabaseClient;
   jobId: string;
   userId: string;
   workspace: Workspace;
-  accountType: AccountType;
   capSeconds: number;
   seconds: number;
   now?: Date;
 }): Promise<QuotaReservation> {
-  const {
-    supabase,
-    jobId,
-    userId,
-    workspace,
-    accountType,
-    capSeconds,
-    seconds,
-    now,
-  } = params;
+  const { supabase, jobId, userId, workspace, capSeconds, seconds, now } =
+    params;
 
-  // Atomic, like reserve_processing_quota: each band is a sum across
-  // accounts, so a read-then-insert here would let two players race past it.
+  // The personal workspace's id IS the user's id; the SQL keys both the free
+  // ledger and the credits on it. A mismatch would spend one person's credits
+  // on another's ledger, so refuse it outright rather than trust the caller.
+  if (workspace.id !== userId) {
+    throw new QuotaReserveError(
+      "Could not reserve processing quota: personal workspace is not the uploader's",
+    );
+  }
+
+  // Atomic: free hours first, then credits oldest-expiring first, under the
+  // same account+month lock reserve_processing_quota takes.
   const { data, error } = await supabase
-    .rpc("reserve_individual_quota", {
+    .rpc("reserve_personal_quota", {
       p_job_id: jobId,
-      p_account_id: workspace.id,
-      p_account_type: accountType,
-      p_created_by: userId,
+      p_user_id: userId,
       p_billing_month: currentBillingMonth(now),
       p_seconds: Math.ceil(seconds),
       p_cap_seconds: capSeconds,
-      p_pool_cap_seconds: getIndividualPoolCapSeconds(),
-      p_open_cap_seconds: getOpenBetaCeilingSeconds(),
     })
     .single();
 
@@ -345,11 +346,10 @@ async function reservePooled(params: {
 
   const row = data as {
     ok: boolean;
-    refusal: QuotaLimit | null;
     used_seconds: number;
     cap_seconds: number;
-    band_used_seconds: number;
-    band_cap_seconds: number;
+    credit_seconds: number;
+    credit_spent_seconds: number;
   };
 
   if (row.ok) {
@@ -360,74 +360,46 @@ async function reservePooled(params: {
     };
   }
 
-  const limit: QuotaLimit = row.refusal ?? "account";
-  const pooled = limit !== "account";
-  const usedSeconds = pooled ? row.band_used_seconds : row.used_seconds;
-  const refusedCap = pooled ? row.band_cap_seconds : row.cap_seconds;
-
   return {
     ok: false,
-    usedSeconds,
-    capSeconds: refusedCap,
-    message: quotaRefusalMessage({
-      limit,
+    usedSeconds: row.used_seconds,
+    capSeconds: row.cap_seconds,
+    message: personalRefusalMessage({
       neededSeconds: seconds,
-      remainingSeconds: secondsLeft(usedSeconds, refusedCap),
-      capSeconds: refusedCap,
+      remainingSeconds:
+        secondsLeft(row.used_seconds, row.cap_seconds) + row.credit_seconds,
+      now,
     }),
   };
 }
 
 /**
- * Unwraps a single-row RPC result the way every quota RPC here returns one,
- * or throws the uniform message the callers all threw by hand before this
- * was pulled out.
+ * A personal player's refusal: what it needs, what is left (free hours plus
+ * credits), and the next step — add hours, shorten the trim, or wait for the
+ * 1st. In December there is no 1st to wait for (free hours end Dec 31), so
+ * the wait drops out. Never says "allowance": the player owns these hours.
  */
-function requireRpcRow<T>(
-  data: T | null,
-  error: { message: string } | null,
-  what: string,
-): T {
-  if (error || !data) {
-    throw new Error(
-      `Could not ${what}: ${error?.message ?? "no row returned"}`,
-    );
-  }
-  return data;
-}
-
-/**
- * The refusal for whichever limit said no. `account` is `capRefusalMessage()`
- * unchanged; the pool ones say it is a shared limit, because the person's own
- * meter can still read hours left when the pool has none.
- */
-export function quotaRefusalMessage(params: {
-  limit: QuotaLimit;
+export function personalRefusalMessage(params: {
   neededSeconds: number;
   remainingSeconds: number;
-  capSeconds: number;
+  now?: Date;
 }): string {
-  const { limit, neededSeconds, remainingSeconds } = params;
-  if (limit === "open_hours") {
-    return (
-      `This month's free beta video analysis is fully booked. It reopens at ` +
-      `the start of next month, and you can still import SwingVision ` +
-      `matches in the meantime.`
-    );
-  }
-  if (limit === "pool_hours") {
-    return (
-      `This match needs ${formatMinutes(neededSeconds)} of analysis but only ` +
-      `${formatMinutes(remainingSeconds)} is left in this month's shared ` +
-      `allowance for individual players. It resets at the start of next ` +
-      `month; a shorter trim will fit sooner.`
-    );
-  }
-  return capRefusalMessage(params);
+  const { neededSeconds, remainingSeconds, now } = params;
+  const back = freeHoursReturnOn(now);
+  const lead =
+    remainingSeconds <= 0
+      ? "You're out of video hours."
+      : `This video needs ${formatHoursLong(neededSeconds)}. You have ` +
+        `${formatHoursLong(remainingSeconds)} left.`;
+  const next = back
+    ? `Add hours on Settings › Plan to send it now, shorten the trim, or ` +
+      `wait for your free hours on ${back}.`
+    : `Add hours on Settings › Plan to send it now, or shorten the trim.`;
+  return `${lead} ${next}`;
 }
 
 /**
- * The allowance refusal, in one place. `reserveQuota()` says it at the spend;
+ * A team workspace's allowance refusal, in one place. `reserveQuota()` says it at the spend;
  * `/api/splitstep/upload-url` says it before a credential exists, from
  * `peekQuota()`'s reading — the same words for the same answer.
  */
@@ -465,16 +437,19 @@ export function sumUsedSeconds(rows: readonly UsageRow[]): number {
 }
 
 export interface QuotaPeek {
+  /** Free hours used this month. */
   usedSeconds: number;
+  /** The workspace's own monthly free figure. */
   capSeconds: number;
-  remainingSeconds: number;
+  /** Free hours left this month, never negative. */
+  freeRemainingSeconds: number;
   /**
-   * Which limit `remainingSeconds` comes from. For a workspace on the
-   * individual figure it is the tighter of its own cap and its shared band
-   * (the pilot pool or the open-beta ceiling); the three figures above belong
-   * to that limit.
+   * Usable credits (unexpired, unspent). Always 0 for a team workspace:
+   * credits are personal and spend only in the owner's personal workspace.
    */
-  limit: QuotaLimit;
+  creditSeconds: number;
+  /** What the next upload can spend: free hours left plus credits. */
+  remainingSeconds: number;
 }
 
 /**
@@ -484,11 +459,12 @@ export interface QuotaPeek {
  */
 export interface HoursLeft {
   workspaceId: string;
+  /** Free hours left this month. */
   remainingSeconds: number;
   /** The workspace's own monthly figure — the ring's denominator. */
   capSeconds: number;
-  /** True when the shared beta band, not the account, is what ran out. */
-  bandFull: boolean;
+  /** Usable credits; 0 for a team workspace. */
+  creditSeconds: number;
 }
 
 /**
@@ -498,11 +474,61 @@ export interface HoursLeft {
 export function peekRefusalMessage(
   peek: QuotaPeek,
   neededSeconds: number,
+  workspace: Pick<Workspace, "kind">,
 ): string | null {
   if (neededSeconds <= peek.remainingSeconds) {
     return null;
   }
-  return quotaRefusalMessage({ ...peek, neededSeconds });
+  if (workspace.kind === "personal") {
+    return personalRefusalMessage({
+      neededSeconds,
+      remainingSeconds: peek.remainingSeconds,
+    });
+  }
+  return capRefusalMessage({
+    neededSeconds,
+    remainingSeconds: peek.remainingSeconds,
+    capSeconds: peek.capSeconds,
+  });
+}
+
+/** A player's usable credit balance and when the next of it expires. */
+export interface CreditBalance {
+  seconds: number;
+  /** ISO instant the oldest usable lot expires, or null with no credits. */
+  nextExpiresAt: string | null;
+}
+
+/**
+ * Sum a user's usable credits: unspent and unexpired, the rows
+ * `reserve_personal_quota` would draw from. Works with either client — the
+ * owner can read their own rows under RLS, and the service role reads anyone's.
+ */
+export async function readCreditBalance(
+  supabase: SupabaseClient,
+  userId: string,
+  now: Date = new Date(),
+): Promise<CreditBalance> {
+  const { data, error } = await supabase
+    .from("video_credits")
+    .select("remaining_seconds, expires_at")
+    .eq("user_id", userId)
+    .gt("remaining_seconds", 0)
+    .gt("expires_at", now.toISOString())
+    .order("expires_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Could not read video credits: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as {
+    remaining_seconds: number;
+    expires_at: string;
+  }[];
+  return {
+    seconds: rows.reduce((sum, row) => sum + row.remaining_seconds, 0),
+    nextExpiresAt: rows[0]?.expires_at ?? null,
+  };
 }
 
 /**
@@ -513,8 +539,9 @@ export function peekRefusalMessage(
  * read, so two uploads racing can both pass it; `reserveQuota()` at
  * `/api/splitstep/jobs` is atomic and still decides. Keyed exactly as that
  * reservation is (`accountTypeFor`, `workspace.id`, `currentBillingMonth`) and
- * summed the way `reserve_processing_quota` sums: the vendor's actual figure
- * where one has landed, the reservation otherwise, released rows excluded.
+ * summed the way the reserve functions sum: the vendor's actual figure where
+ * one has landed, the reservation otherwise, released rows excluded. A
+ * personal workspace adds the player's credits on top.
  *
  * `supabase` must be the service-role client, because `processing_usage` RLS
  * is per-creator and a program's ledger is everybody's rows. Handed in, like
@@ -527,79 +554,70 @@ export function peekRefusalMessage(
 export async function peekQuota(
   supabase: SupabaseClient,
   workspace: Workspace,
-  /** Who is uploading — the pilot list, and so the band, is of people. */
-  userId: string,
 ): Promise<QuotaPeek> {
   const capSeconds = monthlyCapSecondsFor(workspace);
 
-  const { data, error } = await supabase
-    .from("processing_usage")
-    .select("reserved_seconds, actual_seconds")
-    .eq("account_id", workspace.id)
-    .eq("account_type", accountTypeFor(workspace))
-    .eq("billing_month", currentBillingMonth())
-    .eq("released", false);
+  const [usage, credits] = await Promise.all([
+    supabase
+      .from("processing_usage")
+      .select("reserved_seconds, actual_seconds")
+      .eq("account_id", workspace.id)
+      .eq("account_type", accountTypeFor(workspace))
+      .eq("billing_month", currentBillingMonth())
+      .eq("released", false),
+    workspace.kind === "personal"
+      ? readCreditBalance(supabase, workspace.id)
+      : Promise.resolve<CreditBalance>({ seconds: 0, nextExpiresAt: null }),
+  ]);
 
-  if (error) {
-    throw new Error(`Could not read processing usage: ${error.message}`);
+  if (usage.error) {
+    throw new Error(`Could not read processing usage: ${usage.error.message}`);
   }
 
-  const usedSeconds = sumUsedSeconds((data ?? []) as UsageRow[]);
-  const own: QuotaPeek = {
-    usedSeconds,
-    capSeconds,
-    remainingSeconds: secondsLeft(usedSeconds, capSeconds),
-    limit: "account",
-  };
-
-  if (quotaTierFor(workspace) !== "individual") return own;
-
-  const { data: pool, error: poolError } = await supabase
-    .rpc("individual_tier_usage", {
-      p_billing_month: currentBillingMonth(),
-      p_created_by: userId,
-    })
-    .single();
-
-  return pickPeek(
-    own,
-    requireRpcRow(
-      pool as PoolUsageRow | null,
-      poolError,
-      "read individual tier usage",
-    ),
-  );
+  const usedSeconds = sumUsedSeconds((usage.data ?? []) as UsageRow[]);
+  return buildPeek(usedSeconds, capSeconds, credits.seconds);
 }
 
-/** One row of `individual_tier_usage()`. */
-export interface PoolUsageRow {
-  pilot_used_seconds: number;
-  open_used_seconds: number;
-  /** `users.individual_pilot`: on the hand-picked pilot list. */
-  is_player: boolean;
+/** A peek from its three figures. Pure, so meters can build one too. */
+export function buildPeek(
+  usedSeconds: number,
+  capSeconds: number,
+  creditSeconds: number,
+): QuotaPeek {
+  const freeRemainingSeconds = secondsLeft(usedSeconds, capSeconds);
+  return {
+    usedSeconds,
+    capSeconds,
+    freeRemainingSeconds,
+    creditSeconds,
+    remainingSeconds: freeRemainingSeconds + creditSeconds,
+  };
 }
 
 /**
- * The tighter of a workspace's own figure and the uploader's band, in the
- * order `reserve_individual_quota` refuses: own cap, then band. Pure, so the
- * ordering is testable without a database.
+ * How an upload of `seconds` splits between free hours and credits, in the
+ * order `reserve_personal_quota` spends them. `fits` is false when the two
+ * together fall short. Pure — the wizard footer (B2) and paywall read it.
  */
-export function pickPeek(own: QuotaPeek, pool: PoolUsageRow): QuotaPeek {
-  const [bandUsed, bandCap, limit]: [number, number, QuotaLimit] =
-    pool.is_player
-      ? [pool.pilot_used_seconds, getIndividualPoolCapSeconds(), "pool_hours"]
-      : [pool.open_used_seconds, getOpenBetaCeilingSeconds(), "open_hours"];
-  const remainingSeconds = secondsLeft(bandUsed, bandCap);
-
-  if (remainingSeconds < own.remainingSeconds) {
-    return {
-      usedSeconds: bandUsed,
-      capSeconds: bandCap,
-      remainingSeconds,
-      limit,
-    };
-  }
-  return own;
+export function splitSpend(
+  peek: Pick<QuotaPeek, "freeRemainingSeconds" | "creditSeconds">,
+  seconds: number,
+): {
+  freeSeconds: number;
+  creditSeconds: number;
+  shortBySeconds: number;
+  fits: boolean;
+} {
+  const freeSeconds = Math.min(peek.freeRemainingSeconds, seconds);
+  const need = seconds - freeSeconds;
+  const creditSeconds = Math.min(peek.creditSeconds, need);
+  const shortBySeconds = need - creditSeconds;
+  return {
+    freeSeconds,
+    creditSeconds,
+    shortBySeconds,
+    fits: shortBySeconds <= 0,
+  };
 }
 
 /** Hand back a reservation. Safe to call twice. */

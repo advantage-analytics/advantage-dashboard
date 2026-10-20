@@ -834,6 +834,10 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
     expect(ASK_VISUAL_EXAMPLES.trend.when).toContain(
       "name it third: the app draws it as a dashed line beside the points.",
     );
+    // Two measures asked for over time: the second is named third too.
+    expect(ASK_VISUAL_EXAMPLES.trend.when).toContain(
+      "name the second measure's column third the same way: the app draws both lines and names each.",
+    );
     expect(ASK_VISUAL_EXAMPLES.trend.when).toContain(
       "A match_id column in the result links each point to its match.",
     );

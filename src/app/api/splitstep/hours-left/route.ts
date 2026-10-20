@@ -2,10 +2,9 @@
  * Video hours left this month for the active workspace, for the header's Beta
  * pill.
  *
- * A route rather than a browser read because an individual's figure is the
- * tighter of their own cap and a shared band (the pilot pool or the open-beta
- * ceiling), and the band spans everyone's rows: `individual_tier_usage` is
- * service-role only. `peekQuota()` is the same read `/api/splitstep/upload-url`
+ * A route rather than a browser read because a team's ledger is everybody's
+ * rows and `processing_usage` RLS is per-creator. A personal workspace adds
+ * the player's credits. `peekQuota()` is the same read `/api/splitstep/upload-url`
  * refuses on, so the pill cannot promise hours the upload will not honour.
  *
  * Advisory, like every peek: `reserveQuota()` at submit time still decides.
@@ -34,16 +33,12 @@ export async function GET() {
   }
 
   try {
-    const peek = await peekQuota(
-      createAdminClient(),
-      context.active,
-      context.viewer.id,
-    );
+    const peek = await peekQuota(createAdminClient(), context.active);
     const body: HoursLeft = {
       workspaceId: context.active.id,
-      remainingSeconds: peek.remainingSeconds,
+      remainingSeconds: peek.freeRemainingSeconds,
       capSeconds: monthlyCapSecondsFor(context.active),
-      bandFull: peek.limit !== "account" && peek.remainingSeconds === 0,
+      creditSeconds: peek.creditSeconds,
     };
     return NextResponse.json(body, {
       headers: { "Cache-Control": "no-store" },

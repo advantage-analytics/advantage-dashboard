@@ -31,6 +31,11 @@ import { UPLOADING_COPY } from "../upload-progress-copy";
 import type { EventPreset } from "./types";
 import type { CreatedMatch, UploadState } from "./upload-progress";
 import { formatFileSize } from "./utils";
+import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
+import type { VideoUploadProgress } from "@/lib/services/splitstep/submit-match-video";
+
+/** The upload limit, in the whole gigabytes the requirements panel prints. */
+const MAX_VIDEO_GB = Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000);
 import { addVideoHref } from "@/lib/matches/add-video-href";
 import {
   askReturnHref,
@@ -313,9 +318,11 @@ function successView(
             state: "now",
             label: !preparing
               ? UPLOADING_COPY.steps.video
-              : upload?.progress?.converting
-                ? "Converting video to 1080p"
-                : "Trimming video",
+              : upload?.progress?.compressing
+                ? "Compressing video"
+                : upload?.progress?.converting
+                  ? "Converting video to 1080p"
+                  : "Trimming video",
             value: pct === null ? undefined : `${pct}%`,
           },
           later,
@@ -478,9 +485,13 @@ function stepBody(
           percent={progress?.pct ?? 0}
           live
           label={
-            progress?.stage === "preparing"
-              ? "Video trim"
-              : UPLOADING_COPY.trackLabel
+            progress?.stage !== "preparing"
+              ? UPLOADING_COPY.trackLabel
+              : progress.compressing
+                ? "Video compression"
+                : progress.converting
+                  ? "Video conversion"
+                  : "Video trim"
           }
         />
         <div className="-mt-1 flex items-baseline justify-between gap-3 text-[11px] text-[var(--ink-400)] tabular-nums">
@@ -488,11 +499,17 @@ function stepBody(
             {!progress
               ? "Starting…"
               : progress.stage === "preparing"
-                ? "Cutting your selected window out of the video, on this device"
+                ? preparingLine(progress)
                 : `${formatFileSize(progress.bytesUploaded)} of ${formatFileSize(progress.bytesTotal)} · ${sentenceCase(formatEta(progress.etaSeconds))}`}
           </span>
           {upload?.cancel && <CancelUploadControl cancel={upload.cancel} />}
         </div>
+        {progress?.compressing && (
+          <p className={cn(NOTE, "mt-1")}>
+            The video is over {MAX_VIDEO_GB} GB, so it&rsquo;s compressed here
+            first. The upload starts as soon as this finishes.
+          </p>
+        )}
         {/* Leaving in-app is safe — only closing the tab or a sleeping
             computer stops the transfer; `beforeunload` guards the first and
             the wake lock in `submit-match-video.ts` the second. */}
@@ -760,6 +777,21 @@ function UploadAnotherAction({
 }
 
 /** "about 6 min left" -> "About 6 min left"; formatEta stays lowercase for its other callers. */
+/**
+ * The line under a preparing bar. A cut is quick and says what it does; a
+ * re-encode runs for minutes to an hour, so once it has a rate it says how
+ * long is left — the same "about … left" the upload uses.
+ */
+function preparingLine(progress: VideoUploadProgress): string {
+  if (!progress.converting) {
+    return "Cutting your selected window out of the video, on this device";
+  }
+  const what = progress.compressing ? "Compressing" : "Converting";
+  return progress.etaSeconds > 0
+    ? `${what} on this device · ${sentenceCase(formatEta(progress.etaSeconds))}`
+    : `${what} on this device · Working out the time left`;
+}
+
 function sentenceCase(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe/client";
-import { upgradeUserToPro } from "@/lib/user/roles";
-import { isProPlan } from "@/lib/user/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  CREDITS_CHECKOUT_KIND,
+  expandableId,
+  fulfilCreditCheckout,
+  revokeCreditsForCharge,
+} from "@/lib/services/credits/checkout";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -16,6 +20,22 @@ if (!webhookSecret) {
   );
 }
 
+/**
+ * Stripe's events for credit-pack purchases.
+ *
+ * Branches on the session's `metadata.kind`: only `"credits"` sessions do
+ * anything, and what they do is insert one `video_credits` row, idempotent on
+ * the session id (`fulfilCreditCheckout()`, shared with `/api/credits/confirm`).
+ * It no longer sets `users.plan = 'pro'` for every completed checkout — that
+ * was the retired $4.99 Lifetime product, and a credit purchase is not a plan.
+ *
+ * `async_payment_succeeded` covers a payment method that settles after the
+ * session completes; `completed` with `payment_status: "unpaid"` waits for it.
+ *
+ * `charge.refunded` and `charge.dispute.created` take the purchase's unspent
+ * hours away (`revokeCreditsForCharge()`): all sales are final, but money that
+ * goes back must not leave its hours behind. Spent hours stay spent.
+ */
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const signature = request.headers.get("stripe-signature");
@@ -37,50 +57,113 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (event.type === "checkout.session.completed") {
+  if (
+    event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.async_payment_succeeded"
+  ) {
     const session = event.data.object as Stripe.Checkout.Session;
 
-    const userId = session.metadata?.user_id || session.client_reference_id;
-
-    if (!userId) {
-      console.error("No user ID found in session", {
-        metadata: session.metadata,
-        client_reference_id: session.client_reference_id,
+    let result;
+    try {
+      result = await fulfilCreditCheckout({
+        admin: createAdminClient(),
+        session,
+        eventId: event.id,
       });
-      return NextResponse.json({ error: "No user ID" }, { status: 400 });
-    }
-
-    // Update the user's role using the admin client (bypasses RLS)
-    const supabase = createAdminClient();
-
-    const { data: existingUser, error: fetchError } = await supabase
-      .from("users")
-      .select("id, plan")
-      .eq("id", userId)
-      .single();
-
-    if (fetchError || !existingUser) {
-      console.error("User not found in database:", {
-        userId,
-        error: fetchError,
-      });
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    if (isProPlan(existingUser.plan)) {
-      console.log(`User ${userId} already has Pro, skipping update`);
-      return NextResponse.json({ received: true, message: "Already Pro" });
-    }
-
-    const result = await upgradeUserToPro(userId);
-
-    if (!result.success) {
-      console.error("Stripe webhook: failed to upgrade user to Pro", {
-        userId,
-        error: result.error,
+    } catch (error) {
+      // 500 so Stripe retries; the insert is idempotent.
+      console.error("[stripe webhook] could not record credits", {
+        eventId: event.id,
+        sessionId: session.id,
+        error: error instanceof Error ? error.message : String(error),
       });
       return NextResponse.json(
-        { error: "Failed to update user plan" },
+        { error: "Could not record credits" },
+        { status: 500 },
+      );
+    }
+
+    if (!result.ok && result.reason === "user_gone") {
+      // The buyer deleted their account before the hours landed. Nothing to
+      // credit and nothing a retry could change; the payment itself is in
+      // Stripe for whoever reconciles it.
+      console.error("[stripe webhook] credits for a deleted account", {
+        eventId: event.id,
+        sessionId: session.id,
+      });
+    }
+
+    if (!result.ok && result.reason === "bad_metadata") {
+      // A credits session we cannot attribute. Acknowledge (a retry cannot fix
+      // it) and leave a trail for whoever reconciles it by hand.
+      console.error("[stripe webhook] credits session with bad metadata", {
+        eventId: event.id,
+        sessionId: session.id,
+        metadata: session.metadata,
+      });
+    }
+
+    return NextResponse.json({
+      received: true,
+      ...(result.ok ? { created: result.created } : { skipped: result.reason }),
+    });
+  }
+
+  if (
+    event.type === "charge.refunded" ||
+    event.type === "charge.dispute.created"
+  ) {
+    const disputed = event.type === "charge.dispute.created";
+    const object = event.data.object as Stripe.Charge | Stripe.Dispute;
+    const paymentIntent = expandableId(object.payment_intent);
+    if (!paymentIntent) return NextResponse.json({ received: true });
+
+    const charge = disputed ? null : (object as Stripe.Charge);
+    try {
+      const revoked = await revokeCreditsForCharge({
+        admin: createAdminClient(),
+        paymentIntent,
+        amountCents: charge?.amount ?? 0,
+        refundedCents: charge?.amount_refunded ?? 0,
+        disputed,
+      });
+      if (!revoked.found) {
+        // No lot for this payment. Either it is not a credit pack (the
+        // retired Pro, anything else) — acknowledge — or the purchase has not
+        // been recorded yet and the refund arrived first: answer 500 so Stripe
+        // retries after fulfilment, rather than lose the refund and later
+        // grant the full pack for money that went back.
+        const intent = await stripe.paymentIntents.retrieve(paymentIntent);
+        if (intent.metadata?.kind === CREDITS_CHECKOUT_KIND) {
+          console.error(
+            "[stripe webhook] refund before its credits were recorded",
+            {
+              eventId: event.id,
+              paymentIntent,
+            },
+          );
+          return NextResponse.json(
+            { error: "Credits not recorded yet" },
+            { status: 500 },
+          );
+        }
+      }
+      if (revoked.found) {
+        console.log("[stripe webhook] credits revoked", {
+          eventId: event.id,
+          paymentIntent,
+          disputed,
+          remainingSeconds: revoked.remainingSeconds,
+        });
+      }
+    } catch (error) {
+      console.error("[stripe webhook] could not revoke credits", {
+        eventId: event.id,
+        paymentIntent,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return NextResponse.json(
+        { error: "Could not revoke credits" },
         { status: 500 },
       );
     }

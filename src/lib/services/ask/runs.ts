@@ -19,7 +19,7 @@ import { askQuestion, type AskQuestionInput } from "@/lib/services/ask/ask";
 import type { AskDatabase, AskModel } from "@/lib/services/ask/ask";
 import { ASK_COMPARE_KINDS, compareSql } from "@/lib/services/ask/compare";
 import type { AskErrorCode, AskEvent } from "@/lib/services/ask/events";
-import { losingPlaysSql, winningPlaysSql } from "@/lib/services/ask/plays";
+import { isWinningPlaysSql, losingPlaysSql } from "@/lib/services/ask/plays";
 import { ASK_REVIEW_SQL } from "@/lib/services/ask/review";
 import type { AskScope } from "@/lib/services/ask/scope";
 import { servePlusOneRequestOfSql } from "@/lib/services/ask/serve-plus-one";
@@ -103,10 +103,9 @@ export function askRunRoute(input: {
   }
   if (servePlusOneRequestOfSql(input.sql) !== null) return "serve_plus_one";
   if (
+    isWinningPlaysSql(input.sql) ||
     (["mine", "opponent"] as const).some(
-      (subject) =>
-        losingPlaysSql(subject) === input.sql ||
-        winningPlaysSql(subject) === input.sql,
+      (subject) => losingPlaysSql(subject) === input.sql,
     )
   ) {
     return "plays";
