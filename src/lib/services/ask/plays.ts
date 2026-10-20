@@ -1,4 +1,8 @@
 import {
+  type RallyLengthBand,
+  rallyLengthBandOf,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
+import {
   ASK_VISUAL_FIELD_SEPARATOR,
   ASK_VISUAL_LINE_PREFIX,
   type AskRow,
@@ -7,6 +11,7 @@ import { ASK_TABLE_ROWS, MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
 import type { AskPromptTag } from "@/lib/services/ask/prompts";
 import {
   ASK_VISUAL_WATCH_PREFIX,
+  type AskTreeWatch,
   treeWatchFields,
 } from "@/lib/services/ask/tree";
 
@@ -463,8 +468,9 @@ export function winningPlaysSubject(
  * `winners` how many of those a play below accounts for, `errors_drawn`
  * how many matches have shots — then one `play` row per stroke and
  * direction: the points it won (`points`), as the subject's own winner
- * (`winners`) or as the shot before the other side's miss (`errors_drawn`).
- * Most points first.
+ * (`winners`) or as the shot before the other side's miss (`errors_drawn`),
+ * and its share of all the points the subject won (`points_pct`, of the
+ * total row's `points`). Most points first.
  *
  * Per point, from ask.point_plays: the last shot of every point and the
  * one before it are already picked out there (migration 20261015090038),
@@ -501,14 +507,17 @@ plays as (
     and stroke in ('Forehand', 'Backhand', 'Volley', 'Overhead', 'First Serve', 'Second Serve')
   group by stroke, direction
 ),
+won as (
+  select count(*) as points from ended where has_shots and i_won = ${theirs}
+),
 ranked as (
   select 'play' as section, stroke, direction, points, winners, errors_drawn,
-    round(100.0 * points / nullif(sum(points) over (), 0), 1) as points_pct,
+    round(100.0 * points / nullif((select points from won), 0), 1) as points_pct,
     row_number() over (order by points desc, winners desc) as place
   from plays
 )
 select 'total' as section, null as stroke, null as direction,
-  (select count(*) from ended where has_shots and i_won = ${theirs}) as points,
+  (select points from won) as points,
   (select coalesce(sum(points), 0) from plays) as winners,
   (select count(distinct match_id) from ended where has_shots) as errors_drawn,
   null::numeric as points_pct
@@ -648,6 +657,25 @@ export function rallyPhrase(rally: AskRallyLength): string {
   return `rallies of ${words(rally.min)} to ${words(rally.max)} shots`;
 }
 
+/** The serve strokes a play row can name, which the Custom filter does not offer. */
+const SERVE_STROKES: readonly string[] = ["First Serve", "Second Serve"];
+
+/**
+ * The Video filter's rally band that holds exactly `rally`'s rallies
+ * (`rallyLengthBandOf`), or null when none does — Ask's medium (5–9) and
+ * long (10+) are not the filter's 5–8 and 9+.
+ */
+export function rallyFilterBand(rally: AskRallyLength): RallyLengthBand | null {
+  const min = Math.max(rally.min, 1);
+  const band = rallyLengthBandOf(min);
+  if (band === null || rallyLengthBandOf(min - 1) === band) return null;
+  if (rally.max === null) return band === "long" ? band : null;
+  return rallyLengthBandOf(rally.max) === band &&
+    rallyLengthBandOf(rally.max + 1) !== band
+    ? band
+    : null;
+}
+
 /**
  * The answer from `winningPlaysSql()`'s rows, or null when no point won in
  * scope ended on a recorded shot — "no data", said by the caller. Every
@@ -671,42 +699,48 @@ export function buildWinningPlaysAnswer(
   const headline = `${sentenceCase(voice.possessive)} best play${within} was the ${phrase(top.row)}: it won ${cell(top.ref, "points")} points — ${cell(top.ref, "winners")} as ${voice.second ? "your" : "their"} own winner and ${cell(top.ref, "errors_drawn")} by drawing an error.`;
 
   // The tree, as the losing plays draw theirs: each play a branch — the
-  // stroke, then the direction — that opens the film on the points the
-  // subject won with that shot in the rally (`tree.ts`, `won`). The table
-  // when a row cannot be a branch.
+  // stroke, then the direction. A play's film (`tree.ts`, `won`) holds every
+  // point won with that shot anywhere in the rally, not only the ones it
+  // ended, which the filter cannot pick out; the copy below says so. A
+  // narrowed rally length the Video filter has no band for draws no links
+  // rather than film of other rallies.
   const caption = `The shots that won ${voice.second ? "you" : voice.name} points${within}, by stroke and direction. Most points first.`;
-  const branches = plays.map((entry) => ({
-    entry,
-    steps: treeSteps(entry.row),
-  }));
-  const tree = branches.every((branch) => branch.steps !== null);
-  const table = tree
-    ? [
-        `${ASK_VISUAL_LINE_PREFIX} tree ${S} ${caption}`,
-        `COLUMNS: Stroke ${S} Direction`,
-        `SERIES: Points won ${S} Winners ${S} Share of points won`,
-        ...(voice.subject
-          ? [
-              `${ASK_VISUAL_WATCH_PREFIX} ${treeWatchFields({ kind: "plays", subject: voice.subject, won: true }).join(` ${S} `)}`,
-            ]
-          : []),
-        ...branches.map(
-          ({ entry, steps }) =>
-            `ROW: ${(steps ?? []).join(` ${S} `)} ${S} ${cell(entry.ref, "points")} ${S} ${cell(entry.ref, "winners")} ${S} ${cell(entry.ref, "points_pct")}`,
-        ),
-      ]
-    : [
-        `${ASK_VISUAL_LINE_PREFIX} table ${S} ${caption}`,
-        `COLUMNS: Points won ${S} Winners ${S} Errors drawn`,
-        ...plays.map(
-          (entry) =>
-            `ROW: ${label(entry.row)} ${S} ${cell(entry.ref, "points")} ${S} ${cell(entry.ref, "winners")} ${S} ${cell(entry.ref, "errors_drawn")}`,
-        ),
-      ];
+  const branches = plays.slice(0, ASK_TABLE_ROWS).flatMap((entry) => {
+    const steps = treeSteps(entry.row);
+    return steps ? [{ entry, steps }] : [];
+  });
+  const band = rally === null ? undefined : rallyFilterBand(rally);
+  const watch: AskTreeWatch | null =
+    voice.subject && band !== null
+      ? {
+          kind: "plays",
+          subject: voice.subject,
+          won: true,
+          ...(band ? { rally: band } : {}),
+        }
+      : null;
+  // Serves are no Custom stroke the Video filter offers: no link.
+  const linked =
+    watch !== null &&
+    branches.some(
+      ({ entry }) => !SERVE_STROKES.includes(String(entry.row.stroke)),
+    );
+  const tree = [
+    `${ASK_VISUAL_LINE_PREFIX} tree ${S} ${caption}`,
+    `COLUMNS: Stroke ${S} Direction`,
+    `SERIES: Points won ${S} Winners ${S} Share of points won`,
+    ...(watch
+      ? [`${ASK_VISUAL_WATCH_PREFIX} ${treeWatchFields(watch).join(` ${S} `)}`]
+      : []),
+    ...branches.map(
+      ({ entry, steps }) =>
+        `ROW: ${steps.join(` ${S} `)} ${S} ${cell(entry.ref, "points")} ${S} ${cell(entry.ref, "winners")} ${S} ${cell(entry.ref, "points_pct")}`,
+    ),
+  ];
 
   const paragraphs: string[] = [];
   paragraphs.push(
-    `${sentenceCase(voice.name)} won ${cell(total.ref, "points")} points${within}; ${cell(total.ref, "winners")} of them ended on a recorded shot of ${voice.second ? "yours" : "theirs"} — ${voice.second ? "your" : "their"} own winner, or the shot before the other side missed. ${tree ? (voice.subject ? "Each play below opens the film on the points won with it." : "The plays below won the most.") : "The table lists the plays that won the most."}`,
+    `${sentenceCase(voice.name)} won ${cell(total.ref, "points")} points${within}; ${cell(total.ref, "winners")} of them ended on a recorded shot of ${voice.second ? "yours" : "theirs"} — ${voice.second ? "your" : "their"} own winner, or the shot before the other side missed. A play's points won are its winners and the errors it drew.${linked ? " Each rally shot below opens the film on every point won with it anywhere in the rally, so the film can hold more points than the play counts." : ""}`,
   );
   const withShots = count(total.row.errors_drawn);
   paragraphs.push(
@@ -716,7 +750,7 @@ export function buildWinningPlaysAnswer(
         ? "Counted from the shots of this one match."
         : `Counted from the shots of ${cell(total.ref, "errors_drawn")} matches.`,
   );
-  return [headline, ...table, "", ...paragraphs.flatMap((p) => [p, ""])]
+  return [headline, ...tree, "", ...paragraphs.flatMap((p) => [p, ""])]
     .join("\n")
     .trimEnd();
 }

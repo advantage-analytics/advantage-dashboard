@@ -47,6 +47,8 @@ test.describe("the WATCH line", () => {
       { ...SERVE, serveType: "first" } as const,
       { kind: "plays", subject: "mine" } as const,
       { kind: "plays", subject: "mine", won: true } as const,
+      { kind: "plays", subject: "mine", won: true, rally: "short" } as const,
+      { kind: "plays", subject: "opponent", rally: "long" } as const,
     ]) {
       expect(parseTreeWatch(treeWatchFields(watch))).toEqual(watch);
     }
@@ -88,6 +90,8 @@ test.describe("the WATCH line", () => {
       ["plays", "mine", "extra"],
       ["plays", "mine", "lost"],
       ["plays", "mine", "won", "extra"],
+      ["plays", "mine", "won", "short", "extra"],
+      ["plays", "mine", "short", "won"],
       ["plays", "theirs"],
       ["pie", "mine"],
     ]) {
@@ -224,6 +228,10 @@ test.describe("a branch's pattern", () => {
     expect(parseMatchFilters(watch)).toEqual(
       treeBranchFilters({ ...PLAYS, won: true }, row),
     );
+    // The rally band the answer counted narrows the film to it.
+    expect(
+      treeBranchFilters({ ...PLAYS, won: true, rally: "short" }, row),
+    ).toMatchObject({ resultOutcome: ["lost"], resultRallyLength: ["short"] });
   });
 
   test("a value outside the filter's lists is no link rather than a wrong one", () => {

@@ -14,6 +14,7 @@ import {
   isLosingPlaysSql,
   isWinningPlaysSql,
   rallyLengthOf,
+  rallyFilterBand,
   rallyLengthOfPlaysSql,
   winningPlaysSql,
   winningPlaysSubject,
@@ -462,7 +463,7 @@ test.describe("winning plays", () => {
     expect(seen.some((event) => event.type === "error")).toBe(false);
   });
 
-  test("draws a tree whose plays each open the film on the points won with them", async () => {
+  test("draws a tree whose rally shots each open the film on the points won with them", async () => {
     const rows: AskRow[] = [
       {
         section: "total",
@@ -480,7 +481,7 @@ test.describe("winning plays", () => {
         points: 12,
         winners: 5,
         errors_drawn: 7,
-        points_pct: 29.3,
+        points_pct: 24.5,
       },
       {
         section: "play",
@@ -489,14 +490,19 @@ test.describe("winning plays", () => {
         points: 6,
         winners: 6,
         errors_drawn: 0,
-        points_pct: 14.6,
+        points_pct: 12.2,
       },
     ];
     const text =
       buildWinningPlaysAnswer(rows, losingPlaysVoice("mine", "Sam"), 1) ?? "";
-    expect(text).toContain("WATCH: plays | mine | won");
+    expect(text).toContain("WATCH: plays | mine | won\n");
+    // The film holds every point won with the shot in the rally — more than
+    // the ones it ended — and the copy says so.
     expect(text).toContain(
-      "Each play below opens the film on the points won with it.",
+      "Each rally shot below opens the film on every point won with it anywhere in the rally, so the film can hold more points than the play counts.",
+    );
+    expect(text).toContain(
+      "A play's points won are its winners and the errors it drew.",
     );
     const { events, result } = await rendered(text, rows);
     expect(events.some((event) => event.type === "error")).toBe(false);
@@ -510,7 +516,7 @@ test.describe("winning plays", () => {
       steps: ["Forehand", "crosscourt"],
       count: { value: 12, text: "12" },
       part: { value: 5, text: "5" },
-      share: { value: 29.3, text: "29.3%" },
+      share: { value: 24.5, text: "24.5%" },
     });
     // The forehand crosscourt opens Sam's points won with it in the rally.
     expect(parseMatchFilters(result.visual.branches[0].watch)).toMatchObject({
@@ -523,10 +529,100 @@ test.describe("winning plays", () => {
     expect(result.visual.branches[1].watch).toBeUndefined();
   });
 
-  test("the query carries each play's share of the points won", () => {
-    expect(winningPlaysSql("mine")).toContain(
-      "round(100.0 * points / nullif(sum(points) over (), 0), 1) as points_pct",
+  test("the query carries each play's share of all the points won", () => {
+    const sql = winningPlaysSql("mine");
+    // Of the total row's points won — not of the points a play accounts for.
+    expect(sql).toContain(
+      "select count(*) as points from ended where has_shots and i_won = true",
     );
+    expect(sql).toContain(
+      "round(100.0 * points / nullif((select points from won), 0), 1) as points_pct",
+    );
+    expect(sql).toContain("(select points from won) as points,");
+  });
+
+  const play = (stroke: string, points: number): AskRow => ({
+    section: "play",
+    stroke,
+    direction: "Crosscourt",
+    points,
+    winners: points,
+    errors_drawn: 0,
+    points_pct: 1,
+  });
+  const total: AskRow = {
+    section: "total",
+    stroke: null,
+    direction: null,
+    points: 100,
+    winners: 90,
+    errors_drawn: 1,
+    points_pct: null,
+  };
+
+  test("draws as many branches as the losing plays' tree", () => {
+    const strokes = ["Forehand", "Backhand", "Volley", "Overhead"];
+    const rows = [
+      total,
+      ...Array.from({ length: 12 }, (_, i) => play(strokes[i % 4], 20 - i)),
+    ];
+    const text =
+      buildWinningPlaysAnswer(rows, losingPlaysVoice("mine", "Sam"), 1) ?? "";
+    expect(
+      text.split("\n").filter((line) => line.startsWith("ROW:")),
+    ).toHaveLength(8);
+  });
+
+  test("serves alone open no film, so the answer promises none", () => {
+    const text =
+      buildWinningPlaysAnswer(
+        [total, play("First Serve", 9), play("Second Serve", 3)],
+        losingPlaysVoice("mine", "Sam"),
+        1,
+      ) ?? "";
+    expect(text).not.toContain("opens the film");
+  });
+
+  test("a rally length the Video filter has a band for narrows the film too", async () => {
+    const rows = [total, play("Forehand", 12)];
+    const text =
+      buildWinningPlaysAnswer(rows, losingPlaysVoice("mine", "Sam"), 1, {
+        min: 1,
+        max: 4,
+      }) ?? "";
+    expect(text).toContain("WATCH: plays | mine | won | short");
+    const { result } = await rendered(text, rows);
+    if (result.visual?.kind !== "tree") throw new Error("no tree");
+    expect(parseMatchFilters(result.visual.branches[0].watch)).toMatchObject({
+      customStroke: ["Forehand"],
+      resultOutcome: ["won"],
+      resultRallyLength: ["short"],
+    });
+  });
+
+  test("a rally length with no filter band draws no links rather than other rallies", () => {
+    const text =
+      buildWinningPlaysAnswer(
+        [total, play("Forehand", 12)],
+        losingPlaysVoice("mine", "Sam"),
+        1,
+        { min: 5, max: 9 },
+      ) ?? "";
+    expect(text).not.toContain("WATCH:");
+    expect(text).not.toContain("opens the film");
+  });
+
+  test("the filter band holding exactly a rally length", () => {
+    expect(rallyFilterBand({ min: 1, max: 4 })).toBe("short");
+    expect(rallyFilterBand({ min: 0, max: 4 })).toBe("short");
+    expect(rallyFilterBand({ min: 5, max: 8 })).toBe("medium");
+    expect(rallyFilterBand({ min: 9, max: null })).toBe("long");
+    // Ask's own medium and long bands, and any part of a band.
+    expect(rallyFilterBand({ min: 5, max: 9 })).toBe(null);
+    expect(rallyFilterBand({ min: 10, max: null })).toBe(null);
+    expect(rallyFilterBand({ min: 1, max: 3 })).toBe(null);
+    expect(rallyFilterBand({ min: 2, max: 4 })).toBe(null);
+    expect(rallyFilterBand({ min: 1, max: 8 })).toBe(null);
   });
 });
 
