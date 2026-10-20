@@ -1,58 +1,29 @@
 "use client";
 
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  REVIEW_STEP_QUESTION,
   reviewItemThenLabel,
-  type ReviewAnswer,
-  type ReviewAnswerKind,
   type ReviewStep,
 } from "@/lib/services/labels/review-step";
 import {
   isLiveShot,
-  liveShotsInOrder,
   type LabelPoint,
   type LabelShot,
 } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
-import { behindBaseline, type CourtPoint } from "./court-geometry";
-import {
-  courtSlide,
-  isEstimate,
-  placementPrompt,
-  type PlacementState,
-  type PlacementTarget,
-} from "./court-placement";
-import { BlackTextAction, type BlackTextActionInk } from "./label-black-parts";
-import { LabelCourt, type CourtStroke } from "./label-court";
-import {
-  CourtEndControls,
-  TARGET_WORD,
-  shankReadout,
-} from "./label-court-panel";
-import type { SideNames } from "./label-format";
+import type { PlacementState } from "./court-placement";
 
 /**
- * The review step, asked in the rail: one block under the stroke row the
- * step is about (`inlineReviewAnchor`), with the question and its answers on
- * the left and a compact court on the right — the same `LabelCourt` the panel
- * draws, with its zoom, drag, the shank slide, the deep run-off guides and
- * the estimate ring — showing that one stroke and placing on the step's end.
- * The left court panel follows the film meanwhile; this is the one placement
- * surface while it is open.
+ * The review step, noted in the rail: one quiet line under the stroke row the
+ * step is about (`inlineReviewAnchor`) saying what to fix — "Place the last
+ * bounce", "Add the missing shot" — with "n of m" when the point has several. No question block, no answers and no
+ * court of its own: the step's stroke end is placed on the left court panel,
+ * which arms for it, and every other fix is the row's own editing (stroke
+ * keys, the winner, the menu). `]` / `[` still walk the flags, a placement
+ * still advances to the next one, and Enter still checks the point.
  *
- * Two shapes, one block:
- *
- * - **A step** (`step`): its question with "n of m", the end being placed and
- *   whose side is on screen, the named answers as text actions (the reading
- *   the data supports amber, Dismiss quiet), "Off screen, so this is an
- *   estimate" while placing, and what comes after ("Then: …").
- * - **A stroke being placed with no step about it** — the shot an answer just
- *   added, selected on its contact: the placement question alone
- *   (`REVIEW_STEP_QUESTION`), no answers, and the step still open as "Then:".
- *
- * It paints a quiet wash band on the well, never a card inside the rail's
- * card, and no stripe. Rail inks: `--color-white` is the tone's ink.
+ * Settled 2026-10-19 after #489 drew a compact court and named answers in
+ * every flagged row: the labeller wanted the court once, beside the film, and
+ * only a note of what is wrong in the rows (canvas option C).
  */
 
 // ── The count ───────────────────────────────────────────────────────────────
@@ -154,282 +125,62 @@ export function inlineReviewAnchor(
 
 // ── Copy ────────────────────────────────────────────────────────────────────
 
-/** An answer's ink: amber for the reading the data supports, Dismiss quiet. */
-export const ANSWER_INK: Record<ReviewAnswerKind, BlackTextActionInk> = {
-  suggested: "amber",
-  plain: "plain",
-  dismiss: "quiet",
-};
-
-/** "7.1 m back · 2.4 m off centre" — a contact placed behind its baseline. */
-export function contactDepthReadout(
-  half: PlacementState["half"],
-  contact: CourtPoint,
-): string | null {
-  const back = behindBaseline(half, contact.y);
-  if (back <= 0) return null;
-  return `${back.toFixed(1)} m back · ${Math.abs(contact.x).toFixed(1)} m off centre`;
-}
-
-/**
- * The court's one line while placing: the end and whose side is on screen —
- * "Landing · Lee’s side", "Contact · across the net" for a short ball, the
- * run-off for a deep contact.
- */
-export function placingSideLine(
+/** What a note says: the end to place, else what the step's item asks. */
+export function reviewNoteText(
+  step: ReviewStep | null,
   placement: PlacementState,
-  stroke: LabelShot,
-  names: SideNames,
-): string {
-  const slide = courtSlide(placement, stroke);
-  const hitter = stroke.hitter;
-  const own = hitter ? `${names[hitter]}’s side` : "The hitter’s side";
-  const other = hitter
-    ? `${names[hitter === "p1" ? "p2" : "p1"]}’s side`
-    : "The other side";
-  const where =
-    slide?.kind === "shank"
-      ? "across the net"
-      : slide?.kind === "deep"
-        ? `${own} · run-off to ${slide.runoff} m`
-        : placement.target === "contact"
-          ? own
-          : placement.flipped
-            ? `flipped to ${hitter ? own : "the hitter’s side"}`
-            : other;
-  return `${TARGET_WORD[placement.target]} · ${where}`;
+  strokeId: string | null,
+): string | null {
+  const placing = strokeId !== null && placement.shotId === strokeId;
+  const ownStep = step !== null && step.target.shotId === strokeId;
+  if (placing && (!ownStep || step?.target.place)) {
+    return placement.target === "contact"
+      ? "Place where it was hit"
+      : "Place where it landed";
+  }
+  if (!step) return null;
+  const fix = reviewItemThenLabel(step.item);
+  return fix.charAt(0).toUpperCase() + fix.slice(1);
 }
 
-// ── The block ───────────────────────────────────────────────────────────────
-
-export function ReviewInlineBlock({
-  point,
-  names,
+/** The one-line note under the flagged stroke. */
+export function ReviewNote({
   step,
   anchor,
   placement,
-  editable,
-  ghosts = true,
-  count = null,
-  onAnswer,
-  onEstimate,
-  onPlace,
-  onTarget,
-  onFlip,
+  count,
 }: {
-  point: LabelPoint;
-  names: SideNames;
-  /** The open point's review step, or null while only placing a stroke. */
   step: ReviewStep | null;
   anchor: InlineReviewAnchor;
   placement: PlacementState;
-  /** Whether a court click may write. */
-  editable: boolean;
-  /**
-   * Whether the session draws the site's removed strokes as ghosts
-   * (`drawsGhosts`): the prompt numbers the stroke as the rail does, and a
-   * ghost takes no number.
-   */
-  ghosts?: boolean;
-  /** "n of m" for the step; null draws none. */
-  count?: { index: number; total: number } | null;
-  /** Makes an answer's writes. Absent (read-only): the answers are not drawn. */
-  onAnswer?: (answer: ReviewAnswer) => void;
-  /** "Off screen, so this is an estimate" on the end being placed. */
-  onEstimate?: (estimate: boolean) => void;
-  onPlace: (point: CourtPoint) => void;
-  onTarget: (target: PlacementTarget) => void;
-  onFlip: () => void;
+  count: { index: number; total: number } | null;
 }) {
-  const stroke =
-    anchor.strokeId === null
-      ? null
-      : (point.shots.find(
-          (shot) => shot.id === anchor.strokeId && shot.status !== "deleted",
-        ) ?? null);
-  const placing = editable && stroke !== null && placement.shotId === stroke.id;
-  const slide = placing && stroke ? courtSlide(placement, stroke) : null;
-  const index =
-    stroke === null ? -1 : liveShotsInOrder(point, ghosts).indexOf(stroke);
-  const prompt = placing
-    ? placementPrompt(placement, index === -1 ? null : index + 1)
-    : null;
-  const strokes: CourtStroke[] = stroke ? [{ shot: stroke }] : [];
+  const note = reviewNoteText(step, placement, anchor.strokeId);
+  if (!note) return null;
   const score = step?.item.tone === "score";
-  // The step's question, or the placement's while a stroke with no step
-  // about it is being placed (the one an answer added).
-  const ownStep = step !== null && step.target.shotId === anchor.strokeId;
-  const question = ownStep
-    ? step.question
-    : placing
-      ? REVIEW_STEP_QUESTION[placement.target]
-      : (step?.question ?? null);
-  const then = ownStep
-    ? step.then
-    : step
-      ? `Then: ${reviewItemThenLabel(step.item)}`
-      : null;
-  const answers = ownStep && onAnswer ? step.answers : [];
-  const side =
-    placing && stroke ? placingSideLine(placement, stroke, names) : null;
-  const shank =
-    slide?.kind === "shank" && !answers.some((answer) => answer.id === "short")
-      ? shankReadout(stroke?.hitter ? names[stroke.hitter] : null)
-      : null;
-  const depth =
-    placing &&
-    stroke &&
-    placement.target === "contact" &&
-    stroke.contactX != null &&
-    stroke.contactY != null
-      ? contactDepthReadout(placement.half, {
-          x: stroke.contactX,
-          y: stroke.contactY,
-        })
-      : null;
-
   return (
     <div
-      data-review-inline={ownStep ? step.item.id : "placing"}
+      data-review-inline={step ? step.item.id : "placing"}
       data-review-inline-shot={anchor.strokeId ?? undefined}
       data-review-inline-tone={step?.item.tone}
-      className={cn(
-        "flex items-start gap-4 px-[14px] py-3",
-        score ? "bg-[var(--rail-amber-wash-faint)]" : "bg-white/[0.05]",
-      )}
+      className="flex items-center gap-2 px-[14px] py-1.5"
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-2 pt-0.5">
-        <div className="flex items-baseline justify-between gap-3">
-          <span
-            data-review-question=""
-            className="min-w-0 text-[13px] leading-[18px] font-medium text-white"
-          >
-            {question}
-          </span>
-          {/* An added stroke being placed is still the step's question (its
-              "Add the shot" answered it), so it keeps the step's count. */}
-          {count ? (
-            <span
-              data-review-count=""
-              className={cn(
-                "mono tabular shrink-0 text-[11px] leading-[18px]",
-                score ? "text-[var(--rail-amber)]" : "text-white/55",
-              )}
-            >
-              {count.index} of {count.total}
-            </span>
-          ) : null}
-        </div>
-        {side ? (
-          <span
-            data-review-side=""
-            className="truncate text-[11px] leading-4 text-white/55"
-          >
-            {side}
-          </span>
-        ) : null}
-        {shank ? (
-          <span
-            data-review-shank=""
-            className="text-[11px] leading-4 font-medium text-[var(--rail-amber)]"
-          >
-            {shank}
-          </span>
-        ) : null}
-        {depth ? (
-          <span
-            data-review-contact-readout=""
-            className="mono tabular text-[11px] leading-4 text-white/75"
-          >
-            {depth}
-          </span>
-        ) : null}
-        {answers.length > 0 ? (
-          <div
-            data-review-answers=""
-            className="-ml-1 flex flex-wrap items-start gap-x-3 gap-y-1.5"
-          >
-            {answers.map((answer) => (
-              <span
-                key={answer.id}
-                className={cn(
-                  "flex min-w-0 flex-col items-start gap-0.5",
-                  answer.kind === "dismiss" && "ml-auto",
-                )}
-              >
-                <BlackTextAction
-                  ink={ANSWER_INK[answer.kind]}
-                  data-review-answer={answer.kind}
-                  data-review-answer-id={answer.id}
-                  aria-label={`${answer.label}: ${step!.question}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onAnswer?.(answer);
-                  }}
-                >
-                  {answer.label}
-                </BlackTextAction>
-                {answer.detail ? (
-                  <span
-                    data-review-detail=""
-                    className="px-1 text-[10px] leading-[13px] text-white/45"
-                  >
-                    {answer.detail}
-                  </span>
-                ) : null}
-              </span>
-            ))}
-          </div>
-        ) : null}
-        {placing && stroke && onEstimate ? (
-          <label
-            data-review-estimate-box=""
-            className="flex min-w-0 cursor-pointer items-center gap-[7px] text-[11px] leading-4 text-white/70"
-          >
-            <Checkbox
-              checked={isEstimate(stroke.unclear, placement.target)}
-              onChange={onEstimate}
-            />
-            <span className="truncate">Off screen, so this is an estimate</span>
-          </label>
-        ) : null}
-        {then ? (
-          <span
-            data-review-then=""
-            className="text-[11px] leading-4 text-white/50"
-          >
-            {then}
-          </span>
-        ) : null}
-      </div>
-      <div className="flex shrink-0 flex-col gap-1.5">
-        <span aria-live="polite" className="sr-only" data-review-prompt="">
-          {prompt}
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
+          score
+            ? "bg-[var(--rail-amber-wash)] text-[var(--rail-amber)]"
+            : "bg-white/[0.08] text-white/80",
+        )}
+      >
+        <span aria-hidden="true">●</span>
+        {note}
+      </span>
+      {count && count.total > 1 ? (
+        <span className="font-mono text-[11px] text-white/45">
+          {count.index} of {count.total}
         </span>
-        <div
-          data-review-court=""
-          className="[container-type:size] flex h-[200px] w-[250px] items-center justify-center overflow-hidden"
-        >
-          <LabelCourt
-            strokes={strokes}
-            view={placing ? placement.half : "whole"}
-            slide={slide}
-            targetShotId={placing ? placement.shotId : null}
-            target={placing ? placement.target : null}
-            prompt={prompt}
-            onPlace={placing ? onPlace : undefined}
-          />
-        </div>
-        {placing ? (
-          <div className="flex h-6 items-center gap-3">
-            <CourtEndControls
-              placement={placement}
-              onTarget={onTarget}
-              onFlip={onFlip}
-            />
-          </div>
-        ) : null}
-      </div>
+      ) : null}
     </div>
   );
 }

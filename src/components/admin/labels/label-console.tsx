@@ -70,7 +70,6 @@ import {
   nextReviewStop,
   openReviewItems,
   reviewStep,
-  type ReviewAnswer,
   type ReviewStep,
 } from "@/lib/services/labels/review-step";
 import {
@@ -209,13 +208,12 @@ import { LabelCourtPanel, isPlacing } from "./label-court-panel";
 import type { PointInfo } from "./label-point-info";
 import {
   NO_OPENED_COUNT,
-  ReviewInlineBlock,
+  ReviewNote,
   inlineReviewAnchor,
   openedCount,
   stepCount,
   type OpenedCount,
 } from "./label-review-inline";
-import { runReviewAnswer, type ReviewWriteHandlers } from "./review-answer";
 import { runReplay, type ReplayHandle } from "./review-replay";
 import { labelFilmStops } from "./label-film-stops";
 import {
@@ -2884,7 +2882,6 @@ export function LabelConsole({
     reviewMode && expanded
       ? inlineReviewAnchor(expanded, step, placement, drawsGhosts(liveMarks))
       : null;
-  const reviewActive = inlineAnchor !== null;
   /** The step's item is answered: the queue stops asking it. */
   function closeQueuedItem() {
     if (!expanded || !step) return;
@@ -2954,37 +2951,6 @@ export function LabelConsole({
   }, [stepKey, points, confirm, reviewMode]);
   // The armed slot belongs to the open point; it goes with the point.
   if (armedSlot && armedSlot.pointId !== currentPointId) setArmedSlot(null);
-  // An answer's writes, each through the console's own handler for it.
-  const reviewWrites: ReviewWriteHandlers = {
-    patchShot: railHandlers.saveShot,
-    patchPoint: railHandlers.patchPoint,
-    splitPoint: rowOperations.onSplitPoint,
-    removeShotsAfter: railHandlers.removeShotsAfter,
-    dismissSuggestion: rowOperations.onDismissSuggestion,
-    setChecked: rowOperations.onSetChecked,
-    addShot: railHandlers.addShot,
-  };
-  function answerReview(answer: ReviewAnswer) {
-    if (!expanded) return;
-    stopReplay();
-    if (answer.writes.some((write) => write.write === "check")) {
-      // "Looks right" confirms the whole point: nothing left in its queue,
-      // and once the tick has settled its marks the next flagged point lands.
-      noteAnswered();
-      const pointId = expanded.id;
-      setReviewQueue((queue) =>
-        queue && queue.pointId === pointId ? { ...queue, keep: [] } : queue,
-      );
-    } else if (answer.writes.some((write) => write.write === "addShot")) {
-      // The item is answered, but the added stroke (`addShot` selects it
-      // once saved) stays selected for placement: the queue moves on without
-      // landing anywhere.
-      closeQueuedItem();
-    } else {
-      noteAnswered();
-    }
-    void runReviewAnswer(answer, expanded.id, reviewWrites);
-  }
   // "Off screen, so this is an estimate": the placed end's two names in the
   // stroke's `unclear`, through the rail's shot edit.
   function setEstimate(estimate: boolean) {
@@ -3016,9 +2982,9 @@ export function LabelConsole({
         : 0,
     };
   }, [expanded, liveMarks, playing, scores, names, points, keep]);
-  // While the inline block owns placement the left court follows the film
-  // with nothing selected: one placement surface at a time.
-  const panelPlacement = reviewActive ? NO_PLACEMENT : placement;
+  // The left court is the one placement surface, in review too: the rail
+  // only notes what to fix (`ReviewNote`).
+  const panelPlacement = placement;
   const placing = isPlacing(expanded, panelPlacement, editable);
   const courtPanel = (
     <LabelCourtPanel
@@ -3036,27 +3002,18 @@ export function LabelConsole({
       onFlip={() => setPlacement(flipPlacement)}
     />
   );
-  // The review step, asked in the rail under the stroke it is about.
+  // The review step, noted in the rail under the stroke it is about.
   const reviewInline =
     expanded && inlineAnchor
       ? {
           pointId: expanded.id,
           afterShotId: inlineAnchor.shotId,
           node: (
-            <ReviewInlineBlock
-              point={expanded}
-              names={names}
+            <ReviewNote
               step={step}
               anchor={inlineAnchor}
               placement={placement}
-              editable={editable}
-              ghosts={drawsGhosts(liveMarks)}
               count={step ? stepCount(keptOpened, step) : null}
-              onAnswer={operable ? answerReview : undefined}
-              onEstimate={editable ? setEstimate : undefined}
-              onPlace={place}
-              onTarget={setTarget}
-              onFlip={() => setPlacement(flipPlacement)}
             />
           ),
         }
