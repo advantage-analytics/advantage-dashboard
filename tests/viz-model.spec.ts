@@ -126,6 +126,22 @@ test.describe("computeViz — serve cut", () => {
     expect(r.zoneStats).not.toBeNull();
   });
 
+  test("a frozen score reading (score_frozen) reaches the readout as null, never the loader's 0-0", () => {
+    const r = computeViz(
+      [
+        point({ pointScoreRaw: null, scoreFrozen: true }),
+        point({ pointScore: "15-0", pointScoreRaw: "15-0" }),
+      ],
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(r.dots.map((d) => d.meta?.pointScore ?? null).sort()).toEqual([
+      "15-0",
+      null,
+    ]);
+  });
+
   test("subject = player 2: won means player 2 won", () => {
     const r = computeViz(pts, "serve", EMPTY_VIZ_FILTERS, false);
     expect(r.total).toBe(1);

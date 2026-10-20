@@ -37,6 +37,7 @@ import {
 } from "@/lib/services/labels/session";
 import { pointChanged } from "@/lib/services/labels/marks-state";
 import { pointResetScope } from "@/lib/services/labels/reset";
+import { TIEBREAK_TARGET } from "@/lib/services/labels/score";
 import type { TiebreakFold } from "@/lib/services/labels/tiebreak-fold";
 import {
   tiebreakServeReason,
@@ -46,7 +47,7 @@ import { gameInSetOf, type LabelGame } from "@/lib/services/labels/operations";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
-  formatClockTime,
+  formatFileClockTime,
   pointDetail,
   pointSentence,
   withoutGhosts,
@@ -189,8 +190,8 @@ export const BlackPointRow = memo(function BlackPointRow({
   const fresh = isNewPoint(point);
   const sentence = fresh ? NEW_POINT_TITLE : pointSentence(shown, names);
   const detail = fresh
-    ? newPointDetail(point, edit.points)
-    : pointDetail(shown);
+    ? newPointDetail(point, edit.points, edit.fileOffset)
+    : pointDetail(shown, edit.fileOffset);
   // The rail's rows go along so a "Same side twice" question reads settled
   // once a point the labeller added sits between the two (marks-state.ts).
   const rowMarks = pointRowMarks(point, marks, names, sentence, edit.points);
@@ -410,12 +411,14 @@ function isNewPoint(
 /**
  * The new point's detail line: "Set who won, then add its shots · between {t1}
  * and {t2}", from the last live stroke of the live point before it and the
- * first of the one after (`formatClockTime`). With one neighbour timed it reads
- * "after t1" / "before t2"; with neither, the words alone.
+ * first of the one after (`formatFileClockTime`), on the playing file's clock
+ * (`fileOffset`). With one neighbour timed it reads "after t1" / "before t2";
+ * with neither, the words alone.
  */
 function newPointDetail(
   point: Pick<LabelPoint, "id">,
   points: readonly LabelPoint[],
+  fileOffset = 0,
 ): string {
   const at = points.findIndex((p) => p.id === point.id);
   if (at === -1) return NEW_POINT_DETAIL;
@@ -431,11 +434,12 @@ function newPointDetail(
   const t2 = after
     ? (live(after).find((shot) => shot.videoTime !== null)?.videoTime ?? null)
     : null;
+  const clock = (t: number) => formatFileClockTime(t, fileOffset);
   if (t1 !== null && t2 !== null) {
-    return `${NEW_POINT_DETAIL} · between ${formatClockTime(t1)} and ${formatClockTime(t2)}`;
+    return `${NEW_POINT_DETAIL} · between ${clock(t1)} and ${clock(t2)}`;
   }
-  if (t1 !== null) return `${NEW_POINT_DETAIL} · after ${formatClockTime(t1)}`;
-  if (t2 !== null) return `${NEW_POINT_DETAIL} · before ${formatClockTime(t2)}`;
+  if (t1 !== null) return `${NEW_POINT_DETAIL} · after ${clock(t1)}`;
+  if (t2 !== null) return `${NEW_POINT_DETAIL} · before ${clock(t2)}`;
   return NEW_POINT_DETAIL;
 }
 
@@ -667,9 +671,11 @@ export const BlackGameOverflow = memo(function BlackGameOverflow({
 });
 
 /**
- * The tiebreak at 6–6 (tiebreak-fold.ts): a slot above the game after 6–6,
- * saying which of the vendor's games the tiebreak spans and the count they
- * make, player 1 first. "Make it a tiebreak" folds them into one tiebreak
+ * The tiebreak at 6–6, or the entered match tiebreak (tiebreak-fold.ts): a
+ * slot above the game after 6–6 — or above the deciding set the entered
+ * score spells as a 10-point match tiebreak — saying which of the vendor's
+ * games the tiebreak spans and the count they make, player 1 first. "Make
+ * it a tiebreak" / "Make it a match tiebreak" folds them into one tiebreak
  * game with its 1-2-2 serve order.
  */
 export const BlackTiebreakFold = memo(function BlackTiebreakFold({
@@ -686,9 +692,11 @@ export const BlackTiebreakFold = memo(function BlackTiebreakFold({
   const last = gameInSetOf(points, fold.games.at(-1) ?? fold.game);
   const games = first === last ? `Game ${first}` : `Games ${first}–${last}`;
   const count = `${fold.points.p1}–${fold.points.p2}`;
+  const match = fold.type === "match_tiebreak";
+  const target = TIEBREAK_TARGET[fold.type];
   const reason = fold.winner
-    ? `${games} make ${count}, ${edit.names[fold.winner]} first to 7`
-    : `${games} make ${count}, nobody to 7 yet`;
+    ? `${games} make ${count}, ${edit.names[fold.winner]} first to ${target}`
+    : `${games} make ${count}, nobody to ${target} yet`;
   const details = [
     "The first server serves one point, then two each in turn",
     "Ends change after every six points",
@@ -696,11 +704,11 @@ export const BlackTiebreakFold = memo(function BlackTiebreakFold({
   if (fold.games.length > 1) {
     details.push(`Folds ${fold.games.length} games into one`);
   }
-  const label = "Make it a tiebreak";
+  const label = match ? "Make it a match tiebreak" : "Make it a tiebreak";
   const button = (
     <BlackTextAction
       ink="amber"
-      data-tiebreak-fold-make=""
+      data-tiebreak-fold-make={fold.type}
       aria-label={`${label}: ${reason}`}
       onClick={(event) => {
         event.stopPropagation();
@@ -714,7 +722,7 @@ export const BlackTiebreakFold = memo(function BlackTiebreakFold({
     icon: Merge,
     row: "tiebreak-fold",
     anchor: fold.pointIds[0] ?? "",
-    title: "Tiebreak at 6–6?",
+    title: match ? "Match tiebreak?" : "Tiebreak at 6–6?",
     reason,
     action: operations?.onFoldTiebreak ? button : null,
     actionLabel: label,
@@ -786,7 +794,7 @@ export const BlackDeletedPoint = memo(function BlackDeletedPoint({
   edit: EditContext;
 }) {
   const { operations } = edit;
-  const time = pointSummary(point).time;
+  const time = pointSummary(point, edit.fileOffset).time;
   const combined = isCombinedTombstone(point);
   return (
     <div

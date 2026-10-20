@@ -227,10 +227,21 @@ export function resultTypeOf(
  * `points.point_score`: server-first, hyphenated, `AD` upper-case like the
  * vendor's. Null for no call, and for a "Game–30" call — a point sitting past
  * the end of its game, which has no honest score to start from.
+ *
+ * A game's call is already server-first. A tiebreak's is player 1's points
+ * first (score.ts `tiebreakScore`, since its serve changes every two points),
+ * so with player 2 serving (`tiebreakP2Serves`) its two counts swap here — written
+ * as it stood, Eli serving at 0–1 in Emon v Eli's set-2 tiebreak read "1-0".
  */
-export function pointScoreOf(scoreBefore: string | null): string | null {
+export function pointScoreOf(
+  scoreBefore: string | null,
+  tiebreakP2Serves = false,
+): string | null {
   if (!scoreBefore || /game/i.test(scoreBefore)) return null;
-  return scoreBefore.replace(/–/g, "-").replace(/\bAd\b/g, "AD");
+  const score = scoreBefore.replace(/–/g, "-").replace(/\bAd\b/g, "AD");
+  if (!tiebreakP2Serves) return score;
+  const [a, b] = score.split("-");
+  return b === undefined ? score : `${b}-${a}`;
 }
 
 /** Server-first "a-b" from a p1/p2 tally. */
@@ -440,6 +451,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     const sets = setsBefore.get(setNumber) ?? { p1: 0, p2: 0 };
     const pointScore = pointScoreOf(
       scores.points.get(point.id)?.scoreBefore ?? null,
+      (point.gameType ?? "game") !== "game" && server === "p2",
     );
     if (pointScore === null) {
       warnings.push(`${at}: no point score (past the end of its game?)`);

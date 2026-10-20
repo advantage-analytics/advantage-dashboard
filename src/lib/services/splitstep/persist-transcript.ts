@@ -132,6 +132,12 @@ export async function buildTranscriptForJob(params: {
    * stroke the derivation dropped — so the same download serves them too.
    */
   rallies?: SplitStepRally[];
+  /**
+   * The match row the transcript folded under (`score`, `format`), set once
+   * it was read. The label seed reads the entered score and `best_of` off it
+   * to type a deciding-set match tiebreak (seed.ts), from the one read.
+   */
+  match?: MatchRow;
 }> {
   const { supabase, jobId } = params;
 
@@ -223,6 +229,7 @@ export async function buildTranscriptForJob(params: {
     job,
     raw,
     rallies: analysis.rallies,
+    match,
   };
 }
 

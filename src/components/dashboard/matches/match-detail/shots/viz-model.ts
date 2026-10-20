@@ -9,6 +9,7 @@
  */
 
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
+import { readPointScore } from "../film/film-score";
 import {
   isFeedShotType,
   isServeShotType,
@@ -1197,7 +1198,8 @@ function pointDotMeta(
     pointId: p.id,
     isAce,
     setNumber: p.setNumber,
-    pointScore: p.pointScore ?? null,
+    // The raw column: a frozen reading is null, not the loader's "0-0".
+    pointScore: readPointScore(p),
     wonBySubject: p.wonByPlayer1 === subjectIsPlayer1,
     shotType: shot?.shotType ?? null,
     result: shot?.result ?? null,

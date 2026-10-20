@@ -41,9 +41,10 @@ export interface UnderflowSlot {
 export function underflowAfterPoints(
   points: readonly LabelPoint[],
   adScoring: boolean,
+  matchTiebreakSet: number | null = null,
 ): ReadonlyMap<string, UnderflowSlot> {
   const after = new Map<string, UnderflowSlot>();
-  for (const underflow of gameUnderflow(points, adScoring)) {
+  for (const underflow of gameUnderflow(points, adScoring, matchTiebreakSet)) {
     after.set(underflow.lastPointId, {
       underflow,
       plan: planGamePullFrom(points, underflow, adScoring),

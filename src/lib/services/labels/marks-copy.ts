@@ -150,6 +150,21 @@ export function hintLabel(mark: LabelMark, names?: MarkNames): string {
   return `${label} ${n} ${n === 1 ? "shot follows" : "shots follow"}`;
 }
 
+/**
+ * The six questions a point's review flag asks, by item id (marks-state.ts
+ * `REVIEW_ITEMS`), in the order they are answered: strokes, then the last
+ * ball, its ending, the winner, the game. Item 4 is put as the vendor called
+ * it (`lastCallQuestion`) where "Was the last ball in?" is among its members.
+ */
+export const REVIEW_ITEM_QUESTION = {
+  1: "Missing shot?",
+  2: "Extra shots / two points in one?",
+  3: "Serves",
+  4: "How did the last ball end?",
+  5: "Who won?",
+  6: "Game & serve order",
+} as const;
+
 /** The action a live hint offers, by code; the rest offer none. */
 export const HINT_ACTION_LABEL = {
   second_serve_as_first: "Make it a second serve",
@@ -168,6 +183,16 @@ export function lastCallQuestion(call: "in" | "out" | "net"): string {
 }
 
 /**
+ * "Was the last ball in?"'s evidence while the last ball has no landing
+ * placed: the vendor's call alone. Its usual line reads the call against the
+ * landing ("in by its landing"), which the "Place the last bounce" line beside
+ * it would contradict.
+ */
+export function lastCallUnplacedHover(call: "in" | "out" | "net"): string {
+  return `The vendor called the last ball ${call === "net" ? "in the net" : call}, and its landing isn’t placed.`;
+}
+
+/**
  * "Did the point end here?"'s yes: the ball stays (or is made) out and the N
  * strokes after it go.
  */
@@ -177,21 +202,15 @@ export function removeAfterLabel(count: number): string {
 
 // ── The rail header's total ─────────────────────────────────────────────────
 
-/** "41 flags to check" — the header's open-flag count, as a sentence. */
+/** "41 points to review" — the header's count of flagged points, as a sentence. */
 export function toCheckLabel(count: number): string {
   if (count === 0) return "Nothing left to check";
-  return `${count} ${count === 1 ? "flag" : "flags"} to check`;
+  return `${count} ${count === 1 ? "point" : "points"} to review`;
 }
 
-/** "12 data flags" — the header's grey count, beside the amber one. */
+/** "12 data points" — the header's grey count, beside the amber one. */
 export function dataFlagsLabel(count: number): string {
-  return `${count} data ${count === 1 ? "flag" : "flags"}: wrong data that rarely moves the score`;
-}
-
-/** "On 30 points" — how many points the header's count is spread over. */
-export function onPointsDetail(count: number): string | undefined {
-  if (count === 0) return undefined;
-  return `On ${count} ${count === 1 ? "point" : "points"}`;
+  return `${count} data ${count === 1 ? "point" : "points"}: wrong data that rarely moves the score`;
 }
 
 // ── The score chip ──────────────────────────────────────────────────────────
@@ -247,11 +266,11 @@ export function findGapDescription(
 export function markHover(mark: LabelMark, names: MarkNames): string {
   switch (mark.code) {
     case "winner_disputed":
-      return `The score says ${names[mark.params.scoreWinner]} won, but the last shot says ${names[mark.params.lastStrokeWinner]} did. The ending is wrong more often than the winner.`;
+      return `The score says ${names[mark.params.scoreWinner]} won, but the vendor’s last shot says ${names[mark.params.lastStrokeWinner]} did. The ending is wrong more often than the winner.`;
     case "winner_to_error_by_bounce":
-      return `The ball before this winner landed out. The point may be an error by ${names[mark.params.loser]} instead.`;
+      return `The vendor’s tracking had the ball before this winner landing out. The point may be an error by ${names[mark.params.loser]} instead.`;
     case "ending_suspect_line":
-      return "The ball before this winner landed within 1 m of a line. Most like this turn out to be errors.";
+      return "The vendor’s tracking put the ball before this winner within 1 m of a line. Most like this turn out to be errors.";
     case "second_serve_called_out":
       return "The second serve was called out, but one or two shots followed. Check whether it was a double fault.";
     case "same_player_consecutive":

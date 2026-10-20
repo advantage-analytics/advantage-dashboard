@@ -132,6 +132,66 @@ export function enteredScore(
   return null;
 }
 
+/**
+ * The fewest points the winner of a match tiebreak can have entered: first
+ * to 10 under the rules, but 7 is the floor here, since a 7-point match
+ * tiebreak exists and the wizard does not say which was played.
+ */
+export const MATCH_TIEBREAK_MIN_POINTS = 7;
+
+/**
+ * The set the match record says was played as a 10-point match tiebreak, or
+ * null when none was. The wizard stores a match tiebreak by convention —
+ * the deciding set entered as 1–0 or 0–1 games, its points in the tiebreak
+ * arrays (ScoreBlock.tsx `isTiebreakSet`, score-state.ts `setWinner`) — and
+ * no format flag says so anywhere, so both halves of the convention are
+ * required: the deciding set's games are 1–0 / 0–1 AND its entry in the
+ * tiebreak arrays gives the set's winner at least `MATCH_TIEBREAK_MIN_POINTS`.
+ * A 1–0 deciding set with no tiebreak points is a retirement (6–4, 3–6, 1–0
+ * ret.) and stays a set of games; so does a record with no tiebreak arrays
+ * at all, and the console's own `final_score` — games only — never names
+ * one. Nothing is inferred.
+ *
+ * The deciding set is the one at index `bestOf - 1`, or the last entered set
+ * when the sets before it were level with each player one set from the match.
+ * A 1–0 set anywhere else is not a match tiebreak — an unfinished opener
+ * entered as 1–0 stays a set of games.
+ */
+export function matchTiebreakSet(
+  score: MatchScore | null,
+  bestOf: number,
+): number | null {
+  if (!score) return null;
+  const sets = Math.max(score.player1.length, score.player2.length);
+  if (sets === 0) return null;
+  const games = (i: number): [number, number] => [
+    score.player1[i] ?? 0,
+    score.player2[i] ?? 0,
+  ];
+  const toWin = Math.ceil(bestOf / 2);
+  const decidingIndex = (() => {
+    if (sets >= bestOf) return bestOf - 1;
+    const won = { p1: 0, p2: 0 };
+    for (let i = 0; i < sets - 1; i += 1) {
+      const [a, b] = games(i);
+      if (a > b) won.p1 += 1;
+      else if (b > a) won.p2 += 1;
+    }
+    return won.p1 === toWin - 1 && won.p2 === toWin - 1 ? sets - 1 : null;
+  })();
+  if (decidingIndex === null) return null;
+  const [a, b] = games(decidingIndex);
+  if (Math.max(a, b) !== 1 || Math.min(a, b) !== 0) return null;
+  const winnerPoints =
+    a === 1
+      ? score.player1_tiebreaks?.[decidingIndex]
+      : score.player2_tiebreaks?.[decidingIndex];
+  return typeof winnerPoints === "number" &&
+    winnerPoints >= MATCH_TIEBREAK_MIN_POINTS
+    ? decidingIndex + 1
+    : null;
+}
+
 /** Why a set's labelled pair is what it is: one game, and what is wrong with it. */
 export type LabelScoreReason =
   | ({ kind: "unfinished" } & UnfinishedGame)

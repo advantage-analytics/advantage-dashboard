@@ -20,6 +20,7 @@ import {
   type H2HRowConfig,
   type H2HStats,
 } from "@/components/dashboard/matches/match-detail/head-to-head-card";
+import { netPointsWonPct } from "@/lib/data/match-stats-server";
 
 /**
  * The head-to-head table's fifteen rows and the rule that emphasises one of
@@ -526,5 +527,63 @@ test.describe("on an Advantage Intelligence match", () => {
     expect(DERIVED_POINT_ROWS.map((c) => c.label)).toEqual(
       POINT_ROWS.map((c) => c.label),
     );
+  });
+});
+
+test.describe("net points won with no net approaches", () => {
+  // A match where nobody came to the net has not measured the rate. The
+  // loader used to publish 0% for both sides, which says each player lost
+  // every net point they played; unmeasured renders the em dash, like the
+  // other no-data rows.
+  const scope = { hasVideo: true, count: 0, noVideoLine: true };
+
+  test("the loader publishes no rate when there were no appearances", () => {
+    expect(netPointsWonPct(0, 0)).toBeNull();
+    expect(netPointsWonPct(null, null)).toBeNull();
+    expect(netPointsWonPct(6, 10)).toBe(60);
+    // Came to the net and lost every one: that zero is a measurement.
+    expect(netPointsWonPct(0, 4)).toBe(0);
+  });
+
+  test("a zero-attempt net row is a dash on both sides with no readout", () => {
+    // What the loader hands the card: no rate, and `frac()` drops the
+    // zero-attempt fraction.
+    const none = side({
+      netPointsWonPct: netPointsWonPct(0, 0),
+      fractions: {},
+    });
+    const net = byLabel(
+      buildStatRows(POINT_ROWS, none, none),
+      "Net points won",
+    );
+
+    expect(net.you).toMatchObject({ value: null, display: "" });
+    expect(net.opp).toMatchObject({ value: null, display: "" });
+    expect(net.leader).toBeNull();
+    expect(figureReadout(net, "you", "You", scope)).toBeNull();
+    expect(figureReadout(net, "opp", "Opp", scope)).toBeNull();
+    expect(hasReadout(rowReadout(net, "You", "Opp", scope))).toBe(false);
+  });
+
+  test("a match with net points keeps its percentage and fraction", () => {
+    const net = byLabel(
+      buildStatRows(
+        POINT_ROWS,
+        side({
+          netPointsWonPct: netPointsWonPct(6, 10),
+          fractions: { netPointsWonPct: { made: 6, attempts: 10 } },
+        }),
+        side({
+          netPointsWonPct: netPointsWonPct(0, 4),
+          fractions: { netPointsWonPct: { made: 0, attempts: 4 } },
+        }),
+      ),
+      "Net points won",
+    );
+
+    expect(net.you.display).toBe("60%");
+    expect(net.opp.display).toBe("0%");
+    expect(net.leader).toBe("you");
+    expect(hasReadout(figureReadout(net, "opp", "Opp", scope))).toBe(true);
   });
 });

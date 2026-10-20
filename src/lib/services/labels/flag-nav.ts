@@ -1,18 +1,16 @@
 /**
- * The header's flag list and its jumps: every open `count` mark in the match,
- * read exactly as the rows read them (`pointRowMarkList`, `markStates`), then
- * grouped into the four kinds the list shows and stepped through point by
- * point. Pure, so the rail and the console's `[` / `]` keys share one answer.
+ * The header's flag list and its jumps: every point whose review flag is open,
+ * read exactly as the row's chip reads it (`reviewFlag`), then grouped by the
+ * six items the flag asks and stepped through point by point. Pure, so the
+ * rail and the console's `[` / `]` keys share one answer.
  */
 
-import type { LabelMarkCode, LabelMarks } from "./marks";
-import { MARK_LABEL } from "./marks-copy";
+import type { LabelMarks } from "./marks";
 import {
-  markStates,
-  markTone,
-  openHintMarks,
-  pointRowMarkList,
-  pointWinnerContradicted,
+  REVIEW_ITEMS,
+  reviewFlag,
+  reviewItemQuestion,
+  type ReviewItem,
 } from "./marks-state";
 import type { LabelPoint } from "./session";
 import type { LabelScoreMismatch } from "./set-scores";
@@ -21,20 +19,21 @@ import { setBreakLabel, setBreakSuspects } from "./set-break";
 import { tiebreakFolds } from "./tiebreak-fold";
 import { tiebreakServeOrders, type TiebreakServeOrder } from "./tiebreak-serve";
 
-/** One open mark on one point. */
+/** One point's open review flag. */
 export interface OpenFlag {
   pointId: string;
   /** As the rail numbers the point: `pointIndex + 1`. */
   pointNumber: number;
-  code: LabelMarkCode;
-  /** About the data, not the score (`markTone`): grey, and counted apart. */
+  /** The flag is about the data, not the score: grey, and counted apart. */
   data: boolean;
+  /** The flag's open items, in id order; never empty. */
+  items: ReviewItem[];
 }
 
 /**
  * The score that doesn't add up, as one more stop: on the mismatching set's
  * last live point — where the set's score is read — or, when the rows never
- * reach that set, on the last live point of all. Counted with the marks, and
+ * reach that set, on the last live point of all. Counted with the points, and
  * `]` lands on it, so a set that ends on the wrong score is never a dot alone.
  */
 export interface ScoreStop {
@@ -44,7 +43,7 @@ export interface ScoreStop {
   label: string;
 }
 
-/** A stop `[` / `]` can land on: an open mark, or the score. */
+/** A stop `[` / `]` can land on: a flagged point, or the score. */
 export type FlagStop = OpenFlag | ScoreStop;
 
 /** "Set 1 ends 5–5, record 6–4": the score stop's words. */
@@ -92,12 +91,14 @@ export function tiebreakServeStops(
  * it would fold), a tiebreak off its serve order and a sit-down long enough
  * to be a set break the rows do not have. Read off the rows alone,
  * so there on a session labelled without marks too. `]` and `[` land on
- * each; the header's total stays the marks and the score, and its jump's
+ * each; the header's total stays the points and the score, and its jump's
  * tooltip says how many slots there are beside them.
  */
 export function slotStops(
   points: readonly LabelPoint[],
   adScoring: boolean,
+  /** set-scores.ts `matchTiebreakSet`: the fold's set, which never overflows. */
+  matchTiebreakSet: number | null = null,
 ): ScoreStop[] {
   const numberOf = new Map(points.map((p) => [p.id, p.pointIndex + 1]));
   const stop = (pointId: string | undefined, label: string): ScoreStop[] =>
@@ -105,17 +106,20 @@ export function slotStops(
       ? []
       : [{ pointId, pointNumber: numberOf.get(pointId) ?? 0, label }];
   return [
-    ...gameOverflow(points, adScoring).flatMap((game) =>
+    ...gameOverflow(points, adScoring, matchTiebreakSet).flatMap((game) =>
       stop(game.leftovers[0]?.id, "Game already won, with points after it"),
     ),
-    ...gameUnderflow(points, adScoring).flatMap((game) =>
+    ...gameUnderflow(points, adScoring, matchTiebreakSet).flatMap((game) =>
       stop(
         game.lastPointId,
         `Game ${game.gameInSet} isn’t finished at ${game.score}`,
       ),
     ),
-    ...tiebreakFolds(points, adScoring).flatMap((fold) =>
-      stop(fold.pointIds[0], "Tiebreak at 6–6?"),
+    ...tiebreakFolds(points, adScoring, matchTiebreakSet).flatMap((fold) =>
+      stop(
+        fold.pointIds[0],
+        fold.type === "match_tiebreak" ? "Match tiebreak?" : "Tiebreak at 6–6?",
+      ),
     ),
     ...tiebreakServeStops(tiebreakServeOrders(points)),
     // No slot of its own in the rail: the clock says a set ended where the
@@ -126,15 +130,19 @@ export function slotStops(
   ];
 }
 
-/** What a stop is called in a tooltip: its mark's words, or the score's. */
+/**
+ * What a stop is called in a tooltip: its point's first open question, in the
+ * words the row asks it (`reviewItemQuestion`), or the score's words.
+ */
 export function flagStopLabel(stop: FlagStop): string {
-  return "code" in stop ? MARK_LABEL[stop.code] : stop.label;
+  return "items" in stop ? reviewItemQuestion(stop.items[0]) : stop.label;
 }
 
 /**
- * Every open flag, in the rail's order: each point's open `count` marks, then
- * — until the point is checked — its hints, which are grey (`data`) like the
- * chip its row draws for them. Deleted points have none.
+ * Every open flag, in the rail's order: one per live point whose review flag
+ * (`reviewFlag`) is open, carrying the items still open on it. Grey (`data`)
+ * when the whole flag is, as the row's chip draws it; a demoted flag is left
+ * out, as the row leaves it off. Deleted points have none.
  */
 export function openFlags(
   points: readonly LabelPoint[],
@@ -142,130 +150,66 @@ export function openFlags(
 ): OpenFlag[] {
   const flags: OpenFlag[] = [];
   for (const point of points) {
-    if (point.status === "deleted") continue;
-    const { count } = pointRowMarkList(point, marks);
-    const states = markStates(count, point, marks.suggestions, points);
-    count.forEach((mark, i) => {
-      if (states[i] !== "open") return;
-      flags.push({
-        pointId: point.id,
-        pointNumber: point.pointIndex + 1,
-        code: mark.code,
-        data: markTone(mark, point, marks.suggestions) === "data",
-      });
+    const flag = reviewFlag(point, marks, points);
+    if (!flag || flag.demoted || flag.state !== "open") continue;
+    flags.push({
+      pointId: point.id,
+      pointNumber: point.pointIndex + 1,
+      data: flag.tone === "data",
+      items: flag.items.filter((item) => item.state === "open"),
     });
-    // A winner the strokes contradict is the score: amber, and still open
-    // on a checked point. Every other hint is data, and goes when checked.
-    const contradicted = pointWinnerContradicted(point, marks);
-    if (point.checkedAt !== null && !contradicted) continue;
-    for (const hint of openHintMarks(point, marks)) {
-      const score = contradicted && hint.code === "ending_stale";
-      if (point.checkedAt !== null && !score) continue;
-      flags.push({
-        pointId: point.id,
-        pointNumber: point.pointIndex + 1,
-        code: hint.code,
-        data: !score,
-      });
-    }
   }
   return flags;
 }
 
-/** The list's groups, in the order a labeller works through them. */
-const KINDS: readonly { name: string; codes: readonly LabelMarkCode[] }[] = [
-  {
-    name: "Ending",
-    codes: [
-      "winner_disputed",
-      "pick_winner",
-      "last_shot_unresolved",
-      "winner_guessed",
-      "last_call_overruled",
-      // The grey list's: how the point ended, not who won it.
-      "shot_after_point_end",
-      "ending_stale",
-      "ending_suspect_line",
-      "winner_to_error_by_bounce",
-      "result_type_unknown",
-    ],
-  },
-  { name: "Missing shot", codes: ["same_player_consecutive"] },
-  {
-    name: "Serve",
-    codes: [
-      "reserve_after_in",
-      "service_court_repeat",
-      "first_serve_fault_alone",
-      "second_serve_called_out",
-      "second_serve_as_first",
-      "serve_after_serve_in",
-      "serve_in_landing_out",
-    ],
-  },
-  {
-    name: "Landing",
-    codes: ["last_landing_missing", "net_hit_contradicts_height"],
-  },
-  {
-    name: "Score",
-    codes: [
-      "score_side_mismatch",
-      "tiebreak_score_off_six_all",
-      "segment_proposal_differs",
-    ],
-  },
-];
-
 export interface FlagRow {
-  code: LabelMarkCode;
-  /** The rows' own words: "Check the ending". */
+  /** The item's id as a string ("1"…"6"): the row's key and `data-flag-kind`. */
+  code: string;
+  /** The item's question: "How did the last ball end?". */
   label: string;
   /** Each point once, in rail order. */
   points: { pointId: string; pointNumber: number }[];
 }
 
 export interface FlagGroup {
+  /** The item's question. */
   name: string;
-  /** Open marks in the group, not points. */
+  /** Points with the item open. */
   count: number;
+  /** One row: the item, so the lists' rows keep their shape. */
   rows: FlagRow[];
 }
 
 /**
- * `flags` grouped into kinds, each kind's rows in the kind's own order and
- * only where something is open. A code no kind names lands in "Other", so a
- * new `count` mark is listed before anyone files it.
+ * `flags` grouped by review item, in the order the items are answered
+ * (`REVIEW_ITEMS`), and only where something is open: at most six. A point
+ * with two items open is in both groups, so the groups' counts may add up to
+ * more than the points.
  */
 export function flagGroups(flags: readonly OpenFlag[]): FlagGroup[] {
-  const named = new Set(KINDS.flatMap((kind) => kind.codes));
-  const other = [...new Set(flags.map((f) => f.code))].filter(
-    (code) => !named.has(code),
-  );
-  const kinds = [...KINDS, { name: "Other", codes: other }];
   const groups: FlagGroup[] = [];
-  for (const kind of kinds) {
-    const rows: FlagRow[] = [];
-    let count = 0;
-    for (const code of kind.codes) {
-      const mine = flags.filter((f) => f.code === code);
-      if (mine.length === 0) continue;
-      count += mine.length;
-      rows.push({
-        code,
-        label: MARK_LABEL[code],
-        points: firstPerPoint(mine).map(({ pointId, pointNumber }) => ({
-          pointId,
-          pointNumber,
-        })),
-      });
-    }
-    if (rows.length > 0) groups.push({ name: kind.name, count, rows });
+  for (const item of REVIEW_ITEMS) {
+    const mine = flags.filter((f) => f.items.some((i) => i.id === item.id));
+    if (mine.length === 0) continue;
+    groups.push({
+      name: item.question,
+      count: mine.length,
+      rows: [
+        {
+          code: String(item.id),
+          label: item.question,
+          points: firstPerPoint(mine).map(({ pointId, pointNumber }) => ({
+            pointId,
+            pointNumber,
+          })),
+        },
+      ],
+    });
   }
   return groups;
 }
 
-/** One mark per point, the first in the list: a jump goes to a point. */
+/** One stop per point, the first in the list: a jump goes to a point. */
 function firstPerPoint<F extends Pick<OpenFlag, "pointId">>(
   flags: readonly F[],
 ): F[] {
@@ -277,7 +221,7 @@ function firstPerPoint<F extends Pick<OpenFlag, "pointId">>(
  * The flag a jump lands on: the first flagged point after `fromPointId` (or
  * the last before it, going back), wrapping round the match. From no point,
  * forward starts at the top and back at the bottom. Null with nothing open.
- * `flags` may come in any order (the score stop is appended to the marks).
+ * `flags` may come in any order (the score stop is appended to the points).
  */
 export function stepFlag<F extends Pick<OpenFlag, "pointId">>(
   flags: readonly F[],
@@ -289,7 +233,7 @@ export function stepFlag<F extends Pick<OpenFlag, "pointId">>(
   const order = new Map(points.map((point, i) => [point.id, i]));
   const at = fromPointId === null ? null : (order.get(fromPointId) ?? null);
   const pos = (f: F) => order.get(f.pointId) ?? -1;
-  // One per point, the point's first open mark: a jump goes to a point.
+  // One per point, the first stop on it: a jump goes to a point.
   const stops = firstPerPoint([...flags].sort((a, b) => pos(a) - pos(b)));
   if (direction === 1) {
     return (

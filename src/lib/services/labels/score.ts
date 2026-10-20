@@ -336,7 +336,7 @@ export function gameDecided(
 }
 
 /** A tiebreak's target: first to 7, a match tiebreak's first to 10. */
-const TIEBREAK_TARGET: Record<Exclude<LabelGameType, "game">, number> = {
+export const TIEBREAK_TARGET: Record<Exclude<LabelGameType, "game">, number> = {
   tiebreak: 7,
   match_tiebreak: 10,
 };

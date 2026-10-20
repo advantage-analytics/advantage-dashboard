@@ -213,6 +213,7 @@ export function labelSessionFixture(): LabelSession {
     finalScore: null,
     videoEndsEarly: null,
     matchScore: { player1: [6, 4], player2: [3, 6] },
+    bestOf: 3,
     points: [
       labelPoint(P1, 0, {
         winner: "p2",

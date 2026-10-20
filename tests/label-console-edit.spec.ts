@@ -12,8 +12,10 @@ import {
 } from "@/components/admin/labels/court-placement";
 import {
   formatCourtPoint,
+  formatFileTime,
   formatVideoTime,
   parseCourtPoint,
+  parseFileTime,
   parseVideoTime,
 } from "@/components/admin/labels/label-format";
 import {
@@ -318,6 +320,18 @@ test.describe("cell text", () => {
     for (const bad of ["41:61", "1:60:00", "abc", "-3", "1:2:3:4", "4 1"]) {
       expect(parseVideoTime(bad), bad).toBeUndefined();
     }
+  });
+
+  test("time on a trimmed file: the player's clock in, the stored clock out", () => {
+    // Gimena v Vicente: the vendor's copy starts 852.08 s into the upload, and
+    // the first stroke is stored at 853.751 — 0:01.7 in the player.
+    const offset = 852.0812548480718;
+    expect(formatFileTime(853.751, offset)).toBe("0:01.7");
+    expect(formatFileTime(853.751)).toBe("14:13.8");
+    expect(parseFileTime("0:01.7", offset)).toBe(853.781);
+    expect(parseFileTime("0:01.7")).toBe(1.7);
+    expect(parseFileTime("", offset)).toBeNull();
+    expect(parseFileTime("41:61", offset)).toBeUndefined();
   });
 
   test("a position parses what formatCourtPoint prints", () => {
