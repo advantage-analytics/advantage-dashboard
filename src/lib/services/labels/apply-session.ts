@@ -16,10 +16,13 @@
  *   - the vendor's strokes file stays in storage, so a forced re-derive
  *     (`splitstep-derive.ts --force-over-labels`) rebuilds the original too.
  *
- * Refuses, before writing anything, on: build problems, imported points on
- * the match (never mix providers), nothing to write, or a labelled score that
- * differs from the entered one unless `acceptScore` — only
- * `scripts/label-apply.ts --accept-score` passes it; the console never does.
+ * Refuses, before writing anything, on: imported points on the match (never
+ * mix providers), nothing to write, or a labelled score that differs from the
+ * entered one unless `acceptScore` — the console's Mark complete passes it
+ * (session-status-session.ts); `scripts/label-apply.ts` asks for
+ * `--accept-score`. A build problem no longer refuses: the point or stroke it
+ * names is written as far as it can be, or left out, and the answer lists it
+ * (`leftOut`).
  */
 
 import { readAllPages } from "@/lib/data/admin-range-read";
@@ -354,6 +357,8 @@ export type PublishResult =
       ok: true;
       points: number;
       shots: number;
+      /** Build problems published past: a point left out, or written partly. */
+      leftOut: string[];
       bookmarksRelinked: number;
       backupKey: string;
       insightsRequested: boolean;
@@ -378,12 +383,6 @@ export async function publishPlanned(params: {
   const { session } = context;
   const matchId = session.matchId;
 
-  if (plan.built.problems.length > 0) {
-    return {
-      ok: false,
-      error: `Not published: ${plan.built.problems.length === 1 ? "a problem needs" : `${plan.built.problems.length} problems need`} fixing first — ${plan.built.problems[0]}`,
-    };
-  }
   if (plan.mismatch && !acceptScore) {
     return {
       ok: false,
@@ -462,6 +461,7 @@ export async function publishPlanned(params: {
     ok: true,
     points: plan.built.points.length,
     shots: written.shots,
+    leftOut: plan.built.problems,
     bookmarksRelinked,
     backupKey,
     insightsRequested,

@@ -531,3 +531,13 @@ test.describe("vendorShotFacts", () => {
     expect(other.shots[0].speed_mph).toBeNull();
   });
 });
+
+test("games publish numbered in play order, whatever their label keys", () => {
+  // Game 2 stored under key 7 — a game the console started mid-match takes
+  // the session's highest number plus one. Published, it is game 2.
+  const points = session().map((p) =>
+    p.gameNumber === 2 ? { ...p, gameNumber: 7 } : p,
+  );
+  const games = new Set(build(points).points.map((row) => row.game_number));
+  expect([...games]).toEqual([1, 2]);
+});

@@ -38,6 +38,7 @@ import {
 import {
   planGamePull,
   planGameShift,
+  planGameSplit,
   type GameShiftWrite,
   type ShiftPoint,
 } from "./game-shift";
@@ -302,6 +303,27 @@ export async function writeLabelGameShift(params: {
   );
 }
 
+/**
+ * Start a new game at `atPointId` (game-shift.ts `planGameSplit`): that
+ * point and the rest of its game become a new game. Never throws.
+ */
+export async function writeLabelGameSplit(params: {
+  supabase: AdminClient;
+  sessionId: unknown;
+  atPointId: unknown;
+}): Promise<LabelGameShiftResult> {
+  const sessionId = normaliseId(params.sessionId);
+  if (!sessionId) return { error: "Invalid session id." };
+  const atPointId = normaliseId(params.atPointId);
+  if (!atPointId) return { error: "Invalid point id." };
+  return runGamePlan(
+    params.supabase,
+    sessionId,
+    (points) => planGameSplit(points, atPointId),
+    "Could not start the new game",
+  );
+}
+
 /** The match's entered score beside its format, when the session has a match. */
 async function readMatchScore(
   supabase: AdminClient,
@@ -423,5 +445,17 @@ export function foldLabelTiebreak(
     deps,
     (supabase) => writeLabelTiebreakFold({ supabase, sessionId, setNumber }),
     "make the tiebreak",
+  );
+}
+
+export function splitLabelGame(
+  sessionId: unknown,
+  atPointId: unknown,
+  deps: LabelWriteDependencies = defaultLabelWriteDependencies,
+): Promise<LabelGameShiftResult> {
+  return gated(
+    deps,
+    (supabase) => writeLabelGameSplit({ supabase, sessionId, atPointId }),
+    "start the new game",
   );
 }
