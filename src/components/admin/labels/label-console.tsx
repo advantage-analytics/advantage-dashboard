@@ -2225,9 +2225,7 @@ export function LabelConsole({
     const settlePoint = settlePointOf(shotId);
     // A reset point is asked again: its check goes, as the server clears it
     // (reset-session.ts), and comes back if the reset fails.
-    const checkedBefore =
-      points.find((p) => p.shots.some((s) => s.id === shotId))?.checkedAt ??
-      null;
+    const checkedBefore = pointOfShot(points, shotId)?.checkedAt ?? null;
     return runOperation(
       (rows) =>
         setCheckedOfShot(
