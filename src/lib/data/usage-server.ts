@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
-import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import {
+  monthlyCapSecondsFor,
+  readCreditBalance,
+} from "@/lib/services/splitstep/quota";
 import type { Workspace } from "@/lib/workspace/types";
 
 /**
@@ -18,6 +21,13 @@ export interface PersonalUsage {
   capSeconds: number;
   /** `YYYY-MM-01`, the `processing_usage.billing_month` key. */
   billingMonth: string;
+  /**
+   * Usable credits right now (unspent, unexpired) — a balance, not a month's
+   * figure, so it is the same whichever month is being looked at.
+   */
+  creditSeconds: number;
+  /** When the oldest usable credits expire, or null with none. */
+  nextCreditExpiresAt: string | null;
 }
 
 export interface ProgramUsageLine {
@@ -48,7 +58,10 @@ export interface ProgramUsage {
  * `monthlyCapSecondsFor()` answers that, the same as the spend.
  */
 export async function getPersonalUsage(
-  personal: Pick<Workspace, "id" | "kind" | "orgType" | "individualPilot">,
+  personal: Pick<
+    Workspace,
+    "id" | "kind" | "orgType" | "individualPilot" | "unlimitedVideo"
+  >,
   billingMonth: string,
 ): Promise<PersonalUsage> {
   const supabase = await createClient();
@@ -58,19 +71,36 @@ export async function getPersonalUsage(
   // RLS already restricts this to `created_by = auth.uid()`; the account filter
   // is what separates a personal upload from one the same person made inside a
   // program, which bills the program's ledger instead.
-  const { data, error } = await supabase
-    .from("processing_usage")
-    .select("reserved_seconds, actual_seconds")
-    .eq("account_id", userId)
-    .eq("account_type", "individual")
-    .eq("billing_month", billingMonth)
-    .eq("released", false);
+  const [{ data, error }, credits] = await Promise.all([
+    supabase
+      .from("processing_usage")
+      .select("reserved_seconds, actual_seconds")
+      .eq("account_id", userId)
+      .eq("account_type", "individual")
+      .eq("billing_month", billingMonth)
+      .eq("released", false),
+    // The owner reads their own credits under RLS. A failed read shows none
+    // rather than failing the page; the reservation is still the authority.
+    readCreditBalance(supabase, userId).catch((creditError: unknown) => {
+      console.error("[usage] could not read video credits", {
+        error:
+          creditError instanceof Error
+            ? creditError.message
+            : String(creditError),
+      });
+      return { seconds: 0, nextExpiresAt: null };
+    }),
+  ]);
+  const creditFields = {
+    creditSeconds: credits.seconds,
+    nextCreditExpiresAt: credits.nextExpiresAt,
+  };
 
   if (error) {
     console.error("[usage] could not read personal usage", {
       error: error.message,
     });
-    return { usedSeconds: 0, capSeconds, billingMonth };
+    return { usedSeconds: 0, capSeconds, billingMonth, ...creditFields };
   }
 
   const usedSeconds = (data ?? []).reduce(
@@ -78,7 +108,7 @@ export async function getPersonalUsage(
     0,
   );
 
-  return { usedSeconds, capSeconds, billingMonth };
+  return { usedSeconds, capSeconds, billingMonth, ...creditFields };
 }
 
 /** A program's zeroed ledger — what a caller outside a program should see. */

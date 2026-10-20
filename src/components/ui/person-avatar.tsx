@@ -27,6 +27,10 @@ export function PersonAvatar({
         src={photoUrl}
         alt=""
         aria-hidden="true"
+        // Rosters and match lists render dozens of these; offscreen rows
+        // should not compete with the page's first paint.
+        loading="lazy"
+        decoding="async"
         className={cn(
           "shrink-0 rounded-full bg-[var(--surface-subtle)] object-cover",
           className,

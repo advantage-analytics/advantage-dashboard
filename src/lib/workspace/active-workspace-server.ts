@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 // Defined in a client-safe module so the shell can read the same cookie.
 import { WORKSPACE_COOKIE } from "./workspace-cookie";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user-server";
 import { getInitials } from "@/lib/data/match-utils";
 import { isRecordingSource } from "@/app/onboarding/answers";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
@@ -48,6 +49,7 @@ function publicUrlOrNull(
 function personalWorkspace(
   viewer: Viewer,
   individualPilot: boolean,
+  unlimitedVideo: boolean,
 ): Workspace {
   return {
     // Not an invention: `processing_usage` already keys an individual's
@@ -70,6 +72,8 @@ function personalWorkspace(
     canSubmitVideo: true,
     // Read off the viewer's own row — see `Workspace.individualPilot`.
     individualPilot,
+    // `users.is_admin` — see `Workspace.unlimitedVideo`.
+    unlimitedVideo,
     // No program row, so no status to carry — see `Workspace.programStatus`.
     programStatus: null,
     // A program-wide policy about *other* people, in a workspace whose only
@@ -327,9 +331,8 @@ export const getWorkspaceContext = cache(
   async (): Promise<WorkspaceContextValue | null> => {
     const supabase = await createClient();
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Shared with every other loader in this render — see `getAuthUser`.
+    const user = await getAuthUser();
     if (!user) return null;
 
     // Own row only — `users` RLS is a blanket `auth.uid() = id`, which is also
@@ -340,7 +343,7 @@ export const getWorkspaceContext = cache(
       supabase
         .from("users")
         .select(
-          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source, individual_pilot, workspace_hint_done_at, activity_hint_done_at, sample_tour_done_at, first_report_tour_done_at",
+          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source, individual_pilot, is_admin, workspace_hint_done_at, activity_hint_done_at, sample_tour_done_at, first_report_tour_done_at",
         )
         .eq("id", user.id)
         .single(),
@@ -357,7 +360,11 @@ export const getWorkspaceContext = cache(
     const viewer = toViewer(user.id, user.email ?? "", row, avatarUrl);
 
     const available = [
-      personalWorkspace(viewer, row?.individual_pilot === true),
+      personalWorkspace(
+        viewer,
+        row?.individual_pilot === true,
+        row?.is_admin === true,
+      ),
       ...programs,
     ];
 

@@ -762,9 +762,11 @@ export function useAttachmentFlow(
                 },
               });
             } catch {
-              // `prepareVideoForUpload` rejects only on cancellation; anything
-              // else is a cut that could not be made, and a larger upload is
-              // always better than no upload.
+              // `prepareVideoForUpload` rejects on cancellation, and with
+              // `OversizeVideoError` only for a picked file over the upload
+              // limit, which this flow's own size check refuses at pick time.
+              // Anything else is a cut that could not be made, and a larger
+              // upload is always better than no upload.
               if (controller.signal.aborted) {
                 settle({ status: "idle" });
                 return;

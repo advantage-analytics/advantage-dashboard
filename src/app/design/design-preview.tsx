@@ -55,23 +55,25 @@ function pillStates(variant: (typeof VARIANTS)[number]): {
       hours: {
         remainingSeconds: cap - variant.usedHours * 3600,
         capSeconds: cap,
-        bandFull: false,
       },
     },
-    {
-      label: "Out of hours — own allowance spent",
-      hours: { remainingSeconds: 0, capSeconds: cap, bandFull: false },
-    },
-    // An individual whose own hours are untouched, after the shared open-beta
-    // ceiling has run out for the month.
+    // A player whose free hours are spent but who holds credits (C3).
     ...(variant.terms.tier === "pilot"
       ? []
       : [
           {
-            label: "Out of hours — shared beta hours spent",
-            hours: { remainingSeconds: 0, capSeconds: cap, bandFull: true },
+            label: "Free spent — on credits",
+            hours: {
+              remainingSeconds: 0,
+              capSeconds: cap,
+              creditSeconds: 13_200,
+            },
           },
         ]),
+    {
+      label: "Out of hours",
+      hours: { remainingSeconds: 0, capSeconds: cap },
+    },
     { label: "Read failed", hours: null },
   ];
 }

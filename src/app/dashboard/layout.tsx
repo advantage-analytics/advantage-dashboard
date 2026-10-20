@@ -21,10 +21,11 @@ import { timeOfDayGreeting } from "@/lib/ui/greeting";
  * workspace is active, so resolving it client-side would flash the wrong nav.
  * The interactive shell lives in `DashboardShell`.
  *
- * The workspace, and the presence read that depends on it, are the only things
- * awaited here. The activity feed streams in
- * behind a Suspense boundary: it is chrome for a closed popover, and awaiting
- * it held up the sidebar, the header and the page content alike.
+ * The workspace is the only thing awaited here. The presence read that depends
+ * on it is started, not awaited, and handed down as a promise; the activity
+ * feed streams in behind a Suspense boundary: it is chrome for a closed
+ * popover, and awaiting it held up the sidebar, the header and the page
+ * content alike.
  */
 export default async function Layout({
   children,
@@ -57,10 +58,13 @@ export default async function Layout({
 
   // Whether the workspace holds anything yet, so a route's loading fallback
   // can draw that page's day zero instead of skeleton rows nobody has. A
-  // handful of `limit(1)` reads in parallel, and never fatal — see
-  // `getWorkspacePresence`. The one other thing awaited here, because the
-  // fallbacks render before any page has fetched.
-  const presence = await getWorkspacePresence(workspace);
+  // handful of `limit(1)` reads in parallel, and never fatal (it never
+  // rejects) — see `getWorkspacePresence`. Not awaited: awaiting it held the
+  // shell and every loading fallback behind one more round trip. The
+  // fallbacks that need it wait on it themselves (`PresenceGate`), drawing
+  // their skeleton meanwhile, and `cache()` hands a page that asks too (Home)
+  // this same in-flight read.
+  const presence = getWorkspacePresence(workspace);
 
   return (
     <WorkspaceProvider value={workspace}>

@@ -16,7 +16,7 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { MATCH_VIDEOS_FOOTNOTE } from "@/components/dashboard/settings/match-videos-usage-card";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 import { MATCH_VIDEO_ACTIVE_LIMIT } from "@/lib/match-video/limits";
-import { BETA_PLAN_ROWS, PAID_PLANS_BEGIN, planFacts } from "@/lib/user/plan";
+import { planFacts } from "@/lib/user/plan";
 import { capitalize, cn } from "@/lib/utils";
 import { teamLabel, uploadPolicyLabel } from "@/lib/workspace/types";
 
@@ -476,11 +476,49 @@ export function SettingsConnectionsPending() {
   );
 }
 
-/** Plan: the facts strip, then the beta terms — or the program note. */
+/**
+ * Plan: in a personal workspace the hours card, the packs line and the credit
+ * history (`PersonalPlan`); in a team the facts strip and the program note.
+ */
 export function SettingsPlanPending() {
   const { active, viewer } = useWorkspace();
-  const isTeam = active.kind === "team";
   const facts = planFacts(active, viewer);
+
+  if (active.kind !== "team") {
+    return (
+      <Column label="plan">
+        <SettingsCard className="gap-3.5">
+          <SettingsCardTitle
+            trailing={
+              <Text className="text-[11px]">Free hours reset Nov 1</Text>
+            }
+          >
+            Video hours
+          </SettingsCardTitle>
+          <Text className="text-title-lg">1h 36m left</Text>
+          <Box className="h-1.5 w-full rounded-[3px]" />
+          <Text className="text-[11px]">
+            Free: 1h 36m of 2h this month · Credits: none
+          </Text>
+          <Text className="mt-0.5 border-t border-[var(--border-hairline)] pt-3 text-[11px] leading-[1.5]">
+            2h free a month through Dec 31, 2026, used first. Credits are used
+            after them, oldest first.
+          </Text>
+        </SettingsCard>
+        <SettingsCard className="py-3.5">
+          <Text className="text-[12px]">
+            Need more than your free hours? Credit packs start at $14 an hour.
+          </Text>
+        </SettingsCard>
+        <SettingsCard>
+          <SettingsCardTitle className="mb-3">Credit history</SettingsCardTitle>
+          <Text className="border-t border-[var(--border-hairline)] pt-3 text-[11px]">
+            No credits bought yet.
+          </Text>
+        </SettingsCard>
+      </Column>
+    );
+  }
 
   return (
     <Column label="plan">
@@ -505,45 +543,17 @@ export function SettingsPlanPending() {
         </div>
       </SettingsCard>
 
-      {isTeam ? (
-        <SettingsCard className="gap-2">
-          <Text className="text-[12px]">
-            Program plans are arranged with us directly.
-          </Text>
-          <Text className="text-[11px] leading-[1.6]">
-            Seats, shared analysis hours and billing for {active.name} are set
-            up with support rather than bought here — {SUPPORT_EMAIL}. Your own
-            plan is separate and unaffected; switch to your personal workspace
-            to see it.
-          </Text>
-        </SettingsCard>
-      ) : (
-        <SettingsCard>
-          <SettingsCardTitle className="pb-2">
-            Free during the beta
-          </SettingsCardTitle>
-          {BETA_PLAN_ROWS.map((row) => (
-            <div
-              key={row.label}
-              className="flex items-start gap-6 border-t border-[var(--border-hairline)] py-3"
-            >
-              <div className="min-w-0 flex-1">
-                <Text className="text-[12px]">{row.label}</Text>
-                {row.note && (
-                  <Text className="mt-0.5 text-[11px] leading-[1.5]">
-                    {row.note}
-                  </Text>
-                )}
-              </div>
-              <Text className="shrink-0 text-[13px]">{row.value}</Text>
-            </div>
-          ))}
-          <Text className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5]">
-            Free through the end of the year. Paid plans begin in{" "}
-            {PAID_PLANS_BEGIN}.
-          </Text>
-        </SettingsCard>
-      )}
+      <SettingsCard className="gap-2">
+        <Text className="text-[12px]">
+          Program plans are arranged with us directly.
+        </Text>
+        <Text className="text-[11px] leading-[1.6]">
+          Seats, shared analysis hours and billing for {active.name} are set up
+          with support rather than bought here — {SUPPORT_EMAIL}. Your own hours
+          and credits are separate; switch to your personal workspace to see
+          them.
+        </Text>
+      </SettingsCard>
     </Column>
   );
 }
@@ -634,8 +644,10 @@ export function SettingsUsagePending() {
           Your analysis time
         </SettingsCardTitle>
         <Box className="h-1.5 w-full rounded-[3px]" />
-        <Text className="text-[11px]">
-          Personal uploads only · Resets Oct 1 · Free through Dec 31, 2026
+        <Text className="text-[11px]">Credits: none · Manage on Plan</Text>
+        <Text className="mt-0.5 border-t border-[var(--border-hairline)] pt-3 text-[11px]">
+          Personal uploads only · Free hours reset Nov 1 · Free through Dec 31,
+          2026
         </Text>
       </SettingsCard>
 

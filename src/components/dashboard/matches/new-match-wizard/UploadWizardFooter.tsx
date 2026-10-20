@@ -3,7 +3,7 @@
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
-import { FooterMeter } from "./FooterMeter";
+import { FooterMeter, SplitReadout } from "./FooterMeter";
 import { jumpToMissingField, MissingFieldsPill } from "./MissingFieldsPill";
 import { useUploadWizard } from "./UploadWizardProvider";
 import { focusRingCls } from "./styles";
@@ -23,8 +23,11 @@ export function WizardQuotaMeter() {
     wizard: {
       isProcessingProvider,
       remainingQuotaSeconds,
+      quotaFreeSeconds,
+      quotaCreditSeconds,
       quotaCapSeconds,
       uploadedFile,
+      freeHoursReturnOn,
     },
     view: { trimSelected },
     meta: { workspaceKind },
@@ -32,17 +35,51 @@ export function WizardQuotaMeter() {
 
   if (!isProcessingProvider || remainingQuotaSeconds === undefined) return null;
 
+  const selectedSeconds =
+    uploadedFile?.file && trimSelected > 0 ? trimSelected : undefined;
+  const freeSeconds = quotaFreeSeconds ?? 0;
+
+  // B2: a video that spills past the free hours into credits — and fits —
+  // says the split instead of drawing an "over" bar it is not.
+  if (
+    selectedSeconds !== undefined &&
+    quotaCreditSeconds > 0 &&
+    selectedSeconds > freeSeconds &&
+    selectedSeconds <= remainingQuotaSeconds
+  ) {
+    return (
+      <SplitReadout
+        freeSeconds={freeSeconds}
+        creditSeconds={selectedSeconds - freeSeconds}
+      />
+    );
+  }
+
   return (
     <FooterMeter
-      remainingSeconds={remainingQuotaSeconds}
+      remainingSeconds={
+        // The free allowance is what the bar measures; credits are not a
+        // share of the month's cap.
+        quotaCreditSeconds > 0 &&
+        !(
+          selectedSeconds !== undefined &&
+          selectedSeconds > remainingQuotaSeconds
+        )
+          ? freeSeconds
+          : remainingQuotaSeconds
+      }
       capSeconds={quotaCapSeconds}
-      suffix={workspaceKind === "team" ? "team hours" : "resets on the 1st"}
+      suffix={
+        workspaceKind === "team"
+          ? "team hours"
+          : freeHoursReturnOn
+            ? "resets on the 1st"
+            : "free hours end this month"
+      }
       /* Only once there is a video to price. A resumed draft keeps its trim
          window in localStorage but cannot keep the File, so the handles alone
          would have the meter costing a video that is no longer picked. */
-      selectedSeconds={
-        uploadedFile?.file && trimSelected > 0 ? trimSelected : undefined
-      }
+      selectedSeconds={selectedSeconds}
     />
   );
 }
