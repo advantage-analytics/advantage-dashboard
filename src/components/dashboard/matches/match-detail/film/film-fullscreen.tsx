@@ -1729,8 +1729,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               onLoadedData={() => {
                 setVideoReady(true);
                 settling.onLoadedData();
-                // Paused, the frame under the playhead is the whole picture.
-                if (!landingRef.current.playing) dropMirror();
+                // Paused, the mirror already shows the frame under the
+                // playhead; it stays until a play or a seek takes over.
+                settleMirrorDrop();
               }}
               // Playing, the mirror waits for frames that MOVE here: a play
               // that stalls on a cold buffer keeps the viewer's film up rather
@@ -1775,11 +1776,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               onSeeking={settling.onSeeking}
               onSeeked={(e) => {
                 settling.onSeeked();
-                if (!landingRef.current.playing && !handoffRef.current.active) {
-                  dropMirror();
-                } else {
-                  settleMirrorDrop();
-                }
+                // A drop a seek asked for lands with the seek's frame; the
+                // landing's own seek leaves a paused entry's mirror up.
+                settleMirrorDrop();
                 mark(e.currentTarget.currentTime);
                 syncClock();
               }}
