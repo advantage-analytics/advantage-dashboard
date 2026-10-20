@@ -35,6 +35,7 @@ import { scoreColumns } from "./film-score";
 import {
   activeShotAt,
   shotStops as buildShotStops,
+  stepShot,
   type ShotStop,
 } from "./film-shots";
 import { FilmThisPoint } from "./film-this-point";
@@ -77,6 +78,7 @@ import {
   type FilmListFilters,
   type FilmLocalFilters,
 } from "./film-list-filters";
+import type { FilmRoomEntry } from "./film-fullscreen";
 
 // The room is a screenful of its own — the overlay, the drawer, the transport
 // and the track — and most visits to a match never open it. Loading it on the
@@ -372,9 +374,7 @@ function FilmRoom({
   // keeps its in-column panel.
   const filterRail = useFilterRailHost();
   const [currentTime, setCurrentTime] = useState(0);
-  const [room, setRoom] = useState<{ time: number; playing: boolean } | null>(
-    null,
-  );
+  const [room, setRoom] = useState<FilmRoomEntry | null>(null);
   // Follow the film, or hold the point being read (T17 design). Owned HERE,
   // not by the room or the list: the room unmounts on exit and `PointList`
   // is mounted twice (shell column and room drawer), while this view is what
@@ -883,8 +883,9 @@ function FilmRoom({
   const toggleSavedActiveOrNone = readOnly ? undefined : toggleSavedActive;
 
   /**
-   * The room's keys, on the page while this view is open: ← ↑ step to the
-   * previous point, → ↓ to the next, J / L move 5 seconds back / forward,
+   * The room's keys, on the page while this view is open: ← → step to the
+   * previous / next point, ↑ ↓ to the previous / next shot (across points,
+   * over the same cut), J / L move 5 seconds back / forward,
    * space plays and pauses, S saves the point on screen.
    * Off while the room is open (it has its own), while something is typing
    * (an input, a textarea, anything editable), while a dialog or popover is
@@ -894,6 +895,18 @@ function FilmRoom({
    * scroll the pane, and on any key with a modifier, which is the browser's.
    */
   const roomOpen = room !== null;
+  // ↑ ↓: the previous / next shot over the applied cut. A shot step is a step,
+  // so it re-follows first, like the point step does.
+  const stepShotBy = useCallback(
+    (direction: -1 | 1) => {
+      const now = playerRef.current?.snapshot().time ?? currentTime;
+      const shot = stepShot(buildShotStops(walkStops, clock), now, direction);
+      if (!shot) return;
+      followPlayback();
+      playerRef.current?.seekTo(shot.start);
+    },
+    [walkStops, clock, currentTime, followPlayback],
+  );
   useEffect(() => {
     if (roomOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -935,15 +948,21 @@ function FilmRoom({
           e.preventDefault();
           playerRef.current?.togglePlay();
           break;
-        case "ArrowDown":
         case "ArrowRight":
           e.preventDefault();
           playerRef.current?.step(1);
           break;
-        case "ArrowUp":
         case "ArrowLeft":
           e.preventDefault();
           playerRef.current?.step(-1);
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          stepShotBy(1);
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          stepShotBy(-1);
           break;
         case "l":
         case "L":
@@ -964,7 +983,7 @@ function FilmRoom({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [roomOpen, toggleSavedActive]);
+  }, [roomOpen, toggleSavedActive, stepShotBy]);
 
   /**
    * `fullscreen=1` in the query string while the room is up, gone when it is
@@ -1051,8 +1070,12 @@ function FilmRoom({
       time: currentTime,
       playing: false,
     };
-    playerRef.current?.pause();
-    setRoom(snapshot);
+    // The room mirrors this player's element while its own one loads, and a
+    // playing film is left playing for the room to take over from mid-frame —
+    // so it is not paused here. The room pauses it once it has the picture.
+    const source = playerRef.current?.videoElement() ?? null;
+    if (!source) playerRef.current?.pause();
+    setRoom({ ...snapshot, source });
     writeRoomParam(true);
   }, [currentTime, writeRoomParam]);
 

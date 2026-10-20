@@ -40,7 +40,7 @@ import {
  * The three filters you reach for mid-rally (handoff F4), anchored to the
  * panel's Filters trigger. Quick choices apply on click — they are one tap —
  * and the last row opens the advanced filters (the report's 340px drawer, or
- * the room drawer's own column). Filters drive ↑↓ as well as the
+ * the room drawer's own column). Filters drive the arrow keys as well as the
  * list.
  *
  * Since T7 the rows write the layers they belong to (`film-list-filters.ts`):
@@ -214,7 +214,7 @@ export const FilmQuickFilters = memo(function FilmQuickFilters({
             />
           </>
         ) : null}
-        <FloatMenuNote>Filters apply to ↑↓ as well as the list.</FloatMenuNote>
+        <FloatMenuNote>Filters apply to ← → as well as the list.</FloatMenuNote>
       </FloatMenu>
     );
   }

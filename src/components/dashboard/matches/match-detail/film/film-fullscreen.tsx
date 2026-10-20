@@ -87,6 +87,7 @@ import {
   activeShotAt,
   rallyNumbering,
   shotStops as buildShotStops,
+  stepShot,
 } from "./film-shots";
 import {
   activeStopAt,
@@ -156,6 +157,27 @@ import { useFilmReadOnly } from "./film-read-only";
  * is not idle.
  */
 
+/** What the room opens from: the report player's playhead, and its element. */
+export interface FilmRoomEntry {
+  time: number;
+  playing: boolean;
+  /**
+   * The report player's own `<video>`, mirrored onto a canvas over the room's
+   * element until that element has the picture itself. The room's element
+   * starts cold — metadata and a seek on a large file take seconds — and
+   * without the mirror the room grew in black and then stalled, which read as
+   * a broken film. A PLAYING report player is left playing under the mirror
+   * (its sound too) and handed over frame-for-frame; see `handoffRef`.
+   * Absent on the ⇧-click door, which opens somewhere the player is not.
+   */
+  source?: HTMLVideoElement | null;
+}
+
+/** How far ahead of the report player the room parks its element to take over. */
+const HANDOFF_LEAD_SECONDS = 1.5;
+/** Parks that the report player outran before the room takes over unsynced. */
+const HANDOFF_MAX_ATTEMPTS = 3;
+
 export interface FilmFullscreenProps {
   /**
    * The credential to play — the refresh hook's current URL, shared with the
@@ -188,7 +210,7 @@ export interface FilmFullscreenProps {
    */
   clock: FilmClock;
   /** Where the report player was when the room opened. */
-  initial: { time: number; playing: boolean };
+  initial: FilmRoomEntry;
   /** Every timed point on the film clock — the board, the track, the playing row. */
   stops: FilmStop[];
   /** The applied cut on the film clock — what ← → and prev/next walk. */
@@ -391,7 +413,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const idleRef = useRef<number | null>(null);
 
-  const [playing, setPlaying] = useState(false);
+  // A room opened on a playing report player IS playing from its first frame:
+  // the mirror shows that film until this element takes over (`handoffRef`).
+  const initialHandoff = Boolean(p.initial.source) && p.initial.playing;
+  const [playing, setPlaying] = useState(initialHandoff);
+  const [handingOff, setHandingOff] = useState(initialHandoff);
   const [muted, setMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(p.initial.time);
   const [duration, setDuration] = useState(0);
@@ -417,6 +443,33 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   );
   const panelOpen = panel === "open";
   const [videoReady, setVideoReady] = useState(false);
+  // The report player's element, mirrored over this one until this one has
+  // the picture (`FilmRoomEntry.source`). One-way: once dropped it never comes
+  // back for this room.
+  const source = p.initial.source ?? null;
+  const [mirrorUp, setMirrorUp] = useState(source !== null);
+  const dropMirror = useCallback(() => setMirrorUp(false), []);
+  const mirrorRef = useRef<HTMLCanvasElement>(null);
+  /**
+   * The hand-off from a playing report player. It plays on under the mirror
+   * while this element loads and parks, paused, at `target` — a beat ahead —
+   * and this element starts the moment the report player reaches that frame,
+   * so the film never stops. A report player that outruns the park is parked
+   * ahead of again; after {@link HANDOFF_MAX_ATTEMPTS} the room takes over
+   * where the report player is and lets the buffer catch up. Any seek, pause
+   * or exit ends the hand-off first. `handingOff` is the same flag as state,
+   * for what renders from it.
+   */
+  const handoffRef = useRef({
+    active: initialHandoff,
+    target: null as number | null,
+    attempts: 0,
+  });
+  const endHandoff = useCallback(() => {
+    handoffRef.current.active = false;
+    setHandingOff(false);
+    source?.pause();
+  }, [source]);
   // T16: the frame admits it is still catching up with a seek the chrome has
   // already made. Display only — `seek` is untouched and still marks on click.
   const settling = useSeekSettling({ graceMs: 120, generation: p.generation });
@@ -469,7 +522,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const leavingRef = useRef(false);
   const enterAnimation = useRef<Animation | null>(null);
 
-  const syncClock = useFilmClockVars(videoRef, rootRef, playing);
+  // During the hand-off the mirror loop writes `--film-t` off the report
+  // player; this element is parked ahead and would write the wrong time.
+  const syncClock = useFilmClockVars(videoRef, rootRef, playing && !handingOff);
 
   /**
    * Where a fresh element has to come back to. Seeded from the report player's
@@ -787,14 +842,34 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       const target = Math.max(0, max ? Math.min(seconds, max) : seconds);
       // Observes only; captures the buffered ranges the jump starts from.
       traceRef.current?.seek(el, target);
+      // A seek during the hand-off ends it: this element plays from here.
+      const tookOver = handoffRef.current.active;
+      if (tookOver) endHandoff();
       el.currentTime = target;
+      // The mirror is the opening moment; a seek is a different one.
+      dropMirror();
+      if (tookOver && readyRef.current) {
+        void el.play().catch(() => p.onPlayRejected());
+      }
       mark(target);
       rootRef.current?.style.setProperty("--film-t", String(target));
       // Whatever the court's readout was explaining is no longer on screen.
       setSeekKey((k) => k + 1);
     },
-    [mark, traceRef],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mark, traceRef, dropMirror, endHandoff, p.onPlayRejected],
   );
+
+  /** Park this element, paused, a beat ahead of the report player. */
+  const primeHandoff = useCallback(() => {
+    const el = videoRef.current;
+    const handoff = handoffRef.current;
+    if (!el || !source || !readyRef.current) return;
+    handoff.attempts += 1;
+    const target = source.currentTime + HANDOFF_LEAD_SECONDS * handoff.attempts;
+    handoff.target = target;
+    el.currentTime = target;
+  }, [source]);
 
   /**
    * Put a fresh element back where the old one was — the room's half of the
@@ -804,6 +879,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const land = useCallback(() => {
     const el = videoRef.current;
     if (!el || !readyRef.current) return;
+    if (handoffRef.current.active) {
+      primeHandoff();
+      return;
+    }
     const { time, playing: wasPlaying } = landingRef.current;
     const max =
       Number.isFinite(el.duration) && el.duration > 0 ? el.duration : undefined;
@@ -816,10 +895,13 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       rootRef.current?.style.setProperty("--film-t", String(target));
     }
     if (wasPlaying && el.paused) {
-      void el.play().catch(() => p.onPlayRejected());
+      void el.play().catch(() => {
+        dropMirror();
+        p.onPlayRejected();
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mark, p.onPlayRejected]);
+  }, [mark, p.onPlayRejected, dropMirror, primeHandoff]);
 
   /** Metadata is in: take the duration and put the playhead where it belongs. */
   const settle = useCallback(() => {
@@ -870,6 +952,16 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const togglePlay = useCallback(() => {
     const el = videoRef.current;
     if (!el) return;
+    // Mid-hand-off the film playing is the report player's, so this is a
+    // pause: stop it, and put this element on the frame it stopped at.
+    if (handoffRef.current.active && source) {
+      endHandoff();
+      setPlaying(false);
+      landingRef.current = { time: source.currentTime, playing: false };
+      mark(source.currentTime);
+      land();
+      return;
+    }
     // A rejected play() is not a broken film: a pause landing before play
     // resolves (a quick double Space) rejects with AbortError, and an autoplay
     // refusal with NotAllowedError. Only the element's own `error` event means
@@ -877,7 +969,118 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     if (el.paused) void el.play().catch(() => p.onPlayRejected());
     else el.pause();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p.onPlayRejected]);
+  }, [p.onPlayRejected, source, endHandoff, mark, land]);
+
+  /**
+   * One tick of the hand-off, off the mirror loop: take over once the report
+   * player reaches the parked frame and this element can play through it.
+   */
+  const tryTakeOver = useCallback(
+    (t: number) => {
+      const el = videoRef.current;
+      const handoff = handoffRef.current;
+      if (!el || !source || handoff.target === null || !readyRef.current) {
+        return;
+      }
+      const giveUp = () => {
+        endHandoff();
+        landingRef.current = { time: source.currentTime, playing: true };
+        land();
+      };
+      // The report player stopped on its own (its end, a stall that errored).
+      if (source.paused || source.ended) {
+        giveUp();
+        return;
+      }
+      const ready = !el.seeking && el.readyState >= 3;
+      if (t > handoff.target + (ready ? 0.25 : 0)) {
+        // Outran the park: further ahead, or stop chasing.
+        if (handoff.attempts >= HANDOFF_MAX_ATTEMPTS) giveUp();
+        else primeHandoff();
+        return;
+      }
+      if (!ready || t < handoff.target - 1 / 60) return;
+      endHandoff();
+      landingRef.current = { time: handoff.target, playing: true };
+      void el.play().catch(() => {
+        dropMirror();
+        p.onPlayRejected();
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source, endHandoff, land, primeHandoff, dropMirror, p.onPlayRejected],
+  );
+
+  /**
+   * The mirror: the report player's frames painted every animation frame
+   * while it is up, and — during the hand-off — the playhead read off it, so
+   * the board, the track and the counters move with the film being shown.
+   * `mark` is throttled to the rate `timeupdate` would deliver.
+   */
+  useEffect(() => {
+    if (!mirrorUp || !source) return;
+    const canvas = mirrorRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    let frame = 0;
+    let lastMark = 0;
+    let durationTaken = false;
+    const draw = () => {
+      // The report player already knows the length; this element will not
+      // until its metadata lands, and the track reads a zero length as full.
+      if (
+        !durationTaken &&
+        Number.isFinite(source.duration) &&
+        source.duration > 0
+      ) {
+        durationTaken = true;
+        setDuration((d) => d || source.duration);
+        rootRef.current?.style.setProperty("--film-d", String(source.duration));
+      }
+      if (source.videoWidth > 0) {
+        if (canvas.width !== source.videoWidth)
+          canvas.width = source.videoWidth;
+        if (canvas.height !== source.videoHeight) {
+          canvas.height = source.videoHeight;
+        }
+        try {
+          ctx.drawImage(source, 0, 0);
+        } catch {
+          // No frame to draw yet; the next tick tries again.
+        }
+      }
+      if (handoffRef.current.active) {
+        const t = source.currentTime;
+        rootRef.current?.style.setProperty("--film-t", String(t));
+        const now = performance.now();
+        if (now - lastMark > 250) {
+          lastMark = now;
+          mark(t);
+        }
+        tryTakeOver(t);
+      } else if (!readyRef.current) {
+        // Paused entry: this element reads 0 until its metadata lands.
+        rootRef.current?.style.setProperty(
+          "--film-t",
+          String(landingRef.current.time),
+        );
+      }
+      frame = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => cancelAnimationFrame(frame);
+  }, [mirrorUp, source, mark, tryTakeOver]);
+
+  /**
+   * Where the film being SHOWN is: the report player's time during the
+   * hand-off (this element is parked ahead of it), and before this element
+   * has metadata the landing time rather than its 0.
+   */
+  const filmNow = useCallback(() => {
+    if (handoffRef.current.active && source) return source.currentTime;
+    const el = videoRef.current;
+    return el && readyRef.current ? el.currentTime : landingRef.current.time;
+  }, [source]);
 
   const { onFollow } = p;
   const step = useCallback(
@@ -886,14 +1089,30 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       // re-follow first, then walk from the PLAYING point — even at the end
       // of the cut, where there is nothing left to step to.
       onFollow();
-      const now = videoRef.current?.currentTime ?? currentTime;
+      const now = filmNow();
       const stop =
         direction === 1
           ? nextStop(p.walkStops, now)
           : prevStop(p.walkStops, now);
       if (stop) seek(stop.start);
     },
-    [p.walkStops, onFollow, currentTime, seek],
+    [p.walkStops, onFollow, filmNow, seek],
+  );
+
+  // ↑ ↓ walk SHOTS, over the cut ← → walk. Built on the press rather than
+  // read from `shotStops`, which stays empty while the drawer and the court
+  // are both away (it is a few thousand shots to place on every tick).
+  const stepShotBy = useCallback(
+    (direction: -1 | 1) => {
+      onFollow();
+      const shot = stepShot(
+        buildShotStops(p.walkStops, p.clock),
+        filmNow(),
+        direction,
+      );
+      if (shot) seek(shot.start);
+    },
+    [p.walkStops, p.clock, onFollow, filmNow, seek],
   );
 
   // Stable, because the panel's rows are memoized on them and the room
@@ -995,10 +1214,13 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     if (leavingRef.current) return;
     leavingRef.current = true;
     const el = videoRef.current;
-    const wasPlaying = el ? !el.paused : false;
+    // Mid-hand-off the film is still the report player's, and so is its time.
+    const handing = handoffRef.current.active && source !== null;
+    if (handing) endHandoff();
+    const wasPlaying = handing || (el ? !el.paused : false);
     el?.pause();
     const state = {
-      time: el?.currentTime ?? currentTime,
+      time: handing ? source.currentTime : (el?.currentTime ?? currentTime),
       playing: wasPlaying,
     };
 
@@ -1040,7 +1262,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
             fill: "forwards",
           });
     void animation.finished.catch(() => {}).then(() => p.onExit(state));
-  }, [p, currentTime]);
+  }, [p, currentTime, source, endHandoff]);
 
   // The point the film was last inside, for Loop. Loop cannot ask
   // `activeStopAt` at the end of a window: a window clamped to the next one's
@@ -1213,21 +1435,21 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
           e.preventDefault();
           togglePlay();
           break;
-        // Up/Down are kept as plain aliases for previous/next point — phase 1
-        // taught them and nothing else in the room wants them (author
-        // decision 2026-09-21). Left/Right carry the H2 seek behaviour below.
+        // Up/Down walk shots (2026-10-19; they were plain aliases for
+        // previous/next point before). Left/Right step points, and carry the
+        // H2 seek behaviour below.
         case "ArrowUp":
           e.preventDefault();
-          step(-1);
+          stepShotBy(-1);
           break;
         case "ArrowDown":
           e.preventDefault();
-          step(1);
+          stepShotBy(1);
           break;
         case "ArrowLeft":
           e.preventDefault();
           if (e.shiftKey) {
-            seek((videoRef.current?.currentTime ?? 0) - 5);
+            seek(filmNow() - 5);
           } else {
             step(-1);
           }
@@ -1235,7 +1457,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         case "ArrowRight":
           e.preventDefault();
           if (e.shiftKey) {
-            seek((videoRef.current?.currentTime ?? 0) + 5);
+            seek(filmNow() + 5);
           } else {
             step(1);
           }
@@ -1299,6 +1521,8 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     togglePlay,
     seek,
     step,
+    stepShotBy,
+    filmNow,
     toggleSavedActive,
     toggleMute,
     toggleCourt,
@@ -1470,7 +1694,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               key={p.generation}
               ref={videoRef}
               src={p.url ?? undefined}
-              preload="metadata"
+              // A parked hand-off element has to buffer ahead to take over
+              // without a stall; otherwise metadata, as the report player.
+              preload={handingOff ? "auto" : "metadata"}
               playsInline
               data-testid="film-room-video"
               data-generation={p.generation}
@@ -1487,7 +1713,13 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               onLoadedData={() => {
                 setVideoReady(true);
                 settling.onLoadedData();
+                // Paused, the frame under the playhead is the whole picture.
+                if (!landingRef.current.playing) dropMirror();
               }}
+              // Playing, the mirror waits for frames that MOVE here: a play
+              // that stalls on a cold buffer keeps the viewer's film up rather
+              // than a black or dimmed one.
+              onPlaying={dropMirror}
               onClick={togglePlay}
               // R1 (2026-09-22): click the film plays/pauses. Double-click no
               // longer exits — a fast click burst (click, click, dblclick)
@@ -1505,6 +1737,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 }
               }}
               onPause={() => {
+                dropMirror();
                 setPlaying(false);
                 playingRef.current = false;
                 landingRef.current.playing = false;
@@ -1525,6 +1758,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               onSeeking={settling.onSeeking}
               onSeeked={(e) => {
                 settling.onSeeked();
+                if (!landingRef.current.playing && !handoffRef.current.active) {
+                  dropMirror();
+                }
                 mark(e.currentTarget.currentTime);
                 syncClock();
               }}
@@ -1534,6 +1770,19 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
             >
               Your browser cannot play this video.
             </video>
+
+            {source && (
+              <canvas
+                ref={mirrorRef}
+                aria-hidden="true"
+                data-testid="film-room-mirror"
+                data-film-mirror={mirrorUp ? "up" : "down"}
+                className={cn(
+                  "pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-200",
+                  mirrorUp ? "opacity-100" : "opacity-0",
+                )}
+              />
+            )}
 
             <span
               aria-hidden="true"

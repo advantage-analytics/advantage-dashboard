@@ -129,6 +129,11 @@ export interface FilmPlayerHandle {
   snapshot: () => { time: number; playing: boolean };
   /** The frame's box on screen, for the room's grow and shrink. */
   frameRect: () => Rect | null;
+  /**
+   * The `<video>` itself, for the room to mirror while its own element loads
+   * (`FilmRoomEntry.source`). Null before a frame exists.
+   */
+  videoElement: () => HTMLVideoElement | null;
 }
 
 interface FilmPlayerProps {
@@ -563,6 +568,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
           return r
             ? { left: r.left, top: r.top, width: r.width, height: r.height }
             : null;
+        },
+        videoElement: () => {
+          const el = videoRef.current;
+          return el && el.readyState >= 2 && el.videoWidth > 0 ? el : null;
         },
       }),
       [seekTo, togglePlay, play, step],

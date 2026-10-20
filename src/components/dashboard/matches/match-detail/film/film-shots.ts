@@ -110,6 +110,37 @@ export function activeShotAt(
   };
 }
 
+/**
+ * Where ↑ (-1) and ↓ (1) take the film: the previous or next shot, across
+ * point boundaries, over whatever shot feed the caller hands in — built from
+ * the applied cut's stops, so a shot walk skips the points the cut leaves out
+ * exactly as ← → do.
+ *
+ * Inside a shot, ↑ goes to the shot before it rather than back to its own
+ * contact (the same rule as `prevStop`); between points it goes to the last
+ * shot behind the playhead. ↓ is the first contact ahead. A seek lands a few
+ * milliseconds early on a decodable frame, so "ahead" is measured past
+ * {@link REACHED_EPSILON_SECONDS} — the shot just stepped to is never its own
+ * next one. Null at either end of the feed.
+ */
+export function stepShot(
+  stops: readonly ShotStop[],
+  filmTime: number,
+  direction: -1 | 1,
+): ShotStop | null {
+  if (direction === 1) {
+    return (
+      stops.find((s) => s.start - REACHED_EPSILON_SECONDS > filmTime) ?? null
+    );
+  }
+  const current = activeShotAt(stops as ShotStop[], filmTime)?.stop ?? null;
+  const before = current ? current.start : filmTime - REACHED_EPSILON_SECONDS;
+  for (let i = stops.length - 1; i >= 0; i -= 1) {
+    if (stops[i] !== current && stops[i].start < before) return stops[i];
+  }
+  return null;
+}
+
 /** The em dash the Current point widget draws for anything unmeasured. */
 export const UNMEASURED = "—";
 

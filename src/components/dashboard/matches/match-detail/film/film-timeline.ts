@@ -276,13 +276,25 @@ export function nextStop<S extends FilmStop<StopPoint>>(
   return stops.find((s) => s.start > filmTime + STEP_CUSHION_SECONDS) ?? null;
 }
 
-/** The previous stop before the playhead, with the cushion. */
+/**
+ * The previous point — the one BEFORE the point being played.
+ *
+ * Inside a point, "previous" is the point before it, never the same point
+ * from its serve: a back step used to land on the last start behind the
+ * playhead, which mid-rally is the playing point's own, so ← replayed the
+ * rally instead of going back one. Only the dead time between points (and a
+ * playhead inside a point the cut leaves out) still walks to the last start
+ * behind it, with the cushion — there the point just finished IS the one
+ * behind you.
+ */
 export function prevStop<S extends FilmStop<StopPoint>>(
   stops: readonly S[],
   filmTime: number,
 ): S | null {
+  const playing = playingStopAt(stops, filmTime);
+  const before = playing ? playing.start : filmTime - STEP_CUSHION_SECONDS;
   for (let i = stops.length - 1; i >= 0; i -= 1) {
-    if (stops[i].start < filmTime - STEP_CUSHION_SECONDS) return stops[i];
+    if (stops[i] !== playing && stops[i].start < before) return stops[i];
   }
   return null;
 }
