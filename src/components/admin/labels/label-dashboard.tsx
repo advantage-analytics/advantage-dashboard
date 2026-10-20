@@ -26,6 +26,7 @@ import {
   labelSetScores,
   type LabelSetScore,
 } from "@/lib/services/labels/set-scores";
+import { PUBLISHED_PAST_TAILS } from "@/lib/services/labels/session-status";
 import { cn } from "@/lib/utils";
 
 /**
@@ -43,7 +44,8 @@ import { cn } from "@/lib/utils";
  * Read off the same pure rules the rail draws from, so the two never
  * disagree: `openFlags` / `flagGroups` for what is flagged, `labelSetScores`
  * for the score, `completeWarnings` (computed by the console, handed in as
- * `warnings`) for what a publish writes partly or leaves out, `buildAppliedRows` +
+ * `warnings`) for what a publish writes partly or leaves out,
+ * `buildAppliedRows` +
  * `expectedStats` for the statistics — the rows a publish would write,
  * counted.
  *
@@ -597,11 +599,7 @@ interface CheckItem {
  * or leaves out. None blocks a publish any more (2026-10-18); each stays an
  * open check.
  */
-const PUBLISHED_PAST = [
-  ", so it is left out",
-  " — it publishes with no ending",
-  " — it publishes with the labelled winner",
-];
+const PUBLISHED_PAST: readonly string[] = Object.values(PUBLISHED_PAST_TAILS);
 
 /** The route to publishing, as the things that must be true first. */
 function publishChecks({

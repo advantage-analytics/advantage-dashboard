@@ -44,6 +44,17 @@ export interface CompleteWarningInput {
 const plural = (n: number, one: string, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`;
 
+/**
+ * The tails `completeWarnings` ends a point's sentence with when a publish
+ * writes it only partly or leaves it out. The Labels dashboard matches on
+ * them (label-dashboard.tsx), so the wording lives here once.
+ */
+export const PUBLISHED_PAST_TAILS = {
+  leftOut: ", so it is left out",
+  noEnding: " — it publishes with no ending",
+  labelledWinner: " — it publishes with the labelled winner",
+} as const;
+
 /** The open items, most general first; empty when nothing is left. */
 export function completeWarnings(input: CompleteWarningInput): string[] {
   const { points, adScoring, marks } = input;
@@ -122,7 +133,7 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
       resolved.winner !== point.winner
     ) {
       warnings.push(
-        `${at}'s strokes say ${names[resolved.winner]} won, not the labelled winner — it publishes with the labelled winner`,
+        `${at}'s strokes say ${names[resolved.winner]} won, not the labelled winner${PUBLISHED_PAST_TAILS.labelledWinner}`,
       );
     } else if (resolved.kind === "derived") {
       warnings.push(
@@ -132,11 +143,11 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
       warnings.push(
         point.winner !== null && point.server !== null
           ? `${at} isn't on the video and will publish as score only`
-          : `${at} has no strokes and no ${point.winner === null ? "winner" : "server"}, so it is left out`,
+          : `${at} has no strokes and no ${point.winner === null ? "winner" : "server"}${PUBLISHED_PAST_TAILS.leftOut}`,
       );
     } else if (resolved.kind === "unresolved") {
       warnings.push(
-        `${at} has no ending its strokes can settle — it publishes with no ending`,
+        `${at} has no ending its strokes can settle${PUBLISHED_PAST_TAILS.noEnding}`,
       );
     }
   }
