@@ -183,6 +183,7 @@ import {
   type PlacementTarget,
 } from "./court-placement";
 import { LabelBlackRail } from "./label-black-rail";
+import { strokeChangePatch } from "./label-black-shot-row";
 import { LabelBlackView } from "./label-black-view";
 import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
@@ -232,6 +233,7 @@ import {
   playingRowKey,
 } from "./video-clock";
 import { useBrowserFullscreen } from "./use-browser-fullscreen";
+import { isStrokeKey, strokeKeyChange } from "./stroke-keys";
 
 /** Ids of rows drawn optimistically while their insert is in flight. */
 const PENDING_SHOT_PREFIX = "pending-shot-";
@@ -2155,6 +2157,9 @@ export function LabelConsole({
   >(() => {});
   // ↑ and ↓: the previous and next stroke of the open point.
   const stepShot = useRef<(direction: 1 | -1) => void>(() => {});
+  // F B V O S and 1–4: the selected stroke's Stroke or Spin (stroke-keys.ts).
+  // True when the key was the selected stroke's to take.
+  const strokeKey = useRef<(key: string) => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
   const foldOpenPoint = useRef<() => boolean>(() => false);
   // ⌘Z: the header's Undo.
@@ -2226,6 +2231,19 @@ export function LabelConsole({
       // A cell left focused in the old row would keep the keys for itself.
       (document.activeElement as HTMLElement | null)?.blur?.();
       selectShot(shots[next].id);
+    };
+    strokeKey.current = (key) => {
+      if (!operable || confirm || placement.shotId === null) return false;
+      const shot = findShot(points, placement.shotId);
+      if (!shot || shot.status === "deleted") return false;
+      const change = strokeKeyChange(key, shot);
+      if (change) {
+        requestPatchShot(
+          shot.id,
+          "stroke" in change ? strokeChangePatch(shot, change.stroke) : change,
+        );
+      }
+      return true;
     };
     undoLastRef.current = () => void undoLast();
     jumpAfterOpen.current = (pointId) => findGap(pointId);
@@ -2302,6 +2320,30 @@ export function LabelConsole({
         event.preventDefault();
         undoLastRef.current();
         return;
+      }
+      // A stroke key reaches the selected stroke from a focused cell too (a
+      // cell is a button); a text field, a menu and a dialog keep it.
+      if (
+        isStrokeKey(key) &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.defaultPrevented &&
+        !event.repeat
+      ) {
+        const target = event.target as Element | null;
+        if (
+          !target?.closest?.(
+            "input, select, textarea, [contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog']",
+          ) &&
+          !document.querySelector(
+            "[role='menu'], [role='dialog'], [role='alertdialog']",
+          ) &&
+          strokeKey.current(key)
+        ) {
+          event.preventDefault();
+          return;
+        }
       }
       const chord = key === "Enter" && (event.metaKey || event.ctrlKey);
       const vertical =

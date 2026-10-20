@@ -22,6 +22,7 @@ import {
   parseCourtMarksKey,
 } from "./label-court-marks";
 import type { SideNames } from "./label-format";
+import { STROKE_KEY_HINT } from "./stroke-keys";
 import type { VideoClock } from "./video-clock";
 
 /**
@@ -316,6 +317,14 @@ export function LabelCourtPanel({
           </span>
         )}
       </div>
+      {placing ? (
+        <p
+          data-court-keys=""
+          className="mono mt-1 shrink-0 truncate text-[9px] tracking-[0.5px] text-white/45"
+        >
+          {STROKE_KEY_HINT}
+        </p>
+      ) : null}
     </div>
   );
 }
