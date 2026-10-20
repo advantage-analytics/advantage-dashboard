@@ -75,6 +75,13 @@ export interface FormData {
    * SwingVision import that arrives "Unfinished". Words the settled line only.
    */
   stopReason?: StopReason;
+  /**
+   * "It was a match tiebreak" — the answer to a best of 3 whose third set
+   * reads 1-0 with no tiebreak points (`bareMatchTiebreak`). Those games are
+   * also how a match that stopped one game into a real third set looks, so the
+   * set counts as won only once this says so, or once its points are entered.
+   */
+  matchTiebreakConfirmed?: boolean;
   date: string;
   time: string;
   playerName: string;
@@ -288,6 +295,7 @@ export const DEFAULT_FORM_DATA: FormData = {
   playOnLets: false,
   result: "",
   stopReason: undefined,
+  matchTiebreakConfirmed: undefined,
   date: "",
   time: "",
   playerName: "",

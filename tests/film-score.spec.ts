@@ -5,6 +5,8 @@ import {
   boardAt,
   footLine,
   initialSurname,
+  readGameScore,
+  readPointScore,
   setTrackTone,
 } from "@/components/dashboard/matches/match-detail/film/film-score";
 
@@ -87,6 +89,28 @@ test.describe("boardAt", () => {
     expect(board.pointLine).toBeNull();
   });
 
+  test("a point the score stream never read (score_frozen) leaves its live cells blank, never the defaulted 0-0", () => {
+    // The loader defaults a null column to "0-0"; the raw fields keep the null.
+    const point = pt({
+      id: "p",
+      setNumber: 1,
+      serverIsPlayer1: true,
+      gameScore: "0-0",
+      pointScore: "0-0",
+      gameScoreRaw: null,
+      pointScoreRaw: null,
+      scoreFrozen: true,
+    });
+    const board = boardAt(point, sides, {
+      hasGameScore: true,
+      hasPointScore: true,
+    });
+    expect(board.rows[0].sets).toEqual([null]);
+    expect(board.rows[1].sets).toEqual([null]);
+    expect(board.rows[0].game).toBeNull();
+    expect(board.pointLine).toBeNull();
+  });
+
   test("carries the game number the foot line names between points", () => {
     const point = pt({ id: "p", setNumber: 2, gameNumber: 7 });
     const board = boardAt(point, sides, {
@@ -126,5 +150,22 @@ test.describe("footLine", () => {
     expect(footLine("   ", false, state)).toBe(fallback);
     // Saved is about a point; with no point there is nothing to append to.
     expect(footLine(null, true, state)).toBe(fallback);
+  });
+});
+
+test.describe("readGameScore / readPointScore", () => {
+  test("the raw column wins where the loader carried one, null included", () => {
+    expect(
+      readPointScore({ pointScore: "0-0", pointScoreRaw: null }),
+    ).toBeNull();
+    expect(readGameScore({ gameScore: "0-0", gameScoreRaw: null })).toBeNull();
+    expect(readPointScore({ pointScore: "0-0", pointScoreRaw: "0-0" })).toBe(
+      "0-0",
+    );
+  });
+
+  test("a point built without the raw fields keeps its defaulted string", () => {
+    expect(readPointScore({ pointScore: "15-30" })).toBe("15-30");
+    expect(readGameScore({ gameScore: "2-1" })).toBe("2-1");
   });
 });

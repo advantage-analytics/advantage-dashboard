@@ -4,7 +4,10 @@
  * component so the wording is tested once and can't drift between states.
  */
 
-import { setWinner } from "@/components/dashboard/matches/new-match-wizard/score-state";
+import {
+  playsMatchTiebreak,
+  setWinner,
+} from "@/components/dashboard/matches/new-match-wizard/score-state";
 import { formatClock } from "@/components/dashboard/matches/new-match-wizard/utils";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { lineName } from "@/lib/schedule/attach-line-state";
@@ -141,7 +144,12 @@ export function resultLine(input: {
     const a = input.player[i];
     const b = input.opponent[i];
     if (a == null || b == null) break;
-    const w = setWinner(a, b, input.gamesTo);
+    const w = setWinner(
+      a,
+      b,
+      input.gamesTo,
+      playsMatchTiebreak(input.bestOf, i),
+    );
     if (!w) break;
     if (w === "player") p++;
     else o++;

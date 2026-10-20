@@ -635,6 +635,67 @@ test.describe("writeLabelGameShift", () => {
     }
   });
 
+  test("the match row is read once, score beside format, and the shift plans with the record's match-tiebreak set as the console does", async () => {
+    // Best of 1 puts the deciding set at set 1 — the fixture's — and the
+    // record spells it as a match tiebreak: 1–0 games with its points.
+    const fake = fakeClient({
+      session: {
+        status: "labelling",
+        ad_scoring: true,
+        job_id: JOB_ID,
+        match_id: MATCH_ID,
+      },
+      match: {
+        score: {
+          player1: [1],
+          player2: [0],
+          player1_tiebreaks: [10],
+          player2_tiebreaks: [7],
+        },
+        format: { best_of: 1 },
+      },
+    });
+    // Its vendor-cut games are left alone: nothing in the set is a leftover.
+    expect(
+      await writeLabelGameShift({
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        fromPointId: UUID(7),
+      }),
+    ).toEqual({
+      error: "That point sits inside its game — there is nothing to move on.",
+    });
+    expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
+      ["label_sessions", "select"],
+      ["label_points", "select"],
+      ["matches", "select"],
+    ]);
+    expect(fake.calls.find((c) => c.table === "matches")?.filters).toEqual({
+      id: MATCH_ID,
+    });
+    // The same 1–0 with no tiebreak points is a retirement: an ordinary set,
+    // and the shift goes ahead.
+    const retired = fakeClient({
+      session: {
+        status: "labelling",
+        ad_scoring: true,
+        job_id: JOB_ID,
+        match_id: MATCH_ID,
+      },
+      match: { score: { player1: [1], player2: [0] }, format: { best_of: 1 } },
+    });
+    expect(
+      await writeLabelGameShift({
+        supabase: retired.supabase,
+        sessionId: SESSION_ID,
+        fromPointId: UUID(7),
+      }),
+    ).toMatchObject({
+      ok: true,
+      writes: [expect.anything(), expect.anything()],
+    });
+  });
+
   test("moved points whose strokes contradict their new server: the points' writes carry the flipped winner, then the strokes in grouped writes — label_points and label_shots", async () => {
     const shotRow = (id: string, pointId: string, hitter: LabelSide) =>
       labelShotRow(id, pointId, {
@@ -1555,6 +1616,37 @@ test.describe("writeLabelGamePull", () => {
         { id: [UUID(6)] },
       ],
     ]);
+  });
+
+  test("the pull plans with the record's match-tiebreak set too: its games are never short", async () => {
+    const fake = fakeClient({
+      session: {
+        status: "labelling",
+        ad_scoring: false,
+        job_id: JOB_ID,
+        match_id: MATCH_ID,
+      },
+      match: {
+        score: {
+          player1: [1],
+          player2: [0],
+          player1_tiebreaks: [10],
+          player2_tiebreaks: [7],
+        },
+        format: { best_of: 1 },
+      },
+      points: rowsOf(shortCase()),
+    });
+    expect(
+      await writeLabelGamePull({
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        gameKey: KEY,
+      }),
+    ).toEqual({
+      error: "That game is not short — there is nothing to pull in.",
+    });
+    expect(fake.calls.map((c) => c.table)).toContain("matches");
   });
 
   test("a bad key, a game the rule declines, a complete session and a failed write each stop the run", async () => {

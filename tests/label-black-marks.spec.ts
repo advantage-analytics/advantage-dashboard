@@ -9,7 +9,16 @@ import {
   type LabelMarkParams,
   type LabelMarks,
 } from "@/lib/services/labels/marks";
-import { pointEndedEarly } from "@/lib/services/labels/marks-state";
+import {
+  drawsGhosts,
+  pointEndedEarly,
+  reviewFlag,
+} from "@/lib/services/labels/marks-state";
+import { reviewStep } from "@/lib/services/labels/review-step";
+import {
+  runReviewAnswer,
+  type ReviewWriteHandlers,
+} from "@/components/admin/labels/review-answer";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
@@ -20,10 +29,11 @@ import {
 import { tag } from "./fixtures/html-probe";
 import { createLoader } from "./fixtures/vm-modules";
 
-/** What the rail's rows DRAW of the marks, by tier: a chip for the counted, one quiet line for hints, nothing for hidden. */
+/** What the rail's rows DRAW of the marks: one chip for the point's flag, the open point's current review item (asked in the court panel), nothing for hidden. */
 
 const ROW = "src/components/admin/labels/label-black-point-row.tsx";
 const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
+const MARK = "src/components/admin/labels/label-black-mark.tsx";
 const FORMAT = "src/components/admin/labels/label-black-format.ts";
 
 /** The fixture session's two players, as the console's `sideNames` has them. */
@@ -56,7 +66,7 @@ const DISPUTED = mark("winner_disputed", {
   lastStrokeWinner: "p1",
 });
 const DISPUTED_HOVER =
-  "The score says Vargas won, but the last shot says Lee did. The ending is wrong more often than the winner.";
+  "The score says Vargas won, but the vendor’s last shot says Lee did. The ending is wrong more often than the winner.";
 
 /**
  * The fixture's second point — Lee's ace, one kept serve — as it was seeded:
@@ -174,17 +184,43 @@ function chips(html: string): Chip[] {
 
 const pencils = (html: string) => html.match(/data-pencil=""/g)?.length ?? 0;
 
-/** The open point's hint line: each hint's code, words and accessible name. */
-function hintLine(
-  html: string,
-): { code: string; text: string; label: string }[] {
-  return [
-    ...html.matchAll(/<span[^>]*data-point-hint="([^"]*)"[^>]*>([^<]*)</g),
-  ].map((m) => ({
-    code: m[1],
-    text: unescape(m[2]),
-    label: unescape(/aria-label="([^"]*)"/.exec(m[0])?.[1] ?? ""),
-  }));
+/**
+ * The open point's review step as the court panel asks it (review-step.ts
+ * `reviewStep`): its item, question, explanation and answers — data, which
+ * the panel draws only with a console that can write.
+ */
+function review(point: LabelPoint, marks: LabelMarks) {
+  const step = reviewStep(point, marks, [point], NAMES, drawsGhosts(marks));
+  return step
+    ? {
+        id: step.item.id,
+        tone: step.item.tone,
+        question: step.question,
+        explanation: step.explanation,
+        answers: step.answers,
+      }
+    : null;
+}
+
+/** A review's answers' words, in order. */
+const answers = (r: ReturnType<typeof review>) =>
+  r?.answers.map((a) => a.label);
+
+/** Handlers that record each write the console would make, by name. */
+function recorder(calls: unknown[][]): ReviewWriteHandlers {
+  const record =
+    (name: string) =>
+    (...args: unknown[]) =>
+      calls.push([name, ...args]);
+  return {
+    patchShot: record("shot"),
+    patchPoint: record("point"),
+    splitPoint: record("split"),
+    removeShotsAfter: record("remove"),
+    dismissSuggestion: record("dismiss"),
+    setChecked: record("checked"),
+    addShot: record("add"),
+  };
 }
 
 /** One mark of every code, on the fixture's point and its one stroke. */
@@ -211,9 +247,10 @@ test.describe("the chip on the point row", () => {
     const [chip, ...rest] = chips(tail(html));
     expect(rest).toHaveLength(0);
     expect(chip.state).toBe("open");
-    expect(chip.text).toBe("Check the ending");
+    // The chip asks the item the mark sits under, not the mark's own label.
+    expect(chip.text).toBe("How did the last ball end?");
     // The accessible name is the tooltip's two lines as one.
-    expect(chip.label).toBe(`Check the ending. ${DISPUTED_HOVER}`);
+    expect(chip.label).toBe(`How did the last ball end? ${DISPUTED_HOVER}`);
     expect(chip.tag).toContain('role="img"');
     // Untouched and unchecked: no pencil.
     expect(pencils(html)).toBe(0);
@@ -240,64 +277,119 @@ test.describe("the chip on the point row", () => {
     expect(t.indexOf('data-pencil=""')).toBeGreaterThan(chip.at);
   });
 
-  test("three open marks are one chip that counts them", () => {
+  test("three open marks on one question are one chip with that question", () => {
     const point = fixturePoint();
     const html = renderRow(
       point,
       marksOf(point, [
         DISPUTED,
-        mark("pick_winner", {}),
-        mark("reserve_after_in", {}),
+        mark("last_call_overruled", { vendorCall: "out", eventId: 201 }),
+        mark("last_shot_unresolved", {}),
       ]),
     );
     const all = chips(tail(html));
     expect(all).toHaveLength(1);
     expect(all[0].state).toBe("open");
-    expect(all[0].text).toBe("3 to check");
-    expect(all[0].tag).toContain('data-mark-count="3"');
-    // The hover is every line the chip stands for.
+    // Item 4, asked as the vendor called the last ball.
+    expect(all[0].text).toBe("Was the last ball out?");
+    // One item: the chip counts items, not marks.
+    expect(all[0].tag).toContain('data-mark-count="1"');
+    // The hover is the question over every open mark's evidence.
+    expect(all[0].label.startsWith("Was the last ball out? ")).toBe(true);
     expect(all[0].label).toContain(DISPUTED_HOVER);
-    expect(all[0].label).toContain("Watch the clip and choose.");
-    expect(all[0].label).toContain("Could be a let.");
+  });
+
+  test("two open items are one chip: Review · 2, a line per item", () => {
+    const point = fixturePoint();
+    const html = renderRow(
+      point,
+      marksOf(point, [DISPUTED, mark("pick_winner", {})]),
+    );
+    const all = chips(tail(html));
+    expect(all).toHaveLength(1);
+    expect(all[0].state).toBe("open");
+    expect(all[0].text).toBe("Review · 2");
+    expect(all[0].tag).toContain('data-mark-count="2"');
+    expect(all[0].tag).toContain("rail-amber");
+    expect(all[0].label).toBe(
+      "Review · 2. 4 · How did the last ball end? 5 · Who won?",
+    );
   });
 });
 
 test.describe("a closed row draws only what can change the score", () => {
-  test("hints are one grey chip on the row, and take nothing from the count beside it", () => {
+  test("hints are the flag's too: a grey chip unless demoted, and one question beside a counted mark", () => {
     const point = fixturePoint();
     const shot = point.shots[0];
-    // Hints alone: a grey chip, "N data" — wrong data, not the score.
-    const hintsOnly = renderRow(
-      point,
-      marksOf(point, EVERY_HINT, { [shot.id]: [NET_HIT] }),
-    );
-    const [grey, ...others] = chips(hintsOnly);
+    // "No landing on the last shot" alone: a grey, filled chip asking item 4.
+    const landing = mark("last_landing_missing", {});
+    const greyOnly = renderRow(point, marksOf(point, [landing]));
+    const [grey, ...others] = chips(greyOnly);
     expect(others).toHaveLength(0);
-    expect(grey.text).toBe("4 data");
+    expect(grey.state).toBe("open");
+    expect(grey.text).toBe("How did the last ball end?");
     expect(grey.tag).toContain('data-mark-tone="data"');
+    expect(grey.tag).toContain("bg-white/[0.10]");
     expect(grey.tag).not.toContain("rail-amber");
-    expect(hintsOnly).not.toContain("data-point-hint");
-    // Checked, the point is done with them: no chip at all.
-    const checked = { ...point, checkedAt: "2026-10-12T00:00:00Z" };
-    expect(
-      chips(
-        renderRow(
-          checked,
-          marksOf(checked, EVERY_HINT, { [shot.id]: [NET_HIT] }),
-        ),
-      ),
-    ).toHaveLength(0);
+    expect(greyOnly).not.toContain("data-point-hint");
+    // "Net or out?" alone is a demoted flag: no chip on the closed row, while
+    // the open point still asks it.
+    const netOnly = marksOf(point, [], { [shot.id]: [NET_HIT] });
+    expect(renderRow(point, netOnly)).not.toContain("data-mark-chip");
+    // The open point still asks it: the court panel's item 4.
+    const asked = review(point, netOnly)!;
+    expect(asked.id).toBe(4);
+    // The fixture's stroke has no contact: the step asks for it first.
+    expect(asked.question).toBe("Where was it hit?");
 
-    // Beside a counted mark, the chip is that mark's alone — not "N to check".
+    // Beside a counted mark on the same item, the hints are that one question.
     const withCount = renderRow(
       point,
       marksOf(point, [DISPUTED, ...EVERY_HINT], { [shot.id]: [NET_HIT] }),
     );
     const [chip, ...rest] = chips(withCount);
     expect(rest).toHaveLength(0);
-    expect(chip.text).toBe("Check the ending");
-    expect(chip.label).toBe(`Check the ending. ${DISPUTED_HOVER}`);
+    expect(chip.text).toBe("How did the last ball end?");
+    expect(chip.tag).toContain('data-mark-count="1"');
+    expect(
+      chip.label.startsWith(`How did the last ball end? ${DISPUTED_HOVER}`),
+    ).toBe(true);
     expect(withCount).not.toContain("data-point-hint");
+  });
+
+  test("once checked, the quiet outline is only for a counted mark", () => {
+    const point = fixturePoint();
+    const shot = point.shots[0];
+    const checked = { ...point, checkedAt: "2026-10-12T00:00:00Z" };
+    // A hint alone, answered: no chip at all.
+    expect(
+      renderRow(checked, marksOf(checked, [mark("last_landing_missing", {})])),
+    ).not.toContain("data-mark-chip");
+    // A flag that would be demoted: none either.
+    expect(
+      renderRow(checked, marksOf(checked, [], { [shot.id]: [NET_HIT] })),
+    ).not.toContain("data-mark-chip");
+    // A counted mark settled by a change keeps the quiet outline, no words.
+    const settled = { ...checked, status: "edited" as const };
+    const [quiet, ...rest] = chips(
+      renderRow(settled, marksOf(settled, [DISPUTED])),
+    );
+    expect(rest).toHaveLength(0);
+    expect(quiet.state).toBe("checked");
+    expect(quiet.text).toBeNull();
+  });
+
+  test("a winner the strokes contradict keeps an amber chip once checked", () => {
+    // The ace is the server's; the point says the receiver won it.
+    const point = fixturePoint({
+      winner: "p2",
+      checkedAt: "2026-10-12T00:00:00Z",
+    });
+    const [chip, ...rest] = chips(renderRow(point, marksOf(point, [])));
+    expect(rest).toHaveLength(0);
+    expect(chip.state).toBe("open");
+    expect(chip.tag).toContain('data-mark-tone="score"');
+    expect(chip.tag).toContain("rail-amber");
   });
 
   test("a hidden mark is drawn nowhere: not on the row, not in the well, not on a stroke", () => {
@@ -320,46 +412,67 @@ test.describe("a closed row draws only what can change the score", () => {
         expect(html, words).not.toContain(words);
       }
     }
+    expect(review(point, marks)).toBeNull();
   });
 });
 
-test.describe("the open point's quiet line", () => {
-  test("lists the point's hints by their labels, each with its sentence — and no chip", () => {
+test.describe("the open point's current review item", () => {
+  test("is asked in the court panel, not the well: its question, evidence and answers — and no chip", () => {
     const point = fixturePoint();
     const shot = point.shots[0];
-    const html = renderWell(
+    const marks = marksOf(
       point,
-      marksOf(
-        point,
-        [mark("ending_suspect_line", {}), mark("serve_fault", {})], // serve_fault is hidden
-        {
-          [shot.id]: [NET_HIT],
-        },
-      ),
-    );
-    expect(hintLine(html)).toEqual([
+      [mark("ending_suspect_line", {}), mark("serve_fault", {})], // serve_fault is hidden
       {
-        code: "ending_suspect_line",
-        text: "Close to the line",
-        label:
-          "Close to the line. The ball before this winner landed within 1 m of a line. Most like this turn out to be errors.",
+        [shot.id]: [NET_HIT],
       },
-      {
-        code: "net_hit_contradicts_height",
-        text: "Net or out?",
-        label:
-          "Net or out? Marked as hitting the net, but the ball’s height says it cleared it.",
-      },
-    ]);
-    // One line, with a middle dot between the two hints and none at either end.
-    expect(html.match(/data-point-hints=""/g)).toHaveLength(1);
-    // Last in the well, under the rally it is about.
-    expect(html.indexOf("data-point-hints")).toBeGreaterThan(
-      html.lastIndexOf('data-row="shot"'),
     );
-    const line = html.slice(html.indexOf("data-point-hints"));
-    expect(line.match(/aria-hidden="true"[^>]*>·</g)).toHaveLength(1);
+    const html = renderWell(point, marks);
+    expect(html).not.toContain("data-point-hints");
+    expect(html).not.toContain("data-review");
+    expect(html).not.toContain("Review · in this order");
     expect(chips(html)).toHaveLength(0);
+    const item = review(point, marks)!;
+    expect([item.id, item.question]).toEqual([4, "Where was it hit?"]);
+    // The last ball's endings by its hitter, the item's Dismiss (both are
+    // hints with a key), then the check tick.
+    expect(item.answers.map((a) => [a.kind, a.label])).toEqual([
+      ["suggested", "Ace by Lee"],
+      ["plain", "Out by Lee"],
+      ["plain", "Net by Lee"],
+      ["dismiss", "Dismiss"],
+      ["plain", "Looks right"],
+    ]);
+  });
+
+  test("Dismiss stores every member's key, one call a key; Looks right is the check tick's write", async () => {
+    const point = fixturePoint();
+    const shot = point.shots[0];
+    const marks = marksOf(point, [DISPUTED, mark("ending_suspect_line", {})], {
+      [shot.id]: [NET_HIT],
+    });
+    const item = review(point, marks)!;
+    const calls: unknown[][] = [];
+    const dismiss = item.answers.find((a) => a.kind === "dismiss")!;
+    expect(dismiss.label).toBe("Dismiss");
+    await runReviewAnswer(dismiss, point.id, recorder(calls));
+    expect(calls).toEqual([
+      ["dismiss", point.id, "hint:winner_disputed"],
+      ["dismiss", point.id, "hint:ending_suspect_line"],
+      ["dismiss", point.id, "hint:net_hit_contradicts_height"],
+    ]);
+
+    calls.length = 0;
+    const looksRight = item.answers.find((a) => a.id === "looks-right")!;
+    expect(looksRight.label).toBe("Looks right");
+    await runReviewAnswer(looksRight, point.id, recorder(calls));
+    expect(calls).toEqual([["checked", point.id, true]]);
+    // A checked point is not offered it.
+    const checked = { ...point, checkedAt: "2026-10-12T00:00:00Z" };
+    expect(
+      review(checked, marks)?.answers.some((a) => a.id === "looks-right") ??
+        false,
+    ).toBe(false);
   });
 });
 
@@ -392,14 +505,14 @@ test.describe("a stroke row's tail", () => {
 });
 
 test.describe("a session with no marks", () => {
-  test("the same rows carry nothing: no chip, no hint line, and the pencil as before", () => {
+  test("the same rows carry nothing: no chip, no review item, and the pencil as before", () => {
     const point = fixturePoint();
     const shot = point.shots[0];
     const marks = marksOf(point, [DISPUTED, mark("serve_fault", {})], {
       [shot.id]: [NET_HIT],
     });
     expect(renderRow(point, marks)).toContain("data-mark-chip");
-    expect(renderWell(point, marks)).toContain("data-point-hints");
+    expect(review(point, marks)).not.toBeNull();
 
     const without = renderRow(point, null);
     expect(without).not.toContain("data-mark-chip");
@@ -430,7 +543,6 @@ test.describe("a session with no marks", () => {
 });
 
 test.describe("the hints read off the rows, with their answers", () => {
-  const MARK = "src/components/admin/labels/label-black-mark.tsx";
   type Hint = {
     code: string;
     label: string;
@@ -461,31 +573,24 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
   };
 
-  test("a hint with an answer is a dashed suggestion row with its button: under the rally, or under its own stroke", () => {
+  test("the ending the strokes add up to is item 4's answer; a stroke's hint keeps its row under the stroke, and the panel asks its item", () => {
     const html = renderWell(stale(), marksOf(stale(), []));
-    // Not a word on the quiet line: a row of its own, after the last stroke.
-    expect(hintLine(html)).toEqual([]);
-    const row = tag(html, 'data-point-hint="ending_stale"');
-    expect(row).toContain('data-row="suggested-end"');
-    expect(row).toContain("outline-dashed");
-    expect(html.indexOf('data-point-hint="ending_stale"')).toBeGreaterThan(
-      html.lastIndexOf('data-row="shot"'),
-    );
-    expect(tag(html, "data-suggestion-text")).toContain(
-      'aria-label="Ace by Lee? The shots add up to an ace by Lee, not the ending this point has. Check the clip: change it, or leave it if the shots are what&#x27;s wrong."',
-    );
-    const button =
-      /<button[^>]*data-point-hint-action="ending_stale"[^>]*>.*?<span[^>]*>([^<]*)</.exec(
-        html,
-      );
-    expect(button?.[1]).toBe("Make it an ace");
-    // The rail's pressed state, as every text action in it.
-    expect(button?.[0]).toContain("active:scale-[0.96]");
+    // No row of its own, and never an item of its own.
+    expect(html).not.toContain('data-point-hint="ending_stale"');
     expect(chips(html)).toHaveLength(0);
+    const item = review(stale(), marksOf(stale(), []))!;
+    expect(item.id).toBe(4);
+    expect(answers(item)).toEqual([
+      "Ace by Lee",
+      "Out by Lee",
+      "Net by Lee",
+      "Dismiss",
+      "Looks right",
+    ]);
 
-    // "Second serve?" names its stroke: the row sits right under that serve.
+    // "Second serve?" names its stroke: the row sits right under that serve,
+    // with its answer; the panel asks item 3 with the same answer.
     const serves = renderWell(retyped(), marksOf(retyped(), []));
-    expect(hintLine(serves)).toEqual([]);
     expect(tag(serves, 'data-point-hint="second_serve_as_first"')).toContain(
       'data-row="suggested-end"',
     );
@@ -495,6 +600,75 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(serves).toMatch(
       /<button[^>]*data-point-hint-action="second_serve_as_first"[^>]*>.*?<span[^>]*>Make it a second serve</,
     );
+    const asked = review(retyped(), marksOf(retyped(), []))!;
+    expect([asked.id, asked.question]).toEqual([3, "Serves"]);
+    expect(answers(asked)).toEqual([
+      "Make it a second serve",
+      "Dismiss",
+      "Looks right",
+    ]);
+  });
+
+  test("with no landing on the last ball, its evidence is the vendor's call alone", () => {
+    const placed = stale();
+    const point = {
+      ...placed,
+      shots: placed.shots.map((s) => ({
+        ...s,
+        landingX: null,
+        landingY: null,
+      })),
+    };
+    const [ace] = point.shots;
+    const marks = marksOf(point, [
+      mark("last_call_overruled", { vendorCall: "out", eventId: ace.eventId! }),
+    ]);
+    expect(review(point, marks)?.id).toBe(4);
+    // The row's chip says it, a line each.
+    const [chip] = chips(renderRow(point, marks));
+    const lines = [chip.label];
+    expect(lines.join(" ")).toContain(
+      "The vendor called the last ball out, and its landing isn’t placed.",
+    );
+    expect(lines.join(" ")).toContain(
+      "Place the last bounce to settle Out, Net or In.",
+    );
+    expect(lines.some((line) => line.includes("by its landing"))).toBe(false);
+  });
+
+  test("item 4 asked as the vendor called the last ball: one answer row, its ending's answer in it", async () => {
+    const point = stale();
+    const [ace] = point.shots;
+    const call = mark("last_call_overruled", {
+      vendorCall: "out",
+      eventId: ace.eventId!,
+    });
+    const marks = marksOf(point, [call, mark("ending_suspect_line", {})]);
+    const html = renderWell(point, marks, { onSelectShot: () => {} });
+    // Asked in the court panel, not under the last ball.
+    expect(html).not.toContain('data-point-hint="last_call_overruled"');
+    // With its contact placed, the step asks how the last ball ended.
+    const placed = {
+      ...point,
+      shots: point.shots.map((s) => ({ ...s, contactX: -1, contactY: -0.4 })),
+    };
+    const item = review(placed, marksOf(placed, [call]))!;
+    expect(item.id).toBe(4);
+    expect(item.question).toBe("How did the last ball end?");
+    expect(item.answers.map((a) => [a.kind, a.label])).toEqual([
+      ["plain", "Ace by Lee"],
+      ["suggested", "Out by Lee"],
+      ["plain", "Net by Lee"],
+      ["dismiss", "Dismiss"],
+      ["plain", "Looks right"],
+    ]);
+    // The vendor's call is the suggested answer, written through the
+    // console's own shot write.
+    const out = item.answers.find((a) => a.kind === "suggested")!;
+    const calls: unknown[][] = [];
+    await runReviewAnswer(out, placed.id, recorder(calls));
+    // A lone serve out settles no ending by itself: the shot write alone.
+    expect(calls).toEqual([["shot", ace.id, { result: "out" }]]);
   });
 
   test("the answers are the point patch and the shot patch, through the console's two writes", () => {
@@ -694,7 +868,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
   };
 
-  test("“Point ended here” is a suggestion row under the stroke that ended the point; the quiet hints close the well", () => {
+  test("“Point ended here” is a suggestion row under the stroke that ended the point; the panel asks its item first", () => {
     const point = endedEarly();
     const html = renderWell(point, marksOf(point, []));
     const at = (needle: string) => {
@@ -705,12 +879,18 @@ test.describe("the hints read off the rows, with their answers", () => {
     const ended = at('data-point-hint="shot_after_point_end"');
     expect(ended).toBeGreaterThan(at('data-shot-id="s-long"'));
     expect(ended).toBeLessThan(at('data-shot-id="s-dead-1"'));
-    // "No landing on the last shot" is about the point: the well's last row.
-    expect(at('data-point-hint="last_landing_missing"')).toBeGreaterThan(
-      html.lastIndexOf('data-row="shot"'),
-    );
-    // One hint line at the foot; the ending is its own dashed suggestion row.
-    expect(html.match(/data-point-hints=""/g)).toHaveLength(1);
+    // The panel asks item 4 ("No landing on the last shot", about the
+    // point) first, then item 2 as its follow-up (review-step.ts
+    // `openReviewItems`); the well draws neither as a block.
+    expect(html).not.toContain("data-review");
+    expect(
+      reviewFlag(point, marksOf(point, []), [point])!.items.map((i) => i.id),
+    ).toEqual([2, 4]);
+    const item = review(point, marksOf(point, []))!;
+    expect(item.id).toBe(4);
+    expect(
+      reviewStep(point, marksOf(point, []), [point], NAMES, true)?.then,
+    ).toBe("Then: split or remove the shots after");
     expect(tag(html, 'data-row="suggested-end"')).toContain("outline-dashed");
   });
 
@@ -736,7 +916,8 @@ test.describe("the hints read off the rows, with their answers", () => {
     const gone = { ...point, dismissed: ["point_ended:s-long"] };
     const after = renderWell(gone, marksOf(gone, []), edit);
     expect(after).not.toContain('data-point-hint="shot_after_point_end"');
-    expect(after).toContain('data-point-hint="last_landing_missing"');
+    // Answered, the next open item is the panel's.
+    expect(review(gone, marksOf(gone, []))?.id).toBe(4);
     // Read-only: nothing to dismiss with.
     expect(
       renderWell(point, marksOf(point, []), { editable: false }),
@@ -862,9 +1043,19 @@ test.describe("the hints read off the rows, with their answers", () => {
     // Drawn: the words with the count, and a button for each answer. The
     // point's own hint leads the well; "Point ended here" follows its stroke.
     const html = renderWell(point, marksOf(point, []), edit);
-    expect(hintLine(html).map((h) => [h.code, h.text])).toEqual([
-      ["last_landing_missing", "No landing on the last shot"],
+    // The panel asks how the point ended first; the follow-up comes after.
+    expect(answers(review(point, marksOf(point, [])))).toEqual([
+      "Winner by Vargas",
+      "Out by Vargas",
+      "Net by Vargas",
+      "Dismiss",
+      "Looks right",
     ]);
+    const answered = { ...point, dismissed: ["point_ended:s-long"] };
+    expect(
+      reviewStep(answered, marksOf(answered, []), [answered], NAMES, true)
+        ?.then ?? null,
+    ).toBeNull();
     expect(tag(html, "data-suggestion-text")).toContain(
       "Did the point end here? 1 shot follows",
     );
@@ -886,11 +1077,14 @@ test.describe("the hints read off the rows, with their answers", () => {
     const readOnly = renderWell(stale(), marksOf(stale(), []), {
       editable: false,
     });
-    expect(hintLine(readOnly).map((h) => h.code)).toEqual(["ending_stale"]);
     expect(readOnly).not.toContain("data-point-hint-action");
+    expect(readOnly).not.toContain("<button");
+    // Read-only, the step is still the item: the panel draws no answers
+    // without a console that writes (label-court-panel.spec.ts).
+    expect(review(stale(), marksOf(stale(), []))?.id).toBe(4);
     // The rows in step with the ending: no hint at all.
-    expect(
-      renderWell(fixturePoint(), marksOf(fixturePoint(), [])),
-    ).not.toContain("data-point-hint");
+    const inStep = renderWell(fixturePoint(), marksOf(fixturePoint(), []));
+    expect(inStep).not.toContain("data-point-hint");
+    expect(review(fixturePoint(), marksOf(fixturePoint(), []))).toBeNull();
   });
 });

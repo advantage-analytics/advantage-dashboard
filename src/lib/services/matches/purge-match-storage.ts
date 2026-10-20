@@ -218,7 +218,7 @@ async function keysKeptElsewhere(
  * Remove every stored object belonging to a set of matches.
  *
  * MUST run BEFORE the match rows are deleted, and that ordering is
- * load-bearing: `video_object_key`, `trimmed_object_key`,
+ * load-bearing: `video_object_key`, `trimmed_object_key`, `playback_object_key`,
  * `results_object_key`, `players_object_key` and `trajectories_object_key` all
  * live on `processing_jobs`, which cascades away with the match. Delete the
  * rows first and the keys are gone, leaving objects that nothing can even name
@@ -296,7 +296,7 @@ export async function purgeMatchStorage(
   const { data: jobs, error: jobsError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, created_by, video_object_key, trimmed_object_key, results_object_key, players_object_key, trajectories_object_key, label_backup_keys",
+      "id, match_id, created_by, video_object_key, trimmed_object_key, playback_object_key, results_object_key, players_object_key, trajectories_object_key, label_backup_keys",
     )
     .in("match_id", matchIds);
 
@@ -320,9 +320,10 @@ export async function purgeMatchStorage(
         //    runtime already holds the storage account key, because the same key
         //    signs the vendor's read SAS.
         //
-        //    BOTH keys, not just the source. `trimmed_object_key` is our copy of
-        //    the vendor's re-encode, and once the sweeper has removed the source
-        //    it is the ONLY video for this match — several GB of it.
+        //    ALL three keys, not just the source. `trimmed_object_key` is our
+        //    copy of the vendor's re-encode, and once the sweeper has removed the
+        //    source it is the ONLY video for this match — several GB of it.
+        //    `playback_object_key` is the worker's playback copy of the source.
         //
         //    Deduped: every job for one match points at the same source blob, so
         //    a re-submitted match would otherwise delete the same blob twice.
@@ -332,13 +333,14 @@ export async function purgeMatchStorage(
               .flatMap((j) => [
                 j.video_object_key as string | null,
                 j.trimmed_object_key as string | null,
+                j.playback_object_key as string | null,
               ])
               .filter((k): k is string => Boolean(k)),
           ),
         ];
         const kept = await keysKeptElsewhere(
           sharedKeyReader,
-          ["video_object_key", "trimmed_object_key"],
+          ["video_object_key", "trimmed_object_key", "playback_object_key"],
           candidates,
           matchIds,
         );

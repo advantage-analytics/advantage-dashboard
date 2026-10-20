@@ -524,12 +524,17 @@ test.describe("the new flags are stops for ] and the header's count", () => {
       points,
       true,
     );
-    expect(openFlags(points, marks)).toContainEqual({
-      pointId: lone.id,
+    const flag = openFlags(points, marks).find((f) => f.pointId === lone.id);
+    expect(flag).toMatchObject({
       pointNumber: lone.pointIndex + 1,
-      code: "first_serve_fault_alone",
       data: false,
     });
+    // "Serves", open on the fault alone.
+    expect(
+      flag?.items
+        .find((item) => item.id === 3)
+        ?.members.map((member) => member.mark.code),
+    ).toContain("first_serve_fault_alone");
   });
 
   test("a tiebreak off its serve order, on the first point off it", () => {

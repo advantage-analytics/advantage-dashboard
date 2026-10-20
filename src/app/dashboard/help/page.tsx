@@ -7,7 +7,18 @@ import { ANALYSIS_LABEL } from "@/lib/data/match-analysis";
 import { AnalysisStatusLine } from "@/components/dashboard/shared/analysis-status-line";
 import type { StepState } from "@/components/dashboard/shared/vertical-steps";
 import { EXPORT_GUIDE_URL, SUPPORT_EMAIL } from "@/lib/constants";
-import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
+import {
+  MAX_VIDEO_SIZE_BYTES,
+  PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS,
+  formatPilotEnd,
+  getMonthlyCapHours,
+} from "@/lib/services/splitstep/config";
+import {
+  CREDIT_PACKS,
+  CREDIT_VALIDITY_MONTHS,
+  PLAN_HREF,
+  packPerHour,
+} from "@/lib/services/credits/packs";
 
 export const metadata = { title: "Help" };
 
@@ -113,46 +124,49 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     label: "Global",
     items: [
       { keys: ["⌘", "K"], action: "Open the search command palette" },
-      { keys: ["/"], action: "Focus search from anywhere outside an input" },
       {
         keys: ["⌘", "\\"],
         // The rail owns the toggle now, and so does this binding. This entry
         // said ⌘B for as long as the toggle lived in the header.
         action: "Pin or unpin the sidebar",
       },
-      {
-        keys: ["⌘", "U"],
-        action: "Start a new match",
-        note: "On pages that show the Create match button.",
-      },
       { keys: ["esc"], action: "Close the active modal, dropdown, or palette" },
       {
-        keys: ["←"],
-        action: "Jump to the previous match",
-        note: "On a match detail page.",
-      },
-      {
-        keys: ["→"],
-        action: "Jump to the next match",
-        note: "On a match detail page.",
+        keys: ["↑", "↓"],
+        action: "Step through rows in an open drawer",
+        note: "Matches and Opponents.",
       },
     ],
   },
   {
-    label: "Visualizations",
+    label: "Match page",
     items: [
+      { keys: ["⇧", "⌘", "L"], action: "Share the match" },
       {
-        keys: ["1"],
-        action: "Color serve placement by serve type",
-        note: "Inside the serve placement widget.",
+        keys: ["space"],
+        action: "Play or pause the film",
+        note: "On the Film tab.",
       },
       {
-        keys: ["2"],
-        action: "Color serve placement by point result",
-        note: "Inside the serve placement widget.",
+        keys: ["←", "→"],
+        action: "Previous or next point",
+        note: "On the Film tab.",
       },
-      { keys: ["R"], action: "Reset serve placement filters" },
+      {
+        keys: ["J", "L"],
+        action: "Back or forward 5 seconds",
+        note: "On the Film tab.",
+      },
+      {
+        keys: ["S"],
+        action: "Show saved points only",
+        note: "On the Film tab.",
+      },
     ],
+  },
+  {
+    label: "Ask",
+    items: [{ keys: ["⇧", "⌘", "O"], action: "Start a new question" }],
   },
   {
     label: "Settings",
@@ -357,6 +371,9 @@ export default function HelpCenterPage() {
                   </FeatureRow>
                   <FeatureRow>Trends across your matches on Home</FeatureRow>
                   <FeatureRow>
+                    Your record against everyone you play, on Opponents
+                  </FeatureRow>
+                  <FeatureRow>
                     Every point as a video clip — once the match film is on file
                   </FeatureRow>
                 </div>
@@ -371,10 +388,12 @@ export default function HelpCenterPage() {
                 >
                   Upload your first match →
                 </Link>
-                <span className="text-[11px] text-[var(--ink-500)]">
-                  or press <Kbd size="sm">⌘</Kbd> <Kbd size="sm">U</Kbd> from
-                  the matches list
-                </span>
+                <Link
+                  href="/dashboard/matches/sample"
+                  className={`text-[12px] ${linkClass}`}
+                >
+                  See a sample report
+                </Link>
               </div>
             </section>
 
@@ -400,8 +419,7 @@ export default function HelpCenterPage() {
                 <p className={proseClass}>
                   Files are checked when you pick them — a 720p video is
                   rejected before a single byte uploads, with the fix spelled
-                  out: Phone settings → Camera → Record at 1080p/30 or higher.
-                  Doubles lines record a score only. Getting the file off a
+                  out. Doubles lines record a score only. Getting the file off a
                   phone or court camera is covered step by step in the{" "}
                   <a
                     href={EXPORT_GUIDE_URL}
@@ -412,6 +430,30 @@ export default function HelpCenterPage() {
                     export guide
                   </a>
                   .
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>Recording on iPhone</span>
+                <div className="flex flex-col">
+                  <FeatureRow>
+                    HDR Video off (Settings › Camera › Record Video)
+                  </FeatureRow>
+                  <FeatureRow>1080p at 30 or 60 fps</FeatureRow>
+                  <FeatureRow>
+                    Optional: Settings › Camera › Formats › Most Compatible, so
+                    the file is H.264
+                  </FeatureRow>
+                </div>
+                <p className={proseClass}>
+                  An HDR, HEVC or 4K video is converted in this tab before it
+                  uploads, and HDR colour can&rsquo;t survive the conversion, so
+                  the saved video looks paler and flatter than on your phone.
+                  Analysis isn&rsquo;t affected — only how the video looks. If
+                  your browser can&rsquo;t convert it, it uploads as recorded
+                  and some browsers won&rsquo;t play it back — Most Compatible
+                  avoids that. A 1080p H.264 file without HDR uploads exactly as
+                  recorded, unless it&rsquo;s over {MAX_VIDEO_GB} GB.
                 </p>
               </div>
 
@@ -505,14 +547,42 @@ export default function HelpCenterPage() {
                 ))}
               </div>
 
-              <p className={`${blockDividerClass} ${proseClass}`}>
-                Analysis time is metered per month and shown on{" "}
-                <Link href="/dashboard/settings/usage" className={linkClass}>
-                  Settings → Usage
-                </Link>
-                . Hours reserve when you submit and reconcile when the job
-                finishes; a failed job gives them back.
-              </p>
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>Changing your mind</span>
+                <p className={proseClass}>
+                  The wizard saves a draft as you go — pick it up from the
+                  Matches list with Continue. A queued analysis can be cancelled
+                  from the match page until it starts; the video stays saved and
+                  you can send it again. Fixing the score with Edit match on an
+                  analyzed match offers Save and rebuild, which checks the
+                  analysis against the new score, so its statistics can change.
+                  A SwingVision match takes its film later with Add video on the
+                  Film tab.
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>Video hours</span>
+                <p className={proseClass}>
+                  Each month includes {getMonthlyCapHours("individual")} free
+                  hours for your personal uploads (
+                  {PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS} for pilot players),
+                  through {formatPilotEnd()}. Past that, credit packs start at{" "}
+                  {packPerHour(CREDIT_PACKS[0])} on{" "}
+                  <Link href={PLAN_HREF} className={linkClass}>
+                    Settings › Plan
+                  </Link>{" "}
+                  and last {CREDIT_VALIDITY_MONTHS} months; free hours are used
+                  first. A match uses the length of its trim, taken when you
+                  submit. A failed or cancelled analysis gives the hours back.
+                  Team uploads draw on the program&apos;s hours, never yours.
+                  What&apos;s left is on{" "}
+                  <Link href="/dashboard/settings/usage" className={linkClass}>
+                    Settings › Usage
+                  </Link>
+                  .
+                </p>
+              </div>
             </section>
 
             {/* ══════════ Importing from SwingVision ══════════ */}
@@ -666,11 +736,87 @@ export default function HelpCenterPage() {
               </div>
 
               <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>Joining</span>
+                <p className={proseClass}>
+                  Coaches invite you by email, or share the team&apos;s join
+                  link. Depending on how the coach set it, the link lets you in
+                  right away or sends a request that staff approve on the
+                  Roster. A join link admits players only — staff and coaches
+                  are invited by email. Nothing is shared until you press Join.
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
                 <span className={blockLabelClass}>Leaving a program</span>
                 <p className={proseClass}>
-                  Team matches stay with the program; your personal library
-                  leaves with you. Ask your coach to remove you, or contact
-                  support.
+                  Open the team in{" "}
+                  <Link href="/dashboard/settings/teams" className={linkClass}>
+                    Settings › Teams
+                  </Link>{" "}
+                  and press Leave team. Team matches stay with the program; your
+                  personal library leaves with you, and the staff can invite you
+                  back. The owner can&apos;t leave until they hand the team to a
+                  coach or staff member with Make owner, under Members.
+                </p>
+              </div>
+            </section>
+
+            {/* ══════════ Sharing a match ══════════ */}
+            <section
+              id="sharing"
+              className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
+            >
+              <h2 className={topicHeadingClass}>Sharing a match</h2>
+              <p className={`${proseClass} max-w-[560px]`}>
+                Press Share on a match page and choose Anyone with the link: it
+                makes a link anyone can open, with no sign-in. Statistics are
+                always on it; Visualizations start ticked and Video starts
+                clear. On a team match, only staff can add the video unless the
+                program lets players.
+              </p>
+
+              <div className="flex flex-col gap-2.5">
+                <span className={blockLabelClass}>Turning it off</span>
+                <p className={proseClass}>
+                  Set Who can open it back to Only you. The link stops working
+                  for everyone who has it; turning it on again makes a new one.
+                </p>
+              </div>
+            </section>
+
+            {/* ══════════ Ask ══════════ */}
+            <section
+              id="ask"
+              className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
+            >
+              <h2 className={topicHeadingClass}>Ask</h2>
+              <p className={`${proseClass} max-w-[560px]`}>
+                <Link href="/dashboard/ask" className={linkClass}>
+                  Ask
+                </Link>{" "}
+                answers questions about your own matches in plain words, with
+                every number read from your statistics. In a team workspace, the
+                team&apos;s Ask covers the program&apos;s matches; what you ask
+                there stays private to you.
+              </p>
+
+              <div className="flex flex-col gap-2.5">
+                <span className={blockLabelClass}>Your questions</span>
+                <p className={proseClass}>
+                  Questions are counted per calendar month, across personal and
+                  team Ask; how many you have left shows beside the question
+                  box, and the count resets on the 1st. Earlier questions stay
+                  in the rail, where you can rename, pin or delete them —
+                  deleting doesn&apos;t give the question back.
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>A wrong answer</span>
+                <p className={proseClass}>
+                  Press the thumbs-down under it and say what went wrong. The
+                  feedback is kept with that question and answer, even if you
+                  later delete the conversation.
                 </p>
               </div>
             </section>

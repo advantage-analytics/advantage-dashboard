@@ -387,12 +387,14 @@ function LeftToCheck({ points, marks, reading, onOpen }: WidgetProps) {
   );
 }
 
-/** A flag kind shows this many point numbers, then "+N". */
+/** A review item shows this many point numbers, then "+N". */
 const POINTS_SHOWN = 8;
 
 /**
- * One of the two lists the rail's header carries, laid out as a table: the
- * flag, how many are open, and the points they are on. The dot before the
+ * One of the two lists the rail's header carries, laid out as a table: each
+ * review item's question, how many points ask it, and those points. The
+ * heading counts points, each once — a point open on two items is on two
+ * rows. The dot before the
  * heading is the chip's own colour in the rail — amber or grey — and the only
  * colour on the list.
  */
@@ -409,9 +411,16 @@ function FlagList({
   empty: string;
   onOpen: (pointId?: string) => void;
 }) {
-  const count = groups.reduce((sum, group) => sum + group.count, 0);
   const rows = groups.flatMap((group) => group.rows);
-  const first = rows[0]?.points[0];
+  const listed = rows.flatMap((row) => row.points);
+  const count = new Set(listed.map((point) => point.pointId)).size;
+  // The rows run in item order, so the first point in the match is found,
+  // not read off the top row.
+  const first = listed.reduce<(typeof listed)[number] | undefined>(
+    (min, point) =>
+      min === undefined || point.pointNumber < min.pointNumber ? point : min,
+    undefined,
+  );
   return (
     <div data-flag-list={tone} className="flex flex-col gap-2">
       <div className="flex items-center gap-2">

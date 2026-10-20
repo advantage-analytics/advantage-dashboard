@@ -18,10 +18,17 @@ import { deriveEnding, winnerContradicted } from "./ending-derived";
 import {
   isDataMark,
   type LabelMark,
+  type LabelMarkCode,
   type LabelMarks,
   type LabelSuggestion,
 } from "./marks";
-import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
+import {
+  lastCallQuestion,
+  MARK_LABEL,
+  markHover,
+  REVIEW_ITEM_QUESTION,
+  type MarkNames,
+} from "./marks-copy";
 import {
   endsPointWhenMissed,
   isLiveShot,
@@ -59,7 +66,17 @@ export type MarkStateShot = Pick<
   LabelShot,
   "status" | "siteRemovalRestoredAt"
 > &
-  Partial<Pick<LabelShot, "afterEventId" | "eventId" | "statusBeforeDelete">> &
+  Partial<
+    Pick<
+      LabelShot,
+      | "id"
+      | "afterEventId"
+      | "eventId"
+      | "videoTime"
+      | "siteRemoval"
+      | "statusBeforeDelete"
+    >
+  > &
   ResultReadableShot;
 
 export type MarkStatePoint = Pick<
@@ -116,9 +133,15 @@ function missingShotStates(
     (s) => s.kind === "missing_shot" && s.pointId === point.id,
   );
   if (!mine?.length) return [];
+  // The rows a rule may have been handed without them read as a stroke with
+  // no id, time or site removal: live, in row order.
   const shots = point.shots.map((shot) => ({
     ...shot,
+    id: shot.id ?? "",
     afterEventId: shot.afterEventId ?? null,
+    eventId: shot.eventId ?? null,
+    videoTime: shot.videoTime ?? null,
+    siteRemoval: shot.siteRemoval ?? null,
   }));
   return mine.map((s) =>
     suggestionState(s, { dismissed: point.dismissed, shots }),
@@ -129,8 +152,10 @@ function missingShotStates(
  * Where a `count` mark is in its life. `points` — the session's rows in rail
  * order — lets a "Same side twice" question read settled once a point was
  * added between the two (`missingPointAdded`); without them that answer is
- * not seen. "Missing shot?" reads its slots the same way: settled once one is
- * answered with "Add shot", dismissed once every one is dismissed.
+ * not seen. "Missing shot?" reads its slots the same way: open while any slot
+ * is open, settled once none is and one was answered with "Add shot" (or the
+ * point ended on the pair's first stroke), dismissed once every one is
+ * dismissed.
  */
 export function markState(
   mark: LabelMark,
@@ -158,12 +183,23 @@ export function markState(
     return "dismissed";
   }
 
+  // "Missing shot?" is as open as its slots. A point with several gaps (one
+  // player hitting three or four strokes in a row) opens a slot per gap, and
+  // answering one of them answers nothing about the others — so the mark
+  // settles only once no slot is open: settled when one was answered with
+  // "Add shot" or the point ended on the pair's first stroke, dismissed when
+  // every one was waved away. While a slot is still open an unchecked point
+  // keeps the mark open even if the labeller edited it elsewhere: an edit
+  // that leaves the gap in place has not answered the gap. Once the point is
+  // checked the general reading below applies (`checked` for an edited point,
+  // `checked-as-is` otherwise), as it does for every other count mark.
   if (mark.code === "same_player_consecutive") {
     const slots = missingShotStates(point, suggestions);
-    if (slots.includes("done")) return checked ? "checked" : "settled";
-    if (slots.length > 0 && slots.every((s) => s === "dismissed")) {
+    if (slots.length > 0 && !slots.includes("open")) {
+      if (slots.includes("done")) return checked ? "checked" : "settled";
       return "dismissed";
     }
+    if (slots.includes("open") && !checked) return "open";
   }
 
   // A counted mark whose question the well asks ("Was the last ball in?")
@@ -626,7 +662,7 @@ export function markSummary(
   return summary;
 }
 
-/** The states `rollupMarks` reads: one per `count` mark, in order. */
+/** One state per `count` mark, in order: what `reviewFlag` folds into items. */
 export function markStates(
   countMarks: readonly LabelMark[],
   point: MarkStatePoint,
@@ -718,24 +754,7 @@ export function markTone(
   return nearEnd ? "score" : "data";
 }
 
-/**
- * The chip on the point row.
- *
- * `text` is the words, or null for the icon-only form. `count` is how many
- * marks the chip stands for.
- */
-export interface MarkRollupChip {
-  text: string | null;
-  count: number;
-  state: MarkState;
-  /**
-   * Amber or grey: `score` when a mark the chip speaks for can move the
-   * score, `data` when every one of them is about the data (`isDataMark`).
-   * It speaks for its open marks, or for all of them once none is open.
-   */
-  tone: MarkTone;
-}
-
+/** Amber (`score`) when a mark can move the score, grey (`data`) when it is about the data. */
 export type MarkTone = "score" | "data";
 
 /** Most open first: a chip is as open as its most open member. */
@@ -751,34 +770,373 @@ export function mostOpen(states: readonly MarkState[]): MarkState {
   return OPENNESS.find((state) => states.includes(state)) ?? "checked";
 }
 
+// ── The review flag ─────────────────────────────────────────────────────────
+
+/** The six questions a point's review flag can ask, by id (`REVIEW_ITEMS`). */
+export type ReviewItemId = 1 | 2 | 3 | 4 | 5 | 6;
+
+/** One row of `REVIEW_ITEMS`: an item, its question and the codes it absorbs. */
+export interface ReviewItemDef {
+  id: ReviewItemId;
+  question: string;
+  codes: readonly LabelMarkCode[];
+}
+
 /**
- * What the point row shows: at most one chip, for its `count` marks — null
- * when it has none.
- *
- * One mark still open is its own words; past one the words give way to
- * "N to check". A quiet chip (nothing open) has no words at all.
+ * The flag's items in the order they are answered, each with the mark codes
+ * it absorbs. Strokes first, then the last ball, its ending, the winner, the
+ * game: each item reads what the ones above decide — a stroke change moves
+ * the last ball, the last ball's call derives the ending, the winner drives
+ * the labelled score, and `score_side_mismatch` / `service_court_repeat` are
+ * read live off it. Every `count` and `hint` code in `LABEL_MARK_META` is
+ * named by exactly one item; a `hidden` code by none, and it is never a
+ * member. Item 4 is put as the vendor called it (`lastCallQuestion`) where
+ * `last_call_overruled` is a member, and `ending_stale` is its "Then:"
+ * consequence line, never a question of its own.
  */
-export function rollupMarks(
-  countMarks: readonly LabelMark[],
-  states: readonly MarkState[],
-  /** One per mark (`markTone`); by code alone when not given. */
-  tones: readonly MarkTone[] = countMarks.map((mark) =>
-    isDataMark(mark) ? "data" : "score",
-  ),
-): MarkRollupChip | null {
-  if (countMarks.length === 0) return null;
-  const open = countMarks.filter((_, i) => states[i] === "open");
-  const anyOpen = open.length > 0;
-  const spoken = tones.filter((_, i) => !anyOpen || states[i] === "open");
+export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
+  {
+    id: 1,
+    question: REVIEW_ITEM_QUESTION[1],
+    codes: ["same_player_consecutive"],
+  },
+  {
+    id: 2,
+    question: REVIEW_ITEM_QUESTION[2],
+    codes: ["shot_after_point_end", "serve_after_serve_in", "reserve_after_in"],
+  },
+  {
+    id: 3,
+    question: REVIEW_ITEM_QUESTION[3],
+    codes: [
+      "second_serve_as_first",
+      "first_serve_fault_alone",
+      "second_serve_called_out",
+      "serve_in_landing_out",
+    ],
+  },
+  {
+    id: 4,
+    question: REVIEW_ITEM_QUESTION[4],
+    codes: [
+      "last_call_overruled",
+      "winner_disputed",
+      "net_hit_contradicts_height",
+      "ending_suspect_line",
+      "winner_to_error_by_bounce",
+      "ending_stale",
+      "last_landing_missing",
+      "last_shot_unresolved",
+      "result_type_unknown",
+    ],
+  },
+  {
+    id: 5,
+    question: REVIEW_ITEM_QUESTION[5],
+    codes: ["pick_winner", "winner_guessed"],
+  },
+  {
+    id: 6,
+    question: REVIEW_ITEM_QUESTION[6],
+    codes: [
+      "score_side_mismatch",
+      "service_court_repeat",
+      "tiebreak_score_off_six_all",
+      "segment_proposal_differs",
+    ],
+  },
+];
+
+/**
+ * One mark under an item, with where it is in its life and the `dismissed`
+ * key a per-item Dismiss stores for it — `pointEndedKey` for "Did the point
+ * end here?", `missing_point` for "Same side twice" (what its slot's Dismiss
+ * stores), `hintDismissKey` for the rest. "Missing shot?" has none: its
+ * dismissal lives on its `missing_shot` slots.
+ */
+export interface ReviewMember {
+  mark: LabelMark;
+  state: MarkState;
+  dismissKey?: string;
+}
+
+/** One item of a point's flag: the question and the marks that raised it. */
+export interface ReviewItem {
+  id: ReviewItemId;
+  question: string;
+  /** Amber when the item can move the score, grey when it is about the data. */
+  tone: MarkTone;
+  /** `mostOpen` of its members' states. */
+  state: MarkState;
+  /** In the order the marks were gathered: count marks first, then hints. */
+  members: ReviewMember[];
+}
+
+/**
+ * A point's one flag: its items in id order (an item with no members is
+ * absent), amber if an open item is (any item, once none is open), as open
+ * as its most open item.
+ *
+ * `demoted` marks the grey flag the design note leaves off the row and out of
+ * the counts — one whose only open item is item 4 and whose open members
+ * there are exactly {`net_hit_contradicts_height`}, {`ending_suspect_line`}
+ * or {`ending_suspect_line`, `winner_to_error_by_bounce`}. On the 8 complete
+ * sessions those were 99 of 907 points, changed on 36–46% against a 52%
+ * base. It is a boolean rather than a null so the open point can still draw
+ * the evidence lines.
+ */
+export interface ReviewFlag {
+  tone: MarkTone;
+  state: MarkState;
+  items: ReviewItem[];
+  demoted: boolean;
+}
+
+/** The `dismissed` key a per-item Dismiss stores for `mark`, if it has one. */
+function memberDismissKey(mark: LabelMark): string | undefined {
+  switch (mark.code) {
+    case "shot_after_point_end":
+      return pointEndedKey(mark.params.shotId);
+    case "service_court_repeat":
+      return "missing_point";
+    case "same_player_consecutive":
+      return undefined;
+    default:
+      return hintDismissKey(mark.code);
+  }
+}
+
+/** The open item-4 member sets a grey flag is demoted for. */
+const DEMOTED_SIGNATURES: readonly (readonly LabelMarkCode[])[] = [
+  ["net_hit_contradicts_height"],
+  ["ending_suspect_line"],
+  ["ending_suspect_line", "winner_to_error_by_bounce"],
+];
+
+/**
+ * Whether a flag is demoted (`ReviewFlag.demoted`): grey, open on item 4
+ * alone, and the codes open there one of `DEMOTED_SIGNATURES`.
+ */
+function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
+  if (tone !== "data") return false;
+  const open = items.filter((item) => item.state === "open");
+  if (open.length !== 1 || open[0].id !== 4) return false;
+  const codes = [
+    ...new Set(
+      open[0].members
+        .filter((member) => member.state === "open")
+        .map((member) => member.mark.code),
+    ),
+  ].sort();
+  return DEMOTED_SIGNATURES.some(
+    (signature) =>
+      signature.length === codes.length &&
+      [...signature].sort().every((code, i) => code === codes[i]),
+  );
+}
+
+/**
+ * An item's tone from its members. Item 1 is `markTone`'s call (a missing
+ * stroke near the end of the rally decides who hit the last ball); item 2 is
+ * amber only for a serve replayed after one in; item 3 only for a double
+ * fault in question or a point stopping on a faulted first serve; item 4
+ * when a counted mark sits under it or the point's winner is the player its
+ * strokes say lost; items 5 and 6 are always the score. Like the flag
+ * (`foldReviewItems`), an item speaks for its open members while any is
+ * open, and for all of them once none is: a settled "Check the ending"
+ * does not keep the grey hints still open beside it amber.
+ * `contradicted` is `pointWinnerContradicted`, when the caller has it.
+ */
+function reviewItemTone(
+  id: ReviewItemId,
+  all: readonly ReviewMember[],
+  point: LabelPoint,
+  marks: LabelMarks,
+  contradicted?: boolean,
+): MarkTone {
+  const members = openOrAll(all, (member) => member.state);
+  const has = (...codes: LabelMarkCode[]) =>
+    members.some((member) => codes.includes(member.mark.code));
+  switch (id) {
+    case 1:
+      return members.some(
+        (member) => markTone(member.mark, point, marks.suggestions) === "score",
+      )
+        ? "score"
+        : "data";
+    case 2:
+      return has("reserve_after_in") ? "score" : "data";
+    case 3:
+      return has("second_serve_called_out", "first_serve_fault_alone")
+        ? "score"
+        : "data";
+    case 4:
+      return members.some((member) => member.mark.tier === "count") ||
+        (contradicted ?? pointWinnerContradicted(point, marks))
+        ? "score"
+        : "data";
+    case 5:
+    case 6:
+      return "score";
+  }
+}
+
+/**
+ * The point's review flag, or null for a deleted point or one with nothing
+ * to ask. Members are gathered exactly as the row reads them today: the
+ * `count` marks via `pointRowMarkList` with `markStates` (`points` lets
+ * "Same side twice" read settled by an added point), then the hints and the
+ * live row-read marks via `openHintMarks` — so a dismissed hint is not a
+ * member, and "Net or out?" is dropped while "Was the last ball in?" still
+ * has its answer. On a checked point a hint member reads `checked-as-is`,
+ * except "Different ending?" with the winner contradicted, which stays
+ * `open`: the score, as `openFlags` has always read it.
+ */
+export function reviewFlag(
+  point: LabelPoint,
+  marks: LabelMarks,
+  points: readonly LabelPoint[],
+): ReviewFlag | null {
+  if (point.status === "deleted") return null;
+  const { count } = pointRowMarkList(point, marks);
+  const states = markStates(count, point, marks.suggestions, points);
+  const checked = point.checkedAt !== null;
+  const contradicted = pointWinnerContradicted(point, marks);
+  const members: ReviewMember[] = [
+    ...count.map((mark, i) => ({
+      mark,
+      state: states[i],
+      dismissKey: memberDismissKey(mark),
+    })),
+    ...openHintMarks(point, marks).map((mark) => ({
+      mark,
+      state: (!checked || (contradicted && mark.code === "ending_stale")
+        ? "open"
+        : "checked-as-is") as MarkState,
+      dismissKey: memberDismissKey(mark),
+    })),
+  ];
+  return foldReviewItems(members, point, marks, contradicted);
+}
+
+/**
+ * The members (or items) a tone speaks for: the open ones while any is open,
+ * every one once none is — as the row's chip always read its marks.
+ */
+function openOrAll<T>(
+  list: readonly T[],
+  state: (entry: T) => MarkState,
+): readonly T[] {
+  const open = list.filter((entry) => state(entry) === "open");
+  return open.length > 0 ? open : list;
+}
+
+/**
+ * Fold `members` into a point's flag: each item with at least one member, in
+ * id order, its tone and state, then the flag's own. Null when no item has a
+ * member. What `reviewFlag` and the scorecard's opening reading share, so the
+ * tone and demotion rules live in one place.
+ */
+export function foldReviewItems(
+  members: readonly ReviewMember[],
+  point: LabelPoint,
+  marks: LabelMarks,
+  /** `pointWinnerContradicted`, when the caller has already read it. */
+  contradicted?: boolean,
+): ReviewFlag | null {
+  const items: ReviewItem[] = [];
+  for (const def of REVIEW_ITEMS) {
+    const mine = members.filter((member) =>
+      def.codes.includes(member.mark.code),
+    );
+    if (mine.length === 0) continue;
+    items.push({
+      id: def.id,
+      question: def.question,
+      tone: reviewItemTone(def.id, mine, point, marks, contradicted),
+      state: mostOpen(mine.map((member) => member.state)),
+      members: mine,
+    });
+  }
+  if (items.length === 0) return null;
+  // Amber while an open item can move the score, or, with none open, while
+  // any item could: a point whose amber question is answered and whose grey
+  // one is still open is a data point to review, not a score one.
+  const tone = openOrAll(items, (item) => item.state).some(
+    (item) => item.tone === "score",
+  )
+    ? "score"
+    : "data";
   return {
-    tone: spoken.every((tone) => tone === "data") ? "data" : "score",
+    tone,
+    state: mostOpen(items.map((item) => item.state)),
+    items,
+    demoted: isDemoted(tone, items),
+  };
+}
+
+/**
+ * The words an item is asked in: its question, but item 4 as the vendor
+ * called the last ball ("Was the last ball out?") where `last_call_overruled`
+ * is one of its members.
+ */
+export function reviewItemQuestion(
+  item: Pick<ReviewItem, "id" | "question" | "members">,
+): string {
+  if (item.id === 4) {
+    for (const { mark } of item.members) {
+      if (mark.code === "last_call_overruled") {
+        return lastCallQuestion(mark.params.vendorCall);
+      }
+    }
+  }
+  return item.question;
+}
+
+/** The point row's one chip, as `reviewChip` reads it off the flag. */
+export interface ReviewChip {
+  /** The words, or null for the quiet outline that has none. */
+  text: string | null;
+  /** The flag's items, open or not. */
+  count: number;
+  state: MarkState;
+  tone: MarkTone;
+  /** The items still open, in id order: what the words and hover speak for. */
+  open: ReviewItem[];
+}
+
+/**
+ * What the point row draws of its flag: null for a demoted flag, which the
+ * row leaves off as the header leaves it out (the open point still asks it).
+ * One open item is its own question (`reviewItemQuestion`), two or more are
+ * "Review · N", and with none open the chip is the quiet outline, no words —
+ * but only where a `count` mark is among the members, as the row drew it
+ * before the flag: a flag of hints alone leaves no trace once answered, so a
+ * finished match is not strewn with outlines. Every demoted signature is
+ * hints alone, so a flag that would be demoted once checked draws nothing
+ * either. Tone and state are the flag's.
+ */
+export function reviewChip(flag: ReviewFlag): ReviewChip | null {
+  if (flag.demoted) return null;
+  const open = flag.items.filter((item) => item.state === "open");
+  if (
+    open.length === 0 &&
+    !flag.items.some((item) =>
+      item.members.some((member) => member.mark.tier === "count"),
+    )
+  ) {
+    return null;
+  }
+  return {
     text:
       open.length === 0
         ? null
         : open.length === 1
-          ? MARK_LABEL[open[0].code]
-          : `${open.length} to check`,
-    count: countMarks.length,
-    state: mostOpen(states),
+          ? reviewItemQuestion(open[0])
+          : `Review · ${open.length}`,
+    count: flag.items.length,
+    state: flag.state,
+    tone: flag.tone,
+    open,
   };
 }

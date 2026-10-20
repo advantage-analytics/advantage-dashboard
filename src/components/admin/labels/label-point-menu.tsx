@@ -98,7 +98,7 @@ export function pointMenuActions(
   point: LabelPoint,
   context: Pick<
     EditContext,
-    "points" | "names" | "adScoring" | "onPatchPoint"
+    "points" | "names" | "adScoring" | "matchTiebreakSet" | "onPatchPoint"
   > & {
     /** Whether a site-removed stroke is a ghost here; a stroke by default. */
     ghosts?: boolean;
@@ -163,9 +163,11 @@ export function pointMenuActions(
     countPoint: uncounted
       ? patch(countPointPatch(point, context.ghosts ?? false))
       : null,
-    shiftOverflow: leftoverIds(context.points, context.adScoring ?? true).has(
-      point.id,
-    )
+    shiftOverflow: leftoverIds(
+      context.points,
+      context.adScoring ?? true,
+      context.matchTiebreakSet ?? null,
+    ).has(point.id)
       ? () => operations.onShiftGameOverflow(point.id)
       : null,
     move: neighbourGames(context.points, point.id).map((game) => {

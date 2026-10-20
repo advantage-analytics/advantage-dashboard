@@ -13,6 +13,7 @@
  */
 
 import {
+  isLabelGameType,
   isServeStroke,
   LABEL_SPINS,
   type LabelEnding,
@@ -177,8 +178,10 @@ export type LabelPointPatch = Partial<LabelPointValues> & {
  *
  * `game_type` is deliberately absent: marking a game a tiebreak is a
  * game-level annotation, not a correction of the seed, so it never makes a
- * point `edited`, is dropped from a stored seed that carries it
- * (`parseLabelPointSeed`), and is left alone by Reset.
+ * point `edited` and is left alone by Reset. A stored seed may still carry
+ * it (`LabelPointSeedValues.game_type`, the type the point was SEEDED with,
+ * for the opening scorecard): `parseLabelPointSeed` keeps it when it is one
+ * of the game types and drops it otherwise.
  */
 export const LABEL_POINT_SEED_FIELDS = [
   "set_number",
@@ -646,8 +649,10 @@ export function parseLabelShotSeed(value: unknown): LabelShotSeedValues | null {
 
 /**
  * A `label_points.seed` jsonb, or null — see {@link parseLabelShotSeed}.
- * Only {@link LABEL_POINT_SEED_FIELDS} come through: a seed that also carries
- * `game_type` (or anything else) has it dropped, not rejected.
+ * {@link LABEL_POINT_SEED_FIELDS} must all be there; `game_type` comes
+ * through when it names a game type (the type the point was seeded with, for
+ * the opening scorecard) and anything else — an unknown type, another key —
+ * is dropped, not rejected.
  */
 export function parseLabelPointSeed(
   value: unknown,
@@ -680,6 +685,9 @@ export function parseLabelPointSeed(
     winner,
     ending,
     ended_by: endedBy,
+    // The seeded game type, when the seed has one it can trust; a seed older
+    // than the key, or carrying something else, reads as no type (`game`).
+    ...(isLabelGameType(value.game_type) ? { game_type: value.game_type } : {}),
   };
 }
 

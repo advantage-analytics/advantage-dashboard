@@ -74,10 +74,9 @@ export function deriveShotResult(shot: ShotGeometry): LabelShotResult | null {
     return null;
   }
 
+  if (didNotClearNet(contact_y, landing_y)) return "net";
   // Signed depth past the net: positive on the far side, negative on the near.
-  const contactDepth = contact_y - NET_Y;
   const landingDepth = landing_y - NET_Y;
-  if (landingDepth === 0 || contactDepth * landingDepth > 0) return "net";
 
   const insideSidelines = Math.abs(landing_x) <= SINGLES_HALF_WIDTH_M;
 
@@ -96,6 +95,51 @@ export function deriveShotResult(shot: ShotGeometry): LabelShotResult | null {
   return insideSidelines && landing_y >= 0 && landing_y <= COURT_LENGTH
     ? "in"
     : "out";
+}
+
+/** What the shank readers take of a stroke: its two ends, as the row holds them. */
+export type ShotEnds = Partial<
+  Pick<LabelShot, "contactX" | "contactY" | "landingX" | "landingY">
+>;
+
+/** Whether a ball hit from `contactY` came down on that side of the net, or on it. */
+function didNotClearNet(contactY: number, landingY: number): boolean {
+  const landingDepth = landingY - NET_Y;
+  return landingDepth === 0 || (contactY - NET_Y) * landingDepth > 0;
+}
+
+/**
+ * Whether the ball came down on the hitter's own side of the net (or on the
+ * net line itself) — a shank, or a ball into the net: it never crossed. The
+ * same reading `deriveShotResult` makes `"net"` from, kept in one place so
+ * the court panel's "Didn’t clear the net" and the stored result cannot
+ * disagree. False while either end is missing.
+ *
+ * Such a landing is ALLOWED: nothing refuses a click on the hitter's half
+ * (court-placement.ts `nextPlacement` takes any point), and the result the
+ * write carries is `"net"`. That is the stored meaning of `result: "net"`
+ * today — a ball that did not clear — and this changes none of it.
+ */
+export function landedOnOwnSide(shot: ShotEnds): boolean {
+  const { contactX, contactY, landingX, landingY } = shot;
+  if (
+    contactX == null ||
+    contactY == null ||
+    landingX == null ||
+    landingY == null
+  ) {
+    return false;
+  }
+  return didNotClearNet(contactY, landingY);
+}
+
+/**
+ * How far short of the net a ball that `landedOnOwnSide` came down, in
+ * metres to the centimetre; null for any other landing, or one not placed.
+ */
+export function shortOfNet(shot: ShotEnds): number | null {
+  if (!landedOnOwnSide(shot) || shot.landingY == null) return null;
+  return Math.round(Math.abs(shot.landingY - NET_Y) * 100) / 100;
 }
 
 /**

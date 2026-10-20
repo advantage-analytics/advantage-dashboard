@@ -120,6 +120,31 @@ export function youFirstScore(
   return `${you}–${opp}`;
 }
 
+/**
+ * A point's game / point score as the database holds it: the raw column where
+ * the loader carried one, the defaulted string otherwise. Null is a score the
+ * vendor's stream never read (`score_frozen`) — not a "0-0" — so the board
+ * leaves those cells blank and the list draws "—".
+ */
+export function readGameScore(
+  point: Pick<MatchPoint, "gameScore" | "gameScoreRaw">,
+): string | null {
+  return point.gameScoreRaw !== undefined
+    ? point.gameScoreRaw
+    : point.gameScore;
+}
+
+export function readPointScore(
+  point: Pick<MatchPoint, "pointScore" | "pointScoreRaw">,
+): string | null {
+  return point.pointScoreRaw !== undefined
+    ? point.pointScoreRaw
+    : point.pointScore;
+}
+
+/** What a list draws in place of a score the stream never read. */
+export const UNREAD_SCORE = "\u2014";
+
 function asGames(value: string): number | null {
   const n = Number(value);
   return Number.isInteger(n) && n >= 0 ? n : null;
@@ -142,7 +167,7 @@ export function boardAt(
   }
 
   const games = columns.hasGameScore
-    ? absolutize(point.gameScore, point.serverIsPlayer1)
+    ? absolutize(readGameScore(point), point.serverIsPlayer1)
     : null;
   if (games) {
     const [you, opp] = youFirst(games, sides.youIsPlayer1);
@@ -154,7 +179,7 @@ export function boardAt(
   }
 
   const pts = columns.hasPointScore
-    ? absolutize(point.pointScore, point.serverIsPlayer1)
+    ? absolutize(readPointScore(point), point.serverIsPlayer1)
     : null;
   const [youPts, oppPts] = pts
     ? youFirst(pts, sides.youIsPlayer1)
@@ -179,7 +204,7 @@ export function boardAt(
     ],
     liveSet,
     gameNumber: point.gameNumber,
-    pointLine: pts ? serverFirstScore(point.pointScore) : null,
+    pointLine: pts ? serverFirstScore(readPointScore(point)) : null,
   };
 }
 
