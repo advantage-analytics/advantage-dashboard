@@ -556,6 +556,7 @@ export function LabelConsole({
   // A step's end-of-point replay while it runs (review-replay.ts). A ref:
   // nothing renders from it, and it is let go from event handlers.
   const replay = useRef<ReplayHandle | null>(null);
+  const selfPause = useRef(false);
   function cancelReplay() {
     replay.current?.cancel();
     replay.current = null;
@@ -575,7 +576,6 @@ export function LabelConsole({
     }
     cancelReplay();
   }
-  const selfPause = useRef(false);
   /** A pause the labeller made lets the replay go; the console's own does not. */
   function onFilmPause() {
     if (selfPause.current) {

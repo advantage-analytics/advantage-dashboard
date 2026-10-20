@@ -1014,6 +1014,9 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(landSource).toContain("pause: () => handle.pause(),");
     // Let go when the labeller moves the film, jumps, selects or answers.
     expect(consoleSource).toContain("onPause={onFilmPause}");
+    // The console's own pause lands after the next replay has started: it is
+    // marked, and onFilmPause lets it pass rather than cancel that replay.
+    expect(consoleSource).toContain("selfPause.current = true;");
     const keys = consoleSource.slice(
       consoleSource.indexOf('if (key === "Enter") checkOpenPoint.current();'),
       consoleSource.indexOf('window.addEventListener("keydown", onKeyDown);'),
@@ -1034,7 +1037,7 @@ test.describe("a flag jump lands on the point's review step", () => {
       "stopReplay();",
     );
     expect(consoleSource).toContain(
-      "if (replay.current && player.current?.isPlaying()) player.current.pause();",
+      "if (replay.current && player.current?.isPlaying()) {",
     );
     const selectShot = consoleSource.slice(
       consoleSource.indexOf("  function selectShot("),
