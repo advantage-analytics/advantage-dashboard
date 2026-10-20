@@ -56,7 +56,8 @@ import {
  * own bounding rect, so neither notices the scale.
  *
  * The art zooms (a pinch or ⌃ scroll, or the + / − buttons, up to `MAX_ZOOM`)
- * and pans: a two-finger scroll or a drag. Zoomed, a pan moves the art within
+ * and pans: a two-finger scroll, or a drag with either button — a two-finger
+ * press on a trackpad is a right click, whose menu the court keeps shut. Zoomed, a pan moves the art within
  * the box; unzoomed on a half, it moves the box itself up and down the court
  * (`moveWindow`), as far as the deepest run-off past either baseline, so a
  * ball outside the box the console opened on is reached without placing
@@ -163,6 +164,22 @@ export function panBy(zoom: CourtZoom, dx: number, dy: number): CourtZoom {
     x: clamp(zoom.x + dx, min, 0),
     y: clamp(zoom.y + dy, min, 0),
   };
+}
+
+/** The largest ⌃ wheel delta one event zooms by, in pixels. */
+const WHEEL_ZOOM_DELTA_MAX = 20;
+
+/**
+ * A ⌃ wheel's `deltaY` as a zoom step: a pinch sends many small deltas, a
+ * mouse notch one of about 100 pixels (or a few lines), which would zoom
+ * nearly to `MAX_ZOOM` at once. Read in pixels and capped, so one notch is
+ * about a fifth of a step in or out and a pinch is untouched.
+ */
+export function wheelZoomDelta(
+  event: Pick<WheelEvent, "deltaY" | "deltaMode">,
+): number {
+  const pixels = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+  return clamp(pixels, -WHEEL_ZOOM_DELTA_MAX, WHEEL_ZOOM_DELTA_MAX);
 }
 
 /** The lowest and highest top a half's box can be moved to: the deepest run-off. */
@@ -334,7 +351,7 @@ export function LabelCourt({
         event.preventDefault();
         const px = ((event.clientX - rect.left) / rect.width) * 100;
         const py = ((event.clientY - rect.top) / rect.height) * 100;
-        const factor = Math.exp(-event.deltaY * 0.01);
+        const factor = Math.exp(-wheelZoomDelta(event) * 0.01);
         setZoomState((state) => ({
           ...state,
           zoom: zoomAbout(state.zoom, state.zoom.scale * factor, px, py),
@@ -370,9 +387,12 @@ export function LabelCourt({
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
       // A drag left with no click of its own must not eat this press's.
       dropClick.current = false;
+      // The main button, or the secondary: a two-finger press on a trackpad
+      // is a right click, and a drag with it pans too (it never places).
+      if (event.button !== 0 && event.button !== 2) return;
       // On the whole court, unzoomed, there is nothing to pan, so a press is
       // a click however much the hand shakes.
-      if (event.button !== 0 || (zoom.scale === 1 && !zoomed)) return;
+      if (zoom.scale === 1 && !zoomed) return;
       drag.current = {
         id: event.pointerId,
         x: event.clientX,
@@ -414,6 +434,11 @@ export function LabelCourt({
     },
     onPointerCancel: () => {
       drag.current = null;
+    },
+    // The right click that starts a two-finger drag opens no menu over the
+    // court.
+    onContextMenu: (event: React.MouseEvent<HTMLElement>) => {
+      event.preventDefault();
     },
   };
   const zoomBy = (factor: number) =>

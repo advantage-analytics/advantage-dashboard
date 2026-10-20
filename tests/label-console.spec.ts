@@ -1467,3 +1467,22 @@ test("clicking into the row a flag jump selected, or editing a cell, ends review
     body.indexOf("if (held) return;"),
   );
 });
+
+test.describe("Enter and ⌘ Enter", () => {
+  const consoleSource = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+
+  test("Enter unfolds the open point; ⌘ Enter toggles its check once per press", () => {
+    expect(consoleSource).toContain(
+      'if (key === "Enter") unfoldOpenPoint.current();',
+    );
+    expect(consoleSource).toMatch(
+      /if \(chord\) \{\n(\s+\/\/[^\n]*\n)*\s+if \(event\.repeat\) return;[\s\S]{0,120}toggleOpenPointCheck\.current\(\);/,
+    );
+    expect(consoleSource).toContain(
+      "setChecked(expanded.id, expanded.checkedAt === null);",
+    );
+  });
+});

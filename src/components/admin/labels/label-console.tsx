@@ -2729,6 +2729,8 @@ export function LabelConsole({
         }
         event.preventDefault();
         if (chord) {
+          // A held ⌘ Enter toggles once: its repeats would flip it back.
+          if (event.repeat) return;
           (document.activeElement as HTMLElement | null)?.blur?.();
           toggleOpenPointCheck.current();
         } else stepShot.current(key === "ArrowDown" ? 1 : -1);

@@ -15,6 +15,7 @@ import {
   artPoint,
   moveWindow,
   panBy,
+  wheelZoomDelta,
   runoffGuides,
   zoomAbout,
 } from "@/components/admin/labels/label-court";
@@ -199,6 +200,16 @@ test.describe("court zoom", () => {
     );
   });
 
+  test("a mouse notch with ⌃ zooms a step, not to the limit; a pinch is untouched", () => {
+    const notch = Math.exp(
+      -wheelZoomDelta({ deltaY: -100, deltaMode: 0 }) * 0.01,
+    );
+    expect(notch).toBeLessThan(1.3);
+    expect(notch).toBeGreaterThan(1.1);
+    expect(wheelZoomDelta({ deltaY: -3, deltaMode: 1 })).toBe(-20);
+    expect(wheelZoomDelta({ deltaY: 4.5, deltaMode: 0 })).toBe(4.5);
+  });
+
   test("a click on a moved box lands where the court under it is", () => {
     const top = moveWindow(halfTopY("near"), -4);
     // The box's bottom edge is HALF_HEIGHT below its top.
@@ -216,8 +227,13 @@ test.describe("court zoom", () => {
     expect(source).toMatch(/top: moveWindow\(\s*state\.top,/);
     expect(source).toMatch(/top: moveWindow\(start\.top, /);
     // A press on an unzoomed half can start a drag now; the whole court's cannot.
+    expect(source).toContain("if (zoom.scale === 1 && !zoomed) return;");
+    // A two-finger press-and-drag is a right click: it pans, and opens no menu.
     expect(source).toContain(
-      "if (event.button !== 0 || (zoom.scale === 1 && !zoomed)) return;",
+      "if (event.button !== 0 && event.button !== 2) return;",
+    );
+    expect(source).toMatch(
+      /onContextMenu: \(event[^)]*\) => \{\s+event\.preventDefault\(\);/,
     );
     // The click a drag ends with is still dropped, and a click reads the moved box.
     expect(source).toContain("if (dropClick.current) {");
