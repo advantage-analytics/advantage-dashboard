@@ -1057,6 +1057,82 @@ test.describe("serves", () => {
   });
 });
 
+test.describe("the per-item table", () => {
+  const COUNT_4 = mark("last_call_overruled", {} as never);
+  const GUESSED = mark("winner_guessed", {});
+  const SUSPECT = mark("ending_suspect_line", {} as never);
+
+  test("two marks of one item on a point make one row with one point", () => {
+    const a = point("a", 0, [shot("a1")], { winner: "p2" });
+    const card = buildScorecard([a], marksOf({ a: [DISPUTED, COUNT_4] }));
+    expect(card.items).toHaveLength(1);
+    expect(card.items[0]).toMatchObject({
+      id: 4,
+      tone: "score",
+      points: 1,
+      winnerChanged: 1,
+      anythingChanged: 1,
+    });
+  });
+
+  test("a point with marks in two items counts in both", () => {
+    const a = point("a", 0, [shot("a1")], { ending: "error" });
+    const b = point("b", 1, [shot("b1")]);
+    const card = buildScorecard(
+      [a, b],
+      marksOf({ a: [DISPUTED, GUESSED], b: [DISPUTED] }),
+    );
+    expect(
+      card.items.map((r) => [r.id, r.tone, r.points, r.endingChanged]),
+    ).toEqual([
+      [4, "score", 2, 1],
+      [5, "score", 1, 1],
+    ]);
+  });
+
+  test("amber rows come before grey, and the demoted points get a row", () => {
+    const a = point("a", 0, [shot("a1")], { ending: "error" });
+    const b = point("b", 1, [shot("b1")]);
+    const card = buildScorecard(
+      [a, b],
+      marksOf({ a: [SUSPECT], b: [DISPUTED] }),
+    );
+    expect(card.items.map((r) => [r.id, r.tone, r.points])).toEqual([
+      [4, "score", 1],
+      [4, "data", 1],
+      ["demoted", "data", 1],
+    ]);
+    expect(card.items[2].endingChanged).toBe(1);
+  });
+
+  test("a deleted point's marks are measured against the point it became", () => {
+    const kept = point("k", 0, [shot("k1")], { winner: "p2" });
+    const tomb = point("t", 1, [], {
+      status: "deleted",
+      vendorRallyIds: [1],
+    });
+    const card = buildScorecard([kept, tomb], marksOf({ t: [GUESSED] }));
+    expect(card.items.map((r) => [r.id, r.points, r.winnerChanged])).toEqual([
+      [5, 1, 1],
+    ]);
+  });
+
+  test("the markdown has the section and a row for each item", () => {
+    const a = point("a", 0, [shot("a1")]);
+    const text = renderScorecard(
+      buildScorecard([a], marksOf({ a: [DISPUTED, GUESSED] })),
+      { title: "Scorecard", names: { p1: "Lee", p2: "Vargas" } },
+    );
+    expect(text).toContain("## Items, against what the labeller changed");
+    expect(text).toContain("| Item | Tone | Points |");
+    expect(text).toMatch(/\| 4\. .* \| amber \| 1 \| 0 \(0%\) \|/);
+    expect(text).toMatch(/\| 5\. .* \| amber \| 1 \|/);
+    expect(text.indexOf("## Items")).toBeGreaterThan(
+      text.indexOf("## Marks, against"),
+    );
+  });
+});
+
 test.describe("the markdown", () => {
   test("names the players and heads every section", () => {
     const rows = [
@@ -1069,6 +1145,7 @@ test.describe("the markdown", () => {
     );
     for (const heading of [
       "## Marks, against what the labeller changed",
+      "## Items, against what the labeller changed",
       "## Changed with no `count` mark on the point",
       "## Last strokes seeded In whose coordinates say Out or Net",
       "## Strokes the labeller deleted",

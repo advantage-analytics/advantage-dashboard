@@ -50,7 +50,7 @@ import {
 } from "./label-black-parts";
 import {
   PencilMark,
-  PointHintLine,
+  ReviewBlock,
   pointHints,
   type PointHint,
 } from "./label-black-mark";
@@ -252,10 +252,9 @@ export function BlackShotsWell({
   // The next row's place in the well, for the stagger; none when the well
   // does not animate.
   const arrive = () => (animate ? rows.length + 1 : undefined);
-  // The point's hints. One about a stroke, or with an answer to click, is a
-  // dashed amber row: under its stroke, or under the rally when it is about
-  // the whole point. The rest are one quiet line, last in the well. Nothing
-  // leads the well: a line above the first stroke read as part of the point's
+  // The point's hints. One about a stroke is a dashed amber row under it;
+  // the rest are asked by the review block, last in the well. Nothing leads
+  // the well: a line above the first stroke read as part of the point's
   // header, and its answers as words rather than buttons. Their answers write
   // through the console only where it can write at all.
   const hints = pointHints(
@@ -267,11 +266,6 @@ export function BlackShotsWell({
   const live = new Set(
     point.shots.filter((s) => s.status !== "deleted").map((s) => s.id),
   );
-  const under = (hint: (typeof hints)[number]) =>
-    hint.afterShotId !== undefined && live.has(hint.afterShotId);
-  const rest = hints.filter((hint) => !under(hint));
-  const offered = rest.filter((hint) => hint.actions.length > 0);
-  const quiet = rest.filter((hint) => hint.actions.length === 0);
   const hintLineAfter = (shotId: string) => {
     for (const hint of hints) {
       if (hint.afterShotId !== shotId) continue;
@@ -346,23 +340,14 @@ export function BlackShotsWell({
       );
     }
   }
-  for (const hint of offered) {
-    rows.push(
-      <BlackEndedSuggestion
-        key={`hint-${hint.code}`}
-        hint={hint}
-        point={point}
-        edit={edit}
-        arrive={arrive()}
-      />,
-    );
-  }
-  if (quiet.length > 0) {
+  if (marks) {
     const arrival = rowArrival(arrive());
     rows.push(
-      <PointHintLine
-        key="hints"
-        hints={quiet}
+      <ReviewBlock
+        key="review"
+        point={point}
+        marks={marks}
+        edit={edit}
         className={arrival.className}
         style={arrival.style}
       />,
