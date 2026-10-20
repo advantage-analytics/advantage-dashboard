@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  hasEarlierServe,
   isStrokeKey,
   strokeKeyChange,
 } from "@/components/admin/labels/stroke-keys";
+import { labelShot } from "./fixtures/label-session";
 import {
   MAX_ZOOM,
   NO_ZOOM,
@@ -61,6 +63,40 @@ test.describe("stroke keys", () => {
     expect(strokeKeyChange("s", shot("second_serve"))).toEqual({
       stroke: "first_serve",
     });
+  });
+
+  test("S after a serve in the point is a second serve, and still switches", () => {
+    expect(strokeKeyChange("s", shot("forehand"), true)).toEqual({
+      stroke: "second_serve",
+    });
+    expect(strokeKeyChange("s", shot(null), true)).toEqual({
+      stroke: "second_serve",
+    });
+    // Already the serve S would make: it switches to the other.
+    expect(strokeKeyChange("s", shot("second_serve"), true)).toEqual({
+      stroke: "first_serve",
+    });
+    expect(strokeKeyChange("s", shot("first_serve"), true)).toEqual({
+      stroke: "second_serve",
+    });
+  });
+
+  test("an earlier serve counts; a let, a deleted serve or a later one does not", () => {
+    const row = (
+      id: string,
+      videoTime: number,
+      fields: Parameters<typeof labelShot>[2] = {},
+    ) => labelShot(id, "pt", { videoTime, ...fields });
+    const fault = row("a", 1, { stroke: "first_serve", result: "out" });
+    const target = row("b", 2);
+    expect(hasEarlierServe({ shots: [fault, target] }, "b", false)).toBe(true);
+    // A let is replayed: the serve after it is still the first.
+    const let_ = row("a", 1, { stroke: "first_serve", result: "let" });
+    expect(hasEarlierServe({ shots: [let_, target] }, "b", false)).toBe(false);
+    const gone = row("a", 1, { stroke: "first_serve", status: "deleted" });
+    expect(hasEarlierServe({ shots: [gone, target] }, "b", false)).toBe(false);
+    const later = row("c", 3, { stroke: "first_serve" });
+    expect(hasEarlierServe({ shots: [target, later] }, "b", false)).toBe(false);
   });
 
   test("1–4 are the spin menu's rows; the same value asks for nothing", () => {
