@@ -92,7 +92,7 @@ export interface ActiveShot {
 
 /** The shot being played, or null between points and before the first serve. */
 export function activeShotAt(
-  stops: ShotStop[],
+  stops: readonly ShotStop[],
   filmTime: number,
 ): ActiveShot | null {
   let index = -1;
@@ -133,7 +133,7 @@ export function stepShot(
       stops.find((s) => s.start - REACHED_EPSILON_SECONDS > filmTime) ?? null
     );
   }
-  const current = activeShotAt(stops as ShotStop[], filmTime)?.stop ?? null;
+  const current = activeShotAt(stops, filmTime)?.stop ?? null;
   const before = current ? current.start : filmTime - REACHED_EPSILON_SECONDS;
   for (let i = stops.length - 1; i >= 0; i -= 1) {
     if (stops[i] !== current && stops[i].start < before) return stops[i];

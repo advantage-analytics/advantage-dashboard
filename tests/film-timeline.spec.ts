@@ -114,6 +114,9 @@ test.describe("film clock", () => {
     expect(prevStop(stops, stops[0].start + 4)).toBeNull();
     // A seek that landed a hair early still reads as on the point.
     expect(prevStop(stops, stops[2].start - 0.05)?.point.id).toBe("b");
+    // Where two windows touch (c's end is d's start), a seek landing a hair
+    // early on d is on d: back goes to c, never past it to b.
+    expect(prevStop(stops, stops[3].start - 0.05)?.point.id).toBe("c");
   });
 
   test("dead time jumps to the next start, and only from dead time", () => {

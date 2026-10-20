@@ -291,7 +291,14 @@ export function prevStop<S extends FilmStop<StopPoint>>(
   stops: readonly S[],
   filmTime: number,
 ): S | null {
-  const playing = playingStopAt(stops, filmTime);
+  // The LATER of two touching windows: a seek to a point lands a hair before
+  // its start, inside the window before it, which `playingStopAt` (earlier
+  // first, for the board) would name — and back would skip a point.
+  let playing: S | null = null;
+  for (const stop of stops) {
+    if (stop.start - REACHED_EPSILON_SECONDS > filmTime) break;
+    if (filmTime < stop.end) playing = stop;
+  }
   const before = playing ? playing.start : filmTime - STEP_CUSHION_SECONDS;
   for (let i = stops.length - 1; i >= 0; i -= 1) {
     if (stops[i] !== playing && stops[i].start < before) return stops[i];
