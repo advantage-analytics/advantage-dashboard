@@ -913,7 +913,7 @@ test.describe("a flag jump lands on the point's review step", () => {
     // stops asking the item and nothing lands. A stroke with no step about
     // it (the one an answer added) forces the move on, in review mode only.
     expect(placeSource).toMatch(
-      /if \(placesBothEnds\(shot, next\.patch\)\) \{\n\s+if \(step\?\.target\.shotId === shot\.id\) \{\n\s+if \(reviewMode\) noteAnswered\(\);\n\s+else closeQueuedItem\(\);\n\s+\} else if \(reviewMode && inlineAnchor\?\.strokeId === shot\.id\) \{\n\s+notePlaced\(\);\n\s+\}\n\s+\}/,
+      /if \(!growing && placesBothEnds\(shot, next\.patch\)\) \{\n\s+if \(step\?\.target\.shotId === shot\.id\) \{\n\s+if \(reviewMode\) noteAnswered\(\);\n\s+else closeQueuedItem\(\);\n\s+\} else if \(reviewMode && inlineAnchor\?\.strokeId === shot\.id\) \{\n\s+notePlaced\(\);\n\s+\}\n\s+\}/,
     );
     expect(placeSource.match(/noteAnswered\(\)/g)).toHaveLength(1);
     expect(placeSource.match(/closeQueuedItem\(\)/g)).toHaveLength(1);
@@ -1013,7 +1013,10 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(landSource).toContain("replay.current = runReplay(film, {");
     expect(landSource).toContain("pause: () => handle.pause(),");
     // Let go when the labeller moves the film, jumps, selects or answers.
-    expect(consoleSource).toContain("onPause={cancelReplay}");
+    expect(consoleSource).toContain("onPause={onFilmPause}");
+    // The console's own pause lands after the next replay has started: it is
+    // marked, and onFilmPause lets it pass rather than cancel that replay.
+    expect(consoleSource).toContain("selfPause.current = true;");
     const keys = consoleSource.slice(
       consoleSource.indexOf('if (key === "Enter") checkOpenPoint.current();'),
       consoleSource.indexOf('window.addEventListener("keydown", onKeyDown);'),
@@ -1034,7 +1037,7 @@ test.describe("a flag jump lands on the point's review step", () => {
       "stopReplay();",
     );
     expect(consoleSource).toContain(
-      "if (replay.current && player.current?.isPlaying()) player.current.pause();",
+      "if (replay.current && player.current?.isPlaying()) {",
     );
     const selectShot = consoleSource.slice(
       consoleSource.indexOf("  function selectShot("),
