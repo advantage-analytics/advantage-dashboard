@@ -103,10 +103,10 @@ export function parseTreeWatch(fields: readonly string[]): AskTreeWatch | null {
     const tail = won ? more.slice(1) : more;
     const rally =
       tail.length === 1 ? oneOf<RallyLengthBand>(tail[0], BANDS) : null;
+    // Anything left over, or a band that is not one, is no watch.
     if (
       !PLAYERS.includes(subject as AskPatternPlayer) ||
-      tail.length > 1 ||
-      (tail.length === 1 && rally === null)
+      tail.length !== (rally === null ? 0 : 1)
     ) {
       return null;
     }

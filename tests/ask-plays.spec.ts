@@ -511,7 +511,8 @@ test.describe("winning plays", () => {
     if (result.visual?.kind !== "tree") throw new Error("no tree");
     expect(result.visual.countLabel).toBe("Points won");
     expect(result.visual.partLabel).toBe("Winners");
-    expect(result.visual.shareLabel).toBe("Share of points won");
+    // The key reads "Points won, as a share".
+    expect(result.visual.shareLabel).toBe("Points won");
     expect(result.visual.branches[0]).toMatchObject({
       steps: ["Forehand", "crosscourt"],
       count: { value: 12, text: "12" },
@@ -598,6 +599,19 @@ test.describe("winning plays", () => {
       resultOutcome: ["won"],
       resultRallyLength: ["short"],
     });
+  });
+
+  test("over several matches, or with no linkable rally shot, the answer promises no film", () => {
+    const voice = losingPlaysVoice("mine", "Sam");
+    // The tree links only over one match.
+    expect(
+      buildWinningPlaysAnswer([total, play("Forehand", 12)], voice, 6),
+    ).not.toContain("opens the film");
+    // A middle is no direction the Video filter offers.
+    const middle = { ...play("Forehand", 12), direction: "Middle" };
+    expect(buildWinningPlaysAnswer([total, middle], voice, 1)).not.toContain(
+      "opens the film",
+    );
   });
 
   test("a rally length with no filter band draws no links rather than other rallies", () => {

@@ -12,6 +12,7 @@ import type { AskPromptTag } from "@/lib/services/ask/prompts";
 import {
   ASK_VISUAL_WATCH_PREFIX,
   type AskTreeWatch,
+  treeBranchWatch,
   treeWatchFields,
 } from "@/lib/services/ask/tree";
 
@@ -657,9 +658,6 @@ export function rallyPhrase(rally: AskRallyLength): string {
   return `rallies of ${words(rally.min)} to ${words(rally.max)} shots`;
 }
 
-/** The serve strokes a play row can name, which the Custom filter does not offer. */
-const SERVE_STROKES: readonly string[] = ["First Serve", "Second Serve"];
-
 /**
  * The Video filter's rally band that holds exactly `rally`'s rallies
  * (`rallyLengthBandOf`), or null when none does — Ask's medium (5–9) and
@@ -719,16 +717,17 @@ export function buildWinningPlaysAnswer(
           ...(band ? { rally: band } : {}),
         }
       : null;
-  // Serves are no Custom stroke the Video filter offers: no link.
+  // Whether any branch draws a link: the tree links only over one match
+  // (`tree-visual.tsx`), and a serve or a middle is no Custom shot the
+  // Video filter offers.
   const linked =
     watch !== null &&
-    branches.some(
-      ({ entry }) => !SERVE_STROKES.includes(String(entry.row.stroke)),
-    );
+    matchCount === 1 &&
+    branches.some(({ entry }) => treeBranchWatch(watch, entry.row) !== null);
   const tree = [
     `${ASK_VISUAL_LINE_PREFIX} tree ${S} ${caption}`,
     `COLUMNS: Stroke ${S} Direction`,
-    `SERIES: Points won ${S} Winners ${S} Share of points won`,
+    `SERIES: Points won ${S} Winners ${S} Points won`,
     ...(watch
       ? [`${ASK_VISUAL_WATCH_PREFIX} ${treeWatchFields(watch).join(` ${S} `)}`]
       : []),
