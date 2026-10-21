@@ -533,6 +533,14 @@ export function LabelConsole({
       ? initialExpandedPointId
       : (defaultPoint(session.points)?.id ?? null),
   );
+  // A point opened with no live, timed stroke (one just inserted, say) has
+  // no span on the film, so the playing point would win over it at once and
+  // it could never open. It stays current until the video plays into another
+  // row: `at` is the playing row it was opened over.
+  const [pinned, setPinned] = useState<{
+    pointId: string;
+    at: string;
+  } | null>(null);
   const [pointFocus, setPointFocus] = useState<PointFocus>(
     initialPointFocus ?? FOLLOW,
   );
@@ -757,7 +765,10 @@ export function LabelConsole({
 
   // The current point: the playing one, else `restPointId`. The one point that
   // is unfolded, on the court and under Enter.
-  const currentPointId = playingPointId ?? restPointId;
+  if (pinned !== null && pinned.at !== playingKey) setPinned(null);
+  const pinnedPointId =
+    pinned !== null && pinned.at === playingKey ? pinned.pointId : null;
+  const currentPointId = pinnedPointId ?? playingPointId ?? restPointId;
   // Whatever the video plays into is where the current point rests next.
   // Adjusted during render, not in an effect: the fallback must never be a
   // render behind the point it stands in for.
@@ -1213,7 +1224,13 @@ export function LabelConsole({
     const first = point?.shots.find(
       (shot) => shot.status !== "deleted" && shot.videoTime !== null,
     );
-    if (first?.videoTime != null) player.current?.seekTo(first.videoTime);
+    if (first?.videoTime != null) {
+      setPinned(null);
+      player.current?.seekTo(first.videoTime);
+    } else if (point) {
+      // Nowhere on the film to go: hold it open where the video stands.
+      setPinned({ pointId: point.id, at: playingKey });
+    }
   }
 
   /**
@@ -1436,6 +1453,8 @@ export function LabelConsole({
       (rows) => withdrawInsertedPoint(rows, tempId),
     ).then((result) => {
       if (!result) return;
+      setRestPointId(result.point.id);
+      setPinned({ pointId: result.point.id, at: playingKey });
       holdPoint(result.point.id);
       jumpToPointId.current = result.point.id;
     });

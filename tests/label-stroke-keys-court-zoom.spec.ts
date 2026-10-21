@@ -137,10 +137,12 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     "utf8",
   );
 
-  test("the legend under the court names both, after the stroke keys", () => {
-    expect(STROKE_KEY_HINTS.slice(-2)).toEqual([
+  test("the legend under the court names them, after the stroke keys", () => {
+    expect(STROKE_KEY_HINTS.slice(-4)).toEqual([
       { key: "C", label: "contact / landing" },
       { key: "A", label: "add shot" },
+      { key: "⇧A", label: "add before" },
+      { key: "⌫", label: "delete shot" },
     ]);
     // Neither is a stroke key: they never change the selected stroke.
     expect(isStrokeKey("a")).toBe(false);
@@ -158,7 +160,14 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     // Same reach as the stroke keys: never from a field, a menu or a dialog,
     // never with a modifier, never on a held key.
     // The stroke keys' guard, shared: one dispatcher, one reach check.
-    expect(source).toContain("? () => addShotKey.current()");
+    expect(source).toContain(": () => addShotKey.current()");
+    // ⇧A adds before the selected stroke, else first in the rally.
+    expect(source).toContain("? () => addShotBeforeKey.current()");
+    expect(source).toContain(
+      "addShot(expanded.id, at > 0 ? live[at - 1].id : ADD_SHOT_AT_START);",
+    );
+    // Delete / Backspace go through the tray's own confirm.
+    expect(source).toContain('key === "Delete" || key === "Backspace"');
     expect(source).toContain("? () => endKey.current()");
     expect(source).toMatch(/consoleKey &&\n\s+!event\.metaKey/);
   });

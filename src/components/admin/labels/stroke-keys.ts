@@ -37,6 +37,8 @@ export const STROKE_KEY_HINTS: readonly { key: string; label: string }[] = [
   // The console's own keys, not the stroke's (label-console.tsx).
   { key: "C", label: "contact / landing" },
   { key: "A", label: "add shot" },
+  { key: "⇧A", label: "add before" },
+  { key: "⌫", label: "delete shot" },
 ];
 
 const VOLLEY_OF: Partial<Record<LabelStroke, LabelStroke>> = {
