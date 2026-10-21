@@ -23,7 +23,12 @@ pasting the address from Settings › Connections. The connector itself is
    `/claude` page and privacy policy 1.3), merged once step 1 is live.
 4. **The reviewer account** — email and password in step 8's text, never in
    this repo. Reviewers sign in with the password; a magic link reaches only
-   the owner's inbox.
+   the owner's inbox. It needs analysed matches (so `get_match` has insights
+   and key moments to show), one team membership (so `list_workspaces` lists
+   a program and `opponent_scouting` has a `faced_by`) and at least one
+   match it _created_ (`update_match` edits only those), a Tournament one so
+   step 8's `round` edit applies. It is not the `EYES_ON_*` verifier, whose
+   password the eyes-on harness depends on.
 5. **The icon** — the Advantage mark, square.
 
 Already met: remote over HTTPS, OAuth 2.1 with dynamic client registration
@@ -118,7 +123,8 @@ There is no separate credentials field; the text carries them.
 > **Server URL:** https://app.advantage-analytics.com/api/mcp
 >
 > **Test account:** email `<reviewer email>`, password `<reviewer password>`.
-> The account has analysed personal matches and belongs to a team.
+> The account has analysed personal matches, including a Tournament match it
+> recorded, and belongs to a team.
 >
 > **Steps:**
 >
@@ -128,7 +134,8 @@ There is no separate credentials field; the text carries them.
 > 3. The consent page says the app wants to use Ask on your behalf. Choose
 >    **Allow**; you are returned to Claude.
 > 4. Try each tool: `list_workspaces`; `list_matches`; `get_match` with a
->    match id from it; `opponent_scouting`; `describe_views`; `run_query` with
+>    match id from it (both players' statistics, the AI summary, key moments
+>    and the match link); `opponent_scouting`; `describe_views`; `run_query` with
 >    `select count(*) from ask.points where match_id in (select match_id from scope)`;
 >    `ask` with "How did my first serve do in my last match?" (uses one monthly
 >    question); `update_match` with a match id and `round` set to a new value

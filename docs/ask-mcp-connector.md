@@ -1,12 +1,13 @@
 # The Ask MCP connector
 
-**Current state (2026-10-20).** Slice 3 of the Ask roadmap
+**Current state (2026-10-21).** Slice 3 of the Ask roadmap
 ([`ask-improvement-roadmap.md`](ask-improvement-roadmap.md), §4 item 10): a
 remote [MCP](https://modelcontextprotocol.io) server at `/api/mcp` that lets a
-player or coach use **their own Claude** — claude.ai, Claude Desktop, Claude
-Code — over **their own match data**, inside the same security boundary the
-Ask page already has. Built on `claude/ask-mcp-connector`; the one thing it
-needs that code cannot do is the dashboard switch in §2.
+player or coach use **their own AI app** — Claude (claude.ai, Desktop, Code),
+ChatGPT or Cursor — over **their own match data**, inside the same security
+boundary the Ask page already has. Nine tools: seven reads and two writes
+(`update_match`, `prepare_video_upload`) that touch only the caller's own
+rows (§3, §4). The dashboard switch in §2 is on in production.
 
 ## 1. What it is
 
@@ -205,18 +206,21 @@ email"):
   `ask_seed_match_draft` inserts one `match_drafts` row for the caller, in a
   program only when they are a member. Neither creates a match or a job.
 - **The token is wider than the tools.** It is a full user JWT, so its
-  holder can do more than the four tools offer. What it can and cannot do:
+  holder can do more than the nine tools offer. What it can and cannot do:
   - **Reads**: anything the person's own session can read through
     PostgREST and Storage, within RLS — every table they can see, not only
     the `ask` views.
   - **PostgREST writes are refused.** A pre-request hook
     (`public.oauth_client_request_guard()`, migration
-    `20261016050115_oauth_client_read_only`) refuses every non-read request
+    `20261016050115_oauth_client_read_only`, its list last re-stated in
+    `20261021143857_mcp_match_writes`) refuses every non-read request
     from a token carrying `client_id`, except the ten `ask_*` functions
     this route calls as the user. `tests/mcp-auth.spec.ts` holds that list
     equal to the calls in `src/lib/services/mcp/` and the Ask modules it
     runs, so a new user-side RPC there fails CI until the migration lists
-    it. Those eight write only the person's own Ask data, but some take
+    it. Two are the match writes above (`ask_patch_match`,
+    `ask_seed_match_draft`), held to the caller's own rows in SQL. The other
+    eight read or write only the person's own Ask data, but some take
     free-form content: a client calling them directly could plant a cached
     answer (`ask_cache_put`) or a conversation turn the Ask page later shows
     as its own, or spend the monthly question allowance
@@ -225,16 +229,17 @@ email"):
     `storage.objects`.
   - **Edge Functions refuse it.** `process-match`, `generate-insights` and
     `generate-key-moments` answer a `client_id` token 403 in
-    `authorizeCaller()`. They run from what is deployed, so this holds only
-    once they are redeployed from this branch.
+    `authorizeCaller()`. They run from what is deployed; the 403 has been
+    live since their 2026-10-15 redeploy, and any later deploy from this
+    repo carries it.
   - **Supabase Auth's own endpoints accept it** as the person's session:
     `PUT /auth/v1/user` (email, password, metadata), MFA enrolment, identity
     linking, and `POST /auth/v1/oauth/authorizations/{id}/consent`, which
     could approve another client for the same person. Nothing in this repo
-    can gate them. Before switching the OAuth server on, confirm **Secure
-    email change** and **Secure password change** (reauthentication) are on
-    in Authentication → Providers → Email, and keep access tokens
-    short-lived.
+    can gate them. What limits them is Auth's own settings: **Secure email
+    change** and **Secure password change** (reauthentication) in
+    Authentication → Providers → Email — both on since 2026-10-16; keep them
+    on — and short-lived access tokens.
   - **Realtime broadcast** is not gated; nothing here uses it.
 - **The consent page cannot tell whose Claude is asking.** Someone can start
   the connector flow in their own claude.ai and send the authorize link to
@@ -261,7 +266,7 @@ approves that.
 **claude.ai and Claude Desktop** (custom connectors are shared between them):
 Settings → Connectors → **Add custom connector** → name "Advantage", URL
 `https://app.advantage-analytics.com/api/mcp` → Add → **Connect**. The sign-in
-and the consent page open in a browser tab; after Allow, the four tools appear
+and the consent page open in a browser tab; after Allow, the nine tools appear
 in the chat's tool menu. Team workspaces share a connector once an admin adds
 it.
 
@@ -336,10 +341,9 @@ alone (`supabase/migrations/20261015095315_ask_mcp_usage.sql`).
 **Known limits**
 
 - **Writes are gated on `client_id`** in PostgREST, Storage and the Edge
-  Functions (§4), and **consent on the callback** (§2). Before switching the
-  OAuth server on: redeploy the three Edge Functions from this branch, and
-  check the Auth settings §4 names — Supabase Auth's own endpoints accept
-  the token as the person's session. Realtime broadcast is not gated.
+  Functions (§4), and **consent on the callback** (§2). Supabase Auth's own
+  endpoints accept the token as the person's session, limited only by the
+  Auth settings §4 names. Realtime broadcast is not gated.
 - The 401's metadata URL and the resource document name `mcpOrigin()`
   (`NEXT_PUBLIC_SITE_URL`, then Vercel's variables) on a production build;
   the request's own origin stands in only outside one.
@@ -369,4 +373,7 @@ alone (`supabase/migrations/20261015095315_ask_mcp_usage.sql`).
 - **The OpenAPI file** (`openapi/advantage-api.yaml`) does not yet describe
   `/api/mcp` or the two well-known routes.
 - The eyes-on and live specs have not exercised the consent page or a real
-  token: the dashboard switch (§2) has to be flipped first.
+  token; the dashboard switch (§2) is on, so nothing blocks adding them. The
+  last walk with a real token (2026-10-16) covered the first four tools; the
+  three reads and two writes added since (PRs #515, #517) have not been
+  called through a live connector.
