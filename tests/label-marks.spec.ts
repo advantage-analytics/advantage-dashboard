@@ -404,13 +404,14 @@ test.describe("buildLabelMarks on the clean fixture", () => {
 
 test.describe("buildLabelMarks on the degraded fixture", () => {
   test("a refused transcript yields no marks at all", () => {
-    // A transcript with no entered score is refused, so it has no points to
-    // mark and the labels console would never seed it either. (The degraded
-    // payload's warm-up rally used to be the refusal; it is dropped now.)
+    // A transcript without exactly two players is refused, so it has no
+    // points to mark and the labels console would never seed it either. (A
+    // missing entered score used to be the refusal; since 2026-10-17 it
+    // publishes unverified.)
     const degraded = load("degraded-match.json");
     const refused = buildTranscript({
       rallies: degraded.analysis.rallies,
-      labels: degraded.analysis.players,
+      labels: degraded.analysis.players.slice(0, 1),
       score: null,
       initialTopIsPlayer1: null,
     });
