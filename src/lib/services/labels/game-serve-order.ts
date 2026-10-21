@@ -16,11 +16,15 @@
  * picking them in the game band: it rewrites every `server` and switches the
  * players on each point whose serve contradicts the new one.
  *
- * A repeat is `autofix` when the strokes settle it on their own: at least one
- * of the flagged game's serves is the other player's and none is the stored
- * server's, so the fix only puts `server` right and switches nobody. The
- * console applies those by itself (label-console.tsx); one that would switch
- * players on a whole game stays a slot for the labeller.
+ * A repeat is `autofix` when the strokes settle it on their own
+ * (`AUTOFIX_MIN_SERVES`): at least two of the flagged game's serves, and at
+ * least half its points, are the other player's, none is the stored server's,
+ * and the game beside it has a serve by its own server and none against. The
+ * fix then only puts `server` right and switches nobody. The seed applies
+ * those when a session is set up (seed.ts `fixSettledServeRepeats`); the
+ * console never writes one by itself, so a labeller's own server — set in the
+ * band, or put back with ⌘Z — always stands. One that would switch players
+ * stays a slot.
  *
  * Pure: the rail draws the slot, the console runs the fix.
  */
@@ -128,11 +132,7 @@ export function gameServeRepeats(
         pointId: wrong.live[0].id,
         pointNumber: wrong.live[0].pointIndex + 1,
         switched,
-        autofix:
-          !("error" in plan) &&
-          switched === 0 &&
-          againstServer(wrong) > 0 &&
-          servedBy(wrong, wrong.server) === 0,
+        autofix: !("error" in plan) && switched === 0 && settles(wrong, right),
       });
     }
   }
@@ -154,6 +154,26 @@ function againstServer(game: SetGame): number {
     const hitter = servingShot(point.shots)?.hitter ?? null;
     return hitter !== null && hitter !== game.server;
   }).length;
+}
+
+/** The fewest serves by the other player that settle a repeat on their own. */
+export const AUTOFIX_MIN_SERVES = 2;
+
+/**
+ * Whether the strokes alone say `wrong`'s stored server is the mistake: most
+ * of its points, and at least `AUTOFIX_MIN_SERVES`, served by the other
+ * player and none by the stored one; and `right` served by its own server
+ * with nothing against it.
+ */
+function settles(wrong: SetGame, right: SetGame): boolean {
+  const against = againstServer(wrong);
+  return (
+    against >= AUTOFIX_MIN_SERVES &&
+    against * 2 >= wrong.live.length &&
+    servedBy(wrong, wrong.server) === 0 &&
+    servedBy(right, right.server) > 0 &&
+    againstServer(right) === 0
+  );
 }
 
 /** How many of the game's serving strokes are `side`'s. */
