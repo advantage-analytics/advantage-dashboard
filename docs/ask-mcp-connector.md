@@ -220,7 +220,7 @@ email"):
     runs, so a new user-side RPC there fails CI until the migration lists
     it. Two are the match writes above (`ask_patch_match`,
     `ask_seed_match_draft`), held to the caller's own rows in SQL. The other
-    eight write only the person's own Ask data, but some take
+    eight read or write only the person's own Ask data, but some take
     free-form content: a client calling them directly could plant a cached
     answer (`ask_cache_put`) or a conversation turn the Ask page later shows
     as its own, or spend the monthly question allowance

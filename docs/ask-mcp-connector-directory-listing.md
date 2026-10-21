@@ -27,8 +27,8 @@ pasting the address from Settings › Connections. The connector itself is
    and key moments to show), one team membership (so `list_workspaces` lists
    a program and `opponent_scouting` has a `faced_by`) and at least one
    match it _created_ (`update_match` edits only those), a Tournament one so
-   step 8's `round` edit applies — not
-   the `EYES_ON_*` verifier, whose password the eyes-on harness depends on.
+   step 8's `round` edit applies. It is not the `EYES_ON_*` verifier, whose
+   password the eyes-on harness depends on.
 5. **The icon** — the Advantage mark, square.
 
 Already met: remote over HTTPS, OAuth 2.1 with dynamic client registration
