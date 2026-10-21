@@ -232,3 +232,36 @@ test.describe("a settled repeat is fixed at setup, never by the console", () => 
     expect(source).not.toContain("serverSetGames");
   });
 });
+
+test.describe("games read in row order, not by number", () => {
+  // A game started by hand takes the session's highest number plus one
+  // (game-shift.ts `planGameSplit`), so the numbers run 1, 2, 5, 3, 6, 4 down
+  // the rail while the servers alternate.
+  test("started games numbered out of order are no repeat", () => {
+    const points = [
+      ...game(0, 1, "p1", "p1"),
+      ...game(2, 2, "p2", "p2"),
+      ...game(4, 5, "p1", "p1"),
+      ...game(6, 3, "p2", "p2"),
+      ...game(8, 6, "p1", "p1"),
+      ...game(10, 4, "p2", "p2"),
+    ];
+    expect(gameServeRepeats(points)).toEqual([]);
+  });
+
+  test("a repeat beside a started game is still one, named by its place", () => {
+    const points = [
+      ...game(0, 1, "p1", "p1"),
+      // Started at point 3: number 3, past every other, second on the rail.
+      ...game(2, 3, "p2", "p2"),
+      ...game(4, 2, "p2", "p1"),
+    ];
+    const [repeat] = gameServeRepeats(points);
+    expect(repeat).toMatchObject({
+      game: { setNumber: 1, gameNumber: 2 },
+      gameInSet: 3,
+      other: { gameInSet: 2 },
+      expected: "p1",
+    });
+  });
+});

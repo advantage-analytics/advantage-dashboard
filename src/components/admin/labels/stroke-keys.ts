@@ -1,3 +1,5 @@
+import type { LabelShotPatch } from "@/lib/services/labels/edit";
+import { spinRows } from "./label-format";
 import {
   LABEL_SPINS,
   isLetServe,
@@ -20,8 +22,8 @@ import {
  *   this stroke (`hasEarlierServe`; a let does not count, it is replayed),
  *   else a first serve. Pressed on the serve it would make, it switches
  *   first ↔ second.
- * - 1–4 are the Spin menu's rows in order (`LABEL_SPINS`): topspin, flat,
- *   backspin, sidespin.
+ * - 1–4 are the Spin menu's rows in order (`spinRows`): topspin, flat,
+ *   backspin, sidespin; on a serve 1–3, Flat, Slice, Kick (`SERVE_SPINS`).
  *
  * The answer is the change asked for; the console writes a stroke through
  * `strokeChangePatch`, as the Stroke menu does, so a let keeps its rule. A key
@@ -85,8 +87,8 @@ export function strokeKeyChange(
   const lower = key.toLowerCase();
   const spinIndex = "1234".indexOf(lower);
   if (spinIndex !== -1) {
-    const spin = LABEL_SPINS[spinIndex];
-    return shot.spin === spin ? null : { spin };
+    const spin = spinRows(shot.stroke)[spinIndex];
+    return spin === undefined || shot.spin === spin ? null : { spin };
   }
   const stroke = strokeFor(lower, shot.stroke, earlierServe);
   if (stroke === null || stroke === shot.stroke) return null;
@@ -107,9 +109,39 @@ export function hasEarlierServe(
   shotId: string,
   ghosts: boolean,
 ): boolean {
+  return earlierServe(point, shotId, ghosts) !== null;
+}
+
+/** The first live serve before `shotId` in its point, a let aside. */
+function earlierServe(
+  point: { shots: readonly LabelShot[] },
+  shotId: string,
+  ghosts: boolean,
+): LabelShot | null {
   for (const shot of liveShotsInOrder(point, ghosts)) {
-    if (shot.id === shotId) return false;
-    if (isServeStroke(shot.stroke) && !isLetServe(shot)) return true;
+    if (shot.id === shotId) return null;
+    if (isServeStroke(shot.stroke) && !isLetServe(shot)) return shot;
   }
-  return false;
+  return null;
+}
+
+/**
+ * A stroke made a serve after an earlier serve in its point (a second serve
+ * after a fault) is hit by the same player: the patch takes that serve's
+ * hitter along, when the stroke's own differs. One server per point, so an
+ * added stroke — seeded as the opponent of the one before it — never needs
+ * a second edit. A patch that names its own hitter keeps it.
+ */
+export function withServeHitter(
+  point: { shots: readonly LabelShot[] },
+  shotId: string,
+  patch: LabelShotPatch,
+  ghosts: boolean,
+): LabelShotPatch {
+  if (!("stroke" in patch) || "hitter" in patch) return patch;
+  if (!isServeStroke(patch.stroke ?? null)) return patch;
+  const shot = point.shots.find((s) => s.id === shotId);
+  const hitter = earlierServe(point, shotId, ghosts)?.hitter ?? null;
+  if (!shot || hitter === null || shot.hitter === hitter) return patch;
+  return { ...patch, hitter };
 }

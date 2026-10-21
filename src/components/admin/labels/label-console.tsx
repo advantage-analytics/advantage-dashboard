@@ -263,7 +263,12 @@ import {
   playingRowKey,
 } from "./video-clock";
 import { useBrowserFullscreen } from "./use-browser-fullscreen";
-import { hasEarlierServe, isStrokeKey, strokeKeyChange } from "./stroke-keys";
+import {
+  hasEarlierServe,
+  isStrokeKey,
+  strokeKeyChange,
+  withServeHitter,
+} from "./stroke-keys";
 
 /** Ids of rows drawn optimistically while their insert is in flight. */
 const PENDING_SHOT_PREFIX = "pending-shot-";
@@ -2186,7 +2191,12 @@ export function LabelConsole({
    * whether the rest follows it (`planServeHitterFollow`): the point's other
    * rows, and the game's server. Every other edit is written at once.
    */
-  function requestPatchShot(shotId: string, patch: LabelShotPatch) {
+  function requestPatchShot(shotId: string, edit: LabelShotPatch) {
+    // A stroke made a serve after the point's first takes that server.
+    const owner = pointOfShot(points, shotId);
+    const patch = owner
+      ? withServeHitter(owner, shotId, edit, drawsGhosts(marks))
+      : edit;
     // A draft stroke's add is still in flight: the server would switch the
     // saved rows and not it, so its edit goes alone.
     if (
@@ -2634,6 +2644,8 @@ export function LabelConsole({
       const owner = pointOfShot(points, placement.shotId);
       const shot = owner?.shots.find((s) => s.id === placement.shotId);
       if (!owner || !shot || shot.status === "deleted") return false;
+      // Never a stroke left selected in another point than the open one.
+      if (expanded && owner.id !== expanded.id) return false;
       // A draft has no row on the server to delete yet.
       if (shot.id.startsWith(PENDING_SHOT_PREFIX)) return false;
       const number =
@@ -2648,20 +2660,55 @@ export function LabelConsole({
       );
       return true;
     };
+    // The stroke a shot key acts on: the selected one while it is the open
+    // point's; else the open point's first, selected first so the next key
+    // lands on it too. A selection left behind in another point — the film
+    // played or was clicked on into this one — never takes a key meant for
+    // the point on screen.
+    const keyShot = (): LabelShot | null => {
+      const selected =
+        placement.shotId === null ? null : findShot(points, placement.shotId);
+      const live = selected && selected.status !== "deleted" ? selected : null;
+      if (!expanded || unfoldedPointId !== expanded.id) return live;
+      if (live && expanded.shots.some((shot) => shot.id === live.id)) {
+        return live;
+      }
+      const first = liveShotsInOrder(expanded, drawsGhosts(marks)).find(
+        (shot) => !shot.id.startsWith(PENDING_SHOT_PREFIX),
+      );
+      if (!first) return null;
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      selectShot(first.id, undefined, { seek: false });
+      return first;
+    };
     endKey.current = () => {
-      if (!editable || confirm || placement.shotId === null) return false;
-      setTarget(placement.target === "contact" ? "landing" : "contact");
+      if (!editable || confirm) return false;
+      const selected = placement.shotId;
+      const shot = keyShot();
+      if (!shot) return false;
+      if (shot.id === selected) {
+        setTarget(placement.target === "contact" ? "landing" : "contact");
+      } else {
+        // Just selected, on whichever end it opened: C takes the other.
+        setPlacement((current) =>
+          setPlacementTarget(
+            current,
+            current.target === "contact" ? "landing" : "contact",
+            shot.contactY,
+          ),
+        );
+      }
       return true;
     };
     flipKey.current = () => {
-      if (!editable || confirm || placement.shotId === null) return false;
+      if (!editable || confirm || !keyShot()) return false;
       setPlacement(flipPlacement);
       return true;
     };
     strokeKey.current = (key) => {
-      if (!operable || confirm || placement.shotId === null) return false;
-      const shot = findShot(points, placement.shotId);
-      if (!shot || shot.status === "deleted") return false;
+      if (!operable || confirm) return false;
+      const shot = keyShot();
+      if (!shot) return false;
       const owner = points.find((p) => p.shots.some((s) => s.id === shot.id));
       const change = strokeKeyChange(
         key,

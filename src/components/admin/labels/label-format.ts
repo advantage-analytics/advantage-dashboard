@@ -2,6 +2,7 @@ import { shotSpinLabel } from "@/components/dashboard/matches/match-detail/film/
 import { LABEL_STROKES } from "@/lib/services/labels/edit";
 import {
   LABEL_SPINS,
+  SERVE_SPINS,
   isMissedResult,
   isLetServe,
   isServeStroke,
@@ -65,14 +66,22 @@ export function spinLabel(
   });
 }
 
-/** The Spin dropdown's rows for a stroke: every vendor value, in its words. */
+/**
+ * The Spin dropdown's rows for a stroke, in its words: a serve's three
+ * (`SERVE_SPINS`, Flat · Slice · Kick), else every vendor value.
+ */
 export function spinOptions(
   stroke: LabelStroke | null,
 ): { value: LabelSpin; label: string }[] {
-  return LABEL_SPINS.map((value) => ({
+  return spinRows(stroke).map((value) => ({
     value,
     label: spinLabel(stroke, value) ?? value,
   }));
+}
+
+/** The Spin menu's values for a stroke, in order — what 1–4 pick from. */
+export function spinRows(stroke: LabelStroke | null): readonly LabelSpin[] {
+  return isServeStroke(stroke) ? SERVE_SPINS : LABEL_SPINS;
 }
 
 /** Why a stroke was deleted, in the delete dialog's and the ghost row's words. */
