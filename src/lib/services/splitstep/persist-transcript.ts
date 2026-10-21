@@ -83,6 +83,8 @@ interface MatchRow {
   score: MatchScore | null;
   initial_top_player_is_player1: boolean | null;
   format: { ad_scoring?: boolean; best_of?: number } | null;
+  player1_name: string | null;
+  player2_name: string | null;
 }
 
 /**
@@ -168,7 +170,9 @@ export async function buildTranscriptForJob(params: {
 
   const { data: match, error: matchError } = await supabase
     .from("matches")
-    .select("id, score, initial_top_player_is_player1, format")
+    .select(
+      "id, score, initial_top_player_is_player1, format, player1_name, player2_name",
+    )
     .eq("id", job.match_id)
     .single<MatchRow>();
 
@@ -209,6 +213,8 @@ export async function buildTranscriptForJob(params: {
     score: match.score,
     initialTopIsPlayer1:
       job.initial_top_player_is_player1 ?? match.initial_top_player_is_player1,
+    player1Name: match.player1_name,
+    player2Name: match.player2_name,
     // Under no-ad, 40-40 is a deciding point and BOTH players hold game point,
     // so the wrong rule drops (or invents) the most pressured point in a game.
     // See resolveAdScoring for why the job's value beats the match record's.

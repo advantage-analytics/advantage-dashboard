@@ -36,10 +36,12 @@ import type { PointWinner } from "./winners";
  *   • `Reconciliation.ok` keeps meaning "the fold reproduced the score". It is
  *     false on the bypass path, so nothing downstream mistakes an accepted
  *     transcript for a verified one, and derive-and-publish logs it.
- *   • player1 is named from geometry + the wizard's top-player input first, then
- *     from whichever label assignment folds CLOSEST to the entered score, and
- *     the match is still refused when neither says anything — writing rows on a
- *     coin flip would put every statistic on the wrong human.
+ *   • player1 is named from geometry + the wizard's top-player input first,
+ *     then from whichever label assignment folds CLOSEST to the entered score,
+ *     then from the vendor labels matching the match's player names, and
+ *     last by a guess (`player1Source: "guess"`). The match is never refused
+ *     for want of a mapping (product decision, 2026-10-17): job fb00f837 was,
+ *     its two folds tied on distance with geometry indecisive.
  *   • The unresolved-points gate above this one is untouched.
  *     `points.won_by_player1` is NOT NULL, and the fold's game alignment
  *     depends on it.
@@ -73,9 +75,11 @@ export interface Reconciliation {
   /**
    * How player1Label was decided. `fold` when the fold matched; `geometry`
    * when the wizard's top-player input plus court position named it;
-   * `distance` when the closer of the two folds did. Null when refused.
+   * `distance` when the closer of the two folds did; `name` when a vendor
+   * label is the match's player1 or player2 name; `guess` when nothing did.
+   * Null when refused.
    */
-  player1Source: "fold" | "geometry" | "distance" | null;
+  player1Source: "fold" | "geometry" | "distance" | "name" | "guess" | null;
   /** Per-set game counts the fold produced, keyed by label. */
   foldedSets: Array<Record<string, number>>;
   games: FoldedGame[];
@@ -227,6 +231,29 @@ function player1FromGeometry(
 }
 
 /**
+ * player1 from the vendor labels themselves. `pred_player_id` echoes the
+ * names the job request sent, but has been seen misspelled (see `reconcile`),
+ * so this ranks below geometry and distance and only answers when exactly
+ * one label equals one of the match's names, ignoring case and spacing.
+ */
+function player1FromNames(
+  labels: string[],
+  player1Name: string | null | undefined,
+  player2Name: string | null | undefined,
+): string | null {
+  const norm = (s: string | null | undefined) =>
+    (s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  const p1 = norm(player1Name);
+  const p2 = norm(player2Name);
+  if (p1 && p1 === p2) return null;
+  const isP1 = labels.filter((l) => p1 && norm(l) === p1);
+  if (isP1.length === 1) return isP1[0];
+  const isP2 = labels.filter((l) => p2 && norm(l) === p2);
+  if (isP2.length === 1) return otherOf(isP2[0], labels);
+  return null;
+}
+
+/**
  * Decide the label -> player1 mapping and confirm the fold matches the entered
  * score exactly.
  *
@@ -246,6 +273,9 @@ export function reconcile(params: {
   geometryTopLabel?: string | null;
   /** From `matches.initial_top_player_is_player1`, when known. */
   initialTopIsPlayer1?: boolean | null;
+  /** `matches.player1_name` / `player2_name`, for `player1FromNames`. */
+  player1Name?: string | null;
+  player2Name?: string | null;
 }): Reconciliation {
   const { winners, labels, score, gameKeyOf, setKeyOf } = params;
 
@@ -358,9 +388,8 @@ export function reconcile(params: {
         initialTopIsPlayer1,
         labels,
       );
-      let source: "geometry" | "distance" | null = player1Label
-        ? "geometry"
-        : null;
+      let source: "geometry" | "distance" | "name" | "guess" | null =
+        player1Label ? "geometry" : null;
 
       // Distance of every (attempt, mapping) pair from the entered score.
       // The mapping is judged on the SUM over every trailing-point attempt:
@@ -387,8 +416,26 @@ export function reconcile(params: {
         }
       }
 
-      // 3. Neither: fall through to the refusal below.
-      if (player1Label) {
+      // 3. Otherwise a label that is one of the match's player names.
+      if (!player1Label) {
+        player1Label = player1FromNames(
+          labels,
+          params.player1Name,
+          params.player2Name,
+        );
+        if (player1Label) source = "name";
+      }
+
+      // 4. Nothing said anything: guess rather than refuse. The mapping whose
+      //    single best attempt lands closest, else the vendor's label order.
+      if (!player1Label) {
+        const best = (label: string) =>
+          Math.min(...attempts.map((r) => distanceFor(label, r)));
+        player1Label = best(b) < best(a) ? b : a;
+        source = "guess";
+      }
+
+      {
         // Settle the trailing point under the chosen mapping: the attempt
         // that lands closest to the entered score, as the reconciled path
         // would have done.
@@ -422,25 +469,34 @@ export function reconcile(params: {
 
   // A score that equals its own mirror — a retirement recorded as 3-3, a split
   // walkover — satisfies both directions and tells us nothing. Fall back to
-  // geometry, and refuse when geometry was indecisive too, rather than pick.
+  // geometry, then the player names, then a guess (`ok` false), never a
+  // refusal (product decision, 2026-10-17).
   if (aIsPlayer1 && bIsPlayer1) {
     const { geometryTopLabel, initialTopIsPlayer1 } = params;
-    if (
-      !geometryTopLabel ||
-      initialTopIsPlayer1 === null ||
-      initialTopIsPlayer1 === undefined
-    ) {
+    const fromGeometry = player1FromGeometry(
+      geometryTopLabel,
+      initialTopIsPlayer1,
+      labels,
+    );
+    if (!fromGeometry) {
+      const fromNames = player1FromNames(
+        labels,
+        params.player1Name,
+        params.player2Name,
+      );
       return {
-        ...empty,
+        ok: false,
+        player1Label: fromNames ?? a,
+        player1Source: fromNames ? "name" : "guess",
         foldedSets: sets,
         games,
         reason:
-          "entered score is its own mirror and geometry was indecisive, so player1 cannot be identified",
+          "entered score is its own mirror and geometry was indecisive, so player1 was not identified by the analysis",
+        unresolvedPoints,
+        settledWinners,
       };
     }
-    const player1Label = initialTopIsPlayer1
-      ? geometryTopLabel
-      : (otherOf(geometryTopLabel, labels) as string);
+    const player1Label = fromGeometry;
     return {
       ok: true,
       player1Label,

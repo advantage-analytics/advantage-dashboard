@@ -21,6 +21,7 @@ import {
   waitForInsights,
 } from "./request-insights";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
+import { notifyDerivationWarnings } from "@/lib/services/notifications/analysis-warnings-mail";
 import type { AskArrivalAnswer } from "@/lib/services/ask/arrival";
 import type { Transcript } from "./derivation";
 
@@ -291,6 +292,13 @@ export async function deriveAndPublish(params: {
     // With the first answer's headline when Ask wrote one in time.
     const ask = await arrival;
     await notifyAnalysisOutcome({ supabase, jobId, outcome: "ready", ask });
+    // Nothing is refused for a guess; the guesses go to the alerts inbox.
+    await notifyDerivationWarnings({
+      supabase,
+      jobId,
+      matchId,
+      transcript: written.transcript,
+    });
 
     // `unreconciled` is reachable now (ACCEPT_UNRECONCILED_FOLD): the fold did
     // not reproduce the entered score and the rows were written anyway, with

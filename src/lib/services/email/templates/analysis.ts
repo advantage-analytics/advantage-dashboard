@@ -345,3 +345,54 @@ export function analysisFailedInternalEmail(
     tags: { type: "analysis_failed_internal" },
   };
 }
+
+export interface AnalysisWarningsInternalInput {
+  /** `INTERNAL_ALERTS_ADDRESS`, passed by the caller (`analysis-warnings-mail.ts`). */
+  to: string;
+  jobId: string;
+  matchId: string;
+  matchTitle: string;
+  /** `derivationWarnings()`'s rows: what was guessed, folded or unverified. */
+  warnings: { title: string; detail: string }[];
+}
+
+/**
+ * What a published Advantage Intelligence match had to guess — to the alerts
+ * inbox, never the athlete.
+ *
+ * The derivation never refuses a match (product decision, 2026-10-17): where
+ * the vendor's data is unreadable it guesses, folds or flags and publishes
+ * anyway. This mail is where those guesses surface, so somebody can check the
+ * match against the video instead of finding out from a coach.
+ */
+export function analysisWarningsInternalEmail(
+  input: AnalysisWarningsInternalInput,
+): EmailMessage {
+  const { to, jobId, matchId, matchTitle, warnings } = input;
+  const count = `${warnings.length} warning${warnings.length === 1 ? "" : "s"}`;
+
+  const content: EmailContent = {
+    preheader: `${matchTitle} published with ${count}.`,
+    eyebrow: "Published with warnings",
+    heading: `${matchTitle} needs a look`,
+    body: [
+      "The analysis was published, but parts of it were guessed rather than read from the video. Check them against the footage.",
+    ],
+    facts: [
+      { label: "Job", value: jobId },
+      { label: "Match", value: matchId },
+    ],
+    listTitle: count,
+    list: warnings.map((w) => ({ primary: w.title, secondary: w.detail })),
+    cta: { label: "Open the match", url: matchUrl(matchId) },
+    note: "Sent to the internal alerts inbox when a publish carries warnings. The athlete is not told.",
+  };
+
+  return {
+    to,
+    subject: `Published with ${count}: ${matchTitle}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "analysis_warnings_internal" },
+  };
+}

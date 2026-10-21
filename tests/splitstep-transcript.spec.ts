@@ -742,10 +742,12 @@ test.describe("reconciliation", () => {
     expect(out.reason).toMatch(/does not match the entered score/);
     // No geometry was passed, so only distance could name player1 — and a
     // constant game key folds the whole match into ONE game, which sits
-    // exactly as far from [6,4]/[4,6] under either mapping. A tie names
-    // nobody, bypass or not: this stays a refusal rather than a coin flip.
-    expect(out.player1Label).toBeNull();
-    expect(out.player1Source).toBeNull();
+    // exactly as far from [6,4]/[4,6] under either mapping. With no names
+    // either, the bypass guesses rather than refuses (2026-10-17).
+    if (ACCEPT_UNRECONCILED_FOLD) {
+      expect(out.player1Label).not.toBeNull();
+      expect(out.player1Source).toBe("guess");
+    }
   });
 
   test("bypass: geometry plus the wizard input names player1 when the fold cannot", () => {
@@ -795,7 +797,8 @@ test.describe("reconciliation", () => {
 });
 
 test.describe("transcript", () => {
-  test("refuses without an entered score", () => {
+  test("publishes without an entered score, unverified", () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, "Gate 1 is restored");
     const a = analyzeResults(clean);
     const t = buildTranscript({
       rallies: a.rallies,
@@ -803,10 +806,12 @@ test.describe("transcript", () => {
       score: null,
       initialTopIsPlayer1: null,
     });
-    // matches.score is the only automatic correctness check that exists.
-    expect(t.ok).toBe(false);
-    expect(t.points).toHaveLength(0);
-    expect(t.reason).toMatch(/score is required/);
+    // No refusals (2026-10-17): matches.score is the only automatic
+    // correctness check, so without it the rows are written but never `ok`.
+    expect(t.ok).toBe(true);
+    expect(t.points).toHaveLength(a.rallies.length);
+    expect(t.reconciliation.ok).toBe(false);
+    expect(t.reconciliation.player1Label).not.toBeNull();
   });
 
   test("builds rows whose numbering and coordinates match the database frame", () => {
@@ -1254,12 +1259,12 @@ test.describe("reconcile: the final point", () => {
     }
   });
 
-  test("bypass: a tie on distance with no geometry is still refused", () => {
+  test("bypass: a tie on distance with no geometry is a guess, never ok", () => {
     test.skip(!ACCEPT_UNRECONCILED_FOLD, "Gate 1 is restored");
     // Two resolved games, one each, against an entered 3-3: both mappings are
-    // equally wrong, geometry is absent, so there is nothing to name player1
-    // from. Writing rows here would be a coin flip on which human owns every
-    // statistic, which is the one thing the bypass may not do.
+    // equally wrong and geometry is absent. This used to be refused; now the
+    // match is published on a guess (2026-10-17), `ok` false, and the
+    // warnings mail says the players were guessed.
     const split = WINNERS.map((w, i) =>
       i >= 5 ? { ...w, winner: "B", via: "game" as const } : w,
     );
@@ -1271,11 +1276,29 @@ test.describe("reconcile: the final point", () => {
       setKeyOf,
     });
     expect(rec.ok).toBe(false);
-    expect(rec.player1Label).toBeNull();
-    expect(rec.player1Source).toBeNull();
+    expect(LABELS).toContain(rec.player1Label);
+    expect(rec.player1Source).toBe("guess");
   });
 
-  test("1-1 is reachable, and still refused — as a mirror, not as a mismatch", () => {
+  test("bypass: a vendor label matching a player name outranks the guess", () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, "Gate 1 is restored");
+    const split = WINNERS.map((w, i) =>
+      i >= 5 ? { ...w, winner: "B", via: "game" as const } : w,
+    );
+    const rec = reconcile({
+      winners: split,
+      labels: LABELS,
+      score: { player1: [3], player2: [3] },
+      gameKeyOf,
+      setKeyOf,
+      player1Name: " b ",
+      player2Name: "Someone Else",
+    });
+    expect(rec.player1Label).toBe("B");
+    expect(rec.player1Source).toBe("name");
+  });
+
+  test("1-1 is reachable, and unverified — as a mirror, not as a mismatch", () => {
     // 1-1 is what the OLD fold produced for these nine points, and it IS
     // reproducible: credit the trailing point to B. That is precisely why
     // settling cannot be allowed to stop at "some assignment matches" — a
@@ -1287,6 +1310,8 @@ test.describe("reconcile: the final point", () => {
 
     expect(rec.ok).toBe(false);
     expect(rec.reason).toContain("its own mirror");
+    // Never refused (2026-10-17): no geometry or names, so a guess.
+    expect(rec.player1Source).toBe("guess");
   });
 
   test("a fully resolved match is unaffected", () => {

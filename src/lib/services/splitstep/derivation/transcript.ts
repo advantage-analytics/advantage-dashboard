@@ -444,6 +444,9 @@ export interface BuildOptions {
   labels: string[];
   score: MatchScore | null;
   initialTopIsPlayer1: boolean | null;
+  /** `matches.player1_name` / `player2_name`: a fallback for naming player1. */
+  player1Name?: string | null;
+  player2Name?: string | null;
   /**
    * processing_jobs.ad_scoring, falling back to matches.format.ad_scoring (see
    * resolveAdScoring). Decides whether 40-40 is a deciding point.
@@ -472,6 +475,8 @@ export function buildTranscript(options: BuildOptions): Transcript {
     labels,
     score,
     initialTopIsPlayer1,
+    player1Name = null,
+    player2Name = null,
     adScoring = true,
     bestOf = 3,
     lineCalls: streamLineCalls,
@@ -501,7 +506,9 @@ export function buildTranscript(options: BuildOptions): Transcript {
   const tailStart = collapsedTailStart(rallies);
   const guessedRallies: number[] = [];
   const guess = (i: number) => {
-    const winner = lastStrokeWinner(rallies[i], labels);
+    // A rally with no strokes to read still happened: credit its server
+    // rather than leave a point no row can carry.
+    const winner = lastStrokeWinner(rallies[i], labels) ?? rallies[i].server;
     if (!winner) return;
     winners[i] = { ...winners[i], winner, via: "guess" };
     guessedRallies.push(winners[i].rallyId);
@@ -631,9 +638,10 @@ export function buildTranscript(options: BuildOptions): Transcript {
     segmentation: null,
   };
 
-  if (!score) {
-    return { ...empty, reason: "matches.score is required and was not set" };
-  }
+  // No entered score is not a refusal (product decision, 2026-10-17): the
+  // fold is checked against an empty score, misses it, and the bypass names
+  // player1 from geometry, the names or a guess, with `ok` false.
+  const enteredScore: MatchScore = score ?? { player1: [], player2: [] };
   if (labels.length !== 2) {
     return {
       ...empty,
@@ -650,28 +658,32 @@ export function buildTranscript(options: BuildOptions): Transcript {
   bounceVideoTimes(allStrokes).forEach((t, i) => {
     bounceTimeOf.set(allStrokes[i], t);
   });
-  const rec = reconcile({
+  let rec = reconcile({
     winners,
     labels,
-    score,
+    score: enteredScore,
     gameKeyOf: (id) => gameKeyOf.get(id) ?? "",
     setKeyOf: (id) => setKeyOf.get(id) ?? "",
     geometryTopLabel: topLabel,
     initialTopIsPlayer1,
+    player1Name,
+    player2Name,
   });
 
-  // Decisive geometry that contradicts the fold is a refusal, not a warning:
-  // the two disagree about which physical human every statistic belongs to.
+  // Decisive geometry that contradicts the fold used to be a refusal. It is a
+  // warning now (product decision, 2026-10-17): the fold reproduced the
+  // entered score, which the wizard's top-player input cannot do, so the
+  // fold's mapping stands and `ok` goes false so nothing reads it as verified.
   if (rec.ok && topLabel && initialTopIsPlayer1 !== null) {
     const expected = initialTopIsPlayer1
       ? topLabel
       : (labels.find((l) => l !== topLabel) ?? null);
     if (expected && rec.player1Label && expected !== rec.player1Label) {
-      return {
-        ...empty,
-        reconciliation: rec,
+      rec = {
+        ...rec,
+        ok: false,
         reason:
-          "player_mapping_contradiction: geometry and the score fold disagree",
+          "player_mapping_contradiction: geometry and the score fold disagree; the fold's mapping was kept",
       };
     }
   }
@@ -877,7 +889,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
   // it would move to another game or give another server, and both halves of
   // every point it would merge.
   const segmentation =
-    segmenter === null
+    segmenter === null || !score
       ? null
       : segmentForReview({
           rallies: keptRallies,
