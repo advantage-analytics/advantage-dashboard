@@ -151,13 +151,22 @@
  * strokes and that flag can move: games, servers, winners, result_type and
  * scores do not, and neither does any serve-in statistic.
  * 0.8.7 (2026-10-21) names player1 from an exact match between the vendor's
- * labels and `matches.player1_name` / `player2_name` when geometry and score
- * distance both say nothing (reconcile.ts `player1FromNames`,
- * `player1Source: "name"`), before 0.8.6's labels[0] guess. Job fb00f837
- * (Ivan H v Jasper Mok) guessed Jasper; the names say Ivan. A match that
- * geometry or distance already decides derives exactly as 0.8.6.
+ * labels and the player names — the job request's, then the match's — when
+ * geometry and score distance both say nothing (reconcile.ts
+ * `player1FromNames`, `player1Source: "name"`), before 0.8.6's guess. Job
+ * fb00f837 (Ivan H v Jasper Mok) guessed Jasper; the names say Ivan. Every
+ * match 0.8.6 settled by guess (closest single pair, labels[0], or a
+ * self-mirroring score) can change player1 on rebuild; a match that geometry,
+ * the fold or the summed distance decides derives exactly as 0.8.6.
+ * 0.8.8 (2026-10-21) prefers the names the job request sent
+ * (`vendor_request`) to the match's current names for that step
+ * (persist-transcript.ts `playerNamesFor`), and stops rallies before the
+ * first set score from seeding a following frozen stretch's server
+ * alternation or voting in `geometryTopLabel`. Only a stream whose first
+ * rally has no set score, or a renamed player, can derive differently from
+ * 0.8.7. Job fb00f837 now names Ivan H by geometry.
  */
-export const DERIVATION_VERSION = "0.8.7-unreconciled";
+export const DERIVATION_VERSION = "0.8.8-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -261,6 +270,7 @@ export {
   foldGames,
   scoreIsSelfMirroring,
   type MatchScore,
+  type PlayerNames,
   type Reconciliation,
 } from "./reconcile";
 

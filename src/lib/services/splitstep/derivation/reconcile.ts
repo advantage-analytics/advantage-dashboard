@@ -249,8 +249,11 @@ export function reconcile(params: {
   geometryTopLabel?: string | null;
   /** From `matches.initial_top_player_is_player1`, when known. */
   initialTopIsPlayer1?: boolean | null;
-  /** `matches.player1_name` / `player2_name`, for `player1FromNames`. */
-  playerNames?: PlayerNames | null;
+  /**
+   * Name pairs for `player1FromNames`, most authoritative first: the names the
+   * job request sent, then the match's current names.
+   */
+  playerNames?: readonly PlayerNames[] | null;
 }): Reconciliation {
   const { winners, labels, score, gameKeyOf, setKeyOf } = params;
 
@@ -398,7 +401,7 @@ export function reconcile(params: {
       //    Job fb00f837 (Ivan H v Jasper Mok) had no geometry and a tied
       //    distance, and the guess below named the wrong player.
       if (!player1Label) {
-        player1Label = player1FromNames(params.playerNames, labels);
+        player1Label = player1FromNameCandidates(params.playerNames, labels);
         if (player1Label) source = "name";
       }
 
@@ -470,16 +473,14 @@ export function reconcile(params: {
       initialTopIsPlayer1 === null ||
       initialTopIsPlayer1 === undefined
     ) {
-      const named = player1FromNames(params.playerNames, labels);
+      const named = player1FromNameCandidates(params.playerNames, labels);
       return {
         ok: false,
         player1Label: named ?? a,
         player1Source: named ? "name" : "guess",
         foldedSets: sets,
         games,
-        reason: named
-          ? "entered score is its own mirror and geometry was indecisive, so player1 was named from the player names"
-          : "entered score is its own mirror and geometry was indecisive, so player1 was guessed",
+        reason: `entered score is its own mirror and geometry was indecisive, so player1 was ${named ? "named from the player names" : "guessed"}`,
         unresolvedPoints,
         settledWinners,
       };
@@ -537,6 +538,18 @@ export function player1FromNames(
   const viaP2 = p2 ? otherOf(p2, labels) : null;
   if (viaP1 && viaP2 && viaP1 !== viaP2) return null;
   return viaP1 ?? viaP2;
+}
+
+/** The first name pair that names player1, in the order given. */
+function player1FromNameCandidates(
+  candidates: readonly PlayerNames[] | null | undefined,
+  labels: string[],
+): string | null {
+  for (const names of candidates ?? []) {
+    const label = player1FromNames(names, labels);
+    if (label) return label;
+  }
+  return null;
 }
 
 function otherOf(label: string, labels: string[]): string | null {
