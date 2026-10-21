@@ -18,6 +18,7 @@ import { gameOverflow, gameUnderflow } from "./game-shift";
 import { setBreakLabel, setBreakSuspects } from "./set-break";
 import { tiebreakFolds } from "./tiebreak-fold";
 import { tiebreakServeOrders, type TiebreakServeOrder } from "./tiebreak-serve";
+import { foldedPointIds, gameServeRepeats } from "./game-serve-order";
 
 /** One point's open review flag. */
 export interface OpenFlag {
@@ -88,7 +89,8 @@ export function tiebreakServeStops(
  * Every amber slot the rail draws between rows, as stops: a game already won
  * with rows after it (on its first leftover), a game that ends short (on its
  * last row, which the slot follows), the tiebreak at 6–6 (on the first point
- * it would fold), a tiebreak off its serve order and a sit-down long enough
+ * it would fold), a tiebreak off its serve order, a game served by the same
+ * player as the game beside it, and a sit-down long enough
  * to be a set break the rows do not have. Read off the rows alone,
  * so there on a session labelled without marks too. `]` and `[` land on
  * each; the header's total stays the points and the score, and its jump's
@@ -105,6 +107,7 @@ export function slotStops(
     pointId === undefined
       ? []
       : [{ pointId, pointNumber: numberOf.get(pointId) ?? 0, label }];
+  const folds = tiebreakFolds(points, adScoring, matchTiebreakSet);
   return [
     ...gameOverflow(points, adScoring, matchTiebreakSet).flatMap((game) =>
       stop(game.leftovers[0]?.id, "Game already won, with points after it"),
@@ -115,13 +118,16 @@ export function slotStops(
         `Game ${game.gameInSet} isn’t finished at ${game.score}`,
       ),
     ),
-    ...tiebreakFolds(points, adScoring, matchTiebreakSet).flatMap((fold) =>
+    ...folds.flatMap((fold) =>
       stop(
         fold.pointIds[0],
         fold.type === "match_tiebreak" ? "Match tiebreak?" : "Tiebreak at 6–6?",
       ),
     ),
     ...tiebreakServeStops(tiebreakServeOrders(points)),
+    ...gameServeRepeats(points, foldedPointIds(folds)).flatMap((repeat) =>
+      stop(repeat.pointId, "Same server two games in a row"),
+    ),
     // No slot of its own in the rail: the clock says a set ended where the
     // rows carry on (set-break.ts), and the stop is the game after the gap.
     ...setBreakSuspects(points).flatMap((suspect) =>

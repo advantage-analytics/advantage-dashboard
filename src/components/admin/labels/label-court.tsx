@@ -24,12 +24,14 @@ import {
   fromCourt,
   fromCourtInWindow,
   halfTopY,
+  runoffWindowTop,
   toCourtInWindow,
   type CourtHalf,
   type CourtPoint,
   type ScreenPoint,
 } from "./court-geometry";
 import {
+  MAX_RUNOFF,
   isEstimate,
   type CourtSlide,
   type PlacementTarget,
@@ -53,10 +55,16 @@ import {
  * container. Marks are placed in percent and a click is read against the box's
  * own bounding rect, so neither notices the scale.
  *
- * The art zooms (the wheel, or the + / − buttons, up to `MAX_ZOOM`) and, once
- * zoomed, drags. A drag never places: a press that moves more than
- * `DRAG_SLOP_PX` is a pan, and the click it ends with is dropped. A click is
- * read back through the zoom (`artPoint`), so it still lands where the court
+ * The art zooms (a pinch or ⌃ scroll, or the + / − buttons, up to `MAX_ZOOM`)
+ * and pans: a two-finger scroll, or a drag with either button — a two-finger
+ * press on a trackpad is a right click, whose menu the court keeps shut. Zoomed, a pan moves the art within
+ * the box; unzoomed on a half, it moves the box itself up and down the court
+ * (`moveWindow`), as far as the deepest run-off past either baseline, so a
+ * ball outside the box the console opened on is reached without placing
+ * anything first. That move resets whenever the console opens another box.
+ * A drag never places: a press that moves more than `DRAG_SLOP_PX` is a pan,
+ * and the click it ends with is dropped. A click is read back through the
+ * zoom (`artPoint`) and the moved box, so it still lands where the court
  * under the cursor is. The zoom holds across near ↔ far, which flips on every
  * placing click, and resets between the whole court and a half. Marks keep
  * their on-screen size at any zoom.
@@ -156,6 +164,34 @@ export function panBy(zoom: CourtZoom, dx: number, dy: number): CourtZoom {
     x: clamp(zoom.x + dx, min, 0),
     y: clamp(zoom.y + dy, min, 0),
   };
+}
+
+/** The largest ⌃ wheel delta one event zooms by, in pixels. */
+const WHEEL_ZOOM_DELTA_MAX = 20;
+
+/**
+ * A ⌃ wheel's `deltaY` as a zoom step: a pinch sends many small deltas, a
+ * mouse notch one of about 100 pixels (or a few lines), which would zoom
+ * nearly to `MAX_ZOOM` at once. Read in pixels and capped, so one notch is
+ * about a fifth of a step in or out and a pinch is untouched.
+ */
+export function wheelZoomDelta(
+  event: Pick<WheelEvent, "deltaY" | "deltaMode">,
+): number {
+  const pixels = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+  return clamp(pixels, -WHEEL_ZOOM_DELTA_MAX, WHEEL_ZOOM_DELTA_MAX);
+}
+
+/** The lowest and highest top a half's box can be moved to: the deepest run-off. */
+const WINDOW_TOP_MIN = runoffWindowTop("near", MAX_RUNOFF);
+const WINDOW_TOP_MAX = runoffWindowTop("far", MAX_RUNOFF);
+
+/**
+ * A half's box (its top `y`, metres) moved by `dy` metres up the court, kept
+ * between the deepest run-off behind the near baseline and behind the far.
+ */
+export function moveWindow(top: number, dy: number): number {
+  return clamp(top + dy, WINDOW_TOP_MIN, WINDOW_TOP_MAX);
 }
 
 /** A box point (percent) as the art point under it at `zoom`. */
@@ -262,62 +298,107 @@ export function LabelCourt({
 }) {
   const zoomed = view !== "whole";
   const slid = zoomed ? slide : null;
-  const top = zoomed ? (slid?.top ?? halfTopY(view)) : 0;
-  const marks = marksFor(strokes, view, top);
-  const placed = marks.length;
+  // The box the console opened on; the labeller may move it (`moveWindow`).
+  const openedTop = zoomed ? (slid?.top ?? halfTopY(view)) : 0;
   const placing = zoomed && prompt !== null && onPlace !== undefined;
 
-  // The labeller's zoom, reset when the court changes scale (whole ↔ half).
+  // The labeller's zoom, reset when the court changes scale (whole ↔ half),
+  // and the box they moved, reset whenever the console opens another.
   const [zoomState, setZoomState] = useState({
     zoomed,
     zoom: NO_ZOOM,
+    openedTop,
+    top: openedTop,
   });
-  if (zoomState.zoomed !== zoomed) setZoomState({ zoomed, zoom: NO_ZOOM });
+  if (zoomState.zoomed !== zoomed) {
+    setZoomState({ zoomed, zoom: NO_ZOOM, openedTop, top: openedTop });
+  } else if (zoomState.openedTop !== openedTop) {
+    setZoomState({ ...zoomState, openedTop, top: openedTop });
+  }
   const zoom = zoomState.zoom;
+  const top = zoomed ? zoomState.top : 0;
+  const marks = marksFor(strokes, view, top);
+  const placed = marks.length;
   const setZoom = (next: (z: CourtZoom) => CourtZoom) =>
-    setZoomState((state) => ({ zoomed: state.zoomed, zoom: next(state.zoom) }));
+    setZoomState((state) => ({ ...state, zoom: next(state.zoom) }));
   const boxRef = useRef<HTMLElement | null>(null);
   const drag = useRef<{
     id: number;
     x: number;
     y: number;
     zoom: CourtZoom;
+    top: number;
     moved: boolean;
   } | null>(null);
   const dropClick = useRef(false);
-  // The wheel zooms about the cursor. Listened to directly, not through
-  // React, so it can keep the page from scrolling (React's is passive).
+  // The wheel listener reads the scale without re-subscribing on every zoom.
+  const zoomScale = useRef(zoom.scale);
+  useEffect(() => {
+    zoomScale.current = zoom.scale;
+  }, [zoom.scale]);
+  // A pinch (a trackpad sends it as a wheel with ⌃ held) zooms about the
+  // cursor; a two-finger scroll pans — the art when zoomed, else a half's box
+  // up and down the court. Listened to directly, not through React, so it can
+  // keep the page from scrolling (React's is passive). With nothing to pan
+  // the page scrolls as usual.
   useEffect(() => {
     const box = boxRef.current;
     if (!box) return;
     function onWheel(event: WheelEvent) {
       const rect = (box as HTMLElement).getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
+      if (event.ctrlKey) {
+        event.preventDefault();
+        const px = ((event.clientX - rect.left) / rect.width) * 100;
+        const py = ((event.clientY - rect.top) / rect.height) * 100;
+        const factor = Math.exp(-wheelZoomDelta(event) * 0.01);
+        setZoomState((state) => ({
+          ...state,
+          zoom: zoomAbout(state.zoom, state.zoom.scale * factor, px, py),
+        }));
+        return;
+      }
+      if (zoomScale.current === 1 && !zoomed) return;
       event.preventDefault();
-      const px = ((event.clientX - rect.left) / rect.width) * 100;
-      const py = ((event.clientY - rect.top) / rect.height) * 100;
-      const factor = Math.exp(-event.deltaY * 0.002);
-      setZoomState((state) => ({
-        zoomed: state.zoomed,
-        zoom: zoomAbout(state.zoom, state.zoom.scale * factor, px, py),
-      }));
+      setZoomState((state) =>
+        state.zoom.scale > 1
+          ? {
+              ...state,
+              zoom: panBy(
+                state.zoom,
+                (-event.deltaX / rect.width) * 100,
+                (-event.deltaY / rect.height) * 100,
+              ),
+            }
+          : {
+              ...state,
+              top: moveWindow(
+                state.top,
+                (-event.deltaY / rect.height) * HALF_HEIGHT,
+              ),
+            },
+      );
     }
     box.addEventListener("wheel", onWheel, { passive: false });
     return () => box.removeEventListener("wheel", onWheel);
-  }, [placing]);
+  }, [placing, zoomed]);
 
   const panHandlers = {
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
       // A drag left with no click of its own must not eat this press's.
       dropClick.current = false;
-      // Unzoomed there is nothing to pan, so a press is a click however much
-      // the hand shakes.
-      if (event.button !== 0 || zoom.scale === 1) return;
+      // The main button, or the secondary: a two-finger press on a trackpad
+      // is a right click, and a drag with it pans too (it never places).
+      if (event.button !== 0 && event.button !== 2) return;
+      // On the whole court, unzoomed, there is nothing to pan, so a press is
+      // a click however much the hand shakes.
+      if (zoom.scale === 1 && !zoomed) return;
       drag.current = {
         id: event.pointerId,
         x: event.clientX,
         y: event.clientY,
         zoom,
+        top: zoomState.top,
         moved: false,
       };
     },
@@ -333,9 +414,17 @@ export function LabelCourt({
       }
       const rect = event.currentTarget.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
-      setZoom(() =>
-        panBy(start.zoom, (dx / rect.width) * 100, (dy / rect.height) * 100),
-      );
+      if (start.zoom.scale > 1) {
+        setZoom(() =>
+          panBy(start.zoom, (dx / rect.width) * 100, (dy / rect.height) * 100),
+        );
+      } else {
+        // Dragging the court down shows more of it above: the box moves up.
+        setZoomState((state) => ({
+          ...state,
+          top: moveWindow(start.top, (dy / rect.height) * HALF_HEIGHT),
+        }));
+      }
     },
     onPointerUp: (event: React.PointerEvent<HTMLElement>) => {
       const start = drag.current;
@@ -345,6 +434,11 @@ export function LabelCourt({
     },
     onPointerCancel: () => {
       drag.current = null;
+    },
+    // The right click that starts a two-finger drag opens no menu over the
+    // court.
+    onContextMenu: (event: React.MouseEvent<HTMLElement>) => {
+      event.preventDefault();
     },
   };
   const zoomBy = (factor: number) =>

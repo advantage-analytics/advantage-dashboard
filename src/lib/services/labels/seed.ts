@@ -22,10 +22,13 @@ import {
   type SplitStepStroke,
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
-import { rotateServers } from "./game-operations";
+import { rotateServers, type GameServerPoint } from "./game-operations";
+import { gameServeRepeats } from "./game-serve-order";
+import { gameKey } from "./score";
 import {
   compareNullsLast,
   isLabelSpin,
+  isServeStroke,
   labelSideOf,
   type LabelGameType,
   type LabelSiteRemoval,
@@ -175,9 +178,10 @@ export interface LabelSeed {
  * `points.result_type` → `label_points.ending`.
  *
  * The derivation never emits `Ace` (an ace cannot be told from a service
- * winner in the payload — see result-type.ts), so an ace only ever enters the
- * labels by hand. It also folds forced errors into `Unforced Error`, which is
- * why every error collapses to the one `error` ending.
+ * winner in the payload — see result-type.ts); `seedEnding` turns the
+ * unreturned ones back into aces. It also folds forced errors into
+ * `Unforced Error`, which is why every error collapses to the one `error`
+ * ending.
  */
 export function labelEnding(resultType: string | null): LabelEnding | null {
   if (resultType === null) return null;
@@ -187,6 +191,31 @@ export function labelEnding(resultType: string | null): LabelEnding | null {
   if (/winner$/i.test(resultType)) return "winner";
   if (/error$/i.test(resultType)) return "error";
   return null;
+}
+
+/**
+ * A seeded point's ending: `labelEnding`, except that a service winner whose
+ * last kept stroke is the serve, called in, seeds as an `ace` — nothing came
+ * back. That is the console's own reading of such a rally (ending-derived.ts
+ * `deriveEnding`), so the seed and the "Different ending?" hint agree; the
+ * derivation's `Service Winner` only says it could not tell. The landing is
+ * not consulted: the call on a serve the server won comes from the score, and
+ * a landing a few centimetres wide is tracking noise, not a fault. A return
+ * struck and missed stays a service winner. Site-removed strokes are ghosts
+ * and do not count as a return.
+ */
+export function seedEnding(
+  resultType: string | null,
+  shots: ReadonlyArray<
+    Pick<LabelShotSeed, "stroke" | "result" | "site_removal">
+  >,
+): LabelEnding | null {
+  const ending = labelEnding(resultType);
+  if (ending !== "service_winner") return ending;
+  const last = shots.filter((shot) => shot.site_removal === null).at(-1);
+  const unreturnedServe =
+    last !== undefined && isServeStroke(last.stroke) && last.result === "in";
+  return unreturnedServe ? "ace" : ending;
 }
 
 /**
@@ -544,7 +573,7 @@ export function buildLabelSeed(
       winner: resolved.get(point.rally_id)
         ? labelSideOf(point.won_by_player1)
         : null,
-      ending: labelEnding(point.result_type),
+      ending: seedEnding(point.result_type, shots),
       ended_by: endedBy(ordered),
     };
     const game_type: LabelGameType = inTiebreak ? "match_tiebreak" : "game";
@@ -562,5 +591,66 @@ export function buildLabelSeed(
     };
   });
 
-  return { points };
+  return { points: fixSettledServeRepeats(points) };
+}
+
+/**
+ * The seed's points with each serve repeat the strokes settle on their own
+ * put right (game-serve-order.ts `autofix`): the flagged game's `server`, in
+ * the row and in its frozen `seed`, so the row reads `unchanged` and Reset
+ * keeps it. Only a repeat that switches nobody qualifies, so no stroke, winner
+ * or ending moves. Done here, once, when the session is set up — never by the
+ * console on load, so a server the labeller sets later, or puts back with
+ * ⌘Z, always stands. A tiebreak the vendor cut into pieces is no repeat here:
+ * each piece's serves agree with its own server, which settles nothing.
+ */
+export function fixSettledServeRepeats(
+  points: LabelPointSeed[],
+): LabelPointSeed[] {
+  const rows = points.map((point): GameServerPoint => ({
+    id: String(point.point_index),
+    pointIndex: point.point_index,
+    status: "unchanged",
+    server: point.server,
+    setNumber: point.set_number,
+    gameNumber: point.game_number,
+    serveSide: null,
+    winner: point.winner,
+    ending: point.ending,
+    endedBy: point.ended_by,
+    gameType: point.game_type,
+    seed: null,
+    // A stroke the site removed is a ghost, not a serve.
+    shots: point.shots
+      .filter((shot) => shot.site_removal === null)
+      .map((shot, i) => ({
+        id: `${point.point_index}:${i}`,
+        eventId: shot.event_id,
+        status: "kept",
+        statusBeforeDelete: null,
+        seed: null,
+        hitter: shot.hitter,
+        stroke: shot.stroke,
+        result: shot.result,
+        spin: shot.spin,
+        contactX: shot.contact_x,
+        contactY: shot.contact_y,
+        landingX: shot.landing_x,
+        landingY: shot.landing_y,
+        videoTime: shot.video_time,
+      })),
+  }));
+  const servers = new Map<string, LabelSide>();
+  for (const repeat of gameServeRepeats(rows)) {
+    if (repeat.autofix) servers.set(gameKey(repeat.game), repeat.expected);
+  }
+  if (servers.size === 0) return points;
+  return points.map((point) => {
+    const server = servers.get(
+      gameKey({ setNumber: point.set_number, gameNumber: point.game_number }),
+    );
+    return server === undefined
+      ? point
+      : { ...point, server, seed: { ...point.seed, server } };
+  });
 }
