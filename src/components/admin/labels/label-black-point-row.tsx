@@ -43,6 +43,10 @@ import {
   tiebreakServeReason,
   type TiebreakServeOrder,
 } from "@/lib/services/labels/tiebreak-serve";
+import {
+  gameServeRepeatReason,
+  type GameServeRepeat,
+} from "@/lib/services/labels/game-serve-order";
 import { gameInSetOf, type LabelGame } from "@/lib/services/labels/operations";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { suggestionState } from "@/lib/services/labels/suggestions";
@@ -330,7 +334,7 @@ export const BlackPointRow = memo(function BlackPointRow({
         </span>
 
         <ChromeTooltip
-          label={checked ? "Point checked" : "Mark point checked"}
+          label={checked ? "Uncheck point" : "Mark point checked"}
           side="top"
         >
           <button
@@ -768,6 +772,52 @@ export const BlackTiebreakServe = memo(function BlackTiebreakServe({
         onClick={(event) => {
           event.stopPropagation();
           onFix(order.game);
+        }}
+      >
+        {label}
+      </BlackTextAction>
+    ) : null,
+    actionLabel: label,
+    details,
+  });
+});
+
+/**
+ * Two games in a row served by one player (game-serve-order.ts): a slot above
+ * the first point of the game the serving strokes argue against. "Give it to
+ * {name}" is the game band's server change — every point's `server`, and the
+ * players switched on each point whose serve contradicts it.
+ */
+export const BlackGameServeRepeat = memo(function BlackGameServeRepeat({
+  repeat,
+  names,
+  onSetGameServer,
+}: {
+  repeat: GameServeRepeat;
+  names: SideNames;
+  /** The console's server change; absent, the slot only reads. */
+  onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
+}) {
+  const reason = gameServeRepeatReason(repeat, names);
+  const details = [
+    `Servers change every game: game ${repeat.gameInSet} is ${names[repeat.expected]}’s`,
+  ];
+  if (repeat.switched > 0) details.push(playersSwitchDetail(repeat.switched));
+  const label = `${names[repeat.expected]} serves`;
+  return gameSlot({
+    icon: ArrowLeftRight,
+    row: "game-serve-repeat",
+    anchor: repeat.pointId,
+    title: "Same server two games in a row",
+    reason,
+    action: onSetGameServer ? (
+      <BlackTextAction
+        ink="amber"
+        data-game-serve-fix=""
+        aria-label={`${label} game ${repeat.gameInSet}: ${reason}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSetGameServer(repeat.game, repeat.expected);
         }}
       >
         {label}

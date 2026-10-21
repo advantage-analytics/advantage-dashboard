@@ -67,7 +67,6 @@ import {
 } from "@/lib/services/labels/review-flow";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
-  nextReviewStop,
   openReviewItems,
   reviewStep,
   type ReviewStep,
@@ -380,10 +379,11 @@ function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
  *   `restoreShots`). A shot write also settles its point's ending in that
  *   same call (ending-session.ts); the server's `point` is the last word over
  *   the optimistic rows here.
- * - Outside a control: Enter checks the open point, Space plays or pauses, ← /
- *   → step points, ] / [ step the amber marks and ' / ; the grey ones. ↑ / ↓ walk the open point's
- *   strokes and ⌘ Enter checks the point, both from inside a stroke's row
- *   too. Escape lets go of the selected stroke, then folds the open point.
+ * - Outside a control: Enter unfolds the open point, Space plays or pauses,
+ *   ← / → step points, ] / [ step the amber marks and ' / ; the grey ones.
+ *   ↑ / ↓ walk the open point's strokes and ⌘ Enter checks the point — or
+ *   unchecks it, when it is checked — both from inside a stroke's row too.
+ *   Escape lets go of the selected stroke, then folds the open point.
  *   ⌘Z is the header's Undo: the newest action rewound on the server. Space
  *   plays or pauses from anywhere but a text field, an open menu or a dialog.
  * - Two layouts (`label-layout.ts`) mount the same player, court panel and rail
@@ -765,7 +765,7 @@ export function LabelConsole({
   }
 
   // Ticking the current point folds its shot rows until the labeller clicks its
-  // row or unticks it, or another point becomes current.
+  // row, presses Enter or unticks it, or another point becomes current.
   const [foldedPointId, setFoldedPointId] = useState<string | null>(null);
   if (foldedPointId !== null && foldedPointId !== currentPointId) {
     setFoldedPointId(null);
@@ -1689,6 +1689,7 @@ export function LabelConsole({
         matchScore: session.matchScore,
         games: scores.games,
         names,
+        matchTiebreakSet: matchTiebreakSetNumber,
       }),
     });
   }
@@ -2464,10 +2465,11 @@ export function LabelConsole({
     videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
   });
 
-  // Enter marks the open point checked; Space and ← / → drive the video; ]
-  // and [ go to the next and previous open flag. Never from inside a control,
-  // where those keys already mean something.
-  const checkOpenPoint = useRef<() => void>(() => {});
+  // Enter unfolds the open point and ⌘ Enter checks or unchecks it; Space and
+  // ← / → drive the video; ] and [ go to the next and previous open flag.
+  // Never from inside a control, where those keys already mean something.
+  const unfoldOpenPoint = useRef<() => void>(() => {});
+  const toggleOpenPointCheck = useRef<() => void>(() => {});
   // `]` and `[`: the next and previous amber flag, as the header's amber list
   // does; `'` and `;`, the two keys under them, the same for the grey list.
   const stepToFlag = useRef<
@@ -2532,9 +2534,13 @@ export function LabelConsole({
     slotJumpStops,
   ]);
   useEffect(() => {
-    checkOpenPoint.current = () => {
-      if (!operable || confirm || !expanded || expanded.checkedAt) return;
-      setChecked(expanded.id, true);
+    unfoldOpenPoint.current = () => {
+      if (confirm || !expanded) return;
+      setFoldedPointId(null);
+    };
+    toggleOpenPointCheck.current = () => {
+      if (!operable || confirm || !expanded) return;
+      setChecked(expanded.id, expanded.checkedAt === null);
     };
     stepToFlag.current = (direction, kind) => {
       if (confirm) return;
@@ -2725,8 +2731,10 @@ export function LabelConsole({
         }
         event.preventDefault();
         if (chord) {
+          // A held ⌘ Enter toggles once: its repeats would flip it back.
+          if (event.repeat) return;
           (document.activeElement as HTMLElement | null)?.blur?.();
-          checkOpenPoint.current();
+          toggleOpenPointCheck.current();
         } else stepShot.current(key === "ArrowDown" ? 1 : -1);
         return;
       }
@@ -2750,7 +2758,7 @@ export function LabelConsole({
       const target = event.target as Element | null;
       if (target?.closest?.(KEY_OWNER_SELECTOR)) return;
       event.preventDefault();
-      if (key === "Enter") checkOpenPoint.current();
+      if (key === "Enter") unfoldOpenPoint.current();
       else if (key === "]" || key === "[") {
         stepToFlag.current(key === "]" ? 1 : -1, "score");
       } else if (key === "'" || key === ";") {
@@ -2960,20 +2968,13 @@ export function LabelConsole({
   // rows (the optimistic apply, in the same commit as the click), the open
   // point's step is read again. Another question still open on the point
   // lands straight away (`landOnStep`: its stroke or slot, the court armed,
-  // its replay); nothing open goes on to the next flagged point
-  // (`nextReviewStop`, through the same jump `]` makes). Never from a
+  // its replay); nothing open stays on the corrected point — the next
+  // flagged point is `]`'s to reach, never the console's own. Never from a
   // refresh the labeller did not cause (`pendingAdvance` is null then),
   // never once they have selected something of their own (review mode off),
   // and never under a confirm or an open menu.
   const landOnStepRef = useRef(landOnStep);
   landOnStepRef.current = landOnStep;
-  const reviewJumpRef = useRef((fromPointId: string) => void fromPointId);
-  reviewJumpRef.current = (fromPointId) => {
-    if (!liveMarks) return;
-    const stop = nextReviewStop(points, liveMarks, fromPointId, 1);
-    if (stop && stop.pointId !== fromPointId)
-      findGap(stop.pointId, { arm: true });
-  };
   useEffect(() => {
     const pending = pendingAdvance.current;
     if (!pending || !expanded || pending.pointId !== expanded.id) return;
@@ -2993,7 +2994,6 @@ export function LabelConsole({
       return;
     }
     if (verdict === "advance") landOnStepRef.current(expanded, step);
-    else reviewJumpRef.current(expanded.id);
     // `step` and `expanded` move with `stepKey`; the key is the comparison.
     // `points` is here for a forced advance, whose key does not move.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3264,6 +3264,7 @@ export function LabelConsole({
             matchScore: session.matchScore,
             games: scores.games,
             names,
+            matchTiebreakSet: matchTiebreakSetNumber,
           })}
           complete={status === "complete"}
           upload={upload}

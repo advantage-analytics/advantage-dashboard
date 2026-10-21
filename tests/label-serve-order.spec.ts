@@ -548,9 +548,11 @@ test.describe("the new flags are stops for ] and the header's count", () => {
 
 test("every amber slot between the rows is a stop", () => {
   // Game 1 runs over (Lee wins four, then one more row); game 2 stops short.
-  const rows = [1, 1, 1, 1, 1, 2, 2, 3].map((gameNumber, i) =>
-    asLabelPoint(point(i, "p1", "p1", { gameNumber })),
-  );
+  // Servers alternate, so no game repeats the one before it.
+  const rows = [1, 1, 1, 1, 1, 2, 2, 3].map((gameNumber, i) => {
+    const server = gameNumber === 2 ? "p2" : "p1";
+    return asLabelPoint(point(i, server, server, { gameNumber }));
+  });
   expect(slotStops(rows, true).map((s) => [s.pointId, s.label])).toEqual([
     ["p5", "Game already won, with points after it"],
     ["p7", "Game 2 isn’t finished at 30–0"],

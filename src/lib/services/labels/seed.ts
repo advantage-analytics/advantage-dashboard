@@ -22,7 +22,9 @@ import {
   type SplitStepStroke,
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
-import { rotateServers } from "./game-operations";
+import { rotateServers, type GameServerPoint } from "./game-operations";
+import { gameServeRepeats } from "./game-serve-order";
+import { gameKey } from "./score";
 import {
   compareNullsLast,
   isLabelSpin,
@@ -589,5 +591,66 @@ export function buildLabelSeed(
     };
   });
 
-  return { points };
+  return { points: fixSettledServeRepeats(points) };
+}
+
+/**
+ * The seed's points with each serve repeat the strokes settle on their own
+ * put right (game-serve-order.ts `autofix`): the flagged game's `server`, in
+ * the row and in its frozen `seed`, so the row reads `unchanged` and Reset
+ * keeps it. Only a repeat that switches nobody qualifies, so no stroke, winner
+ * or ending moves. Done here, once, when the session is set up — never by the
+ * console on load, so a server the labeller sets later, or puts back with
+ * ⌘Z, always stands. A tiebreak the vendor cut into pieces is no repeat here:
+ * each piece's serves agree with its own server, which settles nothing.
+ */
+export function fixSettledServeRepeats(
+  points: LabelPointSeed[],
+): LabelPointSeed[] {
+  const rows = points.map((point): GameServerPoint => ({
+    id: String(point.point_index),
+    pointIndex: point.point_index,
+    status: "unchanged",
+    server: point.server,
+    setNumber: point.set_number,
+    gameNumber: point.game_number,
+    serveSide: null,
+    winner: point.winner,
+    ending: point.ending,
+    endedBy: point.ended_by,
+    gameType: point.game_type,
+    seed: null,
+    // A stroke the site removed is a ghost, not a serve.
+    shots: point.shots
+      .filter((shot) => shot.site_removal === null)
+      .map((shot, i) => ({
+        id: `${point.point_index}:${i}`,
+        eventId: shot.event_id,
+        status: "kept",
+        statusBeforeDelete: null,
+        seed: null,
+        hitter: shot.hitter,
+        stroke: shot.stroke,
+        result: shot.result,
+        spin: shot.spin,
+        contactX: shot.contact_x,
+        contactY: shot.contact_y,
+        landingX: shot.landing_x,
+        landingY: shot.landing_y,
+        videoTime: shot.video_time,
+      })),
+  }));
+  const servers = new Map<string, LabelSide>();
+  for (const repeat of gameServeRepeats(rows)) {
+    if (repeat.autofix) servers.set(gameKey(repeat.game), repeat.expected);
+  }
+  if (servers.size === 0) return points;
+  return points.map((point) => {
+    const server = servers.get(
+      gameKey({ setNumber: point.set_number, gameNumber: point.game_number }),
+    );
+    return server === undefined
+      ? point
+      : { ...point, server, seed: { ...point.seed, server } };
+  });
 }

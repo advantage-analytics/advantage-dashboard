@@ -19,7 +19,7 @@ import type { PlacementState } from "./court-placement";
  * court of its own: the step's stroke end is placed on the left court panel,
  * which arms for it, and every other fix is the row's own editing (stroke
  * keys, the winner, the menu). `]` / `[` still walk the flags, a placement
- * still advances to the next one, and Enter still checks the point.
+ * still advances to the next one, and ⌘ Enter still checks the point.
  *
  * Settled 2026-10-19 after #489 drew a compact court and named answers in
  * every flagged row: the labeller wanted the court once, beside the film, and

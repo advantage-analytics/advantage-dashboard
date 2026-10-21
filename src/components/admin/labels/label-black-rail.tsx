@@ -69,6 +69,11 @@ import {
   tiebreakServeBeforePoints,
   tiebreakServeOrders,
 } from "@/lib/services/labels/tiebreak-serve";
+import {
+  foldedPointIds,
+  gameServeRepeatBeforePoints,
+  gameServeRepeats,
+} from "@/lib/services/labels/game-serve-order";
 import { LabelGameBand } from "./label-game-band";
 import {
   BlackGameUnderflow,
@@ -80,6 +85,7 @@ import {
   BlackGameOverflow,
   BlackTiebreakFold,
   BlackTiebreakServe,
+  BlackGameServeRepeat,
   BlackPointRow,
   BlackSuggestedPoint,
   openPointSuggestions,
@@ -404,15 +410,13 @@ export function LabelBlackRail({
   );
   // The tiebreak at 6–6 and the entered match tiebreak, by the first point
   // each folds: on editable sessions.
-  const foldBefore = useMemo(
-    () =>
-      new Map(
-        (editable
-          ? tiebreakFolds(points, adScoring, matchTiebreakSet)
-          : []
-        ).map((fold) => [fold.pointIds[0], fold]),
-      ),
+  const folds = useMemo(
+    () => (editable ? tiebreakFolds(points, adScoring, matchTiebreakSet) : []),
     [editable, points, adScoring, matchTiebreakSet],
+  );
+  const foldBefore = useMemo(
+    () => new Map(folds.map((fold) => [fold.pointIds[0], fold])),
+    [folds],
   );
   // A game band in the air, and the point its drop would land above — set
   // only where `planGameBoundary` has something to move.
@@ -455,6 +459,15 @@ export function LabelBlackRail({
     () =>
       tiebreakServeBeforePoints(editable ? tiebreakServeOrders(points) : []),
     [editable, points],
+  );
+  // The games served by the same player as the game beside them, by their
+  // first point.
+  const serveRepeatBefore = useMemo(
+    () =>
+      gameServeRepeatBeforePoints(
+        editable ? gameServeRepeats(points, foldedPointIds(folds)) : [],
+      ),
+    [editable, points, folds],
   );
   // The games that run over, by their first leftover point. Read off the
   // labeller's own rows, so on every editable session — marks on or off.
@@ -706,6 +719,7 @@ export function LabelBlackRail({
                 const overflow = overflowBefore.get(point.id);
                 const fold = foldBefore.get(point.id);
                 const serveOrder = serveOrderBefore.get(point.id);
+                const serveRepeat = serveRepeatBefore.get(point.id);
                 const short = underflowAfter.get(point.id);
                 const open = point.id === expandedPointId;
                 return (
@@ -771,6 +785,13 @@ export function LabelBlackRail({
                         order={serveOrder}
                         names={names}
                         onFix={onFixTiebreakServe}
+                      />
+                    ) : null}
+                    {serveRepeat ? (
+                      <BlackGameServeRepeat
+                        repeat={serveRepeat}
+                        names={names}
+                        onSetGameServer={onSetGameServer}
                       />
                     ) : null}
                     <BlackPointRow

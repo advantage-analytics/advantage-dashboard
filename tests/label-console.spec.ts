@@ -950,11 +950,8 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(consoleSource).toContain(
       "jumpAfterOpen.current = (pointId) => findGap(pointId);",
     );
-    // The third is the auto-advance's own jump to the next flagged point.
-    expect(consoleSource.match(/arm: true/g)).toHaveLength(3);
-    expect(consoleSource).toMatch(
-      /if \(stop && stop\.pointId !== fromPointId\)\s+findGap\(stop\.pointId, \{ arm: true \}\);/,
-    );
+    // Only those two: a corrected point stays put, never jumping on itself.
+    expect(consoleSource.match(/arm: true/g)).toHaveLength(2);
     // The old block focus and the older target are gone.
     expect(consoleSource).not.toContain("reviewFocusTarget");
     expect(consoleSource).not.toContain("focusItem");
@@ -1018,7 +1015,7 @@ test.describe("a flag jump lands on the point's review step", () => {
     // marked, and onFilmPause lets it pass rather than cancel that replay.
     expect(consoleSource).toContain("selfPause.current = true;");
     const keys = consoleSource.slice(
-      consoleSource.indexOf('if (key === "Enter") checkOpenPoint.current();'),
+      consoleSource.indexOf('if (key === "Enter") unfoldOpenPoint.current();'),
       consoleSource.indexOf('window.addEventListener("keydown", onKeyDown);'),
     );
     expect(keys.match(/cancelReplayRef\.current\(\);/g)).toHaveLength(2);
@@ -1072,14 +1069,13 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(effect).toContain(
       "\"[role='menu'], [role='dialog'], [role='alertdialog']\"",
     );
-    // Another item on the point lands; none goes on to the next flagged point.
+    // Another item on the point lands; with none left the console stays on
+    // the corrected point — the next flagged point is `]`'s to reach.
     expect(effect).toContain(
       'if (verdict === "advance") landOnStepRef.current(expanded, step);',
     );
-    expect(effect).toContain("else reviewJumpRef.current(expanded.id);");
-    expect(effect).toContain(
-      "const stop = nextReviewStop(points, liveMarks, fromPointId, 1);",
-    );
+    expect(effect).not.toContain("reviewJumpRef");
+    expect(effect).not.toContain("nextReviewStop");
     expect(effect).toContain("}, [stepKey, points, confirm, reviewMode]);");
     // The writes that arm it: a court placement, a dismiss.
     const place = consoleSource.slice(
@@ -1470,4 +1466,23 @@ test("clicking into the row a flag jump selected, or editing a cell, ends review
   expect(body.indexOf("setReviewMode(false)")).toBeLessThan(
     body.indexOf("if (held) return;"),
   );
+});
+
+test.describe("Enter and ⌘ Enter", () => {
+  const consoleSource = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+
+  test("Enter unfolds the open point; ⌘ Enter toggles its check once per press", () => {
+    expect(consoleSource).toContain(
+      'if (key === "Enter") unfoldOpenPoint.current();',
+    );
+    expect(consoleSource).toMatch(
+      /if \(chord\) \{\n(\s+\/\/[^\n]*\n)*\s+if \(event\.repeat\) return;[\s\S]{0,120}toggleOpenPointCheck\.current\(\);/,
+    );
+    expect(consoleSource).toContain(
+      "setChecked(expanded.id, expanded.checkedAt === null);",
+    );
+  });
 });

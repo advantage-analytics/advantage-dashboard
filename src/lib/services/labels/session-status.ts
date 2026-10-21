@@ -23,6 +23,8 @@ import type { MatchScore } from "@/lib/services/splitstep/derivation";
 import { isNonPointEnding, labelProgress, type LabelPoint } from "./session";
 import { setBreakSuspects, setBreakWarning } from "./set-break";
 import { tiebreakServeOrders } from "./tiebreak-serve";
+import { foldedPointIds, gameServeRepeats } from "./game-serve-order";
+import { tiebreakFolds } from "./tiebreak-fold";
 
 export interface CompleteWarningInput {
   points: readonly LabelPoint[];
@@ -39,6 +41,8 @@ export interface CompleteWarningInput {
   games?: readonly LabelGameBand[];
   /** Who an ending is by, in the publish lines: "an error by Quan". */
   names?: MarkNames;
+  /** set-scores.ts `matchTiebreakSet`: its split games are the fold's, not a repeat. */
+  matchTiebreakSet?: number | null;
 }
 
 const plural = (n: number, one: string, many = `${one}s`) =>
@@ -101,6 +105,18 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
         : "The match tiebreak";
     warnings.push(
       `${name} is off its serve order on ${plural(order.off.length, "point")}`,
+    );
+  }
+
+  const folded = foldedPointIds(
+    tiebreakFolds(points, adScoring, input.matchTiebreakSet ?? null),
+  );
+  for (const repeat of gameServeRepeats(points, folded)) {
+    const games = [repeat.gameInSet, repeat.other.gameInSet].sort(
+      (a, b) => a - b,
+    );
+    warnings.push(
+      `Set ${repeat.game.setNumber}: the same player serves games ${games[0]} and ${games[1]}`,
     );
   }
 

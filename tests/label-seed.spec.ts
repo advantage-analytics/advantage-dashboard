@@ -14,6 +14,8 @@ import { isServeStroke, type MatchScore } from "@/lib/services/labels/session";
 import {
   buildLabelSeed,
   endedBy,
+  fixSettledServeRepeats,
+  type LabelPointSeed,
   labelEnding,
   labelShotResult,
   labelSpin,
@@ -374,6 +376,95 @@ test.describe("a deciding set the entered score spells as a match tiebreak", () 
 function toDerivedLike(shot: { hitter: string; result: string | null }) {
   return { is_player1: shot.hitter === "p1", result: shot.result };
 }
+
+test.describe("a serve repeat the strokes settle is fixed at setup", () => {
+  /** A seeded point stored as `server`'s whose serve `serves` hits. */
+  const seeded = (
+    index: number,
+    gameNumber: number,
+    server: "p1" | "p2",
+    serves: "p1" | "p2",
+  ): LabelPointSeed => {
+    const values = {
+      set_number: 1,
+      game_number: gameNumber,
+      server,
+      winner: serves,
+      ending: null,
+      ended_by: serves,
+      game_type: "game" as const,
+    };
+    const stroke = (hitter: "p1" | "p2", stroke: string, t: number) => {
+      const shot = {
+        hitter,
+        stroke,
+        result: null,
+        spin: null,
+        contact_x: null,
+        contact_y: null,
+        landing_x: null,
+        landing_y: null,
+        video_time: t,
+      };
+      return {
+        event_id: index * 10 + t,
+        vendor: {},
+        status: "kept",
+        ...shot,
+        unclear: [],
+        site_removal: null,
+        seed: shot,
+      };
+    };
+    return {
+      point_index: index,
+      vendor_rally_ids: [index],
+      ...values,
+      status: "unchanged",
+      seed: { ...values, serve_side: null },
+      shots: [
+        stroke(serves, "first_serve", 0),
+        stroke(serves === "p1" ? "p2" : "p1", "forehand", 1),
+      ],
+    } as unknown as LabelPointSeed;
+  };
+
+  test("the game whose serves are all the other player's takes them, row and frozen seed", () => {
+    // Game 2 stored as Lee's, as game 1 is, but Kim hit both its serves.
+    const points = [
+      seeded(0, 1, "p1", "p1"),
+      seeded(1, 1, "p1", "p1"),
+      seeded(2, 2, "p1", "p2"),
+      seeded(3, 2, "p1", "p2"),
+    ];
+    const fixed = fixSettledServeRepeats(points);
+    expect(fixed.map((p) => p.server)).toEqual(["p1", "p1", "p2", "p2"]);
+    expect(fixed.map((p) => p.seed.server)).toEqual(["p1", "p1", "p2", "p2"]);
+    // Nothing else moves: no winner, no ending, no stroke.
+    expect(fixed.map((p) => p.winner)).toEqual(points.map((p) => p.winner));
+    expect(fixed[2].shots).toBe(points[2].shots);
+  });
+
+  test("one that would switch players, or that the serves do not settle, is left", () => {
+    // Both games' serves are Lee's, as stored: the slot asks, the seed does not.
+    const agreeing = [
+      seeded(0, 1, "p1", "p1"),
+      seeded(1, 1, "p1", "p1"),
+      seeded(2, 2, "p1", "p1"),
+      seeded(3, 2, "p1", "p1"),
+    ];
+    expect(fixSettledServeRepeats(agreeing)).toBe(agreeing);
+    // One serve of Kim's in game 2 is not enough.
+    const thin = [
+      seeded(0, 1, "p1", "p1"),
+      seeded(1, 1, "p1", "p1"),
+      seeded(2, 2, "p1", "p2"),
+      { ...seeded(3, 2, "p1", "p2"), shots: [] },
+      { ...seeded(4, 2, "p1", "p2"), shots: [] },
+    ];
+    expect(fixSettledServeRepeats(thin)).toBe(thin);
+  });
+});
 
 test.describe("seedEnding", () => {
   const serve = {
