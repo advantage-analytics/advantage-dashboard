@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 export const metadata = { title: "Connections" };
 
 /**
- * Settings › Connections — how to use Advantage from your own Claude (the
+ * Settings › Connections — how to use Advantage from your own AI app (the
  * Ask MCP connector, docs/ask-mcp-connector.md) and the apps you approved,
  * each with Disconnect. Picked on `/design/settings/connections` (layout B).
  *
