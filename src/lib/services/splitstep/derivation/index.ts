@@ -150,8 +150,14 @@
  * fold. Only `shots.result` on last rally
  * strokes and that flag can move: games, servers, winners, result_type and
  * scores do not, and neither does any serve-in statistic.
+ * 0.8.7 (2026-10-21) names player1 from an exact match between the vendor's
+ * labels and `matches.player1_name` / `player2_name` when geometry and score
+ * distance both say nothing (reconcile.ts `player1FromNames`,
+ * `player1Source: "name"`), before 0.8.6's labels[0] guess. Job fb00f837
+ * (Ivan H v Jasper Mok) guessed Jasper; the names say Ivan. A match that
+ * geometry or distance already decides derives exactly as 0.8.6.
  */
-export const DERIVATION_VERSION = "0.8.6-unreconciled";
+export const DERIVATION_VERSION = "0.8.7-unreconciled";
 
 export type {
   RawSplitStepStroke,

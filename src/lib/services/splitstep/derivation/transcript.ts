@@ -29,6 +29,7 @@ import {
   reconcile,
   scoreIsSelfMirroring,
   type MatchScore,
+  type PlayerNames,
   type Reconciliation,
 } from "./reconcile";
 import {
@@ -445,6 +446,11 @@ export interface BuildOptions {
   score: MatchScore | null;
   initialTopIsPlayer1: boolean | null;
   /**
+   * `matches.player1_name` / `player2_name`. Names player1 only when geometry
+   * and score distance both say nothing (reconcile.ts `player1FromNames`).
+   */
+  playerNames?: PlayerNames | null;
+  /**
    * processing_jobs.ad_scoring, falling back to matches.format.ad_scoring (see
    * resolveAdScoring). Decides whether 40-40 is a deciding point.
    */
@@ -472,6 +478,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     labels,
     score,
     initialTopIsPlayer1,
+    playerNames = null,
     adScoring = true,
     bestOf = 3,
     lineCalls: streamLineCalls,
@@ -658,6 +665,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     setKeyOf: (id) => setKeyOf.get(id) ?? "",
     geometryTopLabel: topLabel,
     initialTopIsPlayer1,
+    playerNames,
   });
   if (!score) {
     rec.reason = "no score was entered, so the fold could not be checked";
