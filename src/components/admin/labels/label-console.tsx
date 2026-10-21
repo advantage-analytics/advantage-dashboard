@@ -546,6 +546,9 @@ export function LabelConsole({
     pointId: string;
     at: string;
   } | null>(null);
+  // An added stroke's add while it is in flight, by the id the console gave
+  // it: true once its row is saved. Its edits and its delete wait on it.
+  const addsInFlight = useRef(new Map<string, Promise<boolean>>());
   const [pointFocus, setPointFocus] = useState<PointFocus>(
     initialPointFocus ?? FOLLOW,
   );
@@ -1024,6 +1027,16 @@ export function LabelConsole({
       setPoints((current) => ending.apply(change(current)));
 
       dispatchSave({ type: "start" });
+      // An added stroke is drawn and edited at once (`addShot`); its row is
+      // written when its add lands, and this edit only after that.
+      const adding = addsInFlight.current.get(shotId);
+      if (adding && !(await adding)) {
+        dispatchSave({
+          type: "failure",
+          message: "That shot was not added, so the change was not saved.",
+        });
+        return null;
+      }
       const result = await settle(onSaveShot(shotId, patch));
       if ("error" in result) {
         // Put back exactly the fields this edit changed, and its status.
@@ -1271,11 +1284,21 @@ export function LabelConsole({
     );
     void runOperation(
       (rows) => ending.apply(gone(rows)),
-      () => operations.deleteShot(shotId, reason),
+      () => afterAdd(shotId, () => operations.deleteShot(shotId, reason)),
       (rows, result) =>
         settlePoint(result.point ? rows : ending.undo(rows), result),
       (rows) => ending.undo(putBackShot(shotId, before)(rows)),
     );
+  }
+
+  /** `call` once `shotId`'s add has landed (`addsInFlight`), else at once. */
+  async function afterAdd<R extends object>(
+    shotId: string,
+    call: () => Promise<R>,
+  ): Promise<R | { error: string }> {
+    const adding = addsInFlight.current.get(shotId);
+    if (adding && !(await adding)) return { error: "That shot was not added." };
+    return call();
   }
 
   function restoreShot(shotId: string) {
@@ -1890,10 +1913,12 @@ export function LabelConsole({
   }
 
   /**
-   * A stroke added after `afterShotId` (or at the end), selected for
-   * placement once it has saved. `follow` is what a review answer knows of it
-   * beyond the add's plan (a second serve, by the server): written once it
-   * has saved, those fields the add did not already give it.
+   * A stroke added after `afterShotId` (or at the end), drawn and selected for
+   * placement at once: the console makes its id and the add writes the row
+   * under it, so it is edited straight away and each edit waits for the row
+   * (`addsInFlight`). `follow` is what a review answer knows of it beyond the
+   * add's plan (a second serve, by the server): written once it has saved,
+   * those fields the add did not already give it.
    */
   function addShot(
     pointId: string,
@@ -1909,9 +1934,9 @@ export function LabelConsole({
       afterShotId === ADD_SHOT_AT_START ? (clock.get() ?? null) : null;
     const plan = planAddedShot(point, afterShotId, filmTime);
     if ("error" in plan) return refuse(plan.error);
-    const tempId = nextTempId(PENDING_SHOT_PREFIX);
+    const id = crypto.randomUUID();
     const draft: LabelShot = {
-      id: tempId,
+      id,
       labelPointId: pointId,
       eventId: null,
       afterEventId: plan.write.after_event_id,
@@ -1932,30 +1957,40 @@ export function LabelConsole({
       siteRemovalRestoredAt: null,
       seed: null,
     };
-    // The new stroke is the one a court click places next — once it is saved.
-    // Selecting the draft would send its temporary id to the server on the
-    // first court click, which refuses it.
-    const selectedBefore = placement.shotId;
-    void runOperation<{ shot: LabelShot; point?: LabelPointEndingSynced }>(
+    // The new stroke is the one a court click places next, from now: its id
+    // is the row's own.
+    setPlacement(placementOf(insertShot(points, pointId, draft), id));
+    const added = runOperation<{
+      shot: LabelShot;
+      point?: LabelPointEndingSynced;
+    }>(
       (rows) => insertShot(rows, pointId, draft),
-      () => operations.addShot(pointId, afterShotId, filmTime),
+      () => operations.addShot(pointId, afterShotId, filmTime, id),
+      // The row as the labeller has edited it since stands; the saved one
+      // only fills in a row that is not there.
       (rows, result) =>
         replacePoint(
-          insertShot(removeShot(rows, tempId), pointId, result.shot),
+          rows.some((p) => p.shots.some((shot) => shot.id === id))
+            ? rows
+            : insertShot(rows, pointId, result.shot),
           pointId,
           (p) => applyEndingSync(p, result.point),
         ),
-      (rows) => removeShot(rows, tempId),
-    ).then((result) => {
-      // Select the saved row, unless the labeller picked something else
-      // while the add was in flight.
-      if (!result) return;
+      (rows) => removeShot(rows, id),
+    );
+    addsInFlight.current.set(
+      id,
+      added.then((result) => result !== null),
+    );
+    void added.then((result) => {
+      addsInFlight.current.delete(id);
+      if (!result) {
+        setPlacement((current) =>
+          current.shotId === id ? NO_PLACEMENT : current,
+        );
+        return;
+      }
       const rows = insertShot(points, pointId, result.shot);
-      setPlacement((current) =>
-        current.shotId === selectedBefore
-          ? placementOf(rows, result.shot.id)
-          : current,
-      );
       const values = labelShotValues(result.shot);
       const rest = Object.fromEntries(
         Object.entries(follow ?? {}).filter(
@@ -3478,6 +3513,8 @@ export interface LabelConsoleOperations {
     pointId: string,
     afterShotId: string | null,
     filmTime?: number | null,
+    /** The new row's id, made by the console (`addShot`). */
+    shotId?: string,
   ) => Promise<LabelAddShotResult>;
   movePoint: (
     pointId: string,

@@ -648,23 +648,36 @@ export function destinationServerIn(
 }
 
 /**
- * A game's number within its set, as the bands name it: its rank among the
- * set's games that still hold a live point. `game_number` counts across the
- * match, so set 2's first game is not "Game 13".
+ * A game's number within its set, as the bands name it (score.ts): its place
+ * in row order among the set's games that still hold a live point, by each
+ * game's first row. `game_number` counts across the match, so set 2's first
+ * game is not "Game 13" — and it is a key, not an order: a game the labeller
+ * started takes the session's highest number plus one (game-shift.ts
+ * `planGameSplit`) wherever it sits. A game with no live row comes last.
  */
 export function gameInSetOf(
-  points: readonly Pick<LabelPoint, "status" | "setNumber" | "gameNumber">[],
+  points: readonly Pick<
+    LabelPoint,
+    "status" | "setNumber" | "gameNumber" | "pointIndex"
+  >[],
   game: LabelGame,
 ): number {
-  const numbers = new Set<number>();
+  const firstRow = new Map<number, number>();
   for (const point of points) {
     if (point.status === "deleted" || point.setNumber !== game.setNumber) {
       continue;
     }
-    if (point.gameNumber !== null) numbers.add(point.gameNumber);
+    if (point.gameNumber === null) continue;
+    const seen = firstRow.get(point.gameNumber);
+    if (seen === undefined || point.pointIndex < seen) {
+      firstRow.set(point.gameNumber, point.pointIndex);
+    }
   }
-  numbers.add(game.gameNumber);
-  return [...numbers].sort((x, y) => x - y).indexOf(game.gameNumber) + 1;
+  const at = firstRow.get(game.gameNumber);
+  if (at === undefined) return firstRow.size + 1;
+  let place = 1;
+  for (const row of firstRow.values()) if (row < at) place += 1;
+  return place;
 }
 
 /**
