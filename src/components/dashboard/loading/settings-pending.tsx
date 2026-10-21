@@ -451,15 +451,15 @@ export function SettingsConnectionsPending() {
   return (
     <Column label="connections" width={660}>
       <SettingsCard className="gap-3">
-        <SettingsCardTitle>Use Advantage in Claude</SettingsCardTitle>
+        <SettingsCardTitle>
+          Use Advantage in Claude, ChatGPT or Cursor
+        </SettingsCardTitle>
         <Text className="text-[12px] leading-[1.55]">
-          Ask Claude about your matches in claude.ai, Claude Desktop or Claude
-          Code. It reads your statistics the way Ask does and spends your Ask
-          questions; it cannot change anything.
+          Ask about your matches from your own AI app. It reads your statistics
+          the way Ask does and spends your Ask questions. Whichever app you use,
+          the address is the same:
         </Text>
-        <Text className="text-[12px]">
-          1. In Claude, open Settings → Connectors → Add custom connector.
-        </Text>
+        <Box className="h-[38px] rounded-[8px]" />
         <Box className="h-[38px] rounded-[8px]" />
         <Box className="h-[38px] rounded-[8px]" />
       </SettingsCard>

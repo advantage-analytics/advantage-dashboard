@@ -19,10 +19,12 @@ import { disconnectApp } from "./connections-actions";
 
 /**
  * Settings › Connections: the Ask MCP connector's two cards — how to connect
- * Claude, and the apps the viewer approved with Disconnect on each.
+ * Claude, ChatGPT or Cursor, and the apps the viewer approved with Disconnect
+ * on each.
  *
- * Claude is named in text only. Anthropic's trademark guidelines allow its
- * logo only with prior approval, so the rows carry a neutral connector glyph.
+ * The apps are named in text only. Anthropic's trademark guidelines allow
+ * its logo only with prior approval, and the others are no different, so the
+ * rows carry a neutral connector glyph.
  *
  * `grants` is null when the list could not be read; `error` then says so,
  * and the card never claims nothing is connected.
@@ -52,23 +54,23 @@ export function ConnectionsSettings({
       )}
 
       <SettingsCard className="gap-3">
-        <SettingsCardTitle>Use Advantage in Claude</SettingsCardTitle>
+        <SettingsCardTitle>
+          Use Advantage in Claude, ChatGPT or Cursor
+        </SettingsCardTitle>
         <p className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
-          Ask Claude about your matches in claude.ai, Claude Desktop or Claude
-          Code. It reads your statistics the way Ask does and spends your Ask
-          questions; it cannot change anything.
+          Ask about your matches from your own AI app. It reads your statistics
+          the way Ask does and spends your Ask questions. Whichever app you use,
+          the address is the same:
         </p>
+        <CopyField value={mcpUrl} />
         <ol className="flex flex-col gap-1.5 text-[12px] text-[var(--ink-700)]">
           <li>
-            1. In Claude, open Settings → Connectors → Add custom connector.
+            1. In Claude (claude.ai or Claude Desktop), open Settings →
+            Connectors → Add custom connector. In ChatGPT, open Settings → Apps
+            &amp; Connectors → Create. In Cursor, add the line below to its MCP
+            settings file.
           </li>
-          <li>2. Name it Advantage and paste this address:</li>
-        </ol>
-        <CopyField value={mcpUrl} />
-        <ol
-          start={3}
-          className="flex flex-col gap-1.5 text-[12px] text-[var(--ink-700)]"
-        >
+          <li>2. Name it Advantage and paste the address.</li>
           <li>3. Press Connect, sign in here, and choose Allow.</li>
         </ol>
         <div className="flex flex-col gap-1.5 pt-1">
@@ -78,6 +80,15 @@ export function ConnectionsSettings({
           </span>
           <CopyField
             value={`claude mcp add --transport http advantage ${mcpUrl}`}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="flex items-center gap-1.5 text-[11px] text-[var(--ink-500)]">
+            <Terminal className="size-3" strokeWidth={1.5} aria-hidden="true" />
+            In Cursor (.cursor/mcp.json)
+          </span>
+          <CopyField
+            value={`{ "mcpServers": { "advantage": { "url": "${mcpUrl}" } } }`}
           />
         </div>
       </SettingsCard>
@@ -117,7 +128,7 @@ export function ConnectionsSettings({
 
 /**
  * One approved app. Disconnect asks once, in the row: it ends the app's
- * sessions at once and the person has to approve it again in Claude, the
+ * sessions at once and the person has to approve it again in the app, the
  * same weight as Account's "Sign out everywhere", which also confirms.
  */
 function GrantRow({
@@ -148,7 +159,7 @@ function GrantRow({
           suppressHydrationWarning
         >
           {confirming
-            ? `${grant.name} loses access now; you would approve it again in Claude.`
+            ? `${grant.name} loses access now; you would approve it again in that app.`
             : `${approved}Reads your matches and asks questions`}
         </div>
       </div>

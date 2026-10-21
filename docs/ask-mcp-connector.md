@@ -119,11 +119,17 @@ The OAuth server is a project setting the API does not expose. For project
      Claude Code uses a `http://localhost:<port>/callback` it chooses per run)
      and paste the client id into the connector's advanced settings. Dynamic
      registration lets any client register, but only a client whose callback
-     is one of Claude's (or a loopback address, for Claude Code) is offered
-     Allow on the consent page — `isConnectorRedirectUri()` in
-     `src/lib/auth/oauth-consent.ts`, checked on the page and again in the
-     action. Connecting another app (ChatGPT, say) means adding its callback
-     to `CONNECTOR_REDIRECT_URIS`.
+     is one the app connects to is offered Allow on the consent page —
+     `isConnectorRedirectUri()` in `src/lib/auth/oauth-consent.ts`, checked
+     on the page and again in the action: Claude's two callbacks, ChatGPT's
+     (`https://chatgpt.com/connector_platform_oauth_redirect`, and the
+     per-app `https://chatgpt.com/connector/oauth/{callback_id}` its current
+     apps register), Cursor Cloud's
+     (`https://www.cursor.com/agents/mcp/oauth/callback`), and any http
+     loopback address (Claude Code, Cursor desktop). Cursor's older
+     `cursor://` custom-scheme callback is refused on purpose — not http(s),
+     and claimable by any app that registers the scheme. Connecting another
+     app means adding its callback to `CONNECTOR_REDIRECT_URIS`.
 3. Optional, recommended by Supabase for OAuth: **Authentication → JWT Keys**,
    move signing to an asymmetric key (ES256/RS256). Nothing here verifies a
    token locally, so it is not required for the connector to work.
@@ -243,10 +249,14 @@ prints the address and the steps below, and lists the apps the person approved
 with Disconnect on each. The list and the revoke call Supabase Auth's
 `GET`/`DELETE /auth/v1/user/oauth/grants` with the person's own token
 (`src/lib/auth/oauth-grants.ts`); revoking ends that client's sessions. The
-help centre's "Using Advantage in Claude" topic points there. Claude is named
-in text only: Anthropic's trademark guidelines allow its logo only with prior
-approval. The draft listing for Claude's Connectors Directory is
+help centre's "Using Advantage in Claude, ChatGPT or Cursor" topic points
+there. The apps are named in text only: Anthropic's trademark guidelines allow
+its logo only with prior approval, and the others are treated the same. The draft listing for Claude's Connectors Directory is
 [`ask-mcp-connector-directory-listing.md`](ask-mcp-connector-directory-listing.md).
+
+Every client below takes the same address. The consent page prints the
+client's registered name, so a person connecting ChatGPT sees "ChatGPT" and
+approves that.
 
 **claude.ai and Claude Desktop** (custom connectors are shared between them):
 Settings → Connectors → **Add custom connector** → name "Advantage", URL
@@ -263,6 +273,26 @@ claude mcp add --transport http advantage https://app.advantage-analytics.com/ap
 
 then `/mcp` inside a session to run the sign-in. Claude Code registers itself
 with dynamic registration and listens on a local port for the callback.
+
+**ChatGPT**: Settings → Apps & Connectors → **Create** → name "Advantage",
+MCP server URL `https://app.advantage-analytics.com/api/mcp`, authentication
+OAuth → Create, then **Connect**. ChatGPT sends a `resource` parameter on the
+authorize and token requests, which Supabase records on the authorization
+(§8); nothing here needs it.
+
+**Cursor**: add to `.cursor/mcp.json` (or the global `~/.cursor/mcp.json`)
+
+```json
+{
+  "mcpServers": {
+    "advantage": { "url": "https://app.advantage-analytics.com/api/mcp" }
+  }
+}
+```
+
+then sign in from the MCP settings pane. Cursor desktop listens on a local
+port (`http://localhost:8787/callback` by default) for the callback; Cursor
+Cloud uses its own `https://www.cursor.com/…` callback.
 
 **A local dev server** can be connected from Claude Code the same way with
 `http://localhost:3000/api/mcp`: discovery, registration and the token exchange
@@ -331,8 +361,9 @@ alone (`supabase/migrations/20261015095315_ask_mcp_usage.sql`).
 - **`@supabase/supabase-js` upgrade**, then the consent page uses
   `auth.oauth.*` instead of `src/lib/auth/oauth-consent.ts`'s two fetches.
 - **Resource indicators** (RFC 8707): the metadata advertises
-  `resource`, and Supabase records it on the authorization, but the token's
-  `aud` stays `authenticated` and the route does not check a resource claim.
+  `resource`, ChatGPT sends it on authorize and token, and Supabase records
+  it on the authorization, but the token's `aud` stays `authenticated` and
+  the route does not check a resource claim.
   A Custom Access Token Hook could set it if a second resource server ever
   shares the project's tokens.
 - **The OpenAPI file** (`openapi/advantage-api.yaml`) does not yet describe

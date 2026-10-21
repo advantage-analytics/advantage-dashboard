@@ -20,7 +20,7 @@ const ITEMS: TocItem[] = [
   { id: "teams", label: "Teams" },
   { id: "sharing", label: "Sharing a match" },
   { id: "ask", label: "Ask" },
-  { id: "claude", label: "Using Advantage in Claude" },
+  { id: "claude", label: "Using Advantage in Claude, ChatGPT or Cursor" },
   { id: "shortcuts", label: "Keyboard shortcuts" },
   { id: "glossary", label: "Glossary" },
   { id: "support", label: "Contact support" },
