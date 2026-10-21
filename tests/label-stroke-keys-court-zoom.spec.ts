@@ -263,6 +263,19 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     expect(source).toContain(
       "if (expanded && owner.id !== expanded.id) return false;",
     );
+    // A stroke just added is used at once; what the server reads it from
+    // waits for its row: an add behind every add in flight, a split and a
+    // remove behind its own, and no serve-hitter follow while it is in flight.
+    expect(source).toContain(
+      "Promise.all([...addsInFlight.current.values()]).then(() =>",
+    );
+    expect(source).toContain(
+      "afterAdd(shotId, () => operations.splitPoint(pointId, shotId))",
+    );
+    expect(source).toContain(
+      "afterAdd(shotId, () => operations.removeShotsAfter(shotId))",
+    );
+    expect(source).toContain("!addsInFlight.current.has(shotId) &&");
     // X is the court's Flip side.
     expect(source).toContain("? () => flipKey.current()");
     expect(source).toContain("setPlacement(flipPlacement);");

@@ -270,8 +270,6 @@ import {
   withServeHitter,
 } from "./stroke-keys";
 
-/** Ids of rows drawn optimistically while their insert is in flight. */
-const PENDING_SHOT_PREFIX = "pending-shot-";
 /** How long the overview's jump waits for full screen to settle. */
 const OPEN_JUMP_DELAY_MS = 450;
 /**
@@ -844,9 +842,6 @@ export function LabelConsole({
     }
     const owner = pointOfShot(points, shotId);
     if (owner) holdPoint(owner.id);
-    // A draft row cannot be placed or edited until its insert lands; it is
-    // selected for placement then (see `addShot`).
-    if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
     const shot = findShot(points, shotId);
     // A position cell names its end: the court opens on that end's half.
     const start = placementOf(points, shotId);
@@ -953,9 +948,6 @@ export function LabelConsole({
     ): Promise<LabelPoint | null> => {
       const before = findShot(rows, shotId);
       if (!before || !onSaveShot) return null;
-      // A draft row has no id the server knows yet; its add is still in
-      // flight, and the saved row replaces it when that lands.
-      if (shotId.startsWith(PENDING_SHOT_PREFIX)) return null;
       // A let on a stroke that is not a serve: refused before any optimistic
       // change or request, on the same save line a server `{ error }` uses.
       const plan = planShotWrite(before, patch);
@@ -1370,7 +1362,7 @@ export function LabelConsole({
     const ending = endingFollow(point, removeFrom(point), drawsGhosts(marks));
     void runOperation(
       (rows) => ending.apply(replacePoint(rows, pointId, removeFrom)),
-      () => operations.removeShotsAfter(shotId),
+      () => afterAdd(shotId, () => operations.removeShotsAfter(shotId)),
       (rows, result) =>
         replacePoint(result.point ? rows : ending.undo(rows), pointId, (p) =>
           applyEndingSync(
@@ -1613,7 +1605,8 @@ export function LabelConsole({
     const draft = draftSplitPoint(plan.write.insert, tempId);
     void runOperation<PointSplitSaved>(
       (rows) => applyPointSplit(rows, pointId, draft, plan.write),
-      () => operations.splitPoint(pointId, shotId),
+      // A stroke just added is split at once its row is saved.
+      () => afterAdd(shotId, () => operations.splitPoint(pointId, shotId)),
       (rows, result) => settlePointSplit(rows, tempId, result),
       (rows) => withdrawPointSplit(rows, anchor, tempId),
     ).then((result) => {
@@ -1965,7 +1958,13 @@ export function LabelConsole({
       point?: LabelPointEndingSynced;
     }>(
       (rows) => insertShot(rows, pointId, draft),
-      () => operations.addShot(pointId, afterShotId, filmTime, id),
+      // Once every add already in flight has saved: the server places this
+      // one among the saved rows — after a stroke just added, or after the
+      // rally's last.
+      () =>
+        Promise.all([...addsInFlight.current.values()]).then(() =>
+          operations.addShot(pointId, afterShotId, filmTime, id),
+        ),
       // The row as the labeller has edited it since stands; the saved one
       // only fills in a row that is not there.
       (rows, result) =>
@@ -2232,11 +2231,11 @@ export function LabelConsole({
     const patch = owner
       ? withServeHitter(owner, shotId, edit, drawsGhosts(marks))
       : edit;
-    // A draft stroke's add is still in flight: the server would switch the
+    // A stroke whose add is still in flight: the server would switch the
     // saved rows and not it, so its edit goes alone.
     if (
       operations &&
-      !shotId.startsWith(PENDING_SHOT_PREFIX) &&
+      !addsInFlight.current.has(shotId) &&
       "hitter" in patch &&
       Object.keys(patch).length === 1
     ) {
@@ -2630,9 +2629,7 @@ export function LabelConsole({
     };
     stepShot.current = (direction) => {
       if (confirm || !expanded || unfoldedPointId !== expanded.id) return;
-      const shots = liveShotsInOrder(expanded, drawsGhosts(marks)).filter(
-        (shot) => !shot.id.startsWith(PENDING_SHOT_PREFIX),
-      );
+      const shots = liveShotsInOrder(expanded, drawsGhosts(marks));
       if (shots.length === 0) return;
       const at = shots.findIndex((shot) => shot.id === placement.shotId);
       // From no stroke, ↓ takes the first and ↑ the last; the ends do not wrap.
@@ -2681,8 +2678,6 @@ export function LabelConsole({
       if (!owner || !shot || shot.status === "deleted") return false;
       // Never a stroke left selected in another point than the open one.
       if (expanded && owner.id !== expanded.id) return false;
-      // A draft has no row on the server to delete yet.
-      if (shot.id.startsWith(PENDING_SHOT_PREFIX)) return false;
       const number =
         liveShotsInOrder(owner, drawsGhosts(marks)).findIndex(
           (s) => s.id === shot.id,
@@ -2708,9 +2703,7 @@ export function LabelConsole({
       if (live && expanded.shots.some((shot) => shot.id === live.id)) {
         return live;
       }
-      const first = liveShotsInOrder(expanded, drawsGhosts(marks)).find(
-        (shot) => !shot.id.startsWith(PENDING_SHOT_PREFIX),
-      );
+      const first = liveShotsInOrder(expanded, drawsGhosts(marks))[0];
       if (!first) return null;
       (document.activeElement as HTMLElement | null)?.blur?.();
       selectShot(first.id, undefined, { seek: false });
