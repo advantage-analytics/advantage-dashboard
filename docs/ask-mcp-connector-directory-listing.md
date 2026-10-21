@@ -1,6 +1,6 @@
 # Advantage in Claude's Connectors Directory — draft listing
 
-**Current state (2026-10-16): draft, not submitted.** The answers the developer
+**Current state (2026-10-21): draft, not submitted.** The answers the developer
 portal at [claude.ai/directory/manage](https://claude.ai/directory/manage) asks
 for, step by step, per Anthropic's
 [submission guide](https://claude.com/docs/connectors/building/submission).
@@ -8,14 +8,13 @@ Any paid Claude plan can submit. Once listed, people find Advantage inside
 Claude and press Connect instead of pasting the address from Settings ›
 Connections. The connector itself is [`ask-mcp-connector.md`](ask-mcp-connector.md).
 
-## Blocking before submission
+## Before submission
 
-1. **A public privacy policy URL.** The app has no privacy page (the sign-up
-   checkbox names a Privacy Policy but links nowhere). The portal requires one.
-2. **A public documentation URL.** `/dashboard/help#claude` is behind sign-in;
-   reviewers and the listing need a page anyone can open. A short public page
-   (or a section of the landing site) with the steps from Settings ›
-   Connections is enough.
+1. **Privacy policy URL** — `https://advantage-analytics.com/legal/privacy-policy`.
+   Version 1.2 adds "AI Service Providers" and "Apps You Connect"
+   (advantage-landing PR #16); submit once that is live.
+2. **Documentation URL** — `https://advantage-analytics.com/claude`, the public
+   connect steps (same PR).
 3. **A reviewer account with data.** A dedicated account with several analysed
    matches and one team — not the `EYES_ON_*` verifier, whose password the
    eyes-on harness depends on. Credentials go in the portal only.
@@ -53,10 +52,10 @@ and every tool carries a `title` and `readOnlyHint`
   > Claude.
 
 - **Categories**: Sports; Analytics (or the nearest the portal offers)
-- **Documentation URL**: _public page, see Blocking 2_
-- **Privacy policy URL**: _see Blocking 1_
+- **Documentation URL**: `https://advantage-analytics.com/claude`
+- **Privacy policy URL**: `https://advantage-analytics.com/legal/privacy-policy`
 - **Support contact**: the `SUPPORT_EMAIL` in `src/lib/constants.ts`
-- **Icon**: _see Blocking 4_
+- **Icon**: _see item 4 above_
 - **Slug** (permanent): `advantage`
 
 ## Use cases
