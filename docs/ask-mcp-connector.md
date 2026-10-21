@@ -201,7 +201,8 @@ email"):
   and `destructiveHint: false`. What a call can change: what the page's own
   question would through `ask` (a saved answer, a run row, a question spent),
   and — since migration `20261021143857_mcp_match_writes` — the two match
-  writes, `update_match` and `prepare_video_upload`, each one `ask_*` function the guard lists, SECURITY INVOKER, run as the user:
+  writes, `update_match` and `prepare_video_upload`, each one `ask_*`
+  function the guard lists, SECURITY INVOKER, run as the user:
   `ask_patch_match` updates the metadata columns of a match whose
   `created_by` is the caller (never `score`, `format` or a seat), and
   `ask_seed_match_draft` inserts one `match_drafts` row for the caller, in a
