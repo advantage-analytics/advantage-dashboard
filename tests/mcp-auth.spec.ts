@@ -414,7 +414,9 @@ function fakeClient(
     self.eq = record("eq");
     self.is = record("is");
     self.order = record("order");
-    self.limit = async () => answers[table];
+    // `limit()` ends `program()`'s chain and sits mid-chain in `ownMatch()`'s:
+    // thenable AND chainable, as PostgREST's builder is.
+    self.limit = record("limit");
     self.maybeSingle = async () => answers[table];
     self.then = (resolve: (value: unknown) => unknown) =>
       Promise.resolve(answers[table]).then(resolve);
@@ -452,10 +454,11 @@ test.describe("createMcpUserReads", () => {
       id: PROGRAM_ID,
       name: "Westbrook",
     });
-    expect(filters.map((f) => `${f.op}:${f.args[0]}=${f.args[1]}`)).toEqual([
-      `eq:user_id=${USER_ID}`,
-      `eq:program_id=${PROGRAM_ID}`,
-    ]);
+    expect(
+      filters
+        .filter((f) => f.op === "eq")
+        .map((f) => `${f.op}:${f.args[0]}=${f.args[1]}`),
+    ).toEqual([`eq:user_id=${USER_ID}`, `eq:program_id=${PROGRAM_ID}`]);
 
     const empty = fakeClient({ program_members: { data: [], error: null } });
     expect(
@@ -595,6 +598,54 @@ test.describe("createMcpUserReads", () => {
     ).toBeNull();
   });
 
+  test("ownMatch(): the creator's own row with what the patch rules decide from; a match they did not create is null", async () => {
+    const { client, filters } = fakeClient({
+      matches: {
+        data: {
+          id: MATCH_ID,
+          program_id: PROGRAM_ID,
+          event_entry_id: "line-1",
+          source_provider: null,
+          score: { player1: [6], player2: [4] },
+          format: { best_of: 3 },
+          match_type: "Dual Match",
+          round: "1S",
+        },
+        error: null,
+      },
+      processing_jobs: {
+        data: { status: "completed", derivation_version: "v2" },
+        error: null,
+      },
+    });
+    expect(
+      await createMcpUserReads(client, USER_ID).ownMatch(MATCH_ID),
+    ).toEqual({
+      id: MATCH_ID,
+      programId: PROGRAM_ID,
+      score: { player1: [6], player2: [4] },
+      format: { best_of: 3 },
+      linked: true,
+      analyzed: true,
+      teamMatch: true,
+      matchType: "Dual Match",
+      round: "1S",
+    });
+    expect(
+      filters
+        .filter((f) => f.table === "matches" && f.op === "eq")
+        .map((f) => `${f.args[0]}=${f.args[1]}`),
+    ).toEqual([`id=${MATCH_ID}`, `created_by=${USER_ID}`]);
+
+    const none = fakeClient({
+      matches: { data: null, error: null },
+      processing_jobs: { data: null, error: null },
+    });
+    expect(
+      await createMcpUserReads(none.client, USER_ID).ownMatch(MATCH_ID),
+    ).toBeNull();
+  });
+
   test("program(): a failed read throws rather than answering 'not a member'", async () => {
     const { client } = fakeClient({
       program_members: { data: null, error: { message: "timeout" } },
@@ -668,7 +719,15 @@ test.describe("createMcpUserReads", () => {
  * only for a live connector, so the two lists are held equal here.
  */
 test.describe("the connector's read-only guard", () => {
-  const migration = readFileSync(
+  // The guard was created in 20261016050115 and its allowlist re-stated by
+  // later migrations; the newest one that carries the list is the live one.
+  const migration = readdirSync("supabase/migrations")
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => readFileSync(`supabase/migrations/${name}`, "utf8"))
+    .filter((source) => /\/rpc\/\(([a-z_|]+)\)\$/.test(source))
+    .at(-1)!;
+  const original = readFileSync(
     "supabase/migrations/20261016050115_oauth_client_read_only.sql",
     "utf8",
   );
@@ -704,9 +763,35 @@ test.describe("the connector's read-only guard", () => {
     expect(migration).toMatch(
       /grant execute on function public\.oauth_client_request_guard\(\) to anon, authenticated, service_role/,
     );
-    expect(migration).toMatch(
+    expect(original).toMatch(
       /alter role authenticator set pgrst\.db_pre_request = 'public\.oauth_client_request_guard'/,
     );
+  });
+
+  test("the two write functions run as the caller, never as their definer", () => {
+    const writes = readFileSync(
+      "supabase/migrations/20261021143857_mcp_match_writes.sql",
+      "utf8",
+    );
+    for (const fn of ["ask_patch_match", "ask_seed_match_draft"]) {
+      const body = writes.slice(writes.indexOf(`function public.${fn}(`));
+      const head = body.slice(0, body.indexOf("as $$"));
+      expect(head).not.toMatch(/security definer/i);
+      expect(head).toMatch(/set search_path = ''/);
+      expect(writes).toMatch(
+        new RegExp(
+          `grant execute on function public\\.${fn}\\([^)]*\\) to authenticated, service_role`,
+        ),
+      );
+    }
+    // The patch never reaches the score, the format or the seats.
+    const patch = writes.slice(
+      writes.indexOf("function public.ask_patch_match("),
+      writes.indexOf("function public.ask_seed_match_draft("),
+    );
+    expect(patch).not.toMatch(/\bscore\s*=/);
+    expect(patch).not.toMatch(/\bformat\s*=/);
+    expect(patch).not.toMatch(/player1_id|player2_id|created_by\s*=\s*p_/);
   });
 
   test("every Edge Function refuses a connector token", () => {

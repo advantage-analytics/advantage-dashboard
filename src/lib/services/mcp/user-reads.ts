@@ -9,6 +9,12 @@ import {
 } from "@/lib/data/opponents-load";
 import { toSquad, type Squad } from "@/lib/data/squad";
 import { playerSeat, viewerSide } from "@/lib/data/viewer-side";
+import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
+import type {
+  MatchFormat,
+  MatchScore,
+  StoredMatchForPatch,
+} from "@/lib/matches/patch-match";
 
 /**
  * The table reads `/api/mcp` makes as the signed-in user, through the
@@ -35,6 +41,11 @@ import { playerSeat, viewerSide } from "@/lib/data/viewer-side";
  *     (`can_share_match`) answers "may they share it".
  *   - `personalOpponents()` / `teamOpponents()`: the two Opponents pages'
  *     reads (`opponents-load.ts`), as the user.
+ *   - `ownMatch()`: what `normalizeMatchPatch()` decides from — the stored
+ *     row the caller CREATED (`loadOwnMatch`'s `created_by` filter in
+ *     `PATCH /api/matches/[id]`: a coach cannot edit a player's match from
+ *     the connector either) and whether it was analysed, from its newest
+ *     processing job as `analysisFor()` reads it.
  *
  * Nothing here touches the service role: a non-member gets nothing from
  * `program_members`, and a conversation or match that is not the caller's
@@ -72,8 +83,15 @@ export interface McpMatchReport {
   shareToken: string | null;
 }
 
+/** The stored row `update_match` normalises against, plus the program it is filed under. */
+export interface McpOwnMatch extends StoredMatchForPatch {
+  id: string;
+  programId: string | null;
+}
+
 export interface McpUserReads {
   program(programId: string): Promise<McpProgram | null>;
+  ownMatch(matchId: string): Promise<McpOwnMatch | null>;
   programs(): Promise<McpProgramMembership[]>;
   conversation(
     conversationId: string,
@@ -263,6 +281,61 @@ export function createMcpUserReads(
         insights: match.insights ?? null,
         keyMoments: match.key_moments ?? null,
         shareToken: typeof share?.token === "string" ? share.token : null,
+      };
+    },
+
+    async ownMatch(matchId) {
+      if (!isUuid(matchId)) return null;
+      const [matchRead, jobRead] = await Promise.all([
+        client
+          .from("matches")
+          .select(
+            "id, program_id, event_entry_id, source_provider, score, format, match_type, round",
+          )
+          .eq("id", matchId)
+          .eq("created_by", userId)
+          .maybeSingle(),
+        client
+          .from("processing_jobs")
+          .select("status, derivation_version")
+          .eq("match_id", matchId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (matchRead.error || jobRead.error) {
+        throw new Error("Could not load the match", {
+          cause: matchRead.error ?? jobRead.error,
+        });
+      }
+      const match = matchRead.data as {
+        id: string;
+        program_id: string | null;
+        event_entry_id: string | null;
+        source_provider: string | null;
+        score: MatchScore | null;
+        format: MatchFormat | null;
+        match_type: string | null;
+        round: string | null;
+      } | null;
+      if (!match) return null;
+      const job = jobRead.data as {
+        status: string;
+        derivation_version: string | null;
+      } | null;
+      const analysis = job
+        ? resolveAnalysisStatus(job.status, job.derivation_version)
+        : null;
+      return {
+        id: match.id,
+        programId: match.program_id,
+        score: match.score,
+        format: match.format,
+        linked: match.event_entry_id !== null,
+        analyzed: analysis !== null || match.source_provider !== null,
+        teamMatch: match.program_id !== null,
+        matchType: match.match_type,
+        round: match.round,
       };
     },
 

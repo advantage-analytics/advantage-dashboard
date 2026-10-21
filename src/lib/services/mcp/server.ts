@@ -1,5 +1,5 @@
 /**
- * The Ask MCP server: seven tools over the signed-in user's own match data,
+ * The Ask MCP server: nine tools over the signed-in user's own match data,
  * for a Claude of their own (claude.ai, Claude Desktop, Claude Code) to
  * call (docs/ask-mcp-connector.md; docs/ask-improvement-roadmap.md, slice 3).
  *
@@ -23,6 +23,19 @@
  *                     same reservation and run record as `POST /api/ask`;
  *                     it reads the page's answer cache but never writes it
  *                     (below)
+ *   update_match      the Edit dialog's metadata fields on a match the
+ *                     caller created — never the score, the format or the
+ *                     player — through `normalizeMatchPatch()` and
+ *                     `ask_patch_match`
+ *   prepare_video_upload
+ *                     a wizard draft from a few typed facts and the
+ *                     `?draft=` link that resumes it; the wizard asks for
+ *                     the file and the three attribution answers itself
+ *
+ * The last two are the connector's only writes. Each is one `ask_*` function
+ * the write guard lists (migration 20261021143857), called as the user, so
+ * RLS and `auth.uid()` decide; nothing here creates a match, a job, or
+ * touches a score.
  *
  * The security boundary is the one `/api/ask` already has, reused whole:
  * every SQL string — the model's, the caller's, this file's own
@@ -46,6 +59,8 @@
  * Takes its collaborators as arguments and imports no client factory, so an
  * offline spec can drive it over an in-memory transport.
  */
+
+import { randomUUID } from "node:crypto";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -95,6 +110,20 @@ import {
   type RateLimiter,
 } from "@/lib/services/mcp/rate-limit";
 import { matchPageUrl, matchShareUrl } from "@/lib/data/match-share-url";
+import { siteUrl } from "@/lib/site-url";
+import {
+  BACKHANDS,
+  HANDS,
+  normalizeMatchPatch,
+  OPPONENT_SCHOOL_MAX,
+} from "@/lib/matches/patch-match";
+import {
+  draftRowSummary,
+  matchDraftFromPrefill,
+  parseScoreHint,
+  PREFILL_PROVIDERS,
+  type PrefillProvider,
+} from "@/lib/wizard/draft-from-prefill";
 import type {
   PersonalOpponent,
   PersonalOpponentRecentMatch,
@@ -134,7 +163,7 @@ const MAX_SQL_LENGTH = 20_000;
 /** How many of the scope's matches a query result lists back. */
 const MAX_LISTED_SOURCES = 100;
 
-const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarising one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, and ask to have Advantage answer a whole question (it spends one of the player's monthly questions). Every number you report must come from a tool result; the views hold nobody else's data.`;
+const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarising one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, and ask to have Advantage answer a whole question (it spends one of the player's monthly questions). Two tools write: update_match fixes a match's details (never its score), and prepare_video_upload saves a draft and returns the link where the player picks the video and finishes — confirm what the player wants before calling either. Every number you report must come from a tool result; the views hold nobody else's data.`;
 
 /** A refusal a tool throws; `guarded()` answers it as the tool result `refusalResult()` shapes. */
 class Refusal extends Error {
@@ -661,6 +690,260 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         opponents: listed.map(scoutedOpponent),
       });
     }),
+  );
+
+  // ── update_match ───────────────────────────────────────────────────────
+  server.registerTool(
+    "update_match",
+    {
+      title: "Update a match's details",
+      description:
+        "Change the details of a match the player created: the opponent's name, tournament, round, date (YYYY-MM-DD), match type, court surface, the opponent's school, hand and backhand. Only the fields passed change; pass null to clear one. The score, the format and who played are never changed here — they are edited on the match page, where a score change can rebuild the statistics. A match on a scheduled event takes its tournament, date, round, type and surface from the event and refuses them (field_locked).",
+      inputSchema: {
+        match_id: z.string().uuid().describe("A match id from list_matches."),
+        program_id: PROGRAM_ID,
+        opponent_name: z.string().trim().min(1).max(120).optional(),
+        tournament_name: z.string().trim().max(120).nullable().optional(),
+        round: z.string().trim().max(40).nullable().optional(),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional()
+          .describe("The day the match was played, YYYY-MM-DD."),
+        match_type: z.string().trim().max(60).nullable().optional(),
+        court_type: z.string().trim().max(60).nullable().optional(),
+        opponent_school: z
+          .string()
+          .trim()
+          .max(OPPONENT_SCHOOL_MAX)
+          .nullable()
+          .optional(),
+        opponent_hand: z.enum(HANDS).nullable().optional(),
+        opponent_backhand: z.enum(BACKHANDS).nullable().optional(),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    guarded("update_match", async ({ match_id, program_id, ...fields }) => {
+      const scope = await resolveScope(program_id);
+      const team = scope.kind === "team";
+      const stored = await context.reads.ownMatch(match_id);
+      if (
+        !stored ||
+        (team
+          ? stored.programId !== scope.programId
+          : stored.programId !== null)
+      ) {
+        throw refusal(
+          "match_not_found",
+          "This match is not one you created in this workspace.",
+        );
+      }
+
+      // The dialog's body, in its column names; `opponent_name` is the
+      // other seat's name, which the Edit dialog labels the same way.
+      const body: Record<string, unknown> = {};
+      const sent = fields as Record<string, unknown>;
+      for (const [key, value] of Object.entries(sent)) {
+        if (value === undefined) continue;
+        body[key === "opponent_name" ? "player2_name" : key] = value;
+      }
+      if (Object.keys(body).length === 0) {
+        throw refusal(
+          "nothing_to_change",
+          "Pass at least one field to change.",
+        );
+      }
+      const normalised = normalizeMatchPatch(body, stored);
+      if (!normalised.ok) {
+        const slug =
+          stored.linked && normalised.field && !normalised.code
+            ? "field_locked"
+            : "invalid_field";
+        throw refusal(
+          slug,
+          normalised.field
+            ? `${normalised.error} (${normalised.field === "player2_name" ? "opponent_name" : normalised.field})`
+            : normalised.error,
+        );
+      }
+
+      const patched = await context.db.rpc("ask_patch_match", {
+        p_match_id: match_id,
+        p_update: normalised.update,
+      });
+      if (patched.error) {
+        if (patched.error.code === "P0002") {
+          throw refusal(
+            "match_not_found",
+            "This match is not one you created in this workspace.",
+          );
+        }
+        throw new Error(`ask_patch_match failed: ${patched.error.message}`);
+      }
+
+      // Read back as the view states it, so the person sees the oriented row.
+      const { rows } = await runAskQuery(
+        scope,
+        oneMatchScope(match_id),
+        matchRowSql(team),
+      );
+      const row = rows[0];
+      return json({
+        scope: scope.kind,
+        program_id: team ? scope.programId : null,
+        changed: Object.keys(normalised.update).map((key) =>
+          key === "player2_name" ? "opponent_name" : key,
+        ),
+        match: row ? listedMatch(row, team) : null,
+        match_url: matchPageUrl(match_id),
+      });
+    }),
+  );
+
+  // ── prepare_video_upload ───────────────────────────────────────────────
+  server.registerTool(
+    "prepare_video_upload",
+    {
+      title: "Prepare a video upload",
+      description:
+        "Start a new match from what the player tells you, and hand them the link to finish it: this saves an upload-wizard draft with the opponent, date, score and event filled in, and returns a URL to /dashboard/matches/new that resumes it. The player opens the link, picks the video file (or the SwingVision export), and answers the questions only they can — which player was at the top of the frame, ad scoring, a fixed camera — before the match is created and analysis is spent. Nothing is created or charged by this call. The score is a hint the wizard shows for confirmation, not a result.",
+      inputSchema: {
+        program_id: PROGRAM_ID,
+        provider: z
+          .enum(
+            Object.keys(PREFILL_PROVIDERS) as [
+              PrefillProvider,
+              ...PrefillProvider[],
+            ],
+          )
+          .default("advantage_intelligence")
+          .describe(
+            "advantage_intelligence (default): a video to analyse. swingvision: a SwingVision .xlsx export.",
+          ),
+        opponent_name: z.string().trim().min(1).max(120),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .describe("The day the match was played, YYYY-MM-DD."),
+        score: z
+          .string()
+          .trim()
+          .max(60)
+          .optional()
+          .describe(
+            "Sets as the player says them, their games first: 6-4 3-6 7-5.",
+          ),
+        tournament_name: z.string().trim().max(120).optional(),
+        round: z.string().trim().max(40).optional(),
+        match_type: z.string().trim().max(60).optional(),
+        court_type: z.string().trim().max(60).optional(),
+        player_name: z
+          .string()
+          .trim()
+          .max(120)
+          .optional()
+          .describe("In a program scope, the roster player's name."),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
+    },
+    guarded(
+      "prepare_video_upload",
+      async ({
+        program_id,
+        provider,
+        opponent_name,
+        date,
+        score,
+        tournament_name,
+        round,
+        match_type,
+        court_type,
+        player_name,
+      }) => {
+        const scope = await resolveScope(program_id);
+        const team = scope.kind === "team";
+        const day = new Date(`${date}T12:00:00Z`);
+        if (
+          Number.isNaN(day.getTime()) ||
+          day.toISOString().slice(0, 10) !== date
+        ) {
+          throw refusal("invalid_field", "That date doesn't exist. (date)");
+        }
+        let sets: { player: number[]; opponent: number[] } | null = null;
+        if (score !== undefined && score !== "") {
+          const parsed = parseScoreHint(score);
+          if (!parsed.ok) throw refusal("invalid_score", parsed.reason);
+          sets = { player: parsed.player, opponent: parsed.opponent };
+        }
+        const draft = matchDraftFromPrefill(
+          {
+            id: randomUUID(),
+            provider,
+            opponentName: opponent_name,
+            date,
+            tournamentName: tournament_name ?? null,
+            round: round ?? null,
+            matchType: match_type ?? null,
+            courtType: court_type ?? null,
+            playerName: team ? (player_name ?? null) : null,
+          },
+          sets,
+        );
+        const summary = draftRowSummary(draft);
+        const seeded = await context.db.rpc("ask_seed_match_draft", {
+          p_id: draft.id,
+          p_program_id: team ? scope.programId : null,
+          p_payload: draft,
+          p_step: draft.step,
+          p_step_index: draft.stepIndex,
+          p_step_count: draft.stepCount,
+          p_provider: draft.provider,
+          p_player_name: summary.playerName,
+          p_event_label: summary.eventLabel,
+        });
+        if (seeded.error) {
+          if (seeded.error.code === "42501") {
+            throw refusal(
+              "not_a_member",
+              "You are not a member of this program.",
+            );
+          }
+          throw new Error(
+            `ask_seed_match_draft failed: ${seeded.error.message}`,
+          );
+        }
+        const url = `${siteUrl()}/dashboard/matches/new?draft=${encodeURIComponent(draft.id)}&return=ask`;
+        return json(
+          {
+            scope: scope.kind,
+            program_id: team ? scope.programId : null,
+            draft_id: draft.id,
+            provider,
+            url,
+            next_steps: [
+              team
+                ? `Open the link in the ${scope.programName} workspace.`
+                : "Open the link.",
+              provider === "swingvision"
+                ? "Choose the SwingVision export."
+                : "Choose the video file; the wizard checks its resolution and frame rate.",
+              provider === "swingvision"
+                ? "Check the details and save."
+                : "Answer which player was at the top of the frame at the start, whether it was ad scoring, and whether the camera was fixed, then confirm the score and save.",
+            ],
+          },
+          `Draft saved. Finish the upload here: ${url}`,
+        );
+      },
+    ),
   );
 
   // ── describe_views ─────────────────────────────────────────────────────

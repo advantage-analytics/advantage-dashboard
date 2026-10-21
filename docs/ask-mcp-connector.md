@@ -12,7 +12,7 @@ needs that code cannot do is the dashboard switch in §2.
 
 | Piece                                                   | Where                                                                                                           |
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| The server (seven tools)                                | [`src/lib/services/mcp/server.ts`](../src/lib/services/mcp/server.ts)                                           |
+| The server (nine tools)                                 | [`src/lib/services/mcp/server.ts`](../src/lib/services/mcp/server.ts)                                           |
 | The user-side reads (bearer client, RLS)                | [`src/lib/services/mcp/user-reads.ts`](../src/lib/services/mcp/user-reads.ts), `src/lib/data/opponents-load.ts` |
 | The HTTP route (Streamable HTTP, stateless, JSON reply) | [`src/app/api/mcp/route.ts`](../src/app/api/mcp/route.ts)                                                       |
 | Token verification                                      | [`src/lib/supabase/bearer.ts`](../src/lib/supabase/bearer.ts)                                                   |
@@ -134,15 +134,17 @@ from Supabase's metadata URL.
 
 ## 3. The tools
 
-| Tool                | Arguments                                                   | Answers                                                                                                                                                                                                                                                                                                                                                                                      |
-| ------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_workspaces`   | —                                                           | The caller's personal workspace and every program they belong to (`program_members`, own `user_id`): `program_id`, name, squad, role, status. Where a `program_id` comes from; the instructions tell a client to call it first when a team is mentioned.                                                                                                                                     |
-| `list_matches`      | `program_id?`                                               | The matches in scope from `ask.matches`, newest first: id, `played_on`, opponent, score (player's seat), `i_won`, `source` (`video` / `swingvision` / null), tournament, match type, `has_stats`; `player` in a program scope. The rows a query can read.                                                                                                                                    |
-| `get_match`         | `match_id`, `program_id?`                                   | One match: its `ask.matches` row, both sides of `ask.match_stats` (`me` / `opponent`), `insights` turned to the caller's seat (`me` / `opponent`), raw `key_moments`, `match_url`, and `share_url` when a share link exists. The two queries run with a one-match `scope_sql`, so the view decides visibility (`match_not_found`); the two columns and the token are bearer reads under RLS. |
-| `opponent_scouting` | `opponent?`, `program_id?`                                  | The Opponents page's record per opponent (`loadPersonalOpponents` / `loadTeamOpponents`, as the user): hand, backhand, played, wins, losses, form, last match, up to six recent meetings with the four measures, each measure's recent average and trend; a program scope adds the opponent's program and `faced_by`. `opponent` is a case-insensitive name filter.                          |
-| `describe_views`    | `scope?` (`personal` \| `team`)                             | The five views and every column (`renderAskSchemaBlock`, so hidden columns stay hidden), the percentage definitions, and the rules a query is held to.                                                                                                                                                                                                                                       |
-| `run_query`         | `sql`, `scope_sql?`, `program_id?`                          | `checkAskSql()` first, then `ask_run_query` / `ask_run_team_query` as the caller. Rows (≤ 200, the `ask.exec_query()` cap), `row_count`, `truncated`, the scope's matches.                                                                                                                                                                                                                   |
-| `ask`               | `question`, `program_id?`, `conversation_id?`, `match_ids?` | A whole question through `askQuestion()`, drained: headline, figures, body, visual, sources, `conversation_id`, `answer_id`, `questions_used` / `questions_cap`. Same reservation and `ask_runs` record as the page; see below for the cache.                                                                                                                                                |
+| Tool                   | Arguments                                                                                                                                                                             | Answers                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_workspaces`      | —                                                                                                                                                                                     | The caller's personal workspace and every program they belong to (`program_members`, own `user_id`): `program_id`, name, squad, role, status. Where a `program_id` comes from; the instructions tell a client to call it first when a team is mentioned.                                                                                                                                                |
+| `list_matches`         | `program_id?`                                                                                                                                                                         | The matches in scope from `ask.matches`, newest first: id, `played_on`, opponent, score (player's seat), `i_won`, `source` (`video` / `swingvision` / null), tournament, match type, `has_stats`; `player` in a program scope. The rows a query can read.                                                                                                                                               |
+| `get_match`            | `match_id`, `program_id?`                                                                                                                                                             | One match: its `ask.matches` row, both sides of `ask.match_stats` (`me` / `opponent`), `insights` turned to the caller's seat (`me` / `opponent`), raw `key_moments`, `match_url`, and `share_url` when a share link exists. The two queries run with a one-match `scope_sql`, so the view decides visibility (`match_not_found`); the two columns and the token are bearer reads under RLS.            |
+| `opponent_scouting`    | `opponent?`, `program_id?`                                                                                                                                                            | The Opponents page's record per opponent (`loadPersonalOpponents` / `loadTeamOpponents`, as the user): hand, backhand, played, wins, losses, form, last match, up to six recent meetings with the four measures, each measure's recent average and trend; a program scope adds the opponent's program and `faced_by`. `opponent` is a case-insensitive name filter.                                     |
+| `update_match`         | `match_id`, `program_id?`, then any of `opponent_name`, `tournament_name`, `round`, `date`, `match_type`, `court_type`, `opponent_school`, `opponent_hand`, `opponent_backhand`       | **A write.** The Edit dialog's metadata fields on a match the caller _created_ (`ownMatch()`, `created_by` filtered, as `PATCH /api/matches/[id]` reads it), normalised by the same `normalizeMatchPatch()` (event-locked fields → `field_locked`, bad values → `invalid_field`), written by `ask_patch_match` as the user, read back through `ask.matches`. Never the score, the format or the player. |
+| `prepare_video_upload` | `opponent_name`, `date`, `provider?` (`advantage_intelligence` \| `swingvision`), `score?`, `tournament_name?`, `round?`, `match_type?`, `court_type?`, `player_name?`, `program_id?` | **A write.** Builds a wizard draft (`matchDraftFromPrefill`, `src/lib/wizard/draft-from-prefill.ts`), saves it by `ask_seed_match_draft` as the user, and answers the `?draft=…&return=ask` link. The wizard resumes it on the file step and asks the three attribution answers itself; nothing is created, charged or scored here. `score` is a hint (`invalid_score` when it is not sets).            |
+| `describe_views`       | `scope?` (`personal` \| `team`)                                                                                                                                                       | The five views and every column (`renderAskSchemaBlock`, so hidden columns stay hidden), the percentage definitions, and the rules a query is held to.                                                                                                                                                                                                                                                  |
+| `run_query`            | `sql`, `scope_sql?`, `program_id?`                                                                                                                                                    | `checkAskSql()` first, then `ask_run_query` / `ask_run_team_query` as the caller. Rows (≤ 200, the `ask.exec_query()` cap), `row_count`, `truncated`, the scope's matches.                                                                                                                                                                                                                              |
+| `ask`                  | `question`, `program_id?`, `conversation_id?`, `match_ids?`                                                                                                                           | A whole question through `askQuestion()`, drained: headline, figures, body, visual, sources, `conversation_id`, `answer_id`, `questions_used` / `questions_cap`. Same reservation and `ask_runs` record as the page; see below for the cache.                                                                                                                                                           |
 
 A `program_id` names a program the caller is a member of (any role); membership
 is read as the caller from `program_members` before a row of the program is.
@@ -154,7 +156,7 @@ skips the cache entirely, as `/api/ask` does. Refusals come back as an
 `isError` tool result whose text starts with a stable slug and a colon —
 `sql_refused: …` — returned by the tool itself rather than thrown, so no
 JSON-RPC error code is involved: `sql_refused`, `query_failed`,
-`not_a_member`, `invalid_program_id`, `match_not_found`, `question_empty`, `no_matches`, `tag_not_resolved`,
+`not_a_member`, `invalid_program_id`, `match_not_found`, `field_locked`, `invalid_field`, `nothing_to_change`, `invalid_score`, `question_empty`, `no_matches`, `tag_not_resolved`,
 `conversation_not_found`, `rate_limited`, `daily_cap_reached`,
 `ask_limit_reached`, `needs_session`, `cannot_answer`, `no_data`,
 `needs_clarification`, `llm_unavailable`, `answer_failed`, `internal_error`.
@@ -187,9 +189,15 @@ email"):
   user. There is no same-origin check because this is not a browser mutation
   — the bearer token is the credential, and a cross-site page has none.
 - **Reads are read-only** at every layer: the SQL guard allows one SELECT,
-  `ask.exec_query()` sets `transaction_read_only`, and the tools are annotated
-  `readOnlyHint`. The only thing a call changes is what the page's own
-  question would: a saved answer, a run row, a question spent.
+  `ask.exec_query()` sets `transaction_read_only`, and the read tools are
+  annotated `readOnlyHint`. What a call can change: what the page's own
+  question would (a saved answer, a run row, a question spent), and — since
+  migration `20261021143857_mcp_match_writes` — the two writes above, each
+  one `ask_*` function the guard lists, SECURITY INVOKER, run as the user:
+  `ask_patch_match` updates the metadata columns of a match whose
+  `created_by` is the caller (never `score`, `format` or a seat), and
+  `ask_seed_match_draft` inserts one `match_drafts` row for the caller, in a
+  program only when they are a member. Neither creates a match or a job.
 - **The token is wider than the tools.** It is a full user JWT, so its
   holder can do more than the four tools offer. What it can and cannot do:
   - **Reads**: anything the person's own session can read through
@@ -198,7 +206,7 @@ email"):
   - **PostgREST writes are refused.** A pre-request hook
     (`public.oauth_client_request_guard()`, migration
     `20261016050115_oauth_client_read_only`) refuses every non-read request
-    from a token carrying `client_id`, except the eight `ask_*` functions
+    from a token carrying `client_id`, except the ten `ask_*` functions
     this route calls as the user. `tests/mcp-auth.spec.ts` holds that list
     equal to the calls in `src/lib/services/mcp/` and the Ask modules it
     runs, so a new user-side RPC there fails CI until the migration lists
@@ -306,6 +314,14 @@ alone (`supabase/migrations/20261015095315_ask_mcp_usage.sql`).
   (`NEXT_PUBLIC_SITE_URL`, then Vercel's variables) on a production build;
   the request's own origin stands in only outside one.
 
+- **The full video upload from Claude Code** — tools that create the match
+  and the job, mint the Azure SAS, hand back a `curl`/`az` command for the
+  bytes, then a `submit_video_analysis` that takes the three attribution
+  answers explicitly and spends credit hours — is deliberately not built.
+  The fps/resolution/trim checks run only in the browser
+  (`splitstep-validator.ts`, `probe.ts`); a server-side probe would have to
+  come first, and `uploadEligibility` / `reserveQuota` would need a bearer
+  path. `prepare_video_upload`'s draft handoff is the shape until then.
 - **Personal access tokens** (the fallback path): a `Settings › Connectors`
   page, an `ask_api_tokens` table (hash + prefix, owner RLS, last-used,
   revoke), a service-only lookup function, and `_as` forms of
