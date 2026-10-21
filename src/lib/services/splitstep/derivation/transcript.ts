@@ -631,9 +631,6 @@ export function buildTranscript(options: BuildOptions): Transcript {
     segmentation: null,
   };
 
-  if (!score) {
-    return { ...empty, reason: "matches.score is required and was not set" };
-  }
   if (labels.length !== 2) {
     return {
       ...empty,
@@ -650,15 +647,21 @@ export function buildTranscript(options: BuildOptions): Transcript {
   bounceVideoTimes(allStrokes).forEach((t, i) => {
     bounceTimeOf.set(allStrokes[i], t);
   });
+  // No entered score is not a refusal (product decision, 2026-10-17): fold
+  // against an empty one, which can never reconcile, so player1 comes from
+  // geometry or a guess and `ok` stays false.
   const rec = reconcile({
     winners,
     labels,
-    score,
+    score: score ?? { player1: [], player2: [] },
     gameKeyOf: (id) => gameKeyOf.get(id) ?? "",
     setKeyOf: (id) => setKeyOf.get(id) ?? "",
     geometryTopLabel: topLabel,
     initialTopIsPlayer1,
   });
+  if (!score) {
+    rec.reason = "no score was entered, so the fold could not be checked";
+  }
 
   // Decisive geometry that contradicts the fold: the two disagree about which
   // physical human every statistic belongs to. No refusals (product decision,
@@ -875,8 +878,10 @@ export function buildTranscript(options: BuildOptions): Transcript {
   // Review-only. The rows above are final; the proposal only marks the points
   // it would move to another game or give another server, and both halves of
   // every point it would merge.
+  // The segmenter is score-constrained, so with no entered score it has
+  // nothing to propose from.
   const segmentation =
-    segmenter === null
+    segmenter === null || !score
       ? null
       : segmentForReview({
           rallies: keptRallies,

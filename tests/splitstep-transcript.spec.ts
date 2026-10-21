@@ -795,7 +795,10 @@ test.describe("reconciliation", () => {
 });
 
 test.describe("transcript", () => {
-  test("refuses without an entered score", () => {
+  test("publishes, unverified, without an entered score", () => {
+    // No refusals (product decision, 2026-10-17): matches.score is the only
+    // automatic correctness check, so without one the rows are written but
+    // the fold can never read as reconciled.
     const a = analyzeResults(clean);
     const t = buildTranscript({
       rallies: a.rallies,
@@ -803,10 +806,11 @@ test.describe("transcript", () => {
       score: null,
       initialTopIsPlayer1: null,
     });
-    // matches.score is the only automatic correctness check that exists.
-    expect(t.ok).toBe(false);
-    expect(t.points).toHaveLength(0);
-    expect(t.reason).toMatch(/score is required/);
+    expect(t.ok).toBe(true);
+    expect(t.points).toHaveLength(a.rallies.length);
+    expect(t.reconciliation.ok).toBe(false);
+    expect(t.reconciliation.player1Label).not.toBeNull();
+    expect(t.reason).toMatch(/no score was entered/);
   });
 
   test("builds rows whose numbering and coordinates match the database frame", () => {
