@@ -379,9 +379,15 @@ type PlanShot = Pick<
 >;
 
 /**
- * A new stroke for a point, placed after `afterShotId`, or after the rally's
- * last live stroke when that is null. `shots` must be in video order
- * (`orderLabelShots`).
+ * `afterShotId` for a stroke placed before the rally's first live stroke — a
+ * serve the vendor missed. Never a row id: those are uuids.
+ */
+export const ADD_SHOT_AT_START = "start";
+
+/**
+ * A new stroke for a point, placed after `afterShotId`, after the rally's
+ * last live stroke when that is null, or before its first when it is
+ * `ADD_SHOT_AT_START`. `shots` must be in video order (`orderLabelShots`).
  *
  * `after_event_id` is the vendor stroke id the new stroke follows. When the
  * stroke it follows was itself added, it inherits that stroke's
@@ -404,6 +410,14 @@ export function planAddedShot(
   let index: number;
   if (afterShotId === null) {
     index = live.length - 1;
+  } else if (afterShotId === ADD_SHOT_AT_START) {
+    index = -1;
+    // Untimed, it would sort after every timed stroke instead of first.
+    if (live.length > 0 && live[0].videoTime == null) {
+      return {
+        error: "The first shot has no video time, so nothing can go before it.",
+      };
+    }
   } else {
     index = live.findIndex((shot) => shot.id === afterShotId);
     if (index === -1) {
@@ -425,12 +439,17 @@ export function planAddedShot(
   // and nothing timed after, it sits just after that stroke, so strokes added
   // one after another keep the order they were added in; without a time each
   // would sort last and fall through to a random row id.
+  // Before the rally's first stroke it sits the same gap ahead of it.
   const videoTime =
-    before?.videoTime == null
-      ? null
-      : after?.videoTime != null
-        ? round2((before.videoTime + after.videoTime) / 2)
-        : round2(before.videoTime + ADDED_SHOT_GAP_SECONDS);
+    before === null
+      ? after?.videoTime != null
+        ? round2(Math.max(0, after.videoTime - ADDED_SHOT_GAP_SECONDS))
+        : null
+      : before.videoTime == null
+        ? null
+        : after?.videoTime != null
+          ? round2((before.videoTime + after.videoTime) / 2)
+          : round2(before.videoTime + ADDED_SHOT_GAP_SECONDS);
 
   return {
     ok: true,

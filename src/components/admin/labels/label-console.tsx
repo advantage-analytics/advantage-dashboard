@@ -85,6 +85,7 @@ import {
   gameInSetOf,
   liveShotsAfter,
   moveNeedsServerSwitch,
+  ADD_SHOT_AT_START,
   planAddedShot,
   planPointMove,
   type PlannedPointMove,
@@ -2482,8 +2483,14 @@ export function LabelConsole({
   // True when the key was the selected stroke's to take.
   const strokeKey = useRef<(key: string) => boolean>(() => false);
   // A: add a stroke after the selected one, else after the open point's last.
+  // ⇧A: add one before the selected one, else before the open point's first
+  // (a serve the vendor missed).
   // C: the court's other end — contact ↔ landing — for the selected stroke.
+  // Delete / Backspace: delete the selected stroke, through the same confirm
+  // as its tray's Delete shot.
   const addShotKey = useRef<() => boolean>(() => false);
+  const addShotBeforeKey = useRef<() => boolean>(() => false);
+  const deleteShotKey = useRef<() => boolean>(() => false);
   const endKey = useRef<() => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
   const foldOpenPoint = useRef<() => boolean>(() => false);
@@ -2576,6 +2583,32 @@ export function LabelConsole({
           ? placement.shotId
           : null;
       addShot(expanded.id, selected);
+      return true;
+    };
+    addShotBeforeKey.current = () => {
+      if (!operable || confirm || !expanded) return false;
+      const live = expanded.shots.filter((shot) => shot.status !== "deleted");
+      const at = live.findIndex((shot) => shot.id === placement.shotId);
+      addShot(expanded.id, at > 0 ? live[at - 1].id : ADD_SHOT_AT_START);
+      return true;
+    };
+    deleteShotKey.current = () => {
+      if (!operable || confirm || placement.shotId === null) return false;
+      const owner = pointOfShot(points, placement.shotId);
+      const shot = owner?.shots.find((s) => s.id === placement.shotId);
+      if (!owner || !shot || shot.status === "deleted") return false;
+      // A draft has no row on the server to delete yet.
+      if (shot.id.startsWith(PENDING_SHOT_PREFIX)) return false;
+      const number =
+        liveShotsInOrder(owner, drawsGhosts(marks)).findIndex(
+          (s) => s.id === shot.id,
+        ) + 1;
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      rowOperations.onAskDeleteShot(
+        shot.id,
+        Math.max(1, number),
+        owner.pointIndex + 1,
+      );
       return true;
     };
     endKey.current = () => {
@@ -2679,16 +2712,21 @@ export function LabelConsole({
         return;
       }
       // A stroke key reaches the selected stroke from a focused cell too (a
-      // cell is a button), and so do A (add a stroke) and C (contact ↔
-      // landing); a text field, a menu and a dialog keep all of them.
+      // cell is a button), and so do A / ⇧A (add a stroke after / before),
+      // C (contact ↔ landing) and Delete / Backspace (delete the stroke); a
+      // text field, a menu and a dialog keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
       const consoleKey = isStrokeKey(key)
         ? () => strokeKey.current(key)
         : lower === "a"
-          ? () => addShotKey.current()
+          ? event.shiftKey
+            ? () => addShotBeforeKey.current()
+            : () => addShotKey.current()
           : lower === "c"
             ? () => endKey.current()
-            : null;
+            : key === "Delete" || key === "Backspace"
+              ? () => deleteShotKey.current()
+              : null;
       if (
         consoleKey &&
         !event.metaKey &&

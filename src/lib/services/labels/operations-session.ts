@@ -49,6 +49,7 @@ import {
   isLabelGame,
   liveShotsAfter,
   planAddedShot,
+  ADD_SHOT_AT_START,
   planPointChecked,
   planPointDelete,
   planPointMove,
@@ -497,8 +498,8 @@ export async function writeLabelShotsRestore(params: {
 }
 
 /**
- * INSERT one labeller-added stroke into a point, after `afterShotId` (or at
- * the end of the rally when null) — see `planAddedShot` for what it is seeded
+ * INSERT one labeller-added stroke into a point, after `afterShotId` (at
+ * the end of the rally when null, first when `ADD_SHOT_AT_START`) — see `planAddedShot` for what it is seeded
  * with. Returns the new row as the console draws it. Never throws.
  */
 export async function writeLabelShotAdd(params: {
@@ -510,7 +511,9 @@ export async function writeLabelShotAdd(params: {
   const pointId = normaliseId(params.pointId);
   if (!pointId) return { error: "Invalid point id." };
   let afterShotId: string | null = null;
-  if (params.afterShotId !== null && params.afterShotId !== undefined) {
+  if (params.afterShotId === ADD_SHOT_AT_START) {
+    afterShotId = ADD_SHOT_AT_START;
+  } else if (params.afterShotId !== null && params.afterShotId !== undefined) {
     afterShotId = normaliseId(params.afterShotId);
     if (!afterShotId) return { error: "Invalid shot id." };
   }

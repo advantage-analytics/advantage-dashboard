@@ -22,6 +22,7 @@ import {
   gameInSetOf,
   neighbourGames,
   planAddedShot,
+  ADD_SHOT_AT_START,
   planPointChecked,
   planPointDelete,
   planPointMove,
@@ -434,6 +435,31 @@ test.describe("add shot", () => {
         video_time: null,
       },
     });
+  });
+
+  test("at the start it is the server's, half a second before the first stroke", () => {
+    expect(planAddedShot(point, ADD_SHOT_AT_START)).toEqual({
+      ok: true,
+      write: {
+        event_id: null,
+        after_event_id: null,
+        status: "added",
+        // Lee (p1) serves the point.
+        hitter: "p1",
+        // The serve, s-serve, is at 2472.0.
+        video_time: 2471.5,
+      },
+    });
+  });
+
+  test("refuses the start when the first stroke has no time", () => {
+    const untimed = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.id === "s-serve" ? { ...s, videoTime: null } : s,
+      ),
+    };
+    expect(planAddedShot(untimed, ADD_SHOT_AT_START)).toHaveProperty("error");
   });
 
   test("refuses a tombstone, a stroke from elsewhere and a deleted point", () => {
