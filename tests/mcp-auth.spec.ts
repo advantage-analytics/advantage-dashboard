@@ -773,7 +773,7 @@ test.describe("the connector's read-only guard", () => {
     // added the dialog's value rules to the function body.
     const writes = [
       "supabase/migrations/20261021143857_mcp_match_writes.sql",
-      "supabase/migrations/20261021160000_ask_patch_match_checks.sql",
+      "supabase/migrations/20261021160317_ask_patch_match_checks.sql",
     ]
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
@@ -799,7 +799,7 @@ test.describe("the connector's read-only guard", () => {
     expect(patch).not.toMatch(/player1_id|player2_id|created_by\s*=\s*p_/);
     // The direct-call contract: the event lock and the two enums hold in SQL.
     const checks = readFileSync(
-      "supabase/migrations/20261021160000_ask_patch_match_checks.sql",
+      "supabase/migrations/20261021160317_ask_patch_match_checks.sql",
       "utf8",
     );
     expect(checks).toMatch(/hint = 'field_locked'/);
