@@ -177,13 +177,17 @@ export async function restoreLabelShotsAction(
 
 /**
  * Add a stroke the vendor missed, after `afterShotId` (null: at the end of
- * the rally). Returns the new row.
+ * the rally; `ADD_SHOT_AT_START`: first, timed at `filmTime` when the rally
+ * has no time of its own). Returns the new row.
  */
 export async function addLabelShotAction(
   pointId: string,
   afterShotId: string | null,
+  filmTime: number | null = null,
 ): Promise<LabelAddShotResult> {
-  return withLabelOp("Add shot", () => addLabelShot(pointId, afterShotId));
+  return withLabelOp("Add shot", () =>
+    addLabelShot(pointId, afterShotId, filmTime),
+  );
 }
 
 /** Delete a label point: a tombstone, never a removed row. */

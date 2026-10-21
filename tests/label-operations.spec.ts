@@ -462,6 +462,24 @@ test.describe("add shot", () => {
     expect(planAddedShot(untimed, ADD_SHOT_AT_START)).toHaveProperty("error");
   });
 
+  test("at the start of an untimed rally it takes the film's time, so it sorts first", () => {
+    const untimed = {
+      ...point,
+      shots: point.shots.map((s) => ({ ...s, videoTime: null })),
+    };
+    expect(planAddedShot(untimed, ADD_SHOT_AT_START, 2468.234)).toMatchObject({
+      ok: true,
+      write: { hitter: "p1", video_time: 2468.23 },
+    });
+    // The film's time is read for that case alone.
+    expect(planAddedShot(point, ADD_SHOT_AT_START, 99)).toEqual(
+      planAddedShot(point, ADD_SHOT_AT_START),
+    );
+    expect(planAddedShot(point, "s-serve", 99)).toEqual(
+      planAddedShot(point, "s-serve"),
+    );
+  });
+
   test("refuses a tombstone, a stroke from elsewhere and a deleted point", () => {
     expect(planAddedShot(point, "s-phantom")).toHaveProperty("error");
     expect(planAddedShot(point, "s-ace")).toHaveProperty("error");
@@ -835,7 +853,7 @@ test.describe("the services", () => {
       restoreLabelShot(SHOT_ID, deps),
       removeLabelShotsAfter(SHOT_ID, deps),
       restoreLabelShots([SHOT_ID], deps),
-      addLabelShot(POINT_ID, null, deps),
+      addLabelShot(POINT_ID, null, null, deps),
       deleteLabelPoint(POINT_ID, deps),
       moveLabelPoint(POINT_ID, { setNumber: 1, gameNumber: 2 }, false, deps),
       markLabelPointChecked(POINT_ID, deps),

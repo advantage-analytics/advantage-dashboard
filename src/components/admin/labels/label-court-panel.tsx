@@ -448,6 +448,7 @@ export function CourtEndControls({
         type="button"
         aria-pressed={placement.flipped}
         data-court-flip=""
+        aria-keyshortcuts="X"
         onClick={onFlip}
         className={cn(
           "inline-flex h-6 cursor-pointer items-center gap-[5px] rounded-[6px] px-2 text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",

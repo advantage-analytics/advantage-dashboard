@@ -396,27 +396,38 @@ export const ADD_SHOT_AT_START = "start";
  *
  * `hitter` is the opponent of the stroke it follows; the point's server when it
  * is the rally's first; null when the stroke it follows has no hitter.
+ *
+ * `filmTime` is where the film stands, read only for `ADD_SHOT_AT_START` in a
+ * rally with no timed stroke (a point the labeller inserted): any time sorts
+ * it ahead of the untimed rows, and the film is where the labeller is looking.
  */
 export function planAddedShot(
   point: Pick<LabelPoint, "server" | "status"> & {
     shots: readonly PlanShot[];
   },
   afterShotId: string | null,
+  filmTime: number | null = null,
 ): Planned<AddedShotPlan> {
   if (point.status === "deleted") {
     return { error: "Restore this point before adding a shot to it." };
   }
   const live = point.shots.filter((shot) => shot.status !== "deleted");
   let index: number;
+  // Before an untimed first stroke: untimed rows sort after every timed one,
+  // so the film's time puts the new stroke first.
+  let startTime: number | null = null;
   if (afterShotId === null) {
     index = live.length - 1;
   } else if (afterShotId === ADD_SHOT_AT_START) {
     index = -1;
-    // Untimed, it would sort after every timed stroke instead of first.
     if (live.length > 0 && live[0].videoTime == null) {
-      return {
-        error: "The first shot has no video time, so nothing can go before it.",
-      };
+      if (filmTime === null || !Number.isFinite(filmTime) || filmTime < 0) {
+        return {
+          error:
+            "The first shot has no video time, so nothing can go before it.",
+        };
+      }
+      startTime = round2(filmTime);
     }
   } else {
     index = live.findIndex((shot) => shot.id === afterShotId);
@@ -444,7 +455,7 @@ export function planAddedShot(
     before === null
       ? after?.videoTime != null
         ? round2(Math.max(0, after.videoTime - ADDED_SHOT_GAP_SECONDS))
-        : null
+        : startTime
       : before.videoTime == null
         ? null
         : after?.videoTime != null

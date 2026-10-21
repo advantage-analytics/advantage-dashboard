@@ -36,6 +36,7 @@ export const STROKE_KEY_HINTS: readonly { key: string; label: string }[] = [
   { key: "1–4", label: "spin" },
   // The console's own keys, not the stroke's (label-console.tsx).
   { key: "C", label: "contact / landing" },
+  { key: "X", label: "flip side" },
   { key: "A", label: "add shot" },
   { key: "⇧A", label: "add before" },
   { key: "⌫", label: "delete shot" },

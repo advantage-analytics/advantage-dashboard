@@ -1233,12 +1233,12 @@ export type ShotTrayAction = {
 /**
  * What a selected stroke's tray can ask for, in its order: Add shot before
  * (on the rally's first live stroke alone — a serve the vendor missed, which
- * the well's Add shot cannot reach), Split point here
- * (when the point can split at this stroke), Add shot after (whenever the row
- * knows its point — the well's own Add shot row, placed right after this
- * stroke), Reset shot (when there is a seed to go back to), and Delete shot,
- * always and last. Reset and Delete only ask the console to confirm; Split
- * and Add run at once.
+ * the well's Add shot cannot reach), Split point here (when the point can
+ * split at this stroke), Add shot after (whenever the row knows its point —
+ * the well's own Add shot row, placed right after this stroke), Reset shot
+ * (when there is a seed to go back to), and Delete shot, always and last.
+ * Reset and Delete only ask the console to confirm; Split and Add run at
+ * once.
  */
 export function shotTrayActions({
   shot,

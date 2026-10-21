@@ -765,9 +765,14 @@ export function LabelConsole({
 
   // The current point: the playing one, else `restPointId`. The one point that
   // is unfolded, on the court and under Enter.
-  if (pinned !== null && pinned.at !== playingKey) setPinned(null);
-  const pinnedPointId =
-    pinned !== null && pinned.at === playingKey ? pinned.pointId : null;
+  // A pin lets go once the video moves on, and once its point is gone
+  // (deleted, combined away): a gone point is never the current one.
+  const pinHolds =
+    pinned !== null &&
+    pinned.at === playingKey &&
+    points.some((p) => p.id === pinned.pointId && p.status !== "deleted");
+  if (pinned !== null && !pinHolds) setPinned(null);
+  const pinnedPointId = pinHolds ? pinned.pointId : null;
   const currentPointId = pinnedPointId ?? playingPointId ?? restPointId;
   // Whatever the video plays into is where the current point rests next.
   // Adjusted during render, not in an effect: the fallback must never be a
@@ -1894,7 +1899,10 @@ export function LabelConsole({
     if (!point || !operations) return;
     // A draft point cannot take a stroke until its own insert lands.
     if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
-    const plan = planAddedShot(point, afterShotId);
+    // Read only for a stroke added first in a rally with no times of its own.
+    const filmTime =
+      afterShotId === ADD_SHOT_AT_START ? (clock.get() ?? null) : null;
+    const plan = planAddedShot(point, afterShotId, filmTime);
     if ("error" in plan) return refuse(plan.error);
     const tempId = nextTempId(PENDING_SHOT_PREFIX);
     const draft: LabelShot = {
@@ -1925,7 +1933,7 @@ export function LabelConsole({
     const selectedBefore = placement.shotId;
     void runOperation<{ shot: LabelShot; point?: LabelPointEndingSynced }>(
       (rows) => insertShot(rows, pointId, draft),
-      () => operations.addShot(pointId, afterShotId),
+      () => operations.addShot(pointId, afterShotId, filmTime),
       (rows, result) =>
         replacePoint(
           insertShot(removeShot(rows, tempId), pointId, result.shot),
@@ -2505,12 +2513,14 @@ export function LabelConsole({
   // ⇧A: add one before the selected one, else before the open point's first
   // (a serve the vendor missed).
   // C: the court's other end — contact ↔ landing — for the selected stroke.
+  // X: Flip side — the placing half across the net, as the court's button.
   // Delete / Backspace: delete the selected stroke, through the same confirm
   // as its tray's Delete shot.
   const addShotKey = useRef<() => boolean>(() => false);
   const addShotBeforeKey = useRef<() => boolean>(() => false);
   const deleteShotKey = useRef<() => boolean>(() => false);
   const endKey = useRef<() => boolean>(() => false);
+  const flipKey = useRef<() => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
   const foldOpenPoint = useRef<() => boolean>(() => false);
   // ⌘Z: the header's Undo.
@@ -2608,6 +2618,14 @@ export function LabelConsole({
       if (!operable || confirm || !expanded) return false;
       const live = expanded.shots.filter((shot) => shot.status !== "deleted");
       const at = live.findIndex((shot) => shot.id === placement.shotId);
+      // After an untimed stroke the new one is untimed too, and untimed rows
+      // fall back to a random row id: it would not land before this one.
+      if (at > 0 && live[at - 1].videoTime === null) {
+        refuse(
+          `Shot ${at} has no time, so nothing can go between it and shot ${at + 1}. Give it a time first.`,
+        );
+        return true;
+      }
       addShot(expanded.id, at > 0 ? live[at - 1].id : ADD_SHOT_AT_START);
       return true;
     };
@@ -2633,6 +2651,11 @@ export function LabelConsole({
     endKey.current = () => {
       if (!editable || confirm || placement.shotId === null) return false;
       setTarget(placement.target === "contact" ? "landing" : "contact");
+      return true;
+    };
+    flipKey.current = () => {
+      if (!editable || confirm || placement.shotId === null) return false;
+      setPlacement(flipPlacement);
       return true;
     };
     strokeKey.current = (key) => {
@@ -2732,8 +2755,8 @@ export function LabelConsole({
       }
       // A stroke key reaches the selected stroke from a focused cell too (a
       // cell is a button), and so do A / ⇧A (add a stroke after / before),
-      // C (contact ↔ landing) and Delete / Backspace (delete the stroke); a
-      // text field, a menu and a dialog keep all of them.
+      // C (contact ↔ landing), X (flip side) and Delete / Backspace (delete
+      // the stroke); a text field, a menu and a dialog keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
       const consoleKey = isStrokeKey(key)
         ? () => strokeKey.current(key)
@@ -2743,9 +2766,11 @@ export function LabelConsole({
             : () => addShotKey.current()
           : lower === "c"
             ? () => endKey.current()
-            : key === "Delete" || key === "Backspace"
-              ? () => deleteShotKey.current()
-              : null;
+            : lower === "x"
+              ? () => flipKey.current()
+              : key === "Delete" || key === "Backspace"
+                ? () => deleteShotKey.current()
+                : null;
       if (
         consoleKey &&
         !event.metaKey &&
@@ -3405,6 +3430,7 @@ export interface LabelConsoleOperations {
   addShot: (
     pointId: string,
     afterShotId: string | null,
+    filmTime?: number | null,
   ) => Promise<LabelAddShotResult>;
   movePoint: (
     pointId: string,

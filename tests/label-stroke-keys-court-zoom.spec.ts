@@ -138,8 +138,9 @@ test.describe("A adds a shot, C switches contact and landing", () => {
   );
 
   test("the legend under the court names them, after the stroke keys", () => {
-    expect(STROKE_KEY_HINTS.slice(-4)).toEqual([
+    expect(STROKE_KEY_HINTS.slice(-5)).toEqual([
       { key: "C", label: "contact / landing" },
+      { key: "X", label: "flip side" },
       { key: "A", label: "add shot" },
       { key: "⇧A", label: "add before" },
       { key: "⌫", label: "delete shot" },
@@ -169,6 +170,10 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     // Delete / Backspace go through the tray's own confirm.
     expect(source).toContain('key === "Delete" || key === "Backspace"');
     expect(source).toContain("? () => endKey.current()");
+    // X is the court's Flip side.
+    expect(source).toContain("? () => flipKey.current()");
+    expect(source).toContain("setPlacement(flipPlacement);");
+    expect(isStrokeKey("x")).toBe(false);
     expect(source).toMatch(/consoleKey &&\n\s+!event\.metaKey/);
   });
 });

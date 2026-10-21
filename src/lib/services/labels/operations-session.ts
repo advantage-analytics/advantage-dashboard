@@ -498,18 +498,24 @@ export async function writeLabelShotsRestore(params: {
 }
 
 /**
- * INSERT one labeller-added stroke into a point, after `afterShotId` (at
- * the end of the rally when null, first when `ADD_SHOT_AT_START`) — see `planAddedShot` for what it is seeded
- * with. Returns the new row as the console draws it. Never throws.
+ * INSERT one labeller-added stroke into a point, after `afterShotId` (at the
+ * end of the rally when null, first when `ADD_SHOT_AT_START`) — see
+ * `planAddedShot` for what it is seeded with, `filmTime` included. Returns the
+ * new row as the console draws it. Never throws.
  */
 export async function writeLabelShotAdd(params: {
   supabase: AdminClient;
   pointId: unknown;
   afterShotId: unknown;
+  filmTime?: unknown;
 }): Promise<LabelAddShotResult> {
   const { supabase } = params;
   const pointId = normaliseId(params.pointId);
   if (!pointId) return { error: "Invalid point id." };
+  const filmTime =
+    typeof params.filmTime === "number" && Number.isFinite(params.filmTime)
+      ? params.filmTime
+      : null;
   let afterShotId: string | null = null;
   if (params.afterShotId === ADD_SHOT_AT_START) {
     afterShotId = ADD_SHOT_AT_START;
@@ -528,6 +534,7 @@ export async function writeLabelShotAdd(params: {
   const plan = planAddedShot(
     { status: read.row.status, server: read.row.server, shots },
     afterShotId,
+    filmTime,
   );
   if ("error" in plan) return plan;
 
@@ -934,11 +941,13 @@ export function restoreLabelShots(
 export function addLabelShot(
   pointId: unknown,
   afterShotId: unknown,
+  filmTime: unknown = null,
   deps: LabelWriteDependencies = defaults,
 ): Promise<LabelAddShotResult> {
   return gated(
     deps,
-    (supabase) => writeLabelShotAdd({ supabase, pointId, afterShotId }),
+    (supabase) =>
+      writeLabelShotAdd({ supabase, pointId, afterShotId, filmTime }),
     "add the shot",
   );
 }
