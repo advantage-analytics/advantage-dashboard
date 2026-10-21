@@ -101,8 +101,10 @@ export default async function ConsentPage({
         <div className="flex flex-col gap-[6px]">
           <dt className="eyebrow">The connector</dt>
           <dd className="text-body-sm">
-            Lists your matches, runs read-only queries over your own statistics,
-            and asks questions that spend your monthly Ask allowance.
+            Reads your matches and statistics, asks questions that spend your
+            monthly Ask allowance, edits the details of a match you created
+            (never its score), and starts upload drafts you finish yourself. It
+            cannot delete a match or its statistics.
           </dd>
         </div>
         <div className="flex flex-col gap-[6px]">
