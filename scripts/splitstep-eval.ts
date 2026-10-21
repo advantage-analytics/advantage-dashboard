@@ -54,7 +54,10 @@ import {
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
-import { resolveAdScoring } from "@/lib/services/splitstep/persist-transcript";
+import {
+  playerNamesFor,
+  resolveAdScoring,
+} from "@/lib/services/splitstep/persist-transcript";
 import { readLabelSessionRows } from "@/lib/data/labels-server";
 import type { LabelSession } from "@/lib/services/labels/session";
 import {
@@ -178,7 +181,7 @@ async function main() {
   const { data: job, error: jobError } = await supabase
     .from("processing_jobs")
     .select(
-      "match_id, results_object_key, trajectories_object_key, start_time_seconds, initial_top_player_is_player1, ad_scoring",
+      "match_id, results_object_key, trajectories_object_key, start_time_seconds, initial_top_player_is_player1, ad_scoring, vendor_request",
     )
     .eq("id", jobId)
     .single();
@@ -224,6 +227,11 @@ async function main() {
       job.initial_top_player_is_player1 ??
       match?.initial_top_player_is_player1 ??
       null,
+    // As persist-transcript does, so the eval scores what production writes.
+    playerNames: playerNamesFor(job, {
+      player1_name: (match?.player1_name as string | null) ?? null,
+      player2_name: (match?.player2_name as string | null) ?? null,
+    }),
     adScoring: resolveAdScoring(job.ad_scoring, format),
     bestOf: format?.best_of ?? 3,
     lineCalls,
