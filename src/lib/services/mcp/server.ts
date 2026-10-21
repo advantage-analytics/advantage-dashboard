@@ -32,10 +32,11 @@
  *                     `?draft=` link that resumes it; the wizard asks for
  *                     the file and the three attribution answers itself
  *
- * The last two are the connector's only writes. Each is one `ask_*` function
- * the write guard lists (migration 20261021143857), called as the user, so
- * RLS and `auth.uid()` decide; nothing here creates a match, a job, or
- * touches a score.
+ * Three tools write: `ask` saves the exchange to the caller's Ask history and
+ * spends a question, as the page does, and the last two write match rows.
+ * Each of those two is one `ask_*` function the write guard lists (migration
+ * 20261021143857), called as the user, so RLS and `auth.uid()` decide;
+ * nothing here creates a match, a job, or touches a score.
  *
  * The security boundary is the one `/api/ask` already has, reused whole:
  * every SQL string — the model's, the caller's, this file's own
@@ -164,7 +165,7 @@ const MAX_SQL_LENGTH = 20_000;
 /** How many of the scope's matches a query result lists back. */
 const MAX_LISTED_SOURCES = 100;
 
-const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarising one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, and ask to have Advantage answer a whole question (it spends one of the player's monthly questions). Two tools write: update_match fixes a match's details (never its score), and prepare_video_upload saves a draft and returns the link where the player picks the video and finishes — confirm what the player wants before calling either. Every number you report must come from a tool result; the views hold nobody else's data.`;
+const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarising one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, and ask to have Advantage answer a whole question (it saves the exchange to the player's Ask history and spends one of their monthly questions). Two more tools write: update_match fixes a match's details (never its score), and prepare_video_upload saves a draft and returns the link where the player picks the video and finishes — confirm what the player wants before calling either. Every number you report must come from a tool result; the views hold nobody else's data.`;
 
 /** A refusal a tool throws; `guarded()` answers it as the tool result `refusalResult()` shapes. */
 class Refusal extends Error {
@@ -1070,7 +1071,11 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
             "Match ids from list_matches the question is about, as the page's match tags.",
           ),
       },
-      annotations: { readOnlyHint: true, idempotentHint: false },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
     },
     guarded(
       "ask",

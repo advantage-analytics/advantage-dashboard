@@ -47,7 +47,7 @@ Synced from the server. Nine, none flagged:
 | Tool                                                                                                           | Reads or writes                                                                                                                                            |
 | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | List matches · List workspaces · Get a match report · Scout an opponent · Describe the ask views · Run a query | read                                                                                                                                                       |
-| Ask a question                                                                                                 | read (saves the exchange to the user's own Ask history and spends a monthly question)                                                                      |
+| Ask a question                                                                                                 | write — saves the exchange to the user's own Ask history and spends a monthly question                                                                     |
 | Update a match's details                                                                                       | write — opponent, tournament, round, date, type, surface, opponent's school, hand and backhand on a match the user created; never score, format or players |
 | Prepare a video upload                                                                                         | write — saves an upload-wizard draft and returns its link; nothing is created or charged                                                                   |
 
@@ -97,7 +97,7 @@ need membership in that team. Ask questions use the account's monthly
 allowance and are saved to its Ask history; edits apply only to matches the
 user created.
 
-**Read/write capabilities**: **Read and write** (two tools write; the portal
+**Read/write capabilities**: **Read and write** (three tools write; the portal
 checks this against the annotations).
 
 ## 5 · Company and primary contact

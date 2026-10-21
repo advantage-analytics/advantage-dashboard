@@ -558,7 +558,12 @@ async function callTool(
 async function listTools(route: {
   POST: (request: Request) => Promise<Response>;
 }) {
-  return rpcResult<{ tools: { name: string }[] }>(
+  return rpcResult<{
+    tools: {
+      name: string;
+      annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
+    }[];
+  }>(
     await route.POST(
       post({ jsonrpc: "2.0", id: nextId++, method: "tools/list" }),
     ),
@@ -779,6 +784,22 @@ test.describe("POST /api/mcp · the auth ladder", () => {
       "run_query",
       "update_match",
     ]);
+    // The Connectors Directory checks these against behaviour: `ask` saves the
+    // exchange and spends a question, so it is a write like the match writes.
+    const writes = listed.tools.filter(
+      (tool) => tool.annotations?.readOnlyHint !== true,
+    );
+    expect(writes.map((tool) => tool.name).sort()).toEqual([
+      "ask",
+      "prepare_video_upload",
+      "update_match",
+    ]);
+    for (const tool of writes) {
+      expect(tool.annotations).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint: false,
+      });
+    }
     expect(calls.verify).toEqual([TOKEN, TOKEN]);
     // Listing is not a tool call: nothing counted, nothing queried.
     expect(calls.rpc).toEqual([]);
