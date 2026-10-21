@@ -22,6 +22,7 @@ import {
   lineCallsFor,
   type LineCalls,
   type MatchScore,
+  type PlayerNames,
   type SplitStepRally,
   type SplitStepStroke,
   type Transcript,
@@ -76,6 +77,46 @@ interface JobRow {
   ad_scoring: boolean | null;
   /** The per-frame ball file, when the webhook stored one. */
   trajectories_object_key: string | null;
+  /** The request body as sent: `InitialTopPlayer` / `InitialBottomPlayer`. */
+  vendor_request: unknown;
+}
+
+/**
+ * The name pairs `reconcile` may name player1 from, most authoritative first.
+ * The vendor labels strokes with the exact names the job request sent
+ * (job-request.ts: InitialTopPlayer is player1 when the top player was), so
+ * those come first; the match's current names follow, for a job whose request
+ * was not stored. A player renamed after upload no longer matches the labels,
+ * which is why the match's names alone are not enough.
+ */
+export function playerNamesFor(
+  job: {
+    vendor_request?: unknown;
+    initial_top_player_is_player1: boolean | null;
+  },
+  match: { player1_name: string | null; player2_name: string | null },
+): PlayerNames[] {
+  const out: PlayerNames[] = [];
+  const req = job.vendor_request as {
+    InitialTopPlayer?: unknown;
+    InitialBottomPlayer?: unknown;
+  } | null;
+  const top =
+    typeof req?.InitialTopPlayer === "string" ? req.InitialTopPlayer : null;
+  const bottom =
+    typeof req?.InitialBottomPlayer === "string"
+      ? req.InitialBottomPlayer
+      : null;
+  const topIsP1 = job.initial_top_player_is_player1;
+  if (top && bottom && typeof topIsP1 === "boolean") {
+    out.push(
+      topIsP1
+        ? { player1: top, player2: bottom }
+        : { player1: bottom, player2: top },
+    );
+  }
+  out.push({ player1: match.player1_name, player2: match.player2_name });
+  return out;
 }
 
 interface MatchRow {
@@ -146,7 +187,7 @@ export async function buildTranscriptForJob(params: {
   const { data: job, error: jobError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, results_object_key, start_time_seconds, initial_top_player_is_player1, ad_scoring, trajectories_object_key",
+      "id, match_id, results_object_key, start_time_seconds, initial_top_player_is_player1, ad_scoring, trajectories_object_key, vendor_request",
     )
     .eq("id", jobId)
     .single<JobRow>();
@@ -213,7 +254,7 @@ export async function buildTranscriptForJob(params: {
     score: match.score,
     initialTopIsPlayer1:
       job.initial_top_player_is_player1 ?? match.initial_top_player_is_player1,
-    playerNames: { player1: match.player1_name, player2: match.player2_name },
+    playerNames: playerNamesFor(job, match),
     // Under no-ad, 40-40 is a deciding point and BOTH players hold game point,
     // so the wrong rule drops (or invents) the most pressured point in a game.
     // See resolveAdScoring for why the job's value beats the match record's.

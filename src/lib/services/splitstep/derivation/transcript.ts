@@ -446,10 +446,11 @@ export interface BuildOptions {
   score: MatchScore | null;
   initialTopIsPlayer1: boolean | null;
   /**
-   * `matches.player1_name` / `player2_name`. Names player1 only when geometry
-   * and score distance both say nothing (reconcile.ts `player1FromNames`).
+   * Player name pairs, most authoritative first (persist-transcript.ts
+   * `playerNamesFor`). Name player1 only when geometry and score distance
+   * both say nothing (reconcile.ts `player1FromNames`).
    */
-  playerNames?: PlayerNames | null;
+  playerNames?: readonly PlayerNames[] | null;
   /**
    * processing_jobs.ad_scoring, falling back to matches.format.ad_scoring (see
    * resolveAdScoring). Decides whether 40-40 is a deciding point.
@@ -506,6 +507,11 @@ export function buildTranscript(options: BuildOptions): Transcript {
   const winners = resolvePointWinners(streamRallies, labels);
   const rallies = [...streamRallies];
   const tailStart = collapsedTailStart(rallies);
+  // The first rally the stream read a set score for. Rallies before it are
+  // kept as points (below) but are no evidence of who served or stood where.
+  const firstScored = rallies.findIndex(
+    (r) => (r.strokes[0]?.predSetScore ?? null) !== null,
+  );
   const guessedRallies: number[] = [];
   const guess = (i: number) => {
     const winner = lastStrokeWinner(rallies[i], labels);
@@ -530,7 +536,11 @@ export function buildTranscript(options: BuildOptions): Transcript {
     tailStart ?? rallies.length,
   )) {
     const run = rallies.slice(start, end);
-    const previous = start > 0 ? rallies[start - 1] : null;
+    // A leading unscored rally has no score reading to seed the server
+    // alternation from, so a stretch that opens at the first scored rally
+    // starts from its own server.
+    const previous =
+      start > Math.max(firstScored, 0) ? rallies[start - 1] : null;
     const opensGame =
       !previous ||
       previous.strokes[0]?.predSetScore !== run[0].strokes[0]?.predSetScore ||
@@ -591,9 +601,6 @@ export function buildTranscript(options: BuildOptions): Transcript {
   // alternation from them. Their winners fall to the stall guess below. Job
   // c349e3d4 (2026-10-17) was refused for one such rally at 0:06, then had it
   // dropped as warm-up (0.8.3); the uploader confirmed it was the first point.
-  const firstScored = rallies.findIndex(
-    (r) => (r.strokes[0]?.predSetScore ?? null) !== null,
-  );
   const leadingUnscoredRallies =
     firstScored > 0 ? rallies.slice(0, firstScored).map((r) => r.rallyId) : [];
   if (firstScored > 0) {
@@ -645,7 +652,12 @@ export function buildTranscript(options: BuildOptions): Transcript {
     };
   }
 
-  const topLabel = geometryTopLabel(rallies, labels);
+  // Leading unscored rallies do not vote: they read no game, and warm-up
+  // positions say nothing about who started at the top.
+  const topLabel = geometryTopLabel(
+    firstScored > 0 ? rallies.slice(firstScored) : rallies,
+    labels,
+  );
 
   // One clock for the whole match: the fit wants every stroke's frame/time
   // pair, not one rally's, so a short rally still lands on the same line.
