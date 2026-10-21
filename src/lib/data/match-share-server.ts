@@ -21,6 +21,7 @@ import {
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { formatMatchDuration } from "@/lib/format/duration";
 import { siteUrl } from "@/lib/site-url";
+import { matchShareUrl } from "@/lib/data/match-share-url";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
 import { getInitials } from "@/lib/data/match-utils";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
@@ -105,10 +106,8 @@ export interface MatchShareLink {
   madeOn?: string | null;
 }
 
-/** `${siteUrl()}/m/${token}` — one spelling, shared by the loader and the actions. */
-export function matchShareUrl(token: string): string {
-  return `${siteUrl()}/m/${encodeURIComponent(token)}`;
-}
+// Re-exported for the actions; the spelling lives in `match-share-url.ts`.
+export { matchShareUrl };
 
 /**
  * Who can open the match inside Advantage today — the first rung of the

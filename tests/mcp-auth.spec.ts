@@ -422,9 +422,17 @@ function fakeClient(
   };
   const client = {
     from: (table: string) => ({ select: () => chain(table) }),
+    // An RPC is keyed like a table; `get` is recorded so a spec can hold the
+    // read-only call shape the write guard lets through.
+    rpc: async (fn: string, args: unknown, options?: { get?: boolean }) => {
+      filters.push({ table: fn, op: "rpc", args: [args, options?.get] });
+      return answers[fn] ?? { data: [], error: null };
+    },
   } as unknown as SupabaseClient;
   return { client, filters };
 }
+
+const MATCH_ID = "3f1c2a9e-6b7d-4c1a-9e55-0a1b2c3d4e5f";
 
 test.describe("createMcpUserReads", () => {
   test("program(): the caller's own membership row names the program; none is null; a malformed id reads nothing", async () => {
@@ -454,6 +462,137 @@ test.describe("createMcpUserReads", () => {
       await createMcpUserReads(empty.client, USER_ID).program(PROGRAM_ID),
     ).toBeNull();
     expect(await reads.program("not-a-uuid")).toBeNull();
+  });
+
+  test("programs(): every membership row the caller holds, filtered to their own user_id, with the squad narrowed", async () => {
+    const { client, filters } = fakeClient({
+      program_members: {
+        data: [
+          {
+            role: "coach",
+            programs: {
+              id: PROGRAM_ID,
+              school_name: "Westbrook",
+              team: "womens",
+              status: "active",
+            },
+          },
+          {
+            role: "player",
+            programs: {
+              id: CONVERSATION_ID,
+              school_name: "Club",
+              team: "mixed-up",
+              status: "claim_pending",
+            },
+          },
+        ],
+        error: null,
+      },
+    });
+    expect(await createMcpUserReads(client, USER_ID).programs()).toEqual([
+      {
+        id: PROGRAM_ID,
+        name: "Westbrook",
+        role: "coach",
+        team: "womens",
+        status: "active",
+      },
+      {
+        id: CONVERSATION_ID,
+        name: "Club",
+        role: "player",
+        team: null,
+        status: "claim_pending",
+      },
+    ]);
+    expect(filters.map((f) => `${f.op}:${f.args[0]}`)).toEqual([
+      `eq:user_id`,
+      `order:joined_at`,
+    ]);
+    expect(filters[0].args[1]).toBe(USER_ID);
+  });
+
+  test("matchReport(): the two report columns and the share token, the seat from the caller's ids, both RPCs on GET", async () => {
+    const { client, filters } = fakeClient({
+      matches: {
+        data: {
+          id: MATCH_ID,
+          program_id: PROGRAM_ID,
+          player1_id: "other",
+          player2_id: "pp-9",
+          created_by: "coach",
+          insights: { player2: { summary: "Deep returns." } },
+          key_moments: [{ moment: "4-4", description: "Held." }],
+        },
+        error: null,
+      },
+      match_share_links: { data: { token: "tok" }, error: null },
+      my_player_ids: { data: ["pp-9"], error: null },
+    });
+    const report = await createMcpUserReads(client, USER_ID).matchReport(
+      MATCH_ID,
+    );
+    expect(report).toEqual({
+      seat: "player2",
+      insights: { player2: { summary: "Deep returns." } },
+      keyMoments: [{ moment: "4-4", description: "Held." }],
+      shareToken: "tok",
+    });
+    const rpcs = filters.filter((f) => f.op === "rpc");
+    expect(rpcs.map((f) => [f.table, f.args[1]])).toEqual([
+      ["my_player_ids", true],
+    ]);
+    expect(
+      filters
+        .filter((f) => f.op === "eq")
+        .map((f) => `${f.table}.${f.args[0]}`),
+    ).toEqual(["matches.id", "match_share_links.match_id"]);
+  });
+
+  test("matchReport(): a coach not seated on a program match takes the roster player's seat; no row is null", async () => {
+    const { client, filters } = fakeClient({
+      matches: {
+        data: {
+          id: MATCH_ID,
+          program_id: PROGRAM_ID,
+          player1_id: "pp-1",
+          player2_id: null,
+          created_by: "coach",
+          insights: null,
+          key_moments: null,
+        },
+        error: null,
+      },
+      match_share_links: { data: null, error: null },
+      my_player_ids: { data: [], error: null },
+      program_roster_full: { data: [{ player_id: "pp-1" }], error: null },
+    });
+    expect(
+      await createMcpUserReads(client, USER_ID).matchReport(MATCH_ID),
+    ).toEqual({
+      seat: "player1",
+      insights: null,
+      keyMoments: null,
+      shareToken: null,
+    });
+    expect(
+      filters.filter((f) => f.op === "rpc").map((f) => [f.table, f.args[1]]),
+    ).toEqual([
+      ["my_player_ids", true],
+      ["program_roster_full", true],
+    ]);
+
+    const none = fakeClient({
+      matches: { data: null, error: null },
+      match_share_links: { data: null, error: null },
+    });
+    expect(
+      await createMcpUserReads(none.client, USER_ID).matchReport(MATCH_ID),
+    ).toBeNull();
+    expect(
+      await createMcpUserReads(none.client, USER_ID).matchReport("nope"),
+    ).toBeNull();
   });
 
   test("program(): a failed read throws rather than answering 'not a member'", async () => {

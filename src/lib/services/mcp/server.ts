@@ -1,18 +1,28 @@
 /**
- * The Ask MCP server: four tools over the signed-in user's own match data,
+ * The Ask MCP server: seven tools over the signed-in user's own match data,
  * for a Claude of their own (claude.ai, Claude Desktop, Claude Code) to
  * call (docs/ask-mcp-connector.md; docs/ask-improvement-roadmap.md, slice 3).
  *
- *   list_matches    the matches in scope, from `ask.matches` — the rows a
- *                   query can see, which are the rows the Ask page's tag
- *                   menu lists
- *   describe_views  the five `ask` views and the rules a query is held to
- *   run_query       one read-only SELECT over the views, checked by the
- *                   SQL guard and run as the caller through the two
- *                   server-only query functions
- *   ask             a whole question through `askQuestion()`, with the same
- *                   reservation and run record as `POST /api/ask`; it reads
- *                   the page's answer cache but never writes it (below)
+ *   list_workspaces   the caller's personal workspace and every program
+ *                     they belong to, with their role — where a program_id
+ *                     comes from
+ *   list_matches      the matches in scope, from `ask.matches` — the rows a
+ *                     query can see, which are the rows the Ask page's tag
+ *                     menu lists
+ *   get_match         one match's report: its `ask.matches` row, both sides
+ *                     of `ask.match_stats`, the AI summary and key moments
+ *                     the views do not carry, and its links
+ *   opponent_scouting the Opponents page's record per opponent — wins,
+ *                     losses, form, the four measures with trend, recent
+ *                     meetings — from the same loader the page uses
+ *   describe_views    the five `ask` views and the rules a query is held to
+ *   run_query         one read-only SELECT over the views, checked by the
+ *                     SQL guard and run as the caller through the two
+ *                     server-only query functions
+ *   ask               a whole question through `askQuestion()`, with the
+ *                     same reservation and run record as `POST /api/ask`;
+ *                     it reads the page's answer cache but never writes it
+ *                     (below)
  *
  * The security boundary is the one `/api/ask` already has, reused whole:
  * every SQL string — the model's, the caller's, this file's own
@@ -22,8 +32,9 @@
  * and sends exactly those functions to the service role. The views and the
  * `ask_reader` role limit what a query may read; nothing a tool argument
  * says can name another viewer. Everything else — the question
- * reservation, the save, the run record, the cache, the membership read —
- * runs as the user, on their bearer client.
+ * reservation, the save, the run record, the cache, the membership read,
+ * the report columns, the opponents reads — runs as the user, on their
+ * bearer client (`user-reads.ts`), under RLS.
  *
  * Refusals are tool results, never thrown at the SDK: `guarded()` turns a
  * `Refusal` into `{ isError: true }` whose text starts with a stable slug —
@@ -83,6 +94,12 @@ import {
   MCP_DAILY_CALL_CAP,
   type RateLimiter,
 } from "@/lib/services/mcp/rate-limit";
+import { matchPageUrl, matchShareUrl } from "@/lib/data/match-share-url";
+import type {
+  PersonalOpponent,
+  PersonalOpponentRecentMatch,
+} from "@/lib/data/personal-opponents";
+import type { TeamOpponent } from "@/lib/data/team-opponents";
 import type { McpUserReads } from "@/lib/services/mcp/user-reads";
 
 /** What the server is handed per request; see the module comment for who owns what. */
@@ -117,7 +134,7 @@ const MAX_SQL_LENGTH = 20_000;
 /** How many of the scope's matches a query result lists back. */
 const MAX_LISTED_SOURCES = 100;
 
-const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). Call describe_views once to learn the five ask views and the query rules, list_matches to see what is in scope, run_query for a read-only SELECT over the views, and ask to have Advantage answer a whole question (it spends one of the player's monthly questions). Every number you report must come from a tool result; the views hold nobody else's data.`;
+const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarising one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, and ask to have Advantage answer a whole question (it spends one of the player's monthly questions). Every number you report must come from a tool result; the views hold nobody else's data.`;
 
 /** A refusal a tool throws; `guarded()` answers it as the tool result `refusalResult()` shapes. */
 class Refusal extends Error {
@@ -158,6 +175,43 @@ function listMatchesSql(team: boolean): string {
   ];
   return `select ${columns.join(", ")} from ask.matches m join scope on scope.match_id = m.match_id order by m.played_on desc nulls last, m.match_id`;
 }
+
+/** `ask.matches`'s columns as the schema block lists them — what `get_match` reads for the match row. */
+const MATCH_ROW_COLUMNS = [
+  "match_id",
+  "played_on",
+  "opponent_name",
+  "opponent_hand",
+  "opponent_backhand",
+  "tournament",
+  "round",
+  "court_type",
+  "match_type",
+  "i_won",
+  "score_text",
+  "source",
+  "duration_seconds",
+  "has_stats",
+] as const;
+
+/** `scope_sql` for one match: the view decides whether the caller may see it. */
+function oneMatchScope(matchId: string): string {
+  // `matchId` is a uuid by the time it gets here (`z.string().uuid()`), so
+  // the literal cannot carry anything but a uuid.
+  return `select match_id from ask.matches where match_id = '${matchId}'`;
+}
+
+function matchRowSql(team: boolean): string {
+  const columns = [
+    ...MATCH_ROW_COLUMNS.map((column) => `m.${column}`),
+    ...(team ? ["m.player_name"] : []),
+  ];
+  return `select ${columns.join(", ")} from ask.matches m join scope on scope.match_id = m.match_id`;
+}
+
+/** Both sides of the match's stats row, `me` first; `side` named so the guard's rule holds. */
+const MATCH_STATS_SQL =
+  "select s.* from ask.match_stats s join scope on scope.match_id = s.match_id order by s.side";
 
 type Row = Record<string, unknown>;
 
@@ -217,6 +271,85 @@ function tagOptionsFromRows(
       : [];
   });
   return { matches, opponents: [], players: [] };
+}
+
+/** One recent meeting as the tool states it. */
+function recentMeeting(match: PersonalOpponentRecentMatch): Row {
+  return {
+    match_id: match.id,
+    played_on: match.date,
+    won: match.won,
+    sets: match.sets.map((set) => ({ me: set.player1, opponent: set.player2 })),
+    event: match.event,
+    in_season: match.inSeason,
+    values: match.values,
+  };
+}
+
+/** The Opponents page's row for one opponent, as the tool states it. */
+function scoutedOpponent(opponent: PersonalOpponent | TeamOpponent): Row {
+  const team = "facedBy" in opponent;
+  return {
+    name: opponent.name,
+    hand: opponent.hand,
+    backhand: opponent.backhand,
+    played: opponent.played,
+    analyzed: opponent.analyzed,
+    wins: opponent.wins,
+    losses: opponent.losses,
+    played_this_season: opponent.playedThisSeason,
+    form: opponent.form,
+    last_match: {
+      match_id: opponent.lastMatch.id,
+      played_on: opponent.lastMatch.date,
+      won: opponent.lastMatch.won,
+      sets: opponent.lastMatch.sets.map((set) => ({
+        me: set.player1,
+        opponent: set.player2,
+      })),
+    },
+    recent: opponent.recent.map((match) => ({
+      ...recentMeeting(match),
+      ...("rosterPlayerId" in match ? { player_id: match.rosterPlayerId } : {}),
+    })),
+    measures: opponent.measures.map((measure) => ({
+      key: measure.key,
+      label: measure.label,
+      value: measure.value,
+      trend: measure.trend,
+    })),
+    ...(team
+      ? {
+          program: opponent.program
+            ? {
+                id: opponent.program.id,
+                school: opponent.program.schoolName,
+                conference: opponent.program.conference,
+                division: opponent.program.division,
+              }
+            : null,
+          school: opponent.school,
+          match_ids: opponent.matchIds,
+          faced_by: opponent.facedBy.map((player) => ({
+            player_id: player.playerId,
+            name: player.name,
+            wins: player.wins,
+            losses: player.losses,
+          })),
+        }
+      : {}),
+  };
+}
+
+/** `insights.player1` / `.player2` turned to the caller: `me` and `opponent`. */
+function orientInsights(
+  insights: unknown,
+  seat: "player1" | "player2",
+): { me: unknown; opponent: unknown } | null {
+  const record = asRecord(insights);
+  if (!record) return null;
+  const other = seat === "player1" ? "player2" : "player1";
+  return { me: record[seat] ?? null, opponent: record[other] ?? null };
 }
 
 function text(content: string): CallToolResult {
@@ -391,6 +524,141 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         count: matches.length,
         truncated: matches.length >= MCP_QUERY_ROW_CAP,
         matches,
+      });
+    }),
+  );
+
+  // ── list_workspaces ────────────────────────────────────────────────────
+  server.registerTool(
+    "list_workspaces",
+    {
+      title: "List workspaces",
+      description:
+        "The caller's workspaces: their personal one (their own matches, the default scope) and every program they belong to, with their role in it (owner, coach, staff or player). A program's id is the program_id the other tools take; call this first when a team or program is mentioned.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true, idempotentHint: true },
+    },
+    guarded("list_workspaces", async () => {
+      const programs = await context.reads.programs();
+      return json({
+        personal: {
+          id: context.caller.userId,
+          label: "Your own matches (no program_id)",
+        },
+        programs: programs.map((program) => ({
+          program_id: program.id,
+          name: program.name,
+          team: program.team,
+          role: program.role,
+          status: program.status,
+        })),
+      });
+    }),
+  );
+
+  // ── get_match ──────────────────────────────────────────────────────────
+  server.registerTool(
+    "get_match",
+    {
+      title: "Get a match report",
+      description:
+        "One match in full, with no SQL: its ask.matches row (date, opponent, score from the player's seat, result, source, tournament), both sides of ask.match_stats (me and opponent — every count, percentage and rating the views carry), the AI summary with strengths and weaknesses for each side and the key moments where analysis produced them, the match page's URL, and its public share link when one has been created in the app. Call it before summarising a match.",
+      inputSchema: {
+        match_id: z.string().uuid().describe("A match id from list_matches."),
+        program_id: PROGRAM_ID,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true },
+    },
+    guarded("get_match", async ({ match_id, program_id }) => {
+      const scope = await resolveScope(program_id);
+      const team = scope.kind === "team";
+      // The view decides visibility: a match outside the scope has no row.
+      const { rows } = await runAskQuery(
+        scope,
+        oneMatchScope(match_id),
+        matchRowSql(team),
+      );
+      const row = rows[0];
+      if (!row) {
+        throw refusal(
+          "match_not_found",
+          team
+            ? "This match is not in the program's matches."
+            : "This match is not in your matches.",
+        );
+      }
+      const [{ rows: statRows }, report] = await Promise.all([
+        row.has_stats === true
+          ? runAskQuery(scope, oneMatchScope(match_id), MATCH_STATS_SQL)
+          : Promise.resolve({ rows: [] as Row[] }),
+        context.reads.matchReport(match_id),
+      ]);
+      const side = (name: "me" | "opponent") =>
+        statRows.find((stat) => stat.side === name) ?? null;
+      return json({
+        scope: scope.kind,
+        program_id: team ? scope.programId : null,
+        match: {
+          ...listedMatch(row, team),
+          opponent_hand: row.opponent_hand ?? null,
+          opponent_backhand: row.opponent_backhand ?? null,
+          round: row.round ?? null,
+          court_type: row.court_type ?? null,
+          duration_seconds: row.duration_seconds ?? null,
+        },
+        stats:
+          statRows.length > 0
+            ? { me: side("me"), opponent: side("opponent") }
+            : null,
+        insights: report ? orientInsights(report.insights, report.seat) : null,
+        key_moments: report?.keyMoments ?? null,
+        match_url: matchPageUrl(match_id),
+        share_url: report?.shareToken ? matchShareUrl(report.shareToken) : null,
+      });
+    }),
+  );
+
+  // ── opponent_scouting ──────────────────────────────────────────────────
+  server.registerTool(
+    "opponent_scouting",
+    {
+      title: "Scout an opponent",
+      description:
+        "The Opponents page's record, one entry per opponent the player (or the program, with program_id) has faced: hand and backhand, matches played, wins and losses, the last five results as form, the most recent meeting, up to six recent meetings with the player's side of four measures (total points won, first-serve points won, first-return points won, break points converted), and each measure's recent average with its trend against earlier meetings. In a program scope each entry also says which roster players faced them. Pass opponent to filter by name. Tendencies beyond these four measures — serve zones, rally lengths, return depth against one opponent — are a run_query away.",
+      inputSchema: {
+        opponent: z
+          .string()
+          .trim()
+          .min(1)
+          .max(120)
+          .optional()
+          .describe(
+            "Part of an opponent's name, matched case-insensitively. Omit for every opponent.",
+          ),
+        program_id: PROGRAM_ID,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true },
+    },
+    guarded("opponent_scouting", async ({ opponent, program_id }) => {
+      const scope = await resolveScope(program_id);
+      const team = scope.kind === "team";
+      const data = team
+        ? await context.reads.teamOpponents(scope.programId)
+        : await context.reads.personalOpponents();
+      const needle = opponent?.toLowerCase() ?? null;
+      const listed = (data.opponents as (PersonalOpponent | TeamOpponent)[])
+        .filter(
+          (entry) =>
+            needle === null || entry.name.toLowerCase().includes(needle),
+        )
+        .slice(0, MCP_QUERY_ROW_CAP);
+      return json({
+        scope: scope.kind,
+        program_id: team ? scope.programId : null,
+        season: data.season,
+        totals: data.totals,
+        count: listed.length,
+        opponents: listed.map(scoutedOpponent),
       });
     }),
   );

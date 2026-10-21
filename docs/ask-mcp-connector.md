@@ -1,6 +1,6 @@
 # The Ask MCP connector
 
-**Current state (2026-10-15).** Slice 3 of the Ask roadmap
+**Current state (2026-10-20).** Slice 3 of the Ask roadmap
 ([`ask-improvement-roadmap.md`](ask-improvement-roadmap.md), §4 item 10): a
 remote [MCP](https://modelcontextprotocol.io) server at `/api/mcp` that lets a
 player or coach use **their own Claude** — claude.ai, Claude Desktop, Claude
@@ -10,15 +10,16 @@ needs that code cannot do is the dashboard switch in §2.
 
 ## 1. What it is
 
-| Piece                                                   | Where                                                                                                          |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| The server (four tools)                                 | [`src/lib/services/mcp/server.ts`](../src/lib/services/mcp/server.ts)                                          |
-| The HTTP route (Streamable HTTP, stateless, JSON reply) | [`src/app/api/mcp/route.ts`](../src/app/api/mcp/route.ts)                                                      |
-| Token verification                                      | [`src/lib/supabase/bearer.ts`](../src/lib/supabase/bearer.ts)                                                  |
-| OAuth discovery documents                               | `src/app/.well-known/oauth-protected-resource/`, `src/app/.well-known/oauth-authorization-server/`             |
-| The consent screen                                      | [`src/app/(auth)/oauth/consent/`](<../src/app/(auth)/oauth/consent/page.tsx>), `src/lib/auth/oauth-consent.ts` |
-| Limits                                                  | [`src/lib/services/mcp/rate-limit.ts`](../src/lib/services/mcp/rate-limit.ts), `ask_mcp_usage`                 |
-| Specs                                                   | `tests/mcp-route.spec.ts` (the HTTP ladder and the tools), `tests/mcp-auth.spec.ts` (the pure pieces)          |
+| Piece                                                   | Where                                                                                                           |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| The server (seven tools)                                | [`src/lib/services/mcp/server.ts`](../src/lib/services/mcp/server.ts)                                           |
+| The user-side reads (bearer client, RLS)                | [`src/lib/services/mcp/user-reads.ts`](../src/lib/services/mcp/user-reads.ts), `src/lib/data/opponents-load.ts` |
+| The HTTP route (Streamable HTTP, stateless, JSON reply) | [`src/app/api/mcp/route.ts`](../src/app/api/mcp/route.ts)                                                       |
+| Token verification                                      | [`src/lib/supabase/bearer.ts`](../src/lib/supabase/bearer.ts)                                                   |
+| OAuth discovery documents                               | `src/app/.well-known/oauth-protected-resource/`, `src/app/.well-known/oauth-authorization-server/`              |
+| The consent screen                                      | [`src/app/(auth)/oauth/consent/`](<../src/app/(auth)/oauth/consent/page.tsx>), `src/lib/auth/oauth-consent.ts`  |
+| Limits                                                  | [`src/lib/services/mcp/rate-limit.ts`](../src/lib/services/mcp/rate-limit.ts), `ask_mcp_usage`                  |
+| Specs                                                   | `tests/mcp-route.spec.ts` (the HTTP ladder and the tools), `tests/mcp-auth.spec.ts` (the pure pieces)           |
 
 The transport is the official `@modelcontextprotocol/sdk`'s
 `WebStandardStreamableHTTPServerTransport` in stateless mode: one server and
@@ -133,12 +134,15 @@ from Supabase's metadata URL.
 
 ## 3. The tools
 
-| Tool             | Arguments                                                   | Answers                                                                                                                                                                                                                                                   |
-| ---------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_matches`   | `program_id?`                                               | The matches in scope from `ask.matches`, newest first: id, `played_on`, opponent, score (player's seat), `i_won`, `source` (`video` / `swingvision` / null), tournament, match type, `has_stats`; `player` in a program scope. The rows a query can read. |
-| `describe_views` | `scope?` (`personal` \| `team`)                             | The five views and every column (`renderAskSchemaBlock`, so hidden columns stay hidden), the percentage definitions, and the rules a query is held to.                                                                                                    |
-| `run_query`      | `sql`, `scope_sql?`, `program_id?`                          | `checkAskSql()` first, then `ask_run_query` / `ask_run_team_query` as the caller. Rows (≤ 200, the `ask.exec_query()` cap), `row_count`, `truncated`, the scope's matches.                                                                                |
-| `ask`            | `question`, `program_id?`, `conversation_id?`, `match_ids?` | A whole question through `askQuestion()`, drained: headline, figures, body, visual, sources, `conversation_id`, `answer_id`, `questions_used` / `questions_cap`. Same reservation and `ask_runs` record as the page; see below for the cache.             |
+| Tool                | Arguments                                                   | Answers                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_workspaces`   | —                                                           | The caller's personal workspace and every program they belong to (`program_members`, own `user_id`): `program_id`, name, squad, role, status. Where a `program_id` comes from; the instructions tell a client to call it first when a team is mentioned.                                                                                                                                     |
+| `list_matches`      | `program_id?`                                               | The matches in scope from `ask.matches`, newest first: id, `played_on`, opponent, score (player's seat), `i_won`, `source` (`video` / `swingvision` / null), tournament, match type, `has_stats`; `player` in a program scope. The rows a query can read.                                                                                                                                    |
+| `get_match`         | `match_id`, `program_id?`                                   | One match: its `ask.matches` row, both sides of `ask.match_stats` (`me` / `opponent`), `insights` turned to the caller's seat (`me` / `opponent`), raw `key_moments`, `match_url`, and `share_url` when a share link exists. The two queries run with a one-match `scope_sql`, so the view decides visibility (`match_not_found`); the two columns and the token are bearer reads under RLS. |
+| `opponent_scouting` | `opponent?`, `program_id?`                                  | The Opponents page's record per opponent (`loadPersonalOpponents` / `loadTeamOpponents`, as the user): hand, backhand, played, wins, losses, form, last match, up to six recent meetings with the four measures, each measure's recent average and trend; a program scope adds the opponent's program and `faced_by`. `opponent` is a case-insensitive name filter.                          |
+| `describe_views`    | `scope?` (`personal` \| `team`)                             | The five views and every column (`renderAskSchemaBlock`, so hidden columns stay hidden), the percentage definitions, and the rules a query is held to.                                                                                                                                                                                                                                       |
+| `run_query`         | `sql`, `scope_sql?`, `program_id?`                          | `checkAskSql()` first, then `ask_run_query` / `ask_run_team_query` as the caller. Rows (≤ 200, the `ask.exec_query()` cap), `row_count`, `truncated`, the scope's matches.                                                                                                                                                                                                                   |
+| `ask`               | `question`, `program_id?`, `conversation_id?`, `match_ids?` | A whole question through `askQuestion()`, drained: headline, figures, body, visual, sources, `conversation_id`, `answer_id`, `questions_used` / `questions_cap`. Same reservation and `ask_runs` record as the page; see below for the cache.                                                                                                                                                |
 
 A `program_id` names a program the caller is a member of (any role); membership
 is read as the caller from `program_members` before a row of the program is.
@@ -150,7 +154,7 @@ skips the cache entirely, as `/api/ask` does. Refusals come back as an
 `isError` tool result whose text starts with a stable slug and a colon —
 `sql_refused: …` — returned by the tool itself rather than thrown, so no
 JSON-RPC error code is involved: `sql_refused`, `query_failed`,
-`not_a_member`, `invalid_program_id`, `question_empty`, `no_matches`, `tag_not_resolved`,
+`not_a_member`, `invalid_program_id`, `match_not_found`, `question_empty`, `no_matches`, `tag_not_resolved`,
 `conversation_not_found`, `rate_limited`, `daily_cap_reached`,
 `ask_limit_reached`, `needs_session`, `cannot_answer`, `no_data`,
 `needs_clarification`, `llm_unavailable`, `answer_failed`, `internal_error`.
@@ -169,10 +173,15 @@ email"):
   pinned, and drops any identity key a caller put in the arguments. The
   `ask` schema's five views and the `ask_reader` role decide what a query may
   read; a hidden column (`video_time`, seat ids) is not in the view.
-- **Nothing else touches the service role.** Membership, the conversation
-  read, the reservation, the save, the cache, the run record and the daily
-  counter all run on the bearer client as the user, under RLS. The service
-  client is built for `.rpc()` and nothing else, as the route does it.
+- **Nothing else touches the service role.** Membership, the workspace
+  list, the conversation read, the report columns (`insights`,
+  `key_moments`, the share token), the two Opponents reads, the reservation,
+  the save, the cache, the run record and the daily counter all run on the
+  bearer client as the user, under RLS. The service client is built for
+  `.rpc()` and nothing else, as the route does it. The user-side RPCs those
+  reads make (`my_player_ids`, `program_roster_full`) are STABLE and called
+  with `get: true`, so they pass the write guard below as GETs rather than
+  needing a place on its allowlist.
 - **The viewer is the token's user, verified with Supabase Auth on every
   request.** No cookie is read; nothing in a JSON-RPC body can name another
   user. There is no same-origin check because this is not a browser mutation
