@@ -660,19 +660,18 @@ export function buildTranscript(options: BuildOptions): Transcript {
     initialTopIsPlayer1,
   });
 
-  // Decisive geometry that contradicts the fold is a refusal, not a warning:
-  // the two disagree about which physical human every statistic belongs to.
+  // Decisive geometry that contradicts the fold: the two disagree about which
+  // physical human every statistic belongs to. No refusals (product decision,
+  // 2026-10-17) — keep the fold's mapping, which reproduced the entered score,
+  // but mark it unverified so nothing reads it as reconciled.
   if (rec.ok && topLabel && initialTopIsPlayer1 !== null) {
     const expected = initialTopIsPlayer1
       ? topLabel
       : (labels.find((l) => l !== topLabel) ?? null);
     if (expected && rec.player1Label && expected !== rec.player1Label) {
-      return {
-        ...empty,
-        reconciliation: rec,
-        reason:
-          "player_mapping_contradiction: geometry and the score fold disagree",
-      };
+      rec.ok = false;
+      rec.reason =
+        "player_mapping_contradiction: geometry and the score fold disagree";
     }
   }
 

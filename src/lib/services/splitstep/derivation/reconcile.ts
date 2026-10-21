@@ -73,9 +73,11 @@ export interface Reconciliation {
   /**
    * How player1Label was decided. `fold` when the fold matched; `geometry`
    * when the wizard's top-player input plus court position named it;
-   * `distance` when the closer of the two folds did. Null when refused.
+   * `distance` when the closer of the two folds did; `guess` when nothing
+   * decided it and a label was picked so the match still publishes. Null
+   * when refused.
    */
-  player1Source: "fold" | "geometry" | "distance" | null;
+  player1Source: "fold" | "geometry" | "distance" | "guess" | null;
   /** Per-set game counts the fold produced, keyed by label. */
   foldedSets: Array<Record<string, number>>;
   games: FoldedGame[];
@@ -358,7 +360,7 @@ export function reconcile(params: {
         initialTopIsPlayer1,
         labels,
       );
-      let source: "geometry" | "distance" | null = player1Label
+      let source: "geometry" | "distance" | "guess" | null = player1Label
         ? "geometry"
         : null;
 
@@ -387,7 +389,31 @@ export function reconcile(params: {
         }
       }
 
-      // 3. Neither: fall through to the refusal below.
+      // 3. Neither: no refusals (product decision, 2026-10-17). Take the
+      //    single (attempt, mapping) pair that lands closest to the entered
+      //    score, and labels[0] when even that ties. `source: "guess"` keeps
+      //    it greppable and `ok` stays false, so nothing reads it as verified.
+      //    Job fb00f837 was refused here: a one-set 3-0 fold, no geometry.
+      if (!player1Label) {
+        let best = Number.POSITIVE_INFINITY;
+        let bestLabel: string | null = null;
+        let tied = false;
+        for (const r of attempts) {
+          for (const label of labels) {
+            const d = distanceFor(label, r);
+            if (d < best) {
+              best = d;
+              bestLabel = label;
+              tied = false;
+            } else if (d === best && label !== bestLabel) {
+              tied = true;
+            }
+          }
+        }
+        player1Label = !tied && bestLabel ? bestLabel : a;
+        source = "guess";
+      }
+
       if (player1Label) {
         // Settle the trailing point under the chosen mapping: the attempt
         // that lands closest to the entered score, as the reconciled path
@@ -422,7 +448,8 @@ export function reconcile(params: {
 
   // A score that equals its own mirror — a retirement recorded as 3-3, a split
   // walkover — satisfies both directions and tells us nothing. Fall back to
-  // geometry, and refuse when geometry was indecisive too, rather than pick.
+  // geometry. When geometry was indecisive too, publish anyway (no refusals,
+  // product decision 2026-10-17) on labels[0], unverified.
   if (aIsPlayer1 && bIsPlayer1) {
     const { geometryTopLabel, initialTopIsPlayer1 } = params;
     if (
@@ -431,11 +458,15 @@ export function reconcile(params: {
       initialTopIsPlayer1 === undefined
     ) {
       return {
-        ...empty,
+        ok: false,
+        player1Label: a,
+        player1Source: "guess",
         foldedSets: sets,
         games,
         reason:
-          "entered score is its own mirror and geometry was indecisive, so player1 cannot be identified",
+          "entered score is its own mirror and geometry was indecisive, so player1 was guessed",
+        unresolvedPoints,
+        settledWinners,
       };
     }
     const player1Label = initialTopIsPlayer1
