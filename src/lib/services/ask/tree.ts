@@ -1,6 +1,7 @@
 import {
   MATCH_FILTER_OPTIONS,
   type MatchFilters,
+  type RallyLengthBand,
   serializeMatchFilters,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { AskRow } from "@/lib/services/ask/answer-render";
@@ -65,13 +66,30 @@ export type AskTreeWatch =
       kind: "plays";
       /** Whose shots. */
       subject: AskPatternPlayer;
+      /**
+       * Only the points the subject won — the winning plays' tree, whose
+       * branches count points won, not every point the shot was hit in.
+       */
+      won?: true;
+      /**
+       * Only rallies of this Video filter band — when the answer counted
+       * exactly that band's rallies (`plays.ts`, `rallyFilterBand`).
+       */
+      rally?: RallyLengthBand;
     };
 
 const PLAYERS: readonly AskPatternPlayer[] = ["mine", "opponent"];
 
 /** The `WATCH:` line's fields for a request, in the order `parseTreeWatch` reads them. */
 export function treeWatchFields(watch: AskTreeWatch): string[] {
-  if (watch.kind === "plays") return ["plays", watch.subject];
+  if (watch.kind === "plays") {
+    return [
+      "plays",
+      watch.subject,
+      ...(watch.won ? ["won"] : []),
+      ...(watch.rally ? [watch.rally] : []),
+    ];
+  }
   return ["plus-one", watch.phase, watch.subject, watch.serveType ?? "any"];
 }
 
@@ -79,11 +97,25 @@ export function treeWatchFields(watch: AskTreeWatch): string[] {
 export function parseTreeWatch(fields: readonly string[]): AskTreeWatch | null {
   const [kind, ...rest] = fields.map((field) => field.trim());
   if (kind === "plays") {
-    const [subject] = rest;
-    if (rest.length !== 1 || !PLAYERS.includes(subject as AskPatternPlayer)) {
+    // `plays | <subject> [| won] [| <rally band>]`, in that order.
+    const [subject, ...more] = rest;
+    const won = more[0] === "won";
+    const tail = won ? more.slice(1) : more;
+    const rally =
+      tail.length === 1 ? oneOf<RallyLengthBand>(tail[0], BANDS) : null;
+    // Anything left over, or a band that is not one, is no watch.
+    if (
+      !PLAYERS.includes(subject as AskPatternPlayer) ||
+      tail.length !== (rally === null ? 0 : 1)
+    ) {
       return null;
     }
-    return { kind: "plays", subject: subject as AskPatternPlayer };
+    return {
+      kind: "plays",
+      subject: subject as AskPatternPlayer,
+      ...(won ? { won: true as const } : {}),
+      ...(rally ? { rally } : {}),
+    };
   }
   if (kind === "plus-one") {
     const [phase, subject, serveType] = rest;
@@ -118,6 +150,9 @@ const RETURN_ZONES = MATCH_FILTER_OPTIONS.returnZone.map(
   (option) => option.value,
 );
 const COURTS: readonly AskPatternCourt[] = ["Deuce", "Ad"];
+const BANDS = MATCH_FILTER_OPTIONS.resultRallyLength.map(
+  (option) => option.value,
+);
 
 function oneOf<T extends string>(
   value: unknown,
@@ -143,7 +178,11 @@ const other = (player: AskPatternPlayer): AskPatternPlayer =>
  *   `zone`, then the subject hit `stroke` in `direction` as the returner's
  *   +1 (shot 4).
  * - A plays branch: the subject hit `stroke` in `direction`, anywhere in the
- *   point.
+ *   point — and, for the winning plays (`won`), won it, in a rally of the
+ *   watch's band when it names one (`treeBranchFilters`). The winning plays
+ *   count only the shot that ended the point or drew the miss, which the
+ *   filter cannot say, so their film holds every point won with the shot in
+ *   the rally; the answer's copy says so.
  */
 export function treeBranchPattern(
   watch: AskTreeWatch,
@@ -205,7 +244,17 @@ export function treeBranchFilters(
   row: AskRow,
 ): MatchFilters | null {
   const pattern = treeBranchPattern(watch, row);
-  return pattern ? patternMatchFilters(pattern) : null;
+  const filters = pattern ? patternMatchFilters(pattern) : null;
+  if (filters === null || watch.kind !== "plays") return filters;
+  return {
+    ...filters,
+    // Won or lost is the viewer's side's (`MatchFilters.resultOutcome`): the
+    // opponent's points won are the viewer's points lost.
+    ...(watch.won
+      ? { resultOutcome: [watch.subject === "mine" ? "won" : "lost"] }
+      : {}),
+    ...(watch.rally ? { resultRallyLength: [watch.rally] } : {}),
+  };
 }
 
 /** The filter as the URL carries it (`?f=`), or null: what a tree branch's `watch` holds. */

@@ -10,7 +10,7 @@ import {
   DERIVATION_VERSION,
   type RawSplitStepStroke,
 } from "@/lib/services/splitstep/derivation";
-import type { MatchScore } from "@/lib/services/labels/session";
+import { isServeStroke, type MatchScore } from "@/lib/services/labels/session";
 import {
   buildLabelSeed,
   endedBy,
@@ -20,6 +20,7 @@ import {
   labelShotResult,
   labelSpin,
   labelStroke,
+  seedEnding,
 } from "@/lib/services/labels/seed";
 import {
   seedLabelSession,
@@ -251,7 +252,7 @@ test.describe("buildLabelSeed", () => {
       expect(point.winner).toBe(
         settled.get(derived.rally_id) ? side(derived.won_by_player1) : null,
       );
-      expect(point.ending).toBe(labelEnding(derived.result_type));
+      expect(point.ending).toBe(seedEnding(derived.result_type, point.shots));
       expect(point.ended_by).toBe(endedBy(point.shots.map(toDerivedLike)));
     });
     // Not vacuous: the fixture resolves winners and endings for most points.
@@ -462,6 +463,76 @@ test.describe("a serve repeat the strokes settle is fixed at setup", () => {
       { ...seeded(4, 2, "p1", "p2"), shots: [] },
     ];
     expect(fixSettledServeRepeats(thin)).toBe(thin);
+  });
+});
+
+test.describe("seedEnding", () => {
+  const serve = {
+    stroke: "first_serve" as const,
+    result: "in" as const,
+    site_removal: null,
+  };
+  const ret = {
+    stroke: "forehand" as const,
+    result: "out" as const,
+    site_removal: null,
+  };
+
+  test("an unreturned serve called in is an ace", () => {
+    expect(seedEnding("Service Winner", [serve])).toBe("ace");
+    expect(
+      seedEnding("Service Winner", [
+        { ...serve, result: "out" },
+        { ...serve, stroke: "second_serve" },
+      ]),
+    ).toBe("ace");
+  });
+
+  test("a serve not called in stays a service winner", () => {
+    expect(seedEnding("Service Winner", [{ ...serve, result: null }])).toBe(
+      "service_winner",
+    );
+  });
+
+  test("a return struck and missed stays a service winner", () => {
+    expect(seedEnding("Service Winner", [serve, ret])).toBe("service_winner");
+  });
+
+  test("a site-removed stroke after the serve is no return", () => {
+    expect(
+      seedEnding("Service Winner", [
+        serve,
+        { ...ret, site_removal: "hit_after_fault" },
+      ]),
+    ).toBe("ace");
+  });
+
+  test("every other result type reads as labelEnding", () => {
+    for (const resultType of [
+      null,
+      "Ace",
+      "Double Fault",
+      "Forehand Winner",
+      "Backhand Unforced Error",
+    ]) {
+      expect(seedEnding(resultType, [serve])).toBe(labelEnding(resultType));
+    }
+  });
+
+  test("the fixture's unreturned service winners seed as aces", () => {
+    // Event 368 among them, though its landing reads 1.5 cm wide: the call
+    // on a serve the server won comes from the score, and the landing is
+    // tracking noise. The console's deriveEnding reads it the same way.
+    const unreturned = seed.points.filter((point, i) => {
+      const last = point.shots.filter((s) => s.site_removal === null).at(-1);
+      return (
+        transcript.points[i].result_type === "Service Winner" &&
+        last?.result === "in" &&
+        isServeStroke(last.stroke)
+      );
+    });
+    expect(unreturned.length).toBeGreaterThan(0);
+    for (const point of unreturned) expect(point.ending).toBe("ace");
   });
 });
 

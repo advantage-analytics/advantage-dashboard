@@ -46,6 +46,9 @@ test.describe("the WATCH line", () => {
       PLAYS,
       { ...SERVE, serveType: "first" } as const,
       { kind: "plays", subject: "mine" } as const,
+      { kind: "plays", subject: "mine", won: true } as const,
+      { kind: "plays", subject: "mine", won: true, rally: "short" } as const,
+      { kind: "plays", subject: "opponent", rally: "long" } as const,
     ]) {
       expect(parseTreeWatch(treeWatchFields(watch))).toEqual(watch);
     }
@@ -62,6 +65,11 @@ test.describe("the WATCH line", () => {
       "second",
     ]);
     expect(treeWatchFields(PLAYS)).toEqual(["plays", "opponent"]);
+    expect(treeWatchFields({ ...PLAYS, won: true })).toEqual([
+      "plays",
+      "opponent",
+      "won",
+    ]);
     // Fields arrive trimmed or not.
     expect(parseTreeWatch([" plays ", " mine "])).toEqual({
       kind: "plays",
@@ -80,6 +88,10 @@ test.describe("the WATCH line", () => {
       ["plus-one", "serve", "mine", "any", "extra"],
       ["plays"],
       ["plays", "mine", "extra"],
+      ["plays", "mine", "lost"],
+      ["plays", "mine", "won", "extra"],
+      ["plays", "mine", "won", "short", "extra"],
+      ["plays", "mine", "short", "won"],
       ["plays", "theirs"],
       ["pie", "mine"],
     ]) {
@@ -189,6 +201,37 @@ test.describe("a branch's pattern", () => {
       customStroke: ["Backhand"],
       customDirection: ["Down the Line"],
     });
+  });
+
+  test("a winning plays branch: only the points the subject won", () => {
+    const row: AskRow = {
+      section: "play",
+      stroke: "Forehand",
+      direction: "Crosscourt",
+      points: 12,
+      winners: 5,
+      points_pct: 29.3,
+    };
+    // Won or lost is the viewer's side's, so the opponent's points won are
+    // the viewer's points lost.
+    expect(treeBranchFilters({ ...PLAYS, won: true }, row)).toEqual({
+      ...EMPTY_MATCH_FILTERS,
+      customPlayer: "opponent",
+      customStroke: ["Forehand"],
+      customDirection: ["Crosscourt"],
+      resultOutcome: ["lost"],
+    });
+    expect(
+      treeBranchFilters({ kind: "plays", subject: "mine", won: true }, row),
+    ).toMatchObject({ customPlayer: "you", resultOutcome: ["won"] });
+    const watch = treeBranchWatch({ ...PLAYS, won: true }, row);
+    expect(parseMatchFilters(watch)).toEqual(
+      treeBranchFilters({ ...PLAYS, won: true }, row),
+    );
+    // The rally band the answer counted narrows the film to it.
+    expect(
+      treeBranchFilters({ ...PLAYS, won: true, rally: "short" }, row),
+    ).toMatchObject({ resultOutcome: ["lost"], resultRallyLength: ["short"] });
   });
 
   test("a value outside the filter's lists is no link rather than a wrong one", () => {
