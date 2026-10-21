@@ -717,12 +717,24 @@ test.describe("winning plays in rallies of a length", () => {
     ["his strengths in medium rallies", { min: 5, max: 9 }],
     ["best plays in rallies of 5 to 9 shots", { min: 5, max: 9 }],
     ["my best plays in 1-4 shots", { min: 1, max: 4 }],
+    ["best plays in rallies longer than 9 shots", { min: 10, max: null }],
+    ["winning plays in points above 6 shots", { min: 7, max: null }],
   ] as const) {
     test(`reads: ${question}`, () => {
       expect(asksForWinningPlays(question)).toBe(true);
       expect(rallyLengthOf(question)).toEqual(rally);
     });
   }
+
+  test('"longer than 9 shots" is ten or more', () => {
+    // Feedback: the winning plays for "points ... longer than 9 shots" were
+    // counted over every point of the match.
+    expect(
+      rallyLengthOf(
+        "Give me all the points with a backhand rally and longer than 9 shots",
+      ),
+    ).toEqual({ min: 10, max: null });
+  });
 
   test("a question naming no length reads none", () => {
     expect(rallyLengthOf("What is this player's best pattern of plays?")).toBe(

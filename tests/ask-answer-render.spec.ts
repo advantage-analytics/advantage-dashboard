@@ -32,6 +32,8 @@ import {
   renderAskAnswer,
   statedRows,
   columnLabel,
+  distinctHeadings,
+  distinctRowLabels,
   siblingHeadline,
   statedFigures,
   visualFromRows,
@@ -4098,5 +4100,129 @@ test.describe("readAskVisual — the tree, and the new fields on the rest", () =
       results: [true, false],
       ticks: [{}, {}],
     });
+  });
+});
+
+test.describe("a table keyed by two names", () => {
+  // Feedback: "the win percentage of each serve placement on each side" drew
+  // six rows labelled Ad, Ad, Ad, Deuce, Deuce, Deuce — the placement
+  // nowhere — under two columns both headed "Points won".
+  const SERVES: AskRow[] = [
+    {
+      court: "Ad",
+      serve_placement: "T",
+      total_serves: 24,
+      points_won: 13,
+      points_won_pct: 54.2,
+    },
+    {
+      court: "Ad",
+      serve_placement: "Body",
+      total_serves: 50,
+      points_won: 25,
+      points_won_pct: 50,
+    },
+    {
+      court: "Deuce",
+      serve_placement: "Wide",
+      total_serves: 30,
+      points_won: 16,
+      points_won_pct: 53.3,
+    },
+    {
+      court: "Deuce",
+      serve_placement: "T",
+      total_serves: 21,
+      points_won: 8,
+      points_won_pct: 38.1,
+    },
+  ];
+  const block = (label: (row: AskRow, n: number) => string) =>
+    "CHART: table | By court and placement.\nCOLUMNS: Points won | Total serves | Points won\n" +
+    SERVES.map(
+      (row, i) =>
+        `ROW: ${label(row, i + 1)} | {{r${i + 1}.points_won}} | {{r${i + 1}.total_serves}} | {{r${i + 1}.points_won_pct}}`,
+    ).join("\n");
+
+  for (const [name, label] of [
+    ["written", (row: AskRow) => String(row.court)],
+    ["cited", (_row: AskRow, n: number) => `{{r${n}.court}}`],
+  ] as const) {
+    test(`rows sharing a ${name} label get their other name`, async () => {
+      const { result } = await render(
+        [
+          `Points won on serve {{r1.points_won_pct}}.\n${block(label)}\n\nBody.`,
+        ],
+        SERVES,
+      );
+      expect(result.droppedVisuals).toEqual([]);
+      expect(result.visual).toMatchObject({
+        kind: "table",
+        columns: ["Points won", "Total serves", "Points won %"],
+        rows: [
+          { label: "Ad · T", cells: ["13", "24", "54.2%"] },
+          { label: "Ad · Body" },
+          { label: "Deuce · Wide" },
+          { label: "Deuce · T" },
+        ],
+      });
+    });
+  }
+
+  test("labels that already name their rows are left alone", async () => {
+    const { result } = await render(
+      [
+        `Points won on serve {{r1.points_won_pct}}.\n${block((row) => `${row.court} ${row.serve_placement}`)}\n\nBody.`,
+      ],
+      SERVES,
+    );
+    expect(result.visual).toMatchObject({
+      rows: [
+        { label: "Ad T" },
+        { label: "Ad Body" },
+        { label: "Deuce Wide" },
+        { label: "Deuce T" },
+      ],
+    });
+  });
+
+  test("the server's own table names both", () => {
+    expect(visualFromRows(SERVES)).toMatchObject({
+      kind: "table",
+      rows: [
+        { label: "Ad · T" },
+        { label: "Ad · Body" },
+        { label: "Deuce · Wide" },
+        { label: "Deuce · T" },
+      ],
+    });
+  });
+
+  test("distinctRowLabels leaves a group it cannot tell apart", () => {
+    const rows: AskRow[] = [
+      { court: "Ad", n: 1 },
+      { court: "Ad", n: 2 },
+    ];
+    expect(distinctRowLabels(["Ad", "Ad"], [0, 1], rows)).toEqual(["Ad", "Ad"]);
+    // A row drawn from several result rows names no one row.
+    expect(distinctRowLabels(["Ad", "Ad"], [0, null], SERVES)).toEqual([
+      "Ad",
+      "Ad",
+    ]);
+  });
+
+  test("distinctHeadings marks only a repeated heading over a share", () => {
+    expect(
+      distinctHeadings(
+        ["Points won", "Points won"],
+        [["points_won", "points_won_pct"]],
+      ),
+    ).toEqual(["Points won", "Points won %"]);
+    expect(
+      distinctHeadings(
+        ["Points won", "Share"],
+        [["points_won", "points_won_pct"]],
+      ),
+    ).toEqual(["Points won", "Share"]);
   });
 });

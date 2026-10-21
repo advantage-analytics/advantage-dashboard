@@ -579,7 +579,7 @@ const BETWEEN = new RegExp(
   "i",
 );
 const AT_LEAST = new RegExp(
-  String.raw`\b(?:at least|more than|over)\s+${N}\s*(?:-\s*)?shots?\b|\b${N}\s*\+\s*shots?\b|\b${N}\s*(?:-\s*)?shots?\s+or\s+(?:more|longer)\b`,
+  String.raw`\b(?:at least|more than|over|longer than|greater than|above|beyond)\s+${N}\s*(?:-\s*)?shots?\b|\b${N}\s*\+\s*shots?\b|\b${N}\s*(?:-\s*)?shots?\s+or\s+(?:more|longer)\b`,
   "i",
 );
 const SHORT_RALLY = /\b(?:short(?:er)?|quick)\s+(?:rall(?:y|ies)|points?)\b/i;
@@ -619,7 +619,10 @@ export function rallyLengthOf(question: string): AskRallyLength | null {
   if (least) {
     const n = numberOf(least.slice(1).find((group) => group !== undefined));
     if (n !== null) {
-      const strict = /\b(?:more than|over)\b/i.test(least[0]);
+      const strict =
+        /\b(?:more than|over|longer than|greater than|above|beyond)\b/i.test(
+          least[0],
+        );
       return { min: strict ? n + 1 : n, max: null };
     }
   }

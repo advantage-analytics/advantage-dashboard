@@ -2600,3 +2600,27 @@ test.describe("the team answer prompt — coach mode (roadmap 4.3)", () => {
     );
   });
 });
+
+test.describe("serve placement and attempts in the plan prompts", () => {
+  // Feedback: "What is the win percentage of each serve placement on each
+  // side?" was counted over every point, both players' serves together; and
+  // "how many attempts?" came back as the winning plays' points won.
+  const personal = buildPlanPrompt(PLAN_INPUT);
+  const team = buildPlanPrompt(TEAM_PLAN_INPUT);
+
+  test("a serve's placement is the subject's own serve: i_served", () => {
+    for (const prompt of [personal, team]) {
+      expect(prompt).toContain(
+        "ask.point_plays.serve_zone is the serve of whoever served the point.",
+      );
+      expect(prompt).toContain("keep i_served = true");
+      expect(prompt).toContain("one row per court and placement");
+    }
+  });
+
+  test("attempts are shots from ask.shots, never points won", () => {
+    for (const prompt of [personal, team]) {
+      expect(prompt).toContain("never name points won as attempts");
+    }
+  });
+});
