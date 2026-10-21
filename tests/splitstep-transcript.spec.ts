@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { expect, test } from "@playwright/test";
 
+import { player1FromNames } from "@/lib/services/splitstep/derivation/reconcile";
 import {
   ACCEPT_UNRECONCILED_FOLD,
   analyzeResults,
@@ -1277,6 +1278,56 @@ test.describe("reconcile: the final point", () => {
     expect(rec.ok).toBe(false);
     expect(rec.player1Label).toBe("A");
     expect(rec.player1Source).toBe("guess");
+  });
+
+  test("bypass: a tie on distance is named from the player names before any guess", () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, "Gate 1 is restored");
+    // Job fb00f837 (Ivan H v Jasper Mok): no geometry, a tied distance, and
+    // the guess named the wrong player. The vendor's labels are the names the
+    // job request sent, so the match's own names settle it.
+    const split = WINNERS.map((w, i) =>
+      i >= 5 ? { ...w, winner: "B", via: "game" as const } : w,
+    );
+    const rec = reconcile({
+      winners: split,
+      labels: LABELS,
+      score: { player1: [3], player2: [3] },
+      gameKeyOf,
+      setKeyOf,
+      playerNames: { player1: "b", player2: "Someone Else" },
+    });
+    expect(rec.ok).toBe(false);
+    expect(rec.player1Label).toBe("B");
+    expect(rec.player1Source).toBe("name");
+  });
+
+  test("player1FromNames: exact matches only, and either name is enough", () => {
+    expect(
+      player1FromNames({ player1: " Ivan H ", player2: null }, [
+        "Jasper Mok",
+        "Ivan H",
+      ]),
+    ).toBe("Ivan H");
+    expect(
+      player1FromNames({ player1: "Ivan", player2: "Jasper Mok" }, [
+        "Jasper Mok",
+        "Ivan H",
+      ]),
+    ).toBe("Ivan H");
+    expect(
+      player1FromNames({ player1: "Ivan", player2: "Jasper" }, [
+        "Jasper Mok",
+        "Ivan H",
+      ]),
+    ).toBeNull();
+    // The two names point at different labels' opposites: no answer.
+    expect(
+      player1FromNames({ player1: "Ivan H", player2: "Ivan H" }, [
+        "Jasper Mok",
+        "Ivan H",
+      ]),
+    ).toBeNull();
+    expect(player1FromNames(null, ["A", "B"])).toBeNull();
   });
 
   test("1-1 is reachable, and unverified — as a mirror, not as a mismatch", () => {
