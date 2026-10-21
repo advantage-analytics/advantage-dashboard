@@ -2,7 +2,8 @@
  * The consent step of Supabase Auth's OAuth 2.1 server, as this app serves
  * it at `/oauth/consent` (docs/ask-mcp-connector.md).
  *
- * When a third-party client — a Claude connecting to `/api/mcp` — starts the
+ * When a third-party client — Claude, ChatGPT or Cursor connecting to
+ * `/api/mcp` — starts the
  * authorization-code flow, Supabase Auth sends the user to this app's
  * authorization path with an `authorization_id`, and the app asks
  * Supabase what the request is and tells it the decision. The installed
@@ -42,22 +43,47 @@ export const MISSING_AUTHORIZATION_ERROR =
  * connects to. Supabase's dynamic client registration lets any client
  * register, and an approved client holds a sign-in token for the person's
  * account, so the consent step only offers Allow to a client whose callback
- * is one of these: the claude.ai and claude.com callbacks (claude.ai and
- * Claude Desktop share custom connectors), and a loopback address on any port and path for Claude Code, which listens
- * locally (RFC 8252 §7.3 — a code sent there never leaves the person's
- * machine). Connecting another app means adding its callback here.
+ * is one of these:
+ *
+ *   - the claude.ai and claude.com callbacks (claude.ai and Claude Desktop
+ *     share custom connectors);
+ *   - ChatGPT's connector callback — the fixed legacy one here, and the
+ *     per-app `https://chatgpt.com/connector/oauth/{callback_id}` its
+ *     current apps register, matched by `CHATGPT_APP_CALLBACK` below;
+ *   - Cursor Cloud's callback. Cursor desktop listens on a loopback
+ *     address (`http://localhost:8787/callback` by default), which the
+ *     loopback rule covers. Its older `cursor://anysphere.cursor-mcp/…`
+ *     custom-scheme callback is NOT allowed: it is not http(s), and a code
+ *     sent to a custom scheme can be claimed by any app that registers the
+ *     scheme (RFC 8252 §8.6);
+ *   - a loopback address on any port and path, for Claude Code, Cursor
+ *     desktop and any other local client (RFC 8252 §7.3 — a code sent there
+ *     never leaves the person's machine).
+ *
+ * Connecting another app means adding its callback here.
  */
 export const CONNECTOR_REDIRECT_URIS: readonly string[] = [
   "https://claude.ai/api/mcp/auth_callback",
   "https://claude.com/api/mcp/auth_callback",
+  "https://chatgpt.com/connector_platform_oauth_redirect",
+  "https://www.cursor.com/agents/mcp/oauth/callback",
 ];
+
+/**
+ * ChatGPT's per-app callback: one path segment of URL-safe characters after
+ * a fixed prefix, nothing else — no query, no fragment, no dot segments, and
+ * only that host.
+ */
+const CHATGPT_APP_CALLBACK =
+  /^https:\/\/chatgpt\.com\/connector\/oauth\/[A-Za-z0-9_-]+$/;
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** True when `uri` is one of `CONNECTOR_REDIRECT_URIS` or a loopback http callback. */
+/** True when `uri` is one of `CONNECTOR_REDIRECT_URIS`, ChatGPT's per-app callback, or a loopback http callback. */
 export function isConnectorRedirectUri(uri: string | null): boolean {
   if (!uri) return false;
   if (CONNECTOR_REDIRECT_URIS.includes(uri)) return true;
+  if (CHATGPT_APP_CALLBACK.test(uri)) return true;
   let url: URL;
   try {
     url = new URL(uri);
@@ -92,7 +118,7 @@ export function goesToConnector(details: OAuthAuthorizationDetails): boolean {
 
 /** The sentence a client outside the allow-list is turned away with. */
 export const UNKNOWN_CLIENT_ERROR =
-  "This app can't connect to Advantage. Advantage connects to Claude: claude.ai, Claude Desktop and Claude Code.";
+  "This app can't connect to Advantage. Advantage connects to Claude (claude.ai, Claude Desktop and Claude Code), ChatGPT and Cursor.";
 
 /** The consent page's own path with the id, for the sign-in round trip. */
 export function consentPath(authorizationId: string): string {

@@ -244,13 +244,28 @@ test.describe("describeAskViews", () => {
 // ── The consent page's parsing ─────────────────────────────────────────────
 
 test.describe("the consent page", () => {
-  test("offers Allow only to Claude's callbacks and a loopback one", () => {
+  test("offers Allow only to Claude's, ChatGPT's and Cursor's callbacks and a loopback one", () => {
     expect(
       isConnectorRedirectUri("https://claude.ai/api/mcp/auth_callback"),
     ).toBe(true);
     expect(
       isConnectorRedirectUri("https://claude.com/api/mcp/auth_callback"),
     ).toBe(true);
+    expect(
+      isConnectorRedirectUri(
+        "https://chatgpt.com/connector_platform_oauth_redirect",
+      ),
+    ).toBe(true);
+    expect(
+      isConnectorRedirectUri("https://chatgpt.com/connector/oauth/abc_12-XY"),
+    ).toBe(true);
+    expect(
+      isConnectorRedirectUri(
+        "https://www.cursor.com/agents/mcp/oauth/callback",
+      ),
+    ).toBe(true);
+    // Cursor desktop: a loopback callback, like Claude Code's.
+    expect(isConnectorRedirectUri("http://localhost:8787/callback")).toBe(true);
     expect(isConnectorRedirectUri("http://localhost:54321/callback")).toBe(
       true,
     );
@@ -270,6 +285,34 @@ test.describe("the consent page", () => {
       false,
     );
     expect(isConnectorRedirectUri("http://user:pw@localhost:1/cb")).toBe(false);
+    // ChatGPT's per-app path: one segment, this host, nothing after it.
+    expect(
+      isConnectorRedirectUri("https://chatgpt.com/connector/oauth/../x"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://chatgpt.com/connector/oauth/abc?x=1"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://chatgpt.com/connector/oauth/abc/def"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://evil.chatgpt.com/connector/oauth/abc"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri(
+        "https://chatgpt.com.evil.example/connector/oauth/abc",
+      ),
+    ).toBe(false);
+    expect(isConnectorRedirectUri("https://chatgpt.com/connector/oauth/")).toBe(
+      false,
+    );
+    // Cursor's custom scheme is refused on purpose — see CONNECTOR_REDIRECT_URIS.
+    expect(
+      isConnectorRedirectUri("cursor://anysphere.cursor-mcp/oauth/callback"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://cursor.com/agents/mcp/oauth/callback"),
+    ).toBe(false);
   });
 
   test("reads a URL-safe authorization id and nothing else", () => {
