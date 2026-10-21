@@ -769,10 +769,14 @@ test.describe("the connector's read-only guard", () => {
   });
 
   test("the two write functions run as the caller, never as their definer", () => {
-    const writes = readFileSync(
+    // Both statements of ask_patch_match: the original and the one that
+    // added the dialog's value rules to the function body.
+    const writes = [
       "supabase/migrations/20261021143857_mcp_match_writes.sql",
-      "utf8",
-    );
+      "supabase/migrations/20261021160000_ask_patch_match_checks.sql",
+    ]
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
     for (const fn of ["ask_patch_match", "ask_seed_match_draft"]) {
       const body = writes.slice(writes.indexOf(`function public.${fn}(`));
       const head = body.slice(0, body.indexOf("as $$"));
@@ -785,13 +789,22 @@ test.describe("the connector's read-only guard", () => {
       );
     }
     // The patch never reaches the score, the format or the seats.
-    const patch = writes.slice(
-      writes.indexOf("function public.ask_patch_match("),
+    const seed = writes.slice(
       writes.indexOf("function public.ask_seed_match_draft("),
+      writes.indexOf("function public.oauth_client_request_guard("),
     );
+    const patch = writes.replace(seed, "");
     expect(patch).not.toMatch(/\bscore\s*=/);
     expect(patch).not.toMatch(/\bformat\s*=/);
     expect(patch).not.toMatch(/player1_id|player2_id|created_by\s*=\s*p_/);
+    // The direct-call contract: the event lock and the two enums hold in SQL.
+    const checks = readFileSync(
+      "supabase/migrations/20261021160000_ask_patch_match_checks.sql",
+      "utf8",
+    );
+    expect(checks).toMatch(/hint = 'field_locked'/);
+    expect(checks).toMatch(/not in \('right', 'left'\)/);
+    expect(checks).toMatch(/not in \('one-handed', 'two-handed'\)/);
   });
 
   test("every Edge Function refuses a connector token", () => {

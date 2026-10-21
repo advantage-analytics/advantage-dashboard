@@ -102,6 +102,12 @@ export interface McpUserReads {
   teamOpponents(programId: string): Promise<TeamOpponentsData>;
 }
 
+/** A PostgREST embed arrives as an object or a one-element array. */
+type Embedded<T> = T | T[] | null;
+function one<T>(embed: Embedded<T>): T | null {
+  return (Array.isArray(embed) ? embed[0] : embed) ?? null;
+}
+
 /**
  * `client` is the bearer client. Typed as the library's own class rather
  * than a structural stand-in: a spec fakes `from().select().eq()…` and casts,
@@ -127,16 +133,9 @@ export function createMcpUserReads(
         });
       }
       const row = (Array.isArray(data) ? (data[0] ?? null) : null) as null | {
-        program_id: string;
-        programs:
-          | { id: string; school_name: string }
-          | { id: string; school_name: string }[]
-          | null;
+        programs: Embedded<{ id: string; school_name: string }>;
       };
-      if (!row) return null;
-      const program = Array.isArray(row.programs)
-        ? row.programs[0]
-        : row.programs;
+      const program = row ? one(row.programs) : null;
       if (!program) return null;
       return { id: program.id, name: program.school_name };
     },
@@ -152,20 +151,17 @@ export function createMcpUserReads(
           cause: error,
         });
       }
-      type Embedded = {
-        id: string;
-        school_name: string;
-        team: string | null;
-        status: string;
-      };
       const rows = (Array.isArray(data) ? data : []) as {
         role: string;
-        programs: Embedded | Embedded[] | null;
+        programs: Embedded<{
+          id: string;
+          school_name: string;
+          team: string | null;
+          status: string;
+        }>;
       }[];
       return rows.flatMap((row): McpProgramMembership[] => {
-        const program = Array.isArray(row.programs)
-          ? row.programs[0]
-          : row.programs;
+        const program = one(row.programs);
         if (!program) return [];
         return [
           {

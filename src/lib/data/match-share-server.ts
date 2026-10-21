@@ -20,8 +20,7 @@ import {
 } from "@/lib/data/match-points-server";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { formatMatchDuration } from "@/lib/format/duration";
-import { siteUrl } from "@/lib/site-url";
-import { matchShareUrl } from "@/lib/data/match-share-url";
+import { matchPageUrl, matchShareUrl } from "@/lib/data/match-share-url";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
 import { getInitials } from "@/lib/data/match-utils";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
@@ -240,7 +239,7 @@ async function loadTeamAudience(
   return {
     kind: "team",
     programName,
-    teamUrl: `${siteUrl()}/dashboard/matches/${encodeURIComponent(matchId)}`,
+    teamUrl: matchPageUrl(matchId),
     memberCount: rosterResult.error ? null : roster.length,
     faces: roster.slice(0, 3).map((member) => {
       const name = member.display_name ?? member.email?.split("@")[0] ?? "";

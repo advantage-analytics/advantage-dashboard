@@ -45,8 +45,6 @@ export interface DraftPrefill {
   opponentName: string;
   /** `YYYY-MM-DD`, already validated by the caller. */
   date: string;
-  /** Sets as typed, "6-4 3-6 7-5"; parsed by `parseScoreHint`. */
-  score?: string | null;
   tournamentName?: string | null;
   round?: string | null;
   matchType?: string | null;

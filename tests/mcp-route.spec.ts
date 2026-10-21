@@ -1161,6 +1161,21 @@ test.describe("POST /api/mcp · update_match", () => {
     );
   });
 
+  test("a round on a match with no tournament or dual type is refused rather than cleared", async () => {
+    const { route, calls } = loadRoute(
+      world({ ownMatch: { ...OWN_MATCH, matchType: null } }),
+    );
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      round: "QF",
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/^invalid_field: .*\(round\)$/);
+    expect(userCalls(calls).some((call) => call.fn === "ask_patch_match")).toBe(
+      false,
+    );
+  });
+
   test("the score and the format are not arguments", async () => {
     const { route } = loadRoute(world());
     const listed = await listTools(route);
@@ -1186,6 +1201,29 @@ test.describe("POST /api/mcp · update_match", () => {
 });
 
 test.describe("POST /api/mcp · prepare_video_upload", () => {
+  test("the write guard's own 42501 is an internal error, not a membership refusal", async () => {
+    const { route } = loadRoute(
+      world({
+        rpc: {
+          ...world().rpc,
+          ask_seed_match_draft: () => ({
+            data: null,
+            error: {
+              code: "42501",
+              message: "Apps connected to Advantage have read-only access.",
+            },
+          }),
+        },
+      }),
+    );
+    const result = await callTool(route, "prepare_video_upload", {
+      opponent_name: "Anna Lee",
+      date: "2026-10-18",
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/^internal_error: /);
+  });
+
   test("seeds a draft through ask_seed_match_draft as the user and answers the resume link; nothing is queried", async () => {
     const { route, calls } = loadRoute(world());
     const result = await withEnv(

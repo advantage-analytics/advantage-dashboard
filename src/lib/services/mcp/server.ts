@@ -110,6 +110,7 @@ import {
   type RateLimiter,
 } from "@/lib/services/mcp/rate-limit";
 import { matchPageUrl, matchShareUrl } from "@/lib/data/match-share-url";
+import { roundKindFor } from "@/lib/matches/round-options";
 import { siteUrl } from "@/lib/site-url";
 import {
   BACKHANDS,
@@ -757,6 +758,23 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           "Pass at least one field to change.",
         );
       }
+      // A round only means something against a Tournament or Dual Match
+      // type; `normalizeMatchPatch` clears it for any other, which would be
+      // reported here as a change the caller asked for. Refuse instead.
+      const typeForRound =
+        "match_type" in body
+          ? (body.match_type as string | null)
+          : (stored.matchType ?? null);
+      if (
+        typeof body.round === "string" &&
+        body.round.trim() !== "" &&
+        roundKindFor(typeForRound) === null
+      ) {
+        throw refusal(
+          "invalid_field",
+          "A round needs the match type to be Tournament or Dual Match. (round)",
+        );
+      }
       const normalised = normalizeMatchPatch(body, stored);
       if (!normalised.ok) {
         const slug =
@@ -910,7 +928,13 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           p_event_label: summary.eventLabel,
         });
         if (seeded.error) {
-          if (seeded.error.code === "42501") {
+          // 42501 is also what the write guard raises for a refused POST
+          // (hint oauth_client_read_only): only the function's own refusal
+          // is a membership answer.
+          if (
+            seeded.error.code === "42501" &&
+            /not a member/.test(seeded.error.message)
+          ) {
             throw refusal(
               "not_a_member",
               "You are not a member of this program.",
