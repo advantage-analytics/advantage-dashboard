@@ -5,9 +5,9 @@
 remote [MCP](https://modelcontextprotocol.io) server at `/api/mcp` that lets a
 player or coach use **their own AI app** — Claude (claude.ai, Desktop, Code),
 ChatGPT or Cursor — over **their own match data**, inside the same security
-boundary the Ask page already has. Nine tools: seven reads and two writes
-(`update_match`, `prepare_video_upload`) that touch only the caller's own
-rows (§3, §4). The dashboard switch in §2 is on in production.
+boundary the Ask page already has. Nine tools: six reads and three that
+write (`ask`, `update_match`, `prepare_video_upload`), only to the caller's
+own rows (§3, §4). The dashboard switch in §2 is on in production.
 
 ## 1. What it is
 
@@ -151,7 +151,7 @@ from Supabase's metadata URL.
 | `prepare_video_upload` | `opponent_name`, `date`, `provider?` (`advantage_intelligence` \| `swingvision`), `score?`, `tournament_name?`, `round?`, `match_type?`, `court_type?`, `player_name?`, `program_id?` | **A write.** Builds a wizard draft (`matchDraftFromPrefill`, `src/lib/wizard/draft-from-prefill.ts`), saves it by `ask_seed_match_draft` as the user, and answers the `?draft=…&return=ask` link. The wizard resumes it on the file step and asks the three attribution answers itself; nothing is created, charged or scored here. `score` is a hint (`invalid_score` when it is not sets).            |
 | `describe_views`       | `scope?` (`personal` \| `team`)                                                                                                                                                       | The five views and every column (`renderAskSchemaBlock`, so hidden columns stay hidden), the percentage definitions, and the rules a query is held to.                                                                                                                                                                                                                                                  |
 | `run_query`            | `sql`, `scope_sql?`, `program_id?`                                                                                                                                                    | `checkAskSql()` first, then `ask_run_query` / `ask_run_team_query` as the caller. Rows (≤ 200, the `ask.exec_query()` cap), `row_count`, `truncated`, the scope's matches.                                                                                                                                                                                                                              |
-| `ask`                  | `question`, `program_id?`, `conversation_id?`, `match_ids?`                                                                                                                           | A whole question through `askQuestion()`, drained: headline, figures, body, visual, sources, `conversation_id`, `answer_id`, `questions_used` / `questions_cap`. Same reservation and `ask_runs` record as the page; see below for the cache.                                                                                                                                                           |
+| `ask`                  | `question`, `program_id?`, `conversation_id?`, `match_ids?`                                                                                                                           | **A write.** A whole question through `askQuestion()`, drained: headline, figures, body, visual, sources, `conversation_id`, `answer_id`, `questions_used` / `questions_cap`. Saves the exchange to the caller's Ask history and spends a monthly question, with the page's `ask_runs` record; see below for the cache.                                                                                 |
 
 A `program_id` names a program the caller is a member of (any role); membership
 is read as the caller from `program_members` before a row of the program is.
@@ -196,11 +196,12 @@ email"):
   user. There is no same-origin check because this is not a browser mutation
   — the bearer token is the credential, and a cross-site page has none.
 - **Reads are read-only** at every layer: the SQL guard allows one SELECT,
-  `ask.exec_query()` sets `transaction_read_only`, and the read tools are
-  annotated `readOnlyHint`. What a call can change: what the page's own
-  question would (a saved answer, a run row, a question spent), and — since
-  migration `20261021143857_mcp_match_writes` — the two writes above, each
-  one `ask_*` function the guard lists, SECURITY INVOKER, run as the user:
+  `ask.exec_query()` sets `transaction_read_only`, and the six read tools are
+  annotated `readOnlyHint`; the three that write carry `readOnlyHint: false`
+  and `destructiveHint: false`. What a call can change: what the page's own
+  question would through `ask` (a saved answer, a run row, a question spent),
+  and — since migration `20261021143857_mcp_match_writes` — the two match
+  writes, `update_match` and `prepare_video_upload`, each one `ask_*` function the guard lists, SECURITY INVOKER, run as the user:
   `ask_patch_match` updates the metadata columns of a match whose
   `created_by` is the caller (never `score`, `format` or a seat), and
   `ask_seed_match_draft` inserts one `match_drafts` row for the caller, in a

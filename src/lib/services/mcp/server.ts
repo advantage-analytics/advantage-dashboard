@@ -1070,7 +1070,11 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
             "Match ids from list_matches the question is about, as the page's match tags.",
           ),
       },
-      annotations: { readOnlyHint: true, idempotentHint: false },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
     },
     guarded(
       "ask",
