@@ -760,7 +760,7 @@ export function buildPatternPrompt(input: {
     `"mine" is ${names.mine === "you" ? "the person asking" : names.mine}${team ? " (the program's player)" : ""}; "opponent" is ${names.opponent}.`,
     'Any "+1" or "plus one" is "plus_one", never "shots": "serve +1 crosscourt" is {"serve": {"server": <who>}, "plus_one": {"after": "serve", "directions": ["Crosscourt"]}}; "return down the middle, then the +1 crosscourt" is {"serve": {"server": <the other player>}, "return": {"zones": ["Middle"]}, "plus_one": {"after": "return", "directions": ["Crosscourt"]}}. A return +1 is the returner\'s, so the server in "serve" is the OTHER player.',
     '"shots" are for anything else: a shot within the first N (shots count from the serve: 1 is the serve, 2 the return), or a later shot in the point.',
-    '"Within seven shots" is "within": 7. Inside out and inside in are their own directions — a forehand from the backhand side — never crosscourt or down the line.',
+    '"Within seven shots" is "within": 7. Inside out and inside in are their own directions — a forehand from the backhand side, or a backhand from the forehand side — never crosscourt or down the line.',
     'A direction with no stroke is any stroke. "Then X" with no player named is the same player as the shot before it.',
     "Use only the values listed. Leave a field out rather than guess.",
     "",

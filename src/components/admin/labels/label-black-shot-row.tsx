@@ -51,7 +51,7 @@ import {
   BlackUndoButton,
 } from "./label-black-parts";
 import { PencilMark, pointHints, type PointHint } from "./label-black-mark";
-import { placementWords, positionWords } from "./shot-position-words";
+import { directionWords, positionWords } from "./shot-position-words";
 import {
   EditableCell,
   SelectEditor,
@@ -69,6 +69,7 @@ import {
   parseCourtPoint,
   parseFileTime,
   sideOptions,
+  placementLabel,
   spinLabel,
   spinOptions,
 } from "./label-format";
@@ -462,6 +463,8 @@ export function BlackShotRow({
       ? formatFileTime(shot.videoTime, edit.fileOffset)
       : null;
   const placement = shotPlacement(labelShotValues(shot));
+  // Inside Out / Inside In when the stroke came from its other wing's half.
+  const direction = placementLabel(shot, edit.hands);
   const serveResult = serveResultMenu(shot, edit.playOnLets);
   /** The words' ink, a step down on a fault. */
   const words = fault ? "text-white/35" : "text-white/50";
@@ -585,7 +588,11 @@ export function BlackShotRow({
         {placement ? (
           // The one word here nobody can open an editor on, in a track that
           // narrows with the rail: whole in the tooltip when it is cut.
-          <ChromeTooltip {...placementWords(placement, shot)} side="top" wrap>
+          <ChromeTooltip
+            {...directionWords(placement, direction, shot)}
+            side="top"
+            wrap
+          >
             <span
               data-calculated="placement"
               className={cn(
@@ -594,7 +601,7 @@ export function BlackShotRow({
                 words,
               )}
             >
-              {placement}
+              {direction}
             </span>
           </ChromeTooltip>
         ) : (

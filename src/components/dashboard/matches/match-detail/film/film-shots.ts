@@ -181,8 +181,8 @@ const SERVE_RESULT_TYPES = new Set(["Ace", "Service Winner", "Double Fault"]);
  * are the filters' own: a serve's spin is Serve › Spin's
  * ({@link shotSpinLabel}) and a rally shot's direction is Custom ›
  * Direction's (`shotDirection`, which needs the hitter's hand), so a forehand
- * struck from the backhand half reads Inside Out here as it does in its shot
- * row. "Break point" is Score › Break point's spelling.
+ * struck from the backhand half (or a backhand from the forehand half) reads
+ * Inside Out here as it does in its shot row. "Break point" is Score › Break point's spelling.
  */
 export function pointDetail(
   point: MatchPoint,
@@ -388,9 +388,9 @@ export function shotTypeLabel(
  * `shotDirection(shot, hand)` (`shot-geometry.ts`), the same rule the Custom ›
  * Direction filter selects by: `shots.zone` only ever stores Crosscourt /
  * Middle / Down the Line, and a forehand struck from the hitter's backhand
- * half reads Inside Out / Inside In here in the browser. With no `hand`, or
- * for a backhand, the stored zone prints as it is; Middle and a serve's zone
- * still print as stored.
+ * half — or a backhand from their forehand half — reads Inside Out / Inside
+ * In here in the browser. With no `hand`, or any other stroke, the stored
+ * zone prints as it is; Middle and a serve's zone still print as stored.
  *
  * Nothing unmeasured is ever rendered as `0` or as an empty cell — a null
  * speed, spin, placement, stroke or result is {@link UNMEASURED}, because a

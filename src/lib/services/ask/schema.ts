@@ -916,7 +916,7 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "direction",
         type: "text",
         meaning:
-          "Where the shot went, as the Video tab's Direction filter names it: for serves Wide, Body or T; for other shots Crosscourt, Down the Line, Inside Out, Inside In or Middle. A forehand hit from the backhand side is Inside Out (crosscourt) or Inside In (down the line), never Crosscourt or Down the Line; null when not recorded.",
+          "Where the shot went, as the Video tab's Direction filter names it: for serves Wide, Body or T; for other shots Crosscourt, Down the Line, Inside Out, Inside In or Middle. A forehand hit from the backhand side, or a backhand hit from the forehand side, is Inside Out (crosscourt) or Inside In (down the line), never Crosscourt or Down the Line; null when not recorded.",
       },
       {
         name: "result",
