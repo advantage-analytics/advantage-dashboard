@@ -11,6 +11,7 @@ import {
   COURT_RECORD_COLS,
   EmptyCell,
 } from "@/components/dashboard/team/court-record-shell";
+import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import {
   COURT_RECORD_WINDOW,
   type CourtCell,
@@ -40,6 +41,10 @@ import {
  * event page where the line lives — the same rule the dual sheet's rows
  * follow — which is also what puts the box within reach of a keyboard: focus
  * opens it as hover does. A court that sat out is a plain span.
+ *
+ * **On touch, the first tap reads.** A finger has no hover, so a tap on a
+ * played cell opens its box and a second tap on the same cell follows the
+ * link; the box stays until a tap lands outside the grid.
  */
 const CELL_FILL: Record<CourtCellResult, string> = {
   w: "var(--viz-heatmap-3)",
@@ -63,9 +68,12 @@ interface HoverState {
 
 export function CourtRecordMosaic({ record }: { record: CourtRecord }) {
   const { columns, rows } = record;
-  const wrapRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
+  const wrapRef = useTouchReadout<HTMLDivElement>(hover !== null, () =>
+    setHover(null),
+  );
+  const fingerTap = useFingerTap();
   const [tipLeft, setTipLeft] = useState<number | null>(null);
 
   // The columns to the right of the season so far: no header, no result, and
@@ -80,7 +88,7 @@ export function CourtRecordMosaic({ record }: { record: CourtRecord }) {
     const half = tipRef.current.offsetWidth / 2;
     const width = wrapRef.current.clientWidth;
     setTipLeft(Math.min(Math.max(hover.cx, half), width - half));
-  }, [hover]);
+  }, [hover, wrapRef]);
 
   const show = (row: number, col: number) => (el: HTMLElement) => {
     // Offsets relative to the wrapper, which is the positioned ancestor.
@@ -158,6 +166,8 @@ export function CourtRecordMosaic({ record }: { record: CourtRecord }) {
                   label={`${CELL_WORD[cell.result]}${cell.ours ? ` — ${cell.ours} vs ${cell.theirs}` : ""}`}
                   onShow={show(r, c)}
                   onHide={() => hide(r, c)}
+                  selected={hover?.row === r && hover.col === c}
+                  fingerTap={fingerTap}
                 />
               ))}
               {Array.from({ length: padding }, (_, i) => (
@@ -232,12 +242,17 @@ function Cell({
   label,
   onShow,
   onHide,
+  selected,
+  fingerTap,
 }: {
   cell: CourtCell;
   eventId: string;
   label: string;
   onShow: (el: HTMLElement) => void;
   onHide: () => void;
+  /** This cell's box is the one open. */
+  selected: boolean;
+  fingerTap: ReturnType<typeof useFingerTap>;
 }) {
   const square = "block size-5 rounded-[var(--radius-cell)]";
   const fill = { background: CELL_FILL[cell.result] };
@@ -263,6 +278,12 @@ function Cell({
         onMouseLeave={onHide}
         onFocus={(e) => onShow(e.currentTarget)}
         onBlur={onHide}
+        onPointerDown={(e) => {
+          if (fingerTap.press(e, selected)) onShow(e.currentTarget);
+        }}
+        onClick={(e) => {
+          if (!fingerTap.shouldFollow()) e.preventDefault();
+        }}
       />
     </span>
   );

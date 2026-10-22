@@ -1381,9 +1381,12 @@ function LineupGrip({
         className={cn(
           "-ml-1 inline-flex h-7 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-[5px] text-[var(--ink-400)] transition-opacity duration-[var(--duration-hover)] active:cursor-grabbing",
           "focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+          // A finger has no hover: on touch the grip is always drawn, and its
+          // 20×28 box takes a 44px tap area.
+          "touch:hit-area",
           held || hot
             ? cn("opacity-100", held && "text-[var(--ink-900)]")
-            : "opacity-0 group-hover:opacity-100",
+            : "opacity-0 group-hover:opacity-100 touch:opacity-100",
         )}
       >
         <GripVertical className="size-3.5" strokeWidth={1.5} aria-hidden />

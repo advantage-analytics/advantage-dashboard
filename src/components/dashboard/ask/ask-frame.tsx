@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
  * `PageTransition` pass no bounded height down, so a tall page simply grows.
  * A chat needs the opposite — the list of earlier questions and the thread
  * scroll on their own, and the composer stays at the foot — so this box
- * sizes itself from the viewport (`100vh` less the header) and clips, the
+ * sizes itself from the viewport (`100dvh` less the header) and clips, the
  * way the match report's layout does. Everything inside it is a flex child
  * carrying `min-h-0`, and the two scrollers are the rail's list and the
  * thread.
@@ -45,7 +45,7 @@ export function AskFrame({
   return (
     <div
       className={cn(
-        "flex h-[calc(100vh-var(--header-h))] w-full overflow-hidden bg-[var(--surface-card)] max-md:h-[calc(100dvh-var(--header-h))] max-md:flex-col",
+        "flex h-[calc(100dvh-var(--header-h))] w-full overflow-hidden bg-[var(--surface-card)] max-md:flex-col",
         className,
       )}
     >

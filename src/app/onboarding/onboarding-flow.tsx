@@ -464,7 +464,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
     : "the player's";
 
   return (
-    <div className="relative flex min-h-screen items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
+    <div className="relative flex min-h-dvh items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
       {step !== 1 ? (
         <div className="absolute top-0 left-0 z-10 p-5">{backButton}</div>
       ) : null}

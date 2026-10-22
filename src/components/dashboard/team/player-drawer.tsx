@@ -22,6 +22,10 @@ import {
 } from "@/components/ui/popover";
 import { AdvSwitch } from "@/components/ui/adv-switch";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import {
+  DRAWER_RAIL,
+  DrawerScrim,
+} from "@/components/dashboard/shared/drawer-sheet";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { playedSets } from "@/lib/ui/score-format";
@@ -88,7 +92,7 @@ import {
  */
 
 const ICON_BUTTON =
-  "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40 touch:hit-area";
 
 /**
  * The leading glyph on each Options-menu row: neutral ink-400 — never `--blue`
@@ -402,106 +406,112 @@ export function PlayerDrawer({
   const profile = profileHref(member.playerId);
 
   return (
-    <aside
-      {...{ [DRAWER_ATTR]: "" }}
-      onAnimationEnd={(event) => {
-        if (event.animationName === "roster-drawer-out") onClosed();
-      }}
-      className={cn(
-        "sticky top-11 z-[2] h-[calc(100vh-44px)] shrink-0 self-start overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none",
-        closing
-          ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
-          : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
-      )}
-    >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-label={member.name}
-        tabIndex={-1}
-        className="flex h-full w-[340px] flex-col outline-none"
+    <>
+      <DrawerScrim closing={closing} onClose={onClose} />
+      <aside
+        {...{ [DRAWER_ATTR]: "" }}
+        onAnimationEnd={(event) => {
+          if (event.animationName === "roster-drawer-out") onClosed();
+        }}
+        className={cn(
+          DRAWER_RAIL,
+          closing
+            ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
+            : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
+        )}
       >
-        {/* 44px, inset 20px — the page header's own height and inset, so the
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-label={member.name}
+          tabIndex={-1}
+          className="flex h-full w-[340px] flex-col outline-none"
+        >
+          {/* 44px, inset 20px — the page header's own height and inset, so the
             two rules line up across the border. */}
-        <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[var(--border-hairline)] px-5">
-          <ChromeTooltip label="Previous player" shortcut="↑">
-            <button
-              type="button"
-              aria-label="Previous player"
-              disabled={index === 0}
-              onClick={onPrev}
-              className={ICON_BUTTON}
-            >
-              <ChevronUp className="size-3.5" strokeWidth={1.5} aria-hidden />
-            </button>
-          </ChromeTooltip>
-          <ChromeTooltip label="Next player" shortcut="↓">
-            <button
-              type="button"
-              aria-label="Next player"
-              disabled={index === total - 1}
-              onClick={onNext}
-              className={ICON_BUTTON}
-            >
-              <ChevronDown className="size-3.5" strokeWidth={1.5} aria-hidden />
-            </button>
-          </ChromeTooltip>
-          <span className="ml-1 inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
-            <span className="text-[12px] text-[var(--ink-600)]">
-              {member.role === "player" ? "Player" : capitalize(member.role)}
+          <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[var(--border-hairline)] px-5">
+            <ChromeTooltip label="Previous player" shortcut="↑">
+              <button
+                type="button"
+                aria-label="Previous player"
+                disabled={index === 0}
+                onClick={onPrev}
+                className={ICON_BUTTON}
+              >
+                <ChevronUp className="size-3.5" strokeWidth={1.5} aria-hidden />
+              </button>
+            </ChromeTooltip>
+            <ChromeTooltip label="Next player" shortcut="↓">
+              <button
+                type="button"
+                aria-label="Next player"
+                disabled={index === total - 1}
+                onClick={onNext}
+                className={ICON_BUTTON}
+              >
+                <ChevronDown
+                  className="size-3.5"
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
+              </button>
+            </ChromeTooltip>
+            <span className="ml-1 inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
+              <span className="text-[12px] text-[var(--ink-600)]">
+                {member.role === "player" ? "Player" : capitalize(member.role)}
+              </span>
+              <span className="mono tabular text-[11px] text-[var(--ink-400)]">
+                {index + 1} / {total}
+              </span>
             </span>
-            <span className="mono tabular text-[11px] text-[var(--ink-400)]">
-              {index + 1} / {total}
-            </span>
-          </span>
-          {/* The bridge to the profile page is the NAME, below — not a chip
+            {/* The bridge to the profile page is the NAME, below — not a chip
               up here. Two routes to one page cost this header its last
               breathing room: at 340px the flexible gap had collapsed to its
               8px floor, and "Open profile" was the single widest item in the
               row at 97px. The name is the better of the two anyway — it is
               the record itself, it costs the header nothing, and ⌘-click on
               the roster row already goes to the same place. */}
-          <div className="min-w-2 flex-1" />
-          {canManage && (
-            <MemberMenu
-              key={member.playerId}
-              member={member}
-              isViewer={isViewer}
-              onEdit={() => onEdit(member)}
-              onError={onError}
-              run={run}
-              pending={pending}
-            />
-          )}
-          <span
-            aria-hidden
-            className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]"
-          />
-          <ChromeTooltip label="Close" shortcut="Esc">
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-              className={ICON_BUTTON}
-            >
-              <X className="size-3.5" strokeWidth={1.5} aria-hidden />
-            </button>
-          </ChromeTooltip>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
-          {/* Identity */}
-          {/* `items-start`, not `items-center`: the avatar stays level with
-              the first line of a name that runs to two. */}
-          <div className="flex items-start gap-3.5">
+            <div className="min-w-2 flex-1" />
+            {canManage && (
+              <MemberMenu
+                key={member.playerId}
+                member={member}
+                isViewer={isViewer}
+                onEdit={() => onEdit(member)}
+                onError={onError}
+                run={run}
+                pending={pending}
+              />
+            )}
             <span
               aria-hidden
-              className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[14px] font-medium text-[var(--ink-700)]"
-            >
-              {getInitials(member.name)}
-            </span>
-            <div className="flex min-w-0 flex-col gap-1">
-              {/* Ink at rest, blue on hover — the product's link affordance
+              className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]"
+            />
+            <ChromeTooltip label="Close" shortcut="Esc">
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={onClose}
+                className={ICON_BUTTON}
+              >
+                <X className="size-3.5" strokeWidth={1.5} aria-hidden />
+              </button>
+            </ChromeTooltip>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
+            {/* Identity */}
+            {/* `items-start`, not `items-center`: the avatar stays level with
+              the first line of a name that runs to two. */}
+            <div className="flex items-start gap-3.5">
+              <span
+                aria-hidden
+                className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[14px] font-medium text-[var(--ink-700)]"
+              >
+                {getInitials(member.name)}
+              </span>
+              <div className="flex min-w-0 flex-col gap-1">
+                {/* Ink at rest, blue on hover — the product's link affordance
                   for a record's own name, the same one the roster row uses.
 
                   It WRAPS rather than truncating. A 340px rail clips plenty
@@ -513,184 +523,185 @@ export function PlayerDrawer({
                   table is the opposite case — fixed at 52px, it cannot give
                   the height, so there the name truncates and `title` carries
                   the rest. */}
-              <h2 className="text-title-lg min-w-0">
-                <Link
-                  href={profile}
-                  /* No `title`. The name is fully readable now, and the
+                <h2 className="text-title-lg min-w-0">
+                  <Link
+                    href={profile}
+                    /* No `title`. The name is fully readable now, and the
                      native tooltip it needed drew in the OS's own style —
                      a pale box here, a dark one there — inches from the
                      header's real dark tooltips. Removing the truncation
                      removed the reason for it. */
-                  className="block rounded-[var(--radius-cell)] [text-wrap:balance] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-                >
-                  {member.name}
-                </Link>
-              </h2>
-              <span className="text-[12px] text-[var(--ink-600)]">
-                {identityLine(member)}
-                {coachManaged && " · Coach-managed"}
-              </span>
+                    className="block rounded-[var(--radius-cell)] [text-wrap:balance] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                  >
+                    {member.name}
+                  </Link>
+                </h2>
+                <span className="text-[12px] text-[var(--ink-600)]">
+                  {identityLine(member)}
+                  {coachManaged && " · Coach-managed"}
+                </span>
+              </div>
             </div>
-          </div>
 
-          {/* What "coach-managed" means, and the one thing to do about it.
+            {/* What "coach-managed" means, and the one thing to do about it.
               The row carries the pill because a coach scans for it; here they
               are reading one player, so the fact joins the identity line and
               this well says what follows from it. A well inset in a card is
               what `--surface-page` is for. The ⋯ menu used to tell a coach to
               "invite them" with nothing to press — this is that sentence with
               its link. Staff only: a teammate can do nothing with it. */}
-          {coachManaged && canManage && (
-            <div className="flex flex-col items-start gap-2 rounded-[var(--radius-element)] bg-[var(--surface-page)] px-3.5 py-3">
-              <p className="text-[11px] leading-[1.6] text-[var(--ink-700)]">
-                <strong className="font-medium text-[var(--ink-900)]">
-                  No login yet.
-                </strong>{" "}
-                Staff upload {firstName}&rsquo;s matches; the stats build the
-                same. Invite {firstName} to claim this profile — every match
-                stays, and no new seat is used.
-              </p>
-              <button
-                type="button"
-                onClick={() =>
-                  claimProfileId && claimInvite.request(claimProfileId)
-                }
-                className="cursor-pointer rounded-[var(--radius-cell)] text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-              >
-                Invite to claim →
-              </button>
-            </div>
-          )}
-
-          {/* One-line stat header over the sparkline */}
-          {active && hasStats && (
-            <div className="flex flex-col gap-3.5">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[12px] text-[var(--ink-600)]">
-                  {active.label}
-                  {points.length > 0 && ` · Last ${points.length}`}
-                </span>
-                <span className="inline-flex items-baseline gap-1.5">
-                  <span className="tabular text-[16px] text-[var(--ink-900)]">
-                    {drawerPercent(active.value)}
-                  </span>
-                  {heroDelta && (
-                    <span
-                      className="tabular text-[11px] font-medium"
-                      style={{ color: heroDelta.color }}
-                    >
-                      {heroDelta.label}
-                    </span>
-                  )}
-                </span>
-              </div>
-              <Sparkline label={active.label} points={points} />
-              <div className="flex justify-between">
-                <span className="mono text-[10px] text-[var(--ink-400)]">
-                  {points[0]?.match.date ?? ""}
-                </span>
-                <span className="mono text-[10px] text-[var(--ink-400)]">
-                  {points.length > 1
-                    ? points[points.length - 1].match.date
-                    : ""}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Four pills that switch the chart — only where there is a chart */}
-          {hasStats && (
-            <div className="flex flex-wrap gap-1.5 border-t border-[var(--border-hairline)] pt-4">
-              {member.measures.map((measure) => (
-                <StatPill
-                  key={measure.key}
-                  measure={measure}
-                  selected={measure.key === active?.key}
-                  onSelect={() => setActiveKey(measure.key)}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Three recent matches — record rows, chevron, open the match page */}
-          <div className="flex flex-col gap-0.5">
-            <div className="flex items-center pb-2">
-              <span className="eyebrow-sm flex-1">Recent matches</span>
-              {/* "All 0" is a link to nothing. */}
-              {member.matchesPlayed > 0 && (
-                <Link
-                  href={profile}
-                  className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+            {coachManaged && canManage && (
+              <div className="flex flex-col items-start gap-2 rounded-[var(--radius-element)] bg-[var(--surface-page)] px-3.5 py-3">
+                <p className="text-[11px] leading-[1.6] text-[var(--ink-700)]">
+                  <strong className="font-medium text-[var(--ink-900)]">
+                    No login yet.
+                  </strong>{" "}
+                  Staff upload {firstName}&rsquo;s matches; the stats build the
+                  same. Invite {firstName} to claim this profile — every match
+                  stays, and no new seat is used.
+                </p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    claimProfileId && claimInvite.request(claimProfileId)
+                  }
+                  className="cursor-pointer rounded-[var(--radius-cell)] text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                 >
-                  All {member.matchesPlayed}
-                </Link>
-              )}
-            </div>
-            {member.recent.length === 0 ? (
-              /* The one place the drawer says what will arrive — the labels
+                  Invite to claim →
+                </button>
+              </div>
+            )}
+
+            {/* One-line stat header over the sparkline */}
+            {active && hasStats && (
+              <div className="flex flex-col gap-3.5">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-[12px] text-[var(--ink-600)]">
+                    {active.label}
+                    {points.length > 0 && ` · Last ${points.length}`}
+                  </span>
+                  <span className="inline-flex items-baseline gap-1.5">
+                    <span className="tabular text-[16px] text-[var(--ink-900)]">
+                      {drawerPercent(active.value)}
+                    </span>
+                    {heroDelta && (
+                      <span
+                        className="tabular text-[11px] font-medium"
+                        style={{ color: heroDelta.color }}
+                      >
+                        {heroDelta.label}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <Sparkline label={active.label} points={points} />
+                <div className="flex justify-between">
+                  <span className="mono text-[10px] text-[var(--ink-400)]">
+                    {points[0]?.match.date ?? ""}
+                  </span>
+                  <span className="mono text-[10px] text-[var(--ink-400)]">
+                    {points.length > 1
+                      ? points[points.length - 1].match.date
+                      : ""}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Four pills that switch the chart — only where there is a chart */}
+            {hasStats && (
+              <div className="flex flex-wrap gap-1.5 border-t border-[var(--border-hairline)] pt-4">
+                {member.measures.map((measure) => (
+                  <StatPill
+                    key={measure.key}
+                    measure={measure}
+                    selected={measure.key === active?.key}
+                    onSelect={() => setActiveKey(measure.key)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Three recent matches — record rows, chevron, open the match page */}
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center pb-2">
+                <span className="eyebrow-sm flex-1">Recent matches</span>
+                {/* "All 0" is a link to nothing. */}
+                {member.matchesPlayed > 0 && (
+                  <Link
+                    href={profile}
+                    className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                  >
+                    All {member.matchesPlayed}
+                  </Link>
+                )}
+              </div>
+              {member.recent.length === 0 ? (
+                /* The one place the drawer says what will arrive — the labels
                  the pills would have carried, in a sentence, since the pills
                  are gone. The button below is the way to make it arrive. */
-              <p className="text-[12px] leading-[1.6] text-[var(--ink-500)]">
-                No matches yet. Serve and pressure numbers appear here once one
-                is analyzed.
-              </p>
-            ) : (
-              member.recent.slice(0, 3).map((match) => (
-                <Link
-                  key={match.id}
-                  href={`/dashboard/matches/${match.id}`}
-                  className={`-mx-2 grid h-9 ${RECENT_MATCH_GRID} items-center gap-2.5 rounded-[var(--radius-element)] px-2 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`}
-                >
-                  {match.won === null ? (
-                    <span
-                      aria-hidden
-                      className="text-center text-[11px] text-[var(--ink-400)]"
-                    >
-                      –
+                <p className="text-[12px] leading-[1.6] text-[var(--ink-500)]">
+                  No matches yet. Serve and pressure numbers appear here once
+                  one is analyzed.
+                </p>
+              ) : (
+                member.recent.slice(0, 3).map((match) => (
+                  <Link
+                    key={match.id}
+                    href={`/dashboard/matches/${match.id}`}
+                    className={`-mx-2 grid h-9 ${RECENT_MATCH_GRID} items-center gap-2.5 rounded-[var(--radius-element)] px-2 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`}
+                  >
+                    {match.won === null ? (
+                      <span
+                        aria-hidden
+                        className="text-center text-[11px] text-[var(--ink-400)]"
+                      >
+                        –
+                      </span>
+                    ) : (
+                      <ResultMark won={match.won} />
+                    )}
+                    <span className="truncate text-[12px] text-[var(--ink-900)]">
+                      {match.opponent}
                     </span>
-                  ) : (
-                    <ResultMark won={match.won} />
-                  )}
-                  <span className="truncate text-[12px] text-[var(--ink-900)]">
-                    {match.opponent}
-                  </span>
-                  {/* `playedSets` is display-only and belongs here, not in the
+                    {/* `playedSets` is display-only and belongs here, not in the
                       loader: `matches.score` genuinely stores trailing `0-0`
                       sets and nothing may rewrite them. The track is
                       `minmax(72px,max-content)` so a real three-setter pushes
                       the truncating opponent cell instead of being
                       clipped — the score is the column that must stay whole. */}
-                  <ScoreLine
-                    sets={playedSets(match.sets)}
-                    className="text-right text-[11px] whitespace-nowrap text-[var(--ink-600)]"
-                  />
-                  <span className="mono text-right text-[10px] text-[var(--ink-400)]">
-                    {match.date}
-                  </span>
-                  <ChevronRight
-                    className="size-3 text-[var(--ink-300)]"
-                    strokeWidth={1.5}
-                    aria-hidden
-                  />
-                </Link>
-              ))
+                    <ScoreLine
+                      sets={playedSets(match.sets)}
+                      className="text-right text-[11px] whitespace-nowrap text-[var(--ink-600)]"
+                    />
+                    <span className="mono text-right text-[10px] text-[var(--ink-400)]">
+                      {match.date}
+                    </span>
+                    <ChevronRight
+                      className="size-3 text-[var(--ink-300)]"
+                      strokeWidth={1.5}
+                      aria-hidden
+                    />
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col gap-3 px-[22px] py-4">
+            <Link href={profile} className={cn(advButton("ghost"), "w-full")}>
+              Open profile
+            </Link>
+            {canUpload && (
+              <Link
+                href={`/dashboard/matches/new?player=${member.playerId}`}
+                className={cn(advButton("primary"), "w-full")}
+              >
+                Upload for {firstName}
+              </Link>
             )}
           </div>
         </div>
-        <div className="flex shrink-0 flex-col gap-3 px-[22px] py-4">
-          <Link href={profile} className={cn(advButton("ghost"), "w-full")}>
-            Open profile
-          </Link>
-          {canUpload && (
-            <Link
-              href={`/dashboard/matches/new?player=${member.playerId}`}
-              className={cn(advButton("primary"), "w-full")}
-            >
-              Upload for {firstName}
-            </Link>
-          )}
-        </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }

@@ -159,7 +159,7 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
     // The same bounded box `(detail)/[matchId]/layout.tsx` draws: the rail
     // and the pane scroll independently only inside a fixed height, and this
     // segment is outside that layout.
-    <div className="flex h-[calc(100vh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
+    <div className="flex h-[calc(100dvh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
       <MatchDataProvider
         key={match.id}
         match={match}

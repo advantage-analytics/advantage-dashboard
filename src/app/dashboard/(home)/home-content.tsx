@@ -57,7 +57,7 @@ export default function HomeContent({
   // invisible because the column has no surface of its own, and a card
   // stretched to fill it would be trapped empty surface.
   const grid = (
-    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+    <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
       <motion.div
         initial={skipAnimation ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}

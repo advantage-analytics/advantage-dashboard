@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { isFingerPointer, useTouchReadout } from "@/hooks/use-touch-readout";
 import { formatDelta } from "@/lib/data/match-utils";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,10 @@ export interface SparkPoint {
  * any match for a hairline, a hollow dot on the line, and a dark tip with the
  * value over "opponent · date". The tip hangs below the chart and shifts at
  * the two ends so it never leaves the 296px box.
+ *
+ * On touch a tap — or a horizontal drag, the chart is `pan-y` so a vertical
+ * swipe still scrolls the drawer — selects the nearest match, and its tip
+ * stays until a tap lands outside the chart or on the same match again.
  */
 export function Sparkline({
   label,
@@ -49,6 +54,12 @@ export function Sparkline({
 }) {
   const gradientId = useId();
   const [hovered, setHovered] = useState<number | null>(null);
+  const chartRef = useTouchReadout<HTMLDivElement>(hovered !== null, () =>
+    setHovered(null),
+  );
+  // A finger's press: the match it landed on, and whether that match was
+  // already selected — lifting on it again closes the tip.
+  const fingerRef = useRef<{ i: number; reselect: boolean } | null>(null);
 
   if (points.length < 2) {
     return (
@@ -84,9 +95,47 @@ export function Sparkline({
     .join(" ")} L ${coords[n - 1].x.toFixed(2)},${SPARK_H} Z`;
   const last = coords[n - 1];
 
+  // The match whose hit region a finger is over — the same midpoint split
+  // the regions below are drawn with.
+  const indexAt = (clientX: number) => {
+    const box = chartRef.current?.getBoundingClientRect();
+    if (!box) return null;
+    const x = ((clientX - box.left) / box.width) * SPARK_W;
+    let i = 0;
+    while (i < n - 1 && x > (coords[i].x + coords[i + 1].x) / 2) i += 1;
+    return i;
+  };
+
   return (
     <div
+      ref={chartRef}
       className="relative h-14 w-[296px]"
+      style={{ touchAction: "pan-y" }}
+      onPointerDown={(e) => {
+        if (!isFingerPointer(e)) return;
+        const i = indexAt(e.clientX);
+        if (i === null) return;
+        fingerRef.current = { i, reselect: hovered === i };
+        setHovered(i);
+      }}
+      onPointerMove={(e) => {
+        if (!isFingerPointer(e) || e.buttons === 0) return;
+        const i = indexAt(e.clientX);
+        if (i === null) return;
+        if (fingerRef.current && i !== fingerRef.current.i) {
+          fingerRef.current.reselect = false;
+        }
+        setHovered(i);
+      }}
+      onPointerUp={(e) => {
+        if (!isFingerPointer(e)) return;
+        if (fingerRef.current?.reselect) setHovered(null);
+        fingerRef.current = null;
+      }}
+      // The browser took the gesture as a scroll.
+      onPointerCancel={(e) => {
+        if (isFingerPointer(e)) setHovered(null);
+      }}
       role="img"
       aria-label={`${label} over the last ${n} matches: ${points
         .map((p) => `${Math.round(p.value)}% against ${p.match.opponent}`)

@@ -357,7 +357,7 @@ export function ScoreOnlyFlow({
         : null;
 
   return (
-    <div className="flex min-h-[calc(100vh-44px)] flex-col">
+    <div className="flex min-h-[calc(100dvh-44px)] flex-col">
       {/* Full bleed under the app header — chrome measuring the flow, not a
           rule belonging to the title. One step, so one filled segment. */}
       <StepIndicator currentStep={0} totalSteps={1} />

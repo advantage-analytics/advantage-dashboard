@@ -68,7 +68,7 @@ export function EventPageLayout({
 }) {
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
-      <div className="flex min-w-0 flex-1 flex-col gap-8 px-14 pt-6 pb-7">
+      <div className="flex min-w-0 flex-1 flex-col gap-8 px-8 pt-6 pb-7 xl:px-14">
         <div className="flex flex-col gap-6">
           {header}
           {strip}

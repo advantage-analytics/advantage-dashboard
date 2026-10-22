@@ -79,7 +79,7 @@ function WizardChrome({
   children: ReactNode;
 }) {
   return (
-    <Status label={label} className="flex min-h-[calc(100vh-44px)] flex-col">
+    <Status label={label} className="flex min-h-[calc(100dvh-44px)] flex-col">
       <div aria-hidden="true" className="flex flex-1 flex-col">
         <StepIndicator currentStep={stepIndex} totalSteps={stepCount} />
 
@@ -289,7 +289,7 @@ export function EditEventPending() {
   return (
     <Status
       label="Loading event"
-      className="flex min-h-[calc(100vh-44px)] flex-col"
+      className="flex min-h-[calc(100dvh-44px)] flex-col"
     >
       <div aria-hidden="true" className="flex flex-1 flex-col">
         <div className="flex gap-[3px]">

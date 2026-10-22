@@ -18,7 +18,7 @@ export function MatchesPagePending() {
       dayZero={<MatchesDayZeroPage scope={scope} canUpload={canUpload} />}
       skeleton={
         <div className="flex w-full flex-1 bg-[var(--surface-card)]">
-          <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">
+          <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-8 pt-5 pb-6 xl:px-14">
             <MatchesTitleRow scope={scope} canUpload={canUpload} />
             <MatchesSkeleton scope={scope} shape={shape} />
           </div>

@@ -1,5 +1,5 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Inter, Roboto_Mono } from "next/font/google";
 import { emailOrigin } from "@/lib/site-url";
@@ -62,6 +62,17 @@ export const metadata: Metadata = {
       "The world's first centralized hub for tennis analytics. Built for the modern athlete.",
     images: ["/opengraph-image.jpg"],
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // The page draws to the screen's edges; fixed chrome that sits against an
+  // edge (the film room, full-screen visuals) pads itself with
+  // `env(safe-area-inset-*)` so nothing hides under the home indicator.
+  viewportFit: "cover",
+  // Safari's toolbar takes the page colour instead of flashing white.
+  themeColor: "#FAFAFA",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -10,6 +10,8 @@ import {
   Pause,
   Play,
   Repeat,
+  RotateCcw,
+  RotateCw,
   SkipBack,
   SkipForward,
   Timer,
@@ -30,12 +32,17 @@ import { useFilmReadOnly } from "./film-read-only";
 /** Playback rates the speed control cycles through. */
 export const PLAYBACK_RATES = [0.5, 1, 1.5, 2] as const;
 
+/**
+ * On touch every control here takes `touch:hit-area` — a 44px tap area round
+ * a glyph that keeps its size — and the rows spread out so neighbouring areas
+ * do not overlap (chrome.md, "Touch"). A mouse sees none of it.
+ */
 const GLYPH =
-  "block h-[15px] w-[15px] cursor-pointer rounded-[2px] text-white/85 transition-opacity duration-200 hover:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
+  "block h-[15px] w-[15px] cursor-pointer rounded-[2px] text-white/85 transition-opacity duration-200 hover:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area";
 
 /** The two 14px point chevrons in the title row. */
 const CHEVRON =
-  "block h-3.5 w-3.5 shrink-0 cursor-pointer rounded-[2px] text-white/70 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
+  "block h-3.5 w-3.5 shrink-0 cursor-pointer rounded-[2px] text-white/70 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area";
 
 /**
  * An icon-only control: `aria-label` plus the design system's dark tooltip
@@ -110,6 +117,12 @@ export interface FilmTransportProps {
    */
   previewSource: { url: string | null; generation: number };
   onSeek: (seconds: number) => void;
+  /**
+   * Move the playhead by `delta` seconds — the room's Shift+← / Shift+→. With
+   * it, a touch screen (no keyboard) gets back/forward 5s glyphs; a mouse
+   * never sees them, since it has the keys.
+   */
+  onSeekBy?: (delta: number) => void;
   onTogglePlay: () => void;
   onStep: (direction: -1 | 1) => void;
   /** Absent on a read-only report: the Save glyph is then not drawn. */
@@ -137,7 +150,7 @@ export interface FilmTransportProps {
 /**
  * The bottom block of the fullscreen frame (handoff F1): title row, the
  * set-by-set track, then the control row. Every glyph is 15px at 85%
- * white 18px apart; Save point fills once the point is saved, and nothing
+ * white 18px apart (26px on touch); Save point fills once the point is saved, and nothing
  * else is filled. Text shadows are
  * off — the scrim under this block carries the contrast.
  *
@@ -177,7 +190,11 @@ export function FilmTransport(p: FilmTransportProps) {
     <div
       inert={p.disabled || undefined}
       className={cn(
-        "absolute inset-x-0 bottom-0 flex flex-col gap-[9px] px-6 pb-3.5",
+        // `@container`: the room's drawer narrows this block, and the touch
+        // spacing below only spreads out where the row has the width for it.
+        // On touch the rows sit 14px apart: the lane's 44px strip reaches 14px
+        // past its 16px row and must not land on the glyphs either side.
+        "@container absolute inset-x-0 bottom-0 flex flex-col gap-[9px] px-6 pb-3.5 touch:gap-3.5",
         p.disabled && "opacity-45",
         p.className,
       )}
@@ -242,7 +259,10 @@ export function FilmTransport(p: FilmTransportProps) {
         preview={{ ...p.previewSource, size: "room" }}
       />
 
-      <div className="flex h-10 items-center gap-[18px]">
+      {/* Touch: a 44px row the glyphs' tap areas fill exactly, and 26px
+          between glyphs (from 18px) wherever the row is wide enough that
+          nothing crowds off it — /design/ipad, section 5. */}
+      <div className="flex h-10 items-center gap-[18px] touch:h-11 touch:@min-[640px]:gap-[26px]">
         <Glyph
           label={p.playing ? "Pause" : "Play"}
           shortcut="space"
@@ -280,6 +300,36 @@ export function FilmTransport(p: FilmTransportProps) {
             aria-hidden="true"
           />
         </Glyph>
+        {/* Touch only: without a keyboard, Shift+← / Shift+→ have no other
+            way in. */}
+        {p.onSeekBy && (
+          <>
+            <Glyph
+              label="Back 5 seconds"
+              shortcut="⇧←"
+              className="hidden touch:block"
+              onClick={() => p.onSeekBy?.(-5)}
+            >
+              <RotateCcw
+                className="h-full w-full"
+                strokeWidth={1.6}
+                aria-hidden="true"
+              />
+            </Glyph>
+            <Glyph
+              label="Forward 5 seconds"
+              shortcut="⇧→"
+              className="hidden touch:block"
+              onClick={() => p.onSeekBy?.(5)}
+            >
+              <RotateCw
+                className="h-full w-full"
+                strokeWidth={1.6}
+                aria-hidden="true"
+              />
+            </Glyph>
+          </>
+        )}
         {/* Opening (R11): nothing is measured yet, so the slot reads one dash
             rather than the false precision of "0:00 / 0:00". */}
         <span className="mono tabular text-[11px] text-white/75">
@@ -337,7 +387,7 @@ export function FilmTransport(p: FilmTransportProps) {
             // optional direction, and a bare `onClick={p.onCycleRate}` would
             // hand it the click event.
             onClick={() => p.onCycleRate()}
-            className="mono cursor-pointer rounded-[2px] text-[11px] font-medium text-white/85 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+            className="mono cursor-pointer rounded-[2px] text-[11px] font-medium text-white/85 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
           >
             {p.rate}×
           </button>
@@ -421,7 +471,7 @@ export function FilmTransport(p: FilmTransportProps) {
               type="button"
               aria-disabled="true"
               aria-label="More — not available yet"
-              className="block h-[15px] w-[15px] cursor-default rounded-[2px] text-white/85 opacity-45 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              className="block h-[15px] w-[15px] cursor-default rounded-[2px] text-white/85 opacity-45 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
             >
               <MoreVertical
                 className="h-full w-full"

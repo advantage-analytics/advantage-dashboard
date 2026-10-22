@@ -109,6 +109,9 @@ export function FilmRoomDrawer({
       }}
       className={cn(
         "absolute inset-y-0 right-0 flex w-[320px] max-w-full flex-col bg-[rgba(13,13,13,0.88)] shadow-[inset_1px_0_0_rgba(255,255,255,0.1),-24px_0_48px_-12px_rgba(0,0,0,0.45)]",
+        // The room is edge to edge (`viewportFit: "cover"`): the list clears
+        // the status bar and the home indicator. Every inset is 0 on a desktop.
+        "pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]",
         // A solid sheet travelling in from the edge: no fade, so it reads as
         // one surface arriving over the film rather than dissolving onto it.
         // In on the room's expo curve; out quicker, accelerating off-screen.

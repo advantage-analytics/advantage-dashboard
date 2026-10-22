@@ -132,7 +132,7 @@ test.describe("EventTableSkeleton mirrors EventTable", () => {
     for (const cls of [
       "surface-card min-w-0 px-6 pt-0.5 pb-2.5",
       "grid items-center gap-x-4 border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-      "flex min-w-0 flex-1 flex-col gap-8 px-14 pt-6 pb-7",
+      "flex min-w-0 flex-1 flex-col gap-8 px-8 pt-6 pb-7 xl:px-14",
     ]) {
       expect(table, cls).toContain(cls);
     }
@@ -140,7 +140,7 @@ test.describe("EventTableSkeleton mirrors EventTable", () => {
     expect(card).toContain(
       "grid items-center gap-x-4 border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
     );
-    expect(html).toContain("flex flex-col gap-8 px-14 pt-6 pb-7");
+    expect(html).toContain("flex flex-col gap-8 px-8 pt-6 pb-7 xl:px-14");
   });
 
   test("exactly one element in the card carries border-b: the header row", () => {

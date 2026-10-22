@@ -123,7 +123,8 @@ function Bar({
         <span className="sr-only">{series}: </span>
         {text}
       </span>
-      <VisualReadout className="bottom-full left-0 mb-1 opacity-0 group-hover/bar:opacity-100">
+      {/* A finger reads it by tapping the bar (`VisualFrame`). */}
+      <VisualReadout className="bottom-full left-0 mb-1 opacity-0 group-hover/bar:opacity-100 group-data-[ask-tapped]/bar:opacity-100">
         {series}: {text}
       </VisualReadout>
     </span>

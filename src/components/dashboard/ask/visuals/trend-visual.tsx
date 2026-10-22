@@ -1,5 +1,6 @@
 import { useState, type CSSProperties } from "react";
 import Link from "next/link";
+import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import type { AskTrendVisual } from "@/lib/services/ask/events";
 import { TREND_BOX, trendGeometry } from "./visual-geometry";
 import { VisualFrame, VisualKey, VisualReadout } from "./visual-frame";
@@ -29,6 +30,9 @@ export function trendPointHref(matchId: string): string {
  * (`[data-ask-wipe]`), whose clip would cut it. The drawing itself is
  * hidden from assistive technology; the words are the anchors' when the
  * points link, else a list under it.
+ *
+ * On touch a tap selects a point and its readout stays until a tap lands
+ * outside the plot; a linked point follows its link on a second tap.
  */
 export function TrendVisual({
   visual,
@@ -52,11 +56,18 @@ export function TrendVisual({
       baseline ? `; ${baseline.label} ${baseline.values[index].text}` : ""
     }`;
   const [hovered, setHovered] = useState<number | null>(null);
+  const plotRef = useTouchReadout<HTMLDivElement>(hovered !== null, () =>
+    setHovered(null),
+  );
+  const fingerTap = useFingerTap();
   const hoverAt = (index: number) => ({
     onMouseEnter: () => setHovered(index),
     onMouseLeave: () => setHovered(null),
     onFocus: () => setHovered(index),
     onBlur: () => setHovered(null),
+    onPointerDown: (e: React.PointerEvent) => {
+      if (fingerTap.press(e, hovered === index)) setHovered(index);
+    },
   });
   const at = (index: number): CSSProperties => ({
     left: percent(geometry.points[index].x, TREND_BOX.width),
@@ -78,7 +89,7 @@ export function TrendVisual({
       {/* `pr-12`: a fixed gutter for the last value's label (about 46px at
           11px), whatever the column's width. */}
       <div className="flex flex-col gap-1 pr-12">
-        <div className="relative">
+        <div ref={plotRef} className="relative">
           {/* The wipe is the wrapper's, not the SVG's: an HTML box is what gets
               clipped, and the drawing inside it is never itself the animated
               element. The last value's label is inside the same box, so the
@@ -93,6 +104,9 @@ export function TrendVisual({
                   className="absolute z-0 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors duration-[var(--duration-hover)] outline-none hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)]"
                   style={at(index)}
                   {...hoverAt(index)}
+                  onClick={(e) => {
+                    if (!fingerTap.shouldFollow()) e.preventDefault();
+                  }}
                 >
                   <span className="sr-only">{words(index)}, open match</span>
                 </Link>
@@ -107,6 +121,9 @@ export function TrendVisual({
                     className="absolute z-0 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full"
                     style={at(index)}
                     {...hoverAt(index)}
+                    onClick={() =>
+                      fingerTap.click(undefined, () => setHovered(null))
+                    }
                   />
                   {linked && <span className="sr-only">{words(index)}</span>}
                 </span>

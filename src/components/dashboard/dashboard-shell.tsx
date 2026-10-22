@@ -126,7 +126,7 @@ export function DashboardShell({
                 {/* Keeps this chrome on the workspace the cookie names — see
                   WorkspaceSync for why a navigation can leave it behind. */}
                 <WorkspaceSync />
-                <div className="flex h-screen w-full overflow-hidden bg-white">
+                <div className="flex h-dvh w-full overflow-hidden bg-white">
                   <AppSidebar />
                   {/* The gutter is reserved even when nothing overflows: with
                     always-visible scrollbars, a page whose height changes (a

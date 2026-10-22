@@ -15,6 +15,8 @@ import {
   Pause,
   Play,
   Repeat,
+  RotateCcw,
+  RotateCw,
   SkipBack,
   SkipForward,
   ListVideo,
@@ -256,8 +258,9 @@ const PROBLEM_TITLES: Record<AttachmentPlaybackProblem["reason"], string> = {
   unplayable: FILM_REFUSAL_COPY.loadFailure.heading,
 };
 
+/** `touch:hit-area`: a 44px tap area on touch, the 13px glyph unchanged. */
 const GLYPH =
-  "block h-[13px] w-[13px] cursor-pointer rounded-[2px] text-white/85 transition-opacity duration-200 hover:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default disabled:opacity-35";
+  "block h-[13px] w-[13px] cursor-pointer rounded-[2px] text-white/85 transition-opacity duration-200 hover:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default disabled:opacity-35 touch:hit-area";
 
 /**
  * An icon-only control: `aria-label` plus the design system's dark tooltip
@@ -270,6 +273,7 @@ function Glyph({
   shortcut,
   pressed,
   disabled,
+  className,
   onClick,
   children,
 }: {
@@ -277,6 +281,7 @@ function Glyph({
   shortcut?: string;
   pressed?: boolean;
   disabled?: boolean;
+  className?: string;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -288,7 +293,7 @@ function Glyph({
         aria-pressed={pressed}
         disabled={disabled}
         onClick={onClick}
-        className={cn(GLYPH, pressed && "text-white")}
+        className={cn(GLYPH, pressed && "text-white", className)}
       >
         {children}
       </button>
@@ -746,7 +751,9 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       <TooltipProvider>
         <div
           ref={frameRef}
-          className="relative aspect-video w-full overflow-hidden rounded-[14px] bg-[#1A1A1C]"
+          // `@container`: the touch spacing on the control row below steps
+          // with the frame's own width, which the tab's list beside it sets.
+          className="@container relative aspect-video w-full overflow-hidden rounded-[14px] bg-[#1A1A1C]"
         >
           <video
             // The reload key. A `src` swap on a live element can keep serving
@@ -846,7 +853,9 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
 
           <div
             aria-hidden={covered || undefined}
-            className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col justify-end gap-1.5 bg-[linear-gradient(to_top,rgba(13,13,13,0.68)_0%,rgba(13,13,13,0)_100%)] px-4 pt-7 pb-2"
+            // Touch: 14px between the lane and the row, the reach of the
+            // lane's 44px strip past its 16px row (`film-track.tsx`).
+            className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col justify-end gap-1.5 bg-[linear-gradient(to_top,rgba(13,13,13,0.68)_0%,rgba(13,13,13,0)_100%)] px-4 pt-7 pb-2 touch:gap-3.5"
           >
             <FilmTrack
               className="pointer-events-auto"
@@ -857,7 +866,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               preview={{ url, generation, size: "report" }}
             />
 
-            <div className="pointer-events-auto flex h-8 items-center gap-3.5">
+            {/* Touch: a 44px row the glyphs' tap areas fill, and the glyphs
+                spread from 14px toward the room's 26px as the frame widens —
+                only as far as the row can take without crowding off the end. */}
+            <div className="pointer-events-auto flex h-8 items-center gap-3.5 touch:h-11 touch:@min-[540px]:gap-5 touch:@min-[640px]:gap-[26px]">
               <Glyph
                 label={playing ? "Pause" : "Play"}
                 shortcut="space"
@@ -884,6 +896,24 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                 onClick={() => step(1)}
               >
                 <SkipForward {...ICON} fill="currentColor" aria-hidden="true" />
+              </Glyph>
+              {/* Touch only, and only where the row has room: J / L have no
+                  other way in without a keyboard. */}
+              <Glyph
+                label="Back 5 seconds"
+                shortcut="J"
+                className="hidden touch:@min-[480px]:block"
+                onClick={() => seekTo((videoRef.current?.currentTime ?? 0) - 5)}
+              >
+                <RotateCcw {...ICON} aria-hidden="true" />
+              </Glyph>
+              <Glyph
+                label="Forward 5 seconds"
+                shortcut="L"
+                className="hidden touch:@min-[480px]:block"
+                onClick={() => seekTo((videoRef.current?.currentTime ?? 0) + 5)}
+              >
+                <RotateCw {...ICON} aria-hidden="true" />
               </Glyph>
               <span className="mono tabular text-[10px] text-white/75">
                 {formatClock(currentTime)} / {formatClock(duration)}
@@ -939,7 +969,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                   type="button"
                   aria-label={`Playback speed, ${rate}×`}
                   onClick={cycleRate}
-                  className="mono cursor-pointer rounded-[2px] text-[10px] font-medium text-white/85 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                  className="mono cursor-pointer rounded-[2px] text-[10px] font-medium text-white/85 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
                 >
                   {rate}×
                 </button>
