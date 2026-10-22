@@ -780,6 +780,23 @@ test.describe("winning plays in rallies of a length", () => {
     });
   });
 
+  test("a comparison of two lengths keeps the first, as before", () => {
+    expect(
+      rallyLengthOf("win rate in points over 4 shots vs under 4 shots"),
+    ).toEqual({ min: 1, max: 3 });
+  });
+
+  test("a contraction or never negates the bound", () => {
+    expect(rallyLengthOf("rallies that aren't longer than 4 shots")).toEqual({
+      min: 1,
+      max: 4,
+    });
+    expect(rallyLengthOf("points that never go more than 4 shots")).toEqual({
+      min: 1,
+      max: 4,
+    });
+  });
+
   test('"4 shots or under" keeps the 4', () => {
     expect(rallyLengthOf("points of 4 shots or under")).toEqual({
       min: 1,

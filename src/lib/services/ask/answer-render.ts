@@ -1858,8 +1858,8 @@ function dateColumn(rows: readonly AskRow[]): string | undefined {
   return dates.includes("played_on") ? "played_on" : dates[0];
 }
 
-/** The longest name added to a row label, so it stays within one line. */
-const MAX_ADDED_NAME_LENGTH = 24;
+/** The longest name added to a row label: a full opponent name fits. */
+const MAX_ADDED_NAME_LENGTH = 32;
 
 /**
  * A cell that names a row of the result: a short name with a letter in it,
@@ -1871,7 +1871,7 @@ function isNameCell(column: string, value: unknown): value is string {
     typeof value === "string" &&
     value.length <= MAX_ADDED_NAME_LENGTH &&
     /\p{L}/u.test(value) &&
-    !/(?:^|_)id$/.test(column) &&
+    !/(?:^|_)(?:id|date|on|at)$/.test(column) &&
     !ISO_DATE.test(value) &&
     !/:\/\//.test(value)
   );

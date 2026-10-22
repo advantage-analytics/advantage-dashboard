@@ -4277,6 +4277,23 @@ test.describe("a table keyed by two names", () => {
       { name: "Rudy", tournament: "Fall Classic Invitational at the Campus" },
       { name: "Rudy", tournament: "Spring Open Invitational at the Campus" },
     ];
+    // A date column is not a name either: the opponent tells the rows apart.
+    const names: AskRow[] = [
+      {
+        label: "Match",
+        played_on: "Sep 14, 2026",
+        opponent: "A. Montgomery-Smith",
+      },
+      {
+        label: "Match",
+        played_on: "Sep 21, 2026",
+        opponent: "A. Montgomery-Jones",
+      },
+    ];
+    expect(distinctRowLabels(["Match", "Match"], [0, 1], names)).toEqual([
+      "Match · A. Montgomery-Smith",
+      "Match · A. Montgomery-Jones",
+    ]);
     expect(distinctRowLabels(["Rudy", "Rudy"], [0, 1], long)).toEqual([
       "Rudy",
       "Rudy",

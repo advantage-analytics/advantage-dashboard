@@ -594,7 +594,8 @@ const AT_MOST_ALL = new RegExp(AT_MOST.source, "gi");
 const AT_LEAST_ALL = new RegExp(AT_LEAST.source, "gi");
 // "no" or "not" just before the comparator — but not the "or not" of "does it
 // help or not over 5 shots", which belongs to the clause before.
-const NEGATED = /(?<!\bor\s+)\b(?:no|not)\s+$/i;
+const NEGATED =
+  /(?:(?<!\bor\s+)\b(?:no|not)|\bnever(?:\s+\w+)?|n't(?:\s+\w+)?)\s+$/i;
 
 /** Whether the match is negated: "no longer than 4". */
 function negated(question: string, match: RegExpMatchArray): boolean {
@@ -627,32 +628,31 @@ export function rallyLengthOf(question: string): AskRallyLength | null {
   }
   // Every bound the question names, both ends kept: "at least 3 and no more
   // than 8" is 3 to 8. A negated bound turns over: "not under 5" is 5 or
-  // more, "no more than 4" is at most 4.
-  let min: number | null = null;
-  let max: number | null = null;
-  const bound = (side: "min" | "max", n: number) => {
-    if (side === "min") min = min === null ? n : Math.max(min, n);
-    else max = max === null ? n : Math.min(max, n);
-  };
+  // more, "no more than 4" is at most 4. Bounds that cannot all hold ("over
+  // 4 vs under 4") are a comparison: the first one read stands alone.
+  const bounds: AskRallyLength[] = [];
   for (const most of question.matchAll(AT_MOST_ALL)) {
     const n = numberOf(most.slice(1).find((group) => group !== undefined));
     if (n === null) continue;
-    const upper = STRICT_UPPER_LEAD.test(most[0]) ? n - 1 : n;
-    if (negated(question, most)) bound("min", upper + 1);
-    else bound("max", upper);
+    const max = STRICT_UPPER_LEAD.test(most[0]) ? n - 1 : n;
+    if (negated(question, most)) bounds.push({ min: max + 1, max: null });
+    else if (max >= 1) bounds.push({ min: 1, max });
   }
   for (const least of question.matchAll(AT_LEAST_ALL)) {
     const n = numberOf(least.slice(1).find((group) => group !== undefined));
     if (n === null) continue;
-    const lower = STRICT_LOWER_LEAD.test(least[0]) ? n + 1 : n;
-    if (negated(question, least)) bound("max", lower - 1);
-    else bound("min", lower);
+    const min = STRICT_LOWER_LEAD.test(least[0]) ? n + 1 : n;
+    if (!negated(question, least)) bounds.push({ min, max: null });
+    else if (min > 1) bounds.push({ min: 1, max: min - 1 });
   }
-  const lo: number | null = min;
-  const hi: number | null = max;
-  if (hi !== null && hi >= Math.max(lo ?? 1, 1))
-    return { min: lo ?? 1, max: hi };
-  if (lo !== null && hi === null) return { min: lo, max: null };
+  if (bounds.length > 0) {
+    const min = Math.max(...bounds.map((bound) => bound.min));
+    const maxes = bounds.flatMap((bound) =>
+      bound.max === null ? [] : [bound.max],
+    );
+    const max = maxes.length > 0 ? Math.min(...maxes) : null;
+    return max === null || min <= max ? { min, max } : bounds[0];
+  }
   if (SHORT_RALLY.test(question)) return ASK_SHORT_RALLY;
   if (MEDIUM_RALLY.test(question)) return ASK_MEDIUM_RALLY;
   if (LONG_RALLY.test(question)) return ASK_LONG_RALLY;
