@@ -1399,6 +1399,8 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // handler's dependency, and re-subscribing that on every play/pause is a
   // cost for nothing.
   const playingRef = useRef(false);
+  /** The press on the film was a touch that found the chrome hidden. */
+  const revealTapRef = useRef(false);
 
   const wake = useCallback(() => {
     setChrome(true);
@@ -1738,7 +1740,21 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               // than a black or dimmed one.
               onPlaying={dropMirror}
               onCanPlay={settleMirrorDrop}
-              onClick={togglePlay}
+              // A finger on a film whose chrome has faded only brings the
+              // chrome back, as the iOS player does: the room's `wake` runs
+              // on the same press, and a tap that also paused would stop the
+              // film under someone who only reached for the controls. Read
+              // here, before the room's own handler bubbles up and wakes it.
+              onPointerDown={(e) => {
+                revealTapRef.current = e.pointerType === "touch" && !chrome;
+              }}
+              onClick={() => {
+                if (revealTapRef.current) {
+                  revealTapRef.current = false;
+                  return;
+                }
+                togglePlay();
+              }}
               // R1 (2026-09-22): click the film plays/pauses. Double-click no
               // longer exits — a fast click burst (click, click, dblclick)
               // was throwing the viewer out of the room on an ordinary rapid
@@ -1875,7 +1891,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 aria-hidden={panelOpen ? true : undefined}
                 tabIndex={panelOpen ? -1 : undefined}
                 className={cn(
-                  "absolute top-[18px] right-6 inline-flex h-7 cursor-pointer items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white transition-[opacity,transform,background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                  // Safe-area insets as the transport's; 0 on a desktop. The
+                  // 28px pill takes a 44px tap area on touch.
+                  "absolute top-[max(18px,env(safe-area-inset-top))] right-[max(1.5rem,env(safe-area-inset-right))] inline-flex h-7 cursor-pointer items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white transition-[opacity,transform,background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area",
                   // Back as soon as the drawer starts leaving, so a quick re-open
                   // can catch the sheet mid-slide and turn it around. The slide
                   // belongs to the drawer: the chrome collapse is opacity alone,
@@ -1916,6 +1934,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
             >
               <FilmTransport
                 className={cn(
+                  // The room is edge to edge (`viewportFit: "cover"`), so the
+                  // bar clears the home indicator and a notch's side insets.
+                  // Every inset is 0 without one, leaving the 24px / 14px.
+                  "pr-[max(1.5rem,env(safe-area-inset-right))] pb-[max(0.875rem,env(safe-area-inset-bottom))] pl-[max(1.5rem,env(safe-area-inset-left))]",
                   fade,
                   chrome ? "pointer-events-auto" : "pointer-events-none",
                 )}
@@ -1935,6 +1957,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 courtOn={courtOn}
                 previewSource={{ url: p.url, generation: p.generation }}
                 onSeek={seek}
+                onSeekBy={(delta) => seek(filmNow() + delta)}
                 onTogglePlay={togglePlay}
                 onStep={step}
                 onToggleSaved={p.onToggleSaved ? toggleSavedActive : undefined}

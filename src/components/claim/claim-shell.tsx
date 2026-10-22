@@ -104,7 +104,7 @@ export function ClaimShell({
   );
 
   return (
-    <div className="relative flex min-h-screen items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
+    <div className="relative flex min-h-dvh items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
       {/* The escape chrome, floating over the page. Absolute rather than a
           band, so the content below is centred on the page and not on what is
           left of it — which is the whole reason these frames read as a screen

@@ -24,6 +24,35 @@
    reshape every one of them. */
 @custom-variant dark (&:is(.dark *));
 
+/* A finger, not a mouse: an iPad or a phone with nothing paired. Rules under
+   `touch:` change where you can tap, never what a mouse sees — a trackpad
+   reports `hover: hover` and keeps the desktop page exactly. `/design/ipad`
+   forces them on with `data-force-touch` so a desktop can review them. The
+   rulebook is "Touch" in .skills/advantage-analytics-design/reference/chrome.md. */
+@custom-variant touch {
+  @media (hover: none) and (pointer: coarse) {
+    @slot;
+  }
+  &:where([data-force-touch], [data-force-touch] *) {
+    @slot;
+  }
+}
+
+/* A 44px tap area around a control whose glyph stays small — Apple's minimum
+   target. Use it as `touch:hit-area`: the control looks the same, and taps
+   up to 44px around its centre land on it. Never shrinks a control already
+   44px or larger. An absolutely placed control keeps its own positioning. */
+@utility hit-area {
+  &:not(.absolute, .fixed, .sticky) {
+    position: relative;
+  }
+  &::after {
+    content: "";
+    position: absolute;
+    inset: min(0px, calc((100% - 44px) / 2));
+  }
+}
+
 @theme inline {
   --font-sans: var(--font-inter);
   /* Was var(--font-inter) — so `font-mono` rendered Inter and Roboto Mono was
@@ -192,10 +221,28 @@
     overflow-x: hidden;
   }
   body {
-    min-height: 100vh;
+    /* dvh, not vh: Safari's 100vh is the height with its toolbar hidden, so
+       a 100vh page runs under the toolbar on an iPad. */
+    min-height: 100dvh;
     overflow-y: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+  /* Touch: no grey flash over a tapped control (every control draws its own
+     pressed state), and no 300ms double-tap-zoom wait before a tap counts.
+     Pinch zoom still works. */
+  a,
+  button,
+  input,
+  label,
+  select,
+  summary,
+  textarea,
+  [role="button"],
+  [role="tab"],
+  [role="slider"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
 }
 
@@ -338,8 +385,13 @@
   }
 }
 
+/* `backwards`, not `both`: a fill that outlives the animation leaves
+   `transform: translateY(0)` on the page wrapper, and any transform makes it
+   the containing block for `position: fixed` — every page's fixed layer (the
+   peek drawer's sheet below `lg`, `DRAWER_RAIL`) would then scroll with the
+   page instead of the viewport. Ending on no transform looks the same. */
 .animate-page-enter {
-  animation: page-enter 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation: page-enter 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
 }
 
 /* The 340px rail beside a table — the roster's player drawer and the

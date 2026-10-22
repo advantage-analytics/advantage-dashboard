@@ -1,7 +1,7 @@
 "use client";
 
 import { Layers, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   DARK_READOUT_CLASS,
@@ -231,7 +231,7 @@ function HeaderButton({
       aria-hidden={hidden || undefined}
       tabIndex={hidden ? -1 : undefined}
       onClick={onClick}
-      className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-cell)] transition-opacity duration-200 hover:bg-white/[0.08]"
+      className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-cell)] transition-opacity duration-200 hover:bg-white/[0.08] touch:hit-area"
       style={{ opacity: hidden ? 0 : 1 }}
     >
       {children}
@@ -265,12 +265,32 @@ export function FilmCourt({
   const [opened, setOpened] = useState<{
     key: string;
     seekKey: FilmCourtProps["seekKey"];
+    /** Opened by a finger's tap rather than a hover or focus. */
+    byTouch?: boolean;
   } | null>(null);
   const openKey = opened && opened.seekKey === seekKey ? opened.key : null;
   // The hands the Direction filter uses, so the readout's placement matches
   // the row the filter kept (Inside Out, not Crosscourt).
   const { context: filterContext } = useMatchFilters();
-  const show = (key: string) => setOpened({ key, seekKey });
+  const show = (key: string, byTouch?: boolean) =>
+    setOpened({ key, seekKey, byTouch });
+
+  // A finger has no hover, and the click that seeks closes the readout with
+  // the seek — so on touch the first tap on a mark opens its readout and a
+  // second tap on the same mark seeks (chrome.md, "Touch": a readout answers
+  // a tap and stays until a tap outside). `pressRef` is the pointer type of
+  // the press the next click belongs to.
+  const pressRef = useRef<string>("mouse");
+  const touchOpen = opened?.byTouch === true && openKey !== null;
+  useEffect(() => {
+    if (!touchOpen) return;
+    const close = (e: PointerEvent) => {
+      if ((e.target as Element | null)?.closest?.("[data-shot-id]")) return;
+      setOpened(null);
+    };
+    document.addEventListener("pointerdown", close, true);
+    return () => document.removeEventListener("pointerdown", close, true);
+  }, [touchOpen]);
 
   const drawn = mode === "none" ? [] : marks;
   const heading = mode === "none" ? "Next point" : title;
@@ -442,12 +462,38 @@ export function FilmCourt({
               type="button"
               data-shot-id={mark.shotId}
               aria-label={`${lines.title} · ${lines.who} · ${lines.where} — ${mark.kind}`}
-              onPointerEnter={() => show(keyOf(mark))}
-              onPointerLeave={() => setOpened(null)}
+              onPointerDown={(e) => {
+                pressRef.current = e.pointerType;
+              }}
+              // A touch "enters" on press and "leaves" on lift; both are the
+              // tap's, handled in `onClick` below.
+              onPointerEnter={(e) => {
+                if (e.pointerType !== "touch") show(keyOf(mark));
+              }}
+              onPointerLeave={(e) => {
+                if (e.pointerType !== "touch") setOpened(null);
+              }}
               onFocus={() => show(keyOf(mark))}
-              onBlur={() => setOpened(null)}
-              onClick={() => onSelectMark(mark)}
-              className="absolute box-border cursor-pointer"
+              onBlur={() => {
+                if (!opened?.byTouch) setOpened(null);
+              }}
+              onClick={() => {
+                const key = keyOf(mark);
+                const byTouch = pressRef.current === "touch";
+                // A later Enter on a focused mark is a keyboard click.
+                pressRef.current = "mouse";
+                if (byTouch && openKey !== key) {
+                  show(key, true);
+                  return;
+                }
+                onSelectMark(mark);
+              }}
+              // A point's few marks take 44px to a finger; the match view's
+              // hundreds of 4.5px dots would only bury each other's areas.
+              className={cn(
+                "absolute box-border cursor-pointer",
+                !isMatch && "touch:hit-area",
+              )}
               style={{
                 left: `${mark.x}%`,
                 top: `${mark.y}%`,

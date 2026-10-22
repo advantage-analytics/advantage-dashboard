@@ -119,7 +119,7 @@ export function BetaWelcomeDialog({
               <span className="flex-1" />
               <DialogPrimitive.Close
                 aria-label="Close"
-                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/75 transition-colors hover:bg-white/15 hover:text-white focus-visible:shadow-[0_0_0_2px_rgba(255,255,255,0.7)] focus-visible:outline-none"
+                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/75 transition-colors hover:bg-white/15 hover:text-white focus-visible:shadow-[0_0_0_2px_rgba(255,255,255,0.7)] focus-visible:outline-none touch:hit-area"
               >
                 <X className="size-3.5" strokeWidth={1.5} aria-hidden />
               </DialogPrimitive.Close>

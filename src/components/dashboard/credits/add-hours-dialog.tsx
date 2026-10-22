@@ -274,7 +274,7 @@ function AddHoursContent({
         if (phase.kind === "checkout" || phase.kind === "recording")
           event.preventDefault();
       }}
-      className="fixed top-10 left-1/2 z-[51] max-h-[calc(100vh-80px)] -translate-x-1/2 overflow-y-auto bg-[var(--surface-card)] outline-none data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-2 motion-reduce:data-[state=open]:slide-in-from-top-0"
+      className="fixed top-10 left-1/2 z-[51] max-h-[calc(100dvh-80px)] -translate-x-1/2 overflow-y-auto bg-[var(--surface-card)] outline-none data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-2 motion-reduce:data-[state=open]:slide-in-from-top-0"
       style={{
         width: "520px",
         maxWidth: "calc(100vw - 32px)",
@@ -300,7 +300,7 @@ function AddHoursContent({
             aria-label="Close"
             // Not while the purchase is being recorded: the hours are paid for.
             hidden={phase.kind === "recording"}
-            className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/75 transition-colors hover:bg-white/15 hover:text-white focus-visible:shadow-[0_0_0_2px_rgba(255,255,255,0.7)] focus-visible:outline-none"
+            className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/75 transition-colors hover:bg-white/15 hover:text-white focus-visible:shadow-[0_0_0_2px_rgba(255,255,255,0.7)] focus-visible:outline-none touch:hit-area"
           >
             <X className="size-3.5" strokeWidth={1.5} aria-hidden />
           </DialogPrimitive.Close>

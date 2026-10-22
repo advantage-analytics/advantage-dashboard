@@ -143,7 +143,7 @@ export function CrestControl({
             aria-label={label}
             disabled={isPending}
             onClick={() => inputRef.current?.click()}
-            className="absolute right-[-6px] bottom-[-6px] flex size-[26px] cursor-pointer items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-card)] text-[var(--ink-700)] shadow-[var(--shadow-card),inset_0_0_0_1px_var(--border-medium)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-wait disabled:opacity-60"
+            className="absolute right-[-6px] bottom-[-6px] flex size-[26px] cursor-pointer items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-card)] text-[var(--ink-700)] shadow-[var(--shadow-card),inset_0_0_0_1px_var(--border-medium)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-wait disabled:opacity-60 touch:hit-area"
           >
             <Upload className="size-[13px]" strokeWidth={1.5} />
           </button>
@@ -163,9 +163,12 @@ export function CrestControl({
         className="group relative shrink-0 cursor-pointer overflow-hidden rounded-[8px] focus-visible:outline-none disabled:cursor-wait disabled:opacity-60"
       >
         <ProgramCrest name={name} crestUrl={crestUrl} size={52} />
+        {/* A finger has no hover: on touch the wash shows only under the
+            press, so the crest stays readable — the text actions beside it
+            are the always-visible way in. */}
         <span
           aria-hidden="true"
-          className="absolute inset-0 flex items-center justify-center bg-[rgba(13,13,13,0.55)] text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+          className="absolute inset-0 flex items-center justify-center bg-[rgba(13,13,13,0.55)] text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 touch:group-active:opacity-100"
         >
           <Camera className="size-4" strokeWidth={1.5} />
         </span>

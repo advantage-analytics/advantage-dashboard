@@ -750,7 +750,7 @@ export function MatchesPageContent({
       setSelectedId(null);
       setClosing(true);
       // The animation's end normally finishes the close; this covers reduced
-      // motion and a rail hidden below `lg`, where no animation runs. A second
+      // motion, where no animation runs. A second
       // close during the slide replaces the timer rather than orphaning it —
       // an orphan would fire later and shut whatever drawer opened next.
       if (closeTimer.current) clearTimeout(closeTimer.current);

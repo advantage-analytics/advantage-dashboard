@@ -50,14 +50,14 @@ export default async function MatchLayout({
     // change that scroll behavior for every route built on `EventShell`
     // (schedule create/detail pages), which already sets its own bounded
     // `overflow-y-auto` and would suddenly start clipping/pinning where it
-    // doesn't today. `calc(100vh-var(--header-h))` + `overflow-hidden` sizes
+    // doesn't today. `calc(100dvh-var(--header-h))` + `overflow-hidden` sizes
     // this subtree from the viewport directly, independent of that chain —
     // same pattern as `new-match-wizard/UploadMatchFlow.tsx`'s
-    // `min-h-[calc(100vh-44px)]`. Everything below this div (see
+    // `min-h-[calc(100dvh-44px)]`. Everything below this div (see
     // `MatchReport.Frame` in `match-report.tsx`) already carries `min-h-0`
     // correctly; this was the one broken link. The skeletons fill it too:
     // `PendingFrame` is `flex-1` in this flex column.
-    <div className="flex h-[calc(100vh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
+    <div className="flex h-[calc(100dvh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
       <Suspense
         fallback={
           hint.kind === "steps" ? (

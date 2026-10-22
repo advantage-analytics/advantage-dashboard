@@ -18,9 +18,10 @@ export const FILM_ROW_SLIDE_TRANSITION =
 /** The score, slid aside for good: the action is lit at rest. */
 export const FILM_ROW_SLIDE_HELD = "-translate-x-[26px]";
 
-/** The score, sliding aside while the row is hovered or holds focus. */
+/** The score, sliding aside while the row is hovered or holds focus — and
+ *  held aside on touch, where the action is lit at rest (no hover to wait for). */
 export const FILM_ROW_SLIDE_ON_REACH =
-  "motion-safe:group-focus-within/row:-translate-x-[26px] motion-safe:group-hover/row:-translate-x-[26px]";
+  "motion-safe:group-focus-within/row:-translate-x-[26px] motion-safe:group-hover/row:-translate-x-[26px] touch:-translate-x-[26px]";
 
 /** The action's transition, and its own keyboard focus showing it. */
 export const FILM_ROW_ACTION_TRANSITION =
@@ -29,6 +30,7 @@ export const FILM_ROW_ACTION_TRANSITION =
 /** The action, lit at rest. */
 export const FILM_ROW_ACTION_HELD = "opacity-100";
 
-/** The action, hidden until the row is hovered or holds focus. */
+/** The action, hidden until the row is hovered or holds focus. A finger has
+ *  no hover, so on touch it is lit at rest, the score slid aside above. */
 export const FILM_ROW_ACTION_ON_REACH =
-  "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100";
+  "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 touch:opacity-100";

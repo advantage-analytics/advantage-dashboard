@@ -585,9 +585,11 @@ function CrestStep({
           className="group relative shrink-0 cursor-pointer overflow-hidden rounded-[8px] focus-visible:outline-none disabled:cursor-wait disabled:opacity-60"
         >
           <ProgramCrest name={created.name} crestUrl={crestUrl} size={52} />
+          {/* A finger has no hover: on touch the wash shows only under the
+              press — "Upload a crest" beside it is always visible. */}
           <span
             aria-hidden="true"
-            className="absolute inset-0 flex items-center justify-center bg-[rgba(13,13,13,0.55)] text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+            className="absolute inset-0 flex items-center justify-center bg-[rgba(13,13,13,0.55)] text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 touch:group-active:opacity-100"
           >
             <Camera className="size-4" strokeWidth={1.5} />
           </span>

@@ -9,6 +9,8 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import { readGameScore } from "@/components/dashboard/matches/match-detail/film/film-score";
+import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
+import { isFingerPointer, useTouchReadout } from "@/hooks/use-touch-readout";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { surnameLabels } from "@/lib/data/match-utils";
 import { cn } from "@/lib/utils";
@@ -40,6 +42,12 @@ import { cn } from "@/lib/utils";
  * break's readout on hover and — with a video — clicks through to the point
  * that broke serve. The readout is the DS dark readout (`ChartTooltip`), hung
  * ABOVE the plot so it never covers the series.
+ *
+ * On touch the same readout answers a finger: a tap or a horizontal drag over
+ * the plot selects the nearest point (the plot is `pan-y`, so a vertical swipe
+ * still scrolls the page), and the readout stays until a tap lands outside
+ * the chart. Opening a point in Video takes a second tap on the point already
+ * selected, so the first tap never jumps the page away.
  */
 
 const CHART_W = 1000;
@@ -135,6 +143,16 @@ export function PerformanceTrackerChart() {
   const [savedTarget, setTarget] = useState<ReadoutTarget | null>(null);
   const [open, setOpen] = useState(false);
 
+  const coarse = useCoarsePointer();
+  const chartRef = useTouchReadout<HTMLDivElement>(open, () => setOpen(false));
+  // A finger's press, kept until its click: the index it landed on, and
+  // whether that mark was already the selected one. Only that second tap
+  // watches the point (or, with nothing to watch, closes the readout). Null
+  // for a mouse, whose click keeps its old meaning.
+  const fingerTapRef = useRef<{ index: number; reselect: boolean } | null>(
+    null,
+  );
+
   const youIsPlayer1 = sides.you.isPlayer1;
 
   const samples: Sample[] = useMemo(() => {
@@ -205,17 +223,18 @@ export function PerformanceTrackerChart() {
   }, [samples]);
 
   const selectFromClientX = useCallback(
-    (clientX: number) => {
+    (clientX: number): number | null => {
       const svg = svgRef.current;
-      if (!svg || samples.length < 2) return;
+      if (!svg || samples.length < 2) return null;
       const rect = svg.getBoundingClientRect();
       const ratio = (clientX - rect.left) / rect.width;
-      const idx = Math.round(ratio * (samples.length - 1));
-      setTarget({
-        kind: "point",
-        index: Math.max(0, Math.min(samples.length - 1, idx)),
-      });
+      const idx = Math.max(
+        0,
+        Math.min(samples.length - 1, Math.round(ratio * (samples.length - 1))),
+      );
+      setTarget({ kind: "point", index: idx });
       setOpen(true);
+      return idx;
     },
     [samples],
   );
@@ -361,6 +380,7 @@ export function PerformanceTrackerChart() {
       </div>
 
       <div
+        ref={chartRef}
         className="relative"
         role="figure"
         aria-label={`Momentum across ${points.length} points. ${sides.you.name} above the midline, ${sides.opp.name} below.`}
@@ -381,7 +401,8 @@ export function PerformanceTrackerChart() {
           viewBox={`0 0 ${CHART_W} ${CHART_H}`}
           preserveAspectRatio="none"
           className="block w-full"
-          style={{ height: PLOT_H }}
+          // A horizontal drag scrubs the plot; a vertical one scrolls.
+          style={{ height: PLOT_H, touchAction: "pan-y" }}
           aria-hidden="true"
         >
           <defs>
@@ -507,9 +528,38 @@ export function PerformanceTrackerChart() {
             height={CHART_H}
             fill="transparent"
             className={watchId ? "cursor-pointer" : undefined}
-            onClick={watchId ? () => actions.watchPoint(watchId) : undefined}
+            onClick={() => {
+              const tap = fingerTapRef.current;
+              fingerTapRef.current = null;
+              if (tap && !tap.reselect) return;
+              if (watchId) actions.watchPoint(watchId);
+              else if (tap) setOpen(false);
+            }}
             onMouseMove={(e) => selectFromClientX(e.clientX)}
             onMouseLeave={() => setOpen(false)}
+            onPointerDown={(e) => {
+              if (!isFingerPointer(e)) {
+                fingerTapRef.current = null;
+                return;
+              }
+              const before =
+                open && target?.kind === "point" ? target.index : null;
+              const idx = selectFromClientX(e.clientX);
+              fingerTapRef.current =
+                idx === null ? null : { index: idx, reselect: idx === before };
+            }}
+            // A drag scrubs. The touch is captured to the rect, so the
+            // readout follows the finger even past the plot's edge.
+            onPointerMove={(e) => {
+              if (!isFingerPointer(e) || e.buttons === 0) return;
+              const idx = selectFromClientX(e.clientX);
+              const tap = fingerTapRef.current;
+              if (tap && idx !== tap.index) tap.reselect = false;
+            }}
+            // The browser took the gesture as a scroll.
+            onPointerCancel={(e) => {
+              if (isFingerPointer(e)) setOpen(false);
+            }}
           />
         </svg>
 
@@ -551,13 +601,33 @@ export function PerformanceTrackerChart() {
               setOpen(true);
             },
             onMouseLeave: () => setOpen(false),
+            onPointerDown: (e: React.PointerEvent) => {
+              if (!isFingerPointer(e)) {
+                fingerTapRef.current = null;
+                return;
+              }
+              fingerTapRef.current = { index: i, reselect: hoveredBreak === i };
+              setTarget({ kind: "break", index: i });
+              setOpen(true);
+            },
+            onPointerCancel: (e: React.PointerEvent) => {
+              if (isFingerPointer(e)) setOpen(false);
+            },
+            // A mouse or keyboard click watches at once; a finger's first tap
+            // only selects the break.
+            onClick: () => {
+              const tap = fingerTapRef.current;
+              fingerTapRef.current = null;
+              if (tap && !tap.reselect) return;
+              if (breakWatchId) actions.watchPoint(breakWatchId);
+              else if (tap) setOpen(false);
+            },
           };
           return breakWatchId ? (
             <button
               key={`break-hit-${i}`}
               type="button"
               aria-label={`Watch the break of serve in set ${points[i].setNumber}, point ${points[i].pointNumber}, in Video`}
-              onClick={() => actions.watchPoint(breakWatchId)}
               onFocus={hitProps.onMouseEnter}
               onBlur={hitProps.onMouseLeave}
               {...hitProps}
@@ -592,7 +662,9 @@ export function PerformanceTrackerChart() {
             </span>
             {readoutWatchable && (
               <span className="text-[10px] text-white/[0.64]">
-                Click to watch in Video
+                {coarse
+                  ? "Tap again to watch in Video"
+                  : "Click to watch in Video"}
               </span>
             )}
           </ChartTooltip>

@@ -269,13 +269,14 @@ export function SeasonKpiStrip({
             frame draws the strip with nothing in its corner, and the 4–5 tile
             picker is still wanted. So it is there on hover, on focus and while
             open, and absent at rest. Named by a dark tooltip as every
-            icon-only control must be. */}
+            icon-only control must be. A finger has no hover, so on touch it
+            stays lit, with a 44px tap area around the 28px glyph box. */}
         <ChromeTooltip label="Customize tiles" detail="Pick 4–5 to show">
           <PopoverTrigger asChild>
             <button
               type="button"
               aria-label="Customize season tiles"
-              className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-lg text-[#8A8A8E] opacity-0 transition-[opacity,color,background-color] duration-200 group-hover:opacity-100 hover:bg-[#F5F5F5] hover:text-[#3C3C43] focus-visible:opacity-100 focus-visible:outline-none data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D] data-[state=open]:opacity-100"
+              className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-lg text-[#8A8A8E] opacity-0 transition-[opacity,color,background-color] duration-200 group-hover:opacity-100 hover:bg-[#F5F5F5] hover:text-[#3C3C43] focus-visible:opacity-100 focus-visible:outline-none data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D] data-[state=open]:opacity-100 touch:hit-area touch:opacity-100"
             >
               <Settings2 className="size-3.5" strokeWidth={1.5} />
             </button>

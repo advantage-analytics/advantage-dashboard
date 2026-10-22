@@ -201,10 +201,10 @@ export function HomeFooterPending() {
 export function HomePageSkeleton() {
   return (
     <div className="w-full flex-1 bg-white">
-      <div className="mx-auto flex min-h-[calc(100vh-var(--header-h))] max-w-screen-2xl flex-col gap-4 px-14 pt-5 pb-8">
+      <div className="mx-auto flex min-h-[calc(100dvh-var(--header-h))] max-w-screen-2xl flex-col gap-4 px-8 pt-5 pb-8 xl:px-14">
         <HomeTitlePending />
         <HomeKpisPending />
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="flex min-w-0 flex-col gap-5">
             <HomeRecentPending />
             <HomeActivityPending />

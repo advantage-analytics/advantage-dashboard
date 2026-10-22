@@ -111,7 +111,7 @@ export function RosterDialog({
               type="button"
               aria-label="Close"
               onClick={() => onOpenChange(false)}
-              className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
             >
               <X className="size-3.5" strokeWidth={1.5} aria-hidden />
             </button>

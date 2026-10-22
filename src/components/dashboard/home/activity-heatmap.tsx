@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import { isFingerPointer, useTouchReadout } from "@/hooks/use-touch-readout";
 import type { ActivityDay } from "@/lib/data/personal-activity";
 
 /**
@@ -16,6 +17,11 @@ import type { ActivityDay } from "@/lib/data/personal-activity";
  * is data, not a control naming itself). It carries the DS float treatment
  * (`--ink-900` on white text, `--shadow-dropdown`) the rest of the system's dark
  * tooltips use.
+ *
+ * A finger has no hover, so on touch the grid selects instead: a tap names the
+ * day under it, a horizontal drag scrubs across days, and the bubble stays
+ * until a tap lands outside the grid or on the same day again. The grid is
+ * `pan-y`, so a vertical swipe over it still scrolls the page.
  */
 
 const MONTHS_SHORT = [
@@ -61,6 +67,28 @@ export function ActivityHeatmap({
   const tipRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
   const [tipLeft, setTipLeft] = useState<number | null>(null);
+  const tapRef = useTouchReadout<HTMLDivElement>(hover !== null, () =>
+    setHover(null),
+  );
+  // A finger's press: the day it landed on, and whether that day was already
+  // selected — lifting on it again closes the bubble.
+  const fingerRef = useRef<{ i: number; reselect: boolean } | null>(null);
+
+  const cellState = (el: HTMLElement, i: number): HoverState => ({
+    i,
+    cx: el.offsetLeft + el.offsetWidth / 2,
+    top: el.offsetTop,
+  });
+
+  // The cell under a finger. A touch stays captured by the cell it started
+  // on, so the event's own target never changes mid-drag; ask the point.
+  const cellAt = (x: number, y: number): HoverState | null => {
+    const el = document.elementFromPoint(x, y);
+    if (!(el instanceof HTMLElement) || el.dataset.day === undefined) {
+      return null;
+    }
+    return cellState(el, Number(el.dataset.day));
+  };
 
   // Keep the bubble inside the grid's width. A cell near either edge would
   // otherwise centre a ~150px label out past the card; clamp its centre to
@@ -78,6 +106,33 @@ export function ActivityHeatmap({
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
       <div
+        ref={tapRef}
+        onPointerDown={(e) => {
+          if (!isFingerPointer(e)) return;
+          const next = cellAt(e.clientX, e.clientY);
+          fingerRef.current = next
+            ? { i: next.i, reselect: hover?.i === next.i }
+            : null;
+          if (next) setHover(next);
+        }}
+        onPointerMove={(e) => {
+          if (!isFingerPointer(e) || e.buttons === 0) return;
+          const next = cellAt(e.clientX, e.clientY);
+          if (!next) return;
+          if (fingerRef.current && next.i !== fingerRef.current.i) {
+            fingerRef.current.reselect = false;
+          }
+          setHover((h) => (h?.i === next.i ? h : next));
+        }}
+        onPointerUp={(e) => {
+          if (!isFingerPointer(e)) return;
+          if (fingerRef.current?.reselect) setHover(null);
+          fingerRef.current = null;
+        }}
+        // The browser took the gesture as a scroll.
+        onPointerCancel={(e) => {
+          if (isFingerPointer(e)) setHover(null);
+        }}
         role="img"
         aria-label={`Match activity over the last 12 months: ${sessionCount} active ${sessionCount === 1 ? "day" : "days"}`}
         style={{
@@ -99,19 +154,14 @@ export function ActivityHeatmap({
           // is 2px at the 724px card the design was drawn at, one tick tighter
           // in a narrow column, and never more than 3px in a wide one.
           gap: "clamp(1.5px, 0.3cqi, 3px)",
+          touchAction: "pan-y",
         }}
       >
         {days.map((day, i) => (
           <div
             key={i}
-            onMouseEnter={(e) => {
-              const el = e.currentTarget;
-              setHover({
-                i,
-                cx: el.offsetLeft + el.offsetWidth / 2,
-                top: el.offsetTop,
-              });
-            }}
+            data-day={i}
+            onMouseEnter={(e) => setHover(cellState(e.currentTarget, i))}
             // Guard on the index so a stale leave from the cell we just left
             // can't clear a hover the next cell has already set.
             onMouseLeave={() => setHover((h) => (h?.i === i ? null : h))}

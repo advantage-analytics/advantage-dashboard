@@ -85,8 +85,16 @@
 export type AdvFieldKind = "boxed" | "underline";
 export type AdvFieldSize = "sm" | "md";
 
-/** Shared by both kinds — the field's own ink and its placeholder. */
-const BASE = "text-[var(--ink-900)] placeholder:text-[var(--ink-400)]";
+/**
+ * Shared by both kinds — the field's own ink and its placeholder — and the
+ * one size rule the two kinds share under a finger: iOS Safari zooms the page
+ * into any focused field whose text is under 16px, and does not zoom back out.
+ * So on touch every field reads at 16px (`touch:text-[16px]`, which outranks
+ * the 12 / 13px below on variant order). The one place this file changes what
+ * an iPad sees; a mouse keeps the DS sizes.
+ */
+const BASE =
+  "text-[var(--ink-900)] placeholder:text-[var(--ink-400)] touch:text-[16px]";
 
 const BOXED = [
   "rounded-[var(--radius-button)]",

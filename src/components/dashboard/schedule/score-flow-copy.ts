@@ -13,4 +13,5 @@
 export const SCORE_FLOW_TITLE = "The result.";
 
 /** The wizard's own content column, copied so the two pages measure the same. */
-export const SCORE_FLOW_CONTENT_CLS = "mx-auto w-full max-w-[832px] px-14";
+export const SCORE_FLOW_CONTENT_CLS =
+  "mx-auto w-full max-w-[784px] px-8 xl:max-w-[832px] xl:px-14";

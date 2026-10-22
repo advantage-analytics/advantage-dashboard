@@ -21,7 +21,7 @@ export default function Loading() {
   // The same fixed height as the layout's box, so the ground does not jump
   // when the layout's own fallback replaces it.
   return (
-    <PendingFrame label="match" className="h-[calc(100vh-var(--header-h))]">
+    <PendingFrame label="match" className="h-[calc(100dvh-var(--header-h))]">
       {null}
     </PendingFrame>
   );

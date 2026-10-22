@@ -26,6 +26,7 @@ import {
   winnerHitBy,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
 import { surnameLabels } from "@/lib/data/match-utils";
@@ -1033,12 +1034,18 @@ function Readout({
   );
 }
 
-/** Hover and focus wiring for one target — keyboard gets what the mouse gets. */
+/**
+ * Hover, focus and tap wiring for one target — keyboard and finger get what
+ * the mouse gets. `onClick` carries the target's click-through, so a finger's
+ * first tap can select instead of opening Video.
+ */
 interface TargetHandlers {
   onMouseEnter: () => void;
   onMouseLeave: () => void;
   onFocus: () => void;
   onBlur: () => void;
+  onPointerDown: (e: React.PointerEvent) => void;
+  onClick: () => void;
 }
 
 /**
@@ -1105,7 +1112,6 @@ function ValueCell({
         <span className={COLUMN}>
           <button
             type="button"
-            onClick={target.onClick}
             aria-disabled={target.onClick ? undefined : true}
             aria-label={target.label}
             {...target.handlers}
@@ -1175,6 +1181,12 @@ export function HeadToHeadCard() {
   // match — the match filters live on the Video tab alone.
   const { context } = useMatchFilters();
   const [hover, setHover] = useState<HoverTarget | null>(null);
+  // Touch: a tap selects a target and its readout stays until a tap lands
+  // outside the card; a second tap on it opens its cut in Video.
+  const cardRef = useTouchReadout<HTMLElement>(hover !== null, () =>
+    setHover(null),
+  );
+  const fingerTap = useFingerTap();
 
   const youStats = sides.you.stats;
   const oppStats = sides.opp.stats;
@@ -1234,7 +1246,11 @@ export function HeadToHeadCard() {
 
   if (sections.length === 0) return null;
 
-  const handlersFor = (row: string, zone: Zone): TargetHandlers => ({
+  const handlersFor = (
+    row: string,
+    zone: Zone,
+    watch?: () => void,
+  ): TargetHandlers => ({
     onMouseEnter: () => setHover({ row, zone }),
     // Leaving a number hands the hover back to its row, which the cursor is
     // still inside; leaving the label is the row's own mouseleave.
@@ -1249,10 +1265,17 @@ export function HeadToHeadCard() {
       setHover((current) =>
         current?.row === row && current.zone === zone ? null : current,
       ),
+    onPointerDown: (e) => {
+      if (fingerTap.press(e, hover?.row === row && hover.zone === zone)) {
+        setHover({ row, zone });
+      }
+    },
+    onClick: () => fingerTap.click(watch, () => setHover(null)),
   });
 
   return (
     <section
+      ref={cardRef}
       aria-labelledby="head-to-head-heading"
       data-tour="head-to-head"
       className="surface-card flex flex-col"
@@ -1333,16 +1356,17 @@ export function HeadToHeadCard() {
               }
               const figure = `${row.label}, ${name}: ${figureWords(row, side)}`;
               const { footer } = content;
+              const watch = () =>
+                actions.watchCut(
+                  sideCut(row.cut!, side, row.sideBy, row.sideWon),
+                  `${row.label} · ${name}`,
+                );
               const target: FigureTarget =
                 footer?.kind === "watch"
                   ? {
-                      onClick: () =>
-                        actions.watchCut(
-                          sideCut(row.cut!, side, row.sideBy, row.sideWon),
-                          `${row.label} · ${name}`,
-                        ),
+                      onClick: watch,
                       label: `${figure}. ${watchLabel(footer.count, noun)}`,
-                      handlers: handlersFor(row.label, side),
+                      handlers: handlersFor(row.label, side, watch),
                     }
                   : {
                       label: [figure, tailWords(content)]
@@ -1426,10 +1450,11 @@ export function HeadToHeadCard() {
                 {rowWatchable ? (
                   <button
                     type="button"
-                    onClick={() => actions.watchCut(row.cut!, row.label)}
                     aria-label={`${row.label}, both players. ${watchLabel(rowFooter.count, noun)}`}
                     data-focus-ring="none"
-                    {...handlersFor(row.label, "row")}
+                    {...handlersFor(row.label, "row", () =>
+                      actions.watchCut(row.cut!, row.label),
+                    )}
                     className={cn(
                       "flex min-w-0 flex-1 cursor-pointer items-center self-stretch border-0 bg-transparent p-0 pr-3 text-left text-[12px] transition-colors",
                       EASE,

@@ -43,7 +43,7 @@ test("the fallback is picked by the hint's kind", () => {
     /hint\.kind === "steps" \?\s*\(?\s*<AnalysisStepsPending \/>\s*\)?\s*:\s*\(?\s*<MatchReportSkeleton \/>/,
   );
   // Inside the same fixed-height box as before.
-  const box = LAYOUT.indexOf("h-[calc(100vh-var(--header-h))]");
+  const box = LAYOUT.indexOf("h-[calc(100dvh-var(--header-h))]");
   expect(box).toBeGreaterThan(-1);
   expect(SUSPENSE).toBeGreaterThan(box);
 });

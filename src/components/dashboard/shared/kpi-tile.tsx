@@ -9,6 +9,8 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
+import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
+import { useLongPress } from "@/hooks/use-long-press";
 import { cn } from "@/lib/utils";
 import type { KpiFormat } from "@/lib/data/performance-server";
 import { PlaceholderSparkline } from "./placeholder-sparkline";
@@ -212,6 +214,9 @@ export function KpiTile({
     };
   }, []);
 
+  const coarse = useCoarsePointer();
+  const press = useLongPress(() => setDetailOpen(true));
+
   const handleDetailEnter = () => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
     // Short dwell so a quick pass over the tile/label doesn't pop the chart.
@@ -322,9 +327,17 @@ export function KpiTile({
     </>
   );
 
-  const hoverHandlers = hasDetail
-    ? { onMouseEnter: handleDetailEnter, onMouseLeave: handleDetailLeave }
-    : {};
+  // A finger cannot hover, so on a coarse pointer the detail chart peeks on
+  // press-and-hold instead, as `/design/ipad`'s PeekTile does: a tap still
+  // follows the link, a hold opens the chart and does not navigate, and a
+  // press outside closes it (the Popover's own dismissal). The hover pair is
+  // dropped there too — iOS fires `mouseenter` from a tap, which would pop
+  // the chart 150ms into a navigation. With a mouse, hover is untouched.
+  const hoverHandlers = !hasDetail
+    ? {}
+    : coarse
+      ? press
+      : { onMouseEnter: handleDetailEnter, onMouseLeave: handleDetailLeave };
 
   const tileEl = href ? (
     <MotionLink
@@ -356,8 +369,15 @@ export function KpiTile({
         sideOffset={8}
         className="w-auto"
         onOpenAutoFocus={(e) => e.preventDefault()}
-        onMouseEnter={handleDetailEnter}
-        onMouseLeave={handleDetailLeave}
+        // Keeps the chart open while a mouse crosses onto it. Not on a finger:
+        // the compatibility `mouseleave` a later tap fires would close it on
+        // an 80ms timer of its own.
+        {...(coarse
+          ? {}
+          : {
+              onMouseEnter: handleDetailEnter,
+              onMouseLeave: handleDetailLeave,
+            })}
       >
         <KpiDetailChart label={label} points={detail} format={format} />
       </PopoverContent>

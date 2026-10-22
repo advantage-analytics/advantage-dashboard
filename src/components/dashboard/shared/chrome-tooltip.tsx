@@ -5,6 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
 
 /**
  * The dark label the shell's chrome answers hover with.
@@ -65,8 +66,17 @@ export function ChromeTooltip({
     Boolean,
   );
   const labelWraps = wrap && lines.length === 0;
+  // On a finger the tooltip opens on press-and-hold (the `Tooltip` primitive
+  // does that). A hidden one is pinned shut instead, which also takes the
+  // hold off the trigger: an expanded rail row says its own name, so a long
+  // press there should neither open an invisible label nor swallow the tap.
+  // With a mouse `open` stays undefined and `hidden` works as it always has.
+  const coarse = useCoarsePointer();
   return (
-    <Tooltip delayDuration={CHROME_TOOLTIP_DELAY_MS}>
+    <Tooltip
+      delayDuration={CHROME_TOOLTIP_DELAY_MS}
+      open={coarse && hidden ? false : undefined}
+    >
       <TooltipTrigger asChild>{children}</TooltipTrigger>
       <TooltipContent
         side={side}

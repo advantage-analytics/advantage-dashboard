@@ -38,7 +38,7 @@ export { MatchReportProvider };
  *   </MatchReport.Provider>
  *
  * The rail and the pane scroll independently only inside `layout.tsx`'s
- * `h-[calc(100vh-var(--header-h))] overflow-hidden` box, and only while every
+ * `h-[calc(100dvh-var(--header-h))] overflow-hidden` box, and only while every
  * flex link carries `min-h-0` — Frame → Rail / Pane. Drop one and that pane
  * grows to its content and the page scrolls as a whole instead. `When` is the
  * one link that must not: it sits inside the scroller (see its note).

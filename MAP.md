@@ -94,6 +94,7 @@ markers is hand-written — edit it as things move.
 | `/design/ask` | [`src/app/design/ask/page.tsx`](src/app/design/ask/page.tsx) |
 | `/design/ask/polish` | [`src/app/design/ask/polish/page.tsx`](src/app/design/ask/polish/page.tsx) |
 | `/design/file-step` | [`src/app/design/file-step/page.tsx`](src/app/design/file-step/page.tsx) |
+| `/design/ipad` | [`src/app/design/ipad/page.tsx`](src/app/design/ipad/page.tsx) |
 | `/design/labels` | [`src/app/design/labels/page.tsx`](src/app/design/labels/page.tsx) |
 | `/design` | [`src/app/design/page.tsx`](src/app/design/page.tsx) |
 | `/design/upload-progress` | [`src/app/design/upload-progress/page.tsx`](src/app/design/upload-progress/page.tsx) |

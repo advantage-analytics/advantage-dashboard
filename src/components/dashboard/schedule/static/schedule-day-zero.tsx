@@ -206,7 +206,7 @@ export function ScheduleDayZeroPage(
 ) {
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
-      <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-6">
+      <div className="flex min-w-0 flex-1 flex-col px-8 pt-5 pb-6 xl:px-14">
         <ScheduleDayZero {...props} />
       </div>
     </div>

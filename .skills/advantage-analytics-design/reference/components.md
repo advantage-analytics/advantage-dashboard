@@ -38,7 +38,8 @@ the transcription. Use it; do not hand-roll a near-miss.
 | `danger`       | transparent, danger-tinted border and label | danger tint fill      |
 | `danger-solid` | danger fill, white label                    | `--danger-hover`      |
 
-Sizes sm/md/lg = 32/36/44px. Press is `scale(0.97)`, suppressed under reduced
+Sizes sm/md/lg = 32/36/44px. On touch, sm and md still tap as 44px (see
+**Touch (iPad)** in [chrome](chrome.md)). Press is `scale(0.97)`, suppressed under reduced
 motion. Focus is `--focus-ring`. One primary per surface — a dialog carries one,
 never two.
 

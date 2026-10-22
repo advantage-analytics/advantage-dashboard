@@ -462,7 +462,7 @@ function AskRailBar({
                 type="button"
                 aria-label={RAIL_COPY.close}
                 onClick={() => setSheetOpen(false)}
-                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
+                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] touch:hit-area"
               >
                 <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
               </button>
@@ -566,7 +566,7 @@ function AskRailBody({
               type="button"
               aria-label="Clear filter"
               onClick={() => setQuery("")}
-              className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)]"
+              className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] touch:hit-area"
             >
               <X className="size-3" strokeWidth={1.5} aria-hidden="true" />
             </button>
@@ -632,7 +632,7 @@ function RailIconButton({
         aria-expanded={expanded}
         aria-keyshortcuts={keyShortcuts}
         onClick={onClick}
-        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
+        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] touch:hit-area"
       >
         <Icon aria-hidden="true" className="size-[15px]" strokeWidth={1.5} />
       </button>
@@ -927,8 +927,8 @@ function AskEarlier({
  * above it — its date at the edge. Under the pointer, or once focus is
  * anywhere in the row, the date fades and the row's ⋯ takes its place — the
  * same 48px, so nothing in the row moves. Under a month the date is read but
- * not drawn, and the title runs to the ⋯'s edge. On a screen with no hover
- * the ⋯ is simply there.
+ * not drawn, and the title runs to the ⋯'s edge. Under a finger (`touch:`),
+ * which has no hover, the ⋯ is simply there, with a 44px tap area.
  *
  * The edge sits over the link's right padding and lets a click through to
  * it, so the whole row opens the conversation except the button itself.
@@ -1014,7 +1014,7 @@ function AskEarlierRow({
                 dateTime={conversation.updatedAt}
                 className={cn(
                   dated
-                    ? "pr-1 font-mono text-[10px] whitespace-nowrap text-[var(--ink-500)] tabular-nums transition-opacity duration-200 group-focus-within:opacity-0 group-hover:opacity-0 [@media(hover:none)]:opacity-0"
+                    ? "pr-1 font-mono text-[10px] whitespace-nowrap text-[var(--ink-500)] tabular-nums transition-opacity duration-200 group-focus-within:opacity-0 group-hover:opacity-0 touch:opacity-0"
                     : "sr-only",
                   dated && menuOpen && "opacity-0",
                 )}
@@ -1038,7 +1038,7 @@ function AskEarlierRow({
                       aria-expanded={menuOpen}
                       disabled={actionsDisabled}
                       className={cn(
-                        "flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-button)] text-[var(--ink-500)] opacity-0 transition-[opacity,color,background-color] duration-200 group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-[var(--surface-card)] hover:text-[var(--ink-900)] disabled:cursor-default disabled:text-[var(--text-disabled)] disabled:hover:bg-transparent [@media(hover:none)]:opacity-100",
+                        "flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-button)] text-[var(--ink-500)] opacity-0 transition-[opacity,color,background-color] duration-200 group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-[var(--surface-card)] hover:text-[var(--ink-900)] disabled:cursor-default disabled:text-[var(--text-disabled)] disabled:hover:bg-transparent touch:hit-area touch:opacity-100",
                         menuOpen && "opacity-100",
                       )}
                     >

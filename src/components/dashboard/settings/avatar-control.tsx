@@ -105,9 +105,12 @@ export function AvatarControl({
             {initials}
           </span>
         )}
+        {/* A finger has no hover: on touch the wash shows only under the
+            press, not at rest, so the photo stays readable — "Replace photo"
+            beside it is the always-visible way in. */}
         <span
           aria-hidden="true"
-          className="absolute inset-0 flex items-center justify-center bg-[rgba(13,13,13,0.55)] text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+          className="absolute inset-0 flex items-center justify-center bg-[rgba(13,13,13,0.55)] text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 touch:group-active:opacity-100"
         >
           <Camera className="size-5" strokeWidth={1.5} />
         </span>

@@ -312,7 +312,7 @@ const GLOSSARY: GlossaryGroup[] = [
 
 export default function HelpCenterPage() {
   return (
-    <div className="min-h-screen w-full flex-1 bg-[var(--surface-card)]">
+    <div className="min-h-dvh w-full flex-1 bg-[var(--surface-card)]">
       {/* Same centred container as the settings pages — see the note in
           settings/layout.tsx. Help's rail is 200px, so the block is ~908px and
           fits the same 960px measure. */}

@@ -9,7 +9,7 @@ import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 export default function Loading() {
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]" aria-busy="true">
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-5 px-6 pt-5 pb-8 sm:px-14">
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-5 px-6 pt-5 pb-8 sm:px-8 xl:px-14">
         {/* Identity */}
         <div className="flex items-center gap-5">
           <PendingBar className="size-[76px] rounded-full" />
