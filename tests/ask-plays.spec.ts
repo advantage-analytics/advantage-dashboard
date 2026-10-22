@@ -717,12 +717,105 @@ test.describe("winning plays in rallies of a length", () => {
     ["his strengths in medium rallies", { min: 5, max: 9 }],
     ["best plays in rallies of 5 to 9 shots", { min: 5, max: 9 }],
     ["my best plays in 1-4 shots", { min: 1, max: 4 }],
+    ["best plays in rallies longer than 9 shots", { min: 10, max: null }],
+    ["winning plays in points above 6 shots", { min: 7, max: null }],
   ] as const) {
     test(`reads: ${question}`, () => {
       expect(asksForWinningPlays(question)).toBe(true);
       expect(rallyLengthOf(question)).toEqual(rally);
     });
   }
+
+  test('"longer than 9 shots" is ten or more', () => {
+    // Feedback: the winning plays for "points ... longer than 9 shots" were
+    // counted over every point of the match.
+    expect(
+      rallyLengthOf(
+        "Give me all the points with a backhand rally and longer than 9 shots",
+      ),
+    ).toEqual({ min: 10, max: null });
+  });
+
+  test("a negated lower bound is an upper bound", () => {
+    // Review: "no longer than 4 shots" read as five or more.
+    expect(rallyLengthOf("plays in rallies no longer than 4 shots")).toEqual({
+      min: 1,
+      max: 4,
+    });
+    expect(rallyLengthOf("points not more than 3 shots")).toEqual({
+      min: 1,
+      max: 3,
+    });
+    expect(
+      rallyLengthOf("my best plays in points no more than 4 shots"),
+    ).toEqual({ min: 1, max: 4 });
+  });
+
+  test("a negated upper bound is a lower bound", () => {
+    // Review: "no shorter than 5 shots" read as four or fewer.
+    expect(rallyLengthOf("rallies no shorter than 5 shots")).toEqual({
+      min: 5,
+      max: null,
+    });
+    expect(rallyLengthOf("points not under 4 shots")).toEqual({
+      min: 4,
+      max: null,
+    });
+    expect(rallyLengthOf("no fewer than 6 shots")).toEqual({
+      min: 6,
+      max: null,
+    });
+  });
+
+  test("a lower and an upper bound make a range", () => {
+    expect(
+      rallyLengthOf("best plays in at least 3 shots and no more than 8 shots"),
+    ).toEqual({ min: 3, max: 8 });
+  });
+
+  test('the "or not" of an earlier clause negates nothing', () => {
+    expect(rallyLengthOf("does it help or not over 5 shots")).toEqual({
+      min: 6,
+      max: null,
+    });
+  });
+
+  test("a comparison of two lengths keeps the first, as before", () => {
+    expect(
+      rallyLengthOf("win rate in points over 4 shots vs under 4 shots"),
+    ).toEqual({ min: 1, max: 3 });
+  });
+
+  test("a contraction or never negates the bound", () => {
+    expect(rallyLengthOf("rallies that aren't longer than 4 shots")).toEqual({
+      min: 1,
+      max: 4,
+    });
+    expect(rallyLengthOf("points that never go more than 4 shots")).toEqual({
+      min: 1,
+      max: 4,
+    });
+  });
+
+  test('"4 shots or under" keeps the 4', () => {
+    expect(rallyLengthOf("points of 4 shots or under")).toEqual({
+      min: 1,
+      max: 4,
+    });
+  });
+
+  test('"shorter than 5 shots" is four or fewer', () => {
+    expect(rallyLengthOf("best plays in rallies shorter than 5 shots")).toEqual(
+      {
+        min: 1,
+        max: 4,
+      },
+    );
+    expect(rallyLengthOf("winning plays below 4 shots")).toEqual({
+      min: 1,
+      max: 3,
+    });
+  });
 
   test("a question naming no length reads none", () => {
     expect(rallyLengthOf("What is this player's best pattern of plays?")).toBe(
