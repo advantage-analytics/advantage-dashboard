@@ -161,6 +161,27 @@ export const LabelVideoPlayer = forwardRef<
   const [skipDead, setSkipDead] = useState(false);
   const [failed, setFailed] = useState<PlaybackFailure | null>(initialFailure);
   const [ready, setReady] = useState(initialReady);
+  // The paused frame, painted onto a canvas that stands in for the element:
+  // Safari puts its Live Text button on a paused <video> with text in the
+  // frame (signage, a scoreboard), over the court and the controls, and no
+  // attribute turns it off. A canvas is not read, so while paused the element
+  // is hidden under its own still. Drawing a frame from another origin taints
+  // the canvas, which only stops it being read back — it still shows.
+  const stillRef = useRef<HTMLCanvasElement>(null);
+  const [still, setStill] = useState(false);
+  const paintStill = useCallback(() => {
+    const el = videoRef.current;
+    const canvas = stillRef.current;
+    if (!el || !canvas || !el.paused || el.videoWidth === 0) return;
+    canvas.width = el.videoWidth;
+    canvas.height = el.videoHeight;
+    try {
+      canvas.getContext("2d")?.drawImage(el, 0, 0);
+      setStill(true);
+    } catch {
+      setStill(false);
+    }
+  }, []);
 
   const settling = useSeekSettling({ graceMs: 120, generation: 0 });
   const syncFrameClock = useFilmClockVars(videoRef, frameRef, playing);
@@ -461,20 +482,27 @@ export const LabelVideoPlayer = forwardRef<
           playsInline
           data-testid="label-video"
           data-film-seeking={settling.seeking ? "true" : undefined}
+          // Hidden under its still while paused (`paintStill`); a click
+          // lands on the layer below it.
           className={cn(
-            "absolute inset-0 h-full w-full object-contain transition-opacity duration-200",
+            "pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-200",
             settling.seeking ? "opacity-60" : "opacity-100",
+            still && "invisible",
           )}
-          onClick={togglePlay}
-          onPlay={() => setPlaying(true)}
+          onPlay={() => {
+            setStill(false);
+            setPlaying(true);
+          }}
           onPause={() => {
             setPlaying(false);
+            paintStill();
             onPause?.();
           }}
           onLoadedMetadata={settle}
           onLoadedData={() => {
             settling.onLoadedData();
             checkReady();
+            paintStill();
           }}
           onCanPlay={() => setReady(true)}
           onPlaying={() => setReady(true)}
@@ -487,6 +515,7 @@ export const LabelVideoPlayer = forwardRef<
           onSeeked={(e) => {
             settling.onSeeked();
             checkReady();
+            paintStill();
             onPlayhead(e.currentTarget.currentTime);
           }}
           onError={(e) =>
@@ -502,6 +531,24 @@ export const LabelVideoPlayer = forwardRef<
           Your browser cannot play this video.
         </video>
 
+        <canvas
+          ref={stillRef}
+          aria-hidden="true"
+          data-label-video-still=""
+          className={cn(
+            "pointer-events-none absolute inset-0 h-full w-full object-contain",
+            !still && "invisible",
+          )}
+        />
+
+        {/* The element's click, on a layer over it: play or pause. */}
+        <div
+          aria-hidden="true"
+          data-label-video-hit=""
+          onClick={togglePlay}
+          className="absolute inset-0"
+        />
+
         {/* The read-ahead: never shown, never played, same URL. */}
         <video
           ref={readAheadRef}
@@ -516,7 +563,7 @@ export const LabelVideoPlayer = forwardRef<
         />
 
         {/* Over the element and `pointer-events-none`: a click still
-            reaches the element, so a slow load never traps one. */}
+            reaches the layer under it, so a slow load never traps one. */}
         {!ready && (
           <div
             data-label-video-pending=""
