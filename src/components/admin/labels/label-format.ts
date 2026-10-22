@@ -1,7 +1,17 @@
 import { shotSpinLabel } from "@/components/dashboard/matches/match-detail/film/film-shots";
-import { LABEL_STROKES } from "@/lib/services/labels/edit";
+import {
+  INFER_HAND_MIN_FOREHANDS,
+  INFER_HAND_MIN_SHARE,
+  hitterHalf,
+  isForehand,
+  shotDirection,
+  type Hand,
+} from "@/components/dashboard/matches/match-detail/match-filters/shot-geometry";
+import { LABEL_STROKES, labelShotValues } from "@/lib/services/labels/edit";
+import { shotPlacement } from "@/lib/services/labels/shot-derived";
 import {
   LABEL_SPINS,
+  SERVE_SPINS,
   isMissedResult,
   isLetServe,
   isServeStroke,
@@ -65,14 +75,81 @@ export function spinLabel(
   });
 }
 
-/** The Spin dropdown's rows for a stroke: every vendor value, in its words. */
+/**
+ * The Spin dropdown's rows for a stroke, in its words: a serve's three
+ * (`SERVE_SPINS`, Flat · Slice · Kick), else every vendor value.
+ */
 export function spinOptions(
   stroke: LabelStroke | null,
 ): { value: LabelSpin; label: string }[] {
-  return LABEL_SPINS.map((value) => ({
+  return spinRows(stroke).map((value) => ({
     value,
     label: spinLabel(stroke, value) ?? value,
   }));
+}
+
+/** The Spin menu's values for a stroke, in order — what 1–4 pick from. */
+export function spinRows(stroke: LabelStroke | null): readonly LabelSpin[] {
+  return isServeStroke(stroke) ? SERVE_SPINS : LABEL_SPINS;
+}
+
+/** Each player's stroke hand, as `labelHands` reads it off the rows. */
+export type SideHands = Record<LabelSide, Hand | null>;
+export const NO_HANDS: SideHands = { p1: null, p2: null };
+
+/**
+ * Each player's hand from where their live forehands were struck — the match
+ * page's own rule (shot-geometry.ts `inferHand`, the same thresholds) over the
+ * labelled rows: a right-hander's forehands come from the deuce half. Null for
+ * a player with too few placed forehands, or no clear side.
+ */
+export function labelHands(
+  points: readonly Pick<LabelPoint, "shots">[],
+): SideHands {
+  const counts = { p1: { deuce: 0, ad: 0 }, p2: { deuce: 0, ad: 0 } };
+  for (const point of points) {
+    for (const shot of point.shots) {
+      if (shot.status === "deleted" || shot.hitter === null) continue;
+      if (!isForehand(shot.stroke ? STROKE_LABEL[shot.stroke] : null)) continue;
+      const half = hitterHalf(shot);
+      if (half) counts[shot.hitter][half] += 1;
+    }
+  }
+  const hand = ({ deuce, ad }: { deuce: number; ad: number }): Hand | null => {
+    const total = deuce + ad;
+    if (total < INFER_HAND_MIN_FOREHANDS) return null;
+    if (deuce / total >= INFER_HAND_MIN_SHARE) return "right";
+    if (ad / total >= INFER_HAND_MIN_SHARE) return "left";
+    return null;
+  };
+  return { p1: hand(counts.p1), p2: hand(counts.p2) };
+}
+
+/**
+ * A stroke's placement in the match page's words (shot-geometry.ts
+ * `shotDirection`): the derived T / Body / Wide or Crosscourt / Middle / Down
+ * the Line, except that a forehand from its hitter's backhand half, or a
+ * backhand from their forehand half, is Inside Out (crosscourt) or Inside In
+ * (down the line). Without the hitter's hand it stays as derived.
+ */
+export function placementLabel(
+  shot: LabelShot,
+  hands: SideHands = NO_HANDS,
+): string | null {
+  const placement = shotPlacement(labelShotValues(shot));
+  if (!placement || isServeStroke(shot.stroke) || shot.hitter === null) {
+    return placement;
+  }
+  const direction = shotDirection(
+    {
+      shotType: shot.stroke ? STROKE_LABEL[shot.stroke] : null,
+      zone: placement,
+      contactX: shot.contactX,
+      contactY: shot.contactY,
+    },
+    hands[shot.hitter],
+  );
+  return direction ?? placement;
 }
 
 /** Why a stroke was deleted, in the delete dialog's and the ghost row's words. */

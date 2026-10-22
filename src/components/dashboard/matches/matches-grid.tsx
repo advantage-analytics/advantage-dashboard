@@ -102,6 +102,13 @@ export function MatchesGrid({
             match={match}
             scope={scope}
             isNew={match.id === newMatchId}
+            // Below `lg` the cards stand in for the table, so a tap peeks
+            // like a row click; the drawer comes up as a sheet over them.
+            onOpen={
+              onToggle
+                ? (viaKeyboard) => onToggle(match.id, viaKeyboard)
+                : undefined
+            }
           />
         ))}
         {matches.length === 0 ? (

@@ -244,13 +244,28 @@ test.describe("describeAskViews", () => {
 // ── The consent page's parsing ─────────────────────────────────────────────
 
 test.describe("the consent page", () => {
-  test("offers Allow only to Claude's callbacks and a loopback one", () => {
+  test("offers Allow only to Claude's, ChatGPT's and Cursor's callbacks and a loopback one", () => {
     expect(
       isConnectorRedirectUri("https://claude.ai/api/mcp/auth_callback"),
     ).toBe(true);
     expect(
       isConnectorRedirectUri("https://claude.com/api/mcp/auth_callback"),
     ).toBe(true);
+    expect(
+      isConnectorRedirectUri(
+        "https://chatgpt.com/connector_platform_oauth_redirect",
+      ),
+    ).toBe(true);
+    expect(
+      isConnectorRedirectUri("https://chatgpt.com/connector/oauth/abc_12-XY"),
+    ).toBe(true);
+    expect(
+      isConnectorRedirectUri(
+        "https://www.cursor.com/agents/mcp/oauth/callback",
+      ),
+    ).toBe(true);
+    // Cursor desktop: a loopback callback, like Claude Code's.
+    expect(isConnectorRedirectUri("http://localhost:8787/callback")).toBe(true);
     expect(isConnectorRedirectUri("http://localhost:54321/callback")).toBe(
       true,
     );
@@ -270,6 +285,34 @@ test.describe("the consent page", () => {
       false,
     );
     expect(isConnectorRedirectUri("http://user:pw@localhost:1/cb")).toBe(false);
+    // ChatGPT's per-app path: one segment, this host, nothing after it.
+    expect(
+      isConnectorRedirectUri("https://chatgpt.com/connector/oauth/../x"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://chatgpt.com/connector/oauth/abc?x=1"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://chatgpt.com/connector/oauth/abc/def"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://evil.chatgpt.com/connector/oauth/abc"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri(
+        "https://chatgpt.com.evil.example/connector/oauth/abc",
+      ),
+    ).toBe(false);
+    expect(isConnectorRedirectUri("https://chatgpt.com/connector/oauth/")).toBe(
+      false,
+    );
+    // Cursor's custom scheme is refused on purpose — see CONNECTOR_REDIRECT_URIS.
+    expect(
+      isConnectorRedirectUri("cursor://anysphere.cursor-mcp/oauth/callback"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://cursor.com/agents/mcp/oauth/callback"),
+    ).toBe(false);
   });
 
   test("reads a URL-safe authorization id and nothing else", () => {
@@ -414,7 +457,9 @@ function fakeClient(
     self.eq = record("eq");
     self.is = record("is");
     self.order = record("order");
-    self.limit = async () => answers[table];
+    // `limit()` ends `program()`'s chain and sits mid-chain in `ownMatch()`'s:
+    // thenable AND chainable, as PostgREST's builder is.
+    self.limit = record("limit");
     self.maybeSingle = async () => answers[table];
     self.then = (resolve: (value: unknown) => unknown) =>
       Promise.resolve(answers[table]).then(resolve);
@@ -422,9 +467,17 @@ function fakeClient(
   };
   const client = {
     from: (table: string) => ({ select: () => chain(table) }),
+    // An RPC is keyed like a table; `get` is recorded so a spec can hold the
+    // read-only call shape the write guard lets through.
+    rpc: async (fn: string, args: unknown, options?: { get?: boolean }) => {
+      filters.push({ table: fn, op: "rpc", args: [args, options?.get] });
+      return answers[fn] ?? { data: [], error: null };
+    },
   } as unknown as SupabaseClient;
   return { client, filters };
 }
+
+const MATCH_ID = "3f1c2a9e-6b7d-4c1a-9e55-0a1b2c3d4e5f";
 
 test.describe("createMcpUserReads", () => {
   test("program(): the caller's own membership row names the program; none is null; a malformed id reads nothing", async () => {
@@ -444,16 +497,196 @@ test.describe("createMcpUserReads", () => {
       id: PROGRAM_ID,
       name: "Westbrook",
     });
-    expect(filters.map((f) => `${f.op}:${f.args[0]}=${f.args[1]}`)).toEqual([
-      `eq:user_id=${USER_ID}`,
-      `eq:program_id=${PROGRAM_ID}`,
-    ]);
+    expect(
+      filters
+        .filter((f) => f.op === "eq")
+        .map((f) => `${f.op}:${f.args[0]}=${f.args[1]}`),
+    ).toEqual([`eq:user_id=${USER_ID}`, `eq:program_id=${PROGRAM_ID}`]);
 
     const empty = fakeClient({ program_members: { data: [], error: null } });
     expect(
       await createMcpUserReads(empty.client, USER_ID).program(PROGRAM_ID),
     ).toBeNull();
     expect(await reads.program("not-a-uuid")).toBeNull();
+  });
+
+  test("programs(): every membership row the caller holds, filtered to their own user_id, with the squad narrowed", async () => {
+    const { client, filters } = fakeClient({
+      program_members: {
+        data: [
+          {
+            role: "coach",
+            programs: {
+              id: PROGRAM_ID,
+              school_name: "Westbrook",
+              team: "womens",
+              status: "active",
+            },
+          },
+          {
+            role: "player",
+            programs: {
+              id: CONVERSATION_ID,
+              school_name: "Club",
+              team: "mixed-up",
+              status: "claim_pending",
+            },
+          },
+        ],
+        error: null,
+      },
+    });
+    expect(await createMcpUserReads(client, USER_ID).programs()).toEqual([
+      {
+        id: PROGRAM_ID,
+        name: "Westbrook",
+        role: "coach",
+        team: "womens",
+        status: "active",
+      },
+      {
+        id: CONVERSATION_ID,
+        name: "Club",
+        role: "player",
+        team: null,
+        status: "claim_pending",
+      },
+    ]);
+    expect(filters.map((f) => `${f.op}:${f.args[0]}`)).toEqual([
+      `eq:user_id`,
+      `order:joined_at`,
+    ]);
+    expect(filters[0].args[1]).toBe(USER_ID);
+  });
+
+  test("matchReport(): the two report columns and the share token, the seat from the caller's ids, both RPCs on GET", async () => {
+    const { client, filters } = fakeClient({
+      matches: {
+        data: {
+          id: MATCH_ID,
+          program_id: PROGRAM_ID,
+          player1_id: "other",
+          player2_id: "pp-9",
+          created_by: "coach",
+          insights: { player2: { summary: "Deep returns." } },
+          key_moments: [{ moment: "4-4", description: "Held." }],
+        },
+        error: null,
+      },
+      match_share_links: { data: { token: "tok" }, error: null },
+      my_player_ids: { data: ["pp-9"], error: null },
+    });
+    const report = await createMcpUserReads(client, USER_ID).matchReport(
+      MATCH_ID,
+    );
+    expect(report).toEqual({
+      seat: "player2",
+      insights: { player2: { summary: "Deep returns." } },
+      keyMoments: [{ moment: "4-4", description: "Held." }],
+      shareToken: "tok",
+    });
+    const rpcs = filters.filter((f) => f.op === "rpc");
+    expect(rpcs.map((f) => [f.table, f.args[1]])).toEqual([
+      ["my_player_ids", true],
+    ]);
+    expect(
+      filters
+        .filter((f) => f.op === "eq")
+        .map((f) => `${f.table}.${f.args[0]}`),
+    ).toEqual(["matches.id", "match_share_links.match_id"]);
+  });
+
+  test("matchReport(): a coach not seated on a program match takes the roster player's seat; no row is null", async () => {
+    const { client, filters } = fakeClient({
+      matches: {
+        data: {
+          id: MATCH_ID,
+          program_id: PROGRAM_ID,
+          player1_id: "pp-1",
+          player2_id: null,
+          created_by: "coach",
+          insights: null,
+          key_moments: null,
+        },
+        error: null,
+      },
+      match_share_links: { data: null, error: null },
+      my_player_ids: { data: [], error: null },
+      program_roster_full: { data: [{ player_id: "pp-1" }], error: null },
+    });
+    expect(
+      await createMcpUserReads(client, USER_ID).matchReport(MATCH_ID),
+    ).toEqual({
+      seat: "player1",
+      insights: null,
+      keyMoments: null,
+      shareToken: null,
+    });
+    expect(
+      filters.filter((f) => f.op === "rpc").map((f) => [f.table, f.args[1]]),
+    ).toEqual([
+      ["my_player_ids", true],
+      ["program_roster_full", true],
+    ]);
+
+    const none = fakeClient({
+      matches: { data: null, error: null },
+      match_share_links: { data: null, error: null },
+    });
+    expect(
+      await createMcpUserReads(none.client, USER_ID).matchReport(MATCH_ID),
+    ).toBeNull();
+    expect(
+      await createMcpUserReads(none.client, USER_ID).matchReport("nope"),
+    ).toBeNull();
+  });
+
+  test("ownMatch(): the creator's own row with what the patch rules decide from; a match they did not create is null", async () => {
+    const { client, filters } = fakeClient({
+      matches: {
+        data: {
+          id: MATCH_ID,
+          program_id: PROGRAM_ID,
+          event_entry_id: "line-1",
+          source_provider: null,
+          score: { player1: [6], player2: [4] },
+          format: { best_of: 3 },
+          match_type: "Dual Match",
+          round: "1S",
+        },
+        error: null,
+      },
+      processing_jobs: {
+        data: { status: "completed", derivation_version: "v2" },
+        error: null,
+      },
+    });
+    expect(
+      await createMcpUserReads(client, USER_ID).ownMatch(MATCH_ID),
+    ).toEqual({
+      id: MATCH_ID,
+      programId: PROGRAM_ID,
+      score: { player1: [6], player2: [4] },
+      format: { best_of: 3 },
+      linked: true,
+      analyzed: true,
+      teamMatch: true,
+      matchType: "Dual Match",
+      round: "1S",
+    });
+    expect(
+      filters
+        .filter((f) => f.table === "matches" && f.op === "eq")
+        .map((f) => `${f.args[0]}=${f.args[1]}`),
+    ).toEqual([`id=${MATCH_ID}`, `created_by=${USER_ID}`]);
+
+    const none = fakeClient({
+      matches: { data: null, error: null },
+      processing_jobs: { data: null, error: null },
+    });
+    expect(
+      await createMcpUserReads(none.client, USER_ID).ownMatch(MATCH_ID),
+    ).toBeNull();
   });
 
   test("program(): a failed read throws rather than answering 'not a member'", async () => {
@@ -529,7 +762,15 @@ test.describe("createMcpUserReads", () => {
  * only for a live connector, so the two lists are held equal here.
  */
 test.describe("the connector's read-only guard", () => {
-  const migration = readFileSync(
+  // The guard was created in 20261016050115 and its allowlist re-stated by
+  // later migrations; the newest one that carries the list is the live one.
+  const migration = readdirSync("supabase/migrations")
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => readFileSync(`supabase/migrations/${name}`, "utf8"))
+    .filter((source) => /\/rpc\/\(([a-z_|]+)\)\$/.test(source))
+    .at(-1)!;
+  const original = readFileSync(
     "supabase/migrations/20261016050115_oauth_client_read_only.sql",
     "utf8",
   );
@@ -565,9 +806,48 @@ test.describe("the connector's read-only guard", () => {
     expect(migration).toMatch(
       /grant execute on function public\.oauth_client_request_guard\(\) to anon, authenticated, service_role/,
     );
-    expect(migration).toMatch(
+    expect(original).toMatch(
       /alter role authenticator set pgrst\.db_pre_request = 'public\.oauth_client_request_guard'/,
     );
+  });
+
+  test("the two write functions run as the caller, never as their definer", () => {
+    // Both statements of ask_patch_match: the original and the one that
+    // added the dialog's value rules to the function body.
+    const writes = [
+      "supabase/migrations/20261021143857_mcp_match_writes.sql",
+      "supabase/migrations/20261021160317_ask_patch_match_checks.sql",
+    ]
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
+    for (const fn of ["ask_patch_match", "ask_seed_match_draft"]) {
+      const body = writes.slice(writes.indexOf(`function public.${fn}(`));
+      const head = body.slice(0, body.indexOf("as $$"));
+      expect(head).not.toMatch(/security definer/i);
+      expect(head).toMatch(/set search_path = ''/);
+      expect(writes).toMatch(
+        new RegExp(
+          `grant execute on function public\\.${fn}\\([^)]*\\) to authenticated, service_role`,
+        ),
+      );
+    }
+    // The patch never reaches the score, the format or the seats.
+    const seed = writes.slice(
+      writes.indexOf("function public.ask_seed_match_draft("),
+      writes.indexOf("function public.oauth_client_request_guard("),
+    );
+    const patch = writes.replace(seed, "");
+    expect(patch).not.toMatch(/\bscore\s*=/);
+    expect(patch).not.toMatch(/\bformat\s*=/);
+    expect(patch).not.toMatch(/player1_id|player2_id|created_by\s*=\s*p_/);
+    // The direct-call contract: the event lock and the two enums hold in SQL.
+    const checks = readFileSync(
+      "supabase/migrations/20261021160317_ask_patch_match_checks.sql",
+      "utf8",
+    );
+    expect(checks).toMatch(/hint = 'field_locked'/);
+    expect(checks).toMatch(/not in \('right', 'left'\)/);
+    expect(checks).toMatch(/not in \('one-handed', 'two-handed'\)/);
   });
 
   test("every Edge Function refuses a connector token", () => {

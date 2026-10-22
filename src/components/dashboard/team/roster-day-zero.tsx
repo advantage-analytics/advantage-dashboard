@@ -174,7 +174,7 @@ export function RosterDayZero({
 export function RosterDayZeroPage(props: Parameters<typeof RosterDayZero>[0]) {
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
-      <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-8">
+      <div className="flex min-w-0 flex-1 flex-col px-8 pt-5 pb-8 xl:px-14">
         <RosterDayZero {...props} />
       </div>
     </div>

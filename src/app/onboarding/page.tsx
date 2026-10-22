@@ -135,7 +135,7 @@ export default async function OnboardingPage({
       // still the first screen of onboarding, and the ✕ that shell carries
       // would offer an exit to a dashboard this account has not reached yet.
       // 720 is the width the offer pane's two columns of terms were drawn at.
-      <div className="flex min-h-screen items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
+      <div className="flex min-h-dvh items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
         <div className="mx-auto w-full" style={{ maxWidth: 720 }}>
           <div className="flex min-w-0 flex-col" style={{ gap: 28 }}>
             <ClaimHeading

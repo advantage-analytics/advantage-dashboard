@@ -760,7 +760,9 @@ function sequencePoint(id = "seq"): MatchPoint {
         shotType: "Forehand Volley",
         zone: "Middle",
       }),
-      from("low", "deuce", {
+      // From the backhand half: a plain down-the-line backhand, not the
+      // Inside In one a backhand from the forehand half would be.
+      from("low", "ad", {
         shotNumber: 5,
         isPlayer1: true,
         shotType: "Backhand",

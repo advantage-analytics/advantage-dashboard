@@ -195,7 +195,7 @@ export const BlackPointRow = memo(function BlackPointRow({
   const sentence = fresh ? NEW_POINT_TITLE : pointSentence(shown, names);
   const detail = fresh
     ? newPointDetail(point, edit.points, edit.fileOffset)
-    : pointDetail(shown, edit.fileOffset);
+    : pointDetail(shown, edit.fileOffset, edit.hands);
   // The rail's rows go along so a "Same side twice" question reads settled
   // once a point the labeller added sits between the two (marks-state.ts).
   const rowMarks = pointRowMarks(point, marks, names, sentence, edit.points);

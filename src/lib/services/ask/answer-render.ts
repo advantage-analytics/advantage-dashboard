@@ -954,6 +954,10 @@ function parseBlock(
         rows: [],
       };
       const skipped = rowSkips(kind);
+      // Per drawn row: the one result row its cells come from (null when
+      // several), and the column each of its cells cites.
+      const sources: (number | null)[] = [];
+      const citedColumns: (string | null)[][] = [];
       for (const fields of rowLines) {
         // A trailing separator after a full row is dropped; one standing
         // for a cell the model left empty (`ROW: Faced | {{r1.a}} | `) stays,
@@ -979,11 +983,13 @@ function parseBlock(
           continue;
         }
         const cells: string[] = [];
+        const cellColumns: (string | null)[] = [];
         const citedRows = new Set<number>();
         let bad: "malformed" | "bad_reference" | null = null;
         for (const field of fields.slice(1)) {
           if (field === "") {
             cells.push(ASK_NULL_CELL);
+            cellColumns.push(null);
             continue;
           }
           const cell = readCell(field, tokens);
@@ -992,6 +998,7 @@ function parseBlock(
             break;
           }
           cells.push(cell.token.text);
+          cellColumns.push(cell.token.column);
           citedRows.add(cell.token.row);
         }
         if (bad) {
@@ -1007,8 +1014,19 @@ function parseBlock(
           cells,
           ...(matchId ? { matchId } : {}),
         });
+        sources.push(citedRows.size === 1 ? [...citedRows][0] : null);
+        citedColumns.push(cellColumns);
       }
       if (out.rows.length === 0) return skipped.block();
+      const labelled = distinctRowLabels(
+        out.rows.map((row) => row.label),
+        sources,
+        rows,
+      );
+      out.rows.forEach((row, index) => {
+        row.label = labelled[index];
+      });
+      out.columns = distinctHeadings(out.columns, citedColumns);
       return { ok: true, visual: out, droppedRows: skipped.count() };
     }
 
@@ -1840,6 +1858,128 @@ function dateColumn(rows: readonly AskRow[]): string | undefined {
   return dates.includes("played_on") ? "played_on" : dates[0];
 }
 
+/** The longest name added to a row label: a full opponent name fits. */
+const MAX_ADDED_NAME_LENGTH = 32;
+
+/**
+ * A cell that names a row of the result: a short name with a letter in it,
+ * not an id, a date or a link. "Court 2" and "1-4 shots" name a row;
+ * "6-4 6-3" and "2026-09-14" do not.
+ */
+function isNameCell(column: string, value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= MAX_ADDED_NAME_LENGTH &&
+    /\p{L}/u.test(value) &&
+    !/(?:^|_)(?:id|date|on|at)$/.test(column) &&
+    !ISO_DATE.test(value) &&
+    !/:\/\//.test(value)
+  );
+}
+
+/** Lower-cased words, space-padded so `includes()` matches whole words only. */
+function wordsOf(text: string): string {
+  return ` ${labelWords(text).join(" ")} `;
+}
+
+/**
+ * A table's row labels, each one naming its row. The model labels the rows of
+ * a result keyed by two names ("Ad", "T") with one of them, and six rows read
+ * "Ad, Ad, Ad, Deuce, Deuce, Deuce" with the serve placement nowhere. Rows
+ * that share a label and each draw their cells from one result row get that
+ * row's other names added ("Ad · T"). Left as written when the names would
+ * still not tell the rows apart.
+ */
+export function distinctRowLabels(
+  labels: readonly string[],
+  sources: readonly (number | null)[],
+  rows: readonly AskRow[],
+): string[] {
+  const out = [...labels];
+  const groups = new Map<string, number[]>();
+  labels.forEach((label, index) => {
+    const key = label.trim().toLowerCase();
+    const group = groups.get(key);
+    if (group) group.push(index);
+    else groups.set(key, [index]);
+  });
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    const found = members.map((index) => {
+      const source = sources[index];
+      return source === null || source === undefined ? undefined : rows[source];
+    });
+    if (found.some((row) => row === undefined)) continue;
+    const sourced = found as AskRow[];
+    const label = wordsOf(labels[members[0]]);
+    // The name columns whose values differ across these rows and are not
+    // already in the label — as whole words, so "T" is not in "First Serve".
+    const columns = Object.keys(sourced[0]).filter((column) => {
+      const values = sourced.map((row) => row[column]);
+      if (!values.every((value) => isNameCell(column, value))) return false;
+      if (new Set(values).size < 2) return false;
+      return !values.some((value) => label.includes(wordsOf(String(value))));
+    });
+    const nameWith = (names: readonly string[]): string[] | null => {
+      const named = members.map((index, i) =>
+        [
+          labels[index],
+          ...names.map(
+            (column) =>
+              formatAskCell(column, sourced[i][column]) ??
+              String(sourced[i][column]),
+          ),
+        ].join(" · "),
+      );
+      const distinct = new Set(named.map((name) => name.toLowerCase()));
+      return distinct.size === named.length ? named : null;
+    };
+    // The first column, in the result's own order — its grouping keys lead —
+    // that tells the rows apart alone, before all of them together.
+    let named: string[] | null = null;
+    for (const column of columns) {
+      named = nameWith([column]);
+      if (named) break;
+    }
+    if (!named && columns.length > 1) named = nameWith(columns);
+    if (!named) continue;
+    members.forEach((index, i) => {
+      out[index] = named[i];
+    });
+  }
+  return out;
+}
+
+/**
+ * A table's column headings, each one naming its column. "Points won" over
+ * both `points_won` and `points_won_pct` prints two columns under one name;
+ * the heading over a share gets a "%" so the two read apart. Left as written
+ * otherwise.
+ */
+export function distinctHeadings(
+  headings: readonly string[],
+  citedColumns: readonly (readonly (string | null)[])[],
+): string[] {
+  const columnAt = (position: number): string | null => {
+    for (const cells of citedColumns) {
+      const column = cells[position];
+      if (column) return column;
+    }
+    return null;
+  };
+  return headings.map((heading, position) => {
+    const key = heading.trim().toLowerCase();
+    const repeated = headings.some(
+      (other, at) => at !== position && other.trim().toLowerCase() === key,
+    );
+    const column = columnAt(position);
+    if (!repeated || column === null || !isPercentColumn(column)) {
+      return heading;
+    }
+    return /%/.test(heading) ? heading : `${heading} %`;
+  });
+}
+
 /**
  * The block a result's shape fits, chosen by the server with no model in the
  * loop — what replaces a model's block that could not be drawn (roadmap
@@ -2028,10 +2168,12 @@ export function visualFromRows(rows: readonly AskRow[]): AskVisual | null {
   ) {
     const shown = measures.slice(0, MAX_ASK_TABLE_COLUMNS);
     const out: AskTableVisual["rows"] = [];
-    for (const row of rows) {
+    const sources: number[] = [];
+    for (const [index, row] of rows.entries()) {
       const name = formatAskCell(labelColumn, row[labelColumn]);
       if (name === null || name === ASK_NULL_CELL) continue;
       const matchId = matchIdOf(row);
+      sources.push(index);
       out.push({
         label: name,
         cells: shown.map(
@@ -2041,11 +2183,16 @@ export function visualFromRows(rows: readonly AskRow[]): AskVisual | null {
       });
     }
     if (out.length === 0) return null;
+    const labelled = distinctRowLabels(
+      out.map((row) => row.label),
+      sources,
+      rows,
+    );
     return {
       kind: "table",
       caption: fromScope,
-      columns: shown.map(columnLabel),
-      rows: out,
+      columns: distinctHeadings(shown.map(columnLabel), [shown]),
+      rows: out.map((row, index) => ({ ...row, label: labelled[index] })),
     };
   }
   return null;

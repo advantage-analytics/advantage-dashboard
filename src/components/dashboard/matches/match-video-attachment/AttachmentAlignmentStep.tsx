@@ -202,10 +202,12 @@ function ScrubRail({
             break;
         }
       }}
+      // `touch:hit-area`: both rails (40px, 24px) take a 44px strip to a
+      // finger without moving or redrawing.
       className={
         trim
-          ? `relative h-10 w-full cursor-pointer touch-none rounded-[var(--radius-button)] bg-[var(--surface-dark)] ${focusRingCls}`
-          : `relative flex h-6 w-full cursor-pointer touch-none items-center ${focusRingCls}`
+          ? `relative h-10 w-full cursor-pointer touch-none rounded-[var(--radius-button)] bg-[var(--surface-dark)] touch:hit-area ${focusRingCls}`
+          : `relative flex h-6 w-full cursor-pointer touch-none items-center touch:hit-area ${focusRingCls}`
       }
     >
       {trim ? (

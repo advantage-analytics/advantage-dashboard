@@ -262,7 +262,7 @@ function CutField({
         disabled={setDisabled}
         aria-label={`Set the trim ${isStart ? "start" : "end"} to the current position`}
         aria-describedby={ruleId}
-        className={`inline-flex w-8 cursor-pointer items-center justify-center text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-50 ${
+        className={`inline-flex w-8 cursor-pointer items-center justify-center text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-50 touch:hit-area ${
           isStart
             ? "rounded-r-[5px] border-l border-[var(--border-field)]"
             : "rounded-l-[5px] border-r border-[var(--border-field)]"
@@ -291,7 +291,8 @@ function CutField({
   );
 }
 
-const controlCls = `inline-flex size-7 items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-150 hover:bg-white/10 ${focusRingCls}`;
+/** `touch:hit-area`: a 44px tap area on touch round the unchanged 28px button. */
+const controlCls = `inline-flex size-7 items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-150 hover:bg-white/10 touch:hit-area ${focusRingCls}`;
 
 /** A coarse jump in the in-frame control row: a mono caption where the frame
  *  steps carry an icon, the spoken name on the button. */
@@ -1325,7 +1326,8 @@ function TrimStepContentImpl({
                 />
 
                 {/* Handles — the bracket's ends, 10px with a white grip line.
-                    The hit area is wider than the mark. */}
+                    The hit area is wider than the mark: 24px, and 44px to a
+                    finger (`touch:hit-area`, centred on the same grab). */}
                 {HANDLES.map((handle) => {
                   const value = handle === "start" ? start : end;
                   const handlePct = pct(value);
@@ -1367,7 +1369,7 @@ function TrimStepContentImpl({
                           e.shiftKey,
                         );
                       }}
-                      className={`group/handle absolute -top-0.5 -bottom-0.5 z-[3] w-6 cursor-ew-resize ${focusRingCls}`}
+                      className={`group/handle absolute -top-0.5 -bottom-0.5 z-[3] w-6 cursor-ew-resize touch:hit-area ${focusRingCls}`}
                       style={{ left: `calc(${handlePct}% - 13px)` }}
                     >
                       {/* 10px of Signal Blue on a 24px grab; hover and the

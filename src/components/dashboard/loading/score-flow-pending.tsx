@@ -35,7 +35,7 @@ import { PendingBar, PendingFrame } from "./pending";
 export function ScoreFlowPending() {
   return (
     <PendingFrame label="result form" pulse={false}>
-      <div className="flex min-h-[calc(100vh-44px)] flex-col">
+      <div className="flex min-h-[calc(100dvh-44px)] flex-col">
         <StepIndicator currentStep={0} totalSteps={1} />
 
         <PinnedLinePending />

@@ -13,6 +13,8 @@ import {
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { EmptyMark } from "@/components/ui/empty-mark";
+import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
+import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import {
   errorMadeBy,
   isUnreturnedServe,
@@ -62,6 +64,10 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * With a playable video each segment opens its points in the Video tab
  * (`outcomeCut`) on click or Enter — hovering only reads. Without one the
  * markup is exactly the read-only card.
+ *
+ * On touch a tap selects a segment and its readout stays until a tap lands
+ * outside the card; with a video, a second tap on the selected segment opens
+ * it. The 10px bar takes taps 17px above and below it, so a finger reaches it.
  */
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
@@ -188,6 +194,10 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
   const { points } = useMatchData();
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<string | null>(null);
+  const cardRef = useTouchReadout<HTMLElement>(hovered !== null, () =>
+    setHovered(null),
+  );
+  const fingerTap = useFingerTap();
 
   const youIsPlayer1 = sides.you.isPlayer1;
 
@@ -287,6 +297,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
 
   return (
     <section
+      ref={cardRef}
       aria-labelledby="point-endings-heading"
       className="surface-card flex flex-col gap-3"
       style={{ padding: "16px 20px 14px" }}
@@ -341,11 +352,8 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                 return (
                   <motion.div
                     key={o.key}
-                    className={
-                      watch
-                        ? "relative cursor-pointer"
-                        : "relative cursor-default"
-                    }
+                    // On touch the 10px bar takes taps 17px above and below.
+                    className={`relative touch:before:absolute touch:before:inset-x-0 touch:before:-inset-y-[17px] touch:before:content-[''] ${watch ? "cursor-pointer" : "cursor-default"}`}
                     style={{
                       background: row.fill(o),
                       borderTopLeftRadius: isFirst
@@ -377,6 +385,12 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                     }}
                     tabIndex={0}
                     {...watchableSegmentProps(watch, label)}
+                    onPointerDown={(e) => {
+                      if (fingerTap.press(e, hovered === id)) setHovered(id);
+                    }}
+                    onClick={() =>
+                      fingerTap.click(watch, () => setHovered(null))
+                    }
                     onMouseEnter={() => setHovered(id)}
                     onMouseLeave={() => setHovered(null)}
                     onFocus={() => setHovered(id)}
@@ -434,6 +448,7 @@ function SegmentTooltip({
   /** The segment opens its points in the Video tab. */
   watchable: boolean;
 }) {
+  const coarse = useCoarsePointer();
   return (
     <ChartTooltip
       open={open}
@@ -445,7 +460,7 @@ function SegmentTooltip({
       <span className="tabular text-[11px] text-white/[0.64]">{detail}</span>
       {watchable && (
         <span className="text-[10px] text-white/[0.64]">
-          Click to watch in Video
+          {coarse ? "Tap again to watch in Video" : "Click to watch in Video"}
         </span>
       )}
     </ChartTooltip>

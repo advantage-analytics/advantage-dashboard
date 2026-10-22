@@ -133,7 +133,7 @@ export default async function PlayerProfilePage({
         players={players}
       />
 
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-5 px-6 pt-5 pb-8 sm:px-14">
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-5 px-6 pt-5 pb-8 sm:px-8 xl:px-14">
         <ProfileIdentity
           profile={profile}
           isSelf={isSelf}

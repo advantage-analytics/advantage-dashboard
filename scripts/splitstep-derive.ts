@@ -92,7 +92,7 @@ async function main() {
 
   console.log(write ? "=== WRITTEN ===" : "=== DRY RUN — nothing written ===");
   console.log(
-    `player1 (by ${r.player1Source ?? "nothing"}, not by name): ${r.player1Label}`,
+    `player1 (by ${r.player1Source ?? "nothing"}): ${r.player1Label}`,
   );
   if (!r.ok) {
     console.log(

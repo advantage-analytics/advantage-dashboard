@@ -7,7 +7,7 @@ import type {
   LabelShotPatch,
 } from "@/lib/services/labels/edit";
 import type { LabelPointScore } from "@/lib/services/labels/score";
-import type { SideNames } from "./label-format";
+import type { SideHands, SideNames } from "./label-format";
 import type { RailTone } from "./label-rail-tone";
 
 /**
@@ -96,6 +96,11 @@ export interface EditContext {
   onToggleGhost?: (id: string) => void;
   /** Every row, for the move menu's neighbouring games. */
   points: readonly LabelPoint[];
+  /**
+   * Each player's hand (`labelHands`), for a placement's Inside Out / Inside
+   * In. Absent, every placement reads as derived.
+   */
+  hands?: SideHands;
   /** `labelScores(points, adScoring).points`, computed once by the console. */
   scores: ReadonlyMap<string, LabelPointScore>;
   /** `session.adScoring`. Absent means ad scoring. */

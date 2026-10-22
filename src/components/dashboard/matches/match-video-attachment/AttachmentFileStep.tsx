@@ -309,7 +309,7 @@ function AttachmentFileStepImpl({
               type="button"
               onClick={onRemove}
               aria-label="Remove video"
-              className="inline-flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
+              className="inline-flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] touch:hit-area"
             >
               <X
                 className="size-3.5 text-[var(--ink-500)]"

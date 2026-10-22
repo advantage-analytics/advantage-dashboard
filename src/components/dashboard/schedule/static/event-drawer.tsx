@@ -6,6 +6,10 @@ import { ChevronDown, ChevronRight, ChevronUp, X } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
+  DRAWER_RAIL,
+  DrawerScrim,
+} from "@/components/dashboard/shared/drawer-sheet";
+import {
   ChromeTooltip,
   CHROME_TOOLTIP_DELAY_MS,
 } from "@/components/dashboard/shared/chrome-tooltip";
@@ -37,7 +41,7 @@ export const DRAWER_ATTR = "data-schedule-drawer";
 
 /** The header's 28px square control — chevrons and the close. The roster's, verbatim. */
 const ICON_BUTTON =
-  "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40 touch:hit-area";
 
 /**
  * `Tc2` — the selected event's detail, as a dismissable right rail.
@@ -162,208 +166,218 @@ export function EventDrawer({
   }, [autoFocus, event.id]);
 
   return (
-    <aside
-      {...{ [DRAWER_ATTR]: "" }}
-      onAnimationEnd={(animation) => {
-        if (animation.animationName === "roster-drawer-out") onClosed();
-      }}
-      className={cn(
-        "sticky top-11 z-[2] h-[calc(100vh-44px)] shrink-0 self-start overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none",
-        closing
-          ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
-          : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
-      )}
-    >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-label={isDual ? `vs ${event.name}` : event.name}
-        tabIndex={-1}
-        className="flex h-full w-[340px] flex-col outline-none"
+    <>
+      <DrawerScrim closing={closing} onClose={onClose} />
+      <aside
+        {...{ [DRAWER_ATTR]: "" }}
+        onAnimationEnd={(animation) => {
+          if (animation.animationName === "roster-drawer-out") onClosed();
+        }}
+        className={cn(
+          DRAWER_RAIL,
+          closing
+            ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
+            : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
+        )}
       >
-        {/* 44px, inset 20px — the page header's own height and inset, so the
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-label={isDual ? `vs ${event.name}` : event.name}
+          tabIndex={-1}
+          className="flex h-full w-[340px] flex-col outline-none"
+        >
+          {/* 44px, inset 20px — the page header's own height and inset, so the
             two rules line up across the border. One provider over the
             cluster, as the app header does, so moving between the controls
             pays the reveal delay once. */}
-        <TooltipProvider delayDuration={CHROME_TOOLTIP_DELAY_MS}>
-          <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[var(--border-hairline)] px-5">
-            <ChromeTooltip label="Previous event" shortcut="↑">
-              <button
-                type="button"
-                aria-label="Previous event"
-                disabled={index <= 0}
-                onClick={() => onStep(-1)}
-                className={ICON_BUTTON}
-              >
-                <ChevronUp
-                  className="size-3.5"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              </button>
-            </ChromeTooltip>
-            <ChromeTooltip label="Next event" shortcut="↓">
-              <button
-                type="button"
-                aria-label="Next event"
-                disabled={index >= total - 1}
-                onClick={() => onStep(1)}
-                className={ICON_BUTTON}
-              >
-                <ChevronDown
-                  className="size-3.5"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              </button>
-            </ChromeTooltip>
+          <TooltipProvider delayDuration={CHROME_TOOLTIP_DELAY_MS}>
+            <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[var(--border-hairline)] px-5">
+              <ChromeTooltip label="Previous event" shortcut="↑">
+                <button
+                  type="button"
+                  aria-label="Previous event"
+                  disabled={index <= 0}
+                  onClick={() => onStep(-1)}
+                  className={ICON_BUTTON}
+                >
+                  <ChevronUp
+                    className="size-3.5"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </button>
+              </ChromeTooltip>
+              <ChromeTooltip label="Next event" shortcut="↓">
+                <button
+                  type="button"
+                  aria-label="Next event"
+                  disabled={index >= total - 1}
+                  onClick={() => onStep(1)}
+                  className={ICON_BUTTON}
+                >
+                  <ChevronDown
+                    className="size-3.5"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </button>
+              </ChromeTooltip>
 
-            <span className="ml-1 inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
-              <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
-                Event
-              </span>
-              <span
-                className="mono tabular text-[11px]"
-                style={{ color: "var(--ink-400)" }}
-              >
-                {index + 1} / {total}
-              </span>
-            </span>
-
-            <div className="min-w-2 flex-1" />
-
-            {capabilities.canEdit ? (
-              <EventActionsMenu
-                eventId={event.id}
-                eventName={event.name}
-                isDual={isDual}
-                entries={entries}
-                canDelete={capabilities.canDelete}
-                onDeleted={onDeleted}
-              />
-            ) : null}
-
-            <span
-              aria-hidden="true"
-              className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]"
-            />
-
-            <ChromeTooltip label="Close" shortcut="Esc">
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={onClose}
-                className={ICON_BUTTON}
-              >
-                <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-              </button>
-            </ChromeTooltip>
-          </div>
-        </TooltipProvider>
-
-        <div
-          data-schedule-drawer-body=""
-          className={cn(
-            "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6",
-            "pb-4",
-          )}
-        >
-          <div className="flex shrink-0 items-center gap-3.5">
-            <EventMark kind={event.kind} name={event.name} size={48} />
-            <div className="flex min-w-0 flex-col gap-1">
-              {/* Two-line wrap: the drawer is 340px, so a long name wraps
-                  instead of truncating, and the panel scrolls to fit. */}
-              <div className="text-title-lg line-clamp-2 break-words">
-                {event.name}
-              </div>
-              {subline ? (
+              <span className="ml-1 inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
                 <span
-                  className="truncate text-[12px]"
+                  className="text-[12px]"
                   style={{ color: "var(--ink-600)" }}
                 >
-                  {subline}
+                  Event
                 </span>
+                <span
+                  className="mono tabular text-[11px]"
+                  style={{ color: "var(--ink-400)" }}
+                >
+                  {index + 1} / {total}
+                </span>
+              </span>
+
+              <div className="min-w-2 flex-1" />
+
+              {capabilities.canEdit ? (
+                <EventActionsMenu
+                  eventId={event.id}
+                  eventName={event.name}
+                  isDual={isDual}
+                  entries={entries}
+                  canDelete={capabilities.canDelete}
+                  onDeleted={onDeleted}
+                />
               ) : null}
+
+              <span
+                aria-hidden="true"
+                className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]"
+              />
+
+              <ChromeTooltip label="Close" shortcut="Esc">
+                <button
+                  type="button"
+                  aria-label="Close"
+                  onClick={onClose}
+                  className={ICON_BUTTON}
+                >
+                  <X
+                    className="size-3.5"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </button>
+              </ChromeTooltip>
             </div>
-          </div>
+          </TooltipProvider>
 
-          <EventGlyphRow event={event} className="-mt-2.5" />
+          <div
+            data-schedule-drawer-body=""
+            className={cn(
+              "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6",
+              "pb-4",
+            )}
+          >
+            <div className="flex shrink-0 items-center gap-3.5">
+              <EventMark kind={event.kind} name={event.name} size={48} />
+              <div className="flex min-w-0 flex-col gap-1">
+                {/* Two-line wrap: the drawer is 340px, so a long name wraps
+                  instead of truncating, and the panel scrolls to fit. */}
+                <div className="text-title-lg line-clamp-2 break-words">
+                  {event.name}
+                </div>
+                {subline ? (
+                  <span
+                    className="truncate text-[12px]"
+                    style={{ color: "var(--ink-600)" }}
+                  >
+                    {subline}
+                  </span>
+                ) : null}
+              </div>
+            </div>
 
-          {/* Always drawn for a dual: nine slots, ghosts until decided, so
+            <EventGlyphRow event={event} className="-mt-2.5" />
+
+            {/* Always drawn for a dual: nine slots, ghosts until decided, so
               the board's size reads before any line is played. */}
-          {isDual ? <ScoreRow singles={singles} doubles={doubles} /> : null}
-          {isDual ? (
-            <>
-              {/* A dual is saved with all nine lines set, so both groups are
+            {isDual ? <ScoreRow singles={singles} doubles={doubles} /> : null}
+            {isDual ? (
+              <>
+                {/* A dual is saved with all nine lines set, so both groups are
                   always drawn — there is no half-built lineup to explain. */}
-              <Section label="Singles">
-                {singles.map((entry) => (
-                  <DualLine key={entry.id} entry={entry} />
-                ))}
-              </Section>
-              <Section label="Doubles">
-                {doubles.map((entry) => (
-                  <DualLine key={entry.id} entry={entry} />
-                ))}
-              </Section>
-            </>
-          ) : (
-            <>
-              {entries.length === 0 ? (
-                <Section label="Entries">
-                  <EmptyNote>
-                    No entries yet. Each player&apos;s latest round appears here
-                    once they are entered.
-                  </EmptyNote>
-                </Section>
-              ) : !anyDecided ? (
-                <EmptyNote>
-                  No results yet. Each entry&apos;s latest round appears here
-                  once one is played.
-                </EmptyNote>
-              ) : null}
-              {singles.length > 0 ? (
                 <Section label="Singles">
                   {singles.map((entry) => (
-                    <TournamentLine key={entry.id} entry={entry} />
+                    <DualLine key={entry.id} entry={entry} />
                   ))}
                 </Section>
-              ) : null}
-              {doubles.length > 0 ? (
                 <Section label="Doubles">
                   {doubles.map((entry) => (
-                    <TournamentLine key={entry.id} entry={entry} />
+                    <DualLine key={entry.id} entry={entry} />
                   ))}
                 </Section>
-              ) : null}
-            </>
-          )}
-        </div>
+              </>
+            ) : (
+              <>
+                {entries.length === 0 ? (
+                  <Section label="Entries">
+                    <EmptyNote>
+                      No entries yet. Each player&apos;s latest round appears
+                      here once they are entered.
+                    </EmptyNote>
+                  </Section>
+                ) : !anyDecided ? (
+                  <EmptyNote>
+                    No results yet. Each entry&apos;s latest round appears here
+                    once one is played.
+                  </EmptyNote>
+                ) : null}
+                {singles.length > 0 ? (
+                  <Section label="Singles">
+                    {singles.map((entry) => (
+                      <TournamentLine key={entry.id} entry={entry} />
+                    ))}
+                  </Section>
+                ) : null}
+                {doubles.length > 0 ? (
+                  <Section label="Doubles">
+                    {doubles.map((entry) => (
+                      <TournamentLine key={entry.id} entry={entry} />
+                    ))}
+                  </Section>
+                ) : null}
+              </>
+            )}
+          </div>
 
-        <div
-          data-schedule-drawer-footer=""
-          className="flex shrink-0 flex-col gap-3 bg-[var(--surface-card)] px-[22px] pb-[22px]"
-        >
-          <Link
-            href={eventHref}
-            className={cn(advButton("ghost", "md"), "w-full")}
+          <div
+            data-schedule-drawer-footer=""
+            className="flex shrink-0 flex-col gap-3 bg-[var(--surface-card)] px-[22px] pb-[22px]"
           >
-            {isDual ? "Open dual" : "Open tournament"}
-          </Link>
-          {canEnterResults ? (
-            // Straight into the score flow — the one place results are
-            // written. The page sends anyone who may not score back to the
-            // event, so this needs no second gate of its own.
             <Link
-              href={`${eventHref}/score`}
-              className={cn(advButton("primary", "md"), "w-full")}
+              href={eventHref}
+              className={cn(advButton("ghost", "md"), "w-full")}
             >
-              Enter results
+              {isDual ? "Open dual" : "Open tournament"}
             </Link>
-          ) : null}
+            {canEnterResults ? (
+              // Straight into the score flow — the one place results are
+              // written. The page sends anyone who may not score back to the
+              // event, so this needs no second gate of its own.
+              <Link
+                href={`${eventHref}/score`}
+                className={cn(advButton("primary", "md"), "w-full")}
+              >
+                Enter results
+              </Link>
+            ) : null}
+          </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 

@@ -38,13 +38,17 @@ import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { advButton } from "@/lib/ui/adv-button";
 import { capitalize, cn } from "@/lib/utils";
 import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
+import {
+  DRAWER_RAIL,
+  DrawerScrim,
+} from "@/components/dashboard/shared/drawer-sheet";
 
 /** The drawer's `role="dialog"` carries this so the window key handler can tell it from a modal. */
 export const DRAWER_ATTR = "data-match-drawer";
 
 /** The header's 28px square control — the roster's and the schedule's, verbatim. */
 export const ICON_BUTTON =
-  "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40 touch:hit-area";
 
 /** The scheduled line a match was recorded against, when it has one. */
 interface ScheduleLink {
@@ -327,8 +331,9 @@ export function MatchDrawer({
  * Roster's and Schedule's shell: 340px, the float shadow, a 44px header with
  * ↑ ↓ stepping, "Match n / N", the record's ⋯, a divider and the close that
  * also answers Esc. It is the WIDTH that animates (`roster-drawer-in` /
- * `-out`), so the table reflows rather than being covered. The body scrolls;
- * the footer pins to the bottom.
+ * `-out`), so the table reflows rather than being covered — at `lg` and up;
+ * below it the rail is a sheet over the table instead (`DRAWER_RAIL`). The
+ * body scrolls; the footer pins to the bottom.
  */
 export function PeekDrawerFrame({
   kind,
@@ -376,79 +381,86 @@ export function PeekDrawerFrame({
   }, [autoFocus, focusKey]);
 
   return (
-    <aside
-      {...{ [DRAWER_ATTR]: "" }}
-      onAnimationEnd={(event) => {
-        if (event.animationName === "roster-drawer-out") onClosed();
-      }}
-      className={cn(
-        "sticky top-11 z-[2] hidden h-[calc(100vh-44px)] shrink-0 self-start overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none lg:block",
-        closing
-          ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
-          : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
-      )}
-    >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-label={label}
-        tabIndex={-1}
-        className="flex h-full w-[340px] flex-col outline-none"
+    <>
+      <DrawerScrim closing={closing} onClose={onClose} />
+      <aside
+        {...{ [DRAWER_ATTR]: "" }}
+        onAnimationEnd={(event) => {
+          if (event.animationName === "roster-drawer-out") onClosed();
+        }}
+        className={cn(
+          DRAWER_RAIL,
+          closing
+            ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
+            : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
+        )}
       >
-        <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[var(--border-hairline)] px-5">
-          <ChromeTooltip label="Previous" shortcut="↑">
-            <button
-              type="button"
-              aria-label="Previous"
-              disabled={!canPrev}
-              onClick={onPrev}
-              className={ICON_BUTTON}
-            >
-              <ChevronUp className="size-3.5" strokeWidth={1.5} aria-hidden />
-            </button>
-          </ChromeTooltip>
-          <ChromeTooltip label="Next" shortcut="↓">
-            <button
-              type="button"
-              aria-label="Next"
-              disabled={!canNext}
-              onClick={onNext}
-              className={ICON_BUTTON}
-            >
-              <ChevronDown className="size-3.5" strokeWidth={1.5} aria-hidden />
-            </button>
-          </ChromeTooltip>
-          <span className="ml-1 inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
-            <span className="text-[12px] text-[var(--ink-600)]">{kind}</span>
-            <span className="mono tabular text-[11px] text-[var(--ink-400)]">
-              {index + 1} / {total}
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-label={label}
+          tabIndex={-1}
+          className="flex h-full w-[340px] flex-col outline-none"
+        >
+          <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[var(--border-hairline)] px-5">
+            <ChromeTooltip label="Previous" shortcut="↑">
+              <button
+                type="button"
+                aria-label="Previous"
+                disabled={!canPrev}
+                onClick={onPrev}
+                className={ICON_BUTTON}
+              >
+                <ChevronUp className="size-3.5" strokeWidth={1.5} aria-hidden />
+              </button>
+            </ChromeTooltip>
+            <ChromeTooltip label="Next" shortcut="↓">
+              <button
+                type="button"
+                aria-label="Next"
+                disabled={!canNext}
+                onClick={onNext}
+                className={ICON_BUTTON}
+              >
+                <ChevronDown
+                  className="size-3.5"
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
+              </button>
+            </ChromeTooltip>
+            <span className="ml-1 inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
+              <span className="text-[12px] text-[var(--ink-600)]">{kind}</span>
+              <span className="mono tabular text-[11px] text-[var(--ink-400)]">
+                {index + 1} / {total}
+              </span>
             </span>
-          </span>
-          <div className="min-w-2 flex-1" />
-          {actions}
-          <span
-            aria-hidden
-            className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]"
-          />
-          <ChromeTooltip label="Close" shortcut="Esc">
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-              className={ICON_BUTTON}
-            >
-              <X className="size-3.5" strokeWidth={1.5} aria-hidden />
-            </button>
-          </ChromeTooltip>
-        </div>
+            <div className="min-w-2 flex-1" />
+            {actions}
+            <span
+              aria-hidden
+              className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]"
+            />
+            <ChromeTooltip label="Close" shortcut="Esc">
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={onClose}
+                className={ICON_BUTTON}
+              >
+                <X className="size-3.5" strokeWidth={1.5} aria-hidden />
+              </button>
+            </ChromeTooltip>
+          </div>
 
-        {children}
+          {children}
 
-        <div className="flex shrink-0 flex-col gap-3 px-[22px] py-4">
-          {footer}
+          <div className="flex shrink-0 flex-col gap-3 px-[22px] py-4">
+            {footer}
+          </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 

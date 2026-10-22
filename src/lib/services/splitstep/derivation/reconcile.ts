@@ -73,11 +73,12 @@ export interface Reconciliation {
   /**
    * How player1Label was decided. `fold` when the fold matched; `geometry`
    * when the wizard's top-player input plus court position named it;
-   * `distance` when the closer of the two folds did; `guess` when nothing
-   * decided it and a label was picked so the match still publishes. Null
-   * when refused.
+   * `distance` when the closer of the two folds did; `name` when only the
+   * vendor's label matched `matches.player1_name` / `player2_name` exactly;
+   * `guess` when nothing decided it and a label was picked so the match
+   * still publishes. Null when refused.
    */
-  player1Source: "fold" | "geometry" | "distance" | "guess" | null;
+  player1Source: "fold" | "geometry" | "distance" | "name" | "guess" | null;
   /** Per-set game counts the fold produced, keyed by label. */
   foldedSets: Array<Record<string, number>>;
   games: FoldedGame[];
@@ -248,6 +249,11 @@ export function reconcile(params: {
   geometryTopLabel?: string | null;
   /** From `matches.initial_top_player_is_player1`, when known. */
   initialTopIsPlayer1?: boolean | null;
+  /**
+   * Name pairs for `player1FromNames`, most authoritative first: the names the
+   * job request sent, then the match's current names.
+   */
+  playerNames?: readonly PlayerNames[] | null;
 }): Reconciliation {
   const { winners, labels, score, gameKeyOf, setKeyOf } = params;
 
@@ -360,9 +366,8 @@ export function reconcile(params: {
         initialTopIsPlayer1,
         labels,
       );
-      let source: "geometry" | "distance" | "guess" | null = player1Label
-        ? "geometry"
-        : null;
+      let source: "geometry" | "distance" | "name" | "guess" | null =
+        player1Label ? "geometry" : null;
 
       // Distance of every (attempt, mapping) pair from the entered score.
       // The mapping is judged on the SUM over every trailing-point attempt:
@@ -389,7 +394,18 @@ export function reconcile(params: {
         }
       }
 
-      // 3. Neither: no refusals (product decision, 2026-10-17). Take the
+      // 3. The vendor's labels are the names the job request sent, so an
+      //    exact match against the match's own names says who is who. Last
+      //    before the guess, not first: `pred_player_id` is free text that
+      //    has come back misspelled, so it only stands in for a coin flip.
+      //    Job fb00f837 (Ivan H v Jasper Mok) had no geometry and a tied
+      //    distance, and the guess below named the wrong player.
+      if (!player1Label) {
+        player1Label = player1FromNameCandidates(params.playerNames, labels);
+        if (player1Label) source = "name";
+      }
+
+      // 4. Neither: no refusals (product decision, 2026-10-17). Take the
       //    single (attempt, mapping) pair that lands closest to the entered
       //    score, and labels[0] when even that ties. `source: "guess"` keeps
       //    it greppable and `ok` stays false, so nothing reads it as verified.
@@ -457,14 +473,14 @@ export function reconcile(params: {
       initialTopIsPlayer1 === null ||
       initialTopIsPlayer1 === undefined
     ) {
+      const named = player1FromNameCandidates(params.playerNames, labels);
       return {
         ok: false,
-        player1Label: a,
-        player1Source: "guess",
+        player1Label: named ?? a,
+        player1Source: named ? "name" : "guess",
         foldedSets: sets,
         games,
-        reason:
-          "entered score is its own mirror and geometry was indecisive, so player1 was guessed",
+        reason: `entered score is its own mirror and geometry was indecisive, so player1 was ${named ? "named from the player names" : "guessed"}`,
         unresolvedPoints,
         settledWinners,
       };
@@ -494,6 +510,46 @@ export function reconcile(params: {
     unresolvedPoints,
     settledWinners,
   };
+}
+
+export interface PlayerNames {
+  player1: string | null;
+  player2: string | null;
+}
+
+/**
+ * player1 from an exact (trimmed, case-insensitive) match between the
+ * vendor's labels and the match's player names. Either name is enough when
+ * it matches exactly one label; null when neither does or the two disagree.
+ */
+export function player1FromNames(
+  names: PlayerNames | null | undefined,
+  labels: string[],
+): string | null {
+  if (!names || labels.length !== 2) return null;
+  const norm = (v: string | null) => v?.trim().toLowerCase() || null;
+  const labelFor = (name: string | null) => {
+    const n = norm(name);
+    const hits = n ? labels.filter((l) => norm(l) === n) : [];
+    return hits.length === 1 ? hits[0] : null;
+  };
+  const viaP1 = labelFor(names.player1);
+  const p2 = labelFor(names.player2);
+  const viaP2 = p2 ? otherOf(p2, labels) : null;
+  if (viaP1 && viaP2 && viaP1 !== viaP2) return null;
+  return viaP1 ?? viaP2;
+}
+
+/** The first name pair that names player1, in the order given. */
+function player1FromNameCandidates(
+  candidates: readonly PlayerNames[] | null | undefined,
+  labels: string[],
+): string | null {
+  for (const names of candidates ?? []) {
+    const label = player1FromNames(names, labels);
+    if (label) return label;
+  }
+  return null;
 }
 
 function otherOf(label: string, labels: string[]): string | null {

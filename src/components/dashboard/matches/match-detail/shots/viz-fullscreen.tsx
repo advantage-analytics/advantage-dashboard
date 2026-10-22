@@ -620,7 +620,7 @@ export function VizFullscreen() {
                   <button
                     type="button"
                     onClick={clearFilters}
-                    className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                    className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)] touch:hit-area"
                   >
                     Clear
                   </button>
@@ -632,7 +632,9 @@ export function VizFullscreen() {
           {/* ── Top chrome ─────────────────────────────────────────────── */}
           <div
             data-chrome=""
-            className="absolute top-[14px] right-[18px] left-[18px] flex flex-wrap items-start justify-end gap-3"
+            // The viewer is edge to edge (`viewportFit: "cover"`): the chrome
+            // clears the status bar and a notch. Each inset is 0 on a desktop.
+            className="absolute top-[max(14px,env(safe-area-inset-top))] right-[max(18px,env(safe-area-inset-right))] left-[max(18px,env(safe-area-inset-left))] flex flex-wrap items-start justify-end gap-3"
           >
             <ViewerScoreboard
               cutLabel={CUT_LABEL[cut]}
@@ -678,7 +680,7 @@ export function VizFullscreen() {
                     type="button"
                     aria-haspopup="dialog"
                     aria-expanded={open}
-                    className="inline-flex h-[26px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-white backdrop-blur-[6px] transition-colors duration-200"
+                    className="inline-flex h-[26px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-white backdrop-blur-[6px] transition-colors duration-200 touch:hit-area"
                     style={{
                       background: open
                         ? "rgba(13,13,13,0.92)"
@@ -716,7 +718,7 @@ export function VizFullscreen() {
                   type="button"
                   aria-label="Exit fullscreen"
                   onClick={exit}
-                  className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/85 backdrop-blur-[6px] transition-colors duration-200 hover:text-white"
+                  className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/85 backdrop-blur-[6px] transition-colors duration-200 hover:text-white touch:hit-area"
                   style={{ background: "rgba(13,13,13,0.72)" }}
                 >
                   <X
@@ -743,7 +745,8 @@ export function VizFullscreen() {
               fade back in over 200ms when the editor closes. */}
           <div
             data-chrome=""
-            className="absolute right-5 bottom-4 left-5 h-12 min-w-0 overflow-hidden rounded-[12px] backdrop-blur-[8px]"
+            // Clears the home indicator, as the top chrome clears the bar.
+            className="absolute right-[max(1.25rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1.25rem,env(safe-area-inset-left))] h-12 min-w-0 overflow-hidden rounded-[12px] backdrop-blur-[8px]"
             style={{ background: "rgba(13,13,13,0.72)" }}
           >
             <div
@@ -951,7 +954,9 @@ function ZoomButton({
           type="button"
           aria-label={label}
           onClick={onClick}
-          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/85 transition-colors duration-200 hover:bg-white/10 hover:text-white"
+          // `touch:hit-area`: 44px to a finger. The slab is 48px tall, so the
+          // area fits inside its clip.
+          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/85 transition-colors duration-200 hover:bg-white/10 hover:text-white touch:hit-area"
         >
           {icon}
         </button>

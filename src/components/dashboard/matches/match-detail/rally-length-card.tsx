@@ -14,6 +14,8 @@ import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { rallyLengthBandOf } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { EmptyMark } from "@/components/ui/empty-mark";
+import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
+import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import { cn } from "@/lib/utils";
 import { surnameLabels } from "@/lib/data/match-utils";
 
@@ -40,6 +42,9 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * With a playable video each band opens its points in the Video tab
  * (`RALLY_BAND_CUTS`) on click or Enter — hovering only reads. Without one
  * the markup is exactly the read-only card.
+ *
+ * On touch a tap selects a band and its readout stays until a tap lands
+ * outside the card; with a video, a second tap on the selected band opens it.
  *
  * The card is the right column's `flex:1` absorber — its own height comes
  * from the grid row, and the mosaic in turn claims whatever that leaves
@@ -89,6 +94,10 @@ export function RallyLengthCard() {
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<Band["key"] | null>(null);
   const watchable = meta.hasPlayableVideo;
+  const cardRef = useTouchReadout<HTMLElement>(hovered !== null, () =>
+    setHovered(null),
+  );
+  const fingerTap = useFingerTap();
 
   const youIsPlayer1 = sides.you.isPlayer1;
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
@@ -182,6 +191,7 @@ export function RallyLengthCard() {
 
   return (
     <section
+      ref={cardRef}
       aria-labelledby="rally-length-heading"
       className="surface-card flex min-h-0 flex-1 flex-col gap-3"
       style={{ padding: "16px 20px 14px" }}
@@ -227,6 +237,12 @@ export function RallyLengthCard() {
                 }}
                 tabIndex={0}
                 {...watchableSegmentProps(watch, label)}
+                onPointerDown={(e) => {
+                  if (fingerTap.press(e, hovered === band.key)) {
+                    setHovered(band.key);
+                  }
+                }}
+                onClick={() => fingerTap.click(watch, () => setHovered(null))}
                 onMouseEnter={() => setHovered(band.key)}
                 onMouseLeave={() => setHovered(null)}
                 onFocus={() => setHovered(band.key)}
@@ -340,6 +356,7 @@ function BandTooltip({
   /** The band opens its points in the Video tab. */
   watchable: boolean;
 }) {
+  const coarse = useCoarsePointer();
   return (
     <ChartTooltip
       open={open}
@@ -359,7 +376,7 @@ function BandTooltip({
       </span>
       {watchable && (
         <span className="text-[10px] text-white/[0.64]">
-          Click to watch in Video
+          {coarse ? "Tap again to watch in Video" : "Click to watch in Video"}
         </span>
       )}
     </ChartTooltip>

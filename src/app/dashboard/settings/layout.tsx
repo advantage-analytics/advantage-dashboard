@@ -42,7 +42,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   const squad = program ? teamLabel(program.team) : null;
 
   return (
-    <div className="min-h-screen w-full flex-1 bg-[var(--surface-card)]">
+    <div className="min-h-dvh w-full flex-1 bg-[var(--surface-card)]">
       {/* Centred on the block's own width, not on the viewport.
           The canvas measures 40/32/48/48 inside a fixed 1280px artboard, where
           the rail + column (~870px) nearly fills the 968px of inner width — so

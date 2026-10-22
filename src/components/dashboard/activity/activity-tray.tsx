@@ -743,7 +743,7 @@ export function ActivityTray({
             data-tour="activity-tray"
             aria-label={`Activity, ${detail}`}
             className={cn(
-              "group relative flex size-7 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none",
+              "group relative flex size-7 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none touch:hit-area",
               isOpen && "bg-[var(--surface-subtle)]",
             )}
           >

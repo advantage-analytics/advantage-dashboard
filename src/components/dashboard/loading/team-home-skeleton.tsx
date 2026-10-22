@@ -41,7 +41,7 @@ export function TeamHomeFrame({
 }) {
   return (
     <div className="flex w-full flex-1 flex-col bg-[var(--surface-card)]">
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col gap-4 px-14 pt-5 pb-8">
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col gap-4 px-8 pt-5 pb-8 xl:px-14">
         {title}
         <TeamHomeRegions
           kpis={kpis}
@@ -76,7 +76,7 @@ export function TeamHomeRegions({
   return (
     <>
       {kpis}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="flex min-w-0 flex-col gap-5">
           {dual}
           {movers}

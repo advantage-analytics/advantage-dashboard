@@ -24,6 +24,11 @@ export const ADMIN_TEAM_SECTION_SLUGS = [
 ] as const;
 
 const nextConfig: NextConfig = {
+  // `next dev` refuses its own scripts to any origin but localhost, so a real
+  // iPad on the same Wi-Fi (http://192.168.x.x:3000) got the server HTML and
+  // no JavaScript: nothing hydrated, and sign-in could not submit. Private
+  // home-network ranges only. Dev only: production ignores this key.
+  allowedDevOrigins: ["192.168.*.*", "10.*.*.*", "*.local"],
   // Mark exceljs as an external package for server components
   // This prevents it from being bundled in server-side code.
   //

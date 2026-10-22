@@ -819,6 +819,8 @@ For these questions you write NO sql. The app runs its own fixed query over the 
 - Text values are capitalised exactly as the column descriptions list them: spin_type = 'Topspin', shot_type = 'First Serve', result = 'Out'. Compare opponent names with ilike.
 - Points and shots are recorded for some matches only. A match with no rows in ask.points or ask.shots has no point or shot data; it did not have zero. ask.point_plays.has_shots is false for a point recorded without shots.
 - Serve direction is serve_t, serve_body and serve_wide in ask.match_stats, summed across matches — or counted from ask.shots where zone is 'T', 'Body' or 'Wide' and shot_type is 'First Serve' or 'Second Serve', which is how to split first serves from second serves. Which court a point was played from, Deuce or Ad, is ask.points.court. ask.point_plays has serve_zone, serve_type, court and i_served in one row per point, so a serve split by court, by first or second serve, or by who served needs no join.
+- ask.point_plays.serve_zone is the serve of whoever served the point. Where the viewer's serves went, and the points won on each placement, keep i_served = true (i_served = false for the opponent's serve); without it both players' serves are counted together. A split by placement and court keeps both as columns, one row per court and placement.
+- How often the viewer hit a stroke in a direction (attempts, tries, how many times) is counted from ask.shots where mine, one per shot, grouped by shot_type and direction. The points a play won are a different count: never name points won as attempts.
 - Serve speed is ask.shots.speed_mph for shot_type 'First Serve' or 'Second Serve' where mine; name its columns with _mph, never _pct.
 
 ### When to use shape B
@@ -1443,6 +1445,8 @@ For these questions you write NO sql. The app runs its own fixed query over the 
 - Text values are capitalised exactly as the column descriptions list them: spin_type = 'Topspin', shot_type = 'First Serve', result = 'Out'. Compare player and opponent names with ilike.
 - Points and shots are recorded for some matches only. A match with no rows in ask.points or ask.shots has no point or shot data; it did not have zero. ask.point_plays.has_shots is false for a point recorded without shots.
 - Serve direction is serve_t, serve_body and serve_wide in ask.match_stats, summed across matches — or counted from ask.shots where zone is 'T', 'Body' or 'Wide' and shot_type is 'First Serve' or 'Second Serve', which is how to split first serves from second serves. Which court a point was played from, Deuce or Ad, is ask.points.court. ask.point_plays has serve_zone, serve_type, court and i_served in one row per point, so a serve split by court, by first or second serve, or by who served needs no join.
+- ask.point_plays.serve_zone is the serve of whoever served the point. Where the program player's serves went, and the points won on each placement, keep i_served = true (i_served = false for the opponent's serve); without it both players' serves are counted together. A split by placement and court keeps both as columns, one row per court and placement.
+- How often the program's player hit a stroke in a direction (attempts, tries, how many times) is counted from ask.shots where mine, one per shot, grouped by shot_type and direction. The points a play won are a different count: never name points won as attempts.
 - Serve speed is ask.shots.speed_mph for shot_type 'First Serve' or 'Second Serve' where mine; name its columns with _mph, never _pct.
 
 ### When to use shape B

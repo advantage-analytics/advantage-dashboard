@@ -7,7 +7,9 @@ import {
   hasEarlierServe,
   isStrokeKey,
   strokeKeyChange,
+  withServeHitter,
 } from "@/components/admin/labels/stroke-keys";
+import { spinOptions } from "@/components/admin/labels/label-format";
 import { labelShot } from "./fixtures/label-session";
 import {
   MAX_ZOOM,
@@ -112,6 +114,59 @@ test.describe("stroke keys", () => {
     expect(hasEarlierServe({ shots: [target, later] }, "b", false)).toBe(false);
   });
 
+  test("a stroke made a serve after the point's first serve takes its hitter", () => {
+    const row = (
+      id: string,
+      videoTime: number,
+      fields: Parameters<typeof labelShot>[2] = {},
+    ) => labelShot(id, "pt", { videoTime, ...fields });
+    const fault = row("a", 1, {
+      stroke: "first_serve",
+      result: "out",
+      hitter: "p1",
+    });
+    // Added after the fault: seeded as the opponent's.
+    const added = row("b", 2, { stroke: null, hitter: "p2" });
+    const point = { shots: [fault, added] };
+    expect(
+      withServeHitter(point, "b", { stroke: "second_serve" }, false),
+    ).toEqual({ stroke: "second_serve", hitter: "p1" });
+    // Already the server's, a rally stroke, a hitter of its own: untouched.
+    expect(
+      withServeHitter(
+        { shots: [fault, { ...added, hitter: "p1" }] },
+        "b",
+        { stroke: "second_serve" },
+        false,
+      ),
+    ).toEqual({ stroke: "second_serve" });
+    expect(withServeHitter(point, "b", { stroke: "forehand" }, false)).toEqual({
+      stroke: "forehand",
+    });
+    expect(
+      withServeHitter(
+        point,
+        "b",
+        { stroke: "second_serve", hitter: "p2" },
+        false,
+      ),
+    ).toEqual({ stroke: "second_serve", hitter: "p2" });
+    // The point's first serve has no earlier serve to follow, and a let
+    // before it is no serve to follow either.
+    expect(
+      withServeHitter(point, "a", { stroke: "first_serve" }, false),
+    ).toEqual({ stroke: "first_serve" });
+    const let_ = { ...fault, result: "let" as const };
+    expect(
+      withServeHitter(
+        { shots: [let_, added] },
+        "b",
+        { stroke: "first_serve" },
+        false,
+      ),
+    ).toEqual({ stroke: "first_serve" });
+  });
+
   test("1–4 are the spin menu's rows; the same value asks for nothing", () => {
     expect(strokeKeyChange("1", shot("forehand"))).toEqual({ spin: "topspin" });
     expect(strokeKeyChange("3", shot("forehand"))).toEqual({
@@ -119,6 +174,35 @@ test.describe("stroke keys", () => {
     });
     expect(strokeKeyChange("2", shot("forehand", "flat"))).toBeNull();
     expect(strokeKeyChange("f", shot("forehand"))).toBeNull();
+  });
+
+  test("a serve's Spin menu is Flat, Slice, Kick, and 1–3 pick them", () => {
+    expect(spinOptions("first_serve")).toEqual([
+      { value: "flat", label: "Flat" },
+      { value: "sidespin", label: "Slice" },
+      { value: "topspin", label: "Kick" },
+    ]);
+    expect(spinOptions("second_serve").map((o) => o.label)).toEqual([
+      "Flat",
+      "Slice",
+      "Kick",
+    ]);
+    // A rally stroke keeps every vendor value.
+    expect(spinOptions("forehand").map((o) => o.value)).toEqual([
+      "topspin",
+      "flat",
+      "backspin",
+      "sidespin",
+    ]);
+    expect(strokeKeyChange("1", shot("first_serve"))).toEqual({ spin: "flat" });
+    expect(strokeKeyChange("2", shot("first_serve"))).toEqual({
+      spin: "sidespin",
+    });
+    expect(strokeKeyChange("3", shot("second_serve"))).toEqual({
+      spin: "topspin",
+    });
+    // No fourth serve spin.
+    expect(strokeKeyChange("4", shot("first_serve"))).toBeNull();
   });
 
   test("other keys are not stroke keys", () => {
@@ -137,10 +221,13 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     "utf8",
   );
 
-  test("the legend under the court names both, after the stroke keys", () => {
-    expect(STROKE_KEY_HINTS.slice(-2)).toEqual([
+  test("the legend under the court names them, after the stroke keys", () => {
+    expect(STROKE_KEY_HINTS.slice(-5)).toEqual([
       { key: "C", label: "contact / landing" },
+      { key: "X", label: "flip side" },
       { key: "A", label: "add shot" },
+      { key: "⇧A", label: "add before" },
+      { key: "⌫", label: "delete shot" },
     ]);
     // Neither is a stroke key: they never change the selected stroke.
     expect(isStrokeKey("a")).toBe(false);
@@ -158,8 +245,41 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     // Same reach as the stroke keys: never from a field, a menu or a dialog,
     // never with a modifier, never on a held key.
     // The stroke keys' guard, shared: one dispatcher, one reach check.
-    expect(source).toContain("? () => addShotKey.current()");
+    expect(source).toContain(": () => addShotKey.current()");
+    // ⇧A adds before the selected stroke, else first in the rally.
+    expect(source).toContain("? () => addShotBeforeKey.current()");
+    expect(source).toContain(
+      "addShot(expanded.id, at > 0 ? live[at - 1].id : ADD_SHOT_AT_START);",
+    );
+    // Delete / Backspace go through the tray's own confirm.
+    expect(source).toContain('key === "Delete" || key === "Backspace"');
     expect(source).toContain("? () => endKey.current()");
+    // A shot key acts on the open point's stroke: a selection left in
+    // another point gives way to the open point's first.
+    expect(source).toContain("const keyShot = (): LabelShot | null =>");
+    expect(source).toContain(
+      "if (live && expanded.shots.some((shot) => shot.id === live.id))",
+    );
+    expect(source).toContain(
+      "if (expanded && owner.id !== expanded.id) return false;",
+    );
+    // A stroke just added is used at once; what the server reads it from
+    // waits for its row: an add behind every add in flight, a split and a
+    // remove behind its own, and no serve-hitter follow while it is in flight.
+    expect(source).toContain(
+      "Promise.all([...addsInFlight.current.values()]).then(() =>",
+    );
+    expect(source).toContain(
+      "afterAdd(shotId, () => operations.splitPoint(pointId, shotId))",
+    );
+    expect(source).toContain(
+      "afterAdd(shotId, () => operations.removeShotsAfter(shotId))",
+    );
+    expect(source).toContain("!addsInFlight.current.has(shotId) &&");
+    // X is the court's Flip side.
+    expect(source).toContain("? () => flipKey.current()");
+    expect(source).toContain("setPlacement(flipPlacement);");
+    expect(isStrokeKey("x")).toBe(false);
     expect(source).toMatch(/consoleKey &&\n\s+!event\.metaKey/);
   });
 });

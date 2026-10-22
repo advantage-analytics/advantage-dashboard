@@ -82,7 +82,7 @@ export function WizardShell({
   children,
 }: WizardShellProps) {
   return (
-    <div className="flex min-h-[calc(100vh-44px)] flex-col">
+    <div className="flex min-h-[calc(100dvh-44px)] flex-col">
       {/* Full-bleed under the app header. Inside the content column it read as
           a rule belonging to the title; spanning the pane it reads as chrome
           measuring the whole flow. */}

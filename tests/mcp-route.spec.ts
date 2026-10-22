@@ -10,6 +10,11 @@ import {
 } from "@/lib/services/mcp/auth";
 import * as rateLimit from "@/lib/services/mcp/rate-limit";
 import type { AskMcpContext } from "@/lib/services/mcp/server";
+import type {
+  McpMatchReport,
+  McpOwnMatch,
+  McpUserReads,
+} from "@/lib/services/mcp/user-reads";
 import { createLoader } from "./fixtures/vm-modules";
 import { withEnv } from "./fixtures/with-env";
 
@@ -29,7 +34,7 @@ import { withEnv } from "./fixtures/with-env";
  *
  * What is pinned: a missing token and a refused one are 401s carrying the
  * `WWW-Authenticate` the MCP spec wants, before anything is built; a good
- * token lists the four tools; a query the guard refuses never reaches the
+ * token lists the nine tools; a query the guard refuses never reaches the
  * database; a query that runs goes to the service client with the TOKEN's
  * user as the viewer and nothing else; membership is checked before a
  * program's rows are read; the two limits refuse by name; `ask` runs the
@@ -106,6 +111,136 @@ const LIST_ANSWER = {
   ],
 };
 
+/** What `reads.matchReport()` answers: the caller sat in seat two, a summary per seat, one share link. */
+const REPORT: McpMatchReport = {
+  seat: "player2",
+  insights: {
+    player1: { summary: "Anna served big." },
+    player2: { summary: "You returned deep.", strengths: [] },
+  },
+  keyMoments: [{ moment: "Set 2, 4-4", description: "Held from 0-30." }],
+  shareToken: "tok_abc",
+};
+
+/** What `reads.ownMatch()` answers: a hand-scored personal match, not on a line. */
+const OWN_MATCH: McpOwnMatch = {
+  id: MATCH_A,
+  programId: null,
+  score: { player1: [6, 6], player2: [4, 3] },
+  format: { best_of: 3 },
+  linked: false,
+  analyzed: false,
+  teamMatch: false,
+  matchType: "Tournament",
+  round: null,
+};
+
+/** What the `get_match` stats query answers: both sides of one match. */
+const STATS_ANSWER = {
+  matches: [QUERY_ANSWER.matches[0]],
+  rows: [
+    { match_id: MATCH_A, side: "me", aces: 5, first_serve_pct: 61.2 },
+    { match_id: MATCH_A, side: "opponent", aces: 2, first_serve_pct: 55.0 },
+  ],
+};
+
+/** The two Opponents reads, as `opponents-load.ts` shapes them, cut to what the tool restates. */
+const OPPONENTS = {
+  personal: {
+    season: "2026–27",
+    totals: { opponents: 1, matches: 2, won: 1, analyzed: 2, unnamed: 0 },
+    opponents: [
+      {
+        key: "name:anna lee",
+        opponentPlayerId: null,
+        name: "Anna Lee",
+        hand: "right",
+        backhand: "two-handed",
+        played: 2,
+        analyzed: 2,
+        wins: 1,
+        losses: 1,
+        playedThisSeason: 2,
+        form: ["loss", "win"],
+        lastMatch: {
+          id: MATCH_A,
+          date: "2026-09-14",
+          won: true,
+          sets: [{ player1: 6, player2: 4 }],
+        },
+        recent: [
+          {
+            id: MATCH_A,
+            date: "2026-09-14",
+            won: true,
+            sets: [{ player1: 6, player2: 4 }],
+            event: null,
+            inSeason: true,
+            values: { total_points_won_pct: 53 },
+          },
+        ],
+        measures: [
+          {
+            key: "total_points_won_pct",
+            label: "Points won",
+            value: 53,
+            trend: 2,
+          },
+        ],
+      },
+    ],
+  },
+  team: {
+    season: "2026–27",
+    totals: {
+      opponents: 1,
+      programs: 1,
+      matches: 1,
+      analyzed: 1,
+      unattributed: 0,
+    },
+    opponents: [
+      {
+        key: "name:bea ortiz",
+        opponentPlayerId: null,
+        name: "Bea Ortiz",
+        hand: null,
+        backhand: null,
+        played: 1,
+        analyzed: 1,
+        wins: 0,
+        losses: 1,
+        playedThisSeason: 1,
+        form: ["loss"],
+        lastMatch: { id: MATCH_B, date: "2026-08-02", won: false, sets: [] },
+        recent: [],
+        measures: [],
+        program: {
+          id: OTHER_PROGRAM_ID,
+          schoolName: "Eastbrook",
+          shortCode: null,
+          crestUrl: null,
+          conference: "Big West",
+          division: "I",
+        },
+        school: null,
+        matchIds: [MATCH_B],
+        editableMatchIds: [],
+        facedBy: [
+          {
+            playerId: "pp-1",
+            name: "Cal Reyes",
+            firstName: "Cal",
+            photoUrl: null,
+            wins: 0,
+            losses: 1,
+          },
+        ],
+      },
+    ],
+  },
+};
+
 // ── The faked edges ─────────────────────────────────────────────────────────
 
 type RpcResult = {
@@ -119,6 +254,10 @@ interface World {
   configured: boolean;
   serviceKey: boolean;
   programs: { id: string; name: string }[];
+  /** What `reads.matchReport()` answers for any match, or null for "not yours". */
+  report: McpMatchReport | null;
+  /** What `reads.ownMatch()` answers for MATCH_A; MATCH_B is never the caller's. */
+  ownMatch: McpOwnMatch | null;
   /** The one saved conversation `reads.conversation()` finds, if any. */
   conversation: { id: string; messages: [] } | null;
   rpc: Record<string, (args: unknown) => RpcResult>;
@@ -139,9 +278,11 @@ interface Calls {
 function answerQuery(args: unknown): RpcResult {
   const sql = (args as { sql?: string }).sql ?? "";
   return {
-    data: /from ask\.matches m join scope/.test(sql)
-      ? LIST_ANSWER
-      : QUERY_ANSWER,
+    data: /from ask\.match_stats s join scope/.test(sql)
+      ? STATS_ANSWER
+      : /from ask\.matches m join scope/.test(sql)
+        ? LIST_ANSWER
+        : QUERY_ANSWER,
     error: null,
   };
 }
@@ -152,6 +293,8 @@ function world(overrides: Partial<World> = {}): World {
     configured: false,
     serviceKey: true,
     programs: [{ id: PROGRAM_ID, name: "Westbrook College" }],
+    report: REPORT,
+    ownMatch: OWN_MATCH,
     conversation: null,
     limiter: rateLimit.createRateLimiter(),
     rpc: {
@@ -175,11 +318,55 @@ function world(overrides: Partial<World> = {}): World {
       ask_data_version: () => ({ data: "v1", error: null }),
       ask_cache_get: () => ({ data: null, error: null }),
       ask_cache_put: () => ({ data: null, error: null }),
+      ask_patch_match: () => ({ data: MATCH_A, error: null }),
+      ask_seed_match_draft: (args) => ({
+        data: (args as { p_id: string }).p_id,
+        error: null,
+      }),
     },
     llm: async () => {
       throw new Error("provider down");
     },
     ...overrides,
+  };
+}
+
+/** `createMcpUserReads()` faked: every read is recorded, and answers what `state` says. */
+function fakeReads(state: World, calls: Calls, userId: string): McpUserReads {
+  return {
+    program: async (id) => {
+      calls.reads.push(`program:${id}:${userId}`);
+      return state.programs.find((program) => program.id === id) ?? null;
+    },
+    programs: async () => {
+      calls.reads.push(`programs:${userId}`);
+      return state.programs.map((program) => ({
+        ...program,
+        role: "player",
+        team: "mens" as const,
+        status: "active",
+      }));
+    },
+    conversation: async (id) => {
+      calls.reads.push(`conversation:${id}`);
+      return state.conversation?.id === id ? state.conversation : null;
+    },
+    matchReport: async (id) => {
+      calls.reads.push(`report:${id}`);
+      return state.report;
+    },
+    ownMatch: async (id) => {
+      calls.reads.push(`own:${id}`);
+      return id === MATCH_A ? state.ownMatch : null;
+    },
+    personalOpponents: async () => {
+      calls.reads.push(`opponents:${userId}`);
+      return OPPONENTS.personal as never;
+    },
+    teamOpponents: async (programId) => {
+      calls.reads.push(`opponents:${programId}`);
+      return OPPONENTS.team as never;
+    },
   };
 }
 
@@ -268,16 +455,8 @@ function fakes(state: World) {
       flushPostHogAfterResponse: () => undefined,
     },
     "@/lib/services/mcp/user-reads": {
-      createMcpUserReads: (_client: unknown, userId: string) => ({
-        program: async (id: string) => {
-          calls.reads.push(`program:${id}:${userId}`);
-          return state.programs.find((program) => program.id === id) ?? null;
-        },
-        conversation: async (id: string) => {
-          calls.reads.push(`conversation:${id}`);
-          return state.conversation?.id === id ? state.conversation : null;
-        },
-      }),
+      createMcpUserReads: (_client: unknown, userId: string) =>
+        fakeReads(state, calls, userId),
     },
     "@/lib/services/mcp/rate-limit": {
       ...rateLimit,
@@ -379,7 +558,12 @@ async function callTool(
 async function listTools(route: {
   POST: (request: Request) => Promise<Response>;
 }) {
-  return rpcResult<{ tools: { name: string }[] }>(
+  return rpcResult<{
+    tools: {
+      name: string;
+      annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
+    }[];
+  }>(
     await route.POST(
       post({ jsonrpc: "2.0", id: nextId++, method: "tools/list" }),
     ),
@@ -563,7 +747,7 @@ test.describe("POST /api/mcp · the auth ladder", () => {
     expect(calls.rpc).toEqual([]);
   });
 
-  test("a good token: initialize names the server, and the four tools are listed", async () => {
+  test("a good token: initialize names the server, and the nine tools are listed", async () => {
     const { route, calls } = loadRoute(world());
     const initialized = await rpcResult<{
       serverInfo: { name: string };
@@ -592,9 +776,30 @@ test.describe("POST /api/mcp · the auth ladder", () => {
     expect(listed.tools.map((tool) => tool.name).sort()).toEqual([
       "ask",
       "describe_views",
+      "get_match",
       "list_matches",
+      "list_workspaces",
+      "opponent_scouting",
+      "prepare_video_upload",
       "run_query",
+      "update_match",
     ]);
+    // The Connectors Directory checks these against behaviour: `ask` saves the
+    // exchange and spends a question, so it is a write like the match writes.
+    const writes = listed.tools.filter(
+      (tool) => tool.annotations?.readOnlyHint !== true,
+    );
+    expect(writes.map((tool) => tool.name).sort()).toEqual([
+      "ask",
+      "prepare_video_upload",
+      "update_match",
+    ]);
+    for (const tool of writes) {
+      expect(tool.annotations).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint: false,
+      });
+    }
     expect(calls.verify).toEqual([TOKEN, TOKEN]);
     // Listing is not a tool call: nothing counted, nothing queried.
     expect(calls.rpc).toEqual([]);
@@ -692,6 +897,441 @@ test.describe("POST /api/mcp · describe_views and list_matches", () => {
       ok: false,
       error_code: "not_a_member",
     });
+  });
+});
+
+// ── list_workspaces, get_match and opponent_scouting ────────────────────────
+
+test.describe("POST /api/mcp · list_workspaces", () => {
+  test("names the personal workspace and every program with its role, as the user, and queries nothing", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await callTool(route, "list_workspaces");
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toEqual({
+      personal: { id: USER_ID, label: "Your own matches (no program_id)" },
+      programs: [
+        {
+          program_id: PROGRAM_ID,
+          name: "Westbrook College",
+          team: "mens",
+          role: "player",
+          status: "active",
+        },
+      ],
+    });
+    expect(calls.reads).toEqual([`programs:${USER_ID}`]);
+    expect(serviceCalls(calls)).toEqual([]);
+  });
+});
+
+test.describe("POST /api/mcp · get_match", () => {
+  test("reads the match row and both stat sides through the one-match scope, orients the insights to the caller's seat, and prints the links", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await withEnv(
+      ["NEXT_PUBLIC_SITE_URL"],
+      { NEXT_PUBLIC_SITE_URL: "https://app.example.test" },
+      () => callTool(route, "get_match", { match_id: MATCH_A }),
+    );
+    expect(result.isError).toBeUndefined();
+    const structured = result.structuredContent as Record<string, unknown>;
+    expect(structured.match).toMatchObject({
+      match_id: MATCH_A,
+      opponent: "Anna Lee",
+      score: "6-4 6-3",
+      i_won: true,
+      has_stats: true,
+    });
+    expect(structured.stats).toEqual({
+      me: { match_id: MATCH_A, side: "me", aces: 5, first_serve_pct: 61.2 },
+      opponent: {
+        match_id: MATCH_A,
+        side: "opponent",
+        aces: 2,
+        first_serve_pct: 55.0,
+      },
+    });
+    // Seat two is the caller: their summary is `me`, seat one's the opponent's.
+    expect(structured.insights).toEqual({
+      me: { summary: "You returned deep.", strengths: [] },
+      opponent: { summary: "Anna served big." },
+    });
+    expect(structured.key_moments).toEqual(REPORT.keyMoments);
+    expect(structured.match_url).toBe(
+      `https://app.example.test/dashboard/matches/${MATCH_A}`,
+    );
+    expect(structured.share_url).toBe("https://app.example.test/m/tok_abc");
+
+    const queries = serviceCalls(calls);
+    expect(queries.map((call) => call.fn)).toEqual([
+      "ask_run_query",
+      "ask_run_query",
+    ]);
+    for (const query of queries) {
+      expect(query.args).toMatchObject({
+        p_viewer: USER_ID,
+        scope_sql: `select match_id from ask.matches where match_id = '${MATCH_A}'`,
+      });
+    }
+    expect((queries[1].args as { sql: string }).sql).toContain(
+      "from ask.match_stats s join scope",
+    );
+    expect(calls.reads).toEqual([`report:${MATCH_A}`]);
+  });
+
+  test("a match the scope does not hold is match_not_found, before the report columns are read", async () => {
+    const { route, calls } = loadRoute(
+      world({
+        rpc: {
+          ...world().rpc,
+          ask_run_query: () => ({
+            data: { matches: [], rows: [] },
+            error: null,
+          }),
+        },
+      }),
+    );
+    const result = await callTool(route, "get_match", { match_id: MATCH_B });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/^match_not_found: /);
+    expect(calls.reads).toEqual([]);
+    expect(serviceCalls(calls)).toHaveLength(1);
+  });
+
+  test("no share link and no insights read as null, never as an empty link", async () => {
+    const { route } = loadRoute(world({ report: null }));
+    const result = await callTool(route, "get_match", { match_id: MATCH_A });
+    expect(result.isError).toBeUndefined();
+    const structured = result.structuredContent as Record<string, unknown>;
+    expect(structured.insights).toBeNull();
+    expect(structured.key_moments).toBeNull();
+    expect(structured.share_url).toBeNull();
+  });
+});
+
+test.describe("POST /api/mcp · opponent_scouting", () => {
+  test("personal: the Opponents page's rows as the user, restated in the tool's names", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await callTool(route, "opponent_scouting");
+    expect(result.isError).toBeUndefined();
+    const structured = result.structuredContent as {
+      scope: string;
+      season: string;
+      count: number;
+      opponents: Record<string, unknown>[];
+    };
+    expect(structured.scope).toBe("personal");
+    expect(structured.season).toBe("2026–27");
+    expect(structured.count).toBe(1);
+    expect(structured.opponents[0]).toEqual({
+      name: "Anna Lee",
+      hand: "right",
+      backhand: "two-handed",
+      played: 2,
+      analyzed: 2,
+      wins: 1,
+      losses: 1,
+      played_this_season: 2,
+      form: ["loss", "win"],
+      last_match: {
+        match_id: MATCH_A,
+        played_on: "2026-09-14",
+        won: true,
+        sets: [{ me: 6, opponent: 4 }],
+      },
+      recent: [
+        {
+          match_id: MATCH_A,
+          played_on: "2026-09-14",
+          won: true,
+          sets: [{ me: 6, opponent: 4 }],
+          event: null,
+          in_season: true,
+          values: { total_points_won_pct: 53 },
+        },
+      ],
+      measures: [
+        {
+          key: "total_points_won_pct",
+          label: "Points won",
+          value: 53,
+          trend: 2,
+        },
+      ],
+    });
+    expect(calls.reads).toEqual([`opponents:${USER_ID}`]);
+    expect(serviceCalls(calls)).toEqual([]);
+  });
+
+  test("team: membership first, then the program's rows with who faced them; a name filter narrows", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await callTool(route, "opponent_scouting", {
+      program_id: PROGRAM_ID,
+      opponent: "ortiz",
+    });
+    expect(result.isError).toBeUndefined();
+    const structured = result.structuredContent as {
+      scope: string;
+      count: number;
+      opponents: Record<string, unknown>[];
+    };
+    expect(structured.scope).toBe("team");
+    expect(structured.count).toBe(1);
+    expect(structured.opponents[0]).toMatchObject({
+      name: "Bea Ortiz",
+      program: {
+        id: OTHER_PROGRAM_ID,
+        school: "Eastbrook",
+        conference: "Big West",
+        division: "I",
+      },
+      match_ids: [MATCH_B],
+      faced_by: [{ player_id: "pp-1", name: "Cal Reyes", wins: 0, losses: 1 }],
+    });
+    expect(calls.reads).toEqual([
+      `program:${PROGRAM_ID}:${USER_ID}`,
+      `opponents:${PROGRAM_ID}`,
+    ]);
+
+    const none = await callTool(route, "opponent_scouting", {
+      program_id: PROGRAM_ID,
+      opponent: "nobody",
+    });
+    expect((none.structuredContent as { count: number }).count).toBe(0);
+  });
+});
+
+// ── update_match and prepare_video_upload ───────────────────────────────────
+
+test.describe("POST /api/mcp · update_match", () => {
+  test("normalises the fields through the dialog's rules, writes through ask_patch_match as the user, and reads the row back", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      opponent_name: "  Anna Lee-Park ",
+      tournament_name: "Fall Open",
+      date: "2026-09-14",
+      opponent_hand: "left",
+      court_type: null,
+    });
+    expect(result.isError).toBeUndefined();
+    const structured = result.structuredContent as Record<string, unknown>;
+    expect(structured.changed).toEqual([
+      "tournament_name",
+      "court_type",
+      "opponent_name",
+      "date",
+      "opponent_hand",
+    ]);
+    expect(structured.match).toMatchObject({ match_id: MATCH_A });
+    expect(calls.reads).toEqual([`own:${MATCH_A}`]);
+
+    const write = userCalls(calls).find(
+      (call) => call.fn === "ask_patch_match",
+    );
+    expect(write?.args).toEqual({
+      p_match_id: MATCH_A,
+      p_update: {
+        tournament_name: "Fall Open",
+        court_type: null,
+        player2_name: "Anna Lee-Park",
+        date: "2026-09-14T12:00:00",
+        opponent_hand: "left",
+      },
+    });
+    // Never the service role for a write; the read-back is the one query.
+    expect(serviceCalls(calls).map((call) => call.fn)).toEqual([
+      "ask_run_query",
+    ]);
+  });
+
+  test("a match on a scheduled line refuses its event-owned fields as field_locked, before any write", async () => {
+    const { route, calls } = loadRoute(
+      world({ ownMatch: { ...OWN_MATCH, linked: true } }),
+    );
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      date: "2026-09-15",
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/^field_locked: /);
+    expect(textOf(result)).toContain("(date)");
+    expect(userCalls(calls).map((call) => call.fn)).toEqual([
+      "ask_mcp_count_call",
+    ]);
+  });
+
+  test("a match the caller did not create, one in another workspace, and an empty patch are refused by name", async () => {
+    const { route, calls } = loadRoute(world());
+    const other = await callTool(route, "update_match", {
+      match_id: MATCH_B,
+      tournament_name: "x",
+    });
+    expect(textOf(other)).toMatch(/^match_not_found: /);
+
+    const wrongWorkspace = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      program_id: PROGRAM_ID,
+      tournament_name: "x",
+    });
+    expect(textOf(wrongWorkspace)).toMatch(/^match_not_found: /);
+
+    const empty = await callTool(route, "update_match", { match_id: MATCH_A });
+    expect(textOf(empty)).toMatch(/^nothing_to_change: /);
+    expect(userCalls(calls).some((call) => call.fn === "ask_patch_match")).toBe(
+      false,
+    );
+  });
+
+  test("a round on a match with no tournament or dual type is refused rather than cleared", async () => {
+    const { route, calls } = loadRoute(
+      world({ ownMatch: { ...OWN_MATCH, matchType: null } }),
+    );
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      round: "QF",
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/^invalid_field: .*\(round\)$/);
+    expect(userCalls(calls).some((call) => call.fn === "ask_patch_match")).toBe(
+      false,
+    );
+  });
+
+  test("the score and the format are not arguments", async () => {
+    const { route } = loadRoute(world());
+    const listed = await listTools(route);
+    const tool = listed.tools.find(
+      (t) => t.name === "update_match",
+    ) as unknown as {
+      inputSchema: { properties: Record<string, unknown> };
+    };
+    expect(Object.keys(tool.inputSchema.properties).sort()).toEqual([
+      "court_type",
+      "date",
+      "match_id",
+      "match_type",
+      "opponent_backhand",
+      "opponent_hand",
+      "opponent_name",
+      "opponent_school",
+      "program_id",
+      "round",
+      "tournament_name",
+    ]);
+  });
+});
+
+test.describe("POST /api/mcp · prepare_video_upload", () => {
+  test("the write guard's own 42501 is an internal error, not a membership refusal", async () => {
+    const { route } = loadRoute(
+      world({
+        rpc: {
+          ...world().rpc,
+          ask_seed_match_draft: () => ({
+            data: null,
+            error: {
+              code: "42501",
+              message: "Apps connected to Advantage have read-only access.",
+            },
+          }),
+        },
+      }),
+    );
+    const result = await callTool(route, "prepare_video_upload", {
+      opponent_name: "Anna Lee",
+      date: "2026-10-18",
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/^internal_error: /);
+  });
+
+  test("seeds a draft through ask_seed_match_draft as the user and answers the resume link; nothing is queried", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await withEnv(
+      ["NEXT_PUBLIC_SITE_URL"],
+      { NEXT_PUBLIC_SITE_URL: "https://app.example.test" },
+      () =>
+        callTool(route, "prepare_video_upload", {
+          opponent_name: "Anna Lee",
+          date: "2026-10-18",
+          score: "6-4 3-6 7-6(5)",
+          tournament_name: "Fall Open",
+        }),
+    );
+    expect(result.isError).toBeUndefined();
+    const structured = result.structuredContent as {
+      draft_id: string;
+      url: string;
+      provider: string;
+      next_steps: string[];
+    };
+    expect(structured.provider).toBe("advantage_intelligence");
+    expect(structured.url).toBe(
+      `https://app.example.test/dashboard/matches/new?draft=${structured.draft_id}&return=ask`,
+    );
+    expect(textOf(result)).toContain(structured.url);
+    expect(structured.next_steps.join(" ")).toContain("top of the frame");
+
+    const seed = userCalls(calls).find(
+      (call) => call.fn === "ask_seed_match_draft",
+    );
+    expect(seed?.args).toMatchObject({
+      p_id: structured.draft_id,
+      p_program_id: null,
+      p_step: "file",
+      p_provider: "splitstep",
+      p_player_name: null,
+      p_event_label: "Fall Open",
+    });
+    const payload = (
+      seed?.args as { p_payload: { formData: Record<string, unknown> } }
+    ).p_payload;
+    expect(payload.formData).toMatchObject({
+      opponentName: "Anna Lee",
+      date: "2026-10-18",
+      eventName: "Fall Open",
+      playerScores: [6, 3, 7],
+      opponentScores: [4, 6, 6],
+    });
+    expect(payload.formData.initialTopPlayerIsPlayer1).toBeUndefined();
+    expect(serviceCalls(calls)).toEqual([]);
+  });
+
+  test("a program draft carries the program and the player's name; a score that is not sets is refused before the write", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await callTool(route, "prepare_video_upload", {
+      program_id: PROGRAM_ID,
+      provider: "swingvision",
+      opponent_name: "Bea Ortiz",
+      player_name: "Cal Reyes",
+      date: "2026-10-18",
+    });
+    expect(result.isError).toBeUndefined();
+    const seed = userCalls(calls).find(
+      (call) => call.fn === "ask_seed_match_draft",
+    );
+    expect(seed?.args).toMatchObject({
+      p_program_id: PROGRAM_ID,
+      p_provider: "swing-vision",
+      p_step_count: 3,
+      p_player_name: "Cal Reyes",
+    });
+
+    const bad = await callTool(route, "prepare_video_upload", {
+      opponent_name: "Bea Ortiz",
+      date: "2026-10-18",
+      score: "won easily",
+    });
+    expect(bad.isError).toBe(true);
+    expect(textOf(bad)).toMatch(/^invalid_score: /);
+    const missing = await callTool(route, "prepare_video_upload", {
+      opponent_name: "Bea Ortiz",
+      date: "2026-02-30",
+    });
+    expect(textOf(missing)).toMatch(/^invalid_field: /);
+    expect(
+      userCalls(calls).filter((call) => call.fn === "ask_seed_match_draft"),
+    ).toHaveLength(1);
   });
 });
 
@@ -1014,10 +1654,7 @@ test.describe("createAskMcpServer · a token caller", () => {
     const server = createAskMcpServer({
       caller,
       db,
-      reads: {
-        program: async () => null,
-        conversation: async () => null,
-      },
+      reads: fakeReads(state, calls, caller.userId),
       model: {
         configured: false,
         // Mock mode never reaches the model; typed as an empty stream.

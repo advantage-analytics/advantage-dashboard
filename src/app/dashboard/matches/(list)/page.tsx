@@ -137,7 +137,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       {report}
-      <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">
+      <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-8 pt-5 pb-6 xl:px-14">
         <WidgetBoundary key={`title:${scopeKey}`} label="Match summary">
           <Suspense
             fallback={<MatchesTitleRow scope={scope} canUpload={canUpload} />}

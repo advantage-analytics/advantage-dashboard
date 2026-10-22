@@ -312,7 +312,7 @@ const GLOSSARY: GlossaryGroup[] = [
 
 export default function HelpCenterPage() {
   return (
-    <div className="min-h-screen w-full flex-1 bg-[var(--surface-card)]">
+    <div className="min-h-dvh w-full flex-1 bg-[var(--surface-card)]">
       {/* Same centred container as the settings pages — see the note in
           settings/layout.tsx. Help's rail is 200px, so the block is ~908px and
           fits the same 960px measure. */}
@@ -826,11 +826,13 @@ export default function HelpCenterPage() {
               id="claude"
               className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
             >
-              <h2 className={topicHeadingClass}>Using Advantage in Claude</h2>
+              <h2 className={topicHeadingClass}>
+                Using Advantage in Claude, ChatGPT or Cursor
+              </h2>
               <p className={`${proseClass} max-w-[560px]`}>
-                Connect your own Claude — claude.ai, Claude Desktop or Claude
-                Code — and ask about your matches there. It reads the same
-                statistics Ask does, as you, and can&apos;t change anything.
+                Connect your own AI app — Claude (claude.ai, Claude Desktop or
+                Claude Code), ChatGPT or Cursor — and ask about your matches
+                there. It reads the same statistics Ask does, as you.
               </p>
 
               <div className="flex flex-col gap-2.5">
@@ -843,7 +845,7 @@ export default function HelpCenterPage() {
                   >
                     Settings › Connections
                   </Link>
-                  . You sign in to Advantage and choose Allow once; Claude then
+                  . You sign in to Advantage and choose Allow once; the app then
                   lists Advantage among its tools.
                 </p>
               </div>
@@ -851,10 +853,10 @@ export default function HelpCenterPage() {
               <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
                 <span className={blockLabelClass}>What it uses</span>
                 <p className={proseClass}>
-                  Questions Claude asks through Advantage count toward your
-                  monthly Ask questions and appear in your Ask history. Claude
-                  sees your matches and, for a team you belong to, that
-                  team&apos;s — nothing another account could not already see.
+                  Questions the app asks through Advantage count toward your
+                  monthly Ask questions and appear in your Ask history. It sees
+                  your matches and, for a team you belong to, that team&apos;s —
+                  nothing another account could not already see.
                 </p>
               </div>
 
@@ -862,7 +864,8 @@ export default function HelpCenterPage() {
                 <span className={blockLabelClass}>Disconnecting</span>
                 <p className={proseClass}>
                   Press Disconnect beside the app in Settings › Connections, or
-                  remove the connector in Claude. Either ends its access.
+                  remove the connector in the app itself. Either ends its
+                  access.
                 </p>
               </div>
             </section>

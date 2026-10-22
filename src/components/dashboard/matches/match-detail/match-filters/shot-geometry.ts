@@ -70,9 +70,19 @@ export function backhandHalf(hand: Hand): CourtHalf {
   return hand === "right" ? "ad" : "deuce";
 }
 
+/** The half a player's forehand side faces: deuce for a right-hander. */
+export function forehandHalf(hand: Hand): CourtHalf {
+  return hand === "right" ? "deuce" : "ad";
+}
+
 /** Forehand strokes by label — serves ("First Serve") never match. */
 export function isForehand(shotType: string | null | undefined): boolean {
   return (shotType ?? "").toLowerCase().includes("forehand");
+}
+
+/** Backhand strokes by label, volleys included, as `isForehand`. */
+export function isBackhand(shotType: string | null | undefined): boolean {
+  return (shotType ?? "").toLowerCase().includes("backhand");
 }
 
 function baseDirection(
@@ -87,11 +97,13 @@ function baseDirection(
 /**
  * The shot's direction for the Custom filter.
  *
- * Starts from `shot.zone`. A FOREHAND struck from the hitter's backhand half
- * (ad for a right-hander, deuce for a left-hander) is renamed: Crosscourt →
- * Inside Out, Down the Line → Inside In. Backhands, an unknown hand, an
- * unmeasured contact, and Middle / serve / null zones are never Inside-*;
- * Middle and anything that is not a rally direction return null.
+ * Starts from `shot.zone`. A stroke struck from the other wing's half is
+ * renamed — a FOREHAND from the hitter's backhand half (ad for a
+ * right-hander), a BACKHAND from their forehand half (deuce for a
+ * right-hander): Crosscourt → Inside Out, Down the Line → Inside In. Any other
+ * stroke, an unknown hand, an unmeasured contact, and Middle / serve / null
+ * zones are never Inside-*; Middle and anything that is not a rally direction
+ * return null.
  */
 export function shotDirection(
   shot: Pick<MatchShot, "shotType" | "zone" | "contactX" | "contactY">,
@@ -99,8 +111,12 @@ export function shotDirection(
 ): ShotDirection | null {
   const base = baseDirection(shot.zone);
   if (base === null) return null;
-  if (hand === null || !isForehand(shot.shotType)) return base;
-  if (hitterHalf(shot) !== backhandHalf(hand)) return base;
+  if (hand === null) return base;
+  const half = hitterHalf(shot);
+  const inside =
+    (isForehand(shot.shotType) && half === backhandHalf(hand)) ||
+    (isBackhand(shot.shotType) && half === forehandHalf(hand));
+  if (!inside) return base;
   return base === "Crosscourt" ? "Inside Out" : "Inside In";
 }
 

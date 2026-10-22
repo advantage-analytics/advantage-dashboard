@@ -91,7 +91,7 @@ import {
   openPointSuggestions,
 } from "./label-black-point-row";
 import { BlackShotsWell } from "./label-black-shot-row";
-import type { SideNames } from "./label-format";
+import { labelHands, type SideNames } from "./label-format";
 import { RAIL_TONE_CLASS, type RailTone } from "./label-rail-tone";
 import type {
   EditContext,
@@ -353,6 +353,8 @@ export function LabelBlackRail({
   // are memoised, and a fresh context per render would re-render them all.
   // Nothing of the playhead is in it (`EditContext`).
   const pointScores = scores.points;
+  // Read off the rows once, for every placement's Inside Out / Inside In.
+  const hands = useMemo(() => labelHands(points), [points]);
   const edit = useMemo<EditContext>(
     () => ({
       editable,
@@ -369,6 +371,7 @@ export function LabelBlackRail({
       openGhostIds,
       onToggleGhost,
       points,
+      hands,
       scores: pointScores,
       adScoring,
       matchTiebreakSet,
@@ -391,6 +394,7 @@ export function LabelBlackRail({
       openGhostIds,
       onToggleGhost,
       points,
+      hands,
       pointScores,
       adScoring,
       matchTiebreakSet,

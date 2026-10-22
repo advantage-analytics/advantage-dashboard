@@ -503,7 +503,7 @@ export function MatchReportPending({
   focused?: boolean;
 }) {
   return (
-    <div className="flex h-[calc(100vh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
+    <div className="flex h-[calc(100dvh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
       <MatchReportFrame>
         <MatchReportRail>
           <PendingRegion label="match summary">

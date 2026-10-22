@@ -60,7 +60,7 @@ export function UploadWizardPending({ pinned }: { pinned: boolean }) {
 
   return (
     <PendingFrame label="upload wizard" pulse={false}>
-      <div className="flex min-h-[calc(100vh-44px)] flex-col">
+      <div className="flex min-h-[calc(100dvh-44px)] flex-col">
         <StepIndicator currentStep={index} totalSteps={order.length} />
 
         {pinned && <PinnedLinePending />}

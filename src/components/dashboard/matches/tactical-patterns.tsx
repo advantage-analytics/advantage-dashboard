@@ -61,7 +61,7 @@ export function TacticalPatterns({ items }: TacticalPatternsProps) {
             >
               <div className="flex items-center gap-3 self-stretch">
                 <div
-                  className="h-full w-px shrink-0 rounded-full opacity-70 transition-opacity duration-200 group-hover:opacity-100"
+                  className="h-full w-px shrink-0 rounded-full opacity-70 transition-opacity duration-200 group-hover:opacity-100 touch:opacity-100"
                   style={{ backgroundColor: accentColor }}
                   aria-hidden="true"
                 />

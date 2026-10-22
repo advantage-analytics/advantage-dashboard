@@ -81,7 +81,7 @@ const EVENT_TABLE_HEADER = ["w-3", "w-12", "w-16", "w-10", "w-10", "w-14"];
 export function EventTableSkeleton() {
   return (
     <PendingFrame label="event">
-      <div className="flex flex-col gap-8 px-14 pt-6 pb-7">
+      <div className="flex flex-col gap-8 px-8 pt-6 pb-7 xl:px-14">
         <div className="flex flex-col gap-6">
           <div className="flex min-w-0 flex-col gap-2">
             <span className="flex h-9 items-center">
@@ -169,7 +169,7 @@ export function DashboardPagePending() {
       label="page"
       className="flex w-full flex-1 flex-col bg-white"
     >
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-8 pt-5 pb-8 xl:px-14">
         <PendingBar className="h-9 w-64" />
       </div>
     </PendingRegion>

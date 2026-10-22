@@ -49,6 +49,7 @@ import {
   isLabelGame,
   liveShotsAfter,
   planAddedShot,
+  ADD_SHOT_AT_START,
   planPointChecked,
   planPointDelete,
   planPointMove,
@@ -497,20 +498,36 @@ export async function writeLabelShotsRestore(params: {
 }
 
 /**
- * INSERT one labeller-added stroke into a point, after `afterShotId` (or at
- * the end of the rally when null) — see `planAddedShot` for what it is seeded
- * with. Returns the new row as the console draws it. Never throws.
+ * INSERT one labeller-added stroke into a point, after `afterShotId` (at the
+ * end of the rally when null, first when `ADD_SHOT_AT_START`) — see
+ * `planAddedShot` for what it is seeded with, `filmTime` included. `shotId`,
+ * when given, is the new row's id: the console makes it, so the row it draws
+ * at once is already the one it edits. Returns the new row as the console
+ * draws it. Never throws.
  */
 export async function writeLabelShotAdd(params: {
   supabase: AdminClient;
   pointId: unknown;
   afterShotId: unknown;
+  filmTime?: unknown;
+  shotId?: unknown;
 }): Promise<LabelAddShotResult> {
   const { supabase } = params;
   const pointId = normaliseId(params.pointId);
   if (!pointId) return { error: "Invalid point id." };
+  let newId: string | null = null;
+  if (params.shotId !== null && params.shotId !== undefined) {
+    newId = normaliseId(params.shotId);
+    if (!newId) return { error: "Invalid shot id." };
+  }
+  const filmTime =
+    typeof params.filmTime === "number" && Number.isFinite(params.filmTime)
+      ? params.filmTime
+      : null;
   let afterShotId: string | null = null;
-  if (params.afterShotId !== null && params.afterShotId !== undefined) {
+  if (params.afterShotId === ADD_SHOT_AT_START) {
+    afterShotId = ADD_SHOT_AT_START;
+  } else if (params.afterShotId !== null && params.afterShotId !== undefined) {
     afterShotId = normaliseId(params.afterShotId);
     if (!afterShotId) return { error: "Invalid shot id." };
   }
@@ -525,12 +542,14 @@ export async function writeLabelShotAdd(params: {
   const plan = planAddedShot(
     { status: read.row.status, server: read.row.server, shots },
     afterShotId,
+    filmTime,
   );
   if ("error" in plan) return plan;
 
   const { data: inserted, error: insertError } = await supabase
     .from("label_shots")
     .insert({
+      ...(newId ? { id: newId } : {}),
       session_id: read.row.session_id,
       label_point_id: pointId,
       ...plan.write,
@@ -931,11 +950,14 @@ export function restoreLabelShots(
 export function addLabelShot(
   pointId: unknown,
   afterShotId: unknown,
+  filmTime: unknown = null,
+  shotId: unknown = null,
   deps: LabelWriteDependencies = defaults,
 ): Promise<LabelAddShotResult> {
   return gated(
     deps,
-    (supabase) => writeLabelShotAdd({ supabase, pointId, afterShotId }),
+    (supabase) =>
+      writeLabelShotAdd({ supabase, pointId, afterShotId, filmTime, shotId }),
     "add the shot",
   );
 }

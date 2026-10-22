@@ -90,6 +90,42 @@ with the name entire. That leaves `title` for the case with no such route,
 where the clipped string is the only copy on screen and nothing can open it
 — a raw email on an invite row is the shipped example.
 
+### Touch (iPad)
+
+The dashboard runs on an iPad held in the hand, with no mouse paired. A finger
+has no hover, so anything a mouse finds by hovering needs a second way in.
+Every rule here sits behind the `touch:` variant (`globals.css`: `(hover: none)
+and (pointer: coarse)`), so **a mouse or trackpad never sees a touch rule**. A
+paired trackpad reports `hover: hover` and gets the desktop page unchanged.
+`/design/ipad` shows each rule beside the iPad's view without it, and
+`data-force-touch` turns the rules on in a desktop browser for review.
+
+- **Tap areas are 44px; glyphs keep their size.** A control under 44px takes
+  `touch:hit-area`, an invisible `::after` centred on the glyph. Where two
+  areas would overlap (the film transport), add touch-only spacing rather than
+  growing the glyphs.
+- **Press-and-hold names a control.** The dark `Tooltip` opens on a 500ms hold
+  on touch and closes on the next press anywhere. A tap only performs the
+  action and never opens the label. This lives in `ui/tooltip.tsx`, so every
+  `ChromeTooltip` and rail row inherits it. Never add a second, touch-only
+  tooltip.
+- **Press-and-hold previews; a tap navigates.** A tile whose hover opens a
+  detail popover (`KpiTile`) opens it on a hold on touch, like a peek in Photos
+  or Mail. The hold never follows the link.
+- **Chart readouts answer a tap or a drag.** Tapping a mark or dragging across
+  a chart selects the nearest point and shows the same readout. It stays until
+  a tap outside. Scrub surfaces take `touch-action: pan-y` so a vertical swipe
+  still scrolls the page.
+- **Nothing hides behind hover.** A control that fades in on
+  `group-hover` takes `touch:opacity-100` and is always visible on touch.
+  `tests/touch-hover-reveal.spec.ts` fails a new one that forgets.
+- **Below `lg`, peek drawers slide over.** The 340px drawer becomes a fixed
+  sheet over the page with a scrim that closes it, instead of disappearing
+  (and taking a record's Edit and Delete with it).
+- **Heights are `dvh`, never `vh`.** Safari's `100vh` is its height with the
+  toolbar hidden. Fixed full-screen surfaces pad with `env(safe-area-inset-*)`,
+  since the root viewport is `viewport-fit=cover`.
+
 ### Activity Tray (v3)
 
 Header icon (Lucide `activity`, 15px ink-700 in a 28px radius-8 square) + 6px

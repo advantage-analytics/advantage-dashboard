@@ -379,9 +379,15 @@ type PlanShot = Pick<
 >;
 
 /**
- * A new stroke for a point, placed after `afterShotId`, or after the rally's
- * last live stroke when that is null. `shots` must be in video order
- * (`orderLabelShots`).
+ * `afterShotId` for a stroke placed before the rally's first live stroke — a
+ * serve the vendor missed. Never a row id: those are uuids.
+ */
+export const ADD_SHOT_AT_START = "start";
+
+/**
+ * A new stroke for a point, placed after `afterShotId`, after the rally's
+ * last live stroke when that is null, or before its first when it is
+ * `ADD_SHOT_AT_START`. `shots` must be in video order (`orderLabelShots`).
  *
  * `after_event_id` is the vendor stroke id the new stroke follows. When the
  * stroke it follows was itself added, it inherits that stroke's
@@ -390,20 +396,39 @@ type PlanShot = Pick<
  *
  * `hitter` is the opponent of the stroke it follows; the point's server when it
  * is the rally's first; null when the stroke it follows has no hitter.
+ *
+ * `filmTime` is where the film stands, read only for `ADD_SHOT_AT_START` in a
+ * rally with no timed stroke (a point the labeller inserted): any time sorts
+ * it ahead of the untimed rows, and the film is where the labeller is looking.
  */
 export function planAddedShot(
   point: Pick<LabelPoint, "server" | "status"> & {
     shots: readonly PlanShot[];
   },
   afterShotId: string | null,
+  filmTime: number | null = null,
 ): Planned<AddedShotPlan> {
   if (point.status === "deleted") {
     return { error: "Restore this point before adding a shot to it." };
   }
   const live = point.shots.filter((shot) => shot.status !== "deleted");
   let index: number;
+  // Before an untimed first stroke: untimed rows sort after every timed one,
+  // so the film's time puts the new stroke first.
+  let startTime: number | null = null;
   if (afterShotId === null) {
     index = live.length - 1;
+  } else if (afterShotId === ADD_SHOT_AT_START) {
+    index = -1;
+    if (live.length > 0 && live[0].videoTime == null) {
+      if (filmTime === null || !Number.isFinite(filmTime) || filmTime < 0) {
+        return {
+          error:
+            "The first shot has no video time, so nothing can go before it.",
+        };
+      }
+      startTime = round2(filmTime);
+    }
   } else {
     index = live.findIndex((shot) => shot.id === afterShotId);
     if (index === -1) {
@@ -425,12 +450,17 @@ export function planAddedShot(
   // and nothing timed after, it sits just after that stroke, so strokes added
   // one after another keep the order they were added in; without a time each
   // would sort last and fall through to a random row id.
+  // Before the rally's first stroke it sits the same gap ahead of it.
   const videoTime =
-    before?.videoTime == null
-      ? null
-      : after?.videoTime != null
-        ? round2((before.videoTime + after.videoTime) / 2)
-        : round2(before.videoTime + ADDED_SHOT_GAP_SECONDS);
+    before === null
+      ? after?.videoTime != null
+        ? round2(Math.max(0, after.videoTime - ADDED_SHOT_GAP_SECONDS))
+        : startTime
+      : before.videoTime == null
+        ? null
+        : after?.videoTime != null
+          ? round2((before.videoTime + after.videoTime) / 2)
+          : round2(before.videoTime + ADDED_SHOT_GAP_SECONDS);
 
   return {
     ok: true,
@@ -618,23 +648,36 @@ export function destinationServerIn(
 }
 
 /**
- * A game's number within its set, as the bands name it: its rank among the
- * set's games that still hold a live point. `game_number` counts across the
- * match, so set 2's first game is not "Game 13".
+ * A game's number within its set, as the bands name it (score.ts): its place
+ * in row order among the set's games that still hold a live point, by each
+ * game's first row. `game_number` counts across the match, so set 2's first
+ * game is not "Game 13" — and it is a key, not an order: a game the labeller
+ * started takes the session's highest number plus one (game-shift.ts
+ * `planGameSplit`) wherever it sits. A game with no live row comes last.
  */
 export function gameInSetOf(
-  points: readonly Pick<LabelPoint, "status" | "setNumber" | "gameNumber">[],
+  points: readonly Pick<
+    LabelPoint,
+    "status" | "setNumber" | "gameNumber" | "pointIndex"
+  >[],
   game: LabelGame,
 ): number {
-  const numbers = new Set<number>();
+  const firstRow = new Map<number, number>();
   for (const point of points) {
     if (point.status === "deleted" || point.setNumber !== game.setNumber) {
       continue;
     }
-    if (point.gameNumber !== null) numbers.add(point.gameNumber);
+    if (point.gameNumber === null) continue;
+    const seen = firstRow.get(point.gameNumber);
+    if (seen === undefined || point.pointIndex < seen) {
+      firstRow.set(point.gameNumber, point.pointIndex);
+    }
   }
-  numbers.add(game.gameNumber);
-  return [...numbers].sort((x, y) => x - y).indexOf(game.gameNumber) + 1;
+  const at = firstRow.get(game.gameNumber);
+  if (at === undefined) return firstRow.size + 1;
+  let place = 1;
+  for (const row of firstRow.values()) if (row < at) place += 1;
+  return place;
 }
 
 /**

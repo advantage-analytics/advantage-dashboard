@@ -526,7 +526,7 @@ export function Header({
             >
               <button
                 onClick={() => setIsSearchOpen(true)}
-                className="group flex h-7 cursor-pointer items-center gap-[7px] rounded-[8px] px-2 text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:outline-none active:scale-[0.97]"
+                className="group flex h-7 cursor-pointer items-center gap-[7px] rounded-[8px] px-2 text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:outline-none active:scale-[0.97] touch:hit-area"
               >
                 <Search
                   className="h-[14px] w-[14px]"
@@ -561,7 +561,7 @@ export function Header({
               <PopoverTrigger asChild>
                 <button
                   className={cn(
-                    "flex cursor-pointer items-center gap-[5px] rounded-full py-[3px] pr-1.5 pl-[3px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none active:scale-[0.97]",
+                    "flex cursor-pointer items-center gap-[5px] rounded-full py-[3px] pr-1.5 pl-[3px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none active:scale-[0.97] touch:hit-area",
                     isProfileOpen && "bg-[var(--surface-subtle)]",
                   )}
                   aria-label="Account menu"

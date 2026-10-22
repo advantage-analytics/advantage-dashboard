@@ -85,6 +85,7 @@ import {
   gameInSetOf,
   liveShotsAfter,
   moveNeedsServerSwitch,
+  ADD_SHOT_AT_START,
   planAddedShot,
   planPointMove,
   type PlannedPointMove,
@@ -262,10 +263,13 @@ import {
   playingRowKey,
 } from "./video-clock";
 import { useBrowserFullscreen } from "./use-browser-fullscreen";
-import { hasEarlierServe, isStrokeKey, strokeKeyChange } from "./stroke-keys";
+import {
+  hasEarlierServe,
+  isStrokeKey,
+  strokeKeyChange,
+  withServeHitter,
+} from "./stroke-keys";
 
-/** Ids of rows drawn optimistically while their insert is in flight. */
-const PENDING_SHOT_PREFIX = "pending-shot-";
 /** How long the overview's jump waits for full screen to settle. */
 const OPEN_JUMP_DELAY_MS = 450;
 /**
@@ -532,6 +536,17 @@ export function LabelConsole({
       ? initialExpandedPointId
       : (defaultPoint(session.points)?.id ?? null),
   );
+  // A point opened with no live, timed stroke (one just inserted, say) has
+  // no span on the film, so the playing point would win over it at once and
+  // it could never open. It stays current until the video plays into another
+  // row: `at` is the playing row it was opened over.
+  const [pinned, setPinned] = useState<{
+    pointId: string;
+    at: string;
+  } | null>(null);
+  // An added stroke's add while it is in flight, by the id the console gave
+  // it: true once its row is saved. Its edits and its delete wait on it.
+  const addsInFlight = useRef(new Map<string, Promise<boolean>>());
   const [pointFocus, setPointFocus] = useState<PointFocus>(
     initialPointFocus ?? FOLLOW,
   );
@@ -756,7 +771,15 @@ export function LabelConsole({
 
   // The current point: the playing one, else `restPointId`. The one point that
   // is unfolded, on the court and under Enter.
-  const currentPointId = playingPointId ?? restPointId;
+  // A pin lets go once the video moves on, and once its point is gone
+  // (deleted, combined away): a gone point is never the current one.
+  const pinHolds =
+    pinned !== null &&
+    pinned.at === playingKey &&
+    points.some((p) => p.id === pinned.pointId && p.status !== "deleted");
+  if (pinned !== null && !pinHolds) setPinned(null);
+  const pinnedPointId = pinHolds ? pinned.pointId : null;
+  const currentPointId = pinnedPointId ?? playingPointId ?? restPointId;
   // Whatever the video plays into is where the current point rests next.
   // Adjusted during render, not in an effect: the fallback must never be a
   // render behind the point it stands in for.
@@ -819,9 +842,6 @@ export function LabelConsole({
     }
     const owner = pointOfShot(points, shotId);
     if (owner) holdPoint(owner.id);
-    // A draft row cannot be placed or edited until its insert lands; it is
-    // selected for placement then (see `addShot`).
-    if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
     const shot = findShot(points, shotId);
     // A position cell names its end: the court opens on that end's half.
     const start = placementOf(points, shotId);
@@ -928,9 +948,6 @@ export function LabelConsole({
     ): Promise<LabelPoint | null> => {
       const before = findShot(rows, shotId);
       if (!before || !onSaveShot) return null;
-      // A draft row has no id the server knows yet; its add is still in
-      // flight, and the saved row replaces it when that lands.
-      if (shotId.startsWith(PENDING_SHOT_PREFIX)) return null;
       // A let on a stroke that is not a serve: refused before any optimistic
       // change or request, on the same save line a server `{ error }` uses.
       const plan = planShotWrite(before, patch);
@@ -1002,6 +1019,16 @@ export function LabelConsole({
       setPoints((current) => ending.apply(change(current)));
 
       dispatchSave({ type: "start" });
+      // An added stroke is drawn and edited at once (`addShot`); its row is
+      // written when its add lands, and this edit only after that.
+      const adding = addsInFlight.current.get(shotId);
+      if (adding && !(await adding)) {
+        dispatchSave({
+          type: "failure",
+          message: "That shot was not added, so the change was not saved.",
+        });
+        return null;
+      }
       const result = await settle(onSaveShot(shotId, patch));
       if ("error" in result) {
         // Put back exactly the fields this edit changed, and its status.
@@ -1212,7 +1239,13 @@ export function LabelConsole({
     const first = point?.shots.find(
       (shot) => shot.status !== "deleted" && shot.videoTime !== null,
     );
-    if (first?.videoTime != null) player.current?.seekTo(first.videoTime);
+    if (first?.videoTime != null) {
+      setPinned(null);
+      player.current?.seekTo(first.videoTime);
+    } else if (point) {
+      // Nowhere on the film to go: hold it open where the video stands.
+      setPinned({ pointId: point.id, at: playingKey });
+    }
   }
 
   /**
@@ -1243,11 +1276,21 @@ export function LabelConsole({
     );
     void runOperation(
       (rows) => ending.apply(gone(rows)),
-      () => operations.deleteShot(shotId, reason),
+      () => afterAdd(shotId, () => operations.deleteShot(shotId, reason)),
       (rows, result) =>
         settlePoint(result.point ? rows : ending.undo(rows), result),
       (rows) => ending.undo(putBackShot(shotId, before)(rows)),
     );
+  }
+
+  /** `call` once `shotId`'s add has landed (`addsInFlight`), else at once. */
+  async function afterAdd<R extends object>(
+    shotId: string,
+    call: () => Promise<R>,
+  ): Promise<R | { error: string }> {
+    const adding = addsInFlight.current.get(shotId);
+    if (adding && !(await adding)) return { error: "That shot was not added." };
+    return call();
   }
 
   function restoreShot(shotId: string) {
@@ -1319,7 +1362,7 @@ export function LabelConsole({
     const ending = endingFollow(point, removeFrom(point), drawsGhosts(marks));
     void runOperation(
       (rows) => ending.apply(replacePoint(rows, pointId, removeFrom)),
-      () => operations.removeShotsAfter(shotId),
+      () => afterAdd(shotId, () => operations.removeShotsAfter(shotId)),
       (rows, result) =>
         replacePoint(result.point ? rows : ending.undo(rows), pointId, (p) =>
           applyEndingSync(
@@ -1435,6 +1478,8 @@ export function LabelConsole({
       (rows) => withdrawInsertedPoint(rows, tempId),
     ).then((result) => {
       if (!result) return;
+      setRestPointId(result.point.id);
+      setPinned({ pointId: result.point.id, at: playingKey });
       holdPoint(result.point.id);
       jumpToPointId.current = result.point.id;
     });
@@ -1560,7 +1605,8 @@ export function LabelConsole({
     const draft = draftSplitPoint(plan.write.insert, tempId);
     void runOperation<PointSplitSaved>(
       (rows) => applyPointSplit(rows, pointId, draft, plan.write),
-      () => operations.splitPoint(pointId, shotId),
+      // A stroke just added is split at once its row is saved.
+      () => afterAdd(shotId, () => operations.splitPoint(pointId, shotId)),
       (rows, result) => settlePointSplit(rows, tempId, result),
       (rows) => withdrawPointSplit(rows, anchor, tempId),
     ).then((result) => {
@@ -1860,10 +1906,12 @@ export function LabelConsole({
   }
 
   /**
-   * A stroke added after `afterShotId` (or at the end), selected for
-   * placement once it has saved. `follow` is what a review answer knows of it
-   * beyond the add's plan (a second serve, by the server): written once it
-   * has saved, those fields the add did not already give it.
+   * A stroke added after `afterShotId` (or at the end), drawn and selected for
+   * placement at once: the console makes its id and the add writes the row
+   * under it, so it is edited straight away and each edit waits for the row
+   * (`addsInFlight`). `follow` is what a review answer knows of it beyond the
+   * add's plan (a second serve, by the server): written once it has saved,
+   * those fields the add did not already give it.
    */
   function addShot(
     pointId: string,
@@ -1874,11 +1922,14 @@ export function LabelConsole({
     if (!point || !operations) return;
     // A draft point cannot take a stroke until its own insert lands.
     if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
-    const plan = planAddedShot(point, afterShotId);
+    // Read only for a stroke added first in a rally with no times of its own.
+    const filmTime =
+      afterShotId === ADD_SHOT_AT_START ? (clock.get() ?? null) : null;
+    const plan = planAddedShot(point, afterShotId, filmTime);
     if ("error" in plan) return refuse(plan.error);
-    const tempId = nextTempId(PENDING_SHOT_PREFIX);
+    const id = crypto.randomUUID();
     const draft: LabelShot = {
-      id: tempId,
+      id,
       labelPointId: pointId,
       eventId: null,
       afterEventId: plan.write.after_event_id,
@@ -1899,30 +1950,46 @@ export function LabelConsole({
       siteRemovalRestoredAt: null,
       seed: null,
     };
-    // The new stroke is the one a court click places next — once it is saved.
-    // Selecting the draft would send its temporary id to the server on the
-    // first court click, which refuses it.
-    const selectedBefore = placement.shotId;
-    void runOperation<{ shot: LabelShot; point?: LabelPointEndingSynced }>(
+    // The new stroke is the one a court click places next, from now: its id
+    // is the row's own.
+    setPlacement(placementOf(insertShot(points, pointId, draft), id));
+    const added = runOperation<{
+      shot: LabelShot;
+      point?: LabelPointEndingSynced;
+    }>(
       (rows) => insertShot(rows, pointId, draft),
-      () => operations.addShot(pointId, afterShotId),
+      // Once every add already in flight has saved: the server places this
+      // one among the saved rows — after a stroke just added, or after the
+      // rally's last.
+      () =>
+        Promise.all([...addsInFlight.current.values()]).then(() =>
+          operations.addShot(pointId, afterShotId, filmTime, id),
+        ),
+      // The row as the labeller has edited it since stands; the saved one
+      // only fills in a row that is not there.
       (rows, result) =>
         replacePoint(
-          insertShot(removeShot(rows, tempId), pointId, result.shot),
+          rows.some((p) => p.shots.some((shot) => shot.id === id))
+            ? rows
+            : insertShot(rows, pointId, result.shot),
           pointId,
           (p) => applyEndingSync(p, result.point),
         ),
-      (rows) => removeShot(rows, tempId),
-    ).then((result) => {
-      // Select the saved row, unless the labeller picked something else
-      // while the add was in flight.
-      if (!result) return;
+      (rows) => removeShot(rows, id),
+    );
+    addsInFlight.current.set(
+      id,
+      added.then((result) => result !== null),
+    );
+    void added.then((result) => {
+      addsInFlight.current.delete(id);
+      if (!result) {
+        setPlacement((current) =>
+          current.shotId === id ? NO_PLACEMENT : current,
+        );
+        return;
+      }
       const rows = insertShot(points, pointId, result.shot);
-      setPlacement((current) =>
-        current.shotId === selectedBefore
-          ? placementOf(rows, result.shot.id)
-          : current,
-      );
       const values = labelShotValues(result.shot);
       const rest = Object.fromEntries(
         Object.entries(follow ?? {}).filter(
@@ -2158,12 +2225,17 @@ export function LabelConsole({
    * whether the rest follows it (`planServeHitterFollow`): the point's other
    * rows, and the game's server. Every other edit is written at once.
    */
-  function requestPatchShot(shotId: string, patch: LabelShotPatch) {
-    // A draft stroke's add is still in flight: the server would switch the
+  function requestPatchShot(shotId: string, edit: LabelShotPatch) {
+    // A stroke made a serve after the point's first takes that server.
+    const owner = pointOfShot(points, shotId);
+    const patch = owner
+      ? withServeHitter(owner, shotId, edit, drawsGhosts(marks))
+      : edit;
+    // A stroke whose add is still in flight: the server would switch the
     // saved rows and not it, so its edit goes alone.
     if (
       operations &&
-      !shotId.startsWith(PENDING_SHOT_PREFIX) &&
+      !addsInFlight.current.has(shotId) &&
       "hitter" in patch &&
       Object.keys(patch).length === 1
     ) {
@@ -2482,9 +2554,17 @@ export function LabelConsole({
   // True when the key was the selected stroke's to take.
   const strokeKey = useRef<(key: string) => boolean>(() => false);
   // A: add a stroke after the selected one, else after the open point's last.
+  // ⇧A: add one before the selected one, else before the open point's first
+  // (a serve the vendor missed).
   // C: the court's other end — contact ↔ landing — for the selected stroke.
+  // X: Flip side — the placing half across the net, as the court's button.
+  // Delete / Backspace: delete the selected stroke, through the same confirm
+  // as its tray's Delete shot.
   const addShotKey = useRef<() => boolean>(() => false);
+  const addShotBeforeKey = useRef<() => boolean>(() => false);
+  const deleteShotKey = useRef<() => boolean>(() => false);
   const endKey = useRef<() => boolean>(() => false);
+  const flipKey = useRef<() => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
   const foldOpenPoint = useRef<() => boolean>(() => false);
   // ⌘Z: the header's Undo.
@@ -2549,9 +2629,7 @@ export function LabelConsole({
     };
     stepShot.current = (direction) => {
       if (confirm || !expanded || unfoldedPointId !== expanded.id) return;
-      const shots = liveShotsInOrder(expanded, drawsGhosts(marks)).filter(
-        (shot) => !shot.id.startsWith(PENDING_SHOT_PREFIX),
-      );
+      const shots = liveShotsInOrder(expanded, drawsGhosts(marks));
       if (shots.length === 0) return;
       const at = shots.findIndex((shot) => shot.id === placement.shotId);
       // From no stroke, ↓ takes the first and ↑ the last; the ends do not wrap.
@@ -2578,15 +2656,87 @@ export function LabelConsole({
       addShot(expanded.id, selected);
       return true;
     };
+    addShotBeforeKey.current = () => {
+      if (!operable || confirm || !expanded) return false;
+      const live = expanded.shots.filter((shot) => shot.status !== "deleted");
+      const at = live.findIndex((shot) => shot.id === placement.shotId);
+      // After an untimed stroke the new one is untimed too, and untimed rows
+      // fall back to a random row id: it would not land before this one.
+      if (at > 0 && live[at - 1].videoTime === null) {
+        refuse(
+          `Shot ${at} has no time, so nothing can go between it and shot ${at + 1}. Give it a time first.`,
+        );
+        return true;
+      }
+      addShot(expanded.id, at > 0 ? live[at - 1].id : ADD_SHOT_AT_START);
+      return true;
+    };
+    deleteShotKey.current = () => {
+      if (!operable || confirm || placement.shotId === null) return false;
+      const owner = pointOfShot(points, placement.shotId);
+      const shot = owner?.shots.find((s) => s.id === placement.shotId);
+      if (!owner || !shot || shot.status === "deleted") return false;
+      // Never a stroke left selected in another point than the open one.
+      if (expanded && owner.id !== expanded.id) return false;
+      const number =
+        liveShotsInOrder(owner, drawsGhosts(marks)).findIndex(
+          (s) => s.id === shot.id,
+        ) + 1;
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      rowOperations.onAskDeleteShot(
+        shot.id,
+        Math.max(1, number),
+        owner.pointIndex + 1,
+      );
+      return true;
+    };
+    // The stroke a shot key acts on: the selected one while it is the open
+    // point's; else the open point's first, selected first so the next key
+    // lands on it too. A selection left behind in another point — the film
+    // played or was clicked on into this one — never takes a key meant for
+    // the point on screen.
+    const keyShot = (): LabelShot | null => {
+      const selected =
+        placement.shotId === null ? null : findShot(points, placement.shotId);
+      const live = selected && selected.status !== "deleted" ? selected : null;
+      if (!expanded || unfoldedPointId !== expanded.id) return live;
+      if (live && expanded.shots.some((shot) => shot.id === live.id)) {
+        return live;
+      }
+      const first = liveShotsInOrder(expanded, drawsGhosts(marks))[0];
+      if (!first) return null;
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      selectShot(first.id, undefined, { seek: false });
+      return first;
+    };
     endKey.current = () => {
-      if (!editable || confirm || placement.shotId === null) return false;
-      setTarget(placement.target === "contact" ? "landing" : "contact");
+      if (!editable || confirm) return false;
+      const selected = placement.shotId;
+      const shot = keyShot();
+      if (!shot) return false;
+      if (shot.id === selected) {
+        setTarget(placement.target === "contact" ? "landing" : "contact");
+      } else {
+        // Just selected, on whichever end it opened: C takes the other.
+        setPlacement((current) =>
+          setPlacementTarget(
+            current,
+            current.target === "contact" ? "landing" : "contact",
+            shot.contactY,
+          ),
+        );
+      }
+      return true;
+    };
+    flipKey.current = () => {
+      if (!editable || confirm || !keyShot()) return false;
+      setPlacement(flipPlacement);
       return true;
     };
     strokeKey.current = (key) => {
-      if (!operable || confirm || placement.shotId === null) return false;
-      const shot = findShot(points, placement.shotId);
-      if (!shot || shot.status === "deleted") return false;
+      if (!operable || confirm) return false;
+      const shot = keyShot();
+      if (!shot) return false;
       const owner = points.find((p) => p.shots.some((s) => s.id === shot.id));
       const change = strokeKeyChange(
         key,
@@ -2679,16 +2829,23 @@ export function LabelConsole({
         return;
       }
       // A stroke key reaches the selected stroke from a focused cell too (a
-      // cell is a button), and so do A (add a stroke) and C (contact ↔
-      // landing); a text field, a menu and a dialog keep all of them.
+      // cell is a button), and so do A / ⇧A (add a stroke after / before),
+      // C (contact ↔ landing), X (flip side) and Delete / Backspace (delete
+      // the stroke); a text field, a menu and a dialog keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
       const consoleKey = isStrokeKey(key)
         ? () => strokeKey.current(key)
         : lower === "a"
-          ? () => addShotKey.current()
+          ? event.shiftKey
+            ? () => addShotBeforeKey.current()
+            : () => addShotKey.current()
           : lower === "c"
             ? () => endKey.current()
-            : null;
+            : lower === "x"
+              ? () => flipKey.current()
+              : key === "Delete" || key === "Backspace"
+                ? () => deleteShotKey.current()
+                : null;
       if (
         consoleKey &&
         !event.metaKey &&
@@ -2774,16 +2931,19 @@ export function LabelConsole({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  // Space always plays or pauses, with a cell, a row or a button focused too.
-  // It is taken in the capture phase, before the control it was aimed at can
-  // read it as a click or open its editor, and that control is let go so the
-  // key's release does not press it either. Typing keeps its space, and an
-  // open menu or dialog keeps the key: there it chooses.
+  // Space always plays or pauses, and ← / → step the film a point, with a
+  // cell, a row or a button focused too — the point's tick, clicked to mark it
+  // done, keeps the focus. Taken in the capture phase, before the control it
+  // was aimed at can read it as a click or open its editor, and that control
+  // is let go so the key's release does not press it either. Typing keeps its
+  // keys, an open menu or dialog keeps them (there they choose), and the
+  // rail's resize handle keeps its arrows.
   useEffect(() => {
     function onSpace(event: KeyboardEvent) {
+      const arrow = event.key === "ArrowLeft" || event.key === "ArrowRight";
       if (
         overviewRef.current ||
-        event.key !== " " ||
+        (event.key !== " " && !arrow) ||
         event.metaKey ||
         event.ctrlKey ||
         event.altKey ||
@@ -2802,12 +2962,18 @@ export function LabelConsole({
       ) {
         return;
       }
+      if (arrow && target?.closest?.("[role='separator'], [role='slider']")) {
+        return;
+      }
       // Outside a control the handler above has it.
       if (!target?.closest?.(KEY_OWNER_SELECTOR)) return;
       event.preventDefault();
       event.stopPropagation();
       (document.activeElement as HTMLElement | null)?.blur?.();
-      if (!event.repeat) {
+      if (arrow) {
+        cancelReplayRef.current();
+        player.current?.step(event.key === "ArrowLeft" ? -1 : 1);
+      } else if (!event.repeat) {
         cancelReplayRef.current();
         player.current?.togglePlay();
       }
@@ -3348,6 +3514,9 @@ export interface LabelConsoleOperations {
   addShot: (
     pointId: string,
     afterShotId: string | null,
+    filmTime?: number | null,
+    /** The new row's id, made by the console (`addShot`). */
+    shotId?: string,
   ) => Promise<LabelAddShotResult>;
   movePoint: (
     pointId: string,

@@ -60,18 +60,35 @@ interface MatchCardGalleryProps {
   match: DisplayMatch;
   isNew?: boolean;
   scope?: "personal" | "team";
+  /**
+   * A plain tap or Enter peeks the match in the drawer instead of following
+   * the link — the Matches table's row-click law, kept below `lg` where the
+   * cards stand in for the table. ⌘/Ctrl/Shift-click and a middle click still
+   * open the report. Without it the card is a plain link.
+   */
+  onOpen?: (viaKeyboard: boolean) => void;
+}
+
+/** The card's DOM id — `matchRowId`'s twin below `lg`, where rows are hidden. */
+export function matchCardId(matchId: string): string {
+  return `match-card-${matchId}`;
 }
 
 export function MatchCardGallery({
   match,
   isNew,
   scope = "personal",
+  onOpen,
 }: MatchCardGalleryProps): React.JSX.Element {
   return (
     <div
       className={`group relative w-full${isNew ? "animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""}`}
     >
-      <div className="absolute top-3 right-3 z-10 opacity-100 transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
+      {/* Hover-revealed from md up, where it trades places with the
+          duration in the corner. A finger has no hover, and shown at rest the
+          menu would sit on the duration — so touch drops it: a tap on the card
+          opens the drawer, which carries the same Edit and Delete. */}
+      <div className="absolute top-3 right-3 z-10 opacity-100 transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 touch:hidden">
         {match.canManage !== false && (
           <MatchActionsMenu
             matchId={match.id}
@@ -84,6 +101,21 @@ export function MatchCardGallery({
       </div>
       <Link
         href={`/dashboard/matches/${match.id}`}
+        id={onOpen ? matchCardId(match.id) : undefined}
+        onClick={(event) => {
+          if (
+            !onOpen ||
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          )
+            return;
+          event.preventDefault();
+          // A click with no pointer behind it (`detail` 0) is Enter on the link.
+          onOpen(event.detail === 0);
+        }}
         className="block w-full overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-[box-shadow,border-color] duration-200 hover:border-[#E5E5EA] hover:shadow-[0px_6px_20px_0px_rgba(0,0,0,0.10)] focus-visible:outline-none"
       >
         <div className="p-5">

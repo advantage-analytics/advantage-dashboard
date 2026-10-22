@@ -22,8 +22,8 @@ import { useSeekPreview } from "./use-seek-preview";
 /**
  * The fullscreen scrub track (handoff F1): 3px runs split by set
  * with 5px gaps, Signal Blue behind the playhead, 22% white ahead of it, an
- * 11px white playhead. The 16px hit area is the whole row; the runs are
- * decoration inside it. Blue here is one of the three places the fullscreen
+ * 11px white playhead. The 16px hit area is the whole row (a 44px strip on
+ * touch, with a 15px playhead); the runs are decoration inside it. Blue here is one of the three places the fullscreen
  * uses it at all.
  *
  * `role="slider"`, and keyboard-seekable like one: ← / → move 5 seconds,
@@ -217,8 +217,12 @@ export function FilmTrack({
             break;
         }
       }}
+      // Touch: the 16px row keeps its place, and `hit-area` widens what takes
+      // the finger to a 44px strip centred on it — the runs do not move.
+      // `pan-y` hands a sideways drag to the scrub, never to the page, and
+      // leaves a vertical swipe to scroll it (chrome.md, "Touch").
       className={cn(
-        "group/lane relative flex h-4 cursor-pointer items-center rounded-[2px] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        "group/lane relative flex h-4 cursor-pointer items-center rounded-[2px] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area touch:touch-pan-y",
         className,
       )}
     >
@@ -252,7 +256,9 @@ export function FilmTrack({
           transform: `translateX(calc(clamp(0, var(--film-t, 0) / var(--film-d, 1), 1) * 100%))`,
         }}
       >
-        <span className="absolute top-1/2 left-0 h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-pill)] bg-white" />
+        {/* 15px under a finger, which otherwise covers the 11px dot it is
+            dragging. */}
+        <span className="absolute top-1/2 left-0 h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-pill)] bg-white touch:h-[15px] touch:w-[15px]" />
       </span>
       {preview && (
         <>

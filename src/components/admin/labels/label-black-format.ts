@@ -1,4 +1,3 @@
-import { labelShotValues } from "@/lib/services/labels/edit";
 import {
   isGhostShot,
   isLetServe,
@@ -7,14 +6,16 @@ import {
   type LabelShot,
   type LabelSide,
 } from "@/lib/services/labels/session";
-import { shotPlacement } from "@/lib/services/labels/shot-derived";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import {
   ENDING_LABEL,
+  NO_HANDS,
   STROKE_LABEL,
   fileSeconds,
+  placementLabel,
   pointSummary,
   spinLabel,
+  type SideHands,
   type SideNames,
 } from "./label-format";
 
@@ -101,7 +102,7 @@ function titleCase(text: string): string {
 /**
  * The second line: "{spin} {placement} · {m:ss} · {n} shot rally".
  *   · spin and placement are the LAST live stroke's — the shot that decided
- *     the point — in the shot row's own words (`spinLabel`, `shotPlacement`);
+ *     the point — in the shot row's own words (`spinLabel`, `placementLabel`);
  *     a serve is named before its placement ("Kick Second Serve T");
  *   · the time is the first live stroke's that has one, where the point
  *     starts on the film;
@@ -115,6 +116,8 @@ export function pointDetail(
   point: Pick<LabelPoint, "shots">,
   /** `LabelVideo.startTimeSeconds`: the time is on the playing file's clock. */
   fileOffset = 0,
+  /** Each player's hand, for Inside Out / Inside In (`labelHands`). */
+  hands: SideHands = NO_HANDS,
 ): string {
   const live = liveShots(point);
   const last = live.at(-1);
@@ -126,7 +129,7 @@ export function pointDetail(
       isServeStroke(last.stroke) && last.stroke
         ? titleCase(STROKE_LABEL[last.stroke])
         : null,
-      shotPlacement(labelShotValues(last)),
+      placementLabel(last, hands),
     ].filter(Boolean);
     if (shot.length > 0) parts.push(shot.join(" "));
   }

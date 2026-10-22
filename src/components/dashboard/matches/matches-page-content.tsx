@@ -37,6 +37,14 @@ import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
 import { DRAWER_ATTR, MatchDrawer } from "./match-drawer";
 import { DraftDrawer } from "./draft-drawer";
 import { matchRowId } from "./match-card-list";
+import { matchCardId } from "./match-card-gallery";
+
+/** The match's row, or below `lg` (rows hidden) its card. */
+function matchElement(matchId: string): HTMLElement | null {
+  const row = document.getElementById(matchRowId(matchId));
+  if (row && row.offsetParent !== null) return row;
+  return document.getElementById(matchCardId(matchId)) ?? row;
+}
 import { MATCH_DRAWER_SLOT_ID } from "./match-drawer-slot";
 import {
   MatchesFilterPanel,
@@ -750,13 +758,13 @@ export function MatchesPageContent({
       setSelectedId(null);
       setClosing(true);
       // The animation's end normally finishes the close; this covers reduced
-      // motion and a rail hidden below `lg`, where no animation runs. A second
+      // motion, where no animation runs. A second
       // close during the slide replaces the timer rather than orphaning it —
       // an orphan would fire later and shut whatever drawer opened next.
       if (closeTimer.current) clearTimeout(closeTimer.current);
       closeTimer.current = setTimeout(finishClose, 240);
       if (returnFocusTo) {
-        document.getElementById(matchRowId(returnFocusTo))?.focus();
+        matchElement(returnFocusTo)?.focus();
       }
     },
     [finishClose],
@@ -790,9 +798,7 @@ export function MatchesPageContent({
       }
       selectRow(nextId, true);
       requestAnimationFrame(() => {
-        document
-          .getElementById(matchRowId(nextId))
-          ?.scrollIntoView({ block: "nearest" });
+        matchElement(nextId)?.scrollIntoView({ block: "nearest" });
       });
     },
     [drafts, sorted, selectedId, selectRow],

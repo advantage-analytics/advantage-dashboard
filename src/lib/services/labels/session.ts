@@ -76,6 +76,18 @@ export function isLabelGameType(value: unknown): value is LabelGameType {
 export const LABEL_SPINS = ["topspin", "flat", "backspin", "sidespin"] as const;
 export type LabelSpin = (typeof LABEL_SPINS)[number];
 
+/**
+ * A serve's spins, in the Spin menu's order: Flat, Slice, Kick. Stored in
+ * the vendor's rotation words — a slice serve is sidespin, a kick topspin —
+ * so a labelled serve reads as the stats read one (match-filters/spin.ts
+ * `normalizeServeSpin`). A backspin serve is not a serve spin.
+ */
+export const SERVE_SPINS = [
+  "flat",
+  "sidespin",
+  "topspin",
+] as const satisfies readonly LabelSpin[];
+
 export function isLabelSpin(value: unknown): value is LabelSpin {
   return (
     typeof value === "string" &&

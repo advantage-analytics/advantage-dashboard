@@ -50,9 +50,13 @@ const BASE = [
   "disabled:pointer-events-none disabled:opacity-50",
 ].join(" ");
 
+// Under a finger, sm and md take a 44px tap area (`touch:hit-area`) rather
+// than a 44px box: they sit in fixed-height rows — the 44px header, table
+// toolbars, dialog footers — that a taller button would push open. `lg` is
+// already 44px.
 const SIZES: Record<AdvButtonSize, string> = {
-  sm: "h-8 px-3 text-[12px]",
-  md: "h-9 px-4 text-[13px]",
+  sm: "h-8 px-3 text-[12px] touch:hit-area",
+  md: "h-9 px-4 text-[13px] touch:hit-area",
   lg: "h-11 px-5 text-[13px]",
 };
 

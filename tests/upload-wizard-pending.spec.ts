@@ -86,7 +86,9 @@ for (const { name, pinned, step } of VARIANTS) {
     });
 
     test("WizardShell's column and 64px hairline footer", () => {
-      expect(html).toContain("mx-auto w-full max-w-[832px] px-14 pt-16 pb-24");
+      expect(html).toContain(
+        "mx-auto w-full max-w-[784px] px-8 xl:max-w-[832px] xl:px-14 pt-16 pb-24",
+      );
       expect(html).toContain(
         "sticky bottom-0 z-10 mt-auto border-t border-[var(--border-hairline)]",
       );

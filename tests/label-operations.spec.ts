@@ -22,6 +22,7 @@ import {
   gameInSetOf,
   neighbourGames,
   planAddedShot,
+  ADD_SHOT_AT_START,
   planPointChecked,
   planPointDelete,
   planPointMove,
@@ -436,6 +437,49 @@ test.describe("add shot", () => {
     });
   });
 
+  test("at the start it is the server's, half a second before the first stroke", () => {
+    expect(planAddedShot(point, ADD_SHOT_AT_START)).toEqual({
+      ok: true,
+      write: {
+        event_id: null,
+        after_event_id: null,
+        status: "added",
+        // Lee (p1) serves the point.
+        hitter: "p1",
+        // The serve, s-serve, is at 2472.0.
+        video_time: 2471.5,
+      },
+    });
+  });
+
+  test("refuses the start when the first stroke has no time", () => {
+    const untimed = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.id === "s-serve" ? { ...s, videoTime: null } : s,
+      ),
+    };
+    expect(planAddedShot(untimed, ADD_SHOT_AT_START)).toHaveProperty("error");
+  });
+
+  test("at the start of an untimed rally it takes the film's time, so it sorts first", () => {
+    const untimed = {
+      ...point,
+      shots: point.shots.map((s) => ({ ...s, videoTime: null })),
+    };
+    expect(planAddedShot(untimed, ADD_SHOT_AT_START, 2468.234)).toMatchObject({
+      ok: true,
+      write: { hitter: "p1", video_time: 2468.23 },
+    });
+    // The film's time is read for that case alone.
+    expect(planAddedShot(point, ADD_SHOT_AT_START, 99)).toEqual(
+      planAddedShot(point, ADD_SHOT_AT_START),
+    );
+    expect(planAddedShot(point, "s-serve", 99)).toEqual(
+      planAddedShot(point, "s-serve"),
+    );
+  });
+
   test("refuses a tombstone, a stroke from elsewhere and a deleted point", () => {
     expect(planAddedShot(point, "s-phantom")).toHaveProperty("error");
     expect(planAddedShot(point, "s-ace")).toHaveProperty("error");
@@ -809,7 +853,7 @@ test.describe("the services", () => {
       restoreLabelShot(SHOT_ID, deps),
       removeLabelShotsAfter(SHOT_ID, deps),
       restoreLabelShots([SHOT_ID], deps),
-      addLabelShot(POINT_ID, null, deps),
+      addLabelShot(POINT_ID, null, null, null, deps),
       deleteLabelPoint(POINT_ID, deps),
       moveLabelPoint(POINT_ID, { setNumber: 1, gameNumber: 2 }, false, deps),
       markLabelPointChecked(POINT_ID, deps),
@@ -1358,6 +1402,26 @@ test.describe("the services", () => {
         hitter: "p2",
       },
     });
+    // The console's own id is the row's, so the row it drew is the one saved;
+    // anything that is not a uuid is refused before a read.
+    const named = await writeLabelShotAdd({
+      supabase: fake.supabase,
+      pointId: POINT_ID,
+      afterShotId: SHOT_ID,
+      shotId: OTHER_SHOT,
+    });
+    expect(named).toMatchObject({ ok: true });
+    expect(
+      fake.calls.filter((c) => c.op === "insert").at(-1)?.values,
+    ).toMatchObject({ id: OTHER_SHOT, label_point_id: POINT_ID });
+    expect(
+      await writeLabelShotAdd({
+        supabase: fake.supabase,
+        pointId: POINT_ID,
+        afterShotId: SHOT_ID,
+        shotId: "not-an-id",
+      }),
+    ).toEqual({ error: "Invalid shot id." });
   });
 
   const pointRow = {
@@ -1724,10 +1788,12 @@ test("no operation issues a SQL DELETE on a label_* row", () => {
 });
 
 test("a game is named by its place in its set, not the match's count", () => {
+  let row = 0;
   const at = (setNumber: number, gameNumber: number) => ({
     status: "unchanged" as const,
     setNumber,
     gameNumber,
+    pointIndex: row++,
   });
   const points = [at(1, 1), at(1, 12), at(2, 13), at(2, 14), at(2, 23)];
   expect(gameInSetOf(points, { setNumber: 1, gameNumber: 12 })).toBe(2);
@@ -1740,4 +1806,23 @@ test("a game is named by its place in its set, not the match's count", () => {
       gameNumber: 23,
     }),
   ).toBe(3);
+});
+
+test("a game's place is its row order: a started game's number is a key", () => {
+  // Ivan H v Jasper Mok's set 1: games started by hand run 1, 2, 5, 3, 6, 4
+  // down the rail.
+  let row = 0;
+  const points = [1, 2, 5, 3, 6, 4].flatMap((gameNumber) =>
+    [0, 1].map(() => ({
+      status: "unchanged" as const,
+      setNumber: 1,
+      gameNumber,
+      pointIndex: row++,
+    })),
+  );
+  const place = (gameNumber: number) =>
+    gameInSetOf(points, { setNumber: 1, gameNumber });
+  expect([1, 2, 5, 3, 6, 4].map(place)).toEqual([1, 2, 3, 4, 5, 6]);
+  // A game with no live row comes after every game that has one.
+  expect(place(7)).toBe(7);
 });

@@ -532,7 +532,7 @@ export default function RecentActivity({
                     e.stopPropagation();
                     dismissToast();
                   }}
-                  className="ml-1 rounded-full p-1 text-white/60 transition-colors duration-200 hover:text-white/80 focus-visible:outline-none"
+                  className="ml-1 rounded-full p-1 text-white/60 transition-colors duration-200 hover:text-white/80 focus-visible:outline-none touch:hit-area"
                   aria-label="Dismiss notification"
                 >
                   <X className="size-3.5" />

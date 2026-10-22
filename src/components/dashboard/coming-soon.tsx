@@ -51,7 +51,7 @@ export function ComingSoonPage({
 }: ComingSoonProps & { title: string }) {
   return (
     <div className="flex w-full flex-1 flex-col bg-white">
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-8 pt-5 pb-8 xl:px-14">
         <h1 className="text-display">{title}</h1>
         <ComingSoon {...rest} />
       </div>

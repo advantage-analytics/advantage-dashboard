@@ -152,6 +152,32 @@ test.describe("shotDirection", () => {
             hand,
           ),
         ).toBe("Down the Line");
+        // A backhand from the forehand half → Inside-* too, volleys included.
+        expect(
+          shotDirection(
+            from(end, forehand, { zone: "Crosscourt", shotType: "Backhand" }),
+            hand,
+          ),
+        ).toBe("Inside Out");
+        expect(
+          shotDirection(
+            from(end, forehand, {
+              zone: "Down the Line",
+              shotType: "Backhand Volley",
+            }),
+            hand,
+          ),
+        ).toBe("Inside In");
+        // A serve is never Inside-*, from either half.
+        expect(
+          shotDirection(
+            from(end, forehand, {
+              zone: "Crosscourt",
+              shotType: "First Serve",
+            }),
+            hand,
+          ),
+        ).toBe("Crosscourt");
         // Middle is no direction, from anywhere.
         expect(
           shotDirection(from(end, backhand, { zone: "Middle" }), hand),
