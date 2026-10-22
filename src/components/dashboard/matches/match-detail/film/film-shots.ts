@@ -182,7 +182,8 @@ const SERVE_RESULT_TYPES = new Set(["Ace", "Service Winner", "Double Fault"]);
  * ({@link shotSpinLabel}) and a rally shot's direction is Custom ›
  * Direction's (`shotDirection`, which needs the hitter's hand), so a forehand
  * struck from the backhand half (or a backhand from the forehand half) reads
- * Inside Out here as it does in its shot row. "Break point" is Score › Break point's spelling.
+ * Inside Out here as it does in its shot row. "Break point" is Score › Break
+ * point's spelling.
  */
 export function pointDetail(
   point: MatchPoint,
