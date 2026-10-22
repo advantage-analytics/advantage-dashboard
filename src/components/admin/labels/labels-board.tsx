@@ -12,6 +12,7 @@ import { getInitials } from "@/lib/data/match-utils";
 import type { LabelJobOwner } from "@/lib/data/label-overview-server";
 import type { LabelJobRow } from "@/lib/data/labels-server";
 import {
+  analysedInstant,
   countsSentence,
   groupLabelJobs,
   jobState,
@@ -77,21 +78,6 @@ const shortDay = (iso: string | null) => {
     year: "numeric",
     timeZone: "UTC",
   }).format(date);
-};
-
-/** "Oct 3, 2026, 2:14 PM UTC": UTC named, so server and browser agree. */
-const instant = (iso: string | null) => {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  return `${new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC",
-  }).format(date)} UTC`;
 };
 
 export function LabelsBoard({
@@ -365,7 +351,7 @@ function JobRow({
   const context = [owner?.event, shortDay(owner?.playedAt ?? null)]
     .filter(Boolean)
     .join(" · ");
-  const analysed = instant(job.completedAt);
+  const analysed = analysedInstant(job.completedAt);
   const label = `${state === "todo" ? "Start labelling" : state === "doing" ? "Continue labelling" : "View"} ${owner?.playerName ?? job.player1Name} vs ${opponent}`;
   const cells = (
     <>
