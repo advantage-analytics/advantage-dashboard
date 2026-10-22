@@ -2931,16 +2931,19 @@ export function LabelConsole({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  // Space always plays or pauses, with a cell, a row or a button focused too.
-  // It is taken in the capture phase, before the control it was aimed at can
-  // read it as a click or open its editor, and that control is let go so the
-  // key's release does not press it either. Typing keeps its space, and an
-  // open menu or dialog keeps the key: there it chooses.
+  // Space always plays or pauses, and ← / → step the film a point, with a
+  // cell, a row or a button focused too — the point's tick, clicked to mark it
+  // done, keeps the focus. Taken in the capture phase, before the control it
+  // was aimed at can read it as a click or open its editor, and that control
+  // is let go so the key's release does not press it either. Typing keeps its
+  // keys, an open menu or dialog keeps them (there they choose), and the
+  // rail's resize handle keeps its arrows.
   useEffect(() => {
     function onSpace(event: KeyboardEvent) {
+      const arrow = event.key === "ArrowLeft" || event.key === "ArrowRight";
       if (
         overviewRef.current ||
-        event.key !== " " ||
+        (event.key !== " " && !arrow) ||
         event.metaKey ||
         event.ctrlKey ||
         event.altKey ||
@@ -2959,12 +2962,18 @@ export function LabelConsole({
       ) {
         return;
       }
+      if (arrow && target?.closest?.("[role='separator'], [role='slider']")) {
+        return;
+      }
       // Outside a control the handler above has it.
       if (!target?.closest?.(KEY_OWNER_SELECTOR)) return;
       event.preventDefault();
       event.stopPropagation();
       (document.activeElement as HTMLElement | null)?.blur?.();
-      if (!event.repeat) {
+      if (arrow) {
+        cancelReplayRef.current();
+        player.current?.step(event.key === "ArrowLeft" ? -1 : 1);
+      } else if (!event.repeat) {
         cancelReplayRef.current();
         player.current?.togglePlay();
       }
