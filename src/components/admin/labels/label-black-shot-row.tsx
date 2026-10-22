@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import {
+  ArrowUpToLine,
   Check,
   CornerDownRight,
   EyeOff,
@@ -30,6 +31,7 @@ import {
 import type { LabelMarks, LabelSuggestion } from "@/lib/services/labels/marks";
 import { hoverLine } from "@/lib/services/labels/marks-state";
 import {
+  ADD_SHOT_AT_START,
   isLabelDeleteReason,
   planAddedShot,
 } from "@/lib/services/labels/operations";
@@ -49,7 +51,7 @@ import {
   BlackUndoButton,
 } from "./label-black-parts";
 import { PencilMark, pointHints, type PointHint } from "./label-black-mark";
-import { placementWords, positionWords } from "./shot-position-words";
+import { directionWords, positionWords } from "./shot-position-words";
 import {
   EditableCell,
   SelectEditor,
@@ -67,6 +69,7 @@ import {
   parseCourtPoint,
   parseFileTime,
   sideOptions,
+  placementLabel,
   spinLabel,
   spinOptions,
 } from "./label-format";
@@ -460,6 +463,8 @@ export function BlackShotRow({
       ? formatFileTime(shot.videoTime, edit.fileOffset)
       : null;
   const placement = shotPlacement(labelShotValues(shot));
+  // Inside Out / Inside In when the stroke came from its other wing's half.
+  const direction = placementLabel(shot, edit.hands);
   const serveResult = serveResultMenu(shot, edit.playOnLets);
   /** The words' ink, a step down on a fault. */
   const words = fault ? "text-white/35" : "text-white/50";
@@ -583,7 +588,11 @@ export function BlackShotRow({
         {placement ? (
           // The one word here nobody can open an editor on, in a track that
           // narrows with the rail: whole in the tooltip when it is cut.
-          <ChromeTooltip {...placementWords(placement, shot)} side="top" wrap>
+          <ChromeTooltip
+            {...directionWords(placement, direction, shot)}
+            side="top"
+            wrap
+          >
             <span
               data-calculated="placement"
               className={cn(
@@ -592,7 +601,7 @@ export function BlackShotRow({
                 words,
               )}
             >
-              {placement}
+              {direction}
             </span>
           </ChromeTooltip>
         ) : (
@@ -1220,7 +1229,7 @@ function GhostPosition({
 
 /** One of a stroke's tray actions, as plain data. */
 export type ShotTrayAction = {
-  key: "split" | "add" | "reset" | "delete";
+  key: "before" | "split" | "add" | "reset" | "delete";
   label: string;
   /** The button's name, naming the stroke ("Delete shot 2"). */
   ariaLabel: string;
@@ -1229,12 +1238,14 @@ export type ShotTrayAction = {
 };
 
 /**
- * What a selected stroke's tray can ask for, in its order: Split point here
- * (when the point can split at this stroke), Add shot after (whenever the row
- * knows its point — the well's own Add shot row, placed right after this
- * stroke), Reset shot (when there is a seed to go back to), and Delete shot,
- * always and last. Reset and Delete only ask the console to confirm; Split
- * and Add run at once.
+ * What a selected stroke's tray can ask for, in its order: Add shot before
+ * (on the rally's first live stroke alone — a serve the vendor missed, which
+ * the well's Add shot cannot reach), Split point here (when the point can
+ * split at this stroke), Add shot after (whenever the row knows its point —
+ * the well's own Add shot row, placed right after this stroke), Reset shot
+ * (when there is a seed to go back to), and Delete shot, always and last.
+ * Reset and Delete only ask the console to confirm; Split and Add run at
+ * once.
  */
 export function shotTrayActions({
   shot,
@@ -1250,6 +1261,14 @@ export function shotTrayActions({
   operations: LabelRowOperations;
 }): ShotTrayAction[] {
   const actions: ShotTrayAction[] = [];
+  if (point?.shots.find((s) => s.status !== "deleted")?.id === shot.id) {
+    actions.push({
+      key: "before",
+      label: "Add shot before",
+      ariaLabel: `Add shot before shot ${number}`,
+      run: () => operations.onAddShot(point.id, ADD_SHOT_AT_START),
+    });
+  }
   if (point && canSplitAtShot(point, shot.id)) {
     actions.push({
       key: "split",
@@ -1285,6 +1304,7 @@ export function shotTrayActions({
 }
 
 const SHOT_TRAY_ICON = {
+  before: ArrowUpToLine,
   split: Split,
   add: Plus,
   reset: RotateCcw,

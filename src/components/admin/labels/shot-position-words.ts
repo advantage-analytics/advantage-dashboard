@@ -131,3 +131,25 @@ export function placementWords(
     ],
   };
 }
+
+/**
+ * The placement cell's tooltip: `placementWords`, renamed Inside Out / Inside
+ * In — and why — when `direction` (label-format.ts `placementLabel`) differs.
+ */
+export function directionWords(
+  placement: ShotPlacement,
+  direction: string | null,
+  shot: {
+    stroke: LabelStroke | null;
+    contactX: number | null;
+    landingX: number | null;
+  },
+): PositionWords {
+  const words = placementWords(placement, shot);
+  if (direction === null || direction === placement) return words;
+  const wing =
+    shot.stroke === "forehand" || shot.stroke === "forehand_volley"
+      ? "A forehand from the hitter's backhand side"
+      : "A backhand from the hitter's forehand side";
+  return { label: direction, detail: [wing, ...words.detail] };
+}

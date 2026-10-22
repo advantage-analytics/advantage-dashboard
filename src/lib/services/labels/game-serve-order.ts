@@ -1,7 +1,11 @@
 /**
  * Servers that do not alternate: two games in a row of one set served by the
- * same player — by their game numbers, so a game missing between them (an
- * even gap) is no repeat. Ordinary games only — a tiebreak keeps its own one-then-two
+ * same player. "In a row" is row order (`point_index`), as the rail draws the
+ * games: a game number is a key, not an order — a game the labeller started
+ * (game-shift.ts `planGameSplit`) takes the session's highest number plus one,
+ * wherever it sits. A game missing between them is no repeat: an even, upward
+ * gap in their numbers that no other game of the set fills (off the video,
+ * or deleted). Ordinary games only — a tiebreak keeps its own one-then-two
  * order (tiebreak-serve.ts) — and only within a set: who serves a set's first
  * game hangs on the set before it, a tiebreak or a break off the video. The
  * points a tiebreak fold would take are left out too (`skipPointIds`,
@@ -89,15 +93,18 @@ export function gameServeRepeats(
 
   const repeats: GameServeRepeat[] = [];
   for (const [setNumber, byNumber] of sets) {
-    const games: SetGame[] = [...byNumber.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([gameNumber, live], i) => ({
+    // In row order: the points went in by `point_index`, so each game's
+    // first row is its place.
+    const games: SetGame[] = [...byNumber.entries()].map(
+      ([gameNumber, live], i) => ({
         game: { setNumber, gameNumber },
         gameInSet: i + 1,
         live,
         server: gameFirstServer(live),
         ordinary: gameTypeOf(live) === "game",
-      }));
+      }),
+    );
+    const numbers = new Set(byNumber.keys());
     // A game flagged as the later of one pair is not flagged again as the
     // earlier of the next: its fix changes both pairs.
     const flagged = new Set<string>();
@@ -109,8 +116,14 @@ export function gameServeRepeats(
       if (after.live.some((p) => skipPointIds.has(p.id))) continue;
       if (before.server === null || before.server !== after.server) continue;
       // A game missing between them (off the video, or deleted) keeps the
-      // turn: games an even number apart have the same server.
-      if ((after.game.gameNumber - before.game.gameNumber) % 2 === 0) continue;
+      // turn: games an even number apart have the same server. Only a gap no
+      // game of the set fills is a missing game — a started game's number is
+      // past every other.
+      if (
+        missingBetween(before.game.gameNumber, after.game.gameNumber, numbers)
+      ) {
+        continue;
+      }
       if (flagged.has(gameKey(before.game))) continue;
       const [wrong, right] =
         againstServer(before) > againstServer(after)
@@ -140,6 +153,22 @@ export function gameServeRepeats(
 }
 
 const NO_POINT_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * Whether games `from` and `to`, side by side in row order, have an even
+ * number of games missing between them: an upward gap of their numbers that
+ * none of the set's own numbers fills.
+ */
+function missingBetween(
+  from: number,
+  to: number,
+  numbers: ReadonlySet<number>,
+): boolean {
+  const gap = to - from;
+  if (gap <= 0 || gap % 2 !== 0) return false;
+  for (let n = from + 1; n < to; n++) if (numbers.has(n)) return false;
+  return true;
+}
 
 /** Every point the tiebreak folds take (tiebreak-fold.ts `tiebreakFolds`). */
 export function foldedPointIds(
