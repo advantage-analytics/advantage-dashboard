@@ -736,6 +736,70 @@ test.describe("winning plays in rallies of a length", () => {
     ).toEqual({ min: 10, max: null });
   });
 
+  test("a negated lower bound is an upper bound", () => {
+    // Review: "no longer than 4 shots" read as five or more.
+    expect(rallyLengthOf("plays in rallies no longer than 4 shots")).toEqual({
+      min: 1,
+      max: 4,
+    });
+    expect(rallyLengthOf("points not more than 3 shots")).toEqual({
+      min: 1,
+      max: 3,
+    });
+    expect(
+      rallyLengthOf("my best plays in points no more than 4 shots"),
+    ).toEqual({ min: 1, max: 4 });
+  });
+
+  test("a negated upper bound is a lower bound", () => {
+    // Review: "no shorter than 5 shots" read as four or fewer.
+    expect(rallyLengthOf("rallies no shorter than 5 shots")).toEqual({
+      min: 5,
+      max: null,
+    });
+    expect(rallyLengthOf("points not under 4 shots")).toEqual({
+      min: 4,
+      max: null,
+    });
+    expect(rallyLengthOf("no fewer than 6 shots")).toEqual({
+      min: 6,
+      max: null,
+    });
+  });
+
+  test("a lower and an upper bound make a range", () => {
+    expect(
+      rallyLengthOf("best plays in at least 3 shots and no more than 8 shots"),
+    ).toEqual({ min: 3, max: 8 });
+  });
+
+  test('the "or not" of an earlier clause negates nothing', () => {
+    expect(rallyLengthOf("does it help or not over 5 shots")).toEqual({
+      min: 6,
+      max: null,
+    });
+  });
+
+  test('"4 shots or under" keeps the 4', () => {
+    expect(rallyLengthOf("points of 4 shots or under")).toEqual({
+      min: 1,
+      max: 4,
+    });
+  });
+
+  test('"shorter than 5 shots" is four or fewer', () => {
+    expect(rallyLengthOf("best plays in rallies shorter than 5 shots")).toEqual(
+      {
+        min: 1,
+        max: 4,
+      },
+    );
+    expect(rallyLengthOf("winning plays below 4 shots")).toEqual({
+      min: 1,
+      max: 3,
+    });
+  });
+
   test("a question naming no length reads none", () => {
     expect(rallyLengthOf("What is this player's best pattern of plays?")).toBe(
       null,

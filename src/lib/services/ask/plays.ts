@@ -570,18 +570,37 @@ const NUMBER_WORDS: Record<string, number> = {
   twenty: 20,
 };
 const N = String.raw`(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fifteen|twenty)`;
+// Upper bounds that exclude the number itself: "under 5 shots" ends at 4.
+const STRICT_UPPER = "under|fewer than|less than|shorter than|below";
 const AT_MOST = new RegExp(
-  String.raw`\b(?:up to|at most|no more than|within(?: the first)?|under|fewer than|less than|max(?:imum)? of)\s+${N}\s*(?:-\s*)?shots?\b|\b${N}\s*(?:-\s*)?shots?\s+or\s+(?:less|fewer|under)\b|\b(?:first|opening)\s+${N}\s+shots?\b`,
+  String.raw`\b(?:up to|at most|within(?: the first)?|${STRICT_UPPER}|max(?:imum)? of)\s+${N}\s*(?:-\s*)?shots?\b|\b${N}\s*(?:-\s*)?shots?\s+or\s+(?:less|fewer|under)\b|\b(?:first|opening)\s+${N}\s+shots?\b`,
   "i",
 );
 const BETWEEN = new RegExp(
   String.raw`\b${N}\s*(?:-|to)\s*${N}\s+shots?\b`,
   "i",
 );
+// Lower bounds that exclude the number itself: "over 5 shots" starts at 6.
+const STRICT_LOWER = "more than|over|longer than|greater than|above|beyond";
 const AT_LEAST = new RegExp(
-  String.raw`\b(?:at least|more than|over|longer than|greater than|above|beyond)\s+${N}\s*(?:-\s*)?shots?\b|\b${N}\s*\+\s*shots?\b|\b${N}\s*(?:-\s*)?shots?\s+or\s+(?:more|longer)\b`,
+  String.raw`\b(?:at least|${STRICT_LOWER})\s+${N}\s*(?:-\s*)?shots?\b|\b${N}\s*\+\s*shots?\b|\b${N}\s*(?:-\s*)?shots?\s+or\s+(?:more|longer)\b`,
   "i",
 );
+// Only a bound that opens with the comparator is strict: "4 shots or under"
+// keeps the 4.
+const STRICT_UPPER_LEAD = new RegExp(String.raw`^(?:${STRICT_UPPER})\b`, "i");
+const STRICT_LOWER_LEAD = new RegExp(String.raw`^(?:${STRICT_LOWER})\b`, "i");
+const AT_MOST_ALL = new RegExp(AT_MOST.source, "gi");
+const AT_LEAST_ALL = new RegExp(AT_LEAST.source, "gi");
+// "no" or "not" just before the comparator — but not the "or not" of "does it
+// help or not over 5 shots", which belongs to the clause before.
+const NEGATED = /(?<!\bor\s+)\b(?:no|not)\s+$/i;
+
+/** Whether the match is negated: "no longer than 4". */
+function negated(question: string, match: RegExpMatchArray): boolean {
+  return NEGATED.test(question.slice(0, match.index));
+}
+
 const SHORT_RALLY = /\b(?:short(?:er)?|quick)\s+(?:rall(?:y|ies)|points?)\b/i;
 const MEDIUM_RALLY = /\bmedium(?:[- ]length)?\s+(?:rall(?:y|ies)|points?)\b/i;
 const LONG_RALLY = /\b(?:long(?:er)?|extended)\s+(?:rall(?:y|ies)|points?)\b/i;
@@ -606,26 +625,34 @@ export function rallyLengthOf(question: string): AskRallyLength | null {
     const max = numberOf(between[2]);
     if (min !== null && max !== null && min <= max) return { min, max };
   }
-  const most = AT_MOST.exec(question);
-  if (most) {
+  // Every bound the question names, both ends kept: "at least 3 and no more
+  // than 8" is 3 to 8. A negated bound turns over: "not under 5" is 5 or
+  // more, "no more than 4" is at most 4.
+  let min: number | null = null;
+  let max: number | null = null;
+  const bound = (side: "min" | "max", n: number) => {
+    if (side === "min") min = min === null ? n : Math.max(min, n);
+    else max = max === null ? n : Math.min(max, n);
+  };
+  for (const most of question.matchAll(AT_MOST_ALL)) {
     const n = numberOf(most.slice(1).find((group) => group !== undefined));
-    if (n !== null) {
-      const strict = /\b(?:under|fewer than|less than)\b/i.test(most[0]);
-      const max = strict ? n - 1 : n;
-      if (max >= 1) return { min: 1, max };
-    }
+    if (n === null) continue;
+    const upper = STRICT_UPPER_LEAD.test(most[0]) ? n - 1 : n;
+    if (negated(question, most)) bound("min", upper + 1);
+    else bound("max", upper);
   }
-  const least = AT_LEAST.exec(question);
-  if (least) {
+  for (const least of question.matchAll(AT_LEAST_ALL)) {
     const n = numberOf(least.slice(1).find((group) => group !== undefined));
-    if (n !== null) {
-      const strict =
-        /\b(?:more than|over|longer than|greater than|above|beyond)\b/i.test(
-          least[0],
-        );
-      return { min: strict ? n + 1 : n, max: null };
-    }
+    if (n === null) continue;
+    const lower = STRICT_LOWER_LEAD.test(least[0]) ? n + 1 : n;
+    if (negated(question, least)) bound("max", lower - 1);
+    else bound("min", lower);
   }
+  const lo: number | null = min;
+  const hi: number | null = max;
+  if (hi !== null && hi >= Math.max(lo ?? 1, 1))
+    return { min: lo ?? 1, max: hi };
+  if (lo !== null && hi === null) return { min: lo, max: null };
   if (SHORT_RALLY.test(question)) return ASK_SHORT_RALLY;
   if (MEDIUM_RALLY.test(question)) return ASK_MEDIUM_RALLY;
   if (LONG_RALLY.test(question)) return ASK_LONG_RALLY;

@@ -1858,15 +1858,28 @@ function dateColumn(rows: readonly AskRow[]): string | undefined {
   return dates.includes("played_on") ? "played_on" : dates[0];
 }
 
-/** A cell that names a row of the result: text, not a match id or a date. */
+/** The longest name added to a row label, so it stays within one line. */
+const MAX_ADDED_NAME_LENGTH = 24;
+
+/**
+ * A cell that names a row of the result: a short name with a letter in it,
+ * not an id, a date or a link. "Court 2" and "1-4 shots" name a row;
+ * "6-4 6-3" and "2026-09-14" do not.
+ */
 function isNameCell(column: string, value: unknown): value is string {
   return (
     typeof value === "string" &&
-    value.trim() !== "" &&
-    column !== "match_id" &&
+    value.length <= MAX_ADDED_NAME_LENGTH &&
+    /\p{L}/u.test(value) &&
     !/(?:^|_)id$/.test(column) &&
-    !/^\d{4}-\d{2}-\d{2}/.test(value)
+    !ISO_DATE.test(value) &&
+    !/:\/\//.test(value)
   );
+}
+
+/** Lower-cased words, space-padded so `includes()` matches whole words only. */
+function wordsOf(text: string): string {
+  return ` ${labelWords(text).join(" ")} `;
 }
 
 /**
@@ -1886,7 +1899,9 @@ export function distinctRowLabels(
   const groups = new Map<string, number[]>();
   labels.forEach((label, index) => {
     const key = label.trim().toLowerCase();
-    groups.set(key, [...(groups.get(key) ?? []), index]);
+    const group = groups.get(key);
+    if (group) group.push(index);
+    else groups.set(key, [index]);
   });
   for (const members of groups.values()) {
     if (members.length < 2) continue;
@@ -1896,27 +1911,38 @@ export function distinctRowLabels(
     });
     if (found.some((row) => row === undefined)) continue;
     const sourced = found as AskRow[];
-    const label = labels[members[0]].toLowerCase();
+    const label = wordsOf(labels[members[0]]);
     // The name columns whose values differ across these rows and are not
-    // already in the label.
+    // already in the label — as whole words, so "T" is not in "First Serve".
     const columns = Object.keys(sourced[0]).filter((column) => {
       const values = sourced.map((row) => row[column]);
       if (!values.every((value) => isNameCell(column, value))) return false;
       if (new Set(values).size < 2) return false;
-      return !values.some((value) =>
-        label.includes(String(value).toLowerCase()),
-      );
+      return !values.some((value) => label.includes(wordsOf(String(value))));
     });
-    if (columns.length === 0) continue;
-    const named = members.map(
-      (index, i) =>
-        `${labels[index]} · ${columns.map((column) => String(sourced[i][column])).join(" · ")}`,
-    );
-    if (
-      new Set(named.map((name) => name.toLowerCase())).size !== named.length
-    ) {
-      continue;
+    const nameWith = (names: readonly string[]): string[] | null => {
+      const named = members.map((index, i) =>
+        [
+          labels[index],
+          ...names.map(
+            (column) =>
+              formatAskCell(column, sourced[i][column]) ??
+              String(sourced[i][column]),
+          ),
+        ].join(" · "),
+      );
+      const distinct = new Set(named.map((name) => name.toLowerCase()));
+      return distinct.size === named.length ? named : null;
+    };
+    // The first column, in the result's own order — its grouping keys lead —
+    // that tells the rows apart alone, before all of them together.
+    let named: string[] | null = null;
+    for (const column of columns) {
+      named = nameWith([column]);
+      if (named) break;
     }
+    if (!named && columns.length > 1) named = nameWith(columns);
+    if (!named) continue;
     members.forEach((index, i) => {
       out[index] = named[i];
     });
