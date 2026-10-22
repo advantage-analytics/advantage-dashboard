@@ -62,14 +62,32 @@ export function useTouchReadout<E extends Element = HTMLDivElement>(
  */
 export function useFingerTap() {
   const ref = useRef<{ reselect: boolean } | null>(null);
+  const forget = useRef<(() => void) | null>(null);
+  useEffect(() => () => forget.current?.(), []);
   return useMemo(
     () => ({
       press(e: { pointerType: string }, alreadySelected: boolean): boolean {
+        forget.current?.();
         if (!isFingerPointer(e)) {
           ref.current = null;
           return false;
         }
         ref.current = { reselect: alreadySelected };
+        // A press the browser takes for a scroll ends in `pointercancel` and
+        // no click; forget it, or a later keyboard click would be read as
+        // that finger's first tap and swallowed.
+        const cancel = () => {
+          ref.current = null;
+          forget.current = null;
+        };
+        window.addEventListener("pointercancel", cancel, {
+          capture: true,
+          once: true,
+        });
+        forget.current = () => {
+          window.removeEventListener("pointercancel", cancel, true);
+          forget.current = null;
+        };
         return true;
       },
       moved() {

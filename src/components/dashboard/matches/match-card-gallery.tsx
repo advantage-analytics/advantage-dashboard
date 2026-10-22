@@ -69,6 +69,11 @@ interface MatchCardGalleryProps {
   onOpen?: (viaKeyboard: boolean) => void;
 }
 
+/** The card's DOM id — `matchRowId`'s twin below `lg`, where rows are hidden. */
+export function matchCardId(matchId: string): string {
+  return `match-card-${matchId}`;
+}
+
 export function MatchCardGallery({
   match,
   isNew,
@@ -96,6 +101,7 @@ export function MatchCardGallery({
       </div>
       <Link
         href={`/dashboard/matches/${match.id}`}
+        id={onOpen ? matchCardId(match.id) : undefined}
         onClick={(event) => {
           if (
             !onOpen ||

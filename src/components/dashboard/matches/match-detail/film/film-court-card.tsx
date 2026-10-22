@@ -473,7 +473,11 @@ export function FilmCourt({
               onPointerLeave={(e) => {
                 if (e.pointerType !== "touch") setOpened(null);
               }}
-              onFocus={() => show(keyOf(mark))}
+              // Some touch browsers focus a tapped button before its click;
+              // that tap's readout belongs to `onClick`, or it would act at once.
+              onFocus={() => {
+                if (pressRef.current !== "touch") show(keyOf(mark));
+              }}
               onBlur={() => {
                 if (!opened?.byTouch) setOpened(null);
               }}
