@@ -86,7 +86,10 @@ export interface ParsedWebhook {
   errorCode: string | null;
   errorCategory: string | null;
   errorStep: string | null;
-  /** The `MatchID` we sent, echoed back. Fallback link to a job row. */
+  /**
+   * The `MatchID` we sent, echoed back as `video_id`. Fallback link to a job
+   * row — the only one when the vendor re-queues a job under a new `job_id`.
+   */
   matchId: string | null;
 }
 
@@ -204,7 +207,10 @@ const TRAJECTORIES_URL_KEYS = [
   "balltrajectoriesurl",
 ];
 const ERROR_KEYS = ["errormessage", "error", "message", "reason", "detail"];
-const MATCH_ID_KEYS = ["matchid"];
+// The vendor echoes our `MatchID` as `video_id`. Job 2fe79546 was re-queued
+// after a vendor restart as faaa1186; its completion carried only the new
+// job_id and the video_id, and orphaned while this list read `matchid` alone.
+const MATCH_ID_KEYS = ["matchid", "videoid"];
 
 /**
  * The trimmed video, which arrives beside `strokes_url` on a completion.
