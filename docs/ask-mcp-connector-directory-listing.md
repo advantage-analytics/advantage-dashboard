@@ -118,13 +118,24 @@ Our own API. No personal health data, no sponsored content.
 
 ## 8 · Test & launch
 
-There is no separate credentials field; the text carries them.
+There is no separate credentials field; the text carries them. Anthropic
+publishes no template — the
+[submission guide](https://claude.com/docs/connectors/building/submission)
+asks for every link, credential and step for a fully populated account,
+written for someone who has never used the service. Fill the `<…>` names in
+from the reviewer account (Before submission, item 4) before pasting.
 
+> Advantage is a tennis analytics app: players upload match video or
+> SwingVision exports and get serve, return and rally statistics. The test
+> account below is one player's account, with analysed matches and a team.
+>
 > **Server URL:** https://app.advantage-analytics.com/api/mcp
 >
 > **Test account:** email `<reviewer email>`, password `<reviewer password>`.
-> The account has analysed personal matches, including a Tournament match it
-> recorded, and belongs to a team.
+> It holds analysed personal matches, including a Tournament match it
+> recorded (vs `<opponent>`, `<date>`), and belongs to the team
+> `<team name>`. It has `<n>` Ask questions left this month; each `ask` call
+> uses one.
 >
 > **Steps:**
 >
@@ -133,16 +144,21 @@ There is no separate credentials field; the text carries them.
 >    above (the password field, not the email link).
 > 3. The consent page says the app wants to use Ask on your behalf. Choose
 >    **Allow**; you are returned to Claude.
-> 4. Try each tool: `list_workspaces`; `list_matches`; `get_match` with a
->    match id from it (both players' statistics, the AI summary, key moments
->    and the match link); `opponent_scouting`; `describe_views`; `run_query` with
->    `select count(*) from ask.points where match_id in (select match_id from scope)`;
->    `ask` with "How did my first serve do in my last match?" (uses one monthly
->    question); `update_match` with a match id and `round` set to a new value
->    (on a Tournament match), then set it back; `prepare_video_upload` with an
->    opponent and date — it returns a link and creates nothing until the
->    upload is finished in the browser.
-> 5. For a team's matches, pass a `program_id` from `list_workspaces`.
+> 4. Try each tool:
+>    - `list_workspaces` — the personal workspace and `<team name>`.
+>    - `list_matches` — the account's matches.
+>    - `get_match` with a match id from it — both players' statistics, the
+>      AI summary, key moments and the match link.
+>    - `opponent_scouting` with `<opponent>`.
+>    - `describe_views`, then `run_query` with
+>      `select count(*) from ask.points where match_id in (select match_id from scope)`.
+>    - `ask` with "How did my first serve do in my last match?".
+>    - `update_match` on the `<opponent>` Tournament match, with `round` set
+>      to a new value, then set it back.
+>    - `prepare_video_upload` with any opponent and date — it returns a link
+>      and creates nothing until the upload is finished in the browser.
+> 5. For `<team name>`'s matches, pass its `program_id` from
+>    `list_workspaces` to `list_matches`, `run_query` or `ask`.
 >
 > MCP Inspector also works: its localhost callback is accepted.
 
