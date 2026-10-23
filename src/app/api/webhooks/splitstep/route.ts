@@ -264,6 +264,9 @@ export async function POST(request: NextRequest) {
         deliveryId: record.delivery_id,
         externalJobId: payload.externalJobId,
         matchId: payload.matchId,
+        // The re-queue fallback (record_splitstep_webhook) runs only on a
+        // signed delivery, so false here explains a re-queue that orphaned.
+        signatureVerified: verified,
       },
     );
   }

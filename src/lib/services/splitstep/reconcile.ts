@@ -204,6 +204,7 @@ export async function reconcileVendorJobs(params: {
       if (parsed.nextStatus === "failed" || isStale) {
         return {
           jobId: job.id,
+          externalJobId: job.external_job_id,
           // isStale wins over whatever error object happened to be present —
           // a status/state field matching /stale/i is definitive; a
           // leftover, unrelated error.code (e.g. a stray VIDEO_UNREACHABLE
@@ -226,6 +227,7 @@ export async function reconcileVendorJobs(params: {
         // says exactly that, wired to the manual resubmit path.
         return {
           jobId: job.id,
+          externalJobId: job.external_job_id,
           // OUR code, not a vendor one — vendor codes come from their error
           // object, and this failure is the delivery's, not the job's.
           errorCode: RESULTS_DELIVERY_LOST,
@@ -422,6 +424,8 @@ async function listInFlightJobs(
 
 interface PolledFailure {
   jobId: string;
+  /** The vendor id that was polled — the failure belongs to it alone. */
+  externalJobId: string;
   errorCode: string | null;
   errorCategory: string | null;
   errorStep: string | null;
@@ -904,16 +908,26 @@ function statusFieldOf(body: unknown): string | null {
 async function applyPolledFailure(params: {
   supabase: SupabaseClient;
   jobId: string;
+  externalJobId: string;
   errorCode: string | null;
   errorCategory: string | null;
   errorStep: string | null;
   errorMessage: string;
 }): Promise<boolean> {
-  const { supabase, jobId, errorCode, errorCategory, errorStep, errorMessage } =
-    params;
+  const {
+    supabase,
+    jobId,
+    externalJobId,
+    errorCode,
+    errorCategory,
+    errorStep,
+    errorMessage,
+  } = params;
 
   // Conditional on still being pollable: if a webhook landed between our read
   // and this write, its answer is fresher and this update matches zero rows.
+  // And on still holding the polled vendor id: a re-queue delivery that moved
+  // the row to a new id meanwhile means this answer is about a dead job.
   const { data, error } = await supabase
     .from("processing_jobs")
     .update({
@@ -925,6 +939,7 @@ async function applyPolledFailure(params: {
       completed_at: new Date().toISOString(),
     })
     .eq("id", jobId)
+    .eq("external_job_id", externalJobId)
     .in("status", [...POLLABLE_STATUSES])
     .select("id");
 
