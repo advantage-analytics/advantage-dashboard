@@ -87,8 +87,8 @@ export interface ParsedWebhook {
   errorCategory: string | null;
   errorStep: string | null;
   /**
-   * The `MatchID` we sent, echoed back as `video_id`. Fallback link to a job
-   * row — the only one when the vendor re-queues a job under a new `job_id`.
+   * The `MatchID` we sent, echoed back as `video_id`. `record_splitstep_webhook`
+   * falls back to it only for a vendor re-queue: a job under a new `job_id`.
    */
   matchId: string | null;
 }
@@ -237,7 +237,12 @@ const UUID_RE =
 /** Interpret a parsed JSON webhook body. Never throws. */
 export function parseWebhookPayload(body: unknown): ParsedWebhook {
   const event = findFirst(body, EVENT_KEYS);
-  const matchId = findFirst(body, MATCH_ID_KEYS);
+  // Each key on its own, so a non-uuid under one cannot hide a uuid under the
+  // other.
+  const matchId =
+    MATCH_ID_KEYS.map((key) => findFirst(body, [key])).find(
+      (value) => value !== null && UUID_RE.test(value),
+    ) ?? null;
 
   // A `status` field can carry the event, and an `event` field can carry the
   // status. Try the event first, then fall back to any explicit status.
@@ -277,7 +282,7 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
     errorCategory: stringField(errObj, "category"),
     errorStep: stringField(errObj, "step"),
     // Guarded: the fallback lookup passes this straight into a uuid column.
-    matchId: matchId && UUID_RE.test(matchId) ? matchId : null,
+    matchId,
   };
 }
 

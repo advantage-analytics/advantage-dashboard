@@ -8,10 +8,10 @@
  * while the route was still writing the id it would have been matched on.
  *
  * `record_splitstep_webhook()` looks the job up by `external_job_id`, finds
- * nothing, and falls back to the `MatchID` we echo on the request, which the
- * vendor returns as `video_id`. That fallback only catches this race since
- * `video_id` joined the parser's match-id keys; adoption stays for deliveries
- * recorded before then, which sit with `job_id = null`.
+ * nothing. Its match-id fallback (the vendor's `video_id`) deliberately does
+ * not link a job with no vendor id yet: the submit route's `queued` write is
+ * unguarded and would move a delivery's `failed` back to `queued`. So the
+ * delivery is recorded with `job_id = null` until this replays it.
  *
  * ── Why it matters more than it looks ────────────────────────────────────────
  * For `job_queued` the cost is cosmetic — a missing `queued_ack_at` and one

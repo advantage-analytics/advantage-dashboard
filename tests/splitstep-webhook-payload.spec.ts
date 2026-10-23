@@ -69,6 +69,17 @@ test.describe("parseWebhookPayload", () => {
     expect(out.matchId).toBeNull();
   });
 
+  test("a non-uuid MatchID does not hide a uuid video_id", () => {
+    const out = parseWebhookPayload({
+      job_id: "j",
+      match_id: "12345",
+      video_id: "2d7e5e5c-d142-47d5-a6ce-2be3897a393b",
+      status: "queued",
+    });
+
+    expect(out.matchId).toBe("2d7e5e5c-d142-47d5-a6ce-2be3897a393b");
+  });
+
   test("a null trajectories_url is tolerated — the docs say it may be null", () => {
     const out = parseWebhookPayload({
       job_id: "j",
