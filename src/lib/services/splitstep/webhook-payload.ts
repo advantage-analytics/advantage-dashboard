@@ -161,8 +161,11 @@ function topLevelField(body: Json, candidate: string): string | null {
     return null;
   }
   for (const [key, entry] of Object.entries(body)) {
-    if (normaliseKey(key) === candidate && typeof entry === "string") {
-      return entry.trim() || null;
+    if (normaliseKey(key) !== candidate) continue;
+    // Same coercion as findFirst, so a numeric job_id compares equal.
+    if (typeof entry === "string") return entry.trim() || null;
+    if (typeof entry === "number" && Number.isFinite(entry)) {
+      return String(entry);
     }
   }
   return null;
