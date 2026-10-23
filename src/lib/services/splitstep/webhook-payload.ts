@@ -116,15 +116,14 @@ function findFirst(
   value: Json,
   candidates: string[],
   depth = 0,
-  maxDepth = 8,
 ): string | null {
   // Bounded so a self-referential payload cannot spin. Nothing legitimate is
   // this deep.
-  if (depth > maxDepth || value == null) return null;
+  if (depth > 8 || value == null) return null;
 
   if (Array.isArray(value)) {
     for (const entry of value) {
-      const found = findFirst(entry, candidates, depth + 1, maxDepth);
+      const found = findFirst(entry, candidates, depth + 1);
       if (found !== null) return found;
     }
     return null;
@@ -149,10 +148,23 @@ function findFirst(
   }
 
   for (const entry of Object.values(record)) {
-    const found = findFirst(entry, candidates, depth + 1, maxDepth);
+    const found = findFirst(entry, candidates, depth + 1);
     if (found !== null) return found;
   }
 
+  return null;
+}
+
+/** A top-level string field by normalised key, or null. */
+function topLevelField(body: Json, candidate: string): string | null {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return null;
+  }
+  for (const [key, entry] of Object.entries(body)) {
+    if (normaliseKey(key) === candidate && typeof entry === "string") {
+      return entry.trim() || null;
+    }
+  }
   return null;
 }
 
@@ -238,14 +250,19 @@ const UUID_RE =
 /** Interpret a parsed JSON webhook body. Never throws. */
 export function parseWebhookPayload(body: unknown): ParsedWebhook {
   const event = findFirst(body, EVENT_KEYS);
-  // Top-level keys only: this id can move a job onto a new vendor id, so a
-  // `video_id` nested in some other object must never stand in for ours. Each
-  // key on its own, so a non-uuid under one cannot hide a uuid under the
-  // other. Guarded: the fallback lookup passes this straight into a uuid column.
+  const externalJobId = findFirst(body, JOB_ID_KEYS);
+  // This id can move a job onto a new vendor id (record_splitstep_webhook's
+  // re-queue fallback), so it is read strictly: top-level keys only, and only
+  // when the job id it would move the job onto is the top-level `job_id` too,
+  // never a nested or generic `id`. Each key on its own, so a non-uuid under
+  // one cannot hide a uuid under the other; the lookup passes it straight into
+  // a uuid column.
   const matchId =
-    MATCH_ID_KEYS.map((key) => findFirst(body, [key], 0, 0)).find(
-      (value) => value !== null && UUID_RE.test(value),
-    ) ?? null;
+    externalJobId !== null && topLevelField(body, "jobid") === externalJobId
+      ? (MATCH_ID_KEYS.map((key) => topLevelField(body, key)).find(
+          (value) => value !== null && UUID_RE.test(value),
+        ) ?? null)
+      : null;
 
   // A `status` field can carry the event, and an `event` field can carry the
   // status. Try the event first, then fall back to any explicit status.
@@ -269,7 +286,7 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
       : null;
 
   return {
-    externalJobId: findFirst(body, JOB_ID_KEYS),
+    externalJobId,
     event: event ? event.toLowerCase() : null,
     nextStatus,
     // `url` is last in the candidate list and broad enough to catch our own

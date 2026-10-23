@@ -90,6 +90,17 @@ test.describe("parseWebhookPayload", () => {
     expect(out.matchId).toBeNull();
   });
 
+  test("no match id unless the job id is the top-level job_id", () => {
+    const out = parseWebhookPayload({
+      video_id: "2d7e5e5c-d142-47d5-a6ce-2be3897a393b",
+      status: "job_completed",
+      error: { id: "not-a-job-id" },
+    });
+
+    expect(out.externalJobId).toBe("not-a-job-id");
+    expect(out.matchId).toBeNull();
+  });
+
   test("a null trajectories_url is tolerated — the docs say it may be null", () => {
     const out = parseWebhookPayload({
       job_id: "j",
