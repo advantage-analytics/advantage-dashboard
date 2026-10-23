@@ -80,6 +80,16 @@ test.describe("parseWebhookPayload", () => {
     expect(out.matchId).toBe("2d7e5e5c-d142-47d5-a6ce-2be3897a393b");
   });
 
+  test("a nested video_id is not read as the match id", () => {
+    const out = parseWebhookPayload({
+      job_id: "j",
+      status: "job_completed",
+      trimmed: { video_id: "2d7e5e5c-d142-47d5-a6ce-2be3897a393b" },
+    });
+
+    expect(out.matchId).toBeNull();
+  });
+
   test("a null trajectories_url is tolerated — the docs say it may be null", () => {
     const out = parseWebhookPayload({
       job_id: "j",

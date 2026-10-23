@@ -116,14 +116,15 @@ function findFirst(
   value: Json,
   candidates: string[],
   depth = 0,
+  maxDepth = 8,
 ): string | null {
   // Bounded so a self-referential payload cannot spin. Nothing legitimate is
   // this deep.
-  if (depth > 8 || value == null) return null;
+  if (depth > maxDepth || value == null) return null;
 
   if (Array.isArray(value)) {
     for (const entry of value) {
-      const found = findFirst(entry, candidates, depth + 1);
+      const found = findFirst(entry, candidates, depth + 1, maxDepth);
       if (found !== null) return found;
     }
     return null;
@@ -148,7 +149,7 @@ function findFirst(
   }
 
   for (const entry of Object.values(record)) {
-    const found = findFirst(entry, candidates, depth + 1);
+    const found = findFirst(entry, candidates, depth + 1, maxDepth);
     if (found !== null) return found;
   }
 
@@ -237,10 +238,12 @@ const UUID_RE =
 /** Interpret a parsed JSON webhook body. Never throws. */
 export function parseWebhookPayload(body: unknown): ParsedWebhook {
   const event = findFirst(body, EVENT_KEYS);
-  // Each key on its own, so a non-uuid under one cannot hide a uuid under the
-  // other.
+  // Top-level keys only: this id can move a job onto a new vendor id, so a
+  // `video_id` nested in some other object must never stand in for ours. Each
+  // key on its own, so a non-uuid under one cannot hide a uuid under the
+  // other. Guarded: the fallback lookup passes this straight into a uuid column.
   const matchId =
-    MATCH_ID_KEYS.map((key) => findFirst(body, [key])).find(
+    MATCH_ID_KEYS.map((key) => findFirst(body, [key], 0, 0)).find(
       (value) => value !== null && UUID_RE.test(value),
     ) ?? null;
 
@@ -281,7 +284,6 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
     errorCode: stringField(errObj, "code"),
     errorCategory: stringField(errObj, "category"),
     errorStep: stringField(errObj, "step"),
-    // Guarded: the fallback lookup passes this straight into a uuid column.
     matchId,
   };
 }
