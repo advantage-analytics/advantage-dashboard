@@ -38,6 +38,8 @@
  * | Match video expiry       | the daily cleanup cron (`/api/cron/cleanup-match-videos`), to the video's `uploaded_by`, once per retention clock via `claimSend("match_video_expiry:<attachment>:<clock date>")` — no pref, it is the only notice before a deletion — WIRED |
  * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row (a join request only when the program has no owner to decide it) — to every `is_admin` user plus `INTERNAL_ALERTS_ADDRESS` — WIRED |
  * | Program went live (internal) | `notifyProgramWentLive()` — a claim lands live via `completeClaim()` / `completeClaimWithToken()` (path `auto`) or an admin's `approveClaim()` opens its objection window (path `reviewed`) — to `INTERNAL_ALERTS_ADDRESS` only, once per program via `claimSend("program_live:<program_id>")` — WIRED |
+ * | New signup (internal)    | `public.users` insert → `pg_net` → `/api/webhooks/internal-events` → `notifyInternalEvent()`, to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("signup_internal:<user_id>")` — WIRED once Vault holds `cron_secret` |
+ * | Upload (internal)        | same route: a first-attempt `processing_jobs` row leaving `pending`/`uploading` (video), or a `match_files` insert (SwingVision), to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("upload_internal:<job_id \| match_id>")` — WIRED once Vault holds `cron_secret` |
  *
  * The claim and invite-request rows fire from
  * `services/programs/{admin-actions,claim-actions}.ts`. None of them can fail
@@ -185,6 +187,14 @@ export {
   type AdminReviewNeededInput,
   type ProgramLiveInternalInput,
 } from "./templates/admin";
+
+export {
+  signupInternalEmail,
+  uploadInternalEmail,
+  type SignupInternalInput,
+  type UploadInternalInput,
+  type UploadKind,
+} from "./templates/internal-activity";
 
 export {
   matchVideoExpiryEmail,
