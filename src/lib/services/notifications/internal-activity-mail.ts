@@ -5,6 +5,7 @@ import {
   uploadInternalEmail,
   INTERNAL_ALERTS_ADDRESS,
 } from "@/lib/services/email";
+import { isUuid } from "@/lib/admin/validation";
 import { emailOrigin } from "@/lib/site-url";
 import { describeContext } from "./analysis-mail";
 import { claimSend } from "./should-notify";
@@ -43,7 +44,6 @@ const KINDS: readonly InternalEventKind[] = [
   "video_upload",
   "swingvision_upload",
 ];
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The trigger's body, or null for anything else. Pure, so tested offline. */
 export function parseInternalEvent(body: unknown): InternalEvent | null {
@@ -52,7 +52,7 @@ export function parseInternalEvent(body: unknown): InternalEvent | null {
   if (typeof kind !== "string" || !KINDS.includes(kind as InternalEventKind)) {
     return null;
   }
-  if (typeof id !== "string" || !UUID.test(id)) return null;
+  if (!isUuid(id)) return null;
   return { kind: kind as InternalEventKind, id };
 }
 
