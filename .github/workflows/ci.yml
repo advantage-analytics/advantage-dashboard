@@ -28,9 +28,11 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    # Passing runs take 9–14 min (tests alone ~7–8), so 15 left no room for
-    # a slow runner; 25 still catches a genuinely hung job.
-    timeout-minutes: 25
+    # Passing runs take ~20 min (tests alone 16–18 as of 2026-10-23), so 25
+    # left a slow apt mirror no room: on 2026-10-23 `install-deps` took 5 min
+    # instead of seconds and a fully green run was cancelled at the limit.
+    # 40 still catches a genuinely hung job.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
