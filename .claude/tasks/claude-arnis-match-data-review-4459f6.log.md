@@ -33,3 +33,13 @@ is the runner's. Newest entries at the bottom.
 2. Inserting a point before a locked first point leaves the lock on the second row — decide whether insert-before should carry it.
 3. No way to clear a lock except Undo; T4 may want an explicit unlock.
 4. `lockedGameImbalance` follows the literal `band.winner` rule; in an overflowing game it flags the decider's points — confirm on real data.
+
+## T4 · Locked game boundary: band lock + amber "doesn't add up" slot — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `label-game-band.tsx` reads `locked` from the game's first live row and draws a Lucide Lock + "set by you" (`data-game-locked`). New `label-game-locked.tsx`: `lockedSlotsAtPoints`, a wrapping per-game `checkStepper`, and `BlackGameLocked` — the amber `gameSlot` row `game-imbalance` "Game N doesn’t add up: an ending is probably wrong" with "Check N points" (steps through `lockedGameImbalance`'s ids via the console's `findGap(id, { arm: true })`) and "Add point" (the underflow slot's insert). Rendered by `label-black-rail.tsx` under the locked band; `label-black-parts.tsx` gains the row value. Specs in label-game-band (+2) and label-game-shift (+5).
+**follow-ups:**
+
+1. The locked-game slot is not in `slotStops`, so `]` / `[` and the header's flag count skip it.
+2. Two specs check console/rail wiring by reading source text — brittle against refactors.
+3. Not yet checked in a browser.

@@ -2,6 +2,7 @@
 
 import {
   Fragment,
+  useCallback,
   useMemo,
   useState,
   type FocusEvent,
@@ -86,6 +87,12 @@ import {
   gameServeRepeats,
 } from "@/lib/services/labels/game-serve-order";
 import { LabelGameBand } from "./label-game-band";
+import {
+  BlackGameLocked,
+  checkStepper,
+  lockedSlotsAtPoints,
+  type LockedGameSlot,
+} from "./label-game-locked";
 import {
   BlackGameUnderflow,
   underflowAfterPoints,
@@ -529,6 +536,26 @@ export function LabelBlackRail({
         : NO_UNDERFLOW,
     [editable, points, adScoring, matchTiebreakSet, startScore],
   );
+  // The locked games that do not add up, by their first live point: the
+  // "doesn't add up" slot under the band, in place of the two above, which
+  // skip a locked game (label-game-locked.tsx).
+  const lockedAt = useMemo(
+    () =>
+      editable
+        ? lockedSlotsAtPoints(points, scores.games, adScoring, startScore)
+        : NO_LOCKED,
+    [editable, points, scores, adScoring, startScore],
+  );
+  // "Check N points": one cursor per game for the rail's life, each click the
+  // next doubted point through the console's flag jump (`onGoToPoint`).
+  const [stepCheck] = useState(checkStepper);
+  const checkLocked = useCallback(
+    (key: string, pointIds: readonly string[]) => {
+      const id = stepCheck(key, pointIds);
+      if (id !== null) onGoToPoint?.(id);
+    },
+    [stepCheck, onGoToPoint],
+  );
   // Where the video starts: the prompt above point 1 while set 1 does not
   // add up and nothing is saved, the editor in its place once asked, and the
   // saved line under the header (label-start-score.tsx).
@@ -853,6 +880,7 @@ export function LabelBlackRail({
                 const serveOrder = serveOrderBefore.get(point.id);
                 const serveRepeat = serveRepeatBefore.get(point.id);
                 const short = underflowAfter.get(point.id);
+                const locked = lockedAt.get(point.id);
                 const open = point.id === expandedPointId;
                 return (
                   <Fragment key={point.id}>
@@ -888,6 +916,14 @@ export function LabelBlackRail({
                           draggedGame.gameNumber === band.gameNumber
                         }
                         menu={tone}
+                      />
+                    ) : null}
+                    {locked ? (
+                      <BlackGameLocked
+                        slot={locked}
+                        names={names}
+                        onCheck={onGoToPoint ? checkLocked : undefined}
+                        onAddPoint={onAddPoint}
                       />
                     ) : null}
                     {fold ? (
@@ -1244,3 +1280,4 @@ function overflowBeforePoints(
 const NO_IDS: ReadonlySet<string> = new Set();
 const NO_OVERFLOW: ReadonlyMap<string, OverflowSlot> = new Map();
 const NO_UNDERFLOW: ReadonlyMap<string, UnderflowSlot> = new Map();
+const NO_LOCKED: ReadonlyMap<string, LockedGameSlot> = new Map();

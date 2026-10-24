@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Locked game boundary: band lock + amber "doesn't add up" slot
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/admin/labels/label-game-band.tsx, src/components/admin/labels/label-black-rail.tsx, src/components/admin/labels/label-game-underflow.tsx, src/components/admin/labels/label-game-locked.tsx (new), src/components/admin/labels/label-console.tsx, tests/label-game-band.spec.ts, tests/label-game-shift.spec.ts (guesses)
