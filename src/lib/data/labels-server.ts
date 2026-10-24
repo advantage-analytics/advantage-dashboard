@@ -50,7 +50,7 @@ import {
   type LabelMarks,
   type MarkablePoint,
 } from "@/lib/services/labels/marks";
-import { buildTranscriptForJob } from "@/lib/services/splitstep/persist-transcript";
+import { cachedTranscriptForJob } from "@/lib/services/labels/transcript-cache";
 
 /** One completed job an admin could start or continue labelling. */
 export interface LabelJobRow {
@@ -502,23 +502,20 @@ function joinMarks(
 }
 
 /**
- * The default `buildMarks`: download the job's results file and derive it with
- * the current code; the join onto the label rows comes back as a function, for
- * the points once they are built. Throws when the transcript could not be built
- * or did not reconcile (`joinMarks` turns that into a logged null). Never reads
- * a stored flags column (marks.ts).
+ * The default `buildMarks`: the job's transcript and rallies — from
+ * `label_transcript_cache` when the job's inputs have not changed since the
+ * last reconciled build, otherwise downloaded and derived with the current
+ * code (transcript-cache.ts) — with the join onto the label rows returned as
+ * a function, for the points once they are built. The join is never cached:
+ * it runs over the request's live rows on every load. Throws when the
+ * transcript could not be built or did not reconcile (`joinMarks` turns that
+ * into a logged null). Never reads a stored flags column (marks.ts).
  */
 export async function buildJobMarks(
   db: AdminClient,
   jobId: string,
 ): Promise<MarksJoin> {
-  const { transcript, rallies, reason } = await buildTranscriptForJob({
-    supabase: db,
-    jobId,
-  });
-  if (!transcript || !transcript.ok || !rallies) {
-    throw new Error(reason ?? "transcript could not be built");
-  }
+  const { transcript, rallies } = await cachedTranscriptForJob(db, jobId);
   return (points, options) =>
     buildLabelMarks(transcript, rallies, points, options);
 }

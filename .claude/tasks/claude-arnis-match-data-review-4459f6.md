@@ -113,7 +113,7 @@ ready).
 
 ## T8 · Cache the derived transcript per job
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<ts>_label_transcript_cache.sql (new), src/lib/data/labels-server.ts, src/lib/services/labels/transcript-cache.ts (new), src/lib/services/splitstep/persist-transcript.ts, tests/label-marks.spec.ts, tests/label-transcript-cache.spec.ts (new) (guesses)
 - **done when:**

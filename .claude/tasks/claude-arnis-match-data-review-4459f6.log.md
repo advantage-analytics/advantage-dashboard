@@ -70,3 +70,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. After a flip clamps to an edge, a later carry starts from the clamped centre, so the original spot is not remembered across two moves.
+
+## T8 · Cache the derived transcript per job — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Migration `20261024102938_label_transcript_cache` (applied live) adds `public.label_transcript_cache`: one row per `job_id` (FK, cascade) keyed on `derivation_version`, `results_object_key`, `trajectories_object_key` and a sha256 fingerprint of score/format/ad_scoring, holding the transcript and rallies as jsonb; RLS on, no policies, anon/authenticated revoked (service_role only; security advisor shows only the expected `rls_enabled_no_policy` INFO). New `transcript-cache.ts` (`cachedTranscriptForJob`, read/write, rally serialise/revive — `serves` rebuilt on read since they share identity with strokes). `buildJobMarks` reads the cache first (0 Storage downloads on a hit), writes only when `transcript.ok`, falls back silently on any cache error, and still joins `buildLabelMarks` per request. `persist-transcript.ts` exports `readJobAndMatch`. 16 specs in the new label-transcript-cache spec.
+**follow-ups:**
+
+1. A cached row is about 1 MB per job (156-rally fixture: ~418 KB transcript + ~575 KB rallies); dedupe strokes in the rallies payload if jobs grow.
+2. `seed-session.ts` still builds uncached because it needs `raw`.

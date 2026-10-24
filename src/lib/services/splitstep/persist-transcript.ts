@@ -67,7 +67,7 @@ export type PersistOutcome =
  */
 export type PersistFailure = "refused" | "error";
 
-interface JobRow {
+export interface JobRow {
   id: string;
   match_id: string;
   results_object_key: string | null;
@@ -119,7 +119,10 @@ export function playerNamesFor(
   return out;
 }
 
-interface MatchRow {
+/** A job row that holds results: `readJobAndMatch` refuses one that does not. */
+export type StoredJobRow = JobRow & { results_object_key: string };
+
+export interface MatchRow {
   id: string;
   score: MatchScore | null;
   initial_top_player_is_player1: boolean | null;
@@ -147,6 +150,79 @@ export function resolveAdScoring(
 }
 
 /**
+ * The job and its match, as `buildTranscriptForJob` reads them — or the
+ * outcome it returns when either read fails. A job without stored results is
+ * a refusal, not an error: running again gives the same answer.
+ */
+export async function readJobAndMatch(
+  supabase: ReturnType<typeof createAdminClient>,
+  jobId: string,
+): Promise<
+  | { ok: true; job: StoredJobRow; match: MatchRow }
+  | {
+      ok: false;
+      failure: {
+        transcript: null;
+        reason: string;
+        failure: PersistFailure;
+        job: JobRow | null;
+      };
+    }
+> {
+  const { data: job, error: jobError } = await supabase
+    .from("processing_jobs")
+    .select(
+      "id, match_id, results_object_key, start_time_seconds, initial_top_player_is_player1, ad_scoring, trajectories_object_key, vendor_request",
+    )
+    .eq("id", jobId)
+    .single<JobRow>();
+
+  if (jobError || !job) {
+    return {
+      ok: false,
+      failure: {
+        transcript: null,
+        reason: `job not found: ${jobError?.message}`,
+        failure: "error",
+        job: null,
+      },
+    };
+  }
+  if (!job.results_object_key) {
+    return {
+      ok: false,
+      failure: {
+        transcript: null,
+        reason: "job has no stored results",
+        failure: "refused",
+        job,
+      },
+    };
+  }
+
+  const { data: match, error: matchError } = await supabase
+    .from("matches")
+    .select(
+      "id, score, initial_top_player_is_player1, format, player1_name, player2_name",
+    )
+    .eq("id", job.match_id)
+    .single<MatchRow>();
+
+  if (matchError || !match) {
+    return {
+      ok: false,
+      failure: {
+        transcript: null,
+        reason: `match not found: ${matchError?.message}`,
+        failure: "error",
+        job,
+      },
+    };
+  }
+  return { ok: true, job: job as StoredJobRow, match };
+}
+
+/**
  * Build the transcript for a job without writing anything.
  *
  * Exported so a caller can inspect what would be written — the sane thing to do
@@ -155,6 +231,12 @@ export function resolveAdScoring(
 export async function buildTranscriptForJob(params: {
   supabase: ReturnType<typeof createAdminClient>;
   jobId: string;
+  /**
+   * The job and match rows, when the caller already read them (the labels
+   * console's transcript cache reads both to key its lookup). Skips the two
+   * SELECTs; the Storage downloads still run.
+   */
+  rows?: { job: StoredJobRow; match: MatchRow };
 }): Promise<{
   transcript: Transcript | null;
   reason: string | null;
@@ -184,47 +266,11 @@ export async function buildTranscriptForJob(params: {
 }> {
   const { supabase, jobId } = params;
 
-  const { data: job, error: jobError } = await supabase
-    .from("processing_jobs")
-    .select(
-      "id, match_id, results_object_key, start_time_seconds, initial_top_player_is_player1, ad_scoring, trajectories_object_key, vendor_request",
-    )
-    .eq("id", jobId)
-    .single<JobRow>();
-
-  if (jobError || !job) {
-    return {
-      transcript: null,
-      reason: `job not found: ${jobError?.message}`,
-      failure: "error",
-      job: null,
-    };
-  }
-  if (!job.results_object_key) {
-    return {
-      transcript: null,
-      reason: "job has no stored results",
-      failure: "refused",
-      job,
-    };
-  }
-
-  const { data: match, error: matchError } = await supabase
-    .from("matches")
-    .select(
-      "id, score, initial_top_player_is_player1, format, player1_name, player2_name",
-    )
-    .eq("id", job.match_id)
-    .single<MatchRow>();
-
-  if (matchError || !match) {
-    return {
-      transcript: null,
-      reason: `match not found: ${matchError?.message}`,
-      failure: "error",
-      job,
-    };
-  }
+  const rows = params.rows
+    ? { ok: true as const, ...params.rows }
+    : await readJobAndMatch(supabase, jobId);
+  if (!rows.ok) return rows.failure;
+  const { job, match } = rows;
 
   const { data: blob, error: readError } = await supabase.storage
     .from(RESULTS_BUCKET)
