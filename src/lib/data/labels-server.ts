@@ -51,6 +51,7 @@ import {
   type MarkablePoint,
 } from "@/lib/services/labels/marks";
 import { cachedTranscriptForJob } from "@/lib/services/labels/transcript-cache";
+import { idChunks } from "@/lib/services/labels/chunks";
 
 /** One completed job an admin could start or continue labelling. */
 export interface LabelJobRow {
@@ -639,28 +640,40 @@ export async function readLabelPointsByIds(
   pointIds: readonly string[],
 ): Promise<LabelPoint[]> {
   if (pointIds.length === 0) return [];
-  const ids = [...pointIds];
-  const [pointRows, shotRows] = await Promise.all([
-    readAllPages<LabelPointRow>(
-      db
-        .from("label_points")
-        .select(LABEL_POINT_COLUMNS)
-        .eq("session_id", sessionId)
-        .in("id", ids)
-        .order("point_index")
-        .order("id"),
-      "Could not read label points",
+  // In `idChunks` runs: an `.in()` list travels in the URL, and an undone
+  // cascade can name a few hundred points.
+  const chunks = idChunks(pointIds);
+  const [pointRuns, shotRuns] = await Promise.all([
+    Promise.all(
+      chunks.map((ids) =>
+        readAllPages<LabelPointRow>(
+          db
+            .from("label_points")
+            .select(LABEL_POINT_COLUMNS)
+            .eq("session_id", sessionId)
+            .in("id", ids)
+            .order("point_index")
+            .order("id"),
+          "Could not read label points",
+        ),
+      ),
     ),
-    readAllPages<LabelShotRow>(
-      db
-        .from("label_shots")
-        .select(LABEL_SHOT_COLUMNS)
-        .eq("session_id", sessionId)
-        .in("label_point_id", ids)
-        .order("id"),
-      "Could not read label shots",
+    Promise.all(
+      chunks.map((ids) =>
+        readAllPages<LabelShotRow>(
+          db
+            .from("label_shots")
+            .select(LABEL_SHOT_COLUMNS)
+            .eq("session_id", sessionId)
+            .in("label_point_id", ids)
+            .order("id"),
+          "Could not read label shots",
+        ),
+      ),
     ),
   ]);
+  const pointRows = pointRuns.flat();
+  const shotRows = shotRuns.flat();
   return buildLabelPoints(pointRows, shotRows);
 }
 

@@ -55,14 +55,14 @@ export function lockedSlotsAtPoints(
   const at = new Map<string, LockedGameSlot>();
   const doubted = lockedGameImbalance(points, adScoring, start);
   const byGame = new Map<string, string[]>();
-  const first = new Map<string, string>();
+  const first = new Map<string, LabelPoint>();
   const last = new Map<string, string>();
   const doubtedIds = new Set(doubted);
   for (const point of points) {
     if (point.status === "deleted") continue;
     if (point.setNumber === null || point.gameNumber === null) continue;
     const key = gameKey(point);
-    if (!first.has(key)) first.set(key, point.id);
+    if (!first.has(key)) first.set(key, point);
     last.set(key, point.id);
     if (doubtedIds.has(point.id)) {
       byGame.set(key, [...(byGame.get(key) ?? []), point.id]);
@@ -71,15 +71,14 @@ export function lockedSlotsAtPoints(
   const lastGame = games.at(-1);
   for (const band of games) {
     const key = gameKey(band);
-    const firstId = first.get(key);
+    const head = first.get(key);
     const lastId = last.get(key);
-    if (!firstId || !lastId) continue;
+    if (!head || !lastId) continue;
     // Only a locked game: its first live row holds the lock.
-    const head = points.find((point) => point.id === firstId);
-    if (head?.gameStartLocked !== true) continue;
+    if (head.gameStartLocked !== true) continue;
     if (band.outcome.kind === "decided" || band.winner === null) continue;
     if (band === lastGame && band.outcome.kind === "unfinished") continue;
-    at.set(firstId, {
+    at.set(head.id, {
       band,
       pointIds: byGame.get(key) ?? [],
       lastPointId: lastId,

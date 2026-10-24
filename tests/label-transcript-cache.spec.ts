@@ -64,6 +64,15 @@ const SCORE: MatchScore = (() => {
 
 const FORMAT = { ad_scoring: true, best_of: 3 };
 
+const NULL_INPUTS = {
+  score: null,
+  format: null,
+  ad_scoring: null,
+  start_time_seconds: null,
+  initial_top_player_is_player1: null,
+  player_names: null,
+};
+
 const JOB_ROW = {
   id: JOB_ID,
   match_id: MATCH_ID,
@@ -223,6 +232,9 @@ test.describe("buildJobMarks reads the cache before building", () => {
         score: SCORE,
         format: FORMAT,
         ad_scoring: true,
+        start_time_seconds: 0,
+        initial_top_player_is_player1: null,
+        player_names: [{ player1: "Jordan Lee", player2: "Elena Vargas" }],
       }),
     });
 
@@ -316,6 +328,25 @@ test.describe("buildJobMarks reads the cache before building", () => {
     expect(edited.downloads).toBe(1);
   });
 
+  for (const [what, job, match] of [
+    ["the trim offset", { ...JOB_ROW, start_time_seconds: 12.5 }, MATCH_ROW],
+    [
+      "who started at the top",
+      JOB_ROW,
+      { ...MATCH_ROW, initial_top_player_is_player1: false },
+    ],
+    ["a player's name", JOB_ROW, { ...MATCH_ROW, player2_name: "E. Vargas" }],
+  ] as const) {
+    test(`a changed ${what} misses`, async () => {
+      const fake = fakeClient();
+      await buildJobMarks(fake.db, JOB_ID);
+      const edited = fakeClient(job, match);
+      edited.row = fake.row;
+      await buildJobMarks(edited.db, JOB_ID);
+      expect(edited.downloads).toBe(1);
+    });
+  }
+
   test("a changed job ad_scoring misses", async () => {
     const fake = fakeClient();
     await buildJobMarks(fake.db, JOB_ID);
@@ -331,22 +362,26 @@ test.describe("buildJobMarks reads the cache before building", () => {
         score: { player1: [6, 3], player2: [4, 6], winner: "player1" },
         format: { ad_scoring: true, best_of: 3 },
         ad_scoring: true,
+        start_time_seconds: 0,
+        initial_top_player_is_player1: true,
+        player_names: null,
       }),
     ).toBe(
       transcriptFingerprint({
         score: { winner: "player1", player2: [4, 6], player1: [6, 3] },
         format: { best_of: 3, ad_scoring: true },
         ad_scoring: true,
+        start_time_seconds: 0,
+        initial_top_player_is_player1: true,
+        player_names: null,
       }),
     );
     expect(stableStringify({ b: 1, a: [2, { d: 3, c: undefined }] })).toBe(
       '{"a":[2,{"d":3}],"b":1}',
     );
     expect(
-      transcriptFingerprint({ score: null, format: null, ad_scoring: null }),
-    ).not.toBe(
-      transcriptFingerprint({ score: null, format: null, ad_scoring: true }),
-    );
+      transcriptFingerprint({ ...NULL_INPUTS, ad_scoring: null }),
+    ).not.toBe(transcriptFingerprint({ ...NULL_INPUTS, ad_scoring: true }));
   });
 });
 

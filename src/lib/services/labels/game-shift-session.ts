@@ -42,9 +42,9 @@ import {
   type GameShiftWrite,
   type ShiftPoint,
 } from "./game-shift";
+import { idChunks } from "./chunks";
 import {
   gated,
-  idChunks,
   normaliseId,
   withShots,
   writeShotSwaps,

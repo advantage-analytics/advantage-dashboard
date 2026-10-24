@@ -35,6 +35,7 @@ import {
 } from "@/lib/services/splitstep/derivation";
 import {
   buildTranscriptForJob,
+  playerNamesFor,
   readJobAndMatch,
   type MatchRow,
   type StoredJobRow,
@@ -50,7 +51,7 @@ export interface TranscriptCacheKey {
   results_object_key: string;
   /** '' when the job stored no trajectories file. */
   trajectories_object_key: string;
-  /** sha256 hex of the match's `score` and `format` and the job's `ad_scoring`. */
+  /** sha256 hex of the build's non-file inputs (`transcriptFingerprint`). */
   fingerprint: string;
 }
 
@@ -82,14 +83,21 @@ export function stableStringify(value: unknown): string {
 }
 
 /**
- * The fingerprint of the inputs the build folds under: the match's entered
- * score and format (`best_of`, `ad_scoring`, `play_on_lets`, …) and the job's
- * own `ad_scoring`, which beats the format's (`resolveAdScoring`).
+ * The fingerprint of the inputs the build folds under, beside the files: the
+ * match's entered score and format (`best_of`, `ad_scoring`, `play_on_lets`,
+ * …), the job's own `ad_scoring`, which beats the format's
+ * (`resolveAdScoring`), the trim offset every stroke time is shifted by, who
+ * started at the top (job, else match), and the name pairs `reconcile` reads
+ * player1 from (`playerNamesFor`). A correction to any of them after the row
+ * was written must miss, or the console keeps the old hitters and times.
  */
 export function transcriptFingerprint(input: {
   score: unknown;
   format: unknown;
   ad_scoring: boolean | null | undefined;
+  start_time_seconds: number | string | null | undefined;
+  initial_top_player_is_player1: boolean | null | undefined;
+  player_names: unknown;
 }): string {
   return createHash("sha256")
     .update(
@@ -97,6 +105,10 @@ export function transcriptFingerprint(input: {
         score: input.score ?? null,
         format: input.format ?? null,
         ad_scoring: input.ad_scoring ?? null,
+        start_time_seconds: input.start_time_seconds ?? null,
+        initial_top_player_is_player1:
+          input.initial_top_player_is_player1 ?? null,
+        player_names: input.player_names ?? null,
       }),
     )
     .digest("hex");
@@ -117,6 +129,11 @@ export function transcriptCacheKey(
       score: match.score,
       format: match.format,
       ad_scoring: job.ad_scoring,
+      start_time_seconds: job.start_time_seconds,
+      initial_top_player_is_player1:
+        job.initial_top_player_is_player1 ??
+        match.initial_top_player_is_player1,
+      player_names: playerNamesFor(job, match),
     }),
   };
 }

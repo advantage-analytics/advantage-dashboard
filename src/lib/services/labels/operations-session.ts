@@ -39,7 +39,7 @@ import {
   syncEndingAfterShotChange,
   type LabelPointEndingSynced,
 } from "./ending-session";
-import { chunksOf } from "./chunks";
+import { chunksOf, idChunks } from "./chunks";
 import { LABEL_SHOT_COLUMNS, toLabelShot, type LabelShotRow } from "./rows";
 import {
   applyShotsRemoved,
@@ -230,17 +230,6 @@ export function shotSwapOps(shots: readonly ShotSwapWrite[]): LabelEditOp[] {
     set: { ...group.values },
     expect_status: group.was,
   }));
-}
-
-/**
- * `ids` in runs short enough for one request. An `.in()` filter travels in
- * the URL, a uuid is 37 characters of it, and a long cascade flips every
- * stroke of every point it moves: a few hundred ids is past what the gateway
- * takes, and the write is refused after the points before it have landed.
- */
-const ID_CHUNK = 100;
-export function idChunks(ids: readonly string[]): string[][] {
-  return chunksOf(ids, ID_CHUNK);
 }
 
 /** `points` each with its strokes from `shots`, matched on `labelPointId`. */
