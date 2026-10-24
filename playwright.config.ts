@@ -24,7 +24,10 @@ export default defineConfig({
   // default overlaps their already-concurrent fixture logins and database
   // writes, causing statement timeouts and exhausted auth retries. Run one
   // suite at a time; explicit race tests still issue concurrent operations.
-  workers: 1,
+  // CI has no Supabase keys, so its live specs skip and the `live-db`
+  // project's own `workers: 1` is all they would need anyway; there the
+  // offline suite gets every core instead of running 8000 tests serially.
+  workers: process.env.CI ? "100%" : 1,
   reporter: process.env.CI ? "dot" : "list",
   globalSetup: "./tests/fixtures/live-db-lock.ts",
   projects: [
