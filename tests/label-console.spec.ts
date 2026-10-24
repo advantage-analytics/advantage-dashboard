@@ -22,10 +22,13 @@ import type {
   LabelVideo,
 } from "@/lib/services/labels/session";
 import { count, tag as tagOf, text } from "./fixtures/html-probe";
+import { applyUndoDiff } from "@/lib/services/labels/undo-diff";
 import {
   FIXTURE_POINT_IDS,
   editContext,
+  labelPoint,
   labelSessionFixture,
+  labelShot,
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -1491,5 +1494,99 @@ test.describe("Enter and ⌘ Enter", () => {
     expect(consoleSource).toContain(
       "setChecked(expanded.id, expanded.checkedAt === null);",
     );
+  });
+});
+
+test.describe("Undo applies a diff (undo-diff.ts), never a whole re-read", () => {
+  const consoleSource = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+
+  test("the console's undoLast merges the answer into its rows", () => {
+    const body = consoleSource.slice(
+      consoleSource.indexOf("  async function undoLast() {"),
+    );
+    const fn = body.slice(0, body.indexOf("\n  }\n"));
+    expect(fn).toContain(
+      "applyUndoDiff(rows, result.changed, result.removedPointIds)",
+    );
+    expect(fn).not.toContain("setPoints(result.points)");
+  });
+
+  test("changed points replace theirs in place, removed ones leave, the rail order holds", () => {
+    const session = labelSessionFixture();
+    const { P1, P2, P3, P4 } = FIXTURE_POINT_IDS;
+    const p3 = session.points.find((p) => p.id === P3)!;
+    const changedP3 = {
+      ...p3,
+      winner: "p2" as const,
+      status: "edited" as const,
+    };
+    // Answered out of rail order, with a point the console has never seen.
+    const restored = labelPoint("p-restored", 2.5, {
+      shots: [labelShot("s-restored", "p-restored", { eventId: 900 })],
+    });
+    const rows = applyUndoDiff(session.points, [restored, changedP3], [P2]);
+    expect(rows.map((p) => p.id)).toEqual([P1, P3, "p-restored", P4]);
+    expect(rows[1]).toBe(changedP3);
+    expect(rows[0]).toBe(session.points[0]);
+    expect(rows[3]).toBe(session.points[3]);
+    // The fixture itself is untouched.
+    expect(session.points.map((p) => p.id)).toEqual([P1, P2, P3, P4]);
+  });
+
+  test("an undone split comes back right: both owners are in the diff, each with the strokes it owns", () => {
+    const session = labelSessionFixture();
+    const { P1, P2, P3, P4 } = FIXTURE_POINT_IDS;
+    // Before the undo the console shows the split: P4's strokes after its
+    // fault went to a new point P5, and P4 moved down a slot behind it.
+    const p4 = session.points[3];
+    const [fault, ...moved] = p4.shots;
+    const beforeUndo: LabelPoint[] = [
+      ...session.points.slice(0, 3),
+      { ...p4, shots: [fault] },
+      labelPoint("p-0005", 4, {
+        status: "added",
+        shots: moved.map((s) => ({ ...s, labelPointId: "p-0005" })),
+      }),
+    ];
+    // The server answers P4 whole again and names the point it deleted.
+    const rows = applyUndoDiff(beforeUndo, [p4], ["p-0005"]);
+    expect(rows.map((p) => [p.id, p.pointIndex])).toEqual([
+      [P1, 0],
+      [P2, 1],
+      [P3, 2],
+      [P4, 3],
+    ]);
+    const shotOwners = rows.flatMap((p) => p.shots.map((s) => [s.id, p.id]));
+    expect(shotOwners.filter(([, owner]) => owner === P4).length).toBe(
+      p4.shots.length,
+    );
+    // No stroke under two points, none lost.
+    expect(new Set(shotOwners.map(([id]) => id)).size).toBe(shotOwners.length);
+    expect(shotOwners.length).toBe(
+      session.points.reduce((n, p) => n + p.shots.length, 0),
+    );
+  });
+
+  test("an undone combine, the other way: two points answered, the merged one shrinks", () => {
+    const session = labelSessionFixture();
+    const { P1, P2, P3, P4 } = FIXTURE_POINT_IDS;
+    const p1 = session.points[0];
+    const p2 = session.points[1];
+    // The console shows P1 holding P2's strokes, P2 a tombstone with none.
+    const combined = session.points.map((p) =>
+      p.id === P1
+        ? { ...p, shots: [...p.shots, ...p2.shots] }
+        : p.id === P2
+          ? { ...p, shots: [], status: "deleted" as const }
+          : p,
+    );
+    const rows = applyUndoDiff(combined, [p2, p1], []);
+    expect(rows.map((p) => p.id)).toEqual([P1, P2, P3, P4]);
+    expect(rows[0].shots.map((s) => s.id)).toEqual(p1.shots.map((s) => s.id));
+    expect(rows[1].shots.map((s) => s.id)).toEqual(p2.shots.map((s) => s.id));
+    expect(rows[1].status).toBe(p2.status);
   });
 });

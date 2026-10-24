@@ -252,6 +252,7 @@ import { ProgramCrest } from "@/components/dashboard/settings/teams/program-cres
 import { getInitials } from "@/lib/data/match-utils";
 import type { LabelUploadInfo } from "@/lib/data/label-overview-server";
 import type { LabelUndoResult } from "@/lib/services/labels/undo-session";
+import { applyUndoDiff } from "@/lib/services/labels/undo-diff";
 import type {
   LabelAddMissingShotsResult,
   MissingShotAdd,
@@ -1174,11 +1175,14 @@ export function LabelConsole({
     return result;
   }
 
-  // Undo: the server rewinds the newest action on its journal and answers
-  // every row, which replace the console's own — an undone split or combine
-  // moves strokes between points and renumbers the ones after. Not while a
-  // write is in flight: its answer would land on rows that are gone. False
-  // once the server has said nothing is left, until the next write.
+  // Undo: the server rewinds the newest action on its journal and answers the
+  // rows it touched, applied here as a diff (`applyUndoDiff`) — changed points
+  // replace their rows, removed ones leave, and the rail's order is restored.
+  // An undone split or combine moves strokes between two points; both come
+  // back whole. Scores, marks and locks recompute from the merged rows as
+  // after any edit. Not while a write is in flight: its answer would land on
+  // rows that are gone. False once the server has said nothing is left, until
+  // the next write.
   const [undoing, setUndoing] = useState(false);
   const [undoEmpty, setUndoEmpty] = useState(false);
   if (undoEmpty && saveStatus.pending > 0) setUndoEmpty(false);
@@ -1201,7 +1205,9 @@ export function LabelConsole({
       return;
     }
     setPlacement(NO_PLACEMENT);
-    setPoints(result.points);
+    setPoints((rows) =>
+      applyUndoDiff(rows, result.changed, result.removedPointIds),
+    );
     dispatchSave({ type: "success", at: Date.now() });
     // After the success above, which counts as a write settling.
     setUndoEmpty(result.undone === null || result.remaining === 0);
@@ -3720,7 +3726,7 @@ export interface LabelConsoleOperations {
   reopenSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
   /**
    * Rewind the session's newest action, whatever it was, and answer the rows
-   * as they now stand (undo-session.ts). Absent: no "Undo".
+   * it touched as a diff (undo-session.ts). Absent: no "Undo".
    */
   undo?: (sessionId: string) => Promise<LabelUndoResult>;
   /**

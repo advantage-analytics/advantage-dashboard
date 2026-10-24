@@ -125,7 +125,7 @@ ready).
 
 ## T9 · Undo answers a diff, not every row
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<ts>_undo_label_op_returns_rows.sql (new), src/lib/services/labels/undo-session.ts, src/lib/data/labels-server.ts, src/components/admin/labels/label-console.tsx, tests/label-undo.spec.ts, tests/label-console.spec.ts (guesses)
 - **done when:**

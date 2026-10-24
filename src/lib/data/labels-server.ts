@@ -605,9 +605,68 @@ export function readPlayOnLets(format: unknown): boolean {
 }
 
 /**
+ * Point rows → the console's points, in `point_index` order, each with its
+ * shots folded under it in video order (`orderLabelShots`), never the order
+ * PostgREST returned them in. A shot whose point is not in `pointRows` is
+ * dropped: the by-id reader asks for shots by owning point, so none is.
+ */
+export function buildLabelPoints(
+  pointRows: readonly LabelPointRow[],
+  shotRows: readonly LabelShotRow[],
+): LabelPoint[] {
+  const shotsByPoint = new Map<string, LabelShot[]>();
+  for (const row of shotRows) {
+    const list = shotsByPoint.get(row.label_point_id) ?? [];
+    list.push(toLabelShot(row));
+    shotsByPoint.set(row.label_point_id, list);
+  }
+  return [...pointRows]
+    .sort((a, b) => a.point_index - b.point_index)
+    .map((row) =>
+      toLabelPoint(row, orderLabelShots(shotsByPoint.get(row.id) ?? [])),
+    );
+}
+
+/**
+ * Some of a session's points, by id, each built whole with its shots — what
+ * the console's Undo reads back (undo-session.ts): the rows the rewind
+ * touched, not the session. `session_id` is on both reads so an id from
+ * another session answers nothing. Nothing asked, nothing read.
+ */
+export async function readLabelPointsByIds(
+  db: AdminClient,
+  sessionId: string,
+  pointIds: readonly string[],
+): Promise<LabelPoint[]> {
+  if (pointIds.length === 0) return [];
+  const ids = [...pointIds];
+  const [pointRows, shotRows] = await Promise.all([
+    readAllPages<LabelPointRow>(
+      db
+        .from("label_points")
+        .select(LABEL_POINT_COLUMNS)
+        .eq("session_id", sessionId)
+        .in("id", ids)
+        .order("point_index")
+        .order("id"),
+      "Could not read label points",
+    ),
+    readAllPages<LabelShotRow>(
+      db
+        .from("label_shots")
+        .select(LABEL_SHOT_COLUMNS)
+        .eq("session_id", sessionId)
+        .in("label_point_id", ids)
+        .order("id"),
+      "Could not read label shots",
+    ),
+  ]);
+  return buildLabelPoints(pointRows, shotRows);
+}
+
+/**
  * Rows → the console's session. Pure and exported for the spec: shots fold
- * under their point and are put in video order by `orderLabelShots`, never
- * by the order PostgREST returned them in.
+ * under their point by `buildLabelPoints`.
  *
  * `job` is the session's `processing_jobs` row (its `ad_scoring`), or null
  * when the job is gone or was not read because the session has its own.
@@ -619,18 +678,7 @@ export function buildLabelSession(
   shotRows: readonly LabelShotRow[],
   job: JobScoringRow | null = null,
 ): LabelSession {
-  const shotsByPoint = new Map<string, LabelShot[]>();
-  for (const row of shotRows) {
-    const list = shotsByPoint.get(row.label_point_id) ?? [];
-    list.push(toLabelShot(row));
-    shotsByPoint.set(row.label_point_id, list);
-  }
-
-  const points: LabelPoint[] = [...pointRows]
-    .sort((a, b) => a.point_index - b.point_index)
-    .map((row) =>
-      toLabelPoint(row, orderLabelShots(shotsByPoint.get(row.id) ?? [])),
-    );
+  const points = buildLabelPoints(pointRows, shotRows);
 
   return {
     id: session.id,

@@ -27,6 +27,7 @@ import {
   planGameBoundary,
 } from "@/lib/services/labels/game-boundary";
 import { gameKey, labelScores } from "@/lib/services/labels/score";
+import { applyUndoDiff } from "@/lib/services/labels/undo-diff";
 import type {
   LabelGameType,
   LabelPoint,
@@ -2439,15 +2440,19 @@ test.describe("a locked game on the rail", () => {
     expect(band2).toContain("data-game-locked");
     expect(text(`<p ${band2}`)).toContain("set by you");
 
-    // `undoLast` sets the console's rows to the undo's answer, whole: the
-    // moved rows as they were read before the drag, the flag false.
+    // `undoLast` merges the undo's answer into the console's rows
+    // (undo-diff.ts): the moved rows as they were read before the drag,
+    // the flag false, replace theirs in place.
     const consoleSource = readFileSync(CONSOLE, "utf8");
     const undoSource = consoleSource.slice(
       consoleSource.indexOf("  async function undoLast()"),
       consoleSource.indexOf("  async function addAllMissingShots()"),
     );
-    expect(undoSource).toContain("setPoints(result.points);");
-    const undone = black(sessionWith(before));
+    expect(undoSource).toContain(
+      "applyUndoDiff(rows, result.changed, result.removedPointIds)",
+    );
+    const changed = before.filter((p) => plan.write.pointIds.includes(p.id));
+    const undone = black(sessionWith(applyUndoDiff(moved, changed, [])));
     expect(undone).not.toContain("data-game-locked");
     expect(undone).not.toContain("set by you");
   });

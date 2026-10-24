@@ -79,3 +79,11 @@ is the runner's. Newest entries at the bottom.
 
 1. A cached row is about 1 MB per job (156-rally fixture: ~418 KB transcript + ~575 KB rallies); dedupe strokes in the rallies payload if jobs grow.
 2. `seed-session.ts` still builds uncached because it needs `raw`.
+
+## T9 · Undo answers a diff, not every row — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Migration `20261024110044_undo_label_op_returns_rows` (applied live via the claude.ai connector after the plain MCP declined; repo file renamed to the live version by the runner) `create or replace`s `undo_label_op(uuid) returns jsonb` with the same signature: the answer keeps `undone`/`remaining` and the `P0001` refusal and adds `points`, `shots`, `deleted_points`, `deleted_shots` and `shot_points` (each touched shot's current and journaled owner). Grants unchanged (service_role + owner); no new security advisor findings. `undoLabelOp` reads only the touched points with their shots (`readLabelPointsByIds`) and answers `{ ok, undone, remaining, changed, removedPointIds }`; a failed read-back is reported, not thrown. New pure `applyUndoDiff`; the console applies the diff instead of re-reading the session. Specs in label-undo, label-console (split and combine), label-game-shift.
+**follow-ups:**
+
+1. `add-missing-shots.ts` still re-reads the whole session; the same diff treatment would speed it up.
