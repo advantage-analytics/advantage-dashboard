@@ -8,10 +8,10 @@
  * while the route was still writing the id it would have been matched on.
  *
  * `record_splitstep_webhook()` looks the job up by `external_job_id`, finds
- * nothing, and falls back to the `MatchID` we echo on the request. That fallback
- * does not save us here: the vendor's payload carries `job_id` and `video_id`
- * but does NOT echo `MatchID`, so there is nothing to fall back to. The delivery
- * is recorded with `job_id = null` and stays there.
+ * nothing. Its match-id fallback (the vendor's `video_id`) deliberately does
+ * not link a job with no vendor id yet: the submit route's `queued` write is
+ * unguarded and would move a delivery's `failed` back to `queued`. So the
+ * delivery is recorded with `job_id = null` until this replays it.
  *
  * ── Why it matters more than it looks ────────────────────────────────────────
  * For `job_queued` the cost is cosmetic — a missing `queued_ack_at` and one
@@ -29,9 +29,6 @@
  * time the job lookup succeeds, so it links the row, advances the status under
  * the usual rank guard, and appends the payload. No new SQL, no second code path
  * that could disagree with the first.
- *
- * The durable fix is the vendor echoing `MatchID` on their webhooks, which would
- * make the existing fallback do this for free. Worth asking for.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";

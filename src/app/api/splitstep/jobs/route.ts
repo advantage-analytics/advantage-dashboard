@@ -223,9 +223,9 @@ export async function POST(request: NextRequest) {
 
       // Pick up any delivery that beat the `queued` write. The vendor fires
       // `job_queued` on acceptance, and on the first real job it landed 0.9s
-      // after our POST — before `external_job_id` existed to match it against,
-      // and their payload does not echo `MatchID`, so the usual fallback had
-      // nothing to work with.
+      // after our POST — before `external_job_id` existed to match it against.
+      // The match-id fallback skips a job with no vendor id on purpose (see
+      // record_splitstep_webhook), so it orphans until this adopts it.
       //
       // In after(), and deliberately NOT inside the handler's try: a throw
       // there runs the catch block, which releases quota and retires the video

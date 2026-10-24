@@ -46,6 +46,71 @@ test.describe("parseWebhookPayload", () => {
     expect(out.errorMessage).toBeNull();
   });
 
+  test("video_id is the echoed MatchID — the fallback when job_id is new", () => {
+    // A vendor restart re-queues a job under a new job_id; only video_id still
+    // names the match. Shape of the 2026-10-21 completion that orphaned.
+    const out = parseWebhookPayload({
+      job_id: "faaa1186-aa02-4fde-94dc-80a770daa376",
+      video_id: "2d7e5e5c-d142-47d5-a6ce-2be3897a393b",
+      status: "job_completed",
+      strokes_url: STROKES,
+    });
+
+    expect(out.matchId).toBe("2d7e5e5c-d142-47d5-a6ce-2be3897a393b");
+  });
+
+  test("a video_id that is not a uuid is not a match id", () => {
+    const out = parseWebhookPayload({
+      job_id: "j",
+      video_id: "v",
+      status: "queued",
+    });
+
+    expect(out.matchId).toBeNull();
+  });
+
+  test("a non-uuid MatchID does not hide a uuid video_id", () => {
+    const out = parseWebhookPayload({
+      job_id: "j",
+      match_id: "12345",
+      video_id: "2d7e5e5c-d142-47d5-a6ce-2be3897a393b",
+      status: "queued",
+    });
+
+    expect(out.matchId).toBe("2d7e5e5c-d142-47d5-a6ce-2be3897a393b");
+  });
+
+  test("a nested video_id is not read as the match id", () => {
+    const out = parseWebhookPayload({
+      job_id: "j",
+      status: "job_completed",
+      trimmed: { video_id: "2d7e5e5c-d142-47d5-a6ce-2be3897a393b" },
+    });
+
+    expect(out.matchId).toBeNull();
+  });
+
+  test("no match id unless the job id is the top-level job_id", () => {
+    const out = parseWebhookPayload({
+      video_id: "2d7e5e5c-d142-47d5-a6ce-2be3897a393b",
+      status: "job_completed",
+      error: { id: "not-a-job-id" },
+    });
+
+    expect(out.externalJobId).toBe("not-a-job-id");
+    expect(out.matchId).toBeNull();
+  });
+
+  test("a numeric top-level job_id still qualifies the match id", () => {
+    const out = parseWebhookPayload({
+      job_id: 12345,
+      video_id: "2d7e5e5c-d142-47d5-a6ce-2be3897a393b",
+      status: "queued",
+    });
+
+    expect(out.matchId).toBe("2d7e5e5c-d142-47d5-a6ce-2be3897a393b");
+  });
+
   test("a null trajectories_url is tolerated — the docs say it may be null", () => {
     const out = parseWebhookPayload({
       job_id: "j",

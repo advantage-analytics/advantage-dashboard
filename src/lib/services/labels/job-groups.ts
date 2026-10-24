@@ -186,3 +186,28 @@ export function countsSentence(counts: StateCounts): string {
   ].filter(Boolean);
   return parts.join(" · ");
 }
+
+/**
+ * "Oct 3, 2026, 2:14 PM UTC" — when a job was analysed. UTC named, so the
+ * server and every browser agree on the moment.
+ *
+ * Every whitespace character is folded to a plain space because the engines do
+ * not agree on which one goes before "PM": Node and Chromium print U+0020,
+ * Safari prints U+202F (narrow no-break space, as ICU 72+ does). The server
+ * render and Safari's hydration then differ by that one character, and React
+ * throws #418 (hydration text mismatch) on /admin/labels.
+ */
+export function analysedInstant(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const text = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(date);
+  return `${text.replace(/\s/g, " ")} UTC`;
+}

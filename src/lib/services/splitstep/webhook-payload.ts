@@ -86,7 +86,10 @@ export interface ParsedWebhook {
   errorCode: string | null;
   errorCategory: string | null;
   errorStep: string | null;
-  /** The `MatchID` we sent, echoed back. Fallback link to a job row. */
+  /**
+   * The `MatchID` we sent, echoed back as `video_id`. `record_splitstep_webhook`
+   * falls back to it only for a vendor re-queue: a job under a new `job_id`.
+   */
   matchId: string | null;
 }
 
@@ -152,6 +155,22 @@ function findFirst(
   return null;
 }
 
+/** A top-level string field by normalised key, or null. */
+function topLevelField(body: Json, candidate: string): string | null {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return null;
+  }
+  for (const [key, entry] of Object.entries(body)) {
+    if (normaliseKey(key) !== candidate) continue;
+    // Same coercion as findFirst, so a numeric job_id compares equal.
+    if (typeof entry === "string") return entry.trim() || null;
+    if (typeof entry === "number" && Number.isFinite(entry)) {
+      return String(entry);
+    }
+  }
+  return null;
+}
+
 /**
  * Map a vendor event or status string onto our job status.
  *
@@ -204,7 +223,10 @@ const TRAJECTORIES_URL_KEYS = [
   "balltrajectoriesurl",
 ];
 const ERROR_KEYS = ["errormessage", "error", "message", "reason", "detail"];
-const MATCH_ID_KEYS = ["matchid"];
+// The vendor echoes our `MatchID` as `video_id`. Job 2fe79546 was re-queued
+// after a vendor restart as faaa1186; its completion carried only the new
+// job_id and the video_id, and orphaned while this list read `matchid` alone.
+const MATCH_ID_KEYS = ["matchid", "videoid"];
 
 /**
  * The trimmed video, which arrives beside `strokes_url` on a completion.
@@ -231,7 +253,19 @@ const UUID_RE =
 /** Interpret a parsed JSON webhook body. Never throws. */
 export function parseWebhookPayload(body: unknown): ParsedWebhook {
   const event = findFirst(body, EVENT_KEYS);
-  const matchId = findFirst(body, MATCH_ID_KEYS);
+  const externalJobId = findFirst(body, JOB_ID_KEYS);
+  // This id can move a job onto a new vendor id (record_splitstep_webhook's
+  // re-queue fallback), so it is read strictly: top-level keys only, and only
+  // when the job id it would move the job onto is the top-level `job_id` too,
+  // never a nested or generic `id`. Each key on its own, so a non-uuid under
+  // one cannot hide a uuid under the other; the lookup passes it straight into
+  // a uuid column.
+  const matchId =
+    externalJobId !== null && topLevelField(body, "jobid") === externalJobId
+      ? (MATCH_ID_KEYS.map((key) => topLevelField(body, key)).find(
+          (value) => value !== null && UUID_RE.test(value),
+        ) ?? null)
+      : null;
 
   // A `status` field can carry the event, and an `event` field can carry the
   // status. Try the event first, then fall back to any explicit status.
@@ -255,7 +289,7 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
       : null;
 
   return {
-    externalJobId: findFirst(body, JOB_ID_KEYS),
+    externalJobId,
     event: event ? event.toLowerCase() : null,
     nextStatus,
     // `url` is last in the candidate list and broad enough to catch our own
@@ -270,8 +304,7 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
     errorCode: stringField(errObj, "code"),
     errorCategory: stringField(errObj, "category"),
     errorStep: stringField(errObj, "step"),
-    // Guarded: the fallback lookup passes this straight into a uuid column.
-    matchId: matchId && UUID_RE.test(matchId) ? matchId : null,
+    matchId,
   };
 }
 
