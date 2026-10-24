@@ -137,7 +137,7 @@ ready).
 
 ## T10 · Navigation: pin holds while the film plays, selection follows the current point, ←/→ re-follow
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-now-playing.ts, tests/label-console.spec.ts, tests/label-playback.spec.ts (guesses)
 - **routes:** /admin/labels/[sessionId]

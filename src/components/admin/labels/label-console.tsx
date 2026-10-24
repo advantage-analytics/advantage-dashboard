@@ -228,7 +228,13 @@ import {
   type LabelLayoutMode,
 } from "./label-layout";
 import { sideNames } from "./label-format";
-import { nowPlayingOf, nowPlayingReadout } from "./label-now-playing";
+import {
+  currentPointOf,
+  nowPlayingOf,
+  nowPlayingReadout,
+  pinLive,
+  selectionFor,
+} from "./label-now-playing";
 import {
   openFlags,
   scoreStop,
@@ -363,13 +369,17 @@ function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
  * reported on the save line; the status it implies comes from the same pure
  * rule the server writes (`edit.ts`).
  *
- * - Current point: the one the playhead is in; between points, the last one it
- *   was in or the one clicked (`restPointId`). Exactly one point is unfolded. A
- *   row click seeks to its first stroke.
+ * - Current point (`currentPointOf`): the held point; else the one the
+ *   playhead is in; between points, the last one it was in or the one clicked
+ *   (`restPointId`). Exactly one point is unfolded. A row click seeks to its
+ *   first stroke. A stroke selected outside the current point is let go
+ *   (`selectionFor`) the moment the current point changes.
  * - Follow or hold: `PointFocus` (film-timeline.ts) decides whether the rail
- *   scrolls with the video. A click, an editor or a hand scroll holds; the "Now
- *   playing" pill or re-clicking the playing row follows again. Holding never
- *   unfolds a second point.
+ *   scrolls with the video, and a hold on a point pins it as the current one
+ *   while the film plays on. A click, an editor or a hand scroll holds; the
+ *   "Now playing" pill, re-clicking the playing row or ← / → (and the
+ *   transport's Previous / Next) follow again. Holding never unfolds a second
+ *   point.
  * - The page does not scroll; the rail's scroller (`data-label-rail-scroller`)
  *   does.
  * - Row operations share one optimistic contract (`runOperation`). Delete and
@@ -552,14 +562,6 @@ export function LabelConsole({
       ? initialExpandedPointId
       : (defaultPoint(session.points)?.id ?? null),
   );
-  // A point opened with no live, timed stroke (one just inserted, say) has
-  // no span on the film, so the playing point would win over it at once and
-  // it could never open. It stays current until the video plays into another
-  // row: `at` is the playing row it was opened over.
-  const [pinned, setPinned] = useState<{
-    pointId: string;
-    at: string;
-  } | null>(null);
   // An added stroke's add while it is in flight, by the id the console gave
   // it: true once its row is saved. Its edits and its delete wait on it.
   const addsInFlight = useRef(new Map<string, Promise<boolean>>());
@@ -791,17 +793,22 @@ export function LabelConsole({
     return stop ? { start: stop.start, end: stop.end } : null;
   }, [stops, playingPointId]);
 
-  // The current point: the playing one, else `restPointId`. The one point that
-  // is unfolded, on the court and under Enter.
-  // A pin lets go once the video moves on, and once its point is gone
-  // (deleted, combined away): a gone point is never the current one.
-  const pinHolds =
-    pinned !== null &&
-    pinned.at === playingKey &&
-    points.some((p) => p.id === pinned.pointId && p.status !== "deleted");
-  if (pinned !== null && !pinHolds) setPinned(null);
-  const pinnedPointId = pinHolds ? pinned.pointId : null;
-  const currentPointId = pinnedPointId ?? playingPointId ?? restPointId;
+  // The current point (`currentPointOf`): the held point, else the playing
+  // one, else `restPointId`. The one point that is unfolded, on the court and
+  // under Enter and the stroke keys. The hold is the pin: it stays while the
+  // film plays on into other points, and lets go only when the labeller
+  // follows again or its point is gone (deleted, combined away) — a gone
+  // point is never the current one. The rail stays held then, on nothing.
+  const pinned = pointFocus.mode === "held" ? pointFocus.pointId : null;
+  const pinHolds = pinLive(pinned, points);
+  if (pinned !== null && !pinHolds) holdPoint(null);
+  const pinnedPointId = pinHolds ? pinned : null;
+  const currentPointId = currentPointOf({
+    pinned: pinnedPointId,
+    playing: playingPointId,
+    rest: restPointId,
+    points,
+  });
   // Whatever the video plays into is where the current point rests next.
   // Adjusted during render, not in an effect: the fallback must never be a
   // render behind the point it stands in for.
@@ -823,6 +830,19 @@ export function LabelConsole({
     points.find(
       (point) => point.id === currentPointId && point.status !== "deleted",
     ) ?? null;
+  // A new current point lets go of a stroke selected in any other, in this
+  // same render: the stroke keys, ↑ / ↓ and the court never act on a stroke
+  // the open well does not show.
+  // `undefined` until the first render has checked it: a stroke handed in
+  // outside the point the console opens on is let go too.
+  const [selectionPointId, setSelectionPointId] = useState<
+    string | null | undefined
+  >(undefined);
+  if (selectionPointId !== currentPointId) {
+    setSelectionPointId(currentPointId);
+    const kept = selectionFor(placement, expanded);
+    if (kept !== placement) setPlacement(kept);
+  }
   const { checked, total } = labelProgress(points);
 
   // A row click makes its point current, seeks to its first stroke and holds
@@ -837,6 +857,15 @@ export function LabelConsole({
     if (pointId === playingPointId) followPlayback();
     else holdPoint(pointId);
     seekToPointStart(points.find((p) => p.id === pointId));
+  }
+
+  // ← / → and the transport's Previous / Next: the labeller driving the film
+  // a point on lets a replay go and lets go of the hold — the console follows
+  // the film again, the current point with it.
+  function stepFilm(direction: -1 | 1) {
+    cancelReplay();
+    followPlayback();
+    player.current?.step(direction);
   }
 
   // Selecting a stroke starts an edit: it holds the rail and seeks the video to
@@ -1266,13 +1295,9 @@ export function LabelConsole({
     const first = point?.shots.find(
       (shot) => shot.status !== "deleted" && shot.videoTime !== null,
     );
-    if (first?.videoTime != null) {
-      setPinned(null);
-      player.current?.seekTo(first.videoTime);
-    } else if (point) {
-      // Nowhere on the film to go: hold it open where the video stands.
-      setPinned({ pointId: point.id, at: playingKey });
-    }
+    // Nowhere on the film to go, the point stays open where the video stands:
+    // every caller has held it first.
+    if (first?.videoTime != null) player.current?.seekTo(first.videoTime);
   }
 
   /**
@@ -1506,7 +1531,6 @@ export function LabelConsole({
     ).then((result) => {
       if (!result) return;
       setRestPointId(result.point.id);
-      setPinned({ pointId: result.point.id, at: playingKey });
       holdPoint(result.point.id);
       jumpToPointId.current = result.point.id;
     });
@@ -1669,6 +1693,8 @@ export function LabelConsole({
     ).then((saved) => {
       if (!saved) return;
       if (currentPointId === removed.id) setRestPointId(kept.id);
+      // A hold on the point combined away moves to the one it joined.
+      if (pinnedPointId === removed.id) holdPoint(kept.id);
     });
   }
 
@@ -2643,6 +2669,8 @@ export function LabelConsole({
   const undoLastRef = useRef<() => void>(() => {});
   // Space and ← / →: the labeller driving the film lets a replay go.
   const cancelReplayRef = useRef<() => void>(() => {});
+  // ← / →: stepping the film a point (`stepFilm`).
+  const stepFilmRef = useRef<(direction: -1 | 1) => void>(() => {});
   // The rail's amber slots as stops, read off the rows once for the keys
   // here and the rail's header — marks or none.
   const slotJumpStops = useMemo(
@@ -2831,6 +2859,7 @@ export function LabelConsole({
     };
     undoLastRef.current = () => void undoLast();
     cancelReplayRef.current = cancelReplay;
+    stepFilmRef.current = stepFilm;
     jumpAfterOpen.current = (pointId) => findGap(pointId);
     foldOpenPoint.current = () => {
       if (confirm || !expanded || unfoldedPointId !== expanded.id) return false;
@@ -3002,8 +3031,7 @@ export function LabelConsole({
         cancelReplayRef.current();
         player.current?.togglePlay();
       } else {
-        cancelReplayRef.current();
-        player.current?.step(key === "ArrowLeft" ? -1 : 1);
+        stepFilmRef.current(key === "ArrowLeft" ? -1 : 1);
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -3049,8 +3077,7 @@ export function LabelConsole({
       event.stopPropagation();
       (document.activeElement as HTMLElement | null)?.blur?.();
       if (arrow) {
-        cancelReplayRef.current();
-        player.current?.step(event.key === "ArrowLeft" ? -1 : 1);
+        stepFilmRef.current(event.key === "ArrowLeft" ? -1 : 1);
       } else if (!event.repeat) {
         cancelReplayRef.current();
         player.current?.togglePlay();
@@ -3151,6 +3178,7 @@ export function LabelConsole({
       readout={readout}
       onTime={clock.set}
       onPause={onFilmPause}
+      onStep={stepFilm}
       clockTargetRef={rootRef}
       square={fullScreen}
     />

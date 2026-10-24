@@ -87,3 +87,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `add-missing-shots.ts` still re-reads the whole session; the same diff treatment would speed it up.
+
+## T10 · Navigation: pin holds while the film plays, selection follows the current point, ←/→ re-follow — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New pure `pinLive`, `currentPointOf` and `selectionFor` in `label-now-playing.ts`. The console's separate `pinned` state and its `pinned.at === playingKey` release are gone: the pin is the held point, so playback never changes the open well under a hold; a deleted pinned point drops the pin and a combine moves the hold to the kept point. A stroke selected in another point is cleared to `NO_PLACEMENT` in the render where the current point changes. New `stepFilm()` (cancel replay, follow, step) handles ←/→ and, via a new `onStep` prop on `label-video.tsx`, the transport's Previous/Next. Pin releases: the follow pill, ←/→ and Previous/Next, clicking the playing point's row, and the pinned point being deleted or combined away; pressing play still does not release it. A hand scroll of the rail now pins the point. The console spec that asserted the old behaviour was rewritten to the new rule. Specs in label-console and label-playback.
+**follow-ups:**
+
+1. A failed combine that is rolled back leaves the pin released while the rail stays held.
+2. During a split's optimistic window, a selected stroke that moved to the new point is cleared.
+3. T11–T13 edit the same key handlers, now routed through `stepFilmRef`.

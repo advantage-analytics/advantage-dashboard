@@ -597,7 +597,7 @@ test.describe("the playing row", () => {
     expect(text(html)).not.toContain("Now playing");
   });
 
-  test("held, only the playing point is unfolded — a hold is about the scroll, not a second well", () => {
+  test("held, the pin holds while another point plays — one well, the held one's (T10)", () => {
     const html = render({
       session: labelSessionFixture(),
       video: null,
@@ -606,18 +606,46 @@ test.describe("the playing row", () => {
       // Point 2's ace.
       initialVideoTime: 2490.5,
     });
-    // The point row and its playing stroke.
-    expect(count(html, PLAYING)).toBe(2);
+    // Point 2's row is still lit as the playing one.
     expect(
       rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P2}"`),
     ).toContain('data-playing="true"');
-    // Point 2 is the current point: the one well, and the court, are its;
-    // point 1 is folded. The way back to following is still offered.
-    expect(html).not.toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
-    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
+    // Point 1 is the current point: the one well, and the court, are its;
+    // point 2 stays folded. The way back to the playing point is offered.
+    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
+    expect(html).not.toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
     expect(count(html, /data-shots-for=/g)).toBe(1);
-    expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Point 2</);
-    expect(html).toContain("data-label-follow-pill");
+    expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Point 1</);
+    expect(html).toContain(
+      'aria-label="Now playing: point 2 — follow playback"',
+    );
+  });
+
+  test("held with a stroke of the held point selected, the selection stays while another point plays", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialPointFocus: { mode: "held", pointId: FIXTURE_POINT_IDS.P1 },
+      initialSelectedShotId: "s-return",
+      initialVideoTime: 2490.5,
+    });
+    expect(rowMarkup(html, 'data-shot-id="s-return"')).toContain(
+      "data-selected",
+    );
+  });
+
+  test("following, a stroke selected in a point the film has left is let go", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialPointFocus: { mode: "follow" },
+      initialSelectedShotId: "s-return",
+      initialVideoTime: 2490.5,
+    });
+    // Point 2 is current, and point 1's stroke is no longer selected: no
+    // stroke key or court click can reach a point the well does not show.
+    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
+    expect(html).not.toContain("data-selected");
   });
 
   test("held with nothing named, the playing point is still the current one", () => {
@@ -1028,7 +1056,15 @@ test.describe("a flag jump lands on the point's review step", () => {
       consoleSource.indexOf('if (key === "Enter") unfoldOpenPoint.current();'),
       consoleSource.indexOf('window.addEventListener("keydown", onKeyDown);'),
     );
-    expect(keys.match(/cancelReplayRef\.current\(\);/g)).toHaveLength(2);
+    // Space lets the replay go itself; ← / → through `stepFilm`, which does.
+    expect(keys.match(/cancelReplayRef\.current\(\);/g)).toHaveLength(1);
+    expect(keys).toContain("stepFilmRef.current(");
+    const stepFilm = consoleSource.slice(
+      consoleSource.indexOf("function stepFilm("),
+    );
+    expect(stepFilm.slice(0, stepFilm.indexOf("\n  }\n"))).toContain(
+      "cancelReplay();",
+    );
     // A row click lets the replay go; a jump or an answer also stops the
     // film, so a replay never plays on into the next point.
     const togglePoint = consoleSource.slice(

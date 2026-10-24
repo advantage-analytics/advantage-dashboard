@@ -121,6 +121,11 @@ export const LabelVideoPlayer = forwardRef<
     onTime?: (videoTime: number) => void;
     /** The element paused, by whoever asked: the transport, a click, a seek's end. */
     onPause?: () => void;
+    /**
+     * The transport's Previous / Next, handed to the caller instead (which
+     * steps through the handle's `step`): the console follows the film again.
+     */
+    onStep?: (direction: -1 | 1) => void;
     /** Playable on first render — for specs. A real element starts pending. */
     initialReady?: boolean;
     /** A media error on first render — for specs. */
@@ -139,6 +144,7 @@ export const LabelVideoPlayer = forwardRef<
     readout = NO_READOUT,
     onTime,
     onPause,
+    onStep,
     initialReady = false,
     initialFailure = null,
     clockTargetRef,
@@ -619,7 +625,7 @@ export const LabelVideoPlayer = forwardRef<
           previewSource={{ url: video.url, generation: 0 }}
           onSeek={seek}
           onTogglePlay={togglePlay}
-          onStep={step}
+          onStep={onStep ?? step}
           onToggleSaved={noop}
           onToggleSkipDeadTime={toggleSkipDeadTime}
           onCycleRate={cycleRate}
