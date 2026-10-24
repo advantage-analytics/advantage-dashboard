@@ -50,6 +50,7 @@ import {
   type LabelDismissSuggestionResult,
 } from "@/lib/services/labels/suggestions-session";
 import type { InsertPosition } from "@/lib/services/labels/point-insert";
+import type { GameBoundaryLock } from "@/lib/services/labels/game-boundary";
 import {
   insertLabelPoint,
   type LabelInsertPointResult,
@@ -228,9 +229,10 @@ export async function moveLabelPointsAction(
   pointIds: string[],
   to: LabelGame,
   switchServer: boolean,
+  lock?: GameBoundaryLock,
 ): Promise<LabelMovePointsResult> {
   return withLabelOp("Move game boundary", () =>
-    moveLabelPoints(pointIds, to, switchServer),
+    moveLabelPoints(pointIds, to, switchServer, lock),
   );
 }
 

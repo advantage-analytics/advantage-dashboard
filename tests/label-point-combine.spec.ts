@@ -94,6 +94,7 @@ test.describe("planPointCombine", () => {
         ended_by: "p1",
         vendor_rally_ids: [1001, 1002],
         status: "edited",
+        game_start_locked: false,
       },
       removed: { status: "deleted", status_before_delete: "unchanged" },
       // The fixture's two points each open on a first serve: joined, the
@@ -169,6 +170,7 @@ test.describe("across a game", () => {
     ending: null,
     endedBy,
     vendorRallyIds: [],
+    gameStartLocked: false,
     shots: shots.map((shot, i) => ({
       ...shot,
       status: "kept" as const,
@@ -638,6 +640,7 @@ test.describe("the console's rows", () => {
         ended_by: "p1",
         vendor_rally_ids: [1001, 1002],
         status: "edited",
+        game_start_locked: false,
       },
       removed: { id: P2, status: "deleted", status_before_delete: "unchanged" },
       retyped: [
@@ -838,6 +841,7 @@ test.describe("writeLabelPointCombine", () => {
         ended_by: "p1",
         vendor_rally_ids: [1001, 1002],
         status: "edited",
+        game_start_locked: false,
       },
       removed: {
         id: UUID(2),
@@ -880,6 +884,7 @@ test.describe("writeLabelPointCombine", () => {
         ended_by: "p1",
         vendor_rally_ids: [1001, 1002],
         status: "edited",
+        game_start_locked: false,
       },
       filters: { id: UUID(1), status: "edited" },
     });
@@ -1313,4 +1318,30 @@ test("a render of the console with a combined point writes nothing and draws the
   );
   expect(light).toContain("Combined into the point above");
   expect(light).not.toContain('aria-label="Undo delete point 2"');
+});
+
+// ── The game's lock (game-boundary.ts) ─────────────────────────────────────
+
+test("a combine keeps the game's lock when either part held it", () => {
+  const lockOn = (id: string) =>
+    points().map((p) => (p.id === id ? { ...p, gameStartLocked: true } : p));
+  const kept = (rows: LabelPoint[]) => {
+    const plan = planPointCombine(rows, P2, "above");
+    if ("error" in plan) throw new Error(plan.error);
+    return plan.write;
+  };
+  expect(kept(points()).kept.game_start_locked).toBe(false);
+  expect(kept(lockOn(P1)).kept.game_start_locked).toBe(true);
+  const fromLater = lockOn(P2);
+  const plan = kept(fromLater);
+  expect(plan.kept.game_start_locked).toBe(true);
+  const after = applyPointCombine(fromLater, plan);
+  expect(after.find((p) => p.id === P1)?.gameStartLocked).toBe(true);
+  expect(
+    settlePointCombine(points(), {
+      kept: { id: P1, ...plan.kept },
+      removed: { id: P2, ...plan.removed },
+      retyped: [],
+    }).find((p) => p.id === P1)?.gameStartLocked,
+  ).toBe(true);
 });

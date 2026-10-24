@@ -525,6 +525,11 @@ export interface PointMoveWrite {
   set_number: number;
   game_number: number;
   status: LivePointStatus;
+  /**
+   * Present only when the point held its game's lock (game-boundary.ts): a
+   * lock fixes a game's start and does not travel with a point that leaves.
+   */
+  game_start_locked?: false;
   /** Present only when the move switches the point's server. */
   server?: LabelSide;
   /** Present only when the move switches the point's players (player-swap.ts). */
@@ -553,6 +558,10 @@ export type PlannedPointMove =
  * The status comes from the same rule as an edit (edit.ts
  * `labelPointStatusAfterChange`), so a point moved back into its seeded game is
  * `unchanged` again.
+ *
+ * A lock the point held (`gameStartLocked`, game-boundary.ts) stays behind:
+ * it fixed the start of the game the point is leaving. The destination's own
+ * lock is not touched — a point moved into a locked game joins it as it is.
  */
 export function planPointMove(
   point: MovablePoint,
@@ -599,6 +608,7 @@ export function planPointMove(
     write.winner = swap.point.winner;
     write.ended_by = swap.point.ended_by;
   }
+  if (point.gameStartLocked) write.game_start_locked = false;
   return { ok: true, write, shots: swap ? swap.shots : [] };
 }
 
@@ -616,6 +626,7 @@ export type MovablePoint = Pick<
   | "winner"
   | "ending"
   | "endedBy"
+  | "gameStartLocked"
   | "seed"
 > & { shots: readonly SwapShot[] };
 
@@ -731,6 +742,7 @@ export function applyPointMove(
     server: write.server ?? point.server,
     winner: "winner" in write ? (write.winner ?? null) : point.winner,
     endedBy: "ended_by" in write ? (write.ended_by ?? null) : point.endedBy,
+    gameStartLocked: write.game_start_locked ?? point.gameStartLocked,
   };
 }
 

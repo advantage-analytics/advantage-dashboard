@@ -20,6 +20,10 @@ import {
   writeLabelGamePull,
   writeLabelGameShift,
 } from "@/lib/services/labels/game-shift-session";
+import {
+  lockedGameImbalance,
+  lockedGames,
+} from "@/lib/services/labels/game-boundary";
 import { gameKey, labelScores } from "@/lib/services/labels/score";
 import type {
   LabelGameType,
@@ -27,6 +31,7 @@ import type {
   LabelSession,
   LabelShot,
   LabelSide,
+  LabelStartScore,
 } from "@/lib/services/labels/session";
 import { inner, tag } from "./fixtures/html-probe";
 import {
@@ -2108,5 +2113,93 @@ test.describe("a start score", () => {
     expect(planGameShift(usersCase(), true, UUID(7), null, null)).toEqual(
       planGameShift(usersCase(), true, UUID(7)),
     );
+  });
+});
+
+// ── Locked games (game-boundary.ts) ────────────────────────────────────────
+
+test.describe("a locked game", () => {
+  /** A row's lock set or cleared, by its index. */
+  const lockAt = (points: LabelPoint[], index: number, locked = true) =>
+    points.map((p, i) => (i === index ? { ...p, gameStartLocked: locked } : p));
+
+  test("lockedGames reads the lock off a game's first live row only", () => {
+    expect([...lockedGames(usersCase())]).toEqual([]);
+    expect([...lockedGames(lockAt(usersCase(), 0))]).toEqual(["1·1"]);
+    // On a later row it says nothing, and a deleted first row is stepped over.
+    expect([...lockedGames(lockAt(usersCase(), 2))]).toEqual([]);
+    const deletedFirst = lockAt(usersCase(), 0).map((p, i) =>
+      i === 0 ? { ...p, status: "deleted" as const } : p,
+    );
+    expect([...lockedGames(deletedFirst)]).toEqual([]);
+    expect([...lockedGames(lockAt(usersCase(), 8))]).toEqual(["1·2"]);
+  });
+
+  test("a locked overflowing game is in neither gameOverflow nor gameUnderflow", () => {
+    expect(gameOverflow(usersCase(), true).map(gameKey)).toEqual(["1·1"]);
+    const locked = lockAt(usersCase(), 0);
+    expect(gameOverflow(locked, true)).toEqual([]);
+    expect(leftoverIds(locked, true).size).toBe(0);
+    expect(planGameShift(locked, true, UUID(7))).toHaveProperty("error");
+
+    const short = shortCase();
+    const keys = gameUnderflow(short, false).map(gameKey);
+    expect(keys.length).toBeGreaterThan(0);
+    const first = short.findIndex(
+      (p) => p.status !== "deleted" && gameKey(p) === keys[0],
+    );
+    expect(gameUnderflow(lockAt(short, first), false).map(gameKey)).toEqual(
+      keys.slice(1),
+    );
+  });
+
+  test("no point moves INTO a locked game either: a shift is refused, a pull says add the point", () => {
+    // Game 2's start locked: game 1's leftovers have nowhere to go.
+    expect(planGameShift(lockAt(usersCase(), 8), true, UUID(7))).toEqual({
+      error: "The next game's start is locked, so no point moves into it.",
+    });
+    const points = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p2", "p2"] },
+      { game: 2, server: "p2", winners: ["p1", "p1", "p1", "p1", "p1"] },
+    ]);
+    expect(planGamePull(points, "1·1", false)).toMatchObject({ ok: true });
+    expect(planGamePull(lockAt(points, 5), "1·1", false)).toEqual({
+      kind: "add_point",
+    });
+  });
+
+  test("lockedGameImbalance names the points a locked game's last-point winner did not win, when the game is not decided on its last row", () => {
+    const game = (winners: (LabelSide | null)[]) =>
+      lockAt(match([{ game: 1, server: "p1", winners }]), 0);
+    // Decided on its last row: nothing to flag.
+    expect(
+      lockedGameImbalance(game(["p1", "p1", "p2", "p1", "p1"]), true),
+    ).toEqual([]);
+    // Five points, one wrong winner: the video opens at 30–0, so Lee's
+    // fourth point came two rows before the end — the one Vargas "won" is it.
+    const start: LabelStartScore = {
+      sets: [0, 0],
+      games: [0, 0],
+      points: [2, 0],
+      server: "p1",
+    };
+    expect(
+      lockedGameImbalance(game(["p1", "p1", "p2", "p1", "p1"]), true, start),
+    ).toEqual([UUID(3)]);
+    // Short of a game: the points not won by the last point's winner, in
+    // rail order — a point with no winner yet among them.
+    expect(
+      lockedGameImbalance(game(["p1", "p1", "p2", null, "p1"]), true),
+    ).toEqual([UUID(3), UUID(4)]);
+    // Unlocked, the same rows say nothing; nor does a game nobody has won a point of.
+    expect(
+      lockedGameImbalance(
+        match([
+          { game: 1, server: "p1", winners: ["p1", "p1", "p2", null, "p1"] },
+        ]),
+        true,
+      ),
+    ).toEqual([]);
+    expect(lockedGameImbalance(game([null, null]), true)).toEqual([]);
   });
 });

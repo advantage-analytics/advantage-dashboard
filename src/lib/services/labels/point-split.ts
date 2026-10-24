@@ -11,8 +11,10 @@
  * that open the new point: a point starts on a first serve, so those are
  * renumbered first, then second (`serveRestrokes`) — two serves split apart
  * leave the second one a first serve of its own point. The anchor becomes
- * `edited` (`added` stays `added`), and the menu holds its Reset back while
- * another live point shares one of its rallies (`sharesVendorRally`).
+ * `edited` (`added` stays `added`), keeps a game lock it held
+ * (game-boundary.ts: the earlier half still starts the game), and the menu
+ * holds its Reset back while another live point shares one of its rallies
+ * (`sharesVendorRally`).
  *
  * Pure: the console runs `applyPointSplit`, `point-split-session.ts` runs
  * `planPointSplit`.
@@ -240,6 +242,7 @@ export function draftSplitPoint(
     checkedAt: null,
     note: null,
     dismissed: [],
+    gameStartLocked: false,
     seed: null,
     shots: [],
   };

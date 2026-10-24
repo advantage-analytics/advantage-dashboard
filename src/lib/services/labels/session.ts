@@ -327,6 +327,15 @@ export interface LabelPoint {
    */
   dismissed: string[];
   /**
+   * Whether the labeller fixed the game's start at this point by dragging
+   * its header here (`label_points.game_start_locked`, game-boundary.ts).
+   * Read only on a game's first live point (`lockedGames`): a locked game is
+   * the labeller's word, so no slot offers to move a point across its start,
+   * and its points not won by its last point's winner are flagged instead
+   * (`lockedGameImbalance`). Not part of `seed`; a seeded point is unlocked.
+   */
+  gameStartLocked: boolean;
+  /**
    * The point's own fields as seeded (set, game, server, serve side, won by,
    * ending, ended by) — what Reset restores and what `unchanged` is measured
    * against. Null for an added point, or one not yet backfilled.

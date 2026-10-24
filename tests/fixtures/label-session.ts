@@ -171,6 +171,7 @@ export function labelPoint(
     checkedAt: null,
     note: null,
     dismissed: [],
+    gameStartLocked: false,
     seed: null,
     shots: [],
     ...fields,

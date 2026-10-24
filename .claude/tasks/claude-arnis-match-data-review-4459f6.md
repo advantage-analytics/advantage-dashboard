@@ -47,7 +47,7 @@ ready).
 
 ## T3 · Locked game boundary: lock column + lock-aware readings
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<ts>_label_points_game_start_locked.sql (new), src/lib/services/labels/session.ts, src/lib/data/labels-server.ts, src/lib/services/labels/game-boundary.ts, src/lib/services/labels/operations.ts, src/lib/services/labels/game-shift.ts, src/lib/services/labels/point-split.ts, src/lib/services/labels/point-combine.ts, tests/label-game-shift.spec.ts, tests/label-point-split.spec.ts, tests/label-point-combine.spec.ts, tests/label-operations.spec.ts (guesses)
 - **done when:**

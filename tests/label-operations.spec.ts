@@ -56,6 +56,7 @@ import {
   POINT_4_SHOTS,
   appliedOps,
   fakeLabelClient,
+  labelPoint,
   labelSessionFixture,
   labelShot,
   labelShotRow,
@@ -502,6 +503,7 @@ test.describe("move point", () => {
     winner: "p1" as const,
     ending: "winner" as const,
     endedBy: "p1" as const,
+    gameStartLocked: false,
     seed: null,
     shots: [],
   };
@@ -724,6 +726,51 @@ test.describe("move point", () => {
     expect(
       destinationServerIn(points, P4, { setNumber: 1, gameNumber: 1 }),
     ).toBe("p1");
+  });
+});
+
+test.describe("move point: the game's lock (game-boundary.ts)", () => {
+  const locked = {
+    status: "unchanged" as const,
+    server: "p1" as const,
+    setNumber: 1,
+    gameNumber: 3,
+    serveSide: null,
+    winner: "p1" as const,
+    ending: "winner" as const,
+    endedBy: "p1" as const,
+    gameStartLocked: true,
+    seed: null,
+    shots: [],
+  };
+
+  test("a move out leaves the lock behind; a move into a locked game touches nothing of it", () => {
+    const out = planPointMove(
+      locked,
+      { setNumber: 1, gameNumber: 4 },
+      "p1",
+      false,
+    );
+    if ("error" in out) throw new Error(out.error);
+    expect(out.write.game_start_locked).toBe(false);
+    const moved = applyPointMove(
+      { ...labelPoint(POINT_ID, 0), ...locked },
+      out.write,
+    );
+    expect(moved.gameStartLocked).toBe(false);
+
+    const plain = planPointMove(
+      { ...locked, gameStartLocked: false },
+      { setNumber: 1, gameNumber: 4 },
+      "p1",
+      false,
+    );
+    if ("error" in plain) throw new Error(plain.error);
+    expect(plain.write).not.toHaveProperty("game_start_locked");
+    expect(
+      applyPointMove({ ...labelPoint(POINT_ID, 0), ...locked }, plain.write)
+        .gameStartLocked,
+    ).toBe(true);
   });
 });
 
@@ -1513,6 +1560,7 @@ test.describe("the services", () => {
       gameNumber: 4,
       winner: "p2",
       endedBy: "p1",
+      gameStartLocked: false,
       shots: [
         {
           id: SHOT_ID,
@@ -1703,6 +1751,109 @@ test.describe("the services", () => {
         }),
       ).toHaveProperty("error");
     }
+  });
+
+  test("a dragged header's lock lands in the ONE write with the moves", async () => {
+    const SECOND = "cccccccc-cccc-4ccc-8ccc-000000000002";
+    const LOCK = "cccccccc-cccc-4ccc-8ccc-000000000003";
+    const OLD = "cccccccc-cccc-4ccc-8ccc-000000000004";
+    const first = { ...pointRow, point_index: 5, winner: null, seed: null };
+    const second = { ...first, id: SECOND, point_index: 6 };
+    const lockRow = { ...first, id: LOCK, point_index: 7, game_number: 4 };
+    const oldRow = {
+      ...first,
+      id: OLD,
+      point_index: 8,
+      game_number: 4,
+      game_start_locked: true,
+    };
+    const client = () =>
+      fakeLabelClient((call) => {
+        if (call.op === "rpc") return undefined;
+        if (call.table === "label_sessions") {
+          return {
+            data: { status: "labelling", marks_enabled: false },
+            error: null,
+          };
+        }
+        if (call.table === "label_shots") return { data: [], error: null };
+        if ("game_number" in call.filters) {
+          return {
+            data: [{ id: "x", server: "p1", point_index: 20 }],
+            error: null,
+          };
+        }
+        const ids = call.in?.id ?? [];
+        return {
+          data: [second, first, lockRow, oldRow].filter((row) =>
+            ids.includes(row.id),
+          ),
+          error: null,
+        };
+      });
+    type Op = {
+      ids: string[];
+      set: Record<string, unknown>;
+      expect_status: string;
+    };
+
+    // The header moved up: the new first point is one of the moved points,
+    // and takes the lock on its own write.
+    const up = client();
+    const moved = await writeLabelPointsMove({
+      supabase: up.supabase,
+      pointIds: [POINT_ID, SECOND],
+      to: { setNumber: 1, gameNumber: 4 },
+      switchServer: true,
+      lock: { lockPointId: POINT_ID, unlockPointIds: [OLD] },
+    });
+    expect(moved).toMatchObject({
+      ok: true,
+      moves: [
+        { id: POINT_ID, gameStartLocked: true },
+        { id: SECOND, gameStartLocked: false },
+      ],
+    });
+    expect(up.calls[0].in).toEqual({ id: [POINT_ID, SECOND, OLD] });
+    const upOps = appliedOps(up.calls) as Op[];
+    expect(
+      upOps.map((op) => [op.ids, op.set.game_start_locked, op.expect_status]),
+    ).toEqual([
+      [[POINT_ID], true, "unchanged"],
+      [[SECOND], undefined, "unchanged"],
+      [[OLD], false, "unchanged"],
+    ]);
+    expect(upOps[0].set).toMatchObject({ set_number: 1, game_number: 4 });
+    expect(up.calls.filter((c) => c.op === "rpc")).toHaveLength(1);
+
+    // The header moved down: the new first point stays in its game, so the
+    // lock is its own row in the same transaction.
+    const down = client();
+    await writeLabelPointsMove({
+      supabase: down.supabase,
+      pointIds: [POINT_ID],
+      to: { setNumber: 1, gameNumber: 4 },
+      switchServer: true,
+      lock: { lockPointId: LOCK, unlockPointIds: [] },
+    });
+    const downOps = appliedOps(down.calls) as Op[];
+    expect(downOps.map((op) => [op.ids, op.set])).toEqual([
+      [[POINT_ID], { set_number: 1, game_number: 4, status: "edited" }],
+      [[LOCK], { game_start_locked: true }],
+    ]);
+
+    // A malformed lock is refused before anything is read.
+    const bad = client();
+    expect(
+      await writeLabelPointsMove({
+        supabase: bad.supabase,
+        pointIds: [POINT_ID],
+        to: { setNumber: 1, gameNumber: 4 },
+        switchServer: true,
+        lock: { lockPointId: 7 },
+      }),
+    ).toHaveProperty("error");
+    expect(bad.calls).toEqual([]);
   });
 
   test("checked sets checked_at, and unchecking clears it", async () => {

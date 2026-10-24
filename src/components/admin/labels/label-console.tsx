@@ -157,7 +157,10 @@ import {
   endingPatchForShotChange,
   SHOT_FIELDS_MOVING_ENDING,
 } from "@/lib/services/labels/ending-derived";
-import { planGameBoundary } from "@/lib/services/labels/game-boundary";
+import {
+  planGameBoundary,
+  type GameBoundaryLock,
+} from "@/lib/services/labels/game-boundary";
 import {
   servedRightHitWrong,
   serversOffOrder,
@@ -2079,19 +2082,23 @@ export function LabelConsole({
     if (!operations) return;
     const plan = planGameBoundary(points, game, beforePointId);
     if ("error" in plan) return refuse(plan.error);
-    const { to, pointIds } = plan.write;
+    const { to, pointIds, lockPointId, unlockPointIds } = plan.write;
     if (pointIds.length === 0) return;
+    const lock: GameBoundaryLock = { lockPointId, unlockPointIds };
     const server = destinationServerIn(points, pointIds[0], to);
     const swaps = pointIds.filter((id) => {
       const point = points.find((p) => p.id === id);
       return point ? moveSwapsPlayers(point, server) : false;
     }).length;
-    if (swaps === 0 || server === null) return void moveBoundary(to, pointIds);
+    if (swaps === 0 || server === null) {
+      return void moveBoundary(to, pointIds, lock);
+    }
     setConfirm({
       kind: "move-boundary",
       to,
       gameInSet: gameInSetOf(points, to),
       pointIds,
+      lock,
       server,
       swaps,
     });
@@ -2101,16 +2108,46 @@ export function LabelConsole({
    * The run's moves. Every point takes its new game at once — one at a time
    * would leave a game a point short between two writes, and the slots that
    * read the score would ask about a state the run is only passing through.
-   * The server takes the whole run in one write (`movePoints`), and a refusal
-   * puts every point back.
+   * The server takes the whole run in one write (`movePoints`), with the
+   * dragged game's lock (`lock`, game-boundary.ts) in the same transaction,
+   * and a refusal puts every point back.
    * A tiebreak on either side of the boundary then has its serve order put
    * right.
    */
-  async function moveBoundary(to: LabelGame, pointIds: readonly string[]) {
+  async function moveBoundary(
+    to: LabelGame,
+    pointIds: readonly string[],
+    lock: GameBoundaryLock | null = null,
+  ) {
     if (!operations) return;
     if (pointIds.some((id) => id.startsWith(PENDING_POINT_PREFIX))) {
       return refuse("Wait for the new point to save, then move it.");
     }
+    // The lock as the write lands it: the new first point takes it, the
+    // game's other points let go. Rows the moves do not touch are set here
+    // and, on a refusal, put back as they were.
+    const lockWas = new Map<string, boolean>();
+    const lockIds = lock ? [lock.lockPointId, ...lock.unlockPointIds] : [];
+    for (const id of lockIds) {
+      const row = points.find((p) => p.id === id);
+      if (row) lockWas.set(id, row.gameStartLocked);
+    }
+    const lockApplied = (current: LabelPoint[]) =>
+      lockIds.length === 0
+        ? current
+        : current.map((p) =>
+            lockWas.has(p.id)
+              ? { ...p, gameStartLocked: p.id === lock?.lockPointId }
+              : p,
+          );
+    const lockPutBack = (current: LabelPoint[]) =>
+      lockIds.length === 0
+        ? current
+        : current.map((p) =>
+            lockWas.has(p.id)
+              ? { ...p, gameStartLocked: lockWas.get(p.id) ?? false }
+              : p,
+          );
     let rows: LabelPoint[] = points;
     const steps: {
       before: LabelPoint;
@@ -2134,7 +2171,8 @@ export function LabelConsole({
       pointMoved(current, before.id, plan);
     const putBack = (current: LabelPoint[], { before }: Step) =>
       pointMovePutBack(current, before);
-    setPoints((current) => steps.reduce(moved, current));
+    rows = lockApplied(rows);
+    setPoints((current) => lockApplied(steps.reduce(moved, current)));
     dispatchSave({ type: "start" });
     if (operations.movePoints) {
       // One write for the whole run: it lands whole or not at all.
@@ -2143,10 +2181,11 @@ export function LabelConsole({
           steps.map(({ before }) => before.id),
           to,
           true,
+          lock ?? undefined,
         ),
       );
       if ("error" in result) {
-        setPoints((current) => steps.reduce(putBack, current));
+        setPoints((current) => lockPutBack(steps.reduce(putBack, current)));
         dispatchSave({ type: "failure", message: result.error });
         return;
       }
@@ -2157,6 +2196,9 @@ export function LabelConsole({
         ),
       );
     } else {
+      // One move at a time writes no lock: the fallback has no transaction
+      // to carry it in, so the rows read as they were.
+      setPoints(lockPutBack);
       for (const [i, { before }] of steps.entries()) {
         const result = await settle(operations.movePoint(before.id, to, true));
         if ("error" in result) {
@@ -2448,7 +2490,7 @@ export function LabelConsole({
         void movePoint(question.pointId, question.to, true);
         return;
       case "move-boundary":
-        void moveBoundary(question.to, question.pointIds);
+        void moveBoundary(question.to, question.pointIds, question.lock);
         return;
       case "serve-hitter":
         void followServeHitter(question.shotId, question.follow);
@@ -3550,11 +3592,15 @@ export interface LabelConsoleOperations {
     to: LabelGame,
     switchServer: boolean,
   ) => Promise<LabelMovePointResult>;
-  /** A dragged header's points in one write; absent, one `movePoint` each. */
+  /**
+   * A dragged header's points in one write, with the game's lock
+   * (game-boundary.ts); absent, one `movePoint` each and no lock.
+   */
   movePoints?: (
     pointIds: string[],
     to: LabelGame,
     switchServer: boolean,
+    lock?: GameBoundaryLock,
   ) => Promise<LabelMovePointsResult>;
   setChecked: (
     pointId: string,
@@ -3798,6 +3844,7 @@ function pointMoveSettled(
       gameNumber: result.gameNumber,
       winner: result.winner,
       endedBy: result.endedBy,
+      gameStartLocked: result.gameStartLocked,
     })),
     result.shots,
   );
@@ -3817,6 +3864,7 @@ function pointMovePutBack(
       status: before.status,
       winner: before.winner,
       endedBy: before.endedBy,
+      gameStartLocked: before.gameStartLocked,
     })),
     shotSwapsOf(before.shots),
   );

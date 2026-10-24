@@ -31,9 +31,16 @@
  * at the beginning): the first game in point order opens at its `points`, so
  * a game complete only when counted from the start is neither overflow nor
  * underflow.
+ *
+ * A locked game (game-boundary.ts `lockedGames`: its start dragged into place
+ * by the labeller) is neither: its boundary is the labeller's word, so no
+ * slot offers to move a point across it. Nor is a locked game ever written
+ * into — a shift whose next game is locked is refused, and a pull whose donor
+ * is locked answers `add_point`.
  */
 
 import { labelPointFields, labelPointStatusAfterChange } from "./edit";
+import { lockedGames } from "./game-boundary";
 import { gameFirstServer, type GamePoint } from "./game-operations";
 import {
   planPlayerSwap,
@@ -169,7 +176,7 @@ interface Accumulator {
 /**
  * Every ordinary game with rows past the row that decided it, in the order
  * the games first appear. A tiebreak never overflows; a game decided on its
- * last row is not listed. Nor is any game of `matchTiebreakSet` — the
+ * last row is not listed, and nor is a locked one (game-boundary.ts). Nor is any game of `matchTiebreakSet` — the
  * deciding set the entered score spells as a match tiebreak (set-scores.ts
  * `matchTiebreakSet`): the vendor's cut of it into short "games" is one
  * tiebreak to fold (tiebreak-fold.ts), never leftovers to move on.
@@ -182,7 +189,9 @@ export function gameOverflow(
 ): GameOverflow[] {
   const games: Accumulator[] = [];
   const byKey = new Map<string, Accumulator>();
-  for (const point of liveRows(points)) {
+  const live = liveRows(points);
+  const locked = lockedGames(live);
+  for (const point of live) {
     if (point.setNumber === null || point.gameNumber === null) continue;
     const key = gameKey(point);
     let game = byKey.get(key);
@@ -202,7 +211,11 @@ export function gameOverflow(
       byKey.set(key, game);
       games.push(game);
     }
-    if (game.gameType !== "game" || game.setNumber === matchTiebreakSet) {
+    if (
+      game.gameType !== "game" ||
+      game.setNumber === matchTiebreakSet ||
+      locked.has(key)
+    ) {
       continue;
     }
     if (game.decidedBy) {
@@ -410,6 +423,11 @@ export function planGameShift(
     const to =
       gameAfter(live, current, current.leftovers) ??
       openGameAfter(working, live, current, current.leftovers);
+    if (!to.opened && lockedGames(live).has(gameKey(to))) {
+      return {
+        error: "The next game's start is locked, so no point moves into it.",
+      };
+    }
     steps.push(ref(to));
 
     for (const point of current.leftovers) {
@@ -613,7 +631,8 @@ function bandIsShort(band: LabelGameBand): boolean {
  * it, so no slot asks about it either — the labeller adds its points by the
  * row menu. Nor any game of `matchTiebreakSet`: the vendor's short "games"
  * there are one match tiebreak to fold (tiebreak-fold.ts), not games to pull
- * points into.
+ * points into. Nor a locked game (game-boundary.ts): its boundary is the
+ * labeller's word.
  */
 export function gameUnderflow(
   points: readonly GamePoint[],
@@ -625,6 +644,7 @@ export function gameUnderflow(
   const bands = labelScores(live, adScoring, start).games;
   if (bands.length === 0) return [];
   const byGame = rowsByGame(live);
+  const locked = lockedGames(live);
   const lastOfSet = new Map<number, string>();
   for (const band of bands) lastOfSet.set(band.setNumber, gameKey(band));
   const out: GameUnderflow[] = [];
@@ -632,6 +652,7 @@ export function gameUnderflow(
     if (band.setNumber === matchTiebreakSet) continue;
     if (!bandIsShort(band)) continue;
     const key = gameKey(band);
+    if (locked.has(key)) continue;
     if (lastOfSet.get(band.setNumber) === key) continue;
     const rows = byGame.get(key) ?? [];
     out.push({
@@ -734,6 +755,8 @@ export function planGamePullFrom(
       return { kind: "add_point" };
     }
     const donorKey = gameKey(to);
+    // A locked donor's start is the labeller's word: nothing leaves it.
+    if (lockedGames(live).has(donorKey)) return { kind: "add_point" };
     if (donors[donors.length - 1] !== donorKey) {
       if (donors.length >= 2) return { kind: "add_point" };
       donors.push(donorKey);

@@ -62,6 +62,7 @@ import {
   type ShotRestoreWrite,
 } from "./operations";
 import { parseLabelPointSeed } from "./edit";
+import { isGameBoundaryLock } from "./game-boundary";
 import type { ShotSwapWrite } from "./player-swap";
 import {
   orderLabelShots,
@@ -98,6 +99,8 @@ export type LabelMovePointResult = LabelOpResult<{
   gameNumber: number;
   winner: LabelSide | null;
   endedBy: LabelSide | null;
+  /** Whether the point holds its game's lock after the move (game-boundary.ts). */
+  gameStartLocked: boolean;
   /** The strokes flipped with the players (player-swap.ts); empty when none. */
   shots: ShotSwapWrite[];
 }>;
@@ -587,6 +590,7 @@ export interface PointStateRow {
   winner: LabelSide | null;
   ending: LabelEnding | null;
   ended_by: LabelSide | null;
+  game_start_locked: boolean;
   seed: unknown;
 }
 
@@ -598,7 +602,7 @@ export async function readPointState(
   const { data, error } = await supabase
     .from("label_points")
     .select(
-      "id, session_id, status, status_before_delete, server, set_number, game_number, serve_side, winner, ending, ended_by, seed",
+      "id, session_id, status, status_before_delete, server, set_number, game_number, serve_side, winner, ending, ended_by, game_start_locked, seed",
     )
     .eq("id", pointId)
     .maybeSingle<PointStateRow>();
@@ -703,12 +707,20 @@ type MoveRow = PointStateRow & { point_index: number };
  * server may switch) their strokes side by side, then every write in one
  * transaction (`applyLabelEdit`): each point's row guarded on the status it
  * was read with, and its flipped strokes on theirs. A miss writes nothing.
+ *
+ * `lock` is a dragged header's (game-boundary.ts `GameBoundaryLock`): the
+ * game's new first point takes `game_start_locked` and any other point of it
+ * still holding one lets go, in the same transaction — one Undo rewinds the
+ * moves and the lock together. A lock point among the moved points takes it
+ * on its own write; one outside them is read first and must be a live point
+ * of the same session.
  */
 export async function writeLabelPointsMove(params: {
   supabase: AdminClient;
   pointIds: unknown;
   to: unknown;
   switchServer: unknown;
+  lock?: unknown;
 }): Promise<LabelMovePointsResult> {
   const { supabase } = params;
   if (
@@ -735,14 +747,31 @@ export async function writeLabelPointsMove(params: {
     gameNumber: params.to.gameNumber,
   };
   const switchServer = params.switchServer;
+  if (params.lock !== undefined && !isGameBoundaryLock(params.lock)) {
+    return { error: "Name the point that takes the game's lock." };
+  }
+  const lockPointId = params.lock ? normaliseId(params.lock.lockPointId) : null;
+  if (params.lock && !lockPointId) return { error: "Invalid point id." };
+  const unlockPointIds: string[] = [];
+  for (const raw of params.lock?.unlockPointIds ?? []) {
+    const id = normaliseId(raw);
+    if (!id) return { error: "Invalid point id." };
+    if (id !== lockPointId && !unlockPointIds.includes(id)) {
+      unlockPointIds.push(id);
+    }
+  }
+  // The lock rows the moves do not already read.
+  const lockReadIds = [lockPointId, ...unlockPointIds].filter(
+    (id): id is string => id !== null && !pointIds.includes(id),
+  );
 
   // In `idChunks` runs: an `.in()` list travels in the URL (see ID_CHUNK).
   const reads = await Promise.all(
-    idChunks(pointIds).map((ids) =>
+    idChunks([...pointIds, ...lockReadIds]).map((ids) =>
       supabase
         .from("label_points")
         .select(
-          "id, session_id, point_index, status, status_before_delete, server, set_number, game_number, serve_side, winner, ending, ended_by, seed",
+          "id, session_id, point_index, status, status_before_delete, server, set_number, game_number, serve_side, winner, ending, ended_by, game_start_locked, seed",
         )
         .in("id", ids)
         .returns<MoveRow[]>(),
@@ -755,11 +784,14 @@ export async function writeLabelPointsMove(params: {
   const rows = new Map(
     reads.flatMap((read) => read.data ?? []).map((row) => [row.id, row]),
   );
-  if (pointIds.some((id) => !rows.has(id)))
+  if ([...pointIds, ...lockReadIds].some((id) => !rows.has(id)))
     return { error: "Point not found." };
   const sessionId = rows.get(pointIds[0])!.session_id;
   if ([...rows.values()].some((row) => row.session_id !== sessionId)) {
     return { error: "These points are not of one session." };
+  }
+  if (lockReadIds.some((id) => rows.get(id)!.status === "deleted")) {
+    return { error: "A deleted point cannot start a game." };
   }
 
   // The strokes matter only to a move that may switch the server; one not
@@ -804,6 +836,7 @@ export async function writeLabelPointsMove(params: {
         winner: row.winner,
         ending: row.ending,
         endedBy: row.ended_by,
+        gameStartLocked: row.game_start_locked ?? false,
         seed: parseLabelPointSeed(row.seed ?? null),
         shots: shotsRead.shots.filter((shot) => shot.labelPointId === id),
       },
@@ -812,12 +845,21 @@ export async function writeLabelPointsMove(params: {
       switchServer,
     );
     if ("error" in plan) return plan;
+    // The game's new first point takes the lock on its own move; any other
+    // moved point leaves a lock it held behind (`planPointMove`).
+    const lockedAfter =
+      id === lockPointId
+        ? true
+        : (plan.write.game_start_locked ?? row.game_start_locked ?? false);
     ops.push(
       {
         op: "update",
         table: "label_points",
         ids: [id],
-        set: { ...plan.write },
+        set: {
+          ...plan.write,
+          ...(id === lockPointId ? { game_start_locked: true } : {}),
+        },
         expect_status: row.status,
       },
       ...shotSwapOps(plan.shots),
@@ -834,7 +876,19 @@ export async function writeLabelPointsMove(params: {
       winner: "winner" in plan.write ? (plan.write.winner ?? null) : row.winner,
       endedBy:
         "ended_by" in plan.write ? (plan.write.ended_by ?? null) : row.ended_by,
+      gameStartLocked: lockedAfter,
       shots: plan.shots,
+    });
+  }
+  // The lock rows no move carried: the game's new first point, and its other
+  // points letting go.
+  for (const id of lockReadIds) {
+    ops.push({
+      op: "update",
+      table: "label_points",
+      ids: [id],
+      set: { game_start_locked: id === lockPointId },
+      expect_status: rows.get(id)!.status,
     });
   }
 
@@ -1001,12 +1055,14 @@ export function moveLabelPoints(
   pointIds: unknown,
   to: unknown,
   switchServer: unknown,
+  /** A dragged header's lock (game-boundary.ts `GameBoundaryLock`), if any. */
+  lock?: unknown,
   deps: LabelWriteDependencies = defaults,
 ): Promise<LabelMovePointsResult> {
   return gated(
     deps,
     (supabase) =>
-      writeLabelPointsMove({ supabase, pointIds, to, switchServer }),
+      writeLabelPointsMove({ supabase, pointIds, to, switchServer, lock }),
     "move the points",
   );
 }
