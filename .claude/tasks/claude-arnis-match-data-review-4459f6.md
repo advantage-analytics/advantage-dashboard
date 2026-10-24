@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Start score: column + scoring from a start
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<ts>_label_sessions_start_score.sql (new), src/lib/services/labels/session-fields.ts, src/lib/services/labels/session.ts, src/lib/data/labels-server.ts, src/lib/services/labels/score.ts, src/lib/services/labels/set-scores.ts, src/lib/services/labels/game-shift.ts, src/lib/services/labels/apply.ts, tests/label-score.spec.ts, tests/label-set-scores.spec.ts, tests/label-game-shift.spec.ts, tests/label-apply.spec.ts, tests/label-session-fields.spec.ts (guesses)
 - **done when:**

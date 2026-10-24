@@ -119,9 +119,14 @@ export function planApply({ session, beside }: ApplyContext) {
     adScoring: session.adScoring,
     bestOf: beside.bestOf,
     vendor: vendorShotFacts(beside.vendor, beside.startTimeSeconds ?? 0),
+    start: session.startScore,
   });
-  const scores = labelScores(session.points, session.adScoring);
-  const sets = labelSetScores(session.points, scores.games);
+  const scores = labelScores(
+    session.points,
+    session.adScoring,
+    session.startScore,
+  );
+  const sets = labelSetScores(session.points, scores.games, session.startScore);
   const entered = enteredScore(session.finalScore, session.matchScore);
   // A video that ends before the match can't add up to the entered score.
   const mismatch =

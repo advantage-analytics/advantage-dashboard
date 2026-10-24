@@ -26,6 +26,11 @@
  * read from more than two games or a donor runs out before the game is
  * settled: then the game is more likely missing a point the vendor never
  * saw than holding the next game's.
+ *
+ * Every reading takes the session's `LabelStartScore` (null: the video starts
+ * at the beginning): the first game in point order opens at its `points`, so
+ * a game complete only when counted from the start is neither overflow nor
+ * underflow.
  */
 
 import { labelPointFields, labelPointStatusAfterChange } from "./edit";
@@ -48,6 +53,7 @@ import {
   type LabelGameType,
   type LabelPoint,
   type LabelSide,
+  type LabelStartScore,
 } from "./session";
 
 type LivePointStatus = Exclude<GamePoint["status"], "deleted">;
@@ -172,6 +178,7 @@ export function gameOverflow(
   points: readonly GamePoint[],
   adScoring: boolean,
   matchTiebreakSet: number | null = null,
+  start: LabelStartScore | null = null,
 ): GameOverflow[] {
   const games: Accumulator[] = [];
   const byKey = new Map<string, Accumulator>();
@@ -180,11 +187,15 @@ export function gameOverflow(
     const key = gameKey(point);
     let game = byKey.get(key);
     if (!game) {
+      // The first game on the video opens where the start says it does.
+      const opening = games.length === 0 ? start : null;
       game = {
         setNumber: point.setNumber,
         gameNumber: point.gameNumber,
         gameType: point.gameType ?? "game",
-        points: { p1: 0, p2: 0 },
+        points: opening
+          ? { p1: opening.points[0], p2: opening.points[1] }
+          : { p1: 0, p2: 0 },
         decidedBy: null,
         leftovers: [],
       };
@@ -218,9 +229,10 @@ export function leftoverIds(
   points: readonly GamePoint[],
   adScoring: boolean,
   matchTiebreakSet: number | null = null,
+  start: LabelStartScore | null = null,
 ): ReadonlySet<string> {
   const ids = new Set<string>();
-  for (const game of gameOverflow(points, adScoring, matchTiebreakSet)) {
+  for (const game of gameOverflow(points, adScoring, matchTiebreakSet, start)) {
     for (const point of game.leftovers) ids.add(point.id);
   }
   return ids;
@@ -339,6 +351,8 @@ export function planGameShift(
   fromPointId: string,
   /** `gameOverflow`'s: the match-tiebreak set has no leftovers to move. */
   matchTiebreakSet: number | null = null,
+  /** Where the video starts in the match; null: at the beginning. */
+  start: LabelStartScore | null = null,
 ): PlannedGameShift {
   const from = points.find((point) => point.id === fromPointId);
   if (!from) return { error: "That point is not a point of this session." };
@@ -348,9 +362,12 @@ export function planGameShift(
   if (from.setNumber === null || from.gameNumber === null) {
     return { error: "Put this point in a game before moving it on." };
   }
-  const overflow = gameOverflow(points, adScoring, matchTiebreakSet).find(
-    (game) => game.leftovers.some((point) => point.id === fromPointId),
-  );
+  const overflow = gameOverflow(
+    points,
+    adScoring,
+    matchTiebreakSet,
+    start,
+  ).find((game) => game.leftovers.some((point) => point.id === fromPointId));
   if (!overflow) {
     return {
       error: "That point sits inside its game — there is nothing to move on.",
@@ -360,7 +377,7 @@ export function planGameShift(
   // The game ranks the console names games by, on the rows as they stand.
   const rank = new Map<string, number>();
   const gamesInSet = new Map<number, number>();
-  for (const band of labelScores(points, adScoring).games) {
+  for (const band of labelScores(points, adScoring, start).games) {
     rank.set(gameKey(band), band.gameInSet);
     gamesInSet.set(band.setNumber, band.gameInSet);
   }
@@ -408,7 +425,7 @@ export function planGameShift(
     // A tiebreak takes the points and is never split; a game just opened
     // has nothing before the moved points to be decided by.
     if (to.gameType !== "game" || to.opened) break;
-    const next = gameOverflow(working, adScoring, matchTiebreakSet).find(
+    const next = gameOverflow(working, adScoring, matchTiebreakSet, start).find(
       (game) =>
         game.setNumber === to.setNumber && game.gameNumber === to.gameNumber,
     );
@@ -602,9 +619,10 @@ export function gameUnderflow(
   points: readonly GamePoint[],
   adScoring: boolean,
   matchTiebreakSet: number | null = null,
+  start: LabelStartScore | null = null,
 ): GameUnderflow[] {
   const live = liveRows(points);
-  const bands = labelScores(live, adScoring).games;
+  const bands = labelScores(live, adScoring, start).games;
   if (bands.length === 0) return [];
   const byGame = rowsByGame(live);
   const lastOfSet = new Map<number, string>();
@@ -638,13 +656,15 @@ export function planGamePull(
   adScoring: boolean,
   /** `gameUnderflow`'s: the match-tiebreak set has no short game to fill. */
   matchTiebreakSet: number | null = null,
+  /** Where the video starts in the match; null: at the beginning. */
+  start: LabelStartScore | null = null,
 ): PlannedGamePull {
-  const short = gameUnderflow(points, adScoring, matchTiebreakSet);
+  const short = gameUnderflow(points, adScoring, matchTiebreakSet, start);
   const from = short.find((game) => gameKey(game) === key);
   if (!from) {
     return { error: "That game is not short — there is nothing to pull in." };
   }
-  return planGamePullFrom(points, from, adScoring);
+  return planGamePullFrom(points, from, adScoring, start);
 }
 
 /**
@@ -657,10 +677,12 @@ export function planGamePullFrom(
   points: readonly ShiftPoint[],
   from: { setNumber: number; gameNumber: number },
   adScoring: boolean,
+  /** Where the video starts in the match; null: at the beginning. */
+  start: LabelStartScore | null = null,
 ): PlannedGamePull {
   // The game ranks the console names games by, on the rows as they stand.
   const rank = new Map<string, number>();
-  for (const band of labelScores(points, adScoring).games) {
+  for (const band of labelScores(points, adScoring, start).games) {
     rank.set(gameKey(band), band.gameInSet);
   }
   const ref = (game: {
@@ -687,7 +709,7 @@ export function planGamePullFrom(
   const bound = working.filter((p) => p.status !== "deleted").length + 2;
   for (let step = 0; step < bound; step += 1) {
     const live = liveRows(working);
-    const bands = labelScores(live, adScoring).games;
+    const bands = labelScores(live, adScoring, start).games;
     const band = bands.find((b) => gameKey(b) === gameKey(current));
     if (!band) return { kind: "add_point" };
     if (band.outcome.kind !== "unfinished") {
@@ -734,7 +756,7 @@ export function planGamePullFrom(
     // The donor given whole without settling the game: a point is missing,
     // not misplaced.
     if (donorRows.length === 1) {
-      const after = labelScores(liveRows(working), adScoring).games.find(
+      const after = labelScores(liveRows(working), adScoring, start).games.find(
         (b) => gameKey(b) === gameKey(current),
       );
       if (!after || after.outcome.kind === "unfinished") {

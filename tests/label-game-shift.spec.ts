@@ -2040,3 +2040,73 @@ test.describe("planGameSplit", () => {
     ]);
   });
 });
+
+// ── A video that starts mid-match ────────────────────────────────────────────
+
+test.describe("a start score", () => {
+  /** The video opens with Lee serving at 15–0, two games up. */
+  const start = {
+    sets: [0, 0] as [number, number],
+    games: [2, 0] as [number, number],
+    points: [1, 0] as [number, number],
+    server: "p1" as const,
+  };
+  /** Three Lee points finish the first game only when counted from 15–0. */
+  const fromStart = () =>
+    match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1"] },
+      { game: 2, server: "p2", winners: ["p2", "p2", "p2", "p2"] },
+    ]);
+
+  test("a game complete only from the start is neither overflow nor underflow", () => {
+    expect(gameOverflow(fromStart(), true, null, start)).toEqual([]);
+    expect(gameUnderflow(fromStart(), true, null, start)).toEqual([]);
+    // Counted from 0–0 the same rows leave game 1 short at 40–0.
+    expect(gameOverflow(fromStart(), true)).toEqual([]);
+    expect(gameUnderflow(fromStart(), true).map((g) => g.score)).toEqual([
+      "40–0",
+    ]);
+    expect(planGamePull(fromStart(), "1·1", true, null, start)).toEqual({
+      error: "That game is not short — there is nothing to pull in.",
+    });
+  });
+
+  test("a game decided from the start before its last row overflows by the rows past it", () => {
+    // Game 2 takes the moved row as its fourth point, settled on its last.
+    const points = match([
+      { game: 1, server: "p1", winners: ["p1", "p2"] },
+      { game: 2, server: "p2", winners: ["p2", "p2", "p2"] },
+    ]);
+    const atForty = { ...start, points: [3, 0] as [number, number] };
+    const overflow = gameOverflow(points, true, null, atForty);
+    expect(overflow).toHaveLength(1);
+    expect(overflow[0]).toMatchObject({ gameNumber: 1, decidedBy: "p1" });
+    expect(ids(overflow[0].leftovers)).toEqual([UUID(2)]);
+    expect([...leftoverIds(points, true, null, atForty)]).toEqual([UUID(2)]);
+    expect(gameOverflow(points, true)).toEqual([]);
+    const plan = planGameShift(points, true, UUID(2), null, atForty);
+    expect(plan).toMatchObject({
+      ok: true,
+      summary: { points: 1, games: 1, nextGame: { set: 1, gameInSet: 2 } },
+    });
+    if ("ok" in plan) {
+      expect(plan.writes.map((w) => [w.id, w.game_number])).toEqual([
+        [UUID(2), 2],
+      ]);
+    }
+  });
+
+  test("null is the beginning of the match: every reading is what it was", () => {
+    for (const adScoring of [true, false]) {
+      expect(gameOverflow(usersCase(), adScoring, null, null)).toEqual(
+        gameOverflow(usersCase(), adScoring),
+      );
+      expect(gameUnderflow(shortCase(), adScoring, null, null)).toEqual(
+        gameUnderflow(shortCase(), adScoring),
+      );
+    }
+    expect(planGameShift(usersCase(), true, UUID(7), null, null)).toEqual(
+      planGameShift(usersCase(), true, UUID(7)),
+    );
+  });
+});

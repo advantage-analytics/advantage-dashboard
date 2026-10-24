@@ -6,6 +6,7 @@ import type { AdminClient } from "@/lib/supabase/admin";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelSession } from "@/lib/services/labels/session";
 import {
+  START_SCORE_ERROR,
   applyLabelSessionPatch,
   parseLabelSessionPatch,
 } from "@/lib/services/labels/session-fields";
@@ -18,7 +19,7 @@ import { labelSessionFixture } from "./fixtures/label-session";
 import { elements } from "./fixtures/react-tree";
 import { createLoader } from "./fixtures/vm-modules";
 
-/** The session's own fields (`final_score`, `video_ends_early`): the parser, the service over a fake client, and the rail header's score chip and total. */
+/** The session's own fields (`final_score`, `video_ends_early`, `start_score`): the parser, the service over a fake client, and the rail header's score chip and total. */
 
 const CONSOLE = "src/components/admin/labels/label-console.tsx";
 const RAIL = "src/components/admin/labels/label-black-rail.tsx";
@@ -122,24 +123,112 @@ test.describe("parseLabelSessionPatch", () => {
     }
   });
 
+  test("accepts start_score as the whole start, or null, and refuses anything else", () => {
+    const start = {
+      sets: [0, 0],
+      games: [2, 0],
+      points: [1, 0],
+      server: "p1",
+    };
+    const parsed = parseLabelSessionPatch({ start_score: start });
+    expect(parsed).toEqual({ ok: true, patch: { start_score: start } });
+    // Copied, not aliased.
+    if ("ok" in parsed) {
+      expect(parsed.patch.start_score).not.toBe(start);
+      expect(parsed.patch.start_score?.games).not.toBe(start.games);
+    }
+    expect(parseLabelSessionPatch({ start_score: null })).toEqual({
+      ok: true,
+      patch: { start_score: null },
+    });
+    // A tiebreak's counts run past 3.
+    expect(
+      parseLabelSessionPatch({
+        start_score: { ...start, points: [5, 4], server: "p2" },
+      }),
+    ).toEqual({
+      ok: true,
+      patch: { start_score: { ...start, points: [5, 4], server: "p2" } },
+    });
+    // Beside the other two keys.
+    expect(
+      parseLabelSessionPatch({
+        start_score: start,
+        final_score: [[6, 3]],
+        video_ends_early: false,
+      }),
+    ).toEqual({
+      ok: true,
+      patch: {
+        start_score: start,
+        final_score: [[6, 3]],
+        video_ends_early: false,
+      },
+    });
+    for (const start_score of [
+      {},
+      [],
+      "2-0",
+      true,
+      { sets: [0, 0], games: [2, 0], points: [1, 0] },
+      { ...start, server: "p3" },
+      { ...start, server: null },
+      { ...start, points: [1] },
+      { ...start, points: [1, 0, 0] },
+      { ...start, games: [-1, 0] },
+      { ...start, games: [1.5, 0] },
+      { ...start, sets: ["0", 0] },
+      { ...start, sets: null },
+      { ...start, extra: 1 },
+    ]) {
+      expect(
+        parseLabelSessionPatch({ start_score }),
+        JSON.stringify(start_score),
+      ).toEqual({ error: START_SCORE_ERROR });
+    }
+  });
+
   test("applyLabelSessionPatch moves only the keys the patch carries", () => {
-    const fields = { finalScore: null, videoEndsEarly: null };
+    const start = {
+      sets: [0, 0] as [number, number],
+      games: [2, 0] as [number, number],
+      points: [1, 0] as [number, number],
+      server: "p1" as const,
+    };
+    const fields = { finalScore: null, videoEndsEarly: null, startScore: null };
     expect(applyLabelSessionPatch(fields, { final_score: [[1, 0]] })).toEqual({
       finalScore: [[1, 0]],
       videoEndsEarly: null,
+      startScore: null,
     });
     expect(
       applyLabelSessionPatch(
-        { finalScore: [[1, 0]], videoEndsEarly: null },
+        { finalScore: [[1, 0]], videoEndsEarly: null, startScore: null },
         { video_ends_early: true },
       ),
-    ).toEqual({ finalScore: [[1, 0]], videoEndsEarly: true });
+    ).toEqual({ finalScore: [[1, 0]], videoEndsEarly: true, startScore: null });
     expect(
       applyLabelSessionPatch(
-        { finalScore: [[1, 0]], videoEndsEarly: true },
+        { finalScore: [[1, 0]], videoEndsEarly: true, startScore: null },
         { final_score: null },
       ),
-    ).toEqual({ finalScore: null, videoEndsEarly: true });
+    ).toEqual({ finalScore: null, videoEndsEarly: true, startScore: null });
+    expect(
+      applyLabelSessionPatch(
+        { finalScore: [[1, 0]], videoEndsEarly: true, startScore: null },
+        { start_score: start },
+      ),
+    ).toEqual({
+      finalScore: [[1, 0]],
+      videoEndsEarly: true,
+      startScore: start,
+    });
+    expect(
+      applyLabelSessionPatch(
+        { finalScore: null, videoEndsEarly: null, startScore: start },
+        { start_score: null },
+      ),
+    ).toEqual({ finalScore: null, videoEndsEarly: null, startScore: null });
   });
 });
 

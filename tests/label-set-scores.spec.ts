@@ -12,6 +12,7 @@ import {
   scoreMismatch,
   scoreMismatchSentence,
   scoreReasonText,
+  sessionScoreMismatch,
   type LabelScoreMismatch,
 } from "@/lib/services/labels/set-scores";
 
@@ -550,5 +551,73 @@ test.describe("matchTiebreakSet", () => {
         [1, 0],
       ]),
     ).toBeNull();
+  });
+});
+
+// ── A video that starts mid-match ────────────────────────────────────────────
+
+test.describe("labelSetScores with a start score", () => {
+  const start = {
+    sets: [1, 0] as [number, number],
+    games: [2, 0] as [number, number],
+    points: [1, 0] as [number, number],
+    server: "p1" as const,
+  };
+
+  test("set 1's games open at the start's games; the first game counts once settled from the start", () => {
+    ids = 0;
+    const points = [
+      // Three p1 points: 15–0 from the start, then game.
+      ...game(1, 1, "p1", 3),
+      ...game(1, 2, "p2"),
+      ...game(2, 3, "p2"),
+    ];
+    const bands = labelScores(points, true, start).games;
+    const sets = labelSetScores(points, bands, start);
+    expect(sets.map((s) => [s.setNumber, s.games])).toEqual([
+      [1, [3, 1]],
+      [2, [0, 1]],
+    ]);
+    expect(sets[0].unfinished).toEqual([]);
+    expect(sets[0].overflow).toEqual([]);
+    // Without the start the same three rows leave game 1 short at 40–0.
+    const plain = labelSetScores(points, labelScores(points, true).games);
+    expect(plain[0].games).toEqual([0, 1]);
+    expect(plain[0].unfinished.map((g) => g.score)).toEqual(["40–0"]);
+  });
+
+  test("sessionScoreMismatch counts from the start", () => {
+    ids = 0;
+    const points = [...game(1, 1, "p1", 3), ...game(1, 2, "p2")];
+    const bands = labelScores(points, true, start).games;
+    const entered: MatchScore = { player1: [3], player2: [1] };
+    expect(
+      sessionScoreMismatch({
+        points,
+        games: bands,
+        finalScore: null,
+        matchScore: entered,
+        videoEndsEarly: null,
+        startScore: start,
+      }),
+    ).toBeNull();
+    // Left out, the start is the beginning of the match and the set is short.
+    expect(
+      sessionScoreMismatch({
+        points,
+        games: labelScores(points, true).games,
+        finalScore: null,
+        matchScore: entered,
+        videoEndsEarly: null,
+      })?.labelled,
+    ).toBe("0–1");
+  });
+
+  test("null is the beginning of the match: nothing changes", () => {
+    const points = twoSets();
+    const bands = labelScores(points, true).games;
+    expect(labelSetScores(points, bands, null)).toEqual(
+      labelSetScores(points, bands),
+    );
   });
 });

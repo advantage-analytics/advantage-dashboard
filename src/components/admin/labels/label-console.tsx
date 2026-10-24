@@ -521,6 +521,7 @@ export function LabelConsole({
   const [sessionFields, setSessionFields] = useState<LabelSessionFields>({
     finalScore: session.finalScore,
     videoEndsEarly: session.videoEndsEarly,
+    startScore: session.startScore,
   });
   // The deciding set the match record spells as a 10-point match tiebreak
   // (set-scores.ts) — never the labeller's own `final_score`, which is games

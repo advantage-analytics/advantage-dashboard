@@ -12,6 +12,7 @@ import { readAllPages } from "@/lib/data/admin-range-read";
 import { isUuid } from "@/lib/admin/validation";
 import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
+import { parseLabelStartScore } from "@/lib/services/labels/session-fields";
 import {
   PLAYBACK_JOB_COLUMNS,
   choosePlaybackFile,
@@ -347,6 +348,8 @@ interface DbSessionRow {
   /** jsonb array of `[p1, p2]` pairs, parsed by `parseFinalScore`; null until set. */
   final_score?: unknown;
   video_ends_early?: boolean | null;
+  /** jsonb object parsed by `parseLabelStartScore` (session-fields.ts); null until set. */
+  start_score?: unknown;
 }
 
 /**
@@ -419,7 +422,7 @@ export async function readLabelSessionRows<T = undefined>(
   const { data: session, error: sessionError } = await db
     .from("label_sessions")
     .select(
-      "id, job_id, match_id, status, derivation_version, ad_scoring, marks_enabled, final_score, video_ends_early",
+      "id, job_id, match_id, status, derivation_version, ad_scoring, marks_enabled, final_score, video_ends_early, start_score",
     )
     .eq("id", sessionId)
     .maybeSingle<DbSessionRow>();
@@ -649,6 +652,7 @@ export function buildLabelSession(
     playOnLets: readPlayOnLets(match?.format),
     finalScore: parseFinalScore(session.final_score ?? null),
     videoEndsEarly: session.video_ends_early ?? null,
+    startScore: parseLabelStartScore(session.start_score ?? null),
     matchScore: parseMatchScore(match?.score ?? null),
     bestOf: readBestOf(match?.format),
     points,
