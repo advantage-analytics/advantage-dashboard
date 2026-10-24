@@ -42,6 +42,8 @@ export const STROKE_KEY_HINTS: readonly { key: string; label: string }[] = [
   { key: "T", label: "time = frame" },
   { key: "A", label: "add shot" },
   { key: "⇧A", label: "add before" },
+  { key: "R", label: "reset shot" },
+  { key: "⇧R", label: "reset point" },
   { key: "⌫", label: "delete shot" },
 ];
 

@@ -113,3 +113,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. T reads the playhead whether or not the film is paused; it does not require a pause first.
+
+## T13 · Reset shortcuts: R and ⇧R — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass (close call: criteria 1–2 are covered by source-text specs, as the file's other key specs are, rather than a console harness driving the key)
+**changed:** `R` (`resetShotKey`) asks the existing reset-shot confirm through `rowOperations.onAskResetShot` for the selected, non-deleted stroke of the open point when `canResetShot` holds; `⇧R` (`resetPointKey`) asks the reset-point confirm through `onAskResetPoint` for the open point when `canResetPoint` holds and `pointResetScope(…, sharesVendorRally(…))` is non-null. Both do nothing on a read-only session or with a confirm open, and never build the confirm themselves. `STROKE_KEY_HINTS` gains R "reset shot" and ⇧R "reset point"; the tray's Reset button carries `aria-keyshortcuts="R"`. Specs in label-stroke-keys-court-zoom and label-black-rows.
+**follow-ups:**
+
+1. A console key harness would let R / ⇧R (and the other keys) be spec'd by driving the key and observing the confirm kind, instead of source text.
+2. ⇧R acts on the open point even when a stroke in another point is selected.

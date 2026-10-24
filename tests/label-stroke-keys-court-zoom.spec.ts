@@ -230,12 +230,14 @@ test.describe("A adds a shot, C switches contact and landing", () => {
   );
 
   test("the legend under the court names them, after the stroke keys", () => {
-    expect(STROKE_KEY_HINTS.slice(-6)).toEqual([
+    expect(STROKE_KEY_HINTS.slice(-8)).toEqual([
       { key: "C", label: "contact / landing" },
       { key: "X", label: "flip side" },
       { key: "T", label: "time = frame" },
       { key: "A", label: "add shot" },
       { key: "⇧A", label: "add before" },
+      { key: "R", label: "reset shot" },
+      { key: "⇧R", label: "reset point" },
       { key: "⌫", label: "delete shot" },
     ]);
     // Neither is a stroke key: they never change the selected stroke.
@@ -265,6 +267,33 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     // No element, no frame.
     expect(frameTimePatch(untimed, null, 940)).toBeNull();
     expect(frameTimePatch(untimed, Number.NaN, 940)).toBeNull();
+  });
+
+  test("R / ⇧R only ask the existing reset confirms, guarded like the other stroke keys", () => {
+    expect(source).toContain('lower === "r"');
+    expect(source).toContain("? () => resetPointKey.current()");
+    expect(source).toContain(": () => resetShotKey.current()");
+    const shotBody = source.slice(
+      source.indexOf("    resetShotKey.current = () => {"),
+    );
+    const shotFn = shotBody.slice(0, shotBody.indexOf("\n    };\n"));
+    expect(shotFn).toContain(
+      "if (!operable || confirm || placement.shotId === null) return false;",
+    );
+    expect(shotFn).toContain("if (!canResetShot(shot)) return false;");
+    expect(shotFn).toContain("rowOperations.onAskResetShot(");
+    expect(shotFn).not.toContain("setConfirm");
+    const pointBody = source.slice(
+      source.indexOf("    resetPointKey.current = () => {"),
+    );
+    const pointFn = pointBody.slice(0, pointBody.indexOf("\n    };\n"));
+    expect(pointFn).toContain("if (!operable || confirm || !expanded)");
+    expect(pointFn).toContain("if (!canResetPoint(expanded)) return false;");
+    expect(pointFn).toContain(
+      "pointResetScope(expanded, sharesVendorRally(expanded, points))",
+    );
+    expect(pointFn).toContain("rowOperations.onAskResetPoint(expanded.id)");
+    expect(pointFn).not.toContain("setConfirm");
   });
 
   test("T writes the selected stroke's time from the player, on the console's key reach", () => {

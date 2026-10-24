@@ -1452,6 +1452,7 @@ function ShotTray({
             shrinks={action.key !== "delete"}
             small
             data-shot-action={action.key}
+            aria-keyshortcuts={action.key === "reset" ? "R" : undefined}
             aria-label={action.ariaLabel}
             onClick={(event) => {
               event.stopPropagation();

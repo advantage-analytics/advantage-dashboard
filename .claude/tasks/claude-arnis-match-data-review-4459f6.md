@@ -178,7 +178,7 @@ ready).
 
 ## T13 · Reset shortcuts: R and ⇧R
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T12
 - **files:** src/components/admin/labels/label-console.tsx, src/components/admin/labels/stroke-keys.ts, src/components/admin/labels/label-black-shot-row.tsx, tests/label-stroke-keys-court-zoom.spec.ts, tests/label-reset.spec.ts (guesses)

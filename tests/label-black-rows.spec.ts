@@ -1345,6 +1345,12 @@ test.describe("the black shots well", () => {
       expect(button).toMatch(/^<button type="button"/);
       expect(button).toContain(`aria-label="${label}"`);
     }
+    expect(tag(edited, 'data-shot-action="reset"')).toContain(
+      'aria-keyshortcuts="R"',
+    );
+    expect(tag(edited, 'data-shot-action="delete"')).not.toContain(
+      "aria-keyshortcuts",
+    );
     // Delete a step quieter than the others, and the one that never gives way.
     expect(tag(edited, 'data-shot-action="delete"')).toContain("text-white/55");
     expect(tag(edited, 'data-shot-action="delete"')).toContain("shrink-0");
