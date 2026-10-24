@@ -15,6 +15,7 @@ import {
   MAX_ZOOM,
   NO_ZOOM,
   artPoint,
+  carryZoom,
   markEndAt,
   markHitRadius,
   moveWindow,
@@ -364,6 +365,195 @@ test.describe("court zoom", () => {
     // The click a drag ends with is still dropped, and a click reads the moved box.
     expect(source).toContain("if (dropClick.current) {");
     expect(source).toMatch(/toCourtInWindow\(\s*top,\s*artPoint\(/);
+  });
+
+  test("+ / − and the ⌃ wheel zoom through `zoomAbout`; the anchor's court point holds", () => {
+    const source = readFileSync(
+      "src/components/admin/labels/label-court.tsx",
+      "utf8",
+    );
+    // + / − about the box centre; the ⌃ wheel about the cursor.
+    expect(source).toContain("zoomAbout(z, z.scale * factor, 50, 50)");
+    expect(source).toContain(
+      "zoomAbout(state.zoom, state.zoom.scale * factor, px, py)",
+    );
+    const anchors = [
+      [50, 50],
+      [15, 85],
+      [0, 0],
+      [100, 100],
+      [72, 31],
+    ];
+    const tops = [halfTopY("near"), halfTopY("far"), moveWindow(30, 0)];
+    for (const scale of [1.5, 2.25, 4]) {
+      for (const [px, py] of anchors) {
+        for (const top of tops) {
+          // From the unzoomed court and from an already zoomed, panned one.
+          for (const from of [
+            NO_ZOOM,
+            panBy(zoomAbout(NO_ZOOM, 1.5, 30, 60), -7, 4),
+          ]) {
+            const before = toCourtInWindow(top, artPoint(from, px, py));
+            const z = zoomAbout(from, scale, px, py);
+            const after = toCourtInWindow(top, artPoint(z, px, py));
+            // Only the clamp may move it, and only at a corner it cannot.
+            if (z.x > 100 * (1 - z.scale) && z.x < 0) {
+              expect(after.x).toBeCloseTo(before.x, 9);
+            }
+            if (z.y > 100 * (1 - z.scale) && z.y < 0) {
+              expect(after.y).toBeCloseTo(before.y, 9);
+            }
+          }
+          // From the unzoomed court the clamp never bites: exactly still.
+          const z = zoomAbout(NO_ZOOM, scale, px, py);
+          const p = artPoint(z, px, py);
+          expect(p.sx).toBeCloseTo(px, 9);
+          expect(p.sy).toBeCloseTo(py, 9);
+        }
+      }
+    }
+  });
+
+  test("in then out by the same factor, from any pan, is exactly the unzoomed court", () => {
+    for (const scale of [1.5, 2.25, 4, Math.exp(0.2) ** 3]) {
+      for (const [px, py] of [
+        [50, 50],
+        [15, 85],
+        [3, 97],
+      ]) {
+        for (const [dx, dy] of [
+          [0, 0],
+          [-40, 12],
+          [500, -500],
+        ]) {
+          const z = panBy(zoomAbout(NO_ZOOM, scale, px, py), dx, dy);
+          const back = zoomAbout(z, z.scale / scale, 100 - px, py / 2);
+          expect(back).toEqual(NO_ZOOM);
+          expect(back.scale).toBe(1);
+        }
+      }
+    }
+    // A pinch in five wheel events and out five: products, not one factor.
+    let z = NO_ZOOM;
+    const f = Math.exp(0.2);
+    for (let i = 0; i < 5; i++) z = zoomAbout(z, z.scale * f, 15, 85);
+    for (let i = 0; i < 5; i++) z = zoomAbout(z, z.scale / f, 15, 85);
+    expect(z).toEqual(NO_ZOOM);
+  });
+
+  // Reproduced in a browser (dev preview of the real LabelCourt on a near
+  // half): pinched to 3.3× on the near baseline's left corner (court
+  // y ≈ 0.3 m under the box centre) and dragged, then a placing click flipped
+  // the box near → far. The art kept its percent offsets, so the zoomed view
+  // jumped 14.5 m to the far service box (y ≈ 14.9 m under the centre) — a
+  // spot nobody zoomed to. A slide (27.27 → 30) likewise shifted the centre
+  // 2.7 m. The placed point itself was right; the view after it was not.
+  test("a placing click's near ↔ far flip, or a slide, keeps the zoomed-to court spot under the centre", () => {
+    const near = halfTopY("near");
+    const far = halfTopY("far");
+    const centre = (z: typeof NO_ZOOM, top: number) =>
+      toCourtInWindow(top, artPoint(z, 50, 50));
+    // Zoomed to the far half's middle, the box slides back 2.73 m.
+    const z = zoomAbout(NO_ZOOM, 2.25, 50, 50);
+    const slid = carryZoom(z, far, 30);
+    expect(centre(slid, 30).y).toBeCloseTo(centre(z, far).y, 9);
+    expect(centre(slid, 30).x).toBeCloseTo(centre(z, far).x, 9);
+    // The same offsets, as before this fix, show another spot.
+    expect(Math.abs(centre(z, 30).y - centre(z, far).y)).toBeGreaterThan(2);
+    // Back again: the same zoom.
+    const back = carryZoom(slid, 30, far);
+    expect(back.x).toBeCloseTo(z.x, 9);
+    expect(back.y).toBeCloseTo(z.y, 9);
+    // Near → far from a zoom near the net: the net-side spot stays centred.
+    const atNet = panBy(zoomAbout(NO_ZOOM, 4, 50, 5), 0, 0);
+    const flipped = carryZoom(atNet, near, far);
+    // That spot is off the far box (near side, below its bottom edge), so the
+    // art is as far toward it as it can go: the bottom edge, and no further.
+    expect(flipped.y).toBeCloseTo(100 * (1 - 4), 9);
+    expect(flipped.scale).toBe(4);
+    expect(flipped.x).toBe(atNet.x);
+  });
+
+  test("carried zoom always covers the box; unzoomed it stays unzoomed", () => {
+    const tops = [halfTopY("near"), halfTopY("far"), 30, 9, 20];
+    for (const scale of [1.5, 2.25, 4]) {
+      for (const from of tops) {
+        for (const to of tops) {
+          for (const [px, py] of [
+            [0, 0],
+            [50, 50],
+            [100, 100],
+            [20, 90],
+          ]) {
+            const z = carryZoom(zoomAbout(NO_ZOOM, scale, px, py), from, to);
+            expect(z.scale).toBe(scale);
+            for (const v of [z.x, z.y]) {
+              expect(v).toBeLessThanOrEqual(0);
+              expect(v).toBeGreaterThanOrEqual(100 * (1 - scale) - 1e-9);
+            }
+          }
+        }
+      }
+    }
+    expect(carryZoom(NO_ZOOM, halfTopY("near"), halfTopY("far"))).toEqual(
+      NO_ZOOM,
+    );
+  });
+
+  test("the court carries the zoom where its box moves, and resets on whole ↔ half or another stroke", () => {
+    const source = readFileSync(
+      "src/components/admin/labels/label-court.tsx",
+      "utf8",
+    );
+    expect(source).toMatch(
+      /zoomState\.zoomed !== zoomed \|\|\s+zoomState\.shotId !== targetShotId/,
+    );
+    expect(source).toMatch(
+      /shotId: targetShotId,\s+zoom: NO_ZOOM,\s+openedTop,\s+top: openedTop,/,
+    );
+    expect(source).toMatch(
+      /} else if \(zoomState\.openedTop !== openedTop\) \{\s+setZoomState\(\{\s+\.\.\.zoomState,\s+zoom: carryZoom\(zoomState\.zoom, zoomState\.top, openedTop\),/,
+    );
+  });
+
+  test("a court point round-trips through the window and the zoom to within 1 cm", () => {
+    const points = [
+      { x: 0, y: 0 },
+      { x: -4.115, y: NET_Y },
+      { x: 5.48, y: COURT_LENGTH },
+      { x: -9.9, y: -3.4 },
+      { x: 2.3, y: 27.1 },
+      { x: 7.1, y: 6.4 },
+    ];
+    const tops = [
+      halfTopY("near"),
+      halfTopY("far"),
+      runoffWindowTop("near", MAX_RUNOFF),
+      runoffWindowTop("far", MAX_RUNOFF),
+      20,
+    ];
+    for (const scale of [1, 1.5, 2.25, 4]) {
+      for (const [px, py, dx, dy] of [
+        [50, 50, 0, 0],
+        [10, 90, 13, -8],
+        [95, 5, -60, 40],
+        [33, 66, 500, 500],
+      ]) {
+        const zoom = panBy(zoomAbout(NO_ZOOM, scale, px, py), dx, dy);
+        for (const top of tops) {
+          for (const point of points) {
+            // Drawn at box percent: the window, then the zoom transform.
+            const art = fromCourtInWindow(top, point);
+            const sx = zoom.x + art.sx * zoom.scale;
+            const sy = zoom.y + art.sy * zoom.scale;
+            // Read back as a click there is.
+            const back = toCourtInWindow(top, artPoint(zoom, sx, sy));
+            expect(Math.abs(back.x - point.x)).toBeLessThan(0.01);
+            expect(Math.abs(back.y - point.y)).toBeLessThan(0.01);
+          }
+        }
+      }
+    }
   });
 
   test("a click maps back through the zoom", () => {

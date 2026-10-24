@@ -67,8 +67,10 @@ import {
  * and the click it ends with is dropped. A click is read back through the
  * zoom (`artPoint`) and the moved box, so it still lands where the court
  * under the cursor is. The zoom holds across near ↔ far, which flips on every
- * placing click, and resets between the whole court and a half. Marks keep
- * their on-screen size at any zoom.
+ * placing click, and across a slide, re-anchored so the court spot under the
+ * box's centre stays there (`carryZoom`); it resets between the whole court
+ * and a half, and when another stroke is selected. Marks keep their on-screen
+ * size at any zoom.
  *
  * A half's box draws its run-off's guides whenever a run-off is on screen
  * (`windowRunoffs`): a dashed guide every 2 m behind the baseline, labelled
@@ -182,10 +184,40 @@ export function zoomAbout(
   px: number,
   py: number,
 ): CourtZoom {
-  const next = clamp(scale, 1, MAX_ZOOM);
+  // A step in and back out by the same factor multiplies to 1 only to within
+  // a rounding error; snapped, it is exactly the unzoomed court again.
+  const next = Math.abs(scale - 1) < 1e-9 ? 1 : clamp(scale, 1, MAX_ZOOM);
+  if (next === 1) return { ...NO_ZOOM };
   const k = next / zoom.scale;
   return panBy(
     { scale: next, x: px - (px - zoom.x) * k, y: py - (py - zoom.y) * k },
+    0,
+    0,
+  );
+}
+
+/**
+ * `zoom` carried from a half's box at `fromTop` to one at `toTop` (metres of
+ * `y` at its top edge) — the console sliding the box, or flipping it near ↔
+ * far on a placing click: the court spot under the box's centre stays under
+ * its centre, as near as the art can come while still covering the box
+ * (`panBy`'s clamp). The scale holds. The percent offsets alone would not do:
+ * the same offsets in a moved box show a different spot on the court.
+ */
+export function carryZoom(
+  zoom: CourtZoom,
+  fromTop: number,
+  toTop: number,
+): CourtZoom {
+  if (zoom.scale === 1 || fromTop === toTop) return zoom;
+  const centre = toCourtInWindow(fromTop, artPoint(zoom, 50, 50));
+  const art = fromCourtInWindow(toTop, centre);
+  return panBy(
+    {
+      scale: zoom.scale,
+      x: 50 - art.sx * zoom.scale,
+      y: 50 - art.sy * zoom.scale,
+    },
     0,
     0,
   );
@@ -442,18 +474,32 @@ export function LabelCourt({
   const openedTop = zoomed ? (slid?.top ?? halfTopY(view)) : 0;
   const placing = zoomed && prompt !== null && onPlace !== undefined;
 
-  // The labeller's zoom, reset when the court changes scale (whole ↔ half),
-  // and the box they moved, reset whenever the console opens another.
+  // The labeller's zoom, reset when the court changes scale (whole ↔ half)
+  // or another stroke is selected, and the box they moved, reset whenever the
+  // console opens another. A box the console slides or flips near ↔ far
+  // carries the zoom (`carryZoom`), so the spot they zoomed to stays put.
   const [zoomState, setZoomState] = useState({
     zoomed,
+    shotId: targetShotId,
     zoom: NO_ZOOM,
     openedTop,
     top: openedTop,
   });
-  if (zoomState.zoomed !== zoomed) {
-    setZoomState({ zoomed, zoom: NO_ZOOM, openedTop, top: openedTop });
+  if (zoomState.zoomed !== zoomed || zoomState.shotId !== targetShotId) {
+    setZoomState({
+      zoomed,
+      shotId: targetShotId,
+      zoom: NO_ZOOM,
+      openedTop,
+      top: openedTop,
+    });
   } else if (zoomState.openedTop !== openedTop) {
-    setZoomState({ ...zoomState, openedTop, top: openedTop });
+    setZoomState({
+      ...zoomState,
+      zoom: carryZoom(zoomState.zoom, zoomState.top, openedTop),
+      openedTop,
+      top: openedTop,
+    });
   }
   const zoom = zoomState.zoom;
   const top = zoomed ? zoomState.top : 0;

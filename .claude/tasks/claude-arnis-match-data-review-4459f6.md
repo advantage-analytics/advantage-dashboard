@@ -100,7 +100,7 @@ ready).
 
 ## T7 · Court zoom: reproduce, then pin the behaviours as pure specs
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/admin/labels/label-court.tsx, src/components/admin/labels/court-geometry.ts, tests/label-stroke-keys-court-zoom.spec.ts (guesses)
 - **routes:** /admin/labels/[sessionId]

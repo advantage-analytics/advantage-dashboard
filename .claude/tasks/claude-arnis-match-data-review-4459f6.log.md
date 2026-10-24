@@ -62,3 +62,11 @@ is the runner's. Newest entries at the bottom.
 1. While placing, the panel draws only the selected stroke, so click-to-select in practice only switches to that stroke's other end; drawing the point's other strokes faintly would let it select a different stroke.
 2. A pointer cursor over a selectable mark would make it discoverable.
 3. The `CourtEndControls` glyphs also appear in the inline review block's switch.
+
+## T7 · Court zoom: reproduce, then pin the behaviours as pure specs — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Reproduced headless on a temporary fixture page (removed): + / −, ⌃-wheel and drag-pan behaved, but a placing click's near↔far flip and a box slide kept the zoom's percent offsets, so the zoomed view jumped to another court spot (near baseline corner y≈0.3 m → far service box y≈14.9 m; a 27.27→30 slide moved it 2.7 m). New pure `carryZoom(zoom, fromTop, toTop)` keeps the court spot under the box centre and clamps via `panBy`; `LabelCourt` carries the zoom when `openedTop` changes and resets to `NO_ZOOM` on whole↔half and when the target stroke changes; `zoomAbout` snaps ≈1 to exactly `NO_ZOOM`. Court box/scale/lines unchanged. New specs in label-stroke-keys-court-zoom: the reproduced failure, anchor hold for {1.5, 2.25, 4}, in-then-out → NO_ZOOM, carry coverage, reset keys, 1 cm round trip.
+**follow-ups:**
+
+1. After a flip clamps to an edge, a later carry starts from the clamped centre, so the original spot is not remembered across two moves.
