@@ -78,8 +78,16 @@ export interface EditContext {
    * its row is drawn armed, the one "Add shot" the court panel is asking for.
    */
   armedSlotAfterShotId?: string | null;
-  /** `target` opens the court on that end: a position cell was clicked. */
-  onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
+  /**
+   * `target` opens the court on that end: a position cell was clicked.
+   * `seek: false` selects without moving the film: the keyboard focused a
+   * cell of the row. A click leaves it out and the film goes to the stroke.
+   */
+  onSelectShot?: (
+    shotId: string,
+    target?: "contact" | "landing",
+    options?: { seek?: boolean },
+  ) => void;
   /**
    * The labeller clicked into the row a flag jump selected: their own
    * selection now, so the console leaves review mode (nothing moves on).

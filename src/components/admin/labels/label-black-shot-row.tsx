@@ -398,6 +398,14 @@ export function BlackShotsWell({
 }
 
 /**
+ * The row a pointer is pressing on: its cell takes focus before the click
+ * lands, and that focus is the click's selection, seek and all — so the
+ * click after it finds the row selected and makes no second one. One press
+ * at a time, so one id; a focus or click spends it.
+ */
+let pressedShotId: string | null = null;
+
+/**
  * One stroke: number · time · hitter · stroke · spin · hit at (ring) · landed
  * at (dot) · derived placement and result · blue pencil when changed or added.
  *
@@ -448,13 +456,28 @@ export function BlackShotRow({
   const changed = shot.status === "edited" || shot.status === "added";
   // A click on the row already selected (the one a flag jump landed on) is
   // the labeller taking it over: review mode ends, the selection stays.
-  const select = () => {
-    if (!selected) onSelectShot?.(shot.id);
-    else edit.onExitReview?.();
+  // A click seeks the film to the stroke; a focus the keyboard moved here
+  // (Tab into a cell) selects it and leaves the film where it is.
+  const select = (seek: boolean) => {
+    if (!selected) {
+      if (seek) onSelectShot?.(shot.id);
+      else onSelectShot?.(shot.id, undefined, { seek: false });
+    } else edit.onExitReview?.();
+  };
+  const clickRow = () => {
+    pressedShotId = null;
+    select(true);
+  };
+  const focusRow = () => {
+    const pressed = pressedShotId === shot.id;
+    pressedShotId = null;
+    select(pressed);
   };
   // A position cell selects the row on its own end, even when already selected.
-  const pick = (target: "contact" | "landing") =>
+  const pick = (target: "contact" | "landing") => {
+    pressedShotId = null;
     onSelectShot?.(shot.id, target);
+  };
   const patch = (value: LabelShotPatch) => onPatchShot?.(shot.id, value);
   const cell = { editable, rowSelected: selected };
   const selectCell = { ...cell, menu: tone };
@@ -484,15 +507,19 @@ export function BlackShotRow({
   return (
     <>
       {/* Selecting is a pointer convenience; the keyboard selects by focusing
-          any cell in the row, which bubbles here as the same call. */}
+          any cell in the row, which bubbles here and selects without a seek.
+          A press's own focus is the click's selection (`pressedShotId`). */}
       <div
         data-row="shot"
         data-shot-id={shot.id}
         data-selected={selected ? "" : undefined}
         data-playing={playing ? "true" : undefined}
         data-fault={fault ? "" : undefined}
-        onClick={select}
-        onFocus={select}
+        onPointerDown={() => {
+          pressedShotId = shot.id;
+        }}
+        onClick={clickRow}
+        onFocus={focusRow}
         style={arrival.style}
         className={cn(
           ROW_GRID,

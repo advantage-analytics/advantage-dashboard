@@ -271,8 +271,16 @@ export function LabelBlackRail({
     afterShotId: string | null;
     node: React.ReactNode;
   } | null;
-  /** `target` opens the court on that end: a position cell was clicked. */
-  onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
+  /**
+   * `target` opens the court on that end: a position cell was clicked.
+   * `seek: false` selects without moving the film: the keyboard focused a
+   * cell of the row. A click leaves it out and the film goes to the stroke.
+   */
+  onSelectShot?: (
+    shotId: string,
+    target?: "contact" | "landing",
+    options?: { seek?: boolean },
+  ) => void;
   /** A click into the row a flag jump selected: leave review mode. */
   onExitReview?: () => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;

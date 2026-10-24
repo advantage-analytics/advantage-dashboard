@@ -255,3 +255,23 @@ export function stepFlag<F extends Pick<OpenFlag, "pointId">>(
     stops[stops.length - 1]
   );
 }
+
+/**
+ * Where `]` / `[` and `'` / `;` step from: the last flag a jump landed on,
+ * while the labeller has not moved off it and its point is still there,
+ * else the current point. A film playing on past the flag leaves the next
+ * jump going on from the flag, not from wherever the film got to.
+ */
+export function flagStepOrigin(
+  lastFlagPointId: string | null,
+  currentPointId: string | null,
+  points: readonly Pick<LabelPoint, "id" | "status">[],
+): string | null {
+  if (
+    lastFlagPointId !== null &&
+    points.some((p) => p.id === lastFlagPointId && p.status !== "deleted")
+  ) {
+    return lastFlagPointId;
+  }
+  return currentPointId;
+}

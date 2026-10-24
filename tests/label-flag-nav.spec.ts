@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   flagGroups,
+  flagStepOrigin,
   flagStopLabel,
   openFlags,
   scoreStop,
@@ -18,6 +19,7 @@ import type {
   ReviewItem,
   ReviewItemId,
 } from "@/lib/services/labels/marks-state";
+import type { LabelPointStatus } from "@/lib/services/labels/session";
 import type { LabelScoreMismatch } from "@/lib/services/labels/set-scores";
 import { labelPoint } from "./fixtures/label-session";
 
@@ -176,5 +178,36 @@ test.describe("the score stop", () => {
     expect(stepFlag(stops, points, "d", -1)?.pointId).toBe("c");
     expect(flagStopLabel(stop)).toBe("Set 1 ends 5–5, record 6–4");
     expect(flagStopLabel(flags[0])).toBe("Missing shot?");
+  });
+});
+
+test.describe("flagStepOrigin", () => {
+  const live = points.map((p) => ({
+    ...p,
+    status: "unchanged" as LabelPointStatus,
+  }));
+  const flags = [flag("b", [1]), flag("d", [6])];
+
+  test("steps on from the last flag landed on while the film plays past it", () => {
+    // Landed on b; the film played on into e. ] goes to d, not round to b.
+    const from = flagStepOrigin("b", "e", live);
+    expect(from).toBe("b");
+    expect(stepFlag(flags, live, from, 1)?.pointId).toBe("d");
+    // From where the film is, the same key would have wrapped to b.
+    expect(stepFlag(flags, live, "e", 1)?.pointId).toBe("b");
+    // [ from d, the film now on a: back to b.
+    expect(stepFlag(flags, live, flagStepOrigin("d", "a", live), -1)).toEqual(
+      flags[0],
+    );
+  });
+
+  test("falls back to the current point with none, or when its point is gone", () => {
+    expect(flagStepOrigin(null, "c", live)).toBe("c");
+    expect(flagStepOrigin(null, null, live)).toBeNull();
+    const gone = live.map((p) =>
+      p.id === "b" ? { ...p, status: "deleted" as const } : p,
+    );
+    expect(flagStepOrigin("b", "c", gone)).toBe("c");
+    expect(flagStepOrigin("zz", "c", live)).toBe("c");
   });
 });

@@ -236,6 +236,7 @@ import {
   selectionFor,
 } from "./label-now-playing";
 import {
+  flagStepOrigin,
   openFlags,
   scoreStop,
   slotStops,
@@ -845,9 +846,16 @@ export function LabelConsole({
   }
   const { checked, total } = labelProgress(points);
 
+  // The point the last flag jump landed on (`stepToFlag`, the header's flag
+  // rows): the flag keys step on from it while the film plays on past it.
+  // Let go when the labeller clicks or selects in another point, or drives
+  // the film a point on (`stepFilm`).
+  const lastFlagPointId = useRef<string | null>(null);
+
   // A row click makes its point current, seeks to its first stroke and holds
   // the rail, or re-follows when the point is the one already playing.
   function togglePoint(pointId: string) {
+    lastFlagPointId.current = null;
     cancelReplay();
     setReviewMode(false);
     setArmedSlot(null);
@@ -863,6 +871,7 @@ export function LabelConsole({
   // a point on lets a replay go and lets go of the hold — the console follows
   // the film again, the current point with it.
   function stepFilm(direction: -1 | 1) {
+    lastFlagPointId.current = null;
     cancelReplay();
     followPlayback();
     player.current?.step(direction);
@@ -893,6 +902,9 @@ export function LabelConsole({
     }
     const owner = pointOfShot(points, shotId);
     if (owner) holdPoint(owner.id);
+    // A stroke of another point than the flag last landed on is the labeller
+    // moving off it: the flag keys step from the current point again.
+    if (owner?.id !== lastFlagPointId.current) lastFlagPointId.current = null;
     const shot = findShot(points, shotId);
     // A position cell names its end: the court opens on that end's half.
     const start = placementOf(points, shotId);
@@ -2626,7 +2638,10 @@ export function LabelConsole({
     fixTiebreakServe,
     setGameType,
     findGap,
-    goToFlag: (pointId: string) => findGap(pointId, { arm: true }),
+    goToFlag: (pointId: string) => {
+      lastFlagPointId.current = pointId;
+      findGap(pointId, { arm: true });
+    },
     pullGamePoints,
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
     clearEnteredScore: () => void updateSessionFields({ final_score: null }),
@@ -2730,14 +2745,27 @@ export function LabelConsole({
     };
     stepToFlag.current = (direction, kind) => {
       if (confirm) return;
-      const flag = stepFlag(flagStops[kind], points, currentPointId, direction);
-      if (flag) findGap(flag.pointId, { arm: true });
+      const from = flagStepOrigin(
+        lastFlagPointId.current,
+        currentPointId,
+        points,
+      );
+      const flag = stepFlag(flagStops[kind], points, from, direction);
+      if (!flag) return;
+      lastFlagPointId.current = flag.pointId;
+      findGap(flag.pointId, { arm: true });
     };
     stepShot.current = (direction) => {
-      if (confirm || !expanded || unfoldedPointId !== expanded.id) return;
+      if (confirm || !expanded) return;
       const shots = liveShotsInOrder(expanded, drawsGhosts(marks));
       if (shots.length === 0) return;
-      const at = shots.findIndex((shot) => shot.id === placement.shotId);
+      // A folded point opens on the key: ↓ lands on its first stroke and ↑
+      // on its last, whatever was selected before it folded.
+      const folded = unfoldedPointId !== expanded.id;
+      if (folded) setFoldedPointId(null);
+      const at = folded
+        ? -1
+        : shots.findIndex((shot) => shot.id === placement.shotId);
       // From no stroke, ↓ takes the first and ↑ the last; the ends do not wrap.
       const next =
         at === -1

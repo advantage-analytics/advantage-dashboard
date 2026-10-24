@@ -974,11 +974,11 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(consoleSource).toMatch(
       /stepToFlag\.current\(key === "\]" \? 1 : -1, "score"\)/,
     );
-    expect(consoleSource).toContain(
-      "if (flag) findGap(flag.pointId, { arm: true });",
+    expect(consoleSource).toMatch(
+      /if \(!flag\) return;\s*lastFlagPointId\.current = flag\.pointId;\s*findGap\(flag\.pointId, \{ arm: true \}\);/,
     );
-    expect(consoleSource).toContain(
-      "goToFlag: (pointId: string) => findGap(pointId, { arm: true }),",
+    expect(consoleSource).toMatch(
+      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
     );
     expect(consoleSource).toContain("onGoToPoint={railHandlers.goToFlag}");
     // "Find the gap", the overview's open-on-point and a clicked row do not.
@@ -1141,12 +1141,11 @@ test.describe("a flag jump lands on the point's review step", () => {
 
   test("↓ and ] still step after a jump that selected a stroke", () => {
     // ↓ walks from the selected stroke of the unfolded point; ] steps flags
-    // from the current point. Neither reads anything the jump leaves behind.
+    // from the last flag landed on, else the current point.
     const stepShot = consoleSource.slice(
       consoleSource.indexOf("stepShot.current = (direction) => {"),
-      consoleSource.indexOf("undoLastRef.current = () =>"),
+      consoleSource.indexOf("addShotKey.current = () => {"),
     );
-    expect(stepShot).toContain("unfoldedPointId !== expanded.id");
     expect(stepShot).toContain(
       "shots.findIndex((shot) => shot.id === placement.shotId)",
     );
@@ -1155,7 +1154,57 @@ test.describe("a flag jump lands on the point's review step", () => {
       consoleSource.indexOf("stepShot.current = (direction) => {"),
     );
     expect(stepFlag).toContain(
-      "stepFlag(flagStops[kind], points, currentPointId, direction)",
+      "stepFlag(flagStops[kind], points, from, direction)",
+    );
+  });
+
+  test("↑ / ↓ on a folded point unfold it onto its first or last stroke", () => {
+    const stepShot = consoleSource.slice(
+      consoleSource.indexOf("stepShot.current = (direction) => {"),
+      consoleSource.indexOf("addShotKey.current = () => {"),
+    );
+    // No bail on a folded point: only a confirm or no point stops the key.
+    expect(stepShot).toContain("if (confirm || !expanded) return;");
+    expect(stepShot).not.toMatch(/unfoldedPointId !== expanded\.id\)\s*return/);
+    expect(stepShot).toContain(
+      "const folded = unfoldedPointId !== expanded.id;",
+    );
+    expect(stepShot).toContain("if (folded) setFoldedPointId(null);");
+    // Folded, the selection before it is ignored: from no stroke, ↓ takes the
+    // first and ↑ the last.
+    expect(stepShot).toMatch(
+      /const at = folded\s*\?\s*-1\s*:\s*shots\.findIndex/,
+    );
+    expect(stepShot).toMatch(
+      /at === -1\s*\?\s*direction === 1\s*\?\s*0\s*:\s*shots\.length - 1/,
+    );
+    expect(stepShot).toContain("selectShot(shots[next].id);");
+  });
+
+  test("the flag keys step from the last flag landed on until the labeller moves off it", () => {
+    const stepFlag = consoleSource.slice(
+      consoleSource.indexOf("stepToFlag.current = (direction, kind) => {"),
+      consoleSource.indexOf("stepShot.current = (direction) => {"),
+    );
+    expect(stepFlag).toMatch(
+      /const from = flagStepOrigin\(\s*lastFlagPointId\.current,\s*currentPointId,\s*points,\s*\);/,
+    );
+    expect(stepFlag).toContain("lastFlagPointId.current = flag.pointId;");
+    // The header's flag rows land on a flag too.
+    expect(consoleSource).toMatch(
+      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
+    );
+    // A row click, or ← / →, lets it go.
+    const body = (name: string) => {
+      const from = consoleSource.indexOf(`  function ${name}(`);
+      return consoleSource.slice(from, consoleSource.indexOf("\n  }\n", from));
+    };
+    expect(body("togglePoint")).toContain("lastFlagPointId.current = null;");
+    expect(body("stepFilm")).toContain("lastFlagPointId.current = null;");
+    // Selecting a stroke of another point lets it go; one of the flag's own
+    // (the jump's landing) keeps it.
+    expect(body("selectShot")).toContain(
+      "if (owner?.id !== lastFlagPointId.current) lastFlagPointId.current = null;",
     );
   });
 
@@ -1494,7 +1543,7 @@ test("clicking into the row a flag jump selected, or editing a cell, ends review
   );
   // The already-selected row's click is the labeller's: review mode ends.
   expect(rowSource).toMatch(
-    /if \(!selected\) onSelectShot\?\.\(shot\.id\);\n\s*else edit\.onExitReview\?\.\(\);/,
+    /if \(!selected\) \{\n\s*if \(seek\) onSelectShot\?\.\(shot\.id\);\n\s*else onSelectShot\?\.\(shot\.id, undefined, \{ seek: false \}\);\n\s*\} else edit\.onExitReview\?\.\(\);/,
   );
   expect(consoleSource).toContain(
     "const exitReview = useCallback(() => setReviewMode(false), []);",

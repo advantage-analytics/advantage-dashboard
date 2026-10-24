@@ -97,3 +97,11 @@ is the runner's. Newest entries at the bottom.
 1. A failed combine that is rolled back leaves the pin released while the rail stays held.
 2. During a split's optimistic window, a selected stroke that moved to the new point is cleared.
 3. T11–T13 edit the same key handlers, now routed through `stepFilmRef`.
+
+## T11 · Navigation: ↑/↓ on a folded point, focus never seeks, flag jumps step from the last flag — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `stepShot` no longer bails on a folded point: ↑/↓ unfold it and land on its last/first live stroke. A keyboard focus on a shot row calls `onSelectShot(id, undefined, { seek: false })` while a click still seeks; a module-level `pressedShotId` set on pointer-down makes a press-then-focus seek exactly once (the `onSelectShot` type in the rail and row parts gains the options argument). `lastFlagPointId` is set by `stepToFlag` and `goToFlag`, cleared by `togglePoint`, `selectShot` on another point and `stepFilm`; new pure `flagStepOrigin()` in flag-nav.ts picks the last flag while its point is live, else `currentPointId`. Specs in label-console, label-black-rows, label-flag-nav; a label-game-shift assertion pinning the old `goToFlag` line updated.
+**follow-ups:**
+
+1. A press dragged off a row with no click or focus leaves `pressedShotId` set, so the next keyboard focus on that same row seeks once; a `pointerup`/`pointercancel` reset would close it.

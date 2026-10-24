@@ -150,7 +150,7 @@ ready).
 
 ## T11 · Navigation: ↑/↓ on a folded point, focus never seeks, flag jumps step from the last flag
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T10
 - **files:** src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-black-shot-row.tsx, src/components/admin/labels/label-black-rail.tsx, tests/label-console.spec.ts, tests/label-black-rows.spec.ts, tests/label-flag-nav.spec.ts (guesses)

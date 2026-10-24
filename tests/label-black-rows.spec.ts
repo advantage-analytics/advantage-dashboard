@@ -1199,6 +1199,52 @@ test.describe("the black shots well", () => {
     ]);
   });
 
+  test("a click selects and seeks; a keyboard focus selects without seeking", () => {
+    const calls: unknown[][] = [];
+    const exits: string[] = [];
+    const rowOf = (selectedShotId: string | null = null) => {
+      const all = elements(
+        well().BlackShotsWell({
+          point: rally(),
+          edit: wellEdit({
+            selectedShotId,
+            onSelectShot: (...args: unknown[]) => calls.push(args),
+            onExitReview: () => exits.push("exit"),
+          }),
+        }),
+      );
+      const row = all.find((el) => el.props["data-shot-id"] === "w-return")!;
+      return {
+        click: () => (row.props.onClick as () => void)(),
+        focus: () => (row.props.onFocus as () => void)(),
+        press: () => (row.props.onPointerDown as () => void)(),
+      };
+    };
+
+    // A click: the stroke alone, so the console's `selectShot` seeks.
+    rowOf().click();
+    expect(calls).toEqual([["w-return"]]);
+    // Tab into a cell: selected, the film left where it is.
+    calls.length = 0;
+    rowOf().focus();
+    expect(calls).toEqual([["w-return", undefined, { seek: false }]]);
+    // A press focuses a cell before its click: that focus is the click's
+    // selection and seeks, once. The click then lands on the row selected,
+    // so it makes no second seek and cancels nothing.
+    calls.length = 0;
+    const pressed = rowOf();
+    pressed.press();
+    pressed.focus();
+    expect(calls).toEqual([["w-return"]]);
+    rowOf("w-return").click();
+    expect(calls).toEqual([["w-return"]]);
+    expect(exits).toEqual(["exit"]);
+    // The press is spent: the next keyboard focus does not seek.
+    calls.length = 0;
+    rowOf().focus();
+    expect(calls).toEqual([["w-return", undefined, { seek: false }]]);
+  });
+
   test("the tray: only under the selected row, and only where the console writes", () => {
     const html = renderWell({ selectedShotId: "w-return" });
     // One tray in the well, under the selected stroke.

@@ -2400,8 +2400,8 @@ test.describe("a locked game on the rail", () => {
     expect(rail).toContain("onCheck={onGoToPoint ? checkLocked : undefined}");
     expect(rail.match(/onAddPoint=\{onAddPoint\}/g)).toHaveLength(2);
     const consoleSource = readFileSync(CONSOLE, "utf8");
-    expect(consoleSource).toContain(
-      "goToFlag: (pointId: string) => findGap(pointId, { arm: true }),",
+    expect(consoleSource).toMatch(
+      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
     );
     expect(consoleSource).toContain("onGoToPoint={railHandlers.goToFlag}");
     expect(consoleSource).toContain(
