@@ -12,7 +12,7 @@ import {
   reviewItemQuestion,
   type ReviewItem,
 } from "./marks-state";
-import type { LabelPoint } from "./session";
+import type { LabelPoint, LabelStartScore } from "./session";
 import type { LabelScoreMismatch } from "./set-scores";
 import { gameOverflow, gameUnderflow } from "./game-shift";
 import { setBreakLabel, setBreakSuspects } from "./set-break";
@@ -101,22 +101,26 @@ export function slotStops(
   adScoring: boolean,
   /** set-scores.ts `matchTiebreakSet`: the fold's set, which never overflows. */
   matchTiebreakSet: number | null = null,
+  /** Where the video starts in the match; null: at the beginning. */
+  start: LabelStartScore | null = null,
 ): ScoreStop[] {
   const numberOf = new Map(points.map((p) => [p.id, p.pointIndex + 1]));
   const stop = (pointId: string | undefined, label: string): ScoreStop[] =>
     pointId === undefined
       ? []
       : [{ pointId, pointNumber: numberOf.get(pointId) ?? 0, label }];
-  const folds = tiebreakFolds(points, adScoring, matchTiebreakSet);
+  const folds = tiebreakFolds(points, adScoring, matchTiebreakSet, start);
   return [
-    ...gameOverflow(points, adScoring, matchTiebreakSet).flatMap((game) =>
-      stop(game.leftovers[0]?.id, "Game already won, with points after it"),
+    ...gameOverflow(points, adScoring, matchTiebreakSet, start).flatMap(
+      (game) =>
+        stop(game.leftovers[0]?.id, "Game already won, with points after it"),
     ),
-    ...gameUnderflow(points, adScoring, matchTiebreakSet).flatMap((game) =>
-      stop(
-        game.lastPointId,
-        `Game ${game.gameInSet} isn’t finished at ${game.score}`,
-      ),
+    ...gameUnderflow(points, adScoring, matchTiebreakSet, start).flatMap(
+      (game) =>
+        stop(
+          game.lastPointId,
+          `Game ${game.gameInSet} isn’t finished at ${game.score}`,
+        ),
     ),
     ...folds.flatMap((fold) =>
       stop(

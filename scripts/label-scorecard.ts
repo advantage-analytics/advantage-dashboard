@@ -73,7 +73,12 @@ async function main() {
   // Joined on the rows as the session opened (`openingMarkRows`), so a mark
   // on a point the labeller combined away is measured on its tombstone.
   const fileMarks = markFor(openingMarkRows(built.points), { hidden: true });
-  const marks = openingMarks(fileMarks, built.points, built.adScoring);
+  const marks = openingMarks(
+    fileMarks,
+    built.points,
+    built.adScoring,
+    built.startScore,
+  );
 
   const vendor = new Map<string, VendorStrokeFacts>();
   for (const row of vendorRows) {
@@ -83,6 +88,7 @@ async function main() {
 
   const card = buildScorecard(built.points, marks, {
     adScoring: built.adScoring,
+    startScore: built.startScore,
     // A site-removed stroke is a ghost only while the marks are on.
     ghosts: built.marksEnabled,
     vendor,

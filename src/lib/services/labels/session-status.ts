@@ -118,7 +118,7 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
   }
 
   const folded = foldedPointIds(
-    tiebreakFolds(points, adScoring, input.matchTiebreakSet ?? null),
+    tiebreakFolds(points, adScoring, input.matchTiebreakSet ?? null, start),
   );
   for (const repeat of gameServeRepeats(points, folded)) {
     const games = [repeat.gameInSet, repeat.other.gameInSet].sort(

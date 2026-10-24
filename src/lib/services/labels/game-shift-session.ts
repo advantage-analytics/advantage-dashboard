@@ -52,7 +52,8 @@ import {
 } from "./operations-session";
 import type { ShotSwapWrite } from "./player-swap";
 import { LABEL_SHOT_COLUMNS, toLabelShot, type LabelShotRow } from "./rows";
-import type { LabelPointStatus, LabelShot } from "./session";
+import type { LabelPointStatus, LabelShot, LabelStartScore } from "./session";
+import { parseLabelStartScore } from "./session-fields";
 
 /**
  * Every shot row of the session, as the console's rows. Paged
@@ -95,6 +96,8 @@ interface ShiftSessionRow {
   ad_scoring: boolean | null;
   job_id: string | null;
   match_id: string | null;
+  /** jsonb, read by `parseLabelStartScore`; null: the video starts at 0–0. */
+  start_score?: unknown;
 }
 
 /** The match row the fold reads: the entered score and the format. */
@@ -176,13 +179,14 @@ async function runGamePlan(
     points: readonly ShiftPoint[],
     adScoring: boolean,
     matchTiebreakSet: number | null,
+    start: LabelStartScore | null,
   ) => GamePlan,
   failed: string,
 ): Promise<LabelGameShiftResult> {
   // One read of the session: its gate and what its scoring resolves from.
   const { data: session, error: sessionError } = await supabase
     .from("label_sessions")
-    .select("status, ad_scoring, job_id, match_id")
+    .select("status, ad_scoring, job_id, match_id, start_score")
     .eq("id", sessionId)
     .maybeSingle<ShiftSessionRow>();
   if (sessionError) {
@@ -224,6 +228,8 @@ async function runGamePlan(
     parseMatchScore(match.data?.score ?? null),
     readBestOf(match.data?.format),
   );
+  // Where the video starts in the match, as the console counts from it.
+  const start = parseLabelStartScore(session.start_score ?? null);
 
   // The plan with no shots yet says whether any point moves under a new
   // server. Only then are shots read — the whole session's, not the moved
@@ -234,7 +240,7 @@ async function runGamePlan(
     ...toGamePoint(row),
     shots: [],
   }));
-  const dry = plan(shiftPoints, adScoring, tiebreakSet);
+  const dry = plan(shiftPoints, adScoring, tiebreakSet, start);
   if ("error" in dry) return dry;
   const byId = new Map(shiftPoints.map((point) => [point.id, point]));
   const switching = dry.writes.some(
@@ -245,7 +251,7 @@ async function runGamePlan(
     const owned = await readShotsOfSession(supabase, sessionId);
     if ("error" in owned) return owned;
     shiftPoints = withShots(shiftPoints, owned.shots);
-    const full = plan(shiftPoints, adScoring, tiebreakSet);
+    const full = plan(shiftPoints, adScoring, tiebreakSet, start);
     if ("error" in full) return full;
     planned = full;
   }
@@ -297,8 +303,8 @@ export async function writeLabelGameShift(params: {
   return runGamePlan(
     params.supabase,
     sessionId,
-    (points, adScoring, tiebreakSet) =>
-      planGameShift(points, adScoring, fromPointId, tiebreakSet),
+    (points, adScoring, tiebreakSet, start) =>
+      planGameShift(points, adScoring, fromPointId, tiebreakSet, start),
     "Could not move the points",
   );
 }
@@ -362,8 +368,8 @@ export async function writeLabelTiebreakFold(params: {
   return runGamePlan(
     params.supabase,
     sessionId,
-    (points, adScoring, tiebreakSet) => {
-      const fold = tiebreakFolds(points, adScoring, tiebreakSet).find(
+    (points, adScoring, tiebreakSet, start) => {
+      const fold = tiebreakFolds(points, adScoring, tiebreakSet, start).find(
         (f) => f.setNumber === setNumber,
       );
       if (!fold) {
@@ -404,8 +410,8 @@ export async function writeLabelGamePull(params: {
   return runGamePlan(
     params.supabase,
     sessionId,
-    (points, adScoring, tiebreakSet) => {
-      const plan = planGamePull(points, key, adScoring, tiebreakSet);
+    (points, adScoring, tiebreakSet, start) => {
+      const plan = planGamePull(points, key, adScoring, tiebreakSet, start);
       return "kind" in plan ? { error: NO_PULL } : plan;
     },
     "Could not pull the points in",

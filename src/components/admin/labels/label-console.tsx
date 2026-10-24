@@ -22,6 +22,7 @@ import {
   type LabelSession,
   type LabelShot,
   type LabelSide,
+  type LabelStartScore,
   type LabelVideo,
 } from "@/lib/services/labels/session";
 import { planShotWrite } from "./shot-write-plan";
@@ -468,11 +469,21 @@ export function LabelConsole({
   // The marks beside those points, as the page built them from the vendor's
   // file. State, not a prop read: the page builds them once per render.
   const [marks] = useState<LabelMarks | null>(initialMarks);
+  // The session fields the score chip and the start-score prompt write, held
+  // beside the rows so an answer re-evaluates the chip and the scoreboard at
+  // once.
+  const [sessionFields, setSessionFields] = useState<LabelSessionFields>({
+    finalScore: session.finalScore,
+    videoEndsEarly: session.videoEndsEarly,
+    startScore: session.startScore,
+  });
+  // Where the video starts in the match: every scorer below counts from it.
+  const startScore = sessionFields.startScore;
   // The scoreboard over the rows as they stand, once: the rail's scores and
   // bands and the player's readout and the score marks all read this.
   const scores = useMemo(
-    () => labelScores(points, session.adScoring),
-    [points, session.adScoring],
+    () => labelScores(points, session.adScoring, startScore),
+    [points, session.adScoring, startScore],
   );
   // The page's marks plus the two score marks read off the live rows
   // (score-marks.ts), which follow the labelled score. Only with marks built.
@@ -480,8 +491,14 @@ export function LabelConsole({
     () =>
       marks === null
         ? null
-        : withLiveScoreMarks(marks, points, session.adScoring, scores),
-    [marks, points, session.adScoring, scores],
+        : withLiveScoreMarks(
+            marks,
+            points,
+            session.adScoring,
+            scores,
+            startScore,
+          ),
+    [marks, points, session.adScoring, scores, startScore],
   );
   // Every "Missing shot?" slot still open whose "Add shot" would write: what
   // "Add all missing shots" fills, in rail order.
@@ -516,13 +533,6 @@ export function LabelConsole({
     // A cache: a failed save leaves the list a step behind, nothing more.
     void recordOpenCounts(session.id, openCounts).catch(() => {});
   }, [openCounts, recordOpenCounts, session.id]);
-  // The two session fields the score chip writes, held beside the rows so an
-  // answer re-evaluates the chip at once.
-  const [sessionFields, setSessionFields] = useState<LabelSessionFields>({
-    finalScore: session.finalScore,
-    videoEndsEarly: session.videoEndsEarly,
-    startScore: session.startScore,
-  });
   // The deciding set the match record spells as a 10-point match tiebreak
   // (set-scores.ts) — never the labeller's own `final_score`, which is games
   // only. "Make it a match tiebreak" offers to fold it, and the shift and
@@ -1528,6 +1538,7 @@ export function LabelConsole({
       session.adScoring,
       fromPointId,
       matchTiebreakSetNumber,
+      startScore,
     );
     if ("error" in plan) return refuse(plan.error);
     runGameShift(plan, () =>
@@ -1558,6 +1569,7 @@ export function LabelConsole({
       points,
       session.adScoring,
       matchTiebreakSetNumber,
+      startScore,
     ).find((f) => f.setNumber === setNumber);
     if (!fold) {
       return refuse(
@@ -1583,6 +1595,7 @@ export function LabelConsole({
       gameKey,
       session.adScoring,
       matchTiebreakSetNumber,
+      startScore,
     );
     if ("error" in plan) return refuse(plan.error);
     if ("kind" in plan) return refuse(GAME_PULL_ADD_POINT);
@@ -1737,6 +1750,7 @@ export function LabelConsole({
         games: scores.games,
         names,
         matchTiebreakSet: matchTiebreakSetNumber,
+        startScore,
       }),
     });
   }
@@ -2536,6 +2550,8 @@ export function LabelConsole({
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
     clearEnteredScore: () => void updateSessionFields({ final_score: null }),
     videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
+    saveStartScore: (start: LabelStartScore | null) =>
+      void updateSessionFields({ start_score: start }),
   });
 
   // Enter unfolds the open point and ⌘ Enter checks or unchecks it; Space and
@@ -2577,9 +2593,14 @@ export function LabelConsole({
   const slotJumpStops = useMemo(
     () =>
       operable
-        ? slotStops(points, session.adScoring, matchTiebreakSetNumber)
+        ? slotStops(
+            points,
+            session.adScoring,
+            matchTiebreakSetNumber,
+            startScore,
+          )
         : NO_SLOT_STOPS,
-    [operable, points, session.adScoring, matchTiebreakSetNumber],
+    [operable, points, session.adScoring, matchTiebreakSetNumber, startScore],
   );
   // The two lists the rail's header steps: what can move the score — the
   // amber flagged points, the set that doesn't add up and every amber slot
@@ -2595,6 +2616,7 @@ export function LabelConsole({
         finalScore: sessionFields.finalScore,
         matchScore: session.matchScore,
         videoEndsEarly: sessionFields.videoEndsEarly,
+        startScore: sessionFields.startScore,
       }),
       points,
     );
@@ -3296,6 +3318,8 @@ export function LabelConsole({
       finalScore={sessionFields.finalScore}
       videoEndsEarly={sessionFields.videoEndsEarly}
       matchScore={session.matchScore}
+      startScore={startScore}
+      onSaveStartScore={operable ? railHandlers.saveStartScore : undefined}
       onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
       onFindGap={operable ? railHandlers.findGap : undefined}
       onGoToPoint={railHandlers.goToFlag}
@@ -3418,6 +3442,7 @@ export function LabelConsole({
           marks={liveMarks}
           games={scores.games}
           adScoring={session.adScoring}
+          startScore={startScore}
           names={names}
           finalScore={sessionFields.finalScore}
           matchScore={session.matchScore}
@@ -3432,6 +3457,7 @@ export function LabelConsole({
             games: scores.games,
             names,
             matchTiebreakSet: matchTiebreakSetNumber,
+            startScore,
           })}
           complete={status === "complete"}
           upload={upload}

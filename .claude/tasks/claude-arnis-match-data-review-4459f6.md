@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Start score: rail prompt, editor, saved line
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/admin/labels/label-black-rail.tsx, src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-start-score.tsx (new), tests/label-session-fields.spec.ts, tests/label-black-rows.spec.ts (guesses)
