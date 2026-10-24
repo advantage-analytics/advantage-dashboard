@@ -21,11 +21,22 @@ import type { LabelShotPatch } from "./edit";
 import type { LabelShotResult, LabelShotSeedValues } from "./seed";
 import { isLetServe, isServeStroke, type LabelShot } from "./session";
 
-/** What `effectiveShotResult` reads of a stroke; absent columns read as unset. */
+/**
+ * What `effectiveShotResult` reads of a stroke; absent columns read as unset.
+ * `seed` lets it tell the labeller's own call from the vendor's: without it
+ * every stored call reads as the seed's.
+ */
 export type ResultReadableShot = Partial<
   Pick<
     LabelShot,
-    "stroke" | "result" | "contactX" | "contactY" | "landingX" | "landingY"
+    | "stroke"
+    | "result"
+    | "contactX"
+    | "contactY"
+    | "landingX"
+    | "landingY"
+    | "seed"
+    | "status"
   >
 >;
 
@@ -181,7 +192,8 @@ export function inServeLandingMiss(shot: {
  * In, out or net as the stroke's own coordinates say it, when all four are
  * placed; the stored result until then. The one reading the marks and the
  * suggestions share, so a placed landing outranks a stale stored call — but
- * never a let: that is the labeller's override, as `positionPatch` keeps it.
+ * never a let, nor a call the labeller set (`labellerCall`): both are the
+ * labeller's override, as `positionPatch` keeps a let.
  */
 export function effectiveShotResult(
   shot: ResultReadableShot,
@@ -191,17 +203,38 @@ export function effectiveShotResult(
   ) {
     return "let";
   }
-  return (
-    deriveShotResult({
-      stroke: shot.stroke ?? null,
-      contact_x: shot.contactX ?? null,
-      contact_y: shot.contactY ?? null,
-      landing_x: shot.landingX ?? null,
-      landing_y: shot.landingY ?? null,
-    }) ??
-    shot.result ??
-    null
-  );
+  const derived = deriveShotResult({
+    stroke: shot.stroke ?? null,
+    contact_x: shot.contactX ?? null,
+    contact_y: shot.contactY ?? null,
+    landing_x: shot.landingX ?? null,
+    landing_y: shot.landingY ?? null,
+  });
+  if (derived === null) return shot.result ?? null;
+  return shot.result && labellerCall(shot) ? shot.result : derived;
+}
+
+/**
+ * Whether the stored call is one the labeller set rather than the seed's:
+ * on an added stroke, any call; on a vendor stroke, one that is not the
+ * seeded call. `positionPatch` writes the call the ends derive, so a stored
+ * call that disagrees with placed ends and with the seed got there by the
+ * tray's call toggle or a review answer — the labeller saying the ball, not
+ * the bounce, decides. A call still as seeded is the vendor's and the ends
+ * outrank it, even after an end moved: the volley link moves a landing
+ * without rewriting the call (volley-link.ts), so a moved end is no sign the
+ * labeller chose the call. A vendor stroke with no seed (one seeded before
+ * the column existed, or a caller that does not pass it) has nothing to
+ * compare, so its ends win.
+ */
+function labellerCall(shot: ResultReadableShot): boolean {
+  if (shot.status === "added") return true;
+  // A kept row holds its seed by definition; only an edit can carry a call.
+  if (shot.status !== "edited") return false;
+  // No seed to compare: a vendor stroke seeded before the column existed.
+  const seed = shot.seed;
+  if (seed == null) return false;
+  return shot.result !== seed.result;
 }
 
 /**

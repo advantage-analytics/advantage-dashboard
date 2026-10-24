@@ -1244,7 +1244,22 @@ test.describe("the black shots well", () => {
           edited.lastIndexOf("<div", edited.indexOf("data-shot-tray")),
         ),
       ),
-    ).toBe("Split point here Add shot after Reset shot Delete shot");
+    ).toBe("In Out Net Split point here Add shot after Reset shot Delete shot");
+    // The call leads the strip: In · Out · Net, the stored call pressed.
+    const call = tag(edited, "data-shot-call");
+    expect(call).toContain('role="group"');
+    expect(call).toContain('aria-label="Shot 3 call"');
+    expect(edited.indexOf("data-shot-call")).toBeLessThan(
+      edited.indexOf('data-shot-action="split"'),
+    );
+    expect(tag(edited, 'data-shot-call-option="in"')).toContain(
+      'aria-pressed="true"',
+    );
+    for (const off of ["out", "net"]) {
+      expect(tag(edited, `data-shot-call-option="${off}"`)).toContain(
+        'aria-pressed="false"',
+      );
+    }
 
     // The selected row's number is the number, never swapped for a trigger.
     const lane = edited.indexOf("data-shot-number");
@@ -1352,6 +1367,39 @@ test.describe("the black shots well", () => {
     });
     expect(findByProp(rest, "data-shot-tray", ["ShotTray"])).toBeNull();
     expect(trayButtons(rest)).toEqual([]);
+  });
+
+  test("the tray's call writes the call alone, and the pressed one writes nothing", () => {
+    const patches: unknown[][] = [];
+    const { BlackShotRow } = createLoader().load(WELL) as {
+      BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    const point = rally();
+    const row = BlackShotRow({
+      shot: point.shots.find((s) => s.id === "w-return"),
+      number: 3,
+      point,
+      pointNumber: 7,
+      edit: wellEdit({
+        selectedShotId: "w-return",
+        onPatchShot: (...args: unknown[]) => patches.push(args),
+      }),
+    });
+    const option = (value: string) =>
+      elements(row).find((el) => el.props["data-shot-call-option"] === value);
+    const event = { stopPropagation: () => {} };
+    for (const value of ["out", "in", "net"]) {
+      (option(value)!.props.onClick as (e: unknown) => void)(event);
+    }
+    // Out and Net each write `result` and nothing else: the landing stays.
+    expect(patches).toEqual([
+      ["w-return", { result: "out" }],
+      ["w-return", { result: "net" }],
+    ]);
+
+    // Read-only: a selected row has no tray, so no call either.
+    const frozen = renderWell({ selectedShotId: "w-return" }, false);
+    expect(frozen).not.toContain("data-shot-call");
   });
 
   test("the tray's actions come and go with their conditions", () => {

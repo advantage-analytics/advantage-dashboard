@@ -474,6 +474,12 @@ export function BlackShotRow({
     selected && operations
       ? shotTrayActions({ shot, number, point, pointNumber, operations })
       : null;
+  // The call, one click in the tray: written alone, so the landing stays
+  // where it was placed (`effectiveShotResult` lets this call outrank it).
+  const call: ShotTrayCall | null =
+    trayActions && onPatchShot && shot.stroke !== null
+      ? { value: shot.result, onPick: (result) => patch({ result }) }
+      : null;
 
   return (
     <>
@@ -669,7 +675,9 @@ export function BlackShotRow({
           ) : null}
         </span>
       </div>
-      {trayActions ? <ShotTray number={number} actions={trayActions} /> : null}
+      {trayActions ? (
+        <ShotTray number={number} actions={trayActions} call={call} />
+      ) : null}
     </>
   );
 }
@@ -1311,6 +1319,16 @@ const SHOT_TRAY_ICON = {
   delete: X,
 } as const;
 
+/** The three calls the tray's toggle offers; a let stays the serve menu's. */
+export const SHOT_CALLS = ["in", "out", "net"] as const;
+export type ShotCall = (typeof SHOT_CALLS)[number];
+
+/** The tray's call toggle: the stored call, and what picking another writes. */
+export type ShotTrayCall = {
+  value: LabelShotResult | null;
+  onPick: (result: ShotCall) => void;
+};
+
 /**
  * The selected stroke's actions, on a 28px strip right under its row: the
  * row's own wash with a hairline between, so the two read as one block. The
@@ -1319,14 +1337,21 @@ const SHOT_TRAY_ICON = {
  * too narrow, the labels truncate before Delete moves. A click here never
  * reaches the row or the point under it.
  *
+ * `call`, when given, leads the strip: In · Out · Net, the stored one pressed.
+ * Picking another writes the call alone — no landing moves — because a flipped
+ * call was otherwise a re-click a few centimetres over the line (median 16 cm
+ * on 202 last-ball flips across 13 completed sessions, 2026-10-23).
+ *
  * No hooks: a spec calls it and reads its buttons off the tree.
  */
 function ShotTray({
   number,
   actions,
+  call,
 }: {
   number: number;
   actions: readonly ShotTrayAction[];
+  call?: ShotTrayCall | null;
 }) {
   return (
     <div
@@ -1338,6 +1363,38 @@ function ShotTray({
       // so the actions sit clear of the hairline without crowding the row.
       className="flex h-[32px] min-w-0 items-center gap-4 bg-white/[0.12] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
     >
+      {call ? (
+        <span
+          role="group"
+          aria-label={`Shot ${number} call`}
+          data-shot-call=""
+          className="inline-flex shrink-0 rounded-[7px] bg-white/[0.08] p-0.5"
+        >
+          {SHOT_CALLS.map((value) => {
+            const on = call.value === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={on}
+                data-shot-call-option={value}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!on) call.onPick(value);
+                }}
+                className={cn(
+                  "h-[18px] cursor-pointer rounded-[5px] px-[7px] text-[10px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                  on
+                    ? "bg-white/[0.16] font-medium text-white"
+                    : "font-normal text-white/60 hover:text-white",
+                )}
+              >
+                {RESULT_LABEL[value]}
+              </button>
+            );
+          })}
+        </span>
+      ) : null}
       {actions.map((action) => (
         <Fragment key={action.key}>
           {action.key === "delete" ? (
