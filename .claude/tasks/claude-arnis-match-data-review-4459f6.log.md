@@ -52,3 +52,13 @@ is the runner's. Newest entries at the bottom.
 
 1. Arming the next stroke's contact does not seek the film to it — decide whether it should.
 2. The notice replaces the subtitle, hiding the "run-off to X m" readout while it shows; T6 may restyle.
+
+## T6 · Placement cues: visible prompt, end glyphs, nearest-end reselect — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** While placing, the court panel's title is the end glyph plus the visible prompt "Click where shot N was hit / landed" (13px, `aria-live`, `data-court-prompt`); the Contact / Landing switch carries `EndGlyph`s (`data-end-glyph`). The half court box carries `data-court-cursor` with an SVG ring/dot cursor at zoom 1 (grab hand unchanged when zoomed). New pure `nearestEnd(shot, point)`; `markEndAt` selects a drawn end clicked within the mark's own screen radius (5.5px ring / 4px dot) via a new `onSelectShot`, never the armed stroke's armed end, so placing beside an existing mark still places. `placementOf` unchanged; court box/scale/lines unchanged (mark sizes hoisted into constants with identical values). Specs in label-court-panel (20) and label-stroke-keys-court-zoom (36).
+**follow-ups:**
+
+1. While placing, the panel draws only the selected stroke, so click-to-select in practice only switches to that stroke's other end; drawing the point's other strokes faintly would let it select a different stroke.
+2. A pointer cursor over a selectable mark would make it discoverable.
+3. The `CourtEndControls` glyphs also appear in the inline review block's switch.

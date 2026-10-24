@@ -15,6 +15,8 @@ import {
   MAX_ZOOM,
   NO_ZOOM,
   artPoint,
+  markEndAt,
+  markHitRadius,
   moveWindow,
   panBy,
   wheelZoomDelta,
@@ -27,6 +29,7 @@ import {
   courtSlide,
   estimatePatch,
   isEstimate,
+  nearestEnd,
   nextPlacement,
   placementNotice,
   placementRunoff,
@@ -38,6 +41,7 @@ import {
   COURT_LENGTH,
   HALF_HEIGHT,
   NET_Y,
+  fromCourtInWindow,
   halfTopY,
   runoffWindowTop,
   toCourtInWindow,
@@ -625,5 +629,176 @@ test.describe("“Off screen, so this is an estimate”", () => {
     });
     expect(isEstimate(["landing_y"], "landing")).toBe(true);
     expect(isEstimate(["landing_y"], "contact")).toBe(false);
+  });
+});
+
+test.describe("a click on a placed end selects it", () => {
+  test("`nearestEnd`: the nearer stored end; one placed, that one; none, null", () => {
+    const both = { contactX: 1, contactY: 2, landingX: -2, landingY: 8 };
+    expect(nearestEnd(both, { x: 1.2, y: 2.1 })).toBe("contact");
+    expect(nearestEnd(both, { x: -1.5, y: 7 })).toBe("landing");
+    // A tie goes to the contact.
+    expect(
+      nearestEnd(
+        { contactX: 0, contactY: 0, landingX: 2, landingY: 0 },
+        {
+          x: 1,
+          y: 0,
+        },
+      ),
+    ).toBe("contact");
+    expect(
+      nearestEnd(
+        { contactX: 1, contactY: 2, landingX: null, landingY: null },
+        {
+          x: -2,
+          y: 8,
+        },
+      ),
+    ).toBe("contact");
+    expect(
+      nearestEnd(
+        { contactX: null, contactY: null, landingX: -2, landingY: 8 },
+        {
+          x: 1,
+          y: 2,
+        },
+      ),
+    ).toBe("landing");
+    expect(
+      nearestEnd(
+        { contactX: null, contactY: null, landingX: null, landingY: null },
+        { x: 0, y: 0 },
+      ),
+    ).toBeNull();
+    expect(nearestEnd({}, { x: 0, y: 0 })).toBeNull();
+  });
+
+  // The near half's own box, at its usual 276 × 222 px: 13.68 px a metre.
+  const TOP = halfTopY("near");
+  const BOX = { width: 276, height: 222 };
+  const PX_PER_M = BOX.width / 20.17;
+  const stroke = {
+    shot: labelShot("s1", "p1", {
+      contactX: 1,
+      contactY: 2,
+      landingX: -2,
+      landingY: 8,
+    }),
+  };
+  const at = (x: number, y: number) => fromCourtInWindow(TOP, { x, y });
+  const none = { shotId: null, target: null };
+
+  test("the hit radius is the mark's own drawn size, in screen pixels", () => {
+    expect(markHitRadius("contact", false)).toBe(5.5);
+    expect(markHitRadius("landing", false)).toBe(4);
+    expect(markHitRadius("landing", true)).toBeCloseTo(5.75);
+  });
+
+  test("on a mark: that stroke on that end; just beside it, nothing (the click places)", () => {
+    expect(markEndAt([stroke], TOP, NO_ZOOM, at(1, 2), BOX, none)).toEqual({
+      shotId: "s1",
+      end: "contact",
+    });
+    expect(markEndAt([stroke], TOP, NO_ZOOM, at(-2, 8), BOX, none)).toEqual({
+      shotId: "s1",
+      end: "landing",
+    });
+    // 0.3 m is 4.1 px: inside the ring's 5.5 px.
+    expect(markEndAt([stroke], TOP, NO_ZOOM, at(1.3, 2), BOX, none)).toEqual({
+      shotId: "s1",
+      end: "contact",
+    });
+    // 0.5 m is 6.8 px: outside it.
+    expect(0.5 * PX_PER_M).toBeGreaterThan(markHitRadius("contact", false));
+    expect(markEndAt([stroke], TOP, NO_ZOOM, at(1.5, 2), BOX, none)).toBeNull();
+  });
+
+  test("the end being placed is never picked: placing beside an existing mark still places", () => {
+    // Re-placing the armed contact right on its old mark places it.
+    expect(
+      markEndAt([stroke], TOP, NO_ZOOM, at(1, 2), BOX, {
+        shotId: "s1",
+        target: "contact",
+      }),
+    ).toBeNull();
+    // Armed on the landing, a click 0.5 m from the stroke's own contact (as a
+    // short ball's landing would be) places the landing.
+    expect(
+      markEndAt([stroke], TOP, NO_ZOOM, at(1.5, 2), BOX, {
+        shotId: "s1",
+        target: "landing",
+      }),
+    ).toBeNull();
+    // A click on the landing's old mark re-places it, not the contact.
+    expect(
+      markEndAt([stroke], TOP, NO_ZOOM, at(-2, 8), BOX, {
+        shotId: "s1",
+        target: "landing",
+      }),
+    ).toBeNull();
+    // Right on the other end's mark it is that end.
+    expect(
+      markEndAt([stroke], TOP, NO_ZOOM, at(1, 2), BOX, {
+        shotId: "s1",
+        target: "landing",
+      }),
+    ).toEqual({ shotId: "s1", end: "contact" });
+  });
+
+  test("under the labeller's zoom the radius stays in screen pixels", () => {
+    const zoom = { scale: 2, x: -50, y: -50 };
+    const screen = (x: number, y: number) => {
+      const p = at(x, y);
+      return { sx: zoom.x + p.sx * zoom.scale, sy: zoom.y + p.sy * zoom.scale };
+    };
+    expect(markEndAt([stroke], TOP, zoom, screen(1, 2), BOX, none)).toEqual({
+      shotId: "s1",
+      end: "contact",
+    });
+    // 0.3 m is 8.2 px at ×2: outside the ring.
+    expect(
+      markEndAt([stroke], TOP, zoom, screen(1.3, 2), BOX, none),
+    ).toBeNull();
+  });
+
+  test("an end not drawn (or not placed) is never picked", () => {
+    const hidden = { ...stroke, opacity: { hit: 0, landed: 1 } };
+    expect(markEndAt([hidden], TOP, NO_ZOOM, at(1, 2), BOX, none)).toBeNull();
+    const bare = { shot: labelShot("s2", "p1", { contactX: 1, contactY: 2 }) };
+    expect(markEndAt([bare], TOP, NO_ZOOM, at(1, 2), BOX, none)).toEqual({
+      shotId: "s2",
+      end: "contact",
+    });
+    expect(markEndAt([bare], TOP, NO_ZOOM, at(-2, 8), BOX, none)).toBeNull();
+  });
+
+  test("the court asks before it places; the console selects through `selectShot`", () => {
+    const court = readFileSync(
+      "src/components/admin/labels/label-court.tsx",
+      "utf8",
+    );
+    const pick = court.indexOf("markEndAt(strokes, top, zoom, at, rect, {");
+    const place = court.indexOf(
+      "onPlace(toCourtInWindow(top, artPoint(zoom, at.sx, at.sy)));",
+    );
+    expect(pick).toBeGreaterThan(-1);
+    expect(place).toBeGreaterThan(pick);
+    expect(court).toContain("shotId: targetShotId,");
+    expect(court).toContain("onSelectShot?.(pick.shotId, pick.end);");
+    const panel = readFileSync(
+      "src/components/admin/labels/label-court-panel.tsx",
+      "utf8",
+    );
+    expect(panel).toContain(
+      "onSelectShot={placing ? onSelectShot : undefined}",
+    );
+    const console = readFileSync(
+      "src/components/admin/labels/label-console.tsx",
+      "utf8",
+    );
+    expect(console).toContain(
+      "onSelectShot={(shotId, end) => selectShot(shotId, end)}",
+    );
   });
 });

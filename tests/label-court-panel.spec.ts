@@ -81,8 +81,21 @@ function render(props: Partial<PanelProps>): string {
   );
 }
 
-const title = (html: string) =>
-  /data-court-title="[^"]*"[^>]*>([^<]*)</.exec(html)?.[1];
+/** The header's title as read: its text, tags stripped, glyph and all. */
+const title = (html: string) => {
+  const start = html.indexOf("data-court-title");
+  const end = html.indexOf("data-court-subtitle");
+  if (start === -1 || end === -1) return undefined;
+  const inner = html.slice(html.indexOf(">", start) + 1, end);
+  return inner
+    .slice(0, inner.lastIndexOf("</span>"))
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+/** A cursor data URI's SVG, read back out of the markup's escaping. */
+const cursorSvg = (tag: string) =>
+  decodeURIComponent(tag.replace(/&#x27;/g, "'").replace(/&quot;/g, '"'));
 const subtitle = (html: string) =>
   /data-court-subtitle="[^"]*"[^>]*>([^<]*)</.exec(html)?.[1];
 
@@ -101,13 +114,13 @@ test.describe("the court panel", () => {
     const html = render({ placement: startPlacement("s-return", "far") });
     expect(html).toContain('data-court-view="far"');
     expect(html).toContain('viewBox="-10.085 -3.5 20.17 16.224"');
-    expect(title(html)).toBe("Shot 2 · contact");
+    expect(title(html)).toBe("Click where shot 2 was hit");
     expect(subtitle(html)).toBe("Vargas’s side");
     expect(html).toMatch(
       /data-court-prompt=""[^>]*>Click where shot 2 was hit</,
     );
     expect(html).toMatch(
-      /aria-pressed="true" data-court-step="contact"[^>]*>Contact</,
+      /aria-pressed="true" data-court-step="contact"[^>]*><span aria-hidden="true" data-end-glyph="contact"[^>]*><\/span>Contact</,
     );
     expect(html).not.toContain("data-court-legend");
   });
@@ -123,12 +136,12 @@ test.describe("the court panel", () => {
       point: withLet,
       placement: startPlacement("s-serve", "near"),
     });
-    expect(title(html)).toBe("Shot 1 · contact · let");
+    expect(title(html)).toBe("Click where shot 1 was hit · let");
     const other = render({
       point: withLet,
       placement: startPlacement("s-return", "far"),
     });
-    expect(title(other)).toBe("Shot 2 · contact");
+    expect(title(other)).toBe("Click where shot 2 was hit");
   });
 
   test("a let serve playing: the title ends with 'let'; another stroke playing, unchanged", () => {
@@ -164,10 +177,10 @@ test.describe("the court panel", () => {
     );
     const html = render({ placement: landing });
     expect(html).toContain('data-court-view="near"');
-    expect(title(html)).toBe("Shot 2 · landing");
+    expect(title(html)).toBe("Click where shot 2 landed");
     expect(subtitle(html)).toBe("Lee’s side");
     expect(html).toMatch(
-      /aria-pressed="true" data-court-step="landing"[^>]*>Landing</,
+      /aria-pressed="true" data-court-step="landing"[^>]*><span aria-hidden="true" data-end-glyph="landing"[^>]*><\/span>Landing</,
     );
     expect(html).toMatch(/aria-pressed="false" data-court-flip=""/);
     expect(html).toContain('data-selected-ring="landing"');
@@ -176,6 +189,75 @@ test.describe("the court panel", () => {
     expect(flipped).toContain('data-court-view="far"');
     expect(subtitle(flipped)).toBe("Flipped to Vargas’s side · Net");
     expect(flipped).toMatch(/aria-pressed="true" data-court-flip=""/);
+  });
+
+  test("the prompt is drawn, not screen-reader only, after its end's glyph; absent with nothing selected", () => {
+    const html = render({ placement: startPlacement("s-return", "far") });
+    const prompt = tagOf(html, "data-court-prompt");
+    expect(prompt).not.toContain("sr-only");
+    expect(prompt).toContain('aria-live="polite"');
+    const titleTag = tagOf(html, "data-court-title");
+    expect(titleTag).toContain("text-[13px]");
+    expect(titleTag).toContain("font-medium");
+    // The 9px glyph leads the title: a hollow ring for a contact…
+    expect(html).toMatch(
+      /data-court-title=""[^>]*><span aria-hidden="true" data-end-glyph="contact" class="[^"]*border-\[1\.5px\][^"]*size-\[9px\]/,
+    );
+    // …a filled dot for a landing.
+    const landing = render({
+      placement: setPlacementTarget(
+        startPlacement("s-return", "far"),
+        "landing",
+      ),
+    });
+    expect(landing).toMatch(
+      /data-court-title=""[^>]*><span aria-hidden="true" data-end-glyph="landing" class="[^"]*bg-current[^"]*size-\[9px\]/,
+    );
+    for (const idle of [
+      render({}),
+      render({ playingShotId: "s-return" }),
+      render({ placement: startPlacement("s-return", "far"), editable: false }),
+    ]) {
+      expect(idle).not.toContain("data-court-prompt");
+      expect(idle).not.toContain("data-end-glyph");
+    }
+  });
+
+  test("the switch's buttons carry the end glyphs: a 7px ring for Contact, a 6px dot for Landing", () => {
+    const html = render({ placement: startPlacement("s-return", "far") });
+    expect(html).toMatch(
+      /data-court-step="contact"[^>]*><span aria-hidden="true" data-end-glyph="contact" class="[^"]*border-\[1\.5px\][^"]*size-\[7px\]/,
+    );
+    expect(html).toMatch(
+      /data-court-step="landing"[^>]*><span aria-hidden="true" data-end-glyph="landing" class="[^"]*bg-current[^"]*size-1\.5/,
+    );
+  });
+
+  test("the half's box carries the end's cursor: its glyph as an SVG data URI, the crosshair behind", () => {
+    const html = render({ placement: startPlacement("s-return", "far") });
+    const box = tagOf(html, "data-court-target");
+    expect(box).toContain('data-court-cursor="contact"');
+    expect(box).toMatch(
+      /cursor:url\(&quot;data:image\/svg\+xml,[^)]*\) 12 12, crosshair/,
+    );
+    // The ring: a hollow circle, no fill.
+    expect(cursorSvg(box)).toContain(
+      "<circle cx='12' cy='12' r='5' stroke='white' stroke-width='1.5'/>",
+    );
+    const landing = tagOf(
+      render({
+        placement: setPlacementTarget(
+          startPlacement("s-return", "far"),
+          "landing",
+        ),
+      }),
+      "data-court-target",
+    );
+    expect(landing).toContain('data-court-cursor="landing"');
+    expect(cursorSvg(landing)).toContain(
+      "<circle cx='12' cy='12' r='3' fill='white'/>",
+    );
+    expect(render({})).not.toContain("data-court-cursor");
   });
 
   test("read-only, or a selection that is not in the open point: no zoom", () => {

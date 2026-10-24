@@ -86,8 +86,38 @@ function deepReadout(own: string, runoff: number): string {
 }
 
 /**
- * The panel's two header lines. Placing: "Shot 3 · contact" over whose half is
- * on screen, or "Flipped to <hitter>'s side · Net" when Flip side has brought a
+ * The end's glyph, as the court draws its marks: a hollow ring where the ball
+ * was hit, a filled dot where it landed. `size` is the header's (9px) or the
+ * switch's (7px ring / 6px dot).
+ */
+export function EndGlyph({
+  end,
+  size = "switch",
+}: {
+  end: PlacementTarget;
+  size?: "title" | "switch";
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      data-end-glyph={end}
+      className={cn(
+        "shrink-0 rounded-full",
+        end === "contact"
+          ? cn(
+              "border-[1.5px] border-current",
+              size === "title" ? "size-[9px]" : "size-[7px]",
+            )
+          : cn("bg-current", size === "title" ? "size-[9px]" : "size-1.5"),
+      )}
+    />
+  );
+}
+
+/**
+ * The panel's two header lines. Placing: "Shot 3 · contact" — the panel draws
+ * the prompt (`placementPrompt`) with its end's glyph in this title's place —
+ * over whose half is on screen, or "Flipped to <hitter>'s side · Net" when Flip side has brought a
  * landing back across. Otherwise: "Point 15" over "Shot 3 of 4 · Ace" for the
  * playing stroke, or just the stroke count; "Court" with no point open. A let
  * serve, placed or lit, adds " · let" to the title. A slid box says why: the
@@ -195,6 +225,7 @@ export function LabelCourtPanel({
   onEstimate,
   clock,
   onPlace,
+  onSelectShot,
   onTarget,
   onFlip,
 }: {
@@ -229,6 +260,12 @@ export function LabelCourtPanel({
   clock: VideoClock;
   /** A click on the zoomed half, in metres. */
   onPlace: (point: CourtPoint) => void;
+  /**
+   * A click on a drawn end other than the one being placed: select that
+   * stroke on that end (label-court.tsx `markEndAt`). Absent: every click
+   * places.
+   */
+  onSelectShot?: (shotId: string, end: PlacementTarget) => void;
   onTarget: (target: PlacementTarget) => void;
   onFlip: () => void;
 }) {
@@ -306,6 +343,7 @@ export function LabelCourtPanel({
         target={placing ? placement.target : null}
         prompt={prompt}
         onPlace={placing ? onPlace : undefined}
+        onSelectShot={placing ? onSelectShot : undefined}
         fadeOnZoom={zoomSwitched}
       />
     </div>
@@ -367,26 +405,37 @@ export function LabelCourtPanel({
     </>
   );
 
-  const live = (
-    <span aria-live="polite" className="sr-only" data-court-prompt="">
-      {prompt}
-    </span>
-  );
+  // Placing, the header's title is what the next click does, after its end's
+  // glyph; a let serve keeps its " · let".
+  const isLet = selected !== null && isLetServe(selected);
+  const titleLine =
+    placing && prompt ? (
+      <span
+        data-court-title=""
+        className="flex min-w-0 items-center gap-[7px] text-[13px] leading-[16px] font-medium text-white"
+      >
+        <EndGlyph end={placement.target} size="title" />
+        <span aria-live="polite" data-court-prompt="" className="truncate">
+          {prompt}
+        </span>
+        {isLet ? <span className="shrink-0">· let</span> : null}
+      </span>
+    ) : (
+      <span
+        data-court-title=""
+        className="tabular truncate text-[12px] leading-[15px] font-medium text-white"
+      >
+        {readout.title}
+      </span>
+    );
 
   return (
     <div
       data-court-panel=""
       className={cn("flex min-h-0 flex-1 flex-col", RAIL_TONE_CLASS.dark)}
     >
-      {live}
-
       <div className="flex h-[34px] min-w-0 shrink-0 flex-col gap-0.5">
-        <span
-          data-court-title=""
-          className="tabular truncate text-[12px] leading-[15px] font-medium text-white"
-        >
-          {readout.title}
-        </span>
+        {titleLine}
         {placing && notice ? (
           <span
             data-court-subtitle=""
@@ -448,12 +497,13 @@ export function CourtEndControls({
               aria-keyshortcuts="C"
               onClick={() => onTarget(target)}
               className={cn(
-                "h-5 cursor-pointer rounded-[5px] px-[9px] text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                "inline-flex h-5 cursor-pointer items-center gap-[5px] rounded-[5px] px-[9px] text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
                 on
                   ? "bg-white/[0.16] font-medium text-white"
                   : "text-white/60 hover:text-white",
               )}
             >
+              <EndGlyph end={target} />
               {TARGET_WORD[target]}
             </button>
           );

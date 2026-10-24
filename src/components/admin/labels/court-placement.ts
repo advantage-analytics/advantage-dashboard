@@ -413,3 +413,22 @@ export function placementPrompt(
     ? `Click where shot ${shotNumber} was hit`
     : `Click where shot ${shotNumber} landed`;
 }
+
+/**
+ * Which of `shot`'s stored ends is nearer `point` (metres): its contact or its
+ * landing. An end with no position is never the answer; null when neither is
+ * placed. A tie goes to the contact. The court reads a click near a mark
+ * through this (label-court.tsx `markEndAt`).
+ */
+export function nearestEnd(
+  shot: ShotEnds,
+  point: CourtPoint,
+): PlacementTarget | null {
+  const distance = (x?: number | null, y?: number | null) =>
+    x == null || y == null ? null : Math.hypot(x - point.x, y - point.y);
+  const contact = distance(shot.contactX, shot.contactY);
+  const landing = distance(shot.landingX, shot.landingY);
+  if (contact === null) return landing === null ? null : "landing";
+  if (landing === null) return "contact";
+  return landing < contact ? "landing" : "contact";
+}

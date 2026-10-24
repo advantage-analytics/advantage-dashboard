@@ -3311,6 +3311,8 @@ export function LabelConsole({
           : null
       }
       onPlace={place}
+      // A click on a mark already drawn opens that stroke on that end.
+      onSelectShot={(shotId, end) => selectShot(shotId, end)}
       onTarget={setTarget}
       onFlip={() => setPlacement(flipPlacement)}
     />

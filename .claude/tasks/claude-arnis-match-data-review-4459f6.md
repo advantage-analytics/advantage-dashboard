@@ -86,7 +86,7 @@ ready).
 
 ## T6 · Placement cues: visible prompt, end glyphs, nearest-end reselect
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** src/components/admin/labels/label-court-panel.tsx, src/components/admin/labels/label-court.tsx, src/components/admin/labels/court-placement.ts, src/components/admin/labels/label-console.tsx, tests/label-court-panel.spec.ts, tests/label-stroke-keys-court-zoom.spec.ts (guesses)
