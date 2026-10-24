@@ -164,7 +164,7 @@ ready).
 
 ## T12 · Shot timestamp: T key, time cell, editor survives a scrub, Escape cancels
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T11
 - **files:** src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-video.tsx, src/components/admin/labels/label-cells.tsx, src/components/admin/labels/label-black-shot-row.tsx, src/components/admin/labels/stroke-keys.ts, tests/label-console-edit.spec.ts, tests/label-console.spec.ts, tests/label-stroke-keys-court-zoom.spec.ts (guesses)

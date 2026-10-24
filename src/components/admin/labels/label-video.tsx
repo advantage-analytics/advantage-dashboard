@@ -74,6 +74,11 @@ import { KEY_OWNER_SELECTOR } from "./label-layout";
 export interface LabelVideoHandle {
   /** Seek to a label's `videoTime` (analysis clock), converted to this file. */
   seekTo: (videoTime: number) => void;
+  /**
+   * The frame the element stands on, on the FILE's clock (no offset added),
+   * or null with no element — T's "time = frame" adds `fileOffset` itself.
+   */
+  currentTime: () => number | null;
   togglePlay: () => void;
   /** Whether the film is running — read before a remount that would stop it. */
   isPlaying: () => boolean;
@@ -379,6 +384,9 @@ export const LabelVideoPlayer = forwardRef<
     () => ({
       seekTo(videoTime) {
         seek(Math.max(0, videoTime - offset));
+      },
+      currentTime() {
+        return videoRef.current?.currentTime ?? null;
       },
       togglePlay,
       isPlaying() {

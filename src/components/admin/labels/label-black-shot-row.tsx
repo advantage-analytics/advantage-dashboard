@@ -468,6 +468,13 @@ export function BlackShotRow({
     pressedShotId = null;
     select(true);
   };
+  // The time cell is where a stroke's time is set, often from the frame the
+  // film stands on: reaching for it selects the row and leaves the film there.
+  const clickTime = (event: { stopPropagation: () => void }) => {
+    event.stopPropagation();
+    pressedShotId = null;
+    select(false);
+  };
   const focusRow = () => {
     const pressed = pressedShotId === shot.id;
     pressedShotId = null;
@@ -515,8 +522,12 @@ export function BlackShotRow({
         data-selected={selected ? "" : undefined}
         data-playing={playing ? "true" : undefined}
         data-fault={fault ? "" : undefined}
-        onPointerDown={() => {
-          pressedShotId = shot.id;
+        onPointerDown={(event?: { target: EventTarget | null }) => {
+          // A press on the time cell is not a seeking press (`clickTime`).
+          const quiet = (event?.target as Element | null)?.closest?.(
+            "[data-select-quiet]",
+          );
+          pressedShotId = quiet ? null : shot.id;
         }}
         onClick={clickRow}
         onFocus={focusRow}
@@ -541,35 +552,38 @@ export function BlackShotRow({
             {playing ? <span className="sr-only">, playing</span> : null}
           </span>
         </span>
-        <EditableCell
-          {...cell}
-          label={`Shot ${number} time`}
-          valueText={time ?? "Not set"}
-          textClassName={TEXT_AFFORDANCE}
-          display={
-            time ? (
-              <span
-                className="mono tabular text-[10px]"
-                style={{ color: QUIET_INK }}
-              >
-                {time}
-              </span>
-            ) : (
-              <Dash label="Not set" />
-            )
-          }
-          editor={
-            <TextEditor
-              label={`Shot ${number} time`}
-              text={time ?? ""}
-              parse={(text) => parseFileTime(text, edit.fileOffset)}
-              onCommit={(value) =>
-                patch({ video_time: value as number | null })
-              }
-              quiet
-            />
-          }
-        />
+        <span data-select-quiet="" className="contents" onClick={clickTime}>
+          <EditableCell
+            {...cell}
+            label={`Shot ${number} time`}
+            valueText={time ?? "Not set"}
+            textClassName={TEXT_AFFORDANCE}
+            display={
+              time ? (
+                <span
+                  className="mono tabular text-[10px]"
+                  style={{ color: QUIET_INK }}
+                >
+                  {time}
+                </span>
+              ) : (
+                <Dash label="Not set" />
+              )
+            }
+            editor={
+              <TextEditor
+                label={`Shot ${number} time`}
+                text={time ?? ""}
+                draftKey={shot.id}
+                parse={(text) => parseFileTime(text, edit.fileOffset)}
+                onCommit={(value) =>
+                  patch({ video_time: value as number | null })
+                }
+                quiet
+              />
+            }
+          />
+        </span>
         <BlackSelectCell
           {...selectCell}
           label={`Shot ${number} player`}

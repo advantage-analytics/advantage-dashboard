@@ -105,3 +105,11 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. A press dragged off a row with no click or focus leaves `pressedShotId` set, so the next keyboard focus on that same row seeks once; a `pointerup`/`pointercancel` reset would close it.
+
+## T12 · Shot timestamp: T key, time cell, editor survives a scrub, Escape cancels — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `T` (`timeKey` in the console's key chain) writes the selected stroke's `video_time` from the playhead: new `frameTimePatch(shot, fileTime, offset)` in stroke-keys.ts computes analysis = file time + `fileOffset`, rounded to ms (the inverse of `fileSeconds`), and returns null inside the 0.05 s tolerance; `LabelVideoHandle.currentTime()` added; T does nothing when read-only, a confirm is open, no stroke is selected, the stroke is deleted or in another point; `{ key: "T", label: "time = frame" }` joins `STROKE_KEY_HINTS`. The time cell sits in a `display: contents` wrapper (`data-select-quiet`) whose click selects with `{ seek: false }`; other cells still seek, the grid is unchanged. `TextEditor` gains `draftKey` (`shot.id`), so a scrub's `text` change keeps the draft. Escape: the console's window handler blurred the field before React re-rendered, so `onBlur` committed the stale draft — an `escaped` ref now skips that commit. Specs in label-stroke-keys-court-zoom, label-console-edit, label-black-rows.
+**follow-ups:**
+
+1. T reads the playhead whether or not the film is paused; it does not require a pause first.

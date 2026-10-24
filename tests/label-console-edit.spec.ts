@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import * as React from "react";
 
 import { toCourtInHalf } from "@/components/admin/labels/court-geometry";
 import {
@@ -28,6 +29,7 @@ import type { LabelShotPatch } from "@/lib/services/labels/edit";
 import type { LabelShot } from "@/lib/services/labels/session";
 import type { ShotGeometry } from "@/lib/services/labels/shot-derived";
 import { labelSessionFixture } from "./fixtures/label-session";
+import { elements } from "./fixtures/react-tree";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
@@ -445,5 +447,123 @@ test.describe("let patch guard", () => {
     const plan = planShotWrite(serve, { result: "let" });
     expect("error" in plan).toBe(false);
     expect((plan as { row: LabelShot }).row.result).toBe("let");
+  });
+});
+
+/**
+ * `TextEditor` rendered by hand: a `react` whose `useState` / `useRef` keep
+ * their slots between calls, so a handler from one render can be fired after
+ * another — or, as the console's window Escape does, before any re-render.
+ */
+function textEditorHarness() {
+  const slots: unknown[] = [];
+  let cursor = 0;
+  let dirty = false;
+  const react = {
+    ...React,
+    useState: (init: unknown) => {
+      const at = cursor++;
+      if (!(at in slots)) {
+        slots[at] =
+          typeof init === "function" ? (init as () => unknown)() : init;
+      }
+      const set = (next: unknown) => {
+        slots[at] =
+          typeof next === "function"
+            ? (next as (v: unknown) => unknown)(slots[at])
+            : next;
+        dirty = true;
+      };
+      return [slots[at], set];
+    },
+    useRef: (init: unknown) => {
+      const at = cursor++;
+      if (!(at in slots)) slots[at] = { current: init };
+      return slots[at];
+    },
+    useLayoutEffect: () => {},
+  };
+  const { TextEditor } = createLoader({ stubs: { react } }).load(
+    "src/components/admin/labels/label-cells.tsx",
+  ) as {
+    TextEditor: (props: Record<string, unknown>) => React.ReactElement;
+  };
+  const commits: unknown[] = [];
+  /** One render — re-run while the render itself set state — → the input. */
+  function render(props: { text: string; draftKey?: string }) {
+    let tree: React.ReactElement | null = null;
+    for (let pass = 0; pass === 0 || (dirty && pass < 5); pass++) {
+      dirty = false;
+      cursor = 0;
+      tree = TextEditor({
+        label: "Shot 3 time",
+        parse: (text: string) => parseFileTime(text, 940),
+        onCommit: (value: unknown) => commits.push(value),
+        ...props,
+      });
+    }
+    const input = elements(tree).find((el) => el.type === "input")!;
+    const on = input.props as Record<string, (event?: unknown) => void>;
+    return {
+      value: input.props.value,
+      type: (value: string) => on.onChange({ target: { value } }),
+      key: (key: string, blur: () => void = () => {}) =>
+        on.onKeyDown({
+          key,
+          preventDefault() {},
+          currentTarget: { blur },
+        }),
+      blur: () => on.onBlur(),
+    };
+  }
+  return { render, commits };
+}
+
+test.describe("the time cell's editor", () => {
+  test("its draft belongs to the shot, so the shown time changing under it keeps it", () => {
+    const { render, commits } = textEditorHarness();
+    render({ text: "0:10.2", draftKey: "w-return" }).type("0:12.0");
+    // The film scrubs: the same stroke's editor, drawn again over another
+    // shown time, keeps what was typed rather than resetting or remounting.
+    expect(render({ text: "0:11.0", draftKey: "w-return" }).value).toBe(
+      "0:12.0",
+    );
+    const again = render({ text: "0:10.5", draftKey: "w-return" });
+    expect(again.value).toBe("0:12.0");
+    // Leaving writes it, on the analysis clock (file + 940).
+    again.blur();
+    expect(commits).toEqual([952]);
+    // Another stroke's editor starts from its own time.
+    commits.length = 0;
+    render({ text: "0:10.2", draftKey: "w-return" }).type("0:13.0");
+    expect(render({ text: "0:20.3", draftKey: "w-lit" }).value).toBe("0:20.3");
+    expect(commits).toEqual([]);
+  });
+
+  test("Escape reverts and writes nothing, even through the blur the console's Escape causes", () => {
+    const { render, commits } = textEditorHarness();
+    render({ text: "0:10.2", draftKey: "w-return" }).type("0:12.0");
+    const typed = render({ text: "0:10.2", draftKey: "w-return" });
+    expect(typed.value).toBe("0:12.0");
+    // The window's Escape handler blurs the field in the same keydown: the
+    // blur runs with this render's handlers, the draft still in them.
+    typed.key("Escape");
+    typed.blur();
+    expect(commits).toEqual([]);
+    expect(render({ text: "0:10.2", draftKey: "w-return" }).value).toBe(
+      "0:10.2",
+    );
+
+    // Typing again after an Escape is a new draft: leaving writes it.
+    render({ text: "0:10.2", draftKey: "w-return" }).type("0:14.0");
+    render({ text: "0:10.2", draftKey: "w-return" }).blur();
+    expect(commits).toEqual([954]);
+
+    // Enter writes once: its blur commits, nothing else does.
+    commits.length = 0;
+    render({ text: "0:10.2", draftKey: "w-return" }).type("0:12.5");
+    const entered = render({ text: "0:10.2", draftKey: "w-return" });
+    entered.key("Enter", () => entered.blur());
+    expect(commits).toEqual([952.5]);
   });
 });

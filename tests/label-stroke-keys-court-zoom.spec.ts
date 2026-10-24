@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 import {
   STROKE_KEY_HINTS,
+  frameTimePatch,
   hasEarlierServe,
   isStrokeKey,
   strokeKeyChange,
@@ -229,9 +230,10 @@ test.describe("A adds a shot, C switches contact and landing", () => {
   );
 
   test("the legend under the court names them, after the stroke keys", () => {
-    expect(STROKE_KEY_HINTS.slice(-5)).toEqual([
+    expect(STROKE_KEY_HINTS.slice(-6)).toEqual([
       { key: "C", label: "contact / landing" },
       { key: "X", label: "flip side" },
+      { key: "T", label: "time = frame" },
       { key: "A", label: "add shot" },
       { key: "⇧A", label: "add before" },
       { key: "⌫", label: "delete shot" },
@@ -239,6 +241,62 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     // Neither is a stroke key: they never change the selected stroke.
     expect(isStrokeKey("a")).toBe(false);
     expect(isStrokeKey("c")).toBe(false);
+    expect(isStrokeKey("t")).toBe(false);
+  });
+
+  test("T: the frame's file time plus the offset, to the millisecond, or nothing", () => {
+    // The trimmed copy starts 940 s into the upload: the player's 0:10.2 is
+    // 950.2 on the analysis clock `video_time` stores (file + offset, as
+    // `parseFileTime` reads the typed cell).
+    const untimed = { videoTime: null };
+    expect(frameTimePatch(untimed, 10.2, 940)).toEqual({ video_time: 950.2 });
+    expect(frameTimePatch(untimed, 10.2)).toEqual({ video_time: 10.2 });
+    // Rounded to milliseconds, like the typed cell.
+    expect(frameTimePatch(untimed, 0.12345, 940)).toEqual({
+      video_time: 940.123,
+    });
+    // A move of more than the 0.05 s tolerance is an edit…
+    expect(frameTimePatch({ videoTime: 950.1 }, 10.2, 940)).toEqual({
+      video_time: 950.2,
+    });
+    // …anything under it is the same time: no write.
+    expect(frameTimePatch({ videoTime: 950.23 }, 10.2, 940)).toBeNull();
+    expect(frameTimePatch({ videoTime: 950.2 }, 10.2, 940)).toBeNull();
+    // No element, no frame.
+    expect(frameTimePatch(untimed, null, 940)).toBeNull();
+    expect(frameTimePatch(untimed, Number.NaN, 940)).toBeNull();
+  });
+
+  test("T writes the selected stroke's time from the player, on the console's key reach", () => {
+    expect(source).toContain(': lower === "t" && !event.shiftKey\n');
+    expect(source).toContain("? () => timeKey.current()");
+    const body = source.slice(source.indexOf("    timeKey.current = () => {"));
+    const fn = body.slice(0, body.indexOf("\n    };\n"));
+    // Read-only, a confirm open or nothing selected: no write, key not taken.
+    expect(fn).toContain(
+      "if (!editable || confirm || placement.shotId === null) return false;",
+    );
+    // Never a stroke left selected in another point than the open one, and
+    // never a deleted one.
+    expect(fn).toContain(
+      'if (!owner || !shot || shot.status === "deleted") return false;',
+    );
+    expect(fn).toContain(
+      "if (expanded && owner.id !== expanded.id) return false;",
+    );
+    // Never `keyShot`: T does not pick a stroke for itself.
+    expect(fn).not.toContain("keyShot()");
+    // The player's file time, back on the analysis clock, through the shot
+    // edit every cell writes with.
+    expect(fn).toContain("player.current?.currentTime() ?? null,");
+    expect(fn).toContain("fileOffset,");
+    expect(fn).toContain("if (patch) requestPatchShot(shot.id, patch);");
+    // The handle reads the element on the file's clock; no offset there.
+    const video = readFileSync(
+      "src/components/admin/labels/label-video.tsx",
+      "utf8",
+    );
+    expect(video).toContain("return videoRef.current?.currentTime ?? null;");
   });
 
   test("A adds after the selected live stroke, else after the point's last; C flips the court's end", () => {

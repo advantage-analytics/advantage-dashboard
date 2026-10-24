@@ -277,6 +277,7 @@ import {
 } from "./video-clock";
 import { useBrowserFullscreen } from "./use-browser-fullscreen";
 import {
+  frameTimePatch,
   hasEarlierServe,
   isStrokeKey,
   strokeKeyChange,
@@ -2671,6 +2672,7 @@ export function LabelConsole({
   // (a serve the vendor missed).
   // C: the court's other end — contact ↔ landing — for the selected stroke.
   // X: Flip side — the placing half across the net, as the court's button.
+  // T: the selected stroke's time = the frame the film stands on.
   // Delete / Backspace: delete the selected stroke, through the same confirm
   // as its tray's Delete shot.
   const addShotKey = useRef<() => boolean>(() => false);
@@ -2678,6 +2680,7 @@ export function LabelConsole({
   const deleteShotKey = useRef<() => boolean>(() => false);
   const endKey = useRef<() => boolean>(() => false);
   const flipKey = useRef<() => boolean>(() => false);
+  const timeKey = useRef<() => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
   const foldOpenPoint = useRef<() => boolean>(() => false);
   // ⌘Z: the header's Undo.
@@ -2867,6 +2870,24 @@ export function LabelConsole({
       setPlacement(flipPlacement);
       return true;
     };
+    // T writes only the stroke already selected — never one it would pick
+    // (`keyShot`) — and only in the open point: the frame on screen is that
+    // stroke's frame, read off the player on the file's clock and put back
+    // on the analysis clock with `fileOffset` (`frameTimePatch`).
+    timeKey.current = () => {
+      if (!editable || confirm || placement.shotId === null) return false;
+      const owner = pointOfShot(points, placement.shotId);
+      const shot = owner?.shots.find((s) => s.id === placement.shotId);
+      if (!owner || !shot || shot.status === "deleted") return false;
+      if (expanded && owner.id !== expanded.id) return false;
+      const patch = frameTimePatch(
+        shot,
+        player.current?.currentTime() ?? null,
+        fileOffset,
+      );
+      if (patch) requestPatchShot(shot.id, patch);
+      return true;
+    };
     strokeKey.current = (key) => {
       if (!operable || confirm) return false;
       const shot = keyShot();
@@ -2965,8 +2986,8 @@ export function LabelConsole({
       }
       // A stroke key reaches the selected stroke from a focused cell too (a
       // cell is a button), and so do A / ⇧A (add a stroke after / before),
-      // C (contact ↔ landing), X (flip side) and Delete / Backspace (delete
-      // the stroke); a text field, a menu and a dialog keep all of them.
+      // C (contact ↔ landing), X (flip side), T (time = frame) and Delete /
+      // Backspace (delete the stroke); a text field, a menu and a dialog keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
       const consoleKey = isStrokeKey(key)
         ? () => strokeKey.current(key)
@@ -2978,9 +2999,11 @@ export function LabelConsole({
             ? () => endKey.current()
             : lower === "x"
               ? () => flipKey.current()
-              : key === "Delete" || key === "Backspace"
-                ? () => deleteShotKey.current()
-                : null;
+              : lower === "t" && !event.shiftKey
+                ? () => timeKey.current()
+                : key === "Delete" || key === "Backspace"
+                  ? () => deleteShotKey.current()
+                  : null;
       if (
         consoleKey &&
         !event.metaKey &&

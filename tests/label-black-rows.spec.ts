@@ -1245,6 +1245,72 @@ test.describe("the black shots well", () => {
     expect(calls).toEqual([["w-return", undefined, { seek: false }]]);
   });
 
+  test("a click on the time cell selects the row and leaves the film where it is", () => {
+    const calls: unknown[][] = [];
+    const rowOf = (selectedShotId: string | null = null) => {
+      const all = elements(
+        well().BlackShotsWell({
+          point: rally(),
+          edit: wellEdit({
+            selectedShotId,
+            onSelectShot: (...args: unknown[]) => calls.push(args),
+          }),
+        }),
+      );
+      const row = all.find((el) => el.props["data-shot-id"] === "w-return")!;
+      const rowIndex = all.indexOf(row);
+      // The row's own time cell: the first quiet wrapper after the row.
+      const time = all
+        .slice(rowIndex)
+        .find((el) => "data-select-quiet" in el.props)!;
+      type Handler = (event?: unknown) => void;
+      const on = (el: typeof row) =>
+        el.props as unknown as Record<
+          "onClick" | "onFocus" | "onPointerDown",
+          Handler
+        >;
+      return { row: on(row), time: on(time), timeElement: time };
+    };
+    let stopped = 0;
+    const stop = { stopPropagation: () => stopped++ };
+
+    // The click: selected without a seek, and it goes no further — the row's
+    // seeking click never sees it.
+    rowOf().time.onClick(stop);
+    expect(calls).toEqual([["w-return", undefined, { seek: false }]]);
+    expect(stopped).toBe(1);
+    // The cell holds the time editor.
+    const { timeElement } = rowOf();
+    expect(
+      elements(timeElement).some(
+        (el) => el.props.label === "Shot 3 time" && "parse" in el.props,
+      ),
+    ).toBe(true);
+
+    // A press on the time cell is not a seeking press: the focus it gives
+    // the cell selects without a seek too.
+    calls.length = 0;
+    const inTime = {
+      closest: (selector: string) =>
+        selector === "[data-select-quiet]" ? {} : null,
+    };
+    const pressed = rowOf();
+    pressed.row.onPointerDown({ target: inTime });
+    pressed.row.onFocus();
+    expect(calls).toEqual([["w-return", undefined, { seek: false }]]);
+
+    // Any other cell still seeks: a press there, its focus, then the click.
+    calls.length = 0;
+    const elsewhere = { closest: () => null };
+    const other = rowOf();
+    other.row.onPointerDown({ target: elsewhere });
+    other.row.onFocus();
+    expect(calls).toEqual([["w-return"]]);
+    calls.length = 0;
+    rowOf().row.onClick();
+    expect(calls).toEqual([["w-return"]]);
+  });
+
   test("the tray: only under the selected row, and only where the console writes", () => {
     const html = renderWell({ selectedShotId: "w-return" });
     // One tray in the well, under the selected stroke.

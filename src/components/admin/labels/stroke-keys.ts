@@ -1,4 +1,4 @@
-import type { LabelShotPatch } from "@/lib/services/labels/edit";
+import { sameShotValue, type LabelShotPatch } from "@/lib/services/labels/edit";
 import { spinRows } from "./label-format";
 import {
   LABEL_SPINS,
@@ -39,6 +39,7 @@ export const STROKE_KEY_HINTS: readonly { key: string; label: string }[] = [
   // The console's own keys, not the stroke's (label-console.tsx).
   { key: "C", label: "contact / landing" },
   { key: "X", label: "flip side" },
+  { key: "T", label: "time = frame" },
   { key: "A", label: "add shot" },
   { key: "⇧A", label: "add before" },
   { key: "⌫", label: "delete shot" },
@@ -144,4 +145,24 @@ export function withServeHitter(
   const hitter = earlierServe(point, shotId, ghosts)?.hitter ?? null;
   if (!shot || hitter === null || shot.hitter === hitter) return patch;
   return { ...patch, hitter };
+}
+
+/**
+ * T: the selected stroke's time set to the frame the film stands on.
+ * `fileTime` is the player's position on the FILE's clock; `label_shots.
+ * video_time` is on the analysis clock, so the offset is added back — the
+ * inverse of `fileSeconds`, as `parseFileTime` does for typed text — and the
+ * result is rounded to milliseconds the same way. Null when there is no frame
+ * to read, or the stroke already holds that time (within
+ * `VIDEO_TIME_TOLERANCE_S`): a key that changes nothing writes nothing.
+ */
+export function frameTimePatch(
+  shot: Pick<LabelShot, "videoTime">,
+  fileTime: number | null,
+  offset = 0,
+): LabelShotPatch | null {
+  if (fileTime === null || !Number.isFinite(fileTime)) return null;
+  const videoTime = Math.round((fileTime + offset) * 1000) / 1000;
+  if (sameShotValue("video_time", shot.videoTime, videoTime)) return null;
+  return { video_time: videoTime };
 }
