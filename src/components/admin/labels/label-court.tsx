@@ -69,10 +69,14 @@ import {
  * placing click, and resets between the whole court and a half. Marks keep
  * their on-screen size at any zoom.
  *
- * A half's box can slide at the same size (`slide`, court-placement.ts
- * `courtSlide`): back past the usual run-off for a deep contact, with a
- * dashed guide every 2 m behind the baseline and a faint line at the usual
- * edge; or across the net for a short ball, the hitter's side washed amber.
+ * A half's box draws its run-off's guides whenever a run-off is on screen
+ * (`windowRunoffs`): a dashed guide every 2 m behind the baseline, labelled
+ * "+2 m", "+4 m", …, and a faint line at the usual edge, labelled, out to
+ * however deep the box reaches — moved deeper (`moveWindow`), the guides
+ * carry on. The box can also slide at the same size (`slide`,
+ * court-placement.ts `courtSlide`): back past the usual run-off for a stored
+ * deep contact, or across the net for a short ball, the hitter's side washed
+ * amber.
  * An end the labeller called an estimate (`unclear`) draws as a dashed amber
  * ring in place of its mark.
  */
@@ -110,6 +114,30 @@ export function runoffGuides(
     });
   }
   return guides;
+}
+
+/** A run-off on screen: the half whose baseline it is behind, and how deep. */
+export interface WindowRunoff {
+  half: CourtHalf;
+  /** Metres behind that baseline the box reaches. */
+  runoff: number;
+}
+
+/**
+ * The run-offs a half's box (its top `y`, metres) shows: behind the near
+ * baseline when its bottom edge is past it, behind the far when its top is,
+ * each as deep as the box reaches (capped at `MAX_RUNOFF`). The half's own
+ * box shows its usual 3.5 m.
+ */
+export function windowRunoffs(top: number): WindowRunoff[] {
+  const out: WindowRunoff[] = [];
+  // To the micrometre: the half's own box reaches its usual edge exactly.
+  const depth = (n: number) => Math.min(MAX_RUNOFF, Math.round(n * 1e6) / 1e6);
+  const near = depth(HALF_HEIGHT - top);
+  const far = depth(top - COURT_LENGTH);
+  if (near > 0) out.push({ half: "near", runoff: near });
+  if (far > 0) out.push({ half: "far", runoff: far });
+  return out;
 }
 
 /** The art's own height; both views are proportioned against it. */
@@ -318,6 +346,8 @@ export function LabelCourt({
   const zoom = zoomState.zoom;
   const top = zoomed ? zoomState.top : 0;
   const marks = marksFor(strokes, view, top);
+  // The run-off guides on screen: any half view, slid or moved or not.
+  const runoffs = zoomed ? windowRunoffs(top) : [];
   const placed = marks.length;
   const setZoom = (next: (z: CourtZoom) => CourtZoom) =>
     setZoomState((state) => ({ ...state, zoom: next(state.zoom) }));
@@ -492,7 +522,13 @@ export function LabelCourt({
             }
       }
     >
-      <CourtArt view={view} top={top} slide={slid} thin={thin} />
+      <CourtArt
+        view={view}
+        top={top}
+        slide={slid}
+        runoffs={runoffs}
+        thin={thin}
+      />
       <svg
         className="absolute inset-0 block h-full w-full"
         aria-hidden="true"
@@ -605,47 +641,49 @@ export function LabelCourt({
           Net
         </span>
       ) : null}
-      {slid?.kind === "deep"
-        ? runoffGuides(slid.half, slid.runoff).map((guide) => {
-            const at = fromCourtInWindow(top, { x: 0, y: guide.y });
-            return (
-              <span
-                key={guide.metres}
-                aria-hidden="true"
-                data-court-guide={guide.metres}
-                // Left, as "usual edge" is: the zoom control holds the top
-                // right, where a guide label would sit under it.
-                className="mono pointer-events-none absolute left-2 origin-left text-[9px] text-white/40"
-                style={{
-                  top: pct(at.sy),
-                  transform: keepSize("translateY(-50%)"),
-                }}
-              >
-                +{guide.metres} m
-              </span>
-            );
-          })
-        : null}
-      {slid?.kind === "deep" ? (
-        <span
-          aria-hidden="true"
-          data-court-usual-edge=""
-          className="pointer-events-none absolute left-2 origin-left text-[10px] text-white/45"
-          style={{
-            top: pct(
-              fromCourtInWindow(top, {
-                x: 0,
-                y: usualEdgeY(slid.half),
-              }).sy,
-            ),
-            transform: keepSize(
-              slid.half === "near" ? "translateY(-120%)" : "translateY(20%)",
-            ),
-          }}
-        >
-          usual edge
-        </span>
-      ) : null}
+      {runoffs.flatMap(({ half, runoff }) =>
+        runoffGuides(half, runoff).map((guide) => {
+          const at = fromCourtInWindow(top, { x: 0, y: guide.y });
+          return (
+            <span
+              key={`${half}-${guide.metres}`}
+              aria-hidden="true"
+              data-court-guide={guide.metres}
+              // Left, as "usual edge" is: the zoom control holds the top
+              // right, where a guide label would sit under it.
+              className="mono pointer-events-none absolute left-2 origin-left text-[9px] text-white/40"
+              style={{
+                top: pct(at.sy),
+                transform: keepSize("translateY(-50%)"),
+              }}
+            >
+              +{guide.metres} m
+            </span>
+          );
+        }),
+      )}
+      {runoffs
+        .filter(({ runoff }) => runoff >= USUAL_RUNOFF)
+        .map(({ half }) => (
+          <span
+            key={`${half}-usual`}
+            aria-hidden="true"
+            data-court-usual-edge=""
+            className="pointer-events-none absolute left-2 origin-left text-[10px] text-white/45"
+            style={{
+              top: pct(
+                fromCourtInWindow(top, { x: 0, y: usualEdgeY(half) }).sy,
+              ),
+              // Inside the run-off, toward the court: at the half's own box
+              // the usual edge is the box's edge.
+              transform: keepSize(
+                half === "near" ? "translateY(-120%)" : "translateY(20%)",
+              ),
+            }}
+          >
+            usual edge
+          </span>
+        ))}
     </span>
   );
 
@@ -777,12 +815,15 @@ function CourtArt({
   view,
   top,
   slide = null,
+  runoffs = [],
   thin = 1,
 }: {
   view: CourtView;
   /** A half's box: metres of `y` at its top edge. */
   top: number;
   slide?: CourtSlide | null;
+  /** The run-offs on screen (`windowRunoffs`): their guides are drawn. */
+  runoffs?: readonly WindowRunoff[];
   /** 1 / the labeller's zoom: the lines keep their on-screen width. */
   thin?: number;
 }) {
@@ -883,9 +924,9 @@ function CourtArt({
         strokeWidth={2 * thin}
         style={lines}
       />
-      {slide?.kind === "deep" ? (
-        <g data-court-runoff="" strokeWidth={thin}>
-          {runoffGuides(slide.half, slide.runoff).map((guide) => (
+      {runoffs.map(({ half, runoff }) => (
+        <g key={half} data-court-runoff={half} strokeWidth={thin}>
+          {runoffGuides(half, runoff).map((guide) => (
             <line
               key={guide.metres}
               x1={HALF_LEFT}
@@ -897,17 +938,19 @@ function CourtArt({
               style={lines}
             />
           ))}
-          <line
-            data-court-usual-edge-line=""
-            x1={HALF_LEFT}
-            y1={svgY(usualEdgeY(slide.half))}
-            x2={HALF_LEFT + HALF_WIDTH}
-            y2={svgY(usualEdgeY(slide.half))}
-            stroke={USUAL_EDGE_LINE}
-            style={lines}
-          />
+          {runoff >= USUAL_RUNOFF ? (
+            <line
+              data-court-usual-edge-line=""
+              x1={HALF_LEFT}
+              y1={svgY(usualEdgeY(half))}
+              x2={HALF_LEFT + HALF_WIDTH}
+              y2={svgY(usualEdgeY(half))}
+              stroke={USUAL_EDGE_LINE}
+              style={lines}
+            />
+          ) : null}
         </g>
-      ) : null}
+      ))}
     </svg>
   );
 }

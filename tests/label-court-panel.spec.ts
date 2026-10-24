@@ -35,6 +35,7 @@ type PanelProps = {
   onFlip: () => void;
   fill?: boolean;
   info?: PointInfo | null;
+  notice?: string | null;
   onEstimate?: (estimate: boolean) => void;
 };
 
@@ -296,6 +297,54 @@ test.describe("the slid court and the estimate", () => {
     });
     expect(usual).not.toContain("data-court-slide");
     expect(usual).toContain('viewBox="-10.085 -3.5 20.17 16.224"');
+  });
+
+  test("a half's own box draws its run-off guides by default, labelled", () => {
+    // Nothing placed yet, no slide: the far half's own 3.5 m run-off.
+    const html = render({ placement: startPlacement("s-return", "far") });
+    expect(html).not.toContain("data-court-slide");
+    expect(
+      [...html.matchAll(/data-court-guide="(\d+)"[^>]*>([^<]*)</g)].map((m) => [
+        m[1],
+        m[2],
+      ]),
+    ).toEqual([["2", "+2 m"]]);
+    expect(html).toContain('data-court-runoff="far"');
+    expect(html).toContain("data-court-usual-edge-line");
+    expect(html).toMatch(/data-court-usual-edge=""[^>]*>usual edge</);
+    // Kept at their size under the court's own zoom, like the marks.
+    expect(tagOf(html, 'data-court-guide="2"')).toContain("scale(1.000)");
+    // The whole court draws none.
+    const whole = render({ placement: startPlacement(null) });
+    expect(whole).not.toContain("data-court-guide");
+    expect(whole).not.toContain("data-court-usual-edge");
+  });
+
+  test("“Landing placed · next: shot N contact” in the subtitle's place, only when given", () => {
+    const notice = "Landing placed · next: shot 2 contact";
+    const html = render({
+      placement: startPlacement("s-return", "far"),
+      notice,
+    });
+    expect(html).toMatch(
+      /data-placement-notice=""[^>]*>Landing placed · next: shot 2 contact</,
+    );
+    // After a contact the console passes none: the usual subtitle.
+    const after = render({
+      placement: setPlacementTarget(
+        startPlacement("s-return", "far"),
+        "landing",
+      ),
+    });
+    expect(after).not.toContain("data-placement-notice");
+    // Not placing (read-only), a notice is not drawn.
+    expect(
+      render({
+        placement: startPlacement("s-return", "far"),
+        editable: false,
+        notice,
+      }),
+    ).not.toContain("data-placement-notice");
   });
 
   test("“Off screen, so this is an estimate” while placing; an estimate draws as a dashed amber ring", () => {

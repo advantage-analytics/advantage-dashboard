@@ -198,6 +198,7 @@ import {
   flipPlacement,
   hitterHalf,
   nextPlacement,
+  placementNotice,
   setPlacementTarget,
   startPlacement,
   type PlacementState,
@@ -574,6 +575,12 @@ export function LabelConsole({
     placementOf(session.points, initialSelectedShotId),
   );
   const [armedSlot, setArmedSlot] = useState<ArmedSlot | null>(null);
+  // "Landing placed · next: shot 4 contact" (`placementNotice`): shown while
+  // the stroke the landing moved on to is still waiting for its contact.
+  const [placementNoticeState, setPlacementNoticeState] = useState<{
+    shotId: string;
+    text: string;
+  } | null>(null);
   // Review mode: a flag jump (] [ ' ; or a header flag row, `findGap` with
   // `arm`) enters it, and while it is on the open point's review step is
   // asked inline in the rail (`ReviewInlineBlock`), an answer lands on the
@@ -3075,7 +3082,14 @@ export function LabelConsole({
     if (placement.shotId === null) return;
     const shot = findShot(points, placement.shotId);
     if (!shot) return;
-    const next = nextPlacement(placement, point, labelShotValues(shot));
+    const owner = pointOfShot(points, shot.id);
+    const strokes = owner ? liveShotsInOrder(owner, drawsGhosts(marks)) : [];
+    const next = nextPlacement(
+      placement,
+      point,
+      labelShotValues(shot),
+      strokes,
+    );
     if (!next) return;
     stopReplay();
     // A placement answers the step only once its stroke has both ends: a
@@ -3084,12 +3098,9 @@ export function LabelConsole({
     // mode the step is noted and the console moves on, outside it the queue
     // only stops asking (the labeller chose this stroke; nothing lands for
     // them). In review mode a stroke with no step about it (the one an
-    // answer added) forces the move on regardless.
-    // A contact near the run-off's back edge only grows the box and keeps
-    // the contact armed for a deeper click: not an answer yet.
-    const growing =
-      placement.target === "contact" && next.state.target === "contact";
-    if (!growing && placesBothEnds(shot, next.patch)) {
+    // answer added) forces the move on regardless — its landing on the
+    // next stroke's contact (`nextPlacement`) stands until the advance lands.
+    if (placesBothEnds(shot, next.patch)) {
       if (step?.target.shotId === shot.id) {
         if (reviewMode) noteAnswered();
         else closeQueuedItem();
@@ -3097,6 +3108,21 @@ export function LabelConsole({
         notePlaced();
       }
     }
+    // A landing that moved the court on to the next stroke says so.
+    const nextNumber =
+      next.state.shotId === null
+        ? -1
+        : strokes.findIndex((s) => s.id === next.state.shotId);
+    const notice = placementNotice(
+      placement,
+      next.state,
+      nextNumber === -1 ? null : nextNumber + 1,
+    );
+    setPlacementNoticeState(
+      notice && next.state.shotId
+        ? { shotId: next.state.shotId, text: notice }
+        : null,
+    );
     setPlacement(next.state);
     void patchShot(shot.id, next.patch);
   }
@@ -3277,6 +3303,13 @@ export function LabelConsole({
       info={pointInfo}
       onEstimate={editable ? setEstimate : undefined}
       clock={clock}
+      notice={
+        placementNoticeState &&
+        placement.shotId === placementNoticeState.shotId &&
+        placement.target === "contact"
+          ? placementNoticeState.text
+          : null
+      }
       onPlace={place}
       onTarget={setTarget}
       onFlip={() => setPlacement(flipPlacement)}

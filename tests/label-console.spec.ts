@@ -913,11 +913,18 @@ test.describe("a flag jump lands on the point's review step", () => {
     // stops asking the item and nothing lands. A stroke with no step about
     // it (the one an answer added) forces the move on, in review mode only.
     expect(placeSource).toMatch(
-      /if \(!growing && placesBothEnds\(shot, next\.patch\)\) \{\n\s+if \(step\?\.target\.shotId === shot\.id\) \{\n\s+if \(reviewMode\) noteAnswered\(\);\n\s+else closeQueuedItem\(\);\n\s+\} else if \(reviewMode && inlineAnchor\?\.strokeId === shot\.id\) \{\n\s+notePlaced\(\);\n\s+\}\n\s+\}/,
+      /if \(placesBothEnds\(shot, next\.patch\)\) \{\n\s+if \(step\?\.target\.shotId === shot\.id\) \{\n\s+if \(reviewMode\) noteAnswered\(\);\n\s+else closeQueuedItem\(\);\n\s+\} else if \(reviewMode && inlineAnchor\?\.strokeId === shot\.id\) \{\n\s+notePlaced\(\);\n\s+\}\n\s+\}/,
     );
     expect(placeSource.match(/noteAnswered\(\)/g)).toHaveLength(1);
     expect(placeSource.match(/closeQueuedItem\(\)/g)).toHaveLength(1);
     expect(placeSource.match(/notePlaced\(\)/g)).toHaveLength(1);
+    // No click grows the run-off any more: every contact moves on.
+    expect(placeSource).not.toContain("growing");
+    // The point's live strokes go in, so a landing moves on to the next.
+    expect(placeSource).toMatch(
+      /nextPlacement\(\s*placement,\s*point,\s*labelShotValues\(shot\),\s*strokes,?\s*\)/,
+    );
+    expect(placeSource).toContain("placementNotice(");
   });
 
   test("landing on a step about no stroke clears the selection, so the point-level question is the one asked", () => {

@@ -43,3 +43,12 @@ is the runner's. Newest entries at the bottom.
 1. The locked-game slot is not in `slotStops`, so `]` / `[` and the header's flag count skip it.
 2. Two specs check console/rail wiring by reading source text — brittle against refactors.
 3. Not yet checked in a browser.
+
+## T5 · Placement flow: next shot after a landing, one-click edge contact, guides by default — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `nextPlacement(state, point, shot, strokes)` arms the next live stroke's contact after a landing (its stored half, else by hitter) and answers `NO_PLACEMENT` on the last stroke; `placementNotice()` gives "Landing placed · next: shot N contact", drawn in the court panel's subtitle slot (`data-placement-notice`). The run-off growth click is gone (`PlacementState.runoff`, the console's `growing`); a back-edge contact is placed in one click and `placementRunoff`/the deep slide still work from a stored contact. New `windowRunoffs(top)`: labelled +2 m… guides and the usual-edge line on every half view, following `moveWindow`, kept at size under zoom. Court box, scale and lines unchanged. Specs in label-stroke-keys-court-zoom, label-court-panel, label-console-edit, label-console.
+**follow-ups:**
+
+1. Arming the next stroke's contact does not seek the film to it — decide whether it should.
+2. The notice replaces the subtitle, hiding the "run-off to X m" readout while it shows; T6 may restyle.

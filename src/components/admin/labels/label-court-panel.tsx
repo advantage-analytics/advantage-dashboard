@@ -191,6 +191,7 @@ export function LabelCourtPanel({
   playingShotId = null,
   ghosts = true,
   info = null,
+  notice = null,
   onEstimate,
   clock,
   onPlace,
@@ -213,6 +214,12 @@ export function LabelCourtPanel({
   ghosts?: boolean;
   /** One line about the open point, drawn under the header while not placing. */
   info?: PointInfo | null;
+  /**
+   * "Landing placed · next: shot 4 contact" (court-placement.ts
+   * `placementNotice`): drawn in the subtitle's place while placing, after a
+   * landing moved the court on to the next stroke. Null: the usual subtitle.
+   */
+  notice?: string | null;
   /**
    * "Off screen, so this is an estimate" on the end being placed. Absent:
    * the box is not drawn.
@@ -380,12 +387,22 @@ export function LabelCourtPanel({
         >
           {readout.title}
         </span>
-        <span
-          data-court-subtitle=""
-          className="truncate text-[10px] leading-[13px] text-white/55"
-        >
-          {readout.subtitle}
-        </span>
+        {placing && notice ? (
+          <span
+            data-court-subtitle=""
+            data-placement-notice=""
+            className="truncate text-[10px] leading-[13px] text-white/70"
+          >
+            {notice}
+          </span>
+        ) : (
+          <span
+            data-court-subtitle=""
+            className="truncate text-[10px] leading-[13px] text-white/55"
+          >
+            {readout.subtitle}
+          </span>
+        )}
       </div>
       {info && !placing ? <PointInfoLine info={info} /> : null}
 

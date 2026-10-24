@@ -19,6 +19,7 @@ import {
   panBy,
   wheelZoomDelta,
   runoffGuides,
+  windowRunoffs,
   zoomAbout,
 } from "@/components/admin/labels/label-court";
 import {
@@ -27,6 +28,7 @@ import {
   estimatePatch,
   isEstimate,
   nextPlacement,
+  placementNotice,
   placementRunoff,
   runoffFor,
   setPlacementTarget,
@@ -368,7 +370,7 @@ test.describe("court zoom", () => {
   });
 });
 
-test.describe("a deep contact: the run-off grows as the labeller clicks near its edge", () => {
+test.describe("a deep contact: one click, written as clicked", () => {
   const UNPLACED: ShotPosition = {
     stroke: "forehand",
     contact_x: null,
@@ -383,38 +385,35 @@ test.describe("a deep contact: the run-off grows as the labeller clicks near its
       startPlacement("s", "near"),
       { x: 1, y: -2.5 },
       UNPLACED,
+      [],
     )!;
     expect(step.patch).toEqual({ contact_x: 1, contact_y: -2.5 });
     expect(step.state.target).toBe("landing");
-    expect(step.state.runoff).toBeUndefined();
   });
 
-  test("a click near the edge is stored as clicked, and the contact stays armed with more run-off", () => {
+  test("a click at the run-off's back edge is stored as clicked and moves on to the landing", () => {
     const start = startPlacement("s", "near");
-    const edge = nextPlacement(start, { x: -2.4, y: -3.3 }, UNPLACED)!;
-    // Never clamped inside the run-off.
+    const edge = nextPlacement(start, { x: -2.4, y: -3.3 }, UNPLACED, [])!;
+    // Never clamped inside the run-off, and no second click to grow it.
     expect(edge.patch).toEqual({ contact_x: -2.4, contact_y: -3.3 });
-    expect(edge.state).toEqual({ ...start, runoff: 5.5 });
-    // Deeper again, at the new edge: it grows again.
-    const placed = { ...UNPLACED, contact_x: -2.4, contact_y: -3.3 };
-    const deeper = nextPlacement(edge.state, { x: -2.4, y: -5.2 }, placed)!;
-    expect(deeper.patch).toEqual({ contact_x: -2.4, contact_y: -5.2 });
-    expect(deeper.state.runoff).toBe(7.5);
-    // Clear of the edge: placed, and on to the landing.
-    const settled = nextPlacement(
-      deeper.state,
-      { x: -2.4, y: -6.2 },
-      { ...placed, contact_y: -5.2 },
-    )!;
-    expect(settled.patch).toEqual({ contact_x: -2.4, contact_y: -6.2 });
-    expect(settled.state.target).toBe("landing");
-    // The far half reads its depth past the far baseline.
+    expect(edge.state).toEqual({
+      shotId: "s",
+      target: "landing",
+      half: "far",
+      flipped: false,
+    });
+    // Past the usual edge (the box moved deeper): the same.
+    const deep = nextPlacement(start, { x: 0, y: -9.4 }, UNPLACED, [])!;
+    expect(deep.patch).toEqual({ contact_x: 0, contact_y: -9.4 });
+    expect(deep.state.target).toBe("landing");
+    // The far half too.
     const far = nextPlacement(
       startPlacement("s", "far"),
-      { x: 0, y: 23.77 + 3.2 },
+      { x: 0, y: 23.77 + 3.4 },
       UNPLACED,
+      [],
     )!;
-    expect(far.state.runoff).toBe(5.5);
+    expect(far.state).toMatchObject({ target: "landing", half: "near" });
   });
 
   test("the run-off covers a stored deep contact, capped", () => {
@@ -424,18 +423,11 @@ test.describe("a deep contact: the run-off grows as the labeller clicks near its
     expect(runoffFor(40)).toBe(MAX_RUNOFF);
     const contact = startPlacement("s", "near");
     expect(placementRunoff(contact, -4.2)).toBe(5.5);
-    expect(placementRunoff({ ...contact, runoff: 7.5 }, -4.2)).toBe(7.5);
+    expect(placementRunoff(contact, null)).toBe(3.5);
     // A landing draws the usual run-off.
     expect(placementRunoff(setPlacementTarget(contact, "landing"), -4.2)).toBe(
       3.5,
     );
-    // At the cap a click at the edge is just placed.
-    const capped = nextPlacement(
-      { ...contact, runoff: MAX_RUNOFF },
-      { x: 0, y: -MAX_RUNOFF + 0.1 },
-      UNPLACED,
-    )!;
-    expect(capped.state.target).toBe("landing");
   });
 
   test("the slide and its guides: +2 m steps out to the run-off", () => {
@@ -464,6 +456,107 @@ test.describe("a deep contact: the run-off grows as the labeller clicks near its
   });
 });
 
+test.describe("after a landing: the next stroke's contact", () => {
+  const PLACED: ShotPosition = {
+    stroke: "forehand",
+    contact_x: 1,
+    contact_y: -0.5,
+    landing_x: null,
+    landing_y: null,
+    result: null,
+  };
+  const RALLY = [
+    { id: "s1", hitter: "p1" as const, contactY: -0.5 },
+    { id: "s2", hitter: "p2" as const, contactY: null },
+    { id: "s3", hitter: "p1" as const, contactY: null },
+  ];
+  const landingOf = (shotId: string) =>
+    setPlacementTarget(startPlacement(shotId, "near"), "landing", -0.5);
+
+  test("the landing arms the next stroke's contact, on its hitter's half", () => {
+    const step = nextPlacement(
+      landingOf("s1"),
+      { x: 0, y: 20 },
+      PLACED,
+      RALLY,
+    )!;
+    expect(step.patch).toMatchObject({ landing_x: 0, landing_y: 20 });
+    expect(step.state).toEqual({
+      shotId: "s2",
+      target: "contact",
+      half: "far",
+      flipped: false,
+    });
+    // A stored contact on the next stroke says its half.
+    const stored = RALLY.map((s) =>
+      s.id === "s2" ? { ...s, contactY: -1 } : s,
+    );
+    expect(
+      nextPlacement(landingOf("s1"), { x: 0, y: 20 }, PLACED, stored)!.state
+        .half,
+    ).toBe("near");
+    // The same hitter again (a second serve): the same half.
+    const fault = RALLY.map((s) =>
+      s.id === "s2" ? { ...s, hitter: "p1" as const } : s,
+    );
+    expect(
+      nextPlacement(landingOf("s1"), { x: 0, y: 20 }, PLACED, fault)!.state
+        .half,
+    ).toBe("near");
+  });
+
+  test("on the point's last stroke nothing is selected after, never the same stroke's contact", () => {
+    const last = nextPlacement(
+      landingOf("s3"),
+      { x: 0, y: 20 },
+      PLACED,
+      RALLY,
+    )!;
+    expect(last.state.shotId).toBeNull();
+    // A stroke the list does not hold lets go too.
+    expect(
+      nextPlacement(landingOf("gone"), { x: 0, y: 20 }, PLACED, RALLY)!.state
+        .shotId,
+    ).toBeNull();
+  });
+
+  test("the notice: after such a landing only", () => {
+    const landing = landingOf("s1");
+    const step = nextPlacement(landing, { x: 0, y: 20 }, PLACED, RALLY)!;
+    expect(placementNotice(landing, step.state, 2)).toBe(
+      "Landing placed · next: shot 2 contact",
+    );
+    // After a contact: none.
+    const contact = startPlacement("s2", "far");
+    const hit = nextPlacement(contact, { x: 0, y: 24 }, PLACED, RALLY)!;
+    expect(placementNotice(contact, hit.state, 2)).toBeNull();
+    // After the last stroke's landing: none.
+    const end = nextPlacement(landingOf("s3"), { x: 0, y: 20 }, PLACED, RALLY)!;
+    expect(placementNotice(landingOf("s3"), end.state, null)).toBeNull();
+  });
+});
+
+test.describe("the run-off guides on screen", () => {
+  test("a half's own box shows its usual run-off; a moved box as deep as it reaches", () => {
+    expect(windowRunoffs(halfTopY("near"))).toEqual([
+      { half: "near", runoff: 3.5 },
+    ]);
+    expect(windowRunoffs(halfTopY("far"))).toEqual([
+      { half: "far", runoff: 3.5 },
+    ]);
+    // Dragged 3 m deeper behind the near baseline: guides out to 6.5 m.
+    const moved = moveWindow(halfTopY("near"), -3);
+    expect(windowRunoffs(moved)).toEqual([{ half: "near", runoff: 6.5 }]);
+    expect(runoffGuides("near", 6.5).map((g) => g.metres)).toEqual([2, 4, 6]);
+    // As far as the box goes: the deepest run-off.
+    expect(windowRunoffs(moveWindow(halfTopY("near"), -40))).toEqual([
+      { half: "near", runoff: MAX_RUNOFF },
+    ]);
+    // Mid-court (a short ball's box): no run-off on screen.
+    expect(windowRunoffs(18.224)).toEqual([]);
+  });
+});
+
 test.describe("a short ball: a landing on the hitter's own side is allowed", () => {
   test("the click is written as clicked, and reads as a net ball", () => {
     // The landing armed on the far half (the receiver's); the ball bounced
@@ -484,6 +577,7 @@ test.describe("a short ball: a landing on the hitter's own side is allowed", () 
         landing_y: null,
         result: null,
       },
+      [],
     )!;
     expect(step.patch).toEqual({
       landing_x: 0.4,

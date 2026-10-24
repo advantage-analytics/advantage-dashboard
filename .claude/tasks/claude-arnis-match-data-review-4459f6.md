@@ -73,7 +73,7 @@ ready).
 
 ## T5 · Placement flow: next shot after a landing, one-click edge contact, guides by default
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/admin/labels/court-placement.ts, src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-court.tsx, src/components/admin/labels/label-court-panel.tsx, tests/label-stroke-keys-court-zoom.spec.ts, tests/label-court-panel.spec.ts (guesses)
 - **routes:** /admin/labels/[sessionId]
