@@ -70,7 +70,7 @@ const OPEN_DIALOG = '[role="dialog"]';
  * page that sits still costs nothing: no per-frame loop for however long a
  * dialog stays open or an anchor stays away. Returns the cleanup.
  */
-function watchDocument(check: () => boolean): () => void {
+export function watchDocument(check: () => boolean): () => void {
   let frame = 0;
   let done = false;
   const observer = new MutationObserver(() => schedule());

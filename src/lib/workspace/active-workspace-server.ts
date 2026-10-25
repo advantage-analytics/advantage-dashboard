@@ -274,8 +274,11 @@ function toViewer(
     activity_hint_done_at: string | null;
     sample_tour_done_at: string | null;
     first_report_tour_done_at: string | null;
+    first_report_seen_at: string | null;
+    first_match_feedback_done_at: string | null;
   } | null,
   avatarUrl: string | null,
+  lastSignInAt: string | null,
 ): Viewer {
   const firstName = row?.first_name ?? null;
   const lastName = row?.last_name ?? null;
@@ -324,6 +327,10 @@ function toViewer(
     activityHintDoneAt: row?.activity_hint_done_at ?? null,
     sampleTourDoneAt: row?.sample_tour_done_at ?? null,
     firstReportTourDoneAt: row?.first_report_tour_done_at ?? null,
+    // The first-match feedback prompt's three facts (`firstMatchFeedbackDue`).
+    firstReportSeenAt: row?.first_report_seen_at ?? null,
+    firstMatchFeedbackDoneAt: row?.first_match_feedback_done_at ?? null,
+    lastSignInAt,
   };
 }
 
@@ -343,7 +350,7 @@ export const getWorkspaceContext = cache(
       supabase
         .from("users")
         .select(
-          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source, individual_pilot, is_admin, workspace_hint_done_at, activity_hint_done_at, sample_tour_done_at, first_report_tour_done_at",
+          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source, individual_pilot, is_admin, workspace_hint_done_at, activity_hint_done_at, sample_tour_done_at, first_report_tour_done_at, first_report_seen_at, first_match_feedback_done_at",
         )
         .eq("id", user.id)
         .single(),
@@ -357,7 +364,13 @@ export const getWorkspaceContext = cache(
       avatarPath,
     );
 
-    const viewer = toViewer(user.id, user.email ?? "", row, avatarUrl);
+    const viewer = toViewer(
+      user.id,
+      user.email ?? "",
+      row,
+      avatarUrl,
+      user.last_sign_in_at ?? null,
+    );
 
     const available = [
       personalWorkspace(

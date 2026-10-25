@@ -16,6 +16,7 @@ import { HeaderStatusProvider } from "@/components/dashboard/header-status";
 import { HeaderSlotProvider } from "@/components/dashboard/header-slot";
 import { WorkspaceSync } from "@/components/dashboard/workspace-sync";
 import { BetaWelcome } from "@/components/dashboard/beta-welcome-dialog";
+import { FirstMatchFeedback } from "@/components/dashboard/feedback/first-match-feedback";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
   STORAGE_KEYS,
@@ -143,10 +144,15 @@ export function DashboardShell({
                     <main className="flex flex-1 flex-col">
                       {/* Once per account, and never over the upload wizard
                         or the sample match: a task you're inside is not
-                        interrupted by news about the account. */}
+                        interrupted by news about the account — nor by a
+                        question about it. The feedback prompt waits for
+                        the welcome to close before it opens. */}
                       {!pathname.startsWith("/dashboard/matches/new") &&
                         !pathname.startsWith("/dashboard/matches/sample") && (
-                          <BetaWelcome />
+                          <>
+                            <BetaWelcome />
+                            <FirstMatchFeedback />
+                          </>
                         )}
                       <PageTransition>{children}</PageTransition>
                     </main>

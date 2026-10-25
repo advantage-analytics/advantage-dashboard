@@ -21,8 +21,15 @@ export type TourId = "sample" | "first-report";
  */
 export type HintId = "workspace-switcher" | "activity-tray";
 
-/** Anything whose seen-state is a `users` column: a tour or a hint. */
-export type SeenId = TourId | HintId;
+/**
+ * A question the shell asks once and never again — answered or dismissed,
+ * it stamps a `users` column as a tour does. The first-match feedback prompt
+ * (`components/dashboard/feedback/first-match-feedback.tsx`) is the one so far.
+ */
+export type PromptId = "first-match-feedback";
+
+/** Anything whose seen-state is a `users` column: a tour, a hint or a prompt. */
+export type SeenId = TourId | HintId | PromptId;
 
 /**
  * The `data-tour="<id>"` attribute values a report renders. Adding these
@@ -69,6 +76,7 @@ export const TOUR_COLUMN = {
   "first-report": "first_report_tour_done_at",
   "workspace-switcher": "workspace_hint_done_at",
   "activity-tray": "activity_hint_done_at",
+  "first-match-feedback": "first_match_feedback_done_at",
 } as const satisfies Record<SeenId, string>;
 
 export interface TourStep {

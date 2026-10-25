@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  feedbackInternalEmail,
   signupInternalEmail,
   uploadInternalEmail,
   type UploadInternalInput,
@@ -18,6 +19,7 @@ import {
 
 const USER = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
 const MATCH = "0a1b2c3d-4e5f-4061-8273-8495a6b7c8d9";
+const FEEDBACK = "5b6c7d8e-9f00-4a1b-8c2d-3e4f5a6b7c8d";
 
 function expectResendSafeTags(tags: Record<string, string> | undefined) {
   // Resend rejects anything outside ASCII letters, numbers, `_` and `-`.
@@ -101,8 +103,74 @@ test("upload: a deleted uploader still renders", () => {
   expect(msg.text).toContain("Uploader: Unknown — account deleted");
 });
 
-test("parseInternalEvent accepts the three kinds the triggers send", () => {
-  for (const kind of ["signup", "video_upload", "swingvision_upload"]) {
+test("feedback: subject, heading, the note in full, facts and tags", () => {
+  const msg = feedbackInternalEmail({
+    to: "team@advantage-analytics.com",
+    feedbackId: FEEDBACK,
+    userId: USER,
+    playerName: "Maya Chen",
+    playerEmail: "maya@stanford.edu",
+    rating: 4,
+    note: "The serve placement was the part I kept coming back to.",
+    hoursSinceFirstReport: 30,
+    adminUrl: "https://app.example.test/admin",
+  });
+
+  expect(msg.subject).toBe("First-match feedback: 4/5 from Maya Chen");
+  expect(msg.tags).toEqual({ type: "feedback_internal", rating: "4" });
+  expectResendSafeTags(msg.tags);
+  expect(msg.text.split("\n")[0]).toBe("Useful — 4 of 5");
+  expect(msg.text).toContain(
+    "“The serve placement was the part I kept coming back to.”",
+  );
+  expect(msg.text).toContain("Rating: 4 of 5 — Useful");
+  expect(msg.text).toContain("Player: Maya Chen (maya@stanford.edu)");
+  expect(msg.text).toContain("Answered: 30 hours after first reading it");
+  expect(msg.text).toContain(`Feedback id: ${FEEDBACK}`);
+  expect(msg.html).toContain('<a href="https://app.example.test/admin"');
+});
+
+test("feedback: no note, no timing, a deleted player still renders", () => {
+  const msg = feedbackInternalEmail({
+    to: "team@advantage-analytics.com",
+    feedbackId: FEEDBACK,
+    userId: USER,
+    playerName: null,
+    playerEmail: null,
+    rating: 1,
+    note: null,
+    hoursSinceFirstReport: null,
+    adminUrl: "https://app.example.test/admin",
+  });
+
+  expect(msg.subject).toBe("First-match feedback: 1/5 from A player");
+  expect(msg.text).toContain("No note.");
+  expect(msg.text).toContain("Player: Unknown — account deleted");
+  expect(msg.text).not.toContain("Answered:");
+});
+
+test("feedback: two days or more reads in days", () => {
+  const msg = feedbackInternalEmail({
+    to: "team@advantage-analytics.com",
+    feedbackId: FEEDBACK,
+    userId: USER,
+    playerName: "Maya Chen",
+    playerEmail: null,
+    rating: 5,
+    note: null,
+    hoursSinceFirstReport: 75,
+    adminUrl: "https://app.example.test/admin",
+  });
+  expect(msg.text).toContain("Answered: 3 days after first reading it");
+});
+
+test("parseInternalEvent accepts the four kinds the triggers send", () => {
+  for (const kind of [
+    "signup",
+    "video_upload",
+    "swingvision_upload",
+    "feedback",
+  ]) {
     expect(parseInternalEvent({ kind, id: USER })).toEqual({ kind, id: USER });
   }
 });
