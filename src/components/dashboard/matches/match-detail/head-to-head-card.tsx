@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { PlayerDot } from "@/components/dashboard/matches/match-detail/rail-scoreboard";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
@@ -1162,16 +1163,6 @@ function ValueCell({
         </TooltipContent>
       </Tooltip>
     </span>
-  );
-}
-
-function PlayerDot({ color }: { color: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="size-1.5 shrink-0 rounded-[var(--radius-pill)]"
-      style={{ background: color }}
-    />
   );
 }
 

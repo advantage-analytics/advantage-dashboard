@@ -46,6 +46,17 @@ export interface RailScoreboardPlayer {
   won?: boolean;
 }
 
+/** The 6px player-colour dot the scoreboard, head to head and skeletons share. */
+export function PlayerDot({ color }: { color: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="size-1.5 shrink-0 rounded-[var(--radius-pill)]"
+      style={{ background: color }}
+    />
+  );
+}
+
 export interface RailScoreboardProps {
   players: [RailScoreboardPlayer, RailScoreboardPlayer];
   status: RailScoreboardStatus;
@@ -136,13 +147,7 @@ function ScoreRow({
 
   return (
     <div className="flex min-w-0 items-center gap-[7px]">
-      {player.color ? (
-        <span
-          aria-hidden="true"
-          className="size-1.5 shrink-0 rounded-[var(--radius-pill)]"
-          style={{ background: player.color }}
-        />
-      ) : null}
+      {player.color ? <PlayerDot color={player.color} /> : null}
       {/* Never wraps: a long name ends in an ellipsis before it can push the
           score group, which never shrinks, out of the 300px rail. */}
       <span
