@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { watchDocument } from "@/components/dashboard/onboarding/hint-runner";
-import { findTarget } from "@/components/dashboard/onboarding/seen-this-session";
+import {
+  findTarget,
+  watchDocument,
+} from "@/components/dashboard/onboarding/seen-this-session";
 import { TourPopover } from "@/components/ui/tour";
 
 import {
