@@ -28,9 +28,8 @@ export interface RailScoreboardPlayer {
   name: string;
   /**
    * The player's chart colour (`--viz-you` / `--viz-opp`), drawn as a 6px dot
-   * before the name so the row reads with every chart on the page. Live, the
-   * server's dot wears a ring. Omitted, the row draws no dot and the server
-   * gets the old blue dot after the name instead.
+   * before the name so the row reads with every chart on the page. Omitted,
+   * the row draws no dot.
    */
   color?: string;
   /** One entry per set column; null is an unmeasured set (an em dash). */
@@ -137,20 +136,11 @@ function ScoreRow({
 
   return (
     <div className="flex min-w-0 items-center gap-[7px]">
-      {/* The server is marked by a ring on their own colour dot rather than a
-          second dot: a blue one after the name read as "you". */}
       {player.color ? (
         <span
-          {...(serving
-            ? { role: "img", "aria-label": "Serving" }
-            : { "aria-hidden": true })}
+          aria-hidden="true"
           className="size-1.5 shrink-0 rounded-[var(--radius-pill)]"
-          style={{
-            background: player.color,
-            boxShadow: serving
-              ? `0 0 0 2px var(--surface-card), 0 0 0 3.5px ${player.color}`
-              : undefined,
-          }}
+          style={{ background: player.color }}
         />
       ) : null}
       {/* Never wraps: a long name ends in an ellipsis before it can push the
@@ -161,13 +151,6 @@ function ScoreRow({
       >
         {player.name}
       </span>
-      {serving && !player.color ? (
-        <span
-          aria-label="Serving"
-          role="img"
-          className="size-1.5 shrink-0 rounded-[var(--radius-pill)] bg-[var(--blue)]"
-        />
-      ) : null}
       {status === "final" && player.won ? (
         <Check
           aria-label="Winner"
@@ -222,11 +205,28 @@ function ScoreRow({
                 aria-hidden="true"
                 className="mx-0.5 h-3 w-px bg-[var(--border-hairline)]"
               />
-              <span
-                className="w-[22px] text-right font-medium"
-                style={{ color: player.points ? ink : "var(--ink-400)" }}
-              >
-                {player.points ?? <Dash label="No points" />}
+              {/* The server is a small caret beside their points, not a dot
+                  after the name: a dot there sat beside the player colour
+                  dot, and a blue one read as "you". */}
+              <span className="inline-flex w-[34px] items-center justify-end gap-1.5">
+                {serving ? (
+                  <svg
+                    role="img"
+                    aria-label="Serving"
+                    width="4"
+                    height="5"
+                    viewBox="0 0 7 8"
+                    className="shrink-0"
+                  >
+                    <path d="M0 0 7 4 0 8Z" fill="var(--ink-600)" />
+                  </svg>
+                ) : null}
+                <span
+                  className="font-medium"
+                  style={{ color: player.points ? ink : "var(--ink-400)" }}
+                >
+                  {player.points ?? <Dash label="No points" />}
+                </span>
               </span>
             </>
           ) : null}
