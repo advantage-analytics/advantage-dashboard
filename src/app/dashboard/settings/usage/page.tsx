@@ -3,6 +3,7 @@ import { getPersonalUsage, getProgramUsage } from "@/lib/data/usage-server";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import {
+  extraHoursWord,
   formatHoursLong,
   formatResetDate,
   secondsLeft,
@@ -85,6 +86,18 @@ export default async function UsagePage() {
     freeLeftSeconds: secondsLeft(personal.usedSeconds, personal.capSeconds),
     creditSeconds: personal.creditSeconds,
   };
+  // Free hours with credits behind them: the headline is the TOTAL and the
+  // split moves under the meter. Hours an admin added are "added", never
+  // "credits" (`extraHoursWord`).
+  const extraWord = extraHoursWord(
+    personal.creditSeconds,
+    personal.grantedSeconds,
+  );
+  const headlineTotal =
+    personalBalance.freeLeftSeconds > 0 && personal.creditSeconds > 0;
+  const creditsUntil = personal.nextCreditExpiresAt
+    ? formatCreditDate(personal.nextCreditExpiresAt)
+    : null;
 
   return (
     <div className="flex max-w-[640px] flex-col gap-5">
@@ -94,6 +107,13 @@ export default async function UsagePage() {
             <span className="mono text-[11px] text-[var(--ink-500)]">
               {personalUnlimited ? (
                 "Unlimited"
+              ) : headlineTotal ? (
+                <>
+                  {formatHoursLong(
+                    personalBalance.freeLeftSeconds + personal.creditSeconds,
+                  )}{" "}
+                  left
+                </>
               ) : (
                 <>
                   {formatHoursLong(personalBalance.freeLeftSeconds)} of{" "}
@@ -110,13 +130,17 @@ export default async function UsagePage() {
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--ink-500)]">
           <span>
-            {personal.creditSeconds > 0
-              ? `Credits: ${formatHoursLong(personal.creditSeconds)}${
-                  personal.nextCreditExpiresAt
-                    ? ` · Next expire ${formatCreditDate(personal.nextCreditExpiresAt)}`
+            {personal.creditSeconds <= 0
+              ? "Credits: none"
+              : `${
+                  headlineTotal
+                    ? `Free: ${formatHoursLong(personalBalance.freeLeftSeconds)} of ${formatHoursLong(personal.capSeconds)} this month · `
                     : ""
-                }`
-              : "Credits: none"}
+                }${
+                  extraWord === "added"
+                    ? `Added: ${formatHoursLong(personal.creditSeconds)}${creditsUntil ? `, until ${creditsUntil}` : ""}`
+                    : `Credits: ${formatHoursLong(personal.creditSeconds)}${creditsUntil ? ` · Next expire ${creditsUntil}` : ""}`
+                }`}
           </span>
           <span className="flex-1" />
           <Link

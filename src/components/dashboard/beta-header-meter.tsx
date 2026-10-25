@@ -12,12 +12,13 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { HoursRing } from "@/components/dashboard/shared/hours-ring";
 import { PendingBar } from "@/components/dashboard/loading/pending";
 import type { HoursLeft } from "@/lib/services/splitstep/quota";
-import { PLAN_HREF } from "@/lib/services/credits/packs";
+import { formatCreditDate, PLAN_HREF } from "@/lib/services/credits/packs";
 import {
   currentBillingMonth,
   freeHoursReturnOn,
 } from "@/lib/services/splitstep/config";
 import {
+  extraHoursWord,
   formatHoursLong,
   formatHoursShort,
   formatResetDate,
@@ -60,7 +61,9 @@ export function BetaHeaderMeter() {
 }
 
 type PillHours = Pick<HoursLeft, "remainingSeconds" | "capSeconds"> &
-  Partial<Pick<HoursLeft, "creditSeconds">>;
+  Partial<
+    Pick<HoursLeft, "creditSeconds" | "grantedSeconds" | "nextCreditExpiresAt">
+  >;
 
 /**
  * The pill itself, with no data of its own, so `/design` draws the same one.
@@ -73,7 +76,12 @@ type PillHours = Pick<HoursLeft, "remainingSeconds" | "capSeconds"> &
  *
  * Personal states (C1–C4): free hours left; running low (the ring stays
  * white, only the tooltip says it); free spent with credits, where the figure
- * is the credit balance; and out of everything.
+ * is the credit balance; and out of everything. A fifth, between C1 and C3:
+ * free hours left AND credits behind them — then the figure is the TOTAL and
+ * the tooltip says the split. A player who was given 4h on top of the free 2
+ * read "2h left" as "I still only have 2", because the 4 lived in the
+ * tooltip's small print under the word "credits" — hours an admin added are
+ * "added", never "credits" (`extraHoursWord`).
  */
 export function BetaMeterPill({
   tier,
@@ -98,10 +106,19 @@ export function BetaMeterPill({
   // An admin's personal workspace — no cap, so nothing to count down.
   const unlimited = ready !== null && isUnlimitedCap(ready.capSeconds);
   const credits = teamHours ? 0 : (ready?.creditSeconds ?? 0);
+  // "added" when every credit lot was granted by an admin, else "credits".
+  const word = extraHoursWord(credits, ready?.grantedSeconds ?? 0);
+  const extraNoun = word === "added" ? "added hours" : "credits";
+  const creditsUntil = ready?.nextCreditExpiresAt
+    ? formatCreditDate(ready.nextCreditExpiresAt)
+    : null;
   const freeOut = ready !== null && ready.remainingSeconds <= 0;
   // C3: free hours spent, credits carry it — the figure is credits.
   const onCredits = freeOut && credits > 0;
   const out = freeOut && credits <= 0;
+  // Free hours left with credits behind them: the figure is the total.
+  const withExtra = ready !== null && !unlimited && !freeOut && credits > 0;
+  const total = (ready?.remainingSeconds ?? 0) + credits;
   // C2: running low on free hours with nothing behind them. The ring stays
   // white; only the tooltip says it (never amber, never red).
   const low =
@@ -131,10 +148,17 @@ export function BetaMeterPill({
       : out
         ? "Out of video hours"
         : onCredits
-          ? "Using your credits"
-          : low
-            ? "Running low"
-            : `Free during the ${tier}`;
+          ? `Using your ${extraNoun}`
+          : withExtra
+            ? `${formatHoursShort(total)}h left · ${formatHoursShort(ready.remainingSeconds)}h free + ${formatHoursShort(credits)}h ${word}`
+            : low
+              ? "Running low"
+              : `Free during the ${tier}`;
+
+  // The credit half of the split tooltip: what they are, and how long they last.
+  const extraSentence = `${word === "added" ? `The ${formatHoursLong(credits)} added to your account` : `Your ${formatHoursLong(credits)} in credits`}${
+    creditsUntil ? ` last until ${creditsUntil}` : " are used after them"
+  }.`;
 
   const detail =
     hours === "loading"
@@ -156,13 +180,19 @@ export function BetaMeterPill({
                 ? `Free hours come back ${resetsOnOrDefault()}. Click to add credits.`
                 : "Free hours have ended. Click to add credits."
               : onCredits
-                ? `Free hours are used for ${monthName(currentBillingMonth())}. ${formatHoursLong(credits)} in credits left.`
-                : low
-                  ? resetsOnOrDefault()
-                    ? `${freeOf} free hours left. They reset ${resetsOnOrDefault()}, or add credits on Plan.`
-                    : `${freeOf} free hours left, the last before they end. Add credits on Plan.`
-                  : credits > 0
-                    ? `${freeOf} free hours left this month, plus ${formatHoursLong(credits)} in credits. Click for Plan.`
+                ? `Free hours are used for ${monthName(currentBillingMonth())}. ${formatHoursLong(credits)} ${word === "added" ? "of added hours" : "in credits"} left.`
+                : withExtra
+                  ? ready.remainingSeconds >= ready.capSeconds
+                    ? `Your ${formatHoursShort(ready.capSeconds)} free hours ${
+                        resetsOnOrDefault()
+                          ? `reset ${resetsOnOrDefault()}`
+                          : "end this month"
+                      } and are used first. ${extraSentence} Click for Plan.`
+                    : `${freeOf} free hours left this month, used first. ${extraSentence} Click for Plan.`
+                  : low
+                    ? resetsOnOrDefault()
+                      ? `${freeOf} free hours left. They reset ${resetsOnOrDefault()}, or add credits on Plan.`
+                      : `${freeOf} free hours left, the last before they end. Add credits on Plan.`
                     : `${freeOf} free hours left this month. Click for Plan.`;
 
   const ariaLabel =
@@ -176,17 +206,24 @@ export function BetaMeterPill({
             : `${name}: out of video hours`
           : `${name}: ${detail}`;
 
-  // The ring is the free allowance; on credits it reads full (C3), out of
+  // The ring is the free allowance; with credits behind it, the total against
+  // free cap plus credits; on credits alone it reads full (C3), out of
   // everything it reads empty (C4).
   const share = !ready
     ? 0
     : unlimited || onCredits
       ? 1
-      : 1 -
-        usageFraction(
-          ready.capSeconds - ready.remainingSeconds,
-          ready.capSeconds,
-        );
+      : withExtra
+        ? 1 -
+          usageFraction(
+            ready.capSeconds - ready.remainingSeconds,
+            ready.capSeconds + credits,
+          )
+        : 1 -
+          usageFraction(
+            ready.capSeconds - ready.remainingSeconds,
+            ready.capSeconds,
+          );
 
   return (
     <ChromeTooltip label={label} detail={detail}>
@@ -233,12 +270,15 @@ export function BetaMeterPill({
                   <span className="font-medium text-white">
                     {formatHoursShort(credits)}h
                   </span>{" "}
-                  credits
+                  {word}
                 </>
               ) : (
                 <>
                   <span className="font-medium text-white">
-                    {formatHoursShort(ready.remainingSeconds)}h
+                    {formatHoursShort(
+                      withExtra ? total : ready.remainingSeconds,
+                    )}
+                    h
                   </span>{" "}
                   left
                 </>

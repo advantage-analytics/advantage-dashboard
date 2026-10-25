@@ -34,6 +34,7 @@ export default async function PlanPage() {
       freeCapSeconds={usage.capSeconds}
       freeLeftSeconds={secondsLeft(usage.usedSeconds, usage.capSeconds)}
       creditSeconds={usage.creditSeconds}
+      grantedSeconds={usage.grantedSeconds}
       lots={lots}
       nextCreditExpiresAt={usage.nextCreditExpiresAt}
       pilot={personal.individualPilot === true}

@@ -16,7 +16,13 @@ import { createLoader, marker } from "./fixtures/vm-modules";
  */
 
 type Hours =
-  | { remainingSeconds: number; capSeconds: number; creditSeconds?: number }
+  | {
+      remainingSeconds: number;
+      capSeconds: number;
+      creditSeconds?: number;
+      grantedSeconds?: number;
+      nextCreditExpiresAt?: string | null;
+    }
   | "loading"
   | null;
 
@@ -131,6 +137,59 @@ test("C2: running low keeps the ring white and says it in the tooltip", () => {
   expect(markup).not.toMatch(/viz-key|--danger|--error|amber/);
 });
 
+test("free hours with added hours behind them: the figure is the total, the tooltip the split", () => {
+  // A player given 4h by an admin, free 2h untouched. Every headline used to
+  // say "2h" and bury the 4h as "credits" in the tooltip.
+  const given = render({
+    hours: {
+      remainingSeconds: 2 * 3600,
+      capSeconds: 2 * 3600,
+      creditSeconds: 4 * 3600,
+      grantedSeconds: 4 * 3600,
+      nextCreditExpiresAt: "2027-10-23T15:04:08Z",
+    },
+  });
+  expect(text(given)).toBe("Beta 6h left");
+  expect(tip(given)).toEqual({
+    label: "6h left · 2h free + 4h added",
+    detail:
+      "Your 2 free hours reset Oct 1 and are used first. The 4h added to your account last until Oct 23, 2027. Click for Plan.",
+  });
+  expect(given).not.toContain("credits");
+
+  // Some free time spent: the free part is "left this month".
+  const spent = render({
+    hours: {
+      remainingSeconds: 1.5 * 3600,
+      capSeconds: 2 * 3600,
+      creditSeconds: 4 * 3600,
+      grantedSeconds: 4 * 3600,
+      nextCreditExpiresAt: "2027-10-23T15:04:08Z",
+    },
+  });
+  expect(text(spent)).toBe("Beta 5.5h left");
+  expect(tip(spent).detail).toBe(
+    "1.5 of 2 free hours left this month, used first. The 4h added to your account last until Oct 23, 2027. Click for Plan.",
+  );
+
+  // Bought as a pack: the same shape says "credits".
+  const bought = render({
+    hours: {
+      remainingSeconds: 2 * 3600,
+      capSeconds: 2 * 3600,
+      creditSeconds: 4 * 3600,
+      grantedSeconds: 0,
+      nextCreditExpiresAt: "2027-10-23T15:04:08Z",
+    },
+  });
+  expect(text(bought)).toBe("Beta 6h left");
+  expect(tip(bought)).toEqual({
+    label: "6h left · 2h free + 4h credits",
+    detail:
+      "Your 2 free hours reset Oct 1 and are used first. Your 4h in credits last until Oct 23, 2027. Click for Plan.",
+  });
+});
+
 test("C3: free hours spent with credits left — the figure is credits", () => {
   const markup = render({
     hours: { remainingSeconds: 0, capSeconds: 2 * 3600, creditSeconds: 13_200 },
@@ -138,6 +197,19 @@ test("C3: free hours spent with credits left — the figure is credits", () => {
   expect(text(markup)).toBe("Beta 3.7h credits");
   expect(tip(markup).label).toBe("Using your credits");
   expect(tip(markup).detail).toContain("3h 40m in credits left.");
+
+  // The same state on hours an admin added says so.
+  const given = render({
+    hours: {
+      remainingSeconds: 0,
+      capSeconds: 2 * 3600,
+      creditSeconds: 13_200,
+      grantedSeconds: 13_200,
+    },
+  });
+  expect(text(given)).toBe("Beta 3.7h added");
+  expect(tip(given).label).toBe("Using your added hours");
+  expect(tip(given).detail).toContain("3h 40m of added hours left.");
 });
 
 test("a team workspace's pill says Pilot", () => {

@@ -2,6 +2,7 @@
 
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { extraHoursWord } from "@/lib/data/usage-format";
 import { cn } from "@/lib/utils";
 import { FooterMeter, SplitReadout } from "./FooterMeter";
 import { jumpToMissingField, MissingFieldsPill } from "./MissingFieldsPill";
@@ -25,6 +26,7 @@ export function WizardQuotaMeter() {
       remainingQuotaSeconds,
       quotaFreeSeconds,
       quotaCreditSeconds,
+      quotaGrantedSeconds,
       quotaCapSeconds,
       uploadedFile,
       freeHoursReturnOn,
@@ -69,6 +71,9 @@ export function WizardQuotaMeter() {
           : remainingQuotaSeconds
       }
       capSeconds={quotaCapSeconds}
+      /* Idle only: once a video is priced the readout is the video's cost. */
+      creditSeconds={selectedSeconds === undefined ? quotaCreditSeconds : 0}
+      creditWord={extraHoursWord(quotaCreditSeconds, quotaGrantedSeconds)}
       suffix={
         workspaceKind === "team"
           ? "team hours"

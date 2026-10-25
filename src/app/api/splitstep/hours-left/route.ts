@@ -39,6 +39,8 @@ export async function GET() {
       remainingSeconds: peek.freeRemainingSeconds,
       capSeconds: monthlyCapSecondsFor(context.active),
       creditSeconds: peek.creditSeconds,
+      grantedSeconds: peek.grantedSeconds,
+      nextCreditExpiresAt: peek.nextCreditExpiresAt,
     };
     return NextResponse.json(body, {
       headers: { "Cache-Control": "no-store" },

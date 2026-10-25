@@ -448,6 +448,15 @@ export interface QuotaPeek {
    * credits are personal and spend only in the owner's personal workspace.
    */
   creditSeconds: number;
+  /**
+   * The part of `creditSeconds` an admin added rather than the player bought
+   * (`video_credits.source = 'grant'`). Decides the word the meters use:
+   * "added" when every usable lot was granted, "credits" otherwise — see
+   * `extraHoursWord()`.
+   */
+  grantedSeconds: number;
+  /** ISO instant the oldest usable credit lot expires, or null with none. */
+  nextCreditExpiresAt: string | null;
   /** What the next upload can spend: free hours left plus credits. */
   remainingSeconds: number;
 }
@@ -465,6 +474,10 @@ export interface HoursLeft {
   capSeconds: number;
   /** Usable credits; 0 for a team workspace. */
   creditSeconds: number;
+  /** The granted part of `creditSeconds` — see `QuotaPeek.grantedSeconds`. */
+  grantedSeconds: number;
+  /** ISO instant the oldest usable credit lot expires, or null with none. */
+  nextCreditExpiresAt: string | null;
 }
 
 /**
@@ -495,9 +508,21 @@ export function peekRefusalMessage(
 /** A player's usable credit balance and when the next of it expires. */
 export interface CreditBalance {
   seconds: number;
+  /**
+   * The part of `seconds` an admin added (`source = 'grant'`) rather than the
+   * player bought. The meters say "added" for these, never "credits".
+   */
+  grantedSeconds: number;
   /** ISO instant the oldest usable lot expires, or null with no credits. */
   nextExpiresAt: string | null;
 }
+
+/** An empty balance — the shape a failed or team read answers with. */
+export const NO_CREDITS: CreditBalance = {
+  seconds: 0,
+  grantedSeconds: 0,
+  nextExpiresAt: null,
+};
 
 /**
  * Sum a user's usable credits: unspent and unexpired, the rows
@@ -511,7 +536,7 @@ export async function readCreditBalance(
 ): Promise<CreditBalance> {
   const { data, error } = await supabase
     .from("video_credits")
-    .select("remaining_seconds, expires_at")
+    .select("remaining_seconds, expires_at, source")
     .eq("user_id", userId)
     .gt("remaining_seconds", 0)
     .gt("expires_at", now.toISOString())
@@ -524,9 +549,13 @@ export async function readCreditBalance(
   const rows = (data ?? []) as {
     remaining_seconds: number;
     expires_at: string;
+    source: string;
   }[];
   return {
     seconds: rows.reduce((sum, row) => sum + row.remaining_seconds, 0),
+    grantedSeconds: rows
+      .filter((row) => row.source === "grant")
+      .reduce((sum, row) => sum + row.remaining_seconds, 0),
     nextExpiresAt: rows[0]?.expires_at ?? null,
   };
 }
@@ -567,7 +596,7 @@ export async function peekQuota(
       .eq("released", false),
     workspace.kind === "personal"
       ? readCreditBalance(supabase, workspace.id)
-      : Promise.resolve<CreditBalance>({ seconds: 0, nextExpiresAt: null }),
+      : Promise.resolve<CreditBalance>(NO_CREDITS),
   ]);
 
   if (usage.error) {
@@ -575,14 +604,21 @@ export async function peekQuota(
   }
 
   const usedSeconds = sumUsedSeconds((usage.data ?? []) as UsageRow[]);
-  return buildPeek(usedSeconds, capSeconds, credits.seconds);
+  return buildPeek(usedSeconds, capSeconds, credits.seconds, credits);
 }
 
-/** A peek from its three figures. Pure, so meters can build one too. */
+/**
+ * A peek from its three figures. Pure, so meters can build one too. The
+ * credit detail (what was granted, when the next lot expires) is optional:
+ * a caller with only a total gets a peek whose credits all read as bought.
+ */
 export function buildPeek(
   usedSeconds: number,
   capSeconds: number,
   creditSeconds: number,
+  credits: Partial<
+    Pick<CreditBalance, "grantedSeconds" | "nextExpiresAt">
+  > = {},
 ): QuotaPeek {
   const freeRemainingSeconds = secondsLeft(usedSeconds, capSeconds);
   return {
@@ -590,6 +626,8 @@ export function buildPeek(
     capSeconds,
     freeRemainingSeconds,
     creditSeconds,
+    grantedSeconds: Math.min(creditSeconds, credits.grantedSeconds ?? 0),
+    nextCreditExpiresAt: credits.nextExpiresAt ?? null,
     remainingSeconds: freeRemainingSeconds + creditSeconds,
   };
 }
