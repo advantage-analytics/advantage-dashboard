@@ -26,6 +26,12 @@ export type RailScoreboardStatus = "live" | "final" | "untagged";
 export interface RailScoreboardPlayer {
   id: string;
   name: string;
+  /**
+   * The player's chart colour (`--viz-you` / `--viz-opp`), drawn as a 6px dot
+   * before the name so the row reads with every chart on the page. Omitted,
+   * the row draws no dot.
+   */
+  color?: string;
   /** One entry per set column; null is an unmeasured set (an em dash). */
   sets: (number | null)[];
   /** Tiebreak points to superscript beside a set, aligned with `sets`. */
@@ -129,6 +135,13 @@ function ScoreRow({
 
   return (
     <div className="flex min-w-0 items-center gap-[7px]">
+      {player.color ? (
+        <span
+          aria-hidden="true"
+          className="size-1.5 shrink-0 rounded-[var(--radius-pill)]"
+          style={{ background: player.color }}
+        />
+      ) : null}
       {/* Never wraps: a long name ends in an ellipsis before it can push the
           score group, which never shrinks, out of the 300px rail. */}
       <span

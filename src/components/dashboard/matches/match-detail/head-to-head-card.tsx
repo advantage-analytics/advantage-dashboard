@@ -737,13 +737,14 @@ const COLUMN =
   "flex w-[var(--h2h-col,64px)] shrink-0 items-center justify-end gap-1";
 
 /**
- * 64 px fits a surname of about nine characters at 12px. A longer one gets
- * roughly 7px a character (room for the verified check on `you`), capped so
- * the statistic label keeps its space; `truncate` backstops anything beyond.
+ * 64 px fits a surname of about six characters at 12px beside the player dot.
+ * A longer one gets roughly 7px a character, plus 18px for the dot and its gap
+ * (and room for the verified check on `you`), capped so the statistic label
+ * keeps its space; `truncate` backstops anything beyond.
  */
 function columnWidth(youName: string, oppName: string): number {
   const longest = Math.max(youName.length, oppName.length);
-  return Math.min(120, Math.max(64, Math.ceil(longest * 7) + 8));
+  return Math.min(130, Math.max(64, Math.ceil(longest * 7) + 18));
 }
 
 const EASE = "duration-200 ease-[var(--ease-primary)]";
@@ -1164,6 +1165,16 @@ function ValueCell({
   );
 }
 
+function PlayerDot({ color }: { color: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="size-1.5 shrink-0 rounded-[var(--radius-pill)]"
+      style={{ background: color }}
+    />
+  );
+}
+
 /** How many points each of a row's three targets opens. */
 interface RowCounts {
   both: number;
@@ -1306,6 +1317,9 @@ export function HeadToHeadCard() {
       <div className="flex items-center border-b border-[var(--border-hairline)] pb-[11px]">
         <span aria-hidden="true" className="min-w-0 flex-1" />
         <span className={COLUMN}>
+          {/* The player's chart colour, the same 6px dot the rail scoreboard
+              draws, so a column reads with every chart on the page. */}
+          <PlayerDot color="var(--viz-you)" />
           <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
             {youName}
           </span>
@@ -1320,6 +1334,7 @@ export function HeadToHeadCard() {
           ) : null}
         </span>
         <span className={COLUMN}>
+          <PlayerDot color="var(--viz-opp)" />
           <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-600)]">
             {oppName}
           </span>
