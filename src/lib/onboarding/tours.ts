@@ -1,5 +1,5 @@
 import type { RecordingSource } from "@/app/onboarding/answers";
-import type { WorkspaceKind } from "@/lib/workspace/types";
+import type { Viewer, WorkspaceKind } from "@/lib/workspace/types";
 
 /**
  * The first-run report tours, their eligibility and the getting-set-up steps
@@ -176,6 +176,24 @@ export function soloDestination(
     default:
       return "/dashboard/matches/sample?tour=1";
   }
+}
+
+/**
+ * Has this player seen a report of any kind — the sample's tour, or their
+ * own first report? Either counts: a player who has read their own first
+ * report has nothing to learn from the sample, and `firstReportTourDoneAt`
+ * is also settled for anyone with more than one finished match (see
+ * `Viewer`), so a veteran reads as seen by construction. Both columns ride
+ * the workspace context, so this costs no read. The one rule behind the
+ * tray's "Tour a sample report" step and the analysis page's "While you
+ * wait, see a sample report" line.
+ */
+export function hasSeenAReport(
+  viewer: Pick<Viewer, "sampleTourDoneAt" | "firstReportTourDoneAt">,
+): boolean {
+  return (
+    viewer.sampleTourDoneAt !== null || viewer.firstReportTourDoneAt !== null
+  );
 }
 
 export interface FirstReportTourFacts {

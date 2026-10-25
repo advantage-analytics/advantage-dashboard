@@ -7,6 +7,7 @@ import {
 } from "@/lib/data/match-analysis";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { getTeamHomePresence } from "@/lib/data/team-home-server";
+import { hasSeenAReport } from "@/lib/onboarding/tours";
 import {
   isProgramStaff,
   type Viewer,
@@ -66,13 +67,11 @@ export async function getSetupSteps(
       throw user.error ?? preferences.error;
     }
     return personalSetupSteps({
-      // Either tour counts: a player who has read their own first report
-      // has nothing to learn from the sample, and a veteran's
-      // first-report tour is settled the first time they open a report.
-      // Off the workspace context, so the step costs no read.
-      sampleReport:
-        viewer.sampleTourDoneAt !== null ||
-        viewer.firstReportTourDoneAt !== null,
+      // Either tour counts (`hasSeenAReport`): a player who has read their
+      // own first report has nothing to learn from the sample, and a
+      // veteran's first-report tour is settled the first time they open a
+      // report. Off the workspace context, so the step costs no read.
+      sampleReport: hasSeenAReport(viewer),
       playingProfile: Boolean(user.data?.hand && user.data?.backhand),
       notifications: Boolean(preferences.data),
     });
