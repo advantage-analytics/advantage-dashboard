@@ -17,7 +17,7 @@
  */
 
 import { gameKey, type LabelGameBand, type ScorablePoint } from "./score";
-import type { LabelSide, MatchScore } from "./session";
+import type { LabelSide, LabelStartScore, MatchScore } from "./session";
 
 /** One game of a set the points left unfinished. */
 export interface UnfinishedGame {
@@ -56,12 +56,15 @@ export interface LabelSetScore {
  * Tally each set's games for who the points settled them for. A game left
  * unfinished — no counted point yet, or short of settled — adds to neither
  * side and is listed; a set appears once it has a live point with a set and
- * game number. Sets come back in set-number order.
+ * game number. Sets come back in set-number order. The first game's set — the
+ * first set on the video — opens at `start.games` when the video starts
+ * mid-match (null: at 0–0, as every later set).
  */
 export function labelSetScores(
   points: readonly ScorablePoint[],
-  /** `labelScores(points, adScoring).games` — scored once by the caller. */
+  /** `labelScores(points, adScoring, start).games` — scored once by the caller. */
   games: readonly LabelGameBand[],
+  start: LabelStartScore | null = null,
 ): LabelSetScore[] {
   const sets = new Map<number, LabelSetScore>();
   for (const point of points) {
@@ -77,6 +80,10 @@ export function labelSetScores(
       });
     }
     sets.get(point.setNumber)!.lastPointId = point.id;
+  }
+  if (start && games.length > 0) {
+    const opening = sets.get(games[0].setNumber);
+    if (opening) opening.games = [start.games[0], start.games[1]];
   }
   for (const band of games) {
     const set = sets.get(band.setNumber);
@@ -261,15 +268,17 @@ export function scoreMismatch(
  */
 export function sessionScoreMismatch(input: {
   points: readonly ScorablePoint[];
-  /** `labelScores(points, adScoring).games`. */
+  /** `labelScores(points, adScoring, startScore).games`. */
   games: readonly LabelGameBand[];
   finalScore: readonly (readonly number[])[] | null;
   matchScore: MatchScore | null;
   videoEndsEarly: boolean | null;
+  /** Where the video starts in the match; missing or null: at the beginning. */
+  startScore?: LabelStartScore | null;
 }): LabelScoreMismatch | null {
   if (input.videoEndsEarly === true) return null;
   return scoreMismatch(
-    labelSetScores(input.points, input.games),
+    labelSetScores(input.points, input.games, input.startScore ?? null),
     enteredScore(input.finalScore, input.matchScore),
   );
 }

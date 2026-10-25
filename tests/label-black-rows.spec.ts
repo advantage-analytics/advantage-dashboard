@@ -1199,6 +1199,118 @@ test.describe("the black shots well", () => {
     ]);
   });
 
+  test("a click selects and seeks; a keyboard focus selects without seeking", () => {
+    const calls: unknown[][] = [];
+    const exits: string[] = [];
+    const rowOf = (selectedShotId: string | null = null) => {
+      const all = elements(
+        well().BlackShotsWell({
+          point: rally(),
+          edit: wellEdit({
+            selectedShotId,
+            onSelectShot: (...args: unknown[]) => calls.push(args),
+            onExitReview: () => exits.push("exit"),
+          }),
+        }),
+      );
+      const row = all.find((el) => el.props["data-shot-id"] === "w-return")!;
+      return {
+        click: () => (row.props.onClick as () => void)(),
+        focus: () => (row.props.onFocus as () => void)(),
+        press: () => (row.props.onPointerDown as () => void)(),
+      };
+    };
+
+    // A click: the stroke alone, so the console's `selectShot` seeks.
+    rowOf().click();
+    expect(calls).toEqual([["w-return"]]);
+    // Tab into a cell: selected, the film left where it is.
+    calls.length = 0;
+    rowOf().focus();
+    expect(calls).toEqual([["w-return", undefined, { seek: false }]]);
+    // A press focuses a cell before its click: that focus is the click's
+    // selection and seeks, once. The click then lands on the row selected,
+    // so it makes no second seek and cancels nothing.
+    calls.length = 0;
+    const pressed = rowOf();
+    pressed.press();
+    pressed.focus();
+    expect(calls).toEqual([["w-return"]]);
+    rowOf("w-return").click();
+    expect(calls).toEqual([["w-return"]]);
+    expect(exits).toEqual(["exit"]);
+    // The press is spent: the next keyboard focus does not seek.
+    calls.length = 0;
+    rowOf().focus();
+    expect(calls).toEqual([["w-return", undefined, { seek: false }]]);
+  });
+
+  test("a click on the time cell selects the row and leaves the film where it is", () => {
+    const calls: unknown[][] = [];
+    const rowOf = (selectedShotId: string | null = null) => {
+      const all = elements(
+        well().BlackShotsWell({
+          point: rally(),
+          edit: wellEdit({
+            selectedShotId,
+            onSelectShot: (...args: unknown[]) => calls.push(args),
+          }),
+        }),
+      );
+      const row = all.find((el) => el.props["data-shot-id"] === "w-return")!;
+      const rowIndex = all.indexOf(row);
+      // The row's own time cell: the first quiet wrapper after the row.
+      const time = all
+        .slice(rowIndex)
+        .find((el) => "data-select-quiet" in el.props)!;
+      type Handler = (event?: unknown) => void;
+      const on = (el: typeof row) =>
+        el.props as unknown as Record<
+          "onClick" | "onFocus" | "onPointerDown",
+          Handler
+        >;
+      return { row: on(row), time: on(time), timeElement: time };
+    };
+    let stopped = 0;
+    const stop = { stopPropagation: () => stopped++ };
+
+    // The click: selected without a seek, and it goes no further — the row's
+    // seeking click never sees it.
+    rowOf().time.onClick(stop);
+    expect(calls).toEqual([["w-return", undefined, { seek: false }]]);
+    expect(stopped).toBe(1);
+    // The cell holds the time editor.
+    const { timeElement } = rowOf();
+    expect(
+      elements(timeElement).some(
+        (el) => el.props.label === "Shot 3 time" && "parse" in el.props,
+      ),
+    ).toBe(true);
+
+    // A press on the time cell is not a seeking press: the focus it gives
+    // the cell selects without a seek too.
+    calls.length = 0;
+    const inTime = {
+      closest: (selector: string) =>
+        selector === "[data-select-quiet]" ? {} : null,
+    };
+    const pressed = rowOf();
+    pressed.row.onPointerDown({ target: inTime });
+    pressed.row.onFocus();
+    expect(calls).toEqual([["w-return", undefined, { seek: false }]]);
+
+    // Any other cell still seeks: a press there, its focus, then the click.
+    calls.length = 0;
+    const elsewhere = { closest: () => null };
+    const other = rowOf();
+    other.row.onPointerDown({ target: elsewhere });
+    other.row.onFocus();
+    expect(calls).toEqual([["w-return"]]);
+    calls.length = 0;
+    rowOf().row.onClick();
+    expect(calls).toEqual([["w-return"]]);
+  });
+
   test("the tray: only under the selected row, and only where the console writes", () => {
     const html = renderWell({ selectedShotId: "w-return" });
     // One tray in the well, under the selected stroke.
@@ -1233,6 +1345,12 @@ test.describe("the black shots well", () => {
       expect(button).toMatch(/^<button type="button"/);
       expect(button).toContain(`aria-label="${label}"`);
     }
+    expect(tag(edited, 'data-shot-action="reset"')).toContain(
+      'aria-keyshortcuts="R"',
+    );
+    expect(tag(edited, 'data-shot-action="delete"')).not.toContain(
+      "aria-keyshortcuts",
+    );
     // Delete a step quieter than the others, and the one that never gives way.
     expect(tag(edited, 'data-shot-action="delete"')).toContain("text-white/55");
     expect(tag(edited, 'data-shot-action="delete"')).toContain("shrink-0");
@@ -1244,7 +1362,22 @@ test.describe("the black shots well", () => {
           edited.lastIndexOf("<div", edited.indexOf("data-shot-tray")),
         ),
       ),
-    ).toBe("Split point here Add shot after Reset shot Delete shot");
+    ).toBe("In Out Net Split point here Add shot after Reset shot Delete shot");
+    // The call leads the strip: In · Out · Net, the stored call pressed.
+    const call = tag(edited, "data-shot-call");
+    expect(call).toContain('role="group"');
+    expect(call).toContain('aria-label="Shot 3 call"');
+    expect(edited.indexOf("data-shot-call")).toBeLessThan(
+      edited.indexOf('data-shot-action="split"'),
+    );
+    expect(tag(edited, 'data-shot-call-option="in"')).toContain(
+      'aria-pressed="true"',
+    );
+    for (const off of ["out", "net"]) {
+      expect(tag(edited, `data-shot-call-option="${off}"`)).toContain(
+        'aria-pressed="false"',
+      );
+    }
 
     // The selected row's number is the number, never swapped for a trigger.
     const lane = edited.indexOf("data-shot-number");
@@ -1352,6 +1485,39 @@ test.describe("the black shots well", () => {
     });
     expect(findByProp(rest, "data-shot-tray", ["ShotTray"])).toBeNull();
     expect(trayButtons(rest)).toEqual([]);
+  });
+
+  test("the tray's call writes the call alone, and the pressed one writes nothing", () => {
+    const patches: unknown[][] = [];
+    const { BlackShotRow } = createLoader().load(WELL) as {
+      BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    const point = rally();
+    const row = BlackShotRow({
+      shot: point.shots.find((s) => s.id === "w-return"),
+      number: 3,
+      point,
+      pointNumber: 7,
+      edit: wellEdit({
+        selectedShotId: "w-return",
+        onPatchShot: (...args: unknown[]) => patches.push(args),
+      }),
+    });
+    const option = (value: string) =>
+      elements(row).find((el) => el.props["data-shot-call-option"] === value);
+    const event = { stopPropagation: () => {} };
+    for (const value of ["out", "in", "net"]) {
+      (option(value)!.props.onClick as (e: unknown) => void)(event);
+    }
+    // Out and Net each write `result` and nothing else: the landing stays.
+    expect(patches).toEqual([
+      ["w-return", { result: "out" }],
+      ["w-return", { result: "net" }],
+    ]);
+
+    // Read-only: a selected row has no tray, so no call either.
+    const frozen = renderWell({ selectedShotId: "w-return" }, false);
+    expect(frozen).not.toContain("data-shot-call");
   });
 
   test("the tray's actions come and go with their conditions", () => {

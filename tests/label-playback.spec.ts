@@ -1,4 +1,17 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { expect, test } from "@playwright/test";
+
+import {
+  NO_PLACEMENT,
+  type PlacementState,
+} from "@/components/admin/labels/court-placement";
+import {
+  currentPointOf,
+  pinLive,
+  selectionFor,
+} from "@/components/admin/labels/label-now-playing";
 
 import {
   POINT_TAIL_SECONDS,
@@ -134,4 +147,104 @@ test("rows are read on the clock, not in the order they arrive", () => {
   expect(at(2472.5, shuffled)).toEqual({ pointId: P1, shotId: "s-serve" });
   expect(at(2474.5, shuffled)).toEqual({ pointId: P1, shotId: "s-added" });
   expect(at(2490.3, shuffled)).toEqual({ pointId: P2, shotId: "s-ace" });
+});
+
+// T10: the current point and the selection under it.
+test.describe("currentPointOf: the pin holds while the film plays", () => {
+  const points = labelSessionFixture().points;
+
+  test("the pinned point, even while another point plays", () => {
+    expect(currentPointOf({ pinned: P1, playing: P2, rest: P2, points })).toBe(
+      P1,
+    );
+    expect(
+      currentPointOf({ pinned: P1, playing: null, rest: P2, points }),
+    ).toBe(P1);
+  });
+
+  test("no pin: the playing point, else where the film rested", () => {
+    expect(
+      currentPointOf({ pinned: null, playing: P2, rest: P1, points }),
+    ).toBe(P2);
+    expect(
+      currentPointOf({ pinned: null, playing: null, rest: P1, points }),
+    ).toBe(P1);
+    expect(
+      currentPointOf({ pinned: null, playing: null, rest: null, points }),
+    ).toBeNull();
+  });
+
+  test("a pin on a deleted or combined-away point lets go", () => {
+    // P3 is the fixture's deleted point.
+    expect(pinLive(P3, points)).toBe(false);
+    expect(currentPointOf({ pinned: P3, playing: P2, rest: P1, points })).toBe(
+      P2,
+    );
+    // Combined away: no longer in the rows at all.
+    expect(pinLive("p-gone", points)).toBe(false);
+    expect(
+      currentPointOf({ pinned: "p-gone", playing: null, rest: P1, points }),
+    ).toBe(P1);
+    expect(pinLive(P1, points)).toBe(true);
+  });
+});
+
+test.describe("selectionFor: a selection never outlives its point", () => {
+  const points = labelSessionFixture().points;
+  const p1 = points.find((p) => p.id === P1)!;
+  const p2 = points.find((p) => p.id === P2)!;
+  const onReturn: PlacementState = {
+    ...NO_PLACEMENT,
+    shotId: "s-return",
+    target: "landing",
+  };
+
+  test("a stroke of the current point stays selected, as it was", () => {
+    expect(selectionFor(onReturn, p1)).toBe(onReturn);
+  });
+
+  test("a stroke of any other point, or no current point, is let go", () => {
+    expect(selectionFor(onReturn, p2)).toEqual(NO_PLACEMENT);
+    expect(selectionFor(onReturn, null)).toEqual(NO_PLACEMENT);
+  });
+
+  test("nothing selected stays nothing", () => {
+    expect(selectionFor(NO_PLACEMENT, p2)).toBe(NO_PLACEMENT);
+  });
+});
+
+test.describe("the console's wiring (source)", () => {
+  const source = readFileSync(
+    path.join(process.cwd(), "src/components/admin/labels/label-console.tsx"),
+    "utf8",
+  );
+
+  test("one derivation of the current point, the pin being the held point", () => {
+    expect(source).toContain(
+      'const pinned = pointFocus.mode === "held" ? pointFocus.pointId : null;',
+    );
+    expect(source).toMatch(
+      /const currentPointId = currentPointOf\(\{\s+pinned: pinnedPointId,\s+playing: playingPointId,\s+rest: restPointId,\s+points,\s+\}\);/,
+    );
+    // Playback never lets the pin go: the old row-key release is gone.
+    expect(source).not.toContain("pinned.at === playingKey");
+    expect(source).not.toContain("setPinned(");
+  });
+
+  test("a new current point lets go of another point's stroke in the same render", () => {
+    expect(source).toContain("if (selectionPointId !== currentPointId) {");
+    expect(source).toContain("const kept = selectionFor(placement, expanded);");
+  });
+
+  test("← / → and the transport's Previous / Next re-follow", () => {
+    const stepFilm = source.slice(source.indexOf("function stepFilm("));
+    const body = stepFilm.slice(0, stepFilm.indexOf("\n  }\n"));
+    expect(body).toContain("followPlayback();");
+    expect(body).toContain("player.current?.step(direction);");
+    // Both key handlers step through it, never the handle directly.
+    expect(source.match(/stepFilmRef\.current\(/g)).toHaveLength(2);
+    expect(source).not.toMatch(/player\.current\?\.step\(key/);
+    expect(source).not.toMatch(/player\.current\?\.step\(event/);
+    expect(source).toContain("onStep={stepFilm}");
+  });
 });

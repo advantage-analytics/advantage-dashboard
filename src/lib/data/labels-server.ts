@@ -12,6 +12,7 @@ import { readAllPages } from "@/lib/data/admin-range-read";
 import { isUuid } from "@/lib/admin/validation";
 import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
+import { parseLabelStartScore } from "@/lib/services/labels/session-fields";
 import {
   PLAYBACK_JOB_COLUMNS,
   choosePlaybackFile,
@@ -49,7 +50,8 @@ import {
   type LabelMarks,
   type MarkablePoint,
 } from "@/lib/services/labels/marks";
-import { buildTranscriptForJob } from "@/lib/services/splitstep/persist-transcript";
+import { cachedTranscriptForJob } from "@/lib/services/labels/transcript-cache";
+import { idChunks } from "@/lib/services/labels/chunks";
 
 /** One completed job an admin could start or continue labelling. */
 export interface LabelJobRow {
@@ -347,6 +349,8 @@ interface DbSessionRow {
   /** jsonb array of `[p1, p2]` pairs, parsed by `parseFinalScore`; null until set. */
   final_score?: unknown;
   video_ends_early?: boolean | null;
+  /** jsonb object parsed by `parseLabelStartScore` (session-fields.ts); null until set. */
+  start_score?: unknown;
 }
 
 /**
@@ -419,7 +423,7 @@ export async function readLabelSessionRows<T = undefined>(
   const { data: session, error: sessionError } = await db
     .from("label_sessions")
     .select(
-      "id, job_id, match_id, status, derivation_version, ad_scoring, marks_enabled, final_score, video_ends_early",
+      "id, job_id, match_id, status, derivation_version, ad_scoring, marks_enabled, final_score, video_ends_early, start_score",
     )
     .eq("id", sessionId)
     .maybeSingle<DbSessionRow>();
@@ -499,23 +503,20 @@ function joinMarks(
 }
 
 /**
- * The default `buildMarks`: download the job's results file and derive it with
- * the current code; the join onto the label rows comes back as a function, for
- * the points once they are built. Throws when the transcript could not be built
- * or did not reconcile (`joinMarks` turns that into a logged null). Never reads
- * a stored flags column (marks.ts).
+ * The default `buildMarks`: the job's transcript and rallies — from
+ * `label_transcript_cache` when the job's inputs have not changed since the
+ * last reconciled build, otherwise downloaded and derived with the current
+ * code (transcript-cache.ts) — with the join onto the label rows returned as
+ * a function, for the points once they are built. The join is never cached:
+ * it runs over the request's live rows on every load. Throws when the
+ * transcript could not be built or did not reconcile (`joinMarks` turns that
+ * into a logged null). Never reads a stored flags column (marks.ts).
  */
 export async function buildJobMarks(
   db: AdminClient,
   jobId: string,
 ): Promise<MarksJoin> {
-  const { transcript, rallies, reason } = await buildTranscriptForJob({
-    supabase: db,
-    jobId,
-  });
-  if (!transcript || !transcript.ok || !rallies) {
-    throw new Error(reason ?? "transcript could not be built");
-  }
+  const { transcript, rallies } = await cachedTranscriptForJob(db, jobId);
   return (points, options) =>
     buildLabelMarks(transcript, rallies, points, options);
 }
@@ -605,9 +606,78 @@ export function readPlayOnLets(format: unknown): boolean {
 }
 
 /**
+ * Point rows → the console's points, in `point_index` order, each with its
+ * shots folded under it in video order (`orderLabelShots`), never the order
+ * PostgREST returned them in. A shot whose point is not in `pointRows` is
+ * dropped: the by-id reader asks for shots by owning point, so none is.
+ */
+export function buildLabelPoints(
+  pointRows: readonly LabelPointRow[],
+  shotRows: readonly LabelShotRow[],
+): LabelPoint[] {
+  const shotsByPoint = new Map<string, LabelShot[]>();
+  for (const row of shotRows) {
+    const list = shotsByPoint.get(row.label_point_id) ?? [];
+    list.push(toLabelShot(row));
+    shotsByPoint.set(row.label_point_id, list);
+  }
+  return [...pointRows]
+    .sort((a, b) => a.point_index - b.point_index)
+    .map((row) =>
+      toLabelPoint(row, orderLabelShots(shotsByPoint.get(row.id) ?? [])),
+    );
+}
+
+/**
+ * Some of a session's points, by id, each built whole with its shots — what
+ * the console's Undo reads back (undo-session.ts): the rows the rewind
+ * touched, not the session. `session_id` is on both reads so an id from
+ * another session answers nothing. Nothing asked, nothing read.
+ */
+export async function readLabelPointsByIds(
+  db: AdminClient,
+  sessionId: string,
+  pointIds: readonly string[],
+): Promise<LabelPoint[]> {
+  if (pointIds.length === 0) return [];
+  // In `idChunks` runs: an `.in()` list travels in the URL, and an undone
+  // cascade can name a few hundred points.
+  const chunks = idChunks(pointIds);
+  const [pointRuns, shotRuns] = await Promise.all([
+    Promise.all(
+      chunks.map((ids) =>
+        readAllPages<LabelPointRow>(
+          db
+            .from("label_points")
+            .select(LABEL_POINT_COLUMNS)
+            .eq("session_id", sessionId)
+            .in("id", ids)
+            .order("point_index")
+            .order("id"),
+          "Could not read label points",
+        ),
+      ),
+    ),
+    Promise.all(
+      chunks.map((ids) =>
+        readAllPages<LabelShotRow>(
+          db
+            .from("label_shots")
+            .select(LABEL_SHOT_COLUMNS)
+            .eq("session_id", sessionId)
+            .in("label_point_id", ids)
+            .order("id"),
+          "Could not read label shots",
+        ),
+      ),
+    ),
+  ]);
+  return buildLabelPoints(pointRuns.flat(), shotRuns.flat());
+}
+
+/**
  * Rows → the console's session. Pure and exported for the spec: shots fold
- * under their point and are put in video order by `orderLabelShots`, never
- * by the order PostgREST returned them in.
+ * under their point by `buildLabelPoints`.
  *
  * `job` is the session's `processing_jobs` row (its `ad_scoring`), or null
  * when the job is gone or was not read because the session has its own.
@@ -619,18 +689,7 @@ export function buildLabelSession(
   shotRows: readonly LabelShotRow[],
   job: JobScoringRow | null = null,
 ): LabelSession {
-  const shotsByPoint = new Map<string, LabelShot[]>();
-  for (const row of shotRows) {
-    const list = shotsByPoint.get(row.label_point_id) ?? [];
-    list.push(toLabelShot(row));
-    shotsByPoint.set(row.label_point_id, list);
-  }
-
-  const points: LabelPoint[] = [...pointRows]
-    .sort((a, b) => a.point_index - b.point_index)
-    .map((row) =>
-      toLabelPoint(row, orderLabelShots(shotsByPoint.get(row.id) ?? [])),
-    );
+  const points = buildLabelPoints(pointRows, shotRows);
 
   return {
     id: session.id,
@@ -649,6 +708,7 @@ export function buildLabelSession(
     playOnLets: readPlayOnLets(match?.format),
     finalScore: parseFinalScore(session.final_score ?? null),
     videoEndsEarly: session.video_ends_early ?? null,
+    startScore: parseLabelStartScore(session.start_score ?? null),
     matchScore: parseMatchScore(match?.score ?? null),
     bestOf: readBestOf(match?.format),
     points,

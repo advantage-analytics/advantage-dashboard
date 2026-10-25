@@ -1,12 +1,14 @@
 import { expect, test } from "@playwright/test";
-import { undoLabelOp } from "@/lib/services/labels/undo-session";
+import { readLabelPointsByIds } from "@/lib/data/labels-server";
+import { pointsToRead, undoLabelOp } from "@/lib/services/labels/undo-session";
 import type { AdminClient } from "@/lib/supabase/admin";
 import { opHeaders, withLabelOp } from "@/lib/supabase/op-context";
+import { fakeLabelClient, labelShotRow } from "./fixtures/label-session";
 
 /**
  * The console's Undo, server side (undo-session.ts): the admin gate, the one
- * RPC, and the rows read back. The rewind itself is `undo_label_op`, in the
- * migration `label_row_history_undo`.
+ * RPC, and the touched rows read back. The rewind itself is `undo_label_op`,
+ * in the migrations `label_row_history_undo` and `undo_label_op_returns_rows`.
  */
 const SESSION = "aa7b743e-c1cc-4784-b920-8e5b27c620fa";
 
@@ -46,23 +48,174 @@ test("refused without an admin, before a client is built; a bad id reads nothing
   expect(built).toBe(0);
 });
 
-test("one RPC, then the session's rows as they now stand", async () => {
+test("one RPC, then only the touched points read back, as a diff", async () => {
   const { calls, db } = fakeDb({
-    data: { undone: "Split point", remaining: 3 },
+    data: {
+      undone: "Split point",
+      remaining: 3,
+      points: ["p1"],
+      shots: ["s1", "s2"],
+      deleted_points: ["p9"],
+      deleted_shots: [],
+      shot_points: ["p1", "p2"],
+    },
   });
-  const points = [{ id: "p1" }] as never;
+  const changed = [{ id: "p1" }, { id: "p2" }] as never;
+  const asked: unknown[] = [];
   const result = await undoLabelOp(SESSION, {
     requireAdmin: async () => ({ id: "admin" }),
     createAdminClient: () => db,
-    readPoints: async () => points,
+    readPoints: async (_db, sessionId, pointIds) => {
+      asked.push([sessionId, pointIds]);
+      return changed;
+    },
   });
   expect(calls).toEqual([["undo_label_op", { p_session_id: SESSION }]]);
+  // The touched points and the touched shots' owners, folded, less the
+  // deleted — which the console drops rather than reads.
+  expect(asked).toEqual([[SESSION, ["p1", "p2"]]]);
   expect(result).toEqual({
     ok: true,
     undone: "Split point",
     remaining: 3,
-    points,
+    changed,
+    removedPointIds: ["p9"],
   });
+});
+
+test("the ids to read: touched points and shot owners, never a deleted point", () => {
+  expect(
+    pointsToRead({
+      points: ["a", "b", "a"],
+      shot_points: ["b", "c", "gone"],
+      deleted_points: ["gone", "gone"],
+    }),
+  ).toEqual({ pointIds: ["a", "b", "c"], removedPointIds: ["gone"] });
+  // The old function's answer, and an empty journal: nothing to read.
+  expect(pointsToRead({ undone: null, remaining: 0 })).toEqual({
+    pointIds: [],
+    removedPointIds: [],
+  });
+});
+
+test("the fake client is asked for exactly the listed ids, each point whole with its shots", async () => {
+  const { calls, supabase } = fakeLabelClient((call) => {
+    if (call.op === "rpc") {
+      return {
+        data: {
+          undone: "Combine points",
+          remaining: 1,
+          points: ["p-b"],
+          shots: ["s-2"],
+          deleted_points: [],
+          deleted_shots: [],
+          shot_points: ["p-a", "p-b"],
+        },
+        error: null,
+      };
+    }
+    if (call.table === "label_points") {
+      return {
+        data: [
+          {
+            id: "p-b",
+            point_index: 1,
+            vendor_rally_ids: null,
+            set_number: 1,
+            game_number: 1,
+            server: "p1",
+            serve_side: "deuce",
+            winner: null,
+            ending: null,
+            ended_by: null,
+            game_type: "game",
+            status: "edited",
+            status_before_delete: null,
+            checked_at: null,
+            note: null,
+            dismissed: null,
+            game_start_locked: false,
+            seed: null,
+          },
+          {
+            id: "p-a",
+            point_index: 0,
+            vendor_rally_ids: [1001],
+            set_number: 1,
+            game_number: 1,
+            server: "p1",
+            serve_side: "deuce",
+            winner: null,
+            ending: null,
+            ended_by: null,
+            game_type: "game",
+            status: "unchanged",
+            status_before_delete: null,
+            checked_at: null,
+            note: null,
+            dismissed: null,
+            game_start_locked: false,
+            seed: null,
+          },
+        ],
+        error: null,
+      };
+    }
+    if (call.table === "label_shots") {
+      return {
+        data: [
+          labelShotRow("s-2", "p-b", { event_id: 2 }),
+          labelShotRow("s-1", "p-a", { event_id: 1 }),
+        ],
+        error: null,
+      };
+    }
+    return undefined;
+  });
+  const result = await undoLabelOp(SESSION, {
+    requireAdmin: async () => ({ id: "admin" }),
+    createAdminClient: () => supabase,
+    readPoints: readLabelPointsByIds,
+  });
+  const reads = calls.filter((call) => call.op === "select");
+  expect(reads.map((call) => [call.table, call.filters, call.in])).toEqual([
+    ["label_points", { session_id: SESSION }, { id: ["p-b", "p-a"] }],
+    [
+      "label_shots",
+      { session_id: SESSION },
+      { label_point_id: ["p-b", "p-a"] },
+    ],
+  ]);
+  expect("ok" in result && result.ok).toBe(true);
+  if (!("ok" in result)) return;
+  // Both owners of the moved stroke, in rail order, each with its own shots.
+  expect(
+    result.changed.map((p) => [p.id, p.pointIndex, p.shots.map((s) => s.id)]),
+  ).toEqual([
+    ["p-a", 0, ["s-1"]],
+    ["p-b", 1, ["s-2"]],
+  ]);
+  expect(result.removedPointIds).toEqual([]);
+});
+
+test("a read-back that fails is reported, not thrown: the rewind is committed", async () => {
+  const log = console.error;
+  console.error = () => {};
+  try {
+    const result = await undoLabelOp(SESSION, {
+      requireAdmin: async () => ({ id: "admin" }),
+      createAdminClient: () =>
+        fakeDb({ data: { undone: "Edit", remaining: 0, points: ["p1"] } }).db,
+      readPoints: async () => {
+        throw new Error("Could not read label points");
+      },
+    });
+    expect(result).toEqual({
+      error: "Undone, but the rows could not be read. Reload.",
+    });
+  } finally {
+    console.error = log;
+  }
 });
 
 test("the function's own refusal is shown; any other failure is not", async () => {

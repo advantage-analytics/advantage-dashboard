@@ -116,3 +116,59 @@ test.describe("the band's outcome", () => {
     ).toEqual({ text: "Vargas · 4–0 · 1 extra", amber: false });
   });
 });
+
+test.describe("the band's lock", () => {
+  function renderLocked(locked: boolean, editable: boolean) {
+    const session = labelSessionFixture();
+    const points = session.points.map((p, i) =>
+      i === 0 ? { ...p, gameStartLocked: locked } : p,
+    );
+    const { LabelGameBand } = createLoader().load(BAND) as {
+      LabelGameBand: React.ComponentType<BandProps>;
+    };
+    const [band] = labelScores(points, session.adScoring).games;
+    return renderToStaticMarkup(
+      React.createElement(LabelGameBand, {
+        band,
+        points,
+        names: NAMES,
+        ...(editable ? { onSetGameType: noop, onSetGameServer: noop } : {}),
+      }),
+    );
+  }
+
+  test("a locked game's band draws a lock and set by you after its name, in the label's ink; an unlocked band neither", () => {
+    for (const editable of [true, false]) {
+      const html = renderLocked(true, editable);
+      const mark = tag(html, "data-game-locked=");
+      expect(mark).toContain("text-white/45");
+      expect(mark).toContain("uppercase");
+      const at = html.indexOf("data-game-locked=");
+      const markup = html.slice(at, html.indexOf("</span>", at));
+      expect(markup).toContain("lucide-lock");
+      expect(markup).toContain('aria-hidden="true"');
+      expect(text(html)).toBe("Set 1 · Game 1 set by you 0–0 · Lee serves");
+
+      const open = renderLocked(false, editable);
+      expect(open).not.toContain("data-game-locked");
+      expect(open).not.toContain("lucide-lock");
+      expect(text(open)).not.toContain("set by you");
+    }
+  });
+
+  test("the lock is read off the game's first live row only", () => {
+    const { gameBandModel } = createLoader().load(BAND) as {
+      gameBandModel: (
+        band: unknown,
+        points: LabelPoint[],
+      ) => { locked: boolean };
+    };
+    const session = labelSessionFixture();
+    const [band] = labelScores(session.points, session.adScoring).games;
+    expect(gameBandModel(band, session.points).locked).toBe(false);
+    const later = session.points.map((p, i) =>
+      i === 1 ? { ...p, gameStartLocked: true } : p,
+    );
+    expect(gameBandModel(band, later).locked).toBe(false);
+  });
+});

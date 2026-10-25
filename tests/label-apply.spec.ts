@@ -541,3 +541,90 @@ test("games publish numbered in play order, whatever their label keys", () => {
   const games = new Set(build(points).points.map((row) => row.game_number));
   expect([...games]).toEqual([1, 2]);
 });
+
+// ── A video that starts mid-match ────────────────────────────────────────────
+
+test.describe("buildAppliedRows with a start score", () => {
+  /** The video opens a set up, 5–0 in games, p1 serving at 15–0. */
+  const start = {
+    sets: [1, 0] as [number, number],
+    games: [5, 0] as [number, number],
+    points: [1, 0] as [number, number],
+    server: "p1" as const,
+  };
+  /** The fixture less its last game-1 point: from 15–0, AD–40 settles it. */
+  const fromStart = () => session().filter((p) => p.pointIndex !== 9);
+
+  test("point, game and set scores are counted from the start", () => {
+    const { points, problems, warnings } = buildAppliedRows({
+      points: fromStart(),
+      adScoring: true,
+      bestOf: 3,
+      start,
+    });
+    expect(problems).toEqual([]);
+    expect(warnings).toEqual([]);
+    expect(points.map((p) => p.point_score)).toEqual([
+      "15-0",
+      "30-0",
+      "30-15",
+      "40-15",
+      "40-30",
+      "40-40",
+      "AD-40",
+      "0-0",
+    ]);
+    // p1 serves game 1 five games up, a set up; game 2 is p2's, server-first.
+    expect(points.slice(0, 7).map((p) => p.game_score)).toEqual(
+      Array(7).fill("5-0"),
+    );
+    expect(points.slice(0, 7).map((p) => p.set_score)).toEqual(
+      Array(7).fill("1-0"),
+    );
+    expect(points[7].game_score).toBe("0-6");
+    expect(points[7].set_score).toBe("0-1");
+  });
+
+  test("the pressure flags read the start: set and match points at 5–0 and a set up, no break point", () => {
+    const { points } = buildAppliedRows({
+      points: fromStart(),
+      adScoring: true,
+      bestOf: 3,
+      start,
+    });
+    const pressure = points.map((p) => [
+      p.point_score,
+      p.is_break_point,
+      p.is_set_point,
+      p.is_match_point,
+    ]);
+    expect(pressure).toEqual([
+      ["15-0", false, false, false],
+      ["30-0", false, false, false],
+      ["30-15", false, false, false],
+      ["40-15", false, true, true],
+      ["40-30", false, true, true],
+      ["40-40", false, false, false],
+      ["AD-40", false, true, true],
+      ["0-0", false, false, false],
+    ]);
+    // The same rows from the beginning of the match: nothing is at stake.
+    const plain = buildAppliedRows({
+      points: fromStart(),
+      adScoring: true,
+      bestOf: 3,
+    }).points;
+    expect(plain.some((p) => p.is_set_point || p.is_match_point)).toBe(false);
+  });
+
+  test("null is the beginning of the match: the fixture builds as it always did", () => {
+    expect(
+      buildAppliedRows({
+        points: session(),
+        adScoring: true,
+        bestOf: 3,
+        start: null,
+      }),
+    ).toEqual(build());
+  });
+});

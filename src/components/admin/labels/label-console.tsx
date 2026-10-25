@@ -22,6 +22,7 @@ import {
   type LabelSession,
   type LabelShot,
   type LabelSide,
+  type LabelStartScore,
   type LabelVideo,
 } from "@/lib/services/labels/session";
 import { planShotWrite } from "./shot-write-plan";
@@ -142,6 +143,8 @@ import type { LabelCombinePointsResult } from "@/lib/services/labels/point-combi
 import {
   applyPointReset,
   applyShotReset,
+  canResetPoint,
+  canResetShot,
   pointResetScope,
 } from "@/lib/services/labels/reset";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
@@ -156,7 +159,10 @@ import {
   endingPatchForShotChange,
   SHOT_FIELDS_MOVING_ENDING,
 } from "@/lib/services/labels/ending-derived";
-import { planGameBoundary } from "@/lib/services/labels/game-boundary";
+import {
+  planGameBoundary,
+  type GameBoundaryLock,
+} from "@/lib/services/labels/game-boundary";
 import {
   servedRightHitWrong,
   serversOffOrder,
@@ -194,6 +200,7 @@ import {
   flipPlacement,
   hitterHalf,
   nextPlacement,
+  placementNotice,
   setPlacementTarget,
   startPlacement,
   type PlacementState,
@@ -223,8 +230,15 @@ import {
   type LabelLayoutMode,
 } from "./label-layout";
 import { sideNames } from "./label-format";
-import { nowPlayingOf, nowPlayingReadout } from "./label-now-playing";
 import {
+  currentPointOf,
+  nowPlayingOf,
+  nowPlayingReadout,
+  pinLive,
+  selectionFor,
+} from "./label-now-playing";
+import {
+  flagStepOrigin,
   openFlags,
   scoreStop,
   slotStops,
@@ -247,6 +261,7 @@ import { ProgramCrest } from "@/components/dashboard/settings/teams/program-cres
 import { getInitials } from "@/lib/data/match-utils";
 import type { LabelUploadInfo } from "@/lib/data/label-overview-server";
 import type { LabelUndoResult } from "@/lib/services/labels/undo-session";
+import { applyUndoDiff } from "@/lib/services/labels/undo-diff";
 import type {
   LabelAddMissingShotsResult,
   MissingShotAdd,
@@ -264,6 +279,7 @@ import {
 } from "./video-clock";
 import { useBrowserFullscreen } from "./use-browser-fullscreen";
 import {
+  frameTimePatch,
   hasEarlierServe,
   isStrokeKey,
   strokeKeyChange,
@@ -357,13 +373,17 @@ function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
  * reported on the save line; the status it implies comes from the same pure
  * rule the server writes (`edit.ts`).
  *
- * - Current point: the one the playhead is in; between points, the last one it
- *   was in or the one clicked (`restPointId`). Exactly one point is unfolded. A
- *   row click seeks to its first stroke.
+ * - Current point (`currentPointOf`): the held point; else the one the
+ *   playhead is in; between points, the last one it was in or the one clicked
+ *   (`restPointId`). Exactly one point is unfolded. A row click seeks to its
+ *   first stroke. A stroke selected outside the current point is let go
+ *   (`selectionFor`) the moment the current point changes.
  * - Follow or hold: `PointFocus` (film-timeline.ts) decides whether the rail
- *   scrolls with the video. A click, an editor or a hand scroll holds; the "Now
- *   playing" pill or re-clicking the playing row follows again. Holding never
- *   unfolds a second point.
+ *   scrolls with the video, and a hold on a point pins it as the current one
+ *   while the film plays on. A click, an editor or a hand scroll holds; the
+ *   "Now playing" pill, re-clicking the playing row or ← / → (and the
+ *   transport's Previous / Next) follow again. Holding never unfolds a second
+ *   point.
  * - The page does not scroll; the rail's scroller (`data-label-rail-scroller`)
  *   does.
  * - Row operations share one optimistic contract (`runOperation`). Delete and
@@ -468,11 +488,21 @@ export function LabelConsole({
   // The marks beside those points, as the page built them from the vendor's
   // file. State, not a prop read: the page builds them once per render.
   const [marks] = useState<LabelMarks | null>(initialMarks);
+  // The session fields the score chip and the start-score prompt write, held
+  // beside the rows so an answer re-evaluates the chip and the scoreboard at
+  // once.
+  const [sessionFields, setSessionFields] = useState<LabelSessionFields>({
+    finalScore: session.finalScore,
+    videoEndsEarly: session.videoEndsEarly,
+    startScore: session.startScore,
+  });
+  // Where the video starts in the match: every scorer below counts from it.
+  const startScore = sessionFields.startScore;
   // The scoreboard over the rows as they stand, once: the rail's scores and
   // bands and the player's readout and the score marks all read this.
   const scores = useMemo(
-    () => labelScores(points, session.adScoring),
-    [points, session.adScoring],
+    () => labelScores(points, session.adScoring, startScore),
+    [points, session.adScoring, startScore],
   );
   // The page's marks plus the two score marks read off the live rows
   // (score-marks.ts), which follow the labelled score. Only with marks built.
@@ -480,8 +510,14 @@ export function LabelConsole({
     () =>
       marks === null
         ? null
-        : withLiveScoreMarks(marks, points, session.adScoring, scores),
-    [marks, points, session.adScoring, scores],
+        : withLiveScoreMarks(
+            marks,
+            points,
+            session.adScoring,
+            scores,
+            startScore,
+          ),
+    [marks, points, session.adScoring, scores, startScore],
   );
   // Every "Missing shot?" slot still open whose "Add shot" would write: what
   // "Add all missing shots" fills, in rail order.
@@ -516,12 +552,6 @@ export function LabelConsole({
     // A cache: a failed save leaves the list a step behind, nothing more.
     void recordOpenCounts(session.id, openCounts).catch(() => {});
   }, [openCounts, recordOpenCounts, session.id]);
-  // The two session fields the score chip writes, held beside the rows so an
-  // answer re-evaluates the chip at once.
-  const [sessionFields, setSessionFields] = useState<LabelSessionFields>({
-    finalScore: session.finalScore,
-    videoEndsEarly: session.videoEndsEarly,
-  });
   // The deciding set the match record spells as a 10-point match tiebreak
   // (set-scores.ts) — never the labeller's own `final_score`, which is games
   // only. "Make it a match tiebreak" offers to fold it, and the shift and
@@ -536,14 +566,6 @@ export function LabelConsole({
       ? initialExpandedPointId
       : (defaultPoint(session.points)?.id ?? null),
   );
-  // A point opened with no live, timed stroke (one just inserted, say) has
-  // no span on the film, so the playing point would win over it at once and
-  // it could never open. It stays current until the video plays into another
-  // row: `at` is the playing row it was opened over.
-  const [pinned, setPinned] = useState<{
-    pointId: string;
-    at: string;
-  } | null>(null);
   // An added stroke's add while it is in flight, by the id the console gave
   // it: true once its row is saved. Its edits and its delete wait on it.
   const addsInFlight = useRef(new Map<string, Promise<boolean>>());
@@ -560,6 +582,12 @@ export function LabelConsole({
     placementOf(session.points, initialSelectedShotId),
   );
   const [armedSlot, setArmedSlot] = useState<ArmedSlot | null>(null);
+  // "Landing placed · next: shot 4 contact" (`placementNotice`): shown while
+  // the stroke the landing moved on to is still waiting for its contact.
+  const [placementNoticeState, setPlacementNoticeState] = useState<{
+    shotId: string;
+    text: string;
+  } | null>(null);
   // Review mode: a flag jump (] [ ' ; or a header flag row, `findGap` with
   // `arm`) enters it, and while it is on the open point's review step is
   // asked inline in the rail (`ReviewInlineBlock`), an answer lands on the
@@ -769,17 +797,22 @@ export function LabelConsole({
     return stop ? { start: stop.start, end: stop.end } : null;
   }, [stops, playingPointId]);
 
-  // The current point: the playing one, else `restPointId`. The one point that
-  // is unfolded, on the court and under Enter.
-  // A pin lets go once the video moves on, and once its point is gone
-  // (deleted, combined away): a gone point is never the current one.
-  const pinHolds =
-    pinned !== null &&
-    pinned.at === playingKey &&
-    points.some((p) => p.id === pinned.pointId && p.status !== "deleted");
-  if (pinned !== null && !pinHolds) setPinned(null);
-  const pinnedPointId = pinHolds ? pinned.pointId : null;
-  const currentPointId = pinnedPointId ?? playingPointId ?? restPointId;
+  // The current point (`currentPointOf`): the held point, else the playing
+  // one, else `restPointId`. The one point that is unfolded, on the court and
+  // under Enter and the stroke keys. The hold is the pin: it stays while the
+  // film plays on into other points, and lets go only when the labeller
+  // follows again or its point is gone (deleted, combined away) — a gone
+  // point is never the current one. The rail stays held then, on nothing.
+  const pinned = pointFocus.mode === "held" ? pointFocus.pointId : null;
+  const pinHolds = pinLive(pinned, points);
+  if (pinned !== null && !pinHolds) holdPoint(null);
+  const pinnedPointId = pinHolds ? pinned : null;
+  const currentPointId = currentPointOf({
+    pinned: pinnedPointId,
+    playing: playingPointId,
+    rest: restPointId,
+    points,
+  });
   // Whatever the video plays into is where the current point rests next.
   // Adjusted during render, not in an effect: the fallback must never be a
   // render behind the point it stands in for.
@@ -801,11 +834,31 @@ export function LabelConsole({
     points.find(
       (point) => point.id === currentPointId && point.status !== "deleted",
     ) ?? null;
+  // A new current point lets go of a stroke selected in any other, in this
+  // same render: the stroke keys, ↑ / ↓ and the court never act on a stroke
+  // the open well does not show.
+  // `undefined` until the first render has checked it: a stroke handed in
+  // outside the point the console opens on is let go too.
+  const [selectionPointId, setSelectionPointId] = useState<
+    string | null | undefined
+  >(undefined);
+  if (selectionPointId !== currentPointId) {
+    setSelectionPointId(currentPointId);
+    const kept = selectionFor(placement, expanded);
+    if (kept !== placement) setPlacement(kept);
+  }
   const { checked, total } = labelProgress(points);
+
+  // The point the last flag jump landed on (`stepToFlag`, the header's flag
+  // rows): the flag keys step on from it while the film plays on past it.
+  // Let go when the labeller clicks or selects in another point, or drives
+  // the film a point on (`stepFilm`).
+  const lastFlagPointId = useRef<string | null>(null);
 
   // A row click makes its point current, seeks to its first stroke and holds
   // the rail, or re-follows when the point is the one already playing.
   function togglePoint(pointId: string) {
+    lastFlagPointId.current = null;
     cancelReplay();
     setReviewMode(false);
     setArmedSlot(null);
@@ -815,6 +868,16 @@ export function LabelConsole({
     if (pointId === playingPointId) followPlayback();
     else holdPoint(pointId);
     seekToPointStart(points.find((p) => p.id === pointId));
+  }
+
+  // ← / → and the transport's Previous / Next: the labeller driving the film
+  // a point on lets a replay go and lets go of the hold — the console follows
+  // the film again, the current point with it.
+  function stepFilm(direction: -1 | 1) {
+    lastFlagPointId.current = null;
+    cancelReplay();
+    followPlayback();
+    player.current?.step(direction);
   }
 
   // Selecting a stroke starts an edit: it holds the rail and seeks the video to
@@ -842,6 +905,9 @@ export function LabelConsole({
     }
     const owner = pointOfShot(points, shotId);
     if (owner) holdPoint(owner.id);
+    // A stroke of another point than the flag last landed on is the labeller
+    // moving off it: the flag keys step from the current point again.
+    if (owner?.id !== lastFlagPointId.current) lastFlagPointId.current = null;
     const shot = findShot(points, shotId);
     // A position cell names its end: the court opens on that end's half.
     const start = placementOf(points, shotId);
@@ -1153,11 +1219,14 @@ export function LabelConsole({
     return result;
   }
 
-  // Undo: the server rewinds the newest action on its journal and answers
-  // every row, which replace the console's own — an undone split or combine
-  // moves strokes between points and renumbers the ones after. Not while a
-  // write is in flight: its answer would land on rows that are gone. False
-  // once the server has said nothing is left, until the next write.
+  // Undo: the server rewinds the newest action on its journal and answers the
+  // rows it touched, applied here as a diff (`applyUndoDiff`) — changed points
+  // replace their rows, removed ones leave, and the rail's order is restored.
+  // An undone split or combine moves strokes between two points; both come
+  // back whole. Scores, marks and locks recompute from the merged rows as
+  // after any edit. Not while a write is in flight: its answer would land on
+  // rows that are gone. False once the server has said nothing is left, until
+  // the next write.
   const [undoing, setUndoing] = useState(false);
   const [undoEmpty, setUndoEmpty] = useState(false);
   if (undoEmpty && saveStatus.pending > 0) setUndoEmpty(false);
@@ -1180,7 +1249,9 @@ export function LabelConsole({
       return;
     }
     setPlacement(NO_PLACEMENT);
-    setPoints(result.points);
+    setPoints((rows) =>
+      applyUndoDiff(rows, result.changed, result.removedPointIds),
+    );
     dispatchSave({ type: "success", at: Date.now() });
     // After the success above, which counts as a write settling.
     setUndoEmpty(result.undone === null || result.remaining === 0);
@@ -1239,13 +1310,9 @@ export function LabelConsole({
     const first = point?.shots.find(
       (shot) => shot.status !== "deleted" && shot.videoTime !== null,
     );
-    if (first?.videoTime != null) {
-      setPinned(null);
-      player.current?.seekTo(first.videoTime);
-    } else if (point) {
-      // Nowhere on the film to go: hold it open where the video stands.
-      setPinned({ pointId: point.id, at: playingKey });
-    }
+    // Nowhere on the film to go, the point stays open where the video stands:
+    // every caller has held it first.
+    if (first?.videoTime != null) player.current?.seekTo(first.videoTime);
   }
 
   /**
@@ -1479,7 +1546,6 @@ export function LabelConsole({
     ).then((result) => {
       if (!result) return;
       setRestPointId(result.point.id);
-      setPinned({ pointId: result.point.id, at: playingKey });
       holdPoint(result.point.id);
       jumpToPointId.current = result.point.id;
     });
@@ -1527,6 +1593,7 @@ export function LabelConsole({
       session.adScoring,
       fromPointId,
       matchTiebreakSetNumber,
+      startScore,
     );
     if ("error" in plan) return refuse(plan.error);
     runGameShift(plan, () =>
@@ -1557,6 +1624,7 @@ export function LabelConsole({
       points,
       session.adScoring,
       matchTiebreakSetNumber,
+      startScore,
     ).find((f) => f.setNumber === setNumber);
     if (!fold) {
       return refuse(
@@ -1582,6 +1650,7 @@ export function LabelConsole({
       gameKey,
       session.adScoring,
       matchTiebreakSetNumber,
+      startScore,
     );
     if ("error" in plan) return refuse(plan.error);
     if ("kind" in plan) return refuse(GAME_PULL_ADD_POINT);
@@ -1639,6 +1708,8 @@ export function LabelConsole({
     ).then((saved) => {
       if (!saved) return;
       if (currentPointId === removed.id) setRestPointId(kept.id);
+      // A hold on the point combined away moves to the one it joined.
+      if (pinnedPointId === removed.id) holdPoint(kept.id);
     });
   }
 
@@ -1736,6 +1807,7 @@ export function LabelConsole({
         games: scores.games,
         names,
         matchTiebreakSet: matchTiebreakSetNumber,
+        startScore,
       }),
     });
   }
@@ -2064,19 +2136,23 @@ export function LabelConsole({
     if (!operations) return;
     const plan = planGameBoundary(points, game, beforePointId);
     if ("error" in plan) return refuse(plan.error);
-    const { to, pointIds } = plan.write;
+    const { to, pointIds, lockPointId, unlockPointIds } = plan.write;
     if (pointIds.length === 0) return;
+    const lock: GameBoundaryLock = { lockPointId, unlockPointIds };
     const server = destinationServerIn(points, pointIds[0], to);
     const swaps = pointIds.filter((id) => {
       const point = points.find((p) => p.id === id);
       return point ? moveSwapsPlayers(point, server) : false;
     }).length;
-    if (swaps === 0 || server === null) return void moveBoundary(to, pointIds);
+    if (swaps === 0 || server === null) {
+      return void moveBoundary(to, pointIds, lock);
+    }
     setConfirm({
       kind: "move-boundary",
       to,
       gameInSet: gameInSetOf(points, to),
       pointIds,
+      lock,
       server,
       swaps,
     });
@@ -2086,16 +2162,43 @@ export function LabelConsole({
    * The run's moves. Every point takes its new game at once — one at a time
    * would leave a game a point short between two writes, and the slots that
    * read the score would ask about a state the run is only passing through.
-   * The server takes the whole run in one write (`movePoints`), and a refusal
-   * puts every point back.
+   * The server takes the whole run in one write (`movePoints`), with the
+   * dragged game's lock (`lock`, game-boundary.ts) in the same transaction,
+   * and a refusal puts every point back.
    * A tiebreak on either side of the boundary then has its serve order put
    * right.
    */
-  async function moveBoundary(to: LabelGame, pointIds: readonly string[]) {
+  async function moveBoundary(
+    to: LabelGame,
+    pointIds: readonly string[],
+    lock: GameBoundaryLock | null = null,
+  ) {
     if (!operations) return;
     if (pointIds.some((id) => id.startsWith(PENDING_POINT_PREFIX))) {
       return refuse("Wait for the new point to save, then move it.");
     }
+    // The lock as the write lands it: the new first point takes it, the
+    // game's other points let go. Rows the moves do not touch are set here
+    // and, on a refusal, put back as they were.
+    const lockWas = new Map<string, boolean>();
+    const lockIds = lock ? [lock.lockPointId, ...lock.unlockPointIds] : [];
+    for (const id of lockIds) {
+      const row = points.find((p) => p.id === id);
+      if (row) lockWas.set(id, row.gameStartLocked);
+    }
+    const setLocks = (
+      current: LabelPoint[],
+      lockedOf: (id: string) => boolean,
+    ) =>
+      lockWas.size === 0
+        ? current
+        : current.map((p) =>
+            lockWas.has(p.id) ? { ...p, gameStartLocked: lockedOf(p.id) } : p,
+          );
+    const lockApplied = (current: LabelPoint[]) =>
+      setLocks(current, (id) => id === lock?.lockPointId);
+    const lockPutBack = (current: LabelPoint[]) =>
+      setLocks(current, (id) => lockWas.get(id) ?? false);
     let rows: LabelPoint[] = points;
     const steps: {
       before: LabelPoint;
@@ -2119,7 +2222,8 @@ export function LabelConsole({
       pointMoved(current, before.id, plan);
     const putBack = (current: LabelPoint[], { before }: Step) =>
       pointMovePutBack(current, before);
-    setPoints((current) => steps.reduce(moved, current));
+    rows = lockApplied(rows);
+    setPoints((current) => lockApplied(steps.reduce(moved, current)));
     dispatchSave({ type: "start" });
     if (operations.movePoints) {
       // One write for the whole run: it lands whole or not at all.
@@ -2128,10 +2232,11 @@ export function LabelConsole({
           steps.map(({ before }) => before.id),
           to,
           true,
+          lock ?? undefined,
         ),
       );
       if ("error" in result) {
-        setPoints((current) => steps.reduce(putBack, current));
+        setPoints((current) => lockPutBack(steps.reduce(putBack, current)));
         dispatchSave({ type: "failure", message: result.error });
         return;
       }
@@ -2142,6 +2247,9 @@ export function LabelConsole({
         ),
       );
     } else {
+      // One move at a time writes no lock: the fallback has no transaction
+      // to carry it in, so the rows read as they were.
+      setPoints(lockPutBack);
       for (const [i, { before }] of steps.entries()) {
         const result = await settle(operations.movePoint(before.id, to, true));
         if ("error" in result) {
@@ -2433,7 +2541,7 @@ export function LabelConsole({
         void movePoint(question.pointId, question.to, true);
         return;
       case "move-boundary":
-        void moveBoundary(question.to, question.pointIds);
+        void moveBoundary(question.to, question.pointIds, question.lock);
         return;
       case "serve-hitter":
         void followServeHitter(question.shotId, question.follow);
@@ -2530,11 +2638,16 @@ export function LabelConsole({
     fixTiebreakServe,
     setGameType,
     findGap,
-    goToFlag: (pointId: string) => findGap(pointId, { arm: true }),
+    goToFlag: (pointId: string) => {
+      lastFlagPointId.current = pointId;
+      findGap(pointId, { arm: true });
+    },
     pullGamePoints,
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
     clearEnteredScore: () => void updateSessionFields({ final_score: null }),
     videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
+    saveStartScore: (start: LabelStartScore | null) =>
+      void updateSessionFields({ start_score: start }),
   });
 
   // Enter unfolds the open point and ⌘ Enter checks or unchecks it; Space and
@@ -2558,6 +2671,7 @@ export function LabelConsole({
   // (a serve the vendor missed).
   // C: the court's other end — contact ↔ landing — for the selected stroke.
   // X: Flip side — the placing half across the net, as the court's button.
+  // T: the selected stroke's time = the frame the film stands on.
   // Delete / Backspace: delete the selected stroke, through the same confirm
   // as its tray's Delete shot.
   const addShotKey = useRef<() => boolean>(() => false);
@@ -2565,20 +2679,30 @@ export function LabelConsole({
   const deleteShotKey = useRef<() => boolean>(() => false);
   const endKey = useRef<() => boolean>(() => false);
   const flipKey = useRef<() => boolean>(() => false);
+  const timeKey = useRef<() => boolean>(() => false);
+  const resetShotKey = useRef<() => boolean>(() => false);
+  const resetPointKey = useRef<() => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
   const foldOpenPoint = useRef<() => boolean>(() => false);
   // ⌘Z: the header's Undo.
   const undoLastRef = useRef<() => void>(() => {});
   // Space and ← / →: the labeller driving the film lets a replay go.
   const cancelReplayRef = useRef<() => void>(() => {});
+  // ← / →: stepping the film a point (`stepFilm`).
+  const stepFilmRef = useRef<(direction: -1 | 1) => void>(() => {});
   // The rail's amber slots as stops, read off the rows once for the keys
   // here and the rail's header — marks or none.
   const slotJumpStops = useMemo(
     () =>
       operable
-        ? slotStops(points, session.adScoring, matchTiebreakSetNumber)
+        ? slotStops(
+            points,
+            session.adScoring,
+            matchTiebreakSetNumber,
+            startScore,
+          )
         : NO_SLOT_STOPS,
-    [operable, points, session.adScoring, matchTiebreakSetNumber],
+    [operable, points, session.adScoring, matchTiebreakSetNumber, startScore],
   );
   // The two lists the rail's header steps: what can move the score — the
   // amber flagged points, the set that doesn't add up and every amber slot
@@ -2594,6 +2718,7 @@ export function LabelConsole({
         finalScore: sessionFields.finalScore,
         matchScore: session.matchScore,
         videoEndsEarly: sessionFields.videoEndsEarly,
+        startScore: sessionFields.startScore,
       }),
       points,
     );
@@ -2624,14 +2749,27 @@ export function LabelConsole({
     };
     stepToFlag.current = (direction, kind) => {
       if (confirm) return;
-      const flag = stepFlag(flagStops[kind], points, currentPointId, direction);
-      if (flag) findGap(flag.pointId, { arm: true });
+      const from = flagStepOrigin(
+        lastFlagPointId.current,
+        currentPointId,
+        points,
+      );
+      const flag = stepFlag(flagStops[kind], points, from, direction);
+      if (!flag) return;
+      lastFlagPointId.current = flag.pointId;
+      findGap(flag.pointId, { arm: true });
     };
     stepShot.current = (direction) => {
-      if (confirm || !expanded || unfoldedPointId !== expanded.id) return;
+      if (confirm || !expanded) return;
       const shots = liveShotsInOrder(expanded, drawsGhosts(marks));
       if (shots.length === 0) return;
-      const at = shots.findIndex((shot) => shot.id === placement.shotId);
+      // A folded point opens on the key: ↓ lands on its first stroke and ↑
+      // on its last, whatever was selected before it folded.
+      const folded = unfoldedPointId !== expanded.id;
+      if (folded) setFoldedPointId(null);
+      const at = folded
+        ? -1
+        : shots.findIndex((shot) => shot.id === placement.shotId);
       // From no stroke, ↓ takes the first and ↑ the last; the ends do not wrap.
       const next =
         at === -1
@@ -2690,6 +2828,37 @@ export function LabelConsole({
       );
       return true;
     };
+    // R / ⇧R only ask: the same confirm as the tray's Reset shot and the
+    // pencil / point menu's Reset point, never a direct reset.
+    resetShotKey.current = () => {
+      if (!operable || confirm || placement.shotId === null) return false;
+      const owner = pointOfShot(points, placement.shotId);
+      const shot = owner?.shots.find((s) => s.id === placement.shotId);
+      if (!owner || !shot || shot.status === "deleted") return false;
+      if (expanded && owner.id !== expanded.id) return false;
+      if (!canResetShot(shot)) return false;
+      const number =
+        liveShotsInOrder(owner, drawsGhosts(marks)).findIndex(
+          (s) => s.id === shot.id,
+        ) + 1;
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      rowOperations.onAskResetShot(
+        shot.id,
+        Math.max(1, number),
+        owner.pointIndex + 1,
+      );
+      return true;
+    };
+    resetPointKey.current = () => {
+      if (!operable || confirm || !expanded) return false;
+      if (!canResetPoint(expanded)) return false;
+      if (!pointResetScope(expanded, sharesVendorRally(expanded, points))) {
+        return false;
+      }
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      rowOperations.onAskResetPoint(expanded.id);
+      return true;
+    };
     // The stroke a shot key acts on: the selected one while it is the open
     // point's; else the open point's first, selected first so the next key
     // lands on it too. A selection left behind in another point — the film
@@ -2733,6 +2902,24 @@ export function LabelConsole({
       setPlacement(flipPlacement);
       return true;
     };
+    // T writes only the stroke already selected — never one it would pick
+    // (`keyShot`) — and only in the open point: the frame on screen is that
+    // stroke's frame, read off the player on the file's clock and put back
+    // on the analysis clock with `fileOffset` (`frameTimePatch`).
+    timeKey.current = () => {
+      if (!editable || confirm || placement.shotId === null) return false;
+      const owner = pointOfShot(points, placement.shotId);
+      const shot = owner?.shots.find((s) => s.id === placement.shotId);
+      if (!owner || !shot || shot.status === "deleted") return false;
+      if (expanded && owner.id !== expanded.id) return false;
+      const patch = frameTimePatch(
+        shot,
+        player.current?.currentTime() ?? null,
+        fileOffset,
+      );
+      if (patch) requestPatchShot(shot.id, patch);
+      return true;
+    };
     strokeKey.current = (key) => {
       if (!operable || confirm) return false;
       const shot = keyShot();
@@ -2753,6 +2940,7 @@ export function LabelConsole({
     };
     undoLastRef.current = () => void undoLast();
     cancelReplayRef.current = cancelReplay;
+    stepFilmRef.current = stepFilm;
     jumpAfterOpen.current = (pointId) => findGap(pointId);
     foldOpenPoint.current = () => {
       if (confirm || !expanded || unfoldedPointId !== expanded.id) return false;
@@ -2830,8 +3018,9 @@ export function LabelConsole({
       }
       // A stroke key reaches the selected stroke from a focused cell too (a
       // cell is a button), and so do A / ⇧A (add a stroke after / before),
-      // C (contact ↔ landing), X (flip side) and Delete / Backspace (delete
-      // the stroke); a text field, a menu and a dialog keep all of them.
+      // C (contact ↔ landing), X (flip side), T (time = frame), Delete /
+      // Backspace (delete the stroke) and R / ⇧R (ask to reset the stroke /
+      // point); a text field, a menu and a dialog keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
       const consoleKey = isStrokeKey(key)
         ? () => strokeKey.current(key)
@@ -2843,9 +3032,15 @@ export function LabelConsole({
             ? () => endKey.current()
             : lower === "x"
               ? () => flipKey.current()
-              : key === "Delete" || key === "Backspace"
-                ? () => deleteShotKey.current()
-                : null;
+              : lower === "t" && !event.shiftKey
+                ? () => timeKey.current()
+                : lower === "r"
+                  ? event.shiftKey
+                    ? () => resetPointKey.current()
+                    : () => resetShotKey.current()
+                  : key === "Delete" || key === "Backspace"
+                    ? () => deleteShotKey.current()
+                    : null;
       if (
         consoleKey &&
         !event.metaKey &&
@@ -2924,8 +3119,7 @@ export function LabelConsole({
         cancelReplayRef.current();
         player.current?.togglePlay();
       } else {
-        cancelReplayRef.current();
-        player.current?.step(key === "ArrowLeft" ? -1 : 1);
+        stepFilmRef.current(key === "ArrowLeft" ? -1 : 1);
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -2971,8 +3165,7 @@ export function LabelConsole({
       event.stopPropagation();
       (document.activeElement as HTMLElement | null)?.blur?.();
       if (arrow) {
-        cancelReplayRef.current();
-        player.current?.step(event.key === "ArrowLeft" ? -1 : 1);
+        stepFilmRef.current(event.key === "ArrowLeft" ? -1 : 1);
       } else if (!event.repeat) {
         cancelReplayRef.current();
         player.current?.togglePlay();
@@ -3010,7 +3203,14 @@ export function LabelConsole({
     if (placement.shotId === null) return;
     const shot = findShot(points, placement.shotId);
     if (!shot) return;
-    const next = nextPlacement(placement, point, labelShotValues(shot));
+    const owner = pointOfShot(points, shot.id);
+    const strokes = owner ? liveShotsInOrder(owner, drawsGhosts(marks)) : [];
+    const next = nextPlacement(
+      placement,
+      point,
+      labelShotValues(shot),
+      strokes,
+    );
     if (!next) return;
     stopReplay();
     // A placement answers the step only once its stroke has both ends: a
@@ -3019,12 +3219,9 @@ export function LabelConsole({
     // mode the step is noted and the console moves on, outside it the queue
     // only stops asking (the labeller chose this stroke; nothing lands for
     // them). In review mode a stroke with no step about it (the one an
-    // answer added) forces the move on regardless.
-    // A contact near the run-off's back edge only grows the box and keeps
-    // the contact armed for a deeper click: not an answer yet.
-    const growing =
-      placement.target === "contact" && next.state.target === "contact";
-    if (!growing && placesBothEnds(shot, next.patch)) {
+    // answer added) forces the move on regardless — its landing on the
+    // next stroke's contact (`nextPlacement`) stands until the advance lands.
+    if (placesBothEnds(shot, next.patch)) {
       if (step?.target.shotId === shot.id) {
         if (reviewMode) noteAnswered();
         else closeQueuedItem();
@@ -3032,6 +3229,21 @@ export function LabelConsole({
         notePlaced();
       }
     }
+    // A landing that moved the court on to the next stroke says so.
+    const nextNumber =
+      next.state.shotId === null
+        ? -1
+        : strokes.findIndex((s) => s.id === next.state.shotId);
+    const notice = placementNotice(
+      placement,
+      next.state,
+      nextNumber === -1 ? null : nextNumber + 1,
+    );
+    setPlacementNoticeState(
+      notice && next.state.shotId
+        ? { shotId: next.state.shotId, text: notice }
+        : null,
+    );
     setPlacement(next.state);
     void patchShot(shot.id, next.patch);
   }
@@ -3054,6 +3266,7 @@ export function LabelConsole({
       readout={readout}
       onTime={clock.set}
       onPause={onFilmPause}
+      onStep={stepFilm}
       clockTargetRef={rootRef}
       square={fullScreen}
     />
@@ -3212,7 +3425,16 @@ export function LabelConsole({
       info={pointInfo}
       onEstimate={editable ? setEstimate : undefined}
       clock={clock}
+      notice={
+        placementNoticeState &&
+        placement.shotId === placementNoticeState.shotId &&
+        placement.target === "contact"
+          ? placementNoticeState.text
+          : null
+      }
       onPlace={place}
+      // A click on a mark already drawn opens that stroke on that end.
+      onSelectShot={(shotId, end) => selectShot(shotId, end)}
       onTarget={setTarget}
       onFlip={() => setPlacement(flipPlacement)}
     />
@@ -3295,6 +3517,8 @@ export function LabelConsole({
       finalScore={sessionFields.finalScore}
       videoEndsEarly={sessionFields.videoEndsEarly}
       matchScore={session.matchScore}
+      startScore={startScore}
+      onSaveStartScore={operable ? railHandlers.saveStartScore : undefined}
       onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
       onFindGap={operable ? railHandlers.findGap : undefined}
       onGoToPoint={railHandlers.goToFlag}
@@ -3417,6 +3641,7 @@ export function LabelConsole({
           marks={liveMarks}
           games={scores.games}
           adScoring={session.adScoring}
+          startScore={startScore}
           names={names}
           finalScore={sessionFields.finalScore}
           matchScore={session.matchScore}
@@ -3431,6 +3656,7 @@ export function LabelConsole({
             games: scores.games,
             names,
             matchTiebreakSet: matchTiebreakSetNumber,
+            startScore,
           })}
           complete={status === "complete"}
           upload={upload}
@@ -3523,11 +3749,15 @@ export interface LabelConsoleOperations {
     to: LabelGame,
     switchServer: boolean,
   ) => Promise<LabelMovePointResult>;
-  /** A dragged header's points in one write; absent, one `movePoint` each. */
+  /**
+   * A dragged header's points in one write, with the game's lock
+   * (game-boundary.ts); absent, one `movePoint` each and no lock.
+   */
   movePoints?: (
     pointIds: string[],
     to: LabelGame,
     switchServer: boolean,
+    lock?: GameBoundaryLock,
   ) => Promise<LabelMovePointsResult>;
   setChecked: (
     pointId: string,
@@ -3612,7 +3842,7 @@ export interface LabelConsoleOperations {
   reopenSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
   /**
    * Rewind the session's newest action, whatever it was, and answer the rows
-   * as they now stand (undo-session.ts). Absent: no "Undo".
+   * it touched as a diff (undo-session.ts). Absent: no "Undo".
    */
   undo?: (sessionId: string) => Promise<LabelUndoResult>;
   /**
@@ -3771,6 +4001,7 @@ function pointMoveSettled(
       gameNumber: result.gameNumber,
       winner: result.winner,
       endedBy: result.endedBy,
+      gameStartLocked: result.gameStartLocked,
     })),
     result.shots,
   );
@@ -3790,6 +4021,7 @@ function pointMovePutBack(
       status: before.status,
       winner: before.winner,
       endedBy: before.endedBy,
+      gameStartLocked: before.gameStartLocked,
     })),
     shotSwapsOf(before.shots),
   );

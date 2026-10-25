@@ -22,10 +22,13 @@ import type {
   LabelVideo,
 } from "@/lib/services/labels/session";
 import { count, tag as tagOf, text } from "./fixtures/html-probe";
+import { applyUndoDiff } from "@/lib/services/labels/undo-diff";
 import {
   FIXTURE_POINT_IDS,
   editContext,
+  labelPoint,
   labelSessionFixture,
+  labelShot,
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -594,7 +597,7 @@ test.describe("the playing row", () => {
     expect(text(html)).not.toContain("Now playing");
   });
 
-  test("held, only the playing point is unfolded — a hold is about the scroll, not a second well", () => {
+  test("held, the pin holds while another point plays — one well, the held one's (T10)", () => {
     const html = render({
       session: labelSessionFixture(),
       video: null,
@@ -603,18 +606,46 @@ test.describe("the playing row", () => {
       // Point 2's ace.
       initialVideoTime: 2490.5,
     });
-    // The point row and its playing stroke.
-    expect(count(html, PLAYING)).toBe(2);
+    // Point 2's row is still lit as the playing one.
     expect(
       rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P2}"`),
     ).toContain('data-playing="true"');
-    // Point 2 is the current point: the one well, and the court, are its;
-    // point 1 is folded. The way back to following is still offered.
-    expect(html).not.toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
-    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
+    // Point 1 is the current point: the one well, and the court, are its;
+    // point 2 stays folded. The way back to the playing point is offered.
+    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
+    expect(html).not.toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
     expect(count(html, /data-shots-for=/g)).toBe(1);
-    expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Point 2</);
-    expect(html).toContain("data-label-follow-pill");
+    expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Point 1</);
+    expect(html).toContain(
+      'aria-label="Now playing: point 2 — follow playback"',
+    );
+  });
+
+  test("held with a stroke of the held point selected, the selection stays while another point plays", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialPointFocus: { mode: "held", pointId: FIXTURE_POINT_IDS.P1 },
+      initialSelectedShotId: "s-return",
+      initialVideoTime: 2490.5,
+    });
+    expect(rowMarkup(html, 'data-shot-id="s-return"')).toContain(
+      "data-selected",
+    );
+  });
+
+  test("following, a stroke selected in a point the film has left is let go", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialPointFocus: { mode: "follow" },
+      initialSelectedShotId: "s-return",
+      initialVideoTime: 2490.5,
+    });
+    // Point 2 is current, and point 1's stroke is no longer selected: no
+    // stroke key or court click can reach a point the well does not show.
+    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
+    expect(html).not.toContain("data-selected");
   });
 
   test("held with nothing named, the playing point is still the current one", () => {
@@ -913,11 +944,18 @@ test.describe("a flag jump lands on the point's review step", () => {
     // stops asking the item and nothing lands. A stroke with no step about
     // it (the one an answer added) forces the move on, in review mode only.
     expect(placeSource).toMatch(
-      /if \(!growing && placesBothEnds\(shot, next\.patch\)\) \{\n\s+if \(step\?\.target\.shotId === shot\.id\) \{\n\s+if \(reviewMode\) noteAnswered\(\);\n\s+else closeQueuedItem\(\);\n\s+\} else if \(reviewMode && inlineAnchor\?\.strokeId === shot\.id\) \{\n\s+notePlaced\(\);\n\s+\}\n\s+\}/,
+      /if \(placesBothEnds\(shot, next\.patch\)\) \{\n\s+if \(step\?\.target\.shotId === shot\.id\) \{\n\s+if \(reviewMode\) noteAnswered\(\);\n\s+else closeQueuedItem\(\);\n\s+\} else if \(reviewMode && inlineAnchor\?\.strokeId === shot\.id\) \{\n\s+notePlaced\(\);\n\s+\}\n\s+\}/,
     );
     expect(placeSource.match(/noteAnswered\(\)/g)).toHaveLength(1);
     expect(placeSource.match(/closeQueuedItem\(\)/g)).toHaveLength(1);
     expect(placeSource.match(/notePlaced\(\)/g)).toHaveLength(1);
+    // No click grows the run-off any more: every contact moves on.
+    expect(placeSource).not.toContain("growing");
+    // The point's live strokes go in, so a landing moves on to the next.
+    expect(placeSource).toMatch(
+      /nextPlacement\(\s*placement,\s*point,\s*labelShotValues\(shot\),\s*strokes,?\s*\)/,
+    );
+    expect(placeSource).toContain("placementNotice(");
   });
 
   test("landing on a step about no stroke clears the selection, so the point-level question is the one asked", () => {
@@ -936,11 +974,11 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(consoleSource).toMatch(
       /stepToFlag\.current\(key === "\]" \? 1 : -1, "score"\)/,
     );
-    expect(consoleSource).toContain(
-      "if (flag) findGap(flag.pointId, { arm: true });",
+    expect(consoleSource).toMatch(
+      /if \(!flag\) return;\s*lastFlagPointId\.current = flag\.pointId;\s*findGap\(flag\.pointId, \{ arm: true \}\);/,
     );
-    expect(consoleSource).toContain(
-      "goToFlag: (pointId: string) => findGap(pointId, { arm: true }),",
+    expect(consoleSource).toMatch(
+      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
     );
     expect(consoleSource).toContain("onGoToPoint={railHandlers.goToFlag}");
     // "Find the gap", the overview's open-on-point and a clicked row do not.
@@ -1018,7 +1056,15 @@ test.describe("a flag jump lands on the point's review step", () => {
       consoleSource.indexOf('if (key === "Enter") unfoldOpenPoint.current();'),
       consoleSource.indexOf('window.addEventListener("keydown", onKeyDown);'),
     );
-    expect(keys.match(/cancelReplayRef\.current\(\);/g)).toHaveLength(2);
+    // Space lets the replay go itself; ← / → through `stepFilm`, which does.
+    expect(keys.match(/cancelReplayRef\.current\(\);/g)).toHaveLength(1);
+    expect(keys).toContain("stepFilmRef.current(");
+    const stepFilm = consoleSource.slice(
+      consoleSource.indexOf("function stepFilm("),
+    );
+    expect(stepFilm.slice(0, stepFilm.indexOf("\n  }\n"))).toContain(
+      "cancelReplay();",
+    );
     // A row click lets the replay go; a jump or an answer also stops the
     // film, so a replay never plays on into the next point.
     const togglePoint = consoleSource.slice(
@@ -1095,12 +1141,11 @@ test.describe("a flag jump lands on the point's review step", () => {
 
   test("↓ and ] still step after a jump that selected a stroke", () => {
     // ↓ walks from the selected stroke of the unfolded point; ] steps flags
-    // from the current point. Neither reads anything the jump leaves behind.
+    // from the last flag landed on, else the current point.
     const stepShot = consoleSource.slice(
       consoleSource.indexOf("stepShot.current = (direction) => {"),
-      consoleSource.indexOf("undoLastRef.current = () =>"),
+      consoleSource.indexOf("addShotKey.current = () => {"),
     );
-    expect(stepShot).toContain("unfoldedPointId !== expanded.id");
     expect(stepShot).toContain(
       "shots.findIndex((shot) => shot.id === placement.shotId)",
     );
@@ -1109,7 +1154,57 @@ test.describe("a flag jump lands on the point's review step", () => {
       consoleSource.indexOf("stepShot.current = (direction) => {"),
     );
     expect(stepFlag).toContain(
-      "stepFlag(flagStops[kind], points, currentPointId, direction)",
+      "stepFlag(flagStops[kind], points, from, direction)",
+    );
+  });
+
+  test("↑ / ↓ on a folded point unfold it onto its first or last stroke", () => {
+    const stepShot = consoleSource.slice(
+      consoleSource.indexOf("stepShot.current = (direction) => {"),
+      consoleSource.indexOf("addShotKey.current = () => {"),
+    );
+    // No bail on a folded point: only a confirm or no point stops the key.
+    expect(stepShot).toContain("if (confirm || !expanded) return;");
+    expect(stepShot).not.toMatch(/unfoldedPointId !== expanded\.id\)\s*return/);
+    expect(stepShot).toContain(
+      "const folded = unfoldedPointId !== expanded.id;",
+    );
+    expect(stepShot).toContain("if (folded) setFoldedPointId(null);");
+    // Folded, the selection before it is ignored: from no stroke, ↓ takes the
+    // first and ↑ the last.
+    expect(stepShot).toMatch(
+      /const at = folded\s*\?\s*-1\s*:\s*shots\.findIndex/,
+    );
+    expect(stepShot).toMatch(
+      /at === -1\s*\?\s*direction === 1\s*\?\s*0\s*:\s*shots\.length - 1/,
+    );
+    expect(stepShot).toContain("selectShot(shots[next].id);");
+  });
+
+  test("the flag keys step from the last flag landed on until the labeller moves off it", () => {
+    const stepFlag = consoleSource.slice(
+      consoleSource.indexOf("stepToFlag.current = (direction, kind) => {"),
+      consoleSource.indexOf("stepShot.current = (direction) => {"),
+    );
+    expect(stepFlag).toMatch(
+      /const from = flagStepOrigin\(\s*lastFlagPointId\.current,\s*currentPointId,\s*points,\s*\);/,
+    );
+    expect(stepFlag).toContain("lastFlagPointId.current = flag.pointId;");
+    // The header's flag rows land on a flag too.
+    expect(consoleSource).toMatch(
+      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
+    );
+    // A row click, or ← / →, lets it go.
+    const body = (name: string) => {
+      const from = consoleSource.indexOf(`  function ${name}(`);
+      return consoleSource.slice(from, consoleSource.indexOf("\n  }\n", from));
+    };
+    expect(body("togglePoint")).toContain("lastFlagPointId.current = null;");
+    expect(body("stepFilm")).toContain("lastFlagPointId.current = null;");
+    // Selecting a stroke of another point lets it go; one of the flag's own
+    // (the jump's landing) keeps it.
+    expect(body("selectShot")).toContain(
+      "if (owner?.id !== lastFlagPointId.current) lastFlagPointId.current = null;",
     );
   });
 
@@ -1448,7 +1543,7 @@ test("clicking into the row a flag jump selected, or editing a cell, ends review
   );
   // The already-selected row's click is the labeller's: review mode ends.
   expect(rowSource).toMatch(
-    /if \(!selected\) onSelectShot\?\.\(shot\.id\);\n\s*else edit\.onExitReview\?\.\(\);/,
+    /if \(!selected\) \{\n\s*if \(seek\) onSelectShot\?\.\(shot\.id\);\n\s*else onSelectShot\?\.\(shot\.id, undefined, \{ seek: false \}\);\n\s*\} else edit\.onExitReview\?\.\(\);/,
   );
   expect(consoleSource).toContain(
     "const exitReview = useCallback(() => setReviewMode(false), []);",
@@ -1484,5 +1579,99 @@ test.describe("Enter and ⌘ Enter", () => {
     expect(consoleSource).toContain(
       "setChecked(expanded.id, expanded.checkedAt === null);",
     );
+  });
+});
+
+test.describe("Undo applies a diff (undo-diff.ts), never a whole re-read", () => {
+  const consoleSource = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+
+  test("the console's undoLast merges the answer into its rows", () => {
+    const body = consoleSource.slice(
+      consoleSource.indexOf("  async function undoLast() {"),
+    );
+    const fn = body.slice(0, body.indexOf("\n  }\n"));
+    expect(fn).toContain(
+      "applyUndoDiff(rows, result.changed, result.removedPointIds)",
+    );
+    expect(fn).not.toContain("setPoints(result.points)");
+  });
+
+  test("changed points replace theirs in place, removed ones leave, the rail order holds", () => {
+    const session = labelSessionFixture();
+    const { P1, P2, P3, P4 } = FIXTURE_POINT_IDS;
+    const p3 = session.points.find((p) => p.id === P3)!;
+    const changedP3 = {
+      ...p3,
+      winner: "p2" as const,
+      status: "edited" as const,
+    };
+    // Answered out of rail order, with a point the console has never seen.
+    const restored = labelPoint("p-restored", 2.5, {
+      shots: [labelShot("s-restored", "p-restored", { eventId: 900 })],
+    });
+    const rows = applyUndoDiff(session.points, [restored, changedP3], [P2]);
+    expect(rows.map((p) => p.id)).toEqual([P1, P3, "p-restored", P4]);
+    expect(rows[1]).toBe(changedP3);
+    expect(rows[0]).toBe(session.points[0]);
+    expect(rows[3]).toBe(session.points[3]);
+    // The fixture itself is untouched.
+    expect(session.points.map((p) => p.id)).toEqual([P1, P2, P3, P4]);
+  });
+
+  test("an undone split comes back right: both owners are in the diff, each with the strokes it owns", () => {
+    const session = labelSessionFixture();
+    const { P1, P2, P3, P4 } = FIXTURE_POINT_IDS;
+    // Before the undo the console shows the split: P4's strokes after its
+    // fault went to a new point P5, and P4 moved down a slot behind it.
+    const p4 = session.points[3];
+    const [fault, ...moved] = p4.shots;
+    const beforeUndo: LabelPoint[] = [
+      ...session.points.slice(0, 3),
+      { ...p4, shots: [fault] },
+      labelPoint("p-0005", 4, {
+        status: "added",
+        shots: moved.map((s) => ({ ...s, labelPointId: "p-0005" })),
+      }),
+    ];
+    // The server answers P4 whole again and names the point it deleted.
+    const rows = applyUndoDiff(beforeUndo, [p4], ["p-0005"]);
+    expect(rows.map((p) => [p.id, p.pointIndex])).toEqual([
+      [P1, 0],
+      [P2, 1],
+      [P3, 2],
+      [P4, 3],
+    ]);
+    const shotOwners = rows.flatMap((p) => p.shots.map((s) => [s.id, p.id]));
+    expect(shotOwners.filter(([, owner]) => owner === P4).length).toBe(
+      p4.shots.length,
+    );
+    // No stroke under two points, none lost.
+    expect(new Set(shotOwners.map(([id]) => id)).size).toBe(shotOwners.length);
+    expect(shotOwners.length).toBe(
+      session.points.reduce((n, p) => n + p.shots.length, 0),
+    );
+  });
+
+  test("an undone combine, the other way: two points answered, the merged one shrinks", () => {
+    const session = labelSessionFixture();
+    const { P1, P2, P3, P4 } = FIXTURE_POINT_IDS;
+    const p1 = session.points[0];
+    const p2 = session.points[1];
+    // The console shows P1 holding P2's strokes, P2 a tombstone with none.
+    const combined = session.points.map((p) =>
+      p.id === P1
+        ? { ...p, shots: [...p.shots, ...p2.shots] }
+        : p.id === P2
+          ? { ...p, shots: [], status: "deleted" as const }
+          : p,
+    );
+    const rows = applyUndoDiff(combined, [p2, p1], []);
+    expect(rows.map((p) => p.id)).toEqual([P1, P2, P3, P4]);
+    expect(rows[0].shots.map((s) => s.id)).toEqual(p1.shots.map((s) => s.id));
+    expect(rows[1].shots.map((s) => s.id)).toEqual(p2.shots.map((s) => s.id));
+    expect(rows[1].status).toBe(p2.status);
   });
 });

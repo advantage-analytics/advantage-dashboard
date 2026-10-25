@@ -225,6 +225,60 @@ test.describe("effectiveShotResult", () => {
     expect(effectiveShotResult({})).toBeNull();
   });
 
+  test("a call the labeller set outranks the ends; the seed's call does not", () => {
+    const seed = {
+      stroke: "forehand" as const,
+      hitter: "p1" as const,
+      result: "in" as const,
+      spin: null,
+      contact_x: 1,
+      contact_y: 2,
+      landing_x: 1,
+      landing_y: 26,
+      video_time: 10,
+    };
+    // Seeded call on seeded ends: the vendor's, and the long landing wins.
+    expect(
+      effectiveShotResult({
+        stroke: "forehand",
+        result: "in",
+        ...placedLong,
+        seed,
+      }),
+    ).toBe("out");
+    // Flipped in the tray, ends untouched: the labeller's call stands.
+    expect(
+      effectiveShotResult({
+        stroke: "forehand",
+        result: "net",
+        ...placedLong,
+        seed,
+        status: "edited",
+      }),
+    ).toBe("net");
+    // The seeded call after an end moved is still the seed's: the volley link
+    // moves a landing without rewriting the call, so the ends win.
+    expect(
+      effectiveShotResult({
+        stroke: "forehand",
+        result: "in",
+        ...placedLong,
+        landingY: 25.9,
+        seed,
+      }),
+    ).toBe("out");
+    // An added stroke has no seed: whatever call it stores is the labeller's.
+    expect(
+      effectiveShotResult({
+        stroke: "forehand",
+        result: "in",
+        ...placedLong,
+        seed: null,
+        status: "added",
+      }),
+    ).toBe("in");
+  });
+
   test("a let stays a let whatever its placed ends say", () => {
     expect(
       effectiveShotResult({

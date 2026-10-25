@@ -64,6 +64,7 @@ import {
   type LabelPoint,
   type LabelShot,
   type LabelSide,
+  type LabelStartScore,
 } from "./session";
 import { deriveShotResult } from "./shot-derived";
 
@@ -168,8 +169,16 @@ export function openingMarks(
   fileMarks: LabelMarks,
   points: readonly LabelPoint[],
   adScoring: boolean,
+  /** `session.startScore`: where the video starts in the match. */
+  start: LabelStartScore | null = null,
 ): LabelMarks {
-  return withLiveScoreMarks(fileMarks, seededScorePoints(points), adScoring);
+  return withLiveScoreMarks(
+    fileMarks,
+    seededScorePoints(points),
+    adScoring,
+    undefined,
+    start,
+  );
 }
 
 export interface ScorecardRow {
@@ -340,6 +349,8 @@ export interface ScorecardOptions {
   ghosts?: boolean;
   /** The vendor's strokes by label shot id; a shot not here has none. */
   vendor?: ReadonlyMap<string, VendorStrokeFacts>;
+  /** `session.startScore`: the games section counts from it. Null: 0–0. */
+  startScore?: LabelStartScore | null;
 }
 
 /** A last stroke seeded In whose seeded coordinates say Out or Net. */
@@ -483,6 +494,7 @@ function fieldChanges(
 function gameFindings(
   points: readonly LabelPoint[],
   adScoring: boolean,
+  start: LabelStartScore | null,
 ): Scorecard["games"] {
   const members = new Map<string, LabelPoint[]>();
   for (const point of points) {
@@ -495,7 +507,7 @@ function gameFindings(
   }
   const undecided: GameRow[] = [];
   const overflow: GameRow[] = [];
-  for (const band of labelScores(points, adScoring).games) {
+  for (const band of labelScores(points, adScoring, start).games) {
     if (band.gameType !== "game") continue;
     const game = members.get(gameKey(band)) ?? [];
     const server = game[0]?.server ?? null;
@@ -606,7 +618,12 @@ export function buildScorecard(
   marks: LabelMarks,
   options: ScorecardOptions = {},
 ): Scorecard {
-  const { adScoring = true, ghosts = true, vendor = new Map() } = options;
+  const {
+    adScoring = true,
+    ghosts = true,
+    vendor = new Map(),
+    startScore = null,
+  } = options;
   const rows = new Map<string, ScorecardRow>();
   const itemRows = new Map<string, ScorecardItemRow>();
   const unmarkedChanges: UnmarkedChange[] = [];
@@ -855,7 +872,7 @@ export function buildScorecard(
     unmarkedChanges,
     seededInLastStrokes,
     deletedShots: [...deleted.values()].sort((a, b) => b.deleted - a.deleted),
-    games: gameFindings(points, adScoring),
+    games: gameFindings(points, adScoring, startScore),
     winnerFlips: byPoints([...flips.values()]),
     lastResultChanges: byPoints([...resultChanges.values()]),
     lastLandings,

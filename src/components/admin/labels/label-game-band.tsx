@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useState } from "react";
-import { ChevronDown, GripVertical } from "lucide-react";
+import { ChevronDown, GripVertical, Lock } from "lucide-react";
 import {
   FloatMenu,
   FloatMenuItem,
@@ -44,6 +44,11 @@ export interface GameBandModel {
   server: LabelSide | null;
   /** The game's live points — what a server or type change rewrites. */
   pointCount: number;
+  /**
+   * The labeller dragged this game's start (game-boundary.ts): its first live
+   * point holds `gameStartLocked`. The band says so ("set by you").
+   */
+  locked: boolean;
 }
 
 export function gameBandModel(
@@ -62,6 +67,7 @@ export function gameBandModel(
     score: band.gamesBefore,
     server: gameFirstServer(live),
     pointCount: live.length,
+    locked: live[0]?.gameStartLocked === true,
   };
 }
 
@@ -248,6 +254,25 @@ export const LabelGameBand = memo(function LabelGameBand({
       ? gameBandMenus(model, names, { onSetGameType, onSetGameServer })
       : null;
   const ended = outcome ? gameBandOutcome(outcome, names) : null;
+  // A start the labeller dragged into place: a lock and "set by you" after
+  // the game's name, in the label's own ink (Design B, 2026-10-24).
+  const lockMark = model.locked ? (
+    <span
+      data-game-locked=""
+      className={cn(
+        BAND_LABEL,
+        PAINT.labelInk,
+        "ml-1.5 flex items-center gap-1",
+      )}
+    >
+      <Lock
+        className="size-2.5 shrink-0"
+        strokeWidth={1.8}
+        aria-hidden="true"
+      />
+      set by you
+    </span>
+  ) : null;
   // The tail's gap from the server is its own margin, not a leading space:
   // with menus the server is a trigger whose `-mr-1.5` takes back its padding
   // and the flex row drops a text space, so the dot would sit flush against
@@ -318,11 +343,15 @@ export const LabelGameBand = memo(function LabelGameBand({
           >
             {model.gameLabel}
           </BandMenu>
+          {lockMark}
         </span>
       ) : (
-        <span className={cn(BAND_LABEL, PAINT.labelInk)}>
-          {model.setLabel ? `${model.setLabel} · ` : ""}
-          {model.gameLabel}
+        <span className="flex items-center">
+          <span className={cn(BAND_LABEL, PAINT.labelInk)}>
+            {model.setLabel ? `${model.setLabel} · ` : ""}
+            {model.gameLabel}
+          </span>
+          {lockMark}
         </span>
       )}
       <span className="flex-1" />

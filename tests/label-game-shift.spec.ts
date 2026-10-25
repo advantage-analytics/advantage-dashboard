@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -20,15 +21,22 @@ import {
   writeLabelGamePull,
   writeLabelGameShift,
 } from "@/lib/services/labels/game-shift-session";
+import {
+  lockedGameImbalance,
+  lockedGames,
+  planGameBoundary,
+} from "@/lib/services/labels/game-boundary";
 import { gameKey, labelScores } from "@/lib/services/labels/score";
+import { applyUndoDiff } from "@/lib/services/labels/undo-diff";
 import type {
   LabelGameType,
   LabelPoint,
   LabelSession,
   LabelShot,
   LabelSide,
+  LabelStartScore,
 } from "@/lib/services/labels/session";
-import { inner, tag } from "./fixtures/html-probe";
+import { inner, tag, text } from "./fixtures/html-probe";
 import {
   fakeLabelClient,
   labelPoint,
@@ -2038,5 +2046,414 @@ test.describe("planGameSplit", () => {
       [3, 2],
       [2, 3],
     ]);
+  });
+});
+
+// ── A video that starts mid-match ────────────────────────────────────────────
+
+test.describe("a start score", () => {
+  /** The video opens with Lee serving at 15–0, two games up. */
+  const start = {
+    sets: [0, 0] as [number, number],
+    games: [2, 0] as [number, number],
+    points: [1, 0] as [number, number],
+    server: "p1" as const,
+  };
+  /** Three Lee points finish the first game only when counted from 15–0. */
+  const fromStart = () =>
+    match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1"] },
+      { game: 2, server: "p2", winners: ["p2", "p2", "p2", "p2"] },
+    ]);
+
+  test("a game complete only from the start is neither overflow nor underflow", () => {
+    expect(gameOverflow(fromStart(), true, null, start)).toEqual([]);
+    expect(gameUnderflow(fromStart(), true, null, start)).toEqual([]);
+    // Counted from 0–0 the same rows leave game 1 short at 40–0.
+    expect(gameOverflow(fromStart(), true)).toEqual([]);
+    expect(gameUnderflow(fromStart(), true).map((g) => g.score)).toEqual([
+      "40–0",
+    ]);
+    expect(planGamePull(fromStart(), "1·1", true, null, start)).toEqual({
+      error: "That game is not short — there is nothing to pull in.",
+    });
+  });
+
+  test("a game decided from the start before its last row overflows by the rows past it", () => {
+    // Game 2 takes the moved row as its fourth point, settled on its last.
+    const points = match([
+      { game: 1, server: "p1", winners: ["p1", "p2"] },
+      { game: 2, server: "p2", winners: ["p2", "p2", "p2"] },
+    ]);
+    const atForty = { ...start, points: [3, 0] as [number, number] };
+    const overflow = gameOverflow(points, true, null, atForty);
+    expect(overflow).toHaveLength(1);
+    expect(overflow[0]).toMatchObject({ gameNumber: 1, decidedBy: "p1" });
+    expect(ids(overflow[0].leftovers)).toEqual([UUID(2)]);
+    expect([...leftoverIds(points, true, null, atForty)]).toEqual([UUID(2)]);
+    expect(gameOverflow(points, true)).toEqual([]);
+    const plan = planGameShift(points, true, UUID(2), null, atForty);
+    expect(plan).toMatchObject({
+      ok: true,
+      summary: { points: 1, games: 1, nextGame: { set: 1, gameInSet: 2 } },
+    });
+    if ("ok" in plan) {
+      expect(plan.writes.map((w) => [w.id, w.game_number])).toEqual([
+        [UUID(2), 2],
+      ]);
+    }
+  });
+
+  test("null is the beginning of the match: every reading is what it was", () => {
+    for (const adScoring of [true, false]) {
+      expect(gameOverflow(usersCase(), adScoring, null, null)).toEqual(
+        gameOverflow(usersCase(), adScoring),
+      );
+      expect(gameUnderflow(shortCase(), adScoring, null, null)).toEqual(
+        gameUnderflow(shortCase(), adScoring),
+      );
+    }
+    expect(planGameShift(usersCase(), true, UUID(7), null, null)).toEqual(
+      planGameShift(usersCase(), true, UUID(7)),
+    );
+  });
+});
+
+// ── Locked games (game-boundary.ts) ────────────────────────────────────────
+
+test.describe("a locked game", () => {
+  /** A row's lock set or cleared, by its index. */
+  const lockAt = (points: LabelPoint[], index: number, locked = true) =>
+    points.map((p, i) => (i === index ? { ...p, gameStartLocked: locked } : p));
+
+  test("lockedGames reads the lock off a game's first live row only", () => {
+    expect([...lockedGames(usersCase())]).toEqual([]);
+    expect([...lockedGames(lockAt(usersCase(), 0))]).toEqual(["1·1"]);
+    // On a later row it says nothing, and a deleted first row is stepped over.
+    expect([...lockedGames(lockAt(usersCase(), 2))]).toEqual([]);
+    const deletedFirst = lockAt(usersCase(), 0).map((p, i) =>
+      i === 0 ? { ...p, status: "deleted" as const } : p,
+    );
+    expect([...lockedGames(deletedFirst)]).toEqual([]);
+    expect([...lockedGames(lockAt(usersCase(), 8))]).toEqual(["1·2"]);
+  });
+
+  test("a locked overflowing game is in neither gameOverflow nor gameUnderflow", () => {
+    expect(gameOverflow(usersCase(), true).map(gameKey)).toEqual(["1·1"]);
+    const locked = lockAt(usersCase(), 0);
+    expect(gameOverflow(locked, true)).toEqual([]);
+    expect(leftoverIds(locked, true).size).toBe(0);
+    expect(planGameShift(locked, true, UUID(7))).toHaveProperty("error");
+
+    const short = shortCase();
+    const keys = gameUnderflow(short, false).map(gameKey);
+    expect(keys.length).toBeGreaterThan(0);
+    const first = short.findIndex(
+      (p) => p.status !== "deleted" && gameKey(p) === keys[0],
+    );
+    expect(gameUnderflow(lockAt(short, first), false).map(gameKey)).toEqual(
+      keys.slice(1),
+    );
+  });
+
+  test("no point moves INTO a locked game either: a shift is refused, a pull says add the point", () => {
+    // Game 2's start locked: game 1's leftovers have nowhere to go.
+    expect(planGameShift(lockAt(usersCase(), 8), true, UUID(7))).toEqual({
+      error: "The next game's start is locked, so no point moves into it.",
+    });
+    const points = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p2", "p2"] },
+      { game: 2, server: "p2", winners: ["p1", "p1", "p1", "p1", "p1"] },
+    ]);
+    expect(planGamePull(points, "1·1", false)).toMatchObject({ ok: true });
+    expect(planGamePull(lockAt(points, 5), "1·1", false)).toEqual({
+      kind: "add_point",
+    });
+  });
+
+  test("lockedGameImbalance names the points a locked game's last-point winner did not win, when the game is not decided on its last row", () => {
+    const game = (winners: (LabelSide | null)[]) =>
+      lockAt(match([{ game: 1, server: "p1", winners }]), 0);
+    // Decided on its last row: nothing to flag.
+    expect(
+      lockedGameImbalance(game(["p1", "p1", "p2", "p1", "p1"]), true),
+    ).toEqual([]);
+    // Five points, one wrong winner: the video opens at 30–0, so Lee's
+    // fourth point came two rows before the end — the one Vargas "won" is it.
+    const start: LabelStartScore = {
+      sets: [0, 0],
+      games: [0, 0],
+      points: [2, 0],
+      server: "p1",
+    };
+    expect(
+      lockedGameImbalance(game(["p1", "p1", "p2", "p1", "p1"]), true, start),
+    ).toEqual([UUID(3)]);
+    // Short of a game: the points not won by the last point's winner, in
+    // rail order — a point with no winner yet among them.
+    expect(
+      lockedGameImbalance(game(["p1", "p1", "p2", null, "p1"]), true),
+    ).toEqual([UUID(3), UUID(4)]);
+    // Unlocked, the same rows say nothing; nor does a game nobody has won a point of.
+    expect(
+      lockedGameImbalance(
+        match([
+          { game: 1, server: "p1", winners: ["p1", "p1", "p2", null, "p1"] },
+        ]),
+        true,
+      ),
+    ).toEqual([]);
+    expect(lockedGameImbalance(game([null, null]), true)).toEqual([]);
+  });
+});
+
+// ── The locked game's slot and band (label-game-locked.tsx, Design B) ──────
+
+test.describe("a locked game on the rail", () => {
+  const LOCKED = "src/components/admin/labels/label-game-locked.tsx";
+  const RAIL = "src/components/admin/labels/label-black-rail.tsx";
+  const lockAt = (points: LabelPoint[], index: number) =>
+    points.map((p, i) => (i === index ? { ...p, gameStartLocked: true } : p));
+  /** `lockedGameImbalance`'s ids for one game. */
+  const doubtedIn = (points: LabelPoint[], key: string, adScoring: boolean) =>
+    lockedGameImbalance(points, adScoring).filter(
+      (id) => gameKey(points.find((p) => p.id === id)!) === key,
+    );
+  /** The slot's markup, from its root to the next row. */
+  const imbalanceSlot = (html: string) => {
+    const at = html.indexOf('data-row="game-imbalance"');
+    expect(at).toBeGreaterThan(-1);
+    return html.slice(
+      html.lastIndexOf("<div", at),
+      html.indexOf("data-row=", at + 10),
+    );
+  };
+
+  test("a locked overflowing game: no already-won or isn't-finished slot, one amber slot under its band with Check N points and Add point", () => {
+    const points = lockAt(usersCase(), 0);
+    const html = black(sessionWith(points));
+    expect(html).not.toContain("data-game-overflow");
+    expect(html).not.toContain("data-game-underflow");
+    expect(html.match(/data-row="game-imbalance"/g)).toHaveLength(1);
+
+    const n = doubtedIn(points, "1·1", true).length;
+    expect(n).toBe(4);
+    const row = imbalanceSlot(html);
+    expect(row).toContain('data-game-imbalance="1·1"');
+    expect(row).toContain(`data-game-imbalance-count="${n}"`);
+    expect(row).toContain("border-dashed");
+    expect(row).toContain("bg-[var(--rail-amber-wash-faint)]");
+    expect(inner(row, "data-game-imbalance-title")).toBe(
+      "Game 1 doesn’t add up: an ending is probably wrong",
+    );
+    expect(inner(row, "data-game-imbalance-detail")).toBe(
+      "Vargas serves and wins its last point, but the points give Lee the game 2 points before it. Check the points Vargas lost.",
+    );
+    expect(inner(row, 'data-game-imbalance-action="check"')).toBe(
+      `Check ${n} points`,
+    );
+    expect(tag(row, 'data-game-imbalance-action="check"')).toContain(
+      "text-[var(--rail-amber)]",
+    );
+    expect(inner(row, 'data-game-imbalance-action="add"')).toBe("Add point");
+    expect(tag(row, 'data-game-imbalance-action="add"')).toContain(
+      "text-white/50",
+    );
+
+    // At the top of the game: under its band, above its first row.
+    const at = html.indexOf('data-row="game-imbalance"');
+    expect(html.indexOf('data-game-band="1-1"')).toBeLessThan(at);
+    expect(at).toBeLessThan(html.indexOf(`data-point-id="${UUID(1)}"`));
+    // The band says who set the start.
+    expect(tag(html, "data-game-locked=")).toContain("data-game-locked");
+    expect(text(html)).toContain("set by you");
+  });
+
+  test("the unlocked fixture still gets the old slots and no lock; an unfinished locked game reads its call", () => {
+    const html = black(sessionWith(usersCase()));
+    expect(html).toContain("data-game-overflow=");
+    expect(html).not.toContain("data-game-imbalance");
+    expect(html).not.toContain("data-game-locked");
+    expect(html).not.toContain("set by you");
+
+    const short = black(sessionWith(shortCase(), { adScoring: false }));
+    expect(short).toContain("data-game-underflow=");
+    expect(short).not.toContain("data-game-imbalance");
+
+    const points = lockAt(shortCase(), 0);
+    const locked = black(sessionWith(points, { adScoring: false }));
+    expect(locked).not.toContain("data-game-underflow");
+    const row = imbalanceSlot(locked);
+    const n = doubtedIn(points, "1·1", false).length;
+    expect(n).toBe(2);
+    expect(inner(row, "data-game-imbalance-detail")).toBe(
+      "Vargas wins its last point, but the points leave the game at 30–40. Check the points Vargas lost.",
+    );
+    expect(inner(row, 'data-game-imbalance-action="check"')).toBe(
+      "Check 2 points",
+    );
+    // Read-only: the band keeps its lock, the slot goes.
+    const readOnly = black(
+      sessionWith(points, { adScoring: false, status: "complete" }),
+    );
+    expect(readOnly).toContain("data-game-locked");
+    expect(readOnly).not.toContain("data-game-imbalance");
+  });
+
+  test("the slot goes once the game adds up, and the session's last game is not asked about while it is played", () => {
+    const { lockedSlotsAtPoints } = createLoader().load(LOCKED) as {
+      lockedSlotsAtPoints: (
+        points: LabelPoint[],
+        games: unknown,
+        adScoring: boolean,
+      ) => Map<string, unknown>;
+    };
+    const slotsOf = (rows: LabelPoint[], adScoring = true) =>
+      lockedSlotsAtPoints(rows, labelScores(rows, adScoring).games, adScoring);
+    expect(slotsOf(lockAt(usersCase(), 0)).size).toBe(1);
+    // Rows 7 and 8 given to Lee: the game still runs past Lee's deciding
+    // point, so it still does not add up.
+    const relabelled = lockAt(usersCase(), 0).map((p, i) =>
+      i === 6 || i === 7 ? { ...p, winner: "p1" as const } : p,
+    );
+    expect(slotsOf(relabelled).size).toBe(1);
+    // Rows 7 and 8 gone: decided on its last row, and the slot with it.
+    const trimmed = lockAt(usersCase(), 0).map((p, i) =>
+      i === 6 || i === 7 ? { ...p, status: "deleted" as const } : p,
+    );
+    expect(slotsOf(trimmed).size).toBe(0);
+    expect(black(sessionWith(trimmed))).not.toContain("data-game-imbalance");
+    expect(black(sessionWith(trimmed))).toContain("data-game-locked");
+    // The last game of the session, unfinished and locked: nothing yet.
+    const last = lockAt(
+      match([
+        { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
+        { game: 2, server: "p2", winners: ["p2", "p1"] },
+      ]),
+      4,
+    );
+    expect(slotsOf(last).size).toBe(0);
+  });
+
+  test("Check N points steps through the doubted ids in order and wraps, through the console's flag jump; Add point is the underflow slot's insert", () => {
+    const { BlackGameLocked, lockedSlotsAtPoints, checkStepper } =
+      createLoader().load(LOCKED) as Record<string, unknown>;
+    const points = lockAt(usersCase(), 0);
+    const slots = (
+      lockedSlotsAtPoints as (
+        p: LabelPoint[],
+        g: unknown,
+        a: boolean,
+      ) => Map<string, { pointIds: string[]; lastPointId: string }>
+    )(points, labelScores(points, true).games, true);
+    const slotOf = slots.get(UUID(1))!;
+    const ids = doubtedIn(points, "1·1", true);
+    expect(slotOf.pointIds).toEqual(ids);
+    expect(slotOf.lastPointId).toBe(UUID(8));
+
+    // The rail's handler: one stepper for its life, each id to `onGoToPoint`.
+    const step = (checkStepper as () => (k: string, i: string[]) => string)();
+    const went: string[] = [];
+    const calls: unknown[][] = [];
+    const tree = renderFunction<Record<string, unknown>>(BlackGameLocked)({
+      slot: slotOf,
+      names: NAMES,
+      onCheck: (key: string, pointIds: string[]) => {
+        calls.push(["check", key]);
+        went.push(step(key, pointIds));
+      },
+      onAddPoint: (...args: unknown[]) => calls.push(["add", ...args]),
+    });
+    expect(calls).toEqual([]);
+    const check = findWhere(
+      tree,
+      (p) => p["data-game-imbalance-action"] === "check",
+    );
+    let stopped = 0;
+    const click = () =>
+      (check!.props.onClick as (e: unknown) => void)({
+        stopPropagation: () => (stopped += 1),
+      });
+    for (let i = 0; i < ids.length + 1; i += 1) click();
+    expect(went).toEqual([...ids, ids[0]]);
+    expect(stopped).toBe(ids.length + 1);
+
+    // A point put right leaves the list: the one now in its place is next.
+    const fresh = (checkStepper as () => (k: string, i: string[]) => string)();
+    expect(fresh("1·1", ids)).toBe(ids[0]);
+    expect(fresh("1·1", ids)).toBe(ids[1]);
+    expect(fresh("1·1", [ids[0], ids[2], ids[3]])).toBe(ids[2]);
+
+    const add = findWhere(
+      tree,
+      (p) => p["data-game-imbalance-action"] === "add",
+    );
+    (add!.props.onClick as (e: unknown) => void)({ stopPropagation: () => {} });
+    expect(calls.at(-1)).toEqual(["add", UUID(8)]);
+
+    // The wiring: the rail hands each id to `onGoToPoint` — the console's
+    // `findGap(pointId, { arm: true })` — and both slots the same `onAddPoint`.
+    const rail = readFileSync(RAIL, "utf8");
+    expect(rail).toMatch(
+      /const id = stepCheck\(key, pointIds\);\n\s+if \(id !== null\) onGoToPoint\?\.\(id\);/,
+    );
+    expect(rail).toContain("onCheck={onGoToPoint ? checkLocked : undefined}");
+    expect(rail.match(/onAddPoint=\{onAddPoint\}/g)).toHaveLength(2);
+    const consoleSource = readFileSync(CONSOLE, "utf8");
+    expect(consoleSource).toMatch(
+      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
+    );
+    expect(consoleSource).toContain("onGoToPoint={railHandlers.goToFlag}");
+    expect(consoleSource).toContain(
+      'addPointAfter: (pointId: string) => insertPoint(pointId, "after"),',
+    );
+    expect(consoleSource).toContain(
+      "onAddPoint={operable ? railHandlers.addPointAfter : undefined}",
+    );
+  });
+
+  test("undo after a boundary drag: the rows come back without the flag, and the band loses its lock", () => {
+    // Game 2's header dragged up above row 7: rows 7 and 8 join it, row 7
+    // takes the lock — as the console applies the move's write.
+    const before = usersCase();
+    const plan = planGameBoundary(
+      before,
+      { setNumber: 1, gameNumber: 2 },
+      UUID(7),
+    );
+    if (!("ok" in plan)) throw new Error("the drag plans");
+    const moved = before.map((p) =>
+      plan.write.pointIds.includes(p.id)
+        ? {
+            ...p,
+            gameNumber: 2,
+            gameStartLocked: p.id === plan.write.lockPointId,
+          }
+        : p,
+    );
+    const dragged = black(sessionWith(moved));
+    expect(tag(dragged, 'data-game-band="1-2"')).toBeTruthy();
+    const band2 = dragged.slice(
+      dragged.indexOf('data-game-band="1-2"'),
+      dragged.indexOf(`data-point-id="${UUID(7)}"`),
+    );
+    expect(band2).toContain("data-game-locked");
+    expect(text(`<p ${band2}`)).toContain("set by you");
+
+    // `undoLast` merges the undo's answer into the console's rows
+    // (undo-diff.ts): the moved rows as they were read before the drag,
+    // the flag false, replace theirs in place.
+    const consoleSource = readFileSync(CONSOLE, "utf8");
+    const undoSource = consoleSource.slice(
+      consoleSource.indexOf("  async function undoLast()"),
+      consoleSource.indexOf("  async function addAllMissingShots()"),
+    );
+    expect(undoSource).toContain(
+      "applyUndoDiff(rows, result.changed, result.removedPointIds)",
+    );
+    const changed = before.filter((p) => plan.write.pointIds.includes(p.id));
+    const undone = black(sessionWith(applyUndoDiff(moved, changed, [])));
+    expect(undone).not.toContain("data-game-locked");
+    expect(undone).not.toContain("set by you");
   });
 });

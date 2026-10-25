@@ -99,7 +99,12 @@ export function pointMenuActions(
   point: LabelPoint,
   context: Pick<
     EditContext,
-    "points" | "names" | "adScoring" | "matchTiebreakSet" | "onPatchPoint"
+    | "points"
+    | "names"
+    | "adScoring"
+    | "matchTiebreakSet"
+    | "startScore"
+    | "onPatchPoint"
   > & {
     /** Whether a site-removed stroke is a ghost here; a stroke by default. */
     ghosts?: boolean;
@@ -170,6 +175,7 @@ export function pointMenuActions(
       context.points,
       context.adScoring ?? true,
       context.matchTiebreakSet ?? null,
+      context.startScore ?? null,
     ).has(point.id)
       ? () => operations.onShiftGameOverflow(point.id)
       : null,

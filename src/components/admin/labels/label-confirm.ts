@@ -1,3 +1,4 @@
+import type { GameBoundaryLock } from "@/lib/services/labels/game-boundary";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { ServeHitterFollow } from "@/lib/services/labels/serve-hitter";
 import type { LabelSide } from "@/lib/services/labels/session";
@@ -53,6 +54,8 @@ export type LabelConfirm =
       gameInSet: number;
       /** The points to move, in the order to move them. */
       pointIds: readonly string[];
+      /** The dragged game's lock, written with the moves. */
+      lock: GameBoundaryLock;
       /** The destination game's server. */
       server: LabelSide;
       /** How many of the points switch players. */

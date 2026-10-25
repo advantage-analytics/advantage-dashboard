@@ -391,14 +391,17 @@ const JOB_ROW = {
 
 /**
  * The persist module's reads: `.single()` for the job and the match, the
- * results file from Storage.
+ * results file from Storage. The transcript cache (transcript-cache.ts) finds
+ * no row and its write lands nowhere, so every call here builds.
  */
 function stubJobClient(job: Record<string, unknown>) {
   const client = {
     from(table: string) {
       return {
+        upsert: async () => ({ error: null }),
         select: () => ({
           eq: () => ({
+            maybeSingle: async () => ({ data: null, error: null }),
             single: async () => ({
               data:
                 table === "processing_jobs"
