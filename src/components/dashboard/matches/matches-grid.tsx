@@ -13,6 +13,7 @@ import {
   listColumnLabels,
   listGridCols,
   LIST_MIN_WIDTH,
+  LIST_MIN_WIDTH_COMPACT,
   LIST_TRACK_TRANSITION,
   TEAM_LIST_MIN_WIDTH,
   TEAM_LIST_MIN_WIDTH_COMPACT,
@@ -62,7 +63,8 @@ export function MatchesGrid({
 }: MatchesGridProps): React.JSX.Element {
   // Only the team table gives a track up beside the drawer; the personal one
   // fits at 1440 with every column.
-  const compact = scope === "team" && drawerOpen;
+  // Both tables give up Event beside the open rail; the rail names the event.
+  const compact = drawerOpen;
   /* Which layout shows is a width question, so Tailwind answers it rather than
      React. Held in state it could only be read after mount, so the server — which
      has no viewport — always emitted the wide table and a phone painted
@@ -127,7 +129,9 @@ export function MatchesGrid({
             className={cn(
               LIST_TRACK_TRANSITION,
               scope === "personal"
-                ? LIST_MIN_WIDTH
+                ? compact
+                  ? LIST_MIN_WIDTH_COMPACT
+                  : LIST_MIN_WIDTH
                 : compact
                   ? TEAM_LIST_MIN_WIDTH_COMPACT
                   : TEAM_LIST_MIN_WIDTH,
@@ -146,15 +150,10 @@ export function MatchesGrid({
               {listColumnLabels(scope).map((label, i) => (
                 <span
                   key={label || `col-${i}`}
-                  aria-hidden={
-                    (label === "Event" && scope === "team" && compact) ||
-                    undefined
-                  }
+                  aria-hidden={(label === "Event" && compact) || undefined}
                   className={cn(
                     "eyebrow-sm min-w-0 truncate",
-                    label === "Event" &&
-                      scope === "team" &&
-                      eventCellFade(compact),
+                    label === "Event" && eventCellFade(compact),
                   )}
                   role="columnheader"
                 >

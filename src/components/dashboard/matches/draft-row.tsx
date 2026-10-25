@@ -12,10 +12,11 @@
  * match row does. Result is "—": nothing is decided until the match exists.
  * Score is the sets typed so far, one ink quieter than a match's because
  * nothing has checked them, "—" until a set is in. Event is the label the
- * row stores. The lifecycle cell is the draft's own: the dashed wait ring the
- * list uses for "something real is waiting", the step it stopped at as one
- * word (`stepLabel`), then "Continue", the way back into the wizard — the
- * track can be 96px, so the word truncates and Continue never does.
+ * row stores, in the cell a match row draws. The lifecycle cell is the
+ * draft's own: the dashed wait ring the list uses for "something real is
+ * waiting", the step it stopped at as one word (`stepLabel`), then
+ * "Continue", the way back into the wizard — the track can be 96px, so the
+ * word truncates and Continue never does.
  *
  * It behaves like every other row on the page: at rest on white, washed on
  * hover and while selected, and a click opens the drawer rather than
@@ -38,11 +39,11 @@ import {
 } from "@/lib/wizard/draft-row-fields";
 import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { cn } from "@/lib/utils";
+import { EventCell } from "./event-cell";
 import { matchRowId } from "./match-card-list";
 import {
   LIST_ROW_FRAME,
   LIST_TRACK_TRANSITION,
-  eventCellFade,
   listGridCols,
 } from "./match-list-layout";
 
@@ -64,7 +65,7 @@ export function DraftRow({
 }: {
   draft: DraftRowData;
   scope: "personal" | "team";
-  /** The team table beside the open drawer, with its Event track dropped. */
+  /** The table beside the open drawer, with its Event track dropped. */
   compact?: boolean;
   /** This draft is the one in the drawer. */
   selected?: boolean;
@@ -74,7 +75,7 @@ export function DraftRow({
   const router = useRouter();
   const href = draftHref(draft.id, scope);
   const isTeam = scope === "team";
-  const eventHidden = isTeam && compact;
+  const eventHidden = compact;
   const title = draftTitle(draft, scope) ?? UNTITLED_DRAFT;
 
   const draftPill = (
@@ -126,13 +127,23 @@ export function DraftRow({
         <EmptyMark label="No date yet" />
       )}
 
-      {/* Player (team) — the roster's mark and the name, with the pill. */}
+      {/* Player (team) — the roster's mark and the name, with the pill. A
+          draft that has not named its player yet gets no mark: initials for
+          a placeholder would read as a person. */}
       {isTeam && (
         <span className="flex min-w-0 items-center gap-2.5">
-          <PlayerMark name={draft.playerName ?? UNTITLED_DRAFT} viewer={null} />
-          <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
-            {draft.playerName ?? UNTITLED_DRAFT}
-          </span>
+          {draft.playerName ? (
+            <>
+              <PlayerMark name={draft.playerName} viewer={null} />
+              <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+                {draft.playerName}
+              </span>
+            </>
+          ) : (
+            <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+              {UNTITLED_DRAFT}
+            </span>
+          )}
           {draftPill}
         </span>
       )}
@@ -170,35 +181,23 @@ export function DraftRow({
         <EmptyMark label="No score yet" />
       )}
 
-      {/* Event — the label the row stores. Beside the open team drawer its
-          track collapses and the cell fades, as a match row's does. */}
-      <span
-        aria-hidden={eventHidden || undefined}
-        className={cn(
-          "flex min-w-0 items-baseline overflow-hidden text-[12px]",
-          eventCellFade(eventHidden),
-        )}
-        style={{ color: "var(--ink-600)" }}
-      >
-        {draft.eventLabel ? (
-          <span className="min-w-0 truncate">{draft.eventLabel}</span>
-        ) : (
-          <span
-            className="min-w-0 truncate"
-            style={{ color: "var(--ink-400)" }}
-          >
-            No event
-          </span>
-        )}
-      </span>
+      {/* Event — the label the row stores, in the match row's own cell. */}
+      <EventCell name={draft.eventLabel} hidden={eventHidden} />
 
       {/* Lifecycle — the step it stopped at, then the way back in. The ring is
           the list's "waiting on something real"; the word is the step's own
-          name, truncating before Continue ever does. */}
+          name. Beside the open rail the track is at its 96px floor, which
+          holds the ring and Continue and nothing else, so the word goes to
+          screen readers only there — the rail names the step — rather than
+          truncating to a letter. The mark never shrinks; the word truncates
+          before Continue ever does. */}
       <span className="flex min-w-0 items-center gap-3.5">
         <AnalysisStatusLine
           mark="wait"
-          className="min-w-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate"
+          className={cn(
+            "min-w-0 [&>span:first-child]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate",
+            compact && "[&>span:last-child]:sr-only",
+          )}
         >
           {stepLabel(draft.step, draft.providerKind)}
         </AnalysisStatusLine>

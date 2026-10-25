@@ -1,6 +1,6 @@
-import type { Step } from "@/components/dashboard/matches/new-match-wizard/types";
 import type { ProviderKind } from "@/lib/services/upload";
 import type { ScoreLineSet } from "@/lib/ui/score-format";
+import { isStep, type Step } from "@/lib/wizard/steps";
 
 /**
  * The handful of answers a listed draft reads back — on its Matches row and
@@ -43,14 +43,6 @@ export interface DraftFieldColumns {
   opponent_scores: unknown;
 }
 
-const STEPS: readonly Step[] = ["provider", "file", "trim", "match"];
-
-export function isStep(value: unknown): value is Step {
-  return (
-    typeof value === "string" && (STEPS as readonly string[]).includes(value)
-  );
-}
-
 /**
  * The row's fields, with the provider's kind answered by the caller (the
  * server resolves it; this module stays free of the upload registry so the
@@ -73,10 +65,17 @@ export function draftFieldsFromColumns(
   };
 }
 
+/** A game count as the wizard stores one: a whole number, never below zero. */
+function isGames(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
 /**
  * The sets typed so far, from the wizard's two game arrays: leading entries
- * where both sides hold a number and at least one game was played. The first
- * gap ends the score — a third set typed before the second is not a score.
+ * where both sides hold a game count and at least one game was played. The
+ * first gap ends the score — a third set typed before the second is not a
+ * score — and so does anything that is not a game count, so a stray NaN or
+ * negative never reaches the row.
  */
 export function draftScoreSets(
   player: unknown,
@@ -87,7 +86,7 @@ export function draftScoreSets(
   for (let i = 0; i < Math.min(player.length, opponent.length); i++) {
     const p = player[i];
     const o = opponent[i];
-    if (typeof p !== "number" || typeof o !== "number") break;
+    if (!isGames(p) || !isGames(o)) break;
     if (p === 0 && o === 0) break;
     sets.push({ player1: p, player2: o });
   }

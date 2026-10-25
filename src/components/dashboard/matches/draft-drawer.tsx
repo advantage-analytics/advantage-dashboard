@@ -8,6 +8,7 @@ import {
   Calendar,
   Clock,
   FileText,
+  Layers,
   MoreHorizontal,
   Trash2,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import { capitalize, cn } from "@/lib/utils";
 import { ICON_BUTTON, PeekDrawerFrame } from "./match-drawer";
 import { DrawerFact, ProviderFact } from "./drawer-sections";
 import { StepIndicator } from "./new-match-wizard/StepIndicator";
+import { matchRowId } from "./match-card-list";
 import { draftHref, type DraftRowData } from "./draft-row";
 import { DiscardDraftDialog } from "./discard-draft-dialog";
 import {
@@ -91,8 +93,15 @@ export function DraftDrawer({
   // The rail leaves the way Esc closes it, and only then does the list drop
   // the row: a refresh that landed mid-slide would unmount the drawer in
   // place (the page's "record left the list" branch), with no slide at all.
+  // Focus goes to the row's neighbour, not the row: `closeDrawer` would put
+  // it on the row this discard is removing, and the refresh would drop it to
+  // the body, so a keyboard user would start over from the top of the page.
   const discarded = () => {
+    const row = document.getElementById(matchRowId(draft.id));
+    const neighbour = (row?.nextElementSibling ??
+      row?.previousElementSibling) as HTMLElement | null;
     onClose();
+    if (neighbour?.getAttribute("role") === "row") neighbour.focus();
     window.setTimeout(() => router.refresh(), DISCARD_REFRESH_DELAY_MS);
   };
 
@@ -187,7 +196,15 @@ export function DraftDrawer({
           >
             {draft.courtType ? capitalize(draft.courtType) : "Not specified"}
           </DrawerFact>
-          <ProviderFact providerId={draft.providerId} />
+          {/* The source keeps its row before one is picked, like every other
+              fact; `ProviderFact` draws nothing for a null id. */}
+          {draft.providerId ? (
+            <ProviderFact providerId={draft.providerId} />
+          ) : (
+            <DrawerFact label="Source" icon={<Layers />} muted>
+              No source yet
+            </DrawerFact>
+          )}
           <DrawerFact label="File" icon={<FileText />} muted={!draft.fileName}>
             {draft.fileName ? (
               <>
@@ -298,7 +315,7 @@ function DiscardMenu({
         }}
         onCloseAutoFocus={(event) => {
           // Back to the ⋯ on Keep draft; after a discard the rail is leaving
-          // and `closeDrawer` has already put focus on the row.
+          // and `discarded` has put focus on the row's neighbour.
           event.preventDefault();
           if (discardedRef.current) {
             discardedRef.current = false;

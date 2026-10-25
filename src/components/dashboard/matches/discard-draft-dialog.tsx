@@ -51,20 +51,19 @@ export function DiscardDraftDialog({
   async function confirm() {
     setPending(true);
     setError(null);
+    let refused = false;
     try {
-      const result = await deleteMatchDraft(draftId);
-      if (result.error) {
-        setPending(false);
-        setError(DISCARD_DRAFT_REFUSED);
-        return;
-      }
-      setPending(false);
-      onOpenChange(false);
-      onDiscarded();
+      refused = Boolean((await deleteMatchDraft(draftId)).error);
     } catch {
-      setPending(false);
-      setError(DISCARD_DRAFT_REFUSED);
+      refused = true;
     }
+    setPending(false);
+    if (refused) {
+      setError(DISCARD_DRAFT_REFUSED);
+      return;
+    }
+    onOpenChange(false);
+    onDiscarded();
   }
 
   return (
