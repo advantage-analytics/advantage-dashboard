@@ -1,6 +1,5 @@
 -- The first-upload candidate query leaves out people already mailed for the
--- step it is asked about. NOT YET APPLIED LIVE — rename this file to the
--- version `schema_migrations` records when it is.
+-- step it is asked about. Applied live 2026-10-25 as version 20261025064708.
 --
 -- The sweep used to fetch 200 candidates and drop the already-mailed ones in
 -- TypeScript. A mailed person stays in their window for days, so once more
