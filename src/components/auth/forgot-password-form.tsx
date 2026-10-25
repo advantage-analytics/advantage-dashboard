@@ -75,6 +75,7 @@ export function ForgotPasswordForm() {
         <FormField
           label="Email"
           id="reset-email"
+          name="email"
           placeholder="name@university.edu"
           type="email"
           value={email}

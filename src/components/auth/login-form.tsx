@@ -81,6 +81,15 @@ export function LoginForm({
     e.preventDefault();
     setError(null);
 
+    // Read what the fields hold, not just state. Chrome can autofill before
+    // hydration, or without firing an input event, so the dots are on screen
+    // while state is still empty and the sign-in would send a blank password.
+    const form = new FormData(e.currentTarget as HTMLFormElement);
+    const email = String(form.get("email") ?? "");
+    const password = String(form.get("password") ?? "");
+    setEmail(email);
+    setPassword(password);
+
     const emailProblem = validateEmail(email);
     if (emailProblem) {
       setError({ field: "email", message: emailProblem });
@@ -175,17 +184,19 @@ export function LoginForm({
         <FormField
           label="Email"
           id="login-email"
+          name="email"
           placeholder="name@university.edu"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          autoComplete="email"
+          autoComplete="username"
           error={error?.field === "email" ? error.message : null}
         />
         <FormField
           label="Password"
           id="login-password"
+          name="password"
           type="password"
           placeholder="••••••••••••"
           showPasswordToggle

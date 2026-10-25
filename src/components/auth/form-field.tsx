@@ -58,8 +58,14 @@ export default function FormField({
 
   // Chrome keeps a browser-autofilled password masked when `type` flips to
   // text, so the reveal toggle appears dead. Re-writing the value once the type
-  // has changed drops the autofill state and lets the new type render.
+  // has changed drops the autofill state and lets the new type render. Only on
+  // a real toggle: running at mount would strip a fresh autofill the same way.
+  const toggled = useRef(false);
   useEffect(() => {
+    if (!toggled.current) {
+      toggled.current = true;
+      return;
+    }
     const input = inputRef.current;
     if (!showPasswordToggle || !input || !input.value) return;
     const current = input.value;

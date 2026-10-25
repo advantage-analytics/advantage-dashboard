@@ -76,6 +76,7 @@ export function UpdatePasswordForm() {
         <FormField
           label="New password"
           id="new-password"
+          name="password"
           type="password"
           placeholder="••••••••••••"
           showPasswordToggle
@@ -88,6 +89,7 @@ export function UpdatePasswordForm() {
         <FormField
           label="Confirm password"
           id="confirm-password"
+          name="confirm-password"
           type="password"
           placeholder="••••••••••••"
           showPasswordToggle

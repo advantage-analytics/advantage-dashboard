@@ -116,17 +116,19 @@ export function SignUpForm({
         <FormField
           label="Email"
           id="signup-email"
+          name="email"
           placeholder="name@university.edu"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          autoComplete="email"
+          autoComplete="username"
           error={error?.field === "email" ? error.message : null}
         />
         <FormField
           label="Password"
           id="signup-password"
+          name="password"
           type="password"
           placeholder="••••••••••••"
           showPasswordToggle
@@ -139,6 +141,7 @@ export function SignUpForm({
         <FormField
           label="Confirm password"
           id="signup-confirm"
+          name="confirm-password"
           type="password"
           placeholder="••••••••••••"
           showPasswordToggle
