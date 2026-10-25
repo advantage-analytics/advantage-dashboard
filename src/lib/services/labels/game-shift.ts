@@ -26,9 +26,21 @@
  * read from more than two games or a donor runs out before the game is
  * settled: then the game is more likely missing a point the vendor never
  * saw than holding the next game's.
+ *
+ * Every reading takes the session's `LabelStartScore` (null: the video starts
+ * at the beginning): the first game in point order opens at its `points`, so
+ * a game complete only when counted from the start is neither overflow nor
+ * underflow.
+ *
+ * A locked game (game-boundary.ts `lockedGames`: its start dragged into place
+ * by the labeller) is neither: its boundary is the labeller's word, so no
+ * slot offers to move a point across it. Nor is a locked game ever written
+ * into — a shift whose next game is locked is refused, and a pull whose donor
+ * is locked answers `add_point`.
  */
 
 import { labelPointFields, labelPointStatusAfterChange } from "./edit";
+import { lockedGames } from "./game-boundary";
 import { gameFirstServer, type GamePoint } from "./game-operations";
 import {
   planPlayerSwap,
@@ -48,6 +60,7 @@ import {
   type LabelGameType,
   type LabelPoint,
   type LabelSide,
+  type LabelStartScore,
 } from "./session";
 
 type LivePointStatus = Exclude<GamePoint["status"], "deleted">;
@@ -163,7 +176,7 @@ interface Accumulator {
 /**
  * Every ordinary game with rows past the row that decided it, in the order
  * the games first appear. A tiebreak never overflows; a game decided on its
- * last row is not listed. Nor is any game of `matchTiebreakSet` — the
+ * last row is not listed, and nor is a locked one (game-boundary.ts). Nor is any game of `matchTiebreakSet` — the
  * deciding set the entered score spells as a match tiebreak (set-scores.ts
  * `matchTiebreakSet`): the vendor's cut of it into short "games" is one
  * tiebreak to fold (tiebreak-fold.ts), never leftovers to move on.
@@ -172,26 +185,37 @@ export function gameOverflow(
   points: readonly GamePoint[],
   adScoring: boolean,
   matchTiebreakSet: number | null = null,
+  start: LabelStartScore | null = null,
 ): GameOverflow[] {
   const games: Accumulator[] = [];
   const byKey = new Map<string, Accumulator>();
-  for (const point of liveRows(points)) {
+  const live = liveRows(points);
+  const locked = lockedGames(live);
+  for (const point of live) {
     if (point.setNumber === null || point.gameNumber === null) continue;
     const key = gameKey(point);
     let game = byKey.get(key);
     if (!game) {
+      // The first game on the video opens where the start says it does.
+      const opening = games.length === 0 ? start : null;
       game = {
         setNumber: point.setNumber,
         gameNumber: point.gameNumber,
         gameType: point.gameType ?? "game",
-        points: { p1: 0, p2: 0 },
+        points: opening
+          ? { p1: opening.points[0], p2: opening.points[1] }
+          : { p1: 0, p2: 0 },
         decidedBy: null,
         leftovers: [],
       };
       byKey.set(key, game);
       games.push(game);
     }
-    if (game.gameType !== "game" || game.setNumber === matchTiebreakSet) {
+    if (
+      game.gameType !== "game" ||
+      game.setNumber === matchTiebreakSet ||
+      locked.has(key)
+    ) {
       continue;
     }
     if (game.decidedBy) {
@@ -218,9 +242,10 @@ export function leftoverIds(
   points: readonly GamePoint[],
   adScoring: boolean,
   matchTiebreakSet: number | null = null,
+  start: LabelStartScore | null = null,
 ): ReadonlySet<string> {
   const ids = new Set<string>();
-  for (const game of gameOverflow(points, adScoring, matchTiebreakSet)) {
+  for (const game of gameOverflow(points, adScoring, matchTiebreakSet, start)) {
     for (const point of game.leftovers) ids.add(point.id);
   }
   return ids;
@@ -339,6 +364,8 @@ export function planGameShift(
   fromPointId: string,
   /** `gameOverflow`'s: the match-tiebreak set has no leftovers to move. */
   matchTiebreakSet: number | null = null,
+  /** Where the video starts in the match; null: at the beginning. */
+  start: LabelStartScore | null = null,
 ): PlannedGameShift {
   const from = points.find((point) => point.id === fromPointId);
   if (!from) return { error: "That point is not a point of this session." };
@@ -348,9 +375,12 @@ export function planGameShift(
   if (from.setNumber === null || from.gameNumber === null) {
     return { error: "Put this point in a game before moving it on." };
   }
-  const overflow = gameOverflow(points, adScoring, matchTiebreakSet).find(
-    (game) => game.leftovers.some((point) => point.id === fromPointId),
-  );
+  const overflow = gameOverflow(
+    points,
+    adScoring,
+    matchTiebreakSet,
+    start,
+  ).find((game) => game.leftovers.some((point) => point.id === fromPointId));
   if (!overflow) {
     return {
       error: "That point sits inside its game — there is nothing to move on.",
@@ -360,7 +390,7 @@ export function planGameShift(
   // The game ranks the console names games by, on the rows as they stand.
   const rank = new Map<string, number>();
   const gamesInSet = new Map<number, number>();
-  for (const band of labelScores(points, adScoring).games) {
+  for (const band of labelScores(points, adScoring, start).games) {
     rank.set(gameKey(band), band.gameInSet);
     gamesInSet.set(band.setNumber, band.gameInSet);
   }
@@ -393,6 +423,11 @@ export function planGameShift(
     const to =
       gameAfter(live, current, current.leftovers) ??
       openGameAfter(working, live, current, current.leftovers);
+    if (!to.opened && lockedGames(live).has(gameKey(to))) {
+      return {
+        error: "The next game's start is locked, so no point moves into it.",
+      };
+    }
     steps.push(ref(to));
 
     for (const point of current.leftovers) {
@@ -408,7 +443,7 @@ export function planGameShift(
     // A tiebreak takes the points and is never split; a game just opened
     // has nothing before the moved points to be decided by.
     if (to.gameType !== "game" || to.opened) break;
-    const next = gameOverflow(working, adScoring, matchTiebreakSet).find(
+    const next = gameOverflow(working, adScoring, matchTiebreakSet, start).find(
       (game) =>
         game.setNumber === to.setNumber && game.gameNumber === to.gameNumber,
     );
@@ -596,17 +631,20 @@ function bandIsShort(band: LabelGameBand): boolean {
  * it, so no slot asks about it either — the labeller adds its points by the
  * row menu. Nor any game of `matchTiebreakSet`: the vendor's short "games"
  * there are one match tiebreak to fold (tiebreak-fold.ts), not games to pull
- * points into.
+ * points into. Nor a locked game (game-boundary.ts): its boundary is the
+ * labeller's word.
  */
 export function gameUnderflow(
   points: readonly GamePoint[],
   adScoring: boolean,
   matchTiebreakSet: number | null = null,
+  start: LabelStartScore | null = null,
 ): GameUnderflow[] {
   const live = liveRows(points);
-  const bands = labelScores(live, adScoring).games;
+  const bands = labelScores(live, adScoring, start).games;
   if (bands.length === 0) return [];
   const byGame = rowsByGame(live);
+  const locked = lockedGames(live);
   const lastOfSet = new Map<number, string>();
   for (const band of bands) lastOfSet.set(band.setNumber, gameKey(band));
   const out: GameUnderflow[] = [];
@@ -614,6 +652,7 @@ export function gameUnderflow(
     if (band.setNumber === matchTiebreakSet) continue;
     if (!bandIsShort(band)) continue;
     const key = gameKey(band);
+    if (locked.has(key)) continue;
     if (lastOfSet.get(band.setNumber) === key) continue;
     const rows = byGame.get(key) ?? [];
     out.push({
@@ -638,13 +677,15 @@ export function planGamePull(
   adScoring: boolean,
   /** `gameUnderflow`'s: the match-tiebreak set has no short game to fill. */
   matchTiebreakSet: number | null = null,
+  /** Where the video starts in the match; null: at the beginning. */
+  start: LabelStartScore | null = null,
 ): PlannedGamePull {
-  const short = gameUnderflow(points, adScoring, matchTiebreakSet);
+  const short = gameUnderflow(points, adScoring, matchTiebreakSet, start);
   const from = short.find((game) => gameKey(game) === key);
   if (!from) {
     return { error: "That game is not short — there is nothing to pull in." };
   }
-  return planGamePullFrom(points, from, adScoring);
+  return planGamePullFrom(points, from, adScoring, start);
 }
 
 /**
@@ -657,10 +698,12 @@ export function planGamePullFrom(
   points: readonly ShiftPoint[],
   from: { setNumber: number; gameNumber: number },
   adScoring: boolean,
+  /** Where the video starts in the match; null: at the beginning. */
+  start: LabelStartScore | null = null,
 ): PlannedGamePull {
   // The game ranks the console names games by, on the rows as they stand.
   const rank = new Map<string, number>();
-  for (const band of labelScores(points, adScoring).games) {
+  for (const band of labelScores(points, adScoring, start).games) {
     rank.set(gameKey(band), band.gameInSet);
   }
   const ref = (game: {
@@ -687,7 +730,7 @@ export function planGamePullFrom(
   const bound = working.filter((p) => p.status !== "deleted").length + 2;
   for (let step = 0; step < bound; step += 1) {
     const live = liveRows(working);
-    const bands = labelScores(live, adScoring).games;
+    const bands = labelScores(live, adScoring, start).games;
     const band = bands.find((b) => gameKey(b) === gameKey(current));
     if (!band) return { kind: "add_point" };
     if (band.outcome.kind !== "unfinished") {
@@ -712,6 +755,8 @@ export function planGamePullFrom(
       return { kind: "add_point" };
     }
     const donorKey = gameKey(to);
+    // A locked donor's start is the labeller's word: nothing leaves it.
+    if (lockedGames(live).has(donorKey)) return { kind: "add_point" };
     if (donors[donors.length - 1] !== donorKey) {
       if (donors.length >= 2) return { kind: "add_point" };
       donors.push(donorKey);
@@ -734,7 +779,7 @@ export function planGamePullFrom(
     // The donor given whole without settling the game: a point is missing,
     // not misplaced.
     if (donorRows.length === 1) {
-      const after = labelScores(liveRows(working), adScoring).games.find(
+      const after = labelScores(liveRows(working), adScoring, start).games.find(
         (b) => gameKey(b) === gameKey(current),
       );
       if (!after || after.outcome.kind === "unfinished") {

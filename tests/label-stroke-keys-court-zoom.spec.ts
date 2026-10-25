@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 import {
   STROKE_KEY_HINTS,
+  frameTimePatch,
   hasEarlierServe,
   isStrokeKey,
   strokeKeyChange,
@@ -15,10 +16,14 @@ import {
   MAX_ZOOM,
   NO_ZOOM,
   artPoint,
+  carryZoom,
+  markEndAt,
+  markHitRadius,
   moveWindow,
   panBy,
   wheelZoomDelta,
   runoffGuides,
+  windowRunoffs,
   zoomAbout,
 } from "@/components/admin/labels/label-court";
 import {
@@ -26,7 +31,9 @@ import {
   courtSlide,
   estimatePatch,
   isEstimate,
+  nearestEnd,
   nextPlacement,
+  placementNotice,
   placementRunoff,
   runoffFor,
   setPlacementTarget,
@@ -36,6 +43,7 @@ import {
   COURT_LENGTH,
   HALF_HEIGHT,
   NET_Y,
+  fromCourtInWindow,
   halfTopY,
   runoffWindowTop,
   toCourtInWindow,
@@ -222,16 +230,102 @@ test.describe("A adds a shot, C switches contact and landing", () => {
   );
 
   test("the legend under the court names them, after the stroke keys", () => {
-    expect(STROKE_KEY_HINTS.slice(-5)).toEqual([
+    expect(STROKE_KEY_HINTS.slice(-8)).toEqual([
       { key: "C", label: "contact / landing" },
       { key: "X", label: "flip side" },
+      { key: "T", label: "time = frame" },
       { key: "A", label: "add shot" },
       { key: "⇧A", label: "add before" },
+      { key: "R", label: "reset shot" },
+      { key: "⇧R", label: "reset point" },
       { key: "⌫", label: "delete shot" },
     ]);
     // Neither is a stroke key: they never change the selected stroke.
     expect(isStrokeKey("a")).toBe(false);
     expect(isStrokeKey("c")).toBe(false);
+    expect(isStrokeKey("t")).toBe(false);
+  });
+
+  test("T: the frame's file time plus the offset, to the millisecond, or nothing", () => {
+    // The trimmed copy starts 940 s into the upload: the player's 0:10.2 is
+    // 950.2 on the analysis clock `video_time` stores (file + offset, as
+    // `parseFileTime` reads the typed cell).
+    const untimed = { videoTime: null };
+    expect(frameTimePatch(untimed, 10.2, 940)).toEqual({ video_time: 950.2 });
+    expect(frameTimePatch(untimed, 10.2)).toEqual({ video_time: 10.2 });
+    // Rounded to milliseconds, like the typed cell.
+    expect(frameTimePatch(untimed, 0.12345, 940)).toEqual({
+      video_time: 940.123,
+    });
+    // A move of more than the 0.05 s tolerance is an edit…
+    expect(frameTimePatch({ videoTime: 950.1 }, 10.2, 940)).toEqual({
+      video_time: 950.2,
+    });
+    // …anything under it is the same time: no write.
+    expect(frameTimePatch({ videoTime: 950.23 }, 10.2, 940)).toBeNull();
+    expect(frameTimePatch({ videoTime: 950.2 }, 10.2, 940)).toBeNull();
+    // No element, no frame.
+    expect(frameTimePatch(untimed, null, 940)).toBeNull();
+    expect(frameTimePatch(untimed, Number.NaN, 940)).toBeNull();
+  });
+
+  test("R / ⇧R only ask the existing reset confirms, guarded like the other stroke keys", () => {
+    expect(source).toContain('lower === "r"');
+    expect(source).toContain("? () => resetPointKey.current()");
+    expect(source).toContain(": () => resetShotKey.current()");
+    const shotBody = source.slice(
+      source.indexOf("    resetShotKey.current = () => {"),
+    );
+    const shotFn = shotBody.slice(0, shotBody.indexOf("\n    };\n"));
+    expect(shotFn).toContain(
+      "if (!operable || confirm || placement.shotId === null) return false;",
+    );
+    expect(shotFn).toContain("if (!canResetShot(shot)) return false;");
+    expect(shotFn).toContain("rowOperations.onAskResetShot(");
+    expect(shotFn).not.toContain("setConfirm");
+    const pointBody = source.slice(
+      source.indexOf("    resetPointKey.current = () => {"),
+    );
+    const pointFn = pointBody.slice(0, pointBody.indexOf("\n    };\n"));
+    expect(pointFn).toContain("if (!operable || confirm || !expanded)");
+    expect(pointFn).toContain("if (!canResetPoint(expanded)) return false;");
+    expect(pointFn).toContain(
+      "pointResetScope(expanded, sharesVendorRally(expanded, points))",
+    );
+    expect(pointFn).toContain("rowOperations.onAskResetPoint(expanded.id)");
+    expect(pointFn).not.toContain("setConfirm");
+  });
+
+  test("T writes the selected stroke's time from the player, on the console's key reach", () => {
+    expect(source).toContain(': lower === "t" && !event.shiftKey\n');
+    expect(source).toContain("? () => timeKey.current()");
+    const body = source.slice(source.indexOf("    timeKey.current = () => {"));
+    const fn = body.slice(0, body.indexOf("\n    };\n"));
+    // Read-only, a confirm open or nothing selected: no write, key not taken.
+    expect(fn).toContain(
+      "if (!editable || confirm || placement.shotId === null) return false;",
+    );
+    // Never a stroke left selected in another point than the open one, and
+    // never a deleted one.
+    expect(fn).toContain(
+      'if (!owner || !shot || shot.status === "deleted") return false;',
+    );
+    expect(fn).toContain(
+      "if (expanded && owner.id !== expanded.id) return false;",
+    );
+    // Never `keyShot`: T does not pick a stroke for itself.
+    expect(fn).not.toContain("keyShot()");
+    // The player's file time, back on the analysis clock, through the shot
+    // edit every cell writes with.
+    expect(fn).toContain("player.current?.currentTime() ?? null,");
+    expect(fn).toContain("fileOffset,");
+    expect(fn).toContain("if (patch) requestPatchShot(shot.id, patch);");
+    // The handle reads the element on the file's clock; no offset there.
+    const video = readFileSync(
+      "src/components/admin/labels/label-video.tsx",
+      "utf8",
+    );
+    expect(video).toContain("return videoRef.current?.currentTime ?? null;");
   });
 
   test("A adds after the selected live stroke, else after the point's last; C flips the court's end", () => {
@@ -360,6 +454,195 @@ test.describe("court zoom", () => {
     expect(source).toMatch(/toCourtInWindow\(\s*top,\s*artPoint\(/);
   });
 
+  test("+ / − and the ⌃ wheel zoom through `zoomAbout`; the anchor's court point holds", () => {
+    const source = readFileSync(
+      "src/components/admin/labels/label-court.tsx",
+      "utf8",
+    );
+    // + / − about the box centre; the ⌃ wheel about the cursor.
+    expect(source).toContain("zoomAbout(z, z.scale * factor, 50, 50)");
+    expect(source).toContain(
+      "zoomAbout(state.zoom, state.zoom.scale * factor, px, py)",
+    );
+    const anchors = [
+      [50, 50],
+      [15, 85],
+      [0, 0],
+      [100, 100],
+      [72, 31],
+    ];
+    const tops = [halfTopY("near"), halfTopY("far"), moveWindow(30, 0)];
+    for (const scale of [1.5, 2.25, 4]) {
+      for (const [px, py] of anchors) {
+        for (const top of tops) {
+          // From the unzoomed court and from an already zoomed, panned one.
+          for (const from of [
+            NO_ZOOM,
+            panBy(zoomAbout(NO_ZOOM, 1.5, 30, 60), -7, 4),
+          ]) {
+            const before = toCourtInWindow(top, artPoint(from, px, py));
+            const z = zoomAbout(from, scale, px, py);
+            const after = toCourtInWindow(top, artPoint(z, px, py));
+            // Only the clamp may move it, and only at a corner it cannot.
+            if (z.x > 100 * (1 - z.scale) && z.x < 0) {
+              expect(after.x).toBeCloseTo(before.x, 9);
+            }
+            if (z.y > 100 * (1 - z.scale) && z.y < 0) {
+              expect(after.y).toBeCloseTo(before.y, 9);
+            }
+          }
+          // From the unzoomed court the clamp never bites: exactly still.
+          const z = zoomAbout(NO_ZOOM, scale, px, py);
+          const p = artPoint(z, px, py);
+          expect(p.sx).toBeCloseTo(px, 9);
+          expect(p.sy).toBeCloseTo(py, 9);
+        }
+      }
+    }
+  });
+
+  test("in then out by the same factor, from any pan, is exactly the unzoomed court", () => {
+    for (const scale of [1.5, 2.25, 4, Math.exp(0.2) ** 3]) {
+      for (const [px, py] of [
+        [50, 50],
+        [15, 85],
+        [3, 97],
+      ]) {
+        for (const [dx, dy] of [
+          [0, 0],
+          [-40, 12],
+          [500, -500],
+        ]) {
+          const z = panBy(zoomAbout(NO_ZOOM, scale, px, py), dx, dy);
+          const back = zoomAbout(z, z.scale / scale, 100 - px, py / 2);
+          expect(back).toEqual(NO_ZOOM);
+          expect(back.scale).toBe(1);
+        }
+      }
+    }
+    // A pinch in five wheel events and out five: products, not one factor.
+    let z = NO_ZOOM;
+    const f = Math.exp(0.2);
+    for (let i = 0; i < 5; i++) z = zoomAbout(z, z.scale * f, 15, 85);
+    for (let i = 0; i < 5; i++) z = zoomAbout(z, z.scale / f, 15, 85);
+    expect(z).toEqual(NO_ZOOM);
+  });
+
+  // Reproduced in a browser (dev preview of the real LabelCourt on a near
+  // half): pinched to 3.3× on the near baseline's left corner (court
+  // y ≈ 0.3 m under the box centre) and dragged, then a placing click flipped
+  // the box near → far. The art kept its percent offsets, so the zoomed view
+  // jumped 14.5 m to the far service box (y ≈ 14.9 m under the centre) — a
+  // spot nobody zoomed to. A slide (27.27 → 30) likewise shifted the centre
+  // 2.7 m. The placed point itself was right; the view after it was not.
+  test("a placing click's near ↔ far flip, or a slide, keeps the zoomed-to court spot under the centre", () => {
+    const near = halfTopY("near");
+    const far = halfTopY("far");
+    const centre = (z: typeof NO_ZOOM, top: number) =>
+      toCourtInWindow(top, artPoint(z, 50, 50));
+    // Zoomed to the far half's middle, the box slides back 2.73 m.
+    const z = zoomAbout(NO_ZOOM, 2.25, 50, 50);
+    const slid = carryZoom(z, far, 30);
+    expect(centre(slid, 30).y).toBeCloseTo(centre(z, far).y, 9);
+    expect(centre(slid, 30).x).toBeCloseTo(centre(z, far).x, 9);
+    // The same offsets, as before this fix, show another spot.
+    expect(Math.abs(centre(z, 30).y - centre(z, far).y)).toBeGreaterThan(2);
+    // Back again: the same zoom.
+    const back = carryZoom(slid, 30, far);
+    expect(back.x).toBeCloseTo(z.x, 9);
+    expect(back.y).toBeCloseTo(z.y, 9);
+    // Near → far from a zoom near the net: the net-side spot stays centred.
+    const atNet = panBy(zoomAbout(NO_ZOOM, 4, 50, 5), 0, 0);
+    const flipped = carryZoom(atNet, near, far);
+    // That spot is off the far box (near side, below its bottom edge), so the
+    // art is as far toward it as it can go: the bottom edge, and no further.
+    expect(flipped.y).toBeCloseTo(100 * (1 - 4), 9);
+    expect(flipped.scale).toBe(4);
+    expect(flipped.x).toBe(atNet.x);
+  });
+
+  test("carried zoom always covers the box; unzoomed it stays unzoomed", () => {
+    const tops = [halfTopY("near"), halfTopY("far"), 30, 9, 20];
+    for (const scale of [1.5, 2.25, 4]) {
+      for (const from of tops) {
+        for (const to of tops) {
+          for (const [px, py] of [
+            [0, 0],
+            [50, 50],
+            [100, 100],
+            [20, 90],
+          ]) {
+            const z = carryZoom(zoomAbout(NO_ZOOM, scale, px, py), from, to);
+            expect(z.scale).toBe(scale);
+            for (const v of [z.x, z.y]) {
+              expect(v).toBeLessThanOrEqual(0);
+              expect(v).toBeGreaterThanOrEqual(100 * (1 - scale) - 1e-9);
+            }
+          }
+        }
+      }
+    }
+    expect(carryZoom(NO_ZOOM, halfTopY("near"), halfTopY("far"))).toEqual(
+      NO_ZOOM,
+    );
+  });
+
+  test("the court carries the zoom where its box moves, and resets on whole ↔ half or another stroke", () => {
+    const source = readFileSync(
+      "src/components/admin/labels/label-court.tsx",
+      "utf8",
+    );
+    expect(source).toMatch(
+      /zoomState\.zoomed !== zoomed \|\|\s+zoomState\.shotId !== targetShotId/,
+    );
+    expect(source).toMatch(
+      /shotId: targetShotId,\s+zoom: NO_ZOOM,\s+openedTop,\s+top: openedTop,/,
+    );
+    expect(source).toMatch(
+      /} else if \(zoomState\.openedTop !== openedTop\) \{\s+setZoomState\(\{\s+\.\.\.zoomState,\s+zoom: carryZoom\(zoomState\.zoom, zoomState\.top, openedTop\),/,
+    );
+  });
+
+  test("a court point round-trips through the window and the zoom to within 1 cm", () => {
+    const points = [
+      { x: 0, y: 0 },
+      { x: -4.115, y: NET_Y },
+      { x: 5.48, y: COURT_LENGTH },
+      { x: -9.9, y: -3.4 },
+      { x: 2.3, y: 27.1 },
+      { x: 7.1, y: 6.4 },
+    ];
+    const tops = [
+      halfTopY("near"),
+      halfTopY("far"),
+      runoffWindowTop("near", MAX_RUNOFF),
+      runoffWindowTop("far", MAX_RUNOFF),
+      20,
+    ];
+    for (const scale of [1, 1.5, 2.25, 4]) {
+      for (const [px, py, dx, dy] of [
+        [50, 50, 0, 0],
+        [10, 90, 13, -8],
+        [95, 5, -60, 40],
+        [33, 66, 500, 500],
+      ]) {
+        const zoom = panBy(zoomAbout(NO_ZOOM, scale, px, py), dx, dy);
+        for (const top of tops) {
+          for (const point of points) {
+            // Drawn at box percent: the window, then the zoom transform.
+            const art = fromCourtInWindow(top, point);
+            const sx = zoom.x + art.sx * zoom.scale;
+            const sy = zoom.y + art.sy * zoom.scale;
+            // Read back as a click there is.
+            const back = toCourtInWindow(top, artPoint(zoom, sx, sy));
+            expect(Math.abs(back.x - point.x)).toBeLessThan(0.01);
+            expect(Math.abs(back.y - point.y)).toBeLessThan(0.01);
+          }
+        }
+      }
+    }
+  });
+
   test("a click maps back through the zoom", () => {
     const z = { scale: 2, x: -50, y: -20 };
     // Box centre at 2× offset (-50, -20) shows art (50, 35).
@@ -368,7 +651,7 @@ test.describe("court zoom", () => {
   });
 });
 
-test.describe("a deep contact: the run-off grows as the labeller clicks near its edge", () => {
+test.describe("a deep contact: one click, written as clicked", () => {
   const UNPLACED: ShotPosition = {
     stroke: "forehand",
     contact_x: null,
@@ -383,38 +666,35 @@ test.describe("a deep contact: the run-off grows as the labeller clicks near its
       startPlacement("s", "near"),
       { x: 1, y: -2.5 },
       UNPLACED,
+      [],
     )!;
     expect(step.patch).toEqual({ contact_x: 1, contact_y: -2.5 });
     expect(step.state.target).toBe("landing");
-    expect(step.state.runoff).toBeUndefined();
   });
 
-  test("a click near the edge is stored as clicked, and the contact stays armed with more run-off", () => {
+  test("a click at the run-off's back edge is stored as clicked and moves on to the landing", () => {
     const start = startPlacement("s", "near");
-    const edge = nextPlacement(start, { x: -2.4, y: -3.3 }, UNPLACED)!;
-    // Never clamped inside the run-off.
+    const edge = nextPlacement(start, { x: -2.4, y: -3.3 }, UNPLACED, [])!;
+    // Never clamped inside the run-off, and no second click to grow it.
     expect(edge.patch).toEqual({ contact_x: -2.4, contact_y: -3.3 });
-    expect(edge.state).toEqual({ ...start, runoff: 5.5 });
-    // Deeper again, at the new edge: it grows again.
-    const placed = { ...UNPLACED, contact_x: -2.4, contact_y: -3.3 };
-    const deeper = nextPlacement(edge.state, { x: -2.4, y: -5.2 }, placed)!;
-    expect(deeper.patch).toEqual({ contact_x: -2.4, contact_y: -5.2 });
-    expect(deeper.state.runoff).toBe(7.5);
-    // Clear of the edge: placed, and on to the landing.
-    const settled = nextPlacement(
-      deeper.state,
-      { x: -2.4, y: -6.2 },
-      { ...placed, contact_y: -5.2 },
-    )!;
-    expect(settled.patch).toEqual({ contact_x: -2.4, contact_y: -6.2 });
-    expect(settled.state.target).toBe("landing");
-    // The far half reads its depth past the far baseline.
+    expect(edge.state).toEqual({
+      shotId: "s",
+      target: "landing",
+      half: "far",
+      flipped: false,
+    });
+    // Past the usual edge (the box moved deeper): the same.
+    const deep = nextPlacement(start, { x: 0, y: -9.4 }, UNPLACED, [])!;
+    expect(deep.patch).toEqual({ contact_x: 0, contact_y: -9.4 });
+    expect(deep.state.target).toBe("landing");
+    // The far half too.
     const far = nextPlacement(
       startPlacement("s", "far"),
-      { x: 0, y: 23.77 + 3.2 },
+      { x: 0, y: 23.77 + 3.4 },
       UNPLACED,
+      [],
     )!;
-    expect(far.state.runoff).toBe(5.5);
+    expect(far.state).toMatchObject({ target: "landing", half: "near" });
   });
 
   test("the run-off covers a stored deep contact, capped", () => {
@@ -424,18 +704,11 @@ test.describe("a deep contact: the run-off grows as the labeller clicks near its
     expect(runoffFor(40)).toBe(MAX_RUNOFF);
     const contact = startPlacement("s", "near");
     expect(placementRunoff(contact, -4.2)).toBe(5.5);
-    expect(placementRunoff({ ...contact, runoff: 7.5 }, -4.2)).toBe(7.5);
+    expect(placementRunoff(contact, null)).toBe(3.5);
     // A landing draws the usual run-off.
     expect(placementRunoff(setPlacementTarget(contact, "landing"), -4.2)).toBe(
       3.5,
     );
-    // At the cap a click at the edge is just placed.
-    const capped = nextPlacement(
-      { ...contact, runoff: MAX_RUNOFF },
-      { x: 0, y: -MAX_RUNOFF + 0.1 },
-      UNPLACED,
-    )!;
-    expect(capped.state.target).toBe("landing");
   });
 
   test("the slide and its guides: +2 m steps out to the run-off", () => {
@@ -464,6 +737,107 @@ test.describe("a deep contact: the run-off grows as the labeller clicks near its
   });
 });
 
+test.describe("after a landing: the next stroke's contact", () => {
+  const PLACED: ShotPosition = {
+    stroke: "forehand",
+    contact_x: 1,
+    contact_y: -0.5,
+    landing_x: null,
+    landing_y: null,
+    result: null,
+  };
+  const RALLY = [
+    { id: "s1", hitter: "p1" as const, contactY: -0.5 },
+    { id: "s2", hitter: "p2" as const, contactY: null },
+    { id: "s3", hitter: "p1" as const, contactY: null },
+  ];
+  const landingOf = (shotId: string) =>
+    setPlacementTarget(startPlacement(shotId, "near"), "landing", -0.5);
+
+  test("the landing arms the next stroke's contact, on its hitter's half", () => {
+    const step = nextPlacement(
+      landingOf("s1"),
+      { x: 0, y: 20 },
+      PLACED,
+      RALLY,
+    )!;
+    expect(step.patch).toMatchObject({ landing_x: 0, landing_y: 20 });
+    expect(step.state).toEqual({
+      shotId: "s2",
+      target: "contact",
+      half: "far",
+      flipped: false,
+    });
+    // A stored contact on the next stroke says its half.
+    const stored = RALLY.map((s) =>
+      s.id === "s2" ? { ...s, contactY: -1 } : s,
+    );
+    expect(
+      nextPlacement(landingOf("s1"), { x: 0, y: 20 }, PLACED, stored)!.state
+        .half,
+    ).toBe("near");
+    // The same hitter again (a second serve): the same half.
+    const fault = RALLY.map((s) =>
+      s.id === "s2" ? { ...s, hitter: "p1" as const } : s,
+    );
+    expect(
+      nextPlacement(landingOf("s1"), { x: 0, y: 20 }, PLACED, fault)!.state
+        .half,
+    ).toBe("near");
+  });
+
+  test("on the point's last stroke nothing is selected after, never the same stroke's contact", () => {
+    const last = nextPlacement(
+      landingOf("s3"),
+      { x: 0, y: 20 },
+      PLACED,
+      RALLY,
+    )!;
+    expect(last.state.shotId).toBeNull();
+    // A stroke the list does not hold lets go too.
+    expect(
+      nextPlacement(landingOf("gone"), { x: 0, y: 20 }, PLACED, RALLY)!.state
+        .shotId,
+    ).toBeNull();
+  });
+
+  test("the notice: after such a landing only", () => {
+    const landing = landingOf("s1");
+    const step = nextPlacement(landing, { x: 0, y: 20 }, PLACED, RALLY)!;
+    expect(placementNotice(landing, step.state, 2)).toBe(
+      "Landing placed · next: shot 2 contact",
+    );
+    // After a contact: none.
+    const contact = startPlacement("s2", "far");
+    const hit = nextPlacement(contact, { x: 0, y: 24 }, PLACED, RALLY)!;
+    expect(placementNotice(contact, hit.state, 2)).toBeNull();
+    // After the last stroke's landing: none.
+    const end = nextPlacement(landingOf("s3"), { x: 0, y: 20 }, PLACED, RALLY)!;
+    expect(placementNotice(landingOf("s3"), end.state, null)).toBeNull();
+  });
+});
+
+test.describe("the run-off guides on screen", () => {
+  test("a half's own box shows its usual run-off; a moved box as deep as it reaches", () => {
+    expect(windowRunoffs(halfTopY("near"))).toEqual([
+      { half: "near", runoff: 3.5 },
+    ]);
+    expect(windowRunoffs(halfTopY("far"))).toEqual([
+      { half: "far", runoff: 3.5 },
+    ]);
+    // Dragged 3 m deeper behind the near baseline: guides out to 6.5 m.
+    const moved = moveWindow(halfTopY("near"), -3);
+    expect(windowRunoffs(moved)).toEqual([{ half: "near", runoff: 6.5 }]);
+    expect(runoffGuides("near", 6.5).map((g) => g.metres)).toEqual([2, 4, 6]);
+    // As far as the box goes: the deepest run-off.
+    expect(windowRunoffs(moveWindow(halfTopY("near"), -40))).toEqual([
+      { half: "near", runoff: MAX_RUNOFF },
+    ]);
+    // Mid-court (a short ball's box): no run-off on screen.
+    expect(windowRunoffs(18.224)).toEqual([]);
+  });
+});
+
 test.describe("a short ball: a landing on the hitter's own side is allowed", () => {
   test("the click is written as clicked, and reads as a net ball", () => {
     // The landing armed on the far half (the receiver's); the ball bounced
@@ -484,6 +858,7 @@ test.describe("a short ball: a landing on the hitter's own side is allowed", () 
         landing_y: null,
         result: null,
       },
+      [],
     )!;
     expect(step.patch).toEqual({
       landing_x: 0.4,
@@ -531,5 +906,176 @@ test.describe("“Off screen, so this is an estimate”", () => {
     });
     expect(isEstimate(["landing_y"], "landing")).toBe(true);
     expect(isEstimate(["landing_y"], "contact")).toBe(false);
+  });
+});
+
+test.describe("a click on a placed end selects it", () => {
+  test("`nearestEnd`: the nearer stored end; one placed, that one; none, null", () => {
+    const both = { contactX: 1, contactY: 2, landingX: -2, landingY: 8 };
+    expect(nearestEnd(both, { x: 1.2, y: 2.1 })).toBe("contact");
+    expect(nearestEnd(both, { x: -1.5, y: 7 })).toBe("landing");
+    // A tie goes to the contact.
+    expect(
+      nearestEnd(
+        { contactX: 0, contactY: 0, landingX: 2, landingY: 0 },
+        {
+          x: 1,
+          y: 0,
+        },
+      ),
+    ).toBe("contact");
+    expect(
+      nearestEnd(
+        { contactX: 1, contactY: 2, landingX: null, landingY: null },
+        {
+          x: -2,
+          y: 8,
+        },
+      ),
+    ).toBe("contact");
+    expect(
+      nearestEnd(
+        { contactX: null, contactY: null, landingX: -2, landingY: 8 },
+        {
+          x: 1,
+          y: 2,
+        },
+      ),
+    ).toBe("landing");
+    expect(
+      nearestEnd(
+        { contactX: null, contactY: null, landingX: null, landingY: null },
+        { x: 0, y: 0 },
+      ),
+    ).toBeNull();
+    expect(nearestEnd({}, { x: 0, y: 0 })).toBeNull();
+  });
+
+  // The near half's own box, at its usual 276 × 222 px: 13.68 px a metre.
+  const TOP = halfTopY("near");
+  const BOX = { width: 276, height: 222 };
+  const PX_PER_M = BOX.width / 20.17;
+  const stroke = {
+    shot: labelShot("s1", "p1", {
+      contactX: 1,
+      contactY: 2,
+      landingX: -2,
+      landingY: 8,
+    }),
+  };
+  const at = (x: number, y: number) => fromCourtInWindow(TOP, { x, y });
+  const none = { shotId: null, target: null };
+
+  test("the hit radius is the mark's own drawn size, in screen pixels", () => {
+    expect(markHitRadius("contact", false)).toBe(5.5);
+    expect(markHitRadius("landing", false)).toBe(4);
+    expect(markHitRadius("landing", true)).toBeCloseTo(5.75);
+  });
+
+  test("on a mark: that stroke on that end; just beside it, nothing (the click places)", () => {
+    expect(markEndAt([stroke], TOP, NO_ZOOM, at(1, 2), BOX, none)).toEqual({
+      shotId: "s1",
+      end: "contact",
+    });
+    expect(markEndAt([stroke], TOP, NO_ZOOM, at(-2, 8), BOX, none)).toEqual({
+      shotId: "s1",
+      end: "landing",
+    });
+    // 0.3 m is 4.1 px: inside the ring's 5.5 px.
+    expect(markEndAt([stroke], TOP, NO_ZOOM, at(1.3, 2), BOX, none)).toEqual({
+      shotId: "s1",
+      end: "contact",
+    });
+    // 0.5 m is 6.8 px: outside it.
+    expect(0.5 * PX_PER_M).toBeGreaterThan(markHitRadius("contact", false));
+    expect(markEndAt([stroke], TOP, NO_ZOOM, at(1.5, 2), BOX, none)).toBeNull();
+  });
+
+  test("the end being placed is never picked: placing beside an existing mark still places", () => {
+    // Re-placing the armed contact right on its old mark places it.
+    expect(
+      markEndAt([stroke], TOP, NO_ZOOM, at(1, 2), BOX, {
+        shotId: "s1",
+        target: "contact",
+      }),
+    ).toBeNull();
+    // Armed on the landing, a click 0.5 m from the stroke's own contact (as a
+    // short ball's landing would be) places the landing.
+    expect(
+      markEndAt([stroke], TOP, NO_ZOOM, at(1.5, 2), BOX, {
+        shotId: "s1",
+        target: "landing",
+      }),
+    ).toBeNull();
+    // A click on the landing's old mark re-places it, not the contact.
+    expect(
+      markEndAt([stroke], TOP, NO_ZOOM, at(-2, 8), BOX, {
+        shotId: "s1",
+        target: "landing",
+      }),
+    ).toBeNull();
+    // Right on the other end's mark it is that end.
+    expect(
+      markEndAt([stroke], TOP, NO_ZOOM, at(1, 2), BOX, {
+        shotId: "s1",
+        target: "landing",
+      }),
+    ).toEqual({ shotId: "s1", end: "contact" });
+  });
+
+  test("under the labeller's zoom the radius stays in screen pixels", () => {
+    const zoom = { scale: 2, x: -50, y: -50 };
+    const screen = (x: number, y: number) => {
+      const p = at(x, y);
+      return { sx: zoom.x + p.sx * zoom.scale, sy: zoom.y + p.sy * zoom.scale };
+    };
+    expect(markEndAt([stroke], TOP, zoom, screen(1, 2), BOX, none)).toEqual({
+      shotId: "s1",
+      end: "contact",
+    });
+    // 0.3 m is 8.2 px at ×2: outside the ring.
+    expect(
+      markEndAt([stroke], TOP, zoom, screen(1.3, 2), BOX, none),
+    ).toBeNull();
+  });
+
+  test("an end not drawn (or not placed) is never picked", () => {
+    const hidden = { ...stroke, opacity: { hit: 0, landed: 1 } };
+    expect(markEndAt([hidden], TOP, NO_ZOOM, at(1, 2), BOX, none)).toBeNull();
+    const bare = { shot: labelShot("s2", "p1", { contactX: 1, contactY: 2 }) };
+    expect(markEndAt([bare], TOP, NO_ZOOM, at(1, 2), BOX, none)).toEqual({
+      shotId: "s2",
+      end: "contact",
+    });
+    expect(markEndAt([bare], TOP, NO_ZOOM, at(-2, 8), BOX, none)).toBeNull();
+  });
+
+  test("the court asks before it places; the console selects through `selectShot`", () => {
+    const court = readFileSync(
+      "src/components/admin/labels/label-court.tsx",
+      "utf8",
+    );
+    const pick = court.indexOf("markEndAt(strokes, top, zoom, at, rect, {");
+    const place = court.indexOf(
+      "onPlace(toCourtInWindow(top, artPoint(zoom, at.sx, at.sy)));",
+    );
+    expect(pick).toBeGreaterThan(-1);
+    expect(place).toBeGreaterThan(pick);
+    expect(court).toContain("shotId: targetShotId,");
+    expect(court).toContain("onSelectShot?.(pick.shotId, pick.end);");
+    const panel = readFileSync(
+      "src/components/admin/labels/label-court-panel.tsx",
+      "utf8",
+    );
+    expect(panel).toContain(
+      "onSelectShot={placing ? onSelectShot : undefined}",
+    );
+    const console = readFileSync(
+      "src/components/admin/labels/label-console.tsx",
+      "utf8",
+    );
+    expect(console).toContain(
+      "onSelectShot={(shotId, end) => selectShot(shotId, end)}",
+    );
   });
 });

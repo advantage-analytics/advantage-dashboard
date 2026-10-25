@@ -13,6 +13,10 @@
  *   left unfinished, or settled with rows still past its end. The set totals
  *   (`set-scores.ts`) and the game band read it; `winner` stays the last
  *   counted point's for the readers that name a game by it.
+ * - A session whose video starts after the first point carries a
+ *   `LabelStartScore`: the first game in point order opens at its `points`
+ *   with its `server`, and that game's set opens at its `games`. With none
+ *   (null) everything counts from 0–0, as before the column existed.
  */
 
 import {
@@ -24,6 +28,7 @@ import {
   type LabelGameType,
   type LabelPointStatus,
   type LabelSide,
+  type LabelStartScore,
 } from "./session";
 
 // `label_points.game_type`'s vocabulary lives in session.ts with the row
@@ -80,6 +85,12 @@ export interface LabelGameBand {
   /** Games already won in this set before this one, p1 first: "2–0". */
   gamesBefore: string;
   /**
+   * The game's first server: its first live point's that names one — or,
+   * for the first game of a video that starts mid-match, the start's
+   * `server`. Null while no row names one.
+   */
+  server: LabelSide | null;
+  /**
    * Who won the game: the winner of its last counted point, or null while
    * no point of it counts. Kept for the readers that name a game by its
    * last point; `set-scores.ts` tallies a set from `outcome`.
@@ -133,11 +144,6 @@ interface GameAccumulator {
   extra: number;
 }
 
-/**
- * Score the session. `points` are the session's rows in `point_index`
- * order; `adScoring` is whether a game at 40–40 goes to Ad (true) or ends on
- * the next point (false, "no-ad").
- */
 /** `"{set}·{game}"`: the one key a point's game goes by in every map. */
 export function gameKey(point: {
   setNumber: number | null;
@@ -168,9 +174,16 @@ export function bandsBeforePoints(
   return bandBefore;
 }
 
+/**
+ * Score the session. `points` are the session's rows in `point_index`
+ * order; `adScoring` is whether a game at 40–40 goes to Ad (true) or ends on
+ * the next point (false, "no-ad"); `start` is where the video starts in the
+ * match (null: at the beginning), which seeds the first game and its set.
+ */
 export function labelScores(
   points: readonly ScorablePoint[],
   adScoring: boolean,
+  start: LabelStartScore | null = null,
 ): LabelScores {
   const games: GameAccumulator[] = [];
   const gameByKey = new Map<string, GameAccumulator>();
@@ -189,12 +202,16 @@ export function labelScores(
     const key = gameKey(point);
     let game = gameByKey.get(key);
     if (!game) {
+      // The first game on the video opens where the start says it does.
+      const opening = games.length === 0 ? start : null;
       game = {
         setNumber: point.setNumber,
         gameNumber: point.gameNumber,
         gameType: point.gameType ?? "game",
-        server: null,
-        points: { p1: 0, p2: 0 },
+        server: opening?.server ?? null,
+        points: opening
+          ? { p1: opening.points[0], p2: opening.points[1] }
+          : { p1: 0, p2: 0 },
         winner: null,
         won: null,
         extra: 0,
@@ -231,7 +248,15 @@ export function labelScores(
   for (const game of games) {
     let set = perSet.get(game.setNumber);
     if (!set) {
-      set = { rank: 0, won: { p1: 0, p2: 0 } };
+      // The first game's set — the first set on the video — opens at the
+      // start's games; every later set at 0–0.
+      const opening = game === games[0] ? start : null;
+      set = {
+        rank: 0,
+        won: opening
+          ? { p1: opening.games[0], p2: opening.games[1] }
+          : { p1: 0, p2: 0 },
+      };
       perSet.set(game.setNumber, set);
     }
     set.rank += 1;
@@ -242,6 +267,7 @@ export function labelScores(
       gameInSet: set.rank,
       gameType: game.gameType,
       gamesBefore: `${set.won.p1}–${set.won.p2}`,
+      server: game.server,
       winner: game.winner,
       points: { ...game.points },
       decidedBy: decidedBy(game),

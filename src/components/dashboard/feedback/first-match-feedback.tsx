@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import posthog from "posthog-js";
 import { markTourDone } from "@/app/dashboard/onboarding-actions";
 import { FirstMatchFeedbackDialog } from "@/components/dashboard/feedback/first-match-feedback-dialog";
-import { watchDocument } from "@/components/dashboard/onboarding/hint-runner";
+
 import {
   rememberSeen,
   seenThisSession,
+  watchDocument,
 } from "@/components/dashboard/onboarding/seen-this-session";
 import { useToast } from "@/components/dashboard/toast/toast-provider";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";

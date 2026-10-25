@@ -36,6 +36,7 @@
  * | Ownership transferred    | `transferProgramOwnership()`, to the new owner — WIRED |
  * | Member left              | `leaveProgram()`, to the owner · pref `notifyTeamActivity` — WIRED |
  * | Match video expiry       | the daily cleanup cron (`/api/cron/cleanup-match-videos`), to the video's `uploaded_by`, once per retention clock via `claimSend("match_video_expiry:<attachment>:<clock date>")` — no pref, it is the only notice before a deletion — WIRED |
+ * | First-upload nudge (×2)  | `/api/cron/first-upload-nudges` (daily, 17:00 UTC) — a sign-up 2–7 days old (step 1, SwingVision import) or 7–14 days (step 2, video), in no program, with no match or job, picked by `first_upload_nudge_candidates()` · pref `emailGettingStarted`, one-click unsubscribe + postal address, `claimSend("first_upload_nudge:<step>:<user_id>")` — WIRED once the migration is applied |
  * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row (a join request only when the program has no owner to decide it) — to every `is_admin` user plus `INTERNAL_ALERTS_ADDRESS` — WIRED |
  * | Program went live (internal) | `notifyProgramWentLive()` — a claim lands live via `completeClaim()` / `completeClaimWithToken()` (path `auto`) or an admin's `approveClaim()` opens its objection window (path `reviewed`) — to `INTERNAL_ALERTS_ADDRESS` only, once per program via `claimSend("program_live:<program_id>")` — WIRED |
  * | New signup (internal)    | `public.users` insert → `pg_net` → `/api/webhooks/internal-events` → `notifyInternalEvent()`, to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("signup_internal:<user_id>")` — WIRED once Vault holds `cron_secret` |
@@ -203,3 +204,9 @@ export {
   matchVideoExpiryEmail,
   type MatchVideoExpiryInput,
 } from "./templates/match-video-expiry";
+
+export {
+  firstUploadNudgeEmail,
+  type FirstUploadNudgeInput,
+  type FirstUploadStep,
+} from "./templates/first-upload";

@@ -20,7 +20,12 @@ import { markSummary } from "./marks-state";
 import { labelScores, type LabelGameBand } from "./score";
 import { enteredScore, labelSetScores, scoreMismatch } from "./set-scores";
 import type { MatchScore } from "@/lib/services/splitstep/derivation";
-import { isNonPointEnding, labelProgress, type LabelPoint } from "./session";
+import {
+  isNonPointEnding,
+  labelProgress,
+  type LabelPoint,
+  type LabelStartScore,
+} from "./session";
 import { setBreakSuspects, setBreakWarning } from "./set-break";
 import { tiebreakServeOrders } from "./tiebreak-serve";
 import { foldedPointIds, gameServeRepeats } from "./game-serve-order";
@@ -43,6 +48,8 @@ export interface CompleteWarningInput {
   names?: MarkNames;
   /** set-scores.ts `matchTiebreakSet`: its split games are the fold's, not a repeat. */
   matchTiebreakSet?: number | null;
+  /** Where the video starts in the match; missing or null: at the beginning. */
+  startScore?: LabelStartScore | null;
 }
 
 const plural = (n: number, one: string, many = `${one}s`) =>
@@ -80,9 +87,11 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
     }
   }
 
+  const start = input.startScore ?? null;
   const sets = labelSetScores(
     points,
-    input.games ?? labelScores(points, adScoring).games,
+    input.games ?? labelScores(points, adScoring, start).games,
+    start,
   );
   const several = sets.length > 1;
   for (const set of sets) {
@@ -109,7 +118,7 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
   }
 
   const folded = foldedPointIds(
-    tiebreakFolds(points, adScoring, input.matchTiebreakSet ?? null),
+    tiebreakFolds(points, adScoring, input.matchTiebreakSet ?? null, start),
   );
   for (const repeat of gameServeRepeats(points, folded)) {
     const games = [repeat.gameInSet, repeat.other.gameInSet].sort(

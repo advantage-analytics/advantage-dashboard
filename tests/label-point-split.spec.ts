@@ -139,6 +139,26 @@ test.describe("a split renumbers the serves that open the new point", () => {
         .shots.find((shot) => shot.id === second.id),
     ).toEqual(before.shots.find((shot) => shot.id === second.id));
   });
+
+  test("a game's lock stays on the earlier half (game-boundary.ts)", () => {
+    const rows = points().map((point) =>
+      point.id === P1 ? { ...point, gameStartLocked: true } : point,
+    );
+    const live = pointOf(P1).shots.filter((shot) => shot.status !== "deleted");
+    const plan = planPointSplit(rows, P1, live[1].id);
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.write.insert).not.toHaveProperty("game_start_locked");
+    const split = applyPointSplit(
+      rows,
+      P1,
+      draftSplitPoint(plan.write.insert, NEW_ID),
+      plan.write,
+    );
+    expect(split.find((point) => point.id === P1)?.gameStartLocked).toBe(true);
+    expect(split.find((point) => point.id === NEW_ID)?.gameStartLocked).toBe(
+      false,
+    );
+  });
 });
 
 // ── The plan ───────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import type { LabelScores } from "@/lib/services/labels/score";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import { ENDING_LABEL, STROKE_LABEL, type SideNames } from "./label-format";
 import type { LabelVideoReadout } from "./label-video";
+import { NO_PLACEMENT, type PlacementState } from "./court-placement";
 
 /** What is playing, in the list's numbers, and the transport's words. */
 
@@ -62,4 +63,57 @@ export function nowPlayingOf(
   const point = points.find((p) => p.id === playing.pointId);
   if (!point) return null;
   return { id: point.id, point: point.pointIndex + 1 };
+}
+
+/**
+ * Whether a pin still names a point the console can open: one in the rows
+ * and not deleted. A point deleted or combined away lets its pin go; nothing
+ * the film does ever does.
+ */
+export function pinLive(
+  pinned: string | null,
+  points: readonly LabelPoint[],
+): boolean {
+  return (
+    pinned !== null &&
+    points.some((p) => p.id === pinned && p.status !== "deleted")
+  );
+}
+
+/**
+ * The console's current point — the one unfolded, on the court and under the
+ * stroke keys: the pinned point while its pin holds, else the playing one,
+ * else where the film last rested (`rest`). The pin is the held point
+ * (`PointFocus`): it holds while the film plays on into other points, and is
+ * let go only by the labeller (the follow pill, ← / →, re-clicking the
+ * playing row) or by its point going away.
+ */
+export function currentPointOf({
+  pinned,
+  playing,
+  rest,
+  points,
+}: {
+  pinned: string | null;
+  playing: string | null;
+  rest: string | null;
+  points: readonly LabelPoint[];
+}): string | null {
+  return pinLive(pinned, points) ? pinned : (playing ?? rest);
+}
+
+/**
+ * The selection as the current point allows it: a stroke selected in any
+ * other point (or with no current point) is let go, so the stroke keys, the
+ * court and ↑ / ↓ only ever act on the open point's own strokes.
+ */
+export function selectionFor(
+  placement: PlacementState,
+  currentPoint: Pick<LabelPoint, "shots"> | null,
+): PlacementState {
+  if (placement.shotId === null) return placement;
+  const inPoint = currentPoint?.shots.some(
+    (shot) => shot.id === placement.shotId,
+  );
+  return inPoint ? placement : NO_PLACEMENT;
 }

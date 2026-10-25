@@ -32,12 +32,24 @@ export function FooterMeter({
   capSeconds,
   selectedSeconds,
   suffix,
+  creditSeconds = 0,
+  creditWord = "credits",
 }: {
   remainingSeconds: number;
   capSeconds: number;
   selectedSeconds?: number;
   /** "resets on the 1st" for a personal allowance, "team hours" for a program's. */
   suffix: string;
+  /**
+   * Credits behind the free hours, for the idle readout only: with any, the
+   * figure is the TOTAL and the split follows it, so a player given hours on
+   * top of the free 2 does not read the free figure as all they have. The
+   * bar still measures the free allowance. A priced video keeps its own
+   * readouts (`SplitReadout` for the spill into credits).
+   */
+  creditSeconds?: number;
+  /** "added" when every credit lot was granted, else "credits". */
+  creditWord?: "added" | "credits";
 }) {
   const priced = selectedSeconds !== undefined && selectedSeconds > 0;
   // An admin's personal workspace: no cap, so no bar — just what it spends.
@@ -106,7 +118,9 @@ export function FooterMeter({
             ? `Spends ${formatHoursTenths(selectedSeconds)} h · ${formatHoursTenths(
                 Math.max(0, remainingSeconds - selectedSeconds),
               )} of ${cap} h left after`
-            : `${formatHoursTenths(remainingSeconds)} of ${cap} h left · ${suffix} · Pilot ends ${formatPilotEnd()}`}
+            : creditSeconds > 0
+              ? `${formatHoursTenths(remainingSeconds + creditSeconds)} h left · ${formatHoursTenths(remainingSeconds)} free + ${formatHoursTenths(creditSeconds)} ${creditWord} · Pilot ends ${formatPilotEnd()}`
+              : `${formatHoursTenths(remainingSeconds)} of ${cap} h left · ${suffix} · Pilot ends ${formatPilotEnd()}`}
       </span>
     </span>
   );

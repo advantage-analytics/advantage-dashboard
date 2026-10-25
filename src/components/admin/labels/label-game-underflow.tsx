@@ -9,7 +9,10 @@ import {
   type PlannedGamePull,
 } from "@/lib/services/labels/game-shift";
 import { gameKey } from "@/lib/services/labels/score";
-import type { LabelPoint } from "@/lib/services/labels/session";
+import type {
+  LabelPoint,
+  LabelStartScore,
+} from "@/lib/services/labels/session";
 import {
   BlackTextAction,
   gameSlot,
@@ -42,12 +45,19 @@ export function underflowAfterPoints(
   points: readonly LabelPoint[],
   adScoring: boolean,
   matchTiebreakSet: number | null = null,
+  /** Where the video starts in the match; null: at the beginning. */
+  start: LabelStartScore | null = null,
 ): ReadonlyMap<string, UnderflowSlot> {
   const after = new Map<string, UnderflowSlot>();
-  for (const underflow of gameUnderflow(points, adScoring, matchTiebreakSet)) {
+  for (const underflow of gameUnderflow(
+    points,
+    adScoring,
+    matchTiebreakSet,
+    start,
+  )) {
     after.set(underflow.lastPointId, {
       underflow,
-      plan: planGamePullFrom(points, underflow, adScoring),
+      plan: planGamePullFrom(points, underflow, adScoring, start),
     });
   }
   return after;

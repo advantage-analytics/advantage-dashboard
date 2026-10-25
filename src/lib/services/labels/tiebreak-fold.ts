@@ -45,7 +45,12 @@ import {
   tiebreakDecided,
   type ScorablePoint,
 } from "./score";
-import type { LabelGameType, LabelPointStatus, LabelSide } from "./session";
+import type {
+  LabelGameType,
+  LabelPointStatus,
+  LabelSide,
+  LabelStartScore,
+} from "./session";
 
 /** The two tiebreaks a fold can make. */
 export type TiebreakFoldType = Exclude<LabelGameType, "game">;
@@ -74,14 +79,17 @@ type FoldPoint = ScorablePoint & { id: string; pointIndex: number };
  * deciding set the entered score spells as a match tiebreak while its games
  * are all still ordinary ones, folded whole. A set whose next game is already
  * a tiebreak — the labeller has said so — is not offered again, and the
- * match-tiebreak set is never also read for a 6–6.
+ * match-tiebreak set is never also read for a 6–6. With a `start` (the video
+ * starts mid-match) the first set on the video counts its games from
+ * `start.games`.
  */
 export function tiebreakFolds(
   points: readonly FoldPoint[],
   adScoring: boolean,
   matchTiebreakSet: number | null = null,
+  start: LabelStartScore | null = null,
 ): TiebreakFold[] {
-  const { games } = labelScores(points, adScoring);
+  const { games } = labelScores(points, adScoring, start);
   const folds: TiebreakFold[] = [];
   const sets = [...new Set(games.map((game) => game.setNumber))];
   for (const setNumber of sets) {
@@ -94,7 +102,10 @@ export function tiebreakFolds(
       }
       continue;
     }
-    const won = { p1: 0, p2: 0 };
+    const won =
+      start !== null && setNumber === games[0]?.setNumber
+        ? { p1: start.games[0], p2: start.games[1] }
+        : { p1: 0, p2: 0 };
     for (let i = 0; i < inSet.length; i += 1) {
       const { outcome } = inSet[i];
       if (outcome.kind !== "unfinished") won[outcome.winner] += 1;

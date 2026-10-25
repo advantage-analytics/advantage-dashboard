@@ -70,7 +70,10 @@ import {
   markFirstReportSeen,
   markTourDone,
 } from "@/app/dashboard/onboarding-actions";
-import { firstReportTourEligible } from "@/lib/onboarding/tours";
+import {
+  firstReportTourEligible,
+  hasSeenAReport,
+} from "@/lib/onboarding/tours";
 import { TourRunner } from "@/components/dashboard/onboarding/tour-runner";
 
 // Statistics is the default view and loads eagerly with the page; Shots and
@@ -314,6 +317,12 @@ export default async function MatchDetailPage({
       : [[], DEFAULT_BANDS];
   // On the request's workspace context already — no read of its own.
   const firstReportTourDoneAt = workspace?.viewer.firstReportTourDoneAt ?? null;
+  // The sample-report line's audience: a player who has never seen a report
+  // of any kind — the tray's own retirement rule. A lost session reads as
+  // false, like `canAct` below.
+  const neverSeenAReport = workspace
+    ? !hasSeenAReport(workspace.viewer)
+    : false;
 
   // The rail's foot on both variants: the share popover opening upward from
   // its full-width trigger (F1).
@@ -359,7 +368,7 @@ export default async function MatchDetailPage({
       <AnalysisSteps
         analysis={analysis}
         canAct={canAct}
-        showSampleLink={workspaceKind === "personal"}
+        showSampleLink={workspaceKind === "personal" && neverSeenAReport}
         matchId={matchId}
         match={{
           player: sides.you.name,

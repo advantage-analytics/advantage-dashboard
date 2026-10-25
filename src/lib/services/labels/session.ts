@@ -48,6 +48,23 @@ export interface MatchScore extends FoldedMatchScore {
   player2_tiebreaks?: (number | null)[];
 }
 
+/**
+ * Where the video starts in the match (`label_sessions.start_score`), for a
+ * recording that begins after the first point. Every pair is p1 first.
+ * `sets` are the sets already won before the first set on the video, `games`
+ * the games already won in that set, `points` the counts already played in
+ * the first game on the video — 0–3 for 0/15/30/40 in an ordinary game, any
+ * count when that game is a tiebreak — and `server` who serves that game.
+ * Null on the session means the video starts at the beginning of the match,
+ * and every reader counts exactly as it did before the column existed.
+ */
+export interface LabelStartScore {
+  sets: [number, number];
+  games: [number, number];
+  points: [number, number];
+  server: LabelSide;
+}
+
 export type LabelPointStatus = "unchanged" | "edited" | "added" | "deleted";
 export type LabelShotStatus = "kept" | "edited" | "added" | "deleted";
 
@@ -310,6 +327,15 @@ export interface LabelPoint {
    */
   dismissed: string[];
   /**
+   * Whether the labeller fixed the game's start at this point by dragging
+   * its header here (`label_points.game_start_locked`, game-boundary.ts).
+   * Read only on a game's first live point (`lockedGames`): a locked game is
+   * the labeller's word, so no slot offers to move a point across its start,
+   * and its points not won by its last point's winner are flagged instead
+   * (`lockedGameImbalance`). Not part of `seed`; a seeded point is unlocked.
+   */
+  gameStartLocked: boolean;
+  /**
    * The point's own fields as seeded (set, game, server, serve side, won by,
    * ending, ended by) — what Reset restores and what `unchanged` is measured
    * against. Null for an added point, or one not yet backfilled.
@@ -361,6 +387,12 @@ export interface LabelSession {
    * (`label_sessions.video_ends_early`); null until the labeller says.
    */
   videoEndsEarly: boolean | null;
+  /**
+   * Where the video starts in the match (`label_sessions.start_score`); null
+   * when it starts at the beginning. The scoreboard, the set tallies, the
+   * shift and pull slots and the publish all count from it.
+   */
+  startScore: LabelStartScore | null;
   /**
    * The score the match record carries (`matches.score`) — the one the
    * derivation folded the vendor's stream under. Null when the record has

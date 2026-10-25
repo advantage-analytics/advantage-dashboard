@@ -33,6 +33,7 @@ import {
 import {
   MAX_RUNOFF,
   isEstimate,
+  nearestEnd,
   type CourtSlide,
   type PlacementTarget,
 } from "./court-placement";
@@ -66,15 +67,27 @@ import {
  * and the click it ends with is dropped. A click is read back through the
  * zoom (`artPoint`) and the moved box, so it still lands where the court
  * under the cursor is. The zoom holds across near ↔ far, which flips on every
- * placing click, and resets between the whole court and a half. Marks keep
- * their on-screen size at any zoom.
+ * placing click, and across a slide, re-anchored so the court spot under the
+ * box's centre stays there (`carryZoom`); it resets between the whole court
+ * and a half, and when another stroke is selected. Marks keep their on-screen
+ * size at any zoom.
  *
- * A half's box can slide at the same size (`slide`, court-placement.ts
- * `courtSlide`): back past the usual run-off for a deep contact, with a
- * dashed guide every 2 m behind the baseline and a faint line at the usual
- * edge; or across the net for a short ball, the hitter's side washed amber.
+ * A half's box draws its run-off's guides whenever a run-off is on screen
+ * (`windowRunoffs`): a dashed guide every 2 m behind the baseline, labelled
+ * "+2 m", "+4 m", …, and a faint line at the usual edge, labelled, out to
+ * however deep the box reaches — moved deeper (`moveWindow`), the guides
+ * carry on. The box can also slide at the same size (`slide`,
+ * court-placement.ts `courtSlide`): back past the usual run-off for a stored
+ * deep contact, or across the net for a short ball, the hitter's side washed
+ * amber.
  * An end the labeller called an estimate (`unclear`) draws as a dashed amber
  * ring in place of its mark.
+ *
+ * Placing, the cursor is the end's own glyph (`END_CURSOR`): a hollow ring
+ * for a contact, a filled dot for a landing. A click on a mark already drawn
+ * — within its own drawn radius on screen (`markEndAt`) — selects that
+ * stroke on that end (`onSelectShot`) instead of placing; the end being
+ * placed is never such a mark, so re-placing it next to where it was works.
  */
 
 /** One step up from the panel's ground, for the court's surface. */
@@ -112,6 +125,30 @@ export function runoffGuides(
   return guides;
 }
 
+/** A run-off on screen: the half whose baseline it is behind, and how deep. */
+export interface WindowRunoff {
+  half: CourtHalf;
+  /** Metres behind that baseline the box reaches. */
+  runoff: number;
+}
+
+/**
+ * The run-offs a half's box (its top `y`, metres) shows: behind the near
+ * baseline when its bottom edge is past it, behind the far when its top is,
+ * each as deep as the box reaches (capped at `MAX_RUNOFF`). The half's own
+ * box shows its usual 3.5 m.
+ */
+export function windowRunoffs(top: number): WindowRunoff[] {
+  const out: WindowRunoff[] = [];
+  // To the micrometre: the half's own box reaches its usual edge exactly.
+  const depth = (n: number) => Math.min(MAX_RUNOFF, Math.round(n * 1e6) / 1e6);
+  const near = depth(HALF_HEIGHT - top);
+  const far = depth(top - COURT_LENGTH);
+  if (near > 0) out.push({ half: "near", runoff: near });
+  if (far > 0) out.push({ half: "far", runoff: far });
+  return out;
+}
+
 /** The art's own height; both views are proportioned against it. */
 const BOX_HEIGHT = 222;
 /** The whole court at that height, in the art's 14.53 × 32.77 proportions. */
@@ -147,10 +184,40 @@ export function zoomAbout(
   px: number,
   py: number,
 ): CourtZoom {
-  const next = clamp(scale, 1, MAX_ZOOM);
+  // A step in and back out by the same factor multiplies to 1 only to within
+  // a rounding error; snapped, it is exactly the unzoomed court again.
+  const next = Math.abs(scale - 1) < 1e-9 ? 1 : clamp(scale, 1, MAX_ZOOM);
+  if (next === 1) return { ...NO_ZOOM };
   const k = next / zoom.scale;
   return panBy(
     { scale: next, x: px - (px - zoom.x) * k, y: py - (py - zoom.y) * k },
+    0,
+    0,
+  );
+}
+
+/**
+ * `zoom` carried from a half's box at `fromTop` to one at `toTop` (metres of
+ * `y` at its top edge) — the console sliding the box, or flipping it near ↔
+ * far on a placing click: the court spot under the box's centre stays under
+ * its centre, as near as the art can come while still covering the box
+ * (`panBy`'s clamp). The scale holds. The percent offsets alone would not do:
+ * the same offsets in a moved box show a different spot on the court.
+ */
+export function carryZoom(
+  zoom: CourtZoom,
+  fromTop: number,
+  toTop: number,
+): CourtZoom {
+  if (zoom.scale === 1 || fromTop === toTop) return zoom;
+  const centre = toCourtInWindow(fromTop, artPoint(zoom, 50, 50));
+  const art = fromCourtInWindow(toTop, centre);
+  return panBy(
+    {
+      scale: zoom.scale,
+      x: 50 - art.sx * zoom.scale,
+      y: 50 - art.sy * zoom.scale,
+    },
     0,
     0,
   );
@@ -216,6 +283,105 @@ export interface CourtStroke {
 /** A stroke on screen: whichever ends are drawn, in percent of the box. */
 type MarkEnd = ScreenPoint & { opacity: number; estimate: boolean };
 
+/**
+ * The cursor over a half while placing: the end's glyph, as the court draws
+ * it — a hollow ring where the ball was hit, a filled dot where it landed —
+ * white over a dark halo, its hotspot the centre, with four short ticks to aim
+ * by. The crosshair stands in where a data-URI cursor is not drawn.
+ */
+const cursorOf = (glyph: string) => {
+  const ticks =
+    "<path d='M12 1v3.5M12 19.5V23M1 12h3.5M19.5 12H23' stroke='black' stroke-opacity='.55' stroke-width='3'/>" +
+    "<path d='M12 1v3.5M12 19.5V23M1 12h3.5M19.5 12H23' stroke='white' stroke-width='1.25'/>";
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='none'>${ticks}${glyph}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 12 12, crosshair`;
+};
+
+export const END_CURSOR: Record<PlacementTarget, string> = {
+  contact: cursorOf(
+    "<circle cx='12' cy='12' r='5' stroke='black' stroke-opacity='.55' stroke-width='3.5'/>" +
+      "<circle cx='12' cy='12' r='5' stroke='white' stroke-width='1.5'/>",
+  ),
+  landing: cursorOf(
+    "<circle cx='12' cy='12' r='4.25' fill='black' fill-opacity='.55'/>" +
+      "<circle cx='12' cy='12' r='3' fill='white'/>",
+  ),
+};
+
+/** A half's mark sizes, in screen pixels at any zoom (see `LabelCourt`). */
+const HALF_MARK = { hit: 4.5, hitStroke: 2, landed: 4, ring: 10 };
+const WHOLE_MARK = { hit: 3, hitStroke: 1.5, landed: 2.5, ring: 6.5 };
+
+/**
+ * How far from its centre, in screen pixels, a half's drawn end takes a click:
+ * the mark's own outer edge — a ring's radius plus half its stroke, a dot's
+ * radius, an estimate's dashed ring — and no further, so a click just beside
+ * a mark still places.
+ */
+export function markHitRadius(end: PlacementTarget, estimate: boolean): number {
+  if (estimate) return HALF_MARK.hit + 0.5 + (HALF_MARK.hitStroke * 0.75) / 2;
+  return end === "contact"
+    ? HALF_MARK.hit + HALF_MARK.hitStroke / 2
+    : HALF_MARK.landed;
+}
+
+/** A drawn end a click came down on: its stroke, and which end. */
+export interface MarkPick {
+  shotId: string;
+  end: PlacementTarget;
+}
+
+/**
+ * The drawn end of `strokes` a click on a half's box lands on, or null.
+ * `at` is the click in percent of the box, `box` the box's size in pixels,
+ * `top` and `zoom` the box's window and the labeller's zoom. `armed` is the
+ * end being placed: the armed stroke's armed end is never picked, placed or
+ * not, so a click re-placing it beside its old mark still places. For each
+ * stroke the nearer of its drawn ends (`nearestEnd`) is the candidate; it is
+ * picked only when the click is within that mark's own drawn radius on
+ * screen (`markHitRadius`), the nearest such mark winning.
+ */
+export function markEndAt(
+  strokes: readonly CourtStroke[],
+  top: number,
+  zoom: CourtZoom,
+  at: ScreenPoint,
+  box: { width: number; height: number },
+  armed: { shotId: string | null; target: PlacementTarget | null },
+): MarkPick | null {
+  if (box.width === 0 || box.height === 0) return null;
+  const clicked = toCourtInWindow(top, artPoint(zoom, at.sx, at.sy));
+  const byId = new Map(strokes.map(({ shot }) => [shot.id, shot]));
+  let best: (MarkPick & { distance: number }) | null = null;
+  for (const mark of marksFor(strokes, "near", top)) {
+    const shot = byId.get(mark.id);
+    if (!shot) continue;
+    const isArmed = mark.id === armed.shotId;
+    const hit = isArmed && armed.target === "contact" ? null : mark.hit;
+    const landed = isArmed && armed.target === "landing" ? null : mark.landed;
+    const end = nearestEnd(
+      {
+        contactX: hit ? shot.contactX : null,
+        contactY: hit ? shot.contactY : null,
+        landingX: landed ? shot.landingX : null,
+        landingY: landed ? shot.landingY : null,
+      },
+      clicked,
+    );
+    const drawn = end === "contact" ? hit : end === "landing" ? landed : null;
+    if (!end || !drawn) continue;
+    // The mark's centre on screen: through the zoom, then to pixels.
+    const dx = ((zoom.x + drawn.sx * zoom.scale - at.sx) / 100) * box.width;
+    const dy = ((zoom.y + drawn.sy * zoom.scale - at.sy) / 100) * box.height;
+    const distance = Math.hypot(dx, dy);
+    if (distance > markHitRadius(end, drawn.estimate)) continue;
+    if (!best || distance < best.distance) {
+      best = { shotId: mark.id, end, distance };
+    }
+  }
+  return best ? { shotId: best.shotId, end: best.end } : null;
+}
+
 interface Mark {
   id: string;
   hit: MarkEnd | null;
@@ -270,6 +436,7 @@ export function LabelCourt({
   target = null,
   prompt = null,
   onPlace,
+  onSelectShot,
   fadeOnZoom = false,
   slide = null,
 }: {
@@ -295,6 +462,11 @@ export function LabelCourt({
   prompt?: string | null;
   /** A click on a half, in metres. Absent: the court is a picture. */
   onPlace?: (point: CourtPoint) => void;
+  /**
+   * A click on a drawn end other than the one being placed (`markEndAt`):
+   * select that stroke on that end. Absent: every click places.
+   */
+  onSelectShot?: (shotId: string, end: PlacementTarget) => void;
 }) {
   const zoomed = view !== "whole";
   const slid = zoomed ? slide : null;
@@ -302,22 +474,38 @@ export function LabelCourt({
   const openedTop = zoomed ? (slid?.top ?? halfTopY(view)) : 0;
   const placing = zoomed && prompt !== null && onPlace !== undefined;
 
-  // The labeller's zoom, reset when the court changes scale (whole ↔ half),
-  // and the box they moved, reset whenever the console opens another.
+  // The labeller's zoom, reset when the court changes scale (whole ↔ half)
+  // or another stroke is selected, and the box they moved, reset whenever the
+  // console opens another. A box the console slides or flips near ↔ far
+  // carries the zoom (`carryZoom`), so the spot they zoomed to stays put.
   const [zoomState, setZoomState] = useState({
     zoomed,
+    shotId: targetShotId,
     zoom: NO_ZOOM,
     openedTop,
     top: openedTop,
   });
-  if (zoomState.zoomed !== zoomed) {
-    setZoomState({ zoomed, zoom: NO_ZOOM, openedTop, top: openedTop });
+  if (zoomState.zoomed !== zoomed || zoomState.shotId !== targetShotId) {
+    setZoomState({
+      zoomed,
+      shotId: targetShotId,
+      zoom: NO_ZOOM,
+      openedTop,
+      top: openedTop,
+    });
   } else if (zoomState.openedTop !== openedTop) {
-    setZoomState({ ...zoomState, openedTop, top: openedTop });
+    setZoomState({
+      ...zoomState,
+      zoom: carryZoom(zoomState.zoom, zoomState.top, openedTop),
+      openedTop,
+      top: openedTop,
+    });
   }
   const zoom = zoomState.zoom;
   const top = zoomed ? zoomState.top : 0;
   const marks = marksFor(strokes, view, top);
+  // The run-off guides on screen: any half view, slid or moved or not.
+  const runoffs = zoomed ? windowRunoffs(top) : [];
   const placed = marks.length;
   const setZoom = (next: (z: CourtZoom) => CourtZoom) =>
     setZoomState((state) => ({ ...state, zoom: next(state.zoom) }));
@@ -446,9 +634,7 @@ export function LabelCourt({
 
   // Zoomed, a mark covers a fifth more court per pixel, so it is drawn larger;
   // under the labeller's own zoom it keeps its on-screen size.
-  const base = zoomed
-    ? { hit: 4.5, hitStroke: 2, landed: 4, ring: 10 }
-    : { hit: 3, hitStroke: 1.5, landed: 2.5, ring: 6.5 };
+  const base = zoomed ? HALF_MARK : WHOLE_MARK;
   const size = {
     hit: base.hit / zoom.scale,
     hitStroke: base.hitStroke / zoom.scale,
@@ -492,7 +678,13 @@ export function LabelCourt({
             }
       }
     >
-      <CourtArt view={view} top={top} slide={slid} thin={thin} />
+      <CourtArt
+        view={view}
+        top={top}
+        slide={slid}
+        runoffs={runoffs}
+        thin={thin}
+      />
       <svg
         className="absolute inset-0 block h-full w-full"
         aria-hidden="true"
@@ -605,47 +797,49 @@ export function LabelCourt({
           Net
         </span>
       ) : null}
-      {slid?.kind === "deep"
-        ? runoffGuides(slid.half, slid.runoff).map((guide) => {
-            const at = fromCourtInWindow(top, { x: 0, y: guide.y });
-            return (
-              <span
-                key={guide.metres}
-                aria-hidden="true"
-                data-court-guide={guide.metres}
-                // Left, as "usual edge" is: the zoom control holds the top
-                // right, where a guide label would sit under it.
-                className="mono pointer-events-none absolute left-2 origin-left text-[9px] text-white/40"
-                style={{
-                  top: pct(at.sy),
-                  transform: keepSize("translateY(-50%)"),
-                }}
-              >
-                +{guide.metres} m
-              </span>
-            );
-          })
-        : null}
-      {slid?.kind === "deep" ? (
-        <span
-          aria-hidden="true"
-          data-court-usual-edge=""
-          className="pointer-events-none absolute left-2 origin-left text-[10px] text-white/45"
-          style={{
-            top: pct(
-              fromCourtInWindow(top, {
-                x: 0,
-                y: usualEdgeY(slid.half),
-              }).sy,
-            ),
-            transform: keepSize(
-              slid.half === "near" ? "translateY(-120%)" : "translateY(20%)",
-            ),
-          }}
-        >
-          usual edge
-        </span>
-      ) : null}
+      {runoffs.flatMap(({ half, runoff }) =>
+        runoffGuides(half, runoff).map((guide) => {
+          const at = fromCourtInWindow(top, { x: 0, y: guide.y });
+          return (
+            <span
+              key={`${half}-${guide.metres}`}
+              aria-hidden="true"
+              data-court-guide={guide.metres}
+              // Left, as "usual edge" is: the zoom control holds the top
+              // right, where a guide label would sit under it.
+              className="mono pointer-events-none absolute left-2 origin-left text-[9px] text-white/40"
+              style={{
+                top: pct(at.sy),
+                transform: keepSize("translateY(-50%)"),
+              }}
+            >
+              +{guide.metres} m
+            </span>
+          );
+        }),
+      )}
+      {runoffs
+        .filter(({ runoff }) => runoff >= USUAL_RUNOFF)
+        .map(({ half }) => (
+          <span
+            key={`${half}-usual`}
+            aria-hidden="true"
+            data-court-usual-edge=""
+            className="pointer-events-none absolute left-2 origin-left text-[10px] text-white/45"
+            style={{
+              top: pct(
+                fromCourtInWindow(top, { x: 0, y: usualEdgeY(half) }).sy,
+              ),
+              // Inside the run-off, toward the court: at the half's own box
+              // the usual edge is the box's edge.
+              transform: keepSize(
+                half === "near" ? "translateY(-120%)" : "translateY(20%)",
+              ),
+            }}
+          >
+            usual edge
+          </span>
+        ))}
     </span>
   );
 
@@ -670,6 +864,7 @@ export function LabelCourt({
       }}
       type="button"
       data-court-target=""
+      data-court-cursor={target ?? undefined}
       data-court-view={view}
       data-court-slide={slid?.kind}
       aria-label={`${prompt}. ${description}. Anywhere in the box counts, including outside the lines for a ball that went out. Positions can also be typed in the stroke's row.`}
@@ -684,22 +879,32 @@ export function LabelCourt({
         if (event.detail === 0) return;
         const rect = event.currentTarget.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
-        onPlace(
-          toCourtInWindow(
-            top,
-            artPoint(
-              zoom,
-              ((event.clientX - rect.left) / rect.width) * 100,
-              ((event.clientY - rect.top) / rect.height) * 100,
-            ),
-          ),
-        );
+        const at = {
+          sx: ((event.clientX - rect.left) / rect.width) * 100,
+          sy: ((event.clientY - rect.top) / rect.height) * 100,
+        };
+        // A click on a mark already drawn selects it, not a placement.
+        const pick = onSelectShot
+          ? markEndAt(strokes, top, zoom, at, rect, {
+              shotId: targetShotId,
+              target,
+            })
+          : null;
+        if (pick) {
+          onSelectShot?.(pick.shotId, pick.end);
+          return;
+        }
+        onPlace(toCourtInWindow(top, artPoint(zoom, at.sx, at.sy)));
       }}
       className={cn(
         box,
         zoom.scale === 1 && "cursor-crosshair",
         "touch-none p-0 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
       )}
+      // The end's glyph as the cursor; zoomed in, the grab hand pans.
+      style={
+        zoom.scale === 1 && target ? { cursor: END_CURSOR[target] } : undefined
+      }
     >
       {art}
     </button>
@@ -777,12 +982,15 @@ function CourtArt({
   view,
   top,
   slide = null,
+  runoffs = [],
   thin = 1,
 }: {
   view: CourtView;
   /** A half's box: metres of `y` at its top edge. */
   top: number;
   slide?: CourtSlide | null;
+  /** The run-offs on screen (`windowRunoffs`): their guides are drawn. */
+  runoffs?: readonly WindowRunoff[];
   /** 1 / the labeller's zoom: the lines keep their on-screen width. */
   thin?: number;
 }) {
@@ -883,9 +1091,9 @@ function CourtArt({
         strokeWidth={2 * thin}
         style={lines}
       />
-      {slide?.kind === "deep" ? (
-        <g data-court-runoff="" strokeWidth={thin}>
-          {runoffGuides(slide.half, slide.runoff).map((guide) => (
+      {runoffs.map(({ half, runoff }) => (
+        <g key={half} data-court-runoff={half} strokeWidth={thin}>
+          {runoffGuides(half, runoff).map((guide) => (
             <line
               key={guide.metres}
               x1={HALF_LEFT}
@@ -897,17 +1105,19 @@ function CourtArt({
               style={lines}
             />
           ))}
-          <line
-            data-court-usual-edge-line=""
-            x1={HALF_LEFT}
-            y1={svgY(usualEdgeY(slide.half))}
-            x2={HALF_LEFT + HALF_WIDTH}
-            y2={svgY(usualEdgeY(slide.half))}
-            stroke={USUAL_EDGE_LINE}
-            style={lines}
-          />
+          {runoff >= USUAL_RUNOFF ? (
+            <line
+              data-court-usual-edge-line=""
+              x1={HALF_LEFT}
+              y1={svgY(usualEdgeY(half))}
+              x2={HALF_LEFT + HALF_WIDTH}
+              y2={svgY(usualEdgeY(half))}
+              stroke={USUAL_EDGE_LINE}
+              style={lines}
+            />
+          ) : null}
         </g>
-      ) : null}
+      ))}
     </svg>
   );
 }

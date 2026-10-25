@@ -218,6 +218,7 @@ export function fixtureMatch(): { points: LabelPoint[]; marks: LabelMarks } {
           checkedAt: checked ? "2026-10-12T18:00:00Z" : null,
           note: null,
           dismissed: [],
+          gameStartLocked: false,
           seed: {
             set_number: s + 1,
             game_number: game,

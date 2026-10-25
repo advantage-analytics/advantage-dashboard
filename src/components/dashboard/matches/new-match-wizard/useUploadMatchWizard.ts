@@ -47,6 +47,7 @@ import {
 import {
   accountTypeFor,
   monthlyCapSecondsFor,
+  NO_CREDITS,
   readCreditBalance,
   sumUsedSeconds,
 } from "@/lib/services/splitstep/quota";
@@ -589,6 +590,8 @@ export interface UseUploadMatchWizardReturn {
    */
   quotaFreeSeconds?: number;
   quotaCreditSeconds: number;
+  /** The granted part of `quotaCreditSeconds` — "added" vs "credits" in the meter. */
+  quotaGrantedSeconds: number;
   /**
    * When free hours come back for the paywall and B4 — "Nov 1" — or null in
    * December, when they end Dec 31 instead of resetting.
@@ -1301,6 +1304,7 @@ export function useUploadMatchWizard({
   );
   // Credits are personal: the admin console and a team workspace spend none.
   const [quotaCreditSeconds, setQuotaCreditSeconds] = useState(0);
+  const [quotaGrantedSeconds, setQuotaGrantedSeconds] = useState(0);
   const remainingQuotaSeconds =
     quotaFreeSeconds === undefined
       ? undefined
@@ -1326,6 +1330,7 @@ export function useUploadMatchWizard({
     (async () => {
       let used: number;
       let credits = 0;
+      let granted = 0;
 
       if (eligibilityWorkspace.kind === "team") {
         const { data, error } = await supabase.rpc("program_usage_total", {
@@ -1349,12 +1354,16 @@ export function useUploadMatchWizard({
         used = sumUsedSeconds(data ?? []);
         // The personal workspace's id is the user's: their own credits, read
         // under RLS. A failed read counts none — the server still decides.
-        credits = await readCreditBalance(supabase, eligibilityWorkspace.id)
-          .then((balance) => balance.seconds)
-          .catch(() => 0);
+        const balance = await readCreditBalance(
+          supabase,
+          eligibilityWorkspace.id,
+        ).catch(() => NO_CREDITS);
         if (cancelled) return;
+        credits = balance.seconds;
+        granted = balance.grantedSeconds ?? 0;
       }
 
+      setQuotaGrantedSeconds(granted);
       setQuotaCreditSeconds((previous) => {
         // The pending purchase has landed once the balance grows.
         if (credits > previous) setPaymentPending(false);
@@ -4169,6 +4178,7 @@ export function useUploadMatchWizard({
     quotaResetsOn,
     quotaFreeSeconds,
     quotaCreditSeconds,
+    quotaGrantedSeconds,
     freeHoursReturnOn: freeHoursReturn,
     paywall,
     canBuyCredits,

@@ -53,6 +53,7 @@ import {
   type LabelPoint,
   type LabelServeSide,
   type LabelSide,
+  type LabelStartScore,
 } from "./session";
 
 /** What the two marks read of a point. A `LabelPoint` satisfies it. */
@@ -181,8 +182,14 @@ export function liveScoreMarks(
   points: readonly ScoreMarkInput[],
   adScoring: boolean,
   serveSides: Readonly<Record<string, LabelServeSide>>,
-  scores = labelScores(points, adScoring),
+  given?: ReturnType<typeof labelScores>,
+  /**
+   * Where the video starts in the match: the first game in point order opens
+   * at its `points`, as the scoreboard's does. Null: at 0–0.
+   */
+  start: LabelStartScore | null = null,
 ): LiveScoreMarks {
+  const scores = given ?? labelScores(points, adScoring, start);
   const out: LiveScoreMarks = { points: {}, suggestions: [] };
   const runs = new Map<string, GameRun>();
 
@@ -192,9 +199,12 @@ export function liveScoreMarks(
     const key = gameKey(point);
     let run = runs.get(key);
     if (!run) {
+      const opening = runs.size === 0 ? start : null;
       run = {
         type: point.gameType ?? "game",
-        points: { p1: 0, p2: 0 },
+        points: opening
+          ? { p1: opening.points[0], p2: opening.points[1] }
+          : { p1: 0, p2: 0 },
         decided: false,
         mismatched: false,
         previous: null,
@@ -316,8 +326,16 @@ export function withLiveScoreMarks(
   points: readonly (ScoreMarkPoint & RowMarkPoint)[],
   adScoring: boolean,
   scores?: ReturnType<typeof labelScores>,
+  /** Where the video starts in the match; null: at the beginning. */
+  start: LabelStartScore | null = null,
 ): LabelMarks {
-  const live = liveScoreMarks(points, adScoring, marks.serveSides, scores);
+  const live = liveScoreMarks(
+    points,
+    adScoring,
+    marks.serveSides,
+    scores,
+    start,
+  );
   const merged: Record<string, LabelMark[]> = { ...marks.points };
   for (const list of [live.points, liveRowMarks(points)]) {
     for (const [id, own] of Object.entries(list)) {

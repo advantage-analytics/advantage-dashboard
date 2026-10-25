@@ -50,6 +50,7 @@ import {
   type LabelDismissSuggestionResult,
 } from "@/lib/services/labels/suggestions-session";
 import type { InsertPosition } from "@/lib/services/labels/point-insert";
+import type { GameBoundaryLock } from "@/lib/services/labels/game-boundary";
 import {
   insertLabelPoint,
   type LabelInsertPointResult,
@@ -228,9 +229,10 @@ export async function moveLabelPointsAction(
   pointIds: string[],
   to: LabelGame,
   switchServer: boolean,
+  lock?: GameBoundaryLock,
 ): Promise<LabelMovePointsResult> {
   return withLabelOp("Move game boundary", () =>
-    moveLabelPoints(pointIds, to, switchServer),
+    moveLabelPoints(pointIds, to, switchServer, lock),
   );
 }
 
@@ -495,7 +497,7 @@ export async function reopenLabelSessionAction(
 /**
  * The console's Undo: rewind the session's newest journaled action, whatever
  * it was — an edit, a delete, a split, a combine, a reset — and answer the
- * session's rows as they now stand. Every action above runs inside
+ * rows it touched as a diff (undo-diff.ts). Every action above runs inside
  * `withLabelOp`, which is what files its writes as one step; this one does
  * not, so an undo is never itself a step to undo.
  */

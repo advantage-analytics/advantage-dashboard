@@ -16,6 +16,7 @@ markers is hand-written — edit it as things move.
 |---|---|
 | `/check-email` | [`src/app/(auth)/check-email/page.tsx`](src/app/(auth)/check-email/page.tsx) |
 | `/confirm` | [`src/app/(auth)/confirm/page.tsx`](src/app/(auth)/confirm/page.tsx) |
+| `/email/unsubscribe` | [`src/app/(auth)/email/unsubscribe/page.tsx`](src/app/(auth)/email/unsubscribe/page.tsx) |
 | `/error` | [`src/app/(auth)/error/page.tsx`](src/app/(auth)/error/page.tsx) |
 | `/forgot-password` | [`src/app/(auth)/forgot-password/page.tsx`](src/app/(auth)/forgot-password/page.tsx) |
 | `/login` | [`src/app/(auth)/login/page.tsx`](src/app/(auth)/login/page.tsx) |

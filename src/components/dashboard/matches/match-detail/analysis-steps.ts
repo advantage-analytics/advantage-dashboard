@@ -202,6 +202,13 @@ export interface AnalysisStepView {
 export interface AnalysisStepsView {
   title: string;
   steps: AnalysisStepView[];
+  /**
+   * The job is moving on its own and nothing is asked of the player — the
+   * only moment "while you wait" is true. False once a step has paused,
+   * stalled, failed or been cancelled, and while the stats wait on gated
+   * work (`processed`): there, nothing is being waited on.
+   */
+  waiting: boolean;
   /** The recovery class the failing step carries, if any step failed. */
   failure?: { step: AnalysisStepKey; recovery: RecoveryClass };
 }
@@ -363,6 +370,7 @@ export function analysisStepsView(
       if (now !== null && isUploadPaused(analysis, now)) {
         return {
           title: STEPPER_COPY.titles.paused,
+          waiting: false,
           steps: [
             SAVED,
             {
@@ -386,6 +394,7 @@ export function analysisStepsView(
         now === null ? undefined : uploadEtaSeconds(analysis, now);
       return {
         title: UPLOADING_COPY.title,
+        waiting: true,
         steps: [
           SAVED,
           {
@@ -417,6 +426,7 @@ export function analysisStepsView(
         const recovery: RecoveryClass = analysis.recovery ?? "retry";
         return {
           title: STEPPER_COPY.titles.stalled,
+          waiting: false,
           steps: [
             SAVED,
             VIDEO_DONE,
@@ -433,6 +443,7 @@ export function analysisStepsView(
       }
       return {
         title: STEPPER_COPY.titles.uploaded,
+        waiting: true,
         steps: [
           SAVED,
           VIDEO_DONE,
@@ -450,6 +461,7 @@ export function analysisStepsView(
     case "queued":
       return {
         title: STEPPER_COPY.titles.queued,
+        waiting: true,
         steps: [
           SAVED,
           VIDEO_DONE,
@@ -473,6 +485,7 @@ export function analysisStepsView(
     case "processing":
       return {
         title: STEPPER_COPY.titles.processing,
+        waiting: true,
         steps: [
           SAVED,
           VIDEO_DONE,
@@ -495,6 +508,7 @@ export function analysisStepsView(
     case "deriving":
       return {
         title: STEPPER_COPY.titles.deriving,
+        waiting: true,
         steps: [
           SAVED,
           VIDEO_DONE,
@@ -513,6 +527,7 @@ export function analysisStepsView(
       // gated work, which is what the dashed `later` mark means.
       return {
         title: ANALYSIS_LABEL.processed,
+        waiting: false,
         steps: [
           SAVED,
           VIDEO_DONE,
@@ -532,6 +547,7 @@ export function analysisStepsView(
       if (recovery === "upload_again") {
         return {
           title: STEPPER_COPY.titles.failed,
+          waiting: false,
           steps: [
             SAVED,
             {
@@ -548,6 +564,7 @@ export function analysisStepsView(
       }
       return {
         title: STEPPER_COPY.titles.failed,
+        waiting: false,
         steps: [
           SAVED,
           VIDEO_DONE,
@@ -569,6 +586,7 @@ export function analysisStepsView(
       const recovery: RecoveryClass = analysis.recovery ?? "stats_unavailable";
       return {
         title: STEPPER_COPY.titles.statsFailed,
+        waiting: false,
         steps: [
           SAVED,
           VIDEO_DONE,
@@ -589,6 +607,7 @@ export function analysisStepsView(
       // nothing went wrong — and the way back is one quiet action.
       return {
         title: STEPPER_COPY.titles.cancelled,
+        waiting: false,
         steps: [
           SAVED,
           VIDEO_DONE,
@@ -612,6 +631,7 @@ export function analysisStepsView(
     default:
       return {
         title: ANALYSIS_LABEL[analysis.status],
+        waiting: false,
         steps: [
           SAVED,
           VIDEO_DONE,

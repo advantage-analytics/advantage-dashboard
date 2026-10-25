@@ -31,8 +31,17 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
  */
 const MATCH_REPORT_PATH_PATTERN = "/dashboard/matches/(detail)/[matchId]";
 
+/**
+ * `email_getting_started` is written only when that toggle is the one being
+ * saved. It is also turned off from outside this form, by the email's own
+ * unsubscribe, and a tab opened before that would otherwise write its stale
+ * `true` back the next time any other switch is flipped — subscribing
+ * somebody who had just said no. An upsert leaves a column it is not given
+ * alone on an existing row, and a new row takes the column default.
+ */
 export async function savePreferences(
   next: Preferences,
+  { gettingStarted = false }: { gettingStarted?: boolean } = {},
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const {
@@ -56,6 +65,9 @@ export async function savePreferences(
       weekly_team_digest: next.weeklyTeamDigest,
       notify_team_activity: next.notifyTeamActivity,
       notify_usage_alerts: next.notifyUsageAlerts,
+      ...(gettingStarted
+        ? { email_getting_started: next.emailGettingStarted }
+        : {}),
       default_workspace: next.defaultWorkspace,
       match_report_opens_at: next.matchReportOpensAt,
       stat_definitions_on_hover: next.statDefinitionsOnHover,
