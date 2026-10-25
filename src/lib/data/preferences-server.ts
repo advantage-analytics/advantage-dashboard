@@ -14,8 +14,9 @@ import {
  * read a missing row as "email me when analysis is ready" without a backfill.
  * DEFAULTS below has to stay in step with the column defaults in
  * 20260818040318_user_preferences.sql, 20260913230000_notification_prefs_team.sql,
- * 20260921120000_user_preferences_unit.sql and
- * 20260924120000_report_opens_at_views.sql.
+ * 20260921120000_user_preferences_unit.sql,
+ * 20260924120000_report_opens_at_views.sql and
+ * 20261025042516_first_upload_nudges.sql.
  */
 
 export type DefaultWorkspace = "last_used" | "personal" | "team";
@@ -28,6 +29,8 @@ export interface Preferences {
   notifyTeamActivity: boolean;
   /** Owner/coach: the program's allowance at 80% and when spent. */
   notifyUsageAlerts: boolean;
+  /** The first-upload nudges. Off from the email's own unsubscribe, too. */
+  emailGettingStarted: boolean;
   defaultWorkspace: DefaultWorkspace;
   /** The match report's own views (`REPORT_VIEWS`), stored as their `?tab=` values. */
   matchReportOpensAt: ReportView;
@@ -46,6 +49,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   weeklyTeamDigest: false,
   notifyTeamActivity: true,
   notifyUsageAlerts: true,
+  emailGettingStarted: true,
   defaultWorkspace: "last_used",
   matchReportOpensAt: "statistics",
   statDefinitionsOnHover: true,
@@ -62,7 +66,7 @@ export async function getPreferences(): Promise<Preferences> {
   const { data, error } = await supabase
     .from("user_preferences")
     .select(
-      "notify_analysis_ready, notify_analysis_failed, weekly_team_digest, notify_team_activity, notify_usage_alerts, default_workspace, match_report_opens_at, stat_definitions_on_hover, unit",
+      "notify_analysis_ready, notify_analysis_failed, weekly_team_digest, notify_team_activity, notify_usage_alerts, email_getting_started, default_workspace, match_report_opens_at, stat_definitions_on_hover, unit",
     )
     .eq("user_id", user.id)
     .maybeSingle();
@@ -81,6 +85,7 @@ export async function getPreferences(): Promise<Preferences> {
     weeklyTeamDigest: data.weekly_team_digest,
     notifyTeamActivity: data.notify_team_activity,
     notifyUsageAlerts: data.notify_usage_alerts,
+    emailGettingStarted: data.email_getting_started,
     defaultWorkspace: data.default_workspace as DefaultWorkspace,
     matchReportOpensAt: parseReportView(data.match_report_opens_at),
     statDefinitionsOnHover: data.stat_definitions_on_hover,

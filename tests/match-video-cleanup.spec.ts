@@ -922,6 +922,8 @@ test("vercel.json schedules this endpoint daily at 05:00 UTC and keeps what was 
     { path: CLEANUP_CRON_PATH, schedule: "0 5 * * *" },
     // The vendor-file archive's second chance (vendor-archive.ts).
     { path: "/api/cron/archive-vendor-files", schedule: "0 6 * * *" },
+    // The first-upload nudges (first-upload-mail.ts), the US morning.
+    { path: "/api/cron/first-upload-nudges", schedule: "0 17 * * *" },
   ]);
   // Every scheduled path must be a route that exists.
   const { existsSync } = await import("node:fs");
