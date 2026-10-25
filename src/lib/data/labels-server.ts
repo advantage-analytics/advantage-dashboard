@@ -672,9 +672,7 @@ export async function readLabelPointsByIds(
       ),
     ),
   ]);
-  const pointRows = pointRuns.flat();
-  const shotRows = shotRuns.flat();
-  return buildLabelPoints(pointRows, shotRows);
+  return buildLabelPoints(pointRuns.flat(), shotRuns.flat());
 }
 
 /**

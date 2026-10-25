@@ -2186,22 +2186,19 @@ export function LabelConsole({
       const row = points.find((p) => p.id === id);
       if (row) lockWas.set(id, row.gameStartLocked);
     }
+    const setLocks = (
+      current: LabelPoint[],
+      lockedOf: (id: string) => boolean,
+    ) =>
+      lockWas.size === 0
+        ? current
+        : current.map((p) =>
+            lockWas.has(p.id) ? { ...p, gameStartLocked: lockedOf(p.id) } : p,
+          );
     const lockApplied = (current: LabelPoint[]) =>
-      lockIds.length === 0
-        ? current
-        : current.map((p) =>
-            lockWas.has(p.id)
-              ? { ...p, gameStartLocked: p.id === lock?.lockPointId }
-              : p,
-          );
+      setLocks(current, (id) => id === lock?.lockPointId);
     const lockPutBack = (current: LabelPoint[]) =>
-      lockIds.length === 0
-        ? current
-        : current.map((p) =>
-            lockWas.has(p.id)
-              ? { ...p, gameStartLocked: lockWas.get(p.id) ?? false }
-              : p,
-          );
+      setLocks(current, (id) => lockWas.get(id) ?? false);
     let rows: LabelPoint[] = points;
     const steps: {
       before: LabelPoint;
@@ -3021,8 +3018,9 @@ export function LabelConsole({
       }
       // A stroke key reaches the selected stroke from a focused cell too (a
       // cell is a button), and so do A / ⇧A (add a stroke after / before),
-      // C (contact ↔ landing), X (flip side), T (time = frame) and Delete /
-      // Backspace (delete the stroke), R / ⇧R (ask to reset the stroke / point); a text field, a menu and a dialog keep all of them.
+      // C (contact ↔ landing), X (flip side), T (time = frame), Delete /
+      // Backspace (delete the stroke) and R / ⇧R (ask to reset the stroke /
+      // point); a text field, a menu and a dialog keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
       const consoleKey = isStrokeKey(key)
         ? () => strokeKey.current(key)
