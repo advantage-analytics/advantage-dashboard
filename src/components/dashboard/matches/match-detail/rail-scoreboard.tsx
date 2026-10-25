@@ -28,8 +28,9 @@ export interface RailScoreboardPlayer {
   name: string;
   /**
    * The player's chart colour (`--viz-you` / `--viz-opp`), drawn as a 6px dot
-   * before the name so the row reads with every chart on the page. Omitted,
-   * the row draws no dot.
+   * before the name so the row reads with every chart on the page. Live, the
+   * server's dot wears a ring. Omitted, the row draws no dot and the server
+   * gets the old blue dot after the name instead.
    */
   color?: string;
   /** One entry per set column; null is an unmeasured set (an em dash). */
@@ -132,14 +133,24 @@ function ScoreRow({
   muted: boolean;
 }) {
   const ink = muted ? "var(--ink-600)" : "var(--ink-900)";
+  const serving = status === "live" && Boolean(player.serving);
 
   return (
     <div className="flex min-w-0 items-center gap-[7px]">
+      {/* The server is marked by a ring on their own colour dot rather than a
+          second dot: a blue one after the name read as "you". */}
       {player.color ? (
         <span
-          aria-hidden="true"
+          {...(serving
+            ? { role: "img", "aria-label": "Serving" }
+            : { "aria-hidden": true })}
           className="size-1.5 shrink-0 rounded-[var(--radius-pill)]"
-          style={{ background: player.color }}
+          style={{
+            background: player.color,
+            boxShadow: serving
+              ? `0 0 0 2px var(--surface-card), 0 0 0 3.5px ${player.color}`
+              : undefined,
+          }}
         />
       ) : null}
       {/* Never wraps: a long name ends in an ellipsis before it can push the
@@ -150,7 +161,7 @@ function ScoreRow({
       >
         {player.name}
       </span>
-      {status === "live" && player.serving ? (
+      {serving && !player.color ? (
         <span
           aria-label="Serving"
           role="img"
