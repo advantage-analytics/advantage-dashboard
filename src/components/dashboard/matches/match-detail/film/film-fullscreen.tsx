@@ -62,14 +62,13 @@ import {
   readCourtMode,
   readCourtOn,
   readDrawerOpen,
-  readSkipDead,
   writeCourtMode,
   writeCourtOn,
   writeDrawerOpen,
-  writeSkipDead,
   type CourtMode,
 } from "./film-room-prefs";
 import { boardAt, type BoardColumns } from "./film-score";
+import { useSkipDead } from "./use-skip-dead";
 import { FilmScoreboard } from "./film-scoreboard";
 import { useFilmClockVars } from "./film-clock";
 import { useFilmTrace } from "./use-film-trace";
@@ -425,15 +424,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const [duration, setDuration] = useState(0);
   const [rate, setRate] = useState<number>(1);
   const [looping, setLooping] = useState(false);
-  // Shared with the report player (`film-room-prefs.ts`): the film keeps
+  // Shared with the report player (`use-skip-dead.ts`): the film keeps
   // skipping, or not, on the way into the room. On by default.
-  const [skipDead, setSkipDead] = useState(readSkipDead);
-  const toggleSkipDead = useCallback(() => {
-    setSkipDead((v) => {
-      writeSkipDead(!v);
-      return !v;
-    });
-  }, []);
+  const [skipDead, toggleSkipDead] = useSkipDead();
   const [failed, setFailed] = useState(false);
   const [chrome, setChrome] = useState(true);
   // The court and the side it is showing are viewer preferences (spec:

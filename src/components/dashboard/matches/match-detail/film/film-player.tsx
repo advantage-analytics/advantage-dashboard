@@ -56,7 +56,7 @@ import type {
 } from "./use-attachment-playback";
 import { useSeekSettling } from "./use-seek-settling";
 import { useFilmReadOnly } from "./film-read-only";
-import { readSkipDead, writeSkipDead } from "./film-room-prefs";
+import { useSkipDead } from "./use-skip-dead";
 
 /**
  * The match video with the room's transport under it, in the tab.
@@ -356,16 +356,13 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const [duration, setDuration] = useState(0);
     const [rate, setRate] = useState<number>(1);
     const [looping, setLooping] = useState(false);
-    // A viewer preference shared with the room (`film-room-prefs.ts`), read
-    // once in a lazy initializer and written on every toggle. On by default.
-    const [skipDead, setSkipDead] = useState(readSkipDead);
+    // A viewer preference shared with the room (`use-skip-dead.ts`), on by
+    // default and hydration-safe: this player is server-rendered.
+    const [skipDead, toggleSkipDeadPref] = useSkipDead();
     const toggleSkipDead = useCallback(() => {
-      setSkipDead((v) => {
-        writeSkipDead(!v);
-        return !v;
-      });
+      toggleSkipDeadPref();
       onSkipDeadToggled?.();
-    }, [onSkipDeadToggled]);
+    }, [toggleSkipDeadPref, onSkipDeadToggled]);
     const [failed, setFailed] = useState<PlaybackFailure | null>(null);
     // T16: dim the held frame while a seek the chrome already made is still
     // landing. Display only — `seekTo` / `pushTime` are untouched.
