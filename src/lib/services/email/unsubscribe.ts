@@ -51,7 +51,7 @@ export function verifyUnsubscribeToken(
 }
 
 function query(userId: string, token: string): string {
-  return `u=${encodeURIComponent(userId)}&t=${encodeURIComponent(token)}`;
+  return new URLSearchParams({ u: userId, t: token }).toString();
 }
 
 /**
