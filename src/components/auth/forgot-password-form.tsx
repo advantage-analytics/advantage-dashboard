@@ -26,9 +26,14 @@ export function ForgotPasswordForm() {
   const [error, setError] = useState<AuthError | null>(null);
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+
+    // Read what the field holds, not just state, as `LoginForm` does: Chrome
+    // can fill it before hydration or without firing an input event.
+    const email = String(new FormData(e.currentTarget).get("email") ?? "");
+    setEmail(email);
 
     // Caught here rather than at the round trip: Supabase answers `name@host`
     // with generic text, and the specific "missing its domain" nudge is the

@@ -42,9 +42,19 @@ export function SignUpForm({
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+
+    // Read what the fields hold, not just state, as `LoginForm` does: Chrome
+    // can fill them before hydration or without firing an input event.
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get("email") ?? "");
+    const password = String(form.get("password") ?? "");
+    const confirm = String(form.get("confirm-password") ?? "");
+    setEmail(email);
+    setPassword(password);
+    setConfirm(confirm);
 
     // Each check names the field it failed on, so the message lands on that
     // field's rule rather than in one banner below the whole group.
