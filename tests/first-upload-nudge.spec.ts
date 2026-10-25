@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { expect, test } from "@playwright/test";
@@ -29,9 +29,23 @@ const SITE = "https://app.example.test";
 const USER = "0b7c9a1e-4f2d-4b8a-9c3e-2d1f5a6b7c8d";
 const OTHER = "1c8dab2f-5a3e-4c9b-8d4f-3e2a6b7c8d9e";
 
+// Set for this file and put back after it, so a later spec in the same
+// worker never inherits a fake service-role key.
+const SAVED_ENV = {
+  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+};
+
 test.beforeAll(() => {
   process.env.NEXT_PUBLIC_SITE_URL = SITE;
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+});
+
+test.afterAll(() => {
+  for (const [name, value] of Object.entries(SAVED_ENV)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
 });
 
 const LINKS = {
@@ -133,6 +147,18 @@ test("the unsubscribe page only acts on POST", () => {
   );
   expect(route).toContain("export async function POST");
   expect(route).not.toContain("export async function GET");
+  // Refusals go through the shared helper, as AGENTS.md asks.
+  expect(route).toContain("errorResponse(");
+  expect(route).not.toContain("NextResponse.json");
+});
+
+test("a failed write sends the person back with their link, so they can retry", () => {
+  const action = readFileSync(
+    resolve(process.cwd(), "src/app/(auth)/email/unsubscribe/actions.ts"),
+    "utf8",
+  );
+  expect(action).toMatch(/outcome === "failed"[^}]*query\.set\("u"/);
+  expect(action).toMatch(/query\.set\("t"/);
 });
 
 // ─── The sweep ─────────────────────────────────────────────────────────────
@@ -146,10 +172,13 @@ function deps(
   const claimed = new Set<string>();
   const sent: EmailMessage[] = [];
   const seen: FirstUploadWindow[] = [];
+  const limits: number[] = [];
+  const pauses: number[] = [];
   const d: FirstUploadSweepDeps = {
-    candidates: async (_db, window) => {
+    candidates: async (_db, window, limit) => {
       seen.push(window);
-      return byStep[window.step] ?? [];
+      limits.push(limit);
+      return (byStep[window.step] ?? []).slice(0, limit);
     },
     claim: async (key) => {
       if (claimed.has(key)) return false;
@@ -162,9 +191,12 @@ function deps(
     },
     postalAddress: () => "123 Example St",
     links: () => LINKS,
+    pause: async (ms) => {
+      pauses.push(ms);
+    },
     ...overrides,
   };
-  return { d, claimed, sent, seen };
+  return { d, claimed, sent, seen, limits, pauses };
 }
 
 const person = (id: string, email = `${id}@example.test`) => ({
@@ -248,4 +280,44 @@ test("a failed read of one window still runs the other", async () => {
   const result = await sweepFirstUploadNudges(db, d);
   expect(sent).toHaveLength(1);
   expect(result.sent[2]).toBe(1);
+});
+
+test("sends are spaced under Resend's rate limit, with no wait before the first", async () => {
+  const { d, sent, pauses } = deps({
+    1: [person(USER)],
+    2: [person(OTHER), person("third")],
+  });
+  await sweepFirstUploadNudges(db, d);
+  expect(sent).toHaveLength(3);
+  expect(pauses).toEqual([600, 600]);
+});
+
+test("each window is asked only for what the run can still send", async () => {
+  const many = (prefix: string) =>
+    Array.from({ length: 30 }, (_, i) => person(`${prefix}-${i}`));
+  const { d, limits } = deps({ 1: many("a"), 2: many("b") });
+  await sweepFirstUploadNudges(db, d);
+  expect(limits).toEqual([40, 10]);
+});
+
+test("the candidate query leaves out people already mailed for that step", () => {
+  const sweep = readFileSync(
+    resolve(
+      process.cwd(),
+      "src/lib/services/notifications/first-upload-mail.ts",
+    ),
+    "utf8",
+  );
+  expect(sweep).toContain("p_dedupe_prefix: claimPrefix(step)");
+  expect(firstUploadClaimKey(2, USER)).toBe(`first_upload_nudge:2:${USER}`);
+  // By name suffix: the version prefix becomes whatever live records.
+  const dir = resolve(process.cwd(), "supabase/migrations");
+  const file = readdirSync(dir).find((name) =>
+    name.endsWith("_first_upload_nudges_skip_mailed.sql"),
+  );
+  expect(file).toBeTruthy();
+  const migration = readFileSync(resolve(dir, file!), "utf8");
+  expect(migration).toContain(
+    "where s.dedupe_key = p_dedupe_prefix || u.id::text",
+  );
 });

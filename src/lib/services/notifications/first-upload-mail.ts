@@ -5,6 +5,7 @@ import {
   type EmailMessage,
   type FirstUploadStep,
 } from "@/lib/services/email";
+import { OUTREACH_SEND_GAP_MS } from "@/lib/services/email/config";
 import { unsubscribeLinks } from "@/lib/services/email/unsubscribe";
 import { claimSend } from "./should-notify";
 
@@ -34,6 +35,11 @@ export const FIRST_UPLOAD_STEPS: readonly FirstUploadWindow[] = [
  * total too, and it leaves room under Resend's free-plan 100 a day for the
  * mail people are waiting on (`docs/email-system.md` §9). Anyone left over is
  * still in their window tomorrow.
+ *
+ * Sends are spaced by `OUTREACH_SEND_GAP_MS`: each one is two Resend calls
+ * (the suppression check, then the send) against a limit of two a second, and
+ * the key is claimed before the send, so a 429 would cost that person the
+ * email for good. Forty sends at that pace fit the route's 60 seconds.
  */
 const MAX_PER_RUN = 40;
 
@@ -53,11 +59,13 @@ export interface FirstUploadSweepDeps {
   candidates: (
     db: SupabaseClient,
     window: FirstUploadWindow,
+    limit: number,
   ) => Promise<FirstUploadCandidate[] | null>;
   claim: (dedupeKey: string) => Promise<boolean>;
   send: (message: EmailMessage) => Promise<{ ok: boolean; error?: string }>;
   postalAddress: () => string | null;
   links: typeof unsubscribeLinks;
+  pause: (ms: number) => Promise<void>;
 }
 
 const productionDeps: FirstUploadSweepDeps = {
@@ -66,14 +74,20 @@ const productionDeps: FirstUploadSweepDeps = {
   send: sendEmail,
   postalAddress: () => process.env.OUTREACH_POSTAL_ADDRESS?.trim() || null,
   links: unsubscribeLinks,
+  pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
 
-/** One email per step per person, whatever the cron does. */
+/** One email per step per person, whatever the cron does. The prefix is
+ *  what the candidate query matches against to leave the mailed out. */
+function claimPrefix(step: FirstUploadStep): string {
+  return `first_upload_nudge:${step}:`;
+}
+
 export function firstUploadClaimKey(
   step: FirstUploadStep,
   userId: string,
 ): string {
-  return `first_upload_nudge:${step}:${userId}`;
+  return `${claimPrefix(step)}${userId}`;
 }
 
 /**
@@ -110,11 +124,12 @@ export async function sweepFirstUploadNudges(
   }
 
   let budget = MAX_PER_RUN;
+  let first = true;
   try {
     for (const window of FIRST_UPLOAD_STEPS) {
       const { step } = window;
       if (budget <= 0) break;
-      const rows = await deps.candidates(db, window);
+      const rows = await deps.candidates(db, window, budget);
       if (!rows) continue;
 
       for (const row of rows) {
@@ -130,6 +145,8 @@ export async function sweepFirstUploadNudges(
           continue;
         }
         budget -= 1;
+        if (!first) await deps.pause(OUTREACH_SEND_GAP_MS);
+        first = false;
         const sent = await deps.send(
           firstUploadNudgeEmail({
             to,
@@ -159,19 +176,19 @@ export async function sweepFirstUploadNudges(
 }
 
 /**
- * Candidates for one window, minus the ones already mailed for it. The read
- * of `notification_sends` is what stops a claimed key from being fetched
- * again every day for the rest of its window; `claimSend()` is still what
- * makes a send happen once.
+ * Candidates for one window who are still owed its email. The mailed are left
+ * out in Postgres, so `limit` is spent on people this run can actually send to.
  */
 async function readCandidates(
   db: SupabaseClient,
   { step, minDays, maxDays }: FirstUploadWindow,
+  limit: number,
 ): Promise<FirstUploadCandidate[] | null> {
   const { data, error } = await db.rpc("first_upload_nudge_candidates", {
     p_min_age: `${minDays} days`,
     p_max_age: `${maxDays} days`,
-    p_limit: 200,
+    p_dedupe_prefix: claimPrefix(step),
+    p_limit: limit,
   });
   if (error) {
     console.error(`${LOG} could not read candidates`, {
@@ -180,24 +197,5 @@ async function readCandidates(
     });
     return null;
   }
-  const rows = (data ?? []) as FirstUploadCandidate[];
-  if (rows.length === 0) return rows;
-
-  const { data: mailed, error: mailedError } = await db
-    .from("notification_sends")
-    .select("dedupe_key")
-    .in(
-      "dedupe_key",
-      rows.map((row) => firstUploadClaimKey(step, row.user_id)),
-    );
-  if (mailedError) {
-    console.error(`${LOG} could not read sent mail`, {
-      error: mailedError.message,
-    });
-    return null;
-  }
-  const done = new Set((mailed ?? []).map((r) => r.dedupe_key as string));
-  return rows.filter(
-    (row) => !done.has(firstUploadClaimKey(step, row.user_id)),
-  );
+  return (data ?? []) as FirstUploadCandidate[];
 }

@@ -22,6 +22,9 @@ export default async function PreferencesPage() {
         workspace?.active.kind === "team" &&
         (workspace.active.role === "owner" || workspace.active.role === "coach")
       }
+      showGettingStarted={
+        !workspace?.available.some((space) => space.kind === "team")
+      }
     />
   );
 }

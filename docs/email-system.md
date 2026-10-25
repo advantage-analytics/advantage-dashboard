@@ -312,7 +312,11 @@ that file.
   `first_upload_nudge_candidates()` in Postgres — no admin, no program
   membership (team onboarding is deferred), no match or processing job, and
   "Tips for getting started" on. Once per step per person,
-  `claimSend("first_upload_nudge:<step>:<user_id>")`, at most 40 a run.
+  `claimSend("first_upload_nudge:<step>:<user_id>")`, at most 40 a run,
+  spaced `OUTREACH_SEND_GAP_MS` apart (two Resend calls per send against a
+  2/s limit, and the key is claimed first, so a 429 would lose the email).
+  The candidate query itself leaves out the already-mailed, so its limit is
+  never spent on them.
   **The first mail here the recipient did not just cause**, so it is the
   first to carry the shell's `compliance` block (postal address from
   `OUTREACH_POSTAL_ADDRESS`; nothing sends without it) and a

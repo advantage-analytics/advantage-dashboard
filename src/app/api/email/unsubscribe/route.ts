@@ -9,8 +9,11 @@
  * `/email/unsubscribe` page instead, which asks first.
  */
 
-import { NextResponse } from "next/server";
-
+import {
+  errorResponse,
+  jsonResponse,
+  transportError,
+} from "@/lib/services/match-video/http";
 import { applyUnsubscribe } from "@/lib/services/notifications/unsubscribe-action";
 
 export const runtime = "nodejs";
@@ -23,10 +26,12 @@ export async function POST(request: Request) {
     url.searchParams.get("t"),
   );
   if (outcome === "invalid") {
-    return NextResponse.json({ error: "Invalid link." }, { status: 400 });
+    return errorResponse(transportError("invalid_request", "unsubscribe_link"));
   }
   if (outcome === "failed") {
-    return NextResponse.json({ error: "Could not save." }, { status: 500 });
+    return errorResponse(
+      transportError("internal_error", "unsubscribe_write_failed"),
+    );
   }
-  return NextResponse.json({ ok: true });
+  return jsonResponse({ ok: true });
 }

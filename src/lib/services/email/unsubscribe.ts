@@ -27,7 +27,10 @@ function key(): Buffer | null {
   return createHmac("sha256", secret).update("email-unsubscribe-v1").digest();
 }
 
-function sign(userId: string, scope: UnsubscribeScope): string | null {
+export function unsubscribeToken(
+  userId: string,
+  scope: UnsubscribeScope = "getting_started",
+): string | null {
   const k = key();
   if (!k) return null;
   return createHmac("sha256", k)
@@ -35,19 +38,12 @@ function sign(userId: string, scope: UnsubscribeScope): string | null {
     .digest("base64url");
 }
 
-export function unsubscribeToken(
-  userId: string,
-  scope: UnsubscribeScope = "getting_started",
-): string | null {
-  return sign(userId, scope);
-}
-
 export function verifyUnsubscribeToken(
   userId: string,
   token: string,
   scope: UnsubscribeScope = "getting_started",
 ): boolean {
-  const expected = sign(userId, scope);
+  const expected = unsubscribeToken(userId, scope);
   if (!expected) return false;
   const a = Buffer.from(expected);
   const b = Buffer.from(token);

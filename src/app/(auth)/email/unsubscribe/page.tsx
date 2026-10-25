@@ -24,8 +24,10 @@ export default async function UnsubscribePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const one = (name: string) =>
-    typeof params[name] === "string" ? (params[name] as string) : null;
+  const one = (name: string) => {
+    const value = params[name];
+    return typeof value === "string" ? value : null;
+  };
   const status = one("status");
 
   if (status === "done") {

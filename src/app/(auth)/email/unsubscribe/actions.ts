@@ -11,6 +11,16 @@ export async function unsubscribeForm(formData: FormData) {
     const value = formData.get(name);
     return typeof value === "string" ? value : null;
   };
-  const outcome = await applyUnsubscribe(read("u"), read("t"));
-  redirect(`/email/unsubscribe?status=${outcome}`);
+  const userId = read("u");
+  const token = read("t");
+  const outcome = await applyUnsubscribe(userId, token);
+
+  // A failed write keeps the link, so the page can offer the button again
+  // instead of calling a good link broken.
+  const query = new URLSearchParams({ status: outcome });
+  if (outcome === "failed" && userId && token) {
+    query.set("u", userId);
+    query.set("t", token);
+  }
+  redirect(`/email/unsubscribe?${query}`);
 }
