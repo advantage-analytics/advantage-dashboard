@@ -33,11 +33,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 /**
- * The poll is a few concurrent 10-second GETs; the results sweep budgets 40
- * seconds for a derivation and runs in `after()`, past the caller's
- * 30-second timeout.
+ * The poll is a few concurrent 10-second GETs, then each failure it finds is
+ * applied in turn (refund, resubmit, email); the results sweep runs after it
+ * in `after()`, past the caller's 30-second timeout, and budgets 40 seconds
+ * for a derivation from its own start. Both share this ceiling, so it is set
+ * well clear of their sum — a derivation killed midway leaves the job reading
+ * as analysing forever.
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * Jobs polled per run. The page path polls three; this one has no render to

@@ -7,11 +7,12 @@ import { expect, test } from "@playwright/test";
 // on the uploader's next page load. Source checks, as for the stalled-upload
 // sweep — the sweeps themselves are covered by the reconcile specs.
 
+const src = readFileSync(
+  resolve(process.cwd(), "src/app/api/cron/reconcile-vendor-jobs/route.ts"),
+  "utf8",
+);
+
 test("the route checks the bearer before it builds the service-role client", () => {
-  const src = readFileSync(
-    resolve(process.cwd(), "src/app/api/cron/reconcile-vendor-jobs/route.ts"),
-    "utf8",
-  );
   const auth = src.indexOf(
     "authorizeCronRequest(request, process.env.CRON_SECRET)",
   );
@@ -23,10 +24,6 @@ test("the route checks the bearer before it builds the service-role client", () 
 });
 
 test("the route sweeps every job, not a page's matches", () => {
-  const src = readFileSync(
-    resolve(process.cwd(), "src/app/api/cron/reconcile-vendor-jobs/route.ts"),
-    "utf8",
-  );
   expect(src).toContain("reconcileVendorJobs({ supabase, cap: POLL_CAP })");
   expect(src).toContain("recoverUndeliveredResults({ supabase })");
   expect(src).not.toContain("matchIds");
