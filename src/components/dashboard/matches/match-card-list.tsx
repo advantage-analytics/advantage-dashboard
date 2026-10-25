@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   LIST_ROW_FRAME,
   LIST_TRACK_TRANSITION,
-  eventCellFade,
   listGridCols,
 } from "./match-list-layout";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
@@ -16,6 +15,7 @@ import { PlayerMark } from "@/components/ui/player-mark";
 import { StatePill } from "@/components/ui/state-pill";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { RowLifecycle } from "./row-state";
+import { EventCell } from "./event-cell";
 import { profileHref } from "@/components/dashboard/team/roster-table";
 import { cn } from "@/lib/utils";
 
@@ -116,7 +116,6 @@ export function MatchCardList({
   const isWin = match.score.winner === "player1";
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
-  const eventHidden = isTeam && compact;
   const { viewer, active } = useWorkspace();
   const playerId = match.player1.id ?? null;
   const isViewerRow =
@@ -235,39 +234,13 @@ export function MatchCardList({
         className="min-w-0 truncate text-[13px] text-[var(--ink-900)]"
       />
 
-      {/* Event — the occasion, with the round trailing it in mono. The round
-          never truncates; a tournament losing its tail is the smaller loss.
-          Beside the open team drawer its track collapses to nothing and the
-          cell fades, rather than leaving the tree — see
-          `TEAM_LIST_GRID_COLS_COMPACT`. */}
-      <span
-        aria-hidden={eventHidden || undefined}
-        className={cn(
-          "flex min-w-0 items-baseline gap-1 overflow-hidden text-[12px]",
-          eventCellFade(eventHidden),
-        )}
-        style={{ color: "var(--ink-600)" }}
-      >
-        {match.tournamentName ? (
-          <span className="min-w-0 truncate">{match.tournamentName}</span>
-        ) : (
-          // Filed with no event: say so, muted, rather than invent one.
-          <span
-            className="min-w-0 truncate"
-            style={{ color: "var(--ink-400)" }}
-          >
-            No event
-          </span>
-        )}
-        {match.round && (
-          <span
-            className="mono shrink-0 text-[11px]"
-            style={{ color: "var(--ink-400)" }}
-          >
-            · {match.round}
-          </span>
-        )}
-      </span>
+      {/* Event — the occasion, with the round trailing it in mono; the one
+          cell a draft row draws too (`EventCell`). */}
+      <EventCell
+        name={match.tournamentName}
+        round={match.round}
+        hidden={compact}
+      />
 
       {/* Analysis — the settled outcome, the upload's chip and bar, or the
           one word that explains an exception, on the rest. `grid` blockifies

@@ -282,3 +282,150 @@ test("a score-only match (manual analysis, no job) still folds its draft", async
     drawer(page).getByRole("link", { name: "Continue upload" }),
   ).toHaveAttribute("href", "/dashboard/matches/new?draft=d-folded");
 });
+
+test("the draft rail's ⋯ asks before discarding, and a refusal keeps the rail", async ({
+  page,
+}) => {
+  await open(page, "?discard=refused");
+  await row(page, "d-new").click();
+  const panel = drawer(page);
+  await expect(panel).toBeVisible();
+
+  // The ⋯ opens the product's float menu: one action row, grey at rest, the
+  // consequence as its second line — nothing is deleted from here.
+  const trigger = panel.getByRole("button", { name: "Draft actions" });
+  await trigger.click();
+  const menu = page.getByRole("menu", { name: "Draft actions" });
+  await expect(menu).toBeVisible();
+  const item = menu.getByRole("menuitem", { name: /Discard draft/ });
+  await expect(item).toHaveCount(1);
+  await expect(item).toContainText("Clears your saved answers");
+  await expect(item.getByText("Discard draft", { exact: true })).toHaveClass(
+    /text-\[var\(--ink-900\)\]/,
+  );
+  expect(await page.evaluate(() => window.draftDiscards ?? [])).toEqual([]);
+
+  await item.click();
+  const confirm = page.getByRole("alertdialog", {
+    name: "Discard this draft?",
+  });
+  await expect(confirm).toBeVisible();
+  await expect(menu).toHaveCount(0);
+  await expect(confirm).toContainText(
+    "Throws away the answers saved for the match vs Sam Ortiz so far. The file you picked stays on your device, and nothing in your match library changes.",
+  );
+
+  // Refused: the problem line, the dialog held open, the draft still listed.
+  await confirm.getByRole("button", { name: "Discard draft" }).click();
+  await expect(confirm.getByRole("alert")).toHaveText(
+    "Couldn’t discard this draft. Try again.",
+  );
+  expect(await page.evaluate(() => window.draftDiscards)).toEqual(["d-new"]);
+  await expect(
+    confirm.getByRole("button", { name: "Discard draft" }),
+  ).toBeEnabled();
+
+  // Keep draft: back to the ⋯, the rail and the row as they were.
+  await confirm.getByRole("button", { name: "Keep draft" }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(panel).toBeVisible();
+  await expect(row(page, "d-new")).toHaveAttribute("aria-current", "true");
+  await expect(trigger).toBeFocused();
+  expect(await page.evaluate(() => window.routerRefreshes ?? 0)).toBe(0);
+});
+
+test("confirming Discard draft deletes it, slides the rail out, then refreshes", async ({
+  page,
+}) => {
+  await open(page);
+  await row(page, "d-new").click();
+  const panel = drawer(page);
+  await expect(panel).toBeVisible();
+
+  await panel.getByRole("button", { name: "Draft actions" }).click();
+  await page.getByRole("menuitem", { name: /Discard draft/ }).click();
+  const confirm = page.getByRole("alertdialog", {
+    name: "Discard this draft?",
+  });
+  await confirm.getByRole("button", { name: "Discard draft" }).click();
+
+  await expect(confirm).toHaveCount(0);
+  // The rail leaves the way Esc closes it; the list refresh waits for that.
+  await expect(panel).toHaveCount(0);
+  await expect(row(page, "d-new")).not.toHaveAttribute("aria-current", "true");
+  expect(await page.evaluate(() => window.draftDiscards)).toEqual(["d-new"]);
+  await expect
+    .poll(() => page.evaluate(() => window.routerRefreshes ?? 0))
+    .toBe(1);
+});
+
+test("a draft row and its rail read back what was answered", async ({
+  page,
+}) => {
+  await open(page);
+  const draftRow = row(page, "d-new");
+
+  // Date is the match day; the opponent carries the pill (the player is the
+  // viewer on a personal list); the sets typed so far read one ink quieter;
+  // the event label fills Event; the lifecycle cell names the step and leads
+  // back into the wizard.
+  await expect(draftRow).toContainText("Sep 18");
+  await expect(draftRow.getByText("Sam Ortiz", { exact: true })).toHaveCount(1);
+  await expect(draftRow.getByText("Jordan Park")).toHaveCount(0);
+  await expect(draftRow.getByText("6-4, 3-6", { exact: true })).toHaveClass(
+    /text-\[var\(--ink-600\)\]/,
+  );
+  await expect(draftRow).toContainText("Fall Classic · R16");
+  await expect(draftRow.getByText("Video check", { exact: true })).toHaveCount(
+    1,
+  );
+  await expect(
+    draftRow.getByRole("link", { name: "Continue", exact: true }),
+  ).toHaveAttribute("href", "/dashboard/matches/new?draft=d-new");
+
+  // The rail: named like a match, the step named and measured, the facts as
+  // the match rail draws them, the file honest about having to be picked
+  // again, and no sentence.
+  await draftRow.click();
+  const panel = drawer(page);
+  await expect(panel).toBeVisible();
+  await expect(
+    panel.getByRole("link", { name: "vs Sam Ortiz", exact: true }),
+  ).toHaveAttribute("href", "/dashboard/matches/new?draft=d-new");
+  await expect(
+    panel.getByText("Stopped at Video check", { exact: true }),
+  ).toBeVisible();
+  await expect(panel.getByText("3 / 4", { exact: true })).toBeVisible();
+  await expect(panel.getByRole("progressbar")).toHaveAttribute(
+    "aria-valuenow",
+    "3",
+  );
+  await expect(panel).toContainText("Sep 18");
+  await expect(panel).toContainText("Hard");
+  await expect(panel).toContainText("Advantage Intelligence");
+  await expect(panel).toContainText("match.mp4 · Pick again on Continue");
+  await expect(panel).toContainText("Edited Sep 22");
+  await expect(panel.getByText("step 3 of 4")).toHaveCount(0);
+  await expect(
+    panel.getByText(/It isn.t a match until you save it/),
+  ).toHaveCount(0);
+});
+
+test("team: the draft row puts the player under Player and the opponent under Opponent", async ({
+  page,
+}) => {
+  await open(page, "?scope=team");
+  const draftRow = row(page, "d-new");
+  const pill = draftRow.getByText("Draft", { exact: true });
+  await expect(
+    pill.locator("..").getByText("Jordan Park", { exact: true }),
+  ).toHaveCount(1);
+  await expect(draftRow.getByText("Sam Ortiz", { exact: true })).toHaveCount(1);
+  await draftRow.click();
+  await expect(
+    drawer(page).getByRole("link", {
+      name: "Jordan Park vs Sam Ortiz",
+      exact: true,
+    }),
+  ).toHaveCount(1);
+});

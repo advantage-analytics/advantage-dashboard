@@ -480,7 +480,7 @@ export function MatchesPageContent({
       workspaceId,
       matchesListShape(
         serverMatches.map((m) => m.date),
-        drafts.map((d) => d.updatedAt),
+        drafts.map((d) => d.matchDate),
       ),
     );
   }, [workspaceId, serverMatches, drafts]);

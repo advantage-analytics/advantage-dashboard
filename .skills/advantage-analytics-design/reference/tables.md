@@ -24,7 +24,7 @@ master-detail split is retired; its detail is the peek drawer below.
    (12px tabular ink-700, 72px) · the name at 13/500 ink-900 with its 26px
    mark (program initials for a dual, the tournament mark for a tournament) ·
    context at 12px ink-600 · then the numbers and the outcome, **flush left in
-   fixed tracks** (see the alignment clause below). Canonical orders: **Matches** = Date · Opponent · Result · Score · Event (+ mono round) · Analysis (the fluid cell, heading nothing) — no ⋯ lane: a match's Edit · Delete live in the drawer header, which renders at the same `lg` breakpoint as the table (2026-09-13); a draft row peeks too, into the same rail (Draft n / N, Discard in its header ⋯, Continue as the footer primary), so no row on the page carries a ⋯. The team table puts Player (13/500 ink-900) before Opponent (13/400 ink-700), and gives up Event while the match drawer is open. The glyph leads the score in a fixed track so the outcome sits at one x ("✓ 6-4, 3-6", the drawer's reading); Event trails the numbers as the least-scanned, widest text. The opponent carries no 26px mark — an initials circle read as a profile picture for someone not in the product (2026-09-13). _Supersedes: "Matches = Date · Opponent · Event (+ mono round) · Score · Result · Analysis (the fluid cell, heading nothing) · ⋯ · chevron — the outcome closes the facts, and the lifecycle annotation trails them because it is blank on eight rows in ten"_; **Roster** = # · Player ·
+   fixed tracks** (see the alignment clause below). Canonical orders: **Matches** = Date · Opponent · Result · Score · Event (+ mono round) · Analysis (the fluid cell, heading nothing) — no ⋯ lane: a match's Edit · Delete live in the drawer header, which renders at the same `lg` breakpoint as the table (2026-09-13); a draft row peeks too, into the same rail (Draft n / N, Discard in its header ⋯, Continue as the footer primary), so no row on the page carries a ⋯. A draft row fills the same tracks with what it has answered (2026-10-25): the match day under Date ("—" until entered); the opponent under Opponent with the pill (team: the player takes the pill, the opponent stands alone); "—" for Result, since nothing is decided; the sets typed so far under Score, one ink quieter (`--ink-600`) because nothing has checked them; the event label under Event; and in the lifecycle cell the dashed wait ring, the step it stopped at as one word (`stepLabel`), then "Continue" — beside the open rail the cell is at its 96px floor, which holds the ring and Continue alone, so the step word is read by screen readers only there (the rail names the step) rather than truncating to a letter; at rest the word truncates before Continue ever does. _Supersedes: the player's name under Opponent (the viewer's own, on a personal list), "—" for a typed score, and "Continue" standing in the Event cell._ The team table puts Player (13/500 ink-900) before Opponent (13/400 ink-700), and gives up Event while the match drawer is open — as the personal table does too (2026-10-25): beside the 340px rail the personal card sits under the list's 776px floor, and with Opponent and Event at their fixed maxima the grid overflowed the card and cut the lifecycle cell off; the rail names the event, so the column is the one to give up (`LIST_GRID_COLS_COMPACT`). The glyph leads the score in a fixed track so the outcome sits at one x ("✓ 6-4, 3-6", the drawer's reading); Event trails the numbers as the least-scanned, widest text. The opponent carries no 26px mark — an initials circle read as a profile picture for someone not in the product (2026-09-13). _Supersedes: "Matches = Date · Opponent · Event (+ mono round) · Score · Result · Analysis (the fluid cell, heading nothing) · ⋯ · chevron — the outcome closes the facts, and the lifecycle annotation trails them because it is blank on eight rows in ten"_; **Roster** = # · Player ·
    Record · Form · Last match (the fluid cell; Record leads Form: the number a coach ranks
    by first, the five-tick trail that qualifies it second); **Schedule** = Date · Event · Type · Venue ·
    Lines `n / 9` · Score · Result. Text and its header flush left; a numeric
@@ -330,12 +330,34 @@ selected, no chevrons, no gutter.
   permitted viewer with nothing left to do an empty footer, and the footer
   changing shape by role reads as a different panel. The ⋯ (Edit · Delete)
   follows the uploader, not the role. _Shipped:_ `matches/match-drawer.tsx`.
-- **Draft body** (Matches page only, same `PeekDrawerFrame`): the name as the
-  wizard link with an outlined Draft pill → event label or "No event yet" →
-  edited date · file name → "Stopped at step n of N". ⋯ holds Discard with
-  its consequence; footer is one primary "Continue" and no ghost, since the
-  wizard is the only page a draft has. ↑↓ walk the drafts, then the matches.
-  _Shipped:_ `matches/draft-drawer.tsx`.
+- **Draft body** (Matches page only, same `PeekDrawerFrame`, 2026-10-25): the
+  draft named as a match is — "vs Opponent" personal, "Player vs Opponent"
+  team, "Untitled match" before either (`draftTitle`,
+  `lib/wizard/draft-row-fields.ts`) — as the wizard link with an outlined
+  Draft pill → event label or "No event yet" → the wizard's own 2px
+  `StepIndicator` over "Stopped at Source / File / Video check / Details"
+  (`stepLabel`; an import's file step is "Export") with "n / N" in mono at
+  the right → the match rail's `DrawerFact` rows: the match day ("No date
+  yet"), court ("Not specified"), `ProviderFact` ("No source yet" before one
+  is picked), the file name with "· Pick
+  again on Continue" in ink-400 ("No file yet"), and "Edited <date>" last,
+  muted. A fact not yet answered reads muted, never blank, and nothing in the
+  body is a sentence. ⋯ is one `FloatMenu` row, "Discard draft" (`Trash2`,
+  grey at rest, `--danger` on intent, an 11px line on what it clears),
+  confirmed in `ConfirmDialog` — "Discard this draft?", naming the match the
+  way the title does, "Keep draft" · "Discard draft" — so the delete has a
+  pending state and a refusal has a line to land on; on success the rail
+  slides out as on Esc, then the row leaves. Footer is one primary "Continue"
+  and no ghost, since the wizard is the only page a draft has. ↑↓ walk the
+  drafts, then the matches. _Shipped:_ `matches/draft-drawer.tsx`,
+  `matches/discard-draft-dialog.tsx`. _Supersedes: "the name as the wizard
+  link with an outlined Draft pill → event label or 'No event yet' → edited
+  date · file name → 'Stopped at step n of N'; ⋯ holds Discard with its
+  consequence" — the player's name as the title (the viewer's own, on a
+  personal rail), a step count that said how far but not where, a file line
+  that implied the file was held, a sentence the pill already said, and a bare
+  Popover with a standing red label whose one-click delete swallowed its
+  error._
 - _Shipped:_ `schedule/static/event-drawer.tsx` and
   `team/player-drawer.tsx` — the roster's v3 delta (the Record column, the
   drawer, the retirement of the stat column and the action gutter) is closed.

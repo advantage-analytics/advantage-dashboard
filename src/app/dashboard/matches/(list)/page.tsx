@@ -130,7 +130,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   // Counted already, so the fallback draws the first page at its real size.
   const shape = matchesListShape(
     matches.map((m) => m.date),
-    drafts.map((d) => d.updatedAt),
+    drafts.map((d) => d.matchDate),
   );
   // A row: the page column, then the slot the match drawer portals into — so
   // the rail sits beside the column and the table reflows, as on the Roster.

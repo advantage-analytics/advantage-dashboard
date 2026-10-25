@@ -3,6 +3,7 @@
  */
 
 import type { ProviderKind } from "@/lib/services/upload";
+import type { Step } from "@/lib/wizard/steps";
 import type { VideoProbe } from "@/lib/video/probe";
 import type { Discipline, EventSite, MatchEnding } from "@/lib/schedule/types";
 import type { Workspace } from "@/lib/workspace/types";
@@ -11,15 +12,11 @@ import type { StyleSaveChoice } from "./style-save-offer";
 
 /** Wizard step identifiers */
 /**
- * Wizard step identifiers.
- *
- * `file` is the drop step for BOTH kinds — a video for a processing provider,
- * an export for an import one. `trim` is the video check that only a
- * processing provider needs. `match` is the last step: there is no confirm
- * step — Save match writes the record, and the match's own page says the rest
- * better than a summary above it could. Design: Upload Wizard v5.
+ * Wizard step identifiers — defined in `lib/wizard/steps.ts`, where a pure
+ * module can name a step without reaching into the component tree, and
+ * re-exported here for the wizard's own callers.
  */
-export type Step = "provider" | "file" | "trim" | "match";
+export type { Step };
 
 /** Where a pre-filled value came from, for the "from …" provenance tag. */
 export type ValueSource =

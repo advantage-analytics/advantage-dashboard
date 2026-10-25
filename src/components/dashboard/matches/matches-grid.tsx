@@ -13,6 +13,7 @@ import {
   listColumnLabels,
   listGridCols,
   LIST_MIN_WIDTH,
+  LIST_MIN_WIDTH_COMPACT,
   LIST_TRACK_TRANSITION,
   TEAM_LIST_MIN_WIDTH,
   TEAM_LIST_MIN_WIDTH_COMPACT,
@@ -60,9 +61,8 @@ export function MatchesGrid({
   drawerOpen = false,
   empty,
 }: MatchesGridProps): React.JSX.Element {
-  // Only the team table gives a track up beside the drawer; the personal one
-  // fits at 1440 with every column.
-  const compact = scope === "team" && drawerOpen;
+  // Both tables give up Event beside the open rail; the rail names the event.
+  const compact = drawerOpen;
   /* Which layout shows is a width question, so Tailwind answers it rather than
      React. Held in state it could only be read after mount, so the server — which
      has no viewport — always emitted the wide table and a phone painted
@@ -76,15 +76,15 @@ export function MatchesGrid({
   // The Date track widens for the whole card, not per row, so the columns keep
   // one x across the list — see `DATE_COL_WITH_YEAR`. A date needs the year
   // whenever it is not from the current year, which is the exact rule each
-  // row's formatter applies (`datesNeedYear` — a match's day and a draft's
-  // moment are read differently) — decided by comparing years directly rather
+  // row's formatter applies (`datesNeedYear` — a match's day and the day a
+  // draft has entered, read the same way) — decided by comparing years directly rather
   // than formatting every date twice (once to detect, once to render), and
   // memoized so a re-render that does not change the rows does not re-scan them.
   const needsYear = useMemo(
     () =>
       datesNeedYear(
         matches.map((m) => m.date),
-        drafts.map((d) => d.updatedAt),
+        drafts.map((d) => d.matchDate),
       ),
     [drafts, matches],
   );
@@ -127,7 +127,9 @@ export function MatchesGrid({
             className={cn(
               LIST_TRACK_TRANSITION,
               scope === "personal"
-                ? LIST_MIN_WIDTH
+                ? compact
+                  ? LIST_MIN_WIDTH_COMPACT
+                  : LIST_MIN_WIDTH
                 : compact
                   ? TEAM_LIST_MIN_WIDTH_COMPACT
                   : TEAM_LIST_MIN_WIDTH,
@@ -146,15 +148,10 @@ export function MatchesGrid({
               {listColumnLabels(scope).map((label, i) => (
                 <span
                   key={label || `col-${i}`}
-                  aria-hidden={
-                    (label === "Event" && scope === "team" && compact) ||
-                    undefined
-                  }
+                  aria-hidden={(label === "Event" && compact) || undefined}
                   className={cn(
                     "eyebrow-sm min-w-0 truncate",
-                    label === "Event" &&
-                      scope === "team" &&
-                      eventCellFade(compact),
+                    label === "Event" && eventCellFade(compact),
                   )}
                   role="columnheader"
                 >
