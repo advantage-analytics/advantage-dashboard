@@ -4,6 +4,7 @@
  *
  *   403 cross_origin     not a request from a page this app served
  *   401 unauthenticated  no session
+ *   403 forbidden        no report read yet — a call the page never makes
  *   413 / 400            an over-long or malformed body
  *                        (`readFirstMatchFeedbackRequest()`)
  *   500 internal_error   the write failed
@@ -35,7 +36,7 @@ export const dynamic = "force-dynamic";
 
 /** As `/api/ask/feedback` does it: `errorResponse()` is typed to the match-video codes. */
 function refusal(
-  code: "unauthenticated",
+  code: "unauthenticated" | "forbidden",
   status: number,
   message: string,
   detail: string,
@@ -81,31 +82,30 @@ export async function POST(request: Request): Promise<Response> {
   }
   const body = parsed.value;
 
-  // The context the answer is read with later: when the first report was
-  // seen and how long after it this came. Own row, RLS-scoped; a failed read
-  // costs the context, never the answer.
-  const { data: row } = await supabase
-    .from("users")
-    .select("first_report_seen_at")
-    .eq("id", user.id)
-    .maybeSingle();
-  const seenAt: string | null = row?.first_report_seen_at ?? null;
-  const seenMs = seenAt ? Date.parse(seenAt) : NaN;
-  const context = {
-    first_report_seen_at: seenAt,
-    hours_since_first_report: Number.isFinite(seenMs)
-      ? Math.round((Date.now() - seenMs) / 36e5)
-      : null,
-    last_sign_in_at: user.last_sign_in_at ?? null,
-  };
-
+  // The context the answer is read with later. The function fills in when
+  // the first report was seen and how long after it this came, from the
+  // caller's own row, and overwrites anything sent under those keys
+  // (`product_feedback_context_guard`); only the sign-in time, which lives
+  // in auth, is handed over from here.
   const { error } = await supabase.rpc("submit_product_feedback", {
     p_prompt: FIRST_MATCH_FEEDBACK_PROMPT,
     p_rating: body.rating,
     p_note: body.note,
-    p_context: context,
+    p_context: { last_sign_in_at: user.last_sign_in_at ?? null },
   });
   if (error) {
+    if (error.code === "42501") {
+      // No report read yet: the prompt is never shown before the stamp, so
+      // this is a call the page did not make.
+      return errorResponse(
+        refusal(
+          "forbidden",
+          403,
+          "There is no report to rate yet.",
+          "no_report_seen",
+        ),
+      );
+    }
     if (error.code === "23505") {
       // Already answered: the first answer stands. The function stamps the
       // column only on a successful insert, so make sure it is stamped here

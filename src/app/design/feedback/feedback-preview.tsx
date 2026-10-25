@@ -597,9 +597,7 @@ function PageFrame({
   return (
     <section className="mt-8 flex max-w-[760px] flex-col gap-5">
       {children}
-      <h2 className="text-[20px] leading-[1.2] font-light tracking-[-0.3px] text-[var(--ink-900)]">
-        {title}
-      </h2>
+      <h2 className="text-title-lg">{title}</h2>
       <div
         aria-hidden
         className="rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] px-6 py-2"
@@ -755,9 +753,7 @@ function CornerCardSketch({
 function HomeFrame({ children }: { children: React.ReactNode }) {
   return (
     <section className="mt-8 flex max-w-[760px] flex-col gap-4">
-      <h2 className="text-[20px] leading-[1.2] font-light tracking-[-0.3px] text-[var(--ink-900)]">
-        Good evening, Lina
-      </h2>
+      <h2 className="text-title-lg">Good evening, Lina</h2>
       {children}
       {["Matches", "Focus"].map((label) => (
         <div

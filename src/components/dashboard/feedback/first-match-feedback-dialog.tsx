@@ -323,19 +323,8 @@ export function RatingScale({
           );
         })}
       </div>
-      {caption === "ends" && (
-        <div className="flex justify-between">
-          <span className="text-micro">{COPY.ratingLow}</span>
-          <span className="text-micro">{COPY.ratingHigh}</span>
-        </div>
-      )}
-      {caption === "word" &&
-        (value === null ? (
-          <div className="flex justify-between">
-            <span className="text-micro">{COPY.ratingLow}</span>
-            <span className="text-micro">{COPY.ratingHigh}</span>
-          </div>
-        ) : (
+      {caption !== "none" &&
+        (caption === "word" && value !== null ? (
           <p
             role="status"
             className="text-micro text-center"
@@ -343,6 +332,11 @@ export function RatingScale({
           >
             {FIRST_MATCH_FEEDBACK_WORDS[value]}
           </p>
+        ) : (
+          <div className="flex justify-between">
+            <span className="text-micro">{COPY.ratingLow}</span>
+            <span className="text-micro">{COPY.ratingHigh}</span>
+          </div>
         ))}
     </div>
   );

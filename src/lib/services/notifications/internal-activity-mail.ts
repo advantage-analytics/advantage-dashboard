@@ -18,7 +18,8 @@ import { claimSend } from "./should-notify";
  *
  * Postgres decides WHEN (the `internal_activity_alerts` migration's triggers,
  * and `internal_alert_feedback`'s, post `{ kind, id }` to
- * `/api/webhooks/internal-events`); this file decides WHAT. It never trusts more than the id: every fact in the email is read
+ * `/api/webhooks/internal-events`); this file decides WHAT. It never trusts
+ * more than the id: every fact in the email is read
  * back from the row with the service role, so a forged or replayed body can
  * at most re-announce a row that exists, and `claimSend` makes that a no-op.
  *
