@@ -272,7 +272,7 @@ function HoursCard({
           {credits <= 0
             ? "Credits: none"
             : added
-              ? `Added: ${formatHoursLong(credits)}${expiresOn ? ` · until ${expiresOn}` : ""}`
+              ? `Added: ${formatHoursLong(credits)}${expiresOn ? ` · Until ${expiresOn}` : ""}`
               : `Credits: ${formatHoursLong(credits)}`}
         </MeterLegend>
       </div>

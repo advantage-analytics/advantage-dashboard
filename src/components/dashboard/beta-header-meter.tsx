@@ -213,17 +213,11 @@ export function BetaMeterPill({
     ? 0
     : unlimited || onCredits
       ? 1
-      : withExtra
-        ? 1 -
-          usageFraction(
-            ready.capSeconds - ready.remainingSeconds,
-            ready.capSeconds + credits,
-          )
-        : 1 -
-          usageFraction(
-            ready.capSeconds - ready.remainingSeconds,
-            ready.capSeconds,
-          );
+      : 1 -
+        usageFraction(
+          ready.capSeconds - ready.remainingSeconds,
+          ready.capSeconds + (withExtra ? credits : 0),
+        );
 
   return (
     <ChromeTooltip label={label} detail={detail}>
