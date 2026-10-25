@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import FormHeader from "./form-header";
@@ -28,7 +28,23 @@ export function UpdatePasswordForm() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<AuthError | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
   const router = useRouter();
+
+  // The recovery session names the account. Read in the browser rather than
+  // on the server: the link can land with the session still in the URL, and
+  // the browser client is what finishes it.
+  useEffect(() => {
+    let live = true;
+    createClient()
+      .auth.getUser()
+      .then(({ data: { user } }) => {
+        if (live) setAccountEmail(user?.email ?? null);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,6 +89,19 @@ export function UpdatePasswordForm() {
       />
 
       <div className="flex flex-col gap-[20px]">
+        {/* Chrome saves a new password against the username field before it.
+            Without one it files the reset as a separate, nameless login and
+            keeps offering the old password on /login. */}
+        {accountEmail ? (
+          <input
+            type="email"
+            name="email"
+            autoComplete="username"
+            value={accountEmail}
+            readOnly
+            hidden
+          />
+        ) : null}
         <FormField
           label="New password"
           id="new-password"
