@@ -77,14 +77,14 @@ export function LoginForm({
   const router = useRouter();
   const destination = safeNext(next ?? null);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
     // Read what the fields hold, not just state. Chrome can autofill before
     // hydration, or without firing an input event, so the dots are on screen
     // while state is still empty and the sign-in would send a blank password.
-    const form = new FormData(e.currentTarget as HTMLFormElement);
+    const form = new FormData(e.currentTarget);
     const email = String(form.get("email") ?? "");
     const password = String(form.get("password") ?? "");
     setEmail(email);
