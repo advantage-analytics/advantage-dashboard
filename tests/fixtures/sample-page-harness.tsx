@@ -21,6 +21,7 @@ import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/re
 import { StatisticsView } from "@/components/dashboard/matches/match-detail/statistics-view";
 import { ShotsTab } from "@/components/dashboard/matches/match-detail/shots/shots-tab";
 import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
+import { SKIP_DEAD_HINT_SEEN_STORAGE_KEY } from "@/components/dashboard/matches/match-detail/film/film-room-prefs";
 import { MatchFiltersProvider } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { SampleBanner } from "@/components/dashboard/onboarding/sample-banner";
@@ -207,6 +208,15 @@ function SampleReport() {
   );
 }
 
+// The Film tab's one-card hint (`film-skip-dead-hint.tsx`) opens on the
+// player's glyph once per browser profile, as a `role="dialog"` over the
+// lane that takes Escape and the pointer. Each case here starts a fresh
+// profile and is about playback, not the hint, so it is marked seen first.
+try {
+  localStorage.setItem(SKIP_DEAD_HINT_SEEN_STORAGE_KEY, "1");
+} catch {
+  /* blocked storage: the hint reads that as seen anyway */
+}
 createRoot(document.getElementById("root")!).render(
   <WorkspaceProvider value={WORKSPACE}>
     <SampleReport />

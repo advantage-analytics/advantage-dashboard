@@ -195,7 +195,7 @@ test("Skip closes the hint and sets the guard", async ({ page }) => {
   await expect(
     page.getByRole("dialog", { name: "Your upload keeps going." }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Skip tour" }).click();
+  await page.getByRole("button", { name: "Dismiss" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await calls(page)).toEqual(["activity-tray"]);
   expect(

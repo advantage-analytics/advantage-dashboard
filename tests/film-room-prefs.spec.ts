@@ -4,9 +4,11 @@ import {
   DEFAULT_COURT_MODE,
   DEFAULT_COURT_ON,
   DEFAULT_DRAWER_OPEN,
+  DEFAULT_SKIP_DEAD,
   parseCourtMode,
   parseCourtOn,
   parseDrawerOpen,
+  parseSkipDead,
   roomParam,
 } from "@/components/dashboard/matches/match-detail/film/film-room-prefs";
 
@@ -29,6 +31,14 @@ test('parseDrawerOpen defaults to false, accepts "1", rejects nonsense', () => {
   expect(parseDrawerOpen(null)).toBe(false);
   expect(parseDrawerOpen("1")).toBe(true);
   expect(parseDrawerOpen("yes")).toBe(false);
+});
+
+test('parseSkipDead defaults to true, accepts "0", rejects nonsense', () => {
+  expect(parseSkipDead(null)).toBe(DEFAULT_SKIP_DEAD);
+  expect(parseSkipDead(null)).toBe(true);
+  expect(parseSkipDead("0")).toBe(false);
+  expect(parseSkipDead("1")).toBe(true);
+  expect(parseSkipDead("off")).toBe(true);
 });
 
 test("roomParam round trips, keeping other params intact on enter and exit", () => {
