@@ -24,7 +24,11 @@ import {
   TwoBucketMeter,
   type HoursBalance,
 } from "@/components/dashboard/credits/two-bucket-meter";
-import { formatHoursLong, isUnlimitedCap } from "@/lib/data/usage-format";
+import {
+  extraHoursWord,
+  formatHoursLong,
+  isUnlimitedCap,
+} from "@/lib/data/usage-format";
 import {
   CREDIT_PACKS,
   creditPack,
@@ -55,6 +59,7 @@ export function PersonalPlan({
   freeCapSeconds,
   freeLeftSeconds,
   creditSeconds,
+  grantedSeconds,
   lots,
   nextCreditExpiresAt,
   pilot,
@@ -65,6 +70,8 @@ export function PersonalPlan({
   freeCapSeconds: number;
   freeLeftSeconds: number;
   creditSeconds: number;
+  /** The granted part of `creditSeconds` — decides "added" vs "credits". */
+  grantedSeconds: number;
   lots: CreditLot[];
   /** When the oldest usable credits expire, from the balance read. */
   nextCreditExpiresAt: string | null;
@@ -120,6 +127,7 @@ export function PersonalPlan({
 
       <HoursCard
         balance={balance}
+        grantedSeconds={grantedSeconds}
         pilot={pilot}
         resetsOn={resetsOn}
         freeEnds={freeEnds}
@@ -165,12 +173,14 @@ export function PersonalPlan({
 
 function HoursCard({
   balance,
+  grantedSeconds,
   pilot,
   resetsOn,
   freeEnds,
   nextExpiry,
 }: {
   balance: HoursBalance;
+  grantedSeconds: number;
   pilot: boolean;
   resetsOn: string | null;
   freeEnds: string;
@@ -179,6 +189,12 @@ function HoursCard({
   const free = balance.freeLeftSeconds;
   const credits = balance.creditSeconds;
   const severity = balanceSeverity(balance);
+  // Hours an admin added are "added", never "credits" — a player who was
+  // given 4h read "Credits: 4h" as someone else's figure and believed the
+  // free 2 was all they had.
+  const word = extraHoursWord(credits, grantedSeconds);
+  const added = word === "added";
+  const expiresOn = nextExpiry ? formatCreditDate(nextExpiry) : null;
   const figureColor =
     severity === "ok" ? "var(--ink-900)" : SEVERITY_FILL[severity];
 
@@ -210,22 +226,36 @@ function HoursCard({
         Video hours
       </SettingsCardTitle>
 
-      <div className="flex flex-wrap items-baseline gap-2">
-        <span className="text-title-lg" style={{ color: figureColor }}>
-          {severity === "spent" ? "0h" : formatHoursLong(free + credits)}
-        </span>
-        <span className="text-[12px] text-[var(--ink-500)]">left</span>
-        {severity !== "ok" && (
-          <span
-            className="ml-1 flex items-center gap-1.5 text-[11px]"
-            style={{ color: SEVERITY_FILL[severity] }}
-          >
-            <TriangleAlert className="size-3" strokeWidth={1.75} aria-hidden />
-            {severity === "low"
-              ? "Running low"
-              : resetsOn
-                ? `Spent — free hours come back ${resetsOn}`
-                : "Spent"}
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="text-title-lg" style={{ color: figureColor }}>
+            {severity === "spent" ? "0h" : formatHoursLong(free + credits)}
+          </span>
+          <span className="text-[12px] text-[var(--ink-500)]">left</span>
+          {severity !== "ok" && (
+            <span
+              className="ml-1 flex items-center gap-1.5 text-[11px]"
+              style={{ color: SEVERITY_FILL[severity] }}
+            >
+              <TriangleAlert
+                className="size-3"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+              {severity === "low"
+                ? "Running low"
+                : resetsOn
+                  ? `Spent — free hours come back ${resetsOn}`
+                  : "Spent"}
+            </span>
+          )}
+        </div>
+        {/* The split, so the total is never read as the free figure alone. */}
+        {free > 0 && credits > 0 && (
+          <span className="text-[12px] text-[var(--ink-600)]">
+            {`${formatHoursLong(free)} free this month + ${formatHoursLong(credits)} ${
+              added ? "added to your account" : "in credits"
+            }`}
           </span>
         )}
       </div>
@@ -239,21 +269,32 @@ function HoursCard({
           {`Free: ${formatHoursLong(free)} of ${formatHoursLong(balance.freeCapSeconds)} this month`}
         </MeterLegend>
         <MeterLegend color="var(--viz-you-mid)">
-          {credits > 0
-            ? `Credits: ${formatHoursLong(credits)}`
-            : "Credits: none"}
+          {credits <= 0
+            ? "Credits: none"
+            : added
+              ? `Added: ${formatHoursLong(credits)}${expiresOn ? ` · Until ${expiresOn}` : ""}`
+              : `Credits: ${formatHoursLong(credits)}`}
         </MeterLegend>
       </div>
 
       <SettingsCardFootnote>
-        {pilot
-          ? `Pilot: ${formatHoursLong(balance.freeCapSeconds)} free a month`
-          : `${formatHoursLong(balance.freeCapSeconds)} free a month`}{" "}
-        through {freeEnds}, used first. Credits are used after them, oldest
-        first
-        {nextExpiry
-          ? ` — your next credits expire ${formatCreditDate(nextExpiry)}.`
-          : "."}
+        {added ? (
+          <>
+            {pilot ? "Pilot: your " : "Your "}
+            {formatHoursLong(balance.freeCapSeconds)} free a month come first,
+            through {freeEnds}. Then the {formatHoursLong(credits)} added to
+            your account{expiresOn ? `, which last until ${expiresOn}` : ""}.
+          </>
+        ) : (
+          <>
+            {pilot
+              ? `Pilot: ${formatHoursLong(balance.freeCapSeconds)} free a month`
+              : `${formatHoursLong(balance.freeCapSeconds)} free a month`}{" "}
+            through {freeEnds}, used first. Credits are used after them, oldest
+            first
+            {expiresOn ? ` — your next credits expire ${expiresOn}.` : "."}
+          </>
+        )}
       </SettingsCardFootnote>
     </SettingsCard>
   );
@@ -348,7 +389,9 @@ function HistoryCard({ lots }: { lots: CreditLot[] }) {
                 <td className="py-2.5">
                   {lot.pack
                     ? packName(creditPack(lot.pack))
-                    : `${formatHoursLong(lot.seconds)} added`}
+                    : lot.source === "grant"
+                      ? `${formatHoursLong(lot.seconds)} added by Advantage`
+                      : `${formatHoursLong(lot.seconds)} added`}
                 </td>
                 <td className="tabular py-2.5 text-right">
                   {formatHoursLong(lot.remainingSeconds)}

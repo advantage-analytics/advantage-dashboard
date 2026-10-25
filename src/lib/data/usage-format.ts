@@ -175,3 +175,18 @@ export const HOURS_PER_DUAL_WEEKEND = 10;
 export function dualWeekendsLeft(seconds: number): number {
   return Math.floor(Math.max(0, seconds) / 3600 / HOURS_PER_DUAL_WEEKEND);
 }
+
+/**
+ * What the hours beyond the free allowance are called: "added" when every
+ * usable lot was granted by an admin, "credits" when any of it was bought.
+ * A player who was handed hours never bought credits, and calling the gift
+ * "credits" is how one read the 4h they were given as still having 2.
+ */
+export function extraHoursWord(
+  creditSeconds: number,
+  grantedSeconds: number,
+): "added" | "credits" {
+  return creditSeconds > 0 && grantedSeconds >= creditSeconds
+    ? "added"
+    : "credits";
+}

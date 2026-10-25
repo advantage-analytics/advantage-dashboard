@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
 import {
   monthlyCapSecondsFor,
+  NO_CREDITS,
   readCreditBalance,
 } from "@/lib/services/splitstep/quota";
 import type { Workspace } from "@/lib/workspace/types";
@@ -26,6 +27,8 @@ export interface PersonalUsage {
    * figure, so it is the same whichever month is being looked at.
    */
   creditSeconds: number;
+  /** The granted part of `creditSeconds` — see `extraHoursWord()`. */
+  grantedSeconds: number;
   /** When the oldest usable credits expire, or null with none. */
   nextCreditExpiresAt: string | null;
 }
@@ -88,11 +91,12 @@ export async function getPersonalUsage(
             ? creditError.message
             : String(creditError),
       });
-      return { seconds: 0, nextExpiresAt: null };
+      return NO_CREDITS;
     }),
   ]);
   const creditFields = {
     creditSeconds: credits.seconds,
+    grantedSeconds: credits.grantedSeconds,
     nextCreditExpiresAt: credits.nextExpiresAt,
   };
 
