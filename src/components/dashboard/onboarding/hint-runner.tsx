@@ -68,9 +68,10 @@ const OPEN_DIALOG = '[role="dialog"]';
  * is a DOM change — the anchor mounting, a dialog or menu opening or closing,
  * the anchor leaving — so a `MutationObserver` wakes it exactly then, and a
  * page that sits still costs nothing: no per-frame loop for however long a
- * dialog stays open or an anchor stays away. Returns the cleanup.
+ * dialog stays open or an anchor stays away. Returns the cleanup. Shared
+ * with the film player's hint (`film/film-skip-dead-hint.tsx`).
  */
-function watchDocument(check: () => boolean): () => void {
+export function watchDocument(check: () => boolean): () => void {
   let frame = 0;
   let done = false;
   const observer = new MutationObserver(() => schedule());

@@ -1,12 +1,14 @@
 /**
- * The fullscreen film room's viewer preferences, and the `fullscreen` URL
- * param helper. Pure logic, no React — `film-fullscreen.tsx` and the shell
- * both read/write these.
+ * The film's viewer preferences — the fullscreen room's, and the one the
+ * room shares with the report player (skip dead time, with the flag that
+ * says its hint was shown) — plus the `fullscreen` URL param helper. Pure
+ * logic, no React — `film-fullscreen.tsx`, `use-skip-dead.ts`,
+ * `film-skip-dead-hint.tsx` and the shell read/write these.
  *
  * Persistence is localStorage, following `film-room:board-anchor`
- * (`board-position.ts`): court on/off, court mode and the points drawer
- * open/closed. There is no `user_preferences` column and no migration for
- * any of this (spec: "Settled mismatches" § Persistence).
+ * (`board-position.ts`): court on/off, court mode, the points drawer
+ * open/closed, skip dead time. There is no `user_preferences` column and no
+ * migration for any of this (spec: "Settled mismatches" § Persistence).
  *
  * The URL only ever carries `fullscreen=1`, written on enter and stripped on
  * exit — never honoured on load (spec: "Settled mismatches" § URL). Modeled
@@ -146,7 +148,9 @@ export function readSkipDeadHintSeen(): boolean {
   try {
     return localStorage.getItem(SKIP_DEAD_HINT_SEEN_STORAGE_KEY) === "1";
   } catch {
-    // Blocked storage: treat the hint as seen rather than show it every visit.
+    // Blocked storage: treat the hint as seen rather than show it every
+    // visit — so a private window gets skipping on (`readSkipDead`'s
+    // default) with no card; the glyph's tooltip is the explanation there.
     return true;
   }
 }

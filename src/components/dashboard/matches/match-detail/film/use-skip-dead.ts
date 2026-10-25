@@ -23,12 +23,29 @@ import {
 
 const listeners = new Set<() => void>();
 
+/**
+ * The value as this page last set it. With storage blocked, `writeSkipDead`
+ * keeps nothing and `readSkipDead` would answer the default forever — the
+ * glyph could never be turned off. This is what the toggle flips and the
+ * snapshot reads then; with storage working it merely mirrors it.
+ */
+let current: boolean | null = null;
+
+function snapshot(): boolean {
+  return current ?? readSkipDead();
+}
+
 function subscribe(onChange: () => void): () => void {
+  // Another tab wrote it: take storage's word over this page's last set.
+  const fromStorage = () => {
+    current = null;
+    onChange();
+  };
   listeners.add(onChange);
-  window.addEventListener("storage", onChange);
+  window.addEventListener("storage", fromStorage);
   return () => {
     listeners.delete(onChange);
-    window.removeEventListener("storage", onChange);
+    window.removeEventListener("storage", fromStorage);
   };
 }
 
@@ -37,13 +54,10 @@ function serverSnapshot(): boolean {
 }
 
 export function useSkipDead(): [skipDead: boolean, toggle: () => void] {
-  const skipDead = useSyncExternalStore(
-    subscribe,
-    readSkipDead,
-    serverSnapshot,
-  );
+  const skipDead = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
   const toggle = useCallback(() => {
-    writeSkipDead(!readSkipDead());
+    current = !snapshot();
+    writeSkipDead(current);
     for (const notify of listeners) notify();
   }, []);
   return [skipDead, toggle];
