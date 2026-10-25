@@ -62,9 +62,11 @@ import {
   readCourtMode,
   readCourtOn,
   readDrawerOpen,
+  readSkipDead,
   writeCourtMode,
   writeCourtOn,
   writeDrawerOpen,
+  writeSkipDead,
   type CourtMode,
 } from "./film-room-prefs";
 import { boardAt, type BoardColumns } from "./film-score";
@@ -423,7 +425,15 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const [duration, setDuration] = useState(0);
   const [rate, setRate] = useState<number>(1);
   const [looping, setLooping] = useState(false);
-  const [skipDead, setSkipDead] = useState(false);
+  // Shared with the report player (`film-room-prefs.ts`): the film keeps
+  // skipping, or not, on the way into the room. On by default.
+  const [skipDead, setSkipDead] = useState(readSkipDead);
+  const toggleSkipDead = useCallback(() => {
+    setSkipDead((v) => {
+      writeSkipDead(!v);
+      return !v;
+    });
+  }, []);
   const [failed, setFailed] = useState(false);
   const [chrome, setChrome] = useState(true);
   // The court and the side it is showing are viewer preferences (spec:
@@ -1508,7 +1518,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         case "D":
           if (e.metaKey || e.ctrlKey || e.altKey) return;
           e.preventDefault();
-          setSkipDead((v) => !v);
+          toggleSkipDead();
           break;
         case "p":
         case "P":
@@ -1544,6 +1554,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     toggleSavedActive,
     toggleMute,
     toggleCourt,
+    toggleSkipDead,
     cycleRate,
     panelOpen,
     openPanel,
@@ -1961,7 +1972,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 onTogglePlay={togglePlay}
                 onStep={step}
                 onToggleSaved={p.onToggleSaved ? toggleSavedActive : undefined}
-                onToggleSkipDeadTime={() => setSkipDead((v) => !v)}
+                onToggleSkipDeadTime={toggleSkipDead}
                 onCycleRate={cycleRate}
                 onToggleLoop={() => setLooping((v) => !v)}
                 onToggleMute={toggleMute}

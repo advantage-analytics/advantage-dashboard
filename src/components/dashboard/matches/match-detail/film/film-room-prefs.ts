@@ -18,6 +18,14 @@
 export const COURT_ON_STORAGE_KEY = "film-room:court-on";
 export const COURT_MODE_STORAGE_KEY = "film-room:court-mode";
 export const DRAWER_OPEN_STORAGE_KEY = "film-room:drawer-open";
+/**
+ * Skip dead time, shared by the report player and the room: one toggle, so
+ * the film does not change behaviour on the way into fullscreen. Not a
+ * `film-room:` key by accident — it is the same preference in both places.
+ */
+export const SKIP_DEAD_STORAGE_KEY = "film-room:skip-dead";
+/** The one-card hint that says dead time is being skipped has been shown. */
+export const SKIP_DEAD_HINT_SEEN_STORAGE_KEY = "film-room:skip-dead-hint-seen";
 
 /* ── State ──────────────────────────────────────────────────────────────── */
 
@@ -26,6 +34,14 @@ export type CourtMode = "point" | "match";
 export const DEFAULT_COURT_ON = true;
 export const DEFAULT_COURT_MODE: CourtMode = "point";
 export const DEFAULT_DRAWER_OPEN = false;
+/**
+ * On by default (product decision, 2026-10-24): a match film is mostly
+ * walking between points, and a first-time viewer who pressed play and
+ * watched ninety seconds of nothing read the film as broken. The hint
+ * (`SKIP_DEAD_HINT_SEEN_STORAGE_KEY`) is what tells them it is on and where
+ * to turn it off.
+ */
+export const DEFAULT_SKIP_DEAD = true;
 
 /* ── Parsers ────────────────────────────────────────────────────────────── */
 
@@ -44,6 +60,13 @@ export function parseCourtMode(raw: string | null): CourtMode {
 /** A stored value, or the default (`false`) when it is missing or unrecognised. */
 export function parseDrawerOpen(raw: string | null): boolean {
   return raw === "1";
+}
+
+/** A stored value, or the default (`true`) when it is missing or unrecognised. */
+export function parseSkipDead(raw: string | null): boolean {
+  if (raw === "0") return false;
+  if (raw === "1") return true;
+  return DEFAULT_SKIP_DEAD;
 }
 
 /* ── Read/write helpers ─────────────────────────────────────────────────── */
@@ -99,6 +122,40 @@ export function writeDrawerOpen(value: boolean): void {
     localStorage.setItem(DRAWER_OPEN_STORAGE_KEY, value ? "1" : "0");
   } catch {
     /* private window or storage blocked — the preference just isn't kept */
+  }
+}
+
+export function readSkipDead(): boolean {
+  try {
+    return parseSkipDead(localStorage.getItem(SKIP_DEAD_STORAGE_KEY));
+  } catch {
+    return DEFAULT_SKIP_DEAD;
+  }
+}
+
+export function writeSkipDead(value: boolean): void {
+  try {
+    localStorage.setItem(SKIP_DEAD_STORAGE_KEY, value ? "1" : "0");
+  } catch {
+    /* private window or storage blocked — the preference just isn't kept */
+  }
+}
+
+/** Whether the skip-dead-time hint was shown (Done, the X, or the glyph pressed). */
+export function readSkipDeadHintSeen(): boolean {
+  try {
+    return localStorage.getItem(SKIP_DEAD_HINT_SEEN_STORAGE_KEY) === "1";
+  } catch {
+    // Blocked storage: treat the hint as seen rather than show it every visit.
+    return true;
+  }
+}
+
+export function writeSkipDeadHintSeen(): void {
+  try {
+    localStorage.setItem(SKIP_DEAD_HINT_SEEN_STORAGE_KEY, "1");
+  } catch {
+    /* private window or storage blocked — it may show again next visit */
   }
 }
 

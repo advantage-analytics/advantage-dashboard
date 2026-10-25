@@ -56,6 +56,7 @@ import type {
 } from "./use-attachment-playback";
 import { useSeekSettling } from "./use-seek-settling";
 import { useFilmReadOnly } from "./film-read-only";
+import { readSkipDead, writeSkipDead } from "./film-room-prefs";
 
 /**
  * The match video with the room's transport under it, in the tab.
@@ -149,6 +150,11 @@ interface FilmPlayerProps {
   onToggleSequence?: () => void;
   /** No stop to walk: the glyph stays, inert, as the transport's others do. */
   sequenceDisabled?: boolean;
+  /**
+   * The Skip dead time glyph was pressed, either way. The tab's hint about
+   * the glyph closes on it: pressing the control answers the hint.
+   */
+  onSkipDeadToggled?: () => void;
   /**
    * The credential to play — `AttachmentPlaybackApi.url`, not
    * `MatchVideo.url`, so a refreshed credential reaches the element without
@@ -275,6 +281,7 @@ function Glyph({
   disabled,
   className,
   onClick,
+  dataTour,
   children,
 }: {
   label: string;
@@ -283,6 +290,8 @@ function Glyph({
   disabled?: boolean;
   className?: string;
   onClick: () => void;
+  /** `data-tour` anchor for a one-card hint (`film-skip-dead-hint.tsx`). */
+  dataTour?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -293,6 +302,7 @@ function Glyph({
         aria-pressed={pressed}
         disabled={disabled}
         onClick={onClick}
+        data-tour={dataTour}
         className={cn(GLYPH, pressed && "text-white", className)}
       >
         {children}
@@ -326,6 +336,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       sequence,
       onToggleSequence,
       sequenceDisabled,
+      onSkipDeadToggled,
       onEnterFullscreen,
       onStep,
       clockTargetRef,
@@ -345,7 +356,16 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const [duration, setDuration] = useState(0);
     const [rate, setRate] = useState<number>(1);
     const [looping, setLooping] = useState(false);
-    const [skipDead, setSkipDead] = useState(false);
+    // A viewer preference shared with the room (`film-room-prefs.ts`), read
+    // once in a lazy initializer and written on every toggle. On by default.
+    const [skipDead, setSkipDead] = useState(readSkipDead);
+    const toggleSkipDead = useCallback(() => {
+      setSkipDead((v) => {
+        writeSkipDead(!v);
+        return !v;
+      });
+      onSkipDeadToggled?.();
+    }, [onSkipDeadToggled]);
     const [failed, setFailed] = useState<PlaybackFailure | null>(null);
     // T16: dim the held frame while a seek the chrome already made is still
     // landing. Display only — `seekTo` / `pushTime` are untouched.
@@ -955,7 +975,8 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                   skipDead ? "Skip dead time — on" : "Skip dead time — off"
                 }
                 pressed={skipDead}
-                onClick={() => setSkipDead((v) => !v)}
+                onClick={toggleSkipDead}
+                dataTour="skip-dead-time"
               >
                 {skipDead ? (
                   <Timer {...ICON} aria-hidden="true" />
