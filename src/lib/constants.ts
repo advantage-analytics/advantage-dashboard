@@ -16,6 +16,11 @@ export const REQUEST_ACCESS_URL = `${MARKETING_SITE_URL}/#access`;
 // uploader. Lives on the marketing site because the landing page links it too.
 export const EXPORT_GUIDE_URL = `${MARKETING_SITE_URL}/export-guide`;
 
+// The Ask connector's public setup guide: every app's steps, the tools and
+// troubleshooting. Settings › Connections and the help centre keep only the
+// address and link here, so each app's steps are written once.
+export const MCP_GUIDE_URL = `${MARKETING_SITE_URL}/mcp`;
+
 // Support address. Was declared in four components, and one copy had already
 // drifted to a domain that does not receive mail.
 export const SUPPORT_EMAIL = "team@advantage-analytics.com";

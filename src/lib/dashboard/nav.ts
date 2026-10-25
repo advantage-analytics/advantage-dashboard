@@ -266,7 +266,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     label: "Connections",
     href: "/dashboard/settings/connections",
     subtitle:
-      "Ask about your matches from your own Claude, and the apps you've let in.",
+      "Ask about your matches from your own AI app, and see the apps you've let in.",
   },
   {
     id: "teams",

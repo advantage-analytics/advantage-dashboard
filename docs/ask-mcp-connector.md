@@ -251,13 +251,20 @@ email"):
 
 ## 5. Connecting
 
+**For people**: the public setup guide,
+[advantage-analytics.com/mcp](https://advantage-analytics.com/mcp) (the
+landing repo's `src/app/mcp/`, which `/claude` redirects to), is the one place
+each app's steps are written: a tab per app with copyable commands and config,
+the nine tools, privacy and troubleshooting. Change a client's steps there; the
+per-client notes below are the engineering detail behind them.
+
 **In the app**: Settings › Connections (`/dashboard/settings/connections`)
-prints the address and the steps below, and lists the apps the person approved
-with Disconnect on each. The list and the revoke call Supabase Auth's
+prints the address and the Claude Code command, links to the guide
+(`MCP_GUIDE_URL` in `src/lib/constants.ts`), and lists the apps the person
+approved with Disconnect on each. The list and the revoke call Supabase Auth's
 `GET`/`DELETE /auth/v1/user/oauth/grants` with the person's own token
 (`src/lib/auth/oauth-grants.ts`); revoking ends that client's sessions. The
-help centre's "Using Advantage in Claude, ChatGPT or Cursor" topic points
-there. The apps are named in text only: Anthropic's trademark guidelines allow
+help centre's "Using Advantage in your AI app" topic points to both. The apps are named in text only: Anthropic's trademark guidelines allow
 its logo only with prior approval, and the others are treated the same. The draft listing for Claude's Connectors Directory is
 [`ask-mcp-connector-directory-listing.md`](ask-mcp-connector-directory-listing.md).
 
