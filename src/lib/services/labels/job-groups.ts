@@ -187,6 +187,21 @@ export function countsSentence(counts: StateCounts): string {
   return parts.join(" · ");
 }
 
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
 /**
  * "Oct 3, 2026, 2:14 PM UTC" — when a job was analysed. UTC named, so the
  * server and every browser agree on the moment.
@@ -206,18 +221,3 @@ export function analysedInstant(iso: string | null): string | null {
   const minutes = String(date.getUTCMinutes()).padStart(2, "0");
   return `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}, ${hours % 12 || 12}:${minutes} ${hours < 12 ? "AM" : "PM"} UTC`;
 }
-
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
