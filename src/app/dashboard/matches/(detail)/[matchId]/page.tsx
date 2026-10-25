@@ -361,9 +361,6 @@ export default async function MatchDetailPage({
     const canAct =
       analysis.createdBy !== undefined &&
       analysis.createdBy === workspace?.viewer.id;
-    // "While you wait, see a sample report" is offered only to a personal
-    // player who has never seen a report (`neverSeenAReport`, the tray's own
-    // rule); the column adds `canAct` and the view's `waiting`.
     return (
       <AnalysisSteps
         analysis={analysis}
