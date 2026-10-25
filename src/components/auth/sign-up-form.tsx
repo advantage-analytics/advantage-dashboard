@@ -122,7 +122,7 @@ export function SignUpForm({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          autoComplete="username"
+          autoComplete="email"
           error={error?.field === "email" ? error.message : null}
         />
         <FormField
