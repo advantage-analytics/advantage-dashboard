@@ -19,6 +19,7 @@ import {
   AUTH_NEXT_MAX_AGE_SECONDS,
 } from "@/lib/auth/auth-next-cookie";
 import { authHref, safeNext } from "@/lib/auth/safe-next";
+import { readFormFields } from "@/lib/auth/form-fields";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 
@@ -81,16 +82,11 @@ export function LoginForm({
     e.preventDefault();
     setError(null);
 
-    // Read what the fields hold, not just state. Chrome can autofill before
-    // hydration, or without firing an input event, so the dots are on screen
-    // while state is still empty and the sign-in would send a blank password.
-    const form = new FormData(e.currentTarget);
-    const email = String(form.get("email") ?? "");
-    const password = String(form.get("password") ?? "");
-    setEmail(email);
-    setPassword(password);
+    const fields = readFormFields(e.currentTarget, ["email", "password"]);
+    setEmail(fields.email);
+    setPassword(fields.password);
 
-    const emailProblem = validateEmail(email);
+    const emailProblem = validateEmail(fields.email);
     if (emailProblem) {
       setError({ field: "email", message: emailProblem });
       return;
@@ -104,8 +100,8 @@ export function LoginForm({
         data: { user },
         error: signInError,
       } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: fields.email,
+        password: fields.password,
       });
       if (signInError) throw signInError;
       if (user && isPostHogConfigured) {

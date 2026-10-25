@@ -19,6 +19,7 @@ import {
   type AuthError,
 } from "@/lib/auth/error-messages";
 import { authHref, safeNext } from "@/lib/auth/safe-next";
+import { readFormFields } from "@/lib/auth/form-fields";
 
 /**
  * @param next Where the confirmation mail should land — `/sign-up` reads it
@@ -46,29 +47,28 @@ export function SignUpForm({
     e.preventDefault();
     setError(null);
 
-    // Read what the fields hold, not just state, as `LoginForm` does: Chrome
-    // can fill them before hydration or without firing an input event.
-    const form = new FormData(e.currentTarget);
-    const email = String(form.get("email") ?? "");
-    const password = String(form.get("password") ?? "");
-    const confirm = String(form.get("confirm-password") ?? "");
-    setEmail(email);
-    setPassword(password);
-    setConfirm(confirm);
+    const fields = readFormFields(e.currentTarget, [
+      "email",
+      "password",
+      "confirm-password",
+    ]);
+    setEmail(fields.email);
+    setPassword(fields.password);
+    setConfirm(fields["confirm-password"]);
 
     // Each check names the field it failed on, so the message lands on that
     // field's rule rather than in one banner below the whole group.
-    const emailProblem = validateEmail(email);
+    const emailProblem = validateEmail(fields.email);
     if (emailProblem) {
       setError({ field: "email", message: emailProblem });
       return;
     }
-    const passwordProblem = validatePassword(password);
+    const passwordProblem = validatePassword(fields.password);
     if (passwordProblem) {
       setError({ field: "password", message: passwordProblem });
       return;
     }
-    if (password !== confirm) {
+    if (fields.password !== fields["confirm-password"]) {
       setError({ field: "confirm", message: "Both passwords have to match." });
       return;
     }
@@ -85,8 +85,8 @@ export function SignUpForm({
 
     try {
       const { error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
+        email: fields.email,
+        password: fields.password,
         options: {
           // The destination rides in the confirmation link, so the click that
           // activates the account is the one that returns to a join link.

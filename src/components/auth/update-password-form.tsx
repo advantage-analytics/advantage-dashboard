@@ -16,6 +16,7 @@ import {
   PASSWORD_RULE,
   type AuthError,
 } from "@/lib/auth/error-messages";
+import { readFormFields } from "@/lib/auth/form-fields";
 
 /**
  * Not one of the four pages in the v2 auth set, but it is the page the recovery
@@ -33,29 +34,38 @@ export function UpdatePasswordForm() {
 
   // The recovery session names the account. Read in the browser rather than
   // on the server: the link can land with the session still in the URL, and
-  // the browser client is what finishes it.
+  // the browser client is what finishes it. `getSession()`, not `getUser()`:
+  // this is an autofill hint, not an access check, so the local session will
+  // do and the field is in place before the user can submit.
   useEffect(() => {
     let live = true;
     createClient()
-      .auth.getUser()
-      .then(({ data: { user } }) => {
-        if (live) setAccountEmail(user?.email ?? null);
+      .auth.getSession()
+      .then(({ data: { session } }) => {
+        if (live) setAccountEmail(session?.user.email ?? null);
       });
     return () => {
       live = false;
     };
   }, []);
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
-    const passwordProblem = validatePassword(password);
+    const fields = readFormFields(e.currentTarget, [
+      "password",
+      "confirm-password",
+    ]);
+    setPassword(fields.password);
+    setConfirm(fields["confirm-password"]);
+
+    const passwordProblem = validatePassword(fields.password);
     if (passwordProblem) {
       setError({ field: "password", message: passwordProblem });
       return;
     }
-    if (password !== confirm) {
+    if (fields.password !== fields["confirm-password"]) {
       setError({ field: "confirm", message: "Both passwords have to match." });
       return;
     }
@@ -65,7 +75,7 @@ export function UpdatePasswordForm() {
 
     try {
       const { error: updateError } = await supabase.auth.updateUser({
-        password,
+        password: fields.password,
       });
       if (updateError) throw updateError;
       router.push("/dashboard");
