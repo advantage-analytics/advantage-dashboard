@@ -187,27 +187,37 @@ export function countsSentence(counts: StateCounts): string {
   return parts.join(" · ");
 }
 
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
 /**
  * "Oct 3, 2026, 2:14 PM UTC" — when a job was analysed. UTC named, so the
  * server and every browser agree on the moment.
  *
- * Every whitespace character is folded to a plain space because the engines do
- * not agree on which one goes before "PM": Node and Chromium print U+0020,
- * Safari prints U+202F (narrow no-break space, as ICU 72+ does). The server
- * render and Safari's hydration then differ by that one character, and React
- * throws #418 (hydration text mismatch) on /admin/labels.
+ * Built by hand from the UTC fields, not with `Intl.DateTimeFormat`, because
+ * the engines do not agree on how a date and a time are joined: Node and
+ * Chromium print "Oct 3, 2026, 2:14 PM", Safari can print "Oct 3, 2026 at
+ * 2:14 PM" and puts U+202F before "PM". The server render and Safari's
+ * hydration then differ, and React throws #418 (hydration text mismatch) on
+ * /admin/labels. Folding the whitespace alone (#533) did not stop it.
  */
 export function analysedInstant(iso: string | null): string | null {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  const text = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC",
-  }).format(date);
-  return `${text.replace(/\s/g, " ")} UTC`;
+  const hours = date.getUTCHours();
+  const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+  return `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}, ${hours % 12 || 12}:${minutes} ${hours < 12 ? "AM" : "PM"} UTC`;
 }
