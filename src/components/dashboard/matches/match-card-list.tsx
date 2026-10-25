@@ -116,7 +116,6 @@ export function MatchCardList({
   const isWin = match.score.winner === "player1";
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
-  const eventHidden = compact;
   const { viewer, active } = useWorkspace();
   const playerId = match.player1.id ?? null;
   const isViewerRow =
@@ -240,7 +239,7 @@ export function MatchCardList({
       <EventCell
         name={match.tournamentName}
         round={match.round}
-        hidden={eventHidden}
+        hidden={compact}
       />
 
       {/* Analysis — the settled outcome, the upload's chip and bar, or the

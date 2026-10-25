@@ -15,8 +15,9 @@
  * row stores, in the cell a match row draws. The lifecycle cell is the
  * draft's own: the dashed wait ring the list uses for "something real is
  * waiting", the step it stopped at as one word (`stepLabel`), then
- * "Continue", the way back into the wizard — the track can be 96px, so the
- * word truncates and Continue never does.
+ * "Continue", the way back into the wizard. Beside the open rail the track
+ * is at its 96px floor, so the word is screen-reader-only there (the rail
+ * names the step); at rest it truncates before Continue ever does.
  *
  * It behaves like every other row on the page: at rest on white, washed on
  * hover and while selected, and a click opens the drawer rather than
@@ -75,7 +76,6 @@ export function DraftRow({
   const router = useRouter();
   const href = draftHref(draft.id, scope);
   const isTeam = scope === "team";
-  const eventHidden = compact;
   const title = draftTitle(draft, scope) ?? UNTITLED_DRAFT;
 
   const draftPill = (
@@ -182,7 +182,7 @@ export function DraftRow({
       )}
 
       {/* Event — the label the row stores, in the match row's own cell. */}
-      <EventCell name={draft.eventLabel} hidden={eventHidden} />
+      <EventCell name={draft.eventLabel} hidden={compact} />
 
       {/* Lifecycle — the step it stopped at, then the way back in. The ring is
           the list's "waiting on something real"; the word is the step's own

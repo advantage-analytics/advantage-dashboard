@@ -61,8 +61,6 @@ export function MatchesGrid({
   drawerOpen = false,
   empty,
 }: MatchesGridProps): React.JSX.Element {
-  // Only the team table gives a track up beside the drawer; the personal one
-  // fits at 1440 with every column.
   // Both tables give up Event beside the open rail; the rail names the event.
   const compact = drawerOpen;
   /* Which layout shows is a width question, so Tailwind answers it rather than
