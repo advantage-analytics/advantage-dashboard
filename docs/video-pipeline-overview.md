@@ -639,7 +639,10 @@ ordering, and match-deletion cleanup. What remains is almost entirely vendor-sid
   (`recoverUndeliveredResults`) re-runs the webhook's own `secureResults` →
   `gradeResults` → `deriveAndPublish` sequence for a `completed` job whose
   delivery never landed. `vendor_first_downloaded_at` still is not the signal
-  this replaces it with — see below.
+  this replaces it with — see below. Both sweeps ran only on a page read
+  until 2026-10-25; they now also run unscoped every ten minutes from
+  `pg_cron` (`/api/cron/reconcile-vendor-jobs`), so a lost delivery's
+  ready/failed email no longer waits for the uploader's next visit.
 - **`vendor_first_downloaded_at`, `vendor_last_downloaded_at` and `vendor_request_count`
   are permanently null.** Only the retired Worker wrote them. Nothing in `src/` reads them,
   but `docs/ux-overhaul-brief.md` plans a "Processing" status on the first — that plan
