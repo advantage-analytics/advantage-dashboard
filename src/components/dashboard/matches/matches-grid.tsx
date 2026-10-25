@@ -76,15 +76,15 @@ export function MatchesGrid({
   // The Date track widens for the whole card, not per row, so the columns keep
   // one x across the list — see `DATE_COL_WITH_YEAR`. A date needs the year
   // whenever it is not from the current year, which is the exact rule each
-  // row's formatter applies (`datesNeedYear` — a match's day and a draft's
-  // moment are read differently) — decided by comparing years directly rather
+  // row's formatter applies (`datesNeedYear` — a match's day and the day a
+  // draft has entered, read the same way) — decided by comparing years directly rather
   // than formatting every date twice (once to detect, once to render), and
   // memoized so a re-render that does not change the rows does not re-scan them.
   const needsYear = useMemo(
     () =>
       datesNeedYear(
         matches.map((m) => m.date),
-        drafts.map((d) => d.updatedAt),
+        drafts.map((d) => d.matchDate),
       ),
     [drafts, matches],
   );

@@ -95,28 +95,23 @@ export interface MatchesListShape {
  * Whether any row's date prints with its year — the test that widens the Date
  * track, and exactly the rule each row's own formatter applies.
  *
- * The two lists hold two different kinds of value. A match's date is a
- * calendar DAY (`match-day.ts`), so its year is read off the day and compared
+ * Both lists hold calendar DAYS (`match-day.ts`): a match's date, and the
+ * match day a draft has entered so far (null before it has one, which prints
+ * as a dash and needs no year). Each year is read off the day and compared
  * with the UTC year `formatMatchDayShortYear` uses — the same answer on the
- * server and in every browser. A draft's `updatedAt` is a real moment, printed
- * by `formatShortDate` in the reader's own zone, so it is compared the way
- * that prints it.
+ * server and in every browser. A draft's `updatedAt` is a real moment and is
+ * printed in the rail, not in this track.
  */
 export function datesNeedYear(
   matchDates: readonly string[],
-  draftDates: readonly string[],
+  draftDays: readonly (string | null)[],
 ): boolean {
-  const matchYear = Number(utcToday().slice(0, 4));
-  const draftYear = new Date().getFullYear();
-  return (
-    matchDates.some((date) => {
-      const year = matchDayYear(date);
-      return year !== null && year !== matchYear;
-    }) ||
-    draftDates.some(
-      (updatedAt) => new Date(updatedAt).getFullYear() !== draftYear,
-    )
-  );
+  const thisYear = Number(utcToday().slice(0, 4));
+  const differs = (date: string | null) => {
+    const year = matchDayYear(date);
+    return year !== null && year !== thisYear;
+  };
+  return matchDates.some(differs) || draftDays.some(differs);
 }
 
 /**
@@ -125,12 +120,12 @@ export function datesNeedYear(
  */
 export function matchesListShape(
   matchDates: string[],
-  draftDates: string[],
+  draftDays: (string | null)[],
 ): MatchesListShape {
   const firstPage = matchDates.slice(0, MATCHES_PAGE_SIZE);
   return {
-    rows: draftDates.length + firstPage.length,
-    needsYear: datesNeedYear(firstPage, draftDates),
+    rows: draftDays.length + firstPage.length,
+    needsYear: datesNeedYear(firstPage, draftDays),
     paged: matchDates.length > MATCHES_PAGE_SIZE,
   };
 }

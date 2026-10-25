@@ -487,13 +487,49 @@ test.describe("listMatchDrafts carries the draft's match (T20)", () => {
     expect(listed.find((d) => d.id === "draft-new")?.matchId).toBeNull();
   });
 
-  test("the list reads two JSON paths, never the whole payload", async () => {
+  test("the list reads JSON paths, never the whole payload", async () => {
     const db = draftsDatabase();
     await loadActions(db).listMatchDrafts({ programId: "program-1" });
     const [select] = db.selects;
     expect(select).toContain("payload->preset->>matchId");
     expect(select).toContain("payload->attachedLine->>matchId");
+    // The answers the row and rail read back — and nothing else of the form.
+    expect(select).toContain("opponent_name:payload->formData->>opponentName");
+    expect(select).toContain("match_date:payload->formData->>date");
+    expect(select).toContain("court_type:payload->formData->>courtType");
+    expect(select).toContain("player_scores:payload->formData->playerScores");
+    expect(select).toContain(
+      "opponent_scores:payload->formData->opponentScores",
+    );
     expect(select.split(",").map((c) => c.trim())).not.toContain("payload");
+  });
+
+  test("the row reads back the opponent, day, court and score typed so far", async () => {
+    const db = draftsDatabase();
+    const actions = loadActions(db);
+    const { updatedAt: _omit, ...draft } = draftOf({ id: "draft-fields" });
+    void _omit;
+    draft.step = "trim";
+    draft.formData = {
+      ...draft.formData,
+      opponentName: " Sam Ortiz ",
+      date: "2026-09-18",
+      courtType: "hard",
+      playerScores: [6, 3, null],
+      opponentScores: [4, 6, null],
+    };
+    await actions.saveMatchDraft(draft);
+    const [row] = (await actions.listMatchDrafts({
+      programId: "program-1",
+    })) as unknown as import("@/lib/wizard/draft-row-fields").DraftFields[];
+    expect(row.step).toBe("trim");
+    expect(row.opponentName).toBe("Sam Ortiz");
+    expect(row.matchDate).toBe("2026-09-18");
+    expect(row.courtType).toBe("hard");
+    expect(row.score).toEqual([
+      { player1: 6, player2: 4 },
+      { player1: 3, player2: 6 },
+    ]);
   });
 
   test("an attached line's match lists too", async () => {

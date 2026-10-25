@@ -111,6 +111,7 @@ function draft(
   playerName: string,
   updatedAt: string,
   matchId: string | null,
+  fields: Partial<DraftRowData> = {},
 ): DraftRowData {
   return {
     id,
@@ -121,12 +122,34 @@ function draft(
     fileName: "match.mp4",
     updatedAt,
     matchId,
+    // A video draft stopped on its video check, the source picked, nothing
+    // else answered unless `fields` says so.
+    step: "trim",
+    providerId: "splitstep",
+    providerKind: "processing",
+    opponentName: null,
+    matchDate: null,
+    courtType: null,
+    score: [],
+    ...fields,
   };
 }
 
 const DRAFTS: DraftRowData[] = [
-  draft("d-new", "Jordan Park", "2026-09-22T10:00:00Z", null),
-  draft("d-folded", "Avery Stone", "2026-09-21T10:00:00Z", "m-scored"),
+  draft("d-new", "Jordan Park", "2026-09-22T10:00:00Z", null, {
+    opponentName: "Sam Ortiz",
+    matchDate: "2026-09-18",
+    courtType: "hard",
+    eventLabel: "Fall Classic · R16",
+    score: [
+      { player1: 6, player2: 4 },
+      { player1: 3, player2: 6 },
+    ],
+  }),
+  draft("d-folded", "Avery Stone", "2026-09-21T10:00:00Z", "m-scored", {
+    opponentName: "Avery Stone",
+    matchDate: "2026-09-20",
+  }),
 ];
 
 createRoot(document.getElementById("root")!).render(
