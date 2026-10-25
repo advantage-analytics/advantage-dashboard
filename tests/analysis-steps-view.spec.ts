@@ -544,6 +544,57 @@ test("every state draws the same four steps in the same order", () => {
   }
 });
 
+test("waiting: only while the job moves on its own — never paused, stalled, failed, cancelled or gated", () => {
+  const moving: MatchAnalysis["status"][] = [
+    "uploading",
+    "uploaded",
+    "queued",
+    "processing",
+    "deriving",
+  ];
+  for (const status of moving) {
+    expect(analysisStepsView({ ...BASE, status }, NOW).waiting, status).toBe(
+      true,
+    );
+  }
+  // Nothing is being waited on: it is the player's turn, or a deploy's.
+  const still: MatchAnalysis["status"][] = [
+    "processed",
+    "failed",
+    "derivation_failed",
+    "cancelled",
+  ];
+  for (const status of still) {
+    expect(analysisStepsView({ ...BASE, status }, NOW).waiting, status).toBe(
+      false,
+    );
+  }
+  // The two the clock decides: an `uploading` row gone quiet and an
+  // `uploaded` hand-off that never happened both stopped moving.
+  const paused = analysisStepsView(
+    {
+      ...BASE,
+      status: "uploading",
+      uploadPercent: 27,
+      updatedAt: minutesAgo(30),
+    },
+    NOW,
+  );
+  expect(paused.title).toBe(STEPPER_COPY.titles.paused);
+  expect(paused.waiting).toBe(false);
+  const stalled = analysisStepsView(
+    {
+      ...BASE,
+      status: "uploaded",
+      updatedAt: minutesAgo(20),
+      recovery: "retry",
+    },
+    NOW,
+  );
+  expect(stalled.title).toBe(STEPPER_COPY.titles.stalled);
+  expect(stalled.waiting).toBe(false);
+});
+
 // ── drawerAnalysisStepsView(): the peek drawers' compact projection ─────────
 
 const IN_FLIGHT_OR_FAILED: MatchAnalysis["status"][] = [
