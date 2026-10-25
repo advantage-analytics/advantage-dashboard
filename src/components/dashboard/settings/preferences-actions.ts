@@ -56,6 +56,7 @@ export async function savePreferences(
       weekly_team_digest: next.weeklyTeamDigest,
       notify_team_activity: next.notifyTeamActivity,
       notify_usage_alerts: next.notifyUsageAlerts,
+      email_getting_started: next.emailGettingStarted,
       default_workspace: next.defaultWorkspace,
       match_report_opens_at: next.matchReportOpensAt,
       stat_definitions_on_hover: next.statDefinitionsOnHover,

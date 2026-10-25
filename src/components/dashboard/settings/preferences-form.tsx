@@ -161,6 +161,19 @@ export function PreferencesForm({
           </>
         )}
 
+        <NotificationGroup label="From Advantage" />
+        <SettingsCardRow
+          label="Tips for getting started"
+          description="Two short emails in your first week, until you add your first match."
+          control={
+            <SettingsToggle
+              label="Tips for getting started"
+              checked={preferences.emailGettingStarted}
+              onChange={(value) => update({ emailGettingStarted: value })}
+            />
+          }
+        />
+
         {/* No top border: the last row already drew a hairline, and a second
             rule two pixels below it reads as a mistake (DS › Settings). */}
         <SettingsCardFootnote className="border-t-0 pt-0">
