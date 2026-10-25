@@ -68,6 +68,9 @@ const workspace: WorkspaceContextValue = {
     activityHintDoneAt: null,
     sampleTourDoneAt: null,
     firstReportTourDoneAt: null,
+    firstReportSeenAt: null,
+    firstMatchFeedbackDoneAt: null,
+    lastSignInAt: null,
   },
 };
 

@@ -86,3 +86,36 @@ export async function markTourDone(tour: SeenId): Promise<MarkTourDoneResult> {
     };
   }
 }
+
+/**
+ * Stamp `users.first_report_seen_at` the first time the signed-in player
+ * opens a published report of a personal match they filed. The match page
+ * calls it (`matches/(detail)/[matchId]/page.tsx`) once the report is on
+ * screen; the column is the first-match feedback prompt's clock
+ * (`firstMatchFeedbackDue`, `lib/feedback/first-match-feedback.ts`).
+ *
+ * Write-once: `.is("first_report_seen_at", null)` keeps the first moment,
+ * however many reports follow. Same client, same own-row policy, same
+ * column-scoped grant (`20261025063957_first_match_feedback.sql`) and the
+ * same never-throws contract as `markTourDone`: a failed write only means
+ * the next report stamps it instead.
+ */
+export async function markFirstReportSeen(): Promise<void> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const { error } = await supabase
+      .from("users")
+      .update({ first_report_seen_at: new Date().toISOString() })
+      .eq("id", user.id)
+      .is("first_report_seen_at", null);
+    if (error) {
+      console.error("[first-report seen] write failed", { code: error.code });
+    }
+  } catch (cause) {
+    console.error("[first-report seen] write failed", cause);
+  }
+}

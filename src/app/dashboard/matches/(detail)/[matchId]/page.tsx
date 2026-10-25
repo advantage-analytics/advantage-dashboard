@@ -66,7 +66,10 @@ import { playedSets } from "@/lib/ui/score-format";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMatchFilmEntry } from "@/lib/data/match-film-entry-server";
 import { countFinishedMatchesFor } from "@/lib/data/finished-match-count-server";
-import { markTourDone } from "@/app/dashboard/onboarding-actions";
+import {
+  markFirstReportSeen,
+  markTourDone,
+} from "@/app/dashboard/onboarding-actions";
 import {
   firstReportTourEligible,
   hasSeenAReport,
@@ -411,6 +414,20 @@ export default async function MatchDetailPage({
       finishedMatchCount,
       doneAt: firstReportTourDoneAt,
     });
+  }
+
+  // The first-match feedback prompt's clock (`firstMatchFeedbackDue`): the
+  // first time this player opens a published report of a personal match they
+  // filed, stamped once, server-side. Decided from the same cheap facts as
+  // the tour above, below the short-circuit for the same reason — a match
+  // still analysing has no report to have read. A failed write only means
+  // the next report stamps it.
+  if (
+    firstReportTourCandidate &&
+    viewerId &&
+    workspace?.viewer.firstReportSeenAt === null
+  ) {
+    await markFirstReportSeen();
   }
 
   return (

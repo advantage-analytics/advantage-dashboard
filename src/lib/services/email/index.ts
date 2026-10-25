@@ -41,6 +41,7 @@
  * | Program went live (internal) | `notifyProgramWentLive()` — a claim lands live via `completeClaim()` / `completeClaimWithToken()` (path `auto`) or an admin's `approveClaim()` opens its objection window (path `reviewed`) — to `INTERNAL_ALERTS_ADDRESS` only, once per program via `claimSend("program_live:<program_id>")` — WIRED |
  * | New signup (internal)    | `public.users` insert → `pg_net` → `/api/webhooks/internal-events` → `notifyInternalEvent()`, to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("signup_internal:<user_id>")` — WIRED once Vault holds `cron_secret` |
  * | Upload (internal)        | same route: a first-attempt `processing_jobs` row leaving `pending`/`uploading` (video), or a `match_files` insert (SwingVision), to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("upload_internal:<job_id \| match_id>")` — WIRED once Vault holds `cron_secret` |
+ * | Feedback (internal)      | same route: a `product_feedback` insert (the first-match prompt's answer, `submit_product_feedback()`), with the note in full, to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("feedback_internal:<feedback_id>")` — WIRED once Vault holds `cron_secret` |
  *
  * The claim and invite-request rows fire from
  * `services/programs/{admin-actions,claim-actions}.ts`. None of them can fail
@@ -190,8 +191,10 @@ export {
 } from "./templates/admin";
 
 export {
+  feedbackInternalEmail,
   signupInternalEmail,
   uploadInternalEmail,
+  type FeedbackInternalInput,
   type SignupInternalInput,
   type UploadInternalInput,
   type UploadKind,
