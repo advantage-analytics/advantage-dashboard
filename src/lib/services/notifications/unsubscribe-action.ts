@@ -1,3 +1,4 @@
+import { isUuid } from "@/lib/admin/validation";
 import { verifyUnsubscribeToken } from "@/lib/services/email/unsubscribe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -12,13 +13,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
  */
 export type UnsubscribeOutcome = "done" | "invalid" | "failed";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function applyUnsubscribe(
   userId: string | null | undefined,
   token: string | null | undefined,
 ): Promise<UnsubscribeOutcome> {
-  if (!userId || !token || !UUID.test(userId)) return "invalid";
+  if (!isUuid(userId) || !token) return "invalid";
   if (!verifyUnsubscribeToken(userId, token)) return "invalid";
 
   const { error } = await createAdminClient().from("user_preferences").upsert(

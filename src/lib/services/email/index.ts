@@ -204,7 +204,6 @@ export {
 
 export {
   firstUploadNudgeEmail,
-  FIRST_UPLOAD_SETTING,
   type FirstUploadNudgeInput,
   type FirstUploadStep,
 } from "./templates/first-upload";

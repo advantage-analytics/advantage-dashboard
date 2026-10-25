@@ -194,6 +194,7 @@ function deps(
     pause: async (ms) => {
       pauses.push(ms);
     },
+    now: () => 0,
     ...overrides,
   };
   return { d, claimed, sent, seen, limits, pauses };
@@ -218,7 +219,11 @@ test("each window's candidates get that step, claimed once each", async () => {
     2: [person(OTHER)],
   });
   const result = await sweepFirstUploadNudges(db, d);
-  expect(result).toEqual({ skipped: null, sent: { 1: 1, 2: 1 } });
+  expect(result).toEqual({
+    skipped: null,
+    outOfTime: false,
+    sent: { 1: 1, 2: 1 },
+  });
   expect(sent.map((m) => m.tags?.step)).toEqual(["1", "2"]);
   expect([...claimed]).toEqual([
     firstUploadClaimKey(1, USER),
@@ -320,4 +325,66 @@ test("the candidate query leaves out people already mailed for that step", () =>
   expect(migration).toContain(
     "where s.dedupe_key = p_dedupe_prefix || u.id::text",
   );
+});
+
+test("a slow run stops before claiming once its time budget is spent", async () => {
+  // Each send costs ten seconds on this clock.
+  let clock = 0;
+  const many = Array.from({ length: 10 }, (_, i) => person(`slow-${i}`));
+  const { d, sent, claimed } = deps(
+    { 1: many },
+    {
+      now: () => clock,
+      send: async (message) => {
+        clock += 10_000;
+        sent.push(message);
+        return { ok: true };
+      },
+    },
+  );
+  const result = await sweepFirstUploadNudges(db, d);
+  expect(result.outOfTime).toBe(true);
+  // 0, 10, 20, 30, 40 s pass the check; at 50 s nothing more is claimed.
+  expect(sent).toHaveLength(5);
+  expect(claimed.size).toBe(5);
+});
+
+test("the pause comes before the claim, so a kill never lands between claim and send", () => {
+  const sweep = readFileSync(
+    resolve(
+      process.cwd(),
+      "src/lib/services/notifications/first-upload-mail.ts",
+    ),
+    "utf8",
+  );
+  const pause = sweep.indexOf("await deps.pause(");
+  const clock = sweep.indexOf("deps.now() - startedAt");
+  const claim = sweep.indexOf("await deps.claim(");
+  const send = sweep.indexOf("await deps.send(");
+  expect(pause).toBeLessThan(clock);
+  expect(clock).toBeLessThan(claim);
+  expect(claim).toBeLessThan(send);
+});
+
+test("Settings writes the getting-started switch only when that switch changed", () => {
+  // An unsubscribe from the email must survive a stale Settings tab saving
+  // some other switch.
+  const action = readFileSync(
+    resolve(
+      process.cwd(),
+      "src/components/dashboard/settings/preferences-actions.ts",
+    ),
+    "utf8",
+  );
+  expect(action).toMatch(
+    /gettingStarted\s*\?\s*\{ email_getting_started: next\.emailGettingStarted \}\s*:\s*\{\}/,
+  );
+  const form = readFileSync(
+    resolve(
+      process.cwd(),
+      "src/components/dashboard/settings/preferences-form.tsx",
+    ),
+    "utf8",
+  );
+  expect(form).toContain('gettingStarted: "emailGettingStarted" in patch');
 });

@@ -316,7 +316,10 @@ that file.
   spaced `OUTREACH_SEND_GAP_MS` apart (two Resend calls per send against a
   2/s limit, and the key is claimed first, so a 429 would lose the email).
   The candidate query itself leaves out the already-mailed, so its limit is
-  never spent on them.
+  never spent on them. A run stops claiming after 40 s, short of the route's 60 s,
+  so a kill never lands between a claim and its send. Settings writes the
+  switch only when it is the one being flipped, so a stale tab cannot undo
+  an unsubscribe.
   **The first mail here the recipient did not just cause**, so it is the
   first to carry the shell's `compliance` block (postal address from
   `OUTREACH_POSTAL_ADDRESS`; nothing sends without it) and a

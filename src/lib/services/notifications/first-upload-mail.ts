@@ -43,6 +43,15 @@ export const FIRST_UPLOAD_STEPS: readonly FirstUploadWindow[] = [
  */
 const MAX_PER_RUN = 40;
 
+/**
+ * Stop claiming after this long. The route is killed at 60 seconds, and a
+ * kill between a claim and its send spends that person's step with no email,
+ * so a slow Resend day ends the run early instead; whoever is left is still
+ * in their window tomorrow. Twenty seconds short of the limit covers one more
+ * send at its worst (two 10-second timeouts).
+ */
+const TIME_BUDGET_MS = 40_000;
+
 export interface FirstUploadCandidate {
   user_id: string;
   email: string;
@@ -52,6 +61,8 @@ export interface FirstUploadCandidate {
 export interface FirstUploadSweepResult {
   /** Why nothing was sent at all, when that is the answer. */
   skipped: "no_postal_address" | null;
+  /** True when the run stopped at `TIME_BUDGET_MS` with people still owed. */
+  outOfTime: boolean;
   sent: Record<FirstUploadStep, number>;
 }
 
@@ -66,6 +77,7 @@ export interface FirstUploadSweepDeps {
   postalAddress: () => string | null;
   links: typeof unsubscribeLinks;
   pause: (ms: number) => Promise<void>;
+  now: () => number;
 }
 
 const productionDeps: FirstUploadSweepDeps = {
@@ -75,6 +87,7 @@ const productionDeps: FirstUploadSweepDeps = {
   postalAddress: () => process.env.OUTREACH_POSTAL_ADDRESS?.trim() || null,
   links: unsubscribeLinks,
   pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now: () => Date.now(),
 };
 
 /** One email per step per person, whatever the cron does. The prefix is
@@ -111,6 +124,7 @@ export async function sweepFirstUploadNudges(
 ): Promise<FirstUploadSweepResult> {
   const result: FirstUploadSweepResult = {
     skipped: null,
+    outOfTime: false,
     sent: { 1: 0, 2: 0 },
   };
 
@@ -123,6 +137,7 @@ export async function sweepFirstUploadNudges(
     return result;
   }
 
+  const startedAt = deps.now();
   let budget = MAX_PER_RUN;
   let first = true;
   try {
@@ -141,12 +156,18 @@ export async function sweepFirstUploadNudges(
           console.error(`${LOG} no unsubscribe key — sending nothing`);
           return result;
         }
+        // Pause and check the clock BEFORE claiming: nothing may stand
+        // between a claim and its send that a kill could land in.
+        if (!first) await deps.pause(OUTREACH_SEND_GAP_MS);
+        first = false;
+        if (deps.now() - startedAt > TIME_BUDGET_MS) {
+          result.outOfTime = true;
+          return result;
+        }
         if (!(await deps.claim(firstUploadClaimKey(step, row.user_id)))) {
           continue;
         }
         budget -= 1;
-        if (!first) await deps.pause(OUTREACH_SEND_GAP_MS);
-        first = false;
         const sent = await deps.send(
           firstUploadNudgeEmail({
             to,

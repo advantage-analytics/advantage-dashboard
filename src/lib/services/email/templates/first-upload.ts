@@ -29,8 +29,6 @@ export interface FirstUploadNudgeInput {
   postalAddress: string;
 }
 
-export const FIRST_UPLOAD_SETTING = "Tips for getting started";
-
 export function firstUploadNudgeEmail(
   input: FirstUploadNudgeInput,
 ): EmailMessage {

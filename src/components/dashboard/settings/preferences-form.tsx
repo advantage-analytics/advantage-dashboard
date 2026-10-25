@@ -93,7 +93,9 @@ export function PreferencesForm({
     setPreferences(next);
     setError(null);
 
-    const result = await savePreferences(next);
+    const result = await savePreferences(next, {
+      gettingStarted: "emailGettingStarted" in patch,
+    });
     if (!result.ok) {
       // Put the control back where it was. A toggle that stayed flipped after a
       // failed write is a lie the person has no way to notice.
