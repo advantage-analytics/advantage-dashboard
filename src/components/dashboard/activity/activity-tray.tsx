@@ -357,6 +357,12 @@ function InviteRow({
       try {
         const result = await acceptPendingInvite(invite.id);
         if (result && !result.ok) {
+          // The age gate wants a date of birth this popover has no room to
+          // ask for: the invitation's own page asks, above its Join button.
+          if (result.age === "required") {
+            window.location.assign(invitationHref(invite.id));
+            return;
+          }
           setError(result.error);
           setConfirming(false);
         }

@@ -18,6 +18,7 @@ import { NothingSent } from "@/components/join/nothing-sent";
 import {
   joinProgramCrestUrl,
   resolveJoinStateOnce,
+  sessionNeedsDob,
   sessionNeedsName,
 } from "@/lib/services/programs/join-state-server";
 import { authHref } from "@/lib/auth/safe-next";
@@ -278,6 +279,7 @@ export default async function JoinPage({
             token={token}
             programName={state.programName}
             role={state.role}
+            needsDob={await sessionNeedsDob()}
           />
         </JoinPane>
       );
@@ -346,6 +348,7 @@ export default async function JoinPage({
             mode={state.mode}
             inviterName={state.inviterName}
             rosterMatchName={state.rosterMatchName}
+            needsDob={await sessionNeedsDob()}
           />
         </JoinPane>
       );

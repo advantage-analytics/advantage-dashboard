@@ -29,6 +29,12 @@ import {
 import { joinHref, signInThenHref } from "./join-links";
 import { getProgramOwner } from "./program-owner";
 import { wantsNotification } from "@/lib/services/notifications/should-notify";
+import {
+  AGE_REFUSAL,
+  DOB_ERROR,
+  ageAllows,
+  ageBand,
+} from "@/app/onboarding/age";
 
 /**
  * The ways an invitation is accepted, and the one that is refused.
@@ -56,7 +62,90 @@ import { wantsNotification } from "@/lib/services/notifications/should-notify";
  * session, and its own header says what that costs it.
  */
 
-export type JoinActionResult = { ok: false; error: string };
+export type JoinActionResult = {
+  ok: false;
+  error: string;
+  /**
+   * Set when the age gate refused (`src/app/onboarding/age.ts`).
+   * `required`: no date of birth on file — the screen shows the field.
+   * `too-young`: under 13 — the screen shows the age refusal in place of the
+   * Join button, the same one onboarding shows.
+   */
+  age?: "required" | "too-young";
+};
+
+/** The sentence for a join refused for want of a date of birth. */
+const AGE_REQUIRED_ERROR = "Add your date of birth to join.";
+
+/**
+ * The age gate's server half for every join and accept below.
+ *
+ * Joining a team by its link or invitation is the one path a 13–17-year-old
+ * may take, so 13+ passes; under 13 never does. A date already on file wins
+ * and the one sent is ignored: these actions fill `users.dob` when it is
+ * empty, they never edit it. The date is written BEFORE the accept RPC runs,
+ * because the RPC reads it back (`join_age_refusal()` in
+ * `20261026080000_join_age_gate.sql`) and refuses without it — and because
+ * `training_excluded_for()` reads the same column to keep an under-18
+ * account's video out of model training. An under-13 date is never written:
+ * it is refused, not stored.
+ *
+ * Returns the refusal to send back, or null to go on.
+ */
+async function settleJoinDob(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  dob: unknown,
+): Promise<JoinActionResult | null> {
+  const { data: row } = await supabase
+    .from("users")
+    .select("dob")
+    .eq("id", userId)
+    .maybeSingle();
+  const onFile = (row?.dob as string | null | undefined) ?? null;
+  if (onFile) {
+    return ageBand(onFile) === "child"
+      ? { ok: false, error: AGE_REFUSAL.child, age: "too-young" }
+      : null;
+  }
+
+  if (dob === undefined || dob === null || dob === "") {
+    return { ok: false, error: AGE_REQUIRED_ERROR, age: "required" };
+  }
+  const band = ageBand(dob);
+  if (band === null || typeof dob !== "string") {
+    return { ok: false, error: DOB_ERROR, age: "required" };
+  }
+  if (!ageAllows(band, true)) {
+    return { ok: false, error: AGE_REFUSAL.child, age: "too-young" };
+  }
+
+  const { error } = await supabase
+    .from("users")
+    .update({ dob })
+    .eq("id", userId);
+  if (error) {
+    console.error("[join] could not save the date of birth", {
+      message: error.message,
+    });
+    return { ok: false, error: "We couldn't save that. Try again." };
+  }
+  return null;
+}
+
+/** A refused accept, carrying the age code when the age gate refused it. */
+function refusal(
+  outcome: Extract<AcceptOutcome, { ok: false }>,
+): JoinActionResult {
+  const error = describe(outcome);
+  if (outcome.status === "age_required") {
+    return { ok: false, error, age: "required" };
+  }
+  if (outcome.status === "too_young") {
+    return { ok: false, error, age: "too-young" };
+  }
+  return { ok: false, error };
+}
 
 /**
  * Everything a failed accept can say, in the words the screen should use.
@@ -96,6 +185,12 @@ function describe(outcome: Extract<AcceptOutcome, { ok: false }>): string {
       // A coach archived their roster row. The restore lives on the Roster,
       // in the coach's hands — the link cannot undo a removal.
       return "You were removed from this team. Ask a coach to add you back.";
+    case "age_required":
+      // The database's own age gate. The actions below ask first, so this
+      // is a caller that skipped them, or a date that failed to save.
+      return AGE_REQUIRED_ERROR;
+    case "too_young":
+      return AGE_REFUSAL.child;
     case "error":
       return outcome.message;
     default:
@@ -348,21 +443,25 @@ async function adoptMembershipAndNotify(
   notifyOwnerOfJoin(admin, userId, programId, role);
 }
 
-/** Already signed in as the invited address. Nothing to collect. */
-export async function acceptInvite(token: string): Promise<JoinActionResult> {
+/**
+ * Already signed in as the invited address. Nothing to collect but a date of
+ * birth, and only when none is on file (`settleJoinDob`).
+ */
+export async function acceptInvite(
+  token: string,
+  dob?: string,
+): Promise<JoinActionResult> {
   const supabase = await createClient();
-  // The session read depends on nothing the accept returns, so the two
-  // round trips overlap rather than queue.
-  const [
-    outcome,
-    {
-      data: { user },
-    },
-  ] = await Promise.all([
-    acceptWithSession(token, supabase),
-    supabase.auth.getUser(),
-  ]);
-  if (!outcome.ok) return { ok: false, error: describe(outcome) };
+  // The session comes first now: the age gate needs it before the accept.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const refused = await settleJoinDob(supabase, user.id, dob);
+    if (refused) return refused;
+  }
+  const outcome = await acceptWithSession(token, supabase);
+  if (!outcome.ok) return refusal(outcome);
 
   if (user?.id) {
     const admin = createAdminClient();
@@ -380,7 +479,8 @@ const UUID_PATTERN =
  * Accept an invitation by id — the door for someone who is signed in and never
  * had the link.
  *
- * One argument, on purpose. The program and the role both come from the
+ * One argument that names anything, on purpose (`dob` is the caller's own
+ * date of birth, for the age gate). The program and the role both come from the
  * database AFTER `accept_pending_invite` has bound the row to the caller's
  * confirmed address: the program from the outcome, the role read back off the
  * membership the function just wrote (see `adoptMembership`). A `role`
@@ -393,22 +493,22 @@ const UUID_PATTERN =
  */
 export async function acceptPendingInvite(
   inviteId: string,
+  dob?: string,
 ): Promise<JoinActionResult> {
   if (!UUID_PATTERN.test(inviteId)) {
     return { ok: false, error: "That invitation isn't available." };
   }
 
   const supabase = await createClient();
-  const [
-    outcome,
-    {
-      data: { user },
-    },
-  ] = await Promise.all([
-    acceptPendingWithSession(inviteId, supabase),
-    supabase.auth.getUser(),
-  ]);
-  if (!outcome.ok) return { ok: false, error: describe(outcome) };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const refused = await settleJoinDob(supabase, user.id, dob);
+    if (refused) return refused;
+  }
+  const outcome = await acceptPendingWithSession(inviteId, supabase);
+  if (!outcome.ok) return refusal(outcome);
 
   if (user?.id) {
     const admin = createAdminClient();
@@ -430,7 +530,12 @@ export async function acceptPendingInvite(
  */
 export async function createAccountAndAccept(
   token: string,
-  input: { firstName: string; lastName: string; password: string },
+  input: {
+    firstName: string;
+    lastName: string;
+    password: string;
+    dob: string;
+  },
 ): Promise<JoinActionResult> {
   const state = await resolveJoinState(token);
   if (state.kind !== "sign_up") {
@@ -443,6 +548,16 @@ export async function createAccountAndAccept(
 
   const passwordProblem = validatePassword(input.password);
   if (passwordProblem) return { ok: false, error: passwordProblem };
+
+  // The age gate, before an account exists: an under-13 is refused without
+  // one ever being created, and nothing about them is stored.
+  const band = ageBand(input.dob);
+  if (band === null) {
+    return { ok: false, error: DOB_ERROR, age: "required" };
+  }
+  if (!ageAllows(band, true)) {
+    return { ok: false, error: AGE_REFUSAL.child, age: "too-young" };
+  }
 
   // Re-checked immediately before the write, not just in `resolveJoinState`.
   // Two tabs on the same link, or a sign-up finishing elsewhere in between,
@@ -493,8 +608,23 @@ export async function createAccountAndAccept(
     };
   }
 
+  // The date of birth, before the accept that reads it back. Service role:
+  // the row is the one `handle_new_user` just made for the account created
+  // above, so the id is ours and nobody else's.
+  if (created?.user?.id) {
+    const { error: dobError } = await admin
+      .from("users")
+      .update({ dob: input.dob })
+      .eq("id", created.user.id);
+    if (dobError) {
+      console.error("[join] could not save the date of birth", {
+        message: dobError.message,
+      });
+    }
+  }
+
   const outcome = await acceptWithSession(token, supabase);
-  if (!outcome.ok) return { ok: false, error: describe(outcome) };
+  if (!outcome.ok) return refusal(outcome);
 
   // Only now — after `acceptWithSession` confirmed the membership, never merely
   // because `createUser` succeeded. See `adoptMembership` for why that order is
@@ -527,7 +657,7 @@ async function finishJoinLink(
 ): Promise<JoinActionResult> {
   if (!outcome.ok) {
     if (outcome.status === "requested") redirect(joinHref(token));
-    return { ok: false, error: describe(outcome) };
+    return refusal(outcome);
   }
 
   if (userId) {
@@ -541,23 +671,26 @@ async function finishJoinLink(
 /**
  * Signed in, holding a join link. One click.
  *
- * Nothing but the token crosses from the browser. The program, the role
+ * Nothing but the token (and, when none is on file, the caller's own date of
+ * birth) crosses from the browser. The program, the role
  * (always `player`) and the mode all come off the `program_join_links` row
  * inside `accept_program_join_link`, which also re-checks seats and the
  * session's confirmed address at the moment of the write. The page's GET only
  * previews; this POST is the only thing that joins.
  */
-export async function acceptJoinLink(token: string): Promise<JoinActionResult> {
+export async function acceptJoinLink(
+  token: string,
+  dob?: string,
+): Promise<JoinActionResult> {
   const supabase = await createClient();
-  const [
-    outcome,
-    {
-      data: { user },
-    },
-  ] = await Promise.all([
-    acceptJoinLinkWithSession(token, supabase),
-    supabase.auth.getUser(),
-  ]);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const refused = await settleJoinDob(supabase, user.id, dob);
+    if (refused) return refused;
+  }
+  const outcome = await acceptJoinLinkWithSession(token, supabase);
   return finishJoinLink(token, outcome, user?.id);
 }
 

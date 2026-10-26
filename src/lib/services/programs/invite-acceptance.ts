@@ -616,6 +616,12 @@ export type AcceptOutcome =
        *                    merged away — a coach removed them, and a link is
        *                    not the way back in
        *
+       * And two from the age gate both doors run
+       * (`20261026080000_join_age_gate.sql`):
+       *
+       *   age_required     no `users.dob` on file — the screen asks for it
+       *   too_young        under 13 by `users.dob` — never joins
+       *
        * Each has its own sentence and its own way forward, which is why they
        * come back as a status rather than as a raised exception.
        */
@@ -629,7 +635,9 @@ export type AcceptOutcome =
         | "already_claimed"
         | "player_gone"
         | "requested"
-        | "removed";
+        | "removed"
+        | "age_required"
+        | "too_young";
     }
   | { ok: false; status: "error"; message: string };
 

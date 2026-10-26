@@ -78,6 +78,34 @@ export async function sessionNeedsName(): Promise<boolean> {
 }
 
 /**
+ * Whether the signed-in account has no date of birth on file, so a join
+ * screen must ask for one before its Join button (the age gate,
+ * `components/join/age-gate.tsx`). Two paths reach a Join button without
+ * onboarding's name step, which is where the date is otherwise asked: an
+ * account that already has a name, and one accepting a pending invitation.
+ *
+ * A failed read answers true: asking for a date the server then ignores (one
+ * on file always wins) costs a field, while not asking sends the person into
+ * the accept RPC's `age_required` refusal. No session answers false — there
+ * is no Join button to put it above.
+ */
+export async function sessionNeedsDob(): Promise<boolean> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("dob")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (error) return true;
+  return !data?.dob;
+}
+
+/**
  * The crest of the program a join token leads to, or null.
  *
  * The join screens draw the team mark above their heading, and a program that

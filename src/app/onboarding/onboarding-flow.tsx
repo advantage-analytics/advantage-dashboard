@@ -50,6 +50,7 @@ import {
 import { guardianClassYears } from "./guardian-options";
 import {
   AGE_REFUSAL,
+  AGE_REFUSAL_TITLE,
   DOB_ERROR,
   DOB_MIN,
   ageAllows,
@@ -548,11 +549,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
                 step={
                   join ? `Joining ${join.programName}` : stepLabel(1, persona)
                 }
-                title={
-                  ageBlock === "child"
-                    ? "You need to be 13 or older"
-                    : "Players under 18 join through their team"
-                }
+                title={AGE_REFUSAL_TITLE[ageBlock]}
                 body={AGE_REFUSAL[ageBlock]}
                 bodyMax="56ch"
               />

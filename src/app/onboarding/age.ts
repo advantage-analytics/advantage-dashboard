@@ -88,4 +88,10 @@ export const AGE_REFUSAL: Record<Exclude<AgeBand, "adult">, string> = {
   teen: "Players under 18 can have their own account only to join their high school, club or academy team through its invitation or join link. Otherwise, a parent or legal guardian can create one and manage it for you.",
 };
 
+/** The refusal's heading, for each blocked band — onboarding and joining alike. */
+export const AGE_REFUSAL_TITLE: Record<Exclude<AgeBand, "adult">, string> = {
+  child: "You need to be 13 or older",
+  teen: "Players under 18 join through their team",
+};
+
 export const DOB_ERROR = "Enter your date of birth.";

@@ -17,6 +17,7 @@ import {
 } from "@/lib/services/programs/join-links";
 import { inviteSentence } from "@/lib/services/programs/join-role";
 import { quotaHours } from "@/lib/services/programs/join-quota";
+import { sessionNeedsDob } from "@/lib/services/programs/join-state-server";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Your invitation" };
@@ -147,6 +148,7 @@ export default async function InvitationPage({
           },
         ]}
         notNowHref={notNowHref(here)}
+        needsDob={await sessionNeedsDob()}
       />
     </JoinPane>
   );

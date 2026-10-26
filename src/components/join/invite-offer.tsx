@@ -14,6 +14,7 @@ import {
 import { inviteSubtitle } from "@/lib/services/programs/join-role";
 import { acceptPendingInvite } from "@/lib/services/programs/join-actions";
 import type { PendingInvite } from "@/lib/data/pending-invites-server";
+import { AgeRefusal, useJoinAge } from "@/components/join/age-gate";
 
 /**
  * An invitation with the two allowance figures its footer quotes.
@@ -60,23 +61,34 @@ export type OfferedInvite = PendingInvite & {
 export function InviteOffer({
   invites,
   notNowHref,
+  needsDob,
 }: {
   invites: OfferedInvite[];
   /** Where declining goes. Composed by the caller — see `NotNowLink`. */
   notNowHref: string;
+  /**
+   * No date of birth on file: the age gate (`age-gate.tsx`) asks once, above
+   * every button. The onboarding intercept offers invitations BEFORE the name
+   * step that otherwise asks, so this is where that path is asked.
+   */
+  needsDob: boolean;
 }) {
+  const age = useJoinAge(needsDob);
+  if (age.tooYoung) return <AgeRefusal signedIn />;
+
   return (
     <div className="flex flex-col gap-4">
       <JoinSharingTerms
         college={invites.some((invite) => invite.programOrgType === "college")}
       />
+      {age.field}
       {invites.length === 1 ? (
-        <SingleInvite invite={invites[0]} notNowHref={notNowHref} />
+        <SingleInvite invite={invites[0]} notNowHref={notNowHref} age={age} />
       ) : (
         <>
           <ul className="flex flex-col gap-3">
             {invites.map((invite) => (
-              <InviteRow key={invite.id} invite={invite} />
+              <InviteRow key={invite.id} invite={invite} age={age} />
             ))}
           </ul>
           <ClaimActions>
@@ -97,36 +109,49 @@ export function InviteOffer({
  * and the transition never settles, so there is no success branch to write —
  * only a refusal comes back.
  */
-function useAccept(inviteId: string) {
+function useAccept(inviteId: string, age: JoinAge) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const run = () =>
     start(async () => {
       setError(null);
-      const result = await acceptPendingInvite(inviteId);
-      if (result && !result.ok) setError(result.error);
+      const gate = age.check();
+      if (!gate.go) {
+        setError(gate.error);
+        return;
+      }
+      const result = await acceptPendingInvite(inviteId, gate.dob);
+      if (result && !result.ok) {
+        age.absorb(result.age);
+        setError(result.error);
+      }
     });
 
-  return { pending, error, run };
+  return { pending, error, run, ready: age.ready };
 }
+
+/** The one age gate the whole offer shares — see `InviteOffer`. */
+type JoinAge = ReturnType<typeof useJoinAge>;
 
 /** One invitation: the primary button. */
 function SingleInvite({
   invite,
   notNowHref,
+  age,
 }: {
   invite: OfferedInvite;
   notNowHref: string;
+  age: JoinAge;
 }) {
-  const { pending, error, run } = useAccept(invite.id);
+  const { pending, error, run, ready } = useAccept(invite.id, age);
 
   return (
     <>
       <ClaimActions>
         <button
           type="button"
-          disabled={pending}
+          disabled={pending || !ready}
           className={CLAIM_BUTTON}
           onClick={run}
         >
@@ -146,8 +171,8 @@ function SingleInvite({
 }
 
 /** One row of several: the program, the role, who asked, its allowance, and a quiet Join. */
-function InviteRow({ invite }: { invite: OfferedInvite }) {
-  const { pending, error, run } = useAccept(invite.id);
+function InviteRow({ invite, age }: { invite: OfferedInvite; age: JoinAge }) {
+  const { pending, error, run, ready } = useAccept(invite.id, age);
 
   return (
     <li className="flex flex-col gap-2 border-t border-[var(--border-hairline)] pt-3 first:border-t-0 first:pt-0">
@@ -162,7 +187,7 @@ function InviteRow({ invite }: { invite: OfferedInvite }) {
         </div>
         <button
           type="button"
-          disabled={pending}
+          disabled={pending || !ready}
           className={advButton("outline", "sm")}
           onClick={run}
         >
