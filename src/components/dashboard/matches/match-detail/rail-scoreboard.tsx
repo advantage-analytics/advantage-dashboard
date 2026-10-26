@@ -212,7 +212,7 @@ function ScoreRow({
               />
               {/* The server is a small caret beside their points, not a dot
                   after the name: a dot there sat beside the player colour
-                  dot, and a blue one read as "you". */}
+                  marker, and a blue one read as "you". */}
               <span className="inline-flex w-[34px] items-center justify-end gap-1.5">
                 {serving ? (
                   <svg
