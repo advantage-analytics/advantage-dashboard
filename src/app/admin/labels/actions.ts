@@ -32,9 +32,9 @@ import {
   type LabelShotsRestoreResult,
 } from "@/lib/services/labels/operations-session";
 import {
-  resetLabelPoint,
+  resetLabelPointWhole,
   resetLabelShot,
-  type LabelPointResetResult,
+  type LabelPointWholeResetResult,
 } from "@/lib/services/labels/reset-session";
 import {
   setLabelGameServer,
@@ -288,14 +288,16 @@ export async function resetLabelShotAction(
 }
 
 /**
- * Reset an edited point's own fields — set, game, server, serve side, won by,
- * ending, ended by — to the values it was seeded with (status back to
- * `unchanged`). Its shots, note and checked mark stay as they are.
+ * Reset the whole point to what the vendor gave (reset.ts `pointResetScope`):
+ * its own fields — set, game, server, serve side, won by, ending, ended by —
+ * every edited shot, the shots the labeller deleted brought back and the ones
+ * they added deleted again, as one Undo step. Its note and checked mark stay
+ * as they are. Answers the point read back whole.
  */
 export async function resetLabelPointAction(
   pointId: string,
-): Promise<LabelPointResetResult> {
-  return withLabelOp("Reset point", () => resetLabelPoint(pointId));
+): Promise<LabelPointWholeResetResult> {
+  return withLabelOp("Reset point", () => resetLabelPointWhole(pointId));
 }
 
 /**

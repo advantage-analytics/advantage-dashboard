@@ -191,7 +191,7 @@ test.describe("the court panel", () => {
     expect(flipped).toMatch(/aria-pressed="true" data-court-flip=""/);
   });
 
-  test("the prompt is drawn, not screen-reader only, after its end's glyph; absent with nothing selected", () => {
+  test("the prompt is drawn, not screen-reader only, in words alone; absent with nothing selected", () => {
     const html = render({ placement: startPlacement("s-return", "far") });
     const prompt = tagOf(html, "data-court-prompt");
     expect(prompt).not.toContain("sr-only");
@@ -199,20 +199,19 @@ test.describe("the court panel", () => {
     const titleTag = tagOf(html, "data-court-title");
     expect(titleTag).toContain("text-[13px]");
     expect(titleTag).toContain("font-medium");
-    // The 9px glyph leads the title: a hollow ring for a contact…
-    expect(html).toMatch(
-      /data-court-title=""[^>]*><span aria-hidden="true" data-end-glyph="contact" class="[^"]*border-\[1\.5px\][^"]*size-\[9px\]/,
-    );
-    // …a filled dot for a landing.
-    const landing = render({
-      placement: setPlacementTarget(
-        startPlacement("s-return", "far"),
-        "landing",
-      ),
-    });
-    expect(landing).toMatch(
-      /data-court-title=""[^>]*><span aria-hidden="true" data-end-glyph="landing" class="[^"]*bg-current[^"]*size-\[9px\]/,
-    );
+    // No glyph leads the title, for either end: the words name it. The
+    // switch below keeps its own.
+    for (const placing of [
+      html,
+      render({
+        placement: setPlacementTarget(
+          startPlacement("s-return", "far"),
+          "landing",
+        ),
+      }),
+    ]) {
+      expect(placing).toMatch(/data-court-title=""[^>]*><span aria-live/);
+    }
     for (const idle of [
       render({}),
       render({ playingShotId: "s-return" }),
@@ -226,10 +225,10 @@ test.describe("the court panel", () => {
   test("the switch's buttons carry the end glyphs: a 7px ring for Contact, a 6px dot for Landing", () => {
     const html = render({ placement: startPlacement("s-return", "far") });
     expect(html).toMatch(
-      /data-court-step="contact"[^>]*><span aria-hidden="true" data-end-glyph="contact" class="[^"]*border-\[1\.5px\][^"]*size-\[7px\]/,
+      /data-court-step="contact"[^>]*><span aria-hidden="true" data-end-glyph="contact" class="(?=[^"]*size-\[7px\])(?=[^"]*border-\[1\.5px\])/,
     );
     expect(html).toMatch(
-      /data-court-step="landing"[^>]*><span aria-hidden="true" data-end-glyph="landing" class="[^"]*bg-current[^"]*size-1\.5/,
+      /data-court-step="landing"[^>]*><span aria-hidden="true" data-end-glyph="landing" class="(?=[^"]*bg-current)(?=[^"]*size-1\.5)/,
     );
   });
 
@@ -310,7 +309,8 @@ test.describe("the point's information line", () => {
     });
     expect(html).not.toContain("data-court-info");
     expect(html).toContain("data-court-steps");
-    expect(html).toContain("data-court-keys");
+    // No strip of keys under the court: the shortcut sheet lists them.
+    expect(html).not.toContain("data-court-keys");
   });
 
   test("the review step is never drawn here: no column, no answers", () => {

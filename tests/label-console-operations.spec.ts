@@ -50,7 +50,10 @@ function spies() {
     switchPlayers: record("switchPlayers", { error: "not in this spec" }),
     setChecked: record("setChecked", { ok: true, checkedAt: null }),
     resetShot: record("resetShot", { ok: true, status: "kept" }),
-    resetPoint: record("resetPoint", { ok: true, status: "unchanged" }),
+    resetPoint: record("resetPoint", {
+      ok: true,
+      point: labelSessionFixture().points.find((p) => p.id === P1),
+    }),
     setGameServer: record("setGameServer", { ok: true, points: [] }),
     setGameType: record("setGameType", { ok: true, points: [] }),
     insertPoint: record("insertPoint", { error: "not in this spec" }),
@@ -689,10 +692,15 @@ test.describe("reset", () => {
     const session = labelSessionFixture();
     const unseeded: LabelSession = {
       ...session,
+      // No seed, and nothing added or deleted: nothing a Reset could put back.
       points: session.points.map((point) => ({
         ...point,
         seed: null,
-        shots: point.shots.map((shot) => ({ ...shot, seed: null })),
+        shots: point.shots
+          .filter(
+            (shot) => shot.status !== "added" && shot.status !== "deleted",
+          )
+          .map((shot) => ({ ...shot, seed: null })),
       })),
     };
     const html = renderConsole({
@@ -1137,7 +1145,7 @@ test.describe("how it ended follows the shot rows", () => {
     expect(point).toEqual([]);
   });
 
-  test("a point reset puts its edited strokes back first, then the point — and no ending patch follows", async () => {
+  test("a point reset is one call for the whole point — no shot resets of its own, and no ending patch follows", async () => {
     const { point, saves } = saveSpies();
     const { calls, operations } = spies();
     consoleTable({
@@ -1153,9 +1161,9 @@ test.describe("how it ended follows the shot rows", () => {
     });
     (dialogs.at(-1)!.onConfirm as () => void)();
     await settled();
-    // Each shot reset re-reads the point's ending on the server; the point's
-    // seed then has the last word.
-    expect(calls).toEqual({ resetShot: [["s-return"]], resetPoint: [[P1]] });
+    // The server runs the restores, removals and resets in order inside one
+    // Undo step (reset-session.ts `writeLabelPointWholeReset`).
+    expect(calls).toEqual({ resetPoint: [[P1]] });
     expect(point).toEqual([]);
   });
 

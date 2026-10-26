@@ -141,14 +141,12 @@ import {
 } from "@/lib/services/labels/point-combine";
 import type { LabelCombinePointsResult } from "@/lib/services/labels/point-combine-session";
 import {
-  applyPointReset,
   applyShotReset,
-  canResetPoint,
   canResetShot,
   pointResetScope,
 } from "@/lib/services/labels/reset";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
-import type { LabelPointResetResult } from "@/lib/services/labels/reset-session";
+import type { LabelPointWholeResetResult } from "@/lib/services/labels/reset-session";
 import {
   applyLabelSessionPatch,
   type LabelSessionFields,
@@ -211,6 +209,8 @@ import { strokeChangePatch } from "./label-black-shot-row";
 import { LabelBlackView } from "./label-black-view";
 import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
+import { LabelShortcutsDialog } from "./label-shortcuts-dialog";
+import { isShortcutSheetKey } from "./label-shortcuts";
 import { LabelCourtPanel, isPlacing } from "./label-court-panel";
 import type { PointInfo } from "./label-point-info";
 import {
@@ -724,6 +724,8 @@ export function LabelConsole({
     [switchLayout, enterWholeScreen, leaveWholeScreen, homeMode],
   );
   const fullScreen = layoutMode === "black";
+  // The shortcut sheet: ⌘ / or ?, or the rail header's keyboard button.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // The overview has no film, court or rail: nothing is labelled on it, and
   // the console's keys are not bound there.
   const overview = layoutMode === "overview";
@@ -2479,50 +2481,26 @@ export function LabelConsole({
   }
 
   /**
-   * The point's own fields back to the seed, and each stroke's hitter back to
-   * its seeded one (`reset.ts`): a point switched after a swap must not keep
-   * contradicting its rows.
+   * The whole point back to what the vendor gave (`pointResetScope`): one
+   * server call, one Undo step. The server answers the point whole, and it
+   * replaces the console's row.
    */
   async function resetPoint(pointId: string) {
     const before = points.find((p) => p.id === pointId);
     if (!before || !operations) return;
-    const scope = pointResetScope(before, sharesVendorRally(before, points));
-    if (!scope) return;
-    // The edited strokes one after another — each re-reads its point's ending
-    // — then the point's own fields, whose seed has the last word.
-    for (const shotId of scope.shotIds) {
-      if ((await resetShot(shotId)) === null) return;
+    if (!pointResetScope(before, sharesVendorRally(before, points))) return;
+    if (before.shots.some((shot) => shot.id === placement.shotId)) {
+      setPlacement(NO_PLACEMENT);
     }
-    if (!scope.fields) return;
-    // The rollback's hitters: the strokes just reset already sit on their
-    // seed, so only the others go back if the point's own write fails.
-    const shotsBefore = shotSwapsOf(
-      before.shots.filter((shot) => !scope.shotIds.includes(shot.id)),
-    );
-    void runOperation(
-      (rows) => replacePoint(rows, pointId, applyPointReset),
-      () => operations.resetPoint(pointId),
-      (rows, result) =>
-        applyShotSwaps(
-          replacePoint(rows, pointId, (p) => ({ ...p, status: result.status })),
-          result.shots,
-        ),
-      (rows) =>
-        applyShotSwaps(
-          replacePoint(rows, pointId, (p) => ({
-            ...p,
-            setNumber: before.setNumber,
-            gameNumber: before.gameNumber,
-            server: before.server,
-            serveSide: before.serveSide,
-            winner: before.winner,
-            ending: before.ending,
-            endedBy: before.endedBy,
-            status: before.status,
-          })),
-          shotsBefore,
-        ),
-    );
+    dispatchSave({ type: "start" });
+    const result = await settle(operations.resetPoint(pointId));
+    if ("error" in result) {
+      dispatchSave({ type: "failure", message: result.error });
+      return;
+    }
+    setPoints((rows) => replacePoint(rows, pointId, () => result.point));
+    setUndoEmpty(false);
+    dispatchSave({ type: "success", at: Date.now() });
   }
 
   const toggleGhost = useMemo(() => toggleIn(setOpenGhosts), []);
@@ -2618,6 +2596,8 @@ export function LabelConsole({
         pointNumber: point.pointIndex + 1,
         fields: scope.fields,
         shots: scope.shotIds.length,
+        added: scope.addedIds.length,
+        deleted: scope.deletedIds.length,
       });
     },
   });
@@ -2688,6 +2668,7 @@ export function LabelConsole({
   const undoLastRef = useRef<() => void>(() => {});
   // Space and ← / →: the labeller driving the film lets a replay go.
   const cancelReplayRef = useRef<() => void>(() => {});
+  const letGoOfShot = useRef<(shotId: string) => void>(() => {});
   // ← / →: stepping the film a point (`stepFilm`).
   const stepFilmRef = useRef<(direction: -1 | 1) => void>(() => {});
   // The rail's amber slots as stops, read off the rows once for the keys
@@ -2851,7 +2832,7 @@ export function LabelConsole({
     };
     resetPointKey.current = () => {
       if (!operable || confirm || !expanded) return false;
-      if (!canResetPoint(expanded)) return false;
+      // Whatever changed on it — fields or strokes — as the ⋯ menu offers it.
       if (!pointResetScope(expanded, sharesVendorRally(expanded, points))) {
         return false;
       }
@@ -2940,6 +2921,20 @@ export function LabelConsole({
     };
     undoLastRef.current = () => void undoLast();
     cancelReplayRef.current = cancelReplay;
+    // Esc on a selected stroke: the stroke goes, and the whole point plays
+    // from its first stroke with the rail and the court following the film,
+    // as with nothing selected. The point stays open; a second Esc folds it.
+    letGoOfShot.current = (shotId) => {
+      const owner = pointOfShot(points, shotId);
+      cancelReplay();
+      setArmedSlot(null);
+      setPlacement(NO_PLACEMENT);
+      if (!owner) return;
+      setFoldedPointId(null);
+      followPlayback();
+      seekToPointStart(owner);
+      player.current?.play();
+    };
     stepFilmRef.current = stepFilm;
     jumpAfterOpen.current = (pointId) => findGap(pointId);
     foldOpenPoint.current = () => {
@@ -2948,9 +2943,10 @@ export function LabelConsole({
       return true;
     };
   });
-  // Escape lets go of the selected stroke, from anywhere in its row: a text
-  // field has already put its draft back by the time the key reaches the
-  // window. An open menu or dialog keeps the key for itself.
+  // Escape lets go of the selected stroke, from anywhere in its row, and plays
+  // its point from the top (`letGoOfShot`): a text field has already put its
+  // draft back by the time the key reaches the window. An open menu or dialog
+  // keeps the key for itself.
   // With no stroke selected the same key folds the open point, unless it was
   // spent closing an editor (`defaultPrevented`) or typed into a field.
   const selectedShotId = placement.shotId;
@@ -2983,7 +2979,7 @@ export function LabelConsole({
         return;
       }
       (document.activeElement as HTMLElement | null)?.blur?.();
-      setPlacement(NO_PLACEMENT);
+      letGoOfShot.current(selectedShotId);
     }
     window.addEventListener("keydown", onEscape);
     return () => window.removeEventListener("keydown", onEscape);
@@ -2992,6 +2988,24 @@ export function LabelConsole({
     function onKeyDown(event: KeyboardEvent) {
       if (overviewRef.current) return;
       const key = event.key;
+      // ⌘ / (or ?) opens the shortcut sheet, from anywhere but a text field;
+      // an open menu or dialog keeps the key.
+      if (isShortcutSheetKey(event) && !event.defaultPrevented) {
+        const target = event.target as Element | null;
+        if (
+          target?.closest?.(
+            "input, select, textarea, [contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog']",
+          ) ||
+          document.querySelector(
+            "[role='menu'], [role='dialog'], [role='alertdialog']",
+          )
+        ) {
+          return;
+        }
+        event.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
       // ⌘ Enter and ↑ / ↓ work from inside a stroke's row as well: a focused
       // cell is a button, which the keys below leave alone. A text field, an
       // open menu and a dialog still keep them.
@@ -3451,6 +3465,10 @@ export function LabelConsole({
               anchor={inlineAnchor}
               placement={placement}
               count={step ? stepCount(keptOpened, step) : null}
+              selected={
+                inlineAnchor.shotId !== null &&
+                placement.shotId === inlineAnchor.shotId
+              }
             />
           ),
         }
@@ -3466,6 +3484,7 @@ export function LabelConsole({
       total={total}
       saveStatus={saveStatus}
       onUndo={editable && operations?.undo ? () => void undoLast() : undefined}
+      onShowShortcuts={fullScreen ? () => setShortcutsOpen(true) : undefined}
       missingShots={missingShotAdds.length}
       onAddMissingShots={
         editable && operations?.addMissingShots
@@ -3678,6 +3697,12 @@ export function LabelConsole({
         </LabelBlackView>
       )}
 
+      {fullScreen ? (
+        <LabelShortcutsDialog
+          open={shortcutsOpen}
+          onOpenChange={setShortcutsOpen}
+        />
+      ) : null}
       {operable ? (
         <LabelConfirmDialog
           confirm={confirm}
@@ -3766,10 +3791,10 @@ export interface LabelConsoleOperations {
   /** Back to the seeded values: status `kept`. */
   resetShot: (shotId: string) => Promise<LabelShotStatusResult>;
   /**
-   * The point's own fields back to the seed, status `unchanged`, and its
-   * strokes' hitters back to theirs.
+   * The whole point back to what the vendor gave (`pointResetScope`), as one
+   * Undo step; answers the point whole.
    */
-  resetPoint: (pointId: string) => Promise<LabelPointResetResult>;
+  resetPoint: (pointId: string) => Promise<LabelPointWholeResetResult>;
   /** Who serves a whole game (in a tiebreak, who serves first). */
   setGameServer: (
     sessionId: string,

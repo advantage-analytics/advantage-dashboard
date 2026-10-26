@@ -17,6 +17,15 @@ import { useCallback, useEffect, useRef } from "react";
  *   reported (`"refused"`), never thrown, and the console goes back to the overview.
  * - Nothing is remembered: without a gesture a stored choice could not be
  *   restored on reload.
+ * - Esc belongs to the console in full screen (let go of a stroke, fold a
+ *   point), so entering asks for the Keyboard Lock on Escape (`lockEscape`).
+ *   Where the browser has it (Chrome, Edge), a press reaches the page and
+ *   holding Esc leaves full screen, as the browser's own banner says. Where it
+ *   has none (Safari, Firefox) the browser's full screen would take every Esc,
+ *   so `enter` does not ask for it (`escapeLockable`) and answers
+ *   `"unsupported"`: the black layer fills the window and Esc stays the
+ *   console's. The macOS window full screen (⌃⌘F) hides the browser's bars
+ *   and leaves Esc alone.
  *
  * The helpers take the document as an argument, so a spec drives them with a
  * plain object.
@@ -99,6 +108,47 @@ export function exitFullscreen(doc: FullscreenDocument): Promise<boolean> {
   return Promise.resolve(false);
 }
 
+/** The slice of `Navigator` the Keyboard Lock reads (Chromium only). */
+export interface KeyboardLockNavigator {
+  keyboard?: {
+    lock?: (keys?: string[]) => Promise<void>;
+    unlock?: () => void;
+  };
+}
+
+/**
+ * Keep Esc for the page while in full screen: the browser then leaves full
+ * screen on a held Esc instead of a press. False where there is no Keyboard
+ * Lock or it is refused; never rejects.
+ */
+export function lockEscape(nav: KeyboardLockNavigator): Promise<boolean> {
+  const lock = nav.keyboard?.lock;
+  if (typeof lock !== "function") return Promise.resolve(false);
+  return attempt(() => lock.call(nav.keyboard, ["Escape"]));
+}
+
+/**
+ * The page's navigator as the Keyboard Lock reads it: TypeScript's DOM
+ * library does not type `navigator.keyboard` (it is Chromium only).
+ */
+function pageNavigator(): KeyboardLockNavigator {
+  return navigator as unknown as KeyboardLockNavigator;
+}
+
+/** Whether the browser can keep Esc for the page in full screen. */
+export function escapeLockable(nav: KeyboardLockNavigator): boolean {
+  return typeof nav.keyboard?.lock === "function";
+}
+
+/** Give Esc back to the browser. A no-op without the Keyboard Lock. */
+export function unlockEscape(nav: KeyboardLockNavigator): void {
+  try {
+    nav.keyboard?.unlock?.call(nav.keyboard);
+  } catch {
+    /* nothing held */
+  }
+}
+
 /**
  * How a request for the full screen came out:
  * - `"entered"` — the page is in the browser's full screen (it went along,
@@ -140,8 +190,9 @@ export function useBrowserFullscreen(onLeft?: () => void): {
   useEffect(() => {
     const changed = () => {
       if (fullscreenActive(document)) return;
-      // Left by any road — Esc, the browser's own control, `leave()`.
+      // Left by any road — a held Esc, the browser's own control, `leave()`.
       entered.current = false;
+      unlockEscape(pageNavigator());
       left.current?.();
     };
     for (const name of FULLSCREEN_EVENTS) {
@@ -155,18 +206,28 @@ export function useBrowserFullscreen(onLeft?: () => void): {
   }, []);
 
   const enter = useCallback(async (): Promise<FullscreenEntry> => {
+    // Without the Keyboard Lock the browser's full screen takes every Esc:
+    // stay in the window, where Esc is the console's (see the header).
+    if (!escapeLockable(pageNavigator()) && !fullscreenActive(document)) {
+      return "unsupported";
+    }
     // Already on by some other road: nothing of ours to leave later.
     const ours = !fullscreenActive(document);
     if (ours) entered.current = true;
     const outcome = await requestFullscreen(document);
     // Refused or not offered: nothing was entered, so nothing to leave.
     if (ours && outcome !== "entered") entered.current = false;
+    // In full screen, a press of Esc is the console's (see the header).
+    if (outcome === "entered" && fullscreenActive(document)) {
+      void lockEscape(pageNavigator());
+    }
     return outcome;
   }, []);
 
   const leave = useCallback(() => {
     if (!entered.current) return;
     entered.current = false;
+    unlockEscape(pageNavigator());
     if (fullscreenActive(document)) void exitFullscreen(document);
   }, []);
   useEffect(() => leave, [leave]);

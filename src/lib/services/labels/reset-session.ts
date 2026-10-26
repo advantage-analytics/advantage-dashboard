@@ -14,6 +14,7 @@
  * reading, so it is asked again.
  */
 
+import { readLabelPointsByIds } from "@/lib/data/labels-server";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   defaultLabelWriteDependencies,
@@ -32,13 +33,21 @@ import {
 import {
   gated,
   normaliseId,
+  writeLabelShotDelete,
+  writeLabelShotsRestore,
   writeShotSwaps,
   type LabelOpResult,
   type LabelShotStatusResult,
 } from "./operations-session";
+import { sharesVendorRally } from "./point-split";
 import type { ShotSwapWrite } from "./player-swap";
-import { applyShotReset, planPointReset, planShotReset } from "./reset";
-import type { LabelPointStatus, LabelShotStatus } from "./session";
+import {
+  applyShotReset,
+  planPointReset,
+  planShotReset,
+  pointResetScope,
+} from "./reset";
+import type { LabelPoint, LabelPointStatus, LabelShotStatus } from "./session";
 
 export type LabelPointResetResult = LabelOpResult<{
   status: LabelPointStatus;
@@ -189,6 +198,150 @@ export async function writeLabelPointReset(params: {
   return { ok: true, status: plan.write.status, shots: plan.shots };
 }
 
+/**
+ * The session's other points that hold one of `point`'s vendor rallies — a
+ * split's halves — with just what `sharesVendorRally` reads. None to read
+ * when the point holds no vendor rally.
+ */
+async function readRallyNeighbours(
+  supabase: AdminClient,
+  sessionId: string,
+  point: Pick<LabelPoint, "id" | "vendorRallyIds">,
+): Promise<
+  | { points: Pick<LabelPoint, "id" | "status" | "vendorRallyIds">[] }
+  | { error: string }
+> {
+  if (point.vendorRallyIds.length === 0) return { points: [] };
+  const { data, error } = await supabase
+    .from("label_points")
+    .select("id, status, vendor_rally_ids")
+    .eq("session_id", sessionId)
+    .neq("id", point.id)
+    .overlaps("vendor_rally_ids", point.vendorRallyIds);
+  if (error) return { error: `Could not read the points: ${error.message}` };
+  return {
+    points: (
+      (data ?? []) as {
+        id: string;
+        status: LabelPointStatus;
+        vendor_rally_ids: number[] | null;
+      }[]
+    ).map((row) => ({
+      id: row.id,
+      status: row.status,
+      vendorRallyIds: row.vendor_rally_ids ?? [],
+    })),
+  };
+}
+
+/**
+ * Run label writes all at once (`together`) or one after another, stopping at
+ * the first refusal. Answers the first error, or null when every write landed.
+ */
+async function runWrites(
+  together: boolean,
+  writes: readonly (() => Promise<object>)[],
+): Promise<{ error: string } | null> {
+  const isError = (r: object): r is { error: string } => "error" in r;
+  if (together) {
+    const results = await Promise.all(writes.map((write) => write()));
+    return results.find(isError) ?? null;
+  }
+  for (const write of writes) {
+    const result = await write();
+    if (isError(result)) return result;
+  }
+  return null;
+}
+
+/** The whole point's Reset: the point as it now stands, whole with its shots. */
+export type LabelPointWholeResetResult = LabelOpResult<{ point: LabelPoint }>;
+
+/**
+ * Reset the whole point (`pointResetScope`): the labeller's deletes restored,
+ * their added strokes deleted again (reason `other`), every edited stroke
+ * reset, then the point's own fields — whose seed has the last word, as the
+ * console's one-at-a-time Reset had it. The caller runs it inside one
+ * `withLabelOp`, so it is one Undo step whatever it wrote. A write that fails
+ * stops the rest and says why; what landed before it is Undo's to take back.
+ * Answers the point read back whole.
+ */
+export async function writeLabelPointWholeReset(params: {
+  supabase: AdminClient;
+  pointId: unknown;
+}): Promise<LabelPointWholeResetResult> {
+  const { supabase } = params;
+  const pointId = normaliseId(params.pointId);
+  if (!pointId) return { error: "Invalid point id." };
+  const { data: owner, error: ownerError } = await supabase
+    .from("label_points")
+    .select("session_id, vendor_rally_ids")
+    .eq("id", pointId)
+    .maybeSingle<{ session_id: string; vendor_rally_ids: number[] | null }>();
+  if (ownerError) {
+    return { error: `Could not read the point: ${ownerError.message}` };
+  }
+  if (!owner) return { error: "Point not found." };
+  // The point whole, and only the points that share a vendor rally with it
+  // (`sharesVendorRally`), side by side: never the whole session.
+  const [[point], neighbours] = await Promise.all([
+    readLabelPointsByIds(supabase, owner.session_id, [pointId]),
+    readRallyNeighbours(supabase, owner.session_id, {
+      id: pointId,
+      vendorRallyIds: owner.vendor_rally_ids ?? [],
+    }),
+  ]);
+  if (!point) return { error: "Point not found." };
+  if ("error" in neighbours) return neighbours;
+  const scope = pointResetScope(
+    point,
+    sharesVendorRally(point, neighbours.points),
+  );
+  if (!scope) return { error: "There is nothing on this point to reset." };
+
+  // Each stroke write re-reads the point's ending. With the point's own
+  // fields reset last, its seed overwrites whatever those wrote, so the
+  // stroke writes do not depend on one another and go out together. A split
+  // half keeps its fields: there the ending each write leaves is the answer,
+  // so they run one at a time, in this order.
+  const together = scope.fields;
+  const restoredFirst = new Set(scope.deletedIds);
+  const failed =
+    (await runWrites(together, [
+      ...(scope.deletedIds.length > 0
+        ? [
+            () =>
+              writeLabelShotsRestore({ supabase, shotIds: scope.deletedIds }),
+          ]
+        : []),
+      ...scope.addedIds.map(
+        (shotId) => () =>
+          writeLabelShotDelete({ supabase, shotId, reason: "other" }),
+      ),
+      ...scope.shotIds
+        .filter((shotId) => !restoredFirst.has(shotId))
+        .map((shotId) => () => writeLabelShotReset({ supabase, shotId })),
+    ])) ??
+    // An edited stroke the labeller deleted resets once it is back.
+    (await runWrites(
+      together,
+      scope.shotIds
+        .filter((shotId) => restoredFirst.has(shotId))
+        .map((shotId) => () => writeLabelShotReset({ supabase, shotId })),
+    ));
+  if (failed) return failed;
+  if (scope.fields) {
+    const reset = await writeLabelPointReset({ supabase, pointId });
+    if ("error" in reset) return reset;
+  }
+  const [after] = await readLabelPointsByIds(supabase, owner.session_id, [
+    pointId,
+  ]);
+  if (!after)
+    return { error: "The point was reset but could not be read back." };
+  return { ok: true, point: after };
+}
+
 // ── The admin-gated entry points behind the server actions ─────────────────
 
 const defaults = defaultLabelWriteDependencies;
@@ -211,6 +364,17 @@ export function resetLabelPoint(
   return gated(
     deps,
     (supabase) => writeLabelPointReset({ supabase, pointId }),
+    "reset the point",
+  );
+}
+
+export function resetLabelPointWhole(
+  pointId: unknown,
+  deps: LabelWriteDependencies = defaults,
+): Promise<LabelPointWholeResetResult> {
+  return gated(
+    deps,
+    (supabase) => writeLabelPointWholeReset({ supabase, pointId }),
     "reset the point",
   );
 }

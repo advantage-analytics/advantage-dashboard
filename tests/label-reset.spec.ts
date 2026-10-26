@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
 
+import { readFileSync } from "node:fs";
+
+import { labelConfirmCopy } from "@/components/admin/labels/label-confirm";
 import {
   applyPointReset,
   applyShotReset,
@@ -241,36 +244,81 @@ test.describe("the console's rows", () => {
     expect(canResetPoint({ status: "edited", seed: null })).toBe(false);
   });
 
-  test("a point's Reset: its own fields when edited, and every edited stroke with a seed", () => {
+  test("a point's Reset: its own fields, every edited stroke, its deletes back and its adds gone", () => {
     const points = new Map(labelSessionFixture().points.map((p) => [p.id, p]));
     const { P1, P2 } = FIXTURE_POINT_IDS;
     const p1 = points.get(P1)!;
     const edited = p1.shots.filter(canResetShot).map((s) => s.id);
-    expect(pointResetScope(p1)).toEqual({ fields: true, shotIds: edited });
-    // A split half keeps its own fields; its strokes still go back.
-    expect(pointResetScope(p1, true)).toEqual(
-      edited.length > 0 ? { fields: false, shotIds: edited } : null,
-    );
-    // Only its strokes changed: Reset is still offered, for them.
-    const shotsOnly = {
-      ...p1,
-      status: "unchanged" as const,
-      shots: p1.shots,
+    const deleted = p1.shots
+      .filter((s) => s.status === "deleted" && s.statusBeforeDelete !== "added")
+      .map((s) => s.id);
+    const added = p1.shots.filter((s) => s.status === "added").map((s) => s.id);
+    const editedThenDeleted = p1.shots
+      .filter(
+        (s) =>
+          s.status === "deleted" &&
+          s.statusBeforeDelete === "edited" &&
+          s.seed !== null,
+      )
+      .map((s) => s.id);
+    const whole = {
+      shotIds: [...edited, ...editedThenDeleted],
+      deletedIds: deleted,
+      addedIds: added,
     };
-    expect(pointResetScope(shotsOnly)).toEqual(
-      edited.length > 0 ? { fields: false, shotIds: edited } : null,
-    );
-    // Nothing edited anywhere: nothing to offer.
+    expect(pointResetScope(p1)).toEqual({ fields: true, ...whole });
+    // A split half keeps its own fields; everything else still goes back.
+    expect(pointResetScope(p1, true)).toEqual({ fields: false, ...whole });
+    // Only its strokes changed: Reset is still offered, for them.
+    expect(pointResetScope({ ...p1, status: "unchanged" as const })).toEqual({
+      fields: false,
+      ...whole,
+    });
+    // Nothing edited, added or deleted: nothing to offer.
     const p2 = points.get(P2)!;
+    const untouched = p2.shots.filter(
+      (s) => !canResetShot(s) && s.status !== "added" && s.status !== "deleted",
+    );
+    expect(
+      pointResetScope({ ...p2, status: "unchanged", shots: untouched }),
+    ).toBeNull();
+    // A deleted point is restored first; an added one has no vendor original.
+    expect(pointResetScope({ ...p1, status: "deleted" })).toBeNull();
+    expect(pointResetScope({ ...p1, status: "added" })).toBeNull();
+  });
+
+  test("a point's Reset brings back a delete and takes away an add, but not an add later withdrawn", () => {
+    const base = {
+      status: "unchanged" as const,
+      seed: null,
+    };
+    const shot = (
+      id: string,
+      status: "kept" | "edited" | "added" | "deleted",
+      statusBeforeDelete: "kept" | "edited" | "added" | null = null,
+      seed: object | null = null,
+    ) => ({ id, status, statusBeforeDelete, seed }) as never;
     expect(
       pointResetScope({
-        ...p2,
-        status: "unchanged",
-        shots: p2.shots.filter((s) => !canResetShot(s)),
+        ...base,
+        shots: [
+          shot("a", "added"),
+          shot("d", "deleted", "kept"),
+          shot("w", "deleted", "added"),
+          shot("e", "deleted", "edited", {}),
+        ],
       }),
+    ).toEqual({
+      fields: false,
+      // The edited stroke deleted afterwards is restored, then reset.
+      shotIds: ["e"],
+      deletedIds: ["d", "e"],
+      addedIds: ["a"],
+    });
+    // An add withdrawn (added, then deleted) is nothing to put back.
+    expect(
+      pointResetScope({ ...base, shots: [shot("w", "deleted", "added")] }),
     ).toBeNull();
-    // A deleted point is restored first.
-    expect(pointResetScope({ ...p1, status: "deleted" })).toBeNull();
   });
 
   test("applyShotReset puts every value back and leaves the rest", () => {
@@ -855,4 +903,58 @@ test("a seeded game type is never part of the point reset's write", () => {
   if ("error" in plan) throw new Error(plan.error);
   expect(plan.write).toEqual({ ...POINT_SEED, status: "unchanged" });
   expect(plan.write).not.toHaveProperty("game_type");
+});
+
+test.describe("the point's Reset confirm", () => {
+  const copy = (
+    fields: boolean,
+    shots: number,
+    added?: number,
+    deleted?: number,
+  ) =>
+    labelConfirmCopy(
+      {
+        kind: "reset-point",
+        pointId: "p",
+        pointNumber: 7,
+        fields,
+        shots,
+        added,
+        deleted,
+      },
+      { p1: "Lee", p2: "Vargas" },
+    );
+
+  test("says what goes back, what comes back, what goes, and that Undo takes it all", () => {
+    const all = copy(true, 2, 1, 3);
+    expect(all.title).toBe("Reset point 7 to its original values?");
+    expect(all.description).toBe(
+      "Its game, server, serve side, winner, ending and who ended it go back to the values they were seeded with. The 2 shots you edited go back to their seeded values. The 3 shots you deleted come back. The 1 shot you added is deleted. Its note and checked mark stay as they are. Undo takes it all back.",
+    );
+    expect(copy(false, 0, 2, 1).description).toBe(
+      "The 1 shot you deleted comes back. The 2 shots you added are deleted. Its note and checked mark stay as they are. Undo takes it all back.",
+    );
+    expect(copy(false, 1).description).toBe(
+      "The 1 shot you edited goes back to its seeded values. Its note and checked mark stay as they are. Undo takes it all back.",
+    );
+  });
+});
+
+test("the whole Reset reads the point and its rally neighbours, never the whole session", () => {
+  const source = readFileSync(
+    "src/lib/services/labels/reset-session.ts",
+    "utf8",
+  );
+  expect(source).not.toContain("readLabelSessionRows");
+  const body = source.slice(
+    source.indexOf("export async function writeLabelPointWholeReset("),
+  );
+  expect(body).toContain("readLabelPointsByIds(supabase, owner.session_id, [");
+  expect(body).toContain("readRallyNeighbours(");
+  expect(source).toContain(
+    '.overlaps("vendor_rally_ids", point.vendorRallyIds)',
+  );
+  // Stroke writes go out together only when the point's own fields are reset
+  // after them (its seed has the last word); a split half runs them in order.
+  expect(body).toContain("const together = scope.fields;");
 });
