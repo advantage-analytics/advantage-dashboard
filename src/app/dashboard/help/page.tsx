@@ -433,27 +433,82 @@ export default function HelpCenterPage() {
                 </p>
               </div>
 
-              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
-                <span className={blockLabelClass}>Recording on iPhone</span>
-                <div className="flex flex-col">
-                  <FeatureRow>
-                    HDR Video off (Settings › Camera › Record Video)
-                  </FeatureRow>
-                  <FeatureRow>1080p at 30 or 60 fps</FeatureRow>
-                  <FeatureRow>
-                    Optional: Settings › Camera › Formats › Most Compatible, so
-                    the file is H.264
-                  </FeatureRow>
+              {/* Numbered the same as the export guide's iPhone steps, and the
+                  screenshots are the same iOS 26 captures. Formats stays on
+                  High Efficiency: Most Compatible doubles the file (about 130
+                  MB a minute at 1080p30 against 60), so a full match would go
+                  over the size limit. */}
+              <div className={`${blockDividerClass} flex flex-col gap-4`}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <span className={blockLabelClass}>Recording on iPhone</span>
+                  <span className="text-[12px] text-[var(--ink-600)]">
+                    Settings › Camera › Record Video · Set once
+                  </span>
+                </div>
+                <div className="flex flex-col gap-4">
+                  <Step number="01" title="1080p HD at 30 fps">
+                    The default. 60 fps follows fast exchanges better, where
+                    your iPhone lists it.
+                  </Step>
+                  <Step number="02" title="HDR Video off">
+                    It&rsquo;s on by default, and HDR colour can&rsquo;t survive
+                    the conversion before upload, so the saved video looks paler
+                    and flatter than on your phone. Analysis isn&rsquo;t
+                    affected.
+                  </Step>
+                  <Step number="03" title="Auto FPS off · Suggested">
+                    In low light it drops 30 fps video to 24, below what the
+                    analysis needs.
+                  </Step>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <figure className="flex flex-col gap-2">
+                    <div className="aspect-[3/2] overflow-hidden rounded-[8px] border border-[var(--border-card)] bg-[var(--surface-muted)]">
+                      <Image
+                        src="/help/iphone-record-top.png"
+                        alt="iPhone Record Video settings with 1080p HD at 30 fps selected"
+                        width={603}
+                        height={1311}
+                        className="h-auto w-full"
+                      />
+                    </div>
+                    <figcaption className="text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                      01 · Camera › Record Video
+                    </figcaption>
+                  </figure>
+                  <figure className="flex flex-col gap-2">
+                    <div className="aspect-[3/2] overflow-hidden rounded-[8px] border border-[var(--border-card)] bg-[var(--surface-muted)]">
+                      {/* Margins are a share of the width, so the crop lands
+                          on HDR Video and Auto FPS at any card width. */}
+                      <Image
+                        src="/help/iphone-record-hdr.png"
+                        alt="iPhone Record Video settings further down, with HDR Video off and Auto FPS off"
+                        width={603}
+                        height={1311}
+                        className="-mt-[106%] h-auto w-full"
+                      />
+                    </div>
+                    <figcaption className="text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                      02–03 · Further down Record Video
+                    </figcaption>
+                  </figure>
                 </div>
                 <p className={proseClass}>
-                  An HDR, HEVC or 4K video is converted in this tab before it
-                  uploads, and HDR colour can&rsquo;t survive the conversion, so
-                  the saved video looks paler and flatter than on your phone.
-                  Analysis isn&rsquo;t affected — only how the video looks. If
-                  your browser can&rsquo;t convert it, it uploads as recorded
-                  and some browsers won&rsquo;t play it back — Most Compatible
-                  avoids that. A 1080p H.264 file without HDR uploads exactly as
-                  recorded, unless it&rsquo;s over {MAX_VIDEO_GB} GB.
+                  Leave Formats on High Efficiency. An HEVC or 4K video is
+                  converted in this tab before it uploads; Most Compatible
+                  (H.264) skips that but doubles the file, so a full match goes
+                  over {MAX_VIDEO_GB} GB. If your browser can&rsquo;t convert a
+                  file, it uploads as recorded and some browsers won&rsquo;t
+                  play it back. Android, GoPro and PlaySight settings are in the{" "}
+                  <a
+                    href={EXPORT_GUIDE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={linkClass}
+                  >
+                    export guide
+                  </a>
+                  .
                 </p>
               </div>
 
