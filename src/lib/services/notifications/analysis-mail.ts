@@ -340,18 +340,25 @@ export async function describeContext(
 /**
  * Tell the alerts inbox that a signed SplitStep delivery could not be read.
  *
- * Once per delivery (`claimSend`), so a vendor retrying the same bytes mails
- * once. Never throws: it runs in the webhook's `after()`, where an exception
- * would only cost the log line.
+ * Once per reason per UTC day (`claimSend`), not per delivery: a new vendor
+ * event we do not map — a heartbeat, a cancel echo — would otherwise mail once
+ * for every job, every time. The first delivery of the day is the one named;
+ * the rest are in `splitstep_webhook_deliveries` under the same reason. Never
+ * throws: it runs in the webhook's `after()`, where an exception would only
+ * cost the log line.
  */
-export async function notifyUnreadableWebhook(input: {
-  deliveryId: string;
-  reason: string;
-  externalJobId: string | null;
-  bodyExcerpt: string;
-}): Promise<void> {
+export async function notifyUnreadableWebhook(
+  input: {
+    deliveryId: string;
+    reason: string;
+    externalJobId: string | null;
+    bodyExcerpt: string;
+  },
+  now: Date = new Date(),
+): Promise<void> {
   try {
-    if (!(await claimSend(`webhook_unreadable:${input.deliveryId}`))) return;
+    const day = now.toISOString().slice(0, 10);
+    if (!(await claimSend(`webhook_unreadable:${input.reason}:${day}`))) return;
     const sent = await sendEmail(
       webhookUnreadableInternalEmail({ to: INTERNAL_ALERTS_ADDRESS, ...input }),
     );

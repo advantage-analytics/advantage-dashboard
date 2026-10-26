@@ -351,6 +351,16 @@ test.describe("splitstep webhook — a signed delivery we cannot read is alerted
     expect(calls.unreadable).toEqual([]);
   });
 
+  test("a matched job with a status we do not map is alerted too", async () => {
+    const { calls, deliver } = loadRoute(record("processing"));
+    await deliver({ job_id: EXTERNAL_JOB, status: "job_heartbeat" });
+    expect(calls.unreadable).toHaveLength(1);
+    expect(calls.unreadable[0]).toMatchObject({
+      reason: "it carries no status we recognise",
+      externalJobId: EXTERNAL_JOB,
+    });
+  });
+
   test("an unsigned unreadable post is recorded but never mailed", async () => {
     const { calls, deliver } = loadRoute(orphan, { signed: false });
     await deliver("garbage");

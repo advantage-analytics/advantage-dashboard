@@ -168,10 +168,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unreadable body" }, { status: 400 });
   }
 
+  const redactedBody = redactSignedUrls(rawBody);
   pipelineLog.info(`${LOG} received`, {
     bytes: rawBody.length,
     contentType: request.headers.get("content-type"),
-    body: redactSignedUrls(rawBody).slice(0, 4000),
+    body: redactedBody.slice(0, 4000),
   });
 
   // 2. Authenticate. Must run against the exact bytes received — the HMAC is
@@ -275,7 +276,7 @@ export async function POST(request: NextRequest) {
         deliveryId: record.delivery_id,
         reason: unreadable,
         externalJobId: payload.externalJobId,
-        bodyExcerpt: redactSignedUrls(rawBody).slice(0, 600),
+        bodyExcerpt: redactedBody.slice(0, 600),
       }),
     );
   }

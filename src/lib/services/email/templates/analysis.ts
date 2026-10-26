@@ -386,7 +386,7 @@ export function webhookUnreadableInternalEmail(
       { label: "Reason", value: reason },
       ...(externalJobId ? [{ label: "Vendor job", value: externalJobId }] : []),
     ],
-    note: "Sent to the internal alerts inbox, once per delivery. The full body is in splitstep_webhook_deliveries under that id.",
+    note: "Sent to the internal alerts inbox once per reason per day — later deliveries like it are not mailed. The full body is in splitstep_webhook_deliveries under that id.",
   };
 
   return {
