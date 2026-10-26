@@ -3,10 +3,10 @@
 import { squadOptionsFor } from "@/lib/data/squad";
 import type { ProgramOrgType } from "@/lib/workspace/types";
 import { useMemo } from "react";
-import { Lock } from "lucide-react";
 import {
   SettingsCard,
   SettingsField,
+  SettingsLockedField,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
 import { MenuSelect } from "@/components/ui/menu-select";
@@ -129,7 +129,8 @@ export function TeamIdentityCard({
             onChange={(value) => onChange("schoolName", value)}
           />
         ) : (
-          <LockedField
+          <SettingsLockedField
+            className="h-8"
             label="Program name"
             value={draft.schoolName}
             hint={lockedHint}
@@ -150,7 +151,8 @@ export function TeamIdentityCard({
             />
           </SettingsField>
         ) : (
-          <LockedField
+          <SettingsLockedField
+            className="h-8"
             label="Squad"
             value={
               squadOptions.find((option) => option.value === draft.team)
@@ -194,14 +196,16 @@ export function TeamIdentityCard({
             onChange={(value) => onChange("conference", value)}
           />
         ) : (
-          <LockedField
+          <SettingsLockedField
+            className="h-8"
             label="Conference"
             value={draft.conference || "—"}
             hint={lockedHint}
           />
         )}
 
-        <LockedField
+        <SettingsLockedField
+          className="h-8"
           label="Season"
           value={season}
           hint="Follows the academic year — turns over Aug 1."
@@ -240,34 +244,6 @@ function TextField({
         className="h-8"
         onChange={(event) => onChange(event.target.value)}
       />
-    </SettingsField>
-  );
-}
-
-/**
- * A field the viewer may not change: the value on a faint rule with a lock,
- * and the reason — naming who can — in the caption slot beneath. Never a
- * `disabled` input.
- */
-function LockedField({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-}) {
-  return (
-    <SettingsField label={label} hint={hint}>
-      <span className="flex h-8 items-center gap-1.5 border-b border-[var(--ink-100)] text-[13px] text-[var(--ink-600)]">
-        <Lock
-          className="size-[11px] shrink-0 text-[var(--ink-400)]"
-          strokeWidth={1.75}
-          aria-hidden="true"
-        />
-        <span className="truncate">{value}</span>
-      </span>
     </SettingsField>
   );
 }

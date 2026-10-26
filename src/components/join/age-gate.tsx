@@ -52,7 +52,7 @@ function JoinDobField({
       </span>
       <DateField
         label="Date of birth"
-        variant="boxed"
+        variant="form"
         value={value}
         onChange={onChange}
         onIncompleteChange={onIncompleteChange}

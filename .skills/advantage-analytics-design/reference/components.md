@@ -294,7 +294,7 @@ file owns the chrome. The wire format is the product's, not the library's: a
 form submission. That one is the library's; finding it is not licence to write
 another.
 
-**Three variants, each matching what its call sites already drew** so no
+**Four variants, each matching what its call sites already drew** so no
 surface changed shape when it landed:
 
 | Variant               | Chrome                                                                                                                                                   | Shipped on                                                                                                                                                                                                                                                                                          |
@@ -302,8 +302,9 @@ surface changed shape when it landed:
 | `underline` (default) | 34px, the caption's hairline beneath, 2px `--blue` on focus and for as long as the calendar is open — the same field as `MenuSelect variant="underline"` | the profile page's date of birth (`settings/profile-form.tsx`), the upload wizard's date-and-time cell (`matches/new-match-wizard/DetailsStepContent.tsx`)                                                                                                                                          |
 | `bare`                | no rule and no height of its own                                                                                                                         | the dual builder's Date cell and the tournament builder's Starts/Ends, each inside a `FieldCell` row (`schedule/static/dual-build-step.tsx`, `schedule/static/static-tournament-builder.tsx`); the match-edit dialog's Date inside `UnderlineField` (`matches/match-actions/edit-match-dialog.tsx`) |
 | `boxed`               | 30px, radius 6, `--border-field` on `--surface-field`, 12px text                                                                                         | the statistics match selector's From/To date filter (`statistics/match-selector.tsx`)                                                                                                                                                                                                               |
+| `form`                | 36px, `--radius-button`, `--border-field` on `--surface-card`, 13px text — `advField("boxed")`'s field, so a date sits among text inputs as one of them  | the onboarding name step's date of birth (`app/onboarding/onboarding-flow.tsx`) and the join screens' age gate (`join/age-gate.tsx`)                                                                                                                                                                |
 
-On `underline` and `boxed`, error owns the colour and focus owns the weight:
+On `underline`, `boxed` and `form`, error owns the colour and focus owns the weight:
 the rule goes red on `data-invalid` and stays red while focused.
 
 `bare` is a contract with the row above it. **The parent owns the rule and the

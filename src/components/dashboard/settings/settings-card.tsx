@@ -1,5 +1,6 @@
 "use client";
 
+import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -264,5 +265,44 @@ export function SettingsUnderlineInput({
       )}
       {...props}
     />
+  );
+}
+
+/**
+ * A field the viewer may not change: the value on a faint rule with a lock,
+ * and the reason — naming who can — in the caption slot beneath. Never a
+ * `disabled` input (settings.md, "A field the viewer may not change").
+ *
+ * The rule's height follows the editable neighbours it sits among —
+ * `SettingsUnderlineInput`'s 34px by default, `h-8` where a card's inputs
+ * are 32 — so the grid's rows stay level.
+ */
+export function SettingsLockedField({
+  label,
+  value,
+  hint,
+  className,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  className?: string;
+}) {
+  return (
+    <SettingsField label={label} hint={hint}>
+      <span
+        className={cn(
+          "flex h-[34px] items-center gap-1.5 border-b border-[var(--ink-100)] text-[13px] text-[var(--ink-600)]",
+          className,
+        )}
+      >
+        <Lock
+          className="size-[11px] shrink-0 text-[var(--ink-400)]"
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
+        <span className="truncate">{value}</span>
+      </span>
+    </SettingsField>
   );
 }

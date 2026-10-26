@@ -636,7 +636,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
                   </span>
                   <DateField
                     label="Date of birth"
-                    variant="boxed"
+                    variant="form"
                     value={dob}
                     onChange={setDob}
                     onIncompleteChange={setDobIncomplete}
