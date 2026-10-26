@@ -22,7 +22,7 @@ import {
 import { VIZ_TILE_GRID_CLASS } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import { InsightMark } from "@/components/dashboard/matches/match-detail/insight-mark";
 import { INSIGHT_SURFACE } from "@/components/dashboard/matches/match-detail/report-insight-card";
-import { PlayerDot } from "@/components/dashboard/matches/match-detail/rail-scoreboard";
+import { PlayerBar } from "@/components/dashboard/matches/match-detail/rail-scoreboard";
 import { cn } from "@/lib/utils";
 import { FilmFramePending } from "./film-frame-pending";
 import { PendingBar, PendingRegion } from "./pending";
@@ -74,8 +74,8 @@ function ScoreboardPending() {
         <div className="flex flex-col gap-[11px]">
           {[0, 1].map((row) => (
             <div key={row} className="flex h-[18px] items-center gap-[7px]">
-              {/* The player dot is known chrome: you on top, always. */}
-              <PlayerDot
+              {/* The player bar is known chrome: you on top, always. */}
+              <PlayerBar
                 color={row === 0 ? "var(--viz-you)" : "var(--viz-opp)"}
               />
               <PendingBar className="w-28" />
@@ -179,8 +179,8 @@ function HeadToHeadPending() {
             key={color}
             className="flex h-[18px] w-[64px] shrink-0 items-center justify-end gap-1"
           >
-            {/* Player dot: known chrome, as on the rail. */}
-            <PlayerDot color={color} />
+            {/* Player bar: known chrome, as on the rail. */}
+            <PlayerBar color={color} />
             <PendingBar className="w-10" />
           </span>
         ))}

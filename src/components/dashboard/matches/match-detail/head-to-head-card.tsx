@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import { PlayerDot } from "@/components/dashboard/matches/match-detail/rail-scoreboard";
+import { PlayerBar } from "@/components/dashboard/matches/match-detail/rail-scoreboard";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
@@ -738,7 +738,7 @@ const COLUMN =
   "flex w-[var(--h2h-col,64px)] shrink-0 items-center justify-end gap-1";
 
 /**
- * 64 px fits a surname of about six characters at 12px beside the player dot.
+ * 64 px fits a surname of about six characters at 12px beside the player bar.
  * A longer one gets roughly 7px a character, plus 18px for the dot and its gap
  * (and room for the verified check on `you`), capped so the statistic label
  * keeps its space; `truncate` backstops anything beyond.
@@ -1308,9 +1308,9 @@ export function HeadToHeadCard() {
       <div className="flex items-center border-b border-[var(--border-hairline)] pb-[11px]">
         <span aria-hidden="true" className="min-w-0 flex-1" />
         <span className={COLUMN}>
-          {/* The player's chart colour, the same 6px dot the rail scoreboard
+          {/* The player's chart colour, the same 3px bar the rail scoreboard
               draws, so a column reads with every chart on the page. */}
-          <PlayerDot color="var(--viz-you)" />
+          <PlayerBar color="var(--viz-you)" />
           <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
             {youName}
           </span>
@@ -1325,7 +1325,7 @@ export function HeadToHeadCard() {
           ) : null}
         </span>
         <span className={COLUMN}>
-          <PlayerDot color="var(--viz-opp)" />
+          <PlayerBar color="var(--viz-opp)" />
           <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-600)]">
             {oppName}
           </span>
