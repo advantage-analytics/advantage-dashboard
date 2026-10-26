@@ -106,18 +106,18 @@ function playbackCopyFor(
   job: PlaybackJobRow,
   jobs: PlaybackJobRow[],
 ): string | null {
-  const ready = (row: PlaybackJobRow) =>
-    row.playback_status === "ready" && row.playback_object_key
-      ? row.playback_object_key
-      : null;
-  const own = ready(job);
+  const own = readyCopyKey(job);
   if (own || !job.video_object_key) return own;
   for (const other of jobs) {
     if (other.video_object_key !== job.video_object_key) continue;
-    const shared = ready(other);
+    const shared = readyCopyKey(other);
     if (shared) return shared;
   }
   return null;
+}
+
+function readyCopyKey(row: PlaybackJobRow): string | null {
+  return (row.playback_status === "ready" && row.playback_object_key) || null;
 }
 
 function vendorCopyChoice(
