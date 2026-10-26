@@ -98,6 +98,7 @@ export function OpponentTeamField({
   lead,
   searchNote,
   onDismiss,
+  blurStaysOpen,
   className,
 }: {
   /** The directory program, when the team is one. */
@@ -121,6 +122,12 @@ export function OpponentTeamField({
    * already went where the person sent it).
    */
   onDismiss?: (restoreFocus: boolean) => void;
+  /**
+   * Search-only: a blur onto an element this accepts leaves the search open —
+   * the caller's own option under the field (the drawer's "Unattached"), so
+   * Tab can reach it. The caller then owns closing when focus leaves it.
+   */
+  blurStaysOpen?: (next: Element | null) => boolean;
   className?: string;
 }) {
   const searchOnly = onDismiss !== undefined;
@@ -258,7 +265,10 @@ export function OpponentTeamField({
                     setTerm(e.target.value);
                     setActive(0);
                   }}
-                  onBlur={close}
+                  onBlur={(e) => {
+                    if (blurStaysOpen?.(e.relatedTarget)) return;
+                    close();
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") {
                       e.preventDefault();

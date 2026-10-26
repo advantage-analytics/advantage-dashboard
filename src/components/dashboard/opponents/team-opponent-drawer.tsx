@@ -89,10 +89,11 @@ const TEXT_ACTION_CLS =
  * (`OpponentTeamField`, search-only), with a line under it saying how many
  * matches a pick changes and, for a change, which team it replaces. Staff set
  * it on every match against the opponent; a player on the ones they recorded;
- * a player who recorded none sees "No team" and no control. Who, how many and both writes are `add-opponent-team.ts` — this
- * file holds no Supabase call. A pick shows at once, the loader's answer
- * replaces it after `router.refresh()`, and a refusal puts the line back with
- * the reason under it.
+ * a player who recorded none sees "Not set" and no control. Who, how many and
+ * both writes are `add-opponent-team.ts` — this file holds no Supabase call. A
+ * pick shows at once, the loader's answer replaces it after
+ * `router.refresh()`, and a refusal puts the line back with the reason under
+ * it.
  *
  * Body, top to bottom: identity (the name, how they play) → **Plays for** →
  * **Faced by** (the team's record is its "All" chip; how many are analyzed
@@ -169,6 +170,7 @@ export function TeamOpponentDrawer({
   const [editing, setEditing] = useState<string | null>(null);
   const editingTeam = editing === opponent.key;
   const teamTriggerRef = useRef<HTMLButtonElement>(null);
+  const unattachedRef = useRef<HTMLButtonElement>(null);
   // Set when the search closes by Esc, a pick or Cancel — the input is gone,
   // so focus goes back to Change. Left alone on blur.
   const restoreTeamFocus = useRef(false);
@@ -429,18 +431,42 @@ export function TeamOpponentDrawer({
                 )}
                 onChange={pickTeam}
                 onDismiss={closeTeamSearch}
+                // Tab from the search lands on Unattached, not on nothing.
+                blurStaysOpen={(next) =>
+                  next !== null && next === unattachedRef.current
+                }
               />
               {/* No school to search for is one press, not a typed answer.
                   Under the field, so the results menu covers it while
                   somebody is typing a school. */}
               {team.kind !== "unattached" && (
                 <button
+                  ref={unattachedRef}
                   type="button"
                   // Keeps focus in the search, as Cancel does.
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     closeTeamSearch(true);
                     void pickTeam(UNATTACHED_CHOICE);
+                  }}
+                  // Reached by Tab from the search, so it closes the search
+                  // the way the search would: Esc puts focus back on Change,
+                  // and leaving for anywhere but the search closes it.
+                  onKeyDown={(e) => {
+                    if (e.key !== "Escape") return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    closeTeamSearch(true);
+                  }}
+                  onBlur={(e) => {
+                    const next = e.relatedTarget;
+                    if (
+                      next instanceof HTMLInputElement &&
+                      next.role === "combobox"
+                    ) {
+                      return;
+                    }
+                    closeTeamSearch(false);
                   }}
                   className="-mx-2.5 mt-2 flex cursor-pointer items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-left transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                 >
