@@ -241,6 +241,58 @@ mentions Ask. The prompt still says "No view records which court (deuce or ad) a
 serve was hit from" (`prompts.ts:523`, `:1058`) although `ask.points.court`
 has existed since migration `20261014214810`.
 
+### 1.11 Agent mode (prototype, `ASK_AGENT=1`)
+
+The one-shot planner never sees a row: it writes one plan, and a guessed name
+or a wrong value ends in a retry on an error message or a refusal. Claude,
+using the MCP connector, makes 3–10 calls a question and recovers on its own
+(PostHog `mcp_tool_call`). Agent mode gives the planner the same chance:
+
+- **What it is.** `src/lib/services/ask/agent.ts`. The planner's first attempt
+  is a bounded tool loop. Its prompt is `buildPlanPrompt()` plus a short
+  appendix. Its tools are the connector's read tools (`list_matches`,
+  `get_match`, `opponent_scouting`, `describe_views`, `run_query`), run by the
+  connector's own handlers (`askReadHandlers()` / `createAskAgentToolbox()` in
+  `mcp/server.ts`) and bound to the route's scope. It ends with `finish`,
+  whose arguments are exactly the plan reply (`ASK_PLAN_REPLY_SCHEMA`, plus an
+  optional `query_id`). `askQuestion()` parses that reply and runs everything
+  after it unchanged: the guard, compare/review, the soft checks and their
+  retries, cell references the renderer substitutes, one visual, the save.
+- **Bounds.** At most 6 tool calls (`finish` not counted) and 12 s. At the
+  limit, only `finish` is offered. A tool error goes back to the model as a
+  result. A loop that never finishes answers from its last query with rows,
+  or plans the one-shot way if it has none.
+- **Adapter.** `getLLMToolTurn()`: one non-streamed turn with tools on both
+  providers, with failover. On Gemini it returns the provider's own
+  `tool_calls` (thought signatures included).
+- **Records.** `ask_runs.route` is `agent` / `agent_server_written`. Agent
+  turns count in `model_calls` and `plan_attempts`, and exploring queries in
+  `query_count`. Status events carry a fixed `detail` ("Running query 2").
+- **Two Gemini traits it handles.** `finish` must fill every field, so
+  `gemini-3.5-flash-lite` sets `compare` beside a written `sql`, which parses
+  as shape D. A `query_id` or a non-empty `sql` is therefore read as shape A.
+
+**Eval (2026-10-26, verifier, season list, `--mode both`):**
+
+| Mode  | Passed       | Median s | Mean s | Max s | Mean queries | Mean model calls |
+| ----- | ------------ | -------- | ------ | ----- | ------------ | ---------------- |
+| plan  | 20/21 (95 %) | 1.7      | 2.1    | 6.8   | 1.0          | 1.4              |
+| agent | 20/21 (95 %) | 2.4      | 2.7    | 6.7   | 1.8          | 2.5              |
+
+The same question failed in both modes (#7, a tree visual where a table was
+expected). The season list is saturated, so it shows the cost (+0.7 s median,
++0.8 queries) and no regression, but not the gain. The gain shows on
+compound questions: on "What is my best serve placement, by attempts too?" the
+one-shot plan returned attempts only. The agent returned points won and
+attempts per placement, but it used all six tool calls (13.5 s against 4.1 s).
+
+**Before turning it on:** add compound and ambiguous questions to the eval
+(the ones `ask_runs` ends in `needs_clarification` / `cannot_answer`), then
+cap the exploration for short questions. Open questions: whether `arrival.ts`
+and the connector's own `ask` tool should take the flag (both stay one-shot
+today), and whether to stream the answer stage's first tokens sooner, since
+the loop delays the headline.
+
 ## 2. Data architecture
 
 ### 2.1 Fix the `mine` CTE (highest value per hour)

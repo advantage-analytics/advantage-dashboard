@@ -151,7 +151,7 @@ export function AskAnswer({
       <p role="status" className="sr-only">
         {answer.status === "streaming"
           ? answer.stage
-            ? copy.stage[answer.stage]
+            ? (answer.stageDetail ?? copy.stage[answer.stage])
             : "Sending your question"
           : live && answer.status === "done"
             ? "Answer ready"
@@ -381,11 +381,13 @@ function AnswerBody({
       {answer.status === "streaming" && (
         <p
           aria-hidden="true"
-          key={answer.stage ?? "sending"}
+          key={answer.stageDetail ?? answer.stage ?? "sending"}
           data-ask-stage=""
           className="text-body-sm"
         >
-          {answer.stage ? copy.stage[answer.stage] : "Sending your question"}
+          {answer.stage
+            ? (answer.stageDetail ?? copy.stage[answer.stage])
+            : "Sending your question"}
         </p>
       )}
 

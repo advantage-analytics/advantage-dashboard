@@ -2,7 +2,16 @@
  * Run a list of realistic questions through the real Ask pipeline and write
  * what came back, so prompt changes are judged on output and not on hope.
  *
- *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade] [--no-examples] [--retries 1]
+ *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade] [--no-examples] [--retries 1] [--mode plan|agent|both]
+ *
+ * `--mode` picks the planner: `plan` (default) is the one-shot planner
+ * production runs; `agent` is agent mode (`ASK_AGENT=1`,
+ * `src/lib/services/ask/agent.ts`), the bounded tool loop over the
+ * connector's read tools; `both` runs every question through each, one after
+ * the other, and the report opens with a `## Side by side` section — pass
+ * rate, latency, queries and model calls per mode, and a row per question.
+ * Agent runs are graded without the `modelCalls` and `queries` ceilings,
+ * which are the one-shot planner's budget; every other check is the same.
  *
  * A question may carry an `expect` block (`AskEvalExpect` in
  * `scripts/lib/ask-eval-grade.ts`): the error code or `none`, the planner's
@@ -82,7 +91,8 @@ import { createClient } from "@supabase/supabase-js";
 import type { AskEvalExpect, AskEvalGrade } from "./lib/ask-eval-grade";
 import { parseSubs, subArgs, substituteQuestion } from "./lib/ask-eval-subs";
 import { loadEnvLocal } from "./lib/env";
-import type { AskModelCall } from "@/lib/services/ask/ask";
+import type { AskDatabase, AskModelCall } from "@/lib/services/ask/ask";
+import type { AskAgentToolTurn } from "@/lib/services/ask/agent";
 
 loadEnvLocal();
 for (const key of Object.keys(process.env)) {
@@ -285,7 +295,7 @@ async function main() {
   const out = arg("out");
   if (!out) {
     console.error(
-      'Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade] [--no-examples] [--retries 1]',
+      'Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade] [--no-examples] [--retries 1] [--mode plan|agent|both]',
     );
     process.exit(2);
   }
@@ -333,6 +343,15 @@ async function main() {
   const grading = process.argv.includes("--grade");
   const withExamples = !process.argv.includes("--no-examples");
   const retries = Math.max(0, Math.floor(Number(arg("retries") ?? 0)) || 0);
+  const modeArg = arg("mode") ?? "plan";
+  if (!["plan", "agent", "both"].includes(modeArg)) {
+    console.error(`--mode must be plan, agent or both, not ${modeArg}.`);
+    process.exit(2);
+  }
+  const modes: EvalMode[] =
+    modeArg === "both" ? ["plan", "agent"] : [modeArg as EvalMode];
+  const { createAskAgentToolbox } = await import("@/lib/services/mcp/server");
+  const { createMcpUserReads } = await import("@/lib/services/mcp/user-reads");
 
   if (!isLLMConfigured()) {
     console.error(
@@ -451,8 +470,16 @@ async function main() {
   ];
   // The `## Score` section goes in here, once every question has run.
   const headerLines = report.length;
-  /** Every question that ran (or whose tags were refused), with its grade. */
-  const grades: { index: number; q: string; grade: AskEvalGrade }[] = [];
+  /** Every question that ran (or whose tags were refused), with its grade, per mode. */
+  const gradesBy: Record<
+    EvalMode,
+    {
+      index: number;
+      q: string;
+      grade: AskEvalGrade;
+      run: EvalRunStats | null;
+    }[]
+  > = { plan: [], agent: [] };
   /**
    * Each earlier exchange in the shape `ask_save_exchange()` stores it — the
    * question with its saved tags, the answer with its headline and body — so
@@ -460,10 +487,12 @@ async function main() {
    * `conversationTurnsFromMessages()` the route uses. Null when the question
    * was skipped (`--only`) or produced no answer.
    */
-  const transcripts: ({
+  type Transcript = {
     question: { text: string; tags: unknown };
     answer: { headline: string; body: string; sql?: string; scopeSql?: string };
-  } | null)[] = [];
+  } | null;
+  /** Per mode: a follow-up continues the conversation its own mode had. */
+  const transcriptsBy: Record<EvalMode, Transcript[]> = { plan: [], agent: [] };
 
   /**
    * One run of one question: its report block, its transcript slot, its
@@ -474,8 +503,12 @@ async function main() {
     index: number,
     entry: EvalQuestion,
     attempt: number,
-  ): Promise<AskEvalGrade> => {
-    const retryMark = attempt > 0 ? ` (retry ${attempt})` : "";
+    mode: EvalMode,
+  ): Promise<{ grade: AskEvalGrade; run: EvalRunStats | null }> => {
+    const transcripts = transcriptsBy[mode];
+    const retryMark =
+      (modes.length > 1 ? ` [${mode}]` : "") +
+      (attempt > 0 ? ` (retry ${attempt})` : "");
     const requested = [
       ...(entry.opponents ?? []).map((name) => {
         const found = options.opponents.find(
@@ -514,7 +547,7 @@ async function main() {
       process.stdout.write(
         `${index + 1}/${questions.length} TAG REFUSED ${entry.q}${retryMark} · ${gradeLabel(grade)}\n`,
       );
-      return grade;
+      return { grade, run: null };
     }
 
     const modelReplies: string[] = [];
@@ -580,6 +613,34 @@ async function main() {
           }
         })();
       },
+      // Agent mode's turns: a finish is recorded as the plan reply the
+      // pipeline parsed from it (`onReply` below) — what the grader reads a
+      // shape from; its raw arguments can carry stray shape fields the agent
+      // drops — and any other turn as the calls it made, with the queries'
+      // SQL in the report below.
+      ...(mode === "agent" && adapter.toolTurn
+        ? {
+            toolTurn: (async (system, messages, tools, call) => {
+              const turn = await adapter.toolTurn!(
+                system,
+                messages,
+                tools,
+                call,
+              );
+              const finish = turn.toolCalls.find(
+                (one) => one.name === "finish",
+              );
+              modelReplies.push(
+                finish
+                  ? FINISH_PLACEHOLDER
+                  : turn.toolCalls.length > 0
+                    ? `[agent] ${turn.toolCalls.map((one) => one.name).join(", ")}`
+                    : `[agent, no call] ${turn.text}`,
+              );
+              return turn;
+            }) satisfies AskAgentToolTurn,
+          }
+        : {}),
     };
 
     const prior = entry.after === undefined ? null : transcripts[entry.after];
@@ -645,6 +706,23 @@ async function main() {
         reservation: null,
         scope,
         examples,
+        ...(mode === "agent"
+          ? {
+              agent: {
+                toolbox: (questionDb: AskDatabase) =>
+                  createAskAgentToolbox({
+                    db: questionDb,
+                    reads: createMcpUserReads(supabase, viewerId),
+                    userId: viewerId,
+                    scope,
+                  }),
+                onReply: (reply: string) => {
+                  const slot = modelReplies.lastIndexOf(FINISH_PLACEHOLDER);
+                  if (slot >= 0) modelReplies[slot] = reply;
+                },
+              },
+            }
+          : {}),
       })) {
         events.push(event as unknown as Record<string, unknown>);
       }
@@ -674,27 +752,31 @@ async function main() {
       unknown[] | undefined;
 
     // What the grader reads: the same events and queries the report prints.
-    const grade = gradeTranscript(entry.expect, {
-      seconds: elapsed,
-      modelReplies,
-      queries: queries.map((query) => ({
-        scope: typeof query.scope === "string" ? query.scope : null,
-        sql: typeof query.sql === "string" ? query.sql : null,
-        error: query.error === null ? null : String(query.error),
-      })),
-      headline: headline ?? null,
-      figures: figures.map((figure) => ({
-        label: String(figure.label),
-        value: String(figure.value),
-      })),
-      visual:
-        visual && typeof visual.kind === "string"
-          ? { kind: visual.kind }
-          : null,
-      body: body.trim(),
-      error: failure ? String(failure.code ?? failure.type) : null,
-      notice,
-    });
+    const grade = gradeTranscript(
+      entry.expect,
+      {
+        seconds: elapsed,
+        modelReplies,
+        queries: queries.map((query) => ({
+          scope: typeof query.scope === "string" ? query.scope : null,
+          sql: typeof query.sql === "string" ? query.sql : null,
+          error: query.error === null ? null : String(query.error),
+        })),
+        headline: headline ?? null,
+        figures: figures.map((figure) => ({
+          label: String(figure.label),
+          value: String(figure.value),
+        })),
+        visual:
+          visual && typeof visual.kind === "string"
+            ? { kind: visual.kind }
+            : null,
+        body: body.trim(),
+        error: failure ? String(failure.code ?? failure.type) : null,
+        notice,
+      },
+      mode === "agent" ? { ignore: ["modelCalls", "queries"] } : {},
+    );
 
     lines.push(
       `_${seconds}s · ${queries.length} quer${queries.length === 1 ? "y" : "ies"} · ${modelReplies.length} model calls_`,
@@ -764,29 +846,42 @@ async function main() {
     process.stdout.write(
       `${index + 1}/${questions.length} ${failure ? "ERR " + String(failure.code ?? "") : visual ? "ok +" + String(visual.kind) : "ok"} (${seconds}s) ${entry.q}${retryMark} · ${gradeLabel(grade)}\n`,
     );
-    return grade;
+    return {
+      grade,
+      run: {
+        seconds: elapsed,
+        queries: queries.length,
+        modelCalls: modelReplies.length,
+        error: failure ? String(failure.code ?? failure.type) : null,
+      },
+    };
   };
 
   for (const [index, entry] of questions.entries()) {
-    if (only && !only.includes(index)) {
-      transcripts.push(null);
-      continue;
+    for (const mode of modes) {
+      if (only && !only.includes(index)) {
+        transcriptsBy[mode].push(null);
+        continue;
+      }
+      let ran = await runQuestion(index, entry, 0, mode);
+      // A scored failure is run again, up to `--retries` times, and the last
+      // run is what the score counts; the earlier blocks stay in the report.
+      for (
+        let attempt = 1;
+        attempt <= retries && ran.grade.scored && !ran.grade.pass;
+        attempt++
+      ) {
+        transcriptsBy[mode].pop();
+        ran = await runQuestion(index, entry, attempt, mode);
+      }
+      gradesBy[mode].push({ index, q: entry.q, ...ran });
     }
-    let grade = await runQuestion(index, entry, 0);
-    // A scored failure is run again, up to `--retries` times, and the last
-    // run is what the score counts; the earlier blocks stay in the report.
-    for (
-      let attempt = 1;
-      attempt <= retries && grade.scored && !grade.pass;
-      attempt++
-    ) {
-      transcripts.pop();
-      grade = await runQuestion(index, entry, attempt);
-    }
-    grades.push({ index, q: entry.q, grade });
   }
 
   // ── Score ──────────────────────────────────────────────────────────────
+  // One mode: its grades, as before. Both: the plan grades head the score
+  // section, and the side-by-side section below it compares the two.
+  const grades = gradesBy[modes[0]];
   const score = tally(grades.map((entry) => entry.grade));
   const scoreLine = `${score.passed} passed · ${score.failed} failed · ${score.unscored} unscored`;
   const failing = grades.filter(
@@ -810,13 +905,112 @@ async function main() {
                 `- ${entry.index + 1}. ${entry.q} — ${failedReasons(entry.grade).join("; ")}`,
             )),
     "",
+    ...(modes.length > 1 ? sideBySide(gradesBy, tally) : []),
   );
 
   writeFileSync(out, report.join("\n"));
   await supabase.auth.signOut();
-  process.stdout.write(`\nScore: ${scoreLine}\nReport: ${out}\n`);
+  for (const mode of modes.slice(1)) {
+    const other = tally(gradesBy[mode].map((entry) => entry.grade));
+    process.stdout.write(
+      `\nScore [${mode}]: ${other.passed} passed · ${other.failed} failed · ${other.unscored} unscored`,
+    );
+  }
+  process.stdout.write(
+    `\nScore${modes.length > 1 ? ` [${modes[0]}]` : ""}: ${scoreLine}\nReport: ${out}\n`,
+  );
   // `--grade`: the exit code is the verdict, for a workflow to fail on.
-  if (grading && score.failed > 0) process.exit(1);
+  const anyFailed = modes.some((mode) =>
+    gradesBy[mode].some((entry) => entry.grade.scored && !entry.grade.pass),
+  );
+  if (grading && anyFailed) process.exit(1);
+}
+
+type EvalMode = "plan" | "agent";
+
+/** An agent turn that called finish, until `onReply` puts the parsed reply in its place. */
+const FINISH_PLACEHOLDER = "[agent] finish";
+
+/** What the side-by-side section reads of one run. */
+interface EvalRunStats {
+  seconds: number;
+  queries: number;
+  modelCalls: number;
+  error: string | null;
+}
+
+function median(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function mean(values: readonly number[]): number | null {
+  return values.length === 0
+    ? null
+    : values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+/** The `## Side by side` section: per mode, then per question. */
+function sideBySide(
+  gradesBy: Record<
+    EvalMode,
+    {
+      index: number;
+      q: string;
+      grade: AskEvalGrade;
+      run: EvalRunStats | null;
+    }[]
+  >,
+  tally: (grades: AskEvalGrade[]) => {
+    passed: number;
+    failed: number;
+    unscored: number;
+  },
+): string[] {
+  const fixed = (value: number | null, digits = 1) =>
+    value === null ? "—" : value.toFixed(digits);
+  const summary = (mode: EvalMode) => {
+    const entries = gradesBy[mode];
+    const score = tally(entries.map((entry) => entry.grade));
+    const runs = entries.flatMap((entry) => (entry.run ? [entry.run] : []));
+    const scored = score.passed + score.failed;
+    return `| ${mode} | ${score.passed}/${scored}${scored > 0 ? ` (${Math.round((100 * score.passed) / scored)}%)` : ""} | ${runs.filter((run) => run.error !== null).length} | ${fixed(median(runs.map((run) => run.seconds)))} | ${fixed(mean(runs.map((run) => run.seconds)))} | ${fixed(Math.max(0, ...runs.map((run) => run.seconds)))} | ${fixed(mean(runs.map((run) => run.queries)))} | ${fixed(mean(runs.map((run) => run.modelCalls)))} |`;
+  };
+  const cell = (entry: (typeof gradesBy)["plan"][number] | undefined) => {
+    if (!entry) return "— | — | —";
+    const verdict = !entry.grade.scored
+      ? "unscored"
+      : entry.grade.pass
+        ? "PASS"
+        : "FAIL";
+    const run = entry.run;
+    return run
+      ? `${verdict}${run.error ? ` (${run.error})` : ""} | ${run.seconds.toFixed(1)}s | ${run.queries}q · ${run.modelCalls}m`
+      : `${verdict} (tag refused) | — | —`;
+  };
+  const byIndex = new Map(gradesBy.agent.map((entry) => [entry.index, entry]));
+  return [
+    "## Side by side",
+    "",
+    "Agent runs are graded without the modelCalls and queries ceilings (the one-shot planner's budget).",
+    "",
+    "| Mode | Passed | Errors | Median s | Mean s | Max s | Mean queries | Mean model calls |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    summary("plan"),
+    summary("agent"),
+    "",
+    "| # | Question | Plan | s | q · m | Agent | s | q · m |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    ...gradesBy.plan.map(
+      (entry) =>
+        `| ${entry.index + 1} | ${entry.q.replace(/\|/g, "\\|")} | ${cell(entry)} | ${cell(byIndex.get(entry.index))} |`,
+    ),
+    "",
+  ];
 }
 
 main().catch((thrown) => {

@@ -13,6 +13,7 @@
 import {
   createLLMObservabilityContext,
   getLLMStream,
+  getLLMToolTurn,
   isLLMConfigured,
   resolvedLLMModel,
 } from "@/lib/llm/adapter";
@@ -63,6 +64,20 @@ export function askAdapterModel(input: {
         jsonSchema: call?.jsonSchema,
         staticPrefixLength: call?.staticPrefixLength,
         signal: input.signal,
+      }),
+    // Agent mode's turns (`agent.ts`) run on the plan stage's model: they
+    // write the plan. The loop's deadline aborts a turn beside the request.
+    toolTurn: (systemPrompt, messages, tools, call) =>
+      getLLMToolTurn(systemPrompt, messages, tools, observability, {
+        span: "ask.agent",
+        model: stage.plan,
+        temperature: 0,
+        toolChoice: call.toolChoice,
+        staticPrefixLength: call.staticPrefixLength,
+        signal:
+          input.signal && call.signal
+            ? AbortSignal.any([input.signal, call.signal])
+            : (call.signal ?? input.signal),
       }),
   };
 }

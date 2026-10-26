@@ -132,6 +132,8 @@ import type {
 } from "@/lib/data/personal-opponents";
 import type { TeamOpponent } from "@/lib/data/team-opponents";
 import type { McpUserReads } from "@/lib/services/mcp/user-reads";
+import type { LLMTool } from "@/lib/llm/adapter";
+import type { AskAgentToolbox } from "@/lib/services/ask/agent";
 
 /** What the server is handed per request; see the module comment for who owns what. */
 export interface AskMcpContext {
@@ -402,6 +404,270 @@ const PROGRAM_ID = z
     "A program's id, to read that program's matches as a member of it. Omit for the player's own matches.",
   );
 
+/** The read tools' descriptions, shared by the connector and Ask's agent mode. */
+const READ_TOOL_DESCRIPTIONS = {
+  list_matches:
+    "The matches in scope — the signed-in player's own, or one program's with program_id — newest first, with each match's id, date (played_on, UTC), opponent, score from the player's seat, result (i_won), source (video, swingvision, or null when entered by hand), tournament, match type and whether statistics exist for it. These are exactly the rows a query can read.",
+  get_match:
+    "One match in full, with no SQL: its ask.matches row (date, opponent, score from the player's seat, result, source, tournament), both sides of ask.match_stats (me and opponent — every count, percentage and rating the views carry), the AI summary with strengths and weaknesses for each side and the key moments where analysis produced them, the match page's URL, and its public share link when one has been created in the app. Call it before summarising a match.",
+  opponent_scouting:
+    "The Opponents page's record, one entry per opponent the player (or the program, with program_id) has faced: hand and backhand, matches played, wins and losses, the last five results as form, the most recent meeting, up to six recent meetings with the player's side of four measures (total points won, first-serve points won, first-return points won, break points converted), and each measure's recent average with its trend against earlier meetings. In a program scope each entry also says which roster players faced them. Pass opponent to filter by name. Tendencies beyond these four measures — serve zones, rally lengths, return depth against one opponent — are a run_query away.",
+  describe_views:
+    "The five read-only views a query may read (ask.matches, ask.match_stats, ask.points, ask.shots, ask.point_plays), every column with its meaning, the percentage definitions, and the rules run_query holds a query to. Call it once before writing SQL.",
+  run_query: `One read-only SELECT over the ask views, as the signed-in player (or a program, with program_id). sql must read its matches from scope — "join scope on match_id" or "where match_id in (select match_id from scope)" — where scope holds the match ids scope_sql returns (default: every match in scope). Refused before it runs when it reads anything but the five views, calls a function off the allowlist, or sums ask.match_stats without mentioning side. At most ${MCP_QUERY_ROW_CAP} rows.`,
+} as const;
+
+/** What the read tools need: the question's database, the user-side reads, and whose they are. */
+export interface AskReadDeps {
+  db: AskDatabase;
+  reads: McpUserReads;
+  userId: string;
+}
+
+/**
+ * The read tools' handlers, outside the MCP server so Ask's agent mode
+ * (`createAskAgentToolbox()` below) runs the very same code. Each throws a
+ * `Refusal` for what the caller can fix; `guarded()` (the connector) and the
+ * toolbox (agent mode) each turn it into a tool result.
+ */
+export function askReadHandlers(deps: AskReadDeps) {
+  // ── Scope ──────────────────────────────────────────────────────────────
+  // A program id names a workspace; whether the caller is in it is read
+  // here, as the user, before a row of the program is.
+  async function resolveScope(
+    programId: string | undefined,
+  ): Promise<AskScope> {
+    if (programId === undefined) return PERSONAL_ASK_SCOPE;
+    if (!isUuid(programId)) {
+      throw refusal("invalid_program_id", "program_id must be a uuid.");
+    }
+    const program = await deps.reads.program(programId);
+    if (!program) {
+      throw refusal("not_a_member", "You are not a member of this program.");
+    }
+    return { kind: "team", programId: program.id, programName: program.name };
+  }
+
+  // ── The one way to the database ────────────────────────────────────────
+  async function runAskQuery(
+    scope: AskScope,
+    scopeSql: string,
+    sql: string,
+  ): Promise<{ rows: Row[]; matches: AskSourceMatch[] }> {
+    const checked = checkAskSql({ scopeSql, sql });
+    if (!checked.ok) {
+      throw refusal("sql_refused", checked.reason);
+    }
+    const team = scope.kind === "team";
+    const { data, error } = team
+      ? await deps.db.rpc("ask_run_team_query", {
+          p_program_id: scope.programId,
+          scope_sql: scopeSql,
+          sql,
+        })
+      : await deps.db.rpc("ask_run_query", { scope_sql: scopeSql, sql });
+    if (error) {
+      throw refusal("query_failed", databaseHint(error.message));
+    }
+    const record = asRecord(data);
+    if (
+      !record ||
+      !Array.isArray(record.matches) ||
+      !Array.isArray(record.rows)
+    ) {
+      throw new Error("ask_run_query() answered an unexpected shape");
+    }
+    return {
+      rows: record.rows
+        .flatMap((row): Row[] => {
+          const cells = asRecord(row);
+          return cells ? [cells] : [];
+        })
+        .slice(0, MCP_QUERY_ROW_CAP),
+      matches: record.matches.flatMap((row) => sourceMatch(row, team) ?? []),
+    };
+  }
+
+  // ── list_matches ───────────────────────────────────────────────────────
+  async function listMatches({
+    program_id,
+  }: {
+    program_id?: string;
+  }): Promise<CallToolResult> {
+    const scope = await resolveScope(program_id);
+    const team = scope.kind === "team";
+    const { rows } = await runAskQuery(
+      scope,
+      ASK_ALL_MATCHES_SCOPE,
+      listMatchesSql(team),
+    );
+    const matches = rows.map((row) => listedMatch(row, team));
+    return json({
+      scope: scope.kind,
+      program_id: team ? scope.programId : null,
+      count: matches.length,
+      truncated: matches.length >= MCP_QUERY_ROW_CAP,
+      matches,
+    });
+  }
+
+  // ── list_workspaces ────────────────────────────────────────────────────
+  async function listWorkspaces(): Promise<CallToolResult> {
+    const programs = await deps.reads.programs();
+    return json({
+      personal: {
+        id: deps.userId,
+        label: "Your own matches (no program_id)",
+      },
+      programs: programs.map((program) => ({
+        program_id: program.id,
+        name: program.name,
+        team: program.team,
+        role: program.role,
+        status: program.status,
+      })),
+    });
+  }
+
+  // ── get_match ──────────────────────────────────────────────────────────
+  async function getMatch({
+    match_id,
+    program_id,
+  }: {
+    match_id: string;
+    program_id?: string;
+  }): Promise<CallToolResult> {
+    const scope = await resolveScope(program_id);
+    const team = scope.kind === "team";
+    // The view decides visibility: a match outside the scope has no row.
+    const { rows } = await runAskQuery(
+      scope,
+      oneMatchScope(match_id),
+      matchRowSql(team),
+    );
+    const row = rows[0];
+    if (!row) {
+      throw refusal(
+        "match_not_found",
+        team
+          ? "This match is not in the program's matches."
+          : "This match is not in your matches.",
+      );
+    }
+    const [{ rows: statRows }, report] = await Promise.all([
+      row.has_stats === true
+        ? runAskQuery(scope, oneMatchScope(match_id), MATCH_STATS_SQL)
+        : Promise.resolve({ rows: [] as Row[] }),
+      deps.reads.matchReport(match_id),
+    ]);
+    const side = (name: "me" | "opponent") =>
+      statRows.find((stat) => stat.side === name) ?? null;
+    return json({
+      scope: scope.kind,
+      program_id: team ? scope.programId : null,
+      match: {
+        ...listedMatch(row, team),
+        opponent_hand: row.opponent_hand ?? null,
+        opponent_backhand: row.opponent_backhand ?? null,
+        round: row.round ?? null,
+        court_type: row.court_type ?? null,
+        duration_seconds: row.duration_seconds ?? null,
+      },
+      stats:
+        statRows.length > 0
+          ? { me: side("me"), opponent: side("opponent") }
+          : null,
+      insights: report ? orientInsights(report.insights, report.seat) : null,
+      key_moments: report?.keyMoments ?? null,
+      match_url: matchPageUrl(match_id),
+      share_url: report?.shareToken ? matchShareUrl(report.shareToken) : null,
+    });
+  }
+
+  // ── opponent_scouting ──────────────────────────────────────────────────
+  async function opponentScouting({
+    opponent,
+    program_id,
+  }: {
+    opponent?: string;
+    program_id?: string;
+  }): Promise<CallToolResult> {
+    const scope = await resolveScope(program_id);
+    const team = scope.kind === "team";
+    const data = team
+      ? await deps.reads.teamOpponents(scope.programId)
+      : await deps.reads.personalOpponents();
+    const needle = opponent?.toLowerCase() ?? null;
+    const listed = (data.opponents as (PersonalOpponent | TeamOpponent)[])
+      .filter(
+        (entry) => needle === null || entry.name.toLowerCase().includes(needle),
+      )
+      .slice(0, MCP_QUERY_ROW_CAP);
+    return json({
+      scope: scope.kind,
+      program_id: team ? scope.programId : null,
+      season: data.season,
+      totals: data.totals,
+      count: listed.length,
+      opponents: listed.map(scoutedOpponent),
+    });
+  }
+
+  // ── describe_views ─────────────────────────────────────────────────────
+  async function describeViews({
+    scope,
+  }: {
+    scope?: "personal" | "team";
+  }): Promise<CallToolResult> {
+    return text(describeAskViews(scope ?? "personal"));
+  }
+
+  // ── run_query ──────────────────────────────────────────────────────────
+  async function runQuery({
+    sql,
+    scope_sql,
+    program_id,
+  }: {
+    sql: string;
+    scope_sql?: string;
+    program_id?: string;
+  }): Promise<CallToolResult> {
+    const scope = await resolveScope(program_id);
+    const { rows, matches } = await runAskQuery(
+      scope,
+      scope_sql ?? ASK_ALL_MATCHES_SCOPE,
+      sql,
+    );
+    return json({
+      scope: scope.kind,
+      program_id: scope.kind === "team" ? scope.programId : null,
+      row_count: rows.length,
+      truncated: rows.length >= MCP_QUERY_ROW_CAP,
+      rows,
+      matches_in_scope: matches.length,
+      matches: matches.slice(0, MAX_LISTED_SOURCES).map((match) => ({
+        match_id: match.matchId,
+        played_on: match.playedOn,
+        opponent: match.opponentName,
+        score: match.scoreText,
+        i_won: match.iWon,
+        ...(scope.kind === "team" ? { player: match.playerName } : {}),
+      })),
+    });
+  }
+
+  return {
+    resolveScope,
+    runAskQuery,
+    listMatches,
+    listWorkspaces,
+    getMatch,
+    opponentScouting,
+    describeViews,
+    runQuery,
+  };
+}
+
 export function createAskMcpServer(context: AskMcpContext): McpServer {
   const dailyCap = context.dailyCap ?? MCP_DAILY_CALL_CAP;
   const now = context.now ?? (() => new Date());
@@ -409,6 +675,12 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     { name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION },
     { instructions: INSTRUCTIONS },
   );
+  const read = askReadHandlers({
+    db: context.db,
+    reads: context.reads,
+    userId: context.caller.userId,
+  });
+  const { resolveScope, runAskQuery } = read;
 
   // ── The guard every tool runs under ────────────────────────────────────
   // The two limits first, then the tool; one `mcp_tool_call` event however
@@ -473,90 +745,16 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     };
   }
 
-  // ── Scope ──────────────────────────────────────────────────────────────
-  // A program id names a workspace; whether the caller is in it is read
-  // here, as the user, before a row of the program is.
-  async function resolveScope(
-    programId: string | undefined,
-  ): Promise<AskScope> {
-    if (programId === undefined) return PERSONAL_ASK_SCOPE;
-    if (!isUuid(programId)) {
-      throw refusal("invalid_program_id", "program_id must be a uuid.");
-    }
-    const program = await context.reads.program(programId);
-    if (!program) {
-      throw refusal("not_a_member", "You are not a member of this program.");
-    }
-    return { kind: "team", programId: program.id, programName: program.name };
-  }
-
-  // ── The one way to the database ────────────────────────────────────────
-  async function runAskQuery(
-    scope: AskScope,
-    scopeSql: string,
-    sql: string,
-  ): Promise<{ rows: Row[]; matches: AskSourceMatch[] }> {
-    const checked = checkAskSql({ scopeSql, sql });
-    if (!checked.ok) {
-      throw refusal("sql_refused", checked.reason);
-    }
-    const team = scope.kind === "team";
-    const { data, error } = team
-      ? await context.db.rpc("ask_run_team_query", {
-          p_program_id: scope.programId,
-          scope_sql: scopeSql,
-          sql,
-        })
-      : await context.db.rpc("ask_run_query", { scope_sql: scopeSql, sql });
-    if (error) {
-      throw refusal("query_failed", databaseHint(error.message));
-    }
-    const record = asRecord(data);
-    if (
-      !record ||
-      !Array.isArray(record.matches) ||
-      !Array.isArray(record.rows)
-    ) {
-      throw new Error("ask_run_query() answered an unexpected shape");
-    }
-    return {
-      rows: record.rows
-        .flatMap((row): Row[] => {
-          const cells = asRecord(row);
-          return cells ? [cells] : [];
-        })
-        .slice(0, MCP_QUERY_ROW_CAP),
-      matches: record.matches.flatMap((row) => sourceMatch(row, team) ?? []),
-    };
-  }
-
   // ── list_matches ───────────────────────────────────────────────────────
   server.registerTool(
     "list_matches",
     {
       title: "List matches",
-      description:
-        "The matches in scope — the signed-in player's own, or one program's with program_id — newest first, with each match's id, date (played_on, UTC), opponent, score from the player's seat, result (i_won), source (video, swingvision, or null when entered by hand), tournament, match type and whether statistics exist for it. These are exactly the rows a query can read.",
+      description: READ_TOOL_DESCRIPTIONS.list_matches,
       inputSchema: { program_id: PROGRAM_ID },
       annotations: { readOnlyHint: true, idempotentHint: true },
     },
-    guarded("list_matches", async ({ program_id }) => {
-      const scope = await resolveScope(program_id);
-      const team = scope.kind === "team";
-      const { rows } = await runAskQuery(
-        scope,
-        ASK_ALL_MATCHES_SCOPE,
-        listMatchesSql(team),
-      );
-      const matches = rows.map((row) => listedMatch(row, team));
-      return json({
-        scope: scope.kind,
-        program_id: team ? scope.programId : null,
-        count: matches.length,
-        truncated: matches.length >= MCP_QUERY_ROW_CAP,
-        matches,
-      });
-    }),
+    guarded("list_matches", read.listMatches),
   );
 
   // ── list_workspaces ────────────────────────────────────────────────────
@@ -569,22 +767,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       inputSchema: {},
       annotations: { readOnlyHint: true, idempotentHint: true },
     },
-    guarded("list_workspaces", async () => {
-      const programs = await context.reads.programs();
-      return json({
-        personal: {
-          id: context.caller.userId,
-          label: "Your own matches (no program_id)",
-        },
-        programs: programs.map((program) => ({
-          program_id: program.id,
-          name: program.name,
-          team: program.team,
-          role: program.role,
-          status: program.status,
-        })),
-      });
-    }),
+    guarded("list_workspaces", read.listWorkspaces),
   );
 
   // ── get_match ──────────────────────────────────────────────────────────
@@ -592,61 +775,14 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     "get_match",
     {
       title: "Get a match report",
-      description:
-        "One match in full, with no SQL: its ask.matches row (date, opponent, score from the player's seat, result, source, tournament), both sides of ask.match_stats (me and opponent — every count, percentage and rating the views carry), the AI summary with strengths and weaknesses for each side and the key moments where analysis produced them, the match page's URL, and its public share link when one has been created in the app. Call it before summarising a match.",
+      description: READ_TOOL_DESCRIPTIONS.get_match,
       inputSchema: {
         match_id: z.string().uuid().describe("A match id from list_matches."),
         program_id: PROGRAM_ID,
       },
       annotations: { readOnlyHint: true, idempotentHint: true },
     },
-    guarded("get_match", async ({ match_id, program_id }) => {
-      const scope = await resolveScope(program_id);
-      const team = scope.kind === "team";
-      // The view decides visibility: a match outside the scope has no row.
-      const { rows } = await runAskQuery(
-        scope,
-        oneMatchScope(match_id),
-        matchRowSql(team),
-      );
-      const row = rows[0];
-      if (!row) {
-        throw refusal(
-          "match_not_found",
-          team
-            ? "This match is not in the program's matches."
-            : "This match is not in your matches.",
-        );
-      }
-      const [{ rows: statRows }, report] = await Promise.all([
-        row.has_stats === true
-          ? runAskQuery(scope, oneMatchScope(match_id), MATCH_STATS_SQL)
-          : Promise.resolve({ rows: [] as Row[] }),
-        context.reads.matchReport(match_id),
-      ]);
-      const side = (name: "me" | "opponent") =>
-        statRows.find((stat) => stat.side === name) ?? null;
-      return json({
-        scope: scope.kind,
-        program_id: team ? scope.programId : null,
-        match: {
-          ...listedMatch(row, team),
-          opponent_hand: row.opponent_hand ?? null,
-          opponent_backhand: row.opponent_backhand ?? null,
-          round: row.round ?? null,
-          court_type: row.court_type ?? null,
-          duration_seconds: row.duration_seconds ?? null,
-        },
-        stats:
-          statRows.length > 0
-            ? { me: side("me"), opponent: side("opponent") }
-            : null,
-        insights: report ? orientInsights(report.insights, report.seat) : null,
-        key_moments: report?.keyMoments ?? null,
-        match_url: matchPageUrl(match_id),
-        share_url: report?.shareToken ? matchShareUrl(report.shareToken) : null,
-      });
-    }),
+    guarded("get_match", read.getMatch),
   );
 
   // ── opponent_scouting ──────────────────────────────────────────────────
@@ -654,8 +790,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     "opponent_scouting",
     {
       title: "Scout an opponent",
-      description:
-        "The Opponents page's record, one entry per opponent the player (or the program, with program_id) has faced: hand and backhand, matches played, wins and losses, the last five results as form, the most recent meeting, up to six recent meetings with the player's side of four measures (total points won, first-serve points won, first-return points won, break points converted), and each measure's recent average with its trend against earlier meetings. In a program scope each entry also says which roster players faced them. Pass opponent to filter by name. Tendencies beyond these four measures — serve zones, rally lengths, return depth against one opponent — are a run_query away.",
+      description: READ_TOOL_DESCRIPTIONS.opponent_scouting,
       inputSchema: {
         opponent: z
           .string()
@@ -670,28 +805,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       },
       annotations: { readOnlyHint: true, idempotentHint: true },
     },
-    guarded("opponent_scouting", async ({ opponent, program_id }) => {
-      const scope = await resolveScope(program_id);
-      const team = scope.kind === "team";
-      const data = team
-        ? await context.reads.teamOpponents(scope.programId)
-        : await context.reads.personalOpponents();
-      const needle = opponent?.toLowerCase() ?? null;
-      const listed = (data.opponents as (PersonalOpponent | TeamOpponent)[])
-        .filter(
-          (entry) =>
-            needle === null || entry.name.toLowerCase().includes(needle),
-        )
-        .slice(0, MCP_QUERY_ROW_CAP);
-      return json({
-        scope: scope.kind,
-        program_id: team ? scope.programId : null,
-        season: data.season,
-        totals: data.totals,
-        count: listed.length,
-        opponents: listed.map(scoutedOpponent),
-      });
-    }),
+    guarded("opponent_scouting", read.opponentScouting),
   );
 
   // ── update_match ───────────────────────────────────────────────────────
@@ -976,8 +1090,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     "describe_views",
     {
       title: "Describe the ask views",
-      description:
-        "The five read-only views a query may read (ask.matches, ask.match_stats, ask.points, ask.shots, ask.point_plays), every column with its meaning, the percentage definitions, and the rules run_query holds a query to. Call it once before writing SQL.",
+      description: READ_TOOL_DESCRIPTIONS.describe_views,
       inputSchema: {
         scope: z
           .enum(["personal", "team"])
@@ -988,9 +1101,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       },
       annotations: { readOnlyHint: true, idempotentHint: true },
     },
-    guarded("describe_views", async ({ scope }) =>
-      text(describeAskViews(scope ?? "personal")),
-    ),
+    guarded("describe_views", read.describeViews),
   );
 
   // ── run_query ──────────────────────────────────────────────────────────
@@ -998,7 +1109,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     "run_query",
     {
       title: "Run a query",
-      description: `One read-only SELECT over the ask views, as the signed-in player (or a program, with program_id). sql must read its matches from scope — "join scope on match_id" or "where match_id in (select match_id from scope)" — where scope holds the match ids scope_sql returns (default: every match in scope). Refused before it runs when it reads anything but the five views, calls a function off the allowlist, or sums ask.match_stats without mentioning side. At most ${MCP_QUERY_ROW_CAP} rows.`,
+      description: READ_TOOL_DESCRIPTIONS.run_query,
       inputSchema: {
         sql: z
           .string()
@@ -1017,30 +1128,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       },
       annotations: { readOnlyHint: true, idempotentHint: true },
     },
-    guarded("run_query", async ({ sql, scope_sql, program_id }) => {
-      const scope = await resolveScope(program_id);
-      const { rows, matches } = await runAskQuery(
-        scope,
-        scope_sql ?? ASK_ALL_MATCHES_SCOPE,
-        sql,
-      );
-      return json({
-        scope: scope.kind,
-        program_id: scope.kind === "team" ? scope.programId : null,
-        row_count: rows.length,
-        truncated: rows.length >= MCP_QUERY_ROW_CAP,
-        rows,
-        matches_in_scope: matches.length,
-        matches: matches.slice(0, MAX_LISTED_SOURCES).map((match) => ({
-          match_id: match.matchId,
-          played_on: match.playedOn,
-          opponent: match.opponentName,
-          score: match.scoreText,
-          i_won: match.iWon,
-          ...(scope.kind === "team" ? { player: match.playerName } : {}),
-        })),
-      });
-    }),
+    guarded("run_query", read.runQuery),
   );
 
   // ── ask ────────────────────────────────────────────────────────────────
@@ -1332,4 +1420,154 @@ async function drainAnswer(
     },
     summary,
   );
+}
+
+// ── Ask's agent mode ─────────────────────────────────────────────────────
+
+const AGENT_SQL_SCHEMA = {
+  type: "string",
+  maxLength: MAX_SQL_LENGTH,
+} as const;
+
+/**
+ * The read tools as Ask's agent mode calls them (`src/lib/services/ask/agent.ts`):
+ * the connector's handlers above, bound to the question's scope — the model
+ * passes no program_id, the route already checked membership — and to the
+ * question's database, so every query is checked by `checkAskSql()` and
+ * runs through `ask_run_query` / `ask_run_team_query` as the route's own
+ * do, counted in the run record. No rate limit or daily cap: the question
+ * itself is what is metered. A refusal is answered as `slug: sentence`, as
+ * the connector answers it.
+ */
+export function createAskAgentToolbox(
+  deps: AskReadDeps & { scope: AskScope },
+): AskAgentToolbox {
+  const read = askReadHandlers(deps);
+  const programId =
+    deps.scope.kind === "team" ? deps.scope.programId : undefined;
+  const definitions: LLMTool[] = [
+    {
+      name: "list_matches",
+      description: READ_TOOL_DESCRIPTIONS.list_matches,
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "get_match",
+      description: READ_TOOL_DESCRIPTIONS.get_match,
+      inputSchema: {
+        type: "object",
+        properties: {
+          match_id: { type: "string", description: "A match id." },
+        },
+        required: ["match_id"],
+      },
+    },
+    {
+      name: "opponent_scouting",
+      description: READ_TOOL_DESCRIPTIONS.opponent_scouting,
+      inputSchema: {
+        type: "object",
+        properties: {
+          opponent: {
+            type: "string",
+            description:
+              "Part of an opponent's name, matched case-insensitively. Omit for every opponent.",
+          },
+        },
+      },
+    },
+    {
+      name: "describe_views",
+      description: READ_TOOL_DESCRIPTIONS.describe_views,
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "run_query",
+      description: READ_TOOL_DESCRIPTIONS.run_query,
+      inputSchema: {
+        type: "object",
+        properties: {
+          scope_sql: {
+            ...AGENT_SQL_SCHEMA,
+            description: `A SELECT returning the single column match_id: the matches the question is about. Default: ${ASK_ALL_MATCHES_SCOPE}.`,
+          },
+          sql: {
+            ...AGENT_SQL_SCHEMA,
+            description:
+              "The SELECT that computes the answer; it must read scope.",
+          },
+        },
+        required: ["sql"],
+      },
+    },
+  ];
+
+  const string = (value: unknown) =>
+    typeof value === "string" && value.trim() !== "" ? value : undefined;
+  const run = (name: string, args: Record<string, unknown>) => {
+    switch (name) {
+      case "list_matches":
+        return read.listMatches({ program_id: programId });
+      case "get_match": {
+        const matchId = string(args.match_id);
+        if (!matchId || !isUuid(matchId)) {
+          throw refusal("invalid_match_id", "match_id must be a match's uuid.");
+        }
+        return read.getMatch({ match_id: matchId, program_id: programId });
+      }
+      case "opponent_scouting":
+        return read.opponentScouting({
+          opponent: string(args.opponent)?.trim().slice(0, 120),
+          program_id: programId,
+        });
+      case "describe_views":
+        return read.describeViews({ scope: deps.scope.kind });
+      case "run_query": {
+        const sql = string(args.sql);
+        const scopeSql = string(args.scope_sql);
+        if (
+          !sql ||
+          sql.length > MAX_SQL_LENGTH ||
+          (scopeSql?.length ?? 0) > MAX_SQL_LENGTH
+        ) {
+          throw refusal("invalid_sql", "sql must be one SELECT.");
+        }
+        return read.runQuery({
+          sql,
+          scope_sql: scopeSql,
+          program_id: programId,
+        });
+      }
+      default:
+        throw refusal("unknown_tool", `There is no tool named ${name}.`);
+    }
+  };
+
+  return {
+    definitions,
+    async call(name, args) {
+      try {
+        const result = await run(name, args);
+        const first = result.content[0];
+        return {
+          ok: result.isError !== true,
+          text: first && first.type === "text" ? first.text : "",
+          ...(result.structuredContent
+            ? { structured: result.structuredContent as Row }
+            : {}),
+        };
+      } catch (error) {
+        if (error instanceof Refusal) {
+          return { ok: false, text: `${error.slug}: ${error.sentence}` };
+        }
+        console.error(`[ask] agent tool ${name} failed`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return {
+          ok: false,
+          text: "internal_error: Something went wrong on our side. Try another way.",
+        };
+      }
+    },
+  };
 }
