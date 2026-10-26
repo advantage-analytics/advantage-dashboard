@@ -43,11 +43,14 @@ export async function acceptLegalTerms(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: row } = await supabase
+  const { data: row, error: roleError } = await supabase
     .from("users")
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
+  // The role decides whether the Guardian Terms are owed. Guessing on a
+  // failed read would record a guardian as agreeing without them.
+  if (roleError) return { ok: false, reason: "failed" };
 
   const missing = await readMissingLegalDocuments(
     supabase,

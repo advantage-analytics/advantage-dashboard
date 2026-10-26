@@ -381,11 +381,11 @@ export function claimObjectionNoticeEmail(
       label: "This isn't right",
       url: `${emailOrigin()}/claim/${encodeURIComponent(programKey)}/object`,
     },
-    note: "You're getting this because your address is on file as a contact for this program.",
     compliance: {
       postalAddress,
       unsubscribeUrl,
-      reason: "To stop emails from Advantage about this program,",
+      reason:
+        "You received this because your address is on file as a contact for this program.",
     },
   };
 

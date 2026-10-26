@@ -74,6 +74,8 @@ export type JoinActionResult = {
   age?: "required" | "too-young";
 };
 
+const SAVE_ERROR = "We couldn't save that. Try again.";
+
 /** The sentence for a join refused for want of a date of birth. */
 const AGE_REQUIRED_ERROR = "Add your date of birth to join.";
 
@@ -97,11 +99,19 @@ async function settleJoinDob(
   userId: string,
   dob: unknown,
 ): Promise<JoinActionResult | null> {
-  const { data: row } = await supabase
+  const { data: row, error: readError } = await supabase
     .from("users")
     .select("dob")
     .eq("id", userId)
     .maybeSingle();
+  // A failed read is not "no date on file": treating it so would write the
+  // sent date over one already stored.
+  if (readError) {
+    console.error("[join] could not read the date of birth", {
+      message: readError.message,
+    });
+    return { ok: false, error: SAVE_ERROR };
+  }
   const onFile = (row?.dob as string | null | undefined) ?? null;
   if (onFile) {
     return ageBand(onFile) === "child"
@@ -112,25 +122,54 @@ async function settleJoinDob(
   if (dob === undefined || dob === null || dob === "") {
     return { ok: false, error: AGE_REQUIRED_ERROR, age: "required" };
   }
+  const refused = checkJoinDob(dob);
+  if (refused) return refused;
+
+  // Only where none is stored, and confirmed by the row it changed: an update
+  // that matched nothing (no users row, or a date written in between) must
+  // not read as saved, or the accept below runs on a date that isn't there.
+  const { data: written, error } = await supabase
+    .from("users")
+    .update({ dob: dob as string })
+    .eq("id", userId)
+    .is("dob", null)
+    .select("id");
+  if (error || !written?.length) {
+    if (error) {
+      console.error("[join] could not save the date of birth", {
+        message: error.message,
+      });
+    }
+    return { ok: false, error: SAVE_ERROR };
+  }
+  return null;
+}
+
+/** A date that is not a real one, or is under 13, as a refusal; else null. */
+function checkJoinDob(dob: unknown): JoinActionResult | null {
   const band = ageBand(dob);
-  if (band === null || typeof dob !== "string") {
+  if (band === null) {
     return { ok: false, error: DOB_ERROR, age: "required" };
   }
   if (!ageAllows(band, true)) {
     return { ok: false, error: AGE_REFUSAL.child, age: "too-young" };
   }
-
-  const { error } = await supabase
-    .from("users")
-    .update({ dob })
-    .eq("id", userId);
-  if (error) {
-    console.error("[join] could not save the date of birth", {
-      message: error.message,
-    });
-    return { ok: false, error: "We couldn't save that. Try again." };
-  }
   return null;
+}
+
+/**
+ * The signed-in session, with the age gate settled for it. `refused` is the
+ * refusal to send back before any accept runs.
+ */
+async function sessionWithJoinDob(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  dob: unknown,
+) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const refused = user ? await settleJoinDob(supabase, user.id, dob) : null;
+  return { user, refused };
 }
 
 /** A refused accept, carrying the age code when the age gate refused it. */
@@ -452,14 +491,8 @@ export async function acceptInvite(
   dob?: string,
 ): Promise<JoinActionResult> {
   const supabase = await createClient();
-  // The session comes first now: the age gate needs it before the accept.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user) {
-    const refused = await settleJoinDob(supabase, user.id, dob);
-    if (refused) return refused;
-  }
+  const { user, refused } = await sessionWithJoinDob(supabase, dob);
+  if (refused) return refused;
   const outcome = await acceptWithSession(token, supabase);
   if (!outcome.ok) return refusal(outcome);
 
@@ -500,13 +533,8 @@ export async function acceptPendingInvite(
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user) {
-    const refused = await settleJoinDob(supabase, user.id, dob);
-    if (refused) return refused;
-  }
+  const { user, refused } = await sessionWithJoinDob(supabase, dob);
+  if (refused) return refused;
   const outcome = await acceptPendingWithSession(inviteId, supabase);
   if (!outcome.ok) return refusal(outcome);
 
@@ -551,13 +579,8 @@ export async function createAccountAndAccept(
 
   // The age gate, before an account exists: an under-13 is refused without
   // one ever being created, and nothing about them is stored.
-  const band = ageBand(input.dob);
-  if (band === null) {
-    return { ok: false, error: DOB_ERROR, age: "required" };
-  }
-  if (!ageAllows(band, true)) {
-    return { ok: false, error: AGE_REFUSAL.child, age: "too-young" };
-  }
+  const dobRefused = checkJoinDob(input.dob);
+  if (dobRefused) return dobRefused;
 
   // Re-checked immediately before the write, not just in `resolveJoinState`.
   // Two tabs on the same link, or a sign-up finishing elsewhere in between,
@@ -683,13 +706,8 @@ export async function acceptJoinLink(
   dob?: string,
 ): Promise<JoinActionResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user) {
-    const refused = await settleJoinDob(supabase, user.id, dob);
-    if (refused) return refused;
-  }
+  const { user, refused } = await sessionWithJoinDob(supabase, dob);
+  if (refused) return refused;
   const outcome = await acceptJoinLinkWithSession(token, supabase);
   return finishJoinLink(token, outcome, user?.id);
 }

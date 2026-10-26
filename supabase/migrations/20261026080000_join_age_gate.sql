@@ -21,7 +21,8 @@
 -- coach restoring someone who already joined).
 --
 -- New statuses, mapped to sentences in `join-actions.ts` `describe()`:
---   age_required  — `users.dob` is null; the screen asks for it
+--   age_required  — `users.dob` is null (or there is no users row); the
+--                   screen asks for it
 --   too_young     — under 13 by `users.dob`
 --
 -- APPLY WITH THE DEPLOY, never ahead of it: on the code before this change no
@@ -38,14 +39,16 @@ as $$
   select case
     when u.dob is null then 'age_required'
     when u.dob > (current_date - interval '13 years') then 'too_young'
+    else 'ok'
   end
   from public.users u
   where u.id = p_user_id;
 $$;
 
 comment on function public.join_age_refusal(uuid) is
-  'age_required / too_young / null for a user joining a team by link or '
-  'invitation. Read by accept_program_invite and accept_program_join_link.';
+  'ok / age_required / too_young for a user joining a team by link or '
+  'invitation; null when the user has no users row. Read by '
+  'accept_program_invite and accept_program_join_link, which refuse null.';
 
 revoke execute on function public.join_age_refusal(uuid)
   from public, anon, authenticated;
@@ -107,8 +110,9 @@ begin
   end if;
 
   -- The age gate (20261026080000): a date of birth on file, and 13 or older.
-  -- A missing users row also refuses (`coalesce`): nothing unknown joins.
-  v_age := coalesce(public.join_age_refusal(v_uid), 'ok');
+  -- A missing users row also refuses: the helper answers null for it, and
+  -- the `coalesce` turns that into `age_required`. Nothing unknown joins.
+  v_age := coalesce(public.join_age_refusal(v_uid), 'age_required');
   if v_age <> 'ok' then
     return query select v_age, v_invite.program_id;
     return;
@@ -261,7 +265,7 @@ begin
   -- The age gate (20261026080000): a date of birth on file, and 13 or older.
   -- Before an approve-mode request is filed, so an approved request was
   -- already age-checked.
-  v_age := coalesce(public.join_age_refusal(v_uid), 'ok');
+  v_age := coalesce(public.join_age_refusal(v_uid), 'age_required');
   if v_age <> 'ok' then
     return query select v_age, v_link.program_id;
     return;

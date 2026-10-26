@@ -41,6 +41,8 @@ const REDIRECT = "NEXT_REDIRECT";
 interface World {
   /** `users.dob` on file for the signed-in user. */
   dobOnFile: string | null;
+  /** The account has no `public.users` row at all. */
+  noUsersRow?: boolean;
   /** What the accept RPC answers. */
   outcome: { ok: true; programId: string } | { ok: false; status: string };
 }
@@ -63,15 +65,27 @@ function harness(world: World) {
       return {
         select: () => ({
           eq: () => ({
-            maybeSingle: async () => ({ data: { dob: world.dobOnFile } }),
+            maybeSingle: async () => ({
+              data: world.noUsersRow ? null : { dob: world.dobOnFile },
+              error: null,
+            }),
           }),
         }),
+        // `.update().eq().is("dob", null).select("id")`: only an empty
+        // date is written, and a write that matched no row reads as none.
         update: (values: { dob: string }) => ({
-          eq: async () => {
-            calls.dobWrites.push(values.dob);
-            world.dobOnFile = values.dob;
-            return { error: null };
-          },
+          eq: () => ({
+            is: () => ({
+              select: async () => {
+                if (world.noUsersRow || world.dobOnFile !== null) {
+                  return { data: [], error: null };
+                }
+                calls.dobWrites.push(values.dob);
+                world.dobOnFile = values.dob;
+                return { data: [{ id: "user-1" }], error: null };
+              },
+            }),
+          }),
         }),
       };
     },
@@ -277,6 +291,17 @@ for (const door of DOORS) {
       expect(calls.rpc).toEqual([]);
     });
 
+    test("a date that saved nowhere (no users row) never reaches the RPC", async () => {
+      const { actions, calls } = harness({
+        dobOnFile: null,
+        noUsersRow: true,
+        outcome: { ok: true, programId: "p1" },
+      });
+      const result = await run(() => door.call(actions, ADULT));
+      expect(result).toMatchObject({ ok: false });
+      expect(calls.rpc).toEqual([]);
+    });
+
     test("the database's own refusal comes back with its age code", async () => {
       const { actions } = harness({
         dobOnFile: ADULT,
@@ -387,6 +412,13 @@ test.describe("the database half", () => {
   test("missing date and under 13 refuse; the helper is not callable from a browser", () => {
     const helper = body("join_age_refusal");
     expect(helper).toContain("when u.dob is null then 'age_required'");
+    // No users row answers null, and both callers turn null into a refusal.
+    expect(helper).toContain("else 'ok'");
+    for (const name of ["accept_program_invite", "accept_program_join_link"]) {
+      expect(body(name)).toContain(
+        "coalesce(public.join_age_refusal(v_uid), 'age_required')",
+      );
+    }
     expect(helper).toContain(
       "when u.dob > (current_date - interval '13 years') then 'too_young'",
     );

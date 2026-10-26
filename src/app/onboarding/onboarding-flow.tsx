@@ -316,16 +316,17 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
     });
   };
 
-  // Both halves, non-blank. The server refuses anything less anyway
-  // (`parseTypedName`); this keeps the button honest about what a tap will do.
-  const nameReady =
+  // Both name halves non-blank and a complete date of birth. The server
+  // refuses anything less anyway (`parseTypedName`, `parseDob`); this keeps
+  // the button honest about what a tap will do.
+  const stepOneReady =
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
     dob !== "" &&
     !dobIncomplete;
 
   const continueFromName = () => {
-    if (!nameReady) return;
+    if (!stepOneReady) return;
     setError(null);
     // The gate's client half: a blocked band never reaches an action. The
     // actions apply the same rule again (`parseDob`), since they are RPCs.
@@ -649,7 +650,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
               <ClaimActions gap={16}>
                 <button
                   type="submit"
-                  disabled={!nameReady || (join !== undefined && isPending)}
+                  disabled={!stepOneReady || (join !== undefined && isPending)}
                   className={CLAIM_BUTTON}
                 >
                   {join && isPending ? "Saving…" : "Continue"}
