@@ -19,7 +19,6 @@ import {
   RotateCw,
   SkipBack,
   SkipForward,
-  ListVideo,
   Timer,
   TimerOff,
   Volume2,
@@ -44,7 +43,6 @@ import {
   REACHED_EPSILON_SECONDS,
   activeStopAt,
   setSegments,
-  deadTimeJump,
   nextStop,
   prevStop,
   type FilmStop,
@@ -57,6 +55,7 @@ import type {
 import { useSeekSettling } from "./use-seek-settling";
 import { useFilmReadOnly } from "./film-read-only";
 import { useSkipDead } from "./use-skip-dead";
+import { skipDeadAction, type SkipDeadMemo } from "./film-sequence";
 
 /**
  * The match video with the room's transport under it, in the tab.
@@ -106,12 +105,15 @@ import { useSkipDead } from "./use-skip-dead";
  * match the video pipeline produced.
  *
  * ── Loop and skip dead time ─────────────────────────────────────────────────
- * Both walk `allStops` — every timed point, not the cut — exactly as the room
- * does: the playhead is inside some point whether or not the filter admits
- * it. Loop remembers the point the film was last inside rather than asking
- * `activeStopAt` at the end of a window, for the reason the room's note gives:
- * a window clamped to the next one's start hands over just before its own
- * end, so "past the end of the active point" would never be true.
+ * Loop walks `allStops` — every timed point, not the cut — exactly as the
+ * room does: the playhead is inside some point whether or not the filter
+ * admits it. It remembers the point the film was last inside rather than
+ * asking `activeStopAt` at the end of a window, for the reason the room's
+ * note gives: a window clamped to the next one's start hands over just
+ * before its own end, so "past the end of the active point" would never be
+ * true. Skip dead time walks `stops` — the cut — through `skipDeadAction`
+ * (`film-sequence.ts`): with a filter on, only the listed points play, and
+ * the film pauses after the last of them.
  */
 
 export interface FilmPlayerHandle {
@@ -140,16 +142,6 @@ export interface FilmPlayerHandle {
 }
 
 interface FilmPlayerProps {
-  /**
-   * "Play in sequence" (roadmap 6.3): the tab's walk over the applied cut,
-   * drawn as a glyph on the transport beside Skip dead time when the tab
-   * hands it over, pressed while the walk is on. Absent on a player with no
-   * cut to walk (the fullscreen room, the report player on a shared link).
-   */
-  sequence?: boolean;
-  onToggleSequence?: () => void;
-  /** No stop to walk: the glyph stays, inert, as the transport's others do. */
-  sequenceDisabled?: boolean;
   /**
    * The Skip dead time glyph was pressed, either way. The tab's hint about
    * the glyph closes on it: pressing the control answers the hint.
@@ -194,7 +186,7 @@ interface FilmPlayerProps {
    * on the film clock, so the buttons walk what the list is showing.
    */
   stops: FilmStop[];
-  /** Every timed point, for the set-by-set track, loop and dead time. */
+  /** Every timed point, for the set-by-set track and loop. */
   allStops: FilmStop[];
   /** Whether the playing point is bookmarked; null when no point is playing. */
   saved: boolean | null;
@@ -333,9 +325,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       onFirstPlay,
       onRetry,
       onToggleSaved,
-      sequence,
-      onToggleSequence,
-      sequenceDisabled,
       onSkipDeadToggled,
       onEnterFullscreen,
       onStep,
@@ -400,6 +389,11 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const appliedRef = useRef(-1);
     /** The point the film was last inside, for Loop (see the file note). */
     const loopStopRef = useRef<FilmStop | null>(null);
+    // Skip dead time's memory between reports (`skipDeadAction`).
+    const skipMemoRef = useRef<SkipDeadMemo<FilmStop>>({
+      inside: null,
+      lastJump: null,
+    });
 
     /** One place that moves the playhead everywhere it is read. */
     const pushTime = useCallback(
@@ -637,12 +631,18 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
           return;
         }
         loopStopRef.current = now?.stop ?? null;
-        if (skipDead) {
-          const jump = deadTimeJump(allStops, t);
-          if (jump !== null) seekTo(jump);
+        // Only while playing: a paused scrub into the dead time is someone
+        // looking at a frame, not a film that needs moving on. The element's
+        // own `paused`, not the `playing` state: a pause and a scrub in one
+        // tick reach here before React has re-rendered with the pause.
+        const el = videoRef.current;
+        if (skipDead && el && !el.paused) {
+          const action = skipDeadAction(stops, t, skipMemoRef.current);
+          if (action?.kind === "seek") seekTo(action.to);
+          else if (action?.kind === "pause") el.pause();
         }
       },
-      [allStops, looping, skipDead, seekTo, pushTime],
+      [allStops, stops, looping, skipDead, seekTo, pushTime],
     );
 
     // Element state React does not carry, restored in ONE place.
@@ -951,19 +951,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                     aria-hidden="true"
                     fill={saved ? "currentColor" : "none"}
                   />
-                </Glyph>
-              )}
-
-              {onToggleSequence && (
-                <Glyph
-                  label={
-                    sequence ? "Playing in sequence — on" : "Play in sequence"
-                  }
-                  pressed={sequence === true}
-                  disabled={sequenceDisabled}
-                  onClick={onToggleSequence}
-                >
-                  <ListVideo {...ICON} aria-hidden="true" />
                 </Glyph>
               )}
 

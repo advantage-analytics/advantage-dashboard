@@ -23,7 +23,6 @@ import {
 } from "@/lib/match-video/film-entry";
 
 import { FilmEmptyState } from "./film-empty-state";
-import { sequenceStep } from "./film-sequence";
 import { FilmEntryActions } from "./film-entry-actions";
 import { FilmSkipDeadHint } from "./film-skip-dead-hint";
 import { FilmExpiredState } from "./film-expired-state";
@@ -574,67 +573,6 @@ function FilmRoom({
   }, [stops, filteredPoints]);
 
   /**
-   * "Play in sequence" (roadmap 6.3): the applied cut's points one after
-   * another, the dead time between them skipped (`film-sequence.ts`). It is
-   * the player's own "Skip dead time" over `walkStops` rather than over
-   * every point, so what plays is exactly what the list shows, and the
-   * transport's prev/next still walk the same array.
-   *
-   * It runs off the shell player's reports alone — `shellPlaying` is its
-   * play/pause as this surface hears it — and stands down while the
-   * fullscreen room is up: the room is what is being watched then. A jump
-   * is remembered so a seek that lands a hair before the window it asked
-   * for (a keyframe) is not re-issued every tick; the lead-in then plays
-   * into the window on its own. Past the last point the film pauses and the
-   * mode switches itself off: the cut has been played.
-   */
-  const [sequence, setSequence] = useState(false);
-  const [shellPlaying, setShellPlaying] = useState(false);
-  const lastJumpRef = useRef<number | null>(null);
-  const reportShellPlaying = useCallback(
-    (playing: boolean) => {
-      reportPlaying(playing);
-      setShellPlaying(playing);
-    },
-    [reportPlaying],
-  );
-  useEffect(() => {
-    if (!sequence || room !== null || !shellPlaying) return;
-    const step = sequenceStep(walkStops, currentTime);
-    if (step.kind === "playing") return;
-    if (step.kind === "end") {
-      playerRef.current?.pause();
-      // The sequence ending is this effect's own event, once.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSequence(false);
-      return;
-    }
-    if (
-      lastJumpRef.current === step.stop.start &&
-      currentTime >= step.stop.start - 1
-    ) {
-      return;
-    }
-    lastJumpRef.current = step.stop.start;
-    playerRef.current?.seekTo(step.stop.start);
-  }, [sequence, shellPlaying, room, walkStops, currentTime]);
-  const toggleSequence = useCallback(() => {
-    if (sequence) {
-      setSequence(false);
-      return;
-    }
-    const step = sequenceStep(walkStops, currentTime);
-    if (step.kind === "end") return;
-    lastJumpRef.current = null;
-    setSequence(true);
-    if (step.kind === "jump") {
-      lastJumpRef.current = step.stop.start;
-      playerRef.current?.seekTo(step.stop.start);
-    }
-    playerRef.current?.play();
-  }, [sequence, walkStops, currentTime]);
-
-  /**
    * A "watch this cut" intent from the report (T2, `film-cut-context.tsx`),
    * in two steps because the first admitted point is only known once the
    * filters it sets have been applied.
@@ -667,8 +605,6 @@ function FilmRoom({
   const [landing, setLanding] = useState<{
     shared: MatchFilters;
     remainder: LandedFilmCut | null;
-    /** Land playing in sequence: a point set's first point now, the rest queued. */
-    sequence?: boolean;
   } | null>(null);
   useEffect(() => {
     if (!pendingCut) return;
@@ -699,14 +635,10 @@ function FilmRoom({
       return;
     }
     if (!playback.url) return;
+    // The first listed point now; with Skip dead time on (the default) the
+    // rest follow on their own, since it walks the cut (`film-sequence.ts`).
     const first = walkStops[0];
     if (first) landOnStop(first);
-    // A point set lands playing in sequence: the first point now, the rest
-    // queued (roadmap 6.1's "Show me").
-    if (landing.sequence && first) {
-      lastJumpRef.current = first.start;
-      setSequence(true);
-    }
     setLanding(null);
   }, [
     landing,
@@ -786,7 +718,7 @@ function FilmRoom({
     [followPlayback],
   );
 
-  // "Point n / N" over the applied cut — the sequence prev/next walk.
+  // "Point n / N" over the applied cut — the prev/next walk.
   const position = useMemo(() => {
     if (!activePoint) return null;
     const index = walkStops.findIndex((s) => s.point.id === activePoint.id);
@@ -1064,7 +996,7 @@ function FilmRoom({
     // The URL arriving is the external event; this runs once per value.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPointSetState(numbers);
-    setLanding({ ...latestLayers.current, sequence: true });
+    setLanding({ ...latestLayers.current });
   }, [pointSetParam]);
 
   /** Door one: the report player's maximize control, from wherever it is. */
@@ -1167,8 +1099,7 @@ function FilmRoom({
             nothing at all for everyone else — and is not mounted on a
             read-only report, whose links would lead into a wizard the
             reader has no match in. Ask is the title row's chat glyph
-            (`report-title-row.tsx`), a link into Ask with this match tagged;
-            the sequence walk is on the player's own transport. */}
+            (`report-title-row.tsx`), a link into Ask with this match tagged. */}
           {!readOnly && <FilmEntryActions matchId={match.id} entry={entry} />}
 
           <FilmPlayer
@@ -1186,13 +1117,10 @@ function FilmRoom({
             stops={walkStops}
             allStops={stops}
             saved={activePoint ? activePoint.saved : null}
-            sequence={sequence}
-            onToggleSequence={toggleSequence}
-            sequenceDisabled={walkStops.length === 0}
             onSkipDeadToggled={markSkipDeadAnswered}
             onTimeChange={setCurrentTime}
             onPlaybackTime={reportTime}
-            onPlaybackPlaying={reportShellPlaying}
+            onPlaybackPlaying={reportPlaying}
             onLoadFailure={reportLoadFailure}
             onPlayRejected={reportPlayRejected}
             onFirstPlay={recordFirstPlay}

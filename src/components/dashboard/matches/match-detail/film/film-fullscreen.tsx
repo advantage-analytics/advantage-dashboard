@@ -69,6 +69,7 @@ import {
 } from "./film-room-prefs";
 import { boardAt, type BoardColumns } from "./film-score";
 import { useSkipDead } from "./use-skip-dead";
+import { skipDeadAction, type SkipDeadMemo } from "./film-sequence";
 import { FilmScoreboard } from "./film-scoreboard";
 import { useFilmClockVars } from "./film-clock";
 import { useFilmTrace } from "./use-film-trace";
@@ -93,7 +94,6 @@ import {
 import {
   activeStopAt,
   setSegments,
-  deadTimeJump,
   nextStop,
   playingStopAt,
   prevStop,
@@ -1289,6 +1289,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // to the next point just before its own end, so "past the end of the active
   // point" is never true and the film ran on.
   const loopStopRef = useRef<FilmStop | null>(null);
+  const skipMemoRef = useRef<SkipDeadMemo<FilmStop>>({
+    inside: null,
+    lastJump: null,
+  });
 
   const onTimeUpdate = useCallback(
     (t: number) => {
@@ -1307,12 +1311,18 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         return;
       }
       loopStopRef.current = now?.stop ?? null;
-      if (skipDead) {
-        const jump = deadTimeJump(p.stops, t);
-        if (jump !== null) seek(jump);
+      // Over the cut, as the report player: only the listed points play.
+      // Only while playing — a paused scrub into the dead time stays put;
+      // the element's `paused`, since a pause and a scrub in one tick reach
+      // here before React has re-rendered with the pause.
+      const el = videoRef.current;
+      if (skipDead && el && !el.paused) {
+        const action = skipDeadAction(p.walkStops, t, skipMemoRef.current);
+        if (action?.kind === "seek") seek(action.to);
+        else if (action?.kind === "pause") el.pause();
       }
     },
-    [p.stops, looping, skipDead, seek, syncClock, mark],
+    [p.stops, p.walkStops, looping, skipDead, seek, syncClock, mark],
   );
 
   /* ── Mount: seed the player, lock the page, take focus ───────────────── */

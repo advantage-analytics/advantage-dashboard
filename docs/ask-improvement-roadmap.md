@@ -55,8 +55,8 @@ export CSV, share, open), 3.11 (pins: `ask_pins` + `ask_pin_answer()`, the
 inline clip strip under the answer — a 340-px Ask drawer in the film room was
 built and taken out the same day: the match page's one chat glyph links into
 Ask on every view, and an answer's film links bring the reader back to the
-Video tab on the points they counted) and 6.3's playlist and preset (`?pn=` point sets, "Play in sequence", "Open on these points" on the
-share popover; no mp4 export). Still open from Tier 3: model-written titles,
+Video tab on the points they counted) and 6.3's playlist and preset (`?pn=` point sets, "Open on these points" on the
+share popover; no mp4 export — the "Play in sequence" glyph was folded into Skip dead time, which walks the listed points, 2026-10-25). Still open from Tier 3: model-written titles,
 a pins slot on the team Home, thumbnails in the point list, and the live
 model has not been run against any of it. Everything else below is still
 unbuilt unless its section says otherwise.
