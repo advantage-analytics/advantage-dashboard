@@ -1312,14 +1312,17 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       }
       loopStopRef.current = now?.stop ?? null;
       // Over the cut, as the report player: only the listed points play.
-      // Only while playing — a paused scrub into the dead time stays put.
-      if (skipDead && playing) {
+      // Only while playing — a paused scrub into the dead time stays put;
+      // the element's `paused`, since a pause and a scrub in one tick reach
+      // here before React has re-rendered with the pause.
+      const el = videoRef.current;
+      if (skipDead && el && !el.paused) {
         const action = skipDeadAction(p.walkStops, t, skipMemoRef.current);
         if (action?.kind === "seek") seek(action.to);
-        else if (action?.kind === "pause") videoRef.current?.pause();
+        else if (action?.kind === "pause") el.pause();
       }
     },
-    [p.stops, p.walkStops, looping, skipDead, playing, seek, syncClock, mark],
+    [p.stops, p.walkStops, looping, skipDead, seek, syncClock, mark],
   );
 
   /* ── Mount: seed the player, lock the page, take focus ───────────────── */

@@ -82,9 +82,12 @@ export function skipDeadAction<S extends FilmStop<StopPoint>>(
   const previous = memo.inside;
   memo.inside = playingStopAt(walkStops, filmTime);
   const last = walkStops[walkStops.length - 1];
+  // By point, not identity: a credential refresh rebuilds the stop objects
+  // for the same points, and a swap inside the last window must still pause.
   if (
     previous &&
-    previous === last &&
+    last &&
+    previous.point.id === last.point.id &&
     memo.inside === null &&
     filmTime >= last.end - REACHED_EPSILON_SECONDS &&
     filmTime < last.end + 1

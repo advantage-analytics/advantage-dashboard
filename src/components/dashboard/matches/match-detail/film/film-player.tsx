@@ -632,14 +632,17 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
         }
         loopStopRef.current = now?.stop ?? null;
         // Only while playing: a paused scrub into the dead time is someone
-        // looking at a frame, not a film that needs moving on.
-        if (skipDead && playing) {
+        // looking at a frame, not a film that needs moving on. The element's
+        // own `paused`, not the `playing` state: a pause and a scrub in one
+        // tick reach here before React has re-rendered with the pause.
+        const el = videoRef.current;
+        if (skipDead && el && !el.paused) {
           const action = skipDeadAction(stops, t, skipMemoRef.current);
           if (action?.kind === "seek") seekTo(action.to);
-          else if (action?.kind === "pause") videoRef.current?.pause();
+          else if (action?.kind === "pause") el.pause();
         }
       },
-      [allStops, stops, looping, skipDead, playing, seekTo, pushTime],
+      [allStops, stops, looping, skipDead, seekTo, pushTime],
     );
 
     // Element state React does not carry, restored in ONE place.
