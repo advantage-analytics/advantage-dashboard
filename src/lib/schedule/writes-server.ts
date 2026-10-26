@@ -21,6 +21,7 @@ import {
   type DoublesGamesTo,
 } from "./format";
 import { matchResultFor } from "./entry-state";
+import { surfaceToCourtType } from "@/components/dashboard/matches/new-match-wizard/court-options";
 import type { OutcomeKind, OutcomeSide } from "./types";
 import type {
   ActionError,
@@ -921,7 +922,9 @@ export function createScheduleWriter(
       // is the games, or `score.winner` when it stopped.
       result: matchResult,
       match_type: entry.discipline === "doubles" ? "Doubles" : "Singles",
-      court_type: event.surface ?? undefined,
+      // The event's surface ("hard") in the spelling the upload wizard and
+      // Edit match store ("Outdoor Hard Court"), so one surface is one value.
+      court_type: event.surface ? surfaceToCourtType(event.surface) : undefined,
       // NULL, not "manual". `analysisFor()` reads a non-null source_provider as
       // an IMPORT and resolves it to `imported`, which is in READY — so a line
       // scored by hand would report as analysed, and the match page would skip

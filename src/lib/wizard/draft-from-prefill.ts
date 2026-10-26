@@ -4,6 +4,7 @@ import {
   type FormData,
   type MatchDraft,
 } from "@/components/dashboard/matches/new-match-wizard/types";
+import { legacyCourtType } from "@/components/dashboard/matches/new-match-wizard/court-options";
 import type { ProviderId, ProviderKind } from "@/lib/services/upload/types";
 
 /**
@@ -120,7 +121,9 @@ export function matchDraftFromPrefill(
     eventName: input.tournamentName?.trim() ?? "",
     round: input.round?.trim() ?? "",
     matchType: input.matchType?.trim() ?? "",
-    courtType: input.courtType?.trim() ?? "",
+    // A bare "hard" opens on the Court field's Hard; any other text is the
+    // caller's own answer and stays as given.
+    courtType: legacyCourtType(input.courtType?.trim() ?? ""),
     playerScores: pad(score?.player),
     opponentScores: pad(score?.opponent),
     playerTiebreaks: pad(undefined),
