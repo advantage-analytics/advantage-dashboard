@@ -58,6 +58,7 @@ import {
 import {
   parseVendorJson,
   parseWebhookPayload,
+  unreadableWebhookReason,
 } from "@/lib/services/splitstep/webhook-payload";
 import { selectDeliveryStorageKeys } from "@/lib/services/splitstep/delivery-storage-keys";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
@@ -78,7 +79,10 @@ import {
   archiveTrimmedVideo,
   archiveVendorJson,
 } from "@/lib/services/splitstep/vendor-archive";
-import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
+import {
+  notifyAnalysisOutcome,
+  notifyUnreadableWebhook,
+} from "@/lib/services/notifications/analysis-mail";
 import { askOnArrival } from "@/lib/services/ask/arrival";
 
 export const runtime = "nodejs";
@@ -255,6 +259,26 @@ export async function POST(request: NextRequest) {
     players_object_key: string | null;
     trajectories_object_key: string | null;
   };
+
+  // A signed delivery we cannot act on is the vendor changing what they send:
+  // say so now, not when the status poll calls the job lost. Unsigned ones are
+  // not mailed — anyone can post those.
+  const unreadable = verified
+    ? unreadableWebhookReason(parsedJson, payload)
+    : null;
+  if (unreadable) {
+    pipelineLog.warn(`${LOG} UNREADABLE — ${unreadable}`, {
+      deliveryId: record.delivery_id,
+    });
+    after(() =>
+      notifyUnreadableWebhook({
+        deliveryId: record.delivery_id,
+        reason: unreadable,
+        externalJobId: payload.externalJobId,
+        bodyExcerpt: redactSignedUrls(rawBody).slice(0, 600),
+      }),
+    );
+  }
 
   if (!record.matched_job_id) {
     // Not an error: the payload is safe in splitstep_webhook_deliveries, and a

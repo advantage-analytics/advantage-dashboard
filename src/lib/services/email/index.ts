@@ -19,6 +19,7 @@
  * | Analysis ready           | `deriveAndPublish()` sets `completed` · pref `notifyAnalysisReady` — WIRED |
  * | Analysis failed          | final `failed` (webhook, poll) / `derivation_failed` · pref `notifyAnalysisFailed` — WIRED |
  * | Analysis failed (internal) | `notifyAnalysisOutcome({ outcome: "failed" })`, same final failures as above, to `INTERNAL_ALERTS_ADDRESS` only — no pref, `claimSend("analysis_failed_internal:<job_id>")` — WIRED |
+ * | Webhook unreadable (internal) | the SplitStep webhook route, a SIGNED delivery whose body is not JSON or names no job id or status (`unreadableWebhookReason()`), to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("webhook_unreadable:<delivery_id>")` — WIRED |
  * | Upload paused           | `/api/cron/reap-stalled-uploads` (every 5 min, `pg_cron` → `pg_net`) — a job still `uploading` with no progress write for 20 minutes, to its `created_by` · pref `notifyAnalysisFailed`, `claimSend("upload_paused:<job_id>")` — WIRED once the schedule migration is applied |
  * | Usage alert (80% / spent) | `reserveQuota()` crosses a line, to owner + coaches · pref `notifyUsageAlerts` — WIRED |
  * | Weekly team digest       | Monday schedule · pref `weeklyTeamDigest` — NOT WIRED, row hidden |
@@ -125,10 +126,12 @@ export {
   analysisReadyEmail,
   analysisFailedEmail,
   analysisFailedInternalEmail,
+  webhookUnreadableInternalEmail,
   uploadPausedEmail,
   type AnalysisReadyInput,
   type AnalysisFailedInput,
   type AnalysisFailedInternalInput,
+  type WebhookUnreadableInternalInput,
 } from "./templates/analysis";
 
 export {

@@ -285,6 +285,24 @@ function nullNonFiniteTokens(text: string): string {
   );
 }
 
+/**
+ * Why a delivery could not be acted on, or null when it could.
+ *
+ * Not JSON at all, no job id to match, or no status we recognise: each one is
+ * recorded and answered 200 by the route, and each one moves nothing. The
+ * route alerts on a SIGNED delivery that lands here, because that is the
+ * vendor changing what they send, not a stranger posting garbage.
+ */
+export function unreadableWebhookReason(
+  parsedJson: unknown,
+  payload: Pick<ParsedWebhook, "externalJobId" | "nextStatus">,
+): string | null {
+  if (parsedJson === null) return "the body is not valid JSON";
+  if (!payload.externalJobId) return "it names no job id";
+  if (!payload.nextStatus) return "it carries no status we recognise";
+  return null;
+}
+
 /** Interpret a parsed JSON webhook body. Never throws. */
 export function parseWebhookPayload(body: unknown): ParsedWebhook {
   const event = findFirst(body, EVENT_KEYS);
