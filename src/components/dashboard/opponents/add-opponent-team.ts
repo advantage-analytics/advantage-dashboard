@@ -58,6 +58,30 @@ export function teamWriteMode(
   return editableCount > 0 ? "creator" : null;
 }
 
+/**
+ * What the drawer's "Plays for" offers this viewer: "add" over no team,
+ * "change" over one, or nothing.
+ *
+ * Adding reaches whatever the viewer can write — every match for staff, the
+ * ones a player recorded otherwise — since any match that gains a team is the
+ * one the loader reads. A change is narrower: the loader shows the team on the
+ * newest match that carries one, so a player rewriting only some matches
+ * could change nothing anyone sees. So a change is staff's, or a player's who
+ * recorded every match against the opponent.
+ */
+export function teamAction(
+  mode: TeamWriteMode | null,
+  hasTeam: boolean,
+  editable: number,
+  total: number,
+): "add" | "change" | null {
+  if (!mode) return null;
+  if (!hasTeam) return "add";
+  return mode === "staff" || (editable > 0 && editable === total)
+    ? "change"
+    : null;
+}
+
 /** May a member with this role, having recorded this many, set the team? */
 export function canAddTeam(role: ProgramRole, editableCount: number): boolean {
   return teamWriteMode({ kind: "team", role }, editableCount) !== null;

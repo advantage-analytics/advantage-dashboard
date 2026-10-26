@@ -139,6 +139,14 @@ export type OpponentTeamLine =
   /** Nobody has said where they play. */
   | { kind: "none" };
 
+/**
+ * A team line as one comparable string, so the drawer can tell when the
+ * loader's answer has moved on from the one a pick replaced.
+ */
+export function opponentTeamLineKey(line: OpponentTeamLine): string {
+  return line.kind === "none" ? "none" : `${line.kind}:${line.name}`;
+}
+
 export function opponentTeamLine(
   opponent: Pick<TeamOpponent, "program" | "school">,
 ): OpponentTeamLine {

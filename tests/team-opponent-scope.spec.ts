@@ -12,6 +12,7 @@ import {
   facedByControl,
   opponentScope,
   opponentTeamLine,
+  opponentTeamLineKey,
   recordLabel,
   scopeHasStats,
   scopePlaceholder,
@@ -218,6 +219,19 @@ test.describe("where the opponent plays", () => {
     expect(
       opponentTeamLine({ program: null, school: "Harbor Tennis Club" }),
     ).toEqual({ kind: "school", name: "Harbor Tennis Club" });
+  });
+
+  test("a line's key changes when the team does, and only then", () => {
+    const line = opponentTeamLine({ program, school: null });
+    expect(opponentTeamLineKey(line)).toBe(
+      opponentTeamLineKey(opponentTeamLine({ program, school: null })),
+    );
+    expect(opponentTeamLineKey(line)).not.toBe(
+      opponentTeamLineKey(
+        opponentTeamLine({ program: null, school: "State University" }),
+      ),
+    );
+    expect(opponentTeamLineKey({ kind: "none" })).toBe("none");
   });
 
   test("neither is No team", () => {

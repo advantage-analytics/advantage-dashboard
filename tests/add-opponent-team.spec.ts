@@ -11,6 +11,7 @@ import {
   canAddTeam,
   chunkMatchIds,
   describeApplies,
+  teamAction,
   describeUnsaved,
   teamWriteMode,
 } from "@/components/dashboard/opponents/add-opponent-team";
@@ -149,6 +150,28 @@ test.describe("describeApplies", () => {
     expect(describeApplies("creator", 1, 1, "Mara")).toBe(
       "Applies to the 1 match against Mara.",
     );
+  });
+});
+
+test.describe("teamAction — what Plays for offers", () => {
+  test("no team: anyone who can write may add one", () => {
+    expect(teamAction("staff", false, 0, 5)).toBe("add");
+    expect(teamAction("creator", false, 1, 5)).toBe("add");
+  });
+
+  test("a team: staff may change it on every match", () => {
+    expect(teamAction("staff", true, 0, 5)).toBe("change");
+  });
+
+  test("a team: a player only when they recorded every match", () => {
+    expect(teamAction("creator", true, 5, 5)).toBe("change");
+    // Rewriting 1 of 5 could leave the newest match's team showing.
+    expect(teamAction("creator", true, 1, 5)).toBeNull();
+  });
+
+  test("nobody who cannot write is offered anything", () => {
+    expect(teamAction(null, false, 0, 5)).toBeNull();
+    expect(teamAction(null, true, 0, 5)).toBeNull();
   });
 });
 

@@ -63,8 +63,9 @@ const ROW_CLS =
  *
  * Men's and women's are the same school twice, so the squad decides which
  * row is right. A men's or women's workspace searches its own squad only
- * (`useProgramSearch`'s `squad`, a filter in `search_programs`) under a "Women's teams" label, and its rows and
- * chosen team leave the squad unsaid. Anywhere else — a personal or co-ed
+ * (`useProgramSearch`'s `squad`, a filter in `search_programs`) under a
+ * "Women's teams" label, and its rows and chosen team leave the squad
+ * unsaid. Anywhere else — a personal or co-ed
  * workspace — every row LEADS with its squad, where truncation cannot cut it,
  * and the chosen team keeps it: "University of San Diego · Women's".
  *
@@ -145,6 +146,10 @@ export function OpponentTeamField({
     .filter((row) => Boolean(row.id))
     .slice(0, MAX_RESULTS);
   const ready = typed.length >= 2;
+  // Search-only, the menu waits for something to search: its "Type their
+  // school." hint would otherwise open over whatever sits under the field
+  // (the drawer's Faced by) before a key is pressed.
+  const menuOpen = !searchOnly || ready;
   // Directory rows, then the as-typed row.
   const rowCount = ready ? results.length + 1 : 0;
   const activeIndex = Math.min(active, Math.max(rowCount - 1, 0));
@@ -201,7 +206,7 @@ export function OpponentTeamField({
     return (
       <span className={cn("flex min-w-0 flex-col", className)}>
         <Popover
-          open
+          open={menuOpen}
           // Only Esc reaches this: outside presses are declined below and
           // left to the input's blur, which is the one signal for "left it".
           onOpenChange={(next) => {
@@ -235,11 +240,12 @@ export function OpponentTeamField({
                   aria-label="Their team"
                   role="combobox"
                   aria-autocomplete="list"
-                  // True for as long as the search is on screen: the menu under
-                  // it is (a hint, then rows), and the wizard's own Escape
-                  // handler stands down for an expanded control.
-                  aria-expanded="true"
-                  aria-controls={listId}
+                  // True whenever the menu is on screen (a hint, then rows) —
+                  // in the wizard, for as long as the search is — and the
+                  // wizard's own Escape handler stands down for an expanded
+                  // control.
+                  aria-expanded={menuOpen}
+                  aria-controls={menuOpen ? listId : undefined}
                   aria-describedby={searchNote ? noteId : undefined}
                   aria-activedescendant={
                     rowCount > 0 ? `${listId}-${activeIndex}` : undefined

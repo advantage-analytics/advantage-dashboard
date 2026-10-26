@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils";
 import {
   applyOpponentTeam,
   describeApplies,
+  teamAction,
   teamWriteMode,
 } from "./add-opponent-team";
 import {
@@ -54,6 +55,7 @@ import {
   facedByControl,
   opponentScope,
   opponentTeamLine,
+  opponentTeamLineKey,
   recordLabel,
   scopeHasStats,
   scopePlaceholder,
@@ -86,9 +88,9 @@ const TEXT_ACTION_CLS =
  * text action beside the eyebrow — "Add their team" over "No team", "Change"
  * over a team — that turns the row into the wizard's own directory search
  * (`OpponentTeamField`, search-only), with a line under it saying how many
- * matches a pick changes and, for a change, which team it replaces. Staff set it on every match against the opponent; a player on the
- * ones they recorded; a player who recorded none sees "No team" and no
- * control. Who, how many and both writes are `add-opponent-team.ts` — this
+ * matches a pick changes and, for a change, which team it replaces. Staff set
+ * it on every match against the opponent; a player on the ones they recorded;
+ * a player who recorded none sees "No team" and no control. Who, how many and both writes are `add-opponent-team.ts` — this
  * file holds no Supabase call. A pick shows at once, the loader's answer
  * replaces it after `router.refresh()`, and a refusal puts the line back with
  * the reason under it.
@@ -214,22 +216,39 @@ export function TeamOpponentDrawer({
   const hand = opponentHandLabel(opponent.hand);
   const backhand = opponentBackhandLabel(opponent.backhand);
   const firstName = opponentFirstName(opponent.name);
-  // A pick that is saving or has saved stands in for the loader's answer —
-  // a first team or a change alike — until `router.refresh()` brings the
-  // same answer back; one that was refused does not.
+  // A pick that is saving or has saved stands in for the loader's answer
+  // only while the loader still says what it said before the pick. Once
+  // `router.refresh()` brings anything else back, the loader wins — the pick
+  // is never kept over the data. One that was refused never stands in.
+  const savedTeam = opponentTeamLine(opponent);
   const team =
-    write && write.status !== "refused"
+    write &&
+    write.status !== "refused" &&
+    opponentTeamLineKey(savedTeam) === write.before
       ? opponentTeamLine(write.choice)
-      : opponentTeamLine(opponent);
+      : savedTeam;
   const writeMode = teamWriteMode(
     workspace.active,
     opponent.editableMatchIds.length,
+  );
+  const action = teamAction(
+    writeMode,
+    team.kind !== "none",
+    opponent.editableMatchIds.length,
+    opponent.matchIds.length,
   );
 
   const pickTeam = async (next: OpponentTeamChange) => {
     if (!writeMode) return;
     const opponentKey = opponent.key;
-    setTeamWrite({ opponentKey, choice: next, status: "saving", error: null });
+    const before = opponentTeamLineKey(savedTeam);
+    setTeamWrite({
+      opponentKey,
+      before,
+      choice: next,
+      status: "saving",
+      error: null,
+    });
     const result = await applyOpponentTeam({
       mode: writeMode,
       programId: workspace.active.id,
@@ -243,6 +262,7 @@ export function TeamOpponentDrawer({
       current?.opponentKey === opponentKey && current.choice === next
         ? {
             opponentKey,
+            before,
             choice: next,
             status: result.saved > 0 ? "saved" : "refused",
             error: result.error,
@@ -350,7 +370,7 @@ export function TeamOpponentDrawer({
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center pb-2">
             <span className="eyebrow-sm flex-1">Plays for</span>
-            {writeMode &&
+            {action &&
               (editingTeam ? (
                 <button
                   type="button"
@@ -360,7 +380,7 @@ export function TeamOpponentDrawer({
                   onClick={() => closeTeamSearch(true)}
                   className={cn(
                     TEXT_ACTION_CLS,
-                    "text-[var(--ink-600)] hover:text-[var(--ink-900)]",
+                    "text-[var(--ink-600)] hover:text-[var(--ink-700)]",
                   )}
                 >
                   Cancel
@@ -380,11 +400,11 @@ export function TeamOpponentDrawer({
                     "text-[var(--blue)] hover:text-[var(--blue-hover)]",
                   )}
                 >
-                  {team.kind === "none" ? "Add their team" : "Change"}
+                  {action === "add" ? "Add their team" : "Change"}
                 </button>
               ))}
           </div>
-          {editingTeam && writeMode ? (
+          {editingTeam && action && writeMode ? (
             <OpponentTeamField
               program={opponent.program}
               school={opponent.school}
@@ -476,6 +496,8 @@ export function TeamOpponentDrawer({
               <Chip
                 label="All"
                 detail={recordLabel(opponent)}
+                // The record line this chip replaced said it in words.
+                ariaLabel={`All: the team won ${opponent.wins} and lost ${opponent.losses}`}
                 active={scope.playerId === null}
                 onClick={() => choose(null)}
               />
@@ -629,6 +651,8 @@ export function TeamOpponentDrawer({
 interface TeamWrite {
   /** The opponent the pick was made on. */
   opponentKey: string;
+  /** `opponentTeamLineKey` of the loader's team when the pick was made. */
+  before: string;
   choice: OpponentTeamChange;
   /** `refused` is nothing saved; `saved` is at least one match changed. */
   status: "saving" | "saved" | "refused";
