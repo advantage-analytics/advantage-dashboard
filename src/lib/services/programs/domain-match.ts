@@ -242,7 +242,7 @@ export function matchesListed(
 }
 
 /** `athletics_domains` arrives `;`-joined from CSV or as a `text[]` from Postgres. */
-function asList(value: string | string[] | null | undefined): string[] {
+export function asList(value: string | string[] | null | undefined): string[] {
   if (value == null) return [];
   const items = Array.isArray(value) ? value : String(value).split(";");
   return items.map(normalizeHost).filter(Boolean);
