@@ -11,6 +11,8 @@ import {
 } from "@/components/dashboard/matches/match-detail/film/film-list-filters";
 import {
   sequenceStep,
+  skipDeadAction,
+  type SkipDeadMemo,
   stopForPointNumber,
 } from "@/components/dashboard/matches/match-detail/film/film-sequence";
 import type { FilmStop } from "@/components/dashboard/matches/match-detail/film/film-timeline";
@@ -32,11 +34,11 @@ import {
 import { pt } from "./fixtures/film-point";
 
 /**
- * The Video tab's point set (`?pn=`), the sequence it plays, and the two
- * links that carry it — an answer's "Show me" and a shared link's preset.
- * Pure: the URL contract, the list's fourth layer, the playback walk, the
- * drawer's href reader and the share popover's helpers, none of them
- * needing a browser.
+ * The Video tab's point set (`?pn=`), the walk Skip dead time makes over it,
+ * and the two links that carry it — an answer's "Show me" and a shared
+ * link's preset. Pure: the URL contract, the list's fourth layer, the
+ * playback walk, the drawer's href reader and the share popover's helpers,
+ * none of them needing a browser.
  */
 
 const MATCH = "3f1c2a9e-6b7d-4c1a-9e55-0a1b2c3d4e5f";
@@ -170,7 +172,7 @@ test.describe("the list's fourth layer", () => {
   });
 });
 
-test.describe("the sequence", () => {
+test.describe("skip dead time over the cut", () => {
   const stop = (
     id: string,
     pointNumber: number,
@@ -202,6 +204,37 @@ test.describe("the sequence", () => {
     expect(sequenceStep([], 0)).toEqual({ kind: "end" });
     // A seek that landed a hair before its window counts as inside it.
     expect(sequenceStep(stops, 29.95)).toEqual({ kind: "playing" });
+  });
+
+  test("skipDeadAction seeks once per window, pauses once past the last, then lets the film run", () => {
+    const memo: SkipDeadMemo<(typeof stops)[number]> = {
+      inside: null,
+      lastJump: null,
+    };
+    // Before the first window: one seek, then the lead-in plays on its own.
+    expect(skipDeadAction(stops, 2, memo)).toEqual({ kind: "seek", to: 10 });
+    expect(skipDeadAction(stops, 9.2, memo)).toBeNull();
+    // Inside a window: nothing.
+    expect(skipDeadAction(stops, 15, memo)).toBeNull();
+    // Dead time (or an unlisted point) after one: seek to the next.
+    expect(skipDeadAction(stops, 25, memo)).toEqual({ kind: "seek", to: 30 });
+    expect(skipDeadAction(stops, 29.3, memo)).toBeNull();
+    // Scrubbed back before a window already jumped to: it is asked again.
+    expect(skipDeadAction(stops, 22, memo)).toEqual({ kind: "seek", to: 30 });
+    // Crossing the last window's end: one pause, then the film runs on.
+    expect(skipDeadAction(stops, 45, memo)).toBeNull();
+    expect(skipDeadAction(stops, 50.2, memo)).toEqual({ kind: "pause" });
+    expect(skipDeadAction(stops, 50.4, memo)).toBeNull();
+    expect(skipDeadAction(stops, 70, memo)).toBeNull();
+    // Landing past the end without having been inside the last window
+    // (a scrub) is not a crossing: nothing to pause.
+    const fresh: SkipDeadMemo<(typeof stops)[number]> = {
+      inside: null,
+      lastJump: null,
+    };
+    expect(skipDeadAction(stops, 50.2, fresh)).toBeNull();
+    // An empty cut asks nothing.
+    expect(skipDeadAction([], 5, fresh)).toBeNull();
   });
 
   test("finds a stop by its point's number", () => {
