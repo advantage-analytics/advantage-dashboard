@@ -41,6 +41,18 @@ test.describe("redactSignedUrls", () => {
     );
   });
 
+  test("a sig the url pattern misses is still blanked", () => {
+    // Escaped slashes and an escaped ampersand: the url pattern never matches
+    // the whole url, so only the second pass stands between the token and
+    // the log line (or the unreadable-webhook alert mail).
+    const body =
+      '{"strokes_url": "https:\\/\\/x.blob.core.windows.net\\/s.json?sv=1\\u0026sig=SECRETTOKEN", "y": "a?sig%3DOTHERTOKEN"}';
+    const out = redactSignedUrls(body);
+    expect(out).not.toContain("SECRETTOKEN");
+    expect(out).not.toContain("OTHERTOKEN");
+    expect(out).toContain("sig=[redacted]");
+  });
+
   test("returns a body with no URL byte-for-byte", () => {
     const body = '{"status":"completed","job_id":"ext-1","n":3}';
     expect(redactSignedUrls(body)).toBe(body);

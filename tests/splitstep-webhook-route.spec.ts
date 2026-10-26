@@ -38,6 +38,7 @@ interface Calls {
   /** The completed branch's seams, in call order. */
   pipeline: string[];
   warn: string[];
+  unreadable: Row[];
 }
 
 function record(jobStatus: string): Row {
@@ -62,7 +63,10 @@ const { isDownloadFailure } = createLoader().load(
   isDownloadFailure: (code: string | null, step: string | null) => boolean;
 };
 
-function loadRoute(rpcRecord: Row, opts: { completedPath?: boolean } = {}) {
+function loadRoute(
+  rpcRecord: Row,
+  opts: { completedPath?: boolean; signed?: boolean } = {},
+) {
   const calls: Calls = {
     rpc: [],
     releaseQuota: [],
@@ -70,6 +74,7 @@ function loadRoute(rpcRecord: Row, opts: { completedPath?: boolean } = {}) {
     resubmitJob: [],
     pipeline: [],
     warn: [],
+    unreadable: [],
   };
   const pending: Promise<unknown>[] = [];
   // The completed branch's seams. Every call is recorded; outside a
@@ -114,7 +119,11 @@ function loadRoute(rpcRecord: Row, opts: { completedPath?: boolean } = {}) {
       },
       "@/lib/services/splitstep/webhook-auth": {
         SIGNATURE_HEADERS: ["x-hmac-signature"],
-        verifyWebhookAuth: () => ({ ok: true, verified: true, reason: "test" }),
+        verifyWebhookAuth: () => ({
+          ok: true,
+          verified: opts.signed ?? true,
+          reason: "test",
+        }),
       },
       "@/lib/services/splitstep/quota": {
         releaseQuota: async (...args: unknown[]) => {
@@ -131,6 +140,9 @@ function loadRoute(rpcRecord: Row, opts: { completedPath?: boolean } = {}) {
       "@/lib/services/notifications/analysis-mail": {
         notifyAnalysisOutcome: async (params: Row) => {
           calls.notifyAnalysisOutcome.push(params);
+        },
+        notifyUnreadableWebhook: async (params: Row) => {
+          calls.unreadable.push(params);
         },
       },
       "@/lib/services/splitstep/grade-results": {
@@ -166,12 +178,12 @@ function loadRoute(rpcRecord: Row, opts: { completedPath?: boolean } = {}) {
   return {
     calls,
     /** POST the body, then wait for everything after() scheduled. */
-    async deliver(body: Row) {
+    async deliver(body: Row | string) {
       const res = await POST(
         new NextRequest("http://localhost/api/webhooks/splitstep", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
+          body: typeof body === "string" ? body : JSON.stringify(body),
         }),
       );
       await Promise.all(pending);
@@ -308,5 +320,51 @@ test.describe("splitstep webhook — completed branch gated on a cancelled row",
       "deriveAndStoreBallPaths",
     ]);
     expect(calls.warn.some((m) => m.includes("SKIPPED"))).toBe(false);
+  });
+});
+
+test.describe("splitstep webhook — a signed delivery we cannot read is alerted", () => {
+  const orphan = { ...record("completed"), matched_job_id: null };
+
+  test("not JSON → recorded, 200, one internal alert naming the delivery", async () => {
+    const { calls, deliver } = loadRoute(orphan);
+    const res = await deliver('{"job_id": "ss-1", "status": "job_completed",');
+    expect(res.status).toBe(200);
+    expect(calls.rpc).toHaveLength(1);
+    expect(calls.unreadable).toHaveLength(1);
+    expect(calls.unreadable[0]).toMatchObject({
+      deliveryId: "d-1",
+      reason: "the body is not valid JSON",
+      externalJobId: null,
+    });
+  });
+
+  test("the 2026-10-25 NaN completion is read, matched and not alerted", async () => {
+    const { calls, deliver } = loadRoute(record("completed"), {
+      completedPath: true,
+    });
+    await deliver(
+      `{"job_id": "${EXTERNAL_JOB}", "status": "job_completed", "homography_score": NaN, "strokes_url": "https://vendor.blob.core.windows.net/out/s.json?sig=a"}`,
+    );
+    expect(calls.rpc[0].args.p_external_job_id).toBe(EXTERNAL_JOB);
+    expect(calls.rpc[0].args.p_next_status).toBe("completed");
+    expect(calls.unreadable).toEqual([]);
+  });
+
+  test("a matched job with a status we do not map is alerted too", async () => {
+    const { calls, deliver } = loadRoute(record("processing"));
+    await deliver({ job_id: EXTERNAL_JOB, status: "job_heartbeat" });
+    expect(calls.unreadable).toHaveLength(1);
+    expect(calls.unreadable[0]).toMatchObject({
+      reason: "it carries no status we recognise",
+      externalJobId: EXTERNAL_JOB,
+    });
+  });
+
+  test("an unsigned unreadable post is recorded but never mailed", async () => {
+    const { calls, deliver } = loadRoute(orphan, { signed: false });
+    await deliver("garbage");
+    expect(calls.rpc).toHaveLength(1);
+    expect(calls.unreadable).toEqual([]);
   });
 });
