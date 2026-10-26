@@ -90,3 +90,15 @@ test("Edit match reads a stored surface through the exact mapping only", () => {
   expect(dialog).toContain("legacyCourtType(value)");
   expect(dialog).not.toContain("surfaceToCourtType");
 });
+
+test("admin uploads accept the shared list, plus the bare labels they always took", async () => {
+  const { adminUploadCourt } = await import("@/lib/admin/uploads/court");
+  for (const { value } of COURT_OPTIONS)
+    expect(adminUploadCourt(value), value).toBe(value);
+  for (const legacy of ["Hard", "Clay", "Grass", "Carpet"])
+    expect(adminUploadCourt(legacy), legacy).toBe(legacy);
+  for (const unanswered of ["", null, undefined])
+    expect(adminUploadCourt(unanswered)).toBeNull();
+  for (const refused of ["hard", "Indoor Clay Court", 7])
+    expect(adminUploadCourt(refused), String(refused)).toBeUndefined();
+});
