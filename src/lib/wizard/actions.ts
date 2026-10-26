@@ -352,6 +352,7 @@ interface OpponentProgramEmbed {
   crest_path: string | null;
   conference: string | null;
   division: string | null;
+  team: string | null;
 }
 
 /**
@@ -371,7 +372,7 @@ export async function opponentsPlayed(
     .select(
       // The embed names its FK: `matches` points at `programs` twice
       // (`program_id` too), and PostgREST refuses an ambiguous one.
-      "player2_name, date, opponent_hand, opponent_backhand, opponent_player_id, opponent_school, opponent_program:programs!matches_opponent_program_id_fkey(id, school_name, school_abbrev, crest_path, conference, division)",
+      "player2_name, date, opponent_hand, opponent_backhand, opponent_player_id, opponent_school, opponent_program:programs!matches_opponent_program_id_fkey(id, school_name, school_abbrev, crest_path, conference, division, team)",
     )
     .order("date", { ascending: false })
     .limit(400);
@@ -423,6 +424,7 @@ export async function opponentsPlayed(
             crestUrl: null,
             conference: program.conference,
             division: program.division,
+            team: program.team,
           }
         : null,
       // Either/or on the row; a program outranks a school here too, so a

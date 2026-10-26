@@ -444,6 +444,23 @@ test.describe("the team page's Program and Faced-by facets", () => {
     expect(opponentProgramChoices(TEAM).length - 1).toBe(totals.programs);
   });
 
+  test("Program: Unattached is offered only when somebody is, before No team", () => {
+    const withUnattached = [
+      ...TEAM,
+      { program: null, school: null, unattached: true },
+    ];
+    expect(opponentProgramChoices(withUnattached).slice(-2)).toEqual([
+      { value: "unattached", label: "Unattached" },
+      { value: NO_PROGRAM_KEY, label: "No team" },
+    ]);
+    expect(
+      opponentProgramKey({ program: null, school: null, unattached: true }),
+    ).toBe("unattached");
+    expect(
+      opponentProgramChoices(TEAM).some((c) => c.value === "unattached"),
+    ).toBe(false);
+  });
+
   test("Program: nothing ticked keeps everybody", () => {
     expect(inPrograms([])).toHaveLength(4);
   });

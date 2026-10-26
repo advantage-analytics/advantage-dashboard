@@ -185,6 +185,8 @@ interface ProgramFields {
   program?: { id: string; schoolName: string } | null;
   /** The school as somebody typed it — only ever set when `program` is null. */
   school?: string | null;
+  /** No school or club, said on purpose — only when both above are null. */
+  unattached?: boolean;
 }
 
 /** Who on the roster met them, as far as the Faced-by facet reads it. */
@@ -195,6 +197,10 @@ interface FacedByFields {
 /** The Program facet's value for an opponent with neither program nor school. */
 export const NO_PROGRAM_KEY = "none";
 export const NO_PROGRAM_LABEL = "No team";
+
+/** The Program facet's value for an opponent marked as playing for no one. */
+export const UNATTACHED_KEY = "unattached";
+export const UNATTACHED_LABEL = "Unattached";
 
 /**
  * The Program facet's value for one opponent.
@@ -210,6 +216,7 @@ export function opponentProgramKey(opponent: ProgramFields): string {
   if (opponent.program) return `id:${opponent.program.id}`;
   const school = opponent.school?.trim();
   if (school) return `name:${normalizedPersonName(school)}`;
+  if (opponent.unattached) return UNATTACHED_KEY;
   return NO_PROGRAM_KEY;
 }
 
@@ -228,14 +235,23 @@ export function opponentProgramChoices(
   const labels = new Map<string, string>();
   for (const opponent of opponents) {
     const key = opponentProgramKey(opponent);
-    if (key === NO_PROGRAM_KEY || labels.has(key)) continue;
+    if (key === NO_PROGRAM_KEY || key === UNATTACHED_KEY || labels.has(key)) {
+      continue;
+    }
     labels.set(
       key,
       opponent.program?.schoolName ?? opponent.school?.trim() ?? "",
     );
   }
+  // "Unattached" only when somebody is: an option no row could match is noise.
+  const anyUnattached = opponents.some(
+    (opponent) => opponentProgramKey(opponent) === UNATTACHED_KEY,
+  );
   return [
     ...[...labels].map(([value, label]) => ({ value, label })).sort(byLabel),
+    ...(anyUnattached
+      ? [{ value: UNATTACHED_KEY, label: UNATTACHED_LABEL }]
+      : []),
     { value: NO_PROGRAM_KEY, label: NO_PROGRAM_LABEL },
   ];
 }

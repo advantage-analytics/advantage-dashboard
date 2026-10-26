@@ -193,6 +193,29 @@ test.describe("where the opponent plays", () => {
     expect(opponents[0].school).toBeNull();
   });
 
+  test("unattached only when no match names a program or school", () => {
+    const { opponents } = groupTeamOpponents(
+      [
+        match({ date: "2026-09-10", opponent_unattached: true }),
+        match({ date: "2026-08-20" }),
+      ],
+      ROSTER,
+      SEASON,
+    );
+    expect(opponents[0].unattached).toBe(true);
+
+    const named = groupTeamOpponents(
+      [
+        match({ date: "2026-09-10", opponent_unattached: true }),
+        match({ date: "2026-08-20", opponent_school: "State Univ." }),
+      ],
+      ROSTER,
+      SEASON,
+    ).opponents[0];
+    expect(named.school).toBe("State Univ.");
+    expect(named.unattached).toBe(false);
+  });
+
   test("with no program, the most recent typed school; with neither, null", () => {
     const { opponents } = groupTeamOpponents(
       [

@@ -69,6 +69,11 @@ export interface TeamOpponentMatchInput extends Omit<
   opponent_program: TeamOpponentProgram | null;
   /** The school as somebody typed it, when the match names no program. */
   opponent_school: string | null;
+  /**
+   * `matches.opponent_unattached` — said on purpose: no school or club.
+   * Optional so a reader that never selected it reads as "not said".
+   */
+  opponent_unattached?: boolean;
 }
 
 /** One person on the roster, as far as this page draws them. */
@@ -117,6 +122,11 @@ export interface TeamOpponent extends Omit<PersonalOpponent, "recent"> {
    * `program` is null. Null when nobody has said where they play.
    */
   school: string | null;
+  /**
+   * Somebody said they play for no school or club — only ever true when
+   * `program` and `school` are both null, so a team said anywhere outranks it.
+   */
+  unattached: boolean;
   /** Newest first, at most six, across every roster player. */
   recent: TeamOpponentRecentMatch[];
   /** Every meeting's id, newest first. */
@@ -306,6 +316,8 @@ export function groupTeamOpponents(
       ...opponent,
       program,
       school,
+      unattached:
+        !program && !school && sources.some((s) => s.opponent_unattached),
       recent: withPlayer(opponent.recent),
       matchIds: sources.map((s) => s.id),
       editableMatchIds:

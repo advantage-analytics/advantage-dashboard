@@ -223,13 +223,14 @@ interface OpponentProgramEmbed {
 interface DbTeamOpponentMatch extends DbOpponentMatch {
   opponent_program_id: string | null;
   opponent_school: string | null;
+  opponent_unattached: boolean | null;
   opponent_program?: OpponentProgramEmbed | OpponentProgramEmbed[] | null;
 }
 
 // The personal columns, plus the opponent's team. The embed names its FK:
 // `matches` points at `programs` twice (`program_id` too), and PostgREST
 // refuses an ambiguous one.
-const TEAM_MATCH_COLUMNS = `${PERSONAL_MATCH_COLUMNS}, opponent_program_id, opponent_school, opponent_program:programs!matches_opponent_program_id_fkey(id, school_name, school_abbrev, crest_path, conference, division, team)`;
+const TEAM_MATCH_COLUMNS = `${PERSONAL_MATCH_COLUMNS}, opponent_program_id, opponent_school, opponent_unattached, opponent_program:programs!matches_opponent_program_id_fkey(id, school_name, school_abbrev, crest_path, conference, division, team)`;
 
 /** The public crest bucket — `CRESTS_BUCKET` in `programs-server.ts`, restated so this file imports no cookie module. */
 const CRESTS_BUCKET = "program-crests";
@@ -343,6 +344,7 @@ export async function loadTeamOpponents(
           }
         : null,
       opponent_school: match.opponent_school,
+      opponent_unattached: match.opponent_unattached === true,
     };
   });
 

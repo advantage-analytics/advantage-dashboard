@@ -11,8 +11,10 @@ import {
   canAddTeam,
   chunkMatchIds,
   describeApplies,
+  teamAction,
   describeUnsaved,
   teamWriteMode,
+  UNATTACHED_CHOICE,
 } from "@/components/dashboard/opponents/add-opponent-team";
 
 /**
@@ -152,11 +154,54 @@ test.describe("describeApplies", () => {
   });
 });
 
+test.describe("teamAction — what Plays for offers", () => {
+  test("no team: anyone who can write may add one", () => {
+    expect(teamAction("staff", false, 0, 5)).toBe("add");
+    expect(teamAction("creator", false, 1, 5)).toBe("add");
+  });
+
+  test("a team: staff may change it on every match", () => {
+    expect(teamAction("staff", true, 0, 5)).toBe("change");
+  });
+
+  test("a team: a player only when they recorded every match", () => {
+    expect(teamAction("creator", true, 5, 5)).toBe("change");
+    // Rewriting 1 of 5 could leave the newest match's team showing.
+    expect(teamAction("creator", true, 1, 5)).toBeNull();
+  });
+
+  test("nobody who cannot write is offered anything", () => {
+    expect(teamAction(null, false, 0, 5)).toBeNull();
+    expect(teamAction(null, true, 0, 5)).toBeNull();
+  });
+});
+
+test.describe("describeApplies — replacing a team", () => {
+  test("a change names the team it overwrites", () => {
+    expect(
+      describeApplies("staff", 0, 2, "Theo", "University of San Diego"),
+    ).toBe("Replaces University of San Diego on all 2 matches against Theo.");
+    expect(describeApplies("staff", 0, 1, "Theo", "Harbor Tennis Club")).toBe(
+      "Replaces Harbor Tennis Club on the 1 match against Theo.",
+    );
+    expect(describeApplies("creator", 1, 2, "Theo", "USD")).toBe(
+      "Replaces USD on the 1 of 2 matches you recorded.",
+    );
+  });
+
+  test("no team to replace is the first-pick sentence", () => {
+    expect(describeApplies("staff", 0, 2, "Theo", null)).toBe(
+      "Applies to all 2 matches against Theo.",
+    );
+  });
+});
+
 test.describe("buildTeamPatch", () => {
   test("a picked program nulls the school", () => {
     expect(buildTeamPatch(PICKED)).toEqual({
       opponent_program_id: OTHER_PROGRAM,
       opponent_school: null,
+      opponent_unattached: false,
     });
   });
 
@@ -164,13 +209,26 @@ test.describe("buildTeamPatch", () => {
     expect(buildTeamPatch(TYPED)).toEqual({
       opponent_program_id: null,
       opponent_school: "Quarry Lane Academy",
+      opponent_unattached: false,
     });
   });
 
   test("a blank typed school is neither — never an empty string", () => {
     expect(
       buildTeamPatch({ program: null, school: "   ", source: "typed" }),
-    ).toEqual({ opponent_program_id: null, opponent_school: null });
+    ).toEqual({
+      opponent_program_id: null,
+      opponent_school: null,
+      opponent_unattached: false,
+    });
+  });
+
+  test("unattached nulls both and says so", () => {
+    expect(buildTeamPatch(UNATTACHED_CHOICE)).toEqual({
+      opponent_program_id: null,
+      opponent_school: null,
+      opponent_unattached: true,
+    });
   });
 });
 
@@ -206,9 +264,28 @@ test.describe("applyOpponentTeam — staff", () => {
           p_match_ids: ids(8),
           p_opponent_program_id: OTHER_PROGRAM,
           p_opponent_school: null,
+          p_unattached: false,
         },
       },
     ]);
+  });
+
+  test("unattached goes as the flag, with neither program nor school", async () => {
+    const fake = fakeClient(allSaved);
+    const result = await applyOpponentTeam({
+      mode: "staff",
+      programId: PROGRAM_ID,
+      matchIds: ids(2),
+      editableMatchIds: [],
+      choice: UNATTACHED_CHOICE,
+      supabase: fake.supabase,
+    });
+    expect(result).toEqual({ saved: 2, total: 2, error: null });
+    expect(fake.rpcCalls[0]?.args).toMatchObject({
+      p_opponent_program_id: null,
+      p_opponent_school: null,
+      p_unattached: true,
+    });
   });
 
   test("a typed school goes as the school, with a null program", async () => {
@@ -364,7 +441,11 @@ test.describe("applyOpponentTeam — creator", () => {
     expect(fake.updates).toEqual([
       {
         table: "matches",
-        patch: { opponent_program_id: OTHER_PROGRAM, opponent_school: null },
+        patch: {
+          opponent_program_id: OTHER_PROGRAM,
+          opponent_school: null,
+          opponent_unattached: false,
+        },
         ids: ids(3),
       },
     ]);

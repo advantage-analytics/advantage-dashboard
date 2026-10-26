@@ -58,6 +58,30 @@ export function teamWriteMode(
   return editableCount > 0 ? "creator" : null;
 }
 
+/**
+ * What the drawer's "Plays for" offers this viewer: "add" over no team,
+ * "change" over one, or nothing.
+ *
+ * Adding reaches whatever the viewer can write — every match for staff, the
+ * ones a player recorded otherwise — since any match that gains a team is the
+ * one the loader reads. A change is narrower: the loader shows the team on the
+ * newest match that carries one, so a player rewriting only some matches
+ * could change nothing anyone sees. So a change is staff's, or a player's who
+ * recorded every match against the opponent.
+ */
+export function teamAction(
+  mode: TeamWriteMode | null,
+  hasTeam: boolean,
+  editable: number,
+  total: number,
+): "add" | "change" | null {
+  if (!mode) return null;
+  if (!hasTeam) return "add";
+  return mode === "staff" || (editable > 0 && editable === total)
+    ? "change"
+    : null;
+}
+
 /** May a member with this role, having recorded this many, set the team? */
 export function canAddTeam(role: ProgramRole, editableCount: number): boolean {
   return teamWriteMode({ kind: "team", role }, editableCount) !== null;
@@ -69,35 +93,69 @@ export function canAddTeam(role: ProgramRole, editableCount: number): boolean {
  * Staff reach all of them; so does a player who happened to record every one.
  * A player who recorded some is told the share, so the Program cell changing
  * for only part of a history is not a surprise.
+ *
+ * `replacing` names the team already there, for a change rather than a first
+ * pick: "Replaces University of San Diego on all 2 matches against Theo." A
+ * change overwrites a fact somebody set, so the line says which one.
  */
 export function describeApplies(
   mode: TeamWriteMode,
   editable: number,
   total: number,
   firstName: string,
+  replacing?: string | null,
 ): string {
+  const lead = replacing ? `Replaces ${replacing} on` : "Applies to";
   if (mode === "staff" || editable === total) {
     return total === 1
-      ? `Applies to the 1 match against ${firstName}.`
-      : `Applies to all ${total} matches against ${firstName}.`;
+      ? `${lead} the 1 match against ${firstName}.`
+      : `${lead} all ${total} matches against ${firstName}.`;
   }
-  return `Applies to the ${editable} of ${total} matches you recorded.`;
+  return `${lead} the ${editable} of ${total} matches you recorded.`;
 }
 
 /**
- * A pick as the two `matches` columns: a directory program nulls the school,
- * a typed school nulls the program. The wizard's own rule
- * (`opponentTeamColumns`), so a team set here and one set at upload cannot be
- * shaped differently.
+ * What the drawer can write: the picker's answer, or "unattached" — no school
+ * or club, said on purpose. The wizard never offers the third, so it lives
+ * here rather than in `OpponentTeamChange`.
  */
-export function buildTeamPatch(
-  choice: OpponentTeamChange,
-): OpponentTeamColumns {
-  return opponentTeamColumns({
-    opponentTeamProgram: choice.program ?? undefined,
-    opponentTeamSchool: choice.school ?? undefined,
-    opponentTeamSource: choice.source,
-  });
+export type TeamChoice =
+  OpponentTeamChange | { program: null; school: null; source: "unattached" };
+
+export const UNATTACHED_CHOICE: TeamChoice = {
+  program: null,
+  school: null,
+  source: "unattached",
+};
+
+/** The three `matches` columns a drawer pick writes. */
+export interface TeamPatch extends OpponentTeamColumns {
+  opponent_unattached: boolean;
+}
+
+/**
+ * A pick as the three `matches` columns: a directory program nulls the school,
+ * a typed school nulls the program — the wizard's own rule
+ * (`opponentTeamColumns`), so a team set here and one set at upload cannot be
+ * shaped differently — and "unattached" nulls both. The flag is written
+ * either way, so a pick always says exactly one thing.
+ */
+export function buildTeamPatch(choice: TeamChoice): TeamPatch {
+  if (choice.source === "unattached") {
+    return {
+      opponent_program_id: null,
+      opponent_school: null,
+      opponent_unattached: true,
+    };
+  }
+  return {
+    ...opponentTeamColumns({
+      opponentTeamProgram: choice.program ?? undefined,
+      opponentTeamSchool: choice.school ?? undefined,
+      opponentTeamSource: choice.source,
+    }),
+    opponent_unattached: false,
+  };
 }
 
 /** `ids` without repeats, in runs of at most `size`. */
@@ -126,7 +184,7 @@ export interface ApplyOpponentTeamInput {
   matchIds: readonly string[];
   /** The ones the viewer recorded; what a creator writes. */
   editableMatchIds: readonly string[];
-  choice: OpponentTeamChange;
+  choice: TeamChoice;
   /** Defaults to the browser client; a spec passes its own. */
   supabase?: SupabaseClient;
 }
@@ -162,7 +220,9 @@ export async function applyOpponentTeam({
   // Nothing to say or nothing to say it on: no request goes out.
   if (
     total === 0 ||
-    (patch.opponent_program_id === null && patch.opponent_school === null)
+    (patch.opponent_program_id === null &&
+      patch.opponent_school === null &&
+      !patch.opponent_unattached)
   ) {
     return { saved: 0, total, error: TEAM_WRITE_FAILED };
   }
@@ -181,6 +241,7 @@ export async function applyOpponentTeam({
               p_match_ids: chunk,
               p_opponent_program_id: patch.opponent_program_id,
               p_opponent_school: patch.opponent_school,
+              p_unattached: patch.opponent_unattached,
             })
           : await client
               .from("matches")
