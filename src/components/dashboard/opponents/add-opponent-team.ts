@@ -115,19 +115,47 @@ export function describeApplies(
 }
 
 /**
- * A pick as the two `matches` columns: a directory program nulls the school,
- * a typed school nulls the program. The wizard's own rule
- * (`opponentTeamColumns`), so a team set here and one set at upload cannot be
- * shaped differently.
+ * What the drawer can write: the picker's answer, or "unattached" — no school
+ * or club, said on purpose. The wizard never offers the third, so it lives
+ * here rather than in `OpponentTeamChange`.
  */
-export function buildTeamPatch(
-  choice: OpponentTeamChange,
-): OpponentTeamColumns {
-  return opponentTeamColumns({
-    opponentTeamProgram: choice.program ?? undefined,
-    opponentTeamSchool: choice.school ?? undefined,
-    opponentTeamSource: choice.source,
-  });
+export type TeamChoice =
+  OpponentTeamChange | { program: null; school: null; source: "unattached" };
+
+export const UNATTACHED_CHOICE: TeamChoice = {
+  program: null,
+  school: null,
+  source: "unattached",
+};
+
+/** The three `matches` columns a drawer pick writes. */
+export interface TeamPatch extends OpponentTeamColumns {
+  opponent_unattached: boolean;
+}
+
+/**
+ * A pick as the three `matches` columns: a directory program nulls the school,
+ * a typed school nulls the program — the wizard's own rule
+ * (`opponentTeamColumns`), so a team set here and one set at upload cannot be
+ * shaped differently — and "unattached" nulls both. The flag is written
+ * either way, so a pick always says exactly one thing.
+ */
+export function buildTeamPatch(choice: TeamChoice): TeamPatch {
+  if (choice.source === "unattached") {
+    return {
+      opponent_program_id: null,
+      opponent_school: null,
+      opponent_unattached: true,
+    };
+  }
+  return {
+    ...opponentTeamColumns({
+      opponentTeamProgram: choice.program ?? undefined,
+      opponentTeamSchool: choice.school ?? undefined,
+      opponentTeamSource: choice.source,
+    }),
+    opponent_unattached: false,
+  };
 }
 
 /** `ids` without repeats, in runs of at most `size`. */
@@ -156,7 +184,7 @@ export interface ApplyOpponentTeamInput {
   matchIds: readonly string[];
   /** The ones the viewer recorded; what a creator writes. */
   editableMatchIds: readonly string[];
-  choice: OpponentTeamChange;
+  choice: TeamChoice;
   /** Defaults to the browser client; a spec passes its own. */
   supabase?: SupabaseClient;
 }
@@ -192,7 +220,9 @@ export async function applyOpponentTeam({
   // Nothing to say or nothing to say it on: no request goes out.
   if (
     total === 0 ||
-    (patch.opponent_program_id === null && patch.opponent_school === null)
+    (patch.opponent_program_id === null &&
+      patch.opponent_school === null &&
+      !patch.opponent_unattached)
   ) {
     return { saved: 0, total, error: TEAM_WRITE_FAILED };
   }
@@ -211,6 +241,7 @@ export async function applyOpponentTeam({
               p_match_ids: chunk,
               p_opponent_program_id: patch.opponent_program_id,
               p_opponent_school: patch.opponent_school,
+              p_unattached: patch.opponent_unattached,
             })
           : await client
               .from("matches")

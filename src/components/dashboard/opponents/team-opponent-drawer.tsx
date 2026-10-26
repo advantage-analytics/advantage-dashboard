@@ -5,10 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { PeekDrawerFrame } from "@/components/dashboard/matches/match-drawer";
-import {
-  OpponentTeamField,
-  type OpponentTeamChange,
-} from "@/components/dashboard/matches/opponent-team-field";
+import { OpponentTeamField } from "@/components/dashboard/matches/opponent-team-field";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { Chip } from "@/components/dashboard/schedule/static/chip";
 import { ScoreLine } from "@/components/dashboard/score-line";
@@ -41,6 +38,8 @@ import {
   describeApplies,
   teamAction,
   teamWriteMode,
+  UNATTACHED_CHOICE,
+  type TeamChoice,
 } from "./add-opponent-team";
 import {
   RECENT_ROWS,
@@ -225,8 +224,18 @@ export function TeamOpponentDrawer({
     write &&
     write.status !== "refused" &&
     opponentTeamLineKey(savedTeam) === write.before
-      ? opponentTeamLine(write.choice)
+      ? opponentTeamLine({
+          ...write.choice,
+          unattached: write.choice.source === "unattached",
+        })
       : savedTeam;
+  // The words the team goes by, for the Change label and the Replaces note.
+  const teamName =
+    team.kind === "program" || team.kind === "school"
+      ? team.name
+      : team.kind === "unattached"
+        ? "Unattached"
+        : null;
   const writeMode = teamWriteMode(
     workspace.active,
     opponent.editableMatchIds.length,
@@ -238,7 +247,7 @@ export function TeamOpponentDrawer({
     opponent.matchIds.length,
   );
 
-  const pickTeam = async (next: OpponentTeamChange) => {
+  const pickTeam = async (next: TeamChoice) => {
     if (!writeMode) return;
     const opponentKey = opponent.key;
     const before = opponentTeamLineKey(savedTeam);
@@ -391,43 +400,76 @@ export function TeamOpponentDrawer({
                   type="button"
                   onClick={() => setEditing(opponent.key)}
                   aria-label={
-                    team.kind === "none"
-                      ? undefined
-                      : `Change ${firstName}’s team, ${team.name}`
+                    teamName
+                      ? `Change ${firstName}’s team, ${teamName}`
+                      : `Add ${firstName}’s team`
                   }
                   className={cn(
                     TEXT_ACTION_CLS,
                     "text-[var(--blue)] hover:text-[var(--blue-hover)]",
                   )}
                 >
-                  {action === "add" ? "Add their team" : "Change"}
+                  {action === "add" ? "Add" : "Change"}
                 </button>
               ))}
           </div>
           {editingTeam && action && writeMode ? (
-            <OpponentTeamField
-              program={opponent.program}
-              school={opponent.school}
-              searchNote={describeApplies(
-                writeMode,
-                opponent.editableMatchIds.length,
-                opponent.matchIds.length,
-                firstName,
-                team.kind === "none" ? null : team.name,
+            <>
+              <OpponentTeamField
+                program={opponent.program}
+                school={opponent.school}
+                searchNote={describeApplies(
+                  writeMode,
+                  opponent.editableMatchIds.length,
+                  opponent.matchIds.length,
+                  firstName,
+                  // "Replaces Unattached on…" reads as a typo; a first answer
+                  // and a change from unattached both just apply.
+                  team.kind === "unattached" ? null : teamName,
+                )}
+                onChange={pickTeam}
+                onDismiss={closeTeamSearch}
+              />
+              {/* No school to search for is one press, not a typed answer.
+                  Under the field, so the results menu covers it while
+                  somebody is typing a school. */}
+              {team.kind !== "unattached" && (
+                <button
+                  type="button"
+                  // Keeps focus in the search, as Cancel does.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    closeTeamSearch(true);
+                    void pickTeam(UNATTACHED_CHOICE);
+                  }}
+                  className="-mx-2.5 mt-2 flex cursor-pointer items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-left transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                >
+                  <UnattachedMark size={26} />
+                  <span className="flex min-w-0 flex-col gap-px">
+                    <span className="text-[12px] text-[var(--ink-900)]">
+                      Unattached
+                    </span>
+                    <span className="text-[11px] text-[var(--ink-600)]">
+                      Not with a school or club
+                    </span>
+                  </span>
+                </button>
               )}
-              onChange={pickTeam}
-              onDismiss={closeTeamSearch}
-            />
+            </>
           ) : (
             // A directory program and a school somebody typed are both a team
-            // and both get the crest; only an opponent nobody has placed
-            // reads "No team", over an empty crest outline. The name wraps.
+            // and both get the crest. Unattached is an answer too — a plain
+            // tile with a dash, no crest to fake. Only an opponent nobody has
+            // placed reads "Not set", over an empty crest outline, with what
+            // the answer can be under it for whoever can give it.
             <span className="flex items-center gap-3">
               {team.kind === "none" ? (
                 <span
                   aria-hidden
                   className="size-[38px] shrink-0 rounded-[8px] border border-dashed border-[var(--ink-200)]"
                 />
+              ) : team.kind === "unattached" ? (
+                <UnattachedMark size={38} />
               ) : (
                 <ProgramCrest
                   name={team.name}
@@ -439,16 +481,26 @@ export function TeamOpponentDrawer({
               <span className="flex min-w-0 flex-col gap-0.5">
                 {team.kind === "none" ? (
                   <span className="text-[13px] leading-[1.3] text-[var(--ink-600)]">
-                    No team
+                    Not set
                   </span>
                 ) : (
                   <span className="text-[13px] leading-[1.3] text-[var(--ink-900)]">
-                    {team.name}
+                    {teamName}
                   </span>
                 )}
                 {team.kind === "program" && team.detail ? (
                   <span className="text-[11px] leading-[1.3] text-[var(--ink-600)]">
                     {team.detail}
+                  </span>
+                ) : null}
+                {team.kind === "unattached" ? (
+                  <span className="text-[11px] leading-[1.3] text-[var(--ink-600)]">
+                    Not with a school or club
+                  </span>
+                ) : null}
+                {team.kind === "none" && action ? (
+                  <span className="text-[11px] leading-[1.3] text-[var(--ink-600)]">
+                    A school, a club, or unattached
                   </span>
                 ) : null}
                 {write?.status === "saving" ? (
@@ -653,11 +705,35 @@ interface TeamWrite {
   opponentKey: string;
   /** `opponentTeamLineKey` of the loader's team when the pick was made. */
   before: string;
-  choice: OpponentTeamChange;
+  choice: TeamChoice;
   /** `refused` is nothing saved; `saved` is at least one match changed. */
   status: "saving" | "saved" | "refused";
   /** The sentence to show; null while saving and when every match saved. */
   error: string | null;
+}
+
+/**
+ * The mark for "Unattached": a plain tile with a short dash — the crest's
+ * geometry, so the row lines up with a program's, and nothing that reads as
+ * a school.
+ */
+function UnattachedMark({ size }: { size: 26 | 38 }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex shrink-0 items-center justify-center bg-[var(--surface-subtle)]",
+        size === 38 ? "size-[38px] rounded-[8px]" : "size-[26px] rounded-[7px]",
+      )}
+    >
+      <span
+        className={cn(
+          "h-[1.5px] rounded-full bg-[var(--ink-600)]",
+          size === 38 ? "w-3" : "w-2.5",
+        )}
+      />
+    </span>
+  );
 }
 
 /** One roster player's 18px face: their photo, or their initials. */

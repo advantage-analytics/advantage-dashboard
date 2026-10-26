@@ -234,6 +234,16 @@ test.describe("where the opponent plays", () => {
     expect(opponentTeamLineKey({ kind: "none" })).toBe("none");
   });
 
+  test("unattached is its own answer, and a team said anywhere outranks it", () => {
+    expect(
+      opponentTeamLine({ program: null, school: null, unattached: true }),
+    ).toEqual({ kind: "unattached" });
+    expect(
+      opponentTeamLine({ program: null, school: "Harbor", unattached: true }),
+    ).toEqual({ kind: "school", name: "Harbor" });
+    expect(opponentTeamLineKey({ kind: "unattached" })).toBe("unattached");
+  });
+
   test("neither is No team", () => {
     expect(opponentTeamLine({ program: null, school: null })).toEqual({
       kind: "none",

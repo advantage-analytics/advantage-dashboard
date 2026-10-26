@@ -136,6 +136,8 @@ export type OpponentTeamLine =
     }
   /** A school somebody typed, not in the directory: a team all the same. */
   | { kind: "school"; name: string }
+  /** Said on purpose: they play for no school or club. */
+  | { kind: "unattached" }
   /** Nobody has said where they play. */
   | { kind: "none" };
 
@@ -144,11 +146,15 @@ export type OpponentTeamLine =
  * loader's answer has moved on from the one a pick replaced.
  */
 export function opponentTeamLineKey(line: OpponentTeamLine): string {
-  return line.kind === "none" ? "none" : `${line.kind}:${line.name}`;
+  return line.kind === "none" || line.kind === "unattached"
+    ? line.kind
+    : `${line.kind}:${line.name}`;
 }
 
 export function opponentTeamLine(
-  opponent: Pick<TeamOpponent, "program" | "school">,
+  opponent: Pick<TeamOpponent, "program" | "school"> & {
+    unattached?: boolean;
+  },
 ): OpponentTeamLine {
   const { program, school } = opponent;
   if (program) {
@@ -168,5 +174,6 @@ export function opponentTeamLine(
     };
   }
   if (school) return { kind: "school", name: school };
+  if (opponent.unattached) return { kind: "unattached" };
   return { kind: "none" };
 }
