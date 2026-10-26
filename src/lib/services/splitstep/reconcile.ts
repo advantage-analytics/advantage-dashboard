@@ -12,11 +12,11 @@
  *     cannot be recovered this way. The honest outcome is a failed state that
  *     routes the user to the manual resubmit path.
  *
- * Runs on the READ PATH, not a schedule: this app is on Vercel Hobby, where
- * cron fires once a day — useless against a 30-minute staleness window. The
- * precedent is `reap_stalled_uploads()`, called by the same two loaders
- * (matches list, match detail) at the same moment: a stale row only misleads
- * while someone is looking at it. `last_polled_at` is the rate limiter —
+ * Runs on the READ PATH, scoped to the rows a page shows, and unscoped every
+ * ten minutes from `pg_cron` via `/api/cron/reconcile-vendor-jobs` — Vercel
+ * Hobby's once-a-day cron is useless against a 30-minute staleness window,
+ * and without the schedule a lost delivery (and its email) waited for the
+ * uploader's next visit. `last_polled_at` is the rate limiter —
  * stamped on EVERY attempt, so a flapping vendor endpoint sees at most one
  * request per job per 10 minutes however often the page reloads.
  *

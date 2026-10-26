@@ -194,7 +194,9 @@ test("A single-step tour shows no StepBar and no counter, and Done closes it", a
   const { tour } = await openTour(page, "/?steps=1");
   await expect(tour.locator("[data-step-segment]")).toHaveCount(0);
   await expect(tour).not.toContainText(/\d+ of \d+/);
-  await expect(page.getByRole("button", { name: "Skip tour" })).toBeVisible();
+  // Not a tour, so its X does not offer to skip one.
+  await expect(page.getByRole("button", { name: "Skip tour" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Dismiss" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0);
 
   const done = page.getByRole("button", { name: "Done" });

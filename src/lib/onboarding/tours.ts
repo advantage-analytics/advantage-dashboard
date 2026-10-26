@@ -1,5 +1,5 @@
 import type { RecordingSource } from "@/app/onboarding/answers";
-import type { WorkspaceKind } from "@/lib/workspace/types";
+import type { Viewer, WorkspaceKind } from "@/lib/workspace/types";
 
 /**
  * The first-run report tours, their eligibility and the getting-set-up steps
@@ -21,8 +21,15 @@ export type TourId = "sample" | "first-report";
  */
 export type HintId = "workspace-switcher" | "activity-tray";
 
-/** Anything whose seen-state is a `users` column: a tour or a hint. */
-export type SeenId = TourId | HintId;
+/**
+ * A question the shell asks once and never again — answered or dismissed,
+ * it stamps a `users` column as a tour does. The first-match feedback prompt
+ * (`components/dashboard/feedback/first-match-feedback.tsx`) is the one so far.
+ */
+export type PromptId = "first-match-feedback";
+
+/** Anything whose seen-state is a `users` column: a tour, a hint or a prompt. */
+export type SeenId = TourId | HintId | PromptId;
 
 /**
  * The `data-tour="<id>"` attribute values a report renders. Adding these
@@ -69,6 +76,7 @@ export const TOUR_COLUMN = {
   "first-report": "first_report_tour_done_at",
   "workspace-switcher": "workspace_hint_done_at",
   "activity-tray": "activity_hint_done_at",
+  "first-match-feedback": "first_match_feedback_done_at",
 } as const satisfies Record<SeenId, string>;
 
 export interface TourStep {
@@ -176,6 +184,24 @@ export function soloDestination(
     default:
       return "/dashboard/matches/sample?tour=1";
   }
+}
+
+/**
+ * Has this player seen a report of any kind — the sample's tour, or their
+ * own first report? Either counts: a player who has read their own first
+ * report has nothing to learn from the sample, and `firstReportTourDoneAt`
+ * is also settled for anyone with more than one finished match (see
+ * `Viewer`), so a veteran reads as seen by construction. Both columns ride
+ * the workspace context, so this costs no read. The one rule behind the
+ * tray's "Tour a sample report" step and the analysis page's "While you
+ * wait, see a sample report" line.
+ */
+export function hasSeenAReport(
+  viewer: Pick<Viewer, "sampleTourDoneAt" | "firstReportTourDoneAt">,
+): boolean {
+  return (
+    viewer.sampleTourDoneAt !== null || viewer.firstReportTourDoneAt !== null
+  );
 }
 
 export interface FirstReportTourFacts {

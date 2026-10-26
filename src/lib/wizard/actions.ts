@@ -16,6 +16,13 @@
  */
 
 import { createClient } from "@/lib/supabase/server";
+import { providerKindOrNull } from "@/lib/services/upload";
+import {
+  DRAFT_FIELDS_SELECT,
+  draftFieldsFromColumns,
+  type DraftFieldColumns,
+  type DraftFields,
+} from "@/lib/wizard/draft-row-fields";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import {
   resolveWizardLookupScope,
@@ -702,9 +709,22 @@ export async function saveMatchDraft(
   return { id: row.id, updatedAt: row.updated_at };
 }
 
-export async function deleteMatchDraft(id: string): Promise<void> {
+/**
+ * Removes one of the viewer's drafts; RLS (`(select auth.uid()) = user_id`)
+ * scopes the delete to their own rows.
+ *
+ * Answers `{ error }` rather than throwing. The draft rail's confirm shows a
+ * refusal and stays open on one; the wizard's post-submit cleanup
+ * (`handleCreateMatch`) fires it and moves on, as it always has. Before this
+ * the error was dropped on the floor, and the rail closed on a draft that was
+ * still there.
+ */
+export async function deleteMatchDraft(
+  id: string,
+): Promise<{ error: string | null }> {
   const supabase = await createClient();
-  await supabase.from("match_drafts").delete().eq("id", id);
+  const { error } = await supabase.from("match_drafts").delete().eq("id", id);
+  return { error: error?.message ?? null };
 }
 
 const UUID_RE =
@@ -793,8 +813,13 @@ export async function loadMatchDraft(
   };
 }
 
-/** The drafts the Matches table lists at its top (design 11c). */
-export interface DraftRow {
+/**
+ * The drafts the Matches table lists at its top (design 11c), carrying the
+ * answers the row and the rail read back (`DraftFields`): the opponent, the
+ * match day, the score typed so far, the court, the source and the step it
+ * stopped on.
+ */
+export interface DraftRow extends DraftFields {
   id: string;
   playerName: string | null;
   eventLabel: string | null;
@@ -822,9 +847,10 @@ export async function listMatchDrafts(scope: {
   let query = supabase
     .from("match_drafts")
     .select(
-      // Two JSON paths, not the whole payload: the list needs one id out of
-      // it, and the payload carries every answer the wizard holds.
-      `id, player_name, event_label, step_index, step_count, file_name, updated_at, ${DRAFT_TARGET_SELECT}`,
+      // JSON paths, not the whole payload: the row reads back the handful of
+      // answers it shows (`DRAFT_FIELDS_SELECT`) and the id of the match it
+      // fills; the payload carries every answer the wizard holds.
+      `id, step, step_index, step_count, provider, player_name, event_label, file_name, updated_at, ${DRAFT_FIELDS_SELECT}, ${DRAFT_TARGET_SELECT}`,
     )
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false });
@@ -841,7 +867,8 @@ export async function listMatchDrafts(scope: {
       step_count: number;
       file_name: string | null;
       updated_at: string;
-    } & DraftTargetColumns)[]
+    } & DraftFieldColumns &
+      DraftTargetColumns)[]
   ).map((row) => ({
     id: row.id,
     playerName: row.player_name,
@@ -851,6 +878,10 @@ export async function listMatchDrafts(scope: {
     fileName: row.file_name,
     updatedAt: row.updated_at,
     matchId: draftTargetFromColumns(row),
+    ...draftFieldsFromColumns(
+      row,
+      row.provider ? providerKindOrNull(row.provider) : null,
+    ),
   }));
 
   // A draft whose match already has a video job is stale: the video went in

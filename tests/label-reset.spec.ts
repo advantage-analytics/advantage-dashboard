@@ -381,6 +381,7 @@ test("the loader carries each row's seed, and no seed for a bad one", () => {
         checked_at: null,
         note: "  ",
         dismissed: ["missing_shot:7"],
+        game_start_locked: false,
         seed: POINT_SEED,
       },
     ],

@@ -11,8 +11,12 @@ import { matchDayYear, utcToday } from "@/lib/data/match-day";
  * x on every row and reads the way the match drawer draws it ("✓ 6-4, 3-6").
  * After the score it floated: a three-set score is wider than a two-set one.
  * Event trails the numbers — the least-scanned text, the widest, often blank
- * for practice — and is the column the team table collapses while the drawer
- * is open (`TEAM_LIST_GRID_COLS_COMPACT`); the drawer names the event instead.
+ * for practice — and is the column both tables collapse while the drawer is
+ * open (`LIST_GRID_COLS_COMPACT`, `TEAM_LIST_GRID_COLS_COMPACT`); the drawer
+ * names the event instead. Beside a 340px rail the personal card drops under
+ * the list's floor (about 707px inside at 1440), and with Opponent and Event
+ * still at their fixed maxima the grid overflowed the card: the lifecycle
+ * cell — "Analyzed", a draft's step and its Continue — was the part cut off.
  *
  * No chevron track: a row opens the peek drawer rather than travelling. No ⋯
  * track either: Edit and Delete live in the drawer's header, one click away,
@@ -31,6 +35,14 @@ const SCORE_COL = "116px";
 export const LIST_GRID_COLS = {
   gridTemplateColumns: `var(--date-col, ${DATE_COL}) minmax(186px,276px) ${RESULT_COL} ${SCORE_COL} minmax(150px,260px) minmax(96px,1fr)`,
 } as const;
+/**
+ * The personal tracks beside the open drawer: Event collapsed to nothing, in
+ * the same `minmax()` shape so the columns interpolate (see the team note
+ * below). Lifecycle takes what Event gave up.
+ */
+export const LIST_GRID_COLS_COMPACT = {
+  gridTemplateColumns: `var(--date-col, ${DATE_COL}) minmax(186px,276px) ${RESULT_COL} ${SCORE_COL} minmax(0px,0fr) minmax(96px,1fr)`,
+} as const;
 export const TEAM_LIST_GRID_COLS = {
   gridTemplateColumns: `var(--date-col, ${DATE_COL}) minmax(166px,1fr) minmax(130px,1fr) ${RESULT_COL} ${SCORE_COL} minmax(150px,1fr) minmax(96px,1fr)`,
 } as const;
@@ -45,25 +57,31 @@ export const TEAM_LIST_GRID_COLS = {
  * rail's width animated. Its leftover 16px gap is absorbed by lifecycle's 1fr.
  */
 export const TEAM_LIST_GRID_COLS_COMPACT = {
-  gridTemplateColumns: `var(--date-col, ${DATE_COL}) minmax(156px,1fr) minmax(130px,1fr) ${RESULT_COL} ${SCORE_COL} minmax(0px,0fr) minmax(96px,1fr)`,
+  // Player and Opponent floors of 140 and 120 (not the wide table's 166 and
+  // 130): with the sidebar pinned and the rail open, a 1440 viewport leaves
+  // the card about 705px inside, and the earlier 728px floor overflowed it by
+  // the width of the lifecycle cell's last word.
+  gridTemplateColumns: `var(--date-col, ${DATE_COL}) minmax(140px,1fr) minmax(120px,1fr) ${RESULT_COL} ${SCORE_COL} minmax(0px,0fr) minmax(96px,1fr)`,
 } as const;
 
 /** Minimum inner widths, so the card scrolls rather than crushing a track. */
 export const LIST_MIN_WIDTH = "min-w-[776px]";
+export const LIST_MIN_WIDTH_COMPACT = "min-w-[610px]";
 export const TEAM_LIST_MIN_WIDTH = "min-w-[892px]";
-export const TEAM_LIST_MIN_WIDTH_COMPACT = "min-w-[728px]";
+export const TEAM_LIST_MIN_WIDTH_COMPACT = "min-w-[700px]";
 
 /** Which tracks a row uses: the scope, and whether the team drawer is open. */
 export function listGridCols(scope: "personal" | "team", compact = false) {
-  if (scope === "personal") return LIST_GRID_COLS;
+  if (scope === "personal") {
+    return compact ? LIST_GRID_COLS_COMPACT : LIST_GRID_COLS;
+  }
   return compact ? TEAM_LIST_GRID_COLS_COMPACT : TEAM_LIST_GRID_COLS;
 }
 
 /**
  * One header label per track, shared by `MatchesGrid` and the loading skeleton
  * so the two cannot drift. Analysis labels the trailing lifecycle track;
- * Event stays in the
- * team header beside the drawer, fading with the cells under it.
+ * Event stays in the header beside the drawer, fading with the cells under it.
  */
 export function listColumnLabels(scope: "personal" | "team"): string[] {
   if (scope === "personal") {
@@ -95,28 +113,23 @@ export interface MatchesListShape {
  * Whether any row's date prints with its year — the test that widens the Date
  * track, and exactly the rule each row's own formatter applies.
  *
- * The two lists hold two different kinds of value. A match's date is a
- * calendar DAY (`match-day.ts`), so its year is read off the day and compared
+ * Both lists hold calendar DAYS (`match-day.ts`): a match's date, and the
+ * match day a draft has entered so far (null before it has one, which prints
+ * as a dash and needs no year). Each year is read off the day and compared
  * with the UTC year `formatMatchDayShortYear` uses — the same answer on the
- * server and in every browser. A draft's `updatedAt` is a real moment, printed
- * by `formatShortDate` in the reader's own zone, so it is compared the way
- * that prints it.
+ * server and in every browser. A draft's `updatedAt` is a real moment and is
+ * printed in the rail, not in this track.
  */
 export function datesNeedYear(
   matchDates: readonly string[],
-  draftDates: readonly string[],
+  draftDays: readonly (string | null)[],
 ): boolean {
-  const matchYear = Number(utcToday().slice(0, 4));
-  const draftYear = new Date().getFullYear();
-  return (
-    matchDates.some((date) => {
-      const year = matchDayYear(date);
-      return year !== null && year !== matchYear;
-    }) ||
-    draftDates.some(
-      (updatedAt) => new Date(updatedAt).getFullYear() !== draftYear,
-    )
-  );
+  const thisYear = Number(utcToday().slice(0, 4));
+  const differs = (date: string | null) => {
+    const year = matchDayYear(date);
+    return year !== null && year !== thisYear;
+  };
+  return matchDates.some(differs) || draftDays.some(differs);
 }
 
 /**
@@ -125,12 +138,12 @@ export function datesNeedYear(
  */
 export function matchesListShape(
   matchDates: string[],
-  draftDates: string[],
+  draftDays: (string | null)[],
 ): MatchesListShape {
   const firstPage = matchDates.slice(0, MATCHES_PAGE_SIZE);
   return {
-    rows: draftDates.length + firstPage.length,
-    needsYear: datesNeedYear(firstPage, draftDates),
+    rows: draftDays.length + firstPage.length,
+    needsYear: datesNeedYear(firstPage, draftDays),
     paged: matchDates.length > MATCHES_PAGE_SIZE,
   };
 }

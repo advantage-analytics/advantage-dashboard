@@ -21,6 +21,12 @@
  * answer anyone else "Job not found". Every other viewer reads the same
  * steps with no action under them.
  *
+ * "While you wait, see a sample report" closes the column for a first-time
+ * personal player (`showSampleLink`, decided by the page) who filed this
+ * match (`canAct`), and only while the job is moving (`view.waiting`): never
+ * under a paused, stalled, failed or cancelled step, where nothing is being
+ * waited on.
+ *
  * The column itself never reads the app router: only the dialog and the
  * resend action do, and each mounts only where it is needed — so the column
  * renders offline (specs) and on `/design` without one.
@@ -109,9 +115,11 @@ export function AnalysisSteps({
    */
   canAct?: boolean;
   /**
-   * Offer "While you wait, see a sample report" under the steps. The caller
-   * decides (the match page passes it for personal workspaces); it also needs
-   * `canAct`, so only the player who filed the match is pointed at the sample.
+   * The viewer is a personal player who has never seen a report — the match
+   * page decides, from `hasSeenAReport()`. The column adds two gates of its
+   * own before drawing "While you wait, see a sample report": `canAct` (only
+   * the player who filed the match is pointed at the sample) and the view's
+   * `waiting` (never under a paused, stalled, failed or cancelled step).
    */
   showSampleLink?: boolean;
   /** Replaces the queued step's "Cancel analysis" (which opens the dialog). */
@@ -200,7 +208,7 @@ export function AnalysisSteps({
           ))}
         </ol>
 
-        {showSampleLink && canAct && (
+        {showSampleLink && canAct && view.waiting && (
           <Link
             href="/dashboard/matches/sample?tour=1"
             className="mt-8 self-start rounded-[4px] text-[12px] leading-4 font-medium text-[var(--ink-700)] transition-colors duration-150 hover:text-[var(--blue-hover)]"

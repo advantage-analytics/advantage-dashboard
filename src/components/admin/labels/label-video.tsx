@@ -74,6 +74,11 @@ import { KEY_OWNER_SELECTOR } from "./label-layout";
 export interface LabelVideoHandle {
   /** Seek to a label's `videoTime` (analysis clock), converted to this file. */
   seekTo: (videoTime: number) => void;
+  /**
+   * The frame the element stands on, on the FILE's clock (no offset added),
+   * or null with no element — T's "time = frame" adds `fileOffset` itself.
+   */
+  currentTime: () => number | null;
   togglePlay: () => void;
   /** Whether the film is running — read before a remount that would stop it. */
   isPlaying: () => boolean;
@@ -121,6 +126,11 @@ export const LabelVideoPlayer = forwardRef<
     onTime?: (videoTime: number) => void;
     /** The element paused, by whoever asked: the transport, a click, a seek's end. */
     onPause?: () => void;
+    /**
+     * The transport's Previous / Next, handed to the caller instead (which
+     * steps through the handle's `step`): the console follows the film again.
+     */
+    onStep?: (direction: -1 | 1) => void;
     /** Playable on first render — for specs. A real element starts pending. */
     initialReady?: boolean;
     /** A media error on first render — for specs. */
@@ -139,6 +149,7 @@ export const LabelVideoPlayer = forwardRef<
     readout = NO_READOUT,
     onTime,
     onPause,
+    onStep,
     initialReady = false,
     initialFailure = null,
     clockTargetRef,
@@ -373,6 +384,9 @@ export const LabelVideoPlayer = forwardRef<
     () => ({
       seekTo(videoTime) {
         seek(Math.max(0, videoTime - offset));
+      },
+      currentTime() {
+        return videoRef.current?.currentTime ?? null;
       },
       togglePlay,
       isPlaying() {
@@ -619,7 +633,7 @@ export const LabelVideoPlayer = forwardRef<
           previewSource={{ url: video.url, generation: 0 }}
           onSeek={seek}
           onTogglePlay={togglePlay}
-          onStep={step}
+          onStep={onStep ?? step}
           onToggleSaved={noop}
           onToggleSkipDeadTime={toggleSkipDeadTime}
           onCycleRate={cycleRate}

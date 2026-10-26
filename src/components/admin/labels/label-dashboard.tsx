@@ -18,6 +18,7 @@ import {
   labelProgress,
   type LabelPoint,
   type LabelSide,
+  type LabelStartScore,
   type MatchScore,
 } from "@/lib/services/labels/session";
 import {
@@ -57,9 +58,11 @@ export interface LabelDashboardProps {
   points: readonly LabelPoint[];
   /** The live marks; null on a session labelled without them. */
   marks: LabelMarks | null;
-  /** `labelScores(points, adScoring).games`, as the console scored them. */
+  /** `labelScores(points, adScoring, startScore).games`, as the console scored them. */
   games: readonly LabelGameBand[];
   adScoring: boolean;
+  /** Where the video starts in the match; null or absent: at the beginning. */
+  startScore?: LabelStartScore | null;
   names: Record<LabelSide, string>;
   finalScore: readonly (readonly number[])[] | null;
   matchScore: MatchScore | null;
@@ -89,8 +92,16 @@ interface Reading {
 type WidgetProps = LabelDashboardProps & { reading: Reading };
 
 export function LabelDashboard(props: LabelDashboardProps) {
-  const { points, marks, games, adScoring, finalScore, matchScore, upload } =
-    props;
+  const {
+    points,
+    marks,
+    games,
+    adScoring,
+    finalScore,
+    matchScore,
+    upload,
+    startScore = null,
+  } = props;
   const bestOf = upload?.bestOf ?? 3;
   const flagged = useMemo(
     () => (marks ? openFlags(points, marks) : []),
@@ -106,18 +117,22 @@ export function LabelDashboard(props: LabelDashboardProps) {
       () => flagGroups(flagged.filter((flag) => flag.data)),
       [flagged],
     ),
-    sets: useMemo(() => labelSetScores(points, games), [points, games]),
+    sets: useMemo(
+      () => labelSetScores(points, games, startScore),
+      [points, games, startScore],
+    ),
     entered: enteredScore(finalScore, matchScore),
     changes: useMemo(() => changeCounts(points), [points]),
     stats: useMemo(() => {
       try {
         return expectedStats(
-          buildAppliedRows({ points, adScoring, bestOf }).points,
+          buildAppliedRows({ points, adScoring, bestOf, start: startScore })
+            .points,
         );
       } catch {
         return null;
       }
-    }, [points, adScoring, bestOf]),
+    }, [points, adScoring, bestOf, startScore]),
   };
   const widget = { ...props, reading };
 

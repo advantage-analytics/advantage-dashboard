@@ -25,6 +25,7 @@ import {
 import { FilmEmptyState } from "./film-empty-state";
 import { sequenceStep } from "./film-sequence";
 import { FilmEntryActions } from "./film-entry-actions";
+import { FilmSkipDeadHint } from "./film-skip-dead-hint";
 import { FilmExpiredState } from "./film-expired-state";
 import { FilmExpiryNotice } from "./film-expiry-notice";
 import { FilmUnavailableState } from "./film-unavailable-state";
@@ -895,6 +896,8 @@ function FilmRoom({
    * scroll the pane, and on any key with a modifier, which is the browser's.
    */
   const roomOpen = room !== null;
+  const [skipDeadAnswered, setSkipDeadAnswered] = useState(false);
+  const markSkipDeadAnswered = useCallback(() => setSkipDeadAnswered(true), []);
   // ↑ ↓: the previous / next shot over the applied cut. A shot step is a step,
   // so it re-follows first, like the point step does.
   const stepShotBy = useCallback(
@@ -1186,6 +1189,7 @@ function FilmRoom({
             sequence={sequence}
             onToggleSequence={toggleSequence}
             sequenceDisabled={walkStops.length === 0}
+            onSkipDeadToggled={markSkipDeadAnswered}
             onTimeChange={setCurrentTime}
             onPlaybackTime={reportTime}
             onPlaybackPlaying={reportShellPlaying}
@@ -1246,6 +1250,10 @@ function FilmRoom({
             />
           </div>
         </div>
+
+        {/* Skip dead time is on by default: the one card that says so, on the
+            player's glyph, once. The glyph pressed answers it. */}
+        <FilmSkipDeadHint when={!roomOpen} resolved={skipDeadAnswered} />
 
         {room && (
           <FilmFullscreen

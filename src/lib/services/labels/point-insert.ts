@@ -135,6 +135,7 @@ export function draftInsertedPoint(
     checkedAt: null,
     note: null,
     dismissed: [],
+    gameStartLocked: false,
     seed: null,
     shots: [],
   };

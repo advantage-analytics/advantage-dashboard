@@ -1,3 +1,7 @@
+import {
+  FIRST_MATCH_FEEDBACK_WORDS,
+  type FirstMatchFeedbackRating,
+} from "@/lib/feedback/first-match-feedback";
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
 
@@ -125,5 +129,97 @@ export function uploadInternalEmail(input: UploadInternalInput): EmailMessage {
     html: renderEmail(content),
     text: renderText(content),
     tags: { type: "upload_internal", kind },
+  };
+}
+
+export interface FeedbackInternalInput {
+  /** `INTERNAL_ALERTS_ADDRESS`, passed by the caller. */
+  to: string;
+  /** `product_feedback.id`. */
+  feedbackId: string;
+  userId: string;
+  playerName: string | null;
+  playerEmail: string | null;
+  rating: FirstMatchFeedbackRating;
+  /** The note in full, or null when none was written. */
+  note: string | null;
+  /**
+   * Whole hours between first reading the report and answering, from the
+   * route's saved context; null when the context did not carry it.
+   */
+  hoursSinceFirstReport: number | null;
+  /** Pre-built by the caller: `${emailOrigin()}/admin`. */
+  adminUrl: string;
+}
+
+/** "9 hours after first reading it" / "3 days after first reading it". */
+function sinceFirstReport(hours: number | null): string | null {
+  if (hours === null || !Number.isFinite(hours) || hours < 0) return null;
+  if (hours < 48)
+    return `${hours} hour${hours === 1 ? "" : "s"} after first reading it`;
+  const days = Math.round(hours / 24);
+  return `${days} days after first reading it`;
+}
+
+/**
+ * A player answered the first-match feedback question. The one alert the
+ * inbox gets that carries a player's own words, so the note is the body,
+ * quoted in full — the point of the mail is reading it, not knowing it
+ * exists.
+ */
+export function feedbackInternalEmail(
+  input: FeedbackInternalInput,
+): EmailMessage {
+  const {
+    to,
+    feedbackId,
+    userId,
+    playerName,
+    playerEmail,
+    rating,
+    note,
+    hoursSinceFirstReport,
+    adminUrl,
+  } = input;
+
+  const word = FIRST_MATCH_FEEDBACK_WORDS[rating];
+  const player = playerName ?? playerEmail ?? "A player";
+  const who =
+    [playerName, playerEmail && `(${playerEmail})`].filter(Boolean).join(" ") ||
+    "Unknown — account deleted";
+  const when = sinceFirstReport(hoursSinceFirstReport);
+
+  const content: EmailContent = {
+    preheader: `${player} rated their first report ${rating} of 5${note ? " and left a note." : "."}`,
+    eyebrow: "First-match feedback",
+    heading: `${word} — ${rating} of 5`,
+    body: [
+      [
+        { text: player, strong: true },
+        {
+          text: ` answered the first-match question${when ? `, ${when}` : ""}.`,
+        },
+      ],
+      note
+        ? [{ text: "“" }, { text: note, strong: true }, { text: "”" }]
+        : "No note.",
+    ],
+    facts: [
+      { label: "Rating", value: `${rating} of 5 — ${word}` },
+      { label: "Player", value: who },
+      ...(when ? [{ label: "Answered", value: when }] : []),
+      { label: "Account", value: userId },
+      { label: "Feedback id", value: feedbackId },
+    ],
+    cta: { label: "Open admin", url: adminUrl },
+    note: "Sent to the internal alerts inbox, once per answer.",
+  };
+
+  return {
+    to,
+    subject: `First-match feedback: ${rating}/5 from ${player}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "feedback_internal", rating: String(rating) },
   };
 }

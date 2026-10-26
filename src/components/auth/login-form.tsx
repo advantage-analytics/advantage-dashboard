@@ -19,6 +19,7 @@ import {
   AUTH_NEXT_MAX_AGE_SECONDS,
 } from "@/lib/auth/auth-next-cookie";
 import { authHref, safeNext } from "@/lib/auth/safe-next";
+import { readFormFields } from "@/lib/auth/form-fields";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 
@@ -77,11 +78,15 @@ export function LoginForm({
   const router = useRouter();
   const destination = safeNext(next ?? null);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
-    const emailProblem = validateEmail(email);
+    const fields = readFormFields(e.currentTarget, ["email", "password"]);
+    setEmail(fields.email);
+    setPassword(fields.password);
+
+    const emailProblem = validateEmail(fields.email);
     if (emailProblem) {
       setError({ field: "email", message: emailProblem });
       return;
@@ -95,8 +100,8 @@ export function LoginForm({
         data: { user },
         error: signInError,
       } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: fields.email,
+        password: fields.password,
       });
       if (signInError) throw signInError;
       if (user && isPostHogConfigured) {
@@ -175,17 +180,19 @@ export function LoginForm({
         <FormField
           label="Email"
           id="login-email"
+          name="email"
           placeholder="name@university.edu"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          autoComplete="email"
+          autoComplete="username"
           error={error?.field === "email" ? error.message : null}
         />
         <FormField
           label="Password"
           id="login-password"
+          name="password"
           type="password"
           placeholder="••••••••••••"
           showPasswordToggle

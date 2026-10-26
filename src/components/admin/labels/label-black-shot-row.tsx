@@ -398,6 +398,14 @@ export function BlackShotsWell({
 }
 
 /**
+ * The row a pointer is pressing on: its cell takes focus before the click
+ * lands, and that focus is the click's selection, seek and all — so the
+ * click after it finds the row selected and makes no second one. One press
+ * at a time, so one id; a focus or click spends it.
+ */
+let pressedShotId: string | null = null;
+
+/**
  * One stroke: number · time · hitter · stroke · spin · hit at (ring) · landed
  * at (dot) · derived placement and result · blue pencil when changed or added.
  *
@@ -448,13 +456,35 @@ export function BlackShotRow({
   const changed = shot.status === "edited" || shot.status === "added";
   // A click on the row already selected (the one a flag jump landed on) is
   // the labeller taking it over: review mode ends, the selection stays.
-  const select = () => {
-    if (!selected) onSelectShot?.(shot.id);
-    else edit.onExitReview?.();
+  // A click seeks the film to the stroke; a focus the keyboard moved here
+  // (Tab into a cell) selects it and leaves the film where it is.
+  const select = (seek: boolean) => {
+    if (!selected) {
+      if (seek) onSelectShot?.(shot.id);
+      else onSelectShot?.(shot.id, undefined, { seek: false });
+    } else edit.onExitReview?.();
+  };
+  const clickRow = () => {
+    pressedShotId = null;
+    select(true);
+  };
+  // The time cell is where a stroke's time is set, often from the frame the
+  // film stands on: reaching for it selects the row and leaves the film there.
+  const clickTime = (event: { stopPropagation: () => void }) => {
+    event.stopPropagation();
+    pressedShotId = null;
+    select(false);
+  };
+  const focusRow = () => {
+    const pressed = pressedShotId === shot.id;
+    pressedShotId = null;
+    select(pressed);
   };
   // A position cell selects the row on its own end, even when already selected.
-  const pick = (target: "contact" | "landing") =>
+  const pick = (target: "contact" | "landing") => {
+    pressedShotId = null;
     onSelectShot?.(shot.id, target);
+  };
   const patch = (value: LabelShotPatch) => onPatchShot?.(shot.id, value);
   const cell = { editable, rowSelected: selected };
   const selectCell = { ...cell, menu: tone };
@@ -474,19 +504,33 @@ export function BlackShotRow({
     selected && operations
       ? shotTrayActions({ shot, number, point, pointNumber, operations })
       : null;
+  // The call, one click in the tray: written alone, so the landing stays
+  // where it was placed (`effectiveShotResult` lets this call outrank it).
+  const call: ShotTrayCall | null =
+    trayActions && onPatchShot && shot.stroke !== null
+      ? { value: shot.result, onPick: (result) => patch({ result }) }
+      : null;
 
   return (
     <>
       {/* Selecting is a pointer convenience; the keyboard selects by focusing
-          any cell in the row, which bubbles here as the same call. */}
+          any cell in the row, which bubbles here and selects without a seek.
+          A press's own focus is the click's selection (`pressedShotId`). */}
       <div
         data-row="shot"
         data-shot-id={shot.id}
         data-selected={selected ? "" : undefined}
         data-playing={playing ? "true" : undefined}
         data-fault={fault ? "" : undefined}
-        onClick={select}
-        onFocus={select}
+        onPointerDown={(event?: { target: EventTarget | null }) => {
+          // A press on the time cell is not a seeking press (`clickTime`).
+          const quiet = (event?.target as Element | null)?.closest?.(
+            "[data-select-quiet]",
+          );
+          pressedShotId = quiet ? null : shot.id;
+        }}
+        onClick={clickRow}
+        onFocus={focusRow}
         style={arrival.style}
         className={cn(
           ROW_GRID,
@@ -508,35 +552,38 @@ export function BlackShotRow({
             {playing ? <span className="sr-only">, playing</span> : null}
           </span>
         </span>
-        <EditableCell
-          {...cell}
-          label={`Shot ${number} time`}
-          valueText={time ?? "Not set"}
-          textClassName={TEXT_AFFORDANCE}
-          display={
-            time ? (
-              <span
-                className="mono tabular text-[10px]"
-                style={{ color: QUIET_INK }}
-              >
-                {time}
-              </span>
-            ) : (
-              <Dash label="Not set" />
-            )
-          }
-          editor={
-            <TextEditor
-              label={`Shot ${number} time`}
-              text={time ?? ""}
-              parse={(text) => parseFileTime(text, edit.fileOffset)}
-              onCommit={(value) =>
-                patch({ video_time: value as number | null })
-              }
-              quiet
-            />
-          }
-        />
+        <span data-select-quiet="" className="contents" onClick={clickTime}>
+          <EditableCell
+            {...cell}
+            label={`Shot ${number} time`}
+            valueText={time ?? "Not set"}
+            textClassName={TEXT_AFFORDANCE}
+            display={
+              time ? (
+                <span
+                  className="mono tabular text-[10px]"
+                  style={{ color: QUIET_INK }}
+                >
+                  {time}
+                </span>
+              ) : (
+                <Dash label="Not set" />
+              )
+            }
+            editor={
+              <TextEditor
+                label={`Shot ${number} time`}
+                text={time ?? ""}
+                draftKey={shot.id}
+                parse={(text) => parseFileTime(text, edit.fileOffset)}
+                onCommit={(value) =>
+                  patch({ video_time: value as number | null })
+                }
+                quiet
+              />
+            }
+          />
+        </span>
         <BlackSelectCell
           {...selectCell}
           label={`Shot ${number} player`}
@@ -669,7 +716,9 @@ export function BlackShotRow({
           ) : null}
         </span>
       </div>
-      {trayActions ? <ShotTray number={number} actions={trayActions} /> : null}
+      {trayActions ? (
+        <ShotTray number={number} actions={trayActions} call={call} />
+      ) : null}
     </>
   );
 }
@@ -1311,6 +1360,16 @@ const SHOT_TRAY_ICON = {
   delete: X,
 } as const;
 
+/** The three calls the tray's toggle offers; a let stays the serve menu's. */
+export const SHOT_CALLS = ["in", "out", "net"] as const;
+export type ShotCall = (typeof SHOT_CALLS)[number];
+
+/** The tray's call toggle: the stored call, and what picking another writes. */
+export type ShotTrayCall = {
+  value: LabelShotResult | null;
+  onPick: (result: ShotCall) => void;
+};
+
 /**
  * The selected stroke's actions, on a 28px strip right under its row: the
  * row's own wash with a hairline between, so the two read as one block. The
@@ -1319,14 +1378,21 @@ const SHOT_TRAY_ICON = {
  * too narrow, the labels truncate before Delete moves. A click here never
  * reaches the row or the point under it.
  *
+ * `call`, when given, leads the strip: In · Out · Net, the stored one pressed.
+ * Picking another writes the call alone — no landing moves — because a flipped
+ * call was otherwise a re-click a few centimetres over the line (median 16 cm
+ * on 202 last-ball flips across 13 completed sessions, 2026-10-23).
+ *
  * No hooks: a spec calls it and reads its buttons off the tree.
  */
 function ShotTray({
   number,
   actions,
+  call,
 }: {
   number: number;
   actions: readonly ShotTrayAction[];
+  call?: ShotTrayCall | null;
 }) {
   return (
     <div
@@ -1338,6 +1404,38 @@ function ShotTray({
       // so the actions sit clear of the hairline without crowding the row.
       className="flex h-[32px] min-w-0 items-center gap-4 bg-white/[0.12] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
     >
+      {call ? (
+        <span
+          role="group"
+          aria-label={`Shot ${number} call`}
+          data-shot-call=""
+          className="inline-flex shrink-0 rounded-[7px] bg-white/[0.08] p-0.5"
+        >
+          {SHOT_CALLS.map((value) => {
+            const on = call.value === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={on}
+                data-shot-call-option={value}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!on) call.onPick(value);
+                }}
+                className={cn(
+                  "h-[18px] cursor-pointer rounded-[5px] px-[7px] text-[10px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                  on
+                    ? "bg-white/[0.16] font-medium text-white"
+                    : "font-normal text-white/60 hover:text-white",
+                )}
+              >
+                {RESULT_LABEL[value]}
+              </button>
+            );
+          })}
+        </span>
+      ) : null}
       {actions.map((action) => (
         <Fragment key={action.key}>
           {action.key === "delete" ? (
@@ -1354,6 +1452,7 @@ function ShotTray({
             shrinks={action.key !== "delete"}
             small
             data-shot-action={action.key}
+            aria-keyshortcuts={action.key === "reset" ? "R" : undefined}
             aria-label={action.ariaLabel}
             onClick={(event) => {
               event.stopPropagation();

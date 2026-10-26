@@ -5,12 +5,23 @@ import { createRoot } from "react-dom/client";
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
+import { SKIP_DEAD_HINT_SEEN_STORAGE_KEY } from "@/components/dashboard/matches/match-detail/film/film-room-prefs";
 import { MatchReportProvider } from "@/components/dashboard/matches/match-detail/match-report-context";
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import type { Match } from "@/lib/data/types";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { WorkspaceContextValue } from "@/lib/workspace/types";
+
+// The Film tab's one-card hint (`film-skip-dead-hint.tsx`) opens on the
+// player's glyph once per browser profile, as a `role="dialog"` over the
+// lane that takes Escape and the pointer. Each case here starts a fresh
+// profile and is about playback, not the hint, so it is marked seen first.
+try {
+  localStorage.setItem(SKIP_DEAD_HINT_SEEN_STORAGE_KEY, "1");
+} catch {
+  /* blocked storage: the hint reads that as seen anyway */
+}
 
 import type { FilmRefreshHarnessWindow } from "./film-playback-refresh-window";
 
@@ -130,6 +141,9 @@ const WORKSPACE: WorkspaceContextValue = {
     activityHintDoneAt: null,
     sampleTourDoneAt: null,
     firstReportTourDoneAt: null,
+    firstReportSeenAt: null,
+    firstMatchFeedbackDoneAt: null,
+    lastSignInAt: null,
   },
 };
 

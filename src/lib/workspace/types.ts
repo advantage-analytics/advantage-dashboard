@@ -394,6 +394,27 @@ export interface Viewer {
    * row read for it.
    */
   firstReportTourDoneAt: string | null;
+  /**
+   * `users.first_report_seen_at` — when the player first opened a published
+   * report of a personal match they filed, stamped by the match page
+   * (`markFirstReportSeen`). Null means not yet. With `lastSignInAt` and
+   * `firstMatchFeedbackDoneAt` it decides whether the shell asks the
+   * first-match feedback question (`firstMatchFeedbackDue`).
+   */
+  firstReportSeenAt: string | null;
+  /**
+   * `users.first_match_feedback_done_at` — when the first-match feedback
+   * prompt was answered (`submit_product_feedback`) or dismissed
+   * (`markTourDone("first-match-feedback")`). Null means it may still be
+   * asked.
+   */
+  firstMatchFeedbackDoneAt: string | null;
+  /**
+   * The auth user's `last_sign_in_at`: set by a password, OAuth or magic-link
+   * sign-in, never by a token refresh. Null when Supabase has none. Read off
+   * the `getAuthUser()` result the context already has, so it costs nothing.
+   */
+  lastSignInAt: string | null;
 }
 
 /**

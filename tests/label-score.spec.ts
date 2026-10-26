@@ -387,3 +387,92 @@ test.describe("games and sets", () => {
     expect(JSON.stringify(points)).toBe(snapshot);
   });
 });
+
+// ── A video that starts mid-match ────────────────────────────────────────────
+
+test.describe("a start score", () => {
+  const start = {
+    sets: [0, 0] as [number, number],
+    games: [2, 0] as [number, number],
+    points: [1, 0] as [number, number],
+    server: "p1" as const,
+  };
+
+  test("the first game opens at the start's points and server, its set at the start's games", () => {
+    // Three more p1 points settle a game that opened 15–0, then game 2.
+    const points = [
+      ...game({}, ["p1", "p1", "p1"]),
+      ...game({ gameNumber: 2, server: "p2" }, ["p2"]),
+    ];
+    const scores = labelScores(points, true, start);
+    const [first, second] = scores.games;
+    expect(first.gamesBefore).toBe("2–0");
+    expect(first.server).toBe("p1");
+    expect(first.points).toEqual({ p1: 4, p2: 0 });
+    expect(first.outcome).toEqual({
+      kind: "decided",
+      winner: "p1",
+      score: "4–0",
+    });
+    expect(first.decidedBy).toBe("p1");
+    expect(scores.points.get(points[0].id)?.scoreBefore).toBe("15–0");
+    expect(scores.points.get(points[1].id)?.scoreBefore).toBe("30–0");
+    expect(scores.points.get(points[2].id)?.scoreBefore).toBe("40–0");
+    // The game counted, the second band reads 3–0.
+    expect(second.gamesBefore).toBe("3–0");
+    expect(second.server).toBe("p2");
+    expect(scores.points.get(points[3].id)?.scoreBefore).toBe("0–0");
+  });
+
+  test("the start's server reads a first game whose rows name none; a row's own server wins its call", () => {
+    const points = game({ server: null }, ["p2"]);
+    const { games, points: scored } = labelScores(points, true, start);
+    expect(games[0].server).toBe("p1");
+    // p1 serving at 15–0 — the start's server, since the row names none.
+    expect(scored.get(points[0].id)?.scoreBefore).toBe("15–0");
+    const named = game({ server: "p2" }, ["p2"]);
+    expect(
+      labelScores(named, true, start).points.get(named[0].id)?.scoreBefore,
+    ).toBe("0–15");
+  });
+
+  test("a tiebreak start takes any count", () => {
+    const points = game({ gameType: "tiebreak" }, ["p1", "p1"]);
+    const scores = labelScores(points, true, {
+      ...start,
+      games: [6, 6],
+      points: [5, 6],
+    });
+    expect(scores.games[0].gamesBefore).toBe("6–6");
+    expect(scores.points.get(points[0].id)?.scoreBefore).toBe("5–6");
+    expect(scores.points.get(points[1].id)?.scoreBefore).toBe("6–6");
+    expect(scores.games[0].outcome).toEqual({
+      kind: "unfinished",
+      score: "7–6",
+    });
+  });
+
+  test("a later set opens at 0–0 whatever the start says", () => {
+    const points = [
+      ...game({}, ["p1", "p1", "p1"]),
+      ...game({ setNumber: 2, gameNumber: 2 }, ["p2"]),
+    ];
+    const { games } = labelScores(points, true, start);
+    expect(games.map((g) => g.gamesBefore)).toEqual(["2–0", "0–0"]);
+  });
+
+  test("with no start, nothing moves: the same bands as before, server added", () => {
+    const points = [
+      ...game({}, ["p1", "p1", "p1", "p1"]),
+      ...game({ gameNumber: 2, server: "p2" }, ["p2"]),
+    ];
+    const plain = labelScores(points, true);
+    const explicit = labelScores(points, true, null);
+    expect(explicit).toEqual(plain);
+    expect(plain.games.map((g) => [g.gamesBefore, g.server])).toEqual([
+      ["0–0", "p1"],
+      ["1–0", "p2"],
+    ]);
+    expect(scoresBefore(points)[0]).toBe("0–0");
+  });
+});

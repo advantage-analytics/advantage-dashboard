@@ -442,6 +442,73 @@ test.describe("state", () => {
     expect(settled?.state).toBe("settled");
   });
 
+  test("answering the last ball settles the vendor-ball hints, not the row-read ones", () => {
+    const vendorHints = [
+      sample("ending_suspect_line"),
+      sample("net_hit_contradicts_height"),
+      sample("winner_to_error_by_bounce"),
+      sample("result_type_unknown"),
+    ];
+    const statesOf = (p: LabelPoint) =>
+      reviewFlag(p, marksOf({ [POINT]: vendorHints }), [p])?.items.find(
+        (item) => item.id === 4,
+      );
+    // Untouched: every hint still asks.
+    const untouched = statesOf(wonOnForehand());
+    expect(untouched?.state).toBe("open");
+
+    // The last ball's call edited: the four settle and the question closes.
+    const edited = wonOnForehand({
+      winner: "p2",
+      ending: "error",
+      endedBy: "p1",
+      shots: [
+        {
+          ...forehand({ landingX: 2, landingY: 20 }),
+          result: "out",
+          status: "edited",
+        },
+      ],
+    });
+    const item = statesOf(edited);
+    expect(
+      item?.members
+        .filter((m) => vendorHints.some((h) => h.code === m.mark.code))
+        .map((m) => m.state),
+    ).toEqual(["settled", "settled", "settled", "settled"]);
+
+    // A dead-ball tail cut after the last ball answers it too.
+    const tail = wonOnForehand({
+      shots: [
+        forehand({ landingX: 2, landingY: 20 }),
+        labelShot("s2", POINT, {
+          eventId: 8,
+          hitter: "p2",
+          stroke: "forehand",
+          videoTime: 11,
+          status: "deleted",
+          deleteReason: "dead_ball_after_point",
+        }),
+      ],
+    });
+    expect(statesOf(tail)?.state).toBe("settled");
+
+    // "No landing on the last shot" is read off the rows: an edit that leaves
+    // the landing empty has not answered it.
+    const unplaced = wonOnForehand({
+      shots: [
+        {
+          ...forehand({ landingX: null, landingY: null }),
+          result: "in",
+          spin: "topspin",
+          status: "edited",
+        },
+      ],
+    });
+    const open = statesOf(unplaced)?.members.filter((m) => m.state === "open");
+    expect(open?.map((m) => m.mark.code)).toEqual(["last_landing_missing"]);
+  });
+
   test("a checked point's flag is not open unless its winner is contradicted", () => {
     const checked = flagOf(
       [sample("winner_disputed"), sample("ending_suspect_line")],

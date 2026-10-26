@@ -67,6 +67,7 @@ export function PreferencesForm({
   initial,
   plan,
   showTeamNotifications,
+  showGettingStarted,
 }: {
   initial: Preferences;
   /** From `users.plan` — what you pay for, never what you see. */
@@ -77,6 +78,11 @@ export function PreferencesForm({
    * off nothing.
    */
   showTeamNotifications: boolean;
+  /**
+   * In no program. The getting-started emails skip anyone on a team, so a
+   * member would be turning off mail that never comes.
+   */
+  showGettingStarted: boolean;
 }) {
   const [preferences, setPreferences] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +93,9 @@ export function PreferencesForm({
     setPreferences(next);
     setError(null);
 
-    const result = await savePreferences(next);
+    const result = await savePreferences(next, {
+      gettingStarted: "emailGettingStarted" in patch,
+    });
     if (!result.ok) {
       // Put the control back where it was. A toggle that stayed flipped after a
       // failed write is a lie the person has no way to notice.
@@ -155,6 +163,23 @@ export function PreferencesForm({
                   label="Analysis allowance alerts"
                   checked={preferences.notifyUsageAlerts}
                   onChange={(value) => update({ notifyUsageAlerts: value })}
+                />
+              }
+            />
+          </>
+        )}
+
+        {showGettingStarted && (
+          <>
+            <NotificationGroup label="From Advantage" />
+            <SettingsCardRow
+              label="Tips for getting started"
+              description="Two short emails in your first week, until you add your first match."
+              control={
+                <SettingsToggle
+                  label="Tips for getting started"
+                  checked={preferences.emailGettingStarted}
+                  onChange={(value) => update({ emailGettingStarted: value })}
                 />
               }
             />

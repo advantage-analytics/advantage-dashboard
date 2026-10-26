@@ -451,17 +451,39 @@ export function SettingsConnectionsPending() {
   return (
     <Column label="connections" width={660}>
       <SettingsCard className="gap-3">
-        <SettingsCardTitle>
-          Use Advantage in Claude, ChatGPT or Cursor
+        <SettingsCardTitle
+          trailing={<Text className="text-[12px]">Setup guide</Text>}
+        >
+          Use Advantage in your AI app
         </SettingsCardTitle>
         <Text className="text-[12px] leading-[1.55]">
-          Ask about your matches from your own AI app. It reads your statistics
-          the way Ask does and spends your Ask questions. Whichever app you use,
-          the address is the same:
+          Ask about your matches from Claude, ChatGPT, Cursor or any MCP app. It
+          reads your statistics the way Ask does, and the questions it asks use
+          your Ask questions.
         </Text>
-        <Box className="h-[38px] rounded-[8px]" />
-        <Box className="h-[38px] rounded-[8px]" />
-        <Box className="h-[38px] rounded-[8px]" />
+        {/* The three connect steps: the title is static copy, the fields are
+            the viewer's own address, so they trace as boxes. */}
+        <div className="flex flex-col gap-4 pt-1 pl-[30px]">
+          <div className="flex flex-col gap-2">
+            <Text className="text-[12px]">Copy your address</Text>
+            <Box className="h-[38px] rounded-[8px]" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Text className="text-[12px]">Add it to your app</Text>
+            <Text className="text-[12px] leading-[1.55]">
+              Steps for Claude · Claude Code · ChatGPT · Cursor · VS Code ·
+              other apps
+            </Text>
+            <Box className="mt-0.5 h-[56px] rounded-[8px]" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Text className="text-[12px]">Sign in here and choose Allow</Text>
+            <Text className="text-[12px] leading-[1.55]">
+              The app opens this sign-in once, then lists Advantage among its
+              tools. Once you approve it, it appears under Connected apps.
+            </Text>
+          </div>
+        </div>
       </SettingsCard>
       <SettingsCard>
         <SettingsCardTitle className="pb-2">Connected apps</SettingsCardTitle>

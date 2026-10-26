@@ -299,16 +299,27 @@ export function SelectEditor({
  * something new. Enter on text that parses also lets go of the field, so the
  * console's own keys work again. Text that does not parse is marked invalid
  * and never written: Enter keeps it open, leaving throws it away.
+ *
+ * - The draft belongs to `draftKey` (the shot's id), not to `text`: a shown
+ *   value that changes underneath — the film scrubbing past while the field is
+ *   open — keeps what is being typed. A new key starts a fresh draft.
+ * - Escape throws the draft away and writes nothing, including through the
+ *   blur that follows it: the console's window-level Escape blurs the field in
+ *   the same keydown, before React has re-rendered without the draft, so the
+ *   blur's closure still holds it (`escaped`).
  */
 export function TextEditor({
   label,
   text,
+  draftKey,
   parse,
   onCommit,
   quiet = false,
 }: {
   label: string;
   text: string;
+  /** Whose draft this is — the shot's id. A change of key drops the draft. */
+  draftKey?: string;
   /** The typed text → a value; `undefined` when it does not parse. */
   parse: (text: string) => unknown;
   onCommit: (value: unknown) => void;
@@ -318,6 +329,13 @@ export function TextEditor({
   // Null until something is typed, and again once it is written or thrown away,
   // so the stored value shows through, including one that changes underneath.
   const [draft, setDraft] = useState<string | null>(null);
+  const [draftFor, setDraftFor] = useState(draftKey);
+  if (draftFor !== draftKey) {
+    setDraftFor(draftKey);
+    setDraft(null);
+  }
+  // Set by Escape, until the next keystroke or the blur it causes.
+  const escaped = useRef(false);
   const shown = draft ?? text;
   const invalid = draft !== null && parse(draft) === undefined;
 
@@ -345,9 +363,13 @@ export function TextEditor({
         // The chrome's border change is the focus indicator.
         data-focus-ring="none"
         value={shown}
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={(event) => {
+          escaped.current = false;
+          setDraft(event.target.value);
+        }}
         onBlur={() => {
-          commit();
+          if (!escaped.current) commit();
+          escaped.current = false;
           setDraft(null);
         }}
         onKeyDown={(event) => {
@@ -356,7 +378,9 @@ export function TextEditor({
             // The blur commits (`onBlur`); unreadable text keeps the field.
             if (!invalid) event.currentTarget.blur();
           } else if (event.key === "Escape") {
-            // Revert; the cell closes the editor as the key bubbles on.
+            // Revert; the cell closes the editor as the key bubbles on. The
+            // blur the console's Escape causes must not write the old draft.
+            escaped.current = true;
             setDraft(null);
           }
         }}

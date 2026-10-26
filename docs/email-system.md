@@ -304,6 +304,33 @@ that file.
   slept carries the upload on when it wakes, and only a closed tab needs a
   second one.
 
+- **`firstUploadNudgeEmail`** (`templates/first-upload.ts`) — two emails
+  to a player who signed up and has not added a match. Step 1 (sign-up 2–7
+  days old) points at the SwingVision import; step 2 (7–14 days) at video.
+  Sent by `/api/cron/first-upload-nudges` (`vercel.json`, daily 17:00 UTC)
+  through `services/notifications/first-upload-mail.ts`; who qualifies is
+  `first_upload_nudge_candidates()` in Postgres — no admin, no program
+  membership (team onboarding is deferred), no match or processing job, and
+  "Tips for getting started" on. Once per step per person,
+  `claimSend("first_upload_nudge:<step>:<user_id>")`, at most 40 a run,
+  spaced `OUTREACH_SEND_GAP_MS` apart (two Resend calls per send against a
+  2/s limit, and the key is claimed first, so a 429 would lose the email).
+  The candidate query itself leaves out the already-mailed, so its limit is
+  never spent on them. A run stops claiming after 40 s, short of the route's 60 s,
+  so a kill never lands between a claim and its send. Settings writes the
+  switch only when it is the one being flipped, so a stale tab cannot undo
+  an unsubscribe.
+  **The first mail here the recipient did not just cause**, so it is the
+  first to carry the shell's `compliance` block (postal address from
+  `OUTREACH_POSTAL_ADDRESS`; nothing sends without it) and a
+  `List-Unsubscribe` + `List-Unsubscribe-Post` header. The footer link opens
+  `/email/unsubscribe`, a page with a button (scanners GET every link); the
+  header's one-click POST goes to `/api/email/unsubscribe`. Both check an
+  HMAC of the user id (`email/unsubscribe.ts`, keyed off the service-role
+  key) and turn `user_preferences.email_getting_started` off. A new
+  marketing-style email should reuse that pair with a new
+  `UnsubscribeScope`, not invent another.
+
 ## 9. Written but not yet wired
 
 Inherited from the pilot branch (merged in PR #131), each waiting on one call

@@ -376,7 +376,12 @@ test.describe("a game's header dragged to where the game starts", () => {
   test("up: the end of the game before joins it, nearest first", () => {
     expect(plan("p2")).toEqual({
       ok: true,
-      write: { to: game2, pointIds: ["p3", "p2"] },
+      write: {
+        to: game2,
+        pointIds: ["p3", "p2"],
+        lockPointId: "p2",
+        unlockPointIds: [],
+      },
     });
   });
 
@@ -386,6 +391,8 @@ test.describe("a game's header dragged to where the game starts", () => {
       write: {
         to: { setNumber: 1, gameNumber: 1 },
         pointIds: ["p4", "p5"],
+        lockPointId: "p6",
+        unlockPointIds: [],
       },
     });
   });
@@ -393,7 +400,7 @@ test.describe("a game's header dragged to where the game starts", () => {
   test("where it already is: nothing moves", () => {
     expect(plan("p4")).toEqual({
       ok: true,
-      write: { to: game2, pointIds: [] },
+      write: { to: game2, pointIds: [], lockPointId: "p4", unlockPointIds: [] },
     });
   });
 
@@ -411,11 +418,41 @@ test.describe("a game's header dragged to where the game starts", () => {
     );
     expect(planGameBoundary(withGap, game2, "p2")).toEqual({
       ok: true,
-      write: { to: game2, pointIds: ["p2"] },
+      write: {
+        to: game2,
+        pointIds: ["p2"],
+        lockPointId: "p2",
+        unlockPointIds: [],
+      },
     });
     expect(dropBeforePoint(withGap, "p2", false)).toBe("p4");
     expect(dropBeforePoint(withGap, "p2", true)).toBe("p2");
     expect(dropBeforePoint(withGap, "p7", false)).toBeNull();
+  });
+
+  test("the dragged game's lock: its new first point takes it, its old first lets go", () => {
+    // Game 2 locked at p4.
+    const locked = rows.map((row) =>
+      row.id === "p4" ? { ...row, gameStartLocked: true } : row,
+    );
+    expect(planGameBoundary(locked, game2, "p2")).toMatchObject({
+      write: {
+        pointIds: ["p3", "p2"],
+        lockPointId: "p2",
+        unlockPointIds: ["p4"],
+      },
+    });
+    // Down: p4 leaves the game, and its move drops the lock (operations.ts).
+    expect(planGameBoundary(locked, game2, "p6")).toMatchObject({
+      write: { pointIds: ["p4", "p5"], lockPointId: "p6", unlockPointIds: [] },
+    });
+    // A stale lock on a moved point is the move's to clear, not the plan's.
+    const stale = rows.map((row) =>
+      row.id === "p3" ? { ...row, gameStartLocked: true } : row,
+    );
+    expect(planGameBoundary(stale, game2, "p2")).toMatchObject({
+      write: { lockPointId: "p2", unlockPointIds: [] },
+    });
   });
 
   test("the confirm, asked only when players switch", () => {
@@ -426,6 +463,7 @@ test.describe("a game's header dragged to where the game starts", () => {
           to: game2,
           gameInSet: 2,
           pointIds: ["p3", "p2"],
+          lock: { lockPointId: "p2", unlockPointIds: [] },
           server: "p2",
           swaps: 1,
         },

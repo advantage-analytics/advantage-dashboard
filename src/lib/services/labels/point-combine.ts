@@ -15,7 +15,8 @@
  * included) takes its id in one update, statuses untouched. It takes the later
  * point's `winner`, `ending` and `ended_by` and the union of both rows'
  * `vendor_rally_ids`, so the derivation's marks land on it; its status is
- * `edited` (`added` stays `added`). The later point becomes a tombstone
+ * `edited` (`added` stays `added`), and it holds the game's lock
+ * (game-boundary.ts) when either part did. The later point becomes a tombstone
  * (`planPointDelete`) with no shot rows: no Undo is offered
  * (`isCombinedTombstone`), and the way back is "Split point here" on the first
  * moved shot.
@@ -69,6 +70,7 @@ export type CombinablePoint = Pick<
   | "ending"
   | "endedBy"
   | "vendorRallyIds"
+  | "gameStartLocked"
 > & { shots: readonly CombinableShot[] };
 
 /**
@@ -102,6 +104,11 @@ export interface CombineKeptWrite {
   ended_by: LabelSide | null;
   vendor_rally_ids: number[];
   status: "edited" | "added";
+  /**
+   * True when either part held its game's lock (game-boundary.ts): the
+   * joined point still starts that game.
+   */
+  game_start_locked: boolean;
 }
 
 export interface PointCombinePlan {
@@ -363,6 +370,7 @@ export function planPointCombine(
           ...new Set([...earlier.vendorRallyIds, ...later.vendorRallyIds]),
         ],
         status: earlier.status === "added" ? "added" : "edited",
+        game_start_locked: earlier.gameStartLocked || later.gameStartLocked,
       },
       removed: removed.write,
       retyped,
@@ -403,6 +411,7 @@ export function applyPointCombine(
         endedBy: plan.kept.ended_by,
         vendorRallyIds: plan.kept.vendor_rally_ids,
         status: plan.kept.status,
+        gameStartLocked: plan.kept.game_start_locked,
         shots: orderLabelShots([...point.shots, ...moved]).map((shot) => {
           const retype = plan.retyped.find((r) => r.shotId === shot.id);
           return retype ? applyLabelShotPatch(shot, retype.patch) : shot;
@@ -459,6 +468,7 @@ export function settlePointCombine(
         endedBy: saved.kept.ended_by,
         vendorRallyIds: saved.kept.vendor_rally_ids,
         status: saved.kept.status,
+        gameStartLocked: saved.kept.game_start_locked,
         shots: point.shots.map((shot) => {
           const written = saved.retyped.find((r) => r.id === shot.id);
           return written

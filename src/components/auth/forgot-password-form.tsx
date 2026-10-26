@@ -19,6 +19,7 @@ import {
   recoveryRedirectTo,
   writeRecoveryHandoff,
 } from "@/lib/auth/recovery-handoff";
+import { readFormFields } from "@/lib/auth/form-fields";
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
@@ -26,14 +27,17 @@ export function ForgotPasswordForm() {
   const [error, setError] = useState<AuthError | null>(null);
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+
+    const { email: submitted } = readFormFields(e.currentTarget, ["email"]);
+    setEmail(submitted);
 
     // Caught here rather than at the round trip: Supabase answers `name@host`
     // with generic text, and the specific "missing its domain" nudge is the
     // whole point of putting the message on the field.
-    const emailProblem = validateEmail(email);
+    const emailProblem = validateEmail(submitted);
     if (emailProblem) {
       setError({ field: "email", message: emailProblem });
       return;
@@ -44,13 +48,13 @@ export function ForgotPasswordForm() {
     try {
       const supabase = createClient();
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        email,
+        submitted,
         { redirectTo: recoveryRedirectTo(window.location.origin) },
       );
       if (resetError) throw resetError;
       // Hand the address and the send time to /check-email so it can name the
       // address and count down both the link expiry and the resend cooldown.
-      writeRecoveryHandoff(email);
+      writeRecoveryHandoff(submitted);
       router.push("/check-email");
     } catch (err: unknown) {
       setError(toAuthError(err));
@@ -75,6 +79,7 @@ export function ForgotPasswordForm() {
         <FormField
           label="Email"
           id="reset-email"
+          name="email"
           placeholder="name@university.edu"
           type="email"
           value={email}

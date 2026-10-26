@@ -58,8 +58,13 @@ export default function FormField({
 
   // Chrome keeps a browser-autofilled password masked when `type` flips to
   // text, so the reveal toggle appears dead. Re-writing the value once the type
-  // has changed drops the autofill state and lets the new type render.
+  // has changed drops the autofill state and lets the new type render. Only
+  // after a click: running at mount would strip a fresh autofill the same way,
+  // and a flag the click sets survives Strict Mode's replayed mount effect.
+  const toggled = useRef(false);
   useEffect(() => {
+    if (!toggled.current) return;
+    toggled.current = false;
     const input = inputRef.current;
     if (!showPasswordToggle || !input || !input.value) return;
     const current = input.value;
@@ -92,7 +97,10 @@ export default function FormField({
         {showPasswordToggle ? (
           <button
             type="button"
-            onClick={() => setShowPassword((prev) => !prev)}
+            onClick={() => {
+              toggled.current = true;
+              setShowPassword((prev) => !prev);
+            }}
             className="-my-3 -mr-3 flex h-11 w-11 shrink-0 items-center justify-center text-[var(--ink-500)] transition-colors hover:text-[var(--ink-700)]"
             aria-label={showPassword ? "Hide password" : "Show password"}
           >

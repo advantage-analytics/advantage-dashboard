@@ -709,6 +709,58 @@ export function openHintMarks(
 }
 
 /**
+ * The derivation's hints about how the vendor's last ball ended: "Close to
+ * the line", "Winner or error?", "Net or out?" and "Ending unknown". They
+ * describe the ball as the vendor sent it, so once the labeller has answered
+ * that ball (`lastBallAnswered`) they settle, as a counted mark settles on
+ * any edit. The row-read hints under the same question ("Different
+ * ending?", "No landing on the last shot") are not here: they are read off
+ * the rows as they stand, so while they are drawn they are still true.
+ *
+ * Measured 2026-10-23 over 14 completed sessions, read unticked: "How did the
+ * last ball end?" stayed open on 191 points whose last ball the labeller had
+ * edited, added or cut a dead-ball tail after, every one on hints alone —
+ * 101 "Close to the line", 42 "Net or out?", 34 "Winner or error?", 12
+ * "Ending unknown".
+ */
+const LAST_BALL_HINT_CODES: ReadonlySet<LabelMarkCode> = new Set([
+  "ending_suspect_line",
+  "winner_to_error_by_bounce",
+  "net_hit_contradicts_height",
+  "result_type_unknown",
+]);
+
+/**
+ * Whether the labeller has answered the point's last ball: its ending,
+ * ended-by or winner is off its seed, the last live stroke is one they added
+ * or edited, or a stroke after it was removed (a dead-ball tail cut, so the
+ * vendor's last ball is gone). Live means not deleted and, with `ghosts` on,
+ * not a ghost.
+ */
+export function lastBallAnswered(point: LabelPoint, ghosts: boolean): boolean {
+  const seed = point.seed;
+  if (
+    seed &&
+    (point.ending !== seed.ending ||
+      point.endedBy !== seed.ended_by ||
+      point.winner !== seed.winner)
+  ) {
+    return true;
+  }
+  const live = liveShotsInOrder(point, ghosts);
+  const last = live[live.length - 1];
+  if (!last) return false;
+  if (last.status === "added" || last.status === "edited") return true;
+  const after = last.videoTime ?? -Infinity;
+  return point.shots.some(
+    (shot) =>
+      shot.status === "deleted" &&
+      !isWithdrawnAdd(shot) &&
+      (shot.videoTime ?? -Infinity) > after,
+  );
+}
+
+/**
  * Whether the point's winner is the player its strokes say lost. The one
  * hint that is not about the data: it is the score, so its chip is amber and
  * stays on a checked point until it is put right.
@@ -1002,6 +1054,15 @@ export function reviewFlag(
   const states = markStates(count, point, marks.suggestions, points);
   const checked = point.checkedAt !== null;
   const contradicted = pointWinnerContradicted(point, marks);
+  const answered = lastBallAnswered(point, drawsGhosts(marks));
+  const hintState = (mark: LabelMark): MarkState => {
+    if (checked) {
+      return contradicted && mark.code === "ending_stale"
+        ? "open"
+        : "checked-as-is";
+    }
+    return answered && LAST_BALL_HINT_CODES.has(mark.code) ? "settled" : "open";
+  };
   const members: ReviewMember[] = [
     ...count.map((mark, i) => ({
       mark,
@@ -1010,9 +1071,7 @@ export function reviewFlag(
     })),
     ...openHintMarks(point, marks).map((mark) => ({
       mark,
-      state: (!checked || (contradicted && mark.code === "ending_stale")
-        ? "open"
-        : "checked-as-is") as MarkState,
+      state: hintState(mark),
       dismissKey: memberDismissKey(mark),
     })),
   ];

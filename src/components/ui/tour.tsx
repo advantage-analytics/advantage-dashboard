@@ -78,9 +78,19 @@ export interface TourPopoverProps {
   /** Preferred side of the anchor; Radix flips it when there is no room. */
   side?: "top" | "right" | "bottom" | "left";
   /**
+   * Which edge of the box lines up with the anchor along `side`. `start`
+   * (the default) hangs the box off the anchor's leading edge; `end` off its
+   * trailing edge, for an anchor at the right-hand end of a bar where a
+   * start-aligned box would run off the surface it sits over.
+   */
+  align?: "start" | "center" | "end";
+  /**
    * Dim the page around the anchor. On for a tour, which the person is in
    * for a few steps; off for a one-card hint, which may stay up while they
-   * keep working and must not leave the app looking disabled.
+   * keep working and must not leave the app looking disabled. The one
+   * exception a hint may take: an anchor under ~20px inside a cluster of
+   * like controls (a transport bar's glyphs), where "press this" cannot
+   * point without the spotlight — the film player's Skip dead time hint.
    */
   dim?: boolean;
 }
@@ -104,6 +114,7 @@ export function TourPopover({
   onBack,
   onSkip,
   side = "bottom",
+  align = "start",
   dim = true,
 }: TourPopoverProps) {
   const titleId = React.useId();
@@ -131,6 +142,8 @@ export function TourPopover({
 
   const last = index >= total - 1;
   const canGoBack = Boolean(onBack) && index > 0;
+  // A one-card hint is not a tour, so its X does not offer to skip one.
+  const closeLabel = total > 1 ? "Skip tour" : "Dismiss";
 
   return (
     <>
@@ -147,7 +160,7 @@ export function TourPopover({
         <PopoverPrimitive.Portal>
           <PopoverPrimitive.Content
             side={side}
-            align="start"
+            align={align}
             sideOffset={SPOTLIGHT_PAD + 8}
             collisionPadding={16}
             aria-labelledby={titleId}
@@ -174,18 +187,25 @@ export function TourPopover({
           >
             {total > 1 && <TourStepBar index={index} total={total} />}
 
-            <div className="mt-3.5 flex items-start justify-between gap-3">
+            {/* The gap under the StepBar goes with it: a one-card hint
+                starts at its title, with the same headroom as its footer. */}
+            <div
+              className={cn(
+                "flex items-start justify-between gap-3",
+                total > 1 && "mt-3.5",
+              )}
+            >
               <p
                 id={titleId}
                 className="pt-[5px] text-[14px] leading-[1.35] font-medium text-[var(--ink-900)]"
               >
                 {title}
               </p>
-              <ChromeTooltip label="Skip tour" side="top">
+              <ChromeTooltip label={closeLabel} side="top">
                 <button
                   type="button"
                   onClick={onSkip}
-                  aria-label="Skip tour"
+                  aria-label={closeLabel}
                   className="-mr-1.5 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg text-[#888888] transition-colors duration-200 hover:bg-[#F5F5F5] hover:text-[#0D0D0D]"
                 >
                   <X className="size-3.5" strokeWidth={1.5} aria-hidden />

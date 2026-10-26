@@ -171,6 +171,7 @@ export function labelPoint(
     checkedAt: null,
     note: null,
     dismissed: [],
+    gameStartLocked: false,
     seed: null,
     shots: [],
     ...fields,
@@ -212,6 +213,7 @@ export function labelSessionFixture(): LabelSession {
     playOnLets: false,
     finalScore: null,
     videoEndsEarly: null,
+    startScore: null,
     matchScore: { player1: [6, 4], player2: [3, 6] },
     bestOf: 3,
     points: [

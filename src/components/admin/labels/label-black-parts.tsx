@@ -138,7 +138,8 @@ export function playersSwitchDetail(count: number): string {
 }
 
 /**
- * A game slot's markup (the one that runs over, the one that ends short): the
+ * A game slot's markup (the one that runs over, the one that ends short, the
+ * locked one that does not add up): the
  * amber slot with a glyph, a title over its reason and the one answer at the
  * right, whose tooltip carries `details` when there are any. `row` names it
  * (`data-row`, and its `data-{row}-title` / `-detail` / `-actions` hooks);
@@ -162,10 +163,12 @@ export function gameSlot({
   row:
     | "game-overflow"
     | "game-underflow"
+    | "game-imbalance"
     | "tiebreak-fold"
     | "tiebreak-serve"
     | "game-serve-repeat"
-    | "set-score";
+    | "set-score"
+    | "start-score-prompt";
   anchor: string;
   rootData?: Record<string, string>;
   title: string;

@@ -19,6 +19,7 @@ import {
   type AuthError,
 } from "@/lib/auth/error-messages";
 import { authHref, safeNext } from "@/lib/auth/safe-next";
+import { readFormFields } from "@/lib/auth/form-fields";
 
 /**
  * @param next Where the confirmation mail should land — `/sign-up` reads it
@@ -42,23 +43,32 @@ export function SignUpForm({
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
+    const fields = readFormFields(e.currentTarget, [
+      "email",
+      "password",
+      "confirm-password",
+    ]);
+    setEmail(fields.email);
+    setPassword(fields.password);
+    setConfirm(fields["confirm-password"]);
+
     // Each check names the field it failed on, so the message lands on that
     // field's rule rather than in one banner below the whole group.
-    const emailProblem = validateEmail(email);
+    const emailProblem = validateEmail(fields.email);
     if (emailProblem) {
       setError({ field: "email", message: emailProblem });
       return;
     }
-    const passwordProblem = validatePassword(password);
+    const passwordProblem = validatePassword(fields.password);
     if (passwordProblem) {
       setError({ field: "password", message: passwordProblem });
       return;
     }
-    if (password !== confirm) {
+    if (fields.password !== fields["confirm-password"]) {
       setError({ field: "confirm", message: "Both passwords have to match." });
       return;
     }
@@ -75,8 +85,8 @@ export function SignUpForm({
 
     try {
       const { error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
+        email: fields.email,
+        password: fields.password,
         options: {
           // The destination rides in the confirmation link, so the click that
           // activates the account is the one that returns to a join link.
@@ -116,6 +126,7 @@ export function SignUpForm({
         <FormField
           label="Email"
           id="signup-email"
+          name="email"
           placeholder="name@university.edu"
           type="email"
           value={email}
@@ -127,6 +138,7 @@ export function SignUpForm({
         <FormField
           label="Password"
           id="signup-password"
+          name="password"
           type="password"
           placeholder="••••••••••••"
           showPasswordToggle
@@ -139,6 +151,7 @@ export function SignUpForm({
         <FormField
           label="Confirm password"
           id="signup-confirm"
+          name="confirm-password"
           type="password"
           placeholder="••••••••••••"
           showPasswordToggle

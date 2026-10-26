@@ -16,6 +16,7 @@ markers is hand-written — edit it as things move.
 |---|---|
 | `/check-email` | [`src/app/(auth)/check-email/page.tsx`](src/app/(auth)/check-email/page.tsx) |
 | `/confirm` | [`src/app/(auth)/confirm/page.tsx`](src/app/(auth)/confirm/page.tsx) |
+| `/email/unsubscribe` | [`src/app/(auth)/email/unsubscribe/page.tsx`](src/app/(auth)/email/unsubscribe/page.tsx) |
 | `/error` | [`src/app/(auth)/error/page.tsx`](src/app/(auth)/error/page.tsx) |
 | `/forgot-password` | [`src/app/(auth)/forgot-password/page.tsx`](src/app/(auth)/forgot-password/page.tsx) |
 | `/login` | [`src/app/(auth)/login/page.tsx`](src/app/(auth)/login/page.tsx) |
@@ -93,6 +94,7 @@ markers is hand-written — edit it as things move.
 | `/design/ask/answers` | [`src/app/design/ask/answers/page.tsx`](src/app/design/ask/answers/page.tsx) |
 | `/design/ask` | [`src/app/design/ask/page.tsx`](src/app/design/ask/page.tsx) |
 | `/design/ask/polish` | [`src/app/design/ask/polish/page.tsx`](src/app/design/ask/polish/page.tsx) |
+| `/design/feedback` | [`src/app/design/feedback/page.tsx`](src/app/design/feedback/page.tsx) |
 | `/design/file-step` | [`src/app/design/file-step/page.tsx`](src/app/design/file-step/page.tsx) |
 | `/design/ipad` | [`src/app/design/ipad/page.tsx`](src/app/design/ipad/page.tsx) |
 | `/design/labels` | [`src/app/design/labels/page.tsx`](src/app/design/labels/page.tsx) |

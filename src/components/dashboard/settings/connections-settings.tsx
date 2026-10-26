@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Check, Copy, Plug, Terminal } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowUpRight, Check, Copy, Plug, Terminal } from "lucide-react";
 
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
@@ -13,14 +14,16 @@ import {
   GRANTS_UNAVAILABLE_ERROR,
   type OAuthGrant,
 } from "@/lib/auth/oauth-grants";
+import { MCP_GUIDE_URL } from "@/lib/constants";
 import { formatShortDate } from "@/lib/ui/date-format";
 
 import { disconnectApp } from "./connections-actions";
 
 /**
- * Settings › Connections: the Ask MCP connector's two cards — how to connect
- * Claude, ChatGPT or Cursor, and the apps the viewer approved with Disconnect
- * on each.
+ * Settings › Connections: the Ask MCP connector's two cards — the viewer's
+ * address and the Claude Code command, and the apps the viewer approved with
+ * Disconnect on each. Each app's steps live on the public setup guide
+ * (MCP_GUIDE_URL) so they are written once.
  *
  * The apps are named in text only. Anthropic's trademark guidelines allow
  * its logo only with prior approval, and the others are no different, so the
@@ -43,6 +46,18 @@ export function ConnectionsSettings({
     text: string;
   } | null>(null);
 
+  // The grants are read on the server at load. Approving an app happens in
+  // another tab, so re-read them when the viewer comes back to this one —
+  // otherwise step 3's promise that the app appears below is a reload away.
+  const router = useRouter();
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [router]);
+
   return (
     <div className="flex max-w-[660px] flex-col gap-5">
       {message && (
@@ -54,43 +69,74 @@ export function ConnectionsSettings({
       )}
 
       <SettingsCard className="gap-3">
-        <SettingsCardTitle>
-          Use Advantage in Claude, ChatGPT or Cursor
+        <SettingsCardTitle
+          trailing={
+            <a
+              href={MCP_GUIDE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex shrink-0 items-center gap-1 text-[12px] text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
+            >
+              Setup guide
+              <span className="sr-only"> (opens in a new tab)</span>
+              <ArrowUpRight
+                className="size-3"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            </a>
+          }
+        >
+          Use Advantage in your AI app
         </SettingsCardTitle>
         <p className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
-          Ask about your matches from your own AI app. It reads your statistics
-          the way Ask does and spends your Ask questions. Whichever app you use,
-          the address is the same:
+          Ask about your matches from Claude, ChatGPT, Cursor or any MCP app. It
+          reads your statistics the way Ask does, and the questions it asks use
+          your Ask questions.
         </p>
-        <CopyField value={mcpUrl} />
-        <ol className="flex flex-col gap-1.5 text-[12px] text-[var(--ink-700)]">
-          <li>
-            1. In Claude (claude.ai or Claude Desktop), open Settings →
-            Connectors → Add custom connector. In ChatGPT, open Settings → Apps
-            &amp; Connectors → Create. In Cursor, add the line below to its MCP
-            settings file.
-          </li>
-          <li>2. Name it Advantage and paste the address.</li>
-          <li>3. Press Connect, sign in here, and choose Allow.</li>
+        <ol className="flex flex-col gap-4 pt-1">
+          <ConnectStep n={1} title="Copy your address">
+            <CopyField value={mcpUrl} />
+          </ConnectStep>
+          <ConnectStep n={2} title="Add it to your app">
+            <p className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
+              Steps for{" "}
+              {GUIDE_APPS.map((app, i) => (
+                <span key={app.id}>
+                  <a
+                    href={`${MCP_GUIDE_URL}#${app.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
+                  >
+                    {app.label}
+                    <span className="sr-only"> (opens in a new tab)</span>
+                  </a>
+                  {i < GUIDE_APPS.length - 1 ? " · " : ""}
+                </span>
+              ))}
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
+                <Terminal
+                  className="size-3"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                Claude Code, in a terminal
+              </span>
+              <CopyField
+                value={`claude mcp add --transport http advantage ${mcpUrl}`}
+              />
+            </div>
+          </ConnectStep>
+          <ConnectStep n={3} title="Sign in here and choose Allow">
+            <p className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
+              The app opens this sign-in once, then lists Advantage among its
+              tools. Once you approve it, it appears under Connected apps.
+            </p>
+          </ConnectStep>
         </ol>
-        <div className="flex flex-col gap-1.5 pt-1">
-          <span className="flex items-center gap-1.5 text-[11px] text-[var(--ink-500)]">
-            <Terminal className="size-3" strokeWidth={1.5} aria-hidden="true" />
-            In Claude Code
-          </span>
-          <CopyField
-            value={`claude mcp add --transport http advantage ${mcpUrl}`}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="flex items-center gap-1.5 text-[11px] text-[var(--ink-500)]">
-            <Terminal className="size-3" strokeWidth={1.5} aria-hidden="true" />
-            In Cursor (.cursor/mcp.json)
-          </span>
-          <CopyField
-            value={`{ "mcpServers": { "advantage": { "url": "${mcpUrl}" } } }`}
-          />
-        </div>
       </SettingsCard>
 
       <SettingsCard>
@@ -155,7 +201,7 @@ function GrantRow({
           {grant.name}
         </div>
         <div
-          className="mt-0.5 text-[11px] text-[var(--ink-500)]"
+          className="mt-0.5 text-[11px] text-[var(--ink-600)]"
           suppressHydrationWarning
         >
           {confirming
@@ -200,6 +246,52 @@ function GrantRow({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * The guide's apps, in its order, each opening /mcp on that app's steps. The
+ * ids are the guide's own (`content.tsx` in advantage-landing); a renamed id
+ * there lands on the guide's first app rather than breaking.
+ */
+const GUIDE_APPS = [
+  { id: "claude", label: "Claude" },
+  { id: "claude-code", label: "Claude Code" },
+  { id: "chatgpt", label: "ChatGPT" },
+  { id: "cursor", label: "Cursor" },
+  { id: "vscode", label: "VS Code" },
+  { id: "other", label: "other apps" },
+];
+
+/**
+ * One step of the connect card: the guide's three moves in miniature, so the
+ * card and the guide teach the same sequence. The number is quiet ink, not
+ * blue — nothing on it is a control.
+ */
+function ConnectStep({
+  n,
+  title,
+  children,
+}: {
+  n: number;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="grid grid-cols-[18px_minmax(0,1fr)] gap-x-3">
+      <span
+        aria-hidden="true"
+        className="mt-px flex size-[18px] items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[10px] font-medium text-[var(--ink-700)]"
+      >
+        {n}
+      </span>
+      <div className="flex min-w-0 flex-col gap-2">
+        <span className="text-[12px] font-medium text-[var(--ink-900)]">
+          {title}
+        </span>
+        {children}
+      </div>
+    </li>
   );
 }
 

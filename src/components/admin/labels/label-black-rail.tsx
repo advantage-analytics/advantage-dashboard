@@ -2,16 +2,27 @@
 
 import {
   Fragment,
+  useCallback,
   useMemo,
   useState,
   type FocusEvent,
   type RefObject,
 } from "react";
-import { Flag, Maximize2, Minimize2, Scale, Undo2 } from "lucide-react";
+import {
+  Maximize2,
+  Minimize2,
+  MoreHorizontal,
+  Scale,
+  Undo2,
+} from "lucide-react";
 import { reducedMotionNow } from "@/components/dashboard/matches/match-detail/film/film-motion";
 import type { FollowAffordance } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
-import { FloatMenuItem, FloatMenuNote } from "@/components/ui/float-menu";
+import {
+  FloatMenu,
+  FloatMenuItem,
+  FloatMenuNote,
+} from "@/components/ui/float-menu";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type {
   LabelPointPatch,
@@ -46,6 +57,7 @@ import {
   type LabelGameType,
   type LabelPoint,
   type LabelSide,
+  type LabelStartScore,
   type MatchScore,
 } from "@/lib/services/labels/session";
 import {
@@ -76,6 +88,12 @@ import {
 } from "@/lib/services/labels/game-serve-order";
 import { LabelGameBand } from "./label-game-band";
 import {
+  BlackGameLocked,
+  checkStepper,
+  lockedSlotsAtPoints,
+  type LockedGameSlot,
+} from "./label-game-locked";
+import {
   BlackGameUnderflow,
   underflowAfterPoints,
   type UnderflowSlot,
@@ -99,6 +117,13 @@ import type {
   PlayingWindow,
 } from "./label-row-parts";
 import { LabelSaveStatus } from "./label-save-status";
+import {
+  LabelStartScoreEditor,
+  LabelStartScoreLine,
+  formatStartScore,
+  startScorePrompt,
+  zeroStartScore,
+} from "./label-start-score";
 import type { SaveStatus } from "./save-status";
 
 /**
@@ -177,6 +202,8 @@ export function LabelBlackRail({
   finalScore = null,
   videoEndsEarly = null,
   matchScore = null,
+  startScore = null,
+  onSaveStartScore,
   onVideoEndsEarly,
   onFindGap,
   onGoToPoint,
@@ -244,8 +271,16 @@ export function LabelBlackRail({
     afterShotId: string | null;
     node: React.ReactNode;
   } | null;
-  /** `target` opens the court on that end: a position cell was clicked. */
-  onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
+  /**
+   * `target` opens the court on that end: a position cell was clicked.
+   * `seek: false` selects without moving the film: the keyboard focused a
+   * cell of the row. A click leaves it out and the film goes to the stroke.
+   */
+  onSelectShot?: (
+    shotId: string,
+    target?: "contact" | "landing",
+    options?: { seek?: boolean },
+  ) => void;
   /** A click into the row a flag jump selected: leave review mode. */
   onExitReview?: () => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
@@ -283,6 +318,18 @@ export function LabelBlackRail({
   finalScore?: number[][] | null;
   videoEndsEarly?: boolean | null;
   matchScore?: MatchScore | null;
+  /**
+   * Where the video starts in the match (`label_sessions.start_score`), as
+   * the console holds it; null: at the beginning. `scores` already count
+   * from it; the rail's own readings are handed it too.
+   */
+  startScore?: LabelStartScore | null;
+  /**
+   * Save a start (label-start-score.tsx). Given on an editable rail, it
+   * draws the prompt above point 1, the editor and the header menu's "Video
+   * starts mid-match…"; absent, the saved line alone.
+   */
+  onSaveStartScore?: (start: LabelStartScore) => void;
   /**
    * The chip's answers. Given both, the chip opens a menu of them; absent, it
    * is words alone. Neither rewrites the entered score: the match record's is
@@ -328,6 +375,7 @@ export function LabelBlackRail({
           finalScore,
           matchScore,
           videoEndsEarly,
+          startScore,
         })
       : null;
   // The mismatch as a flag of its own: counted, jumped to, and a slot after
@@ -375,6 +423,7 @@ export function LabelBlackRail({
       scores: pointScores,
       adScoring,
       matchTiebreakSet,
+      startScore,
       playOnLets,
       tone,
       fileOffset,
@@ -398,6 +447,7 @@ export function LabelBlackRail({
       pointScores,
       adScoring,
       matchTiebreakSet,
+      startScore,
       playOnLets,
       tone,
       fileOffset,
@@ -415,8 +465,11 @@ export function LabelBlackRail({
   // The tiebreak at 6–6 and the entered match tiebreak, by the first point
   // each folds: on editable sessions.
   const folds = useMemo(
-    () => (editable ? tiebreakFolds(points, adScoring, matchTiebreakSet) : []),
-    [editable, points, adScoring, matchTiebreakSet],
+    () =>
+      editable
+        ? tiebreakFolds(points, adScoring, matchTiebreakSet, startScore)
+        : [],
+    [editable, points, adScoring, matchTiebreakSet, startScore],
   );
   const foldBefore = useMemo(
     () => new Map(folds.map((fold) => [fold.pointIds[0], fold])),
@@ -478,19 +531,69 @@ export function LabelBlackRail({
   const overflowBefore = useMemo(
     () =>
       editable
-        ? overflowBeforePoints(points, adScoring, matchTiebreakSet)
+        ? overflowBeforePoints(points, adScoring, matchTiebreakSet, startScore)
         : NO_OVERFLOW,
-    [editable, points, adScoring, matchTiebreakSet],
+    [editable, points, adScoring, matchTiebreakSet, startScore],
   );
   // The games that end short, by their last live point. On the same sessions
   // as the slot above.
   const underflowAfter = useMemo(
     () =>
       editable
-        ? underflowAfterPoints(points, adScoring, matchTiebreakSet)
+        ? underflowAfterPoints(points, adScoring, matchTiebreakSet, startScore)
         : NO_UNDERFLOW,
-    [editable, points, adScoring, matchTiebreakSet],
+    [editable, points, adScoring, matchTiebreakSet, startScore],
   );
+  // The locked games that do not add up, by their first live point: the
+  // "doesn't add up" slot under the band, in place of the two above, which
+  // skip a locked game (label-game-locked.tsx).
+  const lockedAt = useMemo(
+    () =>
+      editable
+        ? lockedSlotsAtPoints(points, scores.games, adScoring, startScore)
+        : NO_LOCKED,
+    [editable, points, scores, adScoring, startScore],
+  );
+  // "Check N points": one cursor per game for the rail's life, each click the
+  // next doubted point through the console's flag jump (`onGoToPoint`).
+  const [stepCheck] = useState(checkStepper);
+  const checkLocked = useCallback(
+    (key: string, pointIds: readonly string[]) => {
+      const id = stepCheck(key, pointIds);
+      if (id !== null) onGoToPoint?.(id);
+    },
+    [stepCheck, onGoToPoint],
+  );
+  // Where the video starts: the prompt above point 1 while set 1 does not
+  // add up and nothing is saved, the editor in its place once asked, and the
+  // saved line under the header (label-start-score.tsx).
+  const [startEditing, setStartEditing] = useState(false);
+  const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
+  const canSetStart = editable && onSaveStartScore !== undefined;
+  const firstGame = scores.games[0];
+  const firstGameType = firstGame?.gameType ?? "game";
+  const firstServer: LabelSide = firstGame?.server ?? "p1";
+  const firstPointId =
+    points.find((point) => point.status !== "deleted")?.id ?? null;
+  const startPrompt =
+    canSetStart &&
+    !startEditing &&
+    startScore === null &&
+    mismatch?.setNumber === 1 &&
+    firstPointId !== null
+      ? startScorePrompt({
+          mismatch,
+          anchor: firstPointId,
+          recordSays: matchScore !== null,
+          onSet: () => setStartEditing(true),
+          onStartsAtZero: () => onSaveStartScore?.(zeroStartScore(firstServer)),
+        })
+      : null;
+  const editStartScore = () => {
+    setStartEditing(true);
+    scrollerRef?.current?.scrollTo({ top: 0 });
+  };
+
   // The chip's "Go to game": the band (or slot) carrying the game's key,
   // brought to the scroller's top.
   const goToGame = (gameKey: string) => {
@@ -603,6 +706,42 @@ export function LabelBlackRail({
           {showSession ? (
             <LabelSaveStatus status={saveStatus} tone={tone} />
           ) : null}
+          {canSetStart ? (
+            <FloatMenu
+              open={sessionMenuOpen}
+              onOpenChange={setSessionMenuOpen}
+              align="end"
+              width={280}
+              tone={tone}
+              label="Session"
+              trigger={
+                <button
+                  type="button"
+                  data-label-rail-session-menu=""
+                  aria-label="Session actions"
+                  aria-haspopup="menu"
+                  aria-expanded={sessionMenuOpen}
+                  className={cn(
+                    HEADER_BUTTON,
+                    "aria-expanded:bg-white/[0.08] aria-expanded:text-white",
+                  )}
+                >
+                  <MoreHorizontal
+                    className="size-3.5"
+                    strokeWidth={1.6}
+                    aria-hidden="true"
+                  />
+                </button>
+              }
+            >
+              <RailSessionMenuRows
+                close={() => setSessionMenuOpen(false)}
+                startScore={startScore}
+                gameType={firstGameType}
+                onEditStartScore={editStartScore}
+              />
+            </FloatMenu>
+          ) : null}
           {showSession && onUndo ? (
             <ChromeTooltip
               label="Undo"
@@ -672,6 +811,15 @@ export function LabelBlackRail({
           ) : null}
         </div>
 
+        {startScore !== null ? (
+          <LabelStartScoreLine
+            start={startScore}
+            names={names}
+            gameType={firstGameType}
+            onEdit={canSetStart ? editStartScore : undefined}
+          />
+        ) : null}
+
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div
             className="flex min-h-0 flex-1 flex-col"
@@ -707,6 +855,21 @@ export function LabelBlackRail({
                   : undefined
               }
             >
+              {canSetStart && startEditing ? (
+                <LabelStartScoreEditor
+                  initial={startScore}
+                  defaultServer={firstServer}
+                  names={names}
+                  gameType={firstGameType}
+                  onCancel={() => setStartEditing(false)}
+                  onSave={(start) => {
+                    setStartEditing(false);
+                    onSaveStartScore?.(start);
+                  }}
+                />
+              ) : (
+                startPrompt
+              )}
               {points.map((point) => {
                 if (point.status === "deleted") {
                   if (isWithdrawnPointAdd(point)) return null;
@@ -725,6 +888,7 @@ export function LabelBlackRail({
                 const serveOrder = serveOrderBefore.get(point.id);
                 const serveRepeat = serveRepeatBefore.get(point.id);
                 const short = underflowAfter.get(point.id);
+                const locked = lockedAt.get(point.id);
                 const open = point.id === expandedPointId;
                 return (
                   <Fragment key={point.id}>
@@ -760,6 +924,14 @@ export function LabelBlackRail({
                           draggedGame.gameNumber === band.gameNumber
                         }
                         menu={tone}
+                      />
+                    ) : null}
+                    {locked ? (
+                      <BlackGameLocked
+                        slot={locked}
+                        names={names}
+                        onCheck={onGoToPoint ? checkLocked : undefined}
+                        onAddPoint={onAddPoint}
                       />
                     ) : null}
                     {fold ? (
@@ -857,6 +1029,38 @@ export function LabelBlackRail({
         </div>
       </div>
     </TooltipProvider>
+  );
+}
+
+/**
+ * The rail header's session menu, hook-free so a spec can read it: "Video
+ * starts mid-match…" opens the start-score editor above point 1, whether or
+ * not the prompt is showing.
+ */
+export function RailSessionMenuRows({
+  close,
+  startScore,
+  gameType = "game",
+  onEditStartScore,
+}: {
+  close: () => void;
+  startScore: LabelStartScore | null;
+  gameType?: LabelGameType;
+  onEditStartScore: () => void;
+}) {
+  return (
+    <FloatMenuItem
+      label="Video starts mid-match…"
+      description={
+        startScore
+          ? `Starts at ${formatStartScore(startScore, gameType)}`
+          : "Set the score before the first point on video"
+      }
+      onSelect={() => {
+        close();
+        onEditStartScore();
+      }}
+    />
   );
 }
 
@@ -1056,11 +1260,23 @@ function overflowBeforePoints(
   points: readonly LabelPoint[],
   adScoring: boolean,
   matchTiebreakSet: number | null,
+  start: LabelStartScore | null,
 ): ReadonlyMap<string, OverflowSlot> {
   const before = new Map<string, OverflowSlot>();
-  for (const overflow of gameOverflow(points, adScoring, matchTiebreakSet)) {
+  for (const overflow of gameOverflow(
+    points,
+    adScoring,
+    matchTiebreakSet,
+    start,
+  )) {
     const from = overflow.leftovers[0].id;
-    const plan = planGameShift(points, adScoring, from, matchTiebreakSet);
+    const plan = planGameShift(
+      points,
+      adScoring,
+      from,
+      matchTiebreakSet,
+      start,
+    );
     before.set(from, {
       overflow,
       summary: "error" in plan ? null : plan.summary,
@@ -1072,3 +1288,4 @@ function overflowBeforePoints(
 const NO_IDS: ReadonlySet<string> = new Set();
 const NO_OVERFLOW: ReadonlyMap<string, OverflowSlot> = new Map();
 const NO_UNDERFLOW: ReadonlyMap<string, UnderflowSlot> = new Map();
+const NO_LOCKED: ReadonlyMap<string, LockedGameSlot> = new Map();

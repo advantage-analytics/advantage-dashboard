@@ -7,6 +7,7 @@ import {
 } from "@/components/dashboard/beta-welcome-dialog";
 import { advButton } from "@/lib/ui/adv-button";
 import { HeaderPreview } from "./header-preview";
+import { HoursCopyPreview } from "./hours-copy-preview";
 import { AnalysisStepsPreview } from "./analysis-steps-preview";
 import { ScoreboardPreview } from "./scoreboard-preview";
 import { TourPreview } from "./tour-preview";
@@ -140,6 +141,7 @@ export function DesignPreview() {
         </div>
       </div>
 
+      <HoursCopyPreview />
       <AnalysisStepsPreview />
       <ScoreboardPreview />
       <TourPreview />

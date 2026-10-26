@@ -577,15 +577,22 @@ test("the match page offers the actions only to the job's creator", () => {
 });
 
 // ── The sample-report line (first-run onboarding) ───────────────────────────
-// Offered while a personal player waits on their own match: a team workspace,
-// or a viewer who did not file the match, reads the steps with no such line.
+// Offered to a first-time personal player (the page's `showSampleLink`) while
+// they wait on their own match (`canAct`, and the view's `waiting`). A team
+// workspace, a viewer who did not file the match, or a job that stopped moving
+// — paused, stalled, failed, cancelled, stats pending — reads the steps with
+// no such line.
 
 const SAMPLE_LINE = "While you wait, see a sample report";
 
-function renderSample(showSampleLink: boolean | undefined, canAct: boolean) {
+function renderSample(
+  showSampleLink: boolean | undefined,
+  canAct: boolean,
+  analysis: MatchAnalysis = QUEUED,
+) {
   return renderToStaticMarkup(
     React.createElement(AnalysisSteps, {
-      analysis: QUEUED,
+      analysis,
       matchId: MATCH_ID,
       match: MATCH,
       snapshotAt: NOW,
@@ -610,10 +617,45 @@ test("team (showSampleLink off), or personal without canAct: no sample-report li
   expect(renderSample(false, false)).not.toContain(SAMPLE_LINE);
 });
 
-test("the match page passes showSampleLink for personal workspaces inside the gate", () => {
+test("the line shows while the job moves: uploading, in line, analysing", () => {
+  const uploading = CASES.find((c) => c.id === "uploading")!.analysis;
+  for (const analysis of [uploading, QUEUED, PROCESSING]) {
+    expect(renderSample(true, true, analysis), analysis.status).toContain(
+      SAMPLE_LINE,
+    );
+  }
+});
+
+test("no line once nothing is being waited on, even for a first-time player", () => {
+  const byId = (id: string) => CASES.find((c) => c.id === id)!.analysis;
+  const paused: MatchAnalysis = {
+    ...BASE,
+    status: "uploading",
+    uploadPercent: 27.6,
+    updatedAt: minutesAgo(30),
+  };
+  const processed: MatchAnalysis = { ...BASE, status: "processed" };
+  for (const analysis of [
+    CANCELLED,
+    byId("failed retry"),
+    byId("stalled retry"),
+    paused,
+    processed,
+  ]) {
+    expect(renderSample(true, true, analysis), analysis.status).not.toContain(
+      SAMPLE_LINE,
+    );
+  }
+});
+
+test("the match page offers the line only to a personal player who has never seen a report", () => {
   const page = readFileSync(
     "src/app/dashboard/matches/(detail)/[matchId]/page.tsx",
     "utf8",
   );
-  expect(page).toContain('showSampleLink={workspaceKind === "personal"}');
+  expect(page).toContain(
+    'showSampleLink={workspaceKind === "personal" && neverSeenAReport}',
+  );
+  // The tray's own rule (`hasSeenAReport`), not a second copy of it.
+  expect(page).toContain("!hasSeenAReport(workspace.viewer)");
 });

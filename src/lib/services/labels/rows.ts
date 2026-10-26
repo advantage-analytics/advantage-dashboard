@@ -41,12 +41,13 @@ export interface LabelPointRow {
   checked_at: string | null;
   note: string | null;
   dismissed: string[] | null;
+  game_start_locked: boolean;
   /** jsonb, parsed by `parseLabelPointSeed` before anything trusts it. */
   seed?: unknown;
 }
 
 export const LABEL_POINT_COLUMNS =
-  "id, point_index, vendor_rally_ids, set_number, game_number, server, serve_side, winner, ending, ended_by, game_type, status, status_before_delete, checked_at, note, dismissed, seed";
+  "id, point_index, vendor_rally_ids, set_number, game_number, server, serve_side, winner, ending, ended_by, game_type, status, status_before_delete, checked_at, note, dismissed, game_start_locked, seed";
 
 /** A point row as the console draws it, with `shots` already in video order. */
 export function toLabelPoint(
@@ -70,6 +71,7 @@ export function toLabelPoint(
     checkedAt: row.checked_at ?? null,
     note: row.note ?? null,
     dismissed: row.dismissed ?? [],
+    gameStartLocked: row.game_start_locked ?? false,
     seed: parseLabelPointSeed(row.seed ?? null),
     shots,
   };

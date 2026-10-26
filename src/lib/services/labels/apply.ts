@@ -24,7 +24,9 @@
  *   one every reader already skips (the derivation writes them too).
  * - Score strings come from the console's own scoreboard (`labelScores`),
  *   server-first like the vendor's, and the pressure flags from the same
- *   `pressureFor` the derivation runs over them.
+ *   `pressureFor` the derivation runs over them — both counted from the
+ *   session's `start` when the video starts mid-match: the first game opens
+ *   at its points, its set at its games, and sets-won-before at its sets.
  * - Sides: `p1` is `matches.player1_id`, the side `is_player1` /
  *   `server_is_player1` / `won_by_player1` name, so `p1` → true throughout.
  * - `video_time` on a label shot is already on the analysis clock (the seed
@@ -60,6 +62,7 @@ import {
   type LabelShotResult,
   type LabelSide,
   type LabelSpin,
+  type LabelStartScore,
   type LabelStroke,
 } from "./session";
 
@@ -146,6 +149,8 @@ export interface ApplyInput {
   bestOf: number;
   /** By vendor `event_id`; an added stroke has none. */
   vendor?: ReadonlyMap<number, VendorShotFacts>;
+  /** Where the video starts in the match; missing or null: at the beginning. */
+  start?: LabelStartScore | null;
 }
 
 // ── Vocabulary: seed.ts's mappings, inverted ────────────────────────────────
@@ -297,15 +302,19 @@ function playedShots(point: Pick<LabelPoint, "shots">): LabelShot[] {
 
 /**
  * Sets won before each set, p1/p2, from the set tallies: a set counts for
- * whoever won more of its settled games.
+ * whoever won more of its settled games, on top of the sets already won
+ * before the video started (`start.sets`).
  */
 function setsWonBefore(
   points: readonly LabelPoint[],
   games: readonly LabelGameBand[],
+  start: LabelStartScore | null,
 ): Map<number, Record<LabelSide, number>> {
   const before = new Map<number, Record<LabelSide, number>>();
-  const won: Record<LabelSide, number> = { p1: 0, p2: 0 };
-  for (const set of labelSetScores(points, games)) {
+  const won: Record<LabelSide, number> = start
+    ? { p1: start.sets[0], p2: start.sets[1] }
+    : { p1: 0, p2: 0 };
+  for (const set of labelSetScores(points, games, start)) {
     before.set(set.setNumber, { ...won });
     const [a, b] = set.games;
     if (a > b) won.p1 += 1;
@@ -327,9 +336,10 @@ function parseGamesBefore(text: string): Record<LabelSide, number> {
  */
 export function buildAppliedRows(input: ApplyInput): AppliedRows {
   const { points, adScoring, bestOf, vendor } = input;
+  const start = input.start ?? null;
   const problems: string[] = [];
   const warnings: string[] = [];
-  const scores = labelScores(points, adScoring);
+  const scores = labelScores(points, adScoring, start);
   const bandByGame = new Map(scores.games.map((band) => [gameKey(band), band]));
   // A label game number is a key, not an order: a game the console opens or
   // starts mid-set takes the session's highest number plus one. Published,
@@ -338,7 +348,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
   const playOrder = new Map(
     scores.games.map((band, index) => [gameKey(band), index + 1]),
   );
-  const setsBefore = setsWonBefore(points, scores.games);
+  const setsBefore = setsWonBefore(points, scores.games, start);
 
   const rows: AppliedPointRow[] = [];
   let letsLeftOut = 0;

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import * as React from "react";
 
 import { toCourtInHalf } from "@/components/admin/labels/court-geometry";
 import {
@@ -28,6 +29,7 @@ import type { LabelShotPatch } from "@/lib/services/labels/edit";
 import type { LabelShot } from "@/lib/services/labels/session";
 import type { ShotGeometry } from "@/lib/services/labels/shot-derived";
 import { labelSessionFixture } from "./fixtures/label-session";
+import { elements } from "./fixtures/react-tree";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
@@ -49,7 +51,12 @@ test.describe("court click placement", () => {
     const selected = startPlacement("s-return");
     expect(placementPrompt(selected, 2)).toBe("Click where shot 2 was hit");
 
-    const first = nextPlacement(selected, { x: 1.234, y: 24.567 }, UNPLACED);
+    const first = nextPlacement(
+      selected,
+      { x: 1.234, y: 24.567 },
+      UNPLACED,
+      [],
+    );
     expect(first).not.toBeNull();
     // Only one end is known: no `result` key, so the stored value stands.
     expect(first!.patch).toEqual({ contact_x: 1.23, contact_y: 24.57 });
@@ -57,29 +64,26 @@ test.describe("court click placement", () => {
 
     // The landing click completes the pair: `result` rides in the same patch.
     const hit = { ...UNPLACED, ...first!.patch };
-    const second = nextPlacement(first!.state, { x: -2.1, y: 3.49 }, hit);
+    const second = nextPlacement(first!.state, { x: -2.1, y: 3.49 }, hit, []);
     expect(second!.patch).toEqual({
       landing_x: -2.1,
       landing_y: 3.49,
       result: "in",
     });
 
-    // A third click starts over at the hit, on the same stroke.
-    // The contact was on the far side, so that is the half it returns to.
-    expect(second!.state).toEqual({
-      shotId: "s-return",
-      target: "contact",
-      half: "far",
-      flipped: false,
-    });
-    expect(placementPrompt(second!.state, 2)).toBe(
-      "Click where shot 2 was hit",
-    );
+    // The point's last stroke: the landing lets go rather than cycling
+    // back to this stroke's contact.
+    expect(second!.state).toEqual(NO_PLACEMENT);
     // Re-placing the hit on the landing's own side re-derives the result.
     const placed = { ...hit, ...second!.patch };
-    expect(nextPlacement(second!.state, { x: 0, y: 1 }, placed)!.patch).toEqual(
-      { contact_x: 0, contact_y: 1, result: "net" },
-    );
+    expect(
+      nextPlacement(
+        startPlacement("s-return", "far"),
+        { x: 0, y: 1 },
+        placed,
+        [],
+      )!.patch,
+    ).toEqual({ contact_x: 0, contact_y: 1, result: "net" });
   });
 
   test("the landing click's result follows the stroke being placed", () => {
@@ -98,21 +102,23 @@ test.describe("court click placement", () => {
     // Deep in the far court, past the service line: a rally ball is in, a
     // serve is long.
     const deep = { x: -2, y: 20 };
-    expect(nextPlacement(landing, deep, from("backhand"))!.patch.result).toBe(
-      "in",
-    );
     expect(
-      nextPlacement(landing, deep, from("first_serve"))!.patch.result,
+      nextPlacement(landing, deep, from("backhand"), [])!.patch.result,
+    ).toBe("in");
+    expect(
+      nextPlacement(landing, deep, from("first_serve"), [])!.patch.result,
     ).toBe("out");
     // A landing click on a stroke with no contact stored derives nothing.
-    expect(nextPlacement(landing, deep, UNPLACED)!.patch).toEqual({
+    expect(nextPlacement(landing, deep, UNPLACED, [])!.patch).toEqual({
       landing_x: -2,
       landing_y: 20,
     });
   });
 
   test("with nothing selected a click places nothing and there is no prompt", () => {
-    expect(nextPlacement(NO_PLACEMENT, { x: 0, y: 0 }, UNPLACED)).toBeNull();
+    expect(
+      nextPlacement(NO_PLACEMENT, { x: 0, y: 0 }, UNPLACED, []),
+    ).toBeNull();
     expect(placementPrompt(NO_PLACEMENT, null)).toBeNull();
     expect(placementPrompt(startPlacement("gone"), null)).toBeNull();
   });
@@ -168,6 +174,7 @@ test.describe("which half the court zooms to", () => {
       startPlacement("s", "near"),
       { x: 1, y: -0.5 },
       UNPLACED,
+      [],
     )!;
     expect(first.state).toEqual({
       shotId: "s",
@@ -180,6 +187,7 @@ test.describe("which half the court zooms to", () => {
       startPlacement("s", "near"),
       { x: 0, y: 12.2 },
       UNPLACED,
+      [],
     )!;
     expect(across.state.half).toBe("near");
   });
@@ -199,16 +207,20 @@ test.describe("which half the court zooms to", () => {
     // A net ball: the landing click on the hitter's own half derives "net",
     // and the cycle returns to the contact on that same half, unflipped.
     const hit = { ...UNPLACED, contact_x: 1, contact_y: -0.5 };
-    const net = nextPlacement(flipped, { x: 0.4, y: 11.2 }, hit)!;
+    const net = nextPlacement(flipped, { x: 0.4, y: 11.2 }, hit, [
+      { id: "s", hitter: "p1", contactY: -0.5 },
+      { id: "s2", hitter: "p2", contactY: null },
+    ])!;
     expect(net.patch).toEqual({
       landing_x: 0.4,
       landing_y: 11.2,
       result: "net",
     });
+    // On to the next stroke's contact, unflipped, across from the hitter.
     expect(net.state).toEqual({
-      shotId: "s",
+      shotId: "s2",
       target: "contact",
-      half: "near",
+      half: "far",
       flipped: false,
     });
 
@@ -238,7 +250,7 @@ test.describe("which half the court zooms to", () => {
     expect(out.y).toBeGreaterThan(23.77);
     const hit = { ...UNPLACED, contact_x: 1, contact_y: -0.5 };
     const landing = setPlacementTarget(startPlacement("s", "near"), "landing");
-    const step = nextPlacement(landing, out, hit)!;
+    const step = nextPlacement(landing, out, hit, [])!;
     expect(step.patch).toEqual({
       landing_x: -9.28,
       landing_y: 26.78,
@@ -247,7 +259,12 @@ test.describe("which half the court zooms to", () => {
 
     // Deep contact, in the run-off behind the near baseline.
     const deep = toCourtInHalf("near", { sx: 50, sy: 97 });
-    const contact = nextPlacement(startPlacement("s", "near"), deep, UNPLACED)!;
+    const contact = nextPlacement(
+      startPlacement("s", "near"),
+      deep,
+      UNPLACED,
+      [],
+    )!;
     expect(contact.patch).toEqual({ contact_x: 0, contact_y: -3.01 });
   });
 });
@@ -430,5 +447,123 @@ test.describe("let patch guard", () => {
     const plan = planShotWrite(serve, { result: "let" });
     expect("error" in plan).toBe(false);
     expect((plan as { row: LabelShot }).row.result).toBe("let");
+  });
+});
+
+/**
+ * `TextEditor` rendered by hand: a `react` whose `useState` / `useRef` keep
+ * their slots between calls, so a handler from one render can be fired after
+ * another — or, as the console's window Escape does, before any re-render.
+ */
+function textEditorHarness() {
+  const slots: unknown[] = [];
+  let cursor = 0;
+  let dirty = false;
+  const react = {
+    ...React,
+    useState: (init: unknown) => {
+      const at = cursor++;
+      if (!(at in slots)) {
+        slots[at] =
+          typeof init === "function" ? (init as () => unknown)() : init;
+      }
+      const set = (next: unknown) => {
+        slots[at] =
+          typeof next === "function"
+            ? (next as (v: unknown) => unknown)(slots[at])
+            : next;
+        dirty = true;
+      };
+      return [slots[at], set];
+    },
+    useRef: (init: unknown) => {
+      const at = cursor++;
+      if (!(at in slots)) slots[at] = { current: init };
+      return slots[at];
+    },
+    useLayoutEffect: () => {},
+  };
+  const { TextEditor } = createLoader({ stubs: { react } }).load(
+    "src/components/admin/labels/label-cells.tsx",
+  ) as {
+    TextEditor: (props: Record<string, unknown>) => React.ReactElement;
+  };
+  const commits: unknown[] = [];
+  /** One render — re-run while the render itself set state — → the input. */
+  function render(props: { text: string; draftKey?: string }) {
+    let tree: React.ReactElement | null = null;
+    for (let pass = 0; pass === 0 || (dirty && pass < 5); pass++) {
+      dirty = false;
+      cursor = 0;
+      tree = TextEditor({
+        label: "Shot 3 time",
+        parse: (text: string) => parseFileTime(text, 940),
+        onCommit: (value: unknown) => commits.push(value),
+        ...props,
+      });
+    }
+    const input = elements(tree).find((el) => el.type === "input")!;
+    const on = input.props as Record<string, (event?: unknown) => void>;
+    return {
+      value: input.props.value,
+      type: (value: string) => on.onChange({ target: { value } }),
+      key: (key: string, blur: () => void = () => {}) =>
+        on.onKeyDown({
+          key,
+          preventDefault() {},
+          currentTarget: { blur },
+        }),
+      blur: () => on.onBlur(),
+    };
+  }
+  return { render, commits };
+}
+
+test.describe("the time cell's editor", () => {
+  test("its draft belongs to the shot, so the shown time changing under it keeps it", () => {
+    const { render, commits } = textEditorHarness();
+    render({ text: "0:10.2", draftKey: "w-return" }).type("0:12.0");
+    // The film scrubs: the same stroke's editor, drawn again over another
+    // shown time, keeps what was typed rather than resetting or remounting.
+    expect(render({ text: "0:11.0", draftKey: "w-return" }).value).toBe(
+      "0:12.0",
+    );
+    const again = render({ text: "0:10.5", draftKey: "w-return" });
+    expect(again.value).toBe("0:12.0");
+    // Leaving writes it, on the analysis clock (file + 940).
+    again.blur();
+    expect(commits).toEqual([952]);
+    // Another stroke's editor starts from its own time.
+    commits.length = 0;
+    render({ text: "0:10.2", draftKey: "w-return" }).type("0:13.0");
+    expect(render({ text: "0:20.3", draftKey: "w-lit" }).value).toBe("0:20.3");
+    expect(commits).toEqual([]);
+  });
+
+  test("Escape reverts and writes nothing, even through the blur the console's Escape causes", () => {
+    const { render, commits } = textEditorHarness();
+    render({ text: "0:10.2", draftKey: "w-return" }).type("0:12.0");
+    const typed = render({ text: "0:10.2", draftKey: "w-return" });
+    expect(typed.value).toBe("0:12.0");
+    // The window's Escape handler blurs the field in the same keydown: the
+    // blur runs with this render's handlers, the draft still in them.
+    typed.key("Escape");
+    typed.blur();
+    expect(commits).toEqual([]);
+    expect(render({ text: "0:10.2", draftKey: "w-return" }).value).toBe(
+      "0:10.2",
+    );
+
+    // Typing again after an Escape is a new draft: leaving writes it.
+    render({ text: "0:10.2", draftKey: "w-return" }).type("0:14.0");
+    render({ text: "0:10.2", draftKey: "w-return" }).blur();
+    expect(commits).toEqual([954]);
+
+    // Enter writes once: its blur commits, nothing else does.
+    commits.length = 0;
+    render({ text: "0:10.2", draftKey: "w-return" }).type("0:12.5");
+    const entered = render({ text: "0:10.2", draftKey: "w-return" });
+    entered.key("Enter", () => entered.blur());
+    expect(commits).toEqual([952.5]);
   });
 });

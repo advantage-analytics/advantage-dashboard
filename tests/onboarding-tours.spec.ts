@@ -68,6 +68,7 @@ test.describe("TOURS", () => {
       "first-report": "first_report_tour_done_at",
       "workspace-switcher": "workspace_hint_done_at",
       "activity-tray": "activity_hint_done_at",
+      "first-match-feedback": "first_match_feedback_done_at",
     });
   });
 
