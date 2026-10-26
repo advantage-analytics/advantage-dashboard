@@ -227,14 +227,18 @@ function AttachmentFileStepImpl({
                 className="text-[13px] font-medium text-[var(--ink-900)]"
                 {...(busy ? { role: "status" as const } : {})}
               >
+                {/* Keyed elements, not bare text, so a page translator that
+                    replaced the text nodes cannot make React's removeChild
+                    throw when the zone flips to "checking" (see the wizard's
+                    FileStepContent). */}
                 {busy ? (
-                  "Checking the video…"
+                  <span key="busy">Checking the video…</span>
                 ) : (
-                  <>
+                  <span key="idle">
                     Drop {mode === "replace" ? "the replacement" : "the match"}{" "}
                     video here, or{" "}
                     <span className="text-[var(--blue)]">browse</span>
-                  </>
+                  </span>
                 )}
               </span>
               <span className="text-micro" data-testid="attachment-zone-facts">

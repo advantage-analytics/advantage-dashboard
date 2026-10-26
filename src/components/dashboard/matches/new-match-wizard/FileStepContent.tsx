@@ -401,17 +401,21 @@ function FileStepContentImpl({
             )}
             <span className="flex flex-col items-center gap-1.5">
               <span className="text-[13px] font-medium text-[var(--ink-900)]">
+                {/* Each branch is its own keyed element, never bare text: a
+                    page translator (Safari's, Chrome's) swaps the text nodes
+                    React owns for its own, and React's removeChild on a text
+                    node that is no longer here throws NotFoundError when the
+                    zone flips to "checking". Removing a whole element still
+                    works after a translation. */}
                 {busy ? (
-                  isVideo ? (
-                    "Checking the video…"
-                  ) : (
-                    "Reading the export…"
-                  )
+                  <span key="busy">
+                    {isVideo ? "Checking the video…" : "Reading the export…"}
+                  </span>
                 ) : (
-                  <>
+                  <span key="idle">
                     Drop {whose} {noun} here, or{" "}
                     <span className="text-[var(--blue)]">browse</span>
-                  </>
+                  </span>
                 )}
               </span>
               <span className="text-micro">
