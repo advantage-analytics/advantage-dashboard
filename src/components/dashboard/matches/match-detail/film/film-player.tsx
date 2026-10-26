@@ -631,13 +631,15 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
           return;
         }
         loopStopRef.current = now?.stop ?? null;
-        if (skipDead) {
+        // Only while playing: a paused scrub into the dead time is someone
+        // looking at a frame, not a film that needs moving on.
+        if (skipDead && playing) {
           const action = skipDeadAction(stops, t, skipMemoRef.current);
           if (action?.kind === "seek") seekTo(action.to);
           else if (action?.kind === "pause") videoRef.current?.pause();
         }
       },
-      [allStops, stops, looping, skipDead, seekTo, pushTime],
+      [allStops, stops, looping, skipDead, playing, seekTo, pushTime],
     );
 
     // Element state React does not carry, restored in ONE place.

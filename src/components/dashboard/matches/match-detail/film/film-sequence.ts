@@ -69,6 +69,10 @@ export interface SkipDeadMemo<S extends FilmStop<StopPoint> = FilmStop> {
  * - crossing the end of the LAST listed window during playback → `pause`,
  *   once: the cut has played. Past it with play pressed again the film runs
  *   on; the next report finds no listed stop behind it and asks nothing.
+ *
+ * Callers ask only while the film is playing: a paused scrub into the dead
+ * time is someone looking at a frame, and the old dead-time jump never
+ * moved a paused film either.
  */
 export function skipDeadAction<S extends FilmStop<StopPoint>>(
   walkStops: readonly S[],

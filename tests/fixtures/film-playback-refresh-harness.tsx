@@ -5,7 +5,10 @@ import { createRoot } from "react-dom/client";
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
-import { SKIP_DEAD_HINT_SEEN_STORAGE_KEY } from "@/components/dashboard/matches/match-detail/film/film-room-prefs";
+import {
+  SKIP_DEAD_HINT_SEEN_STORAGE_KEY,
+  SKIP_DEAD_STORAGE_KEY,
+} from "@/components/dashboard/matches/match-detail/film/film-room-prefs";
 import { MatchReportProvider } from "@/components/dashboard/matches/match-detail/match-report-context";
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
@@ -17,8 +20,13 @@ import type { WorkspaceContextValue } from "@/lib/workspace/types";
 // player's glyph once per browser profile, as a `role="dialog"` over the
 // lane that takes Escape and the pointer. Each case here starts a fresh
 // profile and is about playback, not the hint, so it is marked seen first.
+// Skip dead time itself is turned OFF: on by default, it walks the cut
+// (`film-sequence.ts`) and would carry the film out of the excluded points
+// and dead time the T18–T26 follow cases deliberately play through. The
+// walk is pinned by `tests/film-point-set.spec.ts` instead.
 try {
   localStorage.setItem(SKIP_DEAD_HINT_SEEN_STORAGE_KEY, "1");
+  localStorage.setItem(SKIP_DEAD_STORAGE_KEY, "0");
 } catch {
   /* blocked storage: the hint reads that as seen anyway */
 }
