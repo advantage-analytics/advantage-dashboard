@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
-import { rankOpponentTeams } from "@/components/dashboard/matches/new-match-wizard/opponent-team";
+import { opponentTeamsForSquad } from "@/components/dashboard/matches/new-match-wizard/opponent-team";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { useProgramSearch } from "@/components/dashboard/schedule/static/use-program-search";
 import {
@@ -15,7 +15,8 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
-import { divisionLongLabel, teamLabel } from "@/lib/data/programs-server";
+import { divisionLabel } from "@/lib/data/programs-server";
+import { squadLabel, toGenderedSquad, toSquad } from "@/lib/data/squad";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
 import type {
@@ -54,12 +55,19 @@ const ROW_CLS =
  * - **link** — nothing set: an 11px blue "Add their team".
  * - **search** — a small underline input over the program directory
  *   (`useProgramSearch`, two characters and up). Results are crest + school +
- *   "conference · division · squad"; under a hairline, one row keeps what was
- *   typed for a school the directory does not hold. Esc, or leaving the input
- *   with nothing picked, goes back to whatever was there before.
+ *   "division · conference"; under a hairline, one row keeps what was typed
+ *   for a school the directory does not hold. Esc, or leaving the input with
+ *   nothing picked, goes back to whatever was there before.
  * - **chosen** — crest + school + "Change". A team remembered from the last
  *   match against this opponent says so on a second line; one that came from
  *   the scheduled `line` is the line's to decide, so it has no Change.
+ *
+ * Men's and women's are the same school twice, so the squad decides which
+ * row is right. A men's or women's workspace lists its own squad only
+ * (`opponentTeamsForSquad`) under a "Women's teams" label, and its rows and
+ * chosen team leave the squad unsaid. Anywhere else — a personal or co-ed
+ * workspace — every row LEADS with its squad, where truncation cannot cut it,
+ * and the chosen team keeps it: "University of San Diego · Women's".
  *
  * Driven entirely by props so the upload wizard, the edit-match dialog and the
  * opponent drawer can each hold the value their own way. It lives under a name
@@ -118,7 +126,8 @@ export function OpponentTeamField({
   // The team's own squad first, before the cut — otherwise a same-squad row
   // the search ranked seventh would be the one dropped.
   const { active: workspace } = useWorkspace();
-  const results = rankOpponentTeams(
+  const ownSquad = toGenderedSquad(workspace.team);
+  const results = opponentTeamsForSquad(
     useProgramSearch(searching ? term : "").filter((row) => Boolean(row.id)),
     workspace.team,
   ).slice(0, MAX_RESULTS);
@@ -155,6 +164,7 @@ export function OpponentTeamField({
           crestUrl: row.crestUrl ?? null,
           conference: row.conference,
           division: row.division,
+          team: row.team,
         },
         school: null,
         source: "picked",
@@ -168,6 +178,8 @@ export function OpponentTeamField({
 
   const locked = readOnly || source === "line";
   const name = program?.schoolName ?? school?.trim() ?? "";
+  // Said only where both squads could have been picked.
+  const chosenSquad = ownSquad ? null : squadLabel(toSquad(program?.team));
 
   if (searching && !locked) {
     return (
@@ -261,11 +273,21 @@ export function OpponentTeamField({
             <div
               id={listId}
               role="listbox"
-              aria-label="Their team"
+              aria-label={
+                ownSquad ? `${squadLabel(ownSquad)} teams` : "Their team"
+              }
               className="flex flex-col"
             >
               {ready ? (
                 <>
+                  {ownSquad && results.length > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className="px-2.5 pt-1.5 pb-1 text-[11px] text-[var(--ink-500)]"
+                    >
+                      {squadLabel(ownSquad)} teams
+                    </span>
+                  )}
                   {results.map((row, index) => (
                     <button
                       key={row.id}
@@ -290,15 +312,14 @@ export function OpponentTeamField({
                         <span className="truncate text-[12px] text-[var(--ink-900)]">
                           {row.schoolName}
                         </span>
-                        <span className="truncate text-[11px] text-[var(--ink-500)]">
-                          {[
-                            row.conference,
-                            divisionLongLabel(row.division),
-                            teamLabel(row.team),
-                          ]
+                        <SquadLine
+                          squad={
+                            ownSquad ? null : squadLabel(toSquad(row.team))
+                          }
+                          detail={[divisionLabel(row.division), row.conference]
                             .filter(Boolean)
                             .join(" · ")}
-                        </span>
+                        />
                       </span>
                     </button>
                   ))}
@@ -370,6 +391,9 @@ export function OpponentTeamField({
         />
         <span className="min-w-0 truncate text-[12px] text-[var(--ink-700)]">
           {name}
+          {chosenSquad && (
+            <span className="text-[var(--ink-500)]"> · {chosenSquad}</span>
+          )}
         </span>
         {!locked && (
           <button
@@ -388,6 +412,29 @@ export function OpponentTeamField({
           From your last match against {opponentFirstName}
         </span>
       )}
+    </span>
+  );
+}
+
+/**
+ * A result row's second line: the squad first, a step darker, then
+ * "division · conference". First because the line truncates, and the squad
+ * is the half that tells two rows of one school apart.
+ */
+function SquadLine({
+  squad,
+  detail,
+}: {
+  squad: string | null;
+  detail: string;
+}) {
+  return (
+    <span className="truncate text-[11px] text-[var(--ink-500)]">
+      {squad && (
+        <span className="font-medium text-[var(--ink-700)]">{squad}</span>
+      )}
+      {squad && detail && " · "}
+      {detail}
     </span>
   );
 }

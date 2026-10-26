@@ -156,6 +156,7 @@ function storedOpponentTeam(m: RawMatch): OpponentTeamState {
           : null,
         conference: row.conference,
         division: row.division,
+        team: row.team,
       },
       school: null,
       source: null,

@@ -13,7 +13,7 @@ import {
   opponentTeamFromHistory,
   opponentTeamIsEmpty,
   opponentTeamUpdate,
-  rankOpponentTeams,
+  opponentTeamsForSquad,
 } from "@/components/dashboard/matches/new-match-wizard/opponent-team";
 import { redactForPlayer, searchPrograms } from "@/lib/data/programs-server";
 
@@ -440,34 +440,43 @@ test.describe("searchPrograms — id, abbreviation and crest", () => {
   });
 });
 
-test.describe("rankOpponentTeams — the team's own squad first", () => {
+test.describe("opponentTeamsForSquad — only the team's own squad", () => {
   const rows = [
     { id: "a", team: "womens" },
     { id: "b", team: "mens" },
-    { id: "c", team: "womens" },
-    { id: "d", team: "mens" },
+    { id: "c", team: "coed" },
+    { id: "d", team: "womens" },
+    { id: "e", team: null },
+    { id: "f", team: "mens" },
   ];
 
-  test("a men's team sees men's programs first, each half in search order", () => {
-    expect(rankOpponentTeams(rows, "mens").map((r) => r.id)).toEqual([
-      "b",
-      "d",
+  test("a women's team never sees men's programs", () => {
+    expect(opponentTeamsForSquad(rows, "womens").map((r) => r.id)).toEqual([
       "a",
+      "d",
       "c",
+      "e",
     ]);
   });
 
-  test("nothing is removed", () => {
-    expect(rankOpponentTeams(rows, "womens")).toHaveLength(rows.length);
+  test("a men's team sees men's first, then co-ed and unset, in search order", () => {
+    expect(opponentTeamsForSquad(rows, "mens").map((r) => r.id)).toEqual([
+      "b",
+      "f",
+      "c",
+      "e",
+    ]);
   });
 
-  test("a co-ed or unset squad leaves the order alone", () => {
+  test("a co-ed or unset squad gets every row, in search order", () => {
     for (const squad of ["coed", null, undefined]) {
-      expect(rankOpponentTeams(rows, squad).map((r) => r.id)).toEqual([
+      expect(opponentTeamsForSquad(rows, squad).map((r) => r.id)).toEqual([
         "a",
         "b",
         "c",
         "d",
+        "e",
+        "f",
       ]);
     }
   });
