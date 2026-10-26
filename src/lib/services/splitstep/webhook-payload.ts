@@ -250,6 +250,69 @@ const TRIMMED_VIDEO_URL_KEYS = [
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * `JSON.parse` for a body the vendor wrote, which may not be strict JSON.
+ *
+ * Their side serialises with Python's `json.dumps`, which writes a missing
+ * float as a bare `NaN` (or `Infinity` / `-Infinity`). Strict JSON has no such
+ * token, so `JSON.parse` threw on the whole body and every field in it was
+ * lost: on 2026-10-25 three completions for one video arrived signed, each
+ * with `"homography_score": NaN`, and all three orphaned with a 200 while the
+ * job waited for a delivery it had already had.
+ *
+ * Strict first, so a well-formed body costs one parse. Only when that fails
+ * are the bare tokens outside string literals read as `null` — a `"NaN"`
+ * inside a string, a player called Nan, is left alone. Still throws on a body
+ * that is broken in any other way, exactly as `JSON.parse` would.
+ */
+export function parseVendorJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (strictError) {
+    const relaxed = nullNonFiniteTokens(text);
+    if (relaxed === text) throw strictError;
+    return JSON.parse(relaxed);
+  }
+}
+
+const NON_FINITE_TOKENS = ["-Infinity", "Infinity", "NaN"];
+
+/** Replace bare NaN / Infinity / -Infinity outside strings with `null`. */
+function nullNonFiniteTokens(text: string): string {
+  let out = "";
+  let inString = false;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (inString) {
+      out += ch;
+      if (ch === "\\") {
+        out += text[i + 1] ?? "";
+        i += 2;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    const token = NON_FINITE_TOKENS.find((t) => text.startsWith(t, i));
+    if (token) {
+      out += "null";
+      i += token.length;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
 /** Interpret a parsed JSON webhook body. Never throws. */
 export function parseWebhookPayload(body: unknown): ParsedWebhook {
   const event = findFirst(body, EVENT_KEYS);

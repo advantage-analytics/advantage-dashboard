@@ -92,7 +92,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildSplitStepJobRequest, vendorRequestRecord } from "./job-request";
 import type { SplitStepJobRequest } from "./job-request";
-import { parseWebhookPayload } from "./webhook-payload";
+import { parseVendorJson, parseWebhookPayload } from "./webhook-payload";
 import { resolveSplitstepDeploymentConfig } from "./deployment-config";
 import type { SplitstepDeploymentConfig } from "./deployment-config";
 import { createVideoUrlStrategy, videoContainerClient } from "./video-url";
@@ -810,7 +810,7 @@ export async function resubmitJob(params: {
     let externalJobId: string | null = null;
     try {
       externalJobId = parseWebhookPayload(
-        JSON.parse(rawResponse),
+        parseVendorJson(rawResponse),
       ).externalJobId;
     } catch {
       console.warn(`${LOG} provider response was not JSON`, {
