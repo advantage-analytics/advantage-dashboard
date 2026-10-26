@@ -75,7 +75,7 @@ import {
 import { opponentTeamColumns } from "@/components/dashboard/matches/new-match-wizard/opponent-team";
 import {
   COURT_OPTIONS,
-  surfaceToCourtType,
+  legacyCourtType,
 } from "@/components/dashboard/matches/new-match-wizard/court-options";
 import { CRESTS_BUCKET } from "@/lib/data/programs-server";
 import { createClient } from "@/lib/supabase/client";
@@ -227,11 +227,11 @@ const MATCH_TYPE_OPTIONS = ["Tournament", "Dual Match", "Practice"].map(
 );
 /**
  * A stored surface as the upload wizard's Court field spells it, so an older
- * "hard" opens on the wizard's Hard rather than as a row of its own. Anything
- * the list does not know stays as stored.
+ * "hard" opens on the wizard's Hard rather than as a row of its own. Any other
+ * value stays exactly as stored, and saving leaves it alone.
  */
 const storedCourtType = (value: string | null) =>
-  value ? surfaceToCourtType(value) : "";
+  value ? legacyCourtType(value) : "";
 
 /**
  * A menu's options with a stored value that is in none of them kept as its

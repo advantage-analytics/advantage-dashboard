@@ -23,3 +23,22 @@ export function surfaceToCourtType(surface: string): string {
   if (s.includes("hard")) return "Outdoor Hard Court";
   return surface;
 }
+
+/**
+ * The bare spellings older writers stored ("hard", "Hard", "clay", "grass"),
+ * keyed lower-case. Only these map: a free-text value that merely mentions a
+ * surface ("Indoor Clay Court") is someone's own answer, not a legacy one.
+ */
+const LEGACY_COURT_TYPES = new Map([
+  ["hard", "Outdoor Hard Court"],
+  ["clay", "Clay Court"],
+  ["grass", "Grass Court"],
+]);
+
+/**
+ * A stored `court_type` as the Court field spells it: a legacy bare spelling
+ * becomes its option's value, and anything else comes back exactly as stored.
+ */
+export function legacyCourtType(value: string): string {
+  return LEGACY_COURT_TYPES.get(value.toLowerCase()) ?? value;
+}
