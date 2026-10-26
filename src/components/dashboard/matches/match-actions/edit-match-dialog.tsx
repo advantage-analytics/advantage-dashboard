@@ -73,6 +73,10 @@ import {
   type PlayerFields,
 } from "./edit-match-players";
 import { opponentTeamColumns } from "@/components/dashboard/matches/new-match-wizard/opponent-team";
+import {
+  COURT_OPTIONS,
+  legacyCourtType,
+} from "@/components/dashboard/matches/new-match-wizard/court-options";
 import { CRESTS_BUCKET } from "@/lib/data/programs-server";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
@@ -221,10 +225,13 @@ const NOT_SET = "__not-set";
 const MATCH_TYPE_OPTIONS = ["Tournament", "Dual Match", "Practice"].map(
   (t) => ({ value: t, label: t }),
 );
-const COURT_TYPE_OPTIONS = ["hard", "clay", "grass", "carpet"].map((t) => ({
-  value: t,
-  label: t.charAt(0).toUpperCase() + t.slice(1),
-}));
+/**
+ * A stored surface as the upload wizard's Court field spells it, so an older
+ * "hard" opens on the wizard's Hard rather than as a row of its own. Any other
+ * value stays exactly as stored, and saving leaves it alone.
+ */
+const storedCourtType = (value: string | null) =>
+  value ? legacyCourtType(value) : "";
 
 /**
  * A menu's options with a stored value that is in none of them kept as its
@@ -402,7 +409,7 @@ export function EditMatchDialog({
         setDate(dayOf(m.date));
         setRound(normalizeRound(m.round) ?? "");
         setMatchType(m.match_type ?? "");
-        setCourtType(m.court_type ?? "");
+        setCourtType(storedCourtType(m.court_type));
         // Known hands fill only what the match left empty; a value already on
         // the match is the record and is never replaced.
         const withKnown = (
@@ -515,7 +522,7 @@ export function EditMatchDialog({
             pendingLine.eventKind === "dual" &&
               round !== (storedRound ?? "") &&
               "round",
-            courtType !== (match.court_type ?? "") && "surface",
+            courtType !== storedCourtType(match.court_type) && "surface",
             (format.bestOf !== (match.format?.best_of ?? 3) ||
               format.adScoring !== (match.format?.ad_scoring ?? null) ||
               format.playOnLets !== (match.format?.play_on_lets ?? null)) &&
@@ -1427,14 +1434,14 @@ export function EditMatchDialog({
                 )}
                 <div className="flex min-w-0 flex-col gap-2">
                   <span className="text-[11px] text-[var(--ink-600)]">
-                    Court surface
+                    Court
                   </span>
                   <MenuSelect
-                    label="Court surface"
+                    label="Court"
                     variant="underline"
                     placeholder="Not set"
                     value={courtType || undefined}
-                    options={withLegacy(courtType, COURT_TYPE_OPTIONS)}
+                    options={withLegacy(courtType, COURT_OPTIONS)}
                     disabled={saving}
                     onChange={(v) => setCourtType(v === NOT_SET ? "" : v)}
                   />

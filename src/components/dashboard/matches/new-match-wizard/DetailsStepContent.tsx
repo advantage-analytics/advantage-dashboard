@@ -129,6 +129,7 @@ import { formatHoursMinutes } from "@/lib/format/duration";
 import { setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 import { FieldCaption } from "./FieldCaption";
+import { COURT_OPTIONS } from "./court-options";
 import {
   ChosenCheck,
   FloatMenu,
@@ -241,13 +242,6 @@ export interface DetailsVideo {
 
 type Hand = "right" | "left";
 type Backhand = "one-handed" | "two-handed";
-
-const COURT_OPTIONS: readonly { value: string; label: string }[] = [
-  { value: "Outdoor Hard Court", label: "Hard" },
-  { value: "Indoor Hard Court", label: "Hard · Indoor" },
-  { value: "Clay Court", label: "Clay" },
-  { value: "Grass Court", label: "Grass" },
-];
 
 const ROUND_OPTIONS: readonly {
   value: string;

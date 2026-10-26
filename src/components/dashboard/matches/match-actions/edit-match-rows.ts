@@ -10,7 +10,7 @@
  * `fields` names each row's cells in order, by the caption or the name the
  * form shows on them (`tests/edit-match-pending.spec.ts` reads the form's
  * sources for each). Only rows every one-off draws are listed: the Round
- * menu (beside Court surface, when the match type has rounds) and the
+ * menu (beside Court, when the match type has rounds) and the
  * Format · Scoring · Lets row (an unanalysed one-off) are conditional, so
  * the skeleton does not promise them. A match on a schedule line swaps the
  * Details rows for its event's sentence.
@@ -33,5 +33,5 @@ export const EDIT_MATCH_FIELD_ROWS: readonly EditMatchFieldRow[] = [
   // The Details section: the Event field, then its two-column grid.
   { section: "Details", fields: ["Event"] },
   { section: "Details", fields: ["Date", "Match type"] },
-  { section: "Details", fields: ["Court surface"] },
+  { section: "Details", fields: ["Court"] },
 ];

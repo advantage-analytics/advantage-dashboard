@@ -8,6 +8,7 @@ import * as scoreState from "@/components/dashboard/matches/new-match-wizard/sco
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import * as opponentTeam from "@/components/dashboard/matches/new-match-wizard/opponent-team";
 import * as styleSaveOffer from "@/components/dashboard/matches/new-match-wizard/style-save-offer";
+import * as courtOptions from "@/components/dashboard/matches/new-match-wizard/court-options";
 import { buildMatchData } from "@/components/dashboard/matches/new-match-wizard/utils";
 import * as scoreFormat from "@/lib/ui/score-format";
 import * as adminApproval from "@/lib/admin/uploads/approval";
@@ -413,6 +414,7 @@ export function uploadWizardHarness(
     "./opponent-team": opponentTeam,
     "./validation": validation,
     "./score-state": scoreState,
+    "./court-options": courtOptions,
     // The real thing: pure, and it is the seam under test. It pulls in the
     // real `roster-shared` and `upload-eligibility` modules with it.
     "./subject-eligibility": subjectEligibility,

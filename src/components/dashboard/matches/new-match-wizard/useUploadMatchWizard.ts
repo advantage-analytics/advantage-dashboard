@@ -135,6 +135,7 @@ import {
   evaluateImportedIdentityMatch,
   quotaRefusal,
 } from "./validation";
+import { surfaceToCourtType } from "./court-options";
 
 /**
  * How far the window start may travel, in seconds, before the top-player
@@ -814,19 +815,6 @@ function adminVideoScore(formData: MatchFormData) {
 // Helper to get current date in YYYY-MM-DD format.
 // Use LOCAL date components (not toISOString, which is UTC) so the default date matches
 // the user's local day — otherwise an evening upload behind UTC defaults to tomorrow.
-/**
- * The schedule's surface ("hard", "clay", "grass", or a court option already
- * spelled out) to the value the details step's Court field stores.
- */
-function surfaceToCourtType(surface: string): string {
-  const s = surface.trim().toLowerCase();
-  if (s.includes("indoor")) return "Indoor Hard Court";
-  if (s.includes("clay")) return "Clay Court";
-  if (s.includes("grass")) return "Grass Court";
-  if (s.includes("hard")) return "Outdoor Hard Court";
-  return surface;
-}
-
 function getCurrentDate(): string {
   const now = new Date();
   const y = now.getFullYear();

@@ -118,11 +118,11 @@ test("the row list is the form's own", () => {
     expect(row.fields.length).toBeLessThanOrEqual(2);
     for (const field of row.fields) expect(dialog).toContain(`"${field}"`);
   }
-  // Date, Match type, Court surface: three cells, two rows of two.
+  // Date, Match type, Court: three cells, two rows of two.
   expect(grid.flatMap((row) => row.fields)).toEqual([
     "Date",
     "Match type",
-    "Court surface",
+    "Court",
   ]);
 });
 
