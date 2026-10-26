@@ -6,7 +6,11 @@ import { Kbd } from "@/components/ui/kbd";
 import { ANALYSIS_LABEL } from "@/lib/data/match-analysis";
 import { AnalysisStatusLine } from "@/components/dashboard/shared/analysis-status-line";
 import type { StepState } from "@/components/dashboard/shared/vertical-steps";
-import { EXPORT_GUIDE_URL, SUPPORT_EMAIL } from "@/lib/constants";
+import {
+  EXPORT_GUIDE_URL,
+  MCP_GUIDE_URL,
+  SUPPORT_EMAIL,
+} from "@/lib/constants";
 import {
   MAX_VIDEO_SIZE_BYTES,
   PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS,
@@ -827,26 +831,35 @@ export default function HelpCenterPage() {
               className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
             >
               <h2 className={topicHeadingClass}>
-                Using Advantage in Claude, ChatGPT or Cursor
+                Using Advantage in your AI app
               </h2>
               <p className={`${proseClass} max-w-[560px]`}>
-                Connect your own AI app — Claude (claude.ai, Claude Desktop or
-                Claude Code), ChatGPT or Cursor — and ask about your matches
-                there. It reads the same statistics Ask does, as you.
+                Connect your own AI app — Claude, ChatGPT, Cursor or any app
+                that supports MCP — and ask about your matches there. It reads
+                the same statistics Ask does, as you.
               </p>
 
               <div className="flex flex-col gap-2.5">
                 <span className={blockLabelClass}>Connecting</span>
                 <p className={proseClass}>
-                  The address and the steps are in{" "}
+                  Copy your address from{" "}
                   <Link
                     href="/dashboard/settings/connections"
                     className={linkClass}
                   >
                     Settings › Connections
                   </Link>
-                  . You sign in to Advantage and choose Allow once; the app then
-                  lists Advantage among its tools.
+                  , then follow the{" "}
+                  <a
+                    href={MCP_GUIDE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={linkClass}
+                  >
+                    setup guide
+                  </a>{" "}
+                  for your app. You sign in to Advantage and choose Allow once;
+                  the app then lists Advantage among its tools.
                 </p>
               </div>
 
@@ -857,6 +870,19 @@ export default function HelpCenterPage() {
                   monthly Ask questions and appear in your Ask history. It sees
                   your matches and, for a team you belong to, that team&apos;s —
                   nothing another account could not already see.
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>What it can change</span>
+                <p className={proseClass}>
+                  Three things, and nothing it can delete: your Ask history,
+                  when it asks Advantage a question; a match&apos;s details
+                  (opponent, tournament, round, date, match type, surface, or
+                  the opponent&apos;s school, hand and backhand) on a match you
+                  created, never its score; and a new upload draft, which you
+                  finish yourself in Advantage. Most apps ask you before they
+                  make a change.
                 </p>
               </div>
 

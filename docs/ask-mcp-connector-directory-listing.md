@@ -76,7 +76,7 @@ Synced from the server. Nine, none flagged:
   > Connections in Advantage, or by removing the connector in Claude.
 
 - **Categories**: Sports; Analytics (or the nearest offered)
-- **Documentation URL**: `https://advantage-analytics.com/claude`
+- **Documentation URL**: `https://advantage-analytics.com/mcp` (`/claude` redirects there)
 - **Privacy policy URL**: `https://advantage-analytics.com/legal/privacy-policy`
 - **Support contact**: `team@advantage-analytics.com`
 - **Author name**: Advantage Analytics LLC · **Author URL**:
