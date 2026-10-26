@@ -10,7 +10,7 @@ import { GUARDIAN_TERMS_URL, PRIVACY_URL, TERMS_URL } from "@/lib/constants";
  *
  *   * `LEGAL_VERSIONS` below
  *   * `public.current_legal_version()` in
- *     `supabase/migrations/20261025230100_legal_acceptances.sql`
+ *     `supabase/migrations/20261026061004_legal_acceptances.sql`
  *
  * Bump both in the same change (the SQL side is a new migration replacing the
  * function body) whenever a page's version changes. A `legal_acceptances` row

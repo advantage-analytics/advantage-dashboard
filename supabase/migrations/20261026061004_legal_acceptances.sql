@@ -1,3 +1,6 @@
+-- Applied live 2026-10-26 as version 20261026061004, ahead of the
+-- deploy that reads it.
+--
 -- Legal acceptances: which version of the Terms and Conditions, the Privacy
 -- Policy and the Guardian Terms each account agreed to, and when. Modelled on
 -- `pilot_terms_acceptances` (20260926181544).

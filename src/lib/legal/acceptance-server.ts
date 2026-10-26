@@ -11,7 +11,7 @@ import {
  * current version.
  *
  * Read through the SESSION client: `legal_acceptances` lets an account read
- * its own rows and nothing else (`20261025230100_legal_acceptances.sql`).
+ * its own rows and nothing else (`20261026061004_legal_acceptances.sql`).
  *
  * A failed read answers "nothing missing", the opposite of the pilot terms'
  * fail-closed read, and on purpose. That check guards one action (creating a

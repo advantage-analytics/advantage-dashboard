@@ -29,7 +29,7 @@ const MIGRATIONS = resolve(__dirname, "..", "supabase", "migrations");
 
 test("LEGAL_VERSIONS matches current_legal_version() in SQL", () => {
   const sql = readFileSync(
-    resolve(MIGRATIONS, "20261025230100_legal_acceptances.sql"),
+    resolve(MIGRATIONS, "20261026061004_legal_acceptances.sql"),
     "utf8",
   );
   for (const [document, version] of Object.entries(LEGAL_VERSIONS)) {

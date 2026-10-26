@@ -28,7 +28,7 @@
  * video" yet, so nothing here says it. The decision is already made per match
  * — `matches.exclude_from_training`, set by a trigger for guardian and
  * under-18 accounts and for high school / academy teams
- * (`20261025230200_match_training_exclusion.sql`). When the vendor adds a
+ * (`20261026061018_match_training_exclusion.sql`). When the vendor adds a
  * field, send that column from every caller of `buildSplitStepJobRequest`
  * (the jobs route, `resubmit-job.ts`, `admin-video-submission.ts`); until
  * then, hand them the list of excluded match ids (= their video_id).

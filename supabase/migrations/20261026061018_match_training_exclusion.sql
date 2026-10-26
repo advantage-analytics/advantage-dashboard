@@ -1,3 +1,6 @@
+-- Applied live 2026-10-26 as version 20261026061018, ahead of the
+-- deploy that reads it.
+--
 -- Do-not-train: which matches' video must never be used to train models.
 --
 -- Terms and Conditions 2.0 §6 and Privacy Policy 1.4 §3/§10: our video

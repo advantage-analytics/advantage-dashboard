@@ -14,7 +14,7 @@
  *
  * The date of birth is written to `users.dob`, which is also what
  * `training_excluded_for()` reads to keep an under-18 account's video out of
- * model training (`20261025230200_match_training_exclusion.sql`).
+ * model training (`20261026061018_match_training_exclusion.sql`).
  */
 
 /** `adult` is 18+, `teen` 13–17, `child` under 13. */
