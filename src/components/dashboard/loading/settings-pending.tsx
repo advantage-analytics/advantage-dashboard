@@ -1055,7 +1055,7 @@ export function SettingsTeamDetailPending() {
           />
           <CardRow
             label="Personal uploads stay private"
-            description="Players share personal matches to the program per match — never automatically."
+            description="The team never sees a player's personal matches."
             control={<Text className="text-[11px]">fixed</Text>}
           />
         </SettingsCard>

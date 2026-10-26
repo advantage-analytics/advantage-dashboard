@@ -50,6 +50,7 @@ export const LIVE_DB_SPECS = [
   "teams-management.spec.ts",
   // Loopback-only (a local Docker stack), but it creates users all the same.
   "upload-write-eligibility.spec.ts",
+  "users-write-once-identity.spec.ts",
   "viz-bands-rls.spec.ts",
 ] as const;
 

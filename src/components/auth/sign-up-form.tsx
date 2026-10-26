@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { PRIVACY_URL, TERMS_URL } from "@/lib/constants";
+import { LEGAL_VERSIONS } from "@/lib/legal/versions";
 import FormHeader from "./form-header";
 import FormField from "./form-field";
 import AuthButton from "./auth-button";
@@ -91,6 +92,14 @@ export function SignUpForm({
           // The destination rides in the confirmation link, so the click that
           // activates the account is the one that returns to a join link.
           emailRedirectTo: `${window.location.origin}/confirm?next=${encodeURIComponent(destination)}`,
+          // The versions the consent sentence linked to. There is no session
+          // to insert a row with until the address is confirmed, so
+          // `handle_new_user` records them as the account is created — and
+          // only if they are still the current ones.
+          data: {
+            legal_terms_version: LEGAL_VERSIONS.terms,
+            legal_privacy_version: LEGAL_VERSIONS.privacy,
+          },
         },
       });
       if (signUpError) throw signUpError;

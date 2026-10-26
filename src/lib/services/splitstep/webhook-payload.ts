@@ -250,6 +250,59 @@ const TRIMMED_VIDEO_URL_KEYS = [
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * `JSON.parse` for a body the vendor wrote, which may not be strict JSON.
+ *
+ * Their side serialises with Python's `json.dumps`, which writes a missing
+ * float as a bare `NaN` (or `Infinity` / `-Infinity`). Strict JSON has no such
+ * token, so `JSON.parse` threw on the whole body and every field in it was
+ * lost: on 2026-10-25 three completions for one video arrived signed, each
+ * with `"homography_score": NaN`, and all three orphaned with a 200 while the
+ * job waited for a delivery it had already had.
+ *
+ * Strict first, so a well-formed body costs one parse. Only when that fails
+ * are the bare tokens outside string literals read as `null` — a `"NaN"`
+ * inside a string, a player called Nan, is left alone. Still throws on a body
+ * that is broken in any other way, exactly as `JSON.parse` would.
+ */
+export function parseVendorJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (strictError) {
+    const relaxed = nullNonFiniteTokens(text);
+    if (relaxed === text) throw strictError;
+    return JSON.parse(relaxed);
+  }
+}
+
+/** A whole string literal (kept as is) or a bare non-finite token (nulled). */
+const STRING_OR_NON_FINITE_RE = /"(?:[^"\\]|\\.)*"|-?Infinity|NaN/g;
+
+/** Replace bare NaN / Infinity / -Infinity outside strings with `null`. */
+function nullNonFiniteTokens(text: string): string {
+  return text.replace(STRING_OR_NON_FINITE_RE, (m) =>
+    m.startsWith('"') ? m : "null",
+  );
+}
+
+/**
+ * Why a delivery could not be acted on, or null when it could.
+ *
+ * Not JSON at all, no job id to match, or no status we recognise: each one is
+ * recorded and answered 200 by the route, and each one moves nothing. The
+ * route alerts on a SIGNED delivery that lands here, because that is the
+ * vendor changing what they send, not a stranger posting garbage.
+ */
+export function unreadableWebhookReason(
+  parsedJson: unknown,
+  payload: Pick<ParsedWebhook, "externalJobId" | "nextStatus">,
+): string | null {
+  if (parsedJson === null) return "the body is not valid JSON";
+  if (!payload.externalJobId) return "it names no job id";
+  if (!payload.nextStatus) return "it carries no status we recognise";
+  return null;
+}
+
 /** Interpret a parsed JSON webhook body. Never throws. */
 export function parseWebhookPayload(body: unknown): ParsedWebhook {
   const event = findFirst(body, EVENT_KEYS);

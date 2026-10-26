@@ -2,15 +2,18 @@ import { emailOrigin } from "@/lib/site-url";
 import { verifyIdentityUrl } from "@/lib/services/programs/claim-verification";
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
+import { OUTREACH_UNSUBSCRIBE_URL, SUPPORT_ADDRESS } from "../config";
 
 /**
  * The six emails a program claim produces.
  *
- * None of them is preference-driven, and none carries a "turn this off" line.
- * Each is the direct consequence of something a person did — claiming a
- * program, or being the recorded contact for one somebody else claimed — and
- * an account-level notice with an unsubscribe link is one people switch off
- * and then miss.
+ * None of them is preference-driven, and the account holders' ones carry no
+ * "turn this off" line: each is the direct consequence of something a person
+ * did, and an account-level notice with an unsubscribe link is one people
+ * switch off and then miss. The exception is the objection notice, which goes
+ * to a scraped contact who never signed up: the Privacy Policy promises every
+ * such email a way to object and stop further emails, so it carries the
+ * outreach unsubscribe link and postal address.
  *
  * The state machine behind them is in `services/programs/claim-state.ts`. Two
  * details from it shape the copy and are easy to get wrong:
@@ -327,6 +330,8 @@ export interface ClaimObjectionNoticeInput {
   claimantTitle: string;
   windowClosesOn: string;
   programKey: string;
+  /** `OUTREACH_POSTAL_ADDRESS`, as the outreach mail prints it. */
+  postalAddress: string;
 }
 
 /**
@@ -348,7 +353,15 @@ export function claimObjectionNoticeEmail(
     claimantTitle,
     windowClosesOn,
     programKey,
+    postalAddress,
   } = input;
+
+  // The outreach unsubscribe page, keyed the way `outreachUnsubscribeUrl()`
+  // keys a program's contact, so one opt-out covers both kinds of mail.
+  const unsubscribeUrl = `${OUTREACH_UNSUBSCRIBE_URL}?${new URLSearchParams({
+    e: to,
+    t: programKey,
+  }).toString()}`;
 
   const content: EmailContent = {
     preheader: `${claimantName} now manages ${programName} on Advantage.`,
@@ -368,7 +381,12 @@ export function claimObjectionNoticeEmail(
       label: "This isn't right",
       url: `${emailOrigin()}/claim/${encodeURIComponent(programKey)}/object`,
     },
-    note: "You're getting this because your address is on file as a contact for this program. We don't add contacts to any mailing list.",
+    compliance: {
+      postalAddress,
+      unsubscribeUrl,
+      reason:
+        "You received this because your address is on file as a contact for this program.",
+    },
   };
 
   return {
@@ -379,5 +397,9 @@ export function claimObjectionNoticeEmail(
     html: renderEmail(content),
     text: renderText(content),
     tags: { type: "claim_objection_notice" },
+    headers: {
+      "List-Unsubscribe": `<${unsubscribeUrl}>, <mailto:${SUPPORT_ADDRESS}?subject=unsubscribe>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
   };
 }

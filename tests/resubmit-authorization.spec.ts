@@ -611,6 +611,29 @@ test("a line match retried by staff submits", async () => {
   expect((await manual(h)).ok).toBe(true);
 });
 
+// Cj v Summer: the copy was stamped on the first job only, so each retry
+// played the raw upload until the chooser learned to borrow it.
+test("a ready playback copy comes along to the child; any other state does not", async () => {
+  const copy = "playback/u/m-1/original.mp4";
+  const ready = harness({
+    job: parentJob({ playback_object_key: copy, playback_status: "ready" }),
+  });
+  expect((await manual(ready)).ok).toBe(true);
+  expect(ready.db.inserts[0].row).toMatchObject({
+    playback_object_key: copy,
+    playback_status: "ready",
+  });
+
+  for (const playback_status of ["processing", "failed", null]) {
+    const h = harness({
+      job: parentJob({ playback_object_key: copy, playback_status }),
+    });
+    expect((await manual(h)).ok).toBe(true);
+    expect(h.db.inserts[0].row.playback_object_key).toBeUndefined();
+    expect(h.db.inserts[0].row.playback_status).toBeUndefined();
+  }
+});
+
 test("a personal match is the uploader's own: no roster read, personal ledger", async () => {
   const h = harness({
     match: matchRow({ program_id: null, player1_id: VIEWER }),

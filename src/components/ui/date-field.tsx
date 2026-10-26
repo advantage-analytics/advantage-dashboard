@@ -68,7 +68,7 @@ import { cn } from "@/lib/utils";
  * moves.
  */
 
-export type DateFieldVariant = "underline" | "bare" | "boxed";
+export type DateFieldVariant = "underline" | "bare" | "boxed" | "form";
 
 /** What `handleRef` receives: focus the first segment, for focus-first-invalid. */
 export type DateFieldHandle = { focus: () => void };
@@ -244,12 +244,21 @@ export function DateField({
               "h-[30px] rounded-[6px] border border-[var(--border-field)] bg-[var(--surface-field)] px-2.5",
               "data-[invalid]:border-[var(--error)]",
             ),
+          // A form field among `advField("boxed")` inputs: their height,
+          // radius, white ground and padding, so a date in a form of text
+          // fields reads as one more field rather than a filter chip.
+          variant === "form" &&
+            cn(
+              "h-9 rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)] pr-1 pl-3",
+              "data-[invalid]:border-[var(--error)]",
+            ),
         )}
       >
         <DateInput
           className={cn(
             "flex min-w-0 flex-1 items-center text-[var(--ink-900)]",
             variant === "boxed" ? "text-[12px]" : "text-[13px]",
+            variant === "form" && "touch:text-[16px]",
           )}
         >
           {(segment) => (

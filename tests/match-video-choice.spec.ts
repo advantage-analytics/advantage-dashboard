@@ -192,6 +192,41 @@ test.describe("the playback copy", () => {
     );
     expect(gone?.source).toBe("upload");
   });
+
+  // Cj v Summer: resubmitted twice, the copy only on the first job.
+  test("a resubmission plays the copy an older job made of the same upload", async () => {
+    const resubmitted = {
+      ...job,
+      playback_object_key: null,
+      playback_status: null,
+    };
+    expect(
+      await choosePlaybackFile([resubmitted, resubmitted, job], all),
+    ).toEqual({
+      blobName: "playback/u/m/original.mp4",
+      startTimeSeconds: 0,
+      source: "playback",
+    });
+  });
+
+  test("a copy of a different upload is never borrowed", async () => {
+    const reuploaded = {
+      ...job,
+      video_object_key: "videos/u/m/second.mp4",
+      playback_object_key: null,
+      playback_status: null,
+    };
+    expect(
+      await choosePlaybackFile(
+        [reuploaded, job],
+        exists("videos/u/m/second.mp4", "playback/u/m/original.mp4"),
+      ),
+    ).toEqual({
+      blobName: "videos/u/m/second.mp4",
+      startTimeSeconds: 0,
+      source: "upload",
+    });
+  });
 });
 
 test.describe("analysedWindowSeconds", () => {

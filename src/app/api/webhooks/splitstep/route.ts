@@ -55,7 +55,11 @@ import {
   SIGNATURE_HEADERS,
   verifyWebhookAuth,
 } from "@/lib/services/splitstep/webhook-auth";
-import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
+import {
+  parseVendorJson,
+  parseWebhookPayload,
+  unreadableWebhookReason,
+} from "@/lib/services/splitstep/webhook-payload";
 import { selectDeliveryStorageKeys } from "@/lib/services/splitstep/delivery-storage-keys";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
 import {
@@ -75,7 +79,10 @@ import {
   archiveTrimmedVideo,
   archiveVendorJson,
 } from "@/lib/services/splitstep/vendor-archive";
-import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
+import {
+  notifyAnalysisOutcome,
+  notifyUnreadableWebhook,
+} from "@/lib/services/notifications/analysis-mail";
 import { askOnArrival } from "@/lib/services/ask/arrival";
 
 export const runtime = "nodejs";
@@ -161,10 +168,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unreadable body" }, { status: 400 });
   }
 
+  const redactedBody = redactSignedUrls(rawBody);
   pipelineLog.info(`${LOG} received`, {
     bytes: rawBody.length,
     contentType: request.headers.get("content-type"),
-    body: redactSignedUrls(rawBody).slice(0, 4000),
+    body: redactedBody.slice(0, 4000),
   });
 
   // 2. Authenticate. Must run against the exact bytes received — the HMAC is
@@ -179,7 +187,7 @@ export async function POST(request: NextRequest) {
   // 3. Interpret. Never fatal: an unparseable body is still recorded verbatim.
   let parsedJson: unknown = null;
   try {
-    parsedJson = rawBody.trim() === "" ? null : JSON.parse(rawBody);
+    parsedJson = rawBody.trim() === "" ? null : parseVendorJson(rawBody);
   } catch {
     pipelineLog.warn(`${LOG} body is not valid JSON — recording raw only`);
   }
@@ -252,6 +260,26 @@ export async function POST(request: NextRequest) {
     players_object_key: string | null;
     trajectories_object_key: string | null;
   };
+
+  // A signed delivery we cannot act on is the vendor changing what they send:
+  // say so now, not when the status poll calls the job lost. Unsigned ones are
+  // not mailed — anyone can post those.
+  const unreadable = verified
+    ? unreadableWebhookReason(parsedJson, payload)
+    : null;
+  if (unreadable) {
+    pipelineLog.warn(`${LOG} UNREADABLE — ${unreadable}`, {
+      deliveryId: record.delivery_id,
+    });
+    after(() =>
+      notifyUnreadableWebhook({
+        deliveryId: record.delivery_id,
+        reason: unreadable,
+        externalJobId: payload.externalJobId,
+        bodyExcerpt: redactedBody.slice(0, 600),
+      }),
+    );
+  }
 
   if (!record.matched_job_id) {
     // Not an error: the payload is safe in splitstep_webhook_deliveries, and a

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
 import { releaseStoragePurgeClaims } from "@/lib/services/matches/release-storage-purge-claim";
 import { revalidatePath } from "next/cache";
+import { AGE_REFUSAL, DOB_ERROR, ageBand } from "@/app/onboarding/age";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { recoveryRedirectTo } from "@/lib/auth/recovery-handoff";
@@ -62,12 +63,33 @@ export async function saveProfile(input: ProfileInput): Promise<ActionResult> {
     return { ok: false, error: "Invalid backhand selection." };
   }
 
+  // The date of birth is write-once (`users_write_once_identity`): sent only
+  // when none is on file, and then through the same age rule onboarding and
+  // the join screens apply. One already stored is never in this update, so a
+  // save of the other fields can't trip the database's refusal.
+  const { data: current, error: readError } = await supabase
+    .from("users")
+    .select("dob")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (readError) {
+    return { ok: false, error: "We couldn't save that. Try again." };
+  }
+  const dobUpdate: { dob?: string } = {};
+  const birthdate = emptyToNull(input.birthdate);
+  if (!current?.dob && birthdate !== null) {
+    const band = ageBand(birthdate);
+    if (band === null) return { ok: false, error: DOB_ERROR };
+    if (band === "child") return { ok: false, error: AGE_REFUSAL.child };
+    dobUpdate.dob = birthdate;
+  }
+
   const { error } = await supabase
     .from("users")
     .update({
       first_name: emptyToNull(input.firstName),
       last_name: emptyToNull(input.lastName),
-      dob: emptyToNull(input.birthdate),
+      ...dobUpdate,
       phone: emptyToNull(input.phone),
       country: emptyToNull(input.country),
       state: emptyToNull(input.state),
@@ -375,6 +397,13 @@ export async function deleteAccount(): Promise<ActionResult> {
   await adminClient.from("processing_jobs").delete().eq("created_by", user.id);
   await adminClient.from("processing_usage").delete().eq("created_by", user.id);
 
+  //    And the profile photo. Every avatar lives under `${user.id}/` in
+  //    `user-avatars` (`uploadAvatar`), and nothing cascades into Storage, so
+  //    the whole folder goes — a replaced photo whose removal failed included.
+  //    Best-effort like the two above: a file left behind is cleaned by hand,
+  //    and must not keep the person from deleting their account.
+  await removeAvatarFolder(adminClient, user.id);
+
   // 4. The login, last.
   const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(
     user.id,
@@ -446,6 +475,35 @@ async function releaseDeletionClaims(
     purgedMatchIds,
     "account delete",
   );
+}
+
+/**
+ * Remove every object under `${userId}/` in the avatars bucket. Logged, never
+ * thrown: see the account deletion step that calls it.
+ */
+async function removeAvatarFolder(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+): Promise<void> {
+  try {
+    const bucket = adminClient.storage.from(USER_AVATARS_BUCKET);
+    const { data, error } = await bucket.list(userId, { limit: 1000 });
+    if (error) {
+      console.error("[account delete] could not list avatars:", error.message);
+      return;
+    }
+    const paths = (data ?? []).map((file) => `${userId}/${file.name}`);
+    if (paths.length === 0) return;
+    const { error: removeError } = await bucket.remove(paths);
+    if (removeError) {
+      console.error(
+        "[account delete] could not remove avatars:",
+        removeError.message,
+      );
+    }
+  } catch (error) {
+    console.error("[account delete] avatar removal threw:", error);
+  }
 }
 
 /** One row per program `release_my_account_from_programs()` touched. */

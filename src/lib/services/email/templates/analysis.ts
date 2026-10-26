@@ -345,3 +345,55 @@ export function analysisFailedInternalEmail(
     tags: { type: "analysis_failed_internal" },
   };
 }
+
+export interface WebhookUnreadableInternalInput {
+  /** `INTERNAL_ALERTS_ADDRESS`, passed by the caller (`analysis-mail.ts`). */
+  to: string;
+  /** `splitstep_webhook_deliveries.id` — where the raw body is kept. */
+  deliveryId: string;
+  /** What could not be read, from `unreadableWebhookReason()`. */
+  reason: string;
+  /** The vendor job id, when one was found despite the rest. */
+  externalJobId: string | null;
+  /** The start of the body, signed urls already redacted by the caller. */
+  bodyExcerpt: string;
+}
+
+/**
+ * A signed SplitStep delivery we could not read — to the alerts inbox only.
+ *
+ * The route still records it and answers 200, so the vendor's logs say
+ * "delivered" and nothing on our side moves. On 2026-10-25 three completions
+ * sat like that for thirteen hours because the body carried a bare `NaN`; the
+ * only signal was the status poll later calling the job lost. This is the
+ * signal at the moment it happens, with the delivery id to recover from.
+ */
+export function webhookUnreadableInternalEmail(
+  input: WebhookUnreadableInternalInput,
+): EmailMessage {
+  const { to, deliveryId, reason, externalJobId, bodyExcerpt } = input;
+
+  const content: EmailContent = {
+    preheader: `A signed SplitStep delivery could not be read: ${reason}.`,
+    eyebrow: "Webhook unreadable",
+    heading: "A SplitStep delivery could not be read",
+    body: [
+      `The delivery was signed and stored, and answered 200, but ${reason}, so it moved no job. If it was a completion, the job will sit until the status poll marks it lost.`,
+      `Start of the body: ${bodyExcerpt}`,
+    ],
+    facts: [
+      { label: "Delivery", value: deliveryId },
+      { label: "Reason", value: reason },
+      ...(externalJobId ? [{ label: "Vendor job", value: externalJobId }] : []),
+    ],
+    note: "Sent to the internal alerts inbox once per reason per day — later deliveries like it are not mailed. The full body is in splitstep_webhook_deliveries under that id.",
+  };
+
+  return {
+    to,
+    subject: `SplitStep webhook unreadable: ${reason}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "webhook_unreadable_internal" },
+  };
+}

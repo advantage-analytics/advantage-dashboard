@@ -9,7 +9,7 @@ import { ArrowRight } from "lucide-react";
  * The design's note on 4.2 says they are "the same ones the invited player
  * reads in 8.2, in the same order", and building 8.2 is what established that
  * the note describes an intention rather than the frames. 8.2 draws six rows in
- * two headed columns — "Your coaches will see" and "Stays yours" — and shares
+ * two headed columns — "Your team will see" and "Stays yours" — and shares
  * no sentence with these three. Sharing a constant between the two would mean
  * making one screen wrong to keep a caption right, so 8.2 carries its own copy
  * in `components/join/join-terms.tsx`, which explains the split from its end.
@@ -26,7 +26,7 @@ import { ArrowRight } from "lucide-react";
  */
 export const JOIN_SHARING_ROWS: readonly string[] = [
   "Your coach approves the request. Until then, this changes nothing about your account.",
-  "Matches you've already uploaded stay personal. You choose, per match, whether to share one.",
+  "Matches you've already uploaded stay personal, and your team never sees them.",
   "Once you're on the roster, team matches run on the program's hours instead of your own.",
 ];
 

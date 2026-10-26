@@ -42,7 +42,7 @@ const OPTIONS: {
     id: "junior",
     icon: Shield,
     label: "I manage a junior's account",
-    sub: "Parent or academy staff.",
+    sub: "Parent or legal guardian.",
   },
 ];
 

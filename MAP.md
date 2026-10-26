@@ -105,6 +105,7 @@ markers is hand-written — edit it as things move.
 | `/m/[token]` | [`src/app/m/[token]/page.tsx`](src/app/m/[token]/page.tsx) |
 | `/onboarding` | [`src/app/onboarding/page.tsx`](src/app/onboarding/page.tsx) |
 | `/` | [`src/app/page.tsx`](src/app/page.tsx) |
+| `/terms-update` | [`src/app/terms-update/page.tsx`](src/app/terms-update/page.tsx) |
 | `/wizard-reproduction` | [`src/app/wizard-reproduction/page.tsx`](src/app/wizard-reproduction/page.tsx) |
 
 <!-- ROUTES:END -->

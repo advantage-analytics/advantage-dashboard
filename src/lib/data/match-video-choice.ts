@@ -64,13 +64,10 @@ export async function choosePlaybackFile(
   prefer: PlaybackChoice["source"] = "upload",
 ): Promise<PlaybackChoice | null> {
   for (const job of jobs) {
-    if (
-      job.playback_status === "ready" &&
-      job.playback_object_key &&
-      (await blobExists(job.playback_object_key))
-    ) {
+    const copyKey = playbackCopyFor(job, jobs);
+    if (copyKey && (await blobExists(copyKey))) {
       return {
-        blobName: job.playback_object_key,
+        blobName: copyKey,
         startTimeSeconds: 0,
         source: "playback",
       };
@@ -95,6 +92,32 @@ export async function choosePlaybackFile(
     if (prefer === "upload" && vendorCopy) return vendorCopy;
   }
   return null;
+}
+
+/**
+ * The ready playback copy of this job's upload: its own, or else one another
+ * job made of the SAME upload. The worker copies an upload once, onto the job
+ * that uploaded it; a resubmission reuses `video_object_key` and never gets a
+ * copy of its own. Without this, Cj v Summer's newest job fell through to the
+ * raw upload — index at the end of a 614 MB file — while an identical copy sat
+ * on the job before it. Same bytes, same timeline, so the offset is still 0.
+ */
+function playbackCopyFor(
+  job: PlaybackJobRow,
+  jobs: PlaybackJobRow[],
+): string | null {
+  const own = readyCopyKey(job);
+  if (own || !job.video_object_key) return own;
+  for (const other of jobs) {
+    if (other.video_object_key !== job.video_object_key) continue;
+    const shared = readyCopyKey(other);
+    if (shared) return shared;
+  }
+  return null;
+}
+
+function readyCopyKey(row: PlaybackJobRow): string | null {
+  return (row.playback_status === "ready" && row.playback_object_key) || null;
 }
 
 function vendorCopyChoice(

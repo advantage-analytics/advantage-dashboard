@@ -33,12 +33,16 @@ const SENSITIVE = /https?:\/\/|[?&]sig=/i;
  * and path so a log line still names which blob was delivered. A SAS token
  * (`sv=…&se=…&sig=…`) lives entirely in the query, so this is what keeps the
  * signature out of the console line, which `write()` prints verbatim.
+ *
+ * A second pass blanks any `sig=` the first missed: a body that writes its
+ * urls as `https:\/\/…` or its `&` as `\u0026` never matches the url pattern
+ * whole, and the token would otherwise ride through into a log or the
+ * unreadable-webhook alert mail.
  */
 export function redactSignedUrls(text: string): string {
-  return text.replace(
-    /(https?:\/\/[^\s"'<>?\\]*)\?[^\s"'<>\\]*/gi,
-    "$1?[redacted]",
-  );
+  return text
+    .replace(/(https?:\/\/[^\s"'<>?\\]*)\?[^\s"'<>\\]*/gi, "$1?[redacted]")
+    .replace(/((?<![A-Za-z])sig(?:=|%3D))[^&\s"'<>\\]+/gi, "$1[redacted]");
 }
 
 function safeString(value: string): string {

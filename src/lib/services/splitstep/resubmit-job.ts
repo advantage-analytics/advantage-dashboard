@@ -92,7 +92,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildSplitStepJobRequest, vendorRequestRecord } from "./job-request";
 import type { SplitStepJobRequest } from "./job-request";
-import { parseWebhookPayload } from "./webhook-payload";
+import { parseVendorJson, parseWebhookPayload } from "./webhook-payload";
 import { resolveSplitstepDeploymentConfig } from "./deployment-config";
 import type { SplitstepDeploymentConfig } from "./deployment-config";
 import { createVideoUrlStrategy, videoContainerClient } from "./video-url";
@@ -282,6 +282,8 @@ interface ParentJob {
   ad_scoring: boolean | null;
   fixed_camera: boolean | null;
   resubmitted_from_job_id: string | null;
+  playback_object_key: string | null;
+  playback_status: string | null;
 }
 
 export async function resubmitJob(params: {
@@ -326,7 +328,7 @@ export async function resubmitJob(params: {
   const { data: parentRow, error: parentError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, created_by, status, error_category, error_code, error_step, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id",
+      "id, match_id, created_by, status, error_category, error_code, error_step, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id, playback_object_key, playback_status",
     )
     .eq("id", jobId)
     .maybeSingle();
@@ -699,6 +701,17 @@ export async function resubmitJob(params: {
       fixed_camera: vendorRequest.FixedCamera,
       resubmitted_from_job_id: parent.id,
       auto_resubmitted: auto,
+      // The playback copy is of the upload, not the job: the worker stamps it
+      // on every job that shares the upload, but only when it reports, so a
+      // child made after that never got one and played the raw file (Cj v
+      // Summer). A ready copy comes along; one still processing reaches the
+      // child through that same report.
+      ...(parent.playback_status === "ready" && parent.playback_object_key
+        ? {
+            playback_object_key: parent.playback_object_key,
+            playback_status: "ready",
+          }
+        : {}),
     })
     .select("id")
     .single();
@@ -810,7 +823,7 @@ export async function resubmitJob(params: {
     let externalJobId: string | null = null;
     try {
       externalJobId = parseWebhookPayload(
-        JSON.parse(rawResponse),
+        parseVendorJson(rawResponse),
       ).externalJobId;
     } catch {
       console.warn(`${LOG} provider response was not JSON`, {

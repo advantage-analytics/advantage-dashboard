@@ -30,6 +30,8 @@ import {
   titleCaseTypedName,
 } from "@/lib/data/person-name-case";
 import { GUARDIAN_TERMS_URL } from "@/lib/constants";
+import { DateField } from "@/components/ui/date-field";
+import { createClient } from "@/lib/supabase/client";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 import { cn } from "@/lib/utils";
 import {
@@ -46,6 +48,15 @@ import {
   type RecordingSource,
 } from "./answers";
 import { guardianClassYears } from "./guardian-options";
+import {
+  AGE_REFUSAL,
+  AGE_REFUSAL_TITLE,
+  DOB_ERROR,
+  DOB_MIN,
+  ageAllows,
+  ageBand,
+  todayUtc,
+} from "./age";
 import { previousStep, stepLabel, type Step } from "./steps";
 
 /**
@@ -66,7 +77,13 @@ import { previousStep, stepLabel, type Step } from "./steps";
  * error line — every answer already given survives, so the step it returns to
  * re-renders with its choice still selected — and it never writes.
  *
- * Step 1 (1.2) asks what to call the person. Both fields start empty even when
+ * Step 1 (1.2) asks what to call the person, and their date of birth — the
+ * age gate (`age.ts`). It sits on the one screen every path shares, the join
+ * link's included. Under 13 stops here, and so does 13–17 anywhere but a join
+ * link: the step turns into a refusal with Sign out as its only action. The
+ * date rides along like the name and is written by whichever action finishes.
+ *
+ * The name step asks what to call the person. Both fields start empty even when
  * Google or Apple handed us a display name — the OAuth profile is often a
  * legal name, an initial or a school-issued string, and this name goes on
  * invites, the roster and every report a coach reads. Title case is applied on
@@ -118,7 +135,7 @@ const PERSONAS: {
     id: "junior",
     icon: Shield,
     label: "I manage a junior's account",
-    sub: "Parent or academy staff.",
+    sub: "Parent or legal guardian.",
   },
 ];
 
@@ -160,7 +177,7 @@ const RECORDING_ICONS: Record<RecordingSource, typeof User> = {
  */
 const GUARDIAN_ACKNOWLEDGMENTS: readonly string[] = [
   "You're their parent or legal guardian, and you consent to Advantage analyzing match video of them.",
-  "You'll manage what's uploaded and who it's shared with until you transfer the account.",
+  "You'll manage what's uploaded and who it's shared with. When they're ready, or turn 18, contact us and we'll hand the account over with you.",
   "Video of a minor is never used to train models or shown outside the people you share it with.",
 ];
 
@@ -233,6 +250,10 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
   const [step, setStep] = useState<Step>(1);
   const [firstName, setFirstName] = useState(join?.firstName ?? "");
   const [lastName, setLastName] = useState(join?.lastName ?? "");
+  const [dob, setDob] = useState("");
+  const [dobIncomplete, setDobIncomplete] = useState(false);
+  const [ageBlock, setAgeBlock] = useState<"child" | "teen" | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
   const [persona, setPersona] = useState<Persona | null>(null);
   const [college, setCollege] = useState<CollegeAnswer | null>(null);
   const [playerName, setPlayerName] = useState("");
@@ -285,18 +306,39 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
     startTransition(async () => {
       // Success redirects on the server; reaching the line below means the
       // write failed and there is a sentence to show.
-      const result = await finishOnboarding({ choice, firstName, lastName });
+      const result = await finishOnboarding({
+        choice,
+        firstName,
+        lastName,
+        dob,
+      });
       if (result && !result.ok) setError(result.error);
     });
   };
 
-  // Both halves, non-blank. The server refuses anything less anyway
-  // (`parseTypedName`); this keeps the button honest about what a tap will do.
-  const nameReady = firstName.trim().length > 0 && lastName.trim().length > 0;
+  // Both name halves non-blank and a complete date of birth. The server
+  // refuses anything less anyway (`parseTypedName`, `parseDob`); this keeps
+  // the button honest about what a tap will do.
+  const stepOneReady =
+    firstName.trim().length > 0 &&
+    lastName.trim().length > 0 &&
+    dob !== "" &&
+    !dobIncomplete;
 
   const continueFromName = () => {
-    if (!nameReady) return;
+    if (!stepOneReady) return;
     setError(null);
+    // The gate's client half: a blocked band never reaches an action. The
+    // actions apply the same rule again (`parseDob`), since they are RPCs.
+    const band = ageBand(dob, todayUtc());
+    if (band === null) {
+      setError(DOB_ERROR);
+      return;
+    }
+    if (!ageAllows(band, join !== undefined)) {
+      setAgeBlock(band === "child" ? "child" : "teen");
+      return;
+    }
     if (join) {
       // The whole flow, for a joiner: save the name and go back to the link.
       // Every later step is a question the join already answers.
@@ -304,6 +346,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
         const result = await saveNameThenJoin({
           firstName,
           lastName,
+          dob,
           next: join.next,
         });
         if (result && !result.ok) setError(result.error);
@@ -311,6 +354,13 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
       return;
     }
     turnTo(2);
+  };
+
+  // The age gate's only exit. This device only, as `SwitchAccountButton`.
+  const signOut = async () => {
+    setSigningOut(true);
+    await createClient().auth.signOut({ scope: "local" });
+    window.location.assign("/login");
   };
 
   // Page-turn only: no answer is cleared and nothing is written, so this can
@@ -411,6 +461,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
         choice,
         firstName,
         lastName,
+        dob,
         ...answers,
       });
       if (result && !result.ok) setError(result.error);
@@ -448,6 +499,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
       const result = await finishGuardianOnboarding({
         firstName,
         lastName,
+        dob,
         playerName,
         classYear,
         consent,
@@ -488,7 +540,32 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
           className="flex min-w-0 flex-col"
           style={{ gap: step === 4 ? 20 : 28 }}
         >
-          {step === 1 ? (
+          {step === 1 && ageBlock ? (
+            // The age gate's refusal (`age.ts`). Nothing was written, and
+            // there is no Back: the honest way out is signing out, and a
+            // parent or guardian starts their own account.
+            <>
+              <ClaimHeading
+                gap={8}
+                step={
+                  join ? `Joining ${join.programName}` : stepLabel(1, persona)
+                }
+                title={AGE_REFUSAL_TITLE[ageBlock]}
+                body={AGE_REFUSAL[ageBlock]}
+                bodyMax="56ch"
+              />
+              <ClaimActions gap={16}>
+                <button
+                  type="button"
+                  disabled={signingOut}
+                  onClick={() => void signOut()}
+                  className={CLAIM_BUTTON}
+                >
+                  Sign out
+                </button>
+              </ClaimActions>
+            </>
+          ) : step === 1 ? (
             // A form, so Enter from either field continues — the one step in
             // the flow that is typed rather than tapped. `contents` keeps the
             // parent's column gap running through it.
@@ -549,10 +626,31 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
                   />
                 </div>
               </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  {/* Not a <label> around the field: `DateField`'s segments are
+                      not labelable, and a wrapper would send every click to its
+                      calendar button. It names itself with `label`. */}
+                  <span className={CLAIM_LABEL} aria-hidden="true">
+                    Date of birth
+                  </span>
+                  <DateField
+                    label="Date of birth"
+                    variant="form"
+                    value={dob}
+                    onChange={setDob}
+                    onIncompleteChange={setDobIncomplete}
+                    min={DOB_MIN}
+                    max={todayUtc()}
+                    required
+                    className="w-full"
+                  />
+                </div>
+              </div>
               <ClaimActions gap={16}>
                 <button
                   type="submit"
-                  disabled={!nameReady || (join !== undefined && isPending)}
+                  disabled={!stepOneReady || (join !== undefined && isPending)}
                   className={CLAIM_BUTTON}
                 >
                   {join && isPending ? "Saving…" : "Continue"}
@@ -822,7 +920,8 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
                 <h1 className="text-title">Who&apos;s playing?</h1>
                 <p className="text-body-sm" style={{ maxWidth: "56ch" }}>
                   Everything in Advantage will be about this player. You hold
-                  the account and can hand it to them later.
+                  the account; when they&apos;re ready, contact us and
+                  we&apos;ll hand it over with you.
                 </p>
               </div>
 

@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
+import {
+  parseVendorJson,
+  parseWebhookPayload,
+} from "@/lib/services/splitstep/webhook-payload";
 
 /**
  * The webhook payload parser, against the shapes in the vendor's published
@@ -234,5 +237,47 @@ test.describe("parseWebhookPayload", () => {
     const out = parseWebhookPayload({ hello: "world" });
     expect(out.strokesUrl).toBeNull();
     expect(out.nextStatus).toBeNull();
+  });
+});
+
+test.describe("parseVendorJson", () => {
+  // The shape that orphaned three completions on 2026-10-25: Python's
+  // json.dumps writes a missing float as a bare NaN, which JSON.parse rejects.
+  const completion = (score: string) =>
+    `{"job_id": "36a0015a-89c6-4be3-bee3-2a6f32b71cf2", "video_id": "fb51a494-ba43-47da-a0f3-3a0442a61c2d", "status": "job_completed", "strokes_url": "${STROKES}", "homography_score": ${score}, "player_detection_score": 0.9}`;
+
+  test("a completion with a bare NaN score still yields its job id and urls", () => {
+    expect(() => JSON.parse(completion("NaN"))).toThrow();
+    const out = parseWebhookPayload(parseVendorJson(completion("NaN")));
+    expect(out.externalJobId).toBe("36a0015a-89c6-4be3-bee3-2a6f32b71cf2");
+    expect(out.nextStatus).toBe("completed");
+    expect(out.strokesUrl).toBe(STROKES);
+  });
+
+  test("NaN, Infinity and -Infinity read as null", () => {
+    expect(
+      parseVendorJson('{"a": NaN, "b": Infinity, "c": [-Infinity, 1]}'),
+    ).toEqual({
+      a: null,
+      b: null,
+      c: [null, 1],
+    });
+  });
+
+  test("the same words inside strings are left alone", () => {
+    expect(
+      parseVendorJson('{"name": "Nan \\"NaN\\" Infinity", "x": NaN}'),
+    ).toEqual({ name: 'Nan "NaN" Infinity', x: null });
+  });
+
+  test("strict JSON parses unchanged", () => {
+    expect(parseVendorJson(completion("0.835"))).toEqual(
+      JSON.parse(completion("0.835")),
+    );
+  });
+
+  test("a body broken some other way still throws", () => {
+    expect(() => parseVendorJson('{"a": NaN,')).toThrow();
+    expect(() => parseVendorJson("not json")).toThrow();
   });
 });

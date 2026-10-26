@@ -4,6 +4,7 @@ import {
   analysisFailedInternalEmail,
   analysisReadyEmail,
   sendEmail,
+  webhookUnreadableInternalEmail,
   INTERNAL_ALERTS_ADDRESS,
 } from "@/lib/services/email";
 import { programDisplayName } from "@/lib/data/programs-server";
@@ -334,4 +335,43 @@ export async function describeContext(
     : null;
 
   return [name, when].filter(Boolean).join(" · ") || "Team match";
+}
+
+/**
+ * Tell the alerts inbox that a signed SplitStep delivery could not be read.
+ *
+ * Once per reason per UTC day (`claimSend`), not per delivery: a new vendor
+ * event we do not map — a heartbeat, a cancel echo — would otherwise mail once
+ * for every job, every time. The first delivery of the day is the one named;
+ * the rest are in `splitstep_webhook_deliveries` under the same reason. Never
+ * throws: it runs in the webhook's `after()`, where an exception would only
+ * cost the log line.
+ */
+export async function notifyUnreadableWebhook(
+  input: {
+    deliveryId: string;
+    reason: string;
+    externalJobId: string | null;
+    bodyExcerpt: string;
+  },
+  now: Date = new Date(),
+): Promise<void> {
+  try {
+    const day = now.toISOString().slice(0, 10);
+    if (!(await claimSend(`webhook_unreadable:${input.reason}:${day}`))) return;
+    const sent = await sendEmail(
+      webhookUnreadableInternalEmail({ to: INTERNAL_ALERTS_ADDRESS, ...input }),
+    );
+    if (!sent.ok) {
+      console.warn(`${LOG} unreadable-webhook alert not delivered`, {
+        deliveryId: input.deliveryId,
+        error: sent.error,
+      });
+    }
+  } catch (error) {
+    console.error(`${LOG} unreadable-webhook alert threw`, {
+      deliveryId: input.deliveryId,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
