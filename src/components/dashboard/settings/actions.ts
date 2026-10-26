@@ -375,6 +375,13 @@ export async function deleteAccount(): Promise<ActionResult> {
   await adminClient.from("processing_jobs").delete().eq("created_by", user.id);
   await adminClient.from("processing_usage").delete().eq("created_by", user.id);
 
+  //    And the profile photo. Every avatar lives under `${user.id}/` in
+  //    `user-avatars` (`uploadAvatar`), and nothing cascades into Storage, so
+  //    the whole folder goes — a replaced photo whose removal failed included.
+  //    Best-effort like the two above: a file left behind is cleaned by hand,
+  //    and must not keep the person from deleting their account.
+  await removeAvatarFolder(adminClient, user.id);
+
   // 4. The login, last.
   const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(
     user.id,
@@ -446,6 +453,35 @@ async function releaseDeletionClaims(
     purgedMatchIds,
     "account delete",
   );
+}
+
+/**
+ * Remove every object under `${userId}/` in the avatars bucket. Logged, never
+ * thrown: see the account deletion step that calls it.
+ */
+async function removeAvatarFolder(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+): Promise<void> {
+  try {
+    const bucket = adminClient.storage.from(USER_AVATARS_BUCKET);
+    const { data, error } = await bucket.list(userId, { limit: 1000 });
+    if (error) {
+      console.error("[account delete] could not list avatars:", error.message);
+      return;
+    }
+    const paths = (data ?? []).map((file) => `${userId}/${file.name}`);
+    if (paths.length === 0) return;
+    const { error: removeError } = await bucket.remove(paths);
+    if (removeError) {
+      console.error(
+        "[account delete] could not remove avatars:",
+        removeError.message,
+      );
+    }
+  } catch (error) {
+    console.error("[account delete] avatar removal threw:", error);
+  }
 }
 
 /** One row per program `release_my_account_from_programs()` touched. */

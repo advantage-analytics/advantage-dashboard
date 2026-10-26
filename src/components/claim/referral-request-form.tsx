@@ -247,5 +247,5 @@ const SECTION_LABEL = "text-[11px] text-[var(--ink-900)]";
 const CONSEQUENCES: readonly string[] = [
   "No one approves it yet — there's no coach here to ask.",
   "The first person to claim the program sees your request.",
-  "Your uploaded matches stay personal until you share them.",
+  "Your uploaded matches stay personal. The team never sees them.",
 ];

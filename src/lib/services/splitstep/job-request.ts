@@ -20,7 +20,19 @@
  * deliberately isolated and directly testable.
  */
 
-/** The vendor's job submission body. Field casing is theirs, not ours. */
+/**
+ * The vendor's job submission body. Field casing is theirs, not ours.
+ *
+ * TODO(do-not-train): SplitStep may train only on adults' video (Terms 2.0
+ * §6, Privacy 1.4 §3). Its job API has no field to say "do not train on this
+ * video" yet, so nothing here says it. The decision is already made per match
+ * — `matches.exclude_from_training`, set by a trigger for guardian and
+ * under-18 accounts and for high school / academy teams
+ * (`20261025230200_match_training_exclusion.sql`). When the vendor adds a
+ * field, send that column from every caller of `buildSplitStepJobRequest`
+ * (the jobs route, `resubmit-job.ts`, `admin-video-submission.ts`); until
+ * then, hand them the list of excluded match ids (= their video_id).
+ */
 export interface SplitStepJobRequest {
   MatchID: string;
   VideoUrl: string;

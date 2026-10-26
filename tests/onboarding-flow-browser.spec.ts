@@ -9,6 +9,7 @@ import {
   deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { LEGAL_VERSIONS } from "@/lib/legal/versions";
 
 /**
  * The player onboarding flow, walked end to end in a real browser against a
@@ -98,12 +99,26 @@ test.describe("Player onboarding flow — browser, end to end (live)", () => {
     await page.goto(`${baseURL}/onboarding`, { timeout: NAV_TIMEOUT });
   }
 
+  /**
+   * The age gate's date of birth (`age.ts`), typed segment by segment into
+   * `DateField` — an adult, so every path stays open.
+   */
+  async function fillAdultDob() {
+    await page
+      .getByRole("group", { name: "Date of birth" })
+      .getByRole("spinbutton")
+      .first()
+      .click();
+    await page.keyboard.type("01152000");
+  }
+
   /** Steps 1.2 → 1.3 "I play" → 1.4 "No — …", leaving the page on 1.5. */
   async function walkToRecordingStep() {
     await page
       .locator("#onboarding-first-name")
       .fill("Onboarding", { timeout: NAV_TIMEOUT });
     await page.locator("#onboarding-last-name").fill("Browser");
+    await fillAdultDob();
     await page.getByRole("button", { name: "Continue" }).click();
 
     await page
@@ -131,6 +146,17 @@ test.describe("Player onboarding flow — browser, end to end (live)", () => {
       password: PASSWORD,
       authUserIds,
     }));
+
+    // Agreed to the current legal versions, so the dashboard's terms gate
+    // (`/terms-update`) does not stand between onboarding and `/dashboard`.
+    const { error: legalError } = await admin.from("legal_acceptances").insert(
+      Object.entries(LEGAL_VERSIONS).map(([document, version]) => ({
+        user_id: userId,
+        document,
+        version,
+      })),
+    );
+    if (legalError) throw new Error(`legal rows: ${legalError.message}`);
 
     page = await browser.newPage();
     await page.goto(`${baseURL}/login`, { timeout: NAV_TIMEOUT });
@@ -202,6 +228,7 @@ test.describe("Player onboarding flow — browser, end to end (live)", () => {
       .locator("#onboarding-first-name")
       .fill("Onboarding", { timeout: NAV_TIMEOUT });
     await page.locator("#onboarding-last-name").fill("Browser");
+    await fillAdultDob();
     await page.getByRole("button", { name: "Continue" }).click();
 
     await page

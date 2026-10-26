@@ -146,7 +146,13 @@ export default async function JoinPage({
   // The terms and the allowance line, beside the decision on every screen that
   // carries a Join button — see `JoinTermsPanel`.
   const terms = (
-    <JoinTermsPanel programHours={programHours} personalHours={personalHours} />
+    <JoinTermsPanel
+      programHours={programHours}
+      personalHours={personalHours}
+      college={
+        !("programOrgType" in state) || state.programOrgType === "college"
+      }
+    />
   );
 
   // "Not now" is a query flag and nothing else — see `NotNowLink`. It only

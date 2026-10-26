@@ -185,7 +185,7 @@ export function TeamPoliciesCard({
 
       <SettingsCardRow
         label="Personal uploads stay private"
-        description="Players share personal matches to the program per match — never automatically."
+        description="The team never sees a player's personal matches."
         control={
           <span className="text-[11px] text-[var(--ink-500)]">fixed</span>
         }

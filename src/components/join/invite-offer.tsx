@@ -67,7 +67,9 @@ export function InviteOffer({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <JoinSharingTerms />
+      <JoinSharingTerms
+        college={invites.some((invite) => invite.programOrgType === "college")}
+      />
       {invites.length === 1 ? (
         <SingleInvite invite={invites[0]} notNowHref={notNowHref} />
       ) : (

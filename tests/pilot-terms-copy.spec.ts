@@ -137,3 +137,14 @@ test("the form renders no term prose of its own", () => {
     }
   }
 });
+
+test("the team terms say junior team video never trains models; the college ones don't need to", () => {
+  const sentence =
+    "Video from high school and junior teams is never used to train models.";
+  const team = pilotTermsCopy({ flow: "team", accountType: "individual" });
+  const college = pilotTermsCopy({ flow: "college", accountType: "program" });
+  const textOf = (copy: PilotTermsCopy) =>
+    copy.terms.map((t) => t.segments.map((s) => s.text).join("")).join("\n");
+  expect(textOf(team)).toContain(sentence);
+  expect(textOf(college)).not.toContain(sentence);
+});

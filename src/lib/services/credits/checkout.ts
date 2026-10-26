@@ -45,7 +45,7 @@ export function creditProductName(pack: CreditPack): string {
 export function creditProductDescription(pack: CreditPack): string {
   return (
     `${packName(pack)} of ${PROVIDER_DISPLAY_NAME} ` +
-    `video analysis. Expires 12 months after purchase. All sales final.`
+    `video analysis. Expires 12 months after purchase. All sales final, except where required by law.`
   );
 }
 
@@ -139,7 +139,7 @@ export async function createCreditCheckoutSession(params: {
       ...(email ? { receipt_email: email } : {}),
     },
     custom_text: {
-      submit: { message: "All sales final." },
+      submit: { message: "All sales final, except where required by law." },
     },
   };
   const session = await stripe.checkout.sessions.create(sessionParams);
