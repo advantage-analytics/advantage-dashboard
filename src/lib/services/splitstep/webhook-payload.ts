@@ -275,42 +275,14 @@ export function parseVendorJson(text: string): unknown {
   }
 }
 
-const NON_FINITE_TOKENS = ["-Infinity", "Infinity", "NaN"];
+/** A whole string literal (kept as is) or a bare non-finite token (nulled). */
+const STRING_OR_NON_FINITE_RE = /"(?:[^"\\]|\\.)*"|-?Infinity|NaN/g;
 
 /** Replace bare NaN / Infinity / -Infinity outside strings with `null`. */
 function nullNonFiniteTokens(text: string): string {
-  let out = "";
-  let inString = false;
-  let i = 0;
-  while (i < text.length) {
-    const ch = text[i];
-    if (inString) {
-      out += ch;
-      if (ch === "\\") {
-        out += text[i + 1] ?? "";
-        i += 2;
-        continue;
-      }
-      if (ch === '"') inString = false;
-      i += 1;
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      out += ch;
-      i += 1;
-      continue;
-    }
-    const token = NON_FINITE_TOKENS.find((t) => text.startsWith(t, i));
-    if (token) {
-      out += "null";
-      i += token.length;
-      continue;
-    }
-    out += ch;
-    i += 1;
-  }
-  return out;
+  return text.replace(STRING_OR_NON_FINITE_RE, (m) =>
+    m.startsWith('"') ? m : "null",
+  );
 }
 
 /** Interpret a parsed JSON webhook body. Never throws. */
