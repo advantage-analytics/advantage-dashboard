@@ -106,6 +106,13 @@ async function translate(page: Page) {
   });
 }
 
+const setBusy = (page: Page, busy: boolean) =>
+  page.evaluate(
+    (value) =>
+      (window as unknown as { setBusy: (b: boolean) => void }).setBusy(value),
+    busy,
+  );
+
 const reactErrors = (page: Page) =>
   page.evaluate(
     () => (window as unknown as { reactErrors: string[] }).reactErrors,
@@ -124,9 +131,7 @@ for (const zone of ["wizard", "attachment"] as const) {
     await expect(page.getByText("browse", { exact: true })).toBeVisible();
 
     await translate(page);
-    await page.evaluate(() =>
-      (window as unknown as { setBusy: (b: boolean) => void }).setBusy(true),
-    );
+    await setBusy(page, true);
     await page.evaluate(
       () => new Promise((done) => requestAnimationFrame(() => done(null))),
     );
@@ -134,9 +139,7 @@ for (const zone of ["wizard", "attachment"] as const) {
     await expect(
       page.getByText(/Checking the video…|Reading the export…/),
     ).toBeVisible();
-    await page.evaluate(() =>
-      (window as unknown as { setBusy: (b: boolean) => void }).setBusy(false),
-    );
+    await setBusy(page, false);
     await expect(page.getByText("browse", { exact: true })).toBeVisible();
 
     expect(await reactErrors(page)).toEqual([]);
