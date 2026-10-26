@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -10,6 +10,7 @@ import {
   emailDomain,
   type ClaimProgram,
 } from "@/lib/services/programs/domain-match";
+import { suggestSchoolEmail } from "@/lib/services/programs/domain-typo";
 import { startClaim } from "@/lib/services/programs/claim-actions";
 import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
 import {
@@ -96,24 +97,69 @@ export function SetupForm({
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // The address the claimant chose to keep over our suggestion. Compared by
+  // value, so editing it afterwards asks again.
+  const [keptAddress, setKeptAddress] = useState<string | null>(null);
+  // Submitted with the suggestion unanswered: nothing was sent, and the line
+  // says so.
+  const [held, setHeld] = useState(false);
+  const acceptRef = useRef<HTMLButtonElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+
+  const addressLooksFinished =
+    email.includes("@") && !!email.split("@")[1]?.includes(".");
+
+  // A one-keystroke slip in the school's own domain. A bounced link is silent
+  // — the next screen already says "check your inbox" — so this is the only
+  // moment the typo can be caught. See `suggestSchoolEmail`.
+  const suggestion = useMemo(() => {
+    if (!addressLooksFinished || email === keptAddress) return null;
+    return suggestSchoolEmail(email, program);
+  }, [addressLooksFinished, email, keptAddress, program]);
 
   // Only once the address looks finished. Telling someone their half-typed
   // address is unrecognised, on every keystroke, is not feedback. Until then
   // the line answers the question a coach arrives with.
   const note = useMemo(() => {
-    if (!email.includes("@") || !email.split("@")[1]?.includes(".")) {
+    if (!addressLooksFinished) {
       return "Any address works. Plenty of JUCO and NAIA programs have no institutional one.";
     }
     return usesPersonalAddress(email)
       ? "We'll confirm this one manually. Everything except sending video works while we do."
       : checkClaimEmail(email, program).inlineNote;
-  }, [email, program]);
+  }, [addressLooksFinished, email, program]);
 
   const canSubmit = fullName.trim().length > 0 && email.trim().length > 0;
+
+  function onEmailChange(value: string) {
+    setEmail(value);
+    setHeld(false);
+  }
+
+  // Both answers unmount the button that was clicked, which would drop focus
+  // to the page — and a repeated Enter would then do nothing. Back to the
+  // field, where the next Enter submits.
+  function takeSuggestion(address: string) {
+    onEmailChange(address);
+    emailRef.current?.focus();
+  }
+
+  function keepTyped() {
+    setKeptAddress(email);
+    setHeld(false);
+    emailRef.current?.focus();
+  }
 
   function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    // Never send to a likely typo without an answer — but never block either:
+    // "Keep mine" is one click away.
+    if (suggestion) {
+      setHeld(true);
+      acceptRef.current?.focus();
+      return;
+    }
     startTransition(async () => {
       const result = await startClaim({ programKey, fullName, role, email });
       if (!result.ok) {
@@ -169,15 +215,42 @@ export function SetupForm({
           School email
         </label>
         <input
+          ref={emailRef}
           id="email"
           type="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => onEmailChange(e.target.value)}
           autoComplete="email"
+          aria-describedby="email-note"
           className={CLAIM_FIELD}
         />
-        {/* Quiet, never blocking, and never styled as an error. */}
-        {note && <p className={`${CLAIM_MICRO} mt-2`}>{note}</p>}
+        {/* Quiet, never blocking, and never styled as an error. A suggestion
+            takes the note's place rather than stacking under it. One element
+            for both, always mounted: a live region that arrives already
+            holding its text is not announced, so only the contents swap. */}
+        <p id="email-note" role="status" className={`${CLAIM_MICRO} mt-2`}>
+          {suggestion ? (
+            <>
+              {held && "We haven't sent anything yet. "}
+              Did you mean{" "}
+              <span className="text-[var(--ink-900)]">{suggestion}</span>?{" "}
+              <button
+                ref={acceptRef}
+                type="button"
+                onClick={() => takeSuggestion(suggestion)}
+                className={CLAIM_LINK}
+              >
+                Use it
+              </button>
+              <span aria-hidden="true"> · </span>
+              <button type="button" onClick={keepTyped} className={CLAIM_LINK}>
+                Keep mine
+              </button>
+            </>
+          ) : (
+            note
+          )}
+        </p>
       </div>
 
       {error && (
