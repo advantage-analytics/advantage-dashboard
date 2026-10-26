@@ -55,7 +55,10 @@ import {
   SIGNATURE_HEADERS,
   verifyWebhookAuth,
 } from "@/lib/services/splitstep/webhook-auth";
-import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
+import {
+  parseVendorJson,
+  parseWebhookPayload,
+} from "@/lib/services/splitstep/webhook-payload";
 import { selectDeliveryStorageKeys } from "@/lib/services/splitstep/delivery-storage-keys";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
 import {
@@ -179,7 +182,7 @@ export async function POST(request: NextRequest) {
   // 3. Interpret. Never fatal: an unparseable body is still recorded verbatim.
   let parsedJson: unknown = null;
   try {
-    parsedJson = rawBody.trim() === "" ? null : JSON.parse(rawBody);
+    parsedJson = rawBody.trim() === "" ? null : parseVendorJson(rawBody);
   } catch {
     pipelineLog.warn(`${LOG} body is not valid JSON — recording raw only`);
   }

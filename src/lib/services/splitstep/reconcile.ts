@@ -26,7 +26,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { after } from "next/server";
-import { normaliseKey, parseWebhookPayload } from "./webhook-payload";
+import {
+  normaliseKey,
+  parseVendorJson,
+  parseWebhookPayload,
+} from "./webhook-payload";
 import { releaseQuota } from "./quota";
 import { isDownloadFailure, resubmitJob } from "./resubmit-job";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
@@ -169,7 +173,7 @@ export async function reconcileVendorJobs(params: {
 
       let parsedJson: unknown = null;
       try {
-        parsedJson = raw.trim() === "" ? null : JSON.parse(raw);
+        parsedJson = raw.trim() === "" ? null : parseVendorJson(raw);
       } catch {
         /* handled below as unparseable */
       }
