@@ -25,9 +25,18 @@ import {
  * Each keystroke is debounced by 180ms and every reply is stamped with the
  * query that asked for it — a fast "UC" landing after a slow "U" would
  * otherwise repaint the list with the older answer.
+ *
+ * A search that fails answers its query with nothing and says so, the way
+ * the Conference drawer's `AddTeamPopover` does. Server actions are queued
+ * one at a time per client, so several keystrokes' searches can be waiting
+ * when the network drops or the page reloads; each of those rejects (Safari:
+ * `TypeError: Load failed`), and without a handler every one of them was an
+ * unhandled rejection in error tracking and the list sat on "Searching…".
  */
 
 const DEBOUNCE_MS = 180;
+
+const SEARCH_ERROR = "Couldn't search teams.";
 
 export function AdminSearch() {
   const [open, setOpen] = useState(false);
@@ -39,6 +48,7 @@ export function AdminSearch() {
   const [answered, setAnswered] = useState<{
     query: string;
     rows: AdminSearchResult[];
+    failed?: boolean;
   }>({ query: "", rows: [] });
   const inputRef = useRef<HTMLInputElement>(null);
   // The query the newest request was issued for; a reply for anything else is
@@ -51,10 +61,17 @@ export function AdminSearch() {
     if (query.length === 0) return;
 
     const timer = setTimeout(() => {
-      void adminSearchTeams(query).then((rows) => {
-        if (latest.current !== query) return;
-        setAnswered({ query, rows });
-      });
+      void adminSearchTeams(query)
+        .then(
+          (rows) => ({ rows, failed: false }),
+          // Answered with nothing, so "Searching…" ends, and says why. The
+          // next keystroke searches again.
+          () => ({ rows: [] as AdminSearchResult[], failed: true }),
+        )
+        .then(({ rows, failed }) => {
+          if (latest.current !== query) return;
+          setAnswered({ query, rows, failed });
+        });
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
@@ -73,6 +90,7 @@ export function AdminSearch() {
   const query = term.trim();
   const loading = answered.query !== query;
   const results = loading ? [] : answered.rows;
+  const failed = !loading && answered.failed === true;
 
   return (
     <Popover open={open} onOpenChange={changeOpen}>
@@ -118,7 +136,11 @@ export function AdminSearch() {
           <div className="mt-1 flex flex-col">
             {results.length === 0 ? (
               <p className="px-2.5 py-3 text-[12px] text-[var(--ink-500)]">
-                {loading ? "Searching…" : `No team matches “${query}”`}
+                {loading
+                  ? "Searching…"
+                  : failed
+                    ? SEARCH_ERROR
+                    : `No team matches “${query}”`}
               </p>
             ) : (
               results.map((result) => (
