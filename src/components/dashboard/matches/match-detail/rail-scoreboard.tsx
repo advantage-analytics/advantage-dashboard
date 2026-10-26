@@ -27,9 +27,9 @@ export interface RailScoreboardPlayer {
   id: string;
   name: string;
   /**
-   * The player's chart colour (`--viz-you` / `--viz-opp`), drawn as a 6px dot
+   * The player's chart colour (`--viz-you` / `--viz-opp`), drawn as a 3×12px bar
    * before the name so the row reads with every chart on the page. Omitted,
-   * the row draws no dot.
+   * the row draws no bar.
    */
   color?: string;
   /** One entry per set column; null is an unmeasured set (an em dash). */
@@ -46,12 +46,12 @@ export interface RailScoreboardPlayer {
   won?: boolean;
 }
 
-/** The 6px player-colour dot the scoreboard, head to head and skeletons share. */
-export function PlayerDot({ color }: { color: string }) {
+/** The 3×12px player-colour bar the scoreboard, head to head and skeletons share. */
+export function PlayerBar({ color }: { color: string }) {
   return (
     <span
       aria-hidden="true"
-      className="size-1.5 shrink-0 rounded-[var(--radius-pill)]"
+      className="h-3 w-[3px] shrink-0 rounded-[var(--radius-pill)]"
       style={{ background: color }}
     />
   );
@@ -147,7 +147,7 @@ function ScoreRow({
 
   return (
     <div className="flex min-w-0 items-center gap-[7px]">
-      {player.color ? <PlayerDot color={player.color} /> : null}
+      {player.color ? <PlayerBar color={player.color} /> : null}
       {/* Never wraps: a long name ends in an ellipsis before it can push the
           score group, which never shrinks, out of the 300px rail. */}
       <span
@@ -212,7 +212,7 @@ function ScoreRow({
               />
               {/* The server is a small caret beside their points, not a dot
                   after the name: a dot there sat beside the player colour
-                  dot, and a blue one read as "you". */}
+                  marker, and a blue one read as "you". */}
               <span className="inline-flex w-[34px] items-center justify-end gap-1.5">
                 {serving ? (
                   <svg
