@@ -152,6 +152,26 @@ test.describe("describeApplies", () => {
   });
 });
 
+test.describe("describeApplies — replacing a team", () => {
+  test("a change names the team it overwrites", () => {
+    expect(
+      describeApplies("staff", 0, 2, "Theo", "University of San Diego"),
+    ).toBe("Replaces University of San Diego on all 2 matches against Theo.");
+    expect(describeApplies("staff", 0, 1, "Theo", "Harbor Tennis Club")).toBe(
+      "Replaces Harbor Tennis Club on the 1 match against Theo.",
+    );
+    expect(describeApplies("creator", 1, 2, "Theo", "USD")).toBe(
+      "Replaces USD on the 1 of 2 matches you recorded.",
+    );
+  });
+
+  test("no team to replace is the first-pick sentence", () => {
+    expect(describeApplies("staff", 0, 2, "Theo", null)).toBe(
+      "Applies to all 2 matches against Theo.",
+    );
+  });
+});
+
 test.describe("buildTeamPatch", () => {
   test("a picked program nulls the school", () => {
     expect(buildTeamPatch(PICKED)).toEqual({

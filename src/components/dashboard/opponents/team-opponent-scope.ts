@@ -4,6 +4,7 @@ import type {
   TeamOpponentRecentMatch,
 } from "@/lib/data/team-opponents";
 import type { PersonalOpponentMeasure } from "@/lib/data/personal-opponents";
+import { divisionLabel } from "@/lib/data/programs-server";
 
 /**
  * What the team opponent drawer shows for the scope its "Faced by" control is
@@ -127,7 +128,10 @@ export type OpponentTeamLine =
       name: string;
       shortCode: string | null;
       crestUrl: string | null;
-      /** "Big West · Division I", either half alone, or null for neither. */
+      /**
+       * "D-I · Big West" — division first, as the team picker's rows read —
+       * either half alone, or null for neither.
+       */
       detail: string | null;
     }
   /** A school somebody typed, not in the directory: a team all the same. */
@@ -140,7 +144,10 @@ export function opponentTeamLine(
 ): OpponentTeamLine {
   const { program, school } = opponent;
   if (program) {
-    const detail = [program.conference, program.division]
+    const detail = [
+      divisionLabel(program.division?.trim() || null),
+      program.conference,
+    ]
       .map((part) => part?.trim())
       .filter(Boolean)
       .join(" · ");

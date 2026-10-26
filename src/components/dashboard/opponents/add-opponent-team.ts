@@ -69,19 +69,25 @@ export function canAddTeam(role: ProgramRole, editableCount: number): boolean {
  * Staff reach all of them; so does a player who happened to record every one.
  * A player who recorded some is told the share, so the Program cell changing
  * for only part of a history is not a surprise.
+ *
+ * `replacing` names the team already there, for a change rather than a first
+ * pick: "Replaces University of San Diego on all 2 matches against Theo." A
+ * change overwrites a fact somebody set, so the line says which one.
  */
 export function describeApplies(
   mode: TeamWriteMode,
   editable: number,
   total: number,
   firstName: string,
+  replacing?: string | null,
 ): string {
+  const lead = replacing ? `Replaces ${replacing} on` : "Applies to";
   if (mode === "staff" || editable === total) {
     return total === 1
-      ? `Applies to the 1 match against ${firstName}.`
-      : `Applies to all ${total} matches against ${firstName}.`;
+      ? `${lead} the 1 match against ${firstName}.`
+      : `${lead} all ${total} matches against ${firstName}.`;
   }
-  return `Applies to the ${editable} of ${total} matches you recorded.`;
+  return `${lead} the ${editable} of ${total} matches you recorded.`;
 }
 
 /**

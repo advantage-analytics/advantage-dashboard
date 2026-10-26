@@ -189,13 +189,13 @@ test.describe("where the opponent plays", () => {
     division: "Division I",
   };
 
-  test("a directory program carries its crest inputs and conference · division", () => {
+  test("a directory program carries its crest inputs and division · conference", () => {
     expect(opponentTeamLine({ program, school: null })).toEqual({
       kind: "program",
       name: "State University",
       shortCode: "STU",
       crestUrl: null,
-      detail: "Big Sky · Division I",
+      detail: "Division I · Big Sky",
     });
   });
 

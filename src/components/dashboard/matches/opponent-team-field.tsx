@@ -78,6 +78,13 @@ const ROW_CLS =
  * line between the search input and its menu saying what a pick will change.
  * The menu hangs under the note, so the note is never behind it.
  *
+ * `onDismiss` makes the field its search alone, for a caller that draws the
+ * read-back and the Change link itself (the drawer's "Plays for"): it opens
+ * searching, spans its container, and hands every close back to the caller,
+ * with whether focus should return to the caller's trigger. The program
+ * already set is marked "Current" in the results, so a change is never a
+ * guess about which row is the one there now.
+ *
  * Design: Team Opponents → "Giving an opponent a team".
  */
 export function OpponentTeamField({
@@ -89,6 +96,7 @@ export function OpponentTeamField({
   readOnly = false,
   lead,
   searchNote,
+  onDismiss,
   className,
 }: {
   /** The directory program, when the team is one. */
@@ -106,9 +114,16 @@ export function OpponentTeamField({
   lead?: React.ReactNode;
   /** A line under the search input, above its menu; the search state only. */
   searchNote?: React.ReactNode;
+  /**
+   * The search alone, open from mount; called when it closes. `restoreFocus`
+   * is true for Esc or a pick (the input is gone) and false for a blur (focus
+   * already went where the person sent it).
+   */
+  onDismiss?: (restoreFocus: boolean) => void;
   className?: string;
 }) {
-  const [searching, setSearching] = useState(false);
+  const searchOnly = onDismiss !== undefined;
+  const [searching, setSearching] = useState(searchOnly);
   const [term, setTerm] = useState("");
   const [active, setActive] = useState(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -145,14 +160,17 @@ export function OpponentTeamField({
     setActive(0);
     setSearching(true);
   };
-  const close = () => setSearching(false);
+  const close = () => (onDismiss ? onDismiss(false) : setSearching(false));
   const dismiss = () => {
+    if (onDismiss) return onDismiss(true);
     restoreFocus.current = true;
-    close();
+    setSearching(false);
   };
 
   const pickRow = (index: number) => {
     const row = results[index];
+    // The program already set: nothing to change, so nothing is written.
+    if (row?.id && row.id === program?.id) return dismiss();
     if (row?.id) {
       onChange({
         program: {
@@ -193,8 +211,18 @@ export function OpponentTeamField({
           {/* The anchor is the input AND the note, so the menu opens under
               both — the note is read before a row is picked, not behind it. */}
           <PopoverAnchor asChild>
-            <span className="flex max-w-full flex-col items-start gap-1.5">
-              <span className="relative flex w-[200px] max-w-full items-center">
+            <span
+              className={cn(
+                "flex max-w-full flex-col gap-1.5",
+                searchOnly ? "w-full items-stretch" : "items-start",
+              )}
+            >
+              <span
+                className={cn(
+                  "relative flex max-w-full items-center",
+                  searchOnly ? "w-full" : "w-[200px]",
+                )}
+              >
                 <Search
                   className="pointer-events-none absolute left-0 size-3 text-[var(--ink-500)]"
                   strokeWidth={1.5}
@@ -266,7 +294,12 @@ export function OpponentTeamField({
             // Keeps focus in the input while a row is pressed, so the press
             // lands as a pick rather than as the blur that cancels the search.
             onMouseDown={(e) => e.preventDefault()}
-            className={cn(floatMenuToneClasses(), "w-[268px]")}
+            className={cn(
+              floatMenuToneClasses(),
+              searchOnly
+                ? "w-[var(--radix-popover-trigger-width)]"
+                : "w-[268px]",
+            )}
           >
             <div
               id={listId}
@@ -319,6 +352,11 @@ export function OpponentTeamField({
                             .join(" · ")}
                         />
                       </span>
+                      {row.id === program?.id && (
+                        <span className="shrink-0 text-[11px] text-[var(--ink-600)]">
+                          Current
+                        </span>
+                      )}
                     </button>
                   ))}
                   {results.length > 0 && <FloatMenuDivider />}
@@ -356,6 +394,9 @@ export function OpponentTeamField({
       </span>
     );
   }
+
+  // The caller draws the read-back; this field was only ever its search.
+  if (searchOnly) return null;
 
   if (!name) {
     if (locked) return null;
