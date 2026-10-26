@@ -480,7 +480,7 @@ export function SettingsConnectionsPending() {
             <Text className="text-[12px]">Sign in here and choose Allow</Text>
             <Text className="text-[12px] leading-[1.55]">
               The app opens this sign-in once, then lists Advantage among its
-              tools. It appears below once you approve it.
+              tools. Once you approve it, it appears under Connected apps.
             </Text>
           </div>
         </div>

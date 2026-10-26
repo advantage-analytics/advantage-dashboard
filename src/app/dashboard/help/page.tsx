@@ -878,10 +878,11 @@ export default function HelpCenterPage() {
                 <p className={proseClass}>
                   Three things, and nothing it can delete: your Ask history,
                   when it asks Advantage a question; a match&apos;s details
-                  (opponent, tournament, round, date, match type or surface) on
-                  a match you created, never its score; and a new upload draft,
-                  which you finish yourself in Advantage. Most apps ask you
-                  before they make a change.
+                  (opponent, tournament, round, date, match type, surface, or
+                  the opponent&apos;s school, hand and backhand) on a match you
+                  created, never its score; and a new upload draft, which you
+                  finish yourself in Advantage. Most apps ask you before they
+                  make a change.
                 </p>
               </div>
 

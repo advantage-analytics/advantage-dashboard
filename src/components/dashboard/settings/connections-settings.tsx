@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowUpRight, Check, Copy, Plug, Terminal } from "lucide-react";
 
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
@@ -45,6 +46,18 @@ export function ConnectionsSettings({
     text: string;
   } | null>(null);
 
+  // The grants are read on the server at load. Approving an app happens in
+  // another tab, so re-read them when the viewer comes back to this one —
+  // otherwise step 3's promise that the app appears below is a reload away.
+  const router = useRouter();
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [router]);
+
   return (
     <div className="flex max-w-[660px] flex-col gap-5">
       {message && (
@@ -65,6 +78,7 @@ export function ConnectionsSettings({
               className="flex shrink-0 items-center gap-1 text-[12px] text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
             >
               Setup guide
+              <span className="sr-only"> (opens in a new tab)</span>
               <ArrowUpRight
                 className="size-3"
                 strokeWidth={1.5}
@@ -96,6 +110,7 @@ export function ConnectionsSettings({
                     className="text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
                   >
                     {app.label}
+                    <span className="sr-only"> (opens in a new tab)</span>
                   </a>
                   {i < GUIDE_APPS.length - 1 ? " · " : ""}
                 </span>
@@ -118,7 +133,7 @@ export function ConnectionsSettings({
           <ConnectStep n={3} title="Sign in here and choose Allow">
             <p className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
               The app opens this sign-in once, then lists Advantage among its
-              tools. It appears below once you approve it.
+              tools. Once you approve it, it appears under Connected apps.
             </p>
           </ConnectStep>
         </ol>
