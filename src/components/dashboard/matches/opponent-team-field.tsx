@@ -3,7 +3,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
-import { opponentTeamsForSquad } from "@/components/dashboard/matches/new-match-wizard/opponent-team";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { useProgramSearch } from "@/components/dashboard/schedule/static/use-program-search";
 import {
@@ -63,8 +62,8 @@ const ROW_CLS =
  *   the scheduled `line` is the line's to decide, so it has no Change.
  *
  * Men's and women's are the same school twice, so the squad decides which
- * row is right. A men's or women's workspace lists its own squad only
- * (`opponentTeamsForSquad`) under a "Women's teams" label, and its rows and
+ * row is right. A men's or women's workspace searches its own squad only
+ * (`useProgramSearch`'s `squad`, a filter in `search_programs`) under a "Women's teams" label, and its rows and
  * chosen team leave the squad unsaid. Anywhere else — a personal or co-ed
  * workspace — every row LEADS with its squad, where truncation cannot cut it,
  * and the chosen team keeps it: "University of San Diego · Women's".
@@ -121,16 +120,15 @@ export function OpponentTeamField({
   const noteId = useId();
 
   const typed = term.trim();
-  // A row the enrichment read could not give an id cannot be pointed at as a
-  // program, so it is not offered as one — the as-typed row covers it.
-  // The team's own squad first, before the cut — otherwise a same-squad row
-  // the search ranked seventh would be the one dropped.
+  // A men's or women's team searches its own squad only, narrowed in the SQL
+  // so the route's row limit counts only rows it can pick.
   const { active: workspace } = useWorkspace();
   const ownSquad = toGenderedSquad(workspace.team);
-  const results = opponentTeamsForSquad(
-    useProgramSearch(searching ? term : "").filter((row) => Boolean(row.id)),
-    workspace.team,
-  ).slice(0, MAX_RESULTS);
+  // A row the enrichment read could not give an id cannot be pointed at as a
+  // program, so it is not offered as one — the as-typed row covers it.
+  const results = useProgramSearch(searching ? term : "", ownSquad)
+    .filter((row) => Boolean(row.id))
+    .slice(0, MAX_RESULTS);
   const ready = typed.length >= 2;
   // Directory rows, then the as-typed row.
   const rowCount = ready ? results.length + 1 : 0;

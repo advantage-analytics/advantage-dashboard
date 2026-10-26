@@ -235,16 +235,25 @@ function toResult(row: Record<string, unknown>): ProgramSearchResult {
  * prefix hits first — "angeles" has to find University of California, Los
  * Angeles. What that costs, and why the floor below is two characters rather
  * than one, is measured in the migration that defines the function.
+ *
+ * `squad` narrows to one squad's programs inside the SQL, so the page limit
+ * counts only rows that can be picked — a men's or women's team picking an
+ * opponent never wants the other half of every school pair. Without it, the
+ * two-argument function searches every squad, as it always has.
  */
 export async function searchPrograms(
   supabase: SupabaseClient,
   term: string,
+  squad?: GenderedSquad | null,
 ): Promise<ProgramSearchResult[]> {
   const query = term.trim();
   if (query.length < 2) return [];
 
   const { data, error } = await supabase.rpc("search_programs", {
     p_term: query,
+    // Named arguments pick the overload: with `p_team` the three-argument
+    // function, without it the original two-argument one.
+    ...(squad ? { p_team: squad } : {}),
     p_limit: SEARCH_LIMIT,
   });
 

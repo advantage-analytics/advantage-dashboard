@@ -13,7 +13,6 @@ import {
   opponentTeamFromHistory,
   opponentTeamIsEmpty,
   opponentTeamUpdate,
-  opponentTeamsForSquad,
 } from "@/components/dashboard/matches/new-match-wizard/opponent-team";
 import { redactForPlayer, searchPrograms } from "@/lib/data/programs-server";
 
@@ -308,9 +307,11 @@ test.describe("searchPrograms — id, abbreviation and crest", () => {
 
   function fakeClient(opts: { facts?: unknown[]; factsError?: boolean } = {}) {
     const calls: string[] = [];
+    const rpcArgs: Record<string, unknown>[] = [];
     const client = {
-      rpc: async (fn: string) => {
+      rpc: async (fn: string, args: Record<string, unknown>) => {
         calls.push(`rpc:${fn}`);
+        rpcArgs.push(args);
         return { data: [RPC_ROW], error: null };
       },
       from(table: string) {
@@ -334,8 +335,24 @@ test.describe("searchPrograms — id, abbreviation and crest", () => {
         }),
       },
     };
-    return { client: client as unknown as SupabaseClient, calls };
+    return { client: client as unknown as SupabaseClient, calls, rpcArgs };
   }
+
+  test("a squad is sent as p_team, so the SQL limit counts only that squad", async () => {
+    const { client, rpcArgs } = fakeClient();
+    await searchPrograms(client, "usd", "womens");
+    expect(rpcArgs).toEqual([{ p_term: "usd", p_team: "womens", p_limit: 8 }]);
+  });
+
+  test("no squad calls the two-argument search, with no p_team at all", async () => {
+    const { client, rpcArgs } = fakeClient();
+    await searchPrograms(client, "usd");
+    await searchPrograms(client, "usd", null);
+    expect(rpcArgs).toEqual([
+      { p_term: "usd", p_limit: 8 },
+      { p_term: "usd", p_limit: 8 },
+    ]);
+  });
 
   test("each row carries its id, abbreviation and crest URL", async () => {
     const { client, calls } = fakeClient({
@@ -437,47 +454,5 @@ test.describe("searchPrograms — id, abbreviation and crest", () => {
     });
     expect(redacted).not.toHaveProperty("ownerDisplay");
     expect(redacted).not.toHaveProperty("status");
-  });
-});
-
-test.describe("opponentTeamsForSquad — only the team's own squad", () => {
-  const rows = [
-    { id: "a", team: "womens" },
-    { id: "b", team: "mens" },
-    { id: "c", team: "coed" },
-    { id: "d", team: "womens" },
-    { id: "e", team: null },
-    { id: "f", team: "mens" },
-  ];
-
-  test("a women's team never sees men's programs", () => {
-    expect(opponentTeamsForSquad(rows, "womens").map((r) => r.id)).toEqual([
-      "a",
-      "d",
-      "c",
-      "e",
-    ]);
-  });
-
-  test("a men's team sees men's first, then co-ed and unset, in search order", () => {
-    expect(opponentTeamsForSquad(rows, "mens").map((r) => r.id)).toEqual([
-      "b",
-      "f",
-      "c",
-      "e",
-    ]);
-  });
-
-  test("a co-ed or unset squad gets every row, in search order", () => {
-    for (const squad of ["coed", null, undefined]) {
-      expect(opponentTeamsForSquad(rows, squad).map((r) => r.id)).toEqual([
-        "a",
-        "b",
-        "c",
-        "d",
-        "e",
-        "f",
-      ]);
-    }
   });
 });

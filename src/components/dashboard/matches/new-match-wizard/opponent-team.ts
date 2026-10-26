@@ -9,7 +9,6 @@
  * `types.ts` says which is which.
  */
 
-import { toGenderedSquad } from "@/lib/data/squad";
 import type { FormData, OpponentTeamProgram } from "./types";
 
 /** The three form keys the field owns. */
@@ -122,30 +121,4 @@ export function opponentTeamFromHistory(
     };
   }
   return current.opponentTeamSource === "history" ? EMPTY_OPPONENT_TEAM : null;
-}
-
-/**
- * Directory results a team can pick its opponent from.
- *
- * A college is two directory rows — men's and women's — and a search for the
- * school returns both, identical but for the squad. A men's or women's team
- * never plays the other squad, so that squad's rows are dropped; co-ed and
- * never-said programs stay, since teams do play across types. What is left
- * keeps the team's own squad first, a stable partition, so the search's own
- * order (prefix hits first) holds inside each half. A team with no single
- * squad (co-ed, or never said) — and a personal workspace — gets the list as
- * it came, and the field names each row's squad instead.
- */
-export function opponentTeamsForSquad<T extends { team: string | null }>(
-  rows: readonly T[],
-  squad: string | null | undefined,
-): T[] {
-  const own = toGenderedSquad(squad);
-  if (!own) return [...rows];
-  const other = own === "mens" ? "womens" : "mens";
-  const kept = rows.filter((row) => row.team !== other);
-  return [
-    ...kept.filter((row) => row.team === own),
-    ...kept.filter((row) => row.team !== own),
-  ];
 }

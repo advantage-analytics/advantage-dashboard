@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
+import type { GenderedSquad } from "@/lib/data/squad";
 
 /**
  * The directory search behind every "which school?" question the schedule
@@ -18,8 +19,14 @@ import type { ProgramSearchResult } from "@/lib/data/programs-server";
  * Under the floor the answer is an empty list in the same render, not a tick
  * later: a list that lingered after the term was cleared would offer schools
  * for a search that no longer exists.
+ *
+ * `squad` narrows the search to one squad's programs on the server, so the
+ * route's row limit counts only rows of that squad.
  */
-export function useProgramSearch(term: string): ProgramSearchResult[] {
+export function useProgramSearch(
+  term: string,
+  squad?: GenderedSquad | null,
+): ProgramSearchResult[] {
   const [results, setResults] = useState<ProgramSearchResult[]>([]);
   const query = term.trim();
 
@@ -32,7 +39,9 @@ export function useProgramSearch(term: string): ProgramSearchResult[] {
     const timer = setTimeout(async () => {
       try {
         const response = await fetch(
-          `/api/programs/search?q=${encodeURIComponent(query)}`,
+          `/api/programs/search?q=${encodeURIComponent(query)}${
+            squad ? `&team=${squad}` : ""
+          }`,
           { signal: controller.signal },
         );
         if (!response.ok) return;
@@ -49,7 +58,7 @@ export function useProgramSearch(term: string): ProgramSearchResult[] {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query]);
+  }, [query, squad]);
 
   return useMemo(() => (query.length < 2 ? [] : results), [query, results]);
 }
