@@ -14,6 +14,22 @@ import type { CaptureResult } from "posthog-js";
  */
 const SCANNER_REJECTION = /Object Not Found Matching Id:\d+, MethodName:\w+/;
 
+/**
+ * "ResizeObserver loop completed with undelivered notifications." (Safari,
+ * Firefox, current Chrome) and "ResizeObserver loop limit exceeded" (older
+ * Chrome) are browser notices, not failures. The spec fires them as a window
+ * `error` event with no Error object when a ResizeObserver callback changes
+ * layout and the browser defers the resulting notifications to the next
+ * frame; those notifications are still delivered and nothing breaks. They
+ * arrive with no stack, so they can't be traced to a component either.
+ * Anchored to the whole message so a real error that merely mentions
+ * ResizeObserver still reaches error tracking.
+ */
+const RESIZE_OBSERVER_LOOP =
+  /^ResizeObserver loop (?:completed with undelivered notifications\.|limit exceeded)$/;
+
+const NOISE = [SCANNER_REJECTION, RESIZE_OBSERVER_LOOP];
+
 /** True when a `$exception` event is noise we never want in error tracking. */
 export function isUnfixableNoise(event: CaptureResult): boolean {
   if (event.event !== "$exception") return false;
@@ -24,7 +40,7 @@ export function isUnfixableNoise(event: CaptureResult): boolean {
       typeof entry === "object" &&
       entry !== null &&
       typeof (entry as { value?: unknown }).value === "string" &&
-      SCANNER_REJECTION.test((entry as { value: string }).value),
+      NOISE.some((pattern) => pattern.test((entry as { value: string }).value)),
   );
 }
 
