@@ -60,7 +60,8 @@ export function DeleteMatchDialog({
       description={
         <>
           Removes <Em>{matchLabel}</Em> for good — its statistics, every
-          recorded point and shot, and the uploaded file. There is no undo.
+          recorded point and shot, and the uploaded file. There is no undo, and
+          analysis hours it used aren&apos;t returned.
         </>
       }
       tone="danger"

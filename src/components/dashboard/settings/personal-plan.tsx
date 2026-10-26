@@ -334,7 +334,7 @@ function PacksCard({
       ))}
       <SettingsCardFootnote className="mt-0 border-t-0 pt-1">
         Credits are used after your free hours. Unused credits carry past{" "}
-        {freeEnds}. All sales final.
+        {freeEnds}. All sales final, except where required by law.
       </SettingsCardFootnote>
     </SettingsCard>
   );

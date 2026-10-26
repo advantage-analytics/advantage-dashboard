@@ -104,19 +104,19 @@ const TEAM_VISIBILITY: {
   {
     icon: Eye,
     title: "Matches uploaded in the team workspace",
-    detail:
-      "Visible to your coach and — if the coach allows it — your teammates.",
+    detail: "Visible to everyone on the team: coaches, staff and teammates.",
   },
   {
     icon: EyeOff,
     title: "Matches uploaded in your personal workspace",
-    detail: "Private. You share them one at a time, and you can unshare.",
+    detail:
+      "Private, and never visible to your team. To show one to someone, make a public link from Share.",
   },
   {
     icon: UserCheck,
     title: "Your profile as your coach sees it",
     detail:
-      "A read-only mirror of your own pages — no separate coach-only scoring.",
+      "A read-only mirror of your team matches — no separate coach-only scoring.",
   },
 ];
 
@@ -891,7 +891,9 @@ export default function HelpCenterPage() {
               <p className={`${proseClass} max-w-[560px]`}>
                 Connect your own AI app — Claude, ChatGPT, Cursor or any app
                 that supports MCP — and ask about your matches there. It reads
-                the same statistics Ask does, as you.
+                the same statistics Ask does, as you, and can edit a
+                match&apos;s details (never the score) and start an upload
+                draft.
               </p>
 
               <div className="flex flex-col gap-2.5">

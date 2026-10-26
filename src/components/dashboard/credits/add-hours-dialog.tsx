@@ -408,8 +408,8 @@ function AddHoursContent({
             </p>
           ) : (
             <ConfirmAside>
-              All sales final. Credits are used after your free hours, oldest
-              first.
+              All sales final, except where required by law. Credits are used
+              after your free hours, oldest first.
             </ConfirmAside>
           )}
 
@@ -463,7 +463,8 @@ function AddHoursContent({
                 onComplete={onComplete}
               />
               <ConfirmAside>
-                All sales final. Your trim and video stay put while you pay.
+                All sales final, except where required by law. Your trim and
+                video stay put while you pay.
               </ConfirmAside>
             </>
           ) : phase.kind === "recording" ? (

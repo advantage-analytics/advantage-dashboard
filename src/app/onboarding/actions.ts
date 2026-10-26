@@ -19,6 +19,8 @@ import {
   GUARDIAN_PLAYER_NAME_MAX,
   isGuardianClassYear,
 } from "./guardian-options";
+import { insertLegalAcceptances } from "@/lib/legal/acceptance-server";
+import { AGE_REFUSAL, DOB_ERROR, ageAllows, ageBand } from "./age";
 
 /**
  * What each resolution writes: the persona `role`.
@@ -64,6 +66,30 @@ function parseNamePair(input: {
 }
 
 const NAME_ERROR = "Enter your first and last name.";
+
+/**
+ * The age gate's server half (`age.ts` holds the rule). The client step stops
+ * a blocked band before any action runs; this is the rule, because an action
+ * is a raw RPC whatever the screen did. Returns the `YYYY-MM-DD` to write to
+ * `users.dob`, or the refusal to show.
+ */
+function parseDob(
+  input: { dob?: unknown },
+  viaTeamLink: boolean,
+): { ok: true; dob: string } | { ok: false; error: string } {
+  const dob = input?.dob;
+  const band = ageBand(dob);
+  if (band === null || typeof dob !== "string") {
+    return { ok: false, error: DOB_ERROR };
+  }
+  if (!ageAllows(band, viaTeamLink)) {
+    return {
+      ok: false,
+      error: AGE_REFUSAL[band === "child" ? "child" : "teen"],
+    };
+  }
+  return { ok: true, dob };
+}
 const SAVE_ERROR = "We couldn't save that. Try again.";
 
 /**
@@ -142,6 +168,7 @@ export async function finishOnboarding(input: {
   choice: OnboardingChoice;
   firstName: string;
   lastName: string;
+  dob: string;
   recordingSource?: RecordingSource | null;
   acquisitionSource?: AcquisitionSource | null;
   acquisitionSourceDetail?: string | null;
@@ -166,6 +193,11 @@ export async function finishOnboarding(input: {
     return { ok: false, error: NAME_ERROR };
   }
 
+  const age = parseDob(input, false);
+  if (!age.ok) {
+    return age;
+  }
+
   const intake = parseIntake(input);
   if (!intake.ok) {
     return intake;
@@ -181,6 +213,7 @@ export async function finishOnboarding(input: {
     .from("users")
     .update({
       ...name,
+      dob: age.dob,
       role: resolution.role,
       recording_source: intake.recording_source,
       acquisition_source: intake.acquisition_source,
@@ -227,13 +260,15 @@ export async function finishOnboarding(input: {
  *    onboarding write uses. `plan` is untouched, and `role` gets only the
  *    persona vocabulary onboarding already assigns.
  *
- * `role` is `parent` for academy staff too — the design routes both down this
- * path ("Parent or academy staff"), and profile settings can refine it to
- * `academy` later, exactly as `finishOnboarding`'s mapping notes.
+ * `role` is always `parent`: only a parent or legal guardian manages a junior's
+ * account (Guardian Terms 1.1). Academy staff coach the player through a team
+ * workspace instead, and never hold this persona.
  */
 export async function finishGuardianOnboarding(input: {
   firstName: string;
   lastName: string;
+  /** The guardian's own date of birth: only an adult manages a junior. */
+  dob: string;
   playerName: string;
   classYear: string;
   consent: boolean;
@@ -252,6 +287,10 @@ export async function finishGuardianOnboarding(input: {
   const name = parseNamePair(input);
   if (name === null) {
     return { ok: false, error: NAME_ERROR };
+  }
+  const age = parseDob(input, false);
+  if (!age.ok) {
+    return age;
   }
   if (!playerName || playerName.length > GUARDIAN_PLAYER_NAME_MAX) {
     return { ok: false, error: "Enter the player's name." };
@@ -274,6 +313,7 @@ export async function finishGuardianOnboarding(input: {
     .from("users")
     .update({
       ...name,
+      dob: age.dob,
       role: "parent",
       junior_player_name: playerName,
       junior_class_year: classYear,
@@ -292,6 +332,12 @@ export async function finishGuardianOnboarding(input: {
     return { ok: false, error: SAVE_ERROR };
   }
 
+  // The consent box names the Guardian Terms, so ticking it is agreeing to
+  // the current version — recorded beside `guardian_consent_at`. Not fatal:
+  // the consent column is written, and a missing row only means the terms
+  // screen asks once more before the dashboard opens.
+  await insertLegalAcceptances(supabase, user.id, ["guardian"]);
+
   revalidatePath("/dashboard", "layout");
   redirect("/dashboard");
 }
@@ -302,21 +348,30 @@ export async function finishGuardianOnboarding(input: {
  * `/join/<token>` sends a signed-in account with no name here before it shows
  * a Join button, because joining marks the account onboarded and this flow
  * would never run for them again. So this writes the two name columns and
- * NOTHING else — no persona, no intake answers, and above all no
+ * the date of birth, and NOTHING else — no persona, no intake answers, and above all no
  * `onboarded_at`: if they come back and decline the join, the ordinary
  * onboarding is still theirs to answer.
  *
  * `next` comes from the query string, so it is clamped and then required to be
  * a join link. This action is not a general "save a name and go anywhere".
+ *
+ * The date of birth rides along: this is the one path a 13–17-year-old may
+ * finish (`age.ts`), so it is the one action that lets `teen` through.
  */
 export async function saveNameThenJoin(input: {
   firstName: string;
   lastName: string;
+  dob: string;
   next: string;
 }): Promise<{ ok: false; error: string }> {
   const name = parseNamePair(input);
   if (name === null) {
     return { ok: false, error: NAME_ERROR };
+  }
+  // The one path open to 13–17: joining a team through its own link.
+  const age = parseDob(input, true);
+  if (!age.ok) {
+    return age;
   }
 
   const next = safeNext(typeof input?.next === "string" ? input.next : null);
@@ -332,7 +387,7 @@ export async function saveNameThenJoin(input: {
 
   const { data, error } = await supabase
     .from("users")
-    .update(name)
+    .update({ ...name, dob: age.dob })
     .eq("id", user.id)
     .select("id");
 

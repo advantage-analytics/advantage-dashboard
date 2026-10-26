@@ -8,6 +8,7 @@ import {
   SettingsCard,
   SettingsCardTitle,
   SettingsField,
+  SettingsLockedField,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
 import { SettingsSaveBar } from "@/components/dashboard/settings/settings-save-bar";
@@ -16,6 +17,7 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { DateField } from "@/components/ui/date-field";
 import { todayISO } from "@/lib/schedule/format";
+import { SUPPORT_EMAIL } from "@/lib/constants";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 
@@ -35,6 +37,13 @@ import { isPostHogConfigured } from "@/lib/posthog-client";
  * Settings › Teams. A single self-described role beside them could only
  * disagree with one of them, and editing it would let a parent account (with
  * guardian consent on file) relabel itself.
+ *
+ * The date of birth is set once. Onboarding's age gate records it, and
+ * after that it decides whether this account's video may ever train models
+ * and whether it may join a team, so the account cannot change it: the
+ * database refuses (`20261026090000_users_write_once_identity.sql`), and this
+ * page draws it as a locked field that names support as the way to correct
+ * it. An account with none yet (one made before the gate) sets it here once.
  *
  * Nor is there a team. The identity card belongs to the account, so it reads
  * the same in every workspace; a pill naming only the *active* team changed on
@@ -214,13 +223,24 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
             value={draft.lastName}
             onChange={(value) => set("lastName", value)}
           />
-          <ProfileField
-            label={FIELD_LABELS.birthdate}
-            isDate
-            value={draft.birthdate}
-            missing={draft.birthdate.trim() === ""}
-            onChange={(value) => set("birthdate", value)}
-          />
+          {/* Locked by what is SAVED, not the draft: a date typed and not
+              yet saved is still editable, and the save that writes it locks
+              it. */}
+          {saved.birthdate ? (
+            <SettingsLockedField
+              label={FIELD_LABELS.birthdate}
+              value={formatBirthdate(saved.birthdate)}
+              hint={`Set once. To correct it, email ${SUPPORT_EMAIL}.`}
+            />
+          ) : (
+            <ProfileField
+              label={FIELD_LABELS.birthdate}
+              isDate
+              value={draft.birthdate}
+              missing={draft.birthdate.trim() === ""}
+              onChange={(value) => set("birthdate", value)}
+            />
+          )}
           <ProfileField
             label={FIELD_LABELS.phone}
             type="tel"
@@ -279,6 +299,21 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
       />
     </div>
   );
+}
+
+/**
+ * "January 15, 2008". A calendar day, not a moment: formatted in UTC so no
+ * time zone moves it to the day before.
+ */
+function formatBirthdate(iso: string): string {
+  const date = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 }
 
 function Note({ children }: { children: React.ReactNode }) {

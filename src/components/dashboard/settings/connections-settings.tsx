@@ -92,7 +92,8 @@ export function ConnectionsSettings({
         <p className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
           Ask about your matches from Claude, ChatGPT, Cursor or any MCP app. It
           reads your statistics the way Ask does, and the questions it asks use
-          your Ask questions.
+          your Ask questions. It can also edit a match&apos;s details, never the
+          score, and start an upload draft you finish here.
         </p>
         <ol className="flex flex-col gap-4 pt-1">
           <ConnectStep n={1} title="Copy your address">
@@ -206,7 +207,7 @@ function GrantRow({
         >
           {confirming
             ? `${grant.name} loses access now; you would approve it again in that app.`
-            : `${approved}Reads your matches and asks questions`}
+            : `${approved}Reads your matches, asks questions, edits match details and starts upload drafts`}
         </div>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-2">

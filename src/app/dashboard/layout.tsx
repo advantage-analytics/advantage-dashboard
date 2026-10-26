@@ -12,6 +12,8 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { ToastProvider } from "@/components/dashboard/toast/toast-provider";
 import { UploadFailureListener } from "@/components/dashboard/toast/upload-failure-listener";
 import { timeOfDayGreeting } from "@/lib/ui/greeting";
+import { readMissingLegalDocuments } from "@/lib/legal/acceptance-server";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * Dashboard layout.
@@ -48,6 +50,18 @@ export default async function Layout({
   // those flows' own server actions before any redirect that could land here,
   // so they never bounce.
   if (!workspace.viewer.onboardedAt) redirect("/onboarding");
+
+  // Then the terms: an account with no current-version acceptance of a
+  // document it needs (Terms, Privacy, and for a guardian the Guardian Terms)
+  // agrees once on `/terms-update` before the dashboard opens. One indexed
+  // read of the viewer's own rows; a failed read lets them through
+  // (`readMissingLegalDocuments`).
+  const missingLegal = await readMissingLegalDocuments(
+    await createClient(),
+    workspace.viewer.id,
+    workspace.viewer.role,
+  );
+  if (missingLegal.length > 0) redirect("/terms-update");
 
   // The header greets by name on the personal Home (Platform Audit Pa2). The
   // word is chosen here, on the server, for the reason the page's own greeting

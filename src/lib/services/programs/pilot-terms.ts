@@ -12,8 +12,8 @@ import {
  * The version literal lives in exactly two places that name each other:
  *
  *   * `PILOT_TERMS_VERSION` here
- *   * `public.current_pilot_terms_version()` in
- *     `supabase/migrations/20260926181544_pilot_terms_acceptances.sql`
+ *   * `public.current_pilot_terms_version()`, last replaced by
+ *     `supabase/migrations/20261025230000_pilot_terms_version_2.sql`
  *
  * Bump both in the same change (the SQL side is a new migration replacing
  * the function body). A `pilot_terms_acceptances` row whose `terms_version`
@@ -24,7 +24,7 @@ import {
  * that the words a coach accepted and the version they accepted under can
  * never drift apart.
  */
-export const PILOT_TERMS_VERSION = "2026-fall-pilot-1";
+export const PILOT_TERMS_VERSION = "2026-fall-pilot-2";
 
 /**
  * SQLSTATE the program-creating RPCs raise when the acting user holds no
@@ -167,7 +167,15 @@ export function pilotTermsCopy({
       {
         tone: "ink",
         segments: [
-          { text: "We may use pilot usage and data to improve Advantage." },
+          {
+            text:
+              "We may use pilot usage and data to improve Advantage." +
+              // Terms 2.0 §6: junior video is never training data. Said on
+              // the team side only — a college program is adult players.
+              (flow === "team"
+                ? " Video from high school and junior teams is never used to train models."
+                : ""),
+          },
         ],
       },
       {

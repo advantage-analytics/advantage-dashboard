@@ -80,7 +80,7 @@ export default async function OnboardingPage({
   const [{ data: row }, join, invites] = await Promise.all([
     supabase
       .from("users")
-      .select("onboarded_at, first_name")
+      .select("onboarded_at, first_name, dob")
       .eq("id", user.id)
       .maybeSingle(),
     joinToken ? resolveJoinStateOnce(joinToken) : null,
@@ -155,6 +155,9 @@ export default async function OnboardingPage({
             <InviteOffer
               invites={offered}
               notNowHref={notNowHref("/onboarding")}
+              // The intercept runs before the name step, which is where the
+              // date of birth is otherwise asked — so the offer asks.
+              needsDob={!row?.dob}
             />
           </div>
         </div>

@@ -30,6 +30,7 @@ import {
 import type { InviterName } from "@/lib/services/programs/invite-acceptance";
 import { ROLE_NOUN, type JoinRole } from "@/lib/services/programs/join-role";
 import { PASSWORD_RULE } from "@/lib/auth/error-messages";
+import { AgeRefusal, useJoinAge } from "@/components/join/age-gate";
 
 /**
  * The interactive half of `/join/[token]`.
@@ -55,37 +56,54 @@ import { PASSWORD_RULE } from "@/lib/auth/error-messages";
  */
 export const JOIN_LABEL = "Join team";
 
-/** Signed in as the invited address. One button. */
+/**
+ * Signed in as the invited address. One button — and a date of birth above it
+ * when none is on file (`needsDob`, the age gate in `age-gate.tsx`).
+ */
 export function JoinReady({
   token,
   programName,
   role,
+  needsDob,
 }: {
   token: string;
   programName: string;
   role: JoinRole;
+  needsDob: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const age = useJoinAge(needsDob);
+
+  if (age.tooYoung) return <AgeRefusal signedIn />;
 
   return (
     <div className="flex flex-col gap-4">
       <p className="text-body">
         You&apos;ll join {programName} as {ROLE_NOUN[role]}.
       </p>
+      {age.field}
       <Problem message={error} />
       <ClaimActions>
         <button
           type="button"
-          disabled={pending}
+          disabled={pending || !age.ready}
           className={CLAIM_BUTTON}
           onClick={() =>
             start(async () => {
               setError(null);
+              const gate = age.check();
+              if (!gate.go) {
+                setError(gate.error);
+                return;
+              }
               // On success the action redirects and this never resolves, so
               // there is no success branch to write. Only a refusal comes back.
-              const result = await acceptInvite(token);
-              if (result && !result.ok) setError(result.error);
+              const result = await acceptInvite(token, gate.dob);
+              if (result && !result.ok) {
+                age.absorb(result.age);
+                setError(result.error);
+              }
             })
           }
         >
@@ -97,7 +115,11 @@ export function JoinReady({
   );
 }
 
-/** No account. Name, password, in. */
+/**
+ * No account. Name, date of birth, password, in. The date is always asked
+ * here — there is no account to have one on file — and an under-13 is
+ * refused before an account is created (`createAccountAndAccept`).
+ */
 export function JoinSignUp({
   token,
   programName,
@@ -114,6 +136,9 @@ export function JoinSignUp({
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const age = useJoinAge(true);
+
+  if (age.tooYoung) return <AgeRefusal signedIn={false} />;
 
   return (
     <form
@@ -125,12 +150,21 @@ export function JoinSignUp({
         event.preventDefault();
         start(async () => {
           setError(null);
+          const gate = age.check();
+          if (!gate.go) {
+            setError(gate.error);
+            return;
+          }
           const result = await createAccountAndAccept(token, {
             firstName,
             lastName,
             password,
+            dob: gate.dob ?? "",
           });
-          if (result && !result.ok) setError(result.error);
+          if (result && !result.ok) {
+            age.absorb(result.age);
+            setError(result.error);
+          }
         });
       }}
     >
@@ -167,6 +201,8 @@ export function JoinSignUp({
         </div>
       </div>
 
+      {age.field}
+
       <div className="max-w-[380px]">
         <label className={CLAIM_LABEL} htmlFor="join-new-password">
           Password
@@ -195,7 +231,11 @@ export function JoinSignUp({
       <Problem message={error} />
 
       <ClaimActions>
-        <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
+        <button
+          type="submit"
+          disabled={pending || !age.ready}
+          className={CLAIM_BUTTON}
+        >
           {pending ? "Joining…" : JOIN_LABEL}
         </button>
         <NotNowLink href={notNowHref(joinHref(token))} />
@@ -345,6 +385,10 @@ export function JoinWrongAccount({
  * construction: nothing the page renders on a GET can reach `acceptJoinLink`.
  * On success the action redirects (into the program, or back here as
  * `link_requested` in approve mode), so only a refusal ever comes back.
+ *
+ * `needsDob`: no date of birth on file, so the age gate (`age-gate.tsx`) asks
+ * for one above the button. This is the path an account that already had a
+ * name — a Google sign-up — takes without ever seeing onboarding.
  */
 export function JoinLinkReady({
   token,
@@ -352,19 +396,29 @@ export function JoinLinkReady({
   mode,
   inviterName,
   rosterMatchName,
+  needsDob,
 }: {
   token: string;
   programName: string;
   mode: JoinLinkMode;
   inviterName: InviterName;
   rosterMatchName: string | null;
+  needsDob: boolean;
 }) {
-  const [result, submit, pending] = useActionState(
-    () => acceptJoinLink(token),
-    null,
-  );
+  const age = useJoinAge(needsDob);
+  const [result, submit, pending] = useActionState(async () => {
+    const gate = age.check();
+    if (!gate.go) {
+      return gate.error ? { ok: false as const, error: gate.error } : null;
+    }
+    const refused = await acceptJoinLink(token, gate.dob);
+    if (refused && !refused.ok) age.absorb(refused.age);
+    return refused;
+  }, null);
   const error = result && !result.ok ? result.error : null;
   const approve = mode === "approve";
+
+  if (age.tooYoung) return <AgeRefusal signedIn />;
 
   return (
     <form action={submit} className="flex flex-col gap-4">
@@ -384,9 +438,14 @@ export function JoinLinkReady({
           </>
         )}
       </p>
+      {age.field}
       <Problem message={error} />
       <ClaimActions>
-        <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
+        <button
+          type="submit"
+          disabled={pending || !age.ready}
+          className={CLAIM_BUTTON}
+        >
           {approve
             ? pending
               ? "Sending…"

@@ -70,17 +70,35 @@ export interface JoinTerms {
   emphasis?: string;
 }
 
-/** What the program gains. */
-const JOIN_TERMS_SEEN: JoinTerms = {
-  title: "Your coaches will see",
-  text: "Matches uploaded to the team, with their video, stats and full report. Your trends across those matches. Any personal match you choose to share, one at a time.",
-  emphasis: "to the team",
-};
+/**
+ * What the team gains. Everyone on it sees team matches — coaches, staff and
+ * teammates alike (Privacy Policy 1.4, "Teams You Join") — so the heading
+ * names the team, not its coaches.
+ *
+ * A college program's roster and results are also visible to other signed-in
+ * Advantage users for scouting, so that sentence joins the paragraph only when
+ * `college` is set: a club or high school team's are not.
+ */
+function joinTermsSeen(college: boolean): JoinTerms {
+  return {
+    title: "Your team will see",
+    text:
+      "Matches uploaded to the team, with their video, stats and full report — seen by its coaches, staff and teammates. Your trends across those matches." +
+      (college
+        ? " A college program's roster and results are also visible to other signed-in Advantage users, for scouting."
+        : ""),
+    emphasis: "to the team",
+  };
+}
 
-/** What does not move. */
+/**
+ * What does not move. Personal matches are never visible to a team, and
+ * nothing offers to share one there: the only way to show a personal match to
+ * anyone is a public link.
+ */
 const JOIN_TERMS_KEPT: JoinTerms = {
   title: "Stays yours",
-  text: "Everything you've uploaded up to now, personal matches you upload later unless you share them, and your account if you leave. The team's matches stay with the team.",
+  text: "Everything you've uploaded up to now, every personal match you upload later, and your account if you leave. The team never sees your personal matches. The team's matches stay with the team.",
 };
 
 function TermsBlock({ terms }: { terms: JoinTerms }) {
@@ -115,10 +133,10 @@ function TermsBlock({ terms }: { terms: JoinTerms }) {
  * `InviteOffer` uses this: it can list several invitations, so the terms sit
  * once above every button instead of beside one of them.
  */
-export function JoinSharingTerms() {
+export function JoinSharingTerms({ college }: { college: boolean }) {
   return (
     <div className="grid gap-6 border-t border-[var(--border-hairline)] pt-5 sm:grid-cols-2 sm:gap-10">
-      <TermsBlock terms={JOIN_TERMS_SEEN} />
+      <TermsBlock terms={joinTermsSeen(college)} />
       <TermsBlock terms={JOIN_TERMS_KEPT} />
     </div>
   );
@@ -136,13 +154,16 @@ export function JoinSharingTerms() {
 export function JoinTermsPanel({
   programHours,
   personalHours,
+  college,
 }: {
   programHours: number;
   personalHours: number;
+  /** The program is a college one, whose roster other users can scout. */
+  college: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3.5 rounded-[var(--radius-card)] bg-[var(--surface-subtle)] p-5">
-      <TermsBlock terms={JOIN_TERMS_SEEN} />
+      <TermsBlock terms={joinTermsSeen(college)} />
       <div className="border-t border-[var(--border-medium)] pt-3">
         <TermsBlock terms={JOIN_TERMS_KEPT} />
       </div>
