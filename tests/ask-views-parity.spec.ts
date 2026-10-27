@@ -7,6 +7,8 @@ import { youAreAtLowEnd } from "@/components/dashboard/matches/match-detail/film
 import type { MatchShot } from "@/lib/data/match-points-server";
 import { matchOutcome, type MatchScore } from "@/lib/data/match-utils";
 import { playerSide } from "@/lib/data/player-identity-server";
+import { REAL_HALF_SINGLES, REAL_NET_Y } from "@/lib/data/serve-zones";
+import { DEFAULT_BANDS, makeDepthBucketer } from "@/lib/data/viz-bands";
 import {
   HAVE_ENV,
   INSUFFICIENT_PRIVILEGE,
@@ -360,6 +362,64 @@ const POSITION_POINTS: { point_number: number; shots: ShotSeed[] }[] = [
     ],
   },
 ];
+
+/** The point's end by the film court's rule; true = the viewer at y = 0. */
+function pointLowEnd(point: (typeof POSITION_POINTS)[number]): boolean | null {
+  return youAreAtLowEnd(
+    point.shots.map(
+      (shot) =>
+        ({
+          isPlayer1: shot.is_player1,
+          result: shot.result,
+          contactY: shot.contact_y,
+          landingY: shot.landing_y,
+        }) as MatchShot,
+    ),
+    true,
+  );
+}
+
+/** A stored position turned to the player, as film-court.ts turns a point. */
+function turned(low: boolean, x: number, y: number): { x: number; y: number } {
+  return low ? { x, y } : { x: -x, y: 23.77 - y };
+}
+
+/** Index 0 is Deep, as `makeDepthBucketer` orders the default thirds. */
+const DEPTH_BAND_NAMES = ["Deep", "Mid", "Short"] as const;
+const depthBand = makeDepthBucketer(DEFAULT_BANDS);
+
+/**
+ * `landing_section` as the TypeScript rules name it: a serve keeps its zone;
+ * any other in-play ball gets the Visualizations tab's default depth band
+ * (`makeDepthBucketer(DEFAULT_BANDS)`) and a third of the singles width. The
+ * view restates both in SQL; this is what holds the restatement to them.
+ */
+function sectionByTsRules(shot: ShotSeed, low: boolean): string | null {
+  if (shot.result !== "In" || shot.expect.landingDropped) return null;
+  if (/serve/i.test(shot.shot_type)) return shot.zone;
+  const landing = turned(low, shot.landing_x, shot.landing_y);
+  const depth = DEPTH_BAND_NAMES[depthBand(Math.abs(landing.y - REAL_NET_Y))];
+  const lane =
+    Math.abs(landing.x) < REAL_HALF_SINGLES / 3
+      ? "Middle"
+      : landing.x > 0
+        ? "Right"
+        : "Left";
+  return `${depth} ${lane}`;
+}
+
+test("the position seeds' expected sections are what the TypeScript band and lane rules name", () => {
+  for (const point of POSITION_POINTS) {
+    const low = pointLowEnd(point);
+    expect(low, `point ${point.point_number}`).not.toBeNull();
+    for (const shot of point.shots) {
+      expect(
+        shot.expect.section,
+        `point ${point.point_number} shot ${shot.shot_number}`,
+      ).toBe(sectionByTsRules(shot, low!));
+    }
+  }
+});
 
 interface AskShotPositionRow {
   point_number: number;
@@ -718,21 +778,9 @@ test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", ()
     expect(meIsPlayer1).toBe(true);
 
     for (const point of POSITION_POINTS) {
-      const low = youAreAtLowEnd(
-        point.shots.map(
-          (shot) =>
-            ({
-              isPlayer1: shot.is_player1,
-              result: shot.result,
-              contactY: shot.contact_y,
-              landingY: shot.landing_y,
-            }) as MatchShot,
-        ),
-        meIsPlayer1,
-      );
+      const low = pointLowEnd(point);
       expect(low, `point ${point.point_number}`).toBe(point.point_number === 1);
-      const turn = (x: number, y: number) =>
-        low ? { x, y } : { x: -x, y: 23.77 - y };
+      const turn = (x: number, y: number) => turned(low!, x, y);
 
       for (const shot of point.shots) {
         const at = `point ${point.point_number} shot ${shot.shot_number}`;
@@ -752,6 +800,8 @@ test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", ()
         expect(row!.landing_pinned, `${at} landing_pinned`).toBe(
           shot.expect.pinned,
         );
+        // shot.expect.section is held to the TypeScript rules offline (the
+        // test above), so the SQL is held to them here.
         expect(row!.landing_section, `${at} landing_section`).toBe(
           shot.expect.section,
         );
