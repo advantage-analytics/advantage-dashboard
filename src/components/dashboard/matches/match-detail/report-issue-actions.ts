@@ -21,9 +21,15 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
  *
  * One open report per match and address: a second Send while the first is
  * still in the queue says it is already there rather than filing it twice.
+ * The read below answers the usual case; two Sends at once both pass it, and
+ * the partial unique index `program_requests_one_open_match_issue` refuses
+ * the second, which answers the same.
  */
 
 const MATCH_ISSUE_MAX_LENGTH = 2000;
+const UNIQUE_VIOLATION = "23505";
+const ALREADY_REPORTED =
+  "We already have your report on this match, and we'll look at it.";
 
 export async function reportMatchIssue(
   matchId: string,
@@ -93,12 +99,7 @@ export async function reportMatchIssue(
     });
     return { ok: false, error: "Couldn't send that. Try again." };
   }
-  if (open && open.length > 0) {
-    return {
-      ok: false,
-      error: "We already have your report on this match, and we'll look at it.",
-    };
-  }
+  if (open && open.length > 0) return { ok: false, error: ALREADY_REPORTED };
 
   const { error: insertError } = await admin.from("program_requests").insert({
     kind: "match_issue",
@@ -107,6 +108,9 @@ export async function reportMatchIssue(
     name: displayName(profile?.first_name ?? null, profile?.last_name ?? null),
     note: text,
   });
+  if (insertError?.code === UNIQUE_VIOLATION) {
+    return { ok: false, error: ALREADY_REPORTED };
+  }
   if (insertError) {
     console.error("[report-issue] could not file the report", {
       error: insertError.message,
