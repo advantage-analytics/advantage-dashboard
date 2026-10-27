@@ -2762,10 +2762,7 @@ export function canonicalLabel(
  * share" for a percentage column (`serve_t_pct`), "Serves to the T, count"
  * for any other. Null when the cells are not one known measure.
  */
-export function unitQualifiedLabel(
-  canonical: string,
-  cells: string,
-): string | null {
+function unitQualifiedLabel(canonical: string, cells: string): string | null {
   const measures = measureOfCells(cells);
   if (!measures) return null;
   return `${canonical}, ${measures[0].key.endsWith("_pct") ? "share" : "count"}`;
