@@ -7,7 +7,11 @@ import { youAreAtLowEnd } from "@/components/dashboard/matches/match-detail/film
 import type { MatchShot } from "@/lib/data/match-points-server";
 import { matchOutcome, type MatchScore } from "@/lib/data/match-utils";
 import { playerSide } from "@/lib/data/player-identity-server";
-import { REAL_HALF_SINGLES, REAL_NET_Y } from "@/lib/data/serve-zones";
+import {
+  REAL_COURT_LENGTH,
+  REAL_HALF_SINGLES,
+  REAL_NET_Y,
+} from "@/lib/data/serve-zones";
 import { DEFAULT_BANDS, makeDepthBucketer } from "@/lib/data/viz-bands";
 import {
   HAVE_ENV,
@@ -381,7 +385,7 @@ function pointLowEnd(point: (typeof POSITION_POINTS)[number]): boolean | null {
 
 /** A stored position turned to the player, as film-court.ts turns a point. */
 function turned(low: boolean, x: number, y: number): { x: number; y: number } {
-  return low ? { x, y } : { x: -x, y: 23.77 - y };
+  return low ? { x, y } : { x: -x, y: REAL_COURT_LENGTH - y };
 }
 
 /** Index 0 is Deep, as `makeDepthBucketer` orders the default thirds. */
