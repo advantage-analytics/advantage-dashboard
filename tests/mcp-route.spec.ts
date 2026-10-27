@@ -5,7 +5,6 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import type { AskDatabase } from "@/lib/services/ask/ask";
 import { renderAskSchemaBlock } from "@/lib/services/ask/prompts";
-import { ASK_SCHEMA } from "@/lib/services/ask/schema";
 import {
   ASK_NEEDS_SESSION_MESSAGE,
   type McpCaller,
@@ -823,11 +822,6 @@ test.describe("POST /api/mcp · describe_views and list_matches", () => {
     expect(described).toContain(
       renderAskSchemaBlock("personal", { mcp: true }),
     );
-    for (const column of ASK_SCHEMA.flatMap((view) =>
-      view.columns.filter((c) => c.mcpOnly),
-    )) {
-      expect(described).toContain(`  ${column.name} (${column.type}): `);
-    }
     expect(described).toContain("# Court positions");
     expect(described).toContain("floor(s.landing_x / 2)");
     expect(calls.rpc).toEqual([

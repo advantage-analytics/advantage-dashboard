@@ -18,8 +18,8 @@ export const MCP_QUERY_ROW_CAP = 200;
  * lists them — the same renderer, so a column the prompt hides
  * (`video_time`, the seat ids) is hidden here too, while the `mcpOnly` court
  * positions are listed here alone — how to read and bin those positions, the
- * percentage definitions, and the rules `run_query` holds a query to. Written for a
- * model reading it as a tool result: plain text, one section per heading.
+ * percentage definitions, and the rules `run_query` holds a query to. Written
+ * for a model reading it as a tool result: plain text, one section per heading.
  */
 export function describeAskViews(mode: AskScope["kind"] = "personal"): string {
   const team = mode === "team";
