@@ -1,4 +1,5 @@
 import { useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { CirclePlay } from "lucide-react";
 import { isFingerPointer, useTouchReadout } from "@/hooks/use-touch-readout";
 import {
   DARK_READOUT_CLASS,
@@ -101,11 +102,23 @@ export function VisualFrame({
 const GROUP = ".group, .group\\/bar";
 const CSS_READOUT = "[data-ask-readout][data-ask-css]";
 
-/** Which colour is which series. The swatch is decoration; the label is text. */
+/**
+ * Which colour is which series. The swatch is decoration; the label is text.
+ *
+ * The report's `LegendSwatch` geometry — an 8px square at 2px radius — for
+ * every series but a dashed one, which keeps a 12px dash so the key draws
+ * the rule it names. `swatch` takes a custom glyph in place of either (the
+ * momentum key's three mark sizes).
+ */
 export function VisualKey({
   items,
 }: {
-  items: { label: string; color: string; dashed?: boolean }[];
+  items: {
+    label: string;
+    color: string;
+    dashed?: boolean;
+    swatch?: ReactNode;
+  }[];
 }) {
   return (
     <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0">
@@ -114,23 +127,41 @@ export function VisualKey({
           key={index}
           className="flex items-center gap-1.5 text-[11px] text-[var(--ink-600)]"
         >
-          <span
-            aria-hidden="true"
-            className="h-[3px] w-3 shrink-0 rounded-[1px]"
-            style={
-              item.dashed
-                ? {
-                    background: `repeating-linear-gradient(90deg, ${item.color} 0 3px, transparent 3px 5px)`,
-                  }
-                : { background: item.color }
-            }
-          />
+          {item.swatch ?? (
+            <span
+              aria-hidden="true"
+              className={
+                item.dashed
+                  ? "h-px w-3 shrink-0"
+                  : "size-2 shrink-0 rounded-[2px]"
+              }
+              style={
+                item.dashed
+                  ? {
+                      background: `repeating-linear-gradient(90deg, ${item.color} 0 3px, transparent 3px 5px)`,
+                    }
+                  : { background: item.color }
+              }
+            />
+          )}
           {item.label}
         </li>
       ))}
     </ul>
   );
 }
+
+/**
+ * The row of a block whose label opens the film: the head-to-head's row
+ * (`head-to-head-card.tsx`). It washes `--surface-muted` while hovered or
+ * focused, and its label darkens from ink-600 to ink-900. Bleeds 8px each
+ * side so the wash has room around the content.
+ */
+export const WATCH_ROW =
+  "-mx-2 rounded-[var(--radius-element)] px-2 transition-colors duration-[var(--duration-hover)] has-[a:hover]:bg-[var(--surface-muted)] has-[a:focus-visible]:bg-[var(--surface-muted)]";
+
+/** A block row's label at rest. */
+export const ROW_LABEL = "text-[12px] text-[var(--ink-600)]";
 
 /**
  * The dark readout over a hovered mark — the chart cards' own skin
@@ -175,15 +206,22 @@ export function VisualReadout({
   );
 }
 
-/** The quiet "· Watch" after a label that opens the film, as the figure tiles write it. */
+/**
+ * The mark after a label that opens the film: the head-to-head's
+ * `CirclePlay`, 12px in ink-900, hidden at rest and slid in when its `group`
+ * link is hovered or focused, so a block with five watchable rows carries no
+ * blue until one is pointed at. The words stay for a screen reader: the link
+ * still reads "First serves in · Watch".
+ */
 export function WatchMark() {
   return (
-    <span
-      data-ask-watch=""
-      className="text-[var(--blue)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--blue-hover)]"
-    >
-      {" "}
-      · Watch
+    <span data-ask-watch="" className="inline-flex items-center">
+      <span className="sr-only"> · Watch</span>
+      <CirclePlay
+        aria-hidden="true"
+        strokeWidth={1.5}
+        className="ml-1.5 size-3 shrink-0 -translate-x-1 text-[var(--ink-900)] opacity-0 transition-[opacity,transform] duration-[var(--duration-hover)] group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 group-data-[ask-tapped]:translate-x-0 group-data-[ask-tapped]:opacity-100 motion-reduce:transform-none"
+      />
     </span>
   );
 }

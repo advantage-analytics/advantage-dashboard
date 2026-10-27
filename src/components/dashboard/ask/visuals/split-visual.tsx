@@ -12,16 +12,18 @@ const STEPS = [
 ];
 
 /**
- * Parts of a whole: one bar cut by each part's count, and the counts under
- * it. Each part prints its own count and nothing derived from it — a share
- * of the whole is not a cell of the query result.
+ * Parts of a whole: one bar cut by each part's count, and the parts under
+ * it as a key whose counts stand in one right-aligned column. The bar is
+ * the point-endings card's: 10px, `--radius-cell`, 2px gaps. Each part
+ * prints its own count and nothing derived from it — a share of the whole
+ * is not a cell of the query result.
  */
 export function SplitVisual({ visual }: { visual: AskSplitVisual }) {
   const weights = shareWeights(visual.parts.map((part) => part.count.value));
 
   return (
     <VisualFrame kind="split" caption={visual.caption}>
-      <span aria-hidden="true" className="flex h-3.5 gap-0.5">
+      <span aria-hidden="true" className="flex h-2.5 max-w-[520px] gap-0.5">
         {weights ? (
           weights.map(
             (weight, index) =>
@@ -46,23 +48,21 @@ export function SplitVisual({ visual }: { visual: AskSplitVisual }) {
           <span className="h-full flex-1 rounded-[var(--radius-cell)] bg-[var(--ink-100)]" />
         )}
       </span>
-      <ul className="m-0 flex list-none flex-wrap gap-x-6 gap-y-2 p-0">
+      <ul className="m-0 flex max-w-[520px] list-none flex-col p-0">
         {visual.parts.map((part, index) => (
           <li
             key={index}
             data-ask-after=""
             style={{ "--ask-row": index } as CSSProperties}
-            className="flex flex-col gap-0.5"
+            className="flex min-h-[26px] items-center gap-1.5 text-[12px] text-[var(--ink-600)]"
           >
-            <span className="flex items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
-              <span
-                aria-hidden="true"
-                className="size-2 shrink-0 rounded-[2px]"
-                style={{ background: STEPS[index % STEPS.length] }}
-              />
-              {part.label}
-            </span>
-            <span className="text-[13px] text-[var(--ink-900)] tabular-nums">
+            <span
+              aria-hidden="true"
+              className="size-2 shrink-0 rounded-[2px]"
+              style={{ background: STEPS[index % STEPS.length] }}
+            />
+            {part.label}
+            <span className="ml-auto pl-4 text-[13px] text-[var(--ink-900)] tabular-nums">
               {part.count.text}
             </span>
           </li>

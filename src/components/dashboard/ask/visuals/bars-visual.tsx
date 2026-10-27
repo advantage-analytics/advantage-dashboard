@@ -5,9 +5,11 @@ import { barRowVideoHref } from "@/lib/services/ask/figure-video";
 import { cn } from "@/lib/utils";
 import { barWidth } from "./visual-geometry";
 import {
+  ROW_LABEL,
   VisualFrame,
   VisualKey,
   VisualReadout,
+  WATCH_ROW,
   WatchMark,
 } from "./visual-frame";
 
@@ -39,7 +41,7 @@ export function BarsVisual({
           { label: visual.baselineLabel, color: BASELINE },
         ]}
       />
-      <ul className="m-0 flex list-none flex-col gap-3.5 p-0">
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {visual.rows.map((row, index) => {
           const watch = barRowVideoHref(row.label, sources);
           return (
@@ -47,21 +49,25 @@ export function BarsVisual({
               key={index}
               data-ask-bar-row=""
               style={{ "--ask-row": index } as CSSProperties}
-              className="grid grid-cols-[minmax(0,168px)_minmax(0,1fr)] items-center gap-x-4"
+              className={cn(
+                "grid grid-cols-[minmax(0,168px)_minmax(0,1fr)] items-center gap-x-4 py-1.5",
+                WATCH_ROW,
+              )}
             >
               {watch ? (
                 <Link
                   href={watch}
                   data-ask-bar-watch=""
-                  className="group rounded-[var(--radius-element)] text-[12px] text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)]"
+                  className={cn(
+                    "group flex items-center rounded-[var(--radius-element)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--ink-900)] focus-visible:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)]",
+                    ROW_LABEL,
+                  )}
                 >
                   {row.label}
                   <WatchMark />
                 </Link>
               ) : (
-                <span className="text-[12px] text-[var(--ink-700)]">
-                  {row.label}
-                </span>
+                <span className={ROW_LABEL}>{row.label}</span>
               )}
               <span className="flex flex-col gap-1">
                 <Bar
@@ -103,19 +109,21 @@ function Bar({
     <span className="group/bar relative flex items-center gap-2.5">
       <span
         aria-hidden="true"
-        className="h-1.5 min-w-0 flex-1 rounded-[1px] bg-[var(--ink-100)]"
+        className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-[3px] bg-[var(--ink-100)]"
       >
         <span
           data-ask-grow=""
-          className="block h-full rounded-[1px]"
+          className="block h-full rounded-[3px]"
           style={{ width: `${barWidth(value)}%`, background: color }}
         />
       </span>
       <span
         data-ask-after=""
         className={cn(
-          "w-12 shrink-0 text-right text-[12px] whitespace-nowrap tabular-nums",
-          strong ? "text-[var(--ink-900)]" : "text-[var(--ink-500)]",
+          "w-14 shrink-0 text-right text-[13px] leading-4 whitespace-nowrap tabular-nums",
+          strong
+            ? "font-medium text-[var(--ink-900)]"
+            : "text-[var(--ink-500)]",
         )}
       >
         {/* The bar's colour says which series this is; a reader who cannot

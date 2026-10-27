@@ -7,8 +7,10 @@ import { VisualFrame, VisualReadout } from "./visual-frame";
  * A record as its matches, oldest left. The one block that uses the outcome
  * colours, because an outcome is what it draws.
  *
- * The record beside the strip is a count of the ticks drawn next to it, not a
- * figure from the database: it cannot disagree with the strip.
+ * The ticks lead and the record follows as the design system's muted
+ * summary ("5–3 · Last 8", `FormTicks`' own pairing), 12px beside them. It
+ * is a count of the ticks drawn next to it, not a figure from the database:
+ * it cannot disagree with the strip.
  *
  * With `ticks` — the rows named their matches — each tick carries its
  * match in words (the result, the opponent, the score, the date), shown in
@@ -25,16 +27,7 @@ export function FormVisual({ visual }: { visual: AskFormVisual }) {
       : null;
   return (
     <VisualFrame kind="form" caption={visual.caption}>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <p className="text-scoreboard m-0 tabular-nums">
-          <span className="sr-only">Won </span>
-          {wins}
-          <span aria-hidden="true" className="px-1 text-[var(--ink-400)]">
-            –
-          </span>
-          <span className="sr-only">, lost </span>
-          {losses}
-        </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {ticks ? (
           <LabelledTicks results={visual.results} ticks={ticks} />
         ) : (
@@ -43,6 +36,15 @@ export function FormVisual({ visual }: { visual: AskFormVisual }) {
             empty={null}
           />
         )}
+        <p className="m-0 text-[12px] text-[var(--ink-600)] tabular-nums">
+          <span className="sr-only">
+            Won {wins}, lost {losses}
+          </span>
+          <span aria-hidden="true" className="text-[var(--ink-900)]">
+            {wins}–{losses}
+          </span>
+          <span aria-hidden="true"> · Last {visual.results.length}</span>
+        </p>
       </div>
     </VisualFrame>
   );
