@@ -203,7 +203,8 @@ us" lands in /admin Requests.
   SwingVision matches too. Three definer functions are the only door:
   `can_fix_match_points`, `self_review_state`, `self_review_save`.
 - The lock is `matches_guard_verification` (score, result, stop reason,
-  format, players) plus `zz_points_guard_verified_match` /
+  format, player names; not the player ids, which account deletion and
+  roster merges re-point under the caller's JWT) plus `zz_points_guard_verified_match` /
   `zz_shots_guard_verified_match` on client writes, the Edit match route's
   `match_verified` refusal, and the rebuild route's refusal (it writes on the
   service role, which the triggers let through).

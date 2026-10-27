@@ -21,9 +21,10 @@
 -- label tables keep their admin-only policies and SELECT-only grant.
 --
 -- The lock: `matches_guard_verification` now also refuses a client change to
--- a Verified match's score, result and players, and two new triggers refuse
--- any client write to its points and shots. The service role (the console's
--- publish, Reopen) passes, as it does through step 0's guard. Because the
+-- a Verified match's score, result and player names, and two new triggers
+-- refuse any client write to its points and shots (bar the `saved` flag).
+-- The service role (the console's publish, Reopen) passes, as it does
+-- through step 0's guard. Because the
 -- definer functions run under the caller's JWT, the guards bind them too.
 --
 -- Deletion: a label session blocks deleting its match and the account
@@ -264,6 +265,10 @@ begin
   if jsonb_typeof(p_fixes) is distinct from 'array' then
     raise exception 'Fixes must be a list' using errcode = '22023';
   end if;
+  -- The server action's cap, held here too: the function is callable directly.
+  if jsonb_array_length(p_fixes) > 600 then
+    raise exception 'That''s too many fixes for one save' using errcode = '22023';
+  end if;
 
   -- One self session per match, seeded once from the published points.
   insert into public.label_sessions (match_id, kind, labeller, status)
@@ -417,8 +422,16 @@ grant execute on function public.self_review_save(uuid, jsonb)
 -- ── The lock (D1) ────────────────────────────────────────────────────────────
 
 -- Step 0's guard, plus: on a Verified match a client may not change the
--- score, the result or who played. Date, tournament, round, court and the
--- rest stay editable.
+-- score, the result or the players' names. Date, tournament, round, court and
+-- the rest stay editable.
+--
+-- The player ID columns are deliberately NOT locked here. Account deletion,
+-- leaving a team and the staff merge (`release_my_account_from_programs`,
+-- `merge_program_players`) re-point `player1_id` / `player2_id` from a login
+-- to its roster profile under the caller's JWT. That is the same person, and
+-- locking it would refuse those flows on every Verified team match. Who
+-- played is locked where a person would change it: the Edit match route
+-- refuses `player1_id` on a Verified match, and the names are locked here.
 create or replace function public.matches_guard_verification()
 returns trigger
 language plpgsql
@@ -457,11 +470,8 @@ begin
        or new.result is distinct from old.result
        or new.stop_reason is distinct from old.stop_reason
        or new.format is distinct from old.format
-       or new.player1_id is distinct from old.player1_id
-       or new.player2_id is distinct from old.player2_id
        or new.player1_name is distinct from old.player1_name
        or new.player2_name is distinct from old.player2_name
-       or new.opponent_player_id is distinct from old.opponent_player_id
        or new.initial_top_player_is_player1
             is distinct from old.initial_top_player_is_player1
      ) then
@@ -473,6 +483,8 @@ end;
 $$;
 
 -- Points and shots of a Verified match: no client insert, update or delete.
+-- One exception: an update to a point that changes only `saved` (the old
+-- bookmark flag, `set_point_saved`), which is not part of the reading.
 -- SECURITY DEFINER so the lookup of the match sees it whatever the caller's
 -- RLS; it decides only whether to raise.
 create or replace function public.points_guard_verified_match()
@@ -492,6 +504,10 @@ begin
   end if;
 
   if tg_table_name = 'points' then
+    if tg_op = 'UPDATE'
+       and (to_jsonb(new) - 'saved') = (to_jsonb(old) - 'saved') then
+      return new;
+    end if;
     v_match := coalesce(new.match_id, old.match_id);
     if tg_op = 'UPDATE' and new.match_id is distinct from old.match_id then
       if exists (select 1 from public.matches m
