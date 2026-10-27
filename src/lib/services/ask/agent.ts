@@ -22,11 +22,14 @@
  * the answer's). Nothing here touches the service role or a table.
  *
  * Bounded: at most `maxToolCalls` tool calls (finish not counted) and
- * `deadlineMs` of wall time. At the call limit the next turn may only call
- * finish; past the deadline the loop stops. A loop that ends without a
- * finish answers from its last query that returned rows, or — none — hands
- * back null, and the caller plans the one-shot way. A tool that refuses or
- * fails is told back to the model as a result, never thrown.
+ * `deadlineMs` of wall time, tool calls included. Once the calls are spent,
+ * or less than `finishReserveMs` is left, the model gets ONE turn that may
+ * only call finish. A loop that ends any other way — the deadline, a
+ * provider failure, no usable finish — hands back null, and the caller plans
+ * the one-shot way: a query the agent ran to look at the data is never taken
+ * for the answer, and the plan always carries the model's own
+ * `asks_for_advice`. A tool that refuses or fails is told back to the model
+ * as a result, never thrown.
  *
  * Privacy as in `ask.ts`: nothing here logs a question, a row or a reply.
  * The status lines it emits are fixed sentences, never the model's words.
@@ -80,11 +83,14 @@ export type AskAgentToolTurn = (
 export interface AskAgentBounds {
   maxToolCalls: number;
   deadlineMs: number;
+  /** With less than this left, the next turn is the forced finish: time for one model call. */
+  finishReserveMs: number;
 }
 
 export const ASK_AGENT_BOUNDS: AskAgentBounds = {
   maxToolCalls: 6,
   deadlineMs: 12_000,
+  finishReserveMs: 2_500,
 };
 
 /** Whether the route runs agent mode: `ASK_AGENT=1`. */
@@ -139,41 +145,28 @@ export type AskAgentOutcome =
   | { reply: string; toolCalls: number; turns: number }
   | { reply: null; stop: AskAgentStop; toolCalls: number; turns: number };
 
+/** The planning-stage line each read tool shows; run_query has its own. */
+const PLANNING_DETAIL: Record<string, string> = {
+  list_matches: "Looking through the matches",
+  get_match: "Reading a match report",
+  opponent_scouting: "Reading the opponent records",
+};
+
 /** The status line a tool call shows, by tool: fixed sentences only. */
 function statusFor(name: string, queryNumber: number): AskStatusEvent {
-  switch (name) {
-    case "run_query":
-      return {
-        type: "status",
-        stage: "querying",
-        detail:
-          queryNumber > 1 ? `Running query ${queryNumber}` : "Running a query",
-      };
-    case "list_matches":
-      return {
-        type: "status",
-        stage: "planning",
-        detail: "Looking through the matches",
-      };
-    case "get_match":
-      return {
-        type: "status",
-        stage: "planning",
-        detail: "Reading a match report",
-      };
-    case "opponent_scouting":
-      return {
-        type: "status",
-        stage: "planning",
-        detail: "Reading the opponent records",
-      };
-    default:
-      return {
-        type: "status",
-        stage: "planning",
-        detail: "Checking what the data records",
-      };
+  if (name === "run_query") {
+    return {
+      type: "status",
+      stage: "querying",
+      detail:
+        queryNumber > 1 ? `Running query ${queryNumber}` : "Running a query",
+    };
   }
+  return {
+    type: "status",
+    stage: "planning",
+    detail: PLANNING_DETAIL[name] ?? "Checking what the data records",
+  };
 }
 
 function cut(text: string): string {
@@ -266,30 +259,26 @@ export async function* runAskAgent(input: {
     { role: "user", content: input.question },
   ];
   const queries = new Map<string, { scope_sql: string; sql: string }>();
-  /** The last query that returned rows: the answer when the loop ends without a finish. */
-  let lastWithRows: { scope_sql: string; sql: string } | null = null;
   let toolCalls = 0;
   let turns = 0;
   let nudged = false;
 
-  const fallback = (stop: AskAgentStop): AskAgentOutcome =>
-    lastWithRows
-      ? {
-          reply: JSON.stringify({
-            ...lastWithRows,
-            cannot_answer: "",
-            review: false,
-            asks_for_advice: false,
-          }),
-          toolCalls,
-          turns,
-        }
-      : { reply: null, stop, toolCalls, turns };
+  const stop = (why: AskAgentStop): AskAgentOutcome => ({
+    reply: null,
+    stop: why,
+    toolCalls,
+    turns,
+  });
+  const elapsed = () => now() - started;
 
   for (;;) {
-    const remaining = bounds.deadlineMs - (now() - started);
-    if (remaining <= 0) return fallback("deadline");
-    const spent = toolCalls >= bounds.maxToolCalls;
+    const remaining = bounds.deadlineMs - elapsed();
+    if (remaining <= 0) return stop("deadline");
+    // The last turn: the calls are spent, or there is only time for one
+    // more model call. Offered once; a forced turn that does not finish
+    // ends the loop rather than asking again.
+    const forced =
+      toolCalls >= bounds.maxToolCalls || remaining < bounds.finishReserveMs;
 
     let turn: LLMToolTurn;
     try {
@@ -297,17 +286,15 @@ export async function* runAskAgent(input: {
       turn = await input.toolTurn(
         input.systemPrompt,
         messages,
-        spent ? [FINISH_TOOL] : tools,
+        forced ? [FINISH_TOOL] : tools,
         {
-          toolChoice: spent ? { name: ASK_AGENT_FINISH_TOOL } : "required",
+          toolChoice: forced ? { name: ASK_AGENT_FINISH_TOOL } : "required",
           staticPrefixLength: input.staticPrefixLength,
           signal: AbortSignal.timeout(remaining),
         },
       );
     } catch {
-      return fallback(
-        now() - started >= bounds.deadlineMs ? "deadline" : "unavailable",
-      );
+      return stop(elapsed() >= bounds.deadlineMs ? "deadline" : "unavailable");
     }
     messages.push({
       role: "assistant",
@@ -318,7 +305,7 @@ export async function* runAskAgent(input: {
 
     if (turn.toolCalls.length === 0) {
       // Prose instead of a call: told once, then the loop gives up.
-      if (nudged) return fallback("no_finish");
+      if (nudged || forced) return stop("no_finish");
       nudged = true;
       messages.push({
         role: "user",
@@ -335,6 +322,7 @@ export async function* runAskAgent(input: {
       const reply = finishReply(finish.input, queries);
       if (reply !== null) return { reply, toolCalls, turns };
     }
+    if (forced) return stop("no_finish");
 
     const results: AskAgentToolAnswer[] = [];
     for (const call of turn.toolCalls) {
@@ -348,7 +336,11 @@ export async function* runAskAgent(input: {
       // The status line goes out before the call, so the page moves on as
       // the agent does.
       yield statusFor(call.name, queryNumber);
-      results.push(await runCall(call, queryNumber));
+      const answer = await runCall(call, queryNumber);
+      // The deadline covers the tools too: a slow query that ate the time
+      // left ends the loop here, before another model call is paid for.
+      if (answer === null) return stop("deadline");
+      results.push(answer);
     }
     messages.push({ role: "tool", results });
   }
@@ -372,13 +364,19 @@ export async function* runAskAgent(input: {
     return null;
   }
 
+  /** One tool call, raced against the deadline; null when the deadline came first. */
   async function runCall(
     call: LLMToolCall,
     queryNumber: number,
-  ): Promise<AskAgentToolAnswer> {
+  ): Promise<AskAgentToolAnswer | null> {
     let result: AskAgentToolResult;
     try {
-      result = await input.toolbox.call(call.name, call.input);
+      const raced = await beforeDeadline(
+        input.toolbox.call(call.name, call.input),
+        bounds.deadlineMs - elapsed(),
+      );
+      if (raced === DEADLINE || elapsed() >= bounds.deadlineMs) return null;
+      result = raced;
     } catch {
       return toolAnswer(
         call,
@@ -395,11 +393,32 @@ export async function* runAskAgent(input: {
         sql: stringArg(call.input, "sql"),
       };
       queries.set(queryId, ran);
-      const rows = result.structured.rows;
-      if (Array.isArray(rows) && rows.length > 0) lastWithRows = ran;
       return toolAnswer(call, queryResultText(queryId, result.structured));
     }
     return toolAnswer(call, cut(result.text), !result.ok);
+  }
+}
+
+const DEADLINE = Symbol("deadline");
+
+/**
+ * `work`, or DEADLINE when `ms` pass first. The work itself is not stopped —
+ * a query already sent to the database finishes there — but the loop no
+ * longer waits for it.
+ */
+async function beforeDeadline<T>(
+  work: Promise<T>,
+  ms: number,
+): Promise<T | typeof DEADLINE> {
+  if (ms <= 0) return DEADLINE;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<typeof DEADLINE>((resolve) => {
+    timer = setTimeout(() => resolve(DEADLINE), ms);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

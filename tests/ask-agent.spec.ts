@@ -302,15 +302,15 @@ test.describe("the agent loop", () => {
     expect(JSON.parse(outcome.reply as string).sql).toBe(ZONES_WON_SQL);
   });
 
-  test("a spent deadline answers from the last query that returned rows", async () => {
+  test("a tool call that runs past the deadline ends the loop with no reply", async () => {
     let clock = 0;
-    const { toolTurn } = fakeTurns([
+    const { toolTurn, seen } = fakeTurns([
       [call("run_query", { scope_sql: SCOPE_SQL, sql: ZONES_WON_SQL })],
       [call("run_query", { scope_sql: SCOPE_SQL, sql: ZONES_SQL })],
     ]);
-    const { toolbox } = fakeToolbox((_name, args) => {
+    const { toolbox } = fakeToolbox(() => {
       clock += 7_000;
-      return rowsResult(args.sql === ZONES_SQL ? [] : ZONE_ROWS);
+      return rowsResult(ZONE_ROWS);
     });
 
     const { outcome } = await drive(
@@ -323,8 +323,81 @@ test.describe("the agent loop", () => {
       }),
     );
 
-    // The second query returned nothing, so the first one is the answer.
-    expect(JSON.parse(outcome.reply as string).sql).toBe(ZONES_WON_SQL);
+    // The second query took the loop to 14 s: no third model call, and no
+    // answer from a query the agent only ran to look — the caller plans the
+    // one-shot way.
+    expect(seen).toHaveLength(2);
+    expect(outcome).toMatchObject({ reply: null, stop: "deadline" });
+  });
+
+  test("a slow query is not waited for past the deadline", async () => {
+    const { toolTurn } = fakeTurns([
+      [call("run_query", { scope_sql: SCOPE_SQL, sql: ZONES_SQL })],
+    ]);
+    const toolbox: AskAgentToolbox = {
+      definitions: [],
+      call: () => new Promise(() => {}),
+    };
+    const started = Date.now();
+    const { outcome } = await drive(
+      runAskAgent({
+        toolTurn,
+        toolbox,
+        systemPrompt: "plan",
+        question: "?",
+        bounds: { ...ASK_AGENT_BOUNDS, deadlineMs: 200, finishReserveMs: 0 },
+      }),
+    );
+    expect(outcome).toMatchObject({ reply: null, stop: "deadline" });
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  test("near the deadline the next turn may only finish", async () => {
+    let clock = 0;
+    const { toolTurn, seen } = fakeTurns([
+      [call("run_query", { scope_sql: SCOPE_SQL, sql: ZONES_WON_SQL })],
+      [call(ASK_AGENT_FINISH_TOOL, { query_id: "q1", asks_for_advice: true })],
+    ]);
+    const { toolbox } = fakeToolbox(() => {
+      clock += 10_000;
+      return rowsResult(ZONE_ROWS);
+    });
+
+    const { outcome } = await drive(
+      runAskAgent({
+        toolTurn,
+        toolbox,
+        systemPrompt: "plan",
+        question: "?",
+        now: () => clock,
+      }),
+    );
+
+    expect(seen[1].tools.map((tool) => tool.name)).toEqual([
+      ASK_AGENT_FINISH_TOOL,
+    ]);
+    // The model's own asks_for_advice survives a forced finish.
+    expect(JSON.parse(outcome.reply as string)).toMatchObject({
+      sql: ZONES_WON_SQL,
+      asks_for_advice: true,
+    });
+  });
+
+  test("a forced finish is offered once: one that names no query ends the loop", async () => {
+    const max = ASK_AGENT_BOUNDS.maxToolCalls;
+    const script: Script = Array.from({ length: max }, () => [
+      call("run_query", { scope_sql: SCOPE_SQL, sql: ZONES_SQL }),
+    ]);
+    script.push([call(ASK_AGENT_FINISH_TOOL, { query_id: "q99" })]);
+    const { toolTurn, seen } = fakeTurns(script);
+    const { toolbox } = fakeToolbox(() => rowsResult(ZONE_ROWS));
+
+    const { outcome } = await drive(
+      runAskAgent({ toolTurn, toolbox, systemPrompt: "plan", question: "?" }),
+    );
+
+    expect(seen).toHaveLength(max + 1);
+    expect(outcome).toMatchObject({ reply: null, stop: "no_finish" });
   });
 
   test("a provider that fails with nothing to answer from hands back null", async () => {
@@ -510,6 +583,51 @@ test.describe("agent mode in askQuestion", () => {
     );
 
     expect(fake.streamed).toBe(2);
+    expect(events.at(-1)?.type).toBe("done");
+  });
+});
+
+test.describe("agent mode falling back", () => {
+  test("a loop past its deadline plans the one-shot way, and an advice question keeps its notice", async () => {
+    const { db } = fakeDb();
+    let clock = 0;
+    const fake = fakeModel(
+      [
+        JSON.stringify({
+          scope_sql: SCOPE_SQL,
+          sql: ZONES_WON_SQL,
+          asks_for_advice: true,
+        }),
+        ANSWER,
+      ],
+      [[call("run_query", { scope_sql: SCOPE_SQL, sql: ZONES_SQL })]],
+    );
+
+    const events = await collect(
+      askQuestion({
+        db,
+        model: fake.model,
+        now: () => new Date("2026-10-26T12:00:00Z"),
+        question: "How do I win more points on my serve?",
+        tags: { prompt: [], saved: [], matchIds: [] },
+        conversation: [],
+        conversationId: null,
+        reservation: null,
+        scope: PERSONAL_ASK_SCOPE,
+        agent: {
+          toolbox: () =>
+            fakeToolbox(() => {
+              clock += 20_000;
+              return rowsResult([{ zone: "T" }]);
+            }).toolbox,
+          now: () => clock,
+        },
+      }),
+    );
+
+    // The planner and the answer: the probe's rows were never the answer.
+    expect(fake.streamed).toBe(2);
+    expect(events).toContainEqual({ type: "notice", notice: "no_advice" });
     expect(events.at(-1)?.type).toBe("done");
   });
 });

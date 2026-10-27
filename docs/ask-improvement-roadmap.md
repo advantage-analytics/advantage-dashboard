@@ -258,10 +258,14 @@ using the MCP connector, makes 3–10 calls a question and recovers on its own
   optional `query_id`). `askQuestion()` parses that reply and runs everything
   after it unchanged: the guard, compare/review, the soft checks and their
   retries, cell references the renderer substitutes, one visual, the save.
-- **Bounds.** At most 6 tool calls (`finish` not counted) and 12 s. At the
-  limit, only `finish` is offered. A tool error goes back to the model as a
-  result. A loop that never finishes answers from its last query with rows,
-  or plans the one-shot way if it has none.
+- **Bounds.** At most 6 tool calls (`finish` not counted) and 12 s, tool
+  calls included: a query still running at the deadline is not waited for.
+  When the calls are spent, or less than 2.5 s is left, the model gets one turn
+  that may only call `finish`. A tool error goes back to the model as a
+  result. A loop that ends any other way (deadline, provider failure, no
+  usable `finish`) plans the one-shot way. A query the agent ran only to look
+  at the data is never taken as the answer, and the plan keeps its own
+  `asks_for_advice`.
 - **Adapter.** `getLLMToolTurn()`: one non-streamed turn with tools on both
   providers, with failover. On Gemini it returns the provider's own
   `tool_calls` (thought signatures included).
