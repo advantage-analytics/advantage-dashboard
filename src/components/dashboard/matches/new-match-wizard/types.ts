@@ -281,7 +281,6 @@ export interface MatchData {
   analysis_method: string;
   match_type?: string;
   court_type?: string;
-  verified?: boolean;
   duration?: number;
   player_hand?: "right" | "left";
   player_backhand?: "one-handed" | "two-handed";
