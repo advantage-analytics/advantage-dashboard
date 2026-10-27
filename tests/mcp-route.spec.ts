@@ -4,6 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import type { AskDatabase } from "@/lib/services/ask/ask";
+import { renderAskSchemaBlock } from "@/lib/services/ask/prompts";
 import {
   ASK_NEEDS_SESSION_MESSAGE,
   type McpCaller,
@@ -817,6 +818,12 @@ test.describe("POST /api/mcp · describe_views and list_matches", () => {
     expect(described).toContain("ask.point_plays");
     expect(described).toContain("side");
     expect(described).not.toContain("video_time");
+    // The court positions are the MCP's alone, with how to read and bin them.
+    expect(described).toContain(
+      renderAskSchemaBlock("personal", { mcp: true }),
+    );
+    expect(described).toContain("# Court positions");
+    expect(described).toContain("floor(s.landing_x / 2)");
     expect(calls.rpc).toEqual([
       { fn: "ask_mcp_count_call", args: undefined, via: "user" },
     ]);

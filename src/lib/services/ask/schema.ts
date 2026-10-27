@@ -18,7 +18,9 @@ import type { ASK_VIEWS } from "@/lib/services/ask/sql-guard";
  * 2026-10-11: 14 + 86 + 12 + 9 columns, in this order. `ask.matches.player_name`
  * (the fifteenth, `20261012170339_ask_team_scope.sql`) was added after that
  * check, and `ask.point_plays` (37 columns, `20261015090038_ask_point_facts.sql`)
- * on 2026-10-15, checked the same way.
+ * on 2026-10-15, checked the same way. The court positions (`ask.shots`
+ * contact/landing columns, `ask.matches.has_coords`,
+ * `20261027032924_ask_shot_positions.sql`) followed on 2026-10-27.
  *
  * Pure data: imports a type only.
  */
@@ -54,6 +56,15 @@ export interface AskColumn {
    * lists it for a team prompt only.
    */
   teamOnly?: true;
+  /**
+   * True for a column only the MCP connector's `describe_views` lists. The
+   * court positions (`ask.shots` contact/landing, `ask.matches.has_coords`)
+   * are for a player's own Claude to draw and bin; the in-app planner has no
+   * court visual to answer with and would invent its own depth thresholds
+   * against the settled measures. `renderAskSchemaBlock()` lists them only
+   * when asked for the MCP, and `focus.ts` never ranks them.
+   */
+  mcpOnly?: true;
 }
 
 /**
@@ -287,6 +298,13 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         meaning:
           "The player this match is turned to (\"me\" in the other views): in a program scope the roster player's name, one spelling per player; in a personal scope the viewer's name as stored on the match.",
         teamOnly: true,
+      },
+      {
+        name: "has_coords",
+        type: "boolean",
+        meaning:
+          "True when the match's shots carry court positions (ask.shots contact_x, contact_y, landing_x, landing_y). Some SwingVision imports have none at all; a figure built from positions covers only the matches where this is true.",
+        mcpOnly: true,
       },
     ],
   },
@@ -923,6 +941,48 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         type: "text",
         meaning:
           "Whether the shot landed: In, Out or Net; null when not recorded.",
+      },
+      {
+        name: "contact_x",
+        type: "number",
+        meaning:
+          "Where the hitter struck the ball, across the court: metres from the centre line, positive to the player's right as they face the net from their own baseline. The frame is turned to the player for every point, so end changes need no handling; null when not measured.",
+        mcpOnly: true,
+      },
+      {
+        name: "contact_y",
+        type: "number",
+        meaning:
+          "Where the hitter struck the ball, along the court: metres from the player's own baseline (0), through the net (11.885), to the opponent's baseline (23.77); below 0 or above 23.77 is behind a baseline. Turned to the player like contact_x; null when not measured.",
+        mcpOnly: true,
+      },
+      {
+        name: "landing_x",
+        type: "number",
+        meaning:
+          "Where the ball bounced, across the court, in the same frame as contact_x; the singles sidelines are at -4.115 and 4.115. Null when not measured, for every ball that hit the net (result Net), and when the recorded bounce is on the hitter's own half, none of which is a real position. Use result, not this, to say whether a ball was in.",
+        mcpOnly: true,
+      },
+      {
+        name: "landing_y",
+        type: "number",
+        meaning:
+          "Where the ball bounced, along the court, in the same frame as contact_y: the player's shots that land in sit between 11.885 and 23.77, the opponent's between 0 and 11.885; the service lines are at 5.485 and 18.285. Null like landing_x.",
+        mcpOnly: true,
+      },
+      {
+        name: "landing_pinned",
+        type: "boolean",
+        meaning:
+          "True when a SwingVision serve's bounce sits on a service line, where SwingVision often places a faulted serve instead of measuring it: leave these out of any figure about where serves landed. False otherwise; null when there is no bounce.",
+        mcpOnly: true,
+      },
+      {
+        name: "landing_section",
+        type: "text",
+        meaning:
+          "Which section of the court an in-play ball (result In) bounced in, for counting rather than plotting. A serve has its zone: Wide, Body or T. Any other shot has a depth and a lane, as Short, Mid or Deep (thirds of the half from the net to the baseline) then Left, Middle or Right (thirds of the singles width as the player sees it from their own baseline), for example Deep Left. Null when the ball was not in or its bounce is not measured.",
+        mcpOnly: true,
       },
     ],
   },
