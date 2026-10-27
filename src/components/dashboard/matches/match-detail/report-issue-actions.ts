@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
+import { MATCH_ISSUE_MAX_LENGTH } from "@/lib/data/match-verification";
 import { UUID_RE } from "@/lib/admin/validation";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 
@@ -26,7 +27,6 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
  * the second, which answers the same.
  */
 
-const MATCH_ISSUE_MAX_LENGTH = 2000;
 const UNIQUE_VIOLATION = "23505";
 const ALREADY_REPORTED =
   "We already have your report on this match, and we'll look at it.";

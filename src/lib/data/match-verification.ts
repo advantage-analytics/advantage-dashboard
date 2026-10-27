@@ -15,6 +15,9 @@ import { shortDate } from "@/lib/data/match-utils";
 
 export const VERIFIED_BY_ADVANTAGE = "Verified by Advantage";
 
+/** The longest "Something still wrong?" note, read by the form and the action. */
+export const MATCH_ISSUE_MAX_LENGTH = 2000;
+
 /** What the report's popover says was checked (decision D2: points only). */
 export const VERIFIED_SCOPE =
   "We checked every point against the video: who won and how it ended.";

@@ -28,8 +28,8 @@
  * Reopen leaves the published points as they are but removes Verified by
  * Advantage (`unverify_match`), after the status flips; a failed unverify
  * puts the session back to complete, so the console and the badge never
- * disagree. Completing again publishes and verifies again. Reopen reads the status and writes the reverse, matched on
- * `status = 'complete'`; the partial unique index that allows one open
+ * disagree. Completing again publishes and verifies again. Reopen reads the
+ * status and writes the reverse, matched on `status = 'complete'`; the partial unique index that allows one open
  * session per job (`label_sessions_one_open_per_job`) refuses it while
  * another session of the match is open.
  */

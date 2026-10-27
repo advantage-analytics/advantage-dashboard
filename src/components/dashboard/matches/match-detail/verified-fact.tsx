@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/popover";
 import {
   VERIFIED_BY_ADVANTAGE,
+  MATCH_ISSUE_MAX_LENGTH,
   VERIFIED_SCOPE,
   verifiedOnLabel,
   type MatchVerification,
@@ -113,7 +114,7 @@ export function VerifiedFact({
             <textarea
               id={`match-issue-${matchId}`}
               rows={4}
-              maxLength={2000}
+              maxLength={MATCH_ISSUE_MAX_LENGTH}
               autoFocus
               value={note}
               disabled={pending}

@@ -202,7 +202,9 @@ export function groupMatchesIntoEvents(
 
     if (mapped.length === 0) continue;
     const shownIds = new Set(mapped.map((row) => row.id));
-    const shown = matches.filter((m) => shownIds.has(m.id));
+    const verifications = matches
+      .filter((m) => shownIds.has(m.id))
+      .map((m) => verificationFor(m));
     events.push({
       id: first.id,
       tournamentName: first.tournament_name,
@@ -212,9 +214,7 @@ export function groupMatchesIntoEvents(
       // The row stands for the matches it lists, so it says Verified by
       // Advantage only when every one of them is — never one match's status
       // for all, and never held back by a match the row leaves out.
-      verification: shown.every((m) => verificationFor(m))
-        ? verificationFor(shown[0])
-        : null,
+      verification: verifications.every(Boolean) ? verifications[0] : null,
       matches: mapped,
     });
   }
