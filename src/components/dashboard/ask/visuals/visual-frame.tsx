@@ -240,7 +240,7 @@ export function WatchMark() {
       <CirclePlay
         aria-hidden="true"
         strokeWidth={1.5}
-        className="ml-1.5 size-3 shrink-0 -translate-x-1 text-[var(--ink-900)] opacity-0 transition-[opacity,transform] duration-[var(--duration-hover)] group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 motion-reduce:transform-none [@media(hover:none)]:translate-x-0 [@media(hover:none)]:text-[var(--ink-500)] [@media(hover:none)]:opacity-100"
+        className="ml-1.5 size-3 shrink-0 -translate-x-1 text-[var(--ink-900)] opacity-0 transition-[opacity,transform] duration-[var(--duration-hover)] group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 motion-reduce:transform-none touch:translate-x-0 touch:text-[var(--ink-500)] touch:opacity-100"
       />
     </span>
   );
