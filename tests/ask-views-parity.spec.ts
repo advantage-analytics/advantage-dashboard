@@ -3,6 +3,8 @@ import { createRequire } from "node:module";
 import { expect, test } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { youAreAtLowEnd } from "@/components/dashboard/matches/match-detail/film/film-court";
+import type { MatchShot } from "@/lib/data/match-points-server";
 import { matchOutcome, type MatchScore } from "@/lib/data/match-utils";
 import { playerSide } from "@/lib/data/player-identity-server";
 import {
@@ -45,7 +47,14 @@ import { poolLogin } from "./fixtures/live-db-pool";
  * points reach that table through the trigger alone, so the last case holds
  * `ask.point_plays` to `ask.points` row for row — same `i_served`, `i_won`,
  * `court` and per-set `game_number` — and expects `has_shots` false, since
- * nothing seeds a shot.
+ * no shot is seeded on those two matches.
+ *
+ * `20261027032924_ask_shot_positions.sql` turns `ask.shots`' court positions
+ * to the player by voting each point's end the way the film court does. The
+ * fourth seed gets two points of shots, one from each end, stored in the
+ * world frame (`POSITION_POINTS`), and the spec holds the view's positions to
+ * `youAreAtLowEnd()` + the 180° turn from `film-court.ts`, and checks the
+ * dropped landings, `landing_pinned`, `landing_section` and `has_coords`.
  *
  * Schema `ask` is deliberately NOT exposed through PostgREST, so supabase-js
  * cannot read the view. The read goes over a direct Postgres connection
@@ -222,6 +231,147 @@ function pointsSeed(matchId: string): PointSeed[] {
   }));
 }
 
+/** The seed that gets shots: player 1 (score.winner against the set count). */
+const POSITION_SEED = 3;
+
+interface ShotSeed {
+  shot_number: number;
+  is_player1: boolean;
+  shot_type: string;
+  zone: string | null;
+  result: "In" | "Out" | "Net";
+  contact_x: number;
+  contact_y: number;
+  landing_x: number;
+  landing_y: number;
+  /** What the view must answer, beyond the turned positions. */
+  expect: {
+    landingDropped: boolean;
+    pinned: boolean | null;
+    section: string | null;
+  };
+}
+
+/**
+ * Two points in the stored world frame, player 1 = the viewer. Point 1 has
+ * the viewer at the y = 0 end, point 2 at the other (an end change), so a
+ * view that forgot to turn, or turned y alone, fails on point 2.
+ */
+const POSITION_POINTS: { point_number: number; shots: ShotSeed[] }[] = [
+  {
+    point_number: 1,
+    shots: [
+      {
+        shot_number: 1,
+        is_player1: true,
+        shot_type: "First Serve",
+        zone: "T",
+        result: "In",
+        contact_x: 0.5,
+        contact_y: -0.5,
+        landing_x: -1.5,
+        landing_y: 17.5,
+        expect: { landingDropped: false, pinned: false, section: "T" },
+      },
+      {
+        shot_number: 2,
+        is_player1: false,
+        shot_type: "Forehand",
+        zone: "Crosscourt",
+        result: "In",
+        contact_x: 2,
+        contact_y: 24,
+        landing_x: 3,
+        landing_y: 2,
+        expect: { landingDropped: false, pinned: false, section: "Deep Right" },
+      },
+      {
+        // Netted: its recorded bounce is no position.
+        shot_number: 3,
+        is_player1: true,
+        shot_type: "Backhand",
+        zone: "Down the Line",
+        result: "Net",
+        contact_x: -1,
+        contact_y: 1,
+        landing_x: -0.5,
+        landing_y: 11,
+        expect: { landingDropped: true, pinned: null, section: null },
+      },
+    ],
+  },
+  {
+    point_number: 2,
+    shots: [
+      {
+        // A SwingVision fault set on the service line.
+        shot_number: 1,
+        is_player1: true,
+        shot_type: "First Serve",
+        zone: "Wide",
+        result: "Out",
+        contact_x: -0.4,
+        contact_y: 24.2,
+        landing_x: 0.8,
+        landing_y: 5.49,
+        expect: { landingDropped: false, pinned: true, section: null },
+      },
+      {
+        shot_number: 2,
+        is_player1: false,
+        shot_type: "Backhand",
+        zone: "Middle",
+        result: "In",
+        contact_x: 1,
+        contact_y: -1,
+        landing_x: 0.5,
+        landing_y: 15,
+        expect: {
+          landingDropped: false,
+          pinned: false,
+          section: "Short Middle",
+        },
+      },
+      {
+        shot_number: 3,
+        is_player1: true,
+        shot_type: "Forehand",
+        zone: "Crosscourt",
+        result: "In",
+        contact_x: 0.3,
+        contact_y: 23,
+        landing_x: 3.5,
+        landing_y: 3,
+        expect: { landingDropped: false, pinned: false, section: "Deep Left" },
+      },
+      {
+        // In, but bounced on the hitter's own half: the tracker's error.
+        shot_number: 4,
+        is_player1: false,
+        shot_type: "Volley",
+        zone: "Middle",
+        result: "In",
+        contact_x: 0.2,
+        contact_y: 9,
+        landing_x: 0.4,
+        landing_y: 8,
+        expect: { landingDropped: true, pinned: null, section: null },
+      },
+    ],
+  },
+];
+
+interface AskShotPositionRow {
+  point_number: number;
+  shot_number: number;
+  contact_x: number | null;
+  contact_y: number | null;
+  landing_x: number | null;
+  landing_y: number | null;
+  landing_pinned: boolean | null;
+  landing_section: string | null;
+}
+
 type AskStatsRow = { match_id: string; side: "me" | "opponent" } & Record<
   StatColumn,
   number
@@ -321,6 +471,38 @@ test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", ()
       .from("points")
       .insert(STATS_SEEDS.flatMap((index) => pointsSeed(seededIds[index])));
     if (points.error) throw new Error(`seed points: ${points.error.message}`);
+
+    // Shots for the positions case, on a match the point_plays case ignores.
+    const positionPoints = await admin
+      .from("points")
+      .insert(
+        POSITION_POINTS.map((point) => ({
+          match_id: seededIds[POSITION_SEED],
+          point_number: point.point_number,
+          set_number: 1,
+          game_number: point.point_number,
+          server_is_player1: true,
+          won_by_player1: true,
+        })),
+      )
+      .select("id, point_number");
+    if (positionPoints.error) {
+      throw new Error(`seed position points: ${positionPoints.error.message}`);
+    }
+    const pointIds = new Map(
+      (positionPoints.data as { id: string; point_number: number }[]).map(
+        (row) => [row.point_number, row.id],
+      ),
+    );
+    const shots = await admin.from("shots").insert(
+      POSITION_POINTS.flatMap((point) =>
+        point.shots.map(({ expect: _expect, ...shot }) => ({
+          ...shot,
+          point_id: pointIds.get(point.point_number),
+        })),
+      ),
+    );
+    if (shots.error) throw new Error(`seed shots: ${shots.error.message}`);
 
     db = new PgClientCtor({ connectionString: DB_URL! });
     await db.connect();
@@ -521,7 +703,74 @@ test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", ()
     }
   });
 
-  test("the four views expose no coordinate, video, flag or id column but match_id", async () => {
+  test("ask.shots positions are the stored ones turned by youAreAtLowEnd(), with the untrustworthy landings dropped", async () => {
+    const rows = await readAsPlayer<AskShotPositionRow>(
+      `select point_number, shot_number, contact_x, contact_y, landing_x, landing_y,
+              landing_pinned, landing_section
+         from ask.shots where match_id = $1`,
+      [seededIds[POSITION_SEED]],
+    );
+    const byKey = new Map(
+      rows.map((row) => [`${row.point_number}:${row.shot_number}`, row]),
+    );
+    // Player 1 is the viewer on this seed.
+    const meIsPlayer1 = seedSide(POSITION_SEED) === "player1";
+    expect(meIsPlayer1).toBe(true);
+
+    for (const point of POSITION_POINTS) {
+      const low = youAreAtLowEnd(
+        point.shots.map(
+          (shot) =>
+            ({
+              isPlayer1: shot.is_player1,
+              result: shot.result,
+              contactY: shot.contact_y,
+              landingY: shot.landing_y,
+            }) as MatchShot,
+        ),
+        meIsPlayer1,
+      );
+      expect(low, `point ${point.point_number}`).toBe(point.point_number === 1);
+      const turn = (x: number, y: number) =>
+        low ? { x, y } : { x: -x, y: 23.77 - y };
+
+      for (const shot of point.shots) {
+        const at = `point ${point.point_number} shot ${shot.shot_number}`;
+        const row = byKey.get(`${point.point_number}:${shot.shot_number}`);
+        expect(row, at).toBeDefined();
+        const contact = turn(shot.contact_x, shot.contact_y);
+        expect(row!.contact_x, `${at} contact_x`).toBeCloseTo(contact.x, 6);
+        expect(row!.contact_y, `${at} contact_y`).toBeCloseTo(contact.y, 6);
+        if (shot.expect.landingDropped) {
+          expect(row!.landing_x, `${at} landing_x`).toBeNull();
+          expect(row!.landing_y, `${at} landing_y`).toBeNull();
+        } else {
+          const landing = turn(shot.landing_x, shot.landing_y);
+          expect(row!.landing_x, `${at} landing_x`).toBeCloseTo(landing.x, 6);
+          expect(row!.landing_y, `${at} landing_y`).toBeCloseTo(landing.y, 6);
+        }
+        expect(row!.landing_pinned, `${at} landing_pinned`).toBe(
+          shot.expect.pinned,
+        );
+        expect(row!.landing_section, `${at} landing_section`).toBe(
+          shot.expect.section,
+        );
+      }
+    }
+  });
+
+  test("ask.matches has_coords is true for the match with positioned shots alone", async () => {
+    const rows = await readAsPlayer<{ match_id: string; has_coords: boolean }>(
+      "select match_id, has_coords from ask.matches",
+    );
+    for (const [index, id] of seededIds.entries()) {
+      const row = rows.find((r) => r.match_id === id);
+      expect(row, `seed ${index}`).toBeDefined();
+      expect(row!.has_coords, `seed ${index}`).toBe(index === POSITION_SEED);
+    }
+  });
+
+  test("the four views expose no coordinate, video, flag or id column but match_id and ask.shots' turned positions", async () => {
     const { rows } = await db.query<{
       table_name: string;
       column_name: string;
@@ -531,9 +780,18 @@ test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", ()
           and table_name in ('match_stats', 'points', 'shots', 'point_plays')`,
     );
     expect(rows.length).toBeGreaterThan(0);
+    // The stored world-frame coordinates never reach a view; these four are
+    // the view's own, turned to the player.
+    const turned = new Set([
+      "shots.contact_x",
+      "shots.contact_y",
+      "shots.landing_x",
+      "shots.landing_y",
+    ]);
     const banned = rows.filter(
-      ({ column_name }) =>
+      ({ table_name, column_name }) =>
         column_name !== "match_id" &&
+        !turned.has(`${table_name}.${column_name}`) &&
         /(_x|_y|_id|video_time|flags|derived|^id)$/.test(column_name),
     );
     expect(banned).toEqual([]);

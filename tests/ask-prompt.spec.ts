@@ -262,7 +262,10 @@ test.describe("buildPlanPrompt", () => {
         view: view.view,
         columns: view.columns
           // `teamOnly` columns are the team planner's; see the team describe.
-          .filter((column) => !column.hidden && !column.teamOnly)
+          // `mcpOnly` ones are describe_views' alone; see the MCP describe.
+          .filter(
+            (column) => !column.hidden && !column.teamOnly && !column.mcpOnly,
+          )
           .map((column) => column.name),
       })),
     );
@@ -1226,11 +1229,58 @@ test.describe("the personal prompts do not move when the team ones do", () => {
         .map((column) => `${view.view}.${column.name}`),
     );
     expect(teamOnly).toEqual(["matches.player_name"]);
-    // Last in ask.matches, as `create or replace view` appended it.
-    expect(ASK_SCHEMA[0].columns.at(-1)?.name).toBe("player_name");
+    // Appended to ask.matches by `create or replace view`, before has_coords.
+    expect(ASK_SCHEMA[0].columns.at(-2)?.name).toBe("player_name");
     expect(migrationColumnComments().get("matches.player_name")).toBe(
-      ASK_SCHEMA[0].columns.at(-1)?.meaning,
+      ASK_SCHEMA[0].columns.at(-2)?.meaning,
     );
+  });
+});
+
+test.describe("renderAskSchemaBlock — MCP-only court positions", () => {
+  const mcpOnly = ASK_SCHEMA.flatMap((view) =>
+    view.columns
+      .filter((column) => column.mcpOnly)
+      .map((column) => `${view.view}.${column.name}`),
+  );
+
+  test("are exactly the positions, has_coords and the two landing helpers", () => {
+    expect(mcpOnly).toEqual([
+      "matches.has_coords",
+      "shots.contact_x",
+      "shots.contact_y",
+      "shots.landing_x",
+      "shots.landing_y",
+      "shots.landing_pinned",
+      "shots.landing_section",
+    ]);
+  });
+
+  test("no planner prompt, personal or team, names one", () => {
+    const names = mcpOnly.map((key) => key.split(".")[1]);
+    for (const prompt of [
+      buildPlanPrompt(PLAN_INPUT),
+      buildPlanPrompt(TEAM_PLAN_INPUT),
+    ]) {
+      for (const name of names) expect(prompt, name).not.toContain(name);
+    }
+  });
+
+  test("the MCP block lists them, and is otherwise the planner's block", () => {
+    for (const mode of ["personal", "team"] as const) {
+      const mcp = renderAskSchemaBlock(mode, { mcp: true });
+      for (const key of mcpOnly) {
+        expect(mcp, key).toContain(`  ${key.split(".")[1]} (`);
+      }
+      const withoutMcpLines = mcp
+        .split("\n")
+        .filter(
+          (line) =>
+            !mcpOnly.some((key) => line.startsWith(`  ${key.split(".")[1]} (`)),
+        )
+        .join("\n");
+      expect(withoutMcpLines).toBe(renderAskSchemaBlock(mode));
+    }
   });
 });
 
@@ -1253,7 +1303,7 @@ test.describe("buildPlanPrompt — team scope", () => {
       ASK_SCHEMA.map((view) => ({
         view: view.view,
         columns: view.columns
-          .filter((column) => !column.hidden)
+          .filter((column) => !column.hidden && !column.mcpOnly)
           .map((column) => column.name),
       })),
     );
