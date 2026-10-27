@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 
 import { readFileSync } from "node:fs";
 
+import { createLoader } from "./fixtures/vm-modules";
+
 import {
   LABEL_SHORTCUT_GROUPS,
   isShortcutSheetKey,
@@ -116,6 +118,11 @@ test.describe("the shortcut sheet", () => {
   test("the dialog draws Kbd chips at ConfirmDialog's geometry, and the rail button opens it in full screen", () => {
     expect(DIALOG).toContain("<Kbd key={key}>{key}</Kbd>");
     expect(DIALOG).toContain('width: "560px"');
+    // Shorter than the sheet (a 900px laptop), the list scrolls inside the
+    // panel: a clipping column, the list the one part that grows and scrolls.
+    expect(DIALOG).toContain('maxHeight: "calc(100dvh - 64px)"');
+    expect(DIALOG).toMatch(/className="flex flex-col gap-0 overflow-hidden/);
+    expect(DIALOG).toMatch(/grid min-h-0 flex-1 [^"]*overflow-y-auto/);
     expect(DIALOG).toContain("Keyboard shortcuts");
     // An icon button: a label, a dark tooltip naming the key.
     expect(RAIL).toContain('aria-label="Keyboard shortcuts"');
@@ -147,5 +154,41 @@ test.describe("esc on a selected stroke", () => {
     expect(fn.indexOf("seekToPointStart(owner);")).toBeLessThan(
       fn.indexOf("player.current?.play();"),
     );
+  });
+});
+
+test.describe("esc typed in a cell's field", () => {
+  test("cancels the edit and leaves the field, and lets go of nothing else", () => {
+    const { escapeLeavesField } = createLoader().load(
+      "src/components/admin/labels/label-console.tsx",
+    ) as { escapeLeavesField: (target: EventTarget | null) => boolean };
+    const from = (selector: string | null) =>
+      ({
+        closest: (s: string) =>
+          selector && s.split(", ").includes(selector) ? {} : null,
+      }) as unknown as EventTarget;
+    for (const field of [
+      "input",
+      "textarea",
+      "select",
+      "[contenteditable='true']",
+    ]) {
+      expect(escapeLeavesField(from(field)), field).toBe(true);
+    }
+    // A row, a cell's text or the page: the Esc lets go of the stroke.
+    expect(escapeLeavesField(from(null))).toBe(false);
+    expect(escapeLeavesField(null)).toBe(false);
+
+    // In the handler: the field is left first (the reverted draft writes
+    // nothing on that blur), and only an Esc from outside a field plays the
+    // point — so the next Esc, the field left, lets go.
+    const handler = CONSOLE.slice(CONSOLE.indexOf("function onEscape("));
+    const tail = handler.slice(0, handler.indexOf("\n    }\n"));
+    const blur = tail.lastIndexOf("?.blur?.();");
+    const guard = tail.indexOf("if (escapeLeavesField(event.target)) return;");
+    const letGo = tail.indexOf("letGoOfShot.current(selectedShotId);");
+    expect(guard).toBeGreaterThan(-1);
+    expect(blur).toBeLessThan(guard);
+    expect(guard).toBeLessThan(letGo);
   });
 });

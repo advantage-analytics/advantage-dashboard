@@ -292,12 +292,15 @@ export async function resetLabelShotAction(
  * its own fields — set, game, server, serve side, won by, ending, ended by —
  * every edited shot, the shots the labeller deleted brought back and the ones
  * they added deleted again, as one Undo step. Its note and checked mark stay
- * as they are. Answers the point read back whole.
+ * as they are. Answers the point read back whole, refused part-way or not.
  */
 export async function resetLabelPointAction(
   pointId: string,
+  sessionId: string,
 ): Promise<LabelPointWholeResetResult> {
-  return withLabelOp("Reset point", () => resetLabelPointWhole(pointId));
+  return withLabelOp("Reset point", () =>
+    resetLabelPointWhole(pointId, sessionId),
+  );
 }
 
 /**

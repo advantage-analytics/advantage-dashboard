@@ -1163,7 +1163,7 @@ test.describe("how it ended follows the shot rows", () => {
     await settled();
     // The server runs the restores, removals and resets in order inside one
     // Undo step (reset-session.ts `writeLabelPointWholeReset`).
-    expect(calls).toEqual({ resetPoint: [[P1]] });
+    expect(calls).toEqual({ resetPoint: [[P1, labelSessionFixture().id]] });
     expect(point).toEqual([]);
   });
 

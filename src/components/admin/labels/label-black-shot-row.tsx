@@ -301,15 +301,17 @@ export function BlackShotsWell({
   const inlineRow = inline ? (
     <Fragment key="review-inline">{inline.node}</Fragment>
   ) : null;
-  // A double fault with strokes after it: a "Point over" line under the
-  // second fault, and the dead-ball strokes after it a step quieter. They
-  // stay rows — the labeller deletes them — but ask for no missing shot
-  // (`suggestionState`).
+  // A double fault with strokes after it: a "Point over" line above the first
+  // of them, and each a step quieter. They stay rows — the labeller deletes
+  // them — but ask for no missing shot (`suggestionState`). "After" is rally
+  // order (`liveShotsInOrder`, as `doubleFaultAt` reads it), not the order
+  // the rows are stored in, so an untimed stroke is judged where it plays.
   const inOrder = liveShotsInOrder(point, ghosts);
   const overAt = doubleFaultAt(inOrder, point.ending);
-  const overAfterId =
-    overAt !== null && overAt < inOrder.length - 1 ? inOrder[overAt].id : null;
-  let pastEnd = false;
+  const pastEnd = new Set(
+    overAt === null ? [] : inOrder.slice(overAt + 1).map((shot) => shot.id),
+  );
+  let overDrawn = false;
   for (const [i, shot] of point.shots.entries()) {
     // A stroke the labeller added and then deleted leaves no row.
     if (isWithdrawnAdd(shot)) continue;
@@ -340,6 +342,10 @@ export function BlackShotsWell({
       );
     } else {
       n += 1;
+      if (pastEnd.has(shot.id) && !overDrawn) {
+        overDrawn = true;
+        rows.push(<PointOverLine key="point-over" arrive={arrive()} />);
+      }
       rows.push(
         <BlackShotRow
           key={shot.id}
@@ -349,11 +355,14 @@ export function BlackShotsWell({
           pointNumber={pointNumber}
           edit={edit}
           playing={shot.id === playingShotId}
-          pastEnd={pastEnd}
+          pastEnd={pastEnd.has(shot.id)}
           arrive={arrive()}
         />,
       );
     }
+    // The rows drawn so far: the inline note joins the selected stroke's
+    // block only when nothing has come between them (below).
+    const afterRow = rows.length;
     if (live.has(shot.id)) hintLineAfter(shot.id);
     for (const suggestion of suggested) {
       if (suggestion.afterShotId !== shot.id) continue;
@@ -367,10 +376,23 @@ export function BlackShotsWell({
         />,
       );
     }
-    if (inlineAfter !== null && inlineAfter === shot.id) rows.push(inlineRow);
-    if (shot.id === overAfterId) {
-      pastEnd = true;
-      rows.push(<PointOverLine key="point-over" arrive={arrive()} />);
+    if (inlineAfter !== null && inlineAfter === shot.id && inline) {
+      // Right under the selected stroke and its tray, with no hint or
+      // suggestion row between: the note takes the row's wash, so the three
+      // read as one block. Anything between, and a wash would only band.
+      rows.push(
+        shot.id === edit.selectedShotId && rows.length === afterRow ? (
+          <div
+            key="review-inline"
+            data-review-inline-wash=""
+            className="bg-white/[0.12]"
+          >
+            {inline.node}
+          </div>
+        ) : (
+          inlineRow
+        ),
+      );
     }
   }
   if (inlineRow && inlineAfter === null) rows.push(inlineRow);
@@ -417,8 +439,8 @@ export function BlackShotsWell({
 }
 
 /**
- * "Point over · double fault": the line under a double fault's second serve
- * when strokes follow it, starting where the rows' words start (44px), a
+ * "Point over · double fault": the line above the first stroke after a double
+ * fault's second serve, starting where the rows' words start (44px), a
  * hairline running out to the right. Quiet: it explains the dimmed rows
  * under it and asks nothing.
  */

@@ -296,6 +296,32 @@ const OPEN_JUMP_DELAY_MS = 450;
  */
 const JUMP_BLURS_SELECTOR =
   "input, textarea, select, [contenteditable='true'], [data-select-editor]";
+/** An open menu or dialog: while one is up, it keeps the keys. */
+const OPEN_LAYER_SELECTOR =
+  "[role='menu'], [role='dialog'], [role='alertdialog']";
+/**
+ * Whether a key event belongs to something else: it came from a text field,
+ * select or editable region, from inside a menu or dialog, or a menu or
+ * dialog is open anywhere. The console's own keys wait for none of these.
+ */
+function keysAreSpoken(target: Element | null): boolean {
+  return (
+    !!target?.closest?.(
+      `input, select, textarea, [contenteditable='true'], ${OPEN_LAYER_SELECTOR}`,
+    ) || !!document.querySelector(OPEN_LAYER_SELECTOR)
+  );
+}
+/**
+ * Whether an Esc came from a text field (a cell's editor, a note): that Esc
+ * cancels the edit and leaves the field, and lets go of nothing else.
+ */
+export function escapeLeavesField(target: EventTarget | null): boolean {
+  return Boolean(
+    (target as Element | null)?.closest?.(
+      "input, select, textarea, [contenteditable='true']",
+    ),
+  );
+}
 /** A point row whose insert is still in flight (`insertPoint`), likewise. */
 const PENDING_POINT_PREFIX = "pending-point-";
 
@@ -2493,13 +2519,19 @@ export function LabelConsole({
       setPlacement(NO_PLACEMENT);
     }
     dispatchSave({ type: "start" });
-    const result = await settle(operations.resetPoint(pointId));
+    const result = await settle(operations.resetPoint(pointId, session.id));
+    // Refused part-way, the server still answers the point as the writes
+    // that landed left it: draw that, not the rows from before.
+    // Whatever landed is one Undo step.
+    if ("point" in result && result.point) {
+      const after = result.point;
+      setPoints((rows) => replacePoint(rows, pointId, () => after));
+      setUndoEmpty(false);
+    }
     if ("error" in result) {
       dispatchSave({ type: "failure", message: result.error });
       return;
     }
-    setPoints((rows) => replacePoint(rows, pointId, () => result.point));
-    setUndoEmpty(false);
     dispatchSave({ type: "success", at: Date.now() });
   }
 
@@ -2944,9 +2976,9 @@ export function LabelConsole({
     };
   });
   // Escape lets go of the selected stroke, from anywhere in its row, and plays
-  // its point from the top (`letGoOfShot`): a text field has already put its
-  // draft back by the time the key reaches the window. An open menu or dialog
-  // keeps the key for itself.
+  // its point from the top (`letGoOfShot`) — except an Esc typed in a cell's
+  // field, which only cancels that edit. An open menu or dialog keeps the key
+  // for itself.
   // With no stroke selected the same key folds the open point, unless it was
   // spent closing an editor (`defaultPrevented`) or typed into a field.
   const selectedShotId = placement.shotId;
@@ -2959,9 +2991,7 @@ export function LabelConsole({
         event.ctrlKey ||
         event.altKey ||
         event.shiftKey ||
-        document.querySelector(
-          "[role='menu'], [role='dialog'], [role='alertdialog']",
-        )
+        document.querySelector(OPEN_LAYER_SELECTOR)
       ) {
         return;
       }
@@ -2978,7 +3008,12 @@ export function LabelConsole({
         }
         return;
       }
+      // An Esc typed in a cell's field is that edit's: the field has put its
+      // draft back, and the Esc only leaves it (the blur writes nothing, the
+      // draft being gone). It must not also let go of the stroke and restart
+      // the film — the next Esc, from outside the field, does.
       (document.activeElement as HTMLElement | null)?.blur?.();
+      if (escapeLeavesField(event.target)) return;
       letGoOfShot.current(selectedShotId);
     }
     window.addEventListener("keydown", onEscape);
@@ -2992,14 +3027,7 @@ export function LabelConsole({
       // an open menu or dialog keeps the key.
       if (isShortcutSheetKey(event) && !event.defaultPrevented) {
         const target = event.target as Element | null;
-        if (
-          target?.closest?.(
-            "input, select, textarea, [contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog']",
-          ) ||
-          document.querySelector(
-            "[role='menu'], [role='dialog'], [role='alertdialog']",
-          )
-        ) {
+        if (keysAreSpoken(target)) {
           return;
         }
         event.preventDefault();
@@ -3064,15 +3092,7 @@ export function LabelConsole({
         !event.repeat
       ) {
         const target = event.target as Element | null;
-        if (
-          !target?.closest?.(
-            "input, select, textarea, [contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog']",
-          ) &&
-          !document.querySelector(
-            "[role='menu'], [role='dialog'], [role='alertdialog']",
-          ) &&
-          consoleKey()
-        ) {
+        if (!keysAreSpoken(target) && consoleKey()) {
           event.preventDefault();
           return;
         }
@@ -3085,14 +3105,7 @@ export function LabelConsole({
       if (chord || vertical) {
         if (event.defaultPrevented || event.altKey || event.shiftKey) return;
         const target = event.target as Element | null;
-        if (
-          target?.closest?.(
-            "input, select, textarea, [contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog']",
-          ) ||
-          document.querySelector(
-            "[role='menu'], [role='dialog'], [role='alertdialog']",
-          )
-        ) {
+        if (keysAreSpoken(target)) {
           return;
         }
         event.preventDefault();
@@ -3160,14 +3173,7 @@ export function LabelConsole({
         return;
       }
       const target = event.target as HTMLElement | null;
-      if (
-        target?.closest?.(
-          "input, select, textarea, [contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog']",
-        ) ||
-        document.querySelector(
-          "[role='menu'], [role='dialog'], [role='alertdialog']",
-        )
-      ) {
+      if (keysAreSpoken(target)) {
         return;
       }
       if (arrow && target?.closest?.("[role='separator'], [role='slider']")) {
@@ -3465,10 +3471,6 @@ export function LabelConsole({
               anchor={inlineAnchor}
               placement={placement}
               count={step ? stepCount(keptOpened, step) : null}
-              selected={
-                inlineAnchor.shotId !== null &&
-                placement.shotId === inlineAnchor.shotId
-              }
             />
           ),
         }
@@ -3794,7 +3796,10 @@ export interface LabelConsoleOperations {
    * The whole point back to what the vendor gave (`pointResetScope`), as one
    * Undo step; answers the point whole.
    */
-  resetPoint: (pointId: string) => Promise<LabelPointWholeResetResult>;
+  resetPoint: (
+    pointId: string,
+    sessionId: string,
+  ) => Promise<LabelPointWholeResetResult>;
   /** Who serves a whole game (in a tiebreak, who serves first). */
   setGameServer: (
     sessionId: string,

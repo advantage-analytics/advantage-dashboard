@@ -36,7 +36,9 @@ export function LabelShortcutsDialog({
       <DialogContent
         hideCloseButton
         data-label-shortcuts=""
-        className="gap-0 border-0 bg-[var(--surface-card)] p-0 outline-none sm:max-w-none"
+        // A column that clips: the list scrolls inside the panel when the
+        // window is shorter than the sheet (a 900px laptop).
+        className="flex flex-col gap-0 overflow-hidden border-0 bg-[var(--surface-card)] p-0 outline-none sm:max-w-none"
         style={{
           width: "560px",
           maxWidth: "calc(100vw - 32px)",
@@ -45,7 +47,7 @@ export function LabelShortcutsDialog({
           boxShadow: "var(--shadow-dropdown)",
         }}
       >
-        <div className="flex min-h-0 flex-col gap-[18px] p-6 pb-5">
+        <div className="flex min-h-0 flex-1 flex-col gap-[18px] p-6 pb-5">
           <div className="flex items-start gap-2.5">
             <div className="min-w-0 flex-1">
               <DialogTitle className="text-left text-[16px] font-medium text-[var(--ink-900)]">
@@ -63,7 +65,7 @@ export function LabelShortcutsDialog({
               <X className="size-3.5" strokeWidth={1.5} aria-hidden />
             </DialogClose>
           </div>
-          <div className="grid min-h-0 grid-cols-1 gap-x-7 gap-y-5 overflow-y-auto sm:grid-cols-2">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-x-7 gap-y-5 overflow-y-auto sm:grid-cols-2">
             {LABEL_SHORTCUT_GROUPS.map((group) => (
               <div
                 key={group.label}
@@ -98,7 +100,7 @@ export function LabelShortcutsDialog({
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-[var(--ink-500)]">
+          <p className="shrink-0 text-[11px] text-[var(--ink-500)]">
             Use Ctrl instead of ⌘ on Windows and Linux.
           </p>
         </div>

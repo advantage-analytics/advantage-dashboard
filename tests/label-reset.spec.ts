@@ -13,12 +13,14 @@ import {
   planShotReset,
 } from "@/lib/services/labels/reset";
 import {
-  resetLabelPoint,
+  resetLabelPointWhole,
+  writeLabelPointWholeReset,
   resetLabelShot,
   writeLabelPointReset,
   writeLabelShotReset,
 } from "@/lib/services/labels/reset-session";
 import type {
+  LabelPoint,
   LabelPointSeedValues,
   LabelShotSeedValues,
 } from "@/lib/services/labels/session";
@@ -635,7 +637,7 @@ const pointRow = (fields: Record<string, unknown> = {}) => ({
   ...fields,
 });
 
-test.describe("resetLabelShot / resetLabelPoint", () => {
+test.describe("resetLabelShot / resetLabelPointWhole", () => {
   test("refuse without an admin, before a client is built", async () => {
     let built = 0;
     const deps = {
@@ -648,7 +650,7 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
     expect(await resetLabelShot(SHOT_ID, deps)).toEqual({
       error: "Administrator access is required.",
     });
-    expect(await resetLabelPoint(POINT_ID, deps)).toEqual({
+    expect(await resetLabelPointWhole(POINT_ID, SESSION_ID, deps)).toEqual({
       error: "Administrator access is required.",
     });
     expect(built).toBe(0);
@@ -940,7 +942,7 @@ test.describe("the point's Reset confirm", () => {
   });
 });
 
-test("the whole Reset reads the point and its rally neighbours, never the whole session", () => {
+test("the whole Reset reads the point and the session's rallies together, never the session whole", () => {
   const source = readFileSync(
     "src/lib/services/labels/reset-session.ts",
     "utf8",
@@ -949,12 +951,136 @@ test("the whole Reset reads the point and its rally neighbours, never the whole 
   const body = source.slice(
     source.indexOf("export async function writeLabelPointWholeReset("),
   );
-  expect(body).toContain("readLabelPointsByIds(supabase, owner.session_id, [");
-  expect(body).toContain("readRallyNeighbours(");
-  expect(source).toContain(
-    '.overlaps("vendor_rally_ids", point.vendorRallyIds)',
+  // One round of reads before any write: the point (within the console's
+  // session) and every point's id, status and rallies alone, paged like every
+  // session-wide label read, with a point read that cannot throw.
+  expect(body).toMatch(
+    /await Promise\.all\(\[\s*steps\.readPoint\(\),\s*steps\.readRallies\(\),/,
   );
-  // Stroke writes go out together only when the point's own fields are reset
-  // after them (its seed has the last word); a split half runs them in order.
-  expect(body).toContain("const together = scope.fields;");
+  expect(source).toContain(
+    "readPoint: () => readBack(supabase, sessionId, pointId)",
+  );
+  expect(source).toContain(
+    "readRallies: () => readSessionRallies(supabase, sessionId)",
+  );
+  expect(source).toMatch(
+    /readAllPages<\{[\s\S]*?\.select\("id, status, vendor_rally_ids"\)/,
+  );
+});
+
+test.describe("writeLabelPointWholeReset, step by step", () => {
+  // The ids only pass `normaliseId`; the steps answer whatever is asked.
+  const SESSION = "11111111-1111-4111-8111-111111111111";
+  const POINT = "22222222-2222-4222-8222-222222222222";
+  type Call = [string, ...unknown[]];
+  /** Steps that record each call and answer as told. */
+  function steps(
+    point: LabelPoint,
+    {
+      after = { ...point, note: "read back" },
+      refuse = {} as Partial<Record<string, string>>,
+      rallies = [] as Pick<LabelPoint, "id" | "status" | "vendorRallyIds">[],
+    } = {},
+  ) {
+    const calls: Call[] = [];
+    let reads = 0;
+    const answer = (name: string, ...args: unknown[]) => {
+      calls.push([name, ...args]);
+      const key = [name, ...args].join(":");
+      const error = refuse[key] ?? refuse[name];
+      return Promise.resolve(error ? { error } : { ok: true });
+    };
+    return {
+      calls,
+      steps: {
+        readPoint: async (): Promise<LabelPoint | null> =>
+          reads++ === 0 ? point : after,
+        readRallies: async () => ({ points: rallies }),
+        restoreShots: (ids: string[]) => answer("restore", ...ids),
+        deleteShot: (id: string) => answer("delete", id),
+        resetShot: (id: string) => answer("resetShot", id),
+        resetPoint: () => answer("resetPoint"),
+      },
+    };
+  }
+  const run = (point: LabelPoint, s: ReturnType<typeof steps>) =>
+    writeLabelPointWholeReset({
+      supabase: null as never,
+      pointId: POINT,
+      sessionId: SESSION,
+      steps: s.steps,
+    });
+
+  const p1 = () =>
+    labelSessionFixture().points.find((p) => p.id === FIXTURE_POINT_IDS.P1)!;
+
+  test("every stroke write, then the point's own fields last; answers the point read back", async () => {
+    const point = p1();
+    const scope = pointResetScope(point)!;
+    const s = steps(point);
+    const result = await run(point, s);
+    expect(result).toEqual({
+      ok: true,
+      point: { ...point, note: "read back" },
+    });
+    expect(s.calls.at(-1)).toEqual(["resetPoint"]);
+    const names = s.calls.map((c) => c[0]);
+    expect(names.filter((n) => n === "resetShot")).toHaveLength(
+      scope.shotIds.length,
+    );
+    expect(names.filter((n) => n === "delete")).toHaveLength(
+      scope.addedIds.length,
+    );
+  });
+
+  test("refused part-way: the error carries the point as the landed writes left it, and nothing after the refusal runs", async () => {
+    const point = p1();
+    const scope = pointResetScope(point)!;
+    expect(scope.shotIds.length).toBeGreaterThan(0);
+    const s = steps(point, { refuse: { resetShot: "That shot changed." } });
+    const result = await run(point, s);
+    expect(result).toEqual({
+      error: "That shot changed.",
+      point: { ...point, note: "read back" },
+    });
+    // The point's own fields wait for every stroke write, so a refusal
+    // before them leaves them as they were.
+    expect(s.calls.map((c) => c[0])).not.toContain("resetPoint");
+  });
+
+  test("a split half keeps its fields and runs its stroke writes one at a time, stopping at a refusal", async () => {
+    const point = { ...p1(), vendorRallyIds: [7] };
+    const twin = {
+      id: "p-twin",
+      status: "added" as const,
+      vendorRallyIds: [7],
+    };
+    const scope = pointResetScope(point, true)!;
+    const ok = steps(point, { rallies: [twin] });
+    await run(point, ok);
+    expect(ok.calls.map((c) => c[0])).not.toContain("resetPoint");
+    // In order: restores, then removals, then resets.
+    const order = ok.calls.map((c) => c[0]);
+    expect(order).toEqual([
+      ...(scope.deletedIds.length > 0 ? ["restore"] : []),
+      ...scope.addedIds.map(() => "delete"),
+      ...scope.shotIds.map(() => "resetShot"),
+    ]);
+    // Refused at the first write: nothing after it is asked for.
+    const first = order[0];
+    const refused = steps(point, {
+      rallies: [twin],
+      refuse: { [first]: "no" },
+    });
+    await run(point, refused);
+    expect(refused.calls).toHaveLength(1);
+  });
+
+  test("a point of another session reads as not found and writes nothing", async () => {
+    const point = p1();
+    const s = steps(point);
+    s.steps.readPoint = async () => null;
+    expect(await run(point, s)).toEqual({ error: "Point not found." });
+    expect(s.calls).toEqual([]);
+  });
 });

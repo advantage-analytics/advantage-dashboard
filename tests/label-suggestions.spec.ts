@@ -978,6 +978,20 @@ test.describe("a double fault ends the point for its slots", () => {
       const row = html.slice(html.indexOf(`data-shot-id="${id}"`));
       expect(row.slice(0, row.indexOf(">")), id).not.toContain("data-past-end");
     }
+    // "After" is rally order, not the stored order: a stroke stored before
+    // the faults but played after them is dimmed, and the line sits above
+    // the first row past the end as drawn.
+    const stored = {
+      ...point,
+      shots: [point.shots[3], ...point.shots.filter((s) => s.id !== "d4")],
+    };
+    const shuffled = renderWell(stored, null);
+    const d4 = shuffled.slice(shuffled.indexOf('data-shot-id="d4"'));
+    expect(d4.slice(0, d4.indexOf(">"))).toContain("data-past-end");
+    expect(shuffled.indexOf("data-point-over")).toBeLessThan(
+      shuffled.indexOf('data-shot-id="d4"'),
+    );
+    expect(shuffled.match(/data-point-over/g)).toHaveLength(1);
     // Ending on the second fault, or no double fault: no line.
     expect(
       renderWell({ ...point, shots: point.shots.slice(0, 2) }, null),

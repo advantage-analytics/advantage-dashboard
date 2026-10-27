@@ -80,7 +80,6 @@ type NoteProps = {
   anchor: { shotId: string | null; strokeId: string | null };
   placement: PlacementState;
   count: { index: number; total: number } | null;
-  selected?: boolean;
 };
 
 function renderNote(props: Partial<NoteProps>) {
@@ -147,11 +146,9 @@ test.describe("the review note", () => {
     expect(html).toMatch(/<svg[^>]*aria-hidden="true"/);
     expect(html).toContain("pl-[44px]");
     expect(html).not.toContain("<button");
-    // Under the selected stroke it takes the row's wash; elsewhere none.
+    // No wash of its own: the well gives it the selected row's
+    // (`data-review-inline-wash`), and only right under that row.
     expect(html).not.toContain("bg-white/[0.12]");
-    expect(
-      renderNote({ step, count: null, selected: true } as Partial<NoteProps>),
-    ).toContain("bg-white/[0.12]");
     // One question alone counts nothing.
     expect(renderNote({ step, count: { index: 1, total: 1 } })).not.toContain(
       " of 1",

@@ -578,6 +578,7 @@ type WellProps = {
   point: LabelPoint;
   edit: Record<string, unknown>;
   playingShotId?: string | null;
+  inline?: { afterShotId: string | null; node: React.ReactNode } | null;
 };
 
 function well() {
@@ -2231,4 +2232,29 @@ test("a tray button lays its icon and label out in one line: its classes are sep
       button,
     ).toBe(true);
   }
+});
+
+test.describe("the inline review note in the well", () => {
+  const note = React.createElement("div", { "data-test-note": "" }, "Fix it");
+  const render = (selectedShotId: string | null, afterShotId: string) => {
+    const { BlackShotsWell } = well();
+    return renderToStaticMarkup(
+      React.createElement(BlackShotsWell, {
+        point: rally(),
+        edit: wellEdit({ selectedShotId }),
+        playingShotId: null,
+        inline: { afterShotId, node: note },
+      }),
+    );
+  };
+
+  test("right under the selected stroke it takes that row's wash; anywhere else, none", () => {
+    const washed = render("w-lit", "w-lit");
+    const wrap = washed.slice(washed.indexOf("data-review-inline-wash"));
+    expect(wrap.slice(0, wrap.indexOf(">"))).toContain("bg-white/[0.12]");
+    expect(wrap).toContain("data-test-note");
+    // Under a stroke that is not selected: the note alone.
+    expect(render(null, "w-lit")).not.toContain("data-review-inline-wash");
+    expect(render("w-serve", "w-lit")).not.toContain("data-review-inline-wash");
+  });
 });

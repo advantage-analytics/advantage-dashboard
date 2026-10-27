@@ -153,21 +153,19 @@ export function reviewNoteText(
  * The one-line note under the flagged stroke: a hook glyph, the fix, and
  * "n of m" at the right edge. It starts 44px in, where the row's words and
  * the tray's actions start. Amber for a score item, the rail's ink for data.
- * Under the selected stroke it takes that row's wash (`selected`), so the row,
- * its tray and the note read as one block.
+ * Right under the selected stroke the well gives it that row's wash
+ * (`BlackShotsWell`), so the row, its tray and the note read as one block.
  */
 export function ReviewNote({
   step,
   anchor,
   placement,
   count,
-  selected = false,
 }: {
   step: ReviewStep | null;
   anchor: InlineReviewAnchor;
   placement: PlacementState;
   count: { index: number; total: number } | null;
-  selected?: boolean;
 }) {
   const note = reviewNoteText(step, placement, anchor.strokeId);
   if (!note) return null;
@@ -180,7 +178,6 @@ export function ReviewNote({
       className={cn(
         "flex h-[26px] min-w-0 items-center gap-1.5 pr-[14px] pl-[44px] text-[11px] font-medium",
         score ? "text-[var(--rail-amber)]" : "text-white",
-        selected && "bg-white/[0.12]",
       )}
     >
       <CornerDownRight
