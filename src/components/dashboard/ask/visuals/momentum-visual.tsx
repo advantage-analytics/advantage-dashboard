@@ -1,4 +1,4 @@
-import { useId, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import {
   EMPTY_MATCH_FILTERS,
@@ -10,7 +10,7 @@ import type {
   AskMomentumVisual,
 } from "@/lib/services/ask/events";
 import { MOMENTUM_BOX, momentumGeometry } from "./visual-geometry";
-import { VisualFrame, VisualKey } from "./visual-frame";
+import { useSvgId, VisualFrame, VisualKey } from "./visual-frame";
 
 const percent = (n: number, of: number) => `${(n / of) * 100}%`;
 
@@ -63,9 +63,8 @@ export function MomentumVisual({ visual }: { visual: AskMomentumVisual }) {
   );
   const counted = (mark: AskMomentumMark) =>
     points.filter((point) => point.mark === mark).length;
-  const id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
-  const above = `ask-momentum-above-${id}`;
-  const below = `ask-momentum-below-${id}`;
+  const above = useSvgId("ask-momentum-above");
+  const below = useSvgId("ask-momentum-below");
   const first = geometry.points[0];
   const lastPoint = geometry.points[geometry.points.length - 1];
   // The line closed to the level rule: washed blue above it, slate below.

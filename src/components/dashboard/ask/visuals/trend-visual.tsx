@@ -1,9 +1,14 @@
-import { useId, useState, type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import type { AskTrendVisual } from "@/lib/services/ask/events";
 import { TREND_BOX, trendGeometry } from "./visual-geometry";
-import { VisualFrame, VisualKey, VisualReadout } from "./visual-frame";
+import {
+  useSvgId,
+  VisualFrame,
+  VisualKey,
+  VisualReadout,
+} from "./visual-frame";
 
 const percent = (n: number, of: number) => `${(n / of) * 100}%`;
 
@@ -56,7 +61,7 @@ export function TrendVisual({
       baseline ? `; ${baseline.label} ${baseline.values[index].text}` : ""
     }`;
   const [hovered, setHovered] = useState<number | null>(null);
-  const areaId = `ask-trend-area-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const areaId = useSvgId("ask-trend-area");
   // The sparkline's wash: the line closed down to the plot's floor.
   const floor = TREND_BOX.height - TREND_BOX.bottom;
   const first = geometry.points[0];
@@ -196,7 +201,27 @@ export function TrendVisual({
                 vectorEffect="non-scaling-stroke"
               />
               {/* A dot on the last point, and on the hovered one: the KPI
-                  sparkline's grammar, not a ring on every match. */}
+                  sparkline's grammar, not a ring on every match. A point
+                  that opens its match keeps a small ring, though: it is a
+                  target, and a target nobody can see is one nobody finds,
+                  least of all on a phone with no hover. */}
+              {points.map((point, index) =>
+                point.matchId !== undefined &&
+                index !== last &&
+                geometry.points[index] ? (
+                  <circle
+                    key={index}
+                    data-ask-trend-ring=""
+                    cx={geometry.points[index].x}
+                    cy={geometry.points[index].y}
+                    r={2.5}
+                    fill="var(--surface-card)"
+                    stroke="var(--viz-you)"
+                    strokeWidth={1.5}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ) : null,
+              )}
               {lastAt && (
                 <circle
                   cx={lastAt.x}

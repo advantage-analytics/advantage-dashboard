@@ -8,7 +8,13 @@ import type {
 import { watchHref } from "@/lib/services/ask/figure-video";
 import { cn } from "@/lib/utils";
 import { barWidth, type TreeNode, treeLayout } from "./visual-geometry";
-import { ROW_LABEL, VisualFrame, WATCH_ROW, WatchMark } from "./visual-frame";
+import {
+  ROW_LABEL,
+  VisualFrame,
+  WATCH_LINK,
+  WATCH_ROW,
+  WatchMark,
+} from "./visual-frame";
 
 const SHARE = "var(--viz-you)";
 
@@ -74,10 +80,7 @@ export function TreeVisual({
           <Link
             href={href}
             data-ask-tree-watch=""
-            className={cn(
-              "group flex items-center rounded-[var(--radius-element)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--ink-900)] focus-visible:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)]",
-              ROW_LABEL,
-            )}
+            className={cn(WATCH_LINK, ROW_LABEL)}
           >
             {node.label}
             <WatchMark />

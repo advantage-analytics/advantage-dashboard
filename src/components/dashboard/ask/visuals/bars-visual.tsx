@@ -9,6 +9,7 @@ import {
   VisualFrame,
   VisualKey,
   VisualReadout,
+  WATCH_LINK,
   WATCH_ROW,
   WatchMark,
 } from "./visual-frame";
@@ -58,10 +59,7 @@ export function BarsVisual({
                 <Link
                   href={watch}
                   data-ask-bar-watch=""
-                  className={cn(
-                    "group flex items-center rounded-[var(--radius-element)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--ink-900)] focus-visible:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)]",
-                    ROW_LABEL,
-                  )}
+                  className={cn(WATCH_LINK, ROW_LABEL)}
                 >
                   {row.label}
                   <WatchMark />

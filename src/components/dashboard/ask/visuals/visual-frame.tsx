@@ -1,4 +1,10 @@
-import { useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { CirclePlay } from "lucide-react";
 import { isFingerPointer, useTouchReadout } from "@/hooks/use-touch-readout";
 import {
@@ -99,6 +105,11 @@ export function VisualFrame({
 }
 
 /** A group whose readout CSS reveals, and that readout. */
+/** A prefix for SVG `id`s unique to this instance (clip paths, gradients): `useId`'s colons are not valid in a `url(#…)`. */
+export function useSvgId(prefix: string): string {
+  return `${prefix}-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+}
+
 const GROUP = ".group, .group\\/bar";
 const CSS_READOUT = "[data-ask-readout][data-ask-css]";
 
@@ -160,6 +171,10 @@ export function VisualKey({
 export const WATCH_ROW =
   "-mx-2 rounded-[var(--radius-element)] px-2 transition-colors duration-[var(--duration-hover)] has-[a:hover]:bg-[var(--surface-muted)] has-[a:focus-visible]:bg-[var(--surface-muted)]";
 
+/** The link a watchable row's label is: the play mark and ink slide in on hover or focus. */
+export const WATCH_LINK =
+  "group flex items-center rounded-[var(--radius-element)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--ink-900)] focus-visible:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)]";
+
 /** A block row's label at rest. */
 export const ROW_LABEL = "text-[12px] text-[var(--ink-600)]";
 
@@ -212,6 +227,11 @@ export function VisualReadout({
  * link is hovered or focused, so a block with five watchable rows carries no
  * blue until one is pointed at. The words stay for a screen reader: the link
  * still reads "First serves in · Watch".
+ *
+ * A device with no hover (a phone, a tablet) never gets the slide-in, so
+ * there the mark stands at rest in ink-500: without it nothing would tell a
+ * row that opens the film from one that does not, and the first tap would
+ * navigate with no warning.
  */
 export function WatchMark() {
   return (
@@ -220,7 +240,7 @@ export function WatchMark() {
       <CirclePlay
         aria-hidden="true"
         strokeWidth={1.5}
-        className="ml-1.5 size-3 shrink-0 -translate-x-1 text-[var(--ink-900)] opacity-0 transition-[opacity,transform] duration-[var(--duration-hover)] group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 group-data-[ask-tapped]:translate-x-0 group-data-[ask-tapped]:opacity-100 motion-reduce:transform-none"
+        className="ml-1.5 size-3 shrink-0 -translate-x-1 text-[var(--ink-900)] opacity-0 transition-[opacity,transform] duration-[var(--duration-hover)] group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 motion-reduce:transform-none [@media(hover:none)]:translate-x-0 [@media(hover:none)]:text-[var(--ink-500)] [@media(hover:none)]:opacity-100"
       />
     </span>
   );

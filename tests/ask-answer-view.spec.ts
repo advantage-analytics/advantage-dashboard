@@ -684,6 +684,10 @@ test.describe("the visual block", () => {
       "Jun 4: 61,0 %; All matches 58,2 %, open match",
     );
     await expect(block.locator("ol")).toHaveCount(0);
+    // A point that opens its match keeps a ring, so the target can be seen;
+    // the last point wears the filled dot instead.
+    await expect(block.locator("circle[data-ask-trend-ring]")).toHaveCount(2);
+    await expect(block.locator("svg circle")).toHaveCount(3);
     // Each link sits on its point: the dot's own place in the box, as a
     // share of the plot's width and height (the harness loads no stylesheet,
     // so the inline position is what can be read).
