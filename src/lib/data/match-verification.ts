@@ -11,8 +11,6 @@
  * "edited" (step 2).
  */
 
-import { shortDate } from "@/lib/data/match-utils";
-
 export const VERIFIED_BY_ADVANTAGE = "Verified by Advantage";
 
 /** The longest "Something still wrong?" note, read by the form and the action. */
@@ -42,9 +40,19 @@ export function verificationFor(row: {
 }
 
 /**
- * "Verified Oct 26". `verified_at` is a real moment, so `shortDate` — pinned
- * to UTC, so the server's render and the browser's agree.
+ * "Verified Oct 26", on the VIEWER's calendar: `verified_at` is a real
+ * moment, and a match verified at 8pm Pacific was verified on the 26th for a
+ * player in California, though UTC has reached the 27th.
+ *
+ * Local time is only safe where the server never renders it, or the server
+ * (UTC) and the browser would disagree and React would refuse to hydrate.
+ * Its one caller is the report's popover, whose content Radix mounts on
+ * click, in the browser. A server-rendered surface wants `shortDate`.
  */
 export function verifiedOnLabel(verification: MatchVerification): string {
-  return `Verified ${shortDate(verification.verifiedAt)}`;
+  const day = new Date(verification.verifiedAt).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+  return `Verified ${day}`;
 }
