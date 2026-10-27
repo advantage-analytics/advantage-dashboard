@@ -56,7 +56,6 @@ function seasonMatch(opts: {
     score: null,
     date: opts.date,
     source_provider: opts.provider ?? null,
-    verified: opts.provider ? true : null,
   };
 }
 

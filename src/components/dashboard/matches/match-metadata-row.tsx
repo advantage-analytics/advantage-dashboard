@@ -1,22 +1,23 @@
 import { Calendar, Crosshair, Swords } from "lucide-react";
 import Image from "next/image";
+import {
+  VERIFIED_BY_ADVANTAGE,
+  type MatchVerification,
+} from "@/lib/data/match-verification";
 
 interface MatchMetadataRowProps {
   date?: string;
   matchType?: string;
   courtType?: string;
-  verificationStatus?: string;
-  /** Hide the verified/unverified badge entirely — useful on pre-save screens
-   *  where the concept of "verification" doesn't yet apply. */
-  showVerification?: boolean;
+  /** Verified by Advantage (`verificationFor`), or null. */
+  verification?: MatchVerification | null;
 }
 
 export function MatchMetadataRow({
   date,
   matchType,
   courtType,
-  verificationStatus,
-  showVerification = true,
+  verification,
 }: MatchMetadataRowProps): React.JSX.Element {
   // The v3 metadata row as the locked Platform Audit frames draw it: 13px
   // icons at --ink-400, `text-micro` labels (11px, --ink-500 — the token, not
@@ -77,7 +78,7 @@ export function MatchMetadataRow({
         </div>
       )}
 
-      {showVerification && verificationStatus && (
+      {verification && (
         <div className="flex items-center gap-[5px]">
           <Image
             src="/icons/verified-check-icon.svg"
@@ -86,7 +87,7 @@ export function MatchMetadataRow({
             height={13}
             aria-hidden="true"
           />
-          <p className="text-micro">{verificationStatus}</p>
+          <p className="text-micro">{VERIFIED_BY_ADVANTAGE}</p>
         </div>
       )}
     </div>

@@ -108,7 +108,6 @@ export const SYNTHETIC_MATCH_DETAIL: MatchDetailData = {
     date: "March 5, 2026",
     matchType: "Dual match",
     courtType: "Hard",
-    verificationStatus: "Verified result",
     sourceProvider: "splitstep",
     round: "Singles 1",
     matchContext: "Win",

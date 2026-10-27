@@ -246,7 +246,6 @@ export default async function MatchDetailPage({
   const jobAnalysis = analysisFor(jobs, {
     id: matchId,
     sourceProvider: match.sourceProvider,
-    verificationStatus: match.verificationStatus,
   });
 
   // Derivation produces two things of very different trustworthiness, and the

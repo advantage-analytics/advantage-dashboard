@@ -35,6 +35,8 @@ import { createLoader } from "./fixtures/vm-modules";
 
 const CONSOLE = "src/components/admin/labels/label-console.tsx";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
+const MATCH_ID = "22222222-2222-4222-8222-222222222222";
+const ACTOR = "33333333-3333-4333-8333-333333333333";
 const NAMES = { p1: "Lee", p2: "Vargas" };
 const { P1, P2 } = FIXTURE_POINT_IDS;
 
@@ -58,6 +60,8 @@ function fakeClient(rows: {
   failCode?: string;
   /** Updates from this one on (0-based) fail with a plain error. */
   failFromUpdate?: number;
+  /** These RPCs (`verify_match`, `unverify_match`) fail. */
+  failRpc?: string[];
 }) {
   const calls: Call[] = [];
   let updateCount = 0;
@@ -65,6 +69,9 @@ function fakeClient(rows: {
     /** `claim_label_publish_lease`: the database's stamp, or none. */
     async rpc(fn: string, args: Record<string, unknown>) {
       calls.push({ table: fn, op: "rpc", values: args, filters: {} });
+      if (rows.failRpc?.includes(fn)) {
+        return { data: null, error: { message: `${fn} refused` } };
+      }
       return { data: rows.raced ? null : CLAIM_STAMP, error: null };
     },
     from(table: string) {
@@ -92,7 +99,7 @@ function fakeClient(rows: {
         return {
           data:
             rows.session === undefined
-              ? { status: "labelling", marks_enabled: true }
+              ? { status: "labelling", marks_enabled: true, match_id: MATCH_ID }
               : rows.session,
           error: null,
         };
@@ -142,6 +149,7 @@ test.describe("writeLabelSessionComplete", () => {
     const now = Date.parse("2026-10-10T21:00:00.000Z");
     expect(
       await writeLabelSessionComplete({
+        actorId: ACTOR,
         supabase: fake.supabase,
         sessionId: SESSION_ID,
         now: () => now,
@@ -162,6 +170,8 @@ test.describe("writeLabelSessionComplete", () => {
     });
     // The lease lands first, so a second tab finds it taken.
     expect(order).toEqual([`publish ${SESSION_ID} after rpc`]);
+    // The lease, then — once the points are in — Verified by Advantage, as
+    // the admin who pressed it, before the session closes.
     expect(fake.calls.filter((c) => c.op === "rpc")).toEqual([
       {
         table: "claim_label_publish_lease",
@@ -169,7 +179,16 @@ test.describe("writeLabelSessionComplete", () => {
         values: { p_session_id: SESSION_ID },
         filters: {},
       },
+      {
+        table: "verify_match",
+        op: "rpc",
+        values: { p_match_id: MATCH_ID, p_actor: ACTOR },
+        filters: {},
+      },
     ]);
+    const verifyAt = fake.calls.findIndex((c) => c.table === "verify_match");
+    const closeAt = fake.calls.findIndex((c) => c.op === "update");
+    expect(verifyAt).toBeLessThan(closeAt);
     const [close] = updates(fake);
     expect(close).toMatchObject({
       values: {
@@ -182,6 +201,34 @@ test.describe("writeLabelSessionComplete", () => {
     for (const call of updates(fake)) expect(call.table).toBe("label_sessions");
   });
 
+  test("a failed verify is a failed Complete: the lease is released, the session stays open", async () => {
+    const fake = fakeClient({ failRpc: ["verify_match"] });
+    const result = await writeLabelSessionComplete({
+      actorId: ACTOR,
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+      publish: PUBLISHED,
+    });
+    expect(result).toEqual({
+      error:
+        "The labels are published, but the match could not be marked Verified by Advantage: verify_match refused. Mark complete again to retry.",
+    });
+    expect(updates(fake).map((c) => c.values)).toEqual([
+      { publishing_since: null },
+    ]);
+  });
+
+  test("a refused publish never verifies", async () => {
+    const fake = fakeClient({});
+    await writeLabelSessionComplete({
+      actorId: ACTOR,
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+      publish: async () => ({ ok: false, error: "Not published: no." }),
+    });
+    expect(fake.calls.some((c) => c.table === "verify_match")).toBe(false);
+  });
+
   test("a refused or failed publish releases only its own lease; the session stays open", async () => {
     const released = (fake: ReturnType<typeof fakeClient>) =>
       updates(fake).map((c) => c.values);
@@ -189,6 +236,7 @@ test.describe("writeLabelSessionComplete", () => {
     const refusedPublish = fakeClient({});
     expect(
       await writeLabelSessionComplete({
+        actorId: ACTOR,
         supabase: refusedPublish.supabase,
         sessionId: SESSION_ID,
         publish: async () => ({ ok: false, error: "Not published: no." }),
@@ -201,6 +249,7 @@ test.describe("writeLabelSessionComplete", () => {
     const threw = fakeClient({});
     expect(
       await writeLabelSessionComplete({
+        actorId: ACTOR,
         supabase: threw.supabase,
         sessionId: SESSION_ID,
         publish: async () => {
@@ -217,6 +266,7 @@ test.describe("writeLabelSessionComplete", () => {
     const fake = fakeClient({ failFromUpdate: 0 });
     expect(
       await writeLabelSessionComplete({
+        actorId: ACTOR,
         supabase: fake.supabase,
         sessionId: SESSION_ID,
         publish: async () => ({ ok: false, error: "Not published: no." }),
@@ -239,6 +289,7 @@ test.describe("writeLabelSessionComplete", () => {
     });
     expect(
       await writeLabelSessionComplete({
+        actorId: ACTOR,
         supabase: held.supabase,
         sessionId: SESSION_ID,
         publish: async () => {
@@ -261,6 +312,7 @@ test.describe("writeLabelSessionComplete", () => {
     expect(await checkSessionOpen(stale.supabase, SESSION_ID)).toBeNull();
     expect(
       await writeLabelSessionComplete({
+        actorId: ACTOR,
         supabase: stale.supabase,
         sessionId: SESSION_ID,
         publish: PUBLISHED,
@@ -274,6 +326,7 @@ test.describe("writeLabelSessionComplete", () => {
     });
     expect(
       await writeLabelSessionComplete({
+        actorId: ACTOR,
         publish: PUBLISHED,
         supabase: blind.supabase,
         sessionId: SESSION_ID,
@@ -294,6 +347,7 @@ test.describe("writeLabelSessionComplete", () => {
     const none = fakeClient({});
     expect(
       await writeLabelSessionComplete({
+        actorId: ACTOR,
         publish: PUBLISHED,
         supabase: none.supabase,
         sessionId: "nope",
@@ -303,6 +357,7 @@ test.describe("writeLabelSessionComplete", () => {
 
     expect(
       await writeLabelSessionComplete({
+        actorId: ACTOR,
         publish: PUBLISHED,
         supabase: fakeClient({ session: null }).supabase,
         sessionId: SESSION_ID,
@@ -314,6 +369,7 @@ test.describe("writeLabelSessionComplete", () => {
     });
     expect(
       await writeLabelSessionComplete({
+        actorId: ACTOR,
         publish: PUBLISHED,
         supabase: frozen.supabase,
         sessionId: SESSION_ID,
@@ -325,6 +381,7 @@ test.describe("writeLabelSessionComplete", () => {
 
     expect(
       await writeLabelSessionComplete({
+        actorId: ACTOR,
         publish: PUBLISHED,
         supabase: fakeClient({ raced: true }).supabase,
         sessionId: SESSION_ID,
@@ -335,7 +392,9 @@ test.describe("writeLabelSessionComplete", () => {
 
 test.describe("writeLabelSessionReopen", () => {
   test("a complete session back to labelling, completed_at cleared, matched on the complete status", async () => {
-    const fake = fakeClient({ session: { status: "complete" } });
+    const fake = fakeClient({
+      session: { status: "complete", match_id: MATCH_ID, completed_at: "x" },
+    });
     expect(
       await writeLabelSessionReopen({
         supabase: fake.supabase,
@@ -350,6 +409,49 @@ test.describe("writeLabelSessionReopen", () => {
         filters: { id: SESSION_ID, status: "complete" },
       },
     ]);
+    // Then Verified by Advantage comes off the match.
+    expect(fake.calls.at(-1)).toEqual({
+      table: "unverify_match",
+      op: "rpc",
+      values: { p_match_id: MATCH_ID },
+      filters: {},
+    });
+  });
+
+  test("a failed unverify puts the session back to complete", async () => {
+    const completedAt = "2026-10-20T10:00:00.000Z";
+    const fake = fakeClient({
+      session: {
+        status: "complete",
+        match_id: MATCH_ID,
+        completed_at: completedAt,
+      },
+      failRpc: ["unverify_match"],
+    });
+    expect(
+      await writeLabelSessionReopen({
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+      }),
+    ).toEqual({
+      error:
+        "Could not remove Verified by Advantage, so the session stays complete: unverify_match refused",
+    });
+    expect(updates(fake).at(-1)).toEqual({
+      table: "label_sessions",
+      op: "update",
+      values: { status: "complete", completed_at: completedAt },
+      filters: { id: SESSION_ID, status: "labelling" },
+    });
+  });
+
+  test("a refused reopen never touches Verified by Advantage", async () => {
+    const fake = fakeClient({ session: { status: "complete" }, raced: true });
+    await writeLabelSessionReopen({
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+    });
+    expect(fake.calls.some((c) => c.op === "rpc")).toBe(false);
   });
 
   test("refused: an open session, another open session of the match, a race", async () => {
@@ -573,7 +675,7 @@ test.describe("completeWarnings", () => {
     ).toEqual({
       title: "Mark complete and publish?",
       description:
-        "Every point is checked and the score adds up. The athlete's match is rebuilt from these labels: statistics, points and summary. The version it replaces is backed up, and Reopen lets you edit and publish again.",
+        "Every point is checked and the score adds up. The athlete's match is rebuilt from these labels: statistics, points and summary, and it shows Verified by Advantage. The version it replaces is backed up, and Reopen lets you edit and publish again.",
       confirmLabel: "Publish",
       pendingLabel: "Publishing…",
       tone: "primary",
@@ -585,8 +687,15 @@ test.describe("completeWarnings", () => {
       ),
     ).toMatchObject({
       description:
-        "Some things are still open. Publishing anyway rebuilds the athlete's match from these labels as they are. The version it replaces is backed up, and Reopen lets you fix them and publish again.",
+        "Some things are still open. Publishing anyway rebuilds the athlete's match from these labels as they are, and it shows Verified by Advantage. The version it replaces is backed up, and Reopen lets you fix them and publish again.",
       confirmLabel: "Publish",
+    });
+  });
+
+  test("Reopen asks first, and says Verified by Advantage comes off", () => {
+    expect(labelConfirmCopy({ kind: "reopen-session" }, NAMES)).toMatchObject({
+      title: "Reopen and remove Verified by Advantage?",
+      confirmLabel: "Reopen",
     });
   });
 });

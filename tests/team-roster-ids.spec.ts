@@ -170,7 +170,6 @@ function recentMatch(opts: {
     match_type: "singles",
     source_provider:
       opts.provider === undefined ? "swingvision" : opts.provider,
-    verified: true,
   };
 }
 

@@ -164,7 +164,6 @@ function seasonMatch(id: string, date: string): DbSeasonMatch {
     score: { player1: [6, 6], player2: [3, 4] },
     date,
     source_provider: "swingvision",
-    verified: true,
   };
 }
 

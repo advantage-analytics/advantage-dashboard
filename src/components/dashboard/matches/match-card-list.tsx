@@ -249,6 +249,7 @@ export function MatchCardList({
       <div className="row-lifecycle grid min-w-0 items-center">
         <RowLifecycle
           analysis={match.analysis}
+          verification={match.verification}
           label={[match.player2.name, match.tournamentName]
             .filter(Boolean)
             .join(", ")}

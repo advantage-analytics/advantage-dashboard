@@ -94,7 +94,8 @@ export type LabelConfirm =
       kind: "complete-session";
       /** What is still open (`completeWarnings`); empty when nothing is. */
       warnings: readonly string[];
-    };
+    }
+  | { kind: "reopen-session" };
 
 /** What a point's Reset replaces, and what it leaves. */
 function resetPointDescription(fields: boolean, shots: number): string {
@@ -256,10 +257,19 @@ export function labelConfirmCopy(
         title: "Mark complete and publish?",
         description:
           confirm.warnings.length === 0
-            ? "Every point is checked and the score adds up. The athlete's match is rebuilt from these labels: statistics, points and summary. The version it replaces is backed up, and Reopen lets you edit and publish again."
-            : "Some things are still open. Publishing anyway rebuilds the athlete's match from these labels as they are. The version it replaces is backed up, and Reopen lets you fix them and publish again.",
+            ? "Every point is checked and the score adds up. The athlete's match is rebuilt from these labels: statistics, points and summary, and it shows Verified by Advantage. The version it replaces is backed up, and Reopen lets you edit and publish again."
+            : "Some things are still open. Publishing anyway rebuilds the athlete's match from these labels as they are, and it shows Verified by Advantage. The version it replaces is backed up, and Reopen lets you fix them and publish again.",
         confirmLabel: "Publish",
         pendingLabel: "Publishing…",
+        tone: "primary",
+      };
+    case "reopen-session":
+      return {
+        title: "Reopen and remove Verified by Advantage?",
+        description:
+          "The athlete's match keeps the published points, but no longer shows Verified by Advantage. Mark complete again to publish and verify it again.",
+        confirmLabel: "Reopen",
+        pendingLabel: "Reopening…",
         tone: "primary",
       };
     case "reset-point":

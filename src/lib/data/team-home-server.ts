@@ -1142,7 +1142,6 @@ export interface DbSeasonMatch {
   score: MatchScore | null;
   date: string;
   source_provider: string | null;
-  verified: boolean | null;
 }
 
 /**
@@ -1155,13 +1154,13 @@ export interface DbSeasonMatch {
  * `manualAnalysis` for a score somebody typed.
  */
 function analysisOf(
-  row: { id: string; source_provider: string | null; verified: boolean | null },
+  row: { id: string; source_provider: string | null },
   jobs: Map<string, MatchAnalysis>,
 ): MatchAnalysis {
   return (
     jobs.get(row.id) ??
     (row.source_provider
-      ? importedAnalysis(row.source_provider, Boolean(row.verified))
+      ? importedAnalysis(row.source_provider)
       : manualAnalysis())
   );
 }
@@ -1668,7 +1667,7 @@ const getTeamHomeAnalytics = cache(async function getTeamHomeAnalytics(
     supabase
       .from("matches")
       .select(
-        "id, player1_name, player2_name, player1_id, player2_id, event_entry_id, score, date, source_provider, verified",
+        "id, player1_name, player2_name, player1_id, player2_id, event_entry_id, score, date, source_provider",
       )
       .eq("program_id", programId)
       .order("date", { ascending: false, nullsFirst: false }),

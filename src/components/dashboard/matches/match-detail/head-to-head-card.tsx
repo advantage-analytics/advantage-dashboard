@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { Check, CirclePlay } from "lucide-react";
+import { CirclePlay } from "lucide-react";
 
 import {
   Tooltip,
@@ -739,8 +739,8 @@ const COLUMN =
 
 /**
  * 64 px fits a surname of about six characters at 12px beside the player bar.
- * A longer one gets roughly 7px a character, plus 18px for the bar and its gap
- * (and room for the verified check on `you`), capped so the statistic label
+ * A longer one gets roughly 7px a character, plus 18px for the bar and its gap,
+ * capped so the statistic label
  * keeps its space; `truncate` backstops anything beyond.
  */
 function columnWidth(youName: string, oppName: string): number {
@@ -1314,15 +1314,6 @@ export function HeadToHeadCard() {
           <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
             {youName}
           </span>
-          {/* Gated exactly as the rail's check is: the glyph claims a verified
-              result, so it may not appear on a match that has none. */}
-          {match.verificationStatus ? (
-            <Check
-              className="h-[11px] w-[11px] shrink-0 text-[var(--viz-good)]"
-              strokeWidth={2}
-              aria-label="Verified result"
-            />
-          ) : null}
         </span>
         <span className={COLUMN}>
           <PlayerBar color="var(--viz-opp)" />

@@ -2561,6 +2561,9 @@ export function LabelConsole({
         }
         void setSessionStatus("complete");
         return;
+      case "reopen-session":
+        void setSessionStatus("labelling");
+        return;
     }
   }
 
@@ -3615,7 +3618,7 @@ export function LabelConsole({
                 data-reopen-session=""
                 className={advButton("outline", "sm")}
                 disabled={statusSaving}
-                onClick={() => void setSessionStatus("labelling")}
+                onClick={() => setConfirm({ kind: "reopen-session" })}
               >
                 Reopen
               </button>
@@ -3678,7 +3681,8 @@ export function LabelConsole({
         </LabelBlackView>
       )}
 
-      {operable ? (
+      {/* A complete session is not operable, but its Reopen still asks. */}
+      {operable || confirm?.kind === "reopen-session" ? (
         <LabelConfirmDialog
           confirm={confirm}
           names={names}

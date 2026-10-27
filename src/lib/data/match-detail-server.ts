@@ -15,6 +15,7 @@ import { formatMatchDayLong } from "@/lib/data/match-day";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
 import { formatMatchDuration } from "@/lib/format/duration";
 import type { Match, SetScore } from "@/lib/data/types";
+import { verificationFor } from "@/lib/data/match-verification";
 
 export interface DbMatch {
   id: string;
@@ -40,6 +41,7 @@ export interface DbMatch {
   court_type: string | null;
   event_entry_id: string | null;
   verified: boolean | null;
+  verified_at: string | null;
   duration: number | null;
   source_provider: string | null;
   player_hand: string | null;
@@ -195,7 +197,7 @@ export function transformDbMatchToMatch(
     date: formatMatchDayLong(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
-    verificationStatus: row.verified ? "Verified result" : undefined,
+    verification: verificationFor(row),
     sourceProvider: row.source_provider ?? undefined,
     round: row.round ?? undefined,
     matchContext: matchContextCaption(row.result),
@@ -457,7 +459,7 @@ async function resolveFoldUnreconciled(dbRow: DbMatch): Promise<boolean> {
  * fields `DbMatch` actually carries.
  */
 export const MATCH_DETAIL_COLUMNS =
-  "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights";
+  "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, verified_at, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights";
 
 /**
  * How `loadMatchDetail` orients and scopes one read. The cached export below

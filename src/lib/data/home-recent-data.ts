@@ -14,6 +14,10 @@ import {
   matchDay,
   type TodayInput,
 } from "@/lib/data/match-day";
+import {
+  verificationFor,
+  type MatchVerification,
+} from "@/lib/data/match-verification";
 
 export interface DbRecentMatch {
   id: string;
@@ -36,6 +40,7 @@ export interface DbRecentMatch {
   match_type: string | null;
   court_type: string | null;
   verified: boolean | null;
+  verified_at?: string | null;
   duration: number | null;
   opponent_hand: string | null;
   opponent_backhand: string | null;
@@ -74,7 +79,8 @@ export interface EventGroup {
   date: string;
   matchType: string | null;
   courtType: string | null;
-  verificationStatus: string | null;
+  /** Verified by Advantage (`verificationFor`), or null. */
+  verification: MatchVerification | null;
   matches: MatchRow[];
 }
 
@@ -201,8 +207,11 @@ export function groupMatchesIntoEvents(
       date: formatMatchDayRelative(first.date, today),
       matchType: first.match_type ?? null,
       courtType: first.court_type ?? null,
-      // Sentence case — the DS's one register for labels, and how Pa2 spells it.
-      verificationStatus: first.verified ? "Verified result" : null,
+      // The row stands for the whole event, so it says Verified by Advantage
+      // only when every match in it is — never one match's status for all.
+      verification: matches.every((m) => verificationFor(m))
+        ? verificationFor(first)
+        : null,
       matches: mapped,
     });
   }
@@ -220,7 +229,7 @@ export async function loadRecentMatches(
     : await supabase
         .from("matches")
         .select(
-          "id, created_by, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player1_id, player2_id, opponent_hand, opponent_backhand",
+          "id, created_by, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, verified_at, duration, player1_id, player2_id, opponent_hand, opponent_backhand",
         )
         .eq("created_by", userId)
         // AND no program. `/dashboard` is the personal home — same predicate as

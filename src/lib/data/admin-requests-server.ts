@@ -87,6 +87,17 @@ export interface AdminRequestRequestDetail {
   role: string | null;
   /** "Head coach" — `claimRoleLabel(role)`, or null when `role` is null. */
   roleLabel: string | null;
+  /**
+   * A `match_issue` report ("Something still wrong? Tell us" on Verified by
+   * Advantage): the match, whether it is still verified, and its newest
+   * label session, for the drawer's link into the console. Null on every
+   * other kind.
+   */
+  match: {
+    id: string;
+    verified: boolean;
+    labelSessionId: string | null;
+  } | null;
 }
 
 export type AdminRequestDetail =
@@ -330,6 +341,15 @@ function toClaimRow(
   };
 }
 
+interface RawMatchEmbed {
+  id: string;
+  player1_name: string | null;
+  player2_name: string | null;
+  verified: boolean;
+  programs: RawProgramEmbed | RawProgramEmbed[] | null;
+  label_sessions: { id: string; created_at: string }[] | null;
+}
+
 interface RawRequestRow {
   id: string;
   kind: string;
@@ -342,7 +362,11 @@ interface RawRequestRow {
   status: string;
   created_at: string;
   programs: RawProgramEmbed | RawProgramEmbed[] | null;
+  matches: RawMatchEmbed | RawMatchEmbed[] | null;
 }
+
+const PROGRAM_EMBED =
+  "id, school_name, team, division, state, staff_page_url, review_reasons, primary_domain, crest_path";
 
 const REQUESTS_SELECT = `
   id,
@@ -355,14 +379,34 @@ const REQUESTS_SELECT = `
   team,
   status,
   created_at,
-  programs(id, school_name, team, division, state, staff_page_url, review_reasons, primary_domain, crest_path)
+  programs(${PROGRAM_EMBED}),
+  matches(id, player1_name, player2_name, verified, programs!matches_program_id_fkey(${PROGRAM_EMBED}), label_sessions(id, created_at))
 `;
+
+function matchOf(
+  raw: RawMatchEmbed | RawMatchEmbed[] | null,
+): RawMatchEmbed | null {
+  if (!raw) return null;
+  return Array.isArray(raw) ? (raw[0] ?? null) : raw;
+}
+
+/**
+ * The program a request is about: its own, or — on a `match_issue`, which
+ * never sets `program_id` — the reported match's team, when it has one.
+ */
+function requestProgram(request: RawRequestRow): RawProgramEmbed | null {
+  return (
+    programOf(request.programs) ??
+    programOf(matchOf(request.matches)?.programs ?? null)
+  );
+}
 
 /** "invite_request" → "Invite request", for the `for` column. */
 const REQUEST_KIND_LABEL: Record<string, string> = {
   invite_request: "Invite request",
   ownership_dispute: "Ownership dispute",
   unlisted_program: "Unlisted program",
+  match_issue: "Match issue",
 };
 
 function requestKindLabel(kind: string): string {
@@ -373,7 +417,8 @@ function toRequestRow(
   request: RawRequestRow,
   resolvedCrestUrl: string | null,
 ): AdminRequestRow {
-  const program = programOf(request.programs);
+  const program = requestProgram(request);
+  const match = matchOf(request.matches);
   const schoolName = program?.school_name ?? request.school_name;
   const team = toSquad(program?.team ?? request.team);
 
@@ -390,15 +435,28 @@ function toRequestRow(
     note: request.note,
     role: request.role,
     roleLabel: request.role ? claimRoleLabel(request.role) : null,
+    match: match
+      ? {
+          id: match.id,
+          verified: match.verified,
+          labelSessionId:
+            [...(match.label_sessions ?? [])].sort((a, b) =>
+              b.created_at.localeCompare(a.created_at),
+            )[0]?.id ?? null,
+        }
+      : null,
   };
 
   return {
     id: request.id,
     source: "request",
     date: request.created_at,
-    team: schoolName
-      ? programDisplayName(schoolName, team)
-      : "Unlisted program",
+    // A match report names the match; the team (if any) is its crest.
+    team: match
+      ? `${match.player1_name ?? "Player"} v ${match.player2_name ?? "Opponent"}`
+      : schoolName
+        ? programDisplayName(schoolName, team)
+        : "Unlisted program",
     crestUrl: resolvedCrestUrl,
     for: requestKindLabel(request.kind),
     from: { name: request.name ?? request.email, email: request.email },
@@ -633,7 +691,7 @@ export async function listAdminRequests({
     ),
     Promise.all(
       rawRequests.map((request) =>
-        crestUrl(programOf(request.programs)?.crest_path ?? null),
+        crestUrl(requestProgram(request)?.crest_path ?? null),
       ),
     ),
   ]);

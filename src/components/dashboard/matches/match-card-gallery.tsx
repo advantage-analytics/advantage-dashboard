@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Calendar, Swords, BadgeCheck } from "lucide-react";
+import { Calendar, Swords } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import { VERIFIED_BY_ADVANTAGE } from "@/lib/data/match-verification";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 
 interface ScoreRowProps {
@@ -130,14 +131,15 @@ export function MatchCardGallery({
               <span className="eyebrow">
                 {match.matchContext ?? "Final Score"}
               </span>
-              {match.verificationStatus && (
-                <span>
-                  <BadgeCheck
-                    className="size-3.5 shrink-0 text-[#3B82F6]"
-                    strokeWidth={1.5}
-                    aria-label="Verified result"
-                  />
-                </span>
+              {match.verification && (
+                <Image
+                  src="/icons/verified-check-icon.svg"
+                  width={14}
+                  height={14}
+                  alt={VERIFIED_BY_ADVANTAGE}
+                  title={VERIFIED_BY_ADVANTAGE}
+                  className="shrink-0"
+                />
               )}
             </div>
             {match.duration && (

@@ -141,7 +141,7 @@ export function arrivalUserClient(
 
 /** `getPersonalMatches()`'s columns, plus the one that says whose scope the match is in. */
 const MATCH_COLUMNS =
-  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, duration, opponent_hand, opponent_backhand, program_id";
+  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, verified_at, duration, opponent_hand, opponent_backhand, program_id";
 
 type ArrivalMatch = DbPersonalMatch & { program_id: string | null };
 

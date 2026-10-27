@@ -92,7 +92,7 @@ function commonStubs(hasPlayableVideo: boolean): Record<string, unknown> {
     "@/components/dashboard/matches/match-data-provider": {
       useMatchData: () => ({
         points: POINTS,
-        match: { verificationStatus: null },
+        match: { verification: null },
         statsResult: null,
       }),
     },

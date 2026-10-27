@@ -109,7 +109,7 @@ async function hasSentMatch(
   for (let from = 0; ; from += SENT_MATCH_PAGE) {
     const { data, error } = await supabase
       .from("matches")
-      .select("id, source_provider, verified")
+      .select("id, source_provider")
       .eq("program_id", programId)
       .order("date", { ascending: false, nullsFirst: false })
       .order("id")
@@ -125,7 +125,7 @@ async function hasSentMatch(
       const analysis =
         jobs.get(row.id) ??
         (row.source_provider
-          ? importedAnalysis(row.source_provider, Boolean(row.verified))
+          ? importedAnalysis(row.source_provider)
           : manualAnalysis());
       return isAnalysisReady(analysis.status) || isInFlight(analysis.status);
     });
