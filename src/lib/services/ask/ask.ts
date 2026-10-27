@@ -2390,11 +2390,16 @@ function withQueryMemo(db: AskDatabase): AskDatabase {
       const key = JSON.stringify([fn, args ?? null]);
       const hit = kept.get(key);
       if (hit) return hit;
-      const result = Promise.resolve(db.rpc(fn, args)).then((answer) => {
-        if (answer.error) kept.delete(key);
-        return answer;
-      });
-      result.catch(() => kept.delete(key));
+      const result = Promise.resolve(db.rpc(fn, args)).then(
+        (answer) => {
+          if (answer.error) kept.delete(key);
+          return answer;
+        },
+        (error: unknown) => {
+          kept.delete(key);
+          throw error;
+        },
+      );
       kept.set(key, result);
       return result;
     },
