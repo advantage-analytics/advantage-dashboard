@@ -896,14 +896,16 @@ interface QueryResult {
 export async function* askQuestion(
   input: AskQuestionInput,
 ): AsyncGenerator<AskEvent, void, undefined> {
-  const { db, model, scope } = input;
+  const { model, scope } = input;
   const team = scope.kind === "team";
+  const agentOn = Boolean(input.agent && model.configured && model.toolTurn);
+  // In agent mode the plan is usually a query the loop already ran
+  // (`finish` with a query_id), so the question's query results are kept
+  // and an identical query is answered from them rather than sent again.
+  const db = agentOn ? withQueryMemo(input.db) : input.db;
   // Agent mode (`agent.ts`): the read tools, bound to this question's
   // database — the run record's counting wrapper, when there is one.
-  const agentToolbox =
-    input.agent && model.configured && model.toolTurn
-      ? input.agent.toolbox(db)
-      : null;
+  const agentToolbox = agentOn && input.agent ? input.agent.toolbox(db) : null;
   // Coach mode is a team matter; a personal flag, however it got there, is nothing.
   const coach = team && input.coach === true;
   /** The state the planner last wrote (`thread-state.ts`): saved with the answer for the next turn. */
@@ -2369,6 +2371,34 @@ function stepOfReply(
     };
   }
   return { ok: true, plan: parsed, review: false, compare: null, reply };
+}
+
+/**
+ * The question's database with its query results kept for the question's
+ * life: the same `ask_run_query` / `ask_run_team_query` call with the same
+ * arguments is answered from the first one, so a plan the agent already ran
+ * is not run twice. A refused or failed call is not kept. Everything else
+ * passes straight through.
+ */
+function withQueryMemo(db: AskDatabase): AskDatabase {
+  const kept = new Map<string, Promise<AskRpcResult>>();
+  return {
+    rpc(fn, args) {
+      if (fn !== "ask_run_query" && fn !== "ask_run_team_query") {
+        return db.rpc(fn, args);
+      }
+      const key = JSON.stringify([fn, args ?? null]);
+      const hit = kept.get(key);
+      if (hit) return hit;
+      const result = Promise.resolve(db.rpc(fn, args)).then((answer) => {
+        if (answer.error) kept.delete(key);
+        return answer;
+      });
+      result.catch(() => kept.delete(key));
+      kept.set(key, result);
+      return result;
+    },
+  };
 }
 
 /**

@@ -522,12 +522,13 @@ test.describe("agent mode in askQuestion", () => {
       ),
     );
 
-    // Two exploring queries, then the plan's own run.
+    // Two exploring queries; the plan is q2, answered from its first run
+    // rather than sent to the database again.
     expect(
       calls
         .filter((one) => one.fn === "ask_run_query")
         .map((one) => one.args?.sql),
-    ).toEqual([ZONES_SQL, ZONES_WON_SQL, ZONES_WON_SQL]);
+    ).toEqual([ZONES_SQL, ZONES_WON_SQL]);
     expect(
       events.flatMap((event) =>
         event.type === "status" ? [event.detail ?? event.stage] : [],
@@ -547,7 +548,7 @@ test.describe("agent mode in askQuestion", () => {
     expect(run).toMatchObject({
       outcome: "done",
       route: "agent",
-      queryCount: 3,
+      queryCount: 2,
       // Three agent turns and the answer.
       modelCalls: 4,
     });
