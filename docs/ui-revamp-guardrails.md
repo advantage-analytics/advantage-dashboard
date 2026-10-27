@@ -269,6 +269,21 @@ be. Doubles teams and existing users depend on it.
 > the RPCs and do not mention this follow-up write.
 > `src/lib/admin/uploads/opponent-team.ts`.
 
+> **A reviewed exception, added 2026-10-27: self review (`self_review_save`).**
+>
+> Advantage Review step 2 (`docs/plans/advantage-review.md`) lets a player fix
+> who won a point and how it ended on their own match, and a team's owner or
+> coach on their players' matches. It writes `points.won_by_player1` and
+> `points.result_type` on existing rows, then re-runs `calculate_match_stats`
+> and `backfill_returns_in_and_net_points` unchanged. Allowed on the other
+> exceptions' terms: an explicit action by the person the match belongs to
+> (or their coach), one match per call, **only** those two columns — never
+> `score`, the per-point scores, `set_number`/`game_number`, the server, any
+> `shots` row, `match_stats` by hand, or `verified`; and nothing is lost: the
+> reading it replaced is kept in the self session's `label_points.seed`, and
+> Reset writes it back. Refused on a match Verified by Advantage. Migration
+> `supabase/migrations/20261027120000_self_review.sql`.
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in

@@ -65,6 +65,9 @@ import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { playedSets } from "@/lib/ui/score-format";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMatchFilmEntry } from "@/lib/data/match-film-entry-server";
+import { getSelfReviewState } from "@/lib/data/self-review-server";
+import { SelfReviewProvider } from "@/components/dashboard/matches/match-detail/self-review/self-review-provider";
+import { FixPointsActions } from "@/components/dashboard/matches/match-detail/self-review/fix-points-actions";
 import { countFinishedMatchesFor } from "@/lib/data/finished-match-count-server";
 import {
   markFirstReportSeen,
@@ -148,49 +151,60 @@ export default async function MatchDetailPage({
   // check, and nothing else here depends on them. No link for every match
   // with sharing off; `canShare` false for a viewer who may see the match
   // but not publish it.
-  const [data, jobs, video, filmEntry, workspace, preferences, shareState] =
-    await Promise.all([
-      getMatchDetailData(matchId),
-      createClient().then(async (supabase) => {
-        // Ask the vendor about jobs that look stuck BEFORE reading, so what the
-        // poll learns is what this page renders. Never fatal — and not inside
-        // loadMatchAnalysis, which client components import and the
-        // reconciler's admin/Azure dependencies must never reach.
-        //
-        // Gated on an RLS-scoped existence check first. reconcileBeforePageRead
-        // runs on the ADMIN client, which enforces no ownership of its own —
-        // without this check, this branch races getMatchDetailData's own RLS
-        // read rather than waiting for it, so a signed-in user who merely
-        // knows or guesses a matchId belonging to another account could force
-        // a vendor poll, a status write, and even an auto-resubmission —
-        // spending someone else's quota — before the page's 404 ever fires.
-        // This SELECT uses the same request-scoped, cookie-authenticated
-        // client as everything else here, so it answers exactly what the
-        // viewer's own RLS policy would: nothing, if they cannot see this row.
-        const { data: accessible } = await supabase
-          .from("matches")
-          .select("id")
-          .eq("id", matchId)
-          .maybeSingle();
-        //
-        // Bounded: a slow vendor must not hold the page's first byte. Past
-        // the budget this read shows the stored status and the poll finishes
-        // after the response — see `reconcileWithinBudget`.
-        if (accessible) {
-          await reconcileWithinBudget(
-            [matchId],
-            "match-detail",
-            RECONCILE_BUDGET_MS,
-          );
-        }
-        return loadMatchAnalysis(supabase, [matchId], { reap: true });
-      }),
-      getMatchVideo(matchId),
-      getMatchFilmEntry(matchId),
-      getWorkspaceContext(),
-      getPreferences(),
-      getMatchShareState(matchId),
-    ]);
+  // `selfReview` too: one definer read that answers "may this viewer fix
+  // points" and lists the points a self review changed; never fatal.
+  const [
+    data,
+    jobs,
+    video,
+    filmEntry,
+    workspace,
+    preferences,
+    shareState,
+    selfReview,
+  ] = await Promise.all([
+    getMatchDetailData(matchId),
+    createClient().then(async (supabase) => {
+      // Ask the vendor about jobs that look stuck BEFORE reading, so what the
+      // poll learns is what this page renders. Never fatal — and not inside
+      // loadMatchAnalysis, which client components import and the
+      // reconciler's admin/Azure dependencies must never reach.
+      //
+      // Gated on an RLS-scoped existence check first. reconcileBeforePageRead
+      // runs on the ADMIN client, which enforces no ownership of its own —
+      // without this check, this branch races getMatchDetailData's own RLS
+      // read rather than waiting for it, so a signed-in user who merely
+      // knows or guesses a matchId belonging to another account could force
+      // a vendor poll, a status write, and even an auto-resubmission —
+      // spending someone else's quota — before the page's 404 ever fires.
+      // This SELECT uses the same request-scoped, cookie-authenticated
+      // client as everything else here, so it answers exactly what the
+      // viewer's own RLS policy would: nothing, if they cannot see this row.
+      const { data: accessible } = await supabase
+        .from("matches")
+        .select("id")
+        .eq("id", matchId)
+        .maybeSingle();
+      //
+      // Bounded: a slow vendor must not hold the page's first byte. Past
+      // the budget this read shows the stored status and the poll finishes
+      // after the response — see `reconcileWithinBudget`.
+      if (accessible) {
+        await reconcileWithinBudget(
+          [matchId],
+          "match-detail",
+          RECONCILE_BUDGET_MS,
+        );
+      }
+      return loadMatchAnalysis(supabase, [matchId], { reap: true });
+    }),
+    getMatchVideo(matchId),
+    getMatchFilmEntry(matchId),
+    getWorkspaceContext(),
+    getPreferences(),
+    getMatchShareState(matchId),
+    getSelfReviewState(matchId),
+  ]);
   const unit = preferences.unit;
 
   if (!data) notFound();
@@ -464,44 +478,54 @@ export default async function MatchDetailPage({
           canEditBands={canEditBands}
           unit={unit}
         >
-          <MatchReportFrame>
-            <MatchReportRail>
-              <MatchReportScoreboard />
-              <MatchReportViewSwitcher />
-              <MatchReportSpacer />
-              {share}
-            </MatchReportRail>
+          <SelfReviewProvider
+            matchId={matchId}
+            state={selfReview}
+            viewerId={viewerId}
+            locked={Boolean(match.verification)}
+            points={data.points ?? []}
+            youIsPlayer1={sides.you.isPlayer1}
+          >
+            <MatchReportFrame>
+              <MatchReportRail>
+                <MatchReportScoreboard />
+                <MatchReportViewSwitcher />
+                <MatchReportSpacer />
+                {share}
+              </MatchReportRail>
 
-            <MatchReportPane>
-              <MatchReportTitleRow>
-                {/* `min-w-0` (F1): a long facts line shrinks its block rather
+              <MatchReportPane>
+                <MatchReportTitleRow>
+                  {/* `min-w-0` (F1): a long facts line shrinks its block rather
                   than pushing the actions out of the row. */}
-                <div className="min-w-0">
-                  <MatchReportTitle />
-                  <MatchReportFacts />
-                </div>
-                <MatchReportTitleActions>
-                  <MatchReportAskLink />
-                  <MatchReportMoreMenu />
-                </MatchReportTitleActions>
-              </MatchReportTitleRow>
+                  <div className="min-w-0">
+                    <MatchReportTitle />
+                    <MatchReportFacts />
+                  </div>
+                  <MatchReportTitleActions>
+                    <FixPointsActions />
+                    <MatchReportAskLink />
+                    <MatchReportMoreMenu />
+                  </MatchReportTitleActions>
+                </MatchReportTitleRow>
 
-              <MatchReportWhen view="statistics">
-                <StatisticsView />
-              </MatchReportWhen>
-              <MatchReportWhen view="shots">
-                <ShotsTab />
-              </MatchReportWhen>
-              <MatchReportWhen view="film" scrollsInside>
-                {/* `video` is the short-lived playback SAS, or null when there
+                <MatchReportWhen view="statistics">
+                  <StatisticsView />
+                </MatchReportWhen>
+                <MatchReportWhen view="shots">
+                  <ShotsTab />
+                </MatchReportWhen>
+                <MatchReportWhen view="film" scrollsInside>
+                  {/* `video` is the short-lived playback SAS, or null when there
                   is no file to serve. `entry` says which no-video case that
                   is — genuinely none, or a storage problem over a match that
                   has one — and which actions this viewer may take. Points
                   come from `MatchDataProvider`. */}
-                <FilmTab video={video} entry={filmEntry} unit={unit} />
-              </MatchReportWhen>
-            </MatchReportPane>
-          </MatchReportFrame>
+                  <FilmTab video={video} entry={filmEntry} unit={unit} />
+                </MatchReportWhen>
+              </MatchReportPane>
+            </MatchReportFrame>
+          </SelfReviewProvider>
           {/* After the frame, inside the provider: the runner reads
               `useMatchReport()` to switch views and finds the `[data-tour]`
               targets the report above has rendered. Mounted only when
