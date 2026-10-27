@@ -1,11 +1,16 @@
 import { expect, test } from "@playwright/test";
 
+import { readFileSync } from "node:fs";
+
 import {
   enterFullscreen,
+  escapeLockable,
   exitFullscreen,
   fullscreenActive,
   fullscreenSupported,
+  lockEscape,
   requestFullscreen,
+  unlockEscape,
   type FullscreenDocument,
 } from "@/components/admin/labels/use-browser-fullscreen";
 
@@ -138,4 +143,53 @@ test("a refusal is swallowed: rejected or thrown, it answers false and stays off
   };
   await expect(enterFullscreen(thrower)).resolves.toBe(false);
   await expect(exitFullscreen(thrower)).resolves.toBe(false);
+});
+
+test("in full screen Esc is the console's: the Keyboard Lock asks for Escape alone", async () => {
+  const asked: unknown[] = [];
+  let unlocked = 0;
+  const nav = {
+    keyboard: {
+      lock: async (keys?: string[]) => {
+        asked.push(keys);
+      },
+      unlock: () => {
+        unlocked += 1;
+      },
+    },
+  };
+  await expect(lockEscape(nav)).resolves.toBe(true);
+  expect(asked).toEqual([["Escape"]]);
+  unlockEscape(nav);
+  expect(unlocked).toBe(1);
+  // Refused, or a browser with no Keyboard Lock (Safari, Firefox): false,
+  // never a throw — Esc then leaves full screen as the browser decides.
+  const refusing = {
+    keyboard: { lock: () => Promise.reject(new Error("no")) },
+  };
+  await expect(lockEscape(refusing)).resolves.toBe(false);
+  await expect(lockEscape({})).resolves.toBe(false);
+  expect(() => unlockEscape({})).not.toThrow();
+});
+
+test("a browser that cannot keep Esc (Safari, Firefox) is never asked for its full screen: the window it is", () => {
+  expect(escapeLockable({ keyboard: { lock: async () => {} } })).toBe(true);
+  expect(escapeLockable({})).toBe(false);
+  expect(escapeLockable({ keyboard: {} })).toBe(false);
+  const source = readFileSync(
+    "src/components/admin/labels/use-browser-fullscreen.ts",
+    "utf8",
+  );
+  const enter = source.slice(source.indexOf("const enter = useCallback("));
+  // Answered before any request, so the console keeps the black layer in the
+  // window (`layoutAfterFullscreenRequest("unsupported")` is black).
+  expect(enter.indexOf("escapeLockable(pageNavigator())")).toBeLessThan(
+    enter.indexOf("requestFullscreen(document)"),
+  );
+  expect(enter).toContain('return "unsupported";');
+  // Only on a secure page: plain http at a network address has no
+  // navigator.keyboard even in Chrome, and asks for full screen as before.
+  expect(enter).toMatch(
+    /!escapeLockable\(pageNavigator\(\)\) &&\s*window\.isSecureContext &&/,
+  );
 });

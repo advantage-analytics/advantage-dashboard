@@ -21,6 +21,7 @@ import type {
 import {
   DEAD_BALL_TAIL,
   applyDismiss,
+  doubleFaultAt,
   planDismiss,
   suggestionState,
 } from "@/lib/services/labels/suggestions";
@@ -862,6 +863,142 @@ test.describe("a suggested shot in the black well", () => {
         suggestions: [{ ...SUGGESTION, pointId: "p-0001" }],
       }),
     ).not.toContain("data-shot-suggestion");
+  });
+});
+
+// ── A double fault ends the point ──────────────────────────────────────────
+
+/**
+ * A double fault, then the server knocking the ball back and three more
+ * dead-ball hits: two same-player pairs, both after the point ended.
+ */
+function doubleFaultPoint(
+  results: [LabelShot["result"], LabelShot["result"]] = ["out", "net"],
+  ending: LabelPoint["ending"] = null,
+): LabelPoint {
+  const point = labelSessionFixture().points.find((p) => p.id === P4)!;
+  const shot = (
+    id: string,
+    eventId: number,
+    hitter: "p1" | "p2",
+    stroke: LabelShot["stroke"],
+    videoTime: number,
+    result: LabelShot["result"] = "in",
+  ): LabelShot =>
+    labelShot(id, P4, { eventId, hitter, stroke, videoTime, result });
+  return {
+    ...point,
+    server: "p1",
+    ending,
+    shots: [
+      shot("d1", 601, "p1", "first_serve", 100, results[0]),
+      shot("d2", 602, "p1", "second_serve", 108, results[1]),
+      shot("d3", 603, "p1", "forehand", 110),
+      shot("d4", 604, "p2", "forehand", 111),
+      shot("d5", 605, "p1", "backhand", 112),
+      shot("d6", 606, "p1", "forehand", 113),
+    ],
+  };
+}
+
+const doubleFaultSlot = (
+  afterShotId: string,
+  eventId: number,
+): Extract<LabelSuggestion, { kind: "missing_shot" }> => ({
+  kind: "missing_shot",
+  key: `missing_shot:${eventId}`,
+  pointId: P4,
+  afterShotId,
+  hitter: "p2",
+  videoTime: 0,
+});
+
+test.describe("a double fault ends the point for its slots", () => {
+  test("doubleFaultAt: the second serve when both missed, or when the ending says so", () => {
+    expect(doubleFaultAt(doubleFaultPoint().shots)).toBe(1);
+    // A second serve in: the rally was played.
+    expect(doubleFaultAt(doubleFaultPoint(["out", "in"]).shots)).toBeNull();
+    // A first serve in is no fault at all.
+    expect(doubleFaultAt(doubleFaultPoint(["in", "out"]).shots)).toBeNull();
+    // The labeller's stored ending outranks results that do not say it.
+    expect(
+      doubleFaultAt(doubleFaultPoint(["in", "in"]).shots, "double_fault"),
+    ).toBe(1);
+    // A let is replayed: the serve after it is still a first serve.
+    const withLet = doubleFaultPoint();
+    const letServe: LabelShot = {
+      ...withLet.shots[0],
+      id: "d0",
+      eventId: 600,
+      result: "let",
+    };
+    withLet.shots = [letServe, ...withLet.shots];
+    expect(doubleFaultAt(withLet.shots)).toBe(2);
+    // One serve: nothing to end.
+    expect(doubleFaultAt(doubleFaultPoint().shots.slice(1))).toBeNull();
+  });
+
+  test("every slot from the second fault on is done, however many strokes follow", () => {
+    const point = doubleFaultPoint();
+    // Four strokes follow the second fault: past `DEAD_BALL_TAIL`, which on
+    // its own would read the miss as a mis-tracked bounce.
+    expect(point.shots.length - 2).toBeGreaterThan(DEAD_BALL_TAIL);
+    expect(suggestionState(doubleFaultSlot("d2", 602), point)).toBe("done");
+    expect(suggestionState(doubleFaultSlot("d5", 605), point)).toBe("done");
+    // Stored as a double fault with results that do not say so: done too.
+    const stored = doubleFaultPoint(["in", "in"], "double_fault");
+    expect(suggestionState(doubleFaultSlot("d5", 605), stored)).toBe("done");
+    // No double fault: the slot is still a question.
+    const played = doubleFaultPoint(["out", "in"]);
+    expect(suggestionState(doubleFaultSlot("d5", 605), played)).toBe("open");
+  });
+
+  test('"Missing shot?" settles on a double fault: no slot is left open', () => {
+    const point = doubleFaultPoint();
+    const suggestions = [
+      doubleFaultSlot("d2", 602),
+      doubleFaultSlot("d5", 605),
+    ];
+    expect(markState(pairMark(), point, suggestions)).not.toBe("open");
+  });
+
+  test("the well draws a Point over line under the second fault, the strokes after it quieter", () => {
+    const point = doubleFaultPoint();
+    const html = renderWell(point, null);
+    expect(html).toContain("data-point-over");
+    expect(html).toContain("Point over · double fault");
+    const line = html.indexOf("data-point-over");
+    expect(html.indexOf('data-shot-id="d2"')).toBeLessThan(line);
+    expect(html.indexOf('data-shot-id="d3"')).toBeGreaterThan(line);
+    for (const id of ["d3", "d4", "d5", "d6"]) {
+      const row = html.slice(html.indexOf(`data-shot-id="${id}"`));
+      expect(row.slice(0, row.indexOf(">")), id).toContain("data-past-end");
+    }
+    for (const id of ["d1", "d2"]) {
+      const row = html.slice(html.indexOf(`data-shot-id="${id}"`));
+      expect(row.slice(0, row.indexOf(">")), id).not.toContain("data-past-end");
+    }
+    // "After" is rally order, not the stored order: a stroke stored before
+    // the faults but played after them is dimmed, and the line sits above
+    // the first row past the end as drawn.
+    const stored = {
+      ...point,
+      shots: [point.shots[3], ...point.shots.filter((s) => s.id !== "d4")],
+    };
+    const shuffled = renderWell(stored, null);
+    const d4 = shuffled.slice(shuffled.indexOf('data-shot-id="d4"'));
+    expect(d4.slice(0, d4.indexOf(">"))).toContain("data-past-end");
+    expect(shuffled.indexOf("data-point-over")).toBeLessThan(
+      shuffled.indexOf('data-shot-id="d4"'),
+    );
+    expect(shuffled.match(/data-point-over/g)).toHaveLength(1);
+    // Ending on the second fault, or no double fault: no line.
+    expect(
+      renderWell({ ...point, shots: point.shots.slice(0, 2) }, null),
+    ).not.toContain("data-point-over");
+    expect(renderWell(doubleFaultPoint(["out", "in"]), null)).not.toContain(
+      "data-point-over",
+    );
   });
 });
 

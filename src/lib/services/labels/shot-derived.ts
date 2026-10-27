@@ -154,6 +154,30 @@ export function shortOfNet(shot: ShotEnds): number | null {
 }
 
 /**
+ * How far past its line an out landing came down, as the Result menu's
+ * second line says it: "0.3 m wide" or "1.2 m long", whichever line it
+ * missed by more, to the tenth of a metre. Null for a landing that is in, in
+ * the net, not placed, or within 5 cm of the line (it would read "0 m"). A
+ * serve's long is past the service line; a serve on the wrong side of the
+ * centre line missed no line it can be measured from, so it reads null too.
+ */
+export function landingMiss(shot: ShotGeometry): string | null {
+  if (deriveShotResult(shot) !== "out") return null;
+  const { contact_x, landing_x, landing_y } = shot;
+  if (contact_x === null || landing_x === null || landing_y === null) {
+    return null;
+  }
+  const depth = Math.abs(landing_y - NET_Y);
+  const wide = Math.abs(landing_x) - SINGLES_HALF_WIDTH_M;
+  const long = isServeStroke(shot.stroke)
+    ? depth - SERVICE_LINE_M
+    : depth - BASELINE_M;
+  const by = Math.max(wide, long);
+  if (by < 0.05) return null;
+  return `${by.toFixed(1)} m ${wide >= long ? "wide" : "long"}`;
+}
+
+/**
  * What the landing of a serve stored `in` reads as when it contradicts that:
  * `"out"` or `"net"`, else null — for a serve whose landing agrees or is not
  * placed, a serve not stored in, and any other stroke. An in serve cannot

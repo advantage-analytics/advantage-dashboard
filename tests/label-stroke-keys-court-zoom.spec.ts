@@ -3,7 +3,6 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
 import {
-  STROKE_KEY_HINTS,
   frameTimePatch,
   hasEarlierServe,
   isStrokeKey,
@@ -229,17 +228,7 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     "utf8",
   );
 
-  test("the legend under the court names them, after the stroke keys", () => {
-    expect(STROKE_KEY_HINTS.slice(-8)).toEqual([
-      { key: "C", label: "contact / landing" },
-      { key: "X", label: "flip side" },
-      { key: "T", label: "time = frame" },
-      { key: "A", label: "add shot" },
-      { key: "⇧A", label: "add before" },
-      { key: "R", label: "reset shot" },
-      { key: "⇧R", label: "reset point" },
-      { key: "⌫", label: "delete shot" },
-    ]);
+  test("A, C and T are console keys, never stroke keys", () => {
     // Neither is a stroke key: they never change the selected stroke.
     expect(isStrokeKey("a")).toBe(false);
     expect(isStrokeKey("c")).toBe(false);
@@ -288,7 +277,10 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     );
     const pointFn = pointBody.slice(0, pointBody.indexOf("\n    };\n"));
     expect(pointFn).toContain("if (!operable || confirm || !expanded)");
-    expect(pointFn).toContain("if (!canResetPoint(expanded)) return false;");
+    // Whatever changed — fields or only strokes — as the ⋯ menu offers it,
+    // never the point's own fields alone (which left ⇧R dead on a point
+    // whose strokes alone were edited).
+    expect(pointFn).not.toContain("canResetPoint(");
     expect(pointFn).toContain(
       "pointResetScope(expanded, sharesVendorRally(expanded, points))",
     );

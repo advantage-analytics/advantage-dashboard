@@ -3,7 +3,6 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { ArrowUpDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Kbd } from "@/components/ui/kbd";
 import {
   isLetServe,
   isLiveShot,
@@ -30,7 +29,6 @@ import {
 import type { SideNames } from "./label-format";
 import { PointInfoLine, type PointInfo } from "./label-point-info";
 import { RAIL_TONE_CLASS } from "./label-rail-tone";
-import { STROKE_KEY_HINTS } from "./stroke-keys";
 import type { VideoClock } from "./video-clock";
 
 /**
@@ -87,16 +85,11 @@ function deepReadout(own: string, runoff: number): string {
 
 /**
  * The end's glyph, as the court draws its marks: a hollow ring where the ball
- * was hit, a filled dot where it landed. `size` is the header's (9px) or the
- * switch's (7px ring / 6px dot).
+ * was hit, a filled dot where it landed — on the contact / landing switch
+ * (7px ring / 6px dot). The header's prompt dropped its larger copy on
+ * 2026-10-26: the words already name the end.
  */
-export function EndGlyph({
-  end,
-  size = "switch",
-}: {
-  end: PlacementTarget;
-  size?: "title" | "switch";
-}) {
+export function EndGlyph({ end }: { end: PlacementTarget }) {
   return (
     <span
       aria-hidden="true"
@@ -104,11 +97,8 @@ export function EndGlyph({
       className={cn(
         "shrink-0 rounded-full",
         end === "contact"
-          ? cn(
-              "border-[1.5px] border-current",
-              size === "title" ? "size-[9px]" : "size-[7px]",
-            )
-          : cn("bg-current", size === "title" ? "size-[9px]" : "size-1.5"),
+          ? "size-[7px] border-[1.5px] border-current"
+          : "size-1.5 bg-current",
       )}
     />
   );
@@ -116,7 +106,7 @@ export function EndGlyph({
 
 /**
  * The panel's two header lines. Placing: "Shot 3 · contact" — the panel draws
- * the prompt (`placementPrompt`) with its end's glyph in this title's place —
+ * the prompt (`placementPrompt`) in this title's place —
  * over whose half is on screen, or "Flipped to <hitter>'s side · Net" when Flip side has brought a
  * landing back across. Otherwise: "Point 15" over "Shot 3 of 4 · Ace" for the
  * playing stroke, or just the stroke count; "Court" with no point open. A let
@@ -382,31 +372,12 @@ export function LabelCourtPanel({
           </span>
         )}
       </div>
-      {placing ? (
-        <p
-          data-court-keys=""
-          className="mt-1 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 overflow-hidden text-[10px] text-white/45"
-        >
-          {STROKE_KEY_HINTS.map((hint) => (
-            <span key={hint.key} className="inline-flex items-center gap-[5px]">
-              <Kbd
-                size="sm"
-                variant="flat"
-                mono
-                className="bg-white/[0.08] text-white/60 shadow-none"
-              >
-                {hint.key}
-              </Kbd>
-              {hint.label}
-            </span>
-          ))}
-        </p>
-      ) : null}
     </>
   );
 
-  // Placing, the header's title is what the next click does, after its end's
-  // glyph; a let serve keeps its " · let".
+  // Placing, the header's title is what the next click does, in words alone
+  // (the cursor and the switch carry the end's glyph); a let serve keeps its
+  // " · let".
   const isLet = selected !== null && isLetServe(selected);
   const titleLine =
     placing && prompt ? (
@@ -414,7 +385,6 @@ export function LabelCourtPanel({
         data-court-title=""
         className="flex min-w-0 items-center gap-[7px] text-[13px] leading-[16px] font-medium text-white"
       >
-        <EndGlyph end={placement.target} size="title" />
         <span aria-live="polite" data-court-prompt="" className="truncate">
           {prompt}
         </span>

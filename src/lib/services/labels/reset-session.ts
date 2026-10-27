@@ -14,6 +14,8 @@
  * reading, so it is asked again.
  */
 
+import { readAllPages } from "@/lib/data/admin-range-read";
+import { readLabelPointsByIds } from "@/lib/data/labels-server";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   defaultLabelWriteDependencies,
@@ -32,13 +34,21 @@ import {
 import {
   gated,
   normaliseId,
+  writeLabelShotDelete,
+  writeLabelShotsRestore,
   writeShotSwaps,
   type LabelOpResult,
   type LabelShotStatusResult,
 } from "./operations-session";
+import { sharesVendorRally } from "./point-split";
 import type { ShotSwapWrite } from "./player-swap";
-import { applyShotReset, planPointReset, planShotReset } from "./reset";
-import type { LabelPointStatus, LabelShotStatus } from "./session";
+import {
+  applyShotReset,
+  planPointReset,
+  planShotReset,
+  pointResetScope,
+} from "./reset";
+import type { LabelPoint, LabelPointStatus, LabelShotStatus } from "./session";
 
 export type LabelPointResetResult = LabelOpResult<{
   status: LabelPointStatus;
@@ -189,6 +199,192 @@ export async function writeLabelPointReset(params: {
   return { ok: true, status: plan.write.status, shots: plan.shots };
 }
 
+/**
+ * Every point of the session with just what `sharesVendorRally` reads — its
+ * id, status and vendor rallies — never its strokes or other columns. Paged
+ * (`readAllPages`), as every session-wide label read is: an unpaged select
+ * stops at PostgREST's row cap, and a split half past it would read as whole.
+ */
+async function readSessionRallies(
+  supabase: AdminClient,
+  sessionId: string,
+): Promise<
+  | { points: Pick<LabelPoint, "id" | "status" | "vendorRallyIds">[] }
+  | { error: string }
+> {
+  const message = "Could not read the points.";
+  try {
+    const rows = await readAllPages<{
+      id: string;
+      status: LabelPointStatus;
+      vendor_rally_ids: number[] | null;
+    }>(
+      supabase
+        .from("label_points")
+        .select("id, status, vendor_rally_ids")
+        .eq("session_id", sessionId)
+        .order("id"),
+      message,
+    );
+    return {
+      points: rows.map((row) => ({
+        id: row.id,
+        status: row.status,
+        vendorRallyIds: row.vendor_rally_ids ?? [],
+      })),
+    };
+  } catch {
+    return { error: message };
+  }
+}
+
+/** The point whole, within the session; null when it is not there. Throws on a read error. */
+async function readPointIn(
+  supabase: AdminClient,
+  sessionId: string,
+  pointId: string,
+): Promise<LabelPoint | null> {
+  const [point] = await readLabelPointsByIds(supabase, sessionId, [pointId]);
+  return point ?? null;
+}
+
+/**
+ * Run label writes all at once (`together`) or one after another, stopping at
+ * the first refusal. Answers the first error, or null when every write landed.
+ */
+async function runWrites(
+  together: boolean,
+  writes: readonly (() => Promise<object>)[],
+): Promise<{ error: string } | null> {
+  const isError = (r: object): r is { error: string } => "error" in r;
+  if (together) {
+    const results = await Promise.all(writes.map((write) => write()));
+    return results.find(isError) ?? null;
+  }
+  for (const write of writes) {
+    const result = await write();
+    if (isError(result)) return result;
+  }
+  return null;
+}
+
+/**
+ * The whole point's Reset: the point as it now stands, whole with its shots.
+ * A refusal part-way carries the point too, read back after the writes that
+ * landed, so the console draws what the database holds rather than the rows
+ * from before the reset.
+ */
+export type LabelPointWholeResetResult =
+  LabelOpResult<{ point: LabelPoint }> | { error: string; point: LabelPoint };
+
+/**
+ * The reads and writes a whole Reset is made of, on one client — the
+ * defaults below; a spec hands its own to drive a refusal part-way.
+ */
+export interface WholeResetSteps {
+  /**
+   * The point whole, within the session; null when it is not there. It may
+   * throw on a read error, which the Reset reports as one.
+   */
+  readPoint: () => Promise<LabelPoint | null>;
+  readRallies: () => ReturnType<typeof readSessionRallies>;
+  restoreShots: (shotIds: string[]) => Promise<object>;
+  deleteShot: (shotId: string) => Promise<object>;
+  resetShot: (shotId: string) => Promise<object>;
+  resetPoint: () => Promise<object>;
+}
+
+function wholeResetSteps(
+  supabase: AdminClient,
+  sessionId: string,
+  pointId: string,
+): WholeResetSteps {
+  return {
+    readPoint: () => readPointIn(supabase, sessionId, pointId),
+    readRallies: () => readSessionRallies(supabase, sessionId),
+    restoreShots: (shotIds) => writeLabelShotsRestore({ supabase, shotIds }),
+    deleteShot: (shotId) =>
+      writeLabelShotDelete({ supabase, shotId, reason: "other" }),
+    resetShot: (shotId) => writeLabelShotReset({ supabase, shotId }),
+    resetPoint: () => writeLabelPointReset({ supabase, pointId }),
+  };
+}
+
+/**
+ * Reset the whole point (`pointResetScope`): the labeller's deletes restored,
+ * their added strokes deleted again (reason `other`), every edited stroke
+ * reset, then the point's own fields — whose seed has the last word, as the
+ * console's one-at-a-time Reset had it. The caller runs it inside one
+ * `withLabelOp`, so it is one Undo step whatever it wrote. A write that fails
+ * stops the rest and says why; what landed before it is Undo's to take back.
+ * Answers the point read back whole, refused or not.
+ *
+ * The session is the console's (`sessionId`), checked by the reads: the point
+ * is read within it, so a point of another session reads as not found. That
+ * read and the session's rallies (id, status and vendor rallies alone, for
+ * `sharesVendorRally`) go out together, before any write.
+ */
+export async function writeLabelPointWholeReset(params: {
+  supabase: AdminClient;
+  pointId: unknown;
+  sessionId: unknown;
+  /** For a spec: the steps on stand-ins, else on `supabase`. */
+  steps?: WholeResetSteps;
+}): Promise<LabelPointWholeResetResult> {
+  const pointId = normaliseId(params.pointId);
+  if (!pointId) return { error: "Invalid point id." };
+  const sessionId = normaliseId(params.sessionId);
+  if (!sessionId) return { error: "Invalid session id." };
+  const steps =
+    params.steps ?? wholeResetSteps(params.supabase, sessionId, pointId);
+  // A read that fails is said as one, never as a point that is not there.
+  const [point, rallies] = await Promise.all([
+    steps.readPoint().catch(() => undefined),
+    steps.readRallies(),
+  ]);
+  if (point === undefined) return { error: "Could not read the point." };
+  if (!point) return { error: "Point not found." };
+  if ("error" in rallies) return rallies;
+  const scope = pointResetScope(
+    point,
+    sharesVendorRally(point, rallies.points),
+  );
+  if (!scope) return { error: "There is nothing on this point to reset." };
+
+  // Each stroke write re-reads the point's ending. With the point's own
+  // fields reset last, its seed overwrites whatever those wrote, so the
+  // stroke writes do not depend on one another and go out together. A split
+  // half keeps its fields: there the ending each write leaves is the answer,
+  // so they run one at a time, in this order.
+  const together = scope.fields;
+  const restoredFirst = new Set(scope.deletedIds);
+  const failed =
+    (await runWrites(together, [
+      ...(scope.deletedIds.length > 0
+        ? [() => steps.restoreShots(scope.deletedIds)]
+        : []),
+      ...scope.addedIds.map((shotId) => () => steps.deleteShot(shotId)),
+      ...scope.shotIds
+        .filter((shotId) => !restoredFirst.has(shotId))
+        .map((shotId) => () => steps.resetShot(shotId)),
+    ])) ??
+    // An edited stroke the labeller deleted resets once it is back.
+    (await runWrites(
+      together,
+      scope.shotIds
+        .filter((shotId) => restoredFirst.has(shotId))
+        .map((shotId) => () => steps.resetShot(shotId)),
+    )) ??
+    (scope.fields ? await runWrites(false, [() => steps.resetPoint()]) : null);
+  // Read back whatever landed — a refusal part-way carries it too. A read
+  // that fails here answers no point: never a throw past the refusal.
+  const after = await steps.readPoint().catch(() => null);
+  if (failed) return after ? { ...failed, point: after } : failed;
+  if (!after)
+    return { error: "The point was reset but could not be read back." };
+  return { ok: true, point: after };
+}
+
 // ── The admin-gated entry points behind the server actions ─────────────────
 
 const defaults = defaultLabelWriteDependencies;
@@ -204,13 +400,14 @@ export function resetLabelShot(
   );
 }
 
-export function resetLabelPoint(
+export function resetLabelPointWhole(
   pointId: unknown,
+  sessionId: unknown,
   deps: LabelWriteDependencies = defaults,
-): Promise<LabelPointResetResult> {
+): Promise<LabelPointWholeResetResult> {
   return gated(
     deps,
-    (supabase) => writeLabelPointReset({ supabase, pointId }),
+    (supabase) => writeLabelPointWholeReset({ supabase, pointId, sessionId }),
     "reset the point",
   );
 }
