@@ -187,4 +187,9 @@ test("a browser that cannot keep Esc (Safari, Firefox) is never asked for its fu
     enter.indexOf("requestFullscreen(document)"),
   );
   expect(enter).toContain('return "unsupported";');
+  // Only on a secure page: plain http at a network address has no
+  // navigator.keyboard even in Chrome, and asks for full screen as before.
+  expect(enter).toMatch(
+    /!escapeLockable\(pageNavigator\(\)\) &&\s*window\.isSecureContext &&/,
+  );
 });

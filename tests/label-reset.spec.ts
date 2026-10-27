@@ -913,6 +913,7 @@ test.describe("the point's Reset confirm", () => {
     shots: number,
     added?: number,
     deleted?: number,
+    fieldsKept?: boolean,
   ) =>
     labelConfirmCopy(
       {
@@ -923,6 +924,7 @@ test.describe("the point's Reset confirm", () => {
         shots,
         added,
         deleted,
+        fieldsKept,
       },
       { p1: "Lee", p2: "Vargas" },
     );
@@ -935,6 +937,10 @@ test.describe("the point's Reset confirm", () => {
     );
     expect(copy(false, 0, 2, 1).description).toBe(
       "The 1 shot you deleted comes back. The 2 shots you added are deleted. Its note and checked mark stay as they are. Undo takes it all back.",
+    );
+    // A split half: its edited fields stay, and the confirm says why.
+    expect(copy(false, 1, 0, 0, true).description).toBe(
+      "The 1 shot you edited goes back to its seeded values. Its game, server, serve side, winner, ending and who ended it stay as you set them: it was split from another point, which shares its original values. Its note and checked mark stay as they are. Undo takes it all back.",
     );
     expect(copy(false, 1).description).toBe(
       "The 1 shot you edited goes back to its seeded values. Its note and checked mark stay as they are. Undo takes it all back.",
@@ -955,10 +961,10 @@ test("the whole Reset reads the point and the session's rallies together, never 
   // session) and every point's id, status and rallies alone, paged like every
   // session-wide label read, with a point read that cannot throw.
   expect(body).toMatch(
-    /await Promise\.all\(\[\s*steps\.readPoint\(\),\s*steps\.readRallies\(\),/,
+    /await Promise\.all\(\[\s*steps\.readPoint\(\)\.catch\(\(\) => undefined\),\s*steps\.readRallies\(\),/,
   );
   expect(source).toContain(
-    "readPoint: () => readBack(supabase, sessionId, pointId)",
+    "readPoint: () => readPointIn(supabase, sessionId, pointId)",
   );
   expect(source).toContain(
     "readRallies: () => readSessionRallies(supabase, sessionId)",
@@ -1074,6 +1080,27 @@ test.describe("writeLabelPointWholeReset, step by step", () => {
     });
     await run(point, refused);
     expect(refused.calls).toHaveLength(1);
+  });
+
+  test("a read that fails is said as one — before the writes, and never past a refusal after them", async () => {
+    const point = p1();
+    const failing = steps(point);
+    failing.steps.readPoint = async () => {
+      throw new Error("timeout");
+    };
+    expect(await run(point, failing)).toEqual({
+      error: "Could not read the point.",
+    });
+    expect(failing.calls).toEqual([]);
+
+    // Refused part-way, then the read-back fails: the refusal's own error.
+    const late = steps(point, { refuse: { resetShot: "That shot changed." } });
+    let reads = 0;
+    late.steps.readPoint = async () => {
+      if (reads++ === 0) return point;
+      throw new Error("timeout");
+    };
+    expect(await run(point, late)).toEqual({ error: "That shot changed." });
   });
 
   test("a point of another session reads as not found and writes nothing", async () => {

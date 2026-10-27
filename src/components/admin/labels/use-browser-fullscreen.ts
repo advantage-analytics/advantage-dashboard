@@ -25,7 +25,9 @@ import { useCallback, useEffect, useRef } from "react";
  *   so `enter` does not ask for it (`escapeLockable`) and answers
  *   `"unsupported"`: the black layer fills the window and Esc stays the
  *   console's. The macOS window full screen (⌃⌘F) hides the browser's bars
- *   and leaves Esc alone.
+ *   and leaves Esc alone. A page that is not a secure context cannot tell
+ *   the two kinds of browser apart (no `navigator.keyboard` at all), so it
+ *   asks for the browser's full screen as before, Esc leaving it.
  *
  * The helpers take the document as an argument, so a spec drives them with a
  * plain object.
@@ -207,8 +209,15 @@ export function useBrowserFullscreen(onLeft?: () => void): {
 
   const enter = useCallback(async (): Promise<FullscreenEntry> => {
     // Without the Keyboard Lock the browser's full screen takes every Esc:
-    // stay in the window, where Esc is the console's (see the header).
-    if (!escapeLockable(pageNavigator()) && !fullscreenActive(document)) {
+    // stay in the window, where Esc is the console's (see the header). A page
+    // that is not a secure context (plain http at a network address) has no
+    // `navigator.keyboard` even in Chrome, so it cannot tell itself from
+    // Safari: there the browser's full screen it is, Esc leaving it.
+    if (
+      !escapeLockable(pageNavigator()) &&
+      window.isSecureContext &&
+      !fullscreenActive(document)
+    ) {
       return "unsupported";
     }
     // Already on by some other road: nothing of ours to leave later.

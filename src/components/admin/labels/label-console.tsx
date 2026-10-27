@@ -142,6 +142,7 @@ import {
 import type { LabelCombinePointsResult } from "@/lib/services/labels/point-combine-session";
 import {
   applyShotReset,
+  canResetPoint,
   canResetShot,
   pointResetScope,
 } from "@/lib/services/labels/reset";
@@ -296,6 +297,8 @@ const OPEN_JUMP_DELAY_MS = 450;
  */
 const JUMP_BLURS_SELECTOR =
   "input, textarea, select, [contenteditable='true'], [data-select-editor]";
+/** A text field, select or editable region: it keeps its own keys. */
+const FIELD_SELECTOR = "input, select, textarea, [contenteditable='true']";
 /** An open menu or dialog: while one is up, it keeps the keys. */
 const OPEN_LAYER_SELECTOR =
   "[role='menu'], [role='dialog'], [role='alertdialog']";
@@ -306,9 +309,8 @@ const OPEN_LAYER_SELECTOR =
  */
 function keysAreSpoken(target: Element | null): boolean {
   return (
-    !!target?.closest?.(
-      `input, select, textarea, [contenteditable='true'], ${OPEN_LAYER_SELECTOR}`,
-    ) || !!document.querySelector(OPEN_LAYER_SELECTOR)
+    !!target?.closest?.(`${FIELD_SELECTOR}, ${OPEN_LAYER_SELECTOR}`) ||
+    !!document.querySelector(OPEN_LAYER_SELECTOR)
   );
 }
 /**
@@ -316,11 +318,7 @@ function keysAreSpoken(target: Element | null): boolean {
  * cancels the edit and leaves the field, and lets go of nothing else.
  */
 export function escapeLeavesField(target: EventTarget | null): boolean {
-  return Boolean(
-    (target as Element | null)?.closest?.(
-      "input, select, textarea, [contenteditable='true']",
-    ),
-  );
+  return Boolean((target as Element | null)?.closest?.(FIELD_SELECTOR));
 }
 /** A point row whose insert is still in flight (`insertPoint`), likewise. */
 const PENDING_POINT_PREFIX = "pending-point-";
@@ -2630,6 +2628,8 @@ export function LabelConsole({
         shots: scope.shotIds.length,
         added: scope.addedIds.length,
         deleted: scope.deletedIds.length,
+        // Edited, but a split half: its fields are held back, and it says so.
+        fieldsKept: !scope.fields && canResetPoint(point),
       });
     },
   });

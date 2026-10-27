@@ -238,21 +238,14 @@ async function readSessionRallies(
   }
 }
 
-/**
- * The point read back after the writes, or null when it is gone or the read
- * failed — never a throw, so a refusal part-way still answers its own error.
- */
-async function readBack(
+/** The point whole, within the session; null when it is not there. Throws on a read error. */
+async function readPointIn(
   supabase: AdminClient,
   sessionId: string,
   pointId: string,
 ): Promise<LabelPoint | null> {
-  try {
-    const [point] = await readLabelPointsByIds(supabase, sessionId, [pointId]);
-    return point ?? null;
-  } catch {
-    return null;
-  }
+  const [point] = await readLabelPointsByIds(supabase, sessionId, [pointId]);
+  return point ?? null;
 }
 
 /**
@@ -285,25 +278,14 @@ export type LabelPointWholeResetResult =
   LabelOpResult<{ point: LabelPoint }> | { error: string; point: LabelPoint };
 
 /**
- * Reset the whole point (`pointResetScope`): the labeller's deletes restored,
- * their added strokes deleted again (reason `other`), every edited stroke
- * reset, then the point's own fields — whose seed has the last word, as the
- * console's one-at-a-time Reset had it. The caller runs it inside one
- * `withLabelOp`, so it is one Undo step whatever it wrote. A write that fails
- * stops the rest and says why; what landed before it is Undo's to take back.
- * Answers the point read back whole, refused or not.
- *
- * The session is the console's (`sessionId`), checked by the reads: the point
- * is read within it, so a point of another session reads as not found. That
- * read and the session's rallies (id, status and vendor rallies alone, for
- * `sharesVendorRally`) go out together, before any write.
- */
-/**
  * The reads and writes a whole Reset is made of, on one client — the
  * defaults below; a spec hands its own to drive a refusal part-way.
  */
 export interface WholeResetSteps {
-  /** The point whole, within the session; null when it is not there. */
+  /**
+   * The point whole, within the session; null when it is not there. It may
+   * throw on a read error, which the Reset reports as one.
+   */
   readPoint: () => Promise<LabelPoint | null>;
   readRallies: () => ReturnType<typeof readSessionRallies>;
   restoreShots: (shotIds: string[]) => Promise<object>;
@@ -318,7 +300,7 @@ function wholeResetSteps(
   pointId: string,
 ): WholeResetSteps {
   return {
-    readPoint: () => readBack(supabase, sessionId, pointId),
+    readPoint: () => readPointIn(supabase, sessionId, pointId),
     readRallies: () => readSessionRallies(supabase, sessionId),
     restoreShots: (shotIds) => writeLabelShotsRestore({ supabase, shotIds }),
     deleteShot: (shotId) =>
@@ -328,6 +310,20 @@ function wholeResetSteps(
   };
 }
 
+/**
+ * Reset the whole point (`pointResetScope`): the labeller's deletes restored,
+ * their added strokes deleted again (reason `other`), every edited stroke
+ * reset, then the point's own fields — whose seed has the last word, as the
+ * console's one-at-a-time Reset had it. The caller runs it inside one
+ * `withLabelOp`, so it is one Undo step whatever it wrote. A write that fails
+ * stops the rest and says why; what landed before it is Undo's to take back.
+ * Answers the point read back whole, refused or not.
+ *
+ * The session is the console's (`sessionId`), checked by the reads: the point
+ * is read within it, so a point of another session reads as not found. That
+ * read and the session's rallies (id, status and vendor rallies alone, for
+ * `sharesVendorRally`) go out together, before any write.
+ */
 export async function writeLabelPointWholeReset(params: {
   supabase: AdminClient;
   pointId: unknown;
@@ -341,10 +337,12 @@ export async function writeLabelPointWholeReset(params: {
   if (!sessionId) return { error: "Invalid session id." };
   const steps =
     params.steps ?? wholeResetSteps(params.supabase, sessionId, pointId);
+  // A read that fails is said as one, never as a point that is not there.
   const [point, rallies] = await Promise.all([
-    steps.readPoint(),
+    steps.readPoint().catch(() => undefined),
     steps.readRallies(),
   ]);
+  if (point === undefined) return { error: "Could not read the point." };
   if (!point) return { error: "Point not found." };
   if ("error" in rallies) return rallies;
   const scope = pointResetScope(
@@ -378,8 +376,9 @@ export async function writeLabelPointWholeReset(params: {
         .map((shotId) => () => steps.resetShot(shotId)),
     )) ??
     (scope.fields ? await runWrites(false, [() => steps.resetPoint()]) : null);
-  // Read back whatever landed — a refusal part-way carries it too.
-  const after = await steps.readPoint();
+  // Read back whatever landed — a refusal part-way carries it too. A read
+  // that fails here answers no point: never a throw past the refusal.
+  const after = await steps.readPoint().catch(() => null);
   if (failed) return after ? { ...failed, point: after } : failed;
   if (!after)
     return { error: "The point was reset but could not be read back." };

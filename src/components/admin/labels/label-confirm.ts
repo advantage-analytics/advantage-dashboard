@@ -93,6 +93,11 @@ export type LabelConfirm =
       added?: number;
       /** Strokes the labeller deleted, brought back. */
       deleted?: number;
+      /**
+       * The point's own fields were changed but stay: it shares its vendor
+       * rally with the point it was split from (`sharesVendorRally`).
+       */
+      fieldsKept?: boolean;
     }
   | {
       kind: "complete-session";
@@ -115,6 +120,7 @@ function resetPointDescription(
   shots: number,
   added = 0,
   deleted = 0,
+  fieldsKept = false,
 ): string {
   const one = (n: number, single: string, many: string) =>
     n === 1 ? single : many;
@@ -137,6 +143,11 @@ function resetPointDescription(
   if (added > 0) {
     sentences.push(
       `The ${shotCount(added, "you added")} ${one(added, "is", "are")} deleted.`,
+    );
+  }
+  if (fieldsKept) {
+    sentences.push(
+      "Its game, server, serve side, winner, ending and who ended it stay as you set them: it was split from another point, which shares its original values.",
     );
   }
   sentences.push(
@@ -307,6 +318,7 @@ export function labelConfirmCopy(
           confirm.shots,
           confirm.added,
           confirm.deleted,
+          confirm.fieldsKept,
         ),
         confirmLabel: "Reset",
         pendingLabel: "Resetting…",
