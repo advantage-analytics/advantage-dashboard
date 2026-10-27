@@ -209,7 +209,6 @@ export interface MatchAnalysis {
    * seconds, unlike `window`, which is the same number pre-formatted.
    */
   reservedSeconds?: number;
-  verified?: boolean;
 }
 
 /**
@@ -1272,14 +1271,10 @@ export function analysisAction(
  * billed window and no vendor job to reference — showing nothing is honest,
  * showing a fixture is not.
  */
-export function importedAnalysis(
-  sourceProvider: string,
-  verified: boolean,
-): MatchAnalysis {
+export function importedAnalysis(sourceProvider: string): MatchAnalysis {
   return {
     status: "imported",
     providerId: (sourceProvider as ProviderId) ?? null,
-    verified,
   };
 }
 

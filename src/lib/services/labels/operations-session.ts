@@ -144,13 +144,16 @@ function message(err: unknown): string {
 /** The gate every entry point shares: admin first, then the work. */
 export async function gated<T extends object>(
   deps: LabelWriteDependencies,
-  work: (supabase: AdminClient) => Promise<LabelOpResult<T>>,
+  work: (
+    supabase: AdminClient,
+    actor: { id: string },
+  ) => Promise<LabelOpResult<T>>,
   what: string,
 ): Promise<LabelOpResult<T>> {
   const actor = await deps.requireAdmin();
   if (!actor) return { error: ADMIN_REQUIRED };
   try {
-    return await work(deps.createAdminClient());
+    return await work(deps.createAdminClient(), actor);
   } catch (err) {
     console.error(`${LOG} ${what} threw`, { message: message(err) });
     return { error: `Could not ${what}: ${message(err)}` };

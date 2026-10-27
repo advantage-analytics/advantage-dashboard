@@ -50,12 +50,9 @@ export const getMatchPageHint = cache(async function getMatchPageHint(
   matchId: string,
 ): Promise<MatchPageHint | null> {
   const supabase = await createClient();
-  // `matches` has no `verification_status` column; `verified` is the boolean
-  // behind `Match.verificationStatus`, mapped the same way
-  // `transformDbMatchToMatch` maps it, so `analysisFor` sees identical input.
   const { data: row, error } = await supabase
     .from("matches")
-    .select("id, source_provider, verified")
+    .select("id, source_provider")
     .eq("id", matchId)
     .maybeSingle();
   // A failed read is "no answer", not "no match": throw so the route's error
@@ -67,7 +64,6 @@ export const getMatchPageHint = cache(async function getMatchPageHint(
   const analysis = analysisFor(await loadMatchAnalysis(supabase, [matchId]), {
     id: row.id,
     sourceProvider: row.source_provider ?? undefined,
-    verificationStatus: row.verified ? "Verified result" : undefined,
   });
   return { analysis, kind: matchPageKind(analysis) };
 });

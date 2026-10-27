@@ -2,11 +2,12 @@
 
 import type { ReactNode } from "react";
 import Image from "next/image";
-import { Calendar, CircleCheck, Swords } from "lucide-react";
+import { Calendar, Swords } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { shortMonthDate } from "@/components/dashboard/matches/match-detail/format-clock";
 import { totalGames } from "@/components/dashboard/matches/match-detail/set-scope";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import { VerifiedFact } from "@/components/dashboard/matches/match-detail/verified-fact";
 import { savedViewsCountFact } from "@/lib/data/saved-views-logic";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +16,7 @@ const FACT_ICON = "size-[13px] shrink-0 text-[var(--ink-700)]";
 
 /**
  * The facts line under the title (design 04 F1/F4/F5/F6): what was played,
- * when, where, on what, and whether the result is verified. One line when it
+ * when, where, on what, and whether it is Verified by Advantage. One line when it
  * fits; when the title row's actions take the width (the Ask glyph, Compare,
  * ⋯ at 1024), a fact wraps whole to a second line rather than the venue
  * truncating to "Universit…". Only a tournament name longer than the whole
@@ -114,18 +115,14 @@ export function MatchReportFacts() {
         </Fact>
       ) : null}
 
-      {match.verificationStatus ? (
-        <Fact
-          icon={
-            <CircleCheck
-              className={FACT_ICON}
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-          }
-        >
-          Verified result
-        </Fact>
+      {/* Verified by Advantage: the line's last fact, and the one place the
+          report states it. */}
+      {match.verification ? (
+        <VerifiedFact
+          matchId={match.id}
+          verification={match.verification}
+          canReport={!meta.readOnly}
+        />
       ) : null}
     </div>
   );

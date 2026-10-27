@@ -1,3 +1,4 @@
+import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import { AnalysisProgressTrack } from "./analysis-progress-track";
 import {
   AnalysisStatusLine,
@@ -14,6 +15,10 @@ import {
   matchListStatusLabel,
   type MatchAnalysis,
 } from "@/lib/data/match-analysis";
+import {
+  VERIFIED_BY_ADVANTAGE,
+  type MatchVerification,
+} from "@/lib/data/match-verification";
 
 /**
  * Analysis status in the Matches table. Settled rows name their outcome;
@@ -30,9 +35,12 @@ export function RowLifecycle({
   analysis,
   /** Names the match in the progress bar's accessible label. */
   label,
+  verification,
 }: {
   analysis?: MatchAnalysis;
   label: string;
+  /** Verified by Advantage: a settled row says so in place of its outcome. */
+  verification?: MatchVerification | null;
 }): React.JSX.Element | null {
   if (!analysis) return null;
   const { status } = analysis;
@@ -126,6 +134,16 @@ export function RowLifecycle({
   }
   if (status === "manual") {
     return <AnalysisStatusLine mark="none">Not analyzed</AnalysisStatusLine>;
+  }
+  // Verified by Advantage outranks "Analyzed": a person checked every point.
+  // The product's verified-check takes the mark's slot, at the mark's size.
+  if (verification && analysis.recovery !== "stats_unavailable") {
+    return (
+      <span className="inline-flex min-w-0 items-center gap-2 text-[11px] leading-none whitespace-nowrap text-[var(--ink-700)]">
+        <VerifiedMark size={14} />
+        <span className="min-w-0 truncate">{VERIFIED_BY_ADVANTAGE}</span>
+      </span>
+    );
   }
   const word = matchListStatusLabel(analysis);
   return (

@@ -1,3 +1,5 @@
+import type { MatchVerification } from "@/lib/data/match-verification";
+
 export interface Player {
   name: string;
   school: string;
@@ -25,7 +27,8 @@ export interface Match {
   date: string;
   matchType: string;
   courtType?: string;
-  verificationStatus?: string;
+  /** Verified by Advantage (`verificationFor`), or null. */
+  verification?: MatchVerification | null;
   /** `matches.source_provider` — which pipeline produced this match's data. */
   sourceProvider?: string;
   round?: string;
@@ -196,6 +199,7 @@ export interface RecentEvent {
   date: string;
   matchType: string;
   courtType?: string;
-  verificationStatus?: string;
+  /** Verified by Advantage (`verificationFor`), or null. */
+  verification?: MatchVerification | null;
   matches: EventMatch[];
 }

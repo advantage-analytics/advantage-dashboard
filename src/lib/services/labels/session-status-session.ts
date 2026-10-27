@@ -17,9 +17,19 @@
  * reason. A publish killed mid-way leaves the session open with a lease that
  * lapses after `PUBLISH_LEASE_MS`, so Complete again finishes it.
  *
- * Reopen leaves the published points as they are; completing again publishes
- * again. Reopen reads the status and writes the reverse, matched on
- * `status = 'complete'`; the partial unique index that allows one open
+ * A publish also grants Verified by Advantage (docs/plans/advantage-review.md
+ * step 1): after the points are in and before the session closes, the match
+ * is verified by the admin who pressed it (`verify_match`, service role
+ * only — the one door `zz_matches_guard_verification` leaves). A failed
+ * verify is a failed Complete: the lease is released and Complete again
+ * publishes and verifies again. `scripts/label-apply.ts` publishes by hand
+ * and never verifies.
+ *
+ * Reopen leaves the published points as they are but removes Verified by
+ * Advantage (`unverify_match`), after the status flips; a failed unverify
+ * puts the session back to complete, so the console and the badge never
+ * disagree. Completing again publishes and verifies again. Reopen reads the
+ * status and writes the reverse, matched on `status = 'complete'`; the partial unique index that allows one open
  * session per job (`label_sessions_one_open_per_job`) refuses it while
  * another session of the match is open.
  */
@@ -80,14 +90,21 @@ export const ANOTHER_SESSION_OPEN =
   "Another labelling session is open for this match. Complete or remove it before reopening this one.";
 const ALREADY_OPEN = "This session is already open for labelling.";
 
-/** Publish a labelling session to its match, then close it. Never throws. */
+/** Publish a labelling session to its match, verify it, then close it. Never throws. */
 export async function writeLabelSessionComplete(params: {
   supabase: AdminClient;
   sessionId: unknown;
+  /** The admin who pressed Mark complete: `matches.verified_by`. */
+  actorId: string;
   publish?: LabelPublish;
   now?: () => number;
 }): Promise<LabelSessionStatusResult> {
-  const { supabase, publish = publishCheckingScore, now = Date.now } = params;
+  const {
+    supabase,
+    actorId,
+    publish = publishCheckingScore,
+    now = Date.now,
+  } = params;
   const sessionId = normaliseId(params.sessionId);
   if (!sessionId) return { error: "Invalid session id." };
 
@@ -108,7 +125,14 @@ export async function writeLabelSessionComplete(params: {
   let failure: string;
   try {
     const result = await publish(supabase, sessionId);
-    if (result.ok) {
+    const verified = result.ok
+      ? await verifyMatchOf(supabase, sessionId, actorId)
+      : null;
+    if (!result.ok) {
+      failure = result.error;
+    } else if (!verified || "error" in verified) {
+      failure = verified?.error ?? "Could not verify the match.";
+    } else {
       const { data: closed, error: closeError } = await supabase
         .from("label_sessions")
         .update({
@@ -120,8 +144,14 @@ export async function writeLabelSessionComplete(params: {
         .eq("publishing_since", claimedAt)
         .select("id");
       if (closeError) {
+        // Verified by Advantage comes back off, so the match never shows it
+        // beside a session that is still open. A race (below) is left
+        // alone: the Complete that took the lease verifies for itself.
+        const { error: unverifyError } = await supabase.rpc("unverify_match", {
+          p_match_id: verified.matchId,
+        });
         return {
-          error: `The labels are published, but the session could not be marked complete: ${closeError.message}`,
+          error: `The labels are published, but the session could not be marked complete: ${closeError.message}${unverifyError ? ` Verified by Advantage could not be removed either (${unverifyError.message}).` : ""}`,
         };
       }
       if (!closed || closed.length === 0) return { error: RACED };
@@ -136,7 +166,6 @@ export async function writeLabelSessionComplete(params: {
         },
       };
     }
-    failure = result.error;
   } catch (err) {
     failure = `Could not publish the labels: ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -167,9 +196,13 @@ export async function writeLabelSessionReopen(params: {
 
   const { data: session, error: readError } = await supabase
     .from("label_sessions")
-    .select("status")
+    .select("status, match_id, completed_at")
     .eq("id", sessionId)
-    .maybeSingle<{ status: string }>();
+    .maybeSingle<{
+      status: string;
+      match_id: string;
+      completed_at: string | null;
+    }>();
   if (readError) {
     return { error: `Could not read the session: ${readError.message}` };
   }
@@ -187,7 +220,56 @@ export async function writeLabelSessionReopen(params: {
     return { error: `Could not reopen the session: ${error.message}` };
   }
   if (!data || data.length === 0) return { error: RACED };
+
+  const { error: unverifyError } = await supabase.rpc("unverify_match", {
+    p_match_id: session.match_id,
+  });
+  if (unverifyError) {
+    // Back to complete, matched on the reopen this call made, so the match
+    // never shows Verified by Advantage beside an open session.
+    const { error: undoError } = await supabase
+      .from("label_sessions")
+      .update({ status: "complete", completed_at: session.completed_at })
+      .eq("id", sessionId)
+      .eq("status", "labelling");
+    return {
+      error: undoError
+        ? `The session is open again, but Verified by Advantage could not be removed (${unverifyError.message}), and the session could not be put back (${undoError.message}).`
+        : `Could not remove Verified by Advantage, so the session stays complete: ${unverifyError.message}`,
+    };
+  }
   return { ok: true, status: "labelling" };
+}
+
+/**
+ * Verify the session's match as `actorId` (`verify_match`): the match it
+ * verified, or the sentence Complete answers with.
+ */
+async function verifyMatchOf(
+  supabase: AdminClient,
+  sessionId: string,
+  actorId: string,
+): Promise<{ matchId: string } | { error: string }> {
+  const { data: row, error: readError } = await supabase
+    .from("label_sessions")
+    .select("match_id")
+    .eq("id", sessionId)
+    .maybeSingle<{ match_id: string }>();
+  if (readError || !row) {
+    return {
+      error: `The labels are published, but the match could not be marked Verified by Advantage: ${readError?.message ?? "session not found"}. Mark complete again to retry.`,
+    };
+  }
+  const { error } = await supabase.rpc("verify_match", {
+    p_match_id: row.match_id,
+    p_actor: actorId,
+  });
+  if (error) {
+    return {
+      error: `The labels are published, but the match could not be marked Verified by Advantage: ${error.message}. Mark complete again to retry.`,
+    };
+  }
+  return { matchId: row.match_id };
 }
 
 export function completeLabelSession(
@@ -196,7 +278,8 @@ export function completeLabelSession(
 ): Promise<LabelSessionStatusResult> {
   return gated(
     deps,
-    (supabase) => writeLabelSessionComplete({ supabase, sessionId }),
+    (supabase, actor) =>
+      writeLabelSessionComplete({ supabase, sessionId, actorId: actor.id }),
     "complete the session",
   );
 }

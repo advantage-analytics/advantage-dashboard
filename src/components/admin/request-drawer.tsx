@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { squadLabel } from "@/lib/data/squad";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
@@ -447,6 +448,14 @@ export function RequestDrawer({
                 </li>
               ))}
             </ul>
+            {detail.source === "request" && detail.match?.labelSessionId && (
+              <Link
+                href={`/admin/labels/${detail.match.labelSessionId}`}
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              >
+                Open it in the label console
+              </Link>
+            )}
             {detail.staffPageUrl && (
               <a
                 href={detail.staffPageUrl}
@@ -547,6 +556,22 @@ function claimantWords(detail: AdminRequestRow["detail"]): string | null {
 function checksFor(
   detail: AdminRequestRow["detail"],
 ): { ok: boolean; text: string }[] {
+  if (detail.source === "request" && detail.match) {
+    return [
+      {
+        ok: detail.match.verified,
+        text: detail.match.verified
+          ? "The match is still Verified by Advantage"
+          : "The match is no longer Verified by Advantage",
+      },
+      {
+        ok: detail.programId !== null,
+        text: detail.programId
+          ? "A team match"
+          : "A personal match, not a team's",
+      },
+    ];
+  }
   if (detail.source === "request") {
     const checks: { ok: boolean; text: string }[] = [
       {

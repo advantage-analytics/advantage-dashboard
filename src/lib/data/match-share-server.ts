@@ -738,7 +738,6 @@ export const getSharedMatchData = cache(
     const jobAnalysis = analysisFor(jobs, {
       id: matchId,
       sourceProvider: match.sourceProvider,
-      verificationStatus: match.verificationStatus,
     });
     const statsPublished = Boolean(
       statsResult?.statistics?.player1Stats &&
