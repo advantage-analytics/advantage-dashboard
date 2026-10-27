@@ -9,6 +9,7 @@ import {
   type RefObject,
 } from "react";
 import {
+  Keyboard,
   Maximize2,
   Minimize2,
   MoreHorizontal,
@@ -157,6 +158,7 @@ export function LabelBlackRail({
   total,
   saveStatus,
   onUndo,
+  onShowShortcuts,
   missingShots = 0,
   onAddMissingShots,
   canUndo = false,
@@ -222,6 +224,11 @@ export function LabelBlackRail({
    * screen). Absent, there is no button; `canUndo` false draws it disabled.
    */
   onUndo?: () => void;
+  /**
+   * Opens the shortcut sheet (`LabelShortcutsDialog`), from a keyboard
+   * button before Undo. Absent, there is no button.
+   */
+  onShowShortcuts?: () => void;
   /** Open "Missing shot?" slots "Add shot" can fill; with the handler, "Add all". */
   missingShots?: number;
   onAddMissingShots?: () => void;
@@ -741,6 +748,30 @@ export function LabelBlackRail({
                 onEditStartScore={editStartScore}
               />
             </FloatMenu>
+          ) : null}
+          {onShowShortcuts ? (
+            <ChromeTooltip
+              label="Keyboard shortcuts"
+              shortcut="⌘/"
+              side="bottom"
+              align="end"
+            >
+              <button
+                type="button"
+                data-label-rail-shortcuts=""
+                aria-label="Keyboard shortcuts"
+                aria-keyshortcuts="Meta+/"
+                aria-haspopup="dialog"
+                onClick={onShowShortcuts}
+                className={HEADER_BUTTON}
+              >
+                <Keyboard
+                  className="size-3.5"
+                  strokeWidth={1.6}
+                  aria-hidden="true"
+                />
+              </button>
+            </ChromeTooltip>
           ) : null}
           {showSession && onUndo ? (
             <ChromeTooltip

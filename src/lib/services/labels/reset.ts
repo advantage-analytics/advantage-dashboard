@@ -25,13 +25,14 @@ import {
   type ShotSwapWrite,
   type SwapShot,
 } from "./player-swap";
-import type {
-  LabelPoint,
-  LabelPointSeedValues,
-  LabelPointStatus,
-  LabelShot,
-  LabelShotSeedValues,
-  LabelShotStatus,
+import {
+  isWithdrawnAdd,
+  type LabelPoint,
+  type LabelPointSeedValues,
+  type LabelPointStatus,
+  type LabelShot,
+  type LabelShotSeedValues,
+  type LabelShotStatus,
 } from "./session";
 
 /** The columns a shot reset writes: its seed, and `kept`. */
@@ -126,32 +127,63 @@ export function canResetPoint(
   return point.status === "edited" && point.seed !== null;
 }
 
-/** What a point's Reset puts back: its own fields, and its edited strokes. */
+/**
+ * What a point's Reset puts back: the point as the vendor gave it. Its own
+ * fields, every edited stroke, the strokes the labeller deleted brought back,
+ * and the strokes the labeller added taken away again.
+ */
 export interface PointResetScope {
   /** The point's own fields go back (`canResetPoint`, and not a split half). */
   fields: boolean;
-  /** The edited strokes with a seed, each reset as a shot is (`canResetShot`). */
+  /**
+   * The strokes reset to their seed (`canResetShot`) — and a deleted stroke
+   * that was edited before its delete, once `deletedIds` has brought it back.
+   */
   shotIds: string[];
+  /** The labeller's deletes, restored. A stroke added and then deleted stays gone. */
+  deletedIds: string[];
+  /** The labeller's live added strokes, deleted again. */
+  addedIds: string[];
 }
 
 /**
- * The point's Reset: its own fields when they changed — held back on a point
- * that shares a vendor rally (a split's halves, `sharesVendorRally`) — and
- * every edited stroke with a seed. Strokes the labeller added or deleted stay
- * as they are. Null when there is nothing to put back.
+ * The point's Reset: everything the labeller changed on it, as one step —
+ * its own fields when they changed (held back on a point that shares a
+ * vendor rally, `sharesVendorRally`: a split's halves), every edited stroke
+ * with a seed, every stroke they deleted, and every stroke they added. A
+ * site removal is the site's, not the labeller's, and stays as it is. Null on
+ * a point the labeller added or deleted, or with nothing to put back.
+ *
+ * Widened 2026-10-26 from edited fields and strokes alone: "reset the whole
+ * point" should leave it exactly as the vendor gave it.
  */
 export function pointResetScope(
   point: Pick<LabelPoint, "status" | "seed"> & {
-    shots: readonly Pick<LabelShot, "id" | "status" | "seed">[];
+    shots: readonly Pick<
+      LabelShot,
+      "id" | "status" | "seed" | "statusBeforeDelete"
+    >[];
   },
   sharesRally = false,
 ): PointResetScope | null {
+  if (point.status === "deleted" || point.status === "added") return null;
   const fields = canResetPoint(point) && !sharesRally;
-  const shotIds =
-    point.status === "deleted"
-      ? []
-      : point.shots.filter(canResetShot).map((shot) => shot.id);
-  return fields || shotIds.length > 0 ? { fields, shotIds } : null;
+  const deleted = point.shots.filter(
+    (shot) => shot.status === "deleted" && !isWithdrawnAdd(shot),
+  );
+  const shotIds = [
+    ...point.shots.filter(canResetShot),
+    ...deleted.filter(
+      (shot) => shot.statusBeforeDelete === "edited" && shot.seed !== null,
+    ),
+  ].map((shot) => shot.id);
+  const deletedIds = deleted.map((shot) => shot.id);
+  const addedIds = point.shots
+    .filter((shot) => shot.status === "added")
+    .map((shot) => shot.id);
+  return fields || shotIds.length + deletedIds.length + addedIds.length > 0
+    ? { fields, shotIds, deletedIds, addedIds }
+    : null;
 }
 
 // ── The console's camelCase rows ────────────────────────────────────────────
