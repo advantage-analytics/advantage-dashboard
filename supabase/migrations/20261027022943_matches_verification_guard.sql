@@ -28,11 +28,21 @@
 --      columns, are refused, 42501. The service role is not a client and
 --      passes — step 1's `verify_match` runs as it. A SECURITY DEFINER
 --      function called from a browser still carries the browser's JWT, so
---      it is refused like the browser.
+--      it is refused like the browser. `current_user` is tested too, so a
+--      session that rewrites `request.jwt.claims` to another role is still a
+--      client while PostgREST has it running as `authenticated` / `anon`.
 --
 -- A separate trigger rather than a branch in `matches_block_client_regraft`:
 -- that one fires only on the columns it watches, and its body is already
--- the program/line/roster rules. This one watches exactly the four columns.
+-- the program/line/roster rules. This one fires on every insert and update
+-- (no `of` list: a column list is decided from the SET list, so a later
+-- BEFORE trigger rewriting NEW.verified* would slip past it), and is named
+-- `zz_` so it fires after every other BEFORE trigger on matches and sees the
+-- row as it will be written. Keep it last.
+--
+-- verified_by keeps the default NO ACTION: deleting an Advantage admin who
+-- verified matches is refused rather than losing who verified them (SET NULL
+-- would break the provenance check anyway).
 
 do $$
 declare
@@ -80,8 +90,11 @@ language plpgsql
 set search_path = ''
 as $$
 begin
-  if coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '')
-     not in ('authenticated', 'anon') then
+  if coalesce(
+       nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role',
+       ''
+     ) not in ('authenticated', 'anon')
+     and current_user not in ('authenticated', 'anon') then
     return new;
   end if;
 
@@ -115,8 +128,7 @@ comment on function public.matches_guard_verification() is
 revoke execute on function public.matches_guard_verification()
   from public, anon, authenticated;
 
-create trigger matches_guard_verification
-  before insert or update of verified, verified_at, verified_by,
-    verified_review_id
+create trigger zz_matches_guard_verification
+  before insert or update
   on public.matches
   for each row execute function public.matches_guard_verification();
