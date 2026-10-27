@@ -104,12 +104,12 @@ export function VisualFrame({
   );
 }
 
-/** A group whose readout CSS reveals, and that readout. */
 /** A prefix for SVG `id`s unique to this instance (clip paths, gradients): `useId`'s colons are not valid in a `url(#…)`. */
 export function useSvgId(prefix: string): string {
   return `${prefix}-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 }
 
+/** A group whose readout CSS reveals, and that readout. */
 const GROUP = ".group, .group\\/bar";
 const CSS_READOUT = "[data-ask-readout][data-ask-css]";
 

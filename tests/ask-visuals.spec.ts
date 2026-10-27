@@ -638,6 +638,14 @@ test.describe("tableDelta", () => {
     expect(
       tableDelta("Difference", "First serves in", "+3", undefined, "9"),
     ).toBeNull();
+    // A count over 999 reads as its own size, so a baseline − subject sign
+    // on it is still caught.
+    expect(
+      tableDelta("Difference", "Total points won", "−52", "1,050", "998"),
+    ).toBeNull();
+    expect(
+      tableDelta("Difference", "Total points won", "+52", "1,050", "998"),
+    ).toEqual({ arrow: "↑", text: "52", tone: "good" });
   });
 
   test("prints as sent when it cannot tell", () => {
@@ -663,6 +671,9 @@ test.describe("tableDelta", () => {
     expect(cellNumber("37.5%")).toBe(37.5);
     expect(cellNumber("37,5 %")).toBe(37.5);
     expect(cellNumber("−20.7")).toBe(-20.7);
+    // A comma before exactly three digits groups thousands.
+    expect(cellNumber("1,204")).toBe(1204);
+    expect(cellNumber("12,345.5")).toBe(12345.5);
     expect(cellNumber("256/305")).toBeNull();
     expect(cellNumber("4 of 9")).toBeNull();
     expect(cellNumber("—")).toBeNull();

@@ -32,14 +32,26 @@ export type TableDelta = {
 };
 
 /**
- * The one number a display cell holds — "37.5%", "37,5 %", "−20.7", "4" —
- * or null when it holds none or more than one ("256/305", "4 of 9"). Read
- * only to check a difference's direction, never printed.
+ * The one number a display cell holds — "37.5%", "37,5 %", "−20.7", "4",
+ * "1,204" — or null when it holds none or more than one ("256/305", "4 of
+ * 9"). Read only to check a difference's direction, never printed.
+ *
+ * A comma followed by exactly three digits is a thousands separator, any
+ * other comma a decimal mark: "1,204" is 1204 and "37,5" is 37.5. Read the
+ * other way, a count over 999 would compare as a fraction against its
+ * baseline and the direction check could agree with a wrong sign.
  */
 export function cellNumber(cell: string): number | null {
-  const numbers = cell.replace(/−/g, "-").match(/-?\d+(?:[.,]\d+)?/g);
+  const numbers = cell
+    .replace(/−/g, "-")
+    .match(/-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:[.,]\d+)?/g);
   if (!numbers || numbers.length !== 1 || /\//.test(cell)) return null;
-  const value = Number(numbers[0].replace(",", "."));
+  const [number] = numbers;
+  const value = Number(
+    /,\d{3}(?!\d)/.test(number)
+      ? number.replace(/,/g, "")
+      : number.replace(",", "."),
+  );
   return Number.isFinite(value) ? value : null;
 }
 
@@ -89,6 +101,13 @@ export function tableDelta(
     tone: up !== lower ? "good" : "bad",
   };
 }
+
+/** What the arrow says to a screen reader, which skips the glyph. */
+const DELTA_SPOKEN: Record<TableDelta["arrow"], string> = {
+  "↑": "up ",
+  "↓": "down ",
+  "→": "no change, ",
+};
 
 const TONE: Record<TableDelta["tone"], string> = {
   good: "var(--viz-good)",
@@ -202,11 +221,7 @@ export function TableVisual({
                             {delta.arrow}
                           </span>{" "}
                           <span className="sr-only">
-                            {delta.arrow === "↑"
-                              ? "up "
-                              : delta.arrow === "↓"
-                                ? "down "
-                                : "no change, "}
+                            {DELTA_SPOKEN[delta.arrow]}
                           </span>
                           {delta.text}
                         </span>
