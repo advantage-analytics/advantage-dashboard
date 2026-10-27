@@ -1,7 +1,7 @@
 "use client";
 
+import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import { useState, useTransition } from "react";
-import Image from "next/image";
 import {
   Popover,
   PopoverContent,
@@ -88,14 +88,7 @@ export function VerifiedFact({
             open && "bg-[var(--surface-subtle)]",
           )}
         >
-          <Image
-            src="/icons/verified-check-icon.svg"
-            width={13}
-            height={13}
-            alt=""
-            aria-hidden="true"
-            className="shrink-0"
-          />
+          <VerifiedMark />
           {VERIFIED_BY_ADVANTAGE}
         </button>
       </PopoverTrigger>
@@ -157,14 +150,7 @@ export function VerifiedFact({
         ) : (
           <>
             <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink-900)]">
-              <Image
-                src="/icons/verified-check-icon.svg"
-                width={13}
-                height={13}
-                alt=""
-                aria-hidden="true"
-                className="shrink-0"
-              />
+              <VerifiedMark />
               {VERIFIED_BY_ADVANTAGE}
             </span>
             <p className="m-0 text-[11px] leading-[1.55] text-[var(--ink-700)]">

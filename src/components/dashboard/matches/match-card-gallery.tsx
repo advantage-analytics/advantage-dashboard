@@ -1,5 +1,6 @@
 "use client";
 
+import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import Link from "next/link";
 import Image from "next/image";
 import { Calendar, Swords } from "lucide-react";
@@ -132,14 +133,7 @@ export function MatchCardGallery({
                 {match.matchContext ?? "Final Score"}
               </span>
               {match.verification && (
-                <Image
-                  src="/icons/verified-check-icon.svg"
-                  width={14}
-                  height={14}
-                  alt={VERIFIED_BY_ADVANTAGE}
-                  title={VERIFIED_BY_ADVANTAGE}
-                  className="shrink-0"
-                />
+                <VerifiedMark size={14} label={VERIFIED_BY_ADVANTAGE} />
               )}
             </div>
             {match.duration && (

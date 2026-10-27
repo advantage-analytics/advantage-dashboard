@@ -218,6 +218,24 @@ test.describe("writeLabelSessionComplete", () => {
     ]);
   });
 
+  test("a close that fails after the verify takes Verified by Advantage back off", async () => {
+    const fake = fakeClient({ failFromUpdate: 0 });
+    const result = await writeLabelSessionComplete({
+      actorId: ACTOR,
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+      publish: PUBLISHED,
+    });
+    expect(result).toEqual({
+      error:
+        "The labels are published, but the session could not be marked complete: network down",
+    });
+    expect(
+      fake.calls.filter((c) => c.op === "rpc").map((c) => c.table),
+    ).toEqual(["claim_label_publish_lease", "verify_match", "unverify_match"]);
+    expect(fake.calls.at(-1)?.values).toEqual({ p_match_id: MATCH_ID });
+  });
+
   test("a refused publish never verifies", async () => {
     const fake = fakeClient({});
     await writeLabelSessionComplete({

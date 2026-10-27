@@ -1,5 +1,6 @@
 import { Calendar, Crosshair, Swords } from "lucide-react";
 import Image from "next/image";
+import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import {
   VERIFIED_BY_ADVANTAGE,
   type MatchVerification,
@@ -80,13 +81,7 @@ export function MatchMetadataRow({
 
       {verification && (
         <div className="flex items-center gap-[5px]">
-          <Image
-            src="/icons/verified-check-icon.svg"
-            alt=""
-            width={13}
-            height={13}
-            aria-hidden="true"
-          />
+          <VerifiedMark />
           <p className="text-micro">{VERIFIED_BY_ADVANTAGE}</p>
         </div>
       )}

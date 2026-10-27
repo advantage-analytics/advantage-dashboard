@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import { AnalysisProgressTrack } from "./analysis-progress-track";
 import {
   AnalysisStatusLine,
@@ -140,14 +140,7 @@ export function RowLifecycle({
   if (verification && analysis.recovery !== "stats_unavailable") {
     return (
       <span className="inline-flex min-w-0 items-center gap-2 text-[11px] leading-none whitespace-nowrap text-[var(--ink-700)]">
-        <Image
-          src="/icons/verified-check-icon.svg"
-          width={14}
-          height={14}
-          alt=""
-          aria-hidden="true"
-          className="shrink-0"
-        />
+        <VerifiedMark size={14} />
         <span className="min-w-0 truncate">{VERIFIED_BY_ADVANTAGE}</span>
       </span>
     );
