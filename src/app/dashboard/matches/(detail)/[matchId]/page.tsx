@@ -483,8 +483,6 @@ export default async function MatchDetailPage({
             state={selfReview}
             viewerId={viewerId}
             locked={Boolean(match.verification)}
-            points={data.points ?? []}
-            youIsPlayer1={sides.you.isPlayer1}
           >
             <MatchReportFrame>
               <MatchReportRail>

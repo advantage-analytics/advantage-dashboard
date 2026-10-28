@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import {
   readingOf,
@@ -40,19 +42,20 @@ export function SelfReviewProvider({
   state,
   viewerId,
   locked,
-  points,
-  youIsPlayer1,
   children,
 }: {
   matchId: string;
   state: SelfReviewState;
   viewerId: string | null;
   locked: boolean;
-  points: MatchPoint[];
-  youIsPlayer1: boolean;
   children: ReactNode;
 }) {
   const router = useRouter();
+  // The points and the viewer's side come from the report's own providers
+  // (the layout's `MatchDataProvider`), not from props: the page would
+  // otherwise serialize the whole point list into the RSC payload twice.
+  const { points } = useMatchData();
+  const youIsPlayer1 = useMatchSides().you.isPlayer1;
   const [fixing, setFixing] = useState(false);
   const [drafts, setDrafts] = useState<Map<string, PointReading>>(new Map());
   const [openPointId, setOpenPointId] = useState<string | null>(null);
