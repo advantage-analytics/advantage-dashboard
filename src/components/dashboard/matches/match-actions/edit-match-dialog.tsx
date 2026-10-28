@@ -203,7 +203,7 @@ interface Loaded {
    * The analysis a new score can be rebuilt against, and the bookmarks that
    * rebuild would remove — null when there is nothing to rebuild.
    */
-  rebuild: { jobId: string; bookmarks: number; fixes: number } | null;
+  rebuild: { jobId: string; bookmarks: number } | null;
 }
 
 /**
@@ -509,8 +509,6 @@ export function EditMatchDialog({
     !!draftScore.score &&
     !sameScore(draftScore.score as MatchScore, match?.score ?? null);
   const bookmarksLost = rebuildOffer ? (loaded?.rebuild?.bookmarks ?? 0) : 0;
-  // Fixed points (self review) live on the points a rebuild replaces.
-  const fixesLost = rebuildOffer ? (loaded?.rebuild?.fixes ?? 0) : 0;
   const roundKind = roundKindFor(matchType || null);
   const storedRound = normalizeRound(match?.round ?? null);
   /** A match already on a tournament line whose round this viewer may change. */
@@ -1179,10 +1177,6 @@ export function EditMatchDialog({
                   (bookmarksLost === 1
                     ? " It also removes the 1 bookmarked point on this match."
                     : ` It also removes the ${bookmarksLost} bookmarked points on this match.`)}
-                {fixesLost > 0 &&
-                  (fixesLost === 1
-                    ? " The 1 point fixed on this match goes back to Advantage Intelligence’s reading."
-                    : ` The ${fixesLost} points fixed on this match go back to Advantage Intelligence’s reading.`)}
               </DialogInfoRow>
             )}
           </div>

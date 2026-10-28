@@ -62,7 +62,6 @@ import {
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { LandedFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { FilmFilterStrip } from "./film-filter-strip";
-import { FixModeNotice } from "@/components/dashboard/matches/match-detail/self-review/fix-mode-notice";
 import {
   fetchPlaybackSource,
   useAttachmentPlayback,
@@ -1084,9 +1083,6 @@ function FilmRoom({
       {/* The cut in words, above the video and the list (never inside the
           list's card), while anything is applied — the Matches page's
           strip, v3's Data Table rule 6. */}
-      {/* Fix points (self review): the mode stated once, or what a save
-          moved — above the cut and the columns, never inside the list. */}
-      {!readOnly && <FixModeNotice />}
       <FilmFilterStrip
         filmFilters={filmFilters}
         names={filmStripNames}
