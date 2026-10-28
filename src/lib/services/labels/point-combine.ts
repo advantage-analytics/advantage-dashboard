@@ -56,6 +56,7 @@ import {
 import { applyLabelShotPatch, letResultError } from "./edit";
 import type { LabelShotResult } from "./seed";
 import {
+  isLiveShot,
   isServeStroke,
   orderLabelShots,
   type LabelEnding,
@@ -166,13 +167,12 @@ const DEAD_AFTER: ReadonlySet<LabelShotResult | null> = new Set([
 export function deadBetweenServes(shots: readonly CombinableShot[]): string[] {
   const live = orderLabelShots(
     shots
-      .filter(
-        (shot) =>
-          shot.status !== "deleted" &&
-          !(
-            (shot.siteRemoval ?? null) !== null &&
-            (shot.siteRemovalRestoredAt ?? null) === null
-          ),
+      .filter((shot) =>
+        isLiveShot({
+          status: shot.status ?? "kept",
+          siteRemoval: shot.siteRemoval ?? null,
+          siteRemovalRestoredAt: shot.siteRemovalRestoredAt ?? null,
+        }),
       )
       .map((shot) => ({
         ...shot,

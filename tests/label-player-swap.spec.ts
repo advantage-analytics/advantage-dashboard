@@ -839,6 +839,7 @@ test.describe("writeLabelPlayersSwitch (Switch N points)", () => {
       { pointId: POINT_ID, status: "edited", winner: "p2", endedBy: "p1" },
       { pointId: OTHER_ID, status: "edited", winner: "p2", endedBy: "p1" },
     ]);
+    expect(result.stopped).toBeNull();
     expect(result.shots.map((s) => [s.id, s.hitter])).toEqual([
       ["s1", "p2"],
       ["s2", "p1"],
@@ -852,7 +853,7 @@ test.describe("writeLabelPlayersSwitch (Switch N points)", () => {
     ).toEqual([POINT_ID, OTHER_ID]);
   });
 
-  test("a refusal part way says how many went first; bad ids write nothing", async () => {
+  test("a refusal part way answers the points already written and why it stopped; bad ids write nothing", async () => {
     let reads = 0;
     const fake = fakeLabelClient((call) => {
       if (call.table === "label_sessions") {
@@ -873,9 +874,12 @@ test.describe("writeLabelPlayersSwitch (Switch N points)", () => {
         supabase: fake.supabase,
         pointIds: [POINT_ID, OTHER_ID],
       }),
-    ).toEqual({
-      error:
-        "Restore this point before switching its players. 1 point was switched first; ⌘Z takes them back.",
+    ).toMatchObject({
+      ok: true,
+      // The first point is written and answered, so the console keeps it.
+      points: [{ pointId: POINT_ID, winner: "p2", endedBy: "p1" }],
+      stopped:
+        "Restore this point before switching its players. 1 of 2 points were switched; ⌘Z takes them back.",
     });
 
     for (const pointIds of [

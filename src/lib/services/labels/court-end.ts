@@ -39,11 +39,13 @@ import { swapsInSet } from "@/lib/services/splitstep/derivation/position";
 import type { SwapShot } from "./player-swap";
 import type { LabelGame } from "./operations";
 import type { LabelGameBand, ScorablePoint } from "./score";
-import type {
-  LabelPoint,
-  LabelSide,
-  LabelStartScore,
-  MatchScore,
+import {
+  isLiveShot,
+  type LabelPoint,
+  type LabelShot,
+  type LabelSide,
+  type LabelStartScore,
+  type MatchScore,
 } from "./session";
 import { enteredScore, labelSetScores } from "./set-scores";
 
@@ -73,7 +75,8 @@ export type CourtEndPoint = Pick<
 export type CourtEndShot = Pick<
   SwapShot,
   "id" | "eventId" | "status" | "hitter" | "contactY" | "seed"
->;
+> &
+  Pick<LabelShot, "siteRemoval" | "siteRemovalRestoredAt">;
 
 export interface CourtEndSwap {
   game: LabelGame;
@@ -213,10 +216,11 @@ export function courtEndSwaps(
  * Whether the far end at this point is the end the set started at for the
  * far player: true when the stroke is hit from the far half after an even
  * number of changes, or from the near half after an odd one. Null when the
- * stroke is deleted or names no end.
+ * stroke is not live — deleted, or a ghost the site removed, which the rail
+ * does not draw — or names no end.
  */
 function endKey(shot: CourtEndShot, turned: number): boolean | null {
-  if (shot.status === "deleted" || shot.contactY === null) return null;
+  if (!isLiveShot(shot) || shot.contactY === null) return null;
   const fromNet = shot.contactY - BASELINE_M;
   if (Math.abs(fromNet) <= NET_DEAD_ZONE_M) return null;
   return fromNet > 0 !== (turned % 2 === 1);
@@ -231,7 +235,7 @@ function pointIsTurned(
   let against = 0;
   let with_ = 0;
   for (const shot of point.shots) {
-    if (shot.status === "deleted") continue;
+    if (!isLiveShot(shot)) continue;
     // A hitter the labeller gave is theirs: the whole point stands.
     if (shot.eventId === null || shot.seed === null) return false;
     if (shot.hitter !== shot.seed.hitter) return false;

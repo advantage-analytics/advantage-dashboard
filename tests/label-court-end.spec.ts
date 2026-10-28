@@ -27,6 +27,8 @@ function stroke(hitter: LabelSide, contactY: number | null): CourtEndShot {
     hitter,
     contactY,
     seed: { hitter } as CourtEndShot["seed"],
+    siteRemoval: null,
+    siteRemovalRestoredAt: null,
   };
 }
 
@@ -160,6 +162,32 @@ test.describe("players at the wrong end", () => {
       p.id === "set1-g3-p2" ? { ...p, status: "deleted" as const } : p,
     );
     expect(courtEndSwaps(gone, SETTLED)).toEqual([]);
+  });
+
+  test("a ghost the site removed is no evidence: it neither flags a point nor votes", () => {
+    // Game 3 has p1 at the far end. Point 2 is right there, plus four ghost
+    // swings from the wrong ends, enough to outvote its three strokes if
+    // they counted.
+    const ghosts = [1, 2, 3, 4].map((n) => ({
+      ...stroke(n % 2 ? "p1" : "p2", n % 2 ? NEAR : FAR),
+      siteRemoval: "hit_after_fault" as const,
+    }));
+    const rows = setOne().map((p) =>
+      p.id === "set1-g3-p2" ? { ...p, shots: [...p.shots, ...ghosts] } : p,
+    );
+    expect(courtEndSwaps(rows, SETTLED)).toEqual([]);
+    // Restored, the same swings are the labeller's rally again: they count.
+    const restored = rows.map((p) => ({
+      ...p,
+      shots: p.shots.map((s) =>
+        s.siteRemoval
+          ? { ...s, siteRemovalRestoredAt: "2026-10-28T00:00:00Z" }
+          : s,
+      ),
+    }));
+    expect(courtEndSwaps(restored, SETTLED)[0]?.pointIds).toEqual([
+      "set1-g3-p2",
+    ]);
   });
 
   test("too few placed strokes in a set: no vote, no slot", () => {

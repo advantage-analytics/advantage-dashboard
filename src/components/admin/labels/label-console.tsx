@@ -1293,12 +1293,15 @@ export function LabelConsole({
   }
 
   // Redo: what the last undos took back, newest first, while no other change
-  // has landed since — the server clears its redo stack on any new write, and
-  // so does this count (below). A redo is a journaled action of its own, so
-  // Undo is live again after one.
+  // has landed since — the server clears its redo stack on any journaled
+  // write to the label rows, and so does this count (below). The score
+  // banner's writes go to `label_sessions`, which the journal never sees, so
+  // they leave it alone (`fieldSaves`). A redo is a journaled action of its
+  // own, so Undo is live again after one.
   const [redoing, setRedoing] = useState(false);
   const [redoable, setRedoable] = useState(0);
-  if (redoable > 0 && saveStatus.pending > 0 && !undoing && !redoing) {
+  const [fieldSaves, setFieldSaves] = useState(0);
+  if (redoable > 0 && saveStatus.pending > fieldSaves && !undoing && !redoing) {
     setRedoable(0);
   }
   const canRedo =
@@ -1847,6 +1850,23 @@ export function LabelConsole({
     const shotsBefore = [...befores.values()].flatMap((p) =>
       shotSwapsOf(p.shots),
     );
+    const pointOfShot = new Map(
+      [...befores.values()].flatMap((p) =>
+        p.shots.map((shot) => [shot.id, p.id] as const),
+      ),
+    );
+    // Every planned point, back as it was read: the revert, and the settle
+    // for any point the server stopped short of.
+    const revert = (rows: LabelPoint[], ids: ReadonlySet<string>) =>
+      applyShotSwaps(
+        rows.map((p) => {
+          const before = ids.has(p.id) ? befores.get(p.id) : undefined;
+          if (!before) return p;
+          const { status, winner, endedBy } = before;
+          return { ...p, status, winner, endedBy };
+        }),
+        shotsBefore.filter((shot) => ids.has(pointOfShot.get(shot.id) ?? "")),
+      );
     return runOperation(
       (rows) =>
         applyShotSwaps(
@@ -1859,7 +1879,10 @@ export function LabelConsole({
       () => run([...plans.keys()]),
       (rows, result) => {
         const saved = new Map(result.points.map((p) => [p.pointId, p]));
-        return applyShotSwaps(
+        const unsaved = new Set(
+          [...plans.keys()].filter((id) => !saved.has(id)),
+        );
+        const settled = applyShotSwaps(
           rows.map((p) => {
             const one = saved.get(p.id);
             if (!one) return p;
@@ -1868,18 +1891,15 @@ export function LabelConsole({
           }),
           result.shots,
         );
+        return unsaved.size > 0 ? revert(settled, unsaved) : settled;
       },
-      (rows) =>
-        applyShotSwaps(
-          rows.map((p) => {
-            const before = befores.get(p.id);
-            if (!before) return p;
-            const { status, winner, endedBy } = before;
-            return { ...p, status, winner, endedBy };
-          }),
-          shotsBefore,
-        ),
-    );
+      (rows) => revert(rows, new Set(plans.keys())),
+    ).then((result) => {
+      // Some points were written and the rest refused: say why, after the
+      // success runOperation reported for the ones that landed.
+      if (result?.stopped) refuse(result.stopped);
+      return result;
+    });
   }
 
   /** One of the score banner's two writes, on `label_sessions` only. */
@@ -1887,10 +1907,12 @@ export function LabelConsole({
     if (!operations) return;
     const before = sessionFields;
     setSessionFields((fields) => applyLabelSessionPatch(fields, patch));
+    setFieldSaves((n) => n + 1);
     dispatchSave({ type: "start" });
     const result = await settle(
       operations.updateSessionFields(session.id, patch),
     );
+    setFieldSaves((n) => n - 1);
     if ("error" in result) {
       setSessionFields(before);
       dispatchSave({ type: "failure", message: result.error });

@@ -114,12 +114,19 @@ export type LabelPlayersSwitchResult = LabelOpResult<{
   }[];
   /** Every stroke of every switched point, flipped. */
   shots: ShotSwapWrite[];
+  /**
+   * Why the run stopped short of the last id, or null when every point was
+   * switched. The points before the refusal are written and listed above.
+   */
+  stopped: string | null;
 }>;
 
 /**
  * "Switch N points": {@link writeLabelPlayerSwitch} on each id in turn. Stops
- * at the first refusal and says which point; the ones before it stay
- * switched, inside the same undo step.
+ * at the first refusal. A refusal on the first point is an error; a later one
+ * answers the points already switched — written, inside the same undo step —
+ * with `stopped` saying why the rest were not, so the console shows exactly
+ * what the database holds.
  */
 export async function writeLabelPlayersSwitch(params: {
   supabase: AdminClient;
@@ -139,13 +146,14 @@ export async function writeLabelPlayersSwitch(params: {
   for (const pointId of ids as string[]) {
     const one = await writeLabelPlayerSwitch({ supabase, pointId });
     if ("error" in one) {
+      if (points.length === 0) return one;
       return {
-        error:
-          points.length === 0
-            ? one.error
-            : `${one.error} ${points.length} ${
-                points.length === 1 ? "point was" : "points were"
-              } switched first; ⌘Z takes them back.`,
+        ok: true,
+        points,
+        shots,
+        stopped: `${one.error} ${points.length} of ${ids.length} ${
+          ids.length === 1 ? "point was" : "points were"
+        } switched; ⌘Z takes them back.`,
       };
     }
     points.push({
@@ -156,7 +164,7 @@ export async function writeLabelPlayersSwitch(params: {
     });
     shots.push(...one.shots);
   }
-  return { ok: true, points, shots };
+  return { ok: true, points, shots, stopped: null };
 }
 
 export function switchLabelPointsPlayers(
