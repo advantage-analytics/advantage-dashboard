@@ -69,16 +69,18 @@ export default async function AdminTeamsPage({
 
   const { id: adminId } = await requireAdminOrNotFound();
   // Once per render: reads what is New and records this look.
-  const seen = await lookAtSurface(adminId, "teams");
+  const seenRead = lookAtSurface(adminId, "teams");
 
   // Raw facet values in, labelled options out — `divisionLabel()` lives in a
   // server module, and the strings that go back into the URL have to stay the
   // raw column values either way (see `AdminTeamsFilters`).
-  const [facetValues, page, viewCounts, joined] = await Promise.all([
+  const [facetValues, page, viewCounts, [seen, joined]] = await Promise.all([
     listAdminTeamFacets(),
     listAdminTeams({ view, sort, after: one(params.after), filters }),
     countAdminTeamViews(filters),
-    countTeamsJoinedSince(seen),
+    seenRead.then(
+      async (seen) => [seen, await countTeamsJoinedSince(seen)] as const,
+    ),
   ]);
 
   // Booleans only cross to the client; the seen state stays here.

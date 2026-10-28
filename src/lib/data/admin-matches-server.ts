@@ -358,15 +358,17 @@ function compareRows(
 
 /**
  * Every match, newest upload first, with the admin's New marks. `seen` comes
- * from the page's one `lookAtSurface(adminId, "matches")`.
+ * from the page's one `lookAtSurface(adminId, "matches")` — taken as a
+ * promise, so that look runs alongside the reads instead of before them.
  */
 export async function listAdminMatches(
-  seen: SeenState,
+  seenRead: Promise<SeenState>,
 ): Promise<AdminMatchesResult> {
   await requireAdminOrNotFound();
   const db = createAdminClient();
 
-  const [matches, views] = await Promise.all([
+  const [seen, matches, views] = await Promise.all([
+    seenRead,
     readAllPages<DbListMatch>(
       db
         .from("matches")

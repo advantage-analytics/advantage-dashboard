@@ -29,8 +29,9 @@ export default async function AdminMatchesPage({
     searchParams,
     requireAdminOrNotFound(),
   ]);
-  const seen = await lookAtSurface(admin.id, "matches");
-  const { rows, total } = await listAdminMatches(seen);
+  const { rows, total } = await listAdminMatches(
+    lookAtSurface(admin.id, "matches"),
+  );
 
   return (
     <MatchesPageContent
