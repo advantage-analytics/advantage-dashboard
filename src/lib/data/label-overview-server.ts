@@ -25,6 +25,15 @@ import {
 } from "@/lib/services/labels/job-groups";
 import { PROGRAM_CRESTS_BUCKET } from "./teams-server";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
+import { matchOutcome, type MatchScore } from "@/lib/data/match-utils";
+import {
+  scoreSetsFrom,
+  type RawMatchScore,
+  type ScoreLineSet,
+} from "@/lib/ui/score-format";
+import { PROVIDER_ID } from "@/lib/services/splitstep/config";
+import { isFresh, loadNavSeen } from "@/lib/admin/seen-server";
+import { labelJobSeenKey } from "@/components/admin/labels/board/seen-key";
 
 interface Dependencies {
   requireAdmin: () => Promise<{ id: string } | null>;
@@ -278,6 +287,10 @@ export interface LabelJobOwner {
   opponentName: string;
   playedAt: string | null;
   event: string | null;
+  /** The entered score, player 1 first, for the list's match cell. */
+  sets?: ScoreLineSet[];
+  /** Whether player 1 took the match; null where the score cannot say. */
+  won?: boolean | null;
 }
 
 interface DbOwnerMatch {
@@ -288,6 +301,7 @@ interface DbOwnerMatch {
   date: string | null;
   tournament_name: string | null;
   program_id: string | null;
+  score: unknown;
 }
 
 /** Each match's owner, by match id. Empty when the viewer is not an admin. */
@@ -305,7 +319,7 @@ export async function getLabelJobOwners(
   const { data: matches } = await db
     .from("matches")
     .select(
-      "id, player1_id, player1_name, player2_name, date, tournament_name, program_id",
+      "id, player1_id, player1_name, player2_name, date, tournament_name, program_id, score",
     )
     .in("id", ids)
     .returns<DbOwnerMatch[]>();
@@ -363,6 +377,8 @@ export async function getLabelJobOwners(
       opponentName: match.player2_name ?? "Player 2",
       playedAt: match.date,
       event: match.tournament_name,
+      sets: scoreSetsFrom(asRecord(match.score) as RawMatchScore | null),
+      won: matchOutcome(asRecord(match.score) as MatchScore | null, true),
     });
   }
   return owners;
@@ -450,4 +466,94 @@ export async function getLabelJobFlagCounts(
   }
   for (const id of ids) counts.set(id, classifyFlags(byMatch.get(id) ?? []));
   return counts;
+}
+
+/* -------------------------------------------------------------------------
+ * Requested reviews: a player waiting on a match
+ * ---------------------------------------------------------------------- */
+
+/**
+ * An open "Something still wrong? Tell us" report (`program_requests` of
+ * kind `match_issue`, Advantage Review step 1): a player saying a match
+ * Verified by Advantage still reads wrong. The Labels list files the jobs of
+ * a reported match under "Requested reviews" until the report is resolved or
+ * dismissed on the Requests page.
+ */
+export interface LabelReviewRequest {
+  requestId: string;
+  /** When the player sent it. ISO. */
+  requestedAt: string;
+  /** The point the report names, as the player saw it; null = whole match. */
+  pointLabel: string | null;
+}
+
+/** Open match reports, by match id — the oldest report per match wins. */
+export async function getLabelReviewRequests(
+  deps: Dependencies = defaults,
+): Promise<Map<string, LabelReviewRequest>> {
+  const reviews = new Map<string, LabelReviewRequest>();
+  const viewer = await deps.requireAdmin();
+  if (!viewer) return reviews;
+  const { data, error } = await deps
+    .createAdminClient()
+    .from("program_requests")
+    .select("id, match_id, point_label, created_at")
+    .eq("kind", "match_issue")
+    .eq("status", "open")
+    .not("match_id", "is", null)
+    .order("created_at", { ascending: true })
+    .returns<
+      {
+        id: string;
+        match_id: string;
+        point_label: string | null;
+        created_at: string;
+      }[]
+    >();
+  if (error) {
+    throw new Error(`Could not read requested reviews: ${error.message}`);
+  }
+  for (const row of data ?? []) {
+    if (reviews.has(row.match_id)) continue;
+    reviews.set(row.match_id, {
+      requestId: row.id,
+      requestedAt: row.created_at,
+      pointLabel: row.point_label,
+    });
+  }
+  return reviews;
+}
+
+/* -------------------------------------------------------------------------
+ * The nav's "Labels · 2"
+ * ---------------------------------------------------------------------- */
+
+export { labelJobSeenKey };
+
+/**
+ * What the admin nav's "Labels · N" counts: completed Advantage
+ * Intelligence jobs that arrived since this admin last opened the Labels
+ * page and that they have not opened since — the LabelsFlat board's own
+ * `freshCount`. Requested reviews are deliberately not added: each one is
+ * an open `program_requests` row, already counted by "Requests · N", and
+ * counting it twice would make one report look like two jobs of work.
+ * Zero when the read fails; the nav never fails over a count.
+ */
+export async function countLabelsForNav(adminId: string): Promise<number> {
+  const seen = (await loadNavSeen(adminId)).labels;
+  const { data, error } = await createAdminClient()
+    .from("processing_jobs")
+    .select("id, completed_at")
+    .eq("provider", PROVIDER_ID)
+    .eq("status", "completed")
+    .not("results_object_key", "is", null)
+    .gt("completed_at", seen.since)
+    .returns<{ id: string; completed_at: string | null }[]>();
+  if (error) {
+    console.error("[labels nav] count failed", { error: error.message });
+    return 0;
+  }
+  return (data ?? []).filter((job) =>
+    isFresh(seen, labelJobSeenKey(job.id), job.completed_at),
+  ).length;
 }
