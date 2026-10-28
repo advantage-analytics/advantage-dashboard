@@ -1,4 +1,4 @@
-import { listAdminAskFeedback } from "@/lib/data/ask-admin-server";
+import { loadAdminAskPage } from "@/lib/data/ask-admin-server";
 import { AskFeedbackPageContent } from "@/components/admin/ask-feedback-page-content";
 
 /**
@@ -19,14 +19,15 @@ export default async function AdminAskPage({
 }: {
   searchParams: Promise<{ id?: string | string[] }>;
 }) {
-  const [{ rows, capped }, { id }] = await Promise.all([
-    listAdminAskFeedback(),
+  const [{ rows, capped, freshIds }, { id }] = await Promise.all([
+    loadAdminAskPage(),
     searchParams,
   ]);
   return (
     <AskFeedbackPageContent
       rows={rows}
       capped={capped}
+      freshIds={freshIds}
       initialSelectedId={typeof id === "string" ? id : null}
     />
   );
