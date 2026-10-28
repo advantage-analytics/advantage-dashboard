@@ -258,7 +258,7 @@ const subscribeNever = () => () => {};
  * server and the first client render print nothing, and the browser fills the
  * cell in. No hydration mismatch, no "yesterday" for anyone west of UTC.
  */
-function useIsClient(): boolean {
+export function useIsClient(): boolean {
   return useSyncExternalStore(
     subscribeNever,
     () => true,

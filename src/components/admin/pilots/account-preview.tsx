@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { Field } from "@/components/admin/create-team-dialog";
-import { AdminAvatar, dayLabel } from "@/components/admin/admin-cells";
+import {
+  AdminAvatar,
+  dayLabel,
+  useIsClient,
+} from "@/components/admin/admin-cells";
 import {
   capLabel,
   type AccountPreview,
@@ -95,8 +99,6 @@ export function AccountEmailField({
   );
 }
 
-const subscribeNever = () => () => {};
-
 /**
  * What the account is now, in one line: workspace, when they joined, their
  * personal matches and the allowance they draw — "Personal · joined Oct 2 ·
@@ -124,11 +126,7 @@ function previewFacts(account: AccountPreview, isClient: boolean): string {
 
 /** The live preview line under the email field. */
 export function AccountPreviewCard({ preview }: { preview: PreviewState }) {
-  const isClient = useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false,
-  );
+  const isClient = useIsClient();
 
   if (preview.status === "idle") return null;
 

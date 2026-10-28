@@ -1,13 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
 import { AdminPage } from "@/components/admin/admin-page";
 import {
@@ -16,6 +10,7 @@ import {
   AgeText,
   dayLabel,
   timeLabel,
+  useIsClient,
 } from "@/components/admin/admin-cells";
 import { useStartLabelling } from "@/components/admin/labels/start-labelling-button";
 import {
@@ -348,15 +343,9 @@ function ItemCell({ item, fresh }: { item: TodayItem; fresh: boolean }) {
   );
 }
 
-const subscribeNever = () => () => {};
-
 /** "since Oct 25", "since Yesterday, 4:10 pm", "since 9:30 am" — browser zone only. */
 function SinceText({ at }: { at: string }) {
-  const isClient = useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false,
-  );
+  const isClient = useIsClient();
   if (!isClient) return <> </>;
   const date = new Date(at);
   const day = dayLabel(date);

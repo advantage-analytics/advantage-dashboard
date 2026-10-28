@@ -216,6 +216,9 @@ function PilotRow({
   onRemove: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  // Cleared here the moment the row is opened; the server learns it below.
+  const [opened, setOpened] = useState(false);
+  const fresh = row.fresh && !opened;
   return (
     <div
       className={cn(
@@ -228,7 +231,7 @@ function PilotRow({
         <AdminPersonCell
           name={row.name}
           photoUrl={row.avatarUrl}
-          fresh={row.fresh}
+          fresh={fresh}
           sub={<span className="truncate">{row.email}</span>}
         />
       </span>
@@ -250,7 +253,7 @@ function PilotRow({
       </span>
 
       <span className={COL.joined}>
-        <TwoLineDate at={row.addedAt} fresh={row.fresh} />
+        <TwoLineDate at={row.addedAt} fresh={fresh} />
       </span>
 
       <span
@@ -268,7 +271,8 @@ function PilotRow({
                 setMenuOpen(next);
                 // Pilot rows have no side panel; opening the row's menu is
                 // the open that clears its New dot.
-                if (next && row.fresh) {
+                if (next && fresh) {
+                  setOpened(true);
                   void markAdminRowSeen("pilots", `pilot:${row.id}`);
                 }
               }}

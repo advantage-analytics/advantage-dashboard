@@ -34,7 +34,6 @@ import { getAdminMatchReport } from "@/lib/data/admin-matches-server";
 import { isStatsUnavailable, matchPageKind } from "@/lib/data/match-analysis";
 import { getSharedMatchVideo } from "@/lib/data/match-video-server";
 import { getPreferences } from "@/lib/data/preferences-server";
-import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import { playedSets } from "@/lib/ui/score-format";
 
 /**
@@ -205,7 +204,7 @@ export default async function AdminMatchReportPage({
                 workspaceRole="player"
                 workspaceKind="personal"
                 workspaceName=""
-                bandSettings={DEFAULT_BANDS}
+                bandSettings={report.bands}
                 canEditBands={false}
                 unit={unit}
                 readOnly

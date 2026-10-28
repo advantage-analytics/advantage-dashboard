@@ -767,18 +767,6 @@ export async function loadAdminToday(): Promise<TodayPage> {
   };
 }
 
-/**
- * Today items that arrived since the admin last opened Today and were not
- * opened since. Read-only: never moves a watermark.
- */
-export async function countTodayForNav(adminId: string): Promise<number> {
-  const navSeen = await loadNavSeen(adminId);
-  const drafts = await loadDrafts(createAdminClient(), navSeen.ask, Date.now());
-  return drafts.filter((draft) =>
-    isFresh(navSeen.today, draft.key, draft.since),
-  ).length;
-}
-
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function personName(user: {

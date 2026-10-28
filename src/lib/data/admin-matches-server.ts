@@ -5,6 +5,13 @@ import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { isFresh, loadNavSeen, type SeenState } from "@/lib/admin/seen-server";
 import { UUID_RE } from "@/lib/admin/validation";
 import { readAllPages } from "@/lib/data/admin-range-read";
+import {
+  DEFAULT_BANDS,
+  rowToBandSettings,
+  type BandSettings,
+  type BandSettingsDbRow,
+} from "@/lib/data/viz-bands";
+import { BAND_COLUMNS } from "@/lib/data/viz-bands-write";
 import { loadMatchDetail } from "@/lib/data/match-detail-server";
 import {
   analysisFor,
@@ -456,17 +463,41 @@ export async function countNewMatchesForNav(adminId: string): Promise<number> {
   const since = seen.since;
 
   try {
+    // Paged, so PostgREST's row cap can't truncate a long absence silently.
+    type Row = { match_id: string | null };
     const [jobs, files, stats] = await Promise.all([
-      db.from("processing_jobs").select("match_id").gt("created_at", since),
-      db.from("match_files").select("match_id").gt("uploaded_at", since),
-      db.from("match_stats").select("match_id").gt("created_at", since),
+      readAllPages<Row>(
+        db
+          .from("processing_jobs")
+          .select("match_id")
+          .gt("created_at", since)
+          .order("id")
+          .returns<Row[]>(),
+        "processing_jobs nav read failed",
+      ),
+      readAllPages<Row>(
+        db
+          .from("match_files")
+          .select("match_id")
+          .gt("uploaded_at", since)
+          .order("id")
+          .returns<Row[]>(),
+        "match_files nav read failed",
+      ),
+      readAllPages<Row>(
+        db
+          .from("match_stats")
+          .select("match_id")
+          .gt("created_at", since)
+          .order("match_id")
+          .returns<Row[]>(),
+        "match_stats nav read failed",
+      ),
     ]);
     const candidates = [
       ...new Set(
-        [jobs, files, stats].flatMap((result) =>
-          ((result.data ?? []) as { match_id: string | null }[]).flatMap(
-            (row) => (row.match_id ? [row.match_id] : []),
-          ),
+        [...jobs, ...files, ...stats].flatMap((row) =>
+          row.match_id ? [row.match_id] : [],
         ),
       ),
     ];
@@ -497,6 +528,31 @@ export interface AdminMatchReport {
   analysis: MatchAnalysis;
   workspace: AdminMatchWorkspace;
   labelHref: string | null;
+  /**
+   * The match's own visualization bands — its program's, or its owner's for
+   * a personal match — so the admin sees the buckets the player sees.
+   */
+  bands: BandSettings;
+}
+
+/** `viz_band_settings` for one account; any miss or failure is the default. */
+async function bandsFor(
+  db: SupabaseClient,
+  accountId: string | null,
+): Promise<BandSettings> {
+  if (!accountId) return DEFAULT_BANDS;
+  const { data, error } = await db
+    .from("viz_band_settings")
+    .select(BAND_COLUMNS)
+    .eq("account_id", accountId)
+    .maybeSingle();
+  if (error) {
+    console.error("[admin matches] band settings read failed", {
+      error: error.message,
+    });
+    return DEFAULT_BANDS;
+  }
+  return rowToBandSettings((data as BandSettingsDbRow | null) ?? null);
 }
 
 /**
@@ -530,7 +586,7 @@ export const getAdminMatchReport = cache(async function getAdminMatchReport(
     source_provider: string | null;
   };
 
-  const [detail, jobs, programMap, sessions] = await Promise.all([
+  const [detail, jobs, programMap, sessions, bands] = await Promise.all([
     loadMatchDetail(db, matchId, {
       myPlayerIds: async () => (row.created_by ? [row.created_by] : []),
       kpiHistory: false,
@@ -538,6 +594,7 @@ export const getAdminMatchReport = cache(async function getAdminMatchReport(
     loadMatchAnalysis(db, [matchId]),
     workspaces(db, row.program_id ? [row.program_id] : []),
     labelSessions(db, [matchId]),
+    bandsFor(db, row.program_id ?? row.created_by),
   ]);
   if (!detail) return null;
 
@@ -573,5 +630,6 @@ export const getAdminMatchReport = cache(async function getAdminMatchReport(
       row.source_provider,
       analysis,
     ),
+    bands,
   };
 });

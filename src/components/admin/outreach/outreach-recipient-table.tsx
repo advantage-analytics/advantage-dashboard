@@ -1,8 +1,11 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
 import { Users } from "lucide-react";
-import { AdminPersonCell, WorkspaceMark } from "@/components/admin/admin-cells";
+import {
+  AdminPersonCell,
+  WorkspaceMark,
+  useIsClient,
+} from "@/components/admin/admin-cells";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { OutreachRow } from "@/lib/services/outreach/types";
@@ -28,17 +31,6 @@ export const OUTREACH_STATE_LABEL: Record<OutreachRow["state"], string> = {
   held: "Held",
   not_due: "Not due",
 };
-
-const subscribeNever = () => () => {};
-
-/** Dates are the viewer's own zone: the server prints none (no mismatch). */
-function useIsClient(): boolean {
-  return useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false,
-  );
-}
 
 /** "Oct 29, 9:00 am". */
 export function formatOutreachWhen(iso: string): string {
