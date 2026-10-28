@@ -78,8 +78,10 @@ export default async function AdminLayout({
       <AdminHeader nav={nav} viewer={viewer} />
       {/* No padding or max-width here: each page renders its own `AdminPage`
           column, so the Requests page can seat its peek drawer beside that
-          column, flush to the viewport's right edge — see admin-page.tsx. */}
-      <div className="flex flex-1 items-stretch">{children}</div>
+          column, flush to the viewport's right edge — see admin-page.tsx.
+          `shrink-0` here and on the header: inside the fixed-height scroll
+          root a long page would otherwise squeeze the 44px header to fit. */}
+      <div className="flex flex-1 shrink-0 items-stretch">{children}</div>
     </AdminScrollRoot>
   );
 }
