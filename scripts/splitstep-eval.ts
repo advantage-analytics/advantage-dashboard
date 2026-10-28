@@ -230,7 +230,7 @@ async function main() {
     ad_scoring?: boolean;
     best_of?: number;
   } | null;
-  const build = (rallies: SplitStepRally[]) =>
+  const build = (rallies: SplitStepRally[], calls = lineCalls) =>
     buildTranscript({
       rallies,
       labels: analysis.players,
@@ -246,7 +246,7 @@ async function main() {
       }),
       adScoring: resolveAdScoring(job.ad_scoring, format),
       bestOf: format?.best_of ?? 3,
-      lineCalls,
+      lineCalls: calls,
     });
   const transcript = build(analysis.rallies);
   if (!transcript.ok) {
@@ -261,6 +261,8 @@ async function main() {
       session,
       transcript,
       rallies: analysis.rallies,
+      players: analysis.players,
+      lineCalls,
       entered,
       trajectories: rawTrajectories !== null,
       includeUnchecked: allPoints,
@@ -274,8 +276,16 @@ async function main() {
       );
       return;
     }
-    const relabel = hittersByCourtEnd(analysis.rallies, games, [a, b]);
-    const rebuilt = build(relabel.rallies);
+    const relabel = hittersByCourtEnd(
+      analysis.rallies,
+      { games, merges: transcript.segmentation?.merges, score: entered },
+      [a, b],
+    );
+    // Line calls are keyed by stroke object, and a relabelled stroke is a new
+    // one: carry each call over, or every changed stroke loses its call.
+    const relabelledCalls =
+      lineCalls && carryLineCalls(lineCalls, analysis.rallies, relabel.rallies);
+    const rebuilt = build(relabel.rallies, relabelledCalls);
     console.log(
       `\n=== hitters by court end · ${relabel.changed} of ${relabel.covered} strokes relabelled · ${relabel.placed} placed`,
     );
@@ -288,6 +298,8 @@ async function main() {
       session,
       transcript: rebuilt,
       rallies: relabel.rallies,
+      players: analysis.players,
+      lineCalls: relabelledCalls,
       entered,
       trajectories: rawTrajectories !== null,
       includeUnchecked: allPoints,
@@ -495,11 +507,18 @@ function reportSession(args: {
   transcript: Transcript;
   /** The strokes the transcript was built from, for the hitter tally. */
   rallies: readonly SplitStepRally[];
+  /** The match's two vendor labels (`analysis.players`). */
+  players: readonly string[];
+  /** The line calls the transcript was built with, keyed by `rallies`' strokes. */
+  lineCalls: LineCalls | undefined;
   entered: MatchScore | null;
   trajectories: boolean;
   includeUnchecked: boolean;
 }) {
   const { jobId, session, transcript, entered } = args;
+  const player1Label = transcript.reconciliation.player1Label;
+  const player2Label =
+    args.players.find((label) => label !== player1Label) ?? null;
   const proposal = transcript.segmentation;
   const proposed = proposal
     ? proposedPointsOf(
@@ -518,7 +537,7 @@ function reportSession(args: {
   const hitters = hitterTally(
     args.rallies,
     session,
-    transcript.reconciliation.player1Label,
+    { p1: player1Label, p2: player2Label },
     args.includeUnchecked,
   );
 
@@ -554,7 +573,8 @@ function reportSession(args: {
   const study = winnerStudy(
     rows,
     args.rallies,
-    transcript.reconciliation.player1Label,
+    { p1: player1Label, p2: player2Label },
+    args.lineCalls,
   );
   console.log(
     `  winner by last ball         ${study.lastBall.right}/${study.lastBall.of} (${pct(study.lastBall.right, study.lastBall.of)}) — the played rally's last stroke: its hitter wins when it reads in`,
@@ -617,7 +637,7 @@ function reportSession(args: {
   }
 
   // --- Merges -------------------------------------------------------------
-  const merges = compareMerges(proposal, session.points);
+  const merges = compareMerges(proposal, session.points, args.includeUnchecked);
   console.log(
     `\nmerges: proposed ${merges.proposed.length} · the labeller's multi-id points ${merges.labelled.length} · agreed ${merges.agreed.length}`,
   );
@@ -633,11 +653,17 @@ function reportSession(args: {
  * The published winner against a last-ball reading of the same rally: the
  * hitter of the played rally's last stroke wins when that stroke reads `in`,
  * loses otherwise. Where the two disagree, which one the labeller sided with.
+ *
+ * The rally is played as the transcript played it (`playedRally` with the
+ * published winner and the same line calls), so both readings stand on the
+ * same strokes. A point the labeller merged from several rallies ends on the
+ * last of them.
  */
 function winnerStudy(
   rows: ReturnType<typeof joinSessionTruth>["rows"],
   rallies: readonly SplitStepRally[],
-  player1Label: string | null,
+  labels: { p1: string | null; p2: string | null },
+  lineCalls: LineCalls | undefined,
 ) {
   const byId = new Map(rallies.map((r) => [r.rallyId, r]));
   const lastBall = { right: 0, of: 0 };
@@ -645,11 +671,13 @@ function winnerStudy(
   const disagree = { of: 0, publishedRight: 0, lastBallRight: 0 };
   for (const row of rows) {
     const truth = row.truth.winner;
-    const rally = byId.get(row.rallyId);
-    if (truth === null || !rally || !player1Label) continue;
-    const last = playedRally(rally).rally.strokes.at(-1);
+    const rally = byId.get(row.mergedRallyIds.at(-1) ?? row.rallyId);
+    if (truth === null || !rally || !labels.p1) continue;
+    const winner =
+      row.published.winner === null ? null : labels[row.published.winner];
+    const last = playedRally(rally, { winner, lineCalls }).rally.strokes.at(-1);
     if (!last) continue;
-    const hitter = last.playerLabel === player1Label ? "p1" : "p2";
+    const hitter = last.playerLabel === labels.p1 ? "p1" : "p2";
     const read = last.in ? hitter : hitter === "p1" ? "p2" : "p1";
     lastBall.of += 1;
     if (read === truth) lastBall.right += 1;
@@ -673,7 +701,7 @@ function winnerStudy(
 function hitterTally(
   rallies: readonly SplitStepRally[],
   session: LabelSession,
-  player1Label: string | null,
+  labels: { p1: string | null; p2: string | null },
   includeUnchecked: boolean,
 ): { right: number; of: number } {
   const labelOf = new Map<number, string>();
@@ -681,8 +709,6 @@ function hitterTally(
     for (const stroke of rally.strokes)
       labelOf.set(stroke.eventId, stroke.playerLabel);
   }
-  const labels = new Set(labelOf.values());
-  const player2Label = [...labels].find((l) => l !== player1Label) ?? null;
   let right = 0;
   let of = 0;
   for (const point of session.points) {
@@ -694,11 +720,31 @@ function hitterTally(
       const derived = labelOf.get(shot.eventId);
       if (derived === undefined) continue;
       of += 1;
-      const truth = shot.hitter === "p1" ? player1Label : player2Label;
-      if (derived === truth) right += 1;
+      if (derived === labels[shot.hitter]) right += 1;
     }
   }
   return { right, of };
+}
+
+/**
+ * `calls` re-keyed onto the relabelled strokes. `relabelled` is `original`
+ * stroke for stroke, in the same order (`hittersByCourtEnd`), so the keys
+ * pair up by position.
+ */
+function carryLineCalls(
+  calls: LineCalls,
+  original: readonly SplitStepRally[],
+  relabelled: readonly SplitStepRally[],
+): LineCalls {
+  const out = new Map(calls);
+  original.forEach((rally, r) => {
+    rally.strokes.forEach((stroke, s) => {
+      const call = calls.get(stroke);
+      const copy = relabelled[r]?.strokes[s];
+      if (call && copy && copy !== stroke) out.set(copy, call);
+    });
+  });
+  return out;
 }
 
 function otherLabel(

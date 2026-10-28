@@ -217,7 +217,11 @@ export {
   type FrozenStretch,
 } from "./frozen";
 
-export { hittersByCourtEnd, type HitterRelabel } from "./hitters";
+export {
+  hittersByCourtEnd,
+  type HitterProposal,
+  type HitterRelabel,
+} from "./hitters";
 
 export {
   playerAtEnd,

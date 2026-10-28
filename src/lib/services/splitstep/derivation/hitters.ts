@@ -17,8 +17,9 @@
  * wins, set by set. That vote needs no `initial_top_player_is_player1` and
  * survives a set break counted wrong, since each set decides on its own.
  *
- * A match tiebreak — a set the proposal plays as one game, the 1-0 of a
- * 10-point tiebreak in place of a third set — is the exception. The vendor
+ * A match tiebreak — a set the proposal plays as one game and the entered
+ * score calls 1-0, a 10-point tiebreak in place of a third set — is the
+ * exception. The vendor
  * swaps most of that short set, so its own vote comes out inverted (both
  * labelled matches that have one, 9c00c1b4 and d2144c26). It takes the set
  * before it's orientation instead, carried across that set's end changes
@@ -27,9 +28,13 @@
  * (labels/court-end.ts), which measured 211 of 214 swapped points caught with
  * that inheritance.
  *
+ * Tiebreak end changes count points, not rallies: a rally the proposal
+ * merges into the one before it is the same point.
+ *
  * A stroke with no position, or one on the net line, takes the other player
  * from the stroke before it in the same rally (a rally alternates hitters
- * after the serve); a serve with no position keeps the vendor's label.
+ * after the serve) when that stroke was placed; a serve with no position, or
+ * a stroke after one the rule could not place, keeps the vendor's label.
  * Rallies outside every proposed game keep the vendor's labels too.
  *
  * Pure: no I/O. Measured only (scripts/splitstep-eval.ts --hitters-by-end);
@@ -37,6 +42,7 @@
  */
 
 import { swapsInSet } from "./position";
+import type { MatchScore } from "./reconcile";
 import type { ProposedGame } from "./segmentation";
 import type { SplitStepRally, SplitStepStroke } from "./types";
 
@@ -67,6 +73,19 @@ function swapsBefore(
   return Math.ceil(gamesBeforeInSet / 2) + Math.floor(tiebreakPointsBefore / 6);
 }
 
+export interface HitterProposal {
+  /** The segmenter's games (`SegmentationProposal.games`). */
+  games: readonly ProposedGame[];
+  /** Rally pairs it plays as one point; the second never counts as a point. */
+  merges?: ReadonlyArray<readonly [number, number]>;
+  /**
+   * The entered result. A set the proposal plays as one game is a match
+   * tiebreak only when this scores it 1-0 or as tiebreak points (10-8);
+   * without a score, any one-game set is taken for one.
+   */
+  score?: MatchScore | null;
+}
+
 /**
  * The rallies with each stroke's `playerLabel` set to the player at the end it
  * was struck from, under the proposed games. `labels` are the match's two
@@ -74,17 +93,28 @@ function swapsBefore(
  */
 export function hittersByCourtEnd(
   rallies: readonly SplitStepRally[],
-  games: readonly ProposedGame[],
+  { games, merges = [], score = null }: HitterProposal,
   labels: readonly [string, string],
 ): HitterRelabel {
   const position = new Map(rallies.map((r, i) => [r.rallyId, i]));
+  const mergedAway = new Set(merges.map(([, second]) => second));
 
-  // A set the proposal plays as one game is a match tiebreak.
+  // A set the proposal plays as one game, and the score as 1-0, is a match
+  // tiebreak. A one-game set the score does not call 1-0 is a video that
+  // stopped (or a path that did not fit), not a tiebreak.
   const gamesPerSet = new Map<number, number>();
   for (const game of games) {
     gamesPerSet.set(game.set, (gamesPerSet.get(game.set) ?? 0) + 1);
   }
-  const isMatchTiebreak = (set: number) => gamesPerSet.get(set) === 1;
+  // Entered either as 1-0, or as the tiebreak's own points (10-8): no
+  // played-out set reaches 10 games.
+  const isMatchTiebreak = (set: number) => {
+    if (gamesPerSet.get(set) !== 1) return false;
+    if (score === null) return true;
+    const a = score.player1[set - 1] ?? 0;
+    const b = score.player2[set - 1] ?? 0;
+    return a + b === 1 || Math.max(a, b) >= 10;
+  };
 
   // Per rally: its set and the end swaps before it inside that set.
   const placeOf = new Map<number, { set: number; swaps: number }>();
@@ -95,13 +125,19 @@ export function hittersByCourtEnd(
     const to = position.get(game.lastRallyId);
     if (from === undefined || to === undefined) continue;
     const tiebreak = game.game === 13 || isMatchTiebreak(game.set);
-    if (tiebreak) tiebreakPoints.set(game.set, to - from + 1);
+    // Points, not rallies: a merged-away rally is the point before it.
+    let pointsBefore = 0;
     for (let i = from; i <= to; i += 1) {
-      placeOf.set(rallies[i].rallyId, {
+      const rallyId = rallies[i].rallyId;
+      const continues = mergedAway.has(rallyId) && i > from;
+      if (continues) pointsBefore -= 1;
+      placeOf.set(rallyId, {
         set: game.set,
-        swaps: swapsBefore(game.game - 1, tiebreak ? i - from : 0),
+        swaps: swapsBefore(game.game - 1, tiebreak ? pointsBefore : 0),
       });
+      pointsBefore += 1;
     }
+    if (tiebreak) tiebreakPoints.set(game.set, pointsBefore);
   }
 
   // Set by set, the orientation the vendor's labels agree with most.
@@ -154,6 +190,9 @@ export function hittersByCourtEnd(
     const owner = (end: End) => ((end === "top") !== swapped ? top : bottom);
 
     const strokes: SplitStepStroke[] = [];
+    // Whether the stroke before was placed: a fill from a stroke that kept
+    // the vendor's label would carry the vendor's swap forward.
+    let beforePlaced = false;
     for (const stroke of rally.strokes) {
       covered += 1;
       const end = endOf(stroke);
@@ -162,9 +201,12 @@ export function hittersByCourtEnd(
       if (end) {
         label = owner(end);
         placed += 1;
-      } else if (before && stroke.strokeType !== "serve") {
-        label = before.playerLabel === labels[0] ? labels[1] : labels[0];
+        beforePlaced = true;
+      } else if (before && beforePlaced && stroke.strokeType !== "serve") {
+        label = other(before.playerLabel);
         placed += 1;
+      } else {
+        beforePlaced = false;
       }
       if (label !== stroke.playerLabel) changed += 1;
       strokes.push(
