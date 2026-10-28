@@ -68,11 +68,12 @@ export default async function AdminNewUploadPage({
       .filter(Boolean)
       .join(" ");
   // A personal workspace has no duals, tournaments or console file path.
-  const kind =
-    context?.owner && selection.kind && selection.kind !== "video"
-      ? null
-      : selection.kind;
-  if (context?.owner && selection.kind && selection.kind !== "video")
+  const kindRefused =
+    Boolean(context?.owner) &&
+    selection.kind !== null &&
+    selection.kind !== "video";
+  const kind = kindRefused ? null : selection.kind;
+  if (kindRefused)
     error = [error, "A player’s personal workspace takes match video only."]
       .filter(Boolean)
       .join(" ");

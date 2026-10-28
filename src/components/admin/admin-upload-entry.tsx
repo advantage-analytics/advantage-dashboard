@@ -466,7 +466,7 @@ export function AdminUploadEntry({
       </main>
       {context && wizardBelow && (kind === "file" || kind === "video") && (
         <FileOrVideo
-          key={`${typeof team === "string" ? team : `${team?.player}:${team?.billing}`}:${kind}`}
+          key={`${adminUploadHref(team, null)}:${kind}`}
           context={context}
           kind={kind}
         />
