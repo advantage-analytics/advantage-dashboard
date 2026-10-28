@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Info, Loader2, RefreshCw } from "lucide-react";
+import { ArrowUpRight, Info, Loader2, Lock, RefreshCw } from "lucide-react";
+import { VerifiedFact } from "@/components/dashboard/matches/match-detail/verified-fact";
+import { verificationFor } from "@/lib/data/match-verification";
 import { DateField, type DateFieldHandle } from "@/components/ui/date-field";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { advButton } from "@/lib/ui/adv-button";
@@ -110,6 +112,9 @@ interface RawMatch {
   score: MatchScore | null;
   format: MatchFormat | null;
   duration: number | null;
+  /** Verified by Advantage: the score and players are locked (D1). */
+  verified?: boolean;
+  verified_at?: string | null;
   player_hand: string | null;
   player_backhand: string | null;
   opponent_hand: string | null;
@@ -198,7 +203,7 @@ interface Loaded {
    * The analysis a new score can be rebuilt against, and the bookmarks that
    * rebuild would remove — null when there is nothing to rebuild.
    */
-  rebuild: { jobId: string; bookmarks: number } | null;
+  rebuild: { jobId: string; bookmarks: number; fixes: number } | null;
 }
 
 /**
@@ -495,12 +500,17 @@ export function EditMatchDialog({
   const draftScore = match
     ? scoreForSave(score, (match.score?.player1?.length ?? 0) > 0)
     : null;
+  // Verified by Advantage (D1): the score and players show locked and are
+  // never sent; the route refuses them anyway.
+  const verification = match ? verificationFor(match) : null;
   const rebuildOffer =
     !!loaded?.rebuild &&
     !!draftScore?.ok &&
     !!draftScore.score &&
     !sameScore(draftScore.score as MatchScore, match?.score ?? null);
   const bookmarksLost = rebuildOffer ? (loaded?.rebuild?.bookmarks ?? 0) : 0;
+  // Fixed points (self review) live on the points a rebuild replaces.
+  const fixesLost = rebuildOffer ? (loaded?.rebuild?.fixes ?? 0) : 0;
   const roundKind = roundKindFor(matchType || null);
   const storedRound = normalizeRound(match?.round ?? null);
   /** A match already on a tournament line whose round this viewer may change. */
@@ -709,17 +719,23 @@ export function EditMatchDialog({
     setFieldErrors({});
 
     const body: Record<string, unknown> = {
-      player2_name: opponent.name,
       player_hand: player.hand,
       player_backhand: player.backhand,
       opponent_hand: opponent.hand,
       opponent_backhand: opponent.backhand,
     };
-    if (saved.score) body.score = saved.score;
-    // A personal match types its player; a team match picks from the roster,
-    // and the server writes the name from that row. On a line, neither.
-    if (roster === null) body.player1_name = player.name;
-    else if (!linked && playerChanged && playerId) body.player1_id = playerId;
+    // A Verified match's score and players are locked (D1): the fields are
+    // shown read-only and never sent, so a padded but equal score cannot be
+    // read as a change.
+    if (!verification) {
+      body.player2_name = opponent.name;
+      if (saved.score) body.score = saved.score;
+      // A personal match types its player; a team match picks from the
+      // roster, and the server writes the name from that row. On a line,
+      // neither.
+      if (roster === null) body.player1_name = player.name;
+      else if (!linked && playerChanged && playerId) body.player1_id = playerId;
+    }
     // A line owns these once the match is on it — and is about to, when one is
     // picked. Sending them would only be overwritten or refused.
     if (detailsSent) {
@@ -1115,6 +1131,35 @@ export function EditMatchDialog({
           className="-mx-6 flex max-h-[min(66vh,640px)] flex-col gap-10 overflow-y-auto px-6 py-0.5"
         >
           <div className="flex flex-col gap-3">
+            {verification && (
+              <div className={`${noteStripCls} items-center`}>
+                <Lock
+                  className={`${noteIconCls} mt-0 text-[var(--ink-400)]`}
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                <p className="m-0 flex-1">
+                  <span className="font-medium text-[var(--ink-900)]">
+                    Verified by Advantage.
+                  </span>{" "}
+                  The score and players are locked.
+                </p>
+                <VerifiedFact
+                  matchId={match.id}
+                  verification={verification}
+                  canReport
+                  lead="Its points, score and players are locked."
+                  trigger={
+                    <button
+                      type="button"
+                      className="shrink-0 cursor-pointer rounded-[var(--radius-cell)] text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                    >
+                      Something still wrong? Tell us
+                    </button>
+                  }
+                />
+              </div>
+            )}
             <EditMatchScore
               value={score}
               onChange={setScore}
@@ -1122,7 +1167,7 @@ export function EditMatchDialog({
               opponentName={opponent.name}
               bestOf={format.bestOf}
               gamesTo={gamesTo}
-              disabled={saving}
+              disabled={saving || verification !== null}
             />
             {rebuildOffer && !rebuildFailed && (
               <DialogInfoRow
@@ -1134,6 +1179,10 @@ export function EditMatchDialog({
                   (bookmarksLost === 1
                     ? " It also removes the 1 bookmarked point on this match."
                     : ` It also removes the ${bookmarksLost} bookmarked points on this match.`)}
+                {fixesLost > 0 &&
+                  (fixesLost === 1
+                    ? " The 1 point fixed on this match goes back to Advantage Intelligence’s reading."
+                    : ` The ${fixesLost} points fixed on this match go back to Advantage Intelligence’s reading.`)}
               </DialogInfoRow>
             )}
           </div>
@@ -1155,7 +1204,7 @@ export function EditMatchDialog({
             }}
             playerRef={p1Ref}
             opponentRef={p2Ref}
-            disabled={saving}
+            disabled={saving || verification !== null}
             roster={roster}
             playerId={playerId}
             onPickPlayer={(next) => void pickRosterPlayer(next)}

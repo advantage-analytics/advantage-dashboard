@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from "react";
 import {
@@ -31,6 +32,14 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 import { useOptionalWorkspace } from "@/components/dashboard/workspace-provider";
 import { useFilmReadOnly } from "./film-read-only";
+import {
+  editorName,
+  REVIEW_FLAG_QUESTION,
+  resultTypeOf,
+  type PointReading,
+} from "@/lib/data/self-review";
+import { useSelfReview } from "@/components/dashboard/matches/match-detail/self-review/self-review-context";
+import { FixPointForm } from "@/components/dashboard/matches/match-detail/self-review/fix-point-form";
 import { cn } from "@/lib/utils";
 
 import { filmProgressWidth } from "./film-clock";
@@ -268,6 +277,8 @@ interface GameGroup {
   /** A tiebreak: the server changes inside the one game. */
   tiebreak: boolean;
   points: MatchPoint[];
+  /** Fix points' leading group: the flagged points, out of their games. */
+  toCheck?: boolean;
 }
 
 /**
@@ -322,6 +333,12 @@ export const PointList = memo(function PointList({
   // by the hitter's hand (`pointDetail`), as Custom › Direction selects it.
   const { context: labelContext } = useMatchFilters();
 
+  // Self review (Fix points): only the report column becomes the editor; the
+  // fullscreen room's drawer (`tone="dark"`) keeps reading. Saved fixes are
+  // marked on every row in both, whatever the mode.
+  const review = useSelfReview();
+  const fixing = review.fixing && tone === "light";
+
   const filtered = filmListActive(filmFilters);
 
   // `useMatchSides()` returns a fresh object each render, so the memo keys off
@@ -360,7 +377,28 @@ export const PointList = memo(function PointList({
     const out: GameGroup[] = [];
     let current: GameGroup | undefined;
 
+    // While fixing, the points a reviewer is asked about lead the list in a
+    // group of their own (canvas F1), and leave their games so no row draws
+    // twice. Every other point stays fixable where it was.
+    const flagged = fixing
+      ? visiblePoints.filter((point) => (point.reviewFlags?.length ?? 0) > 0)
+      : [];
+    if (flagged.length > 0) {
+      out.push({
+        key: "to-check",
+        setNumber: 0,
+        gameNumber: 0,
+        serverName: "",
+        gameScore: null,
+        tiebreak: false,
+        points: flagged,
+        toCheck: true,
+      });
+    }
+    const flaggedIds = new Set(flagged.map((point) => point.id));
+
     for (const point of visiblePoints) {
+      if (flaggedIds.has(point.id)) continue;
       const key = `${point.setNumber}-${point.gameNumber}`;
       const firstServerIsPlayer1 = tiebreakFirstServer.get(key);
       const serverIsYou =
@@ -401,6 +439,7 @@ export const PointList = memo(function PointList({
     oppName,
     showGameScore,
     tiebreakFirstServer,
+    fixing,
   ]);
 
   const clearAll = filmFilters.clearAll;
@@ -475,6 +514,35 @@ export const PointList = memo(function PointList({
   // the tab's window handler (film-tab.tsx) returns early for `[role=button]`
   // targets, so nothing re-follows and the net result there is `held`.
   const listRef = useRef<HTMLDivElement>(null);
+  const openFix = review.setOpenPointId;
+  const fixKeys = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const row = (event.target as HTMLElement).closest<HTMLElement>(
+        "[data-point-id]",
+      );
+      if (!row || event.target !== row) return;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        openFix(row.dataset.pointId ?? null);
+        return;
+      }
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const rows = [
+        ...(listRef.current?.querySelectorAll<HTMLElement>(
+          "[data-point-id][tabindex]",
+        ) ?? []),
+      ];
+      const at = rows.indexOf(row);
+      const next = rows[at + (event.key === "ArrowDown" ? 1 : -1)];
+      if (!next) return;
+      event.preventDefault();
+      event.stopPropagation();
+      next.focus();
+      next.scrollIntoView({ block: "nearest" });
+    },
+    [openFix],
+  );
   const scrollerMounted = !advancedOpen && groups.length > 0;
   useFollowScroll({
     scroller: listRef,
@@ -604,6 +672,11 @@ export const PointList = memo(function PointList({
               <div
                 ref={listRef}
                 className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+                // Fix points' keys (the banner states them once): ↑/↓ walk
+                // the rows, Enter opens the focused row's fix. Captured, so in
+                // the mode Enter fixes rather than seeks; outside it the rows
+                // keep their own keys.
+                onKeyDownCapture={fixing ? fixKeys : undefined}
               >
                 {groups.map((group) => (
                   <div key={group.key} className="flex flex-col">
@@ -612,20 +685,74 @@ export const PointList = memo(function PointList({
                   No rule under it — the rows' own spacing separates the games.
                   The same header in both tones; only the inks are looked up. */}
                     <div className={t.gameHeader}>
-                      <span className={t.gameLabel}>
-                        Set {group.setNumber} · Game {group.gameNumber}
-                      </span>
-                      <div className="flex-1" />
-                      <span className={t.gameMeta}>
-                        {group.gameScore ? `${group.gameScore} · ` : ""}
-                        {group.serverName} serves
-                        {group.tiebreak ? " first" : ""}
-                      </span>
+                      {group.toCheck ? (
+                        <>
+                          <span className={t.gameLabel}>Worth a look</span>
+                          <div className="flex-1" />
+                          <span className={t.gameMeta}>
+                            {group.points.length === 1
+                              ? "1 point"
+                              : `${group.points.length} points`}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className={t.gameLabel}>
+                            Set {group.setNumber} · Game {group.gameNumber}
+                          </span>
+                          <div className="flex-1" />
+                          <span className={t.gameMeta}>
+                            {group.gameScore ? `${group.gameScore} · ` : ""}
+                            {group.serverName} serves
+                            {group.tiebreak ? " first" : ""}
+                          </span>
+                        </>
+                      )}
                     </div>
 
                     {group.points.map((point) => {
-                      const isYou = point.wonByPlayer1 === youIsPlayer1;
+                      const reading = review.readingFor(point);
+                      const youSide = youIsPlayer1 ? "p1" : "p2";
+                      const isYou = reading.winner === youSide;
                       const isActive = point.id === activePointId;
+                      const edit = review.editOf(point.id);
+                      const drafted = review.drafts.has(point.id);
+                      const changed = drafted || edit !== undefined;
+                      const labelFor = (r: PointReading) =>
+                        pointResultLabel(
+                          {
+                            ...point,
+                            resultType: resultTypeOf(r) ?? point.resultType,
+                            wonByPlayer1: r.winner === "p1",
+                          },
+                          labelContext,
+                        );
+                      const question =
+                        fixing && point.reviewFlags?.[0]
+                          ? REVIEW_FLAG_QUESTION[
+                              point
+                                .reviewFlags[0] as keyof typeof REVIEW_FLAG_QUESTION
+                            ]
+                          : null;
+                      const note = drafted
+                        ? "Fixed, not saved"
+                        : edit
+                          ? `Edited by ${editorName(review.state, edit.editedBy, review.viewerId)}`
+                          : question;
+                      const baseDetail = pointDetail(point, labelContext.hands);
+                      // The struck reading names its winner when the fix
+                      // changed who won: "Forehand Winner" over "Forehand
+                      // Winner" would otherwise strike the same words.
+                      const originalTitleFor = (p: MatchPoint) => {
+                        const original = review.originalFor(p);
+                        const label = labelFor(original);
+                        if (original.winner === reading.winner) return label;
+                        const name =
+                          original.winner === youSide
+                            ? youLastName
+                            : oppLastName;
+                        return `${label} · ${name}`;
+                      };
                       return (
                         // A fragment, not a wrapper: the well is the row's
                         // SIBLING in the game's own column, so it spans the
@@ -635,8 +762,26 @@ export const PointList = memo(function PointList({
                         <Fragment key={point.id}>
                           <PointRow
                             point={point}
-                            title={pointResultLabel(point, labelContext)}
-                            detail={pointDetail(point, labelContext.hands)}
+                            title={
+                              changed
+                                ? labelFor(reading)
+                                : pointResultLabel(point, labelContext)
+                            }
+                            originalTitle={
+                              changed ? originalTitleFor(point) : undefined
+                            }
+                            detail={
+                              note ? `${baseDetail} · ${note}` : baseDetail
+                            }
+                            fixLabel={
+                              fixing && review.openPointId !== point.id
+                                ? changed
+                                  ? "Edit fix"
+                                  : "Fix"
+                                : undefined
+                            }
+                            fixing={fixing}
+                            onFix={review.setOpenPointId}
                             isYou={isYou}
                             initials={
                               isYou ? sides.you.initials : sides.opp.initials
@@ -651,6 +796,15 @@ export const PointList = memo(function PointList({
                             onOpenInRoom={onOpenInRoom}
                             tone={tone}
                           />
+                          {fixing && review.openPointId === point.id && (
+                            <FixPointForm
+                              point={point}
+                              youSide={youSide}
+                              youName={youName}
+                              oppName={oppName}
+                              labelFor={labelFor}
+                            />
+                          )}
                           {/* Under the DISPLAYED row, not the lit one: while
                             held the well stays here as `isActive` moves on.
                             The lit shot inside it is the playing shot, which
@@ -940,10 +1094,24 @@ export const PointRow = memo(function PointRow({
   onToggleSaved,
   onOpenInRoom,
   tone = "light",
+  originalTitle,
+  fixing = false,
+  fixLabel,
+  onFix,
 }: {
   point: MatchPoint;
   /** The row's name — `pointResultLabel`, never the raw result type. */
   title: string;
+  /**
+   * Self review: what Advantage Intelligence read, struck through above the
+   * title, on a point somebody fixed (saved or not).
+   */
+  originalTitle?: string;
+  /** Fix points mode: the row trades its bookmark for the Fix action. */
+  fixing?: boolean;
+  /** "Fix" / "Edit fix"; absent while the row's own form is open. */
+  fixLabel?: string;
+  onFix?: (pointId: string) => void;
   /** The row's second line — `pointDetail`. */
   detail: string;
   isYou: boolean;
@@ -1026,6 +1194,12 @@ export const PointRow = memo(function PointRow({
       </span>
 
       <span className="flex min-w-0 flex-col gap-px">
+        {originalTitle && (
+          <span className="truncate text-[11px] text-[var(--ink-500)] line-through decoration-[var(--ink-300)]">
+            <span className="sr-only">Was </span>
+            {originalTitle}
+          </span>
+        )}
         <span className={t.title}>{title}</span>
         <span className={t.detail} style={t.detailStyle}>
           {detail}
@@ -1043,7 +1217,12 @@ export const PointRow = memo(function PointRow({
             t.score,
             // A saved point's bookmark stays lit, so its score stays aside
             // for it rather than sliding back under it when the hover ends.
-            point.saved ? FILM_ROW_SLIDE_HELD : FILM_ROW_SLIDE_ON_REACH,
+            // Fixing, the bookmark is gone, so nothing needs the room.
+            fixing
+              ? undefined
+              : point.saved
+                ? FILM_ROW_SLIDE_HELD
+                : FILM_ROW_SLIDE_ON_REACH,
           )}
           style={t.scoreStyle}
         >
@@ -1057,7 +1236,20 @@ export const PointRow = memo(function PointRow({
         </span>
       )}
 
-      {!readOnly && onToggleSaved && (
+      {fixing && fixLabel && onFix && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onFix(point.id);
+          }}
+          className="h-6 shrink-0 cursor-pointer rounded-[var(--radius-cell)] px-2 text-[11px] font-medium text-[var(--blue)] opacity-0 transition-[opacity,color,background-color] duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:bg-[var(--surface-card)] hover:text-[var(--blue-hover)] focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:opacity-100"
+        >
+          {fixLabel}
+        </button>
+      )}
+
+      {!readOnly && !fixing && onToggleSaved && (
         <button
           type="button"
           onClick={(e) => {
