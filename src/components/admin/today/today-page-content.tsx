@@ -9,6 +9,7 @@ import {
   AdminPersonCell,
   AgeText,
   dayLabel,
+  scoredSets,
   timeLabel,
   useIsClient,
 } from "@/components/admin/admin-cells";
@@ -316,7 +317,7 @@ function ItemCell({ item, fresh }: { item: TodayItem; fresh: boolean }) {
         fresh={fresh}
         trailing={
           <>
-            {cell.sets.length > 0 ? (
+            {scoredSets(cell.sets).length > 0 ? (
               <span
                 aria-hidden="true"
                 className="text-[12px] text-[var(--ink-400)]"

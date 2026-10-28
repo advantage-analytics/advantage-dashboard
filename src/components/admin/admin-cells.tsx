@@ -76,6 +76,14 @@ export function NewLabel() {
 }
 
 /**
+ * The sets worth printing. An unscored match stores 0-0 sets; it has no score
+ * to show, and a level mark beside "0-0, 0-0" would read as a played draw.
+ */
+export function scoredSets(sets: ScoreLineSet[]): ScoreLineSet[] {
+  return playedSets(sets).filter((set) => set.player1 > 0 || set.player2 > 0);
+}
+
+/**
  * Pattern 2: a 32px avatar, then "Player" (500) "vs Opponent" (ink-600) on
  * line 1 and the ResultMark + Score on line 2. Line 2 draws nothing when the
  * match has no score yet (still uploading, or an unscored draft).
@@ -99,11 +107,7 @@ export function AdminMatchCell({
   /** Extra line-2 content after the score, e.g. a workspace mark. */
   trailing?: React.ReactNode;
 }) {
-  // An unscored match stores 0-0 sets; it has no score to print, and a
-  // level mark beside "0-0, 0-0" would read as a played draw.
-  const played = playedSets(sets).filter(
-    (set) => set.player1 > 0 || set.player2 > 0,
-  );
+  const played = scoredSets(sets);
   const against = opponent.trim();
   return (
     <span className="flex min-w-0 items-center gap-3">
@@ -232,7 +236,9 @@ export function WorkspaceCell({ workspace }: { workspace: AdminWorkspaceRef }) {
   const label =
     workspace.kind === "team" ? workspace.name : (workspace.name ?? "Personal");
   return (
-    <span className="inline-flex min-w-0 items-center gap-2">
+    // A block-level flex row, not inline-flex: only a box with a resolved
+    // width lets the name truncate instead of running into the next column.
+    <span className="flex w-full max-w-full min-w-0 items-center gap-2 overflow-hidden">
       <WorkspaceMark workspace={workspace} />
       <span
         className={cn(
