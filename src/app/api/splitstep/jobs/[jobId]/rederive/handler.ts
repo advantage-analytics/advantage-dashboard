@@ -82,13 +82,6 @@ export interface RederiveDeps {
   /** The id of the newest job for a match, or null when the read failed. */
   newestJobId(matchId: string): Promise<string | null>;
   /**
-   * Is the match Verified by Advantage? A rebuild re-creates every point, and
-   * a Verified match's points are locked (decision D1). The rebuild writes
-   * on the service role, which the database guard lets through, so this is
-   * the lock. Required, so no caller can leave it open by omission.
-   */
-  matchVerified(matchId: string): Promise<boolean>;
-  /**
    * `deriveAndPublish({ supabase: admin, jobId, deadline, rebuild })`, with
    * `rebuild` set when the job is being rebuilt from `completed`.
    */
@@ -162,13 +155,6 @@ export async function handleRederive(
     (await deps.newestJobId(job.match_id)) !== jobId
   ) {
     return refuse("A newer analysis of this match exists.", 409);
-  }
-
-  if (await deps.matchVerified(job.match_id)) {
-    return refuse(
-      "This match is Verified by Advantage, so its statistics are locked.",
-      409,
-    );
   }
 
   const claim = await deps.claimJob(jobId, from);

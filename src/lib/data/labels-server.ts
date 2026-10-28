@@ -426,9 +426,6 @@ export async function readLabelSessionRows<T = undefined>(
       "id, job_id, match_id, status, derivation_version, ad_scoring, marks_enabled, final_score, video_ends_early, start_score",
     )
     .eq("id", sessionId)
-    // A player's self review lives in the same table (`kind = 'self'`, no
-    // vendor file behind it); the console never opens one.
-    .eq("kind", "analyst")
     .maybeSingle<DbSessionRow>();
   if (sessionError) {
     throw new Error(`Could not read label session: ${sessionError.message}`);

@@ -113,7 +113,7 @@ export async function POST(
     await Promise.all([
       admin
         .from("matches")
-        .select("program_id, verified")
+        .select("program_id")
         .eq("id", (jobRow as { match_id: string }).match_id)
         .maybeSingle(),
       getWorkspaceContext(),
@@ -135,19 +135,6 @@ export async function POST(
   // The read succeeded and the match is gone: never bill it to anyone.
   if (!matchRow) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
-  }
-
-  // A match Verified by Advantage keeps its points (decision D1,
-  // docs/plans/advantage-review.md): a new analysis would replace them on the
-  // service role, which the database guard lets through.
-  if ((matchRow as { verified: boolean | null }).verified) {
-    return NextResponse.json(
-      {
-        error:
-          "This match is Verified by Advantage, so it can't be analysed again.",
-      },
-      { status: 409 },
-    );
   }
 
   const billingWorkspace = billingWorkspaceFor(

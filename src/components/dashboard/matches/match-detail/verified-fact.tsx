@@ -1,7 +1,7 @@
 "use client";
 
 import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
-import { useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition } from "react";
 import {
   Popover,
   PopoverContent,
@@ -44,20 +44,10 @@ export function VerifiedFact({
   matchId,
   verification,
   canReport,
-  trigger,
-  lead,
 }: {
   matchId: string;
   verification: MatchVerification;
   canReport: boolean;
-  /**
-   * A different button to open the same popover from — the lock that stands
-   * where Fix points would (`self-review/fix-points-actions.tsx`). It must be
-   * a single element that accepts a ref (`PopoverTrigger asChild`).
-   */
-  trigger?: ReactNode;
-  /** A first sentence above the details: what the lock keeps fixed. */
-  lead?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<Stage>("details");
@@ -90,20 +80,18 @@ export function VerifiedFact({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        {trigger ?? (
-          /* The frame's badge: a fact that is a button, so a 6px wash with
-            its padding pulled back out — it sits on the line's own x. */
-          <button
-            type="button"
-            className={cn(
-              "-mx-1.5 -my-1 inline-flex h-[22px] shrink-0 cursor-pointer items-center gap-1.5 rounded-[6px] px-1.5 text-[11px] leading-[1.4] whitespace-nowrap text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-              open && "bg-[var(--surface-subtle)]",
-            )}
-          >
-            <VerifiedMark />
-            {VERIFIED_BY_ADVANTAGE}
-          </button>
-        )}
+        {/* The frame's badge: a fact that is a button, so a 6px wash with
+            its padding pulled back out — it sits on the line's own x. */}
+        <button
+          type="button"
+          className={cn(
+            "-mx-1.5 -my-1 inline-flex h-[22px] shrink-0 cursor-pointer items-center gap-1.5 rounded-[6px] px-1.5 text-[11px] leading-[1.4] whitespace-nowrap text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+            open && "bg-[var(--surface-subtle)]",
+          )}
+        >
+          <VerifiedMark />
+          {VERIFIED_BY_ADVANTAGE}
+        </button>
       </PopoverTrigger>
       <PopoverContent
         aria-label={VERIFIED_BY_ADVANTAGE}
@@ -166,11 +154,6 @@ export function VerifiedFact({
               <VerifiedMark />
               {VERIFIED_BY_ADVANTAGE}
             </span>
-            {lead ? (
-              <p className="m-0 text-[11px] leading-[1.55] text-[var(--ink-900)]">
-                {lead}
-              </p>
-            ) : null}
             <p className="m-0 text-[11px] leading-[1.55] text-[var(--ink-700)]">
               {VERIFIED_SCOPE} {verifiedOnLabel(verification)}.
             </p>

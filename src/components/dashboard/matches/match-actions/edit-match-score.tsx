@@ -182,7 +182,6 @@ export function EditMatchScore({
                   refs.current[key(r, i)] = el;
                 }}
                 label={`${name}, set ${i + 1}`}
-                disabled={disabled}
               />
               {tie(i) && (
                 <ScoreInput
@@ -194,7 +193,6 @@ export function EditMatchScore({
                     refs.current[key(r, i, true)] = el;
                   }}
                   label={`${name}, set ${i + 1} tiebreak`}
-                  disabled={disabled}
                   onEnter={() =>
                     row === "player"
                       ? focus(key("o", i, true))

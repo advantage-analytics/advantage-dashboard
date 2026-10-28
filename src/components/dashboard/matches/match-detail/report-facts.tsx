@@ -2,15 +2,13 @@
 
 import type { ReactNode } from "react";
 import Image from "next/image";
-import { Calendar, PencilLine, Swords } from "lucide-react";
+import { Calendar, Swords } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { shortMonthDate } from "@/components/dashboard/matches/match-detail/format-clock";
 import { totalGames } from "@/components/dashboard/matches/match-detail/set-scope";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { VerifiedFact } from "@/components/dashboard/matches/match-detail/verified-fact";
 import { savedViewsCountFact } from "@/lib/data/saved-views-logic";
-import { editedByLabel } from "@/lib/data/self-review";
-import { useSelfReview } from "@/components/dashboard/matches/match-detail/self-review/self-review-context";
 import { cn } from "@/lib/utils";
 
 /** 13px lucide glyph at stroke 1.5 in ink-700 — the frame's fact icon. */
@@ -44,10 +42,6 @@ const FACT_ICON = "size-[13px] shrink-0 text-[var(--ink-700)]";
 export function MatchReportFacts() {
   const { match, points } = useMatchData();
   const { meta } = useMatchReport();
-  const review = useSelfReview();
-  // Self review's provenance: "Edited by you · 3 points" or "Edited by Coach
-  // Rivera · 2 points" — edited, never verified (plan › Decisions).
-  const editedBy = editedByLabel(review.state, review.viewerId);
 
   const games = totalGames(match.score.sets);
   const savedViewCount = meta.savedViews.length;
@@ -118,21 +112,6 @@ export function MatchReportFacts() {
           }
         >
           {match.courtType}
-        </Fact>
-      ) : null}
-
-      {editedBy ? (
-        <Fact
-          tabular
-          icon={
-            <PencilLine
-              className={FACT_ICON}
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-          }
-        >
-          {editedBy}
         </Fact>
       ) : null}
 

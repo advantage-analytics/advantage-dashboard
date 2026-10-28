@@ -55,7 +55,6 @@ function harness({
   claimed = true,
   outcome = { ok: true } as RederiveOutcome,
   newest = JOB as string | null,
-  verified = false,
 } = {}): Harness {
   const calls: string[] = [];
   const deriveDeadlines: number[] = [];
@@ -84,10 +83,6 @@ function harness({
         calls.push("newestJobId");
         return newest;
       },
-      // Not pushed to `calls`: the sequences below predate the lock.
-      async matchVerified() {
-        return verified;
-      },
       async derive(_jobId, deadline, from) {
         calls.push("derive");
         derivedFrom.push(from);
@@ -107,15 +102,6 @@ async function run(h: Harness) {
 }
 
 test.describe("rederive handler", () => {
-  test("409 on a match Verified by Advantage, before the job is claimed", async () => {
-    const h = harness({ verified: true });
-    const { status, body } = await run(h);
-    expect(status).toBe(409);
-    expect(body.error).toMatch(/Verified by Advantage/);
-    expect(h.calls).not.toContain("claimJob");
-    expect(h.calls).not.toContain("derive");
-  });
-
   test("401 when signed out, before the job is loaded", async () => {
     const h = harness({ userId: null });
     const { status, body } = await run(h);

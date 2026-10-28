@@ -86,17 +86,6 @@ export async function POST(
       return (data as { id: string } | null)?.id ?? null;
     },
 
-    async matchVerified(matchId) {
-      const { data, error } = await adminClient()
-        .from("matches")
-        .select("verified")
-        .eq("id", matchId)
-        .maybeSingle();
-      // A failed read refuses: a lock that opens on an outage is no lock.
-      if (error) return true;
-      return (data as { verified: boolean } | null)?.verified === true;
-    },
-
     async derive(id, deadline, from) {
       const outcome = await deriveAndPublish({
         supabase: adminClient(),
