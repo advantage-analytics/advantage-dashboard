@@ -18,8 +18,10 @@ import {
   type SwapShot,
 } from "@/lib/services/labels/player-swap";
 import {
+  MAX_SWITCH_POINTS,
   switchLabelPointPlayers,
   writeLabelPlayerSwitch,
+  writeLabelPlayersSwitch,
 } from "@/lib/services/labels/player-swap-session";
 import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
 import {
@@ -814,5 +816,80 @@ test.describe("writeLabelPlayerSwitch", () => {
         createAdminClient: () => fake.supabase,
       }),
     ).toMatchObject({ ok: true, winner: "p2" });
+  });
+});
+
+test.describe("writeLabelPlayersSwitch (Switch N points)", () => {
+  const OTHER_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+  test("each point switched in turn, the same writes as one switch each", async () => {
+    const fake = fakeClient({
+      point: pointRow,
+      shots: [
+        shotRow("s1", { hitter: "p1", stroke: "first_serve", video_time: 1 }),
+        shotRow("s2", { hitter: "p2", video_time: 2 }),
+      ],
+    });
+    const result = await writeLabelPlayersSwitch({
+      supabase: fake.supabase,
+      pointIds: [POINT_ID, OTHER_ID],
+    });
+    if (!("ok" in result)) throw new Error(result.error);
+    expect(result.points).toEqual([
+      { pointId: POINT_ID, status: "edited", winner: "p2", endedBy: "p1" },
+      { pointId: OTHER_ID, status: "edited", winner: "p2", endedBy: "p1" },
+    ]);
+    expect(result.shots.map((s) => [s.id, s.hitter])).toEqual([
+      ["s1", "p2"],
+      ["s2", "p1"],
+      ["s1", "p2"],
+      ["s2", "p1"],
+    ]);
+    expect(
+      fake.calls
+        .filter((c) => c.table === "label_points" && c.op === "update")
+        .map((c) => c.filters?.id),
+    ).toEqual([POINT_ID, OTHER_ID]);
+  });
+
+  test("a refusal part way says how many went first; bad ids write nothing", async () => {
+    let reads = 0;
+    const fake = fakeLabelClient((call) => {
+      if (call.table === "label_sessions") {
+        return { data: { status: "labelling" }, error: null };
+      }
+      if (call.table === "label_shots" && call.op === "select") {
+        return { data: [shotRow("s1", { hitter: "p1" })], error: null };
+      }
+      if (call.table === "label_points" && call.op === "select") {
+        reads += 1;
+        const row = reads === 1 ? pointRow : { ...pointRow, status: "deleted" };
+        return { data: row, error: null };
+      }
+      return undefined;
+    });
+    expect(
+      await writeLabelPlayersSwitch({
+        supabase: fake.supabase,
+        pointIds: [POINT_ID, OTHER_ID],
+      }),
+    ).toEqual({
+      error:
+        "Restore this point before switching its players. 1 point was switched first; ⌘Z takes them back.",
+    });
+
+    for (const pointIds of [
+      [],
+      "nope",
+      [POINT_ID, POINT_ID],
+      [POINT_ID, "nope"],
+      Array.from({ length: MAX_SWITCH_POINTS + 1 }, () => POINT_ID),
+    ]) {
+      const none = fakeClient({ point: pointRow });
+      expect(
+        await writeLabelPlayersSwitch({ supabase: none.supabase, pointIds }),
+      ).toEqual({ error: "Invalid point ids." });
+      expect(none.calls).toEqual([]);
+    }
   });
 });

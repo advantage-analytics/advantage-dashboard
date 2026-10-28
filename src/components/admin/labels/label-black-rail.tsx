@@ -14,6 +14,7 @@ import {
   Minimize2,
   MoreHorizontal,
   Scale,
+  Redo2,
   Undo2,
 } from "lucide-react";
 import { reducedMotionNow } from "@/components/dashboard/matches/match-detail/film/film-motion";
@@ -62,6 +63,11 @@ import {
   type MatchScore,
 } from "@/lib/services/labels/session";
 import {
+  courtEndSwapBeforePoints,
+  sessionCourtEndSwaps,
+  type CourtEndSwap,
+} from "@/lib/services/labels/court-end";
+import {
   mismatchGameKey,
   scoreMismatchSentence,
   sessionScoreMismatch,
@@ -104,6 +110,7 @@ import {
   BlackGameOverflow,
   BlackTiebreakFold,
   BlackTiebreakServe,
+  BlackCourtEndSwap,
   BlackGameServeRepeat,
   BlackPointRow,
   BlackSuggestedPoint,
@@ -158,10 +165,12 @@ export function LabelBlackRail({
   total,
   saveStatus,
   onUndo,
+  onRedo,
   onShowShortcuts,
   missingShots = 0,
   onAddMissingShots,
   canUndo = false,
+  canRedo = false,
   tone = "dark",
   showSession = true,
   onExit,
@@ -193,6 +202,7 @@ export function LabelBlackRail({
   onRestoreShots,
   onSetGameServer,
   onFixTiebreakServe,
+  onSwitchPlayersByEnd,
   onMoveGameBoundary,
   slotStops,
   onSetGameType,
@@ -224,6 +234,8 @@ export function LabelBlackRail({
    * screen). Absent, there is no button; `canUndo` false draws it disabled.
    */
   onUndo?: () => void;
+  /** The header's Redo (⌘⇧Z); absent, no button. */
+  onRedo?: () => void;
   /**
    * Opens the shortcut sheet (`LabelShortcutsDialog`), from a keyboard
    * button before Undo. Absent, there is no button.
@@ -233,6 +245,7 @@ export function LabelBlackRail({
   missingShots?: number;
   onAddMissingShots?: () => void;
   canUndo?: boolean;
+  canRedo?: boolean;
   tone?: RailTone;
   /** Title, checked count and save line. False where the page shows them. */
   showSession?: boolean;
@@ -300,6 +313,8 @@ export function LabelBlackRail({
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
   /** "Fix serve order" on a tiebreak off its order (tiebreak-serve.ts). */
   onFixTiebreakServe?: (game: LabelGame) => void;
+  /** "Switch N points": players at each other's end (court-end.ts). */
+  onSwitchPlayersByEnd?: (pointIds: readonly string[]) => void;
   /**
    * A game band dropped above a point (game-boundary.ts): the points it
    * passed move into the neighbouring game. Absent, the bands do not drag.
@@ -532,6 +547,34 @@ export function LabelBlackRail({
         editable ? gameServeRepeats(points, foldedPointIds(folds)) : [],
       ),
     [editable, points, folds],
+  );
+  // The games whose points have the players at each other's end, by the
+  // first point to switch: only in a set whose games make the entered score,
+  // or a game whose start the labeller locked (court-end.ts).
+  const courtEndBefore = useMemo(
+    () =>
+      editable && onSwitchPlayersByEnd
+        ? courtEndSwapBeforePoints(
+            sessionCourtEndSwaps({
+              points,
+              games: scores.games,
+              finalScore,
+              matchScore,
+              videoEndsEarly,
+              startScore,
+            }),
+          )
+        : NO_COURT_END,
+    [
+      editable,
+      onSwitchPlayersByEnd,
+      points,
+      scores,
+      finalScore,
+      matchScore,
+      videoEndsEarly,
+      startScore,
+    ],
   );
   // The games that run over, by their first leftover point. Read off the
   // labeller's own rows, so on every editable session — marks on or off.
@@ -801,6 +844,34 @@ export function LabelBlackRail({
               </button>
             </ChromeTooltip>
           ) : null}
+          {showSession && onRedo ? (
+            <ChromeTooltip
+              label="Redo"
+              detail="Puts back what Undo took back"
+              shortcut="⇧⌘Z"
+              side="bottom"
+              align="end"
+            >
+              <button
+                type="button"
+                data-label-rail-redo=""
+                aria-label="Redo the last undone change"
+                aria-keyshortcuts="Meta+Shift+Z"
+                disabled={!canRedo}
+                onClick={onRedo}
+                className={cn(
+                  HEADER_BUTTON,
+                  "disabled:cursor-default disabled:text-white/25 disabled:hover:bg-transparent disabled:active:scale-100",
+                )}
+              >
+                <Redo2
+                  className="size-3.5"
+                  strokeWidth={1.6}
+                  aria-hidden="true"
+                />
+              </button>
+            </ChromeTooltip>
+          ) : null}
           {onFullScreen ? (
             <ChromeTooltip
               label="Full screen"
@@ -918,6 +989,7 @@ export function LabelBlackRail({
                 const fold = foldBefore.get(point.id);
                 const serveOrder = serveOrderBefore.get(point.id);
                 const serveRepeat = serveRepeatBefore.get(point.id);
+                const courtEnd = courtEndBefore.get(point.id);
                 const short = underflowAfter.get(point.id);
                 const locked = lockedAt.get(point.id);
                 const open = point.id === expandedPointId;
@@ -992,6 +1064,12 @@ export function LabelBlackRail({
                         order={serveOrder}
                         names={names}
                         onFix={onFixTiebreakServe}
+                      />
+                    ) : null}
+                    {courtEnd ? (
+                      <BlackCourtEndSwap
+                        swap={courtEnd}
+                        onSwitch={onSwitchPlayersByEnd}
                       />
                     ) : null}
                     {serveRepeat ? (
@@ -1320,3 +1398,4 @@ const NO_IDS: ReadonlySet<string> = new Set();
 const NO_OVERFLOW: ReadonlyMap<string, OverflowSlot> = new Map();
 const NO_UNDERFLOW: ReadonlyMap<string, UnderflowSlot> = new Map();
 const NO_LOCKED: ReadonlyMap<string, LockedGameSlot> = new Map();
+const NO_COURT_END: ReadonlyMap<string, CourtEndSwap> = new Map();

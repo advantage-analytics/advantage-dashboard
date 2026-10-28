@@ -110,9 +110,14 @@ import {
   moveSwapsPlayers,
   planPlayerSwitch,
   shotSwapsOf,
+  type PlayerSwitchWrite,
   type ShotSwapWrite,
 } from "@/lib/services/labels/player-swap";
-import type { LabelPlayerSwitchResult } from "@/lib/services/labels/player-swap-session";
+import { sessionCourtEndSwaps } from "@/lib/services/labels/court-end";
+import type {
+  LabelPlayerSwitchResult,
+  LabelPlayersSwitchResult,
+} from "@/lib/services/labels/player-swap-session";
 import {
   applyInsertedPoint,
   draftInsertedPoint,
@@ -261,7 +266,10 @@ import { PersonAvatar } from "@/components/ui/person-avatar";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import { getInitials } from "@/lib/data/match-utils";
 import type { LabelUploadInfo } from "@/lib/data/label-overview-server";
-import type { LabelUndoResult } from "@/lib/services/labels/undo-session";
+import type {
+  LabelRedoResult,
+  LabelUndoResult,
+} from "@/lib/services/labels/undo-session";
 import { applyUndoDiff } from "@/lib/services/labels/undo-diff";
 import type {
   LabelAddMissingShotsResult,
@@ -1281,6 +1289,44 @@ export function LabelConsole({
     dispatchSave({ type: "success", at: Date.now() });
     // After the success above, which counts as a write settling.
     setUndoEmpty(result.undone === null || result.remaining === 0);
+    setRedoable(result.redoable);
+  }
+
+  // Redo: what the last undos took back, newest first, while no other change
+  // has landed since — the server clears its redo stack on any new write, and
+  // so does this count (below). A redo is a journaled action of its own, so
+  // Undo is live again after one.
+  const [redoing, setRedoing] = useState(false);
+  const [redoable, setRedoable] = useState(0);
+  if (redoable > 0 && saveStatus.pending > 0 && !undoing && !redoing) {
+    setRedoable(0);
+  }
+  const canRedo =
+    editable &&
+    Boolean(operations?.redo) &&
+    !undoing &&
+    !redoing &&
+    redoable > 0 &&
+    !statusSaving &&
+    !confirm &&
+    saveStatus.pending === 0;
+  async function redoNext() {
+    if (!canRedo || !operations?.redo) return;
+    setRedoing(true);
+    dispatchSave({ type: "start" });
+    const result = await settle(operations.redo(session.id));
+    setRedoing(false);
+    if ("error" in result) {
+      dispatchSave({ type: "failure", message: result.error });
+      return;
+    }
+    setPlacement(NO_PLACEMENT);
+    setPoints((rows) =>
+      applyUndoDiff(rows, result.changed, result.removedPointIds),
+    );
+    dispatchSave({ type: "success", at: Date.now() });
+    setRedoable(result.remaining);
+    if (result.redone !== null) setUndoEmpty(false);
   }
 
   async function addAllMissingShots() {
@@ -1772,6 +1818,65 @@ export function LabelConsole({
             winner: before.winner,
             endedBy: before.endedBy,
           })),
+          shotsBefore,
+        ),
+    );
+  }
+
+  /**
+   * "Switch N points" (court-end.ts): "Switch players" on each of a game's
+   * points whose strokes sit at the other player's end, as one write and one
+   * ⌘Z.
+   */
+  function switchPlayersByEnd(pointIds: readonly string[]) {
+    const run = operations?.switchPlayersByEnd;
+    if (!run) return;
+    const befores = new Map<string, LabelPoint>();
+    const plans = new Map<string, PlayerSwitchWrite>();
+    const shots: ShotSwapWrite[] = [];
+    for (const id of pointIds) {
+      if (id.startsWith(PENDING_POINT_PREFIX)) continue;
+      const before = points.find((p) => p.id === id);
+      const plan = before ? planPlayerSwitch(before) : null;
+      if (!before || !plan || "error" in plan) continue;
+      befores.set(id, before);
+      plans.set(id, plan.write);
+      shots.push(...plan.shots);
+    }
+    if (plans.size === 0) return;
+    const shotsBefore = [...befores.values()].flatMap((p) =>
+      shotSwapsOf(p.shots),
+    );
+    return runOperation(
+      (rows) =>
+        applyShotSwaps(
+          rows.map((p) => {
+            const write = plans.get(p.id);
+            return write ? applyPlayerSwitch(p, write) : p;
+          }),
+          shots,
+        ),
+      () => run([...plans.keys()]),
+      (rows, result) => {
+        const saved = new Map(result.points.map((p) => [p.pointId, p]));
+        return applyShotSwaps(
+          rows.map((p) => {
+            const one = saved.get(p.id);
+            if (!one) return p;
+            const { status, winner, endedBy } = one;
+            return { ...p, status, winner, endedBy };
+          }),
+          result.shots,
+        );
+      },
+      (rows) =>
+        applyShotSwaps(
+          rows.map((p) => {
+            const before = befores.get(p.id);
+            if (!before) return p;
+            const { status, winner, endedBy } = before;
+            return { ...p, status, winner, endedBy };
+          }),
           shotsBefore,
         ),
     );
@@ -2651,6 +2756,7 @@ export function LabelConsole({
     setGameServer,
     moveGameBoundary: requestMoveBoundary,
     fixTiebreakServe,
+    switchPlayersByEnd,
     setGameType,
     findGap,
     goToFlag: (pointId: string) => {
@@ -2701,6 +2807,8 @@ export function LabelConsole({
   const foldOpenPoint = useRef<() => boolean>(() => false);
   // ⌘Z: the header's Undo.
   const undoLastRef = useRef<() => void>(() => {});
+  // ⌘⇧Z: the header's Redo.
+  const redoNextRef = useRef<() => void>(() => {});
   // Space and ← / →: the labeller driving the film lets a replay go.
   const cancelReplayRef = useRef<() => void>(() => {});
   const letGoOfShot = useRef<(shotId: string) => void>(() => {});
@@ -2711,14 +2819,43 @@ export function LabelConsole({
   const slotJumpStops = useMemo(
     () =>
       operable
-        ? slotStops(
-            points,
-            session.adScoring,
-            matchTiebreakSetNumber,
-            startScore,
-          )
+        ? [
+            ...slotStops(
+              points,
+              session.adScoring,
+              matchTiebreakSetNumber,
+              startScore,
+            ),
+            // "Players at the wrong end" (court-end.ts) leans on the entered
+            // score, which slotStops never reads.
+            ...(operations?.switchPlayersByEnd
+              ? sessionCourtEndSwaps({
+                  points,
+                  games: scores.games,
+                  finalScore: sessionFields.finalScore,
+                  matchScore: session.matchScore,
+                  videoEndsEarly: sessionFields.videoEndsEarly,
+                  startScore,
+                }).map((swap) => ({
+                  pointId: swap.pointId,
+                  pointNumber: swap.pointNumber,
+                  label: "Players at the wrong end",
+                }))
+              : []),
+          ]
         : NO_SLOT_STOPS,
-    [operable, points, session.adScoring, matchTiebreakSetNumber, startScore],
+    [
+      operable,
+      operations,
+      points,
+      scores,
+      session.adScoring,
+      session.matchScore,
+      sessionFields.finalScore,
+      sessionFields.videoEndsEarly,
+      matchTiebreakSetNumber,
+      startScore,
+    ],
   );
   // The two lists the rail's header steps: what can move the score — the
   // amber flagged points, the set that doesn't add up and every amber slot
@@ -2955,6 +3092,7 @@ export function LabelConsole({
       return true;
     };
     undoLastRef.current = () => void undoLast();
+    redoNextRef.current = () => void redoNext();
     cancelReplayRef.current = cancelReplay;
     // Esc on a selected stroke: the stroke goes, and the whole point plays
     // from its first stroke with the rail and the court following the film,
@@ -3040,13 +3178,12 @@ export function LabelConsole({
       // ⌘ Enter and ↑ / ↓ work from inside a stroke's row as well: a focused
       // cell is a button, which the keys below leave alone. A text field, an
       // open menu and a dialog still keep them.
-      // ⌘Z is the header's Undo, except in a text field, which undoes its
-      // own typing.
+      // ⌘Z is the header's Undo and ⌘⇧Z its Redo, except in a text field,
+      // which undoes and redoes its own typing.
       if (
         (key === "z" || key === "Z") &&
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
-        !event.shiftKey &&
         !event.defaultPrevented
       ) {
         const target = event.target as Element | null;
@@ -3058,7 +3195,8 @@ export function LabelConsole({
           return;
         }
         event.preventDefault();
-        undoLastRef.current();
+        if (event.shiftKey) redoNextRef.current();
+        else undoLastRef.current();
         return;
       }
       // A stroke key reaches the selected stroke from a focused cell too (a
@@ -3489,6 +3627,8 @@ export function LabelConsole({
       total={total}
       saveStatus={saveStatus}
       onUndo={editable && operations?.undo ? () => void undoLast() : undefined}
+      onRedo={editable && operations?.redo ? () => void redoNext() : undefined}
+      canRedo={canRedo}
       onShowShortcuts={fullScreen ? () => setShortcutsOpen(true) : undefined}
       missingShots={missingShotAdds.length}
       onAddMissingShots={
@@ -3525,6 +3665,11 @@ export function LabelConsole({
       onRestoreShots={operable ? railHandlers.restoreShots : undefined}
       onSetGameServer={operable ? railHandlers.setGameServer : undefined}
       onFixTiebreakServe={operable ? railHandlers.fixTiebreakServe : undefined}
+      onSwitchPlayersByEnd={
+        operable && operations?.switchPlayersByEnd
+          ? railHandlers.switchPlayersByEnd
+          : undefined
+      }
       slotStops={slotJumpStops}
       onMoveGameBoundary={operable ? railHandlers.moveGameBoundary : undefined}
       onSetGameType={operable ? railHandlers.setGameType : undefined}
@@ -3617,6 +3762,19 @@ export function LabelConsole({
                 onClick={() => void undoLast()}
               >
                 Undo
+              </button>
+            ) : null}
+            {operable && operations?.redo && !overview ? (
+              <button
+                type="button"
+                data-redo-next=""
+                className={advButton("outline", "sm")}
+                aria-label="Redo the last undone change"
+                aria-keyshortcuts="Meta+Shift+Z"
+                disabled={!canRedo}
+                onClick={() => void redoNext()}
+              >
+                Redo
               </button>
             ) : null}
             {operable && operations?.completeSession ? (
@@ -3865,6 +4023,13 @@ export interface LabelConsoleOperations {
    * Switches `pointId`'s players; never `server`. Returns what was written.
    */
   switchPlayers: (pointId: string) => Promise<LabelPlayerSwitchResult>;
+  /**
+   * Switches the players on every named point in one action (court-end.ts),
+   * one ⌘Z. Absent: no "Switch N points" slot.
+   */
+  switchPlayersByEnd?: (
+    pointIds: string[],
+  ) => Promise<LabelPlayersSwitchResult>;
   /** Writes `final_score` and `video_ends_early` on `label_sessions` only. */
   updateSessionFields: (
     sessionId: string,
@@ -3879,6 +4044,11 @@ export interface LabelConsoleOperations {
    * it touched as a diff (undo-session.ts). Absent: no "Undo".
    */
   undo?: (sessionId: string) => Promise<LabelUndoResult>;
+  /**
+   * Put back the newest action an undo took back (undo-session.ts
+   * `redoLabelOp`), answered as undo is. Absent: no Redo.
+   */
+  redo?: (sessionId: string) => Promise<LabelRedoResult>;
   /**
    * Answer every open "Missing shot?" slot with "Add shot", as one Undo step
    * (add-missing-shots.ts). Absent: no "Add all".

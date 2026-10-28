@@ -167,6 +167,7 @@ export function gameSlot({
     | "tiebreak-fold"
     | "tiebreak-serve"
     | "game-serve-repeat"
+    | "court-end-swap"
     | "set-score"
     | "start-score-prompt";
   anchor: string;

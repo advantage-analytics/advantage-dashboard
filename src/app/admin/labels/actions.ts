@@ -73,7 +73,9 @@ import {
 } from "@/lib/services/labels/point-combine-session";
 import {
   switchLabelPointPlayers,
+  switchLabelPointsPlayers,
   type LabelPlayerSwitchResult,
+  type LabelPlayersSwitchResult,
 } from "@/lib/services/labels/player-swap-session";
 import type { LabelSessionFieldsPatch } from "@/lib/services/labels/session-fields";
 import {
@@ -86,7 +88,9 @@ import {
   type LabelSessionStatusResult,
 } from "@/lib/services/labels/session-status-session";
 import {
+  redoLabelOp,
   undoLabelOp,
+  type LabelRedoResult,
   type LabelUndoResult,
 } from "@/lib/services/labels/undo-session";
 import {
@@ -464,6 +468,19 @@ export async function switchLabelPointPlayersAction(
 }
 
 /**
+ * "Switch N points" (court-end.ts): the players switched on each named point,
+ * as "Switch players" does one, in one action — one ⌘Z. `label_points` and
+ * `label_shots` only, never a delete.
+ */
+export async function switchLabelPointsPlayersAction(
+  pointIds: string[],
+): Promise<LabelPlayersSwitchResult> {
+  return withLabelOp("Switch players by court end", () =>
+    switchLabelPointsPlayers(pointIds),
+  );
+}
+
+/**
  * The "Score doesn't add up" banner's answers (board 08m): `final_score`
  * (the match's score as the labeller reads it, `[p1, p2]` games per set) and
  * `video_ends_early`, on `label_sessions` and nothing else — `matches` is
@@ -510,6 +527,18 @@ export async function undoLabelOpAction(
   sessionId: string,
 ): Promise<LabelUndoResult> {
   return undoLabelOp(sessionId);
+}
+
+/**
+ * Redo (⌘⇧Z): put back the newest action an undo took back
+ * (undo-session.ts `redoLabelOp`). Unlike undo it runs inside an op, so its
+ * writes are journaled — filed under the redone action's own name — and ⌘Z
+ * takes the redo back again.
+ */
+export async function redoLabelOpAction(
+  sessionId: string,
+): Promise<LabelRedoResult> {
+  return withLabelOp("Redo", () => redoLabelOp(sessionId));
 }
 
 /**
