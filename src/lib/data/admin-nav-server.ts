@@ -1,4 +1,14 @@
 import type { AdminNavCounts } from "@/components/admin/admin-header";
+import { countNewMatchesForNav } from "@/lib/data/admin-matches-server";
+import { countNewTeamsForNav } from "@/lib/data/admin-teams-server";
+import { conferencesNavSub } from "@/lib/data/admin-conferences-server";
+import {
+  countPilotsForNav,
+  pilotsNavSub,
+} from "@/lib/data/admin-pilots-server";
+import { countAskForNav } from "@/lib/data/ask-admin-server";
+import { countLabelsForNav } from "@/lib/data/label-overview-server";
+import { outreachNavSub } from "@/lib/data/outreach-admin-server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -30,8 +40,58 @@ export async function countWaitingRequests(): Promise<number> {
   return (claims.count ?? 0) + (requests.count ?? 0);
 }
 
+/** A count or a line that failed prints nothing; the header never fails. */
+async function settle<T>(
+  read: Promise<T>,
+  label: string,
+): Promise<T | undefined> {
+  try {
+    return await read;
+  } catch (error) {
+    console.error("[admin nav] read failed", {
+      label,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
+
+/**
+ * Today carries no count (the board shows none, and its loader is the
+ * heaviest in the console). Matches, Teams and Labels count rows new since
+ * this admin last looked; Requests counts what is waiting on a decision;
+ * Pilots counts pilots at 90%+ of their cap; Ask counts new thumbs-down.
+ */
 export async function loadAdminNav(adminId: string): Promise<AdminNavCounts> {
-  void adminId;
-  const requests = await countWaitingRequests().catch(() => 0);
-  return { tabs: { requests }, more: {} };
+  const [
+    requests,
+    matches,
+    teams,
+    labels,
+    pilots,
+    ask,
+    pilotsSub,
+    conferencesSub,
+    outreachSub,
+  ] = await Promise.all([
+    settle(countWaitingRequests(), "requests"),
+    settle(countNewMatchesForNav(adminId), "matches"),
+    settle(countNewTeamsForNav(adminId), "teams"),
+    settle(countLabelsForNav(adminId), "labels"),
+    settle(countPilotsForNav(adminId), "pilots"),
+    settle(countAskForNav(adminId), "ask"),
+    settle(pilotsNavSub(), "pilots sub"),
+    settle(conferencesNavSub(), "conferences sub"),
+    settle(outreachNavSub(), "outreach sub"),
+  ]);
+
+  return {
+    tabs: { requests, matches, teams, labels },
+    more: {
+      conferences: { sub: conferencesSub ?? undefined },
+      pilots: { count: pilots, sub: pilotsSub ?? undefined },
+      outreach: { sub: outreachSub ?? undefined },
+      ask: { count: ask, sub: "Feedback on Ask’s answers" },
+    },
+  };
 }
