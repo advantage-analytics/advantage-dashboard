@@ -3,7 +3,7 @@
  * team's owner or a coach — fixes who won a point and how it ended, on the
  * match's Video tab. The rows live in the label console's tables as a
  * `kind = 'self'` session, one per match, and saving patches `points` in
- * place through `self_review_save` (migration `20261027120000_self_review`).
+ * place through `self_review_save` (migration `20261028025013_self_review`).
  *
  * This file is the client-safe half: the vocabulary, the reading of a
  * `points.result_type` into it and back (a mirror of the SQL's

@@ -214,7 +214,7 @@ test("the opponent's side never counts as the viewer's", () => {
 });
 
 const MIGRATION = readFileSync(
-  join(__dirname, "../supabase/migrations/20261027120000_self_review.sql"),
+  join(__dirname, "../supabase/migrations/20261028025013_self_review.sql"),
   "utf8",
 );
 

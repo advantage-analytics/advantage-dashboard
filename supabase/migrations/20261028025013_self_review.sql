@@ -24,8 +24,8 @@
 -- a Verified match's score, result and player names, and two new triggers
 -- refuse any client write to its points and shots (bar the `saved` flag).
 -- The service role (the console's publish, Reopen) passes, as it does
--- through step 0's guard. Because the
--- definer functions run under the caller's JWT, the guards bind them too.
+-- through step 0's guard. Because the definer functions run under the
+-- caller's JWT, the guards bind them too.
 --
 -- Deletion: a label session blocks deleting its match and the account
 -- (`admin_claim_match_storage_purge`, `prepare_my_account_deletion`,

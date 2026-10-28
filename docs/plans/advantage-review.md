@@ -190,7 +190,7 @@ us" lands in /admin Requests.
 
 **Needs.** D1, D4 (both settled above).
 
-**As built** (migration `20261027120000_self_review`):
+**As built** (migration `20261028025013_self_review`):
 
 - One `kind = 'self'` label session per match, shared by everyone allowed to
   fix it (one per editor would let two saves overwrite each other). Its

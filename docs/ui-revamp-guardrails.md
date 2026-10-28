@@ -282,7 +282,7 @@ be. Doubles teams and existing users depend on it.
 > `shots` row, `match_stats` by hand, or `verified`; and nothing is lost: the
 > reading it replaced is kept in the self session's `label_points.seed`, and
 > Reset writes it back. Refused on a match Verified by Advantage. Migration
-> `supabase/migrations/20261027120000_self_review.sql`.
+> `supabase/migrations/20261028025013_self_review.sql`.
 
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
