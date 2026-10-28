@@ -211,18 +211,31 @@ us" lands in /admin Requests.
 - Only analyst sessions protect a match or an account from deletion; a
   match's self session is deleted with it.
 - Paused on 2026-10-28 (#579 reverted the app code and
-  `20261028120000_self_review_paused` revoked the functions from
+  `20261028155028_self_review_paused` revoked the functions from
   `authenticated`). Bringing it back needs
-  `20261028130000_self_review_resumed`, which re-grants
+  `20261029000000_self_review_resumed`, which re-grants
   `can_fix_match_points`, `self_review_state` and `self_review_save`.
 - Not yet: a rebuild of the analysis after fixes replaces the points, and the
   fixes stay in the session unlinked (`point_id` null) rather than being
   re-applied. Step 3a's "start from the player's fixes" is where they join
   back, by point number.
 
-**Done when.** A player fixes three points, saves, sees the stats move and
-"Edited by you · 3 points"; Reset restores a point; a Verified match refuses
-all of it with the lock shown.
+<<<<<<< HEAD
+=======
+
+**Paused (2026-10-28).** Shipped in #575, then reverted from the app in
+#579 at the user's request; the feature waits in its own draft PR (#580).
+What stays live: both migrations (`20261028025013_self_review`,
+`20261028050138_verified_player_lock`), and the Verified lock in the app (the
+Edit match lock, `match_verified` on PATCH, the rederive and resubmit
+refusals), because D1 holds for the matches already Verified. #579's
+`20261028155028_self_review_paused` revokes the self-review functions from
+`authenticated`; #580 re-grants them.
+
+> > > > > > > claude/revert-self-review
+> > > > > > > **Done when.** A player fixes three points, saves, sees the stats move and
+> > > > > > > "Edited by you · 3 points"; Reset restores a point; a Verified match refuses
+> > > > > > > all of it with the lock shown.
 
 **Prompt.**
 
