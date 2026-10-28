@@ -1232,7 +1232,7 @@ export const PointRow = memo(function PointRow({
             e.stopPropagation();
             onFix(point.id);
           }}
-          className="h-6 shrink-0 cursor-pointer rounded-[var(--radius-cell)] px-2 text-[11px] font-medium text-[var(--blue)] opacity-0 transition-[opacity,color,background-color] duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:bg-[var(--surface-card)] hover:text-[var(--blue-hover)] focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          className="h-6 shrink-0 cursor-pointer rounded-[var(--radius-cell)] px-2 text-[11px] font-medium text-[var(--blue)] opacity-0 transition-[opacity,color,background-color] duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:bg-[var(--surface-card)] hover:text-[var(--blue-hover)] focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:opacity-100"
         >
           {fixLabel}
         </button>
