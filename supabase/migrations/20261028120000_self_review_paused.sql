@@ -22,9 +22,10 @@
 --   grant execute on function public.self_review_state(uuid) to authenticated;
 --   grant execute on function public.self_review_save(uuid, jsonb) to authenticated;
 
-revoke execute on function public.can_fix_match_points(uuid) from authenticated;
-revoke execute on function public.self_review_state(uuid) from authenticated;
-revoke execute on function public.self_review_save(uuid, jsonb) from authenticated;
-revoke execute on function public.self_review_reading(text) from authenticated;
-revoke execute on function public.self_review_result_type(text, text, text)
-  from authenticated;
+revoke execute on function
+  public.can_fix_match_points(uuid),
+  public.self_review_state(uuid),
+  public.self_review_save(uuid, jsonb),
+  public.self_review_reading(text),
+  public.self_review_result_type(text, text, text)
+from authenticated;
