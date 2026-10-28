@@ -183,27 +183,16 @@ export function FixPointForm({
         <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--ink-500)]">
           {draft.ending ? labelFor(draft) : "Choose how it ended"}
         </span>
-        {hasDraft ? (
+        {hasDraft || savedEdit ? (
           <button
             type="button"
             className={cn(QUIET, "h-[26px]")}
             onClick={() => {
-              review.setDraft(point, null);
+              review.setDraft(point, hasDraft ? null : original);
               close();
             }}
           >
-            Undo fix
-          </button>
-        ) : savedEdit ? (
-          <button
-            type="button"
-            className={cn(QUIET, "h-[26px]")}
-            onClick={() => {
-              review.setDraft(point, original);
-              close();
-            }}
-          >
-            Reset
+            {hasDraft ? "Undo fix" : "Reset"}
           </button>
         ) : null}
         <button

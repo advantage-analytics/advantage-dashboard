@@ -190,11 +190,6 @@ export function normalizeReading(
   }
 }
 
-/** Is the reading complete enough to save? */
-export function readingIsSavable(reading: PointReading): boolean {
-  return reading.ending !== null;
-}
-
 /**
  * The details line's provenance fact: "Edited by you · 3 points", "Edited by
  * Coach Rivera · 2 points", or both names when two people fixed points. Null
@@ -225,13 +220,13 @@ export function editorName(
 ): string {
   if (editorId && editorId === viewerId) return "you";
   const editor = state.editors.find((e) => e.userId === editorId);
-  if (!editor) return "someone on the team";
+  if (!editor) return "someone else";
   const last = editor.lastName?.trim();
   const first = editor.firstName?.trim();
   if ((editor.role === "coach" || editor.role === "owner") && (last || first)) {
     return `Coach ${last || first}`;
   }
-  return [first, last].filter(Boolean).join(" ") || "someone on the team";
+  return [first, last].filter(Boolean).join(" ") || "someone else";
 }
 
 /** Normalize the RPC's JSON into {@link SelfReviewState}. */

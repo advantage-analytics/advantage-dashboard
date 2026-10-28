@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { selfReviewStateFrom } from "@/lib/data/self-review";
 import {
   purgeMatchStorage,
   PurgeRefusedError,
@@ -181,12 +182,16 @@ async function analysisFor(supabase: Supabase, matchId: string) {
  * point and `point_bookmarks` cascades, so the count is every user's
  * bookmarks on this match, read through the service role: a coach's
  * bookmarks on a player's match go too, and RLS would hide them.
+ *
+ * Self review's saved fixes go the same way: they live on the points the
+ * rebuild replaces, and the session keeps them only unlinked. `fixes` counts
+ * them, everyone's, through `self_review_state` as this viewer.
  */
 async function rebuildFor(
   supabase: Supabase,
   matchId: string,
   userId: string,
-): Promise<{ jobId: string; bookmarks: number } | null> {
+): Promise<{ jobId: string; bookmarks: number; fixes: number } | null> {
   const { data } = await supabase
     .from("processing_jobs")
     .select("id, status, created_by, results_object_key")
@@ -208,10 +213,16 @@ async function rebuildFor(
   ) {
     return null;
   }
-  const { count, error } = await createAdminClient()
-    .from("point_bookmarks")
-    .select("point_id, points!inner(match_id)", { count: "exact", head: true })
-    .eq("points.match_id", matchId);
+  const [{ count, error }, review] = await Promise.all([
+    createAdminClient()
+      .from("point_bookmarks")
+      .select("point_id, points!inner(match_id)", {
+        count: "exact",
+        head: true,
+      })
+      .eq("points.match_id", matchId),
+    supabase.rpc("self_review_state", { p_match_id: matchId }),
+  ]);
   if (error || count === null) {
     // No offer rather than "0 bookmarks": the note is the only warning a
     // rebuild gives before it removes them.
@@ -221,7 +232,16 @@ async function rebuildFor(
     );
     return null;
   }
-  return { jobId: job.id, bookmarks: count };
+  if (review.error) {
+    // The same rule: no offer rather than a warning that undercounts.
+    console.error(
+      "GET /api/matches/[matchId]: failed to read the self review",
+      review.error,
+    );
+    return null;
+  }
+  const fixes = selfReviewStateFrom(review.data).edits.length;
+  return { jobId: job.id, bookmarks: count, fixes };
 }
 
 async function eventContextFor(

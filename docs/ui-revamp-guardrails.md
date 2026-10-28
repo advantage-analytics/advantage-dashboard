@@ -283,6 +283,15 @@ be. Doubles teams and existing users depend on it.
 > reading it replaced is kept in the self session's `label_points.seed`, and
 > Reset writes it back. Refused on a match Verified by Advantage. Migration
 > `supabase/migrations/20261028025013_self_review.sql`.
+>
+> The same branch adds one refusal to two pipeline routes, in the safe
+> direction: `jobs/[jobId]/rederive` (its `handler.ts` gains a required
+> `matchVerified` dependency) and `jobs/[jobId]/resubmit` refuse a match
+> Verified by Advantage with a 409, before anything is claimed or sent. Both
+> write on the service role, which the database guard lets through, so the
+> routes are the lock. Nothing in `derivation/` or `derive-and-publish.ts`
+> changed. A rebuild still replaces self-review fixes on an unverified match;
+> Edit match's rebuild note now says how many go back.
 
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >

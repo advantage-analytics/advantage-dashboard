@@ -66,17 +66,19 @@ export function SelfReviewProvider({
   );
   const editOf = useCallback((pointId: string) => edits.get(pointId), [edits]);
 
-  const storedFor = useCallback(
-    (point: MatchPoint) =>
-      edits.get(point.id)?.current ??
+  const readingAt = useCallback(
+    (point: MatchPoint, which: "current" | "original") =>
+      edits.get(point.id)?.[which] ??
       readingOf(point.resultType, point.wonByPlayer1),
     [edits],
   );
+  const storedFor = useCallback(
+    (point: MatchPoint) => readingAt(point, "current"),
+    [readingAt],
+  );
   const originalFor = useCallback(
-    (point: MatchPoint) =>
-      edits.get(point.id)?.original ??
-      readingOf(point.resultType, point.wonByPlayer1),
-    [edits],
+    (point: MatchPoint) => readingAt(point, "original"),
+    [readingAt],
   );
   const readingFor = useCallback(
     (point: MatchPoint) => drafts.get(point.id) ?? storedFor(point),

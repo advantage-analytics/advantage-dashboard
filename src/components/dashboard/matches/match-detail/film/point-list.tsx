@@ -735,9 +735,9 @@ export const PointList = memo(function PointList({
                             ]
                           : null;
                       const note = drafted
-                        ? "fixed, not saved"
+                        ? "Fixed, not saved"
                         : edit
-                          ? `edited by ${editorName(review.state, edit.editedBy, review.viewerId)}`
+                          ? `Edited by ${editorName(review.state, edit.editedBy, review.viewerId)}`
                           : question;
                       const baseDetail = pointDetail(point, labelContext.hands);
                       return (

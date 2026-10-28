@@ -106,7 +106,7 @@ test("fixing: the flagged point leads, rows offer Fix, not a bookmark", async ({
   ).toHaveCount(0);
   await expect(flagged.getByRole("button", { name: "Fix" })).toHaveCount(1);
   const edited = page.locator('[data-point-id="edited"]');
-  await expect(edited).toContainText("edited by you");
+  await expect(edited).toContainText("Edited by you");
   await expect(edited.getByRole("button", { name: "Edit fix" })).toHaveCount(1);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/fix-mode.png` });
 });
@@ -125,14 +125,14 @@ test("the form fixes a point into a draft, and Undo fix drops it", async ({
   await expect(form).toContainText("This changes who won the point.");
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/fix-form.png` });
   await form.getByRole("button", { name: "Done" }).click();
-  await expect(row).toContainText("fixed, not saved");
-  await expect(page.getByText("1 point fixed · not saved yet")).toBeVisible();
+  await expect(row).toContainText("Fixed, not saved");
+  await expect(page.getByText("1 point fixed · Not saved yet")).toBeVisible();
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/fix-drafted.png` });
 
   await row.hover();
   await row.getByRole("button", { name: "Edit fix" }).click();
   await page.getByRole("button", { name: "Undo fix" }).click();
-  await expect(row).not.toContainText("fixed, not saved");
+  await expect(row).not.toContainText("Fixed, not saved");
   await expect(page.getByText("Nothing changed yet")).toBeVisible();
 });
 
@@ -156,7 +156,7 @@ test("a saved fix offers Reset back to the original", async ({ page }) => {
   await row.hover();
   await row.getByRole("button", { name: "Edit fix" }).click();
   await page.getByRole("button", { name: "Reset" }).click();
-  await expect(page.getByText("1 point fixed · not saved yet")).toBeVisible();
+  await expect(page.getByText("1 point fixed · Not saved yet")).toBeVisible();
 });
 
 test("outside the mode: no Fix, the saved edit still marked", async ({
@@ -167,7 +167,7 @@ test("outside the mode: no Fix, the saved edit still marked", async ({
   await expect(page.getByText("Worth a look")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Fix" })).toHaveCount(0);
   const edited = page.locator('[data-point-id="edited"]');
-  await expect(edited).toContainText("edited by you");
+  await expect(edited).toContainText("Edited by you");
   await expect(edited.locator(".line-through")).toHaveCount(1);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/view-mode.png` });
 });

@@ -56,7 +56,7 @@ export function FixModeNotice() {
           >
             {count === 0
               ? "Nothing changed yet"
-              : `${count === 1 ? "1 point" : `${count} points`} fixed · not saved yet`}
+              : `${count === 1 ? "1 point" : `${count} points`} fixed · Not saved yet`}
           </span>
         </div>
         {review.error ? (
