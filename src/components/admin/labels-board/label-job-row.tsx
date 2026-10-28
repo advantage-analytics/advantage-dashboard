@@ -38,14 +38,14 @@ export const LABEL_COLUMNS = [
 export function LabelJobListRow({
   job,
   owner,
-  flags,
+  openFlags,
   fresh,
   onOpen,
 }: {
   job: LabelJobRow;
   owner: LabelJobOwner | undefined;
   /** The open amber and grey flags (see `openOf` in labels-board). */
-  flags: FlagCounts;
+  openFlags: FlagCounts;
   fresh: boolean;
   /** Ran on the click, before navigating: clears the New dot. */
   onOpen: () => void;
@@ -80,7 +80,7 @@ export function LabelJobListRow({
       <span className="tabular text-[13px] text-[var(--ink-700)]">
         {job.pointCount}
       </span>
-      <FlagChips counts={flags} />
+      <FlagChips counts={openFlags} />
       <span className="flex min-w-0 items-center">
         <StatePill className="max-w-full truncate">
           {state === "todo"

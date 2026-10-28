@@ -33,7 +33,7 @@ import {
 } from "@/lib/ui/score-format";
 import { PROVIDER_ID } from "@/lib/services/splitstep/config";
 import { isFresh, loadNavSeen } from "@/lib/admin/seen-server";
-import { labelJobSeenKey } from "@/components/admin/labels/board/seen-key";
+import { labelJobSeenKey } from "@/components/admin/labels-board/seen-key";
 
 interface Dependencies {
   requireAdmin: () => Promise<{ id: string } | null>;

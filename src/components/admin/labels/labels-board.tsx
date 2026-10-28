@@ -14,8 +14,8 @@ import {
   LABEL_COLUMNS,
   LABEL_GRID,
   LabelJobListRow,
-} from "@/components/admin/labels/board/label-job-row";
-import { labelJobSeenKey } from "@/components/admin/labels/board/seen-key";
+} from "@/components/admin/labels-board/label-job-row";
+import { labelJobSeenKey } from "@/components/admin/labels-board/seen-key";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type {
@@ -184,7 +184,7 @@ export function LabelsBoard({
               key={job.jobId}
               job={job}
               owner={owners[job.matchId]}
-              flags={openOf(job, flagCounts)}
+              openFlags={openOf(job, flagCounts)}
               fresh={fresh.has(job.jobId)}
               onOpen={() => open(job.jobId)}
             />
