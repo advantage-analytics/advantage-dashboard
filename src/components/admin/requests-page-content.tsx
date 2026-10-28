@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ViewPills } from "@/components/admin/view-pills";
+import { CountPills } from "@/components/admin/admin-cells";
+import { markAdminRowSeen } from "@/app/admin/seen-actions";
 import { RequestsTable, requestRowId } from "@/components/admin/requests-table";
 import { RequestDrawer } from "@/components/admin/request-drawer";
 import { AdminPage } from "@/components/admin/admin-page";
@@ -65,11 +66,17 @@ const VIEW_OPTIONS: { value: AdminRequestsView; label: string }[] = [
 export function RequestsPageContent({
   rows,
   view,
+  counts,
+  freshIds,
   initialSelectedId,
   emptyTitle,
 }: {
   rows: AdminRequestRow[];
   view: AdminRequestsView;
+  /** Rows per view for the pills; null where the count failed. */
+  counts: Record<AdminRequestsView, number | null>;
+  /** Rows on this page that are New since the admin last looked. */
+  freshIds: string[];
   /** `?id=` from the URL, or null. Ignored unless it names a row on this page. */
   initialSelectedId: string | null;
   emptyTitle: string;
@@ -87,6 +94,12 @@ export function RequestsPageContent({
   const [closing, setClosing] = useState(false);
   const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Rows opened in this visit: their dot clears at once, before the server
+  // write (`markAdminRowSeen`, fire and forget) lands.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(
+    () => new Set(initial ? [initial] : []),
+  );
+  const fresh = new Set(freshIds.filter((id) => !opened.has(id)));
 
   const drawerRow = drawerId
     ? (rows.find((row) => row.id === drawerId) ?? null)
@@ -108,6 +121,8 @@ export function RequestsPageContent({
     setDrawerId(row.id);
     setOpenedByKeyboard(viaKeyboard);
     syncUrl(row.id);
+    setOpened((prev) => (prev.has(row.id) ? prev : new Set(prev).add(row.id)));
+    void markAdminRowSeen("requests", `request:${row.id}`).catch(() => {});
   }, []);
 
   const close = useCallback(
@@ -247,16 +262,27 @@ export function RequestsPageContent({
       <div>
         <h1 className="text-display">Requests</h1>
         <p className="text-body-sm mt-[9px]">
-          Program claims and invite requests, merged into one queue.
+          Coaches claiming a team, programs asking to join, and players
+          reporting a match.
+          {fresh.size > 0 ? ` ${fresh.size} new since you last looked.` : ""}
         </p>
       </div>
 
-      <ViewPills options={VIEW_OPTIONS} value={view} onChange={pushView} />
+      <CountPills
+        options={VIEW_OPTIONS.map((option) => ({
+          ...option,
+          // A view with nothing in it reads as its name alone (Requests2).
+          count: counts[option.value] || null,
+        }))}
+        value={view}
+        onChange={pushView}
+      />
 
       <RequestsTable
         rows={rows}
         emptyTitle={emptyTitle}
         selectedId={selectedId}
+        freshIds={fresh}
         onSelect={(row) =>
           toggle(row, document.activeElement?.id === requestRowId(row.id))
         }
