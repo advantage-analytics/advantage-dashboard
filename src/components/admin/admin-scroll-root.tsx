@@ -47,6 +47,10 @@ export function AdminScrollRoot({
     if (!element) return;
     const key = KEY_PREFIX + pathname;
     const onScroll = () => {
+      // Leaving this page, Next scrolls the shared box to the top before this
+      // listener is unbound — by then the URL is the next page's, so that 0
+      // must not overwrite this page's offset.
+      if (window.location.pathname !== pathname) return;
       try {
         sessionStorage.setItem(key, String(Math.round(element.scrollTop)));
       } catch {
@@ -75,7 +79,12 @@ export function AdminScrollRoot({
   }, [pathname]);
 
   return (
-    <div ref={ref} className={cn("h-dvh overflow-y-auto", className)}>
+    // `relative` is load-bearing: without it, every absolutely positioned
+    // child (each row's sr-only "Won"/"Lost", a popover anchor) is placed
+    // against the page instead of this box, lands at its static position far
+    // down the list, and makes the DOCUMENT as tall as the list — a second
+    // scrollbar that scrolls past the page.
+    <div ref={ref} className={cn("relative h-dvh overflow-y-auto", className)}>
       {children}
     </div>
   );
