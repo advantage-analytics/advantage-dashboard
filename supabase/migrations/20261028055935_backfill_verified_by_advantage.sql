@@ -7,9 +7,8 @@
 -- actually happened.
 --
 -- Applied live as 20261028055935. One-off, and guarded to the set checked
--- live on 2026-10-27: exactly 16
--- complete analyst sessions on 16 distinct matches, every labeller set and
--- an admin, every completed_at set, no other session open on any of those
+-- live on 2026-10-27: exactly 16 complete analyst sessions on 16 distinct
+-- matches, every labeller set and an admin, every completed_at set, no other session open on any of those
 -- matches, and no match in the database verified yet. Anything else — a
 -- session reopened since (it is no longer complete, so the count is off), a
 -- match verified by a Mark complete since, a 17th session — refuses the
