@@ -36,12 +36,13 @@ import { playedSets, type ScoreLineSet } from "@/lib/ui/score-format";
  *
  * `matches` has no `created_at`. The moment a match arrived is the earliest of
  * what its upload left behind: its first `processing_jobs.created_at` (a
- * video), its `match_files.uploaded_at` (a SwingVision import) or its
- * `admin_upload_submission_items.created_at` (an admin console entry). A match
+ * video) or its `match_files.uploaded_at` (a SwingVision import). An admin
+ * console entry leaves one of those too — its own submission ledger,
+ * `admin_upload_submission_items`, is private even to the service role. A match
  * with none of those — a hand-scored one, or a legacy import whose file row
  * is gone — falls back to when its statistics were written
  * (`match_stats.created_at`), which is when the import ran. A match with none
- * of the four has no known moment and prints "—"; it sorts last, by its match
+ * of the three has no known moment and prints "—"; it sorts last, by its match
  * day.
  */
 
@@ -160,7 +161,7 @@ async function uploadMoments(
   db: SupabaseClient,
   ids: string[],
 ): Promise<{ uploadedAt: Map<string, string>; withStats: Set<string> }> {
-  const [jobs, files, items, stats] = await Promise.all([
+  const [jobs, files, stats] = await Promise.all([
     readByIds<{ match_id: string; created_at: string }>(
       db,
       "processing_jobs",
@@ -172,13 +173,6 @@ async function uploadMoments(
       db,
       "match_files",
       "match_id, uploaded_at",
-      "match_id",
-      ids,
-    ),
-    readByIds<{ match_id: string; created_at: string }>(
-      db,
-      "admin_upload_submission_items",
-      "match_id, created_at",
       "match_id",
       ids,
     ),
@@ -198,7 +192,6 @@ async function uploadMoments(
   };
   for (const row of jobs) note(row.match_id, row.created_at);
   for (const row of files) note(row.match_id, row.uploaded_at);
-  for (const row of items) note(row.match_id, row.created_at);
 
   const statsAt = new Map<string, string>();
   const withStats = new Set<string>();
@@ -463,18 +456,14 @@ export async function countNewMatchesForNav(adminId: string): Promise<number> {
   const since = seen.since;
 
   try {
-    const [jobs, files, items, stats] = await Promise.all([
+    const [jobs, files, stats] = await Promise.all([
       db.from("processing_jobs").select("match_id").gt("created_at", since),
       db.from("match_files").select("match_id").gt("uploaded_at", since),
-      db
-        .from("admin_upload_submission_items")
-        .select("match_id")
-        .gt("created_at", since),
       db.from("match_stats").select("match_id").gt("created_at", since),
     ]);
     const candidates = [
       ...new Set(
-        [jobs, files, items, stats].flatMap((result) =>
+        [jobs, files, stats].flatMap((result) =>
           ((result.data ?? []) as { match_id: string | null }[]).flatMap(
             (row) => (row.match_id ? [row.match_id] : []),
           ),

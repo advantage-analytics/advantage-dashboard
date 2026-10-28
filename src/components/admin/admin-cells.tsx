@@ -8,7 +8,7 @@ import { ScoreLine } from "@/components/dashboard/score-line";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { getInitials } from "@/lib/data/match-utils";
-import type { ScoreLineSet } from "@/lib/ui/score-format";
+import { playedSets, type ScoreLineSet } from "@/lib/ui/score-format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -99,6 +99,12 @@ export function AdminMatchCell({
   /** Extra line-2 content after the score, e.g. a workspace mark. */
   trailing?: React.ReactNode;
 }) {
+  // An unscored match stores 0-0 sets; it has no score to print, and a
+  // level mark beside "0-0, 0-0" would read as a played draw.
+  const played = playedSets(sets).filter(
+    (set) => set.player1 > 0 || set.player2 > 0,
+  );
+  const against = opponent.trim();
   return (
     <span className="flex min-w-0 items-center gap-3">
       <AdminAvatar name={player} photoUrl={photoUrl} fresh={fresh} />
@@ -107,18 +113,20 @@ export function AdminMatchCell({
           <span className="shrink-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
             {player}
           </span>
-          <span className="truncate text-[13px] text-[var(--ink-600)]">
-            vs {opponent}
-          </span>
+          {against ? (
+            <span className="truncate text-[13px] text-[var(--ink-600)]">
+              vs {against}
+            </span>
+          ) : null}
           {fresh ? <NewLabel /> : null}
         </span>
-        {sets.length > 0 || trailing ? (
+        {played.length > 0 || trailing ? (
           <span className="flex min-w-0 items-center gap-1.5">
-            {sets.length > 0 ? (
+            {played.length > 0 ? (
               <>
                 <ResultMark won={won} className="[&_svg]:size-3" />
                 <ScoreLine
-                  sets={sets}
+                  sets={played}
                   className="text-[12px] whitespace-nowrap text-[var(--ink-700)]"
                 />
               </>
