@@ -12,7 +12,9 @@ import {
 import { DialogProblem } from "@/components/ui/dialog-problem";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { Field } from "@/components/admin/create-team-dialog";
+import { ConferenceCrestControl } from "@/components/admin/conference-crest-control";
 import { createConference } from "@/lib/services/programs/admin-conference-actions";
+import { adminUploadConferenceCrest } from "@/lib/services/programs/admin-conference-crest-actions";
 import { DIVISION_VALUES, divisionLabel } from "@/lib/data/programs-server";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
@@ -27,6 +29,13 @@ import { cn } from "@/lib/utils";
  * once the refresh brings it in. `createConference()` carries the rules
  * (trimming, website normalisation, the duplicate-name sentence); this
  * collects the four fields and shows what it said.
+ *
+ * The crest is optional and staged: `ConferenceCrestControl` hands back the
+ * baked image and nothing is written until the conference exists. Then it
+ * uploads through `adminUploadConferenceCrest`. If that one step fails the
+ * conference is already in — so the dialog stays open on the problem with a
+ * single "Done" (never a second "Add", which would try to create it twice),
+ * and the crest can be added from the drawer.
  *
  * Fields are the underline vocabulary with `data-focus-ring="none"` — the
  * active rule thickening to 2px blue is the focus mark (`focus.md`).
@@ -57,9 +66,17 @@ export function AddConferenceDialog({
   const [division, setDivision] = useState<string | undefined>(undefined);
   const [website, setWebsite] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
+  const [crest, setCrest] = useState<Blob | null>(null);
+  /** Set when the conference was created but its crest did not upload. */
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  // Remounts the crest control on reset, which drops its staged preview.
+  const [crestKey, setCrestKey] = useState(0);
   const [pending, startCreating] = useTransition();
 
   const reset = () => {
+    setCrest(null);
+    setCreatedId(null);
+    setCrestKey((k) => k + 1);
     setName("");
     setShortName("");
     setDivision(undefined);
@@ -70,6 +87,15 @@ export function AddConferenceDialog({
   // Everything resets on close: reopening is a new conference.
   const close = (next: boolean) => {
     if (!next && pending) return;
+    // Created, crest refused: closing still lands on the new conference.
+    if (!next && createdId) {
+      const id = createdId;
+      onOpenChange(false);
+      reset();
+      onCreated(id);
+      router.refresh();
+      return;
+    }
     onOpenChange(next);
     if (!next) reset();
   };
@@ -77,7 +103,7 @@ export function AddConferenceDialog({
   const ready = name.trim().length >= 2;
 
   const submit = () => {
-    if (!ready) return;
+    if (!ready || createdId) return;
     setProblem(null);
     startCreating(async () => {
       const result = await createConference({
@@ -89,6 +115,25 @@ export function AddConferenceDialog({
       if (!result.ok) {
         setProblem(result.error);
         return;
+      }
+      if (crest) {
+        const ext = crest.type === "image/webp" ? "webp" : "png";
+        const formData = new FormData();
+        formData.set("conferenceId", result.id);
+        formData.set(
+          "file",
+          new File([crest], `crest.${ext}`, { type: crest.type }),
+        );
+        const uploaded = await adminUploadConferenceCrest(formData).catch(
+          () => ({ ok: false, error: "Couldn't upload the crest." }) as const,
+        );
+        if (!uploaded.ok) {
+          setCreatedId(result.id);
+          setProblem(
+            `The conference was added, but its crest wasn't: ${uploaded.error} Add it from the conference's panel.`,
+          );
+          return;
+        }
       }
       onOpenChange(false);
       reset();
@@ -137,17 +182,28 @@ export function AddConferenceDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-[18px]">
-            <Field label="Name" className="col-span-2">
-              <input
-                type="text"
-                value={name}
-                placeholder="Ivy League"
-                autoComplete="off"
-                data-focus-ring="none"
-                onChange={(event) => setName(event.target.value)}
-                className={cn(advField("underline"), "w-full outline-none")}
+            <div className="col-span-2 flex items-end gap-3.5">
+              <ConferenceCrestControl
+                key={crestKey}
+                name={name.trim()}
+                shortName={shortName.trim() || null}
+                onStage={setCrest}
+                onError={setProblem}
+                disabled={pending || createdId !== null}
               />
-            </Field>
+              <Field label="Name" className="min-w-0 flex-1">
+                <input
+                  type="text"
+                  value={name}
+                  placeholder="Ivy League"
+                  autoComplete="off"
+                  data-focus-ring="none"
+                  disabled={createdId !== null}
+                  onChange={(event) => setName(event.target.value)}
+                  className={cn(advField("underline"), "w-full outline-none")}
+                />
+              </Field>
+            </div>
 
             <Field label="Short name">
               <input
@@ -191,21 +247,33 @@ export function AddConferenceDialog({
 
           <div className="flex items-center gap-2.5 pt-0.5">
             <div className="flex-1" />
-            <button
-              type="button"
-              className={advButton("ghost", "md")}
-              onClick={() => close(false)}
-              disabled={pending}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={advButton("primary", "md")}
-              disabled={!ready || pending}
-            >
-              {pending ? "Adding…" : "Add conference"}
-            </button>
+            {createdId ? (
+              <button
+                type="button"
+                className={advButton("primary", "md")}
+                onClick={() => close(false)}
+              >
+                Done
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className={advButton("ghost", "md")}
+                  onClick={() => close(false)}
+                  disabled={pending}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={advButton("primary", "md")}
+                  disabled={!ready || pending}
+                >
+                  {pending ? "Adding…" : "Add conference"}
+                </button>
+              </>
+            )}
           </div>
         </form>
       </DialogContent>

@@ -261,6 +261,8 @@ export interface AdminTeamConference {
   name: string;
   /** `conferences.short_name` — the mark, when the conference has one. */
   shortName: string | null;
+  /** Public URL of `conferences.crest_path`; absent or null draws initials. */
+  crestUrl?: string | null;
   division: string | null;
   /** Every program on the conference, this one included. */
   teamCount: number;
@@ -878,7 +880,7 @@ async function readConference(
   const [conferenceResult, teamsResult] = await Promise.all([
     admin
       .from("conferences")
-      .select("id, name, short_name, division")
+      .select("id, name, short_name, division, crest_path")
       .eq("id", conferenceId)
       .maybeSingle(),
     loadConferenceTeams(conferenceId),
@@ -897,6 +899,7 @@ async function readConference(
     name: string;
     short_name: string | null;
     division: string | null;
+    crest_path: string | null;
   } | null;
 
   // A `conference_id` pointing at a row that is gone is a broken FK, not an
@@ -923,6 +926,7 @@ async function readConference(
     id: conference.id,
     name: conference.name,
     shortName: conference.short_name,
+    crestUrl: await crestUrl(conference.crest_path),
     division: conference.division,
     // Counted over the whole conference, this program included — "12 teams"
     // means the conference has twelve, not that it has twelve others.

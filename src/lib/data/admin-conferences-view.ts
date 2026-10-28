@@ -46,16 +46,42 @@ export interface AdminConferenceRow {
   schools: number;
   squads: ConferenceSquads;
   updatedAt: string;
+  /**
+   * Public URL of the uploaded crest (`conferences.crest_path` in the
+   * `program-crests` bucket), or null — `ConferenceMark` draws the initials.
+   */
+  crestUrl: string | null;
 }
 
 // ---------------------------------------------------------------------------
 // Pure helpers
 // ---------------------------------------------------------------------------
 
+/** Any of the three optional fields the drawer can fill in still empty. */
+export function isMissingDetails(
+  row: Pick<AdminConferenceRow, "shortName" | "website" | "division">,
+): boolean {
+  return (
+    row.shortName === null || row.website === null || row.division === null
+  );
+}
+
 /**
- * The three pills. "Missing details" is any of the three optional fields the
- * drawer can fill in still being empty.
+ * The search pill's match: name, short name or label contain the query,
+ * ignoring case. An empty query matches everything.
  */
+export function matchesConferenceSearch(
+  row: Pick<AdminConferenceRow, "name" | "shortName" | "label">,
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [row.name, row.shortName, row.label].some(
+    (value) => value != null && value.toLowerCase().includes(q),
+  );
+}
+
+/** The three pills. "Missing details" is `isMissingDetails`. */
 export function applyConferenceView(
   rows: readonly AdminConferenceRow[],
   view: AdminConferencesView,
@@ -64,12 +90,7 @@ export function applyConferenceView(
     case "on_advantage":
       return rows.filter((row) => row.onAdvantage > 0);
     case "missing":
-      return rows.filter(
-        (row) =>
-          row.shortName === null ||
-          row.website === null ||
-          row.division === null,
-      );
+      return rows.filter(isMissingDetails);
     case "all":
     default:
       return [...rows];
