@@ -8,7 +8,6 @@ import { shortMonthDate } from "@/components/dashboard/matches/match-detail/form
 import { totalGames } from "@/components/dashboard/matches/match-detail/set-scope";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { VerifiedFact } from "@/components/dashboard/matches/match-detail/verified-fact";
-import { useReportPoint } from "@/components/dashboard/matches/match-detail/use-report-point";
 import { savedViewsCountFact } from "@/lib/data/saved-views-logic";
 import { editedByLabel } from "@/lib/data/self-review";
 import { useSelfReview } from "@/components/dashboard/matches/match-detail/self-review/self-review-context";
@@ -45,7 +44,6 @@ const FACT_ICON = "size-[13px] shrink-0 text-[var(--ink-700)]";
 export function MatchReportFacts() {
   const { match, points } = useMatchData();
   const { meta } = useMatchReport();
-  const reportPoint = useReportPoint();
   const review = useSelfReview();
   // Self review's provenance: "Edited by you · 3 points" or "Edited by Coach
   // Rivera · 2 points" — edited, never verified (plan › Decisions).
@@ -145,7 +143,6 @@ export function MatchReportFacts() {
           matchId={match.id}
           verification={match.verification}
           canReport={!meta.readOnly}
-          point={reportPoint}
         />
       ) : null}
     </div>

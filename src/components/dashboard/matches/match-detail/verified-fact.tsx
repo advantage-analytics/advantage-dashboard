@@ -2,7 +2,7 @@
 
 import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import { useOptionalWorkspace } from "@/components/dashboard/workspace-provider";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   Popover,
   PopoverContent,
@@ -60,8 +60,8 @@ export function VerifiedFact({
   /** A first sentence above the details: what the lock keeps fixed. */
   lead?: string;
   /**
-   * The point in view where this opens from (the Video tab's playhead), for
-   * the report to name. Taken when "Tell us" is pressed.
+   * A point for the report to name, taken when "Tell us" is pressed. No
+   * caller passes one yet; self review's Video-tab entry will.
    */
   point?: ReportPoint | null;
 }) {
@@ -70,6 +70,9 @@ export function VerifiedFact({
   const [telling, setTelling] = useState(false);
   const [note, setNote] = useState("");
   const [reportPoint, setReportPoint] = useState<ReportPoint | null>(null);
+  // The popover's trigger. Closing the dialog hands focus back here: the
+  // "Tell us" link that opened it unmounted with the popover.
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   function tellUs() {
     setReportPoint(point);
@@ -80,7 +83,7 @@ export function VerifiedFact({
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
+        <PopoverTrigger asChild ref={triggerRef}>
           {trigger ?? (
             /* The frame's badge: a fact that is a button, so a 6px wash with
               its padding pulled back out — it sits on the line's own x. */
@@ -136,6 +139,11 @@ export function VerifiedFact({
           note={note}
           onNoteChange={setNote}
           onSent={() => setNote("")}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            // Cancel reopens the popover, which takes focus itself.
+            if (!open) triggerRef.current?.focus();
+          }}
         />
       ) : null}
     </>

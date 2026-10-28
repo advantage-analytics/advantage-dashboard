@@ -132,38 +132,6 @@ function cap(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
-/**
- * A reading in words, naming who did it: "Forehand winner by Lee", "Ace by
- * Lee", "Double fault by Nakamura", "Backhand unforced error by Nakamura",
- * or "Won by Lee" when no ending was read. An error and a double fault name
- * the player who made them — the point's loser.
- */
-export function readingPhrase(
-  reading: PointReading,
-  names: Record<Side, string>,
-): string {
-  const winner = names[reading.winner];
-  const loser = names[reading.winner === "p1" ? "p2" : "p1"];
-  const stroke = reading.lastStroke ? `${cap(reading.lastStroke)} ` : "";
-  switch (reading.ending) {
-    case "ace":
-      return `Ace by ${winner}`;
-    case "service_winner":
-      return `Service winner by ${winner}`;
-    case "double_fault":
-      return `Double fault by ${loser}`;
-    case "winner":
-      return stroke ? `${stroke}winner by ${winner}` : `Winner by ${winner}`;
-    case "error": {
-      const kind = reading.errorKind ? `${reading.errorKind} ` : "";
-      const what = `${stroke}${kind}error`;
-      return `${cap(what)} by ${loser}`;
-    }
-    default:
-      return `Won by ${winner}`;
-  }
-}
-
 /** The label reading → `points.result_type`. Mirrors `self_review_result_type`. */
 export function resultTypeOf(reading: PointReading): string | null {
   const stroke = reading.lastStroke ? `${cap(reading.lastStroke)} ` : "";

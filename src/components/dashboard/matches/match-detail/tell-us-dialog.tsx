@@ -8,7 +8,6 @@ import {
 } from "@/components/dashboard/team/dialog-shell";
 import {
   MATCH_ISSUE_MAX_LENGTH,
-  reportPointLabel,
   type ReportPoint,
 } from "@/lib/data/match-verification";
 import { advButton } from "@/lib/ui/adv-button";
@@ -23,9 +22,10 @@ const COUNT_FROM = 0.8;
  * system's 440px form dialog over the report, opened from the Verified
  * popover — which keeps the details only.
  *
- * The point it is about leads: opened from the Video tab with a point in
- * view, that point as a removable chip, sent with the report; otherwise the
- * whole match, and the note can name the point. The guidance sits under the
+ * The point it is about leads: the whole match, and the note can name the
+ * point. A caller can pass a point instead (self review's Video-tab entry,
+ * when it returns): it shows as a removable chip and goes with the report,
+ * whose stored label the server writes from the point row. The guidance sits under the
  * field, not in the placeholder, whose grey fails contrast — the placeholder
  * is an example of a good answer. ⌘/Ctrl+Enter sends.
  *
@@ -44,6 +44,7 @@ export function TellUsDialog({
   note,
   onNoteChange,
   onSent,
+  onCloseAutoFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,6 +59,8 @@ export function TellUsDialog({
   onNoteChange: (note: string) => void;
   /** The report went in: the caller clears its draft. */
   onSent: () => void;
+  /** Focus on close: the popover link that opened this is gone by then. */
+  onCloseAutoFocus: (event: Event) => void;
 }) {
   const fieldId = useId();
   const hintId = useId();
@@ -89,11 +92,7 @@ export function TellUsDialog({
     setError(null);
     const asSent = { point, note: note.trim() };
     startTransition(async () => {
-      const result = await reportMatchIssue(
-        matchId,
-        note,
-        point ? { id: point.id, label: reportPointLabel(point) } : null,
-      );
+      const result = await reportMatchIssue(matchId, note, point?.id ?? null);
       if (result.ok) {
         setSent(asSent);
         onSent();
@@ -108,6 +107,7 @@ export function TellUsDialog({
       <RosterDialog
         open={open}
         onOpenChange={changeOpen}
+        onCloseAutoFocus={onCloseAutoFocus}
         width={440}
         title="Sent to the Advantage team"
         description={`We’ll check it against the video${replyTo}.`}
@@ -146,6 +146,7 @@ export function TellUsDialog({
     <RosterDialog
       open={open}
       onOpenChange={changeOpen}
+      onCloseAutoFocus={onCloseAutoFocus}
       width={440}
       title="Tell us what’s still wrong"
       description={`It goes to the Advantage team, who’ll check it against the video${replyTo}.`}
@@ -188,7 +189,7 @@ export function TellUsDialog({
               aria-label="Remove the point"
               disabled={pending}
               onClick={onRemovePoint}
-              className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-[var(--ink-500)] transition-colors hover:bg-[var(--ink-100)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-[var(--ink-500)] transition-colors hover:bg-[var(--ink-100)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
             >
               <X className="size-3" strokeWidth={1.75} aria-hidden="true" />
             </button>
@@ -237,10 +238,7 @@ export function TellUsDialog({
           </span>
           <span className="flex-1" />
           {note.length > MATCH_ISSUE_MAX_LENGTH * COUNT_FROM ? (
-            <span
-              className="mono shrink-0 text-[11px] text-[var(--ink-600)]"
-              aria-live="polite"
-            >
+            <span className="mono shrink-0 text-[11px] text-[var(--ink-600)]">
               {left} left
             </span>
           ) : null}

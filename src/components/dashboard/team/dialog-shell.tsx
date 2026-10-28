@@ -59,6 +59,7 @@ export function RosterDialog({
   children,
   footer,
   describedBodyId,
+  onCloseAutoFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -75,12 +76,19 @@ export function RosterDialog({
    * should, so this is opt-in rather than the whole of `children`.
    */
   describedBodyId?: string;
+  /**
+   * Where focus goes on close, when the control that opened the dialog is
+   * gone by then (a popover's link, unmounted as the popover closed): call
+   * `event.preventDefault()` and focus something that stays.
+   */
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const { descriptionRef, contentProps } = useDescribedBody(describedBodyId);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         {...contentProps}
+        onCloseAutoFocus={onCloseAutoFocus}
         hideCloseButton
         className="gap-0 border-0 bg-[var(--surface-card)] p-0 sm:max-w-none"
         style={{
