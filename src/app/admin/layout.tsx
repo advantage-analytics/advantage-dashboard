@@ -70,7 +70,14 @@ export default async function AdminLayout({
   return (
     // One white surface, per the Admin Console canvas — `--surface-page` is
     // for inset wells, not the page.
-    <div className="flex min-h-screen flex-col bg-[var(--surface-card)]">
+    //
+    // The console scrolls inside this box, not on the document. `globals.css`
+    // gives html and body `overflow-x: hidden`, which makes body a scroll
+    // container that never scrolls — so anything `position: sticky` (the
+    // header, and every page's peek-drawer rail at `top-11`) stuck to a box
+    // that never moved and scrolled away with the page. A viewport-tall
+    // scroller of our own is what they stick to now.
+    <div className="flex h-dvh flex-col overflow-x-hidden overflow-y-auto bg-[var(--surface-card)]">
       <AdminHeader nav={nav} viewer={viewer} />
       {/* No padding or max-width here: each page renders its own `AdminPage`
           column, so the Requests page can seat its peek drawer beside that
