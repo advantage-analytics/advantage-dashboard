@@ -90,7 +90,7 @@ function swapsAfterGames(games: number): number {
  * every sixth tiebreak point that more play followed. The end-of-tiebreak
  * change is the odd 13th game's own swap, so it is not counted twice.
  */
-function swapsInSet(set: CompletedSet): number {
+export function swapsInSet(set: CompletedSet): number {
   if (typeof set === "number") return swapsAfterGames(set);
   return (
     swapsAfterGames(set.games) +

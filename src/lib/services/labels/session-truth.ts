@@ -130,6 +130,11 @@ export function joinSessionTruth(args: {
   /** `proposedPointsOf(proposal, rallyIds)`, or null without a proposal. */
   proposed: ReadonlyMap<number, ProposedPoint> | null;
   names: TruthNames;
+  /**
+   * Read unchecked, undeleted points as truth too — for a complete session,
+   * where the labeller left a point unticked because it was already right.
+   */
+  includeUnchecked?: boolean;
 }): SessionTruthJoin {
   const byRally = new Map(args.points.map((p) => [p.rally_id, p]));
   const rows: SessionTruthRow[] = [];
@@ -142,7 +147,10 @@ export function joinSessionTruth(args: {
     : new Set<number>();
 
   for (const label of args.labels) {
-    if (!isTruthPoint(label)) {
+    const truth =
+      isTruthPoint(label) ||
+      (args.includeUnchecked === true && label.status !== "deleted");
+    if (!truth) {
       excluded += 1;
       continue;
     }
