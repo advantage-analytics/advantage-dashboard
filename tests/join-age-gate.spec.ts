@@ -379,7 +379,7 @@ test.describe("the database half", () => {
       "..",
       "supabase",
       "migrations",
-      "20261026080000_join_age_gate.sql",
+      "20261026190848_join_age_gate.sql",
     ),
     "utf8",
   );

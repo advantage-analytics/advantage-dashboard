@@ -1,3 +1,6 @@
+-- Applied live 2026-10-26 as version 20261026190848, right after the production deploy
+-- that ships the code it pairs with.
+--
 -- Join age gate: the two database doors that add a person to a team through a
 -- link or an invitation now refuse an account with no date of birth, and an
 -- account under 13. Owner decision 2026-10-25 (Terms 2.0, Privacy 1.4,
@@ -109,7 +112,7 @@ begin
     return;
   end if;
 
-  -- The age gate (20261026080000): a date of birth on file, and 13 or older.
+  -- The age gate (20261026190848): a date of birth on file, and 13 or older.
   -- A missing users row also refuses: the helper answers null for it, and
   -- the `coalesce` turns that into `age_required`. Nothing unknown joins.
   v_age := coalesce(public.join_age_refusal(v_uid), 'age_required');
@@ -262,7 +265,7 @@ begin
     return;
   end if;
 
-  -- The age gate (20261026080000): a date of birth on file, and 13 or older.
+  -- The age gate (20261026190848): a date of birth on file, and 13 or older.
   -- Before an approve-mode request is filed, so an approved request was
   -- already age-checked.
   v_age := coalesce(public.join_age_refusal(v_uid), 'age_required');

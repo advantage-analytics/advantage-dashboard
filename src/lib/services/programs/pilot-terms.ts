@@ -13,7 +13,7 @@ import {
  *
  *   * `PILOT_TERMS_VERSION` here
  *   * `public.current_pilot_terms_version()`, last replaced by
- *     `supabase/migrations/20261025230000_pilot_terms_version_2.sql`
+ *     `supabase/migrations/20261026190847_pilot_terms_version_2.sql`
  *
  * Bump both in the same change (the SQL side is a new migration replacing
  * the function body). A `pilot_terms_acceptances` row whose `terms_version`

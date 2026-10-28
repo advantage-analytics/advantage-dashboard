@@ -87,7 +87,7 @@ const AGE_REQUIRED_ERROR = "Add your date of birth to join.";
  * and the one sent is ignored: these actions fill `users.dob` when it is
  * empty, they never edit it. The date is written BEFORE the accept RPC runs,
  * because the RPC reads it back (`join_age_refusal()` in
- * `20261026080000_join_age_gate.sql`) and refuses without it — and because
+ * `20261026190848_join_age_gate.sql`) and refuses without it — and because
  * `training_excluded_for()` reads the same column to keep an under-18
  * account's video out of model training. An under-13 date is never written:
  * it is refused, not stored.
