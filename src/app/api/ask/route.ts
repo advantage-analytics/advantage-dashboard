@@ -102,6 +102,7 @@ import {
   readAskDataVersion,
   replayCachedAnswer,
 } from "@/lib/services/ask/cache";
+import { isAskAgentEnabled } from "@/lib/services/ask/agent";
 import { askCoachMode, isAskCoachModeEnabled } from "@/lib/services/ask/coach";
 import { retrieveAskExamples } from "@/lib/services/ask/examples";
 import { askAdapterModel, askStageModels } from "@/lib/services/ask/model";
@@ -604,6 +605,15 @@ export async function POST(request: Request): Promise<Response> {
       scope,
       embedding,
     });
+    // Agent mode's toolbox lives beside the MCP server, whose SDK a route
+    // without the flag has no use for: loaded only with it on, and before
+    // the reservation, so a failed load spends nothing.
+    const agentTools = isAskAgentEnabled()
+      ? {
+          ...(await import("@/lib/services/mcp/server")),
+          ...(await import("@/lib/services/mcp/user-reads")),
+        }
+      : null;
     const reserved = await reserveAskQuestion(db, model);
     if (!reserved.ok) {
       if (reserved.code === "ask_limit_reached") {
@@ -634,6 +644,23 @@ export async function POST(request: Request): Promise<Response> {
       // In flight: the orchestrator awaits it after the "planning" status.
       examples: examplesRead,
       coach,
+      // Agent mode (`ASK_AGENT=1`, `agent.ts`): the planner may look first,
+      // through the connector's read tools bound to this question's scope.
+      // The table reads run as the signed-in user; the queries go through
+      // the database above, so nothing new reaches the service role.
+      ...(agentTools
+        ? {
+            agent: {
+              toolbox: (questionDb: AskDatabase) =>
+                agentTools.createAskAgentToolbox({
+                  db: questionDb,
+                  reads: agentTools.createMcpUserReads(supabase, user.id),
+                  userId: user.id,
+                  scope,
+                }),
+            },
+          }
+        : {}),
     };
     const recorded = (run: AskQuestionInput) =>
       recordAskRun(run, {

@@ -1,6 +1,14 @@
 import { isUuid, UUID_RE } from "@/lib/admin/validation";
 import type { ChatMessage } from "@/lib/llm/adapter";
 import {
+  ASK_AGENT_BOUNDS,
+  askAgentPromptAppendix,
+  runAskAgent,
+  type AskAgentBounds,
+  type AskAgentToolbox,
+  type AskAgentToolTurn,
+} from "@/lib/services/ask/agent";
+import {
   ASK_ANSWER_FAILED_MESSAGE,
   type AskAnswerResult,
   type AskRow,
@@ -10,6 +18,7 @@ import {
   stringOrNull,
   type AskErrorCode,
   type AskEvent,
+  type AskStatusEvent,
   type AskSourceMatch,
   type AskVisual,
 } from "@/lib/services/ask/events";
@@ -258,6 +267,8 @@ export interface AskModel {
     messages: ChatMessage[],
     call?: AskModelCall,
   ): Promise<AsyncIterable<string>>;
+  /** One tool turn (`getLLMToolTurn()`), for agent mode; absent, agent mode does not run. */
+  toolTurn?: AskAgentToolTurn;
 }
 
 /** One spent question, as `ask_reserve_question()` returned it. */
@@ -319,6 +330,20 @@ export interface AskQuestionInput {
    * the wait overlaps it.
    */
   examples?: readonly AskExample[] | PromiseLike<readonly AskExample[]>;
+  /**
+   * Agent mode (`agent.ts`, `ASK_AGENT=1`): the planner's first attempt is a
+   * bounded tool loop over the connector's read tools. `toolbox` binds them
+   * to the database it is handed — the one this question runs on. Absent,
+   * or in mock mode, the one-shot planner runs alone.
+   */
+  agent?: {
+    toolbox: (db: AskDatabase) => AskAgentToolbox;
+    bounds?: AskAgentBounds;
+    /** The loop's clock, for tests. */
+    now?: () => number;
+    /** The plan reply the loop finished with, as the parser reads it (the eval's shape check). */
+    onReply?: (reply: string) => void;
+  };
   /**
    * Coach mode (`coach.ts`): decided by the route from the flag, a team scope
    * and the viewer's role in the program. Read only for a team question that
@@ -871,8 +896,16 @@ interface QueryResult {
 export async function* askQuestion(
   input: AskQuestionInput,
 ): AsyncGenerator<AskEvent, void, undefined> {
-  const { db, model, scope } = input;
+  const { model, scope } = input;
   const team = scope.kind === "team";
+  const agentOn = Boolean(input.agent && model.configured && model.toolTurn);
+  // In agent mode the plan is usually a query the loop already ran
+  // (`finish` with a query_id), so the question's query results are kept
+  // and an identical query is answered from them rather than sent again.
+  const db = agentOn ? withQueryMemo(input.db) : input.db;
+  // Agent mode (`agent.ts`): the read tools, bound to this question's
+  // database — the run record's counting wrapper, when there is one.
+  const agentToolbox = agentOn && input.agent ? input.agent.toolbox(db) : null;
   // Coach mode is a team matter; a personal flag, however it got there, is nothing.
   const coach = team && input.coach === true;
   /** The state the planner last wrote (`thread-state.ts`): saved with the answer for the next turn. */
@@ -1413,14 +1446,30 @@ export async function* askQuestion(
       attempt += 1
     ) {
       let step = reroute(
-        await planOnce(
-          model,
-          systemPrompt,
-          messages,
-          cannotAnswer,
-          team,
-          planState,
-        ),
+        attempt === 0 && agentToolbox !== null && model.toolTurn
+          ? yield* agentPlanOnce(
+              model,
+              model.toolTurn,
+              agentToolbox,
+              systemPrompt,
+              messages,
+              cannotAnswer,
+              team,
+              planState,
+              {
+                bounds: input.agent?.bounds,
+                now: input.agent?.now,
+                onReply: input.agent?.onReply,
+              },
+            )
+          : await planOnce(
+              model,
+              systemPrompt,
+              messages,
+              cannotAnswer,
+              team,
+              planState,
+            ),
       );
       // A shot pattern is read into a fixed form by the model and queried by
       // the server (`pattern.ts`); only the planner's scope is kept. Read
@@ -2256,7 +2305,19 @@ async function planOnce(
   } catch {
     return { ok: false, unavailable: true };
   }
+  return stepOfReply(reply, cannotAnswer, team, state);
+}
 
+/**
+ * The plan step a reply asks for — the one-shot planner's, or agent mode's
+ * finish (`agent.ts`), which carries the same object.
+ */
+function stepOfReply(
+  reply: string,
+  cannotAnswer: string,
+  team: boolean,
+  state: { value: AskThreadState | null },
+): PlanStep {
   const parsed = parsePlanReply(reply);
   if (parsed !== null) state.value = parsed.state ?? null;
   if (parsed === null) {
@@ -2310,6 +2371,76 @@ async function planOnce(
     };
   }
   return { ok: true, plan: parsed, review: false, compare: null, reply };
+}
+
+/**
+ * The question's database with its query results kept for the question's
+ * life: the same `ask_run_query` / `ask_run_team_query` call with the same
+ * arguments is answered from the first one, so a plan the agent already ran
+ * is not run twice. A refused or failed call is not kept. Everything else
+ * passes straight through.
+ */
+function withQueryMemo(db: AskDatabase): AskDatabase {
+  const kept = new Map<string, Promise<AskRpcResult>>();
+  return {
+    rpc(fn, args) {
+      if (fn !== "ask_run_query" && fn !== "ask_run_team_query") {
+        return db.rpc(fn, args);
+      }
+      const key = JSON.stringify([fn, args ?? null]);
+      const hit = kept.get(key);
+      if (hit) return hit;
+      const result = Promise.resolve(db.rpc(fn, args)).then(
+        (answer) => {
+          if (answer.error) kept.delete(key);
+          return answer;
+        },
+        (error: unknown) => {
+          kept.delete(key);
+          throw error;
+        },
+      );
+      kept.set(key, result);
+      return result;
+    },
+  };
+}
+
+/**
+ * Agent mode's plan step (`agent.ts`): the bounded tool loop, whose finish is
+ * read as a plan reply. A loop that ends with nothing to finish on plans the
+ * one-shot way, so agent mode never answers worse than no answer.
+ */
+async function* agentPlanOnce(
+  model: AskModel,
+  toolTurn: AskAgentToolTurn,
+  toolbox: AskAgentToolbox,
+  systemPrompt: string,
+  messages: ChatMessage[],
+  cannotAnswer: string,
+  team: boolean,
+  state: { value: AskThreadState | null },
+  options: {
+    bounds?: AskAgentBounds;
+    now?: () => number;
+    onReply?: (reply: string) => void;
+  },
+): AsyncGenerator<AskStatusEvent, PlanStep, undefined> {
+  const question = messages[0]?.content ?? "";
+  const outcome = yield* runAskAgent({
+    toolTurn,
+    toolbox,
+    systemPrompt: `${systemPrompt}${askAgentPromptAppendix(options.bounds ?? ASK_AGENT_BOUNDS)}`,
+    question,
+    staticPrefixLength: askPromptStaticPrefixLength(systemPrompt),
+    bounds: options.bounds,
+    now: options.now,
+  });
+  if (outcome.reply !== null) {
+    options.onReply?.(outcome.reply);
+    return stepOfReply(outcome.reply, cannotAnswer, team, state);
+  }
+  return planOnce(model, systemPrompt, messages, cannotAnswer, team, state);
 }
 
 const FENCE = /^\s*```[a-zA-Z]*\s*([\s\S]*?)\s*```\s*$/;
