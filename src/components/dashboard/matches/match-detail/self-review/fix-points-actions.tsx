@@ -6,6 +6,7 @@ import { Lock, PencilLine } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { VerifiedFact } from "@/components/dashboard/matches/match-detail/verified-fact";
+import { useReportPoint } from "@/components/dashboard/matches/match-detail/use-report-point";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { useSelfReview } from "./self-review-context";
@@ -31,6 +32,7 @@ export function FixPointsActions() {
   const { state, meta } = useMatchReport();
   const { match, points } = useMatchData();
   const review = useSelfReview();
+  const reportPoint = useReportPoint();
 
   if (meta.readOnly || state.view !== "film") return null;
   if (!meta.hasPlayableVideo || points.length === 0) return null;
@@ -43,6 +45,7 @@ export function FixPointsActions() {
         canReport
         lead="Its points, score and players are locked."
         trigger={<LockButton />}
+        point={reportPoint}
       />
     );
   }

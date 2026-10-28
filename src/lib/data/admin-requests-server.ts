@@ -97,6 +97,8 @@ export interface AdminRequestRequestDetail {
     id: string;
     verified: boolean;
     labelSessionId: string | null;
+    /** The point the report names, as the reporter saw it; null for the whole match. */
+    pointLabel: string | null;
   } | null;
 }
 
@@ -357,6 +359,7 @@ interface RawRequestRow {
   name: string | null;
   role: string | null;
   note: string | null;
+  point_label: string | null;
   school_name: string | null;
   team: string | null;
   status: string;
@@ -375,6 +378,7 @@ const REQUESTS_SELECT = `
   name,
   role,
   note,
+  point_label,
   school_name,
   team,
   status,
@@ -448,6 +452,7 @@ function toRequestRow(
                   Number(a.status === "complete") ||
                 b.created_at.localeCompare(a.created_at),
             )[0]?.id ?? null,
+          pointLabel: request.point_label,
         }
       : null,
   };

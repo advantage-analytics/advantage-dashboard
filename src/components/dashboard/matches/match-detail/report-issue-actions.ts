@@ -25,15 +25,28 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
  * The read below answers the usual case; two Sends at once both pass it, and
  * the partial unique index `program_requests_one_open_match_issue` refuses
  * the second, which answers the same.
+ *
+ * Opened from the Video tab with a point in view, the report names that
+ * point: its id, read back through the reporter's own client so it must be a
+ * point of THIS match, and the chip's words (`point_label`), which keep
+ * saying which point once a label publish has replaced the ids.
  */
 
 const UNIQUE_VIOLATION = "23505";
+const POINT_LABEL_MAX_LENGTH = 200;
 const ALREADY_REPORTED =
   "We already have your report on this match, and we'll look at it.";
+
+export interface MatchIssuePoint {
+  id: string;
+  /** "61 · Set 2 · 4-4 · 30-40 · Forehand winner by Lee". */
+  label: string;
+}
 
 export async function reportMatchIssue(
   matchId: string,
   note: string,
+  point: MatchIssuePoint | null = null,
 ): Promise<ActionResult> {
   const text = typeof note === "string" ? note.trim() : "";
   if (!text) return { ok: false, error: "Say what's still wrong." };
@@ -46,6 +59,17 @@ export async function reportMatchIssue(
   if (typeof matchId !== "string" || !UUID_RE.test(matchId)) {
     return { ok: false, error: "That match could not be found." };
   }
+  const pointLabel =
+    point && typeof point.label === "string" ? point.label.trim() : "";
+  if (
+    point &&
+    (typeof point.id !== "string" ||
+      !UUID_RE.test(point.id) ||
+      !pointLabel ||
+      pointLabel.length > POINT_LABEL_MAX_LENGTH)
+  ) {
+    return { ok: false, error: "That point could not be found." };
+  }
 
   const supabase = await createClient();
   const {
@@ -55,19 +79,39 @@ export async function reportMatchIssue(
     return { ok: false, error: "Sign in again to send this." };
   }
 
-  const [{ data: match, error: matchError }, { data: profile }] =
-    await Promise.all([
-      supabase
-        .from("matches")
-        .select("id, verified")
-        .eq("id", matchId)
-        .maybeSingle<{ id: string; verified: boolean }>(),
-      supabase
-        .from("users")
-        .select("first_name, last_name")
-        .eq("id", user.id)
-        .maybeSingle<{ first_name: string | null; last_name: string | null }>(),
-    ]);
+  const [
+    { data: match, error: matchError },
+    { data: profile },
+    { data: pointRow, error: pointError },
+  ] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("id, verified")
+      .eq("id", matchId)
+      .maybeSingle<{ id: string; verified: boolean }>(),
+    supabase
+      .from("users")
+      .select("first_name, last_name")
+      .eq("id", user.id)
+      .maybeSingle<{ first_name: string | null; last_name: string | null }>(),
+    point
+      ? supabase
+          .from("points")
+          .select("id")
+          .eq("id", point.id)
+          .eq("match_id", matchId)
+          .maybeSingle<{ id: string }>()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (pointError) {
+    console.error("[report-issue] could not read the point", {
+      error: pointError.message,
+    });
+    return { ok: false, error: "Couldn't send that. Try again." };
+  }
+  if (point && !pointRow) {
+    return { ok: false, error: "That point could not be found." };
+  }
   if (matchError) {
     console.error("[report-issue] could not read the match", {
       error: matchError.message,
@@ -107,6 +151,8 @@ export async function reportMatchIssue(
     email,
     name: displayName(profile?.first_name ?? null, profile?.last_name ?? null),
     note: text,
+    point_id: point ? point.id : null,
+    point_label: point ? pointLabel : null,
   });
   if (insertError?.code === UNIQUE_VIOLATION) {
     return { ok: false, error: ALREADY_REPORTED };

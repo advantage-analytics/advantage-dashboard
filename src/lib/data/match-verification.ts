@@ -16,6 +16,44 @@ export const VERIFIED_BY_ADVANTAGE = "Verified by Advantage";
 /** The longest "Something still wrong?" note, read by the form and the action. */
 export const MATCH_ISSUE_MAX_LENGTH = 2000;
 
+/**
+ * The point a "Tell us" report is about, in the chip's three parts: its
+ * number, where it fell ("Set 2 · 4-4 · 30-40" — the point's own scores,
+ * server-first as the umpire calls them; one the vendor never read is left
+ * out, not zeroed), and how it reads now ("Forehand winner by Lee").
+ */
+export interface ReportPoint {
+  id: string;
+  number: number;
+  where: string;
+  reading: string;
+}
+
+export function reportPointOf(
+  point: {
+    id: string;
+    pointNumber: number;
+    setNumber: number;
+    gameScoreRaw?: string | null;
+    pointScoreRaw?: string | null;
+  },
+  reading: string,
+): ReportPoint {
+  return {
+    id: point.id,
+    number: point.pointNumber,
+    where: [`Set ${point.setNumber}`, point.gameScoreRaw, point.pointScoreRaw]
+      .filter(Boolean)
+      .join(" · "),
+    reading,
+  };
+}
+
+/** The chip as one line — what `program_requests.point_label` stores. */
+export function reportPointLabel(point: ReportPoint): string {
+  return `${point.number} · ${point.where} · ${point.reading}`;
+}
+
 /** What the report's popover says was checked (decision D2: points only). */
 export const VERIFIED_SCOPE =
   "We checked every point against the video: who won and how it ended.";
