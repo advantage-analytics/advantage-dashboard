@@ -8,7 +8,9 @@
  * ended by, rally ids and status, and one tombstoning the later point (both
  * `updateIfUnchanged` — the writes before a miss stand); one compare-and-set
  * UPDATE per serve the plan relabels (its stroke or let, and the status an edit would
- * give it, `labelShotStatusAfterPatch`); then the kept
+ * give it, `labelShotStatusAfterPatch`); one compare-and-set UPDATE per
+ * stroke between two serves the plan clears (`planShotDelete`,
+ * `dead_ball_after_fault`); then the kept
  * point's ending as its joined rows
  * derive it (`reconcileEnding`, ending-session.ts), where the later point's
  * stored ending did not already say so. No row is ever removed.
@@ -27,8 +29,10 @@ import {
   readShotsOfPoints,
   reconcileEnding,
 } from "./ending-session";
+import { planShotDelete } from "./operations";
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
+  CLEARED_REASON,
   isCombineDirection,
   planPointCombine,
   type CombinablePoint,
@@ -196,6 +200,27 @@ export async function writeLabelPointCombine(params: {
     });
   }
 
+  // The swings between two serves by one server, deleted — after their
+  // retype, whose status the delete remembers, and before the ending.
+  const cleared: PointCombineSaved["cleared"] = [];
+  for (const shotId of write.cleared) {
+    const shot = read.shots.find((s) => s.id === shotId);
+    if (!shot) continue;
+    const status = retyped.find((r) => r.id === shotId)?.status ?? shot.status;
+    const planned = planShotDelete({ status }, CLEARED_REASON);
+    if ("error" in planned) continue;
+    const clearFailed = await updateIfUnchanged(
+      supabase,
+      "label_shots",
+      shotId,
+      status,
+      { ...planned.write },
+      "delete the swings between the serves",
+    );
+    if (clearFailed) return { error: clearFailed };
+    cleared.push({ id: shotId, ...planned.write });
+  }
+
   // The kept point's ending off the joined rows; its status stays `edited`
   // (or `added`) as the plan wrote it.
   const synced = await reconcileEnding({
@@ -215,6 +240,7 @@ export async function writeLabelPointCombine(params: {
     },
     removed: { id: write.removedId, ...write.removed },
     retyped,
+    cleared,
   };
 }
 
