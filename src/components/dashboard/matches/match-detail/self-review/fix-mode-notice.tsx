@@ -10,7 +10,7 @@ import {
   noticeEnterCls,
 } from "@/components/dashboard/matches/new-match-wizard/styles";
 import { cn } from "@/lib/utils";
-import { useSelfReview } from "./self-review-provider";
+import { useSelfReview } from "./self-review-context";
 
 /**
  * The Video tab's one line about self review, above the player and the list:

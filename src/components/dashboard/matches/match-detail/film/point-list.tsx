@@ -38,7 +38,7 @@ import {
   resultTypeOf,
   type PointReading,
 } from "@/lib/data/self-review";
-import { useSelfReview } from "@/components/dashboard/matches/match-detail/self-review/self-review-provider";
+import { useSelfReview } from "@/components/dashboard/matches/match-detail/self-review/self-review-context";
 import { FixPointForm } from "@/components/dashboard/matches/match-detail/self-review/fix-point-form";
 import { cn } from "@/lib/utils";
 

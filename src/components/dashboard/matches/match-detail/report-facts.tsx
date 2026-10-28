@@ -10,7 +10,7 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
 import { VerifiedFact } from "@/components/dashboard/matches/match-detail/verified-fact";
 import { savedViewsCountFact } from "@/lib/data/saved-views-logic";
 import { editedByLabel } from "@/lib/data/self-review";
-import { useSelfReview } from "@/components/dashboard/matches/match-detail/self-review/self-review-provider";
+import { useSelfReview } from "@/components/dashboard/matches/match-detail/self-review/self-review-context";
 import { cn } from "@/lib/utils";
 
 /** 13px lucide glyph at stroke 1.5 in ink-700 — the frame's fact icon. */

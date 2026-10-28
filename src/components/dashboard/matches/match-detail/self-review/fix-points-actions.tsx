@@ -8,7 +8,7 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
 import { VerifiedFact } from "@/components/dashboard/matches/match-detail/verified-fact";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
-import { useSelfReview } from "./self-review-provider";
+import { useSelfReview } from "./self-review-context";
 
 /** The swap of the action slot: 120ms, the reorder mode's (tables.md). */
 const SWAP = { duration: 0.12, ease: [0.16, 1, 0.3, 1] as const };

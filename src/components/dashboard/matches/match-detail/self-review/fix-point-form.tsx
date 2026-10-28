@@ -11,7 +11,7 @@ import {
 } from "@/lib/data/self-review";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
-import { useSelfReview } from "./self-review-provider";
+import { useSelfReview } from "./self-review-context";
 
 /** The canvas's option chip: 26px, field border, pressed in blue. */
 const OPTION =

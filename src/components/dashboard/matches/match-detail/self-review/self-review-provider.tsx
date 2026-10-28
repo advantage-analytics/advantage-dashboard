@@ -1,8 +1,6 @@
 "use client";
 
 import {
-  createContext,
-  use,
   useCallback,
   useEffect,
   useMemo,
@@ -13,13 +11,16 @@ import {
 import { useRouter } from "next/navigation";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import {
-  NO_SELF_REVIEW,
   readingOf,
   sameReading,
-  type PointEdit,
   type PointReading,
   type SelfReviewState,
 } from "@/lib/data/self-review";
+import {
+  SelfReviewContext,
+  type SavedSummary,
+  type SelfReviewContextValue,
+} from "./self-review-context";
 import { saveSelfReview } from "./self-review-actions";
 import { statsMoved } from "./self-review-stats";
 
@@ -33,79 +34,6 @@ import { statsMoved } from "./self-review-stats";
  * save the page refreshes and the new state arrives as the prop. What lives
  * here is only what the server does not have yet — the drafts.
  */
-
-export interface SavedSummary {
-  count: number;
-  /** "Winners 12 → 13" for each of the viewer's stats a fix moved. */
-  moved: string[];
-  /** A fix changed who won a game's last point: the score may not add up. */
-  scoreMayNotAddUp: boolean;
-}
-
-export interface SelfReviewContextValue {
-  state: SelfReviewState;
-  viewerId: string | null;
-  /** Verified by Advantage: nothing here may change (D1). */
-  locked: boolean;
-  fixing: boolean;
-  start: () => void;
-  cancel: () => void;
-  /** Unsaved fixes by point id: the reading the point will have. */
-  drafts: ReadonlyMap<string, PointReading>;
-  /** A reading for a point, or null to drop its draft. */
-  setDraft: (point: MatchPoint, reading: PointReading | null) => void;
-  /** The point whose fix form is open. */
-  openPointId: string | null;
-  setOpenPointId: (pointId: string | null) => void;
-  /** Saved edits by point id. */
-  editOf: (pointId: string) => PointEdit | undefined;
-  /** The point's reading as it stands: its draft, else what is stored. */
-  readingFor: (point: MatchPoint) => PointReading;
-  /** The reading Advantage Intelligence published, before any fix. */
-  originalFor: (point: MatchPoint) => PointReading;
-  /** Drafts that would change something on save. */
-  pendingCount: number;
-  save: () => void;
-  saving: boolean;
-  error: string | null;
-  saved: SavedSummary | null;
-  dismissSaved: () => void;
-}
-
-const NOOP = () => {};
-
-const DEFAULT: SelfReviewContextValue = {
-  state: NO_SELF_REVIEW,
-  viewerId: null,
-  locked: false,
-  fixing: false,
-  start: NOOP,
-  cancel: NOOP,
-  drafts: new Map(),
-  setDraft: NOOP,
-  openPointId: null,
-  setOpenPointId: NOOP,
-  editOf: () => undefined,
-  readingFor: (point) => readingOf(point.resultType, point.wonByPlayer1),
-  originalFor: (point) => readingOf(point.resultType, point.wonByPlayer1),
-  pendingCount: 0,
-  save: NOOP,
-  saving: false,
-  error: null,
-  saved: null,
-  dismissSaved: NOOP,
-};
-
-const SelfReviewContext = createContext<SelfReviewContextValue>(DEFAULT);
-
-/**
- * Outside a provider (the public share page, the sample match, harnesses)
- * this answers "nothing to fix, nothing edited", so every consumer can read
- * it unconditionally.
- */
-export function useSelfReview(): SelfReviewContextValue {
-  return use(SelfReviewContext);
-}
 
 export function SelfReviewProvider({
   matchId,
