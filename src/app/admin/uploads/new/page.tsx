@@ -168,7 +168,7 @@ export default async function AdminNewUploadPage({
       {players && players.length > 0 && (
         <div className="flex flex-col gap-1">
           <span className="text-[11px] text-[var(--ink-500)]">
-            Players · personal workspace, match video
+            Players · Personal workspace, match video
           </span>
           <ul className="flex flex-col">
             {players.map((player) => (

@@ -2,7 +2,7 @@
 
 /**
  * Step 1 in the admin console: the Workspace field that can pick ANY team or
- * any player's personal workspace (board UploadFor, "Any account · admin"),
+ * any player's personal workspace (board UploadFor, "Any account · Admin"),
  * and — for a player — how the upload is billed.
  *
  * Neither control changes the wizard in place. Each navigates to the console
@@ -212,7 +212,7 @@ export function AdminWorkspaceRow({ mode }: { mode: AdminWizardMode }) {
           </p>
         ) : null}
         {[
-          { title: "Players · personal workspace", rows: players },
+          { title: "Players · Personal workspace", rows: players },
           { title: "Teams", rows: teams },
         ].map(
           (group) =>

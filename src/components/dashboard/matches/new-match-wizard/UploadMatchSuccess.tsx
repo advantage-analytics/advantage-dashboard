@@ -92,7 +92,7 @@ export function UploadMatchSuccess({
    * theirs), so it passes its own match page.
    */
   matchHref?: string;
-  /** Replaces "Back to matches" — the console's way back to its uploads. */
+  /** Replaces the matches-list exit: the console's way back to its uploads. */
   doneLink?: { href: string; label: string } | null;
 }) {
   // Only an import waits on its stats here; a video's analysis is reported

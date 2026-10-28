@@ -235,7 +235,7 @@ function Field({
   below,
 }: {
   label: string;
-  /** The caption's quiet right-hand note — the console's "Any account · admin". */
+  /** The caption's quiet right-hand note — the console's "Any account · Admin". */
   tag?: string;
   active: boolean;
   children: React.ReactNode;
@@ -530,7 +530,7 @@ function SourceStepContentImpl({
       {/* Workspace */}
       <Field
         label="Workspace"
-        tag={admin ? "Any account · admin" : undefined}
+        tag={admin ? "Any account · Admin" : undefined}
         active={activeField === "workspace"}
       >
         {admin ? (

@@ -450,8 +450,8 @@ to put a testable seam.
 > - `jobs/route.ts` is unchanged: its admin reservation already passes the
 >   billing workspace to `reserveAdminVideoQuota()`, which now sends a personal
 >   target's own `monthlyCapSecondsFor()` figure as `p_individual_cap`.
-> - SQL (`20261028231751`, `20261028233225`, `20261028233527`, applied live
->   2026-10-28): `admin_upload_submissions` gains `personal_user_id` and
+> - SQL (`20261028231751`, `20261028233225`, `20261028233527`,
+>   `20261028234124`, applied live 2026-10-28): `admin_upload_submissions` gains `personal_user_id` and
 >   `billing` (`free` | `player`) behind a check that exactly one target is
 >   set; `admin_submit_match_video`, `admin_video_access`,
 >   `admin_reserve_video_quota`, `admin_begin_upload_item`, `finish_item` and
