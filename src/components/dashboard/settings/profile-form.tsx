@@ -41,7 +41,7 @@ import { isPostHogConfigured } from "@/lib/posthog-client";
  * The date of birth is set once. Onboarding's age gate records it, and
  * after that it decides whether this account's video may ever train models
  * and whether it may join a team, so the account cannot change it: the
- * database refuses (`20261026090000_users_write_once_identity.sql`), and this
+ * database refuses (`20261026190849_users_write_once_identity.sql`), and this
  * page draws it as a locked field that names support as the way to correct
  * it. An account with none yet (one made before the gate) sets it here once.
  *

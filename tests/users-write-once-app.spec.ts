@@ -7,7 +7,7 @@ import { AGE_REFUSAL, DOB_ERROR } from "../src/app/onboarding/age";
 
 /**
  * The app's half of write-once identity
- * (`20261026090000_users_write_once_identity.sql`), offline.
+ * (`20261026190849_users_write_once_identity.sql`), offline.
  *
  * The database refuses a client change to `dob`, `role` and the guardian
  * fields once set; `users-write-once-identity.spec.ts` proves that live. What
@@ -141,7 +141,7 @@ test.describe("the screens and the database", () => {
 
   test("the trigger covers all five columns and lets only null be filled", () => {
     const sql = read(
-      "supabase/migrations/20261026090000_users_write_once_identity.sql",
+      "supabase/migrations/20261026190849_users_write_once_identity.sql",
     );
     expect(sql).toMatch(
       /before update of dob, role, guardian_consent_at, junior_player_name,\s+junior_class_year/,

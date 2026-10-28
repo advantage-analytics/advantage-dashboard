@@ -95,7 +95,7 @@ export const POOL_USER_DEFAULTS = {
   avatar_path: null,
   // An adult date of birth. `accept_program_invite` and
   // `accept_program_join_link` refuse an account with none
-  // (`20261026080000_join_age_gate.sql`), and pending-invites,
+  // (`20261026190848_join_age_gate.sql`), and pending-invites,
   // join-link-rls and seats-count-players accept as pool users. Unlike the
   // columns above, a new `handle_new_user` row has null here; the reset
   // writes it either way.
