@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPages } from "@/lib/data/paged-query";
 import { gameNumbersInSet } from "@/lib/data/game-in-set";
 import { pickServeShot, pickReturnShot } from "@/lib/data/serve-return-shots";
+import { reviewFlagsOf } from "@/lib/data/self-review";
 
 /** One shot inside a point, in rally order — the film room's shot feed. */
 export interface MatchShot {
@@ -68,6 +69,12 @@ export interface MatchPoint {
   winnerGuessed?: boolean;
   /** The vendor's score reading was stuck on this point (`score_frozen`). */
   scoreFrozen?: boolean;
+  /**
+   * The flags a player is asked about in self review (`REVIEW_FLAGS`,
+   * `self-review.ts`), in that order; empty when none. They lead the list in
+   * Fix points mode.
+   */
+  reviewFlags?: string[];
   resultType: string;
   eventType: string;
   description: string;
@@ -405,6 +412,7 @@ export async function getMatchPointsFromSupabase(
       gameScoreRaw: point.game_score,
       winnerGuessed: point.flags?.includes("winner_guessed") ?? false,
       scoreFrozen: point.flags?.includes("score_frozen") ?? false,
+      reviewFlags: reviewFlagsOf(point.flags),
       resultType,
       eventType: buildEventType(resultType),
       description: buildDescription(resultType, firstShot, lastShot, point),
