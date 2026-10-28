@@ -220,22 +220,9 @@ us" lands in /admin Requests.
   re-applied. Step 3a's "start from the player's fixes" is where they join
   back, by point number.
 
-<<<<<<< HEAD
-=======
-
-**Paused (2026-10-28).** Shipped in #575, then reverted from the app in
-#579 at the user's request; the feature waits in its own draft PR (#580).
-What stays live: both migrations (`20261028025013_self_review`,
-`20261028050138_verified_player_lock`), and the Verified lock in the app (the
-Edit match lock, `match_verified` on PATCH, the rederive and resubmit
-refusals), because D1 holds for the matches already Verified. #579's
-`20261028155028_self_review_paused` revokes the self-review functions from
-`authenticated`; #580 re-grants them.
-
-> > > > > > > claude/revert-self-review
-> > > > > > > **Done when.** A player fixes three points, saves, sees the stats move and
-> > > > > > > "Edited by you · 3 points"; Reset restores a point; a Verified match refuses
-> > > > > > > all of it with the lock shown.
+**Done when.** A player fixes three points, saves, sees the stats move and
+"Edited by you · 3 points"; Reset restores a point; a Verified match refuses
+all of it with the lock shown.
 
 **Prompt.**
 
