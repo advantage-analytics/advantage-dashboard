@@ -113,3 +113,8 @@ begin
   return new;
 end;
 $$;
+
+-- The self-review FK `label_points.edited_by` (on delete set null) had no
+-- index, so deleting a user scanned every label row.
+create index if not exists label_points_edited_by
+  on public.label_points (edited_by) where edited_by is not null;
