@@ -819,9 +819,8 @@ test("the capability is resolved on the server and handed down", () => {
   // workspace's id), riding the layout's already-`cache()`-wrapped call.
   // `preferences` joined in Stage 2C (Units) for the same reason.
   // `shareState` joined with the public share link: its row and whether the
-  // viewer may publish it. `selfReview` joined with self review (Advantage
-  // Review step 2): whether this viewer may fix points, and what was fixed.
+  // viewer may publish it.
   expect(PAGE).toMatch(
-    /const \[\s*data,\s*jobs,\s*video,\s*filmEntry,\s*workspace,\s*preferences,\s*shareState,\s*selfReview,?\s*\] = await Promise\.all\(\[/,
+    /const \[data, jobs, video, filmEntry, workspace, preferences, shareState\] =\s*\n?\s*await Promise\.all\(\[/,
   );
 });

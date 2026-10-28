@@ -4,7 +4,6 @@ import ts from "typescript";
 import { isUuid } from "@/lib/services/match-video/access";
 import { isPlainObject } from "@/lib/services/match-video/http";
 import { normalizeMatchPatch } from "@/lib/matches/patch-match";
-import { selfReviewStateFrom } from "@/lib/data/self-review";
 import { takenRoundCodes } from "@/lib/matches/round-options";
 import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
 import { rosterPlayerOptions } from "@/lib/data/roster-shared";
@@ -129,7 +128,6 @@ function harness(
     },
     "@/lib/data/match-analysis": { resolveAnalysisStatus },
     "@/lib/matches/patch-match": { normalizeMatchPatch },
-    "@/lib/data/self-review": { selfReviewStateFrom },
     "@/lib/matches/round-options": { takenRoundCodes },
     "@/lib/workspace/active-workspace-server": {
       getWorkspaceContext: async () => null,
