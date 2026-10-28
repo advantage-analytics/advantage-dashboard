@@ -802,6 +802,75 @@ test.describe("renderAskAnswer — the visual block, each kind", () => {
     expect(body(events)).toBe("Body.");
   });
 
+  test("table: a count and its share never print under one name", async () => {
+    // The Ad/Deuce answer that read as a duplicated table: the model named
+    // both serve_t (a count) and serve_t_pct (a share) "Serves to the T".
+    const COURTS: AskRow[] = [
+      {
+        court: "Ad",
+        serve_t: 256,
+        serve_t_pct: 34.6,
+        serve_body: 209,
+        serve_body_pct: 28.3,
+      },
+      {
+        court: "Deuce",
+        serve_t: 305,
+        serve_t_pct: 37,
+        serve_body: 217,
+        serve_body_pct: 26.3,
+      },
+    ];
+    const { events } = await render(
+      [
+        HEAD +
+          "CHART: table | Caption.\n" +
+          "COLUMNS: Ad | Deuce\n" +
+          "ROW: Serves to the T | {{r1.serve_t}} | {{r2.serve_t}}\n" +
+          "ROW: Serves to the body | {{r1.serve_body_pct}} | {{r2.serve_body_pct}}\n" +
+          "ROW: Serves to the T | {{r1.serve_t_pct}} | {{r2.serve_t_pct}}\n" +
+          "ROW: Serves to the body | {{r1.serve_body}} | {{r2.serve_body}}\n" +
+          "Body.",
+      ],
+      COURTS,
+    );
+    const labels = (visualOf(events) as { rows: { label: string }[] }).rows.map(
+      (row) => row.label,
+    );
+    // The first row of a measure keeps the name; the second, a different
+    // unit of it, says which unit it is.
+    expect(labels).toEqual([
+      "Serves to the T",
+      "Serves to the body",
+      "Serves to the T, share",
+      "Serves to the body, count",
+    ]);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  test("table: a model label that already tells the rows apart is kept", async () => {
+    const COURTS: AskRow[] = [
+      { court: "Ad", serve_t: 256, serve_t_pct: 34.6 },
+      { court: "Deuce", serve_t: 305, serve_t_pct: 37 },
+    ];
+    const { events } = await render(
+      [
+        HEAD +
+          "CHART: table | Caption.\n" +
+          "COLUMNS: Ad | Deuce\n" +
+          "ROW: Serves to the T | {{r1.serve_t}} | {{r2.serve_t}}\n" +
+          "ROW: Share of serves to the T | {{r1.serve_t_pct}} | {{r2.serve_t_pct}}\n" +
+          "Body.",
+      ],
+      COURTS,
+    );
+    expect(
+      (visualOf(events) as { rows: { label: string }[] }).rows.map(
+        (row) => row.label,
+      ),
+    ).toEqual(["Serves to the T", "Share of serves to the T"]);
+  });
+
   test("trend: one point per row with a value, dates shortened, nulls skipped", async () => {
     const { events } = await render(
       [

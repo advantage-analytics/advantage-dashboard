@@ -3,7 +3,12 @@ import Link from "next/link";
 import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import type { AskTrendVisual } from "@/lib/services/ask/events";
 import { TREND_BOX, trendGeometry } from "./visual-geometry";
-import { VisualFrame, VisualKey, VisualReadout } from "./visual-frame";
+import {
+  useSvgId,
+  VisualFrame,
+  VisualKey,
+  VisualReadout,
+} from "./visual-frame";
 
 const percent = (n: number, of: number) => `${(n / of) * 100}%`;
 
@@ -56,6 +61,14 @@ export function TrendVisual({
       baseline ? `; ${baseline.label} ${baseline.values[index].text}` : ""
     }`;
   const [hovered, setHovered] = useState<number | null>(null);
+  const areaId = useSvgId("ask-trend-area");
+  // The sparkline's wash: the line closed down to the plot's floor.
+  const floor = TREND_BOX.height - TREND_BOX.bottom;
+  const first = geometry.points[0];
+  const areaPath =
+    first && lastAt && geometry.path
+      ? `${geometry.path} L ${lastAt.x} ${floor} L ${first.x} ${floor} Z`
+      : null;
   const plotRef = useTouchReadout<HTMLDivElement>(hovered !== null, () =>
     setHovered(null),
   );
@@ -135,6 +148,20 @@ export function TrendVisual({
               viewBox={`0 0 ${TREND_BOX.width} ${TREND_BOX.height}`}
               className="pointer-events-none relative block w-full overflow-visible"
             >
+              <defs>
+                <linearGradient id={areaId} x1="0" y1="0" x2="0" y2="1">
+                  <stop
+                    offset="0%"
+                    stopColor="var(--viz-you)"
+                    stopOpacity={0.1}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor="var(--viz-you)"
+                    stopOpacity={0}
+                  />
+                </linearGradient>
+              </defs>
               {geometry.baseline ? (
                 <path
                   d={geometry.baseline.path}
@@ -157,6 +184,13 @@ export function TrendVisual({
                   vectorEffect="non-scaling-stroke"
                 />
               )}
+              {areaPath && (
+                <path
+                  data-ask-trend-area=""
+                  d={areaPath}
+                  fill={`url(#${areaId})`}
+                />
+              )}
               <path
                 d={geometry.path}
                 fill="none"
@@ -166,27 +200,58 @@ export function TrendVisual({
                 strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
               />
-              {geometry.points.map((point, index) => (
+              {/* A dot on the last point, and on the hovered one: the KPI
+                  sparkline's grammar, not a ring on every match. A point
+                  that opens its match keeps a small ring, though: it is a
+                  target, and a target nobody can see is one nobody finds,
+                  least of all on a phone with no hover. */}
+              {points.map((point, index) =>
+                point.matchId !== undefined &&
+                index !== last &&
+                geometry.points[index] ? (
+                  <circle
+                    key={index}
+                    data-ask-trend-ring=""
+                    cx={geometry.points[index].x}
+                    cy={geometry.points[index].y}
+                    r={2.5}
+                    fill="var(--surface-card)"
+                    stroke="var(--viz-you)"
+                    strokeWidth={1.5}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ) : null,
+              )}
+              {lastAt && (
                 <circle
-                  key={index}
-                  cx={point.x}
-                  cy={point.y}
-                  r={index === last ? 3.5 : 2.5}
-                  fill={
-                    index === last ? "var(--viz-you)" : "var(--surface-card)"
-                  }
-                  stroke="var(--viz-you)"
-                  strokeWidth={1.5}
+                  cx={lastAt.x}
+                  cy={lastAt.y}
+                  r={3.5}
+                  fill="var(--viz-you)"
                   vectorEffect="non-scaling-stroke"
                 />
-              ))}
+              )}
+              {hovered !== null &&
+                hovered !== last &&
+                geometry.points[hovered] && (
+                  <circle
+                    data-ask-trend-hovered=""
+                    cx={geometry.points[hovered].x}
+                    cy={geometry.points[hovered].y}
+                    r={3}
+                    fill="var(--viz-you)"
+                    stroke="var(--surface-card)"
+                    strokeWidth={1.5}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )}
             </svg>
             {lastAt && (
               <span
                 aria-hidden="true"
                 data-ask-trend-last=""
                 data-ask-after=""
-                className="pointer-events-none absolute -translate-y-1/2 pl-2.5 text-[11px] whitespace-nowrap text-[var(--ink-900)] tabular-nums"
+                className="pointer-events-none absolute -translate-y-1/2 pl-2.5 text-[11px] font-medium whitespace-nowrap text-[var(--ink-900)] tabular-nums"
                 style={
                   {
                     left: percent(lastAt.x, TREND_BOX.width),

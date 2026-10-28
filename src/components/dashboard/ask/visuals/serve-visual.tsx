@@ -28,8 +28,9 @@ const FILTER_ZONE: Record<ServeZoneKey, "T" | "Body" | "Wide"> = {
  * court, the Home card's recipe: 14px tall, 2px gaps, T, Body and Wide in
  * the three blue steps.
  *
- * Under each court either way, the three counts as the query returned them;
- * no total and no share, since neither is a cell of the result.
+ * Beside each court's label either way, right-aligned as the Home strip
+ * sets them, the three counts as the query returned them; no total and no
+ * share, since neither is a cell of the result.
  *
  * Over one source match, when the block says whose serves these are
  * (`server`), each drawn zone opens that match's film on that side's
@@ -66,8 +67,24 @@ export function ServeVisual({
           );
           return (
             <li key={index} className="flex flex-col gap-1.5">
-              <span className="text-[12px] text-[var(--ink-700)]">
-                {court.label}
+              <span className="flex items-baseline">
+                <span className="text-[12px] text-[var(--ink-600)]">
+                  {court.label}
+                </span>
+                <span
+                  data-ask-after=""
+                  style={{ "--ask-row": index + 2 } as CSSProperties}
+                  className="ml-auto flex gap-3.5 pl-4 text-[11px] text-[var(--ink-500)] tabular-nums"
+                >
+                  {SERVE_ZONES.map((zone) => (
+                    <span key={zone}>
+                      {ZONE_LABEL[zone]}{" "}
+                      <span className="text-[12px] text-[var(--ink-900)]">
+                        {court[zone].text}
+                      </span>
+                    </span>
+                  ))}
+                </span>
               </span>
               {!sides && (
                 <span aria-hidden="true" className="flex h-3.5 gap-0.5">
@@ -96,20 +113,6 @@ export function ServeVisual({
                   )}
                 </span>
               )}
-              <span
-                data-ask-after=""
-                style={{ "--ask-row": index + 2 } as CSSProperties}
-                className="flex gap-4 text-[11px] text-[var(--ink-500)] tabular-nums"
-              >
-                {SERVE_ZONES.map((zone) => (
-                  <span key={zone}>
-                    {ZONE_LABEL[zone]}{" "}
-                    <span className="text-[var(--ink-900)]">
-                      {court[zone].text}
-                    </span>
-                  </span>
-                ))}
-              </span>
             </li>
           );
         })}
