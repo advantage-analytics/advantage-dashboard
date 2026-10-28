@@ -8,6 +8,7 @@ import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
+import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { readGameScore } from "@/components/dashboard/matches/match-detail/film/film-score";
 import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
 import { isFingerPointer, useTouchReadout } from "@/hooks/use-touch-readout";
@@ -20,7 +21,9 @@ import { cn } from "@/lib/utils";
  *
  * A mirrored momentum area: the running won-point differential drawn from the
  * VIEWER's side of the match, filled `viz-you` above the midline and `viz-opp`
- * below. Breaks of serve are drawn as dashed verticals at the point that
+ * below. The differential starts over at 0 with each set, as the score does,
+ * so an early lead never props up how a later set went; every set shares one
+ * vertical scale, so a big set still reads bigger than a close one. Breaks of serve are drawn as dashed verticals at the point that
  * ended the game; set boundaries are fainter solid lines, named by the Set
  * labels underneath.
  *
@@ -73,7 +76,7 @@ interface ReadoutTarget {
 }
 
 interface Sample {
-  /** Points won by you minus points won by the opponent, after this point. */
+  /** Points won by you minus points won by the opponent in this set, after this point. */
   diff: number;
   setNumber: number;
 }
@@ -158,7 +161,13 @@ export function PerformanceTrackerChart() {
   const samples: Sample[] = useMemo(() => {
     const out: Sample[] = [];
     let diff = 0;
+    let setNumber: number | null = null;
     for (const p of points) {
+      // Each set starts level, as the score does.
+      if (p.setNumber !== setNumber) {
+        diff = 0;
+        setNumber = p.setNumber;
+      }
       diff += p.wonByPlayer1 === youIsPlayer1 ? 1 : -1;
       out.push({ diff, setNumber: p.setNumber });
     }
@@ -193,12 +202,23 @@ export function PerformanceTrackerChart() {
     const y = (diff: number) => MID - (diff / maxAbs) * (MID - Y_PAD);
 
     const coords = samples.map((s, i) => [x(i), y(s.diff)] as const);
-    const polyline = coords.map(([cx, cy]) => `${cx},${cy}`).join(" ");
+    // The drawn line returns to the midline on each set divider before the
+    // next set's first point, so a set restarts from level rather than
+    // diving across from where the last one ended. `coords` stays one entry
+    // per point: hover and the break lines index it.
+    const vertices: (readonly [number, number])[] = [];
+    coords.forEach((coord, i) => {
+      if (i > 0 && samples[i].setNumber !== samples[i - 1].setNumber) {
+        vertices.push([coord[0], MID]);
+      }
+      vertices.push(coord);
+    });
+    const polyline = vertices.map(([cx, cy]) => `${cx},${cy}`).join(" ");
     // Same vertex list closed back along the midline, so the fill sits between
     // the series and the line the clip paths split on.
     const area = [
       `M0,${MID}`,
-      ...coords.map(([cx, cy]) => `L${cx},${cy}`),
+      ...vertices.map(([cx, cy]) => `L${cx},${cy}`),
       `L${CHART_W},${MID}`,
       "Z",
     ].join(" ");
@@ -313,13 +333,13 @@ export function PerformanceTrackerChart() {
             ? "Break point"
             : `Point ${readoutPoint.pointNumber}`;
 
-  // Margin line: the current lead, oriented by `sides` (never player order),
+  // Margin line: the lead in this point's set, oriented by `sides` (never player order),
   // with the game score appended ONLY where the column is real (flags-doc #9) —
   // a derived match carries the coerced "0-0", which is not a score.
   const marginBase =
     readoutDiff === 0
       ? "Level"
-      : `${readoutDiff > 0 ? youName : oppName} +${Math.abs(readoutDiff)} on margin`;
+      : `${readoutDiff > 0 ? youName : oppName} +${Math.abs(readoutDiff)} in set ${readoutPoint?.setNumber ?? ""}`;
   // A point the score stream never read (`score_frozen`) has no game score:
   // the line stops at the margin rather than printing the coerced "0-0".
   const readoutGameScore = readoutPoint ? readGameScore(readoutPoint) : null;
@@ -383,19 +403,8 @@ export function PerformanceTrackerChart() {
         ref={chartRef}
         className="relative"
         role="figure"
-        aria-label={`Momentum across ${points.length} points. ${sides.you.name} above the midline, ${sides.opp.name} below.`}
+        aria-label={`Momentum across ${points.length} points, starting level each set. ${sides.you.name} above the midline, ${sides.opp.name} below.`}
       >
-        {/* Which half is the viewer's: the label sits on a plain card-colour
-            backing (not the `surface-card` class, which also adds a border
-            and shadow) so it stays legible over the area fill it sits on. */}
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 left-0 z-[2] bg-[var(--surface-card)] pr-1.5 text-[10px] whitespace-nowrap"
-          style={{ color: "var(--ink-400)" }}
-        >
-          {youName} above
-        </span>
-
         <svg
           ref={svgRef}
           viewBox={`0 0 ${CHART_W} ${CHART_H}`}
@@ -686,6 +695,13 @@ export function PerformanceTrackerChart() {
             </span>
           </div>
         ))}
+      </div>
+
+      {/* Which half is whose, as every chart card on the page keys it. The
+          figure's aria-label already says so, so this row is for sight. */}
+      <div className="flex items-center gap-3.5" aria-hidden="true">
+        <LegendSwatch color="var(--viz-you)" label={`${youName} ahead`} />
+        <LegendSwatch color="var(--viz-opp)" label={`${oppName} ahead`} />
       </div>
     </section>
   );
