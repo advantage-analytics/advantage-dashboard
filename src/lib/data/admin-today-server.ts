@@ -821,23 +821,28 @@ async function loadResolutions(
   db: AdminClient,
 ): Promise<Map<string, TodayResolution>> {
   const out = new Map<string, TodayResolution>();
-  const { data, error } = await db
-    .from("admin_resolutions")
-    .select("item_key, resolved_by, resolved_at, note")
-    .order("resolved_at", { ascending: false })
-    .limit(2000);
-  if (error) {
-    console.error("[admin today] resolutions read failed", {
-      error: error.message,
-    });
-    return out;
-  }
-  const rows = (data ?? []) as {
+  type Row = {
     item_key: string;
     resolved_by: string | null;
     resolved_at: string;
     note: string | null;
-  }[];
+  };
+  // Every row, paged: a cap here would quietly bring old resolutions back
+  // onto Today as waiting.
+  let rows: Row[];
+  try {
+    rows = await readAllPages<Row>(
+      db
+        .from("admin_resolutions")
+        .select("item_key, resolved_by, resolved_at, note")
+        .order("item_key")
+        .returns<Row[]>(),
+      "admin_resolutions read failed",
+    );
+  } catch (cause) {
+    console.error("[admin today] resolutions read failed", cause);
+    return out;
+  }
   const ids = [
     ...new Set(
       rows.flatMap((row) => (row.resolved_by ? [row.resolved_by] : [])),

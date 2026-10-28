@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
-import { reopenTodayItem, resolveTodayItem } from "@/app/admin/today-actions";
+import {
+  reopenTodayItem,
+  resolveTodayItem,
+  type ResolveResult,
+} from "@/app/admin/today-actions";
 import { AdminPage } from "@/components/admin/admin-page";
 import {
   AdminMatchCell,
@@ -67,7 +70,6 @@ export function TodayPageContent({
   freshCount: number;
   pipeline: TodayPipeline | null;
 }) {
-  const router = useRouter();
   const [view, setView] = useState<TodayView>("waiting");
   // Rows resolved or reopened here, hidden from the list they left until the
   // refresh that follows the write brings the server's answer.
@@ -197,6 +199,7 @@ export function TodayPageContent({
         .length,
   );
   const waitingCount = waiting.filter((i) => !moved.has(i.key)).length;
+  const resolvedCount = resolved.filter((i) => !moved.has(i.key)).length;
 
   // A server refresh settles every optimistic move; the list is the truth.
   const [settledFrom, setSettledFrom] = useState({ waiting, resolved });
@@ -205,46 +208,28 @@ export function TodayPageContent({
     setMoved(new Set());
   }
 
-  // The undo line goes away on its own after a while.
+  // The undo line and a failed write's message go away on their own.
   useEffect(() => {
-    if (!undo) return;
-    const timer = setTimeout(() => setUndo(null), 10_000);
-    return () => clearTimeout(timer);
-  }, [undo]);
-
-  const resolve = useCallback(
-    async (item: TodayItem, note: string | null) => {
-      setActionError(null);
-      setMoved((prev) => new Set(prev).add(item.key));
-      close(null);
-      const result = await resolveTodayItem(item.key, note).catch(() => ({
-        ok: false as const,
-        error: "Couldn’t resolve it. Try again.",
-      }));
-      if (!result.ok) {
-        setMoved((prev) => {
-          const next = new Set(prev);
-          next.delete(item.key);
-          return next;
-        });
-        setActionError(result.error);
-        return;
-      }
-      setUndo({ key: item.key, title: item.title });
-      router.refresh();
-    },
-    [close, router],
-  );
-
-  const reopen = useCallback(
-    async (key: string) => {
-      setActionError(null);
+    if (!undo && !actionError) return;
+    const timer = setTimeout(() => {
       setUndo(null);
+      setActionError(null);
+    }, 10_000);
+    return () => clearTimeout(timer);
+  }, [undo, actionError]);
+
+  // Hide the row at once, run the write, and put it back if the write fails.
+  const moveRow = useCallback(
+    async (
+      key: string,
+      write: () => Promise<ResolveResult>,
+      failure: string,
+    ): Promise<boolean> => {
+      setActionError(null);
       setMoved((prev) => new Set(prev).add(key));
-      if (drawerKey === key) close(null);
-      const result = await reopenTodayItem(key).catch(() => ({
-        ok: false as const,
-        error: "Couldn’t reopen it. Try again.",
+      const result = await write().catch((): ResolveResult => ({
+        ok: false,
+        error: failure,
       }));
       if (!result.ok) {
         setMoved((prev) => {
@@ -253,11 +238,39 @@ export function TodayPageContent({
           return next;
         });
         setActionError(result.error);
-        return;
+        return false;
       }
-      router.refresh();
+      // No router.refresh(): the action's revalidatePath("/admin") already
+      // re-renders this route in its own response.
+      return true;
     },
-    [close, drawerKey, router],
+    [],
+  );
+
+  const resolve = useCallback(
+    async (item: TodayItem, note: string | null) => {
+      close(null);
+      const ok = await moveRow(
+        item.key,
+        () => resolveTodayItem(item.key, note),
+        "Couldn’t resolve it. Try again.",
+      );
+      if (ok) setUndo({ key: item.key, title: item.title });
+    },
+    [close, moveRow],
+  );
+
+  const reopen = useCallback(
+    async (key: string) => {
+      setUndo(null);
+      if (drawerKey === key) close(null);
+      await moveRow(
+        key,
+        () => reopenTodayItem(key),
+        "Couldn’t reopen it. Try again.",
+      );
+    },
+    [close, drawerKey, moveRow],
   );
 
   return (
@@ -298,21 +311,24 @@ export function TodayPageContent({
               {
                 value: "resolved",
                 label: "Resolved",
-                count: resolved.filter((i) => !moved.has(i.key)).length,
+                count: resolvedCount,
               },
             ]}
           />
         </div>
       ) : null}
 
-      {undo || actionError ? (
+      {actionError ? (
+        <p role="alert" className="mt-4 text-[12px] text-[var(--danger)]">
+          {actionError}
+        </p>
+      ) : null}
+      {undo && !actionError ? (
         <p
           role="status"
           className="mt-4 flex flex-wrap items-center gap-x-2.5 text-[12px] text-[var(--ink-700)]"
         >
-          {actionError ? (
-            <span className="text-[var(--danger)]">{actionError}</span>
-          ) : undo ? (
+          {undo ? (
             <>
               <span className="min-w-0 truncate">Resolved “{undo.title}”.</span>
               <button

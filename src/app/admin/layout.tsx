@@ -1,4 +1,5 @@
 import { AdminHeader } from "@/components/admin/admin-header";
+import { AdminScrollRoot } from "@/components/admin/admin-scroll-root";
 import { loadAdminNav } from "@/lib/data/admin-nav-server";
 import { getInitials } from "@/lib/data/match-utils";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
@@ -69,20 +70,16 @@ export default async function AdminLayout({
 
   return (
     // One white surface, per the Admin Console canvas — `--surface-page` is
-    // for inset wells, not the page.
-    //
-    // The console scrolls inside this box, not on the document. `globals.css`
-    // gives html and body `overflow-x: hidden`, which makes body a scroll
-    // container that never scrolls — so anything `position: sticky` (the
-    // header, and every page's peek-drawer rail at `top-11`) stuck to a box
-    // that never moved and scrolled away with the page. A viewport-tall
-    // scroller of our own is what they stick to now.
-    <div className="flex h-dvh flex-col overflow-x-hidden overflow-y-auto bg-[var(--surface-card)]">
+    // for inset wells, not the page. The console scrolls inside
+    // `AdminScrollRoot`, not on the document, so the sticky header and every
+    // peek-drawer rail stay put — see that file for why, and for how it keeps
+    // Back/Forward scroll positions.
+    <AdminScrollRoot className="flex flex-col overflow-x-hidden bg-[var(--surface-card)]">
       <AdminHeader nav={nav} viewer={viewer} />
       {/* No padding or max-width here: each page renders its own `AdminPage`
           column, so the Requests page can seat its peek drawer beside that
           column, flush to the viewport's right edge — see admin-page.tsx. */}
       <div className="flex flex-1 items-stretch">{children}</div>
-    </div>
+    </AdminScrollRoot>
   );
 }
