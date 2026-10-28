@@ -1,50 +1,79 @@
 "use client";
 
+import { markAdminRowSeen } from "@/app/admin/seen-actions";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, UserRound, X } from "lucide-react";
+import {
+  Clock,
+  MoreHorizontal,
+  Plus,
+  UserMinus,
+  UserRound,
+} from "lucide-react";
 import { AdminPage } from "@/components/admin/admin-page";
-import { Field } from "@/components/admin/create-team-dialog";
+import { AdminPersonCell, TwoLineDate } from "@/components/admin/admin-cells";
+import { AddPilotDialog } from "@/components/admin/pilots/add-pilot-dialog";
+import { SetHoursDialog } from "@/components/admin/pilots/set-hours-dialog";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { DialogProblem } from "@/components/ui/dialog-problem";
-import { PersonAvatar } from "@/components/ui/person-avatar";
-import type { AdminPilotRow } from "@/lib/data/admin-pilots-view";
-import { formatHoursShort } from "@/lib/data/usage-format";
-import {
-  addIndividualPilot,
-  removeIndividualPilot,
-} from "@/lib/services/programs/admin-pilot-actions";
-import {
-  PILOT_INDIVIDUAL_MAX_PLAYERS,
-  PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS,
-} from "@/lib/services/splitstep/config";
+  capLabel,
+  formatCapHours,
+  pilotPlacesLabel,
+  pilotUsageState,
+  type AdminPilotRow,
+  type PilotUsageState,
+} from "@/lib/data/admin-pilots-view";
+import { formatHoursShort, usageFraction } from "@/lib/data/usage-format";
+import { removeIndividualPilot } from "@/lib/services/programs/admin-pilot-actions";
+import { PILOT_INDIVIDUAL_MAX_PLAYERS } from "@/lib/services/splitstep/config";
 import { advButton } from "@/lib/ui/adv-button";
-import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
 
 /**
- * Admin › Pilots.
+ * Admin › Pilots (board Pilots2).
  *
- * One list and two writes: "Add pilot" (by the email of an existing account)
- * and a row's "Remove". Rows open nothing — there is no more to a pilot than
- * the row says — so they are plain rows with one trailing text action, not
- * container rows with a drawer.
+ * One list — Player · This month · Matches · Added — and three writes: Add
+ * pilot, Set hours (any account, from the header or a row) and Remove. Rows
+ * open nothing: there is no more to a pilot than the row says, so the two
+ * row writes sit in a `⋯` menu revealed on hover / focus-within (table law 5)
+ * rather than a drawer.
  */
 
 const COL = {
   player: "min-w-0 flex-1",
-  used: "w-[120px] shrink-0 text-right",
-  action: "w-[72px] shrink-0 text-right",
+  month: "w-[240px] shrink-0",
+  matches: "w-[64px] shrink-0",
+  joined: "w-[92px] shrink-0",
+  action: "w-[28px] shrink-0",
 } as const;
 
 const ROW = "flex items-center gap-4";
+
+const COLUMNS: readonly { label: string; col: string }[] = [
+  { label: "Player", col: COL.player },
+  { label: "This month", col: COL.month },
+  { label: "Matches", col: COL.matches },
+  { label: "Added", col: COL.joined },
+];
+
+const MENU_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
+const DESTRUCTIVE_ROW =
+  "group hover:[&>span:last-child>span:first-child]:text-[var(--danger)] focus-visible:[&>span:last-child>span:first-child]:text-[var(--danger)]";
+const DESTRUCTIVE_ICON =
+  "group-hover:text-[var(--danger)] group-focus-visible:text-[var(--danger)]";
+
+/** Severity → the meter's fill, the same three the Settings meters use. */
+const FILL: Record<PilotUsageState, string> = {
+  ok: "var(--blue)",
+  low: "var(--viz-key)",
+  spent: "var(--danger)",
+  unlimited: "var(--blue)",
+};
+
+type SetHoursTarget = { email: string } | null;
 
 export function PilotsPageContent({
   rows,
@@ -53,20 +82,32 @@ export function PilotsPageContent({
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
+  const [settingHours, setSettingHours] = useState<SetHoursTarget>(null);
   const [removing, setRemoving] = useState<AdminPilotRow | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [removePending, startRemoving] = useTransition();
 
   const full = rows.length >= PILOT_INDIVIDUAL_MAX_PLAYERS;
-  const summary = `${rows.length} of ${PILOT_INDIVIDUAL_MAX_PLAYERS} players · ${PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS} h each a month, personal workspace only`;
 
   return (
-    <AdminPage className="gap-4">
-      <div className="flex items-end gap-2.5">
-        <div className="flex min-w-0 flex-1 items-baseline gap-4">
+    <AdminPage>
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+        <div className="min-w-0 flex-1">
           <h1 className="text-display">Pilots</h1>
-          <p className="text-body-sm truncate tabular-nums">{summary}</p>
+          <p className="text-body-sm mt-[9px] tabular-nums">
+            {pilotPlacesLabel(rows.length)} · personal workspace only
+          </p>
         </div>
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={settingHours !== null}
+          className={advButton("outline", "md")}
+          onClick={() => setSettingHours({ email: "" })}
+        >
+          <Clock className="size-3.5" strokeWidth={1.5} aria-hidden />
+          Set hours
+        </button>
         <button
           type="button"
           aria-haspopup="dialog"
@@ -80,16 +121,19 @@ export function PilotsPageContent({
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-        <div className="min-w-[520px] px-6 pt-0.5 pb-1.5">
+      <div className="mt-5 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
+        <div className="min-w-[680px] px-6 pt-0.5 pb-1.5">
           <div
             className={cn(
               ROW,
               "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
             )}
           >
-            <span className={cn(COL.player, "eyebrow-sm")}>Player</span>
-            <span className={cn(COL.used, "eyebrow-sm")}>This month</span>
+            {COLUMNS.map((column) => (
+              <span key={column.label} className={cn(column.col, "eyebrow-sm")}>
+                {column.label}
+              </span>
+            ))}
             <span className={COL.action} aria-hidden />
           </div>
 
@@ -101,63 +145,27 @@ export function PilotsPageContent({
             />
           ) : (
             rows.map((row) => (
-              <div
+              <PilotRow
                 key={row.id}
-                className={cn(
-                  ROW,
-                  "h-[52px] border-b border-[var(--border-hairline)] last:border-b-0",
-                )}
-              >
-                <span className={cn(COL.player, "flex items-center gap-3")}>
-                  <PersonAvatar
-                    initials={row.initials}
-                    photoUrl={row.avatarUrl}
-                    className="size-[28px] text-[10px]"
-                  />
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-                      {row.name}
-                    </span>
-                    <span className="truncate text-[11px] text-[var(--ink-500)]">
-                      {row.email}
-                    </span>
-                  </span>
-                </span>
-                <span
-                  className={cn(
-                    COL.used,
-                    "text-[12px] tabular-nums",
-                    row.usedSeconds === 0
-                      ? "text-[var(--ink-600)]"
-                      : "text-[var(--ink-700)]",
-                  )}
-                >
-                  {formatHoursShort(row.usedSeconds)} of{" "}
-                  {PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS} h
-                  {row.creditSeconds > 0
-                    ? ` + ${formatHoursShort(row.creditSeconds)} h credits`
-                    : ""}
-                </span>
-                <span className={COL.action}>
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-[var(--radius-element)] text-[12px] text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-                    aria-label={`Remove ${row.name} from the pilot`}
-                    onClick={() => {
-                      setRemoveError(null);
-                      setRemoving(row);
-                    }}
-                  >
-                    Remove
-                  </button>
-                </span>
-              </div>
+                row={row}
+                onSetHours={() => setSettingHours({ email: row.email })}
+                onRemove={() => {
+                  setRemoveError(null);
+                  setRemoving(row);
+                }}
+              />
             ))
           )}
         </div>
       </div>
 
-      <AddPilotDialog open={adding} onOpenChange={setAdding} />
+      {adding ? <AddPilotDialog onClose={() => setAdding(false)} /> : null}
+      {settingHours ? (
+        <SetHoursDialog
+          initialEmail={settingHours.email}
+          onClose={() => setSettingHours(null)}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={removing !== null}
@@ -169,7 +177,11 @@ export function PilotsPageContent({
         title={
           removing ? `Remove ${removing.name} from the pilot?` : "Remove pilot?"
         }
-        description="Their personal workspace goes back to the standard individual allowance from now on. Video they already sent this month still counts."
+        description={
+          removing?.overrideHours != null
+            ? `They keep the ${formatCapHours(removing.overrideHours * 3600)} h a month an admin set until you clear it with Set hours. Video they already sent this month still counts.`
+            : "Their personal workspace goes back to the standard individual allowance from now on. Video they already sent this month still counts."
+        }
         confirmLabel="Remove pilot"
         pendingLabel="Removing…"
         tone="danger"
@@ -194,120 +206,197 @@ export function PilotsPageContent({
   );
 }
 
-function AddPilotDialog({
-  open,
-  onOpenChange,
+function PilotRow({
+  row,
+  onSetHours,
+  onRemove,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  row: AdminPilotRow;
+  onSetHours: () => void;
+  onRemove: () => void;
 }) {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
-  const [pending, startAdding] = useTransition();
-
-  // Everything resets on close: reopening is a new player.
-  const close = (next: boolean) => {
-    if (!next && pending) return;
-    onOpenChange(next);
-    if (!next) {
-      setEmail("");
-      setProblem(null);
-    }
-  };
-
-  const ready = email.trim().includes("@");
-
-  const submit = () => {
-    if (!ready) return;
-    setProblem(null);
-    startAdding(async () => {
-      const result = await addIndividualPilot(email);
-      if (!result.ok) {
-        setProblem(result.error);
-        return;
-      }
-      onOpenChange(false);
-      setEmail("");
-      router.refresh();
-    });
-  };
-
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <Dialog open={open} onOpenChange={close}>
-      <DialogContent
-        hideCloseButton
-        className="gap-0 border-0 bg-[var(--surface-card)] p-0 sm:max-w-none"
-        style={{
-          width: "440px",
-          maxWidth: "calc(100vw - 32px)",
-          borderRadius: "var(--radius-card)",
-          boxShadow: "var(--shadow-dropdown)",
-        }}
+    <div
+      className={cn(
+        ROW,
+        "group/row -mx-4 h-[52px] rounded-[var(--radius-element)] px-4",
+        "transition-colors duration-200 focus-within:bg-[var(--surface-muted)] hover:bg-[var(--surface-muted)]",
+      )}
+    >
+      <span className={COL.player}>
+        <AdminPersonCell
+          name={row.name}
+          photoUrl={row.avatarUrl}
+          fresh={row.fresh}
+          sub={<span className="truncate">{row.email}</span>}
+        />
+      </span>
+
+      <span className={COL.month}>
+        <MonthCell row={row} />
+      </span>
+
+      <span
+        className={cn(
+          COL.matches,
+          "text-[13px] tabular-nums",
+          row.matchCount > 0
+            ? "text-[var(--ink-700)]"
+            : "text-[var(--ink-400)]",
+        )}
       >
-        <form
-          className="flex flex-col gap-[18px] p-6 pb-5"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit();
-          }}
+        {row.matchCount}
+      </span>
+
+      <span className={COL.joined}>
+        <TwoLineDate at={row.addedAt} fresh={row.fresh} />
+      </span>
+
+      <span
+        className={cn(
+          COL.action,
+          "flex justify-end opacity-0 transition-opacity duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
+          menuOpen && "opacity-100",
+        )}
+      >
+        <ChromeTooltip label="Pilot actions" hidden={menuOpen}>
+          <span className="inline-flex">
+            <FloatMenu
+              open={menuOpen}
+              onOpenChange={(next) => {
+                setMenuOpen(next);
+                // Pilot rows have no side panel; opening the row's menu is
+                // the open that clears its New dot.
+                if (next && row.fresh) {
+                  void markAdminRowSeen("pilots", `pilot:${row.id}`);
+                }
+              }}
+              width={232}
+              align="end"
+              label={`Actions for ${row.name}`}
+              trigger={
+                <button
+                  type="button"
+                  aria-label={`Actions for ${row.name}`}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  className="flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                >
+                  <MoreHorizontal
+                    className="size-3.5"
+                    strokeWidth={1.75}
+                    aria-hidden
+                  />
+                </button>
+              }
+            >
+              <FloatMenuItem
+                label="Set hours…"
+                description={
+                  row.overrideHours != null
+                    ? `Now ${capLabel(row.capSeconds)}, set by admin.`
+                    : `Now ${capLabel(row.capSeconds)}, the pilot's figure.`
+                }
+                icon={
+                  <Clock className={MENU_ICON} strokeWidth={1.5} aria-hidden />
+                }
+                onSelect={() => {
+                  setMenuOpen(false);
+                  onSetHours();
+                }}
+              />
+              <FloatMenuItem
+                label="Remove from pilot"
+                icon={
+                  <UserMinus
+                    className={cn(MENU_ICON, DESTRUCTIVE_ICON)}
+                    strokeWidth={1.5}
+                    aria-hidden
+                  />
+                }
+                className={DESTRUCTIVE_ROW}
+                onSelect={() => {
+                  setMenuOpen(false);
+                  onRemove();
+                }}
+              />
+            </FloatMenu>
+          </span>
+        </ChromeTooltip>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * "6.2 of 14 h" over a 3px meter. The word beside the figure carries the
+ * severity ("Running low", "Used up") so the colour never speaks alone; an
+ * admin-set allowance says so on the figure ("of 14 h · set by admin").
+ */
+function MonthCell({ row }: { row: AdminPilotRow }) {
+  const state = pilotUsageState(row.usedSeconds, row.capSeconds);
+  const used = formatHoursShort(row.usedSeconds);
+  const figure =
+    state === "unlimited"
+      ? `${used} h · unlimited`
+      : `${used} of ${capLabel(row.capSeconds)}`;
+  const word =
+    state === "spent" ? "Used up" : state === "low" ? "Running low" : null;
+  const loud = word !== null;
+  // Credit-paid video is billed beyond the free figure, so it is said apart
+  // from it rather than folded into "of 14 h".
+  const credits =
+    row.creditSeconds > 0
+      ? `+${formatHoursShort(row.creditSeconds)} h credits`
+      : null;
+  return (
+    <span className="flex w-full min-w-0 flex-col gap-1.5">
+      <span
+        className={cn(
+          "flex items-baseline justify-between gap-2 text-[12px] whitespace-nowrap tabular-nums",
+          loud ? "font-medium text-[var(--ink-900)]" : "text-[var(--ink-700)]",
+        )}
+      >
+        <span className="min-w-0 truncate">
+          {figure}
+          {row.overrideHours != null ? (
+            <span className="font-normal text-[var(--ink-500)]">
+              {" "}
+              · set by admin
+            </span>
+          ) : null}
+        </span>
+        {word || credits ? (
+          <span className="shrink-0">
+            {word}
+            {credits ? (
+              <span className="font-normal text-[var(--ink-500)]">
+                {word ? " · " : ""}
+                {credits}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
+      </span>
+      {state === "unlimited" ? null : (
+        <span
+          role="meter"
+          aria-label={`${row.name}'s video this month`}
+          aria-valuemin={0}
+          aria-valuemax={row.capSeconds}
+          aria-valuenow={Math.min(row.usedSeconds, row.capSeconds)}
+          className="block h-[3px] overflow-hidden rounded-full bg-[var(--ink-100)]"
         >
-          <div className="flex items-start gap-2.5">
-            <div className="flex-1">
-              <DialogTitle className="text-left text-[16px] font-medium text-[var(--ink-900)]">
-                Add a pilot individual
-              </DialogTitle>
-              <DialogDescription className="mt-1 text-left text-[12px] leading-[1.55] text-[var(--ink-600)]">
-                Their personal workspace gets{" "}
-                {PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS} hours of video a month.
-                They need an Advantage account first.
-              </DialogDescription>
-            </div>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={() => close(false)}
-              className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              <X className="size-3.5" strokeWidth={1.5} aria-hidden />
-            </button>
-          </div>
-
-          <Field label="Account email">
-            <input
-              type="email"
-              value={email}
-              placeholder="player@example.com"
-              autoComplete="off"
-              spellCheck={false}
-              data-focus-ring="none"
-              onChange={(event) => setEmail(event.target.value)}
-              className={cn(advField("underline"), "w-full outline-none")}
-            />
-          </Field>
-
-          <DialogProblem message={problem} />
-
-          <div className="flex items-center gap-2.5 pt-0.5">
-            <div className="flex-1" />
-            <button
-              type="button"
-              className={advButton("ghost", "md")}
-              onClick={() => close(false)}
-              disabled={pending}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={advButton("primary", "md")}
-              disabled={!ready || pending}
-            >
-              {pending ? "Adding…" : "Add pilot"}
-            </button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+          <span
+            className="block h-full rounded-full"
+            style={{
+              width: `${(row.capSeconds <= 0 ? 1 : usageFraction(row.usedSeconds, row.capSeconds)) * 100}%`,
+              background: FILL[state],
+            }}
+          />
+        </span>
+      )}
+    </span>
   );
 }

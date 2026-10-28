@@ -107,6 +107,9 @@ export function quotaTierFor(
  * (`Workspace.individualPilot`); every other workspace — including a team the
  * pilot belongs to — is unchanged.
  *
+ * An admin-set allowance (`Workspace.videoHoursOverride`) replaces all of the
+ * personal figures below.
+ *
  * An admin's PERSONAL workspace (`Workspace.unlimitedVideo`) has no cap at
  * all: `UNLIMITED_CAP_SECONDS`, which the reserve RPCs never reach, so free
  * hours cover every upload and credits are never spent. A team the admin
@@ -115,9 +118,24 @@ export function quotaTierFor(
 export function monthlyCapSecondsFor(
   workspace: Pick<
     Workspace,
-    "kind" | "orgType" | "individualPilot" | "pilotEligible" | "unlimitedVideo"
+    | "kind"
+    | "orgType"
+    | "individualPilot"
+    | "pilotEligible"
+    | "unlimitedVideo"
+    | "videoHoursOverride"
   >,
 ): number {
+  // An admin-set allowance wins over every other personal figure — the
+  // database (`reserve_personal_quota`) applies the same rule, so the meter
+  // and the refusal always name one number.
+  if (
+    workspace.kind === "personal" &&
+    workspace.videoHoursOverride != null &&
+    Number.isFinite(workspace.videoHoursOverride)
+  ) {
+    return Math.round(workspace.videoHoursOverride * 3600);
+  }
   if (workspace.kind === "personal" && workspace.unlimitedVideo) {
     return UNLIMITED_CAP_SECONDS;
   }

@@ -1070,7 +1070,7 @@ async function resolveAutoRetryWorkspace(params: {
     // admin's stays uncapped.
     const { data: owner, error: ownerError } = await supabase
       .from("users")
-      .select("individual_pilot, is_admin")
+      .select("individual_pilot, is_admin, video_hours_override")
       .eq("id", userId)
       .maybeSingle();
     if (ownerError) return null;
@@ -1086,6 +1086,10 @@ async function resolveAutoRetryWorkspace(params: {
       canSubmitVideo: true,
       individualPilot: owner?.individual_pilot === true,
       unlimitedVideo: owner?.is_admin === true,
+      videoHoursOverride:
+        owner?.video_hours_override == null
+          ? null
+          : Number(owner.video_hours_override),
       programStatus: null,
       playersCanUpload: false,
       uploadPolicy: "everyone",
