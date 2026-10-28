@@ -12,6 +12,8 @@ import {
 } from "@/lib/data/programs-server";
 import { crestUrl } from "@/lib/data/teams-server";
 import { pgQuoteValue } from "@/lib/data/postgrest-filter";
+import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
+import { loadNavSeen, type SeenState } from "@/lib/admin/seen-server";
 
 /**
  * The Admin › Teams list — every program in the directory (~1,940 rows),
@@ -62,6 +64,10 @@ export interface AdminTeamsFacets {
   divisions: string[];
   conferences: string[];
   states: string[];
+  /** Programs per raw division value, over the whole directory. */
+  divisionCounts: Record<string, number>;
+  /** Programs per `programs.conference` text, over the whole directory. */
+  conferenceCounts: Record<string, number>;
 }
 
 export interface AdminTeamsQuery {
@@ -91,6 +97,16 @@ export interface AdminTeamRow {
   crestUrl: string | null;
   memberCount: number;
   ownerName: string | null;
+  /** Public URL of the owner's photo, or null for initials. */
+  ownerPhotoUrl: string | null;
+  /**
+   * `programs.claimed_at` — when the program came onto Advantage. Not
+   * `created_at`: claimed directory programs were seeded in August, so their
+   * `created_at` is the seed date, while `claimed_at` is the claim (or, for a
+   * program created already active, equal to `created_at`). Null for a
+   * program nobody has claimed.
+   */
+  claimedAt: string | null;
   /**
    * `'pilot'` — status is `active` (this repo's MVP definition: an active
    * program, whichever route got it there, IS the pilot; see the design note
@@ -188,6 +204,7 @@ interface RawClaim {
 interface RawOwner {
   first_name: string | null;
   last_name: string | null;
+  avatar_path: string | null;
 }
 
 interface RawMemberCount {
@@ -204,6 +221,7 @@ interface RawProgramRow {
   state: string | null;
   status: string;
   crest_path: string | null;
+  claimed_at: string | null;
   // A to-one embed (the FK lives on `programs`) comes back as an object or
   // null; defensive-coded as possibly-an-array too, since that is how the
   // to-many embeds below come back and a schema change could turn this into
@@ -223,7 +241,8 @@ const PROGRAMS_SELECT = `
   state,
   status,
   crest_path,
-  owner:users!programs_owner_user_id_fkey(first_name,last_name),
+  claimed_at,
+  owner:users!programs_owner_user_id_fkey(first_name,last_name,avatar_path),
   program_claims(id,status,claimant_name,claimed_email,created_at),
   program_members(count)
 `;
@@ -266,6 +285,7 @@ function toAdminTeamRow(
   row: RawProgramRow,
   crestUrlValue: string | null,
   openRequestCount: number,
+  avatarUrl: (path: string) => string,
 ): AdminTeamRow {
   const owner = ownerOf(row.owner);
   const claim = latestClaim(row.program_claims);
@@ -283,6 +303,8 @@ function toAdminTeamRow(
     crestUrl: crestUrlValue,
     memberCount: memberCountOf(row.program_members),
     ownerName: owner ? displayName(owner.first_name, owner.last_name) : null,
+    ownerPhotoUrl: owner?.avatar_path ? avatarUrl(owner.avatar_path) : null,
+    claimedAt: row.claimed_at,
     // "pilot" wins over "approve": once a program is active, the claim that
     // got it there is settled history, not a decision still pending. See
     // `programStatusFor` in claim-state.ts — `active` only ever comes from
@@ -522,8 +544,15 @@ export async function listAdminTeams({
     ),
   ]);
 
+  const avatars = admin.storage.from(USER_AVATARS_BUCKET);
+  const avatarUrl = (path: string) => avatars.getPublicUrl(path).data.publicUrl;
   const rows = page.map((row, index) =>
-    toAdminTeamRow(row, crestUrls[index], openRequestCounts.get(row.id) ?? 0),
+    toAdminTeamRow(
+      row,
+      crestUrls[index],
+      openRequestCounts.get(row.id) ?? 0,
+      avatarUrl,
+    ),
   );
 
   const last = page[page.length - 1];
@@ -572,7 +601,7 @@ export const listAdminTeamFacets = cache(
 
     const [programsResult, conferencesResult, unlinkedResult] =
       await Promise.all([
-        admin.from("programs").select("state"),
+        admin.from("programs").select("state, division, conference"),
         admin.from("conferences").select("label"),
         // Conference text on programs with no `conference_id` — see the doc
         // comment's Conferences bullet. A handful of rows, so no paging.
@@ -596,14 +625,31 @@ export const listAdminTeamFacets = cache(
       console.error("[admin teams] could not read facet values", {
         error: facetError.message,
       });
-      return { divisions: [], conferences: [], states: [] };
+      return {
+        divisions: [],
+        conferences: [],
+        states: [],
+        divisionCounts: {},
+        conferenceCounts: {},
+      };
     }
 
     const states = new Set<string>();
+    const divisionCounts: Record<string, number> = {};
+    const conferenceCounts: Record<string, number> = {};
     for (const row of (programsResult.data ?? []) as {
       state: string | null;
+      division: string | null;
+      conference: string | null;
     }[]) {
       if (row.state) states.add(row.state);
+      if (row.division) {
+        divisionCounts[row.division] = (divisionCounts[row.division] ?? 0) + 1;
+      }
+      if (row.conference) {
+        conferenceCounts[row.conference] =
+          (conferenceCounts[row.conference] ?? 0) + 1;
+      }
     }
 
     // The query already excludes null conference text.
@@ -620,6 +666,100 @@ export const listAdminTeamFacets = cache(
       divisions,
       conferences: [...conferences].sort((a, b) => a.localeCompare(b)),
       states: [...states].sort((a, b) => a.localeCompare(b)),
+      divisionCounts,
+      conferenceCounts,
     };
   },
 );
+
+// ---------------------------------------------------------------------------
+// View counts (Teams2's "On Advantage · 4" pills)
+// ---------------------------------------------------------------------------
+
+/**
+ * How many programs each view holds under the current division / conference /
+ * state cut — the number printed in each view pill, so a pill says what
+ * pressing it would show. Head counts only; `needs_review` resolves its id set
+ * the way `listAdminTeams` does. A failed count is null, which the pill prints
+ * as no number rather than a wrong one.
+ */
+export async function countAdminTeamViews(
+  filters: AdminTeamsFilters = {},
+): Promise<Record<AdminTeamsView, number | null>> {
+  await requireAdminOrNotFound();
+  const admin = createAdminClient();
+
+  const base = () => {
+    let query = admin
+      .from("programs")
+      .select("id", { count: "exact", head: true });
+    if (filters.division) query = query.eq("division", filters.division);
+    if (filters.conference) query = query.eq("conference", filters.conference);
+    if (filters.state) query = query.eq("state", filters.state);
+    return query;
+  };
+  const counted = async (
+    query: PromiseLike<{ count: number | null; error: unknown }>,
+  ): Promise<number | null> => {
+    const { count, error } = await query;
+    return error ? null : (count ?? 0);
+  };
+
+  const [claimIds, requestIds] = await Promise.all([
+    reviewClaimProgramIds(admin),
+    openRequestProgramIds(admin),
+  ]);
+  const reviewIds = [...new Set([...claimIds, ...requestIds])];
+
+  const [onAdvantage, inPilot, all, needsReview] = await Promise.all([
+    counted(base().in("status", ["active", "claim_pending"])),
+    counted(base().eq("status", "active")),
+    counted(base()),
+    reviewIds.length === 0
+      ? Promise.resolve(0)
+      : counted(base().in("id", reviewIds)),
+  ]);
+
+  return {
+    on_advantage: onAdvantage,
+    in_pilot: inPilot,
+    needs_review: needsReview,
+    all,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// New since you last looked
+// ---------------------------------------------------------------------------
+
+/**
+ * Programs that came onto Advantage (`claimed_at`) after `seen.since` and that
+ * this admin has not opened since — the Teams page's "N joined since you last
+ * looked". Service role; callers sit behind the admin gate already. A failed
+ * read counts 0: never fail a page over a dot.
+ */
+export async function countTeamsJoinedSince(seen: SeenState): Promise<number> {
+  const { data, error } = await createAdminClient()
+    .from("programs")
+    .select("id")
+    .gt("claimed_at", seen.since);
+  if (error) {
+    console.error("[admin teams] could not count new teams", {
+      error: error.message,
+    });
+    return 0;
+  }
+  return ((data ?? []) as { id: string }[]).filter(
+    (row) => !seen.opened.has(row.id),
+  ).length;
+}
+
+/**
+ * The nav's Teams count: programs that joined since this admin's latest look
+ * at the Teams page, minus the ones they have opened. Keyed on program id —
+ * the same key the Teams page marks seen when a row is opened.
+ */
+export async function countNewTeamsForNav(adminId: string): Promise<number> {
+  const seen = await loadNavSeen(adminId);
+  return countTeamsJoinedSince(seen.teams);
+}

@@ -1,17 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
 import { GalleryHorizontalEnd } from "lucide-react";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { PilotPill } from "@/components/admin/plan-pills";
 import { ApproveChip } from "@/components/admin/approve-chip";
 import {
+  AdminAvatar,
+  NewDot,
+  NewLabel,
+  RowChevron,
+} from "@/components/admin/admin-cells";
+import {
   TableEmptyBody,
   type TableEmptyAction,
 } from "@/components/dashboard/shared/table-empty-body";
-import { teamLabel } from "@/lib/workspace/types";
 import { cn } from "@/lib/utils";
 import type { AdminTeamRow } from "@/lib/data/admin-teams-server";
 import { COL, ROW, TEAMS_COLUMNS } from "@/components/admin/teams-table-layout";
@@ -44,6 +48,8 @@ export function TeamsTable({
   emptyTitle = "No teams match this view",
   emptyAction,
   onApprove,
+  freshIds,
+  onOpenRow,
 }: {
   rows: readonly AdminTeamRow[];
   /** Named cut for the empty state — see `TableEmptyBody`. */
@@ -51,10 +57,14 @@ export function TeamsTable({
   emptyAction?: TableEmptyAction;
   /** Called with the row after its `ApproveChip` is clicked. No-op if omitted. */
   onApprove?: (row: AdminTeamRow) => void;
+  /** Rows New since this admin last looked — the 7px dot and "New". */
+  freshIds?: ReadonlySet<string>;
+  /** The row's link was followed (not the Approve chip). */
+  onOpenRow?: (row: AdminTeamRow) => void;
 }) {
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[820px] px-6 pt-0.5 pb-1.5">
+      <div className="min-w-[960px] px-6 pt-0.5 pb-1.5">
         <div
           className={cn(
             ROW,
@@ -75,7 +85,7 @@ export function TeamsTable({
           ))}
           {/* The chevron's column. No label — it names nothing, it is the
               row's own affordance (Data Table law 3). */}
-          <span className="w-4 shrink-0" aria-hidden="true" />
+          <span className={COL.chevron} aria-hidden="true" />
         </div>
 
         {rows.length === 0 ? (
@@ -86,7 +96,13 @@ export function TeamsTable({
           />
         ) : (
           rows.map((row) => (
-            <TeamRow key={row.id} row={row} onApprove={onApprove} />
+            <TeamRow
+              key={row.id}
+              row={row}
+              fresh={freshIds?.has(row.id) ?? false}
+              onApprove={onApprove}
+              onOpen={onOpenRow}
+            />
           ))
         )}
       </div>
@@ -94,18 +110,52 @@ export function TeamsTable({
   );
 }
 
+/**
+ * "Oct 21" / "Oct 21, 2025" outside this year, in UTC so the server and the
+ * browser print the same day. `claimed_at` is a moment; a day is all the line
+ * needs, and a UTC day keeps hydration stable.
+ */
+function sinceLabel(at: string): string {
+  const date = new Date(at);
+  const sameYear = date.getUTCFullYear() === new Date().getUTCFullYear();
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: sameYear ? undefined : "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** Line 2 of the Team cell. */
+function teamStatusLine(row: AdminTeamRow): string {
+  if (row.status === "active") {
+    return row.claimedAt
+      ? `On Advantage since ${sinceLabel(row.claimedAt)}`
+      : "On Advantage";
+  }
+  if (row.status === "claim_pending") return "Claim pending";
+  if (row.status === "suspended") return "Suspended";
+  return "In the directory, not on Advantage";
+}
+
 function TeamRow({
   row,
+  fresh,
   onApprove,
+  onOpen,
 }: {
   row: AdminTeamRow;
+  fresh: boolean;
   onApprove?: (row: AdminTeamRow) => void;
+  onOpen?: (row: AdminTeamRow) => void;
 }) {
-  const squad = teamLabel(row.team);
-
   return (
     <Link
       href={`/admin/teams/${row.id}`}
+      onClick={(event) => {
+        // The Approve chip prevents default; that click opens nothing.
+        if (!event.defaultPrevented) onOpen?.(row);
+      }}
       className={cn(
         ROW,
         "group -mx-4 h-[52px] rounded-[var(--radius-element)] px-4",
@@ -113,18 +163,22 @@ function TeamRow({
         "focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
       )}
     >
-      {/* Team — crest, name, squad. */}
-      <span className={cn(COL.team, "flex min-w-0 items-center gap-2.5")}>
-        <ProgramCrest name={row.name} crestUrl={row.crestUrl} size={26} />
-        <span className="flex min-w-0 flex-col">
-          <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-            {row.name}
-          </span>
-          {squad ? (
-            <span className="text-micro truncate text-[var(--ink-500)]">
-              {squad}
+      {/* Team — 32px crest (New dot on its corner), name over status. */}
+      <span className={cn(COL.team, "flex min-w-0 items-center gap-3")}>
+        <span className="relative inline-flex shrink-0">
+          <ProgramCrest name={row.name} crestUrl={row.crestUrl} size={32} />
+          {fresh ? <NewDot /> : null}
+        </span>
+        <span className="flex min-w-0 flex-col gap-1">
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            <span className="truncate text-[13px] leading-none font-medium text-[var(--ink-900)]">
+              {row.name}
             </span>
-          ) : null}
+            {fresh ? <NewLabel /> : null}
+          </span>
+          <span className="truncate text-[12px] leading-none text-[var(--ink-600)]">
+            {teamStatusLine(row)}
+          </span>
         </span>
       </span>
 
@@ -160,7 +214,11 @@ function TeamRow({
           "tabular text-right text-[13px] text-[var(--ink-900)]",
         )}
       >
-        {row.memberCount}
+        {row.memberCount > 0 ? (
+          row.memberCount
+        ) : (
+          <EmptyMark label="No members" />
+        )}
       </span>
 
       {/* Plan — fixed-width cell so Owner starts at the same x on every row. */}
@@ -189,18 +247,27 @@ function TeamRow({
         )}
       </span>
 
-      {/* Owner — the fluid cell. */}
-      <span
-        className={cn(COL.owner, "truncate text-[12px] text-[var(--ink-600)]")}
-      >
-        {row.ownerName ?? <EmptyMark label="No owner" />}
+      {/* Owner — avatar and name, the second fluid cell. */}
+      <span className={cn(COL.owner, "flex min-w-0 items-center gap-2")}>
+        {row.ownerName ? (
+          <>
+            <AdminAvatar
+              name={row.ownerName}
+              photoUrl={row.ownerPhotoUrl}
+              size={26}
+            />
+            <span className="truncate text-[13px] text-[var(--ink-900)]">
+              {row.ownerName}
+            </span>
+          </>
+        ) : (
+          <EmptyMark label="No owner" />
+        )}
       </span>
 
-      <ChevronRight
-        className="size-[13px] shrink-0 text-[var(--ink-300)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-900)]"
-        strokeWidth={1.5}
-        aria-hidden="true"
-      />
+      <span className={cn(COL.chevron, "flex items-center")}>
+        <RowChevron />
+      </span>
     </Link>
   );
 }
