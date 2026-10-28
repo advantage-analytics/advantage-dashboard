@@ -14,10 +14,11 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Today" };
 
 export default async function AdminTodayPage() {
-  const { items, freshCount, pipeline } = await loadAdminToday();
+  const { items, resolved, freshCount, pipeline } = await loadAdminToday();
   return (
     <TodayPageContent
       items={items}
+      resolved={resolved}
       freshCount={freshCount}
       pipeline={pipeline}
     />

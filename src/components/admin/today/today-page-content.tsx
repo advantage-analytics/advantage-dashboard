@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
+import { reopenTodayItem, resolveTodayItem } from "@/app/admin/today-actions";
 import { AdminPage } from "@/components/admin/admin-page";
 import {
   AdminMatchCell,
   AdminPersonCell,
   AgeText,
+  CountPills,
   dayLabel,
   scoredSets,
   timeLabel,
@@ -51,15 +54,34 @@ const COL = {
 
 const rowDomId = (key: string) => `admin-today-${key.replace(/[^\w-]/g, "-")}`;
 
+type TodayView = "waiting" | "resolved";
+
 export function TodayPageContent({
-  items,
+  items: waiting,
+  resolved,
   freshCount,
   pipeline,
 }: {
   items: TodayItem[];
+  resolved: TodayItem[];
   freshCount: number;
   pipeline: TodayPipeline | null;
 }) {
+  const router = useRouter();
+  const [view, setView] = useState<TodayView>("waiting");
+  // Rows resolved or reopened here, hidden from the list they left until the
+  // refresh that follows the write brings the server's answer.
+  const [moved, setMoved] = useState<ReadonlySet<string>>(new Set());
+  // The one row that can still be undone, and the line that offers it.
+  const [undo, setUndo] = useState<{ key: string; title: string } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const items = useMemo(
+    () =>
+      (view === "waiting" ? waiting : resolved).filter(
+        (item) => !moved.has(item.key),
+      ),
+    [view, waiting, resolved, moved],
+  );
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [drawerKey, setDrawerKey] = useState<string | null>(null);
@@ -170,7 +192,72 @@ export function TodayPageContent({
 
   const freshNow = Math.max(
     0,
-    freshCount - items.filter((i) => i.fresh && opened.has(i.key)).length,
+    freshCount -
+      waiting.filter((i) => i.fresh && (opened.has(i.key) || moved.has(i.key)))
+        .length,
+  );
+  const waitingCount = waiting.filter((i) => !moved.has(i.key)).length;
+
+  // A server refresh settles every optimistic move; the list is the truth.
+  const [settledFrom, setSettledFrom] = useState({ waiting, resolved });
+  if (settledFrom.waiting !== waiting || settledFrom.resolved !== resolved) {
+    setSettledFrom({ waiting, resolved });
+    setMoved(new Set());
+  }
+
+  // The undo line goes away on its own after a while.
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(null), 10_000);
+    return () => clearTimeout(timer);
+  }, [undo]);
+
+  const resolve = useCallback(
+    async (item: TodayItem, note: string | null) => {
+      setActionError(null);
+      setMoved((prev) => new Set(prev).add(item.key));
+      close(null);
+      const result = await resolveTodayItem(item.key, note).catch(() => ({
+        ok: false as const,
+        error: "Couldn’t resolve it. Try again.",
+      }));
+      if (!result.ok) {
+        setMoved((prev) => {
+          const next = new Set(prev);
+          next.delete(item.key);
+          return next;
+        });
+        setActionError(result.error);
+        return;
+      }
+      setUndo({ key: item.key, title: item.title });
+      router.refresh();
+    },
+    [close, router],
+  );
+
+  const reopen = useCallback(
+    async (key: string) => {
+      setActionError(null);
+      setUndo(null);
+      setMoved((prev) => new Set(prev).add(key));
+      if (drawerKey === key) close(null);
+      const result = await reopenTodayItem(key).catch(() => ({
+        ok: false as const,
+        error: "Couldn’t reopen it. Try again.",
+      }));
+      if (!result.ok) {
+        setMoved((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+        setActionError(result.error);
+        return;
+      }
+      router.refresh();
+    },
+    [close, drawerKey, router],
   );
 
   return (
@@ -188,15 +275,66 @@ export function TodayPageContent({
             onNext={() => step(1)}
             onClose={() => close(drawerItem.key)}
             onClosed={finishClose}
+            onResolve={(note) => void resolve(drawerItem, note)}
+            onReopen={() => void reopen(drawerItem.key)}
           />
         )
       }
     >
       <h1 className="text-display">Today</h1>
-      <p className="text-body-sm mt-[9px]">{lede(items.length, freshNow)}</p>
+      <p className="text-body-sm mt-[9px]">{lede(waitingCount, freshNow)}</p>
+
+      {resolved.length > 0 || view === "resolved" ? (
+        <div className="mt-6">
+          <CountPills
+            label="Today"
+            value={view}
+            onChange={(next) => {
+              close(null);
+              setView(next);
+            }}
+            options={[
+              { value: "waiting", label: "Waiting", count: waitingCount },
+              {
+                value: "resolved",
+                label: "Resolved",
+                count: resolved.filter((i) => !moved.has(i.key)).length,
+              },
+            ]}
+          />
+        </div>
+      ) : null}
+
+      {undo || actionError ? (
+        <p
+          role="status"
+          className="mt-4 flex flex-wrap items-center gap-x-2.5 text-[12px] text-[var(--ink-700)]"
+        >
+          {actionError ? (
+            <span className="text-[var(--danger)]">{actionError}</span>
+          ) : undo ? (
+            <>
+              <span className="min-w-0 truncate">Resolved “{undo.title}”.</span>
+              <button
+                type="button"
+                onClick={() => void reopen(undo.key)}
+                className="cursor-pointer font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+              >
+                Undo
+              </button>
+            </>
+          ) : null}
+        </p>
+      ) : null}
 
       {items.length === 0 ? (
-        <EmptyCard />
+        view === "resolved" ? (
+          <p className="mt-6 text-[13px] text-[var(--ink-600)]">
+            Nothing resolved in the last 30 days.
+          </p>
+        ) : (
+          <EmptyCard />
+        )
       ) : (
         <div className={cn(CARD, "mt-6")}>
           <div className="min-w-[660px] px-6 pt-0.5 pb-1.5">
@@ -206,9 +344,13 @@ export function TodayPageContent({
                 "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
               )}
             >
-              <span className={cn(COL.item, "eyebrow-sm")}>Waiting on you</span>
+              <span className={cn(COL.item, "eyebrow-sm")}>
+                {view === "waiting" ? "Waiting on you" : "Was waiting on you"}
+              </span>
               <span className={cn(COL.need, "eyebrow-sm")}>Needs</span>
-              <span className={cn(COL.age, "eyebrow-sm")}>Waiting</span>
+              <span className={cn(COL.age, "eyebrow-sm")}>
+                {view === "waiting" ? "Waiting" : "Resolved"}
+              </span>
             </div>
             {items.map((item) => (
               <TodayRow
@@ -287,20 +429,35 @@ function TodayRow({
       >
         {item.need}
       </span>
-      <span className={cn(COL.age, "flex min-w-0 flex-col gap-1 tabular-nums")}>
-        <AgeText
-          at={item.since}
-          className={cn(
-            "truncate text-[13px] whitespace-nowrap",
-            fresh
-              ? "font-medium text-[var(--ink-900)]"
-              : "text-[var(--ink-700)]",
-          )}
-        />
-        <span className="truncate text-[12px] whitespace-nowrap text-[var(--ink-600)]">
-          <SinceText at={item.since} />
+      {item.resolution ? (
+        <span
+          className={cn(COL.age, "flex min-w-0 flex-col gap-1 tabular-nums")}
+        >
+          <span className="truncate text-[13px] whitespace-nowrap text-[var(--ink-700)]">
+            <AgeText at={item.resolution.at} /> ago
+          </span>
+          <span className="truncate text-[12px] whitespace-nowrap text-[var(--ink-600)]">
+            by {item.resolution.by}
+          </span>
         </span>
-      </span>
+      ) : (
+        <span
+          className={cn(COL.age, "flex min-w-0 flex-col gap-1 tabular-nums")}
+        >
+          <AgeText
+            at={item.since}
+            className={cn(
+              "truncate text-[13px] whitespace-nowrap",
+              fresh
+                ? "font-medium text-[var(--ink-900)]"
+                : "text-[var(--ink-700)]",
+            )}
+          />
+          <span className="truncate text-[12px] whitespace-nowrap text-[var(--ink-600)]">
+            <SinceText at={item.since} />
+          </span>
+        </span>
+      )}
     </div>
   );
 }
@@ -369,6 +526,8 @@ function TodayDrawer({
   onNext,
   onClose,
   onClosed,
+  onResolve,
+  onReopen,
 }: {
   item: TodayItem;
   index: number;
@@ -379,6 +538,8 @@ function TodayDrawer({
   onNext: () => void;
   onClose: () => void;
   onClosed: () => void;
+  onResolve: (note: string | null) => void;
+  onReopen: () => void;
 }) {
   return (
     <PeekDrawerFrame
@@ -434,8 +595,80 @@ function TodayDrawer({
         <p className="text-[13px] leading-[1.55] break-words text-[var(--ink-700)]">
           {item.body}
         </p>
+        {item.resolution ? (
+          <ResolvedNote resolution={item.resolution} onReopen={onReopen} />
+        ) : item.resolvable ? (
+          <ResolveForm key={item.key} onResolve={onResolve} />
+        ) : null}
       </div>
     </PeekDrawerFrame>
+  );
+}
+
+/**
+ * The hand close for a row that has none of its own (a dead analysis, a
+ * flagged match nobody will label, Ask feedback). Quiet on purpose: an
+ * outline button under the facts, never a second primary beside the real one.
+ */
+function ResolveForm({
+  onResolve,
+}: {
+  onResolve: (note: string | null) => void;
+}) {
+  const [note, setNote] = useState("");
+  return (
+    <div className="flex flex-col gap-2 border-t border-[var(--border-hairline)] pt-4">
+      <label
+        htmlFor="today-resolve-note"
+        className="text-[12px] text-[var(--ink-600)]"
+      >
+        Nothing left to do? Resolve it for every admin.
+      </label>
+      <textarea
+        id="today-resolve-note"
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        maxLength={500}
+        rows={2}
+        placeholder="Note, optional — “player abandoned the upload”"
+        className="w-full resize-none rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-[var(--surface-card)] px-2.5 py-2 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus-visible:border-[var(--border-medium)]"
+      />
+      <button
+        type="button"
+        onClick={() => onResolve(note.trim() || null)}
+        className={cn(advButton("outline", "md"), "self-start")}
+      >
+        Resolve
+      </button>
+    </div>
+  );
+}
+
+function ResolvedNote({
+  resolution,
+  onReopen,
+}: {
+  resolution: NonNullable<TodayItem["resolution"]>;
+  onReopen: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 border-t border-[var(--border-hairline)] pt-4">
+      <p className="text-[12px] text-[var(--ink-600)]">
+        Resolved by {resolution.by} · <AgeText at={resolution.at} /> ago
+      </p>
+      {resolution.note ? (
+        <p className="text-[13px] leading-[1.55] break-words text-[var(--ink-700)]">
+          “{resolution.note}”
+        </p>
+      ) : null}
+      <button
+        type="button"
+        onClick={onReopen}
+        className={cn(advButton("outline", "md"), "self-start")}
+      >
+        Reopen
+      </button>
+    </div>
   );
 }
 

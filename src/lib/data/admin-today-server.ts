@@ -107,7 +107,29 @@ export interface TodayItem {
   body: string;
   primary: TodayPrimary;
   link: { label: string; href: string } | null;
+  /**
+   * Can an admin resolve this row by hand? Only the kinds with no natural
+   * close — a failed or stuck analysis, a flagged label, Ask feedback.
+   * Claims, requests and pilots leave Today when their real action is taken.
+   */
+  resolvable: boolean;
+  /** Set when an admin resolved it (`admin_resolutions`); null while open. */
+  resolution: TodayResolution | null;
 }
+
+export interface TodayResolution {
+  /** Who resolved it, as a display name. */
+  by: string;
+  /** ISO moment. */
+  at: string;
+  note: string | null;
+}
+
+/** The kinds an admin may resolve by hand — `admin_resolutions.kind`. */
+export const RESOLVABLE_KINDS: readonly TodayKind[] = ["job", "label", "ask"];
+
+/** How long a resolved row stays in the Resolved view. */
+const RESOLVED_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface TodayPipeline {
   uploading: number;
@@ -119,6 +141,8 @@ export interface TodayPipeline {
 
 export interface TodayPage {
   items: TodayItem[];
+  /** Resolved in the last 30 days, newest resolution first. */
+  resolved: TodayItem[];
   freshCount: number;
   pipeline: TodayPipeline | null;
 }
@@ -129,7 +153,7 @@ const askSeenKey = (id: string) => `ask:${id}`;
 /** 90% of the month's cap used reads as "nearly out". */
 const PILOT_NEARLY_OUT = 0.9;
 
-type Draft = Omit<TodayItem, "fresh">;
+type Draft = Omit<TodayItem, "fresh" | "resolvable" | "resolution">;
 
 // ── Requests ────────────────────────────────────────────────────────────────
 
@@ -279,8 +303,12 @@ function matchCell(match: MatchFacts | undefined): TodayCell {
   };
 }
 
-const matchTitle = (match: MatchFacts | undefined) =>
-  `${match?.player ?? "Player"} vs ${match?.opponent ?? "Opponent"}`;
+/** "Player vs Opponent"; just the player when no opponent was entered. */
+const matchTitle = (match: MatchFacts | undefined) => {
+  const player = match?.player?.trim() || "Player";
+  const opponent = match ? match.opponent?.trim() : "Opponent";
+  return opponent ? `${player} vs ${opponent}` : player;
+};
 
 // ── Failed or stuck analyses ────────────────────────────────────────────────
 
@@ -750,21 +778,94 @@ export async function loadAdminToday(): Promise<TodayPage> {
   const admin = await requireAdminOrNotFound();
   const db = createAdminClient();
   const now = new Date();
-  const [seen, navSeen, pipeline] = await Promise.all([
+  const [seen, navSeen, pipeline, resolutions] = await Promise.all([
     lookAtSurface(admin.id, "today", now),
     loadNavSeen(admin.id, now),
     loadPipeline(db).catch(() => null),
+    loadResolutions(db),
   ]);
   const drafts = await loadDrafts(db, navSeen.ask, now.getTime());
-  const items = drafts.map((draft) => ({
-    ...draft,
-    fresh: isFresh(seen, draft.key, draft.since),
-  }));
+  const all: TodayItem[] = drafts.map((draft) => {
+    const resolvable = RESOLVABLE_KINDS.includes(draft.kind);
+    const resolution = resolvable ? (resolutions.get(draft.key) ?? null) : null;
+    return {
+      ...draft,
+      resolvable,
+      resolution,
+      fresh: !resolution && isFresh(seen, draft.key, draft.since),
+    };
+  });
+  const items = all.filter((item) => !item.resolution);
+  const resolved = all
+    .filter(
+      (item) =>
+        item.resolution &&
+        now.getTime() - Date.parse(item.resolution.at) <= RESOLVED_WINDOW_MS,
+    )
+    .sort(
+      (a, b) => Date.parse(b.resolution!.at) - Date.parse(a.resolution!.at),
+    );
   return {
     items,
+    resolved,
     freshCount: items.filter((item) => item.fresh).length,
     pipeline,
   };
+}
+
+/**
+ * Every hand resolution, by Today key, with the resolver's name. A failed
+ * read resolves nothing — the rows simply show as waiting.
+ */
+async function loadResolutions(
+  db: AdminClient,
+): Promise<Map<string, TodayResolution>> {
+  const out = new Map<string, TodayResolution>();
+  const { data, error } = await db
+    .from("admin_resolutions")
+    .select("item_key, resolved_by, resolved_at, note")
+    .order("resolved_at", { ascending: false })
+    .limit(2000);
+  if (error) {
+    console.error("[admin today] resolutions read failed", {
+      error: error.message,
+    });
+    return out;
+  }
+  const rows = (data ?? []) as {
+    item_key: string;
+    resolved_by: string | null;
+    resolved_at: string;
+    note: string | null;
+  }[];
+  const ids = [
+    ...new Set(
+      rows.flatMap((row) => (row.resolved_by ? [row.resolved_by] : [])),
+    ),
+  ];
+  const names = new Map<string, string>();
+  if (ids.length) {
+    const { data: users } = await db
+      .from("users")
+      .select("id, email, first_name, last_name")
+      .in("id", ids);
+    for (const user of (users ?? []) as {
+      id: string;
+      email: string | null;
+      first_name: string | null;
+      last_name: string | null;
+    }[]) {
+      names.set(user.id, personName(user));
+    }
+  }
+  for (const row of rows) {
+    out.set(row.item_key, {
+      by: (row.resolved_by && names.get(row.resolved_by)) || "An admin",
+      at: row.resolved_at,
+      note: row.note,
+    });
+  }
+  return out;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
