@@ -23,9 +23,9 @@ import { cn } from "@/lib/utils";
  * VIEWER's side of the match, filled `viz-you` above the midline and `viz-opp`
  * below. The differential starts over at 0 with each set, as the score does,
  * so an early lead never props up how a later set went; every set shares one
- * vertical scale, so a big set still reads bigger than a close one. Breaks of serve are drawn as dashed verticals at the point that
- * ended the game; set boundaries are fainter solid lines, named by the Set
- * labels underneath.
+ * vertical scale, so a big set still reads bigger than a close one. Breaks of
+ * serve are drawn as dashed verticals at the point that ended the game; set
+ * boundaries are fainter solid lines, named by the Set labels underneath.
  *
  * The series is `you − opp`, never `player1 − player2`: which side is "you"
  * comes from `useMatchSides()` and nothing else (guardrails §4). Drawing the
@@ -333,13 +333,13 @@ export function PerformanceTrackerChart() {
             ? "Break point"
             : `Point ${readoutPoint.pointNumber}`;
 
-  // Margin line: the lead in this point's set, oriented by `sides` (never player order),
-  // with the game score appended ONLY where the column is real (flags-doc #9) —
+  // Margin line: the lead in this point's set, oriented by `sides` (never
+  // player order), with the game score appended ONLY where the column is real (flags-doc #9) —
   // a derived match carries the coerced "0-0", which is not a score.
   const marginBase =
     readoutDiff === 0
       ? "Level"
-      : `${readoutDiff > 0 ? youName : oppName} +${Math.abs(readoutDiff)} in set ${readoutPoint?.setNumber ?? ""}`;
+      : `${readoutDiff > 0 ? youName : oppName} +${Math.abs(readoutDiff)} in set ${readoutPoint?.setNumber}`;
   // A point the score stream never read (`score_frozen`) has no game score:
   // the line stops at the margin rather than printing the coerced "0-0".
   const readoutGameScore = readoutPoint ? readGameScore(readoutPoint) : null;

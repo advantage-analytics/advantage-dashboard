@@ -738,7 +738,7 @@ const COLUMN =
   "flex w-[var(--h2h-col,64px)] shrink-0 items-center justify-end gap-1.5";
 
 /**
- * 64 px fits a surname of about six characters at 12px beside the player bar.
+ * 64 px fits a surname of about six characters at 12px beside the legend marker.
  * A longer one gets roughly 7px a character, plus 18px for the bar and its gap,
  * capped so the statistic label keeps its space; `truncate` backstops anything
  * beyond.
