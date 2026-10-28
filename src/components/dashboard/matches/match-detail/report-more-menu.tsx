@@ -22,6 +22,7 @@ import {
   MENU_ROW_ICON,
 } from "@/components/dashboard/matches/match-actions/menu-row-classes";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { cn } from "@/lib/utils";
 
@@ -78,6 +79,7 @@ export function MatchReportMoreMenu() {
 
 function MoreMenu({ matchId }: { matchId: string }) {
   const sides = useMatchSides();
+  const verified = Boolean(useMatchData().match.verification);
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -140,6 +142,11 @@ function MoreMenu({ matchId }: { matchId: string }) {
             />
             <FloatMenuItem
               label="Review score"
+              // Verified by Advantage (D1): the row still opens Edit match,
+              // where the score shows locked beside "Tell us".
+              description={
+                verified ? "Locked · Verified by Advantage" : undefined
+              }
               icon={
                 <Pencil
                   className={MENU_ROW_ICON}

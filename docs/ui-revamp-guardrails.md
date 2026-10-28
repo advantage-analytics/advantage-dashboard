@@ -269,6 +269,15 @@ be. Doubles teams and existing users depend on it.
 > the RPCs and do not mention this follow-up write.
 > `src/lib/admin/uploads/opponent-team.ts`.
 
+> **A reviewed exception, added 2026-10-28: the Verified lock on the
+> rebuild paths.** `jobs/[jobId]/rederive` (its `handler.ts` takes a required
+> `matchVerified` dependency) and `jobs/[jobId]/resubmit` refuse a match
+> Verified by Advantage with a 409, before anything is claimed or sent. Both
+> write on the service role, which the database guard
+> (`20261028050138_verified_player_lock`) lets through, so the routes are the
+> lock (decision D1, `docs/plans/advantage-review.md`). The safe direction
+> only: nothing in `derivation/` or `derive-and-publish.ts` changed.
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in

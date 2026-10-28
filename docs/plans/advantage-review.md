@@ -42,17 +42,23 @@ Settled:
 - No paid plans before January 1, so Advantage Review sells at the
   free-account prices until then: one match $75, five matches $300, scout an
   opponent $100.
+- **D1 (settled 2026-10-27):** a Verified match locks. Players, coaches and
+  the self-review editor can't change its points, shots, score, result or
+  players; "Something still wrong? Tell us" and an admin Reopen are the way
+  back. Date, tournament, round and court stay editable.
+- **D4 (settled 2026-10-27):** a team's owner and coaches can fix points on
+  their team players' matches; staff and team players can only view — a team
+  player's own team match included. A personal match is fixed by whoever
+  recorded it.
 
 Open, with the default this plan uses. Each step names the ones it needs.
 
-| #   | Question                                                                         | Default                                                       |
-| --- | -------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| D1  | After a match is Verified, can the player still edit it?                         | No. It locks; "Tell us" and an admin Reopen are the way back. |
-| D2  | Does Verified cover shot details, or points only?                                | Points: who won and how it ended.                             |
-| D3  | Does a hand-labelled pilot team match become Verified when you mark it complete? | Yes. Coaches see the badge.                                   |
-| D4  | Can a coach edit a team player's match in self review?                           | Yes, owner and coaches; staff and players see only.           |
-| D5  | Does a shared report show the analyst's note?                                    | Status only; the note stays private.                          |
-| D6  | Can a coach request a review for a team player?                                  | Not in v1.                                                    |
+| #   | Question                                                                         | Default                              |
+| --- | -------------------------------------------------------------------------------- | ------------------------------------ |
+| D2  | Does Verified cover shot details, or points only?                                | Points: who won and how it ended.    |
+| D3  | Does a hand-labelled pilot team match become Verified when you mark it complete? | Yes. Coaches see the badge.          |
+| D5  | Does a shared report show the analyst's note?                                    | Status only; the note stays private. |
+| D6  | Can a coach request a review for a team player?                                  | Not in v1.                           |
 
 ## Step 0 · Close the write gap
 
@@ -182,7 +188,41 @@ us" lands in /admin Requests.
   players, points and shots (extend the step 0 guard; date, tournament,
   round and court stay editable).
 
-**Needs.** D1, D4.
+**Needs.** D1, D4 (both settled above).
+
+**As built** (migration `20261028025013_self_review`):
+
+- One `kind = 'self'` label session per match, shared by everyone allowed to
+  fix it (one per editor would let two saves overwrite each other). Its
+  `label_points` are seeded from the published points, joined back by
+  `point_id`, with the original reading in `seed`; new columns `error_kind`
+  (forced/unforced), `last_stroke`, `edited_by`, `edited_at`.
+- Save patches `points.won_by_player1` and `result_type` in place, then runs
+  `calculate_match_stats` and `backfill_returns_in_and_net_points`, then asks
+  for new insights. Point ids never change, so bookmarks stay; it works on
+  SwingVision matches too. Three definer functions are the only door:
+  `can_fix_match_points`, `self_review_state`, `self_review_save`.
+- The lock is `matches_guard_verification` (score, result, stop reason,
+  format, player names; not the player ids, which account deletion and
+  roster merges re-point under the caller's JWT) plus `zz_points_guard_verified_match` /
+  `zz_shots_guard_verified_match` on client writes, the Edit match route's
+  `match_verified` refusal, and the rebuild route's refusal (it writes on the
+  service role, which the triggers let through).
+- Only analyst sessions protect a match or an account from deletion; a
+  match's self session is deleted with it.
+- Not yet: a rebuild of the analysis after fixes replaces the points, and the
+  fixes stay in the session unlinked (`point_id` null) rather than being
+  re-applied. Step 3a's "start from the player's fixes" is where they join
+  back, by point number.
+
+**Paused (2026-10-28).** Shipped in #575, then reverted from the app in
+#579 at the user's request; the feature waits in its own draft PR (#580).
+What stays live: both migrations (`20261028025013_self_review`,
+`20261028050138_verified_player_lock`), and the Verified lock in the app (the
+Edit match lock, `match_verified` on PATCH, the rederive and resubmit
+refusals), because D1 holds for the matches already Verified. #579's
+`20261028120000_self_review_paused` revokes the self-review functions from
+`authenticated`; #580 re-grants them.
 
 **Done when.** A player fixes three points, saves, sees the stats move and
 "Edited by you · 3 points"; Reset restores a point; a Verified match refuses
