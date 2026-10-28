@@ -198,7 +198,7 @@ export function TellUsDialog({
           <span className="text-[12px] text-[var(--ink-700)]">
             The whole match{" "}
             <span className="text-[var(--ink-500)]">
-              · or name the point in your note
+              · Or name the point in your note
             </span>
           </span>
         )}
