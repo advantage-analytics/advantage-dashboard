@@ -97,6 +97,19 @@ export interface SourceStepContentProps {
    * a component: this module's imports are pinned by `upload-source.spec.ts`.
    */
   addSelf?: { roleLabel: string; onOpen: () => void } | null;
+  /**
+   * The admin console's step 1 (board UploadFor): its own Workspace row —
+   * any team, or any player's personal workspace — and, for a player, the
+   * billing field under it. Elements built by `AdminTargetField`, not an
+   * import here, for the same reason as `addSelf`. `player` is the name of
+   * the personal workspace's owner, which the For field then names instead
+   * of "you".
+   */
+  admin?: {
+    workspace: React.ReactNode;
+    billing: React.ReactNode;
+    player: string | null;
+  } | null;
 }
 
 type FieldName = "workspace" | "for" | "source";
@@ -216,11 +229,14 @@ function SourceMark({ provider, size }: { provider: Provider; size: 40 | 26 }) {
  */
 function Field({
   label,
+  tag,
   active,
   children,
   below,
 }: {
   label: string;
+  /** The caption's quiet right-hand note — the console's "Any account · admin". */
+  tag?: string;
   active: boolean;
   children: React.ReactNode;
   /** A note strip under the row — the SwingVision trade, a refusal. */
@@ -228,7 +244,7 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-[14px]">
-      <FieldCaption label={label} />
+      <FieldCaption label={label} tag={tag} />
       <div
         className={cn(
           "flex items-center gap-4 pb-4 transition-shadow duration-200 ease-[var(--ease-primary)]",
@@ -287,6 +303,7 @@ function SourceStepContentImpl({
   whoPlayed,
   quotaRefusal = null,
   addSelf = null,
+  admin = null,
 }: SourceStepContentProps) {
   const { active, available, viewer } = useWorkspace();
   const isTeam = active.kind === "team";
@@ -408,7 +425,12 @@ function SourceStepContentImpl({
     </span>
   );
 
-  const forText = !isTeam ? (
+  const forText = admin?.player ? (
+    <FieldText
+      value={admin.player}
+      subline="Every statistic is credited to this player"
+    />
+  ) : !isTeam ? (
     <FieldText
       value={
         <>
@@ -506,8 +528,14 @@ function SourceStepContentImpl({
   return (
     <div className="flex flex-col gap-9">
       {/* Workspace */}
-      <Field label="Workspace" active={activeField === "workspace"}>
-        {switchable ? (
+      <Field
+        label="Workspace"
+        tag={admin ? "Any account · admin" : undefined}
+        active={activeField === "workspace"}
+      >
+        {admin ? (
+          admin.workspace
+        ) : switchable ? (
           <Popover {...menuFor("workspace")}>
             <PopoverTrigger asChild>
               <button
@@ -565,6 +593,8 @@ function SourceStepContentImpl({
           workspaceRow
         )}
       </Field>
+
+      {admin?.billing}
 
       {/* For */}
       <Field label="For" active={activeField === "for"}>

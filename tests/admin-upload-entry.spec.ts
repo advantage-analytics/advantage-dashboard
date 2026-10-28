@@ -100,7 +100,17 @@ function routeHarness({
         if (!allowed) throw new Error("not found");
       },
     },
+    "@/lib/data/admin-search-server": {
+      adminSearch: async () => {
+        if (searchFails) throw new Error("read failure");
+        return [];
+      },
+    },
     "@/lib/data/admin-upload-server": {
+      getAdminPersonalUploadContext: async (id: string) => {
+        reads.push(`player:${id}`);
+        return { ok: false, message: "Player unavailable" };
+      },
       getAdminUploadContext: async (id: string) => {
         reads.push(`context:${id}`);
         return refusal
@@ -134,8 +144,12 @@ test("scope URLs round-trip all kinds and reject ambiguous inputs", () => {
     const url = new URL(adminUploadHref(TEAM, kind), "https://local.test");
     expect(adminUploadSelection(Object.fromEntries(url.searchParams))).toEqual({
       team: TEAM,
+      player: null,
       kind,
+      billing: "free",
       invalidTeam: false,
+      invalidPlayer: false,
+      invalidBilling: false,
       invalidKind: false,
     });
     expect(adminUploadHref(null, kind)).toBe(`/admin/uploads/new?kind=${kind}`);
@@ -355,4 +369,37 @@ test("tournament slot is scoped to the selected program", async () => {
   expect(h.reads).toContain("events:kind:tournament");
   expect(result.props.tournamentResult.type).toBe("tournament-form");
   expect(result.props.tournamentResult.props.context).toBe(context);
+});
+
+test("a player target round-trips with its billing and refuses a second target", () => {
+  const PLAYER = "22222222-2222-4222-8222-222222222222";
+  for (const billing of ["free", "player"] as const) {
+    const url = new URL(
+      adminUploadHref({ player: PLAYER, billing }, "video"),
+      "https://local.test",
+    );
+    expect(
+      adminUploadSelection(Object.fromEntries(url.searchParams)),
+    ).toMatchObject({
+      team: null,
+      player: PLAYER,
+      kind: "video",
+      billing,
+      invalidPlayer: false,
+      invalidBilling: false,
+    });
+  }
+  // Free is the default and is not spelled in the URL.
+  expect(adminUploadHref({ player: PLAYER }, "video")).toBe(
+    `/admin/uploads/new?player=${PLAYER}&kind=video`,
+  );
+  expect(adminUploadSelection({ team: TEAM, player: PLAYER })).toMatchObject({
+    invalidPlayer: true,
+  });
+  expect(adminUploadSelection({ player: "bad" })).toMatchObject({
+    invalidPlayer: true,
+  });
+  expect(
+    adminUploadSelection({ player: PLAYER, billing: "house" }),
+  ).toMatchObject({ invalidBilling: true, billing: "free" });
 });

@@ -71,6 +71,8 @@ export function UploadMatchSuccess({
   exitHref,
   preset,
   returnTo = null,
+  matchHref = `/dashboard/matches/${match.matchId}`,
+  doneLink = null,
 }: {
   match: CreatedMatch;
   /** Null until the transfer's `"started"` event lands, and for imports. */
@@ -84,6 +86,14 @@ export function UploadMatchSuccess({
   preset: EventPreset | null;
   /** Ask handed this visit off: the quiet exit goes back there, naming this match. */
   returnTo?: WizardReturnTarget | null;
+  /**
+   * Where View match opens. The admin console uploading into a player's
+   * personal workspace cannot open the player's dashboard page (it is
+   * theirs), so it passes its own match page.
+   */
+  matchHref?: string;
+  /** Replaces "Back to matches" — the console's way back to its uploads. */
+  doneLink?: { href: string; label: string } | null;
 }) {
   // Only an import waits on its stats here; a video's analysis is reported
   // by its job, on the match page, long after this screen.
@@ -97,7 +107,6 @@ export function UploadMatchSuccess({
   // starting, uploading, handing off. This screen's own links do not: each
   // is a deliberate exit it offers.
   useLeaveGuard(view.busy);
-  const matchHref = `/dashboard/matches/${match.matchId}`;
   const backToEvent = preset !== null && preset.eventHref !== matchHref;
 
   return (
@@ -173,7 +182,11 @@ export function UploadMatchSuccess({
             // A visit Ask handed off goes back to Ask, naming the match it
             // sent, so that page can say it is on its way.
             !view.busy &&
-            (returnTo === "ask" ? (
+            (doneLink ? (
+              <Link href={doneLink.href} className={QUIET_LINK}>
+                {doneLink.label}
+              </Link>
+            ) : returnTo === "ask" ? (
               <Link href={askReturnHref(match.matchId)} className={QUIET_LINK}>
                 Back to Ask
               </Link>

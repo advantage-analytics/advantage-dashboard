@@ -23,8 +23,18 @@ import type { AdminUploadContext } from "@/lib/data/admin-upload-server";
 import { AdminUploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard/admin-mode";
 import {
   adminUploadHref,
+  type AdminPlayerTarget,
   type AdminUploadKind,
 } from "./admin-upload-selection";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { formatHoursShort, isUnlimitedCap } from "@/lib/data/usage-format";
+
+/** The page's target as `adminUploadHref()` takes it. */
+function targetOf(context: AdminUploadContext): string | AdminPlayerTarget {
+  return context.owner
+    ? { player: context.workspace.id, billing: context.owner.billing }
+    : context.workspace.id;
+}
 
 const choices = [
   {
@@ -96,6 +106,9 @@ function FileOrVideo({
     operationId: crypto.randomUUID(),
     itemId: crypto.randomUUID(),
   }));
+  // A player's personal workspace takes a new match only: there is no
+  // recorded team result there to attach analysis to.
+  const personal = context.owner !== null;
   const [target, setTarget] = useState("new");
   const [options, setOptions] = useState<AdminAttachmentOption[]>([]);
   const [attachment, setAttachment] = useState<AdminWizardMode["attachment"]>();
@@ -139,7 +152,7 @@ function FileOrVideo({
   }
   return (
     <div className="flex flex-col gap-5">
-      {!attachment && (
+      {!attachment && !personal && (
         // The wizard below is full-bleed; this row belongs to the page's column.
         <section
           aria-label="Analysis target"
@@ -239,8 +252,9 @@ function FileOrVideo({
             context,
             ...ids,
             attachment,
-            exitHref: adminUploadHref(context.workspace.id, null),
+            exitHref: adminUploadHref(targetOf(context), null),
             successHref: "/admin/uploads",
+            uploadKind: kind,
           }}
           initialProvider={kind === "file" ? "swing-vision" : "splitstep"}
         />
@@ -266,7 +280,8 @@ export function AdminUploadEntry({
   tournamentResult?: ReactNode;
 }) {
   const router = useRouter();
-  const team = context?.workspace.id ?? null;
+  const team = context ? targetOf(context) : null;
+  const personal = Boolean(context?.owner);
   const wizardBelow = Boolean(context) && (kind === "file" || kind === "video");
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -274,9 +289,10 @@ export function AdminUploadEntry({
         className={`mx-auto flex w-full max-w-[1000px] flex-col gap-6 px-6 pt-9 ${wizardBelow ? "pb-6" : "pb-12"}`}
       >
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-display">Upload for a team</h1>
+          <h1 className="text-display">Upload a match</h1>
           <p className="text-[13px] text-[var(--ink-600)]">
-            Add match files, videos and results to the team’s workspace
+            Add match files, videos and results to a team’s workspace, or a
+            match video to a player’s own
           </p>
         </div>
         {error && (
@@ -289,7 +305,7 @@ export function AdminUploadEntry({
               href={adminUploadHref(null, kind)}
               className="text-[var(--blue)]"
             >
-              Choose another team
+              Choose another team or player
             </Link>
             <button
               type="button"
@@ -300,7 +316,34 @@ export function AdminUploadEntry({
             </button>
           </div>
         )}
-        {context ? (
+        {context?.owner ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <PersonAvatar
+              initials={context.owner.viewer.initials}
+              photoUrl={context.owner.viewer.avatarUrl}
+              className="size-7 text-[11px]"
+            />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[14px] font-medium">
+                {context.owner.viewer.name}
+              </span>
+              <span className="text-[12px] text-[var(--ink-600)]">
+                Personal workspace ·{" "}
+                {context.owner.billing === "free"
+                  ? "Free"
+                  : isUnlimitedCap(context.videoAllowance.remainingSeconds)
+                    ? "Player’s allowance"
+                    : `Player’s allowance · ${formatHoursShort(context.videoAllowance.remainingSeconds)} h left this month`}
+              </span>
+            </div>
+            <Link
+              href={adminUploadHref(null, kind)}
+              className="text-[12px] text-[var(--blue)]"
+            >
+              Change player
+            </Link>
+          </div>
+        ) : context ? (
           <div className="flex flex-wrap items-center gap-3">
             <span
               aria-hidden="true"
@@ -336,42 +379,51 @@ export function AdminUploadEntry({
             What are you adding?
           </legend>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {choices.map(({ kind: value, label, detail, icon: Icon }) => (
-              <label
-                key={value}
-                className={`relative flex cursor-pointer flex-col gap-1 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] pt-[18px] pb-5 ${kind === value ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
-              >
-                <span className="absolute top-4 right-4 size-3.5">
-                  <input
-                    type="radio"
-                    name="upload-kind"
-                    value={value}
-                    checked={kind === value}
-                    onChange={() => router.push(adminUploadHref(team, value))}
-                    aria-label={label}
-                    className={CHECK_DOT_INPUT}
-                  />
-                  {kind === value && (
-                    <Check
-                      aria-hidden="true"
-                      className={CHECK_DOT_MARK}
-                      strokeWidth={2.5}
+            {choices.map(({ kind: value, label, detail, icon: Icon }) => {
+              // A player's personal workspace takes match video only.
+              const unavailable = personal && value !== "video";
+              return (
+                <label
+                  key={value}
+                  className={`relative flex flex-col gap-1 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] pt-[18px] pb-5 ${unavailable ? "cursor-default opacity-60" : "cursor-pointer"} ${kind === value ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : unavailable ? "border-[var(--border-field)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
+                >
+                  <span className="absolute top-4 right-4 size-3.5">
+                    <input
+                      type="radio"
+                      name="upload-kind"
+                      value={value}
+                      checked={kind === value}
+                      disabled={unavailable}
+                      onChange={() => router.push(adminUploadHref(team, value))}
+                      aria-label={label}
+                      className={CHECK_DOT_INPUT}
                     />
-                  )}
-                </span>
-                <span className="mb-2 flex size-9 items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-subtle)]">
-                  <Icon
-                    className="size-[18px]"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                </span>
-                <span className="text-[13px] font-medium">{label}</span>
-                <span className="text-[12px] text-[var(--ink-600)]">
-                  {detail}
-                </span>
-              </label>
-            ))}
+                    {kind === value && (
+                      <Check
+                        aria-hidden="true"
+                        className={CHECK_DOT_MARK}
+                        strokeWidth={2.5}
+                      />
+                    )}
+                  </span>
+                  <span className="mb-2 flex size-9 items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-subtle)]">
+                    <Icon
+                      className="size-[18px]"
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                  </span>
+                  <span className="text-[13px] font-medium">{label}</span>
+                  <span className="text-[12px] text-[var(--ink-600)]">
+                    {unavailable
+                      ? "Teams only"
+                      : personal && value === "video"
+                        ? "Into their personal workspace"
+                        : detail}
+                  </span>
+                </label>
+              );
+            })}
           </div>
         </fieldset>
         {context && (kind === "dual" || kind === "tournament") && (
@@ -389,7 +441,7 @@ export function AdminUploadEntry({
         )}
         {!context && (
           <p className="text-[13px] text-[var(--ink-600)]">
-            Choose a team to continue.
+            Choose a team or player to continue.
           </p>
         )}
         {context && !kind && (
@@ -401,7 +453,11 @@ export function AdminUploadEntry({
             sit between the two questions it should follow. */}
         {!wizardBelow && (
           <div className="flex flex-wrap items-center justify-between gap-4 text-[12px] text-[var(--ink-600)]">
-            <span>Uploads are attributed to the selected team.</span>
+            <span>
+              {personal
+                ? "The match is saved in the player’s personal workspace."
+                : "Uploads are attributed to the selected team."}
+            </span>
             <Link href="/admin/uploads" className="hover:text-[var(--ink-900)]">
               Cancel
             </Link>
@@ -409,7 +465,11 @@ export function AdminUploadEntry({
         )}
       </main>
       {context && wizardBelow && (kind === "file" || kind === "video") && (
-        <FileOrVideo key={`${team}:${kind}`} context={context} kind={kind} />
+        <FileOrVideo
+          key={`${typeof team === "string" ? team : `${team?.player}:${team?.billing}`}:${kind}`}
+          context={context}
+          kind={kind}
+        />
       )}
     </div>
   );

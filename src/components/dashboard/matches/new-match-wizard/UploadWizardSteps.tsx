@@ -2,6 +2,7 @@
 
 import { AdvSelect } from "@/components/ui/adv-select";
 import { useAdminWizardMode, AdminResultLock } from "./admin-mode";
+import { AdminBillingField, AdminWorkspaceRow } from "./AdminTargetField";
 import { useCallback, useMemo } from "react";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { isProgramStaff } from "@/lib/workspace/types";
@@ -97,6 +98,20 @@ export function ProviderStep() {
     },
   } = useUploadWizard();
   const addSelf = useAddSelfOffer(whoPlayed);
+  const admin = useAdminWizardMode();
+  // The console's own Workspace row and billing field. Not for a prepared
+  // attachment: its target is the recorded match, fixed before this step.
+  const adminSlots = useMemo(
+    () =>
+      admin && !admin.attachment
+        ? {
+            workspace: <AdminWorkspaceRow mode={admin} />,
+            billing: <AdminBillingField mode={admin} />,
+            player: admin.context.owner?.viewer.name ?? null,
+          }
+        : null,
+    [admin],
+  );
   return (
     <div className="flex flex-col gap-9">
       <SourceStepContent
@@ -104,6 +119,7 @@ export function ProviderStep() {
         onProviderSelect={handleProviderSelect}
         whoPlayed={whoPlayed}
         addSelf={addSelf.offer}
+        admin={adminSlots}
         /* Null for an import source and while the allowance is still
            loading — the hook decides both, so this step never has to. */
         quotaRefusal={providerQuotaRefusal}
@@ -393,7 +409,12 @@ export function MatchStep() {
         : whoPlayed.roster?.find((row) => row.playerId === playerId);
     return {
       name: formData.playerName || whoPlayed.uploaderName || "You",
-      isSelf: !preset && whoPlayed.subject?.kind !== "roster",
+      // The console's player upload is the player's own match, but not the
+      // signed-in person's: nothing on it says "you".
+      isSelf:
+        !preset &&
+        whoPlayed.subject?.kind !== "roster" &&
+        !admin?.context.owner,
       playerId,
       userId: workspaces.viewer.id,
       rosterStyle: rosterRow ?? null,
@@ -413,6 +434,7 @@ export function MatchStep() {
     preset,
     workspaces.viewer.id,
     workspaces.active,
+    admin?.context.owner,
   ]);
 
   // Stable for the same reason as `subject`. Only while the File itself is

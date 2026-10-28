@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAdminUploadContext } from "@/lib/data/admin-upload-server";
+import {
+  getAdminPersonalUploadContext,
+  getAdminUploadContext,
+} from "@/lib/data/admin-upload-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
 import {
@@ -12,12 +15,16 @@ import type { RosterIdRow } from "@/lib/data/roster-ids";
 /** Client intent only. Every action resolves this again against the session. */
 export type WizardLookupScope =
   | { source: "admin"; programId: string }
+  /** A player's personal workspace, uploaded into from the admin console. */
+  | { source: "admin"; userId: string }
   | { source: "dashboard"; programId?: string };
 
 interface Dependencies {
   createClient: typeof createClient;
   createAdminClient: typeof createAdminClient;
   getAdminUploadContext: typeof getAdminUploadContext;
+  /** Optional so test seams written before it keep compiling. */
+  getAdminPersonalUploadContext?: typeof getAdminPersonalUploadContext;
   getWorkspaceContext: typeof getWorkspaceContext;
 }
 
@@ -28,6 +35,7 @@ export async function resolveWizardLookupScope(
     createClient,
     createAdminClient,
     getAdminUploadContext,
+    getAdminPersonalUploadContext,
     getWorkspaceContext,
   },
 ) {
@@ -37,8 +45,26 @@ export async function resolveWizardLookupScope(
     (!scope || !["admin", "dashboard"].includes(scope.source))
   )
     return null;
+  if (scope?.source === "admin" && "userId" in scope) {
+    if (typeof scope.userId !== "string") return null;
+    // Billing does not change what a lookup reads; the player's own matches
+    // are the personal workspace's, read as the dashboard reads them.
+    const resolvePersonal =
+      deps.getAdminPersonalUploadContext ?? getAdminPersonalUploadContext;
+    const result = await resolvePersonal(scope.userId, "free");
+    if (!result.ok) return null;
+    return {
+      source: "admin" as const,
+      programId: null,
+      actorId: result.context.workspace.id,
+      canReadSchedule: false,
+      client: deps.createAdminClient(),
+      rosterIds: null,
+    };
+  }
   if (scope?.source === "admin") {
-    if (typeof scope.programId !== "string") return null;
+    if (!("programId" in scope) || typeof scope.programId !== "string")
+      return null;
     const result = await deps.getAdminUploadContext(scope.programId);
     if (!result.ok) return null;
     const { context } = result;

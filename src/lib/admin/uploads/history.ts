@@ -1,5 +1,9 @@
 import type { AnalysisStatus } from "@/lib/data/match-analysis";
-import type { AdminUploadSubmissionKind, AdminUploadItemKind } from "./types";
+import type {
+  AdminUploadBilling,
+  AdminUploadSubmissionKind,
+  AdminUploadItemKind,
+} from "./types";
 
 export type AdminUploadHistoryState =
   AnalysisStatus | "pending" | "saved" | "partial" | "unknown";
@@ -25,7 +29,16 @@ export interface AdminUploadHistoryItem {
 export interface AdminUploadHistoryRow {
   operationId: string;
   date: string;
-  team: { id: string; name: string; side: string | null };
+  /**
+   * Where it went: a team, or — `personal` set, `id` null — a player's
+   * personal workspace, with how that upload is billed.
+   */
+  team: {
+    id: string | null;
+    name: string;
+    side: string | null;
+    personal: { userId: string; billing: AdminUploadBilling } | null;
+  };
   kind: AdminUploadSubmissionKind;
   what: string;
   addedBy: { id: string | null; name: string };

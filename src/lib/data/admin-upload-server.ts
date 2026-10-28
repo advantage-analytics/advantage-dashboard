@@ -9,7 +9,14 @@ import type {
   WorkspaceContextValue,
 } from "@/lib/workspace/types";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
-import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import {
+  monthlyCapSecondsFor,
+  peekQuota,
+} from "@/lib/services/splitstep/quota";
+import { getInitials } from "@/lib/data/match-utils";
+import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
+import { UNLIMITED_CAP_SECONDS } from "@/lib/data/usage-format";
+import type { AdminUploadBilling } from "@/lib/admin/uploads/types";
 import {
   eligibleRosterOptions,
   type OwnProfileRow,
@@ -31,12 +38,44 @@ export interface AdminUploadContext {
    */
   workspace: Workspace;
   roster: RosterPlayerOption[];
+  /**
+   * Set only when the target is a player's PERSONAL workspace
+   * (`workspace.kind === "personal"`, `workspace.id` = the player's user id);
+   * null for a team. The wizard treats `owner.viewer` as the person the
+   * personal match belongs to; the administrator stays `viewer`/`actorId`.
+   */
+  owner: AdminUploadOwner | null;
+  /**
+   * What this upload spends. A team's program ledger; for a personal target
+   * either the administrator's own uncapped account (`billing: "free"`) or the
+   * player's free hours plus credits (`"player"`), already summed into
+   * `remainingSeconds`.
+   */
   videoAllowance: {
     accountId: string;
-    accountType: "program";
+    accountType: "program" | "individual";
     billingMonth: string;
     usedSeconds: number;
     capSeconds: number;
+    remainingSeconds: number;
+  };
+}
+
+export interface AdminUploadOwner {
+  /** A display projection of the player, never a session. */
+  viewer: Viewer;
+  hand: string | null;
+  backhand: string | null;
+  billing: AdminUploadBilling;
+  /**
+   * The player's own allowance this month, whichever billing is chosen — the
+   * toggle quotes it beside "Player's allowance". `remainingSeconds` is free
+   * hours left plus usable credits; their hours override already applied.
+   */
+  playerAllowance: {
+    usedSeconds: number;
+    capSeconds: number;
+    creditSeconds: number;
     remainingSeconds: number;
   };
 }
@@ -49,6 +88,7 @@ export type AdminUploadContextResult =
         | "admin-required"
         | "invalid-program-id"
         | "program-not-found"
+        | "player-not-found"
         | "read-failed";
       message: string;
     };
@@ -301,6 +341,7 @@ export const getAdminUploadContext = cache(
           viewer: session.viewer,
           workspace,
           roster,
+          owner: null,
           videoAllowance: {
             accountId: programId,
             accountType: "program",
@@ -316,6 +357,181 @@ export const getAdminUploadContext = cache(
         ok: false,
         reason: "read-failed",
         message: "We couldn't load this program's upload context. Try again.",
+      };
+    }
+  },
+);
+
+interface PlayerRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  avatar_path: string | null;
+  hand: string | null;
+  backhand: string | null;
+  individual_pilot: boolean | null;
+  is_admin: boolean | null;
+  video_hours_override: number | string | null;
+}
+
+/**
+ * A player's PERSONAL workspace as a console upload target — the sibling of
+ * `getAdminUploadContext()` for "Upload for: a player". Same guard order:
+ * the session must be an administrator before any service-role read, and a
+ * failed read refuses the whole context rather than inventing an allowance.
+ *
+ * `billing` is the administrator's choice and shapes only the projection the
+ * wizard reads (`videoAllowance`, `workspace.unlimitedVideo`). What is spent
+ * is decided again by `admin_reserve_video_quota` from the billing stored on
+ * the submission, never from this.
+ */
+export const getAdminPersonalUploadContext = cache(
+  async (
+    userId: string,
+    billing: AdminUploadBilling,
+    deps: Dependencies = {
+      requireAdmin,
+      createAdminClient,
+      getWorkspaceContext,
+      now: () => new Date(),
+    },
+  ): Promise<AdminUploadContextResult> => {
+    const actor = await deps.requireAdmin();
+    if (!actor)
+      return {
+        ok: false,
+        reason: "admin-required",
+        message: "Administrator access is required.",
+      };
+    if (!UUID_RE.test(userId) || (billing !== "free" && billing !== "player"))
+      return {
+        ok: false,
+        reason: "invalid-program-id",
+        message: "Choose a valid player.",
+      };
+    try {
+      const session = await deps.getWorkspaceContext();
+      if (!session || session.viewer.id !== actor.id)
+        return {
+          ok: false,
+          reason: "admin-required",
+          message: "Administrator access is required.",
+        };
+      const admin = deps.createAdminClient();
+      const read = await admin
+        .from("users")
+        .select(
+          "id, first_name, last_name, email, avatar_path, hand, backhand, individual_pilot, is_admin, video_hours_override",
+        )
+        .eq("id", userId)
+        .maybeSingle();
+      if (read.error) throw new Error("player read failed");
+      const row = read.data as PlayerRow | null;
+      if (!row)
+        return {
+          ok: false,
+          reason: "player-not-found",
+          message: "That player no longer exists.",
+        };
+      const email = row.email ?? "";
+      const localPart = email.split("@")[0] ?? "";
+      const name =
+        [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
+        localPart ||
+        "Player";
+      const initials = getInitials(name) || localPart.slice(0, 2).toUpperCase();
+      const avatarUrl = row.avatar_path
+        ? admin.storage.from(USER_AVATARS_BUCKET).getPublicUrl(row.avatar_path)
+            .data.publicUrl
+        : null;
+      const override =
+        row.video_hours_override == null
+          ? null
+          : Number(row.video_hours_override);
+      // The player's own workspace exactly as the dashboard builds it, so the
+      // cap and the peek are the figures the player would see themselves.
+      const own: Workspace = {
+        id: row.id,
+        kind: "personal",
+        name: "Personal",
+        team: null,
+        orgType: null,
+        timeZone: "UTC",
+        role: "owner",
+        mark: initials,
+        iconUrl: avatarUrl,
+        canSubmitVideo: true,
+        individualPilot: row.individual_pilot === true,
+        unlimitedVideo: row.is_admin === true,
+        videoHoursOverride: Number.isFinite(override) ? override : null,
+        programStatus: null,
+        playersCanUpload: false,
+        uploadPolicy: "everyone",
+        eventsPolicy: "staff",
+        memberUploadEnabled: true,
+        myPlayerId: null,
+      };
+      const peek = await peekQuota(admin, own);
+      const playerAllowance = {
+        usedSeconds: peek.usedSeconds,
+        capSeconds: peek.capSeconds,
+        creditSeconds: peek.creditSeconds,
+        remainingSeconds: peek.remainingSeconds,
+      };
+      // Free: nothing of the player's is spent, so the wizard sees an
+      // uncapped workspace and never asks the player's allowance.
+      const workspace: Workspace =
+        billing === "free"
+          ? { ...own, unlimitedVideo: true, videoHoursOverride: null }
+          : own;
+      const billingMonth = currentBillingMonth(deps.now());
+      return {
+        ok: true,
+        context: {
+          source: "admin",
+          actorId: actor.id,
+          viewer: session.viewer,
+          workspace,
+          roster: [],
+          owner: {
+            viewer: {
+              ...session.viewer,
+              id: row.id,
+              email,
+              name,
+              firstName: row.first_name?.trim() || null,
+              initials,
+              avatarUrl,
+            },
+            hand: row.hand,
+            backhand: row.backhand,
+            billing,
+            playerAllowance,
+          },
+          videoAllowance:
+            billing === "free"
+              ? {
+                  accountId: actor.id,
+                  accountType: "individual",
+                  billingMonth,
+                  usedSeconds: 0,
+                  capSeconds: UNLIMITED_CAP_SECONDS,
+                  remainingSeconds: UNLIMITED_CAP_SECONDS,
+                }
+              : {
+                  accountId: row.id,
+                  accountType: "individual",
+                  billingMonth,
+                  ...playerAllowance,
+                },
+        },
+      };
+    } catch {
+      return {
+        ok: false,
+        reason: "read-failed",
+        message: "We couldn't load this player's upload context. Try again.",
       };
     }
   },

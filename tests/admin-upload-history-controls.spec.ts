@@ -108,7 +108,12 @@ function row(
   return {
     operationId: id(n),
     date: "2026-09-20T12:00:00Z",
-    team: { id: id(900), name: "Test University", side: "mens" },
+    team: {
+      id: id(900),
+      name: "Test University",
+      side: "mens",
+      personal: null,
+    },
     kind: "video",
     what: `Row ${n}`,
     addedBy: { id: id(901), name: "Admin Member" },
