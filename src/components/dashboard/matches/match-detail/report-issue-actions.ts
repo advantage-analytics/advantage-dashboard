@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
-import { MATCH_ISSUE_MAX_LENGTH } from "@/lib/data/match-verification";
+import {
+  MATCH_ISSUE_MAX_LENGTH,
+  reportPointLabel,
+  reportPointOf,
+} from "@/lib/data/match-verification";
 import { UUID_RE } from "@/lib/admin/validation";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 
@@ -25,15 +29,32 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
  * The read below answers the usual case; two Sends at once both pass it, and
  * the partial unique index `program_requests_one_open_match_issue` refuses
  * the second, which answers the same.
+ *
+ * A report can name a point (`pointId`; no caller passes one until self
+ * review's Video-tab entry returns). It is read back through the reporter's
+ * own client, so it must be a point of THIS match they can see, and its
+ * `point_label` is written here from that row — never from the client — so
+ * the admin queue keeps saying which point once a label publish has replaced
+ * the ids.
  */
 
 const UNIQUE_VIOLATION = "23505";
 const ALREADY_REPORTED =
   "We already have your report on this match, and we'll look at it.";
 
+interface PointRow {
+  id: string;
+  point_number: number;
+  set_number: number;
+  game_score: string | null;
+  point_score: string | null;
+  result_type: string | null;
+}
+
 export async function reportMatchIssue(
   matchId: string,
   note: string,
+  pointId: string | null = null,
 ): Promise<ActionResult> {
   const text = typeof note === "string" ? note.trim() : "";
   if (!text) return { ok: false, error: "Say what's still wrong." };
@@ -46,6 +67,12 @@ export async function reportMatchIssue(
   if (typeof matchId !== "string" || !UUID_RE.test(matchId)) {
     return { ok: false, error: "That match could not be found." };
   }
+  if (
+    pointId !== null &&
+    (typeof pointId !== "string" || !UUID_RE.test(pointId))
+  ) {
+    return { ok: false, error: "That point could not be found." };
+  }
 
   const supabase = await createClient();
   const {
@@ -55,19 +82,41 @@ export async function reportMatchIssue(
     return { ok: false, error: "Sign in again to send this." };
   }
 
-  const [{ data: match, error: matchError }, { data: profile }] =
-    await Promise.all([
-      supabase
-        .from("matches")
-        .select("id, verified")
-        .eq("id", matchId)
-        .maybeSingle<{ id: string; verified: boolean }>(),
-      supabase
-        .from("users")
-        .select("first_name, last_name")
-        .eq("id", user.id)
-        .maybeSingle<{ first_name: string | null; last_name: string | null }>(),
-    ]);
+  const [
+    { data: match, error: matchError },
+    { data: profile },
+    { data: pointRow, error: pointError },
+  ] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("id, verified")
+      .eq("id", matchId)
+      .maybeSingle<{ id: string; verified: boolean }>(),
+    supabase
+      .from("users")
+      .select("first_name, last_name")
+      .eq("id", user.id)
+      .maybeSingle<{ first_name: string | null; last_name: string | null }>(),
+    pointId
+      ? supabase
+          .from("points")
+          .select(
+            "id, point_number, set_number, game_score, point_score, result_type",
+          )
+          .eq("id", pointId)
+          .eq("match_id", matchId)
+          .maybeSingle<PointRow>()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (pointError) {
+    console.error("[report-issue] could not read the point", {
+      error: pointError.message,
+    });
+    return { ok: false, error: "Couldn't send that. Try again." };
+  }
+  if (pointId && !pointRow) {
+    return { ok: false, error: "That point could not be found." };
+  }
   if (matchError) {
     console.error("[report-issue] could not read the match", {
       error: matchError.message,
@@ -107,6 +156,21 @@ export async function reportMatchIssue(
     email,
     name: displayName(profile?.first_name ?? null, profile?.last_name ?? null),
     note: text,
+    point_id: pointRow?.id ?? null,
+    point_label: pointRow
+      ? reportPointLabel(
+          reportPointOf(
+            {
+              id: pointRow.id,
+              pointNumber: pointRow.point_number,
+              setNumber: pointRow.set_number,
+              gameScoreRaw: pointRow.game_score,
+              pointScoreRaw: pointRow.point_score,
+            },
+            pointRow.result_type || "Point",
+          ),
+        )
+      : null,
   });
   if (insertError?.code === UNIQUE_VIOLATION) {
     return { ok: false, error: ALREADY_REPORTED };

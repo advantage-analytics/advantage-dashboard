@@ -407,6 +407,11 @@ export function RequestDrawer({
                 </span>
               </div>
             </div>
+            {detail.source === "request" && detail.match?.pointLabel && (
+              <p className="mono m-0 text-[11px] leading-[1.5] text-[var(--ink-600)]">
+                Point {detail.match.pointLabel}
+              </p>
+            )}
             {claimantWords(detail) && (
               <blockquote className="border-l-2 border-[var(--border-medium)] pl-2.5 text-[11px] leading-[1.6] text-[var(--ink-700)] italic">
                 {claimantWords(detail)}
