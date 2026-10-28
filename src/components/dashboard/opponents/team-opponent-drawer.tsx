@@ -2,13 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { PeekDrawerFrame } from "@/components/dashboard/matches/match-drawer";
-import {
-  OpponentTeamField,
-  type OpponentTeamChange,
-} from "@/components/dashboard/matches/opponent-team-field";
+import { OpponentTeamField } from "@/components/dashboard/matches/opponent-team-field";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { Chip } from "@/components/dashboard/schedule/static/chip";
 import { ScoreLine } from "@/components/dashboard/score-line";
@@ -39,7 +36,10 @@ import { cn } from "@/lib/utils";
 import {
   applyOpponentTeam,
   describeApplies,
+  teamAction,
   teamWriteMode,
+  UNATTACHED_CHOICE,
+  type TeamChoice,
 } from "./add-opponent-team";
 import {
   RECENT_ROWS,
@@ -54,6 +54,7 @@ import {
   facedByControl,
   opponentScope,
   opponentTeamLine,
+  opponentTeamLineKey,
   recordLabel,
   scopeHasStats,
   scopePlaceholder,
@@ -63,6 +64,13 @@ import {
 
 /** A roster player's 18px face — the chip's, the menu row's and the recent row's. */
 const FACE_18 = "size-[18px] text-[8px]";
+
+/**
+ * An 11px text action beside a section eyebrow — "Change", "Cancel" — the
+ * same geometry as Recent matches' "All 2"; the caller adds the colour.
+ */
+const TEXT_ACTION_CLS =
+  "cursor-pointer rounded-sm text-[11px] font-medium transition-colors duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
 
 /**
  * The team Opponents page's 340px peek drawer — one opponent, read from the
@@ -75,18 +83,21 @@ const FACE_18 = "size-[18px] text-[8px]";
  * → Peek Drawer).
  *
  * ── The one thing it writes ─────────────────────────────────────────────────
- * An opponent nobody has placed reads "No team", and whoever can fix that gets
- * "Add their team" beside it: the wizard's own directory search
- * (`OpponentTeamField`), with a line under it saying how many matches a pick
- * changes. Staff set it on every match against the opponent; a player on the
- * ones they recorded; a player who recorded none sees "No team" and no
- * control. Who, how many and both writes are `add-opponent-team.ts` — this
- * file holds no Supabase call. A pick shows at once, the loader's answer
- * replaces it after `router.refresh()`, and a refusal puts the line back with
- * the reason under it.
+ * Where they play is its own "Plays for" section. Whoever can write it gets a
+ * text action beside the eyebrow — "Add their team" over "No team", "Change"
+ * over a team — that turns the row into the wizard's own directory search
+ * (`OpponentTeamField`, search-only), with a line under it saying how many
+ * matches a pick changes and, for a change, which team it replaces. Staff set
+ * it on every match against the opponent; a player on the ones they recorded;
+ * a player who recorded none sees "Not set" and no control. Who, how many and
+ * both writes are `add-opponent-team.ts` — this file holds no Supabase call. A
+ * pick shows at once, the loader's answer replaces it after
+ * `router.refresh()`, and a refusal puts the line back with the reason under
+ * it.
  *
- * Body, top to bottom: identity (the name, where they play, how they play,
- * the team's record) → **Faced by** → the stat block → three recent matches,
+ * Body, top to bottom: identity (the name, how they play) → **Plays for** →
+ * **Faced by** (the team's record is its "All" chip; how many are analyzed
+ * sits beside the eyebrow) → the stat block → three recent matches,
  * each led by the face of whoever of ours played it → the pinned footer.
  *
  * ── Faced by is the drawer's one control ────────────────────────────────────
@@ -154,6 +165,24 @@ export function TeamOpponentDrawer({
   // rule as `choice`, so a pick never shows on the next opponent's drawer.
   const [teamWrite, setTeamWrite] = useState<TeamWrite | null>(null);
   const write = teamWrite?.opponentKey === opponent.key ? teamWrite : null;
+  // The "Plays for" search, open for one opponent at a time by the same rule:
+  // stepping ↑↓ never carries an open search onto the next drawer.
+  const [editing, setEditing] = useState<string | null>(null);
+  const editingTeam = editing === opponent.key;
+  const teamTriggerRef = useRef<HTMLButtonElement>(null);
+  const unattachedRef = useRef<HTMLButtonElement>(null);
+  // Set when the search closes by Esc, a pick or Cancel — the input is gone,
+  // so focus goes back to Change. Left alone on blur.
+  const restoreTeamFocus = useRef(false);
+  useEffect(() => {
+    if (editingTeam || !restoreTeamFocus.current) return;
+    restoreTeamFocus.current = false;
+    teamTriggerRef.current?.focus();
+  }, [editingTeam]);
+  const closeTeamSearch = (restoreFocus: boolean) => {
+    restoreTeamFocus.current = restoreFocus;
+    setEditing(null);
+  };
 
   const scope = opponentScope(opponent, chosenId);
   const active =
@@ -188,23 +217,49 @@ export function TeamOpponentDrawer({
   const hand = opponentHandLabel(opponent.hand);
   const backhand = opponentBackhandLabel(opponent.backhand);
   const firstName = opponentFirstName(opponent.name);
+  // A pick that is saving or has saved stands in for the loader's answer
+  // only while the loader still says what it said before the pick. Once
+  // `router.refresh()` brings anything else back, the loader wins — the pick
+  // is never kept over the data. One that was refused never stands in.
   const savedTeam = opponentTeamLine(opponent);
-  // What the loader says wins. Until it has an answer, a pick that is saving
-  // or has saved stands in for it; one that was refused does not.
   const team =
-    savedTeam.kind === "none" && write && write.status !== "refused"
-      ? opponentTeamLine(write.choice)
+    write &&
+    write.status !== "refused" &&
+    opponentTeamLineKey(savedTeam) === write.before
+      ? opponentTeamLine({
+          ...write.choice,
+          unattached: write.choice.source === "unattached",
+        })
       : savedTeam;
+  // The words the team goes by, for the Change label and the Replaces note.
+  const teamName =
+    team.kind === "program" || team.kind === "school"
+      ? team.name
+      : team.kind === "unattached"
+        ? "Unattached"
+        : null;
   const writeMode = teamWriteMode(
     workspace.active,
     opponent.editableMatchIds.length,
   );
-  const canAdd = opponent.program === null && writeMode !== null;
+  const action = teamAction(
+    writeMode,
+    team.kind !== "none",
+    opponent.editableMatchIds.length,
+    opponent.matchIds.length,
+  );
 
-  const pickTeam = async (next: OpponentTeamChange) => {
+  const pickTeam = async (next: TeamChoice) => {
     if (!writeMode) return;
     const opponentKey = opponent.key;
-    setTeamWrite({ opponentKey, choice: next, status: "saving", error: null });
+    const before = opponentTeamLineKey(savedTeam);
+    setTeamWrite({
+      opponentKey,
+      before,
+      choice: next,
+      status: "saving",
+      error: null,
+    });
     const result = await applyOpponentTeam({
       mode: writeMode,
       programId: workspace.active.id,
@@ -218,6 +273,7 @@ export function TeamOpponentDrawer({
       current?.opponentKey === opponentKey && current.choice === next
         ? {
             opponentKey,
+            before,
             choice: next,
             status: result.saved > 0 ? "saved" : "refused",
             error: result.error,
@@ -275,8 +331,9 @@ export function TeamOpponentDrawer({
       }
     >
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
-        {/* Identity. `items-start`, not `items-center`: the avatar stays level
-            with the first line of a name that runs to two. */}
+        {/* Identity: who they are, and nothing else. `items-start`, not
+            `items-center`: the avatar stays level with the first line of a
+            name that runs to two. */}
         <div className="flex items-start gap-3.5">
           <span
             aria-hidden
@@ -284,7 +341,7 @@ export function TeamOpponentDrawer({
           >
             {getInitials(opponent.name)}
           </span>
-          <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex min-w-0 flex-col gap-1.5 pt-1">
             {/* Ink at rest, blue on hover, and it WRAPS — a name in its own
                 drawer never truncates (Peek Drawer). */}
             <h2 className="text-title-lg min-w-0">
@@ -295,100 +352,216 @@ export function TeamOpponentDrawer({
                 {opponent.name}
               </Link>
             </h2>
-
-            {/* Where they play. A directory program and a school somebody
-                typed are both a team and both get the crest; only an opponent
-                nobody has placed reads "No team". The school name wraps. */}
-            {team.kind === "none" ? (
-              canAdd && writeMode ? (
-                // "No team · Add their team" → the wizard's directory search,
-                // with what a pick will change on the line under it.
-                <OpponentTeamField
-                  lead={"No team · "}
-                  searchNote={describeApplies(
-                    writeMode,
-                    opponent.editableMatchIds.length,
-                    opponent.matchIds.length,
-                    firstName,
-                  )}
-                  onChange={pickTeam}
-                />
-              ) : (
-                // Nothing this viewer could change: the fact, and no control —
-                // not a disabled one.
-                <span className="text-[12px] text-[var(--ink-600)]">
-                  No team
-                </span>
-              )
-            ) : (
-              <span className="mt-1 mb-0.5 grid grid-cols-[26px_minmax(0,1fr)] items-start gap-2.5">
-                <ProgramCrest
-                  name={team.name}
-                  crestUrl={team.kind === "program" ? team.crestUrl : null}
-                  shortCode={team.kind === "program" ? team.shortCode : null}
-                  size={26}
-                />
-                {/* One line of text centres on the 26px crest; two or more
-                    start level with its top. */}
-                <span className="flex min-h-[26px] min-w-0 flex-col justify-center">
-                  <span className="text-[12px] leading-[1.3] text-[var(--ink-900)]">
-                    {team.name}
-                  </span>
-                  {team.kind === "program" && team.detail ? (
-                    <span className="text-[11px] leading-[1.3] text-[var(--ink-500)]">
-                      {team.detail}
-                    </span>
-                  ) : null}
-                  {write?.status === "saving" ? (
-                    <span
-                      role="status"
-                      className="text-[11px] leading-[1.3] text-[var(--ink-500)]"
-                    >
-                      Saving…
-                    </span>
-                  ) : null}
-                </span>
-              </span>
-            )}
-            {/* Why a pick did not land, or how much of it did not. */}
-            {write?.error ? (
-              <span
-                role="alert"
-                className="tabular text-[11px] leading-[1.4]"
-                style={{ color: "var(--danger-hover)" }}
-              >
-                {write.error}
-              </span>
-            ) : null}
-
-            {/* "Right-handed · Two-handed backhand" — a fact nobody recorded
-                is the one dash, never a guess. */}
+            {/* "Right-handed · Two-handed backhand". Half recorded keeps the
+                one dash for the missing half; nothing recorded is said once,
+                in words — "— · —" read as a rendering fault. */}
             <span className="text-[12px] text-[var(--ink-600)]">
-              {hand ?? <EmptyMark label="Hand not recorded" />}
-              {" · "}
-              {backhand ? (
-                `${backhand} backhand`
+              {hand || backhand ? (
+                <>
+                  {hand ?? <EmptyMark label="Hand not recorded" />}
+                  {" · "}
+                  {backhand ? (
+                    `${backhand} backhand`
+                  ) : (
+                    <EmptyMark label="Backhand not recorded" />
+                  )}
+                </>
               ) : (
-                <EmptyMark label="Backhand not recorded" />
+                "Style not recorded"
               )}
-            </span>
-            {/* The team's wins, then losses — the table's Record figure. It
-                stays the team's whoever Faced by is on: this block is who the
-                opponent is, and the chips carry each player's own. */}
-            <span className="tabular text-[12px] text-[var(--ink-600)]">
-              <span aria-hidden>{recordLabel(opponent)} against the team</span>
-              <span className="sr-only">
-                The team won {opponent.wins} and lost {opponent.losses}
-              </span>
-              {" · "}
-              {opponent.analyzed} of {opponent.played} analyzed
             </span>
           </div>
         </div>
 
-        {/* Faced by — who of ours has met them, and the drawer's one control. */}
+        {/* Plays for — where they play, as its own section under the same
+            eyebrow as Faced by and Recent matches, with the one way to set or
+            change it beside the eyebrow (as "All 2" sits beside Recent
+            matches). Changing turns the row into the picker's search, with
+            what a pick will overwrite on the line under it. */}
         <div className="flex flex-col gap-0.5">
-          <span className="eyebrow-sm pb-2">Faced by</span>
+          <div className="flex items-center pb-2">
+            <span className="eyebrow-sm flex-1">Plays for</span>
+            {action &&
+              (editingTeam ? (
+                <button
+                  type="button"
+                  // Keeps focus in the search, so the press closes it here
+                  // rather than as the blur that would take focus nowhere.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => closeTeamSearch(true)}
+                  className={cn(
+                    TEXT_ACTION_CLS,
+                    "text-[var(--ink-600)] hover:text-[var(--ink-700)]",
+                  )}
+                >
+                  Cancel
+                </button>
+              ) : (
+                <button
+                  ref={teamTriggerRef}
+                  type="button"
+                  onClick={() => setEditing(opponent.key)}
+                  aria-label={
+                    teamName
+                      ? `Change ${firstName}’s team, ${teamName}`
+                      : `Add ${firstName}’s team`
+                  }
+                  className={cn(
+                    TEXT_ACTION_CLS,
+                    "text-[var(--blue)] hover:text-[var(--blue-hover)]",
+                  )}
+                >
+                  {action === "add" ? "Add" : "Change"}
+                </button>
+              ))}
+          </div>
+          {editingTeam && action && writeMode ? (
+            <>
+              <OpponentTeamField
+                program={opponent.program}
+                school={opponent.school}
+                searchNote={describeApplies(
+                  writeMode,
+                  opponent.editableMatchIds.length,
+                  opponent.matchIds.length,
+                  firstName,
+                  // "Replaces Unattached on…" reads as a typo; a first answer
+                  // and a change from unattached both just apply.
+                  team.kind === "unattached" ? null : teamName,
+                )}
+                onChange={pickTeam}
+                onDismiss={closeTeamSearch}
+                // Tab from the search lands on Unattached, not on nothing.
+                blurStaysOpen={(next) =>
+                  next !== null && next === unattachedRef.current
+                }
+              />
+              {/* No school to search for is one press, not a typed answer.
+                  Under the field, so the results menu covers it while
+                  somebody is typing a school. */}
+              {team.kind !== "unattached" && (
+                <button
+                  ref={unattachedRef}
+                  type="button"
+                  // Keeps focus in the search, as Cancel does.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    closeTeamSearch(true);
+                    void pickTeam(UNATTACHED_CHOICE);
+                  }}
+                  // Reached by Tab from the search, so it closes the search
+                  // the way the search would: Esc puts focus back on Change,
+                  // and leaving for anywhere but the search closes it.
+                  onKeyDown={(e) => {
+                    if (e.key !== "Escape") return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    closeTeamSearch(true);
+                  }}
+                  onBlur={(e) => {
+                    const next = e.relatedTarget;
+                    if (
+                      next instanceof HTMLInputElement &&
+                      next.role === "combobox"
+                    ) {
+                      return;
+                    }
+                    closeTeamSearch(false);
+                  }}
+                  className="-mx-2.5 mt-2 flex cursor-pointer items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-left transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                >
+                  <UnattachedMark size={26} />
+                  <span className="flex min-w-0 flex-col gap-px">
+                    <span className="text-[12px] text-[var(--ink-900)]">
+                      Unattached
+                    </span>
+                    <span className="text-[11px] text-[var(--ink-600)]">
+                      Not with a school or club
+                    </span>
+                  </span>
+                </button>
+              )}
+            </>
+          ) : (
+            // A directory program and a school somebody typed are both a team
+            // and both get the crest. Unattached is an answer too — a plain
+            // tile with a dash, no crest to fake. Only an opponent nobody has
+            // placed reads "Not set", over an empty crest outline, with what
+            // the answer can be under it for whoever can give it.
+            <span className="flex items-center gap-3">
+              {team.kind === "none" ? (
+                <span
+                  aria-hidden
+                  className="size-[38px] shrink-0 rounded-[8px] border border-dashed border-[var(--ink-200)]"
+                />
+              ) : team.kind === "unattached" ? (
+                <UnattachedMark size={38} />
+              ) : (
+                <ProgramCrest
+                  name={team.name}
+                  crestUrl={team.kind === "program" ? team.crestUrl : null}
+                  shortCode={team.kind === "program" ? team.shortCode : null}
+                  size={38}
+                />
+              )}
+              <span className="flex min-w-0 flex-col gap-0.5">
+                {team.kind === "none" ? (
+                  <span className="text-[13px] leading-[1.3] text-[var(--ink-600)]">
+                    Not set
+                  </span>
+                ) : (
+                  <span className="text-[13px] leading-[1.3] text-[var(--ink-900)]">
+                    {teamName}
+                  </span>
+                )}
+                {team.kind === "program" && team.detail ? (
+                  <span className="text-[11px] leading-[1.3] text-[var(--ink-600)]">
+                    {team.detail}
+                  </span>
+                ) : null}
+                {team.kind === "unattached" ? (
+                  <span className="text-[11px] leading-[1.3] text-[var(--ink-600)]">
+                    Not with a school or club
+                  </span>
+                ) : null}
+                {team.kind === "none" && action ? (
+                  <span className="text-[11px] leading-[1.3] text-[var(--ink-600)]">
+                    A school, a club, or unattached
+                  </span>
+                ) : null}
+                {write?.status === "saving" ? (
+                  <span
+                    role="status"
+                    className="text-[11px] leading-[1.3] text-[var(--ink-600)]"
+                  >
+                    Saving…
+                  </span>
+                ) : null}
+              </span>
+            </span>
+          )}
+          {/* Why a pick did not land, or how much of it did not. */}
+          {write?.error ? (
+            <span
+              role="alert"
+              className="tabular pt-1.5 text-[11px] leading-[1.4]"
+              style={{ color: "var(--danger-hover)" }}
+            >
+              {write.error}
+            </span>
+          ) : null}
+        </div>
+
+        {/* Faced by — who of ours has met them, and the drawer's one control.
+            The team's record is the "All" chip; how much of it is analyzed
+            sits beside the eyebrow. */}
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center pb-2">
+            <span className="eyebrow-sm flex-1">Faced by</span>
+            <span className="tabular text-[11px] text-[var(--ink-600)]">
+              {opponent.analyzed} of {opponent.played} analyzed
+            </span>
+          </div>
           {facedByControl(opponent.facedBy.length) === "menu" ? (
             <FacedByMenu
               opponent={opponent}
@@ -401,6 +574,8 @@ export function TeamOpponentDrawer({
               <Chip
                 label="All"
                 detail={recordLabel(opponent)}
+                // The record line this chip replaced said it in words.
+                ariaLabel={`All: the team won ${opponent.wins} and lost ${opponent.losses}`}
                 active={scope.playerId === null}
                 onClick={() => choose(null)}
               />
@@ -554,11 +729,37 @@ export function TeamOpponentDrawer({
 interface TeamWrite {
   /** The opponent the pick was made on. */
   opponentKey: string;
-  choice: OpponentTeamChange;
+  /** `opponentTeamLineKey` of the loader's team when the pick was made. */
+  before: string;
+  choice: TeamChoice;
   /** `refused` is nothing saved; `saved` is at least one match changed. */
   status: "saving" | "saved" | "refused";
   /** The sentence to show; null while saving and when every match saved. */
   error: string | null;
+}
+
+/**
+ * The mark for "Unattached": a plain tile with a short dash — the crest's
+ * geometry, so the row lines up with a program's, and nothing that reads as
+ * a school.
+ */
+function UnattachedMark({ size }: { size: 26 | 38 }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex shrink-0 items-center justify-center bg-[var(--surface-subtle)]",
+        size === 38 ? "size-[38px] rounded-[8px]" : "size-[26px] rounded-[7px]",
+      )}
+    >
+      <span
+        className={cn(
+          "h-[1.5px] rounded-full bg-[var(--ink-600)]",
+          size === 38 ? "w-3" : "w-2.5",
+        )}
+      />
+    </span>
+  );
 }
 
 /** One roster player's 18px face: their photo, or their initials. */

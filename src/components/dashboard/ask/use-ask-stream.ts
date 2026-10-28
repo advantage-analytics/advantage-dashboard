@@ -102,6 +102,8 @@ export interface AskAnswerState {
   status: "streaming" | "done" | "error";
   /** The step the route last named. Null before the first one and when saved. */
   stage: AskStatusStage | null;
+  /** Agent mode's step within the stage, shown instead of the stage's line; absent otherwise. */
+  stageDetail?: string | null;
   headline: string | null;
   figures: AskFigure[];
   /** The answer's one visual block, resolved by the server. Null when it has none. */
@@ -220,8 +222,13 @@ function restoreDraft(state: AskThreadState, asked: AskQuestion): AskQuestion {
 
 function applyEvent(answer: AskAnswerState, event: AskEvent): AskAnswerState {
   switch (event.type) {
-    case "status":
-      return { ...answer, stage: event.stage };
+    case "status": {
+      // Agent mode's step line lives only as long as its status: the next
+      // status without one goes back to the stage's own line.
+      const next: AskAnswerState = { ...answer, stage: event.stage };
+      delete next.stageDetail;
+      return event.detail ? { ...next, stageDetail: event.detail } : next;
+    }
     case "headline":
       return { ...answer, headline: event.text };
     case "figure":
@@ -418,7 +425,15 @@ export function parseAskEvent(line: string): AskEvent | null {
   switch (value.type) {
     case "status":
       return (ASK_STATUS_STAGES as readonly unknown[]).includes(value.stage)
-        ? { type: "status", stage: value.stage as AskStatusStage }
+        ? {
+            type: "status",
+            stage: value.stage as AskStatusStage,
+            ...(typeof value.detail === "string" &&
+            value.detail.length > 0 &&
+            value.detail.length <= 80
+              ? { detail: value.detail }
+              : {}),
+          }
         : null;
     case "headline":
       return typeof value.text === "string"

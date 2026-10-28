@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { searchPrograms, redactForPlayer } from "@/lib/data/programs-server";
+import { toGenderedSquad } from "@/lib/data/squad";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,10 @@ export const dynamic = "force-dynamic";
  * built server-side, here, because a component that merely declines to RENDER
  * the owner still ships the name to the browser in the JSON.
  *
+ * `?team=mens|womens` narrows the search to one squad, in the SQL, so the
+ * row limit counts only that squad — the opponent-team picker on a men's or
+ * women's team. Any other value, or none, searches every squad.
+ *
  * Not rate limited. There is no rate-limiting layer in this project yet, and
  * inventing one for a single route would be worse than saying so: the exposure
  * is a directory of 1,940 programs that anyone can also read off the ITA
@@ -40,7 +45,11 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = await createClient();
-  const results = await searchPrograms(supabase, term);
+  const results = await searchPrograms(
+    supabase,
+    term,
+    toGenderedSquad(req.nextUrl.searchParams.get("team")),
+  );
 
   // Anything that is not exactly "join" is the coach intent, which is the
   // existing behaviour unchanged. Fail towards the redacted shape only on an
@@ -57,9 +66,9 @@ export async function GET(req: NextRequest) {
       // are three URLs and three cache keys, so what this absorbs is the same
       // short term typed by everyone — which is also the term that costs most.
       //
-      // `intent` is part of the URL and therefore part of the cache key, so the
-      // full and the redacted answer to the same term can never be served for
-      // each other.
+      // `intent` and `team` are part of the URL and therefore part of the
+      // cache key, so the full and the redacted answer, or one squad's and
+      // every squad's, can never be served for each other.
       headers: {
         "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
       },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { Check, CirclePlay } from "lucide-react";
+import { CirclePlay } from "lucide-react";
 
 import {
   Tooltip,
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import { PlayerDot } from "@/components/dashboard/matches/match-detail/rail-scoreboard";
+import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
@@ -735,13 +735,13 @@ export function withPointRows(
  * surname widens the columns together and every row stays aligned under it.
  */
 const COLUMN =
-  "flex w-[var(--h2h-col,64px)] shrink-0 items-center justify-end gap-1";
+  "flex w-[var(--h2h-col,64px)] shrink-0 items-center justify-end gap-1.5";
 
 /**
- * 64 px fits a surname of about six characters at 12px beside the player dot.
- * A longer one gets roughly 7px a character, plus 18px for the dot and its gap
- * (and room for the verified check on `you`), capped so the statistic label
- * keeps its space; `truncate` backstops anything beyond.
+ * 64 px fits a surname of about six characters at 12px beside the legend marker.
+ * A longer one gets roughly 7px a character, plus 18px for the bar and its gap,
+ * capped so the statistic label keeps its space; `truncate` backstops anything
+ * beyond.
  */
 function columnWidth(youName: string, oppName: string): number {
   const longest = Math.max(youName.length, oppName.length);
@@ -1308,24 +1308,15 @@ export function HeadToHeadCard() {
       <div className="flex items-center border-b border-[var(--border-hairline)] pb-[11px]">
         <span aria-hidden="true" className="min-w-0 flex-1" />
         <span className={COLUMN}>
-          {/* The player's chart colour, the same 6px dot the rail scoreboard
-              draws, so a column reads with every chart on the page. */}
-          <PlayerDot color="var(--viz-you)" />
+          {/* The player's chart colour on the report's one legend marker,
+              so a column reads with every chart key on the page. */}
+          <LegendMark color="var(--viz-you)" />
           <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
             {youName}
           </span>
-          {/* Gated exactly as the rail's check is: the glyph claims a verified
-              result, so it may not appear on a match that has none. */}
-          {match.verificationStatus ? (
-            <Check
-              className="h-[11px] w-[11px] shrink-0 text-[var(--viz-good)]"
-              strokeWidth={2}
-              aria-label="Verified result"
-            />
-          ) : null}
         </span>
         <span className={COLUMN}>
-          <PlayerDot color="var(--viz-opp)" />
+          <LegendMark color="var(--viz-opp)" />
           <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-600)]">
             {oppName}
           </span>

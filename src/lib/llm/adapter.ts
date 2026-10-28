@@ -495,6 +495,384 @@ async function openaiStream(
   return iterate();
 }
 
+/* ── Tool calling ─────────────────────────────────────────── */
+
+/** One tool the model may call: its name, what it does, and its arguments as a JSON schema. */
+export interface LLMTool {
+  name: string;
+  description: string;
+  inputSchema: { type: "object" } & Record<string, unknown>;
+}
+
+/** One call the model asked for. `input` is the parsed arguments, `{}` when they did not parse. */
+export interface LLMToolCall {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+}
+
+/**
+ * One turn of a tool conversation, provider-neutral. An assistant turn keeps
+ * the provider's own message in `raw`, sent back verbatim on that provider:
+ * Gemini 3 signs each function call (`extra_content.google.thought_signature`)
+ * and refuses the next turn when the signature is not returned with it.
+ */
+export type LLMToolMessage =
+  | { role: "user"; content: string }
+  | {
+      role: "assistant";
+      content: string;
+      toolCalls: LLMToolCall[];
+      raw?: { provider: "anthropic" | "openai"; message: unknown };
+    }
+  | {
+      role: "tool";
+      results: {
+        id: string;
+        name: string;
+        content: string;
+        isError?: boolean;
+      }[];
+    };
+
+/** What one model turn answered: its prose, and the calls it asked for (none when it stopped). */
+export interface LLMToolTurn {
+  text: string;
+  toolCalls: LLMToolCall[];
+  raw: { provider: "anthropic" | "openai"; message: unknown };
+}
+
+export interface LLMToolCallOptions extends Omit<LLMCallOptions, "jsonSchema"> {
+  /** `auto` (default): the model may stop. `required`: it must call one. A name: it must call that one. */
+  toolChoice?: "auto" | "required" | { name: string };
+}
+
+function parseToolInput(text: string | undefined): Record<string, unknown> {
+  if (!text) return {};
+  try {
+    const value: unknown = JSON.parse(text);
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * One non-streamed model turn with tools, for a caller that runs its own
+ * bounded loop (Ask's agent mode, `src/lib/services/ask/agent.ts`): the
+ * caller executes the calls and sends their results back as a `tool` turn.
+ * Same providers, failover, models and PostHog events as `getLLMStream()`;
+ * throws when no provider is configured — there is no mock tool turn.
+ */
+export async function getLLMToolTurn(
+  systemPrompt: string,
+  messages: LLMToolMessage[],
+  tools: readonly LLMTool[],
+  context: LLMObservabilityContext,
+  options: LLMToolCallOptions = {},
+): Promise<LLMToolTurn> {
+  const provider = process.env.LLM_PROVIDER ?? "";
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const viaAnthropic = (key: string) => () =>
+    anthropicToolTurn(systemPrompt, messages, tools, context, options, key);
+  const viaOpenAI = (key: string) => () =>
+    openaiToolTurn(systemPrompt, messages, tools, context, options, key);
+
+  const primary =
+    provider === "anthropic" && anthropicKey
+      ? viaAnthropic(anthropicKey)
+      : provider === "openai" && openaiKey
+        ? viaOpenAI(openaiKey)
+        : null;
+  if (!primary) throw new Error("No LLM provider is configured.");
+  const secondary =
+    provider === "anthropic" && openaiKey
+      ? viaOpenAI(openaiKey)
+      : provider === "openai" && anthropicKey
+        ? viaAnthropic(anthropicKey)
+        : null;
+  try {
+    return await primary();
+  } catch (error) {
+    if (!secondary || options.signal?.aborted) throw error;
+    console.warn("[llm] primary provider failed; retrying on the other", {
+      provider,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return secondary();
+  }
+}
+
+async function anthropicToolTurn(
+  systemPrompt: string,
+  messages: LLMToolMessage[],
+  tools: readonly LLMTool[],
+  context: LLMObservabilityContext,
+  options: LLMToolCallOptions,
+  apiKey: string,
+): Promise<LLMToolTurn> {
+  const posthog = getPostHogClient();
+  const choice = options.toolChoice ?? "auto";
+  const request = {
+    model: modelFor("anthropic", options.model),
+    max_tokens: options.maxTokens ?? 4096,
+    system: anthropicSystem(systemPrompt, options.staticPrefixLength),
+    messages: messages.map((message) => {
+      if (message.role === "user") {
+        return { role: "user" as const, content: message.content };
+      }
+      if (message.role === "tool") {
+        return {
+          role: "user" as const,
+          content: message.results.map((result) => ({
+            type: "tool_result" as const,
+            tool_use_id: result.id,
+            content: result.content,
+            ...(result.isError ? { is_error: true } : {}),
+          })),
+        };
+      }
+      if (message.raw?.provider === "anthropic") {
+        return { role: "assistant" as const, content: message.raw.message };
+      }
+      return {
+        role: "assistant" as const,
+        content: [
+          ...(message.content
+            ? [{ type: "text" as const, text: message.content }]
+            : []),
+          ...message.toolCalls.map((call) => ({
+            type: "tool_use" as const,
+            id: call.id,
+            name: call.name,
+            input: call.input,
+          })),
+        ],
+      };
+    }),
+    tools: tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      input_schema: tool.inputSchema,
+    })),
+    tool_choice:
+      choice === "auto"
+        ? { type: "auto" as const }
+        : choice === "required"
+          ? { type: "any" as const }
+          : { type: "tool" as const, name: choice.name },
+    ...(options.temperature !== undefined
+      ? { temperature: options.temperature }
+      : {}),
+  };
+  const requestOptions = options.signal ? { signal: options.signal } : {};
+  // The content blocks are built loosely above (a replayed assistant turn is
+  // the provider's own array); the SDK's request type is too narrow for that.
+  const body = request as never;
+  const response = (
+    posthog
+      ? await (
+          await cachedClient(
+            `anthropic:posthog:${apiKey}`,
+            async () =>
+              new (await import("@posthog/ai/anthropic")).Anthropic({
+                apiKey,
+                posthog,
+              }),
+          )
+        ).messages.create(
+          {
+            ...(body as object),
+            ...posthogOptions(context, options),
+          } as never,
+          requestOptions,
+        )
+      : await (
+          await cachedClient(
+            `anthropic:${apiKey}`,
+            async () =>
+              new (await import("@anthropic-ai/sdk")).default({ apiKey }),
+          )
+        ).messages.create(body, requestOptions)
+  ) as {
+    content: (
+      | { type: "text"; text: string }
+      | { type: "tool_use"; id: string; name: string; input: unknown }
+      | { type: string }
+    )[];
+  };
+  flushAfterResponse(posthog);
+
+  const text: string[] = [];
+  const toolCalls: LLMToolCall[] = [];
+  for (const block of response.content) {
+    if (block.type === "text" && "text" in block) text.push(block.text);
+    if (block.type === "tool_use" && "id" in block && "name" in block) {
+      const input = (block as { input: unknown }).input;
+      toolCalls.push({
+        id: block.id,
+        name: block.name,
+        input:
+          typeof input === "object" && input !== null && !Array.isArray(input)
+            ? (input as Record<string, unknown>)
+            : {},
+      });
+    }
+  }
+  return {
+    text: text.join(""),
+    toolCalls,
+    raw: { provider: "anthropic", message: response.content },
+  };
+}
+
+/** The Gemini (OpenAI-compatible) request body for one tool turn, apart from PostHog's options. Exported for its spec. */
+export function geminiToolRequestBody(
+  systemPrompt: string,
+  messages: LLMToolMessage[],
+  tools: readonly LLMTool[],
+  options: LLMToolCallOptions,
+) {
+  const choice = options.toolChoice ?? "auto";
+  return {
+    model: modelFor("openai", options.model),
+    messages: [
+      { role: "system" as const, content: systemPrompt },
+      ...messages.flatMap((message): Record<string, unknown>[] => {
+        if (message.role === "user") {
+          return [{ role: "user", content: message.content }];
+        }
+        if (message.role === "tool") {
+          return message.results.map((result) => ({
+            role: "tool",
+            tool_call_id: result.id,
+            content: result.content,
+          }));
+        }
+        const raw =
+          message.raw?.provider === "openai"
+            ? (message.raw.message as { tool_calls?: unknown[] })
+            : null;
+        return [
+          {
+            role: "assistant",
+            content: message.content || null,
+            // The provider's own calls, signatures included, with the ids
+            // the results answer — an id the provider left out was minted
+            // in `openaiToolTurn`, and the result carries that one.
+            tool_calls: message.toolCalls.map((call, index) => {
+              const own = raw?.tool_calls?.[index];
+              return {
+                ...(typeof own === "object" && own !== null ? own : {}),
+                id: call.id,
+                type: "function",
+                function: {
+                  name: call.name,
+                  arguments: JSON.stringify(call.input),
+                },
+              };
+            }),
+          },
+        ];
+      }),
+    ],
+    tools: tools.map((tool) => ({
+      type: "function" as const,
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema,
+      },
+    })),
+    tool_choice:
+      choice === "auto" || choice === "required"
+        ? choice
+        : { type: "function" as const, function: { name: choice.name } },
+    // No sampling parameters and no `max_tokens`, as `geminiRequestBody()`.
+  };
+}
+
+async function openaiToolTurn(
+  systemPrompt: string,
+  messages: LLMToolMessage[],
+  tools: readonly LLMTool[],
+  context: LLMObservabilityContext,
+  options: LLMToolCallOptions,
+  apiKey: string,
+): Promise<LLMToolTurn> {
+  const posthog = getPostHogClient();
+  const body = geminiToolRequestBody(
+    systemPrompt,
+    messages,
+    tools,
+    options,
+  ) as never;
+  const requestOptions = options.signal ? { signal: options.signal } : {};
+  const completion = (
+    posthog
+      ? await (
+          await cachedClient(
+            `openai:posthog:${apiKey}`,
+            async () =>
+              new (await import("@posthog/ai/openai")).OpenAI({
+                apiKey,
+                baseURL: GEMINI_OPENAI_BASE_URL,
+                posthog,
+              }),
+          )
+        ).chat.completions.create(
+          {
+            ...(body as object),
+            ...posthogOptions(context, options, "google"),
+          } as never,
+          requestOptions,
+        )
+      : await (
+          await cachedClient(
+            `openai:${apiKey}`,
+            async () =>
+              new (await import("openai")).default({
+                apiKey,
+                baseURL: GEMINI_OPENAI_BASE_URL,
+              }),
+          )
+        ).chat.completions.create(body, requestOptions)
+  ) as {
+    choices?: {
+      message?: {
+        content?: string | null;
+        tool_calls?: {
+          id?: string;
+          type?: string;
+          function?: { name?: string; arguments?: string };
+        }[];
+      };
+    }[];
+  };
+  flushAfterResponse(posthog);
+
+  const message = completion.choices?.[0]?.message ?? {};
+  const toolCalls: LLMToolCall[] = (message.tool_calls ?? []).flatMap((call) =>
+    call.function?.name
+      ? [
+          {
+            id: call.id || `call_${randomUUID()}`,
+            name: call.function.name,
+            input: parseToolInput(call.function.arguments),
+          },
+        ]
+      : [],
+  );
+  return {
+    text: message.content ?? "",
+    toolCalls,
+    raw: { provider: "openai", message },
+  };
+}
+
 /* ── Embeddings ───────────────────────────────────────────── */
 
 /**

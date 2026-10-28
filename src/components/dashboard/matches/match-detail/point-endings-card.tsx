@@ -12,6 +12,7 @@ import {
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
 import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
@@ -412,15 +413,11 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
       })}
 
       <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 pt-0.5">
-        {/* Local swatch, not the shared `LegendSwatch` — this legend runs at
-            6px, smaller than that component's fixed 8px dot. */}
+        {/* `LegendMark`, not `LegendSwatch`: these labels sit a step lighter
+            (ink-400) than that component's text-micro. */}
         {OUTCOMES.map((o) => (
           <span key={o.key} className="inline-flex items-center gap-1.5">
-            <span
-              aria-hidden="true"
-              className="h-1.5 w-1.5 shrink-0 rounded-[2px]"
-              style={{ background: o.you }}
-            />
+            <LegendMark color={o.you} />
             <span
               className="text-micro whitespace-nowrap"
               style={{ color: "var(--ink-400)" }}

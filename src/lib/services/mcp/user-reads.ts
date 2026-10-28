@@ -18,7 +18,12 @@ import type {
 
 /**
  * The table reads `/api/mcp` makes as the signed-in user, through the
- * bearer client (`src/lib/supabase/bearer.ts`), under RLS.
+ * bearer client (`src/lib/supabase/bearer.ts`), under RLS. Ask's agent mode
+ * (`/api/ask` with `ASK_AGENT=1`) makes the read-only ones through the
+ * route's cookie client instead: every read here is filtered to `userId` or
+ * decided by RLS for whichever client asks, so either is the signed-in user.
+ * Keep it that way — a read here must never rely on the client being the
+ * bearer one.
  *
  * The page's loaders (`ask-server.ts`, `active-workspace-server.ts`) read
  * through the cookie client, which has no session here; these are the same

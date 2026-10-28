@@ -82,7 +82,11 @@ export type MarkStateShot = Pick<
 export type MarkStatePoint = Pick<
   LabelPoint,
   "id" | "status" | "checkedAt" | "dismissed"
-> & { shots: readonly MarkStateShot[] };
+> & {
+  shots: readonly MarkStateShot[];
+  /** A stored double fault ends the point for its slots (`doubleFaultAt`). */
+  ending?: LabelPoint["ending"];
+};
 
 /**
  * Whether the labeller changed the point or any of its shots — a shot they
@@ -144,7 +148,11 @@ function missingShotStates(
     siteRemoval: shot.siteRemoval ?? null,
   }));
   return mine.map((s) =>
-    suggestionState(s, { dismissed: point.dismissed, shots }),
+    suggestionState(s, {
+      dismissed: point.dismissed,
+      ending: point.ending,
+      shots,
+    }),
   );
 }
 

@@ -177,6 +177,18 @@ test.describe("measureForLabel — a canonical row label back to its column", ()
     );
     // The paired table's own suffix for a share beside its count.
     expect(measureForLabel("First serves in, share")).toBe("first_serves_in");
+    // The renderer's name for a count row whose measure name was taken.
+    expect(measureForLabel("Serves to the body, count")).toBe(
+      measureForLabel("Serves to the body"),
+    );
+    expect(measureForLabel("Serves to the body, count")).not.toBeNull();
+    // So the renamed row keeps the film link its share row has.
+    expect(tableRowVideoHref({ label: "Serves to the body, count" }, ONE)).toBe(
+      tableRowVideoHref({ label: "Serves to the body, share" }, ONE),
+    );
+    expect(
+      tableRowVideoHref({ label: "Serves to the body, count" }, ONE),
+    ).not.toBeNull();
   });
 
   test("a label that is no measure, has no preset, or is over other matches is null", () => {

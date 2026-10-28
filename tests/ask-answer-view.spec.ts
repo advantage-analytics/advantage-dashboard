@@ -590,16 +590,26 @@ test.describe("the visual block", () => {
       "First serves in",
       "Double faults",
     ]);
+    // The difference column is a Delta: the arrow says which way the number
+    // moved and the colour whether that is good for the measure, so double
+    // faults rising is a red ↑. The sign moves into the arrow.
     await expect(block.locator("tbody tr").nth(0).locator("td")).toHaveText([
       "37.5%",
       "58.2%",
-      "−20.7",
+      "↓ down 20.7",
     ]);
     await expect(block.locator("tbody tr").nth(1).locator("td")).toHaveText([
       "4",
       "2.3",
-      "+1.7",
+      "↑ up 1.7",
     ]);
+    await expect(block.locator("[data-ask-delta]")).toHaveCount(2);
+    const tones = await block
+      .locator("[data-ask-delta]")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => node.getAttribute("data-ask-delta")),
+      );
+    expect(tones).toEqual(["bad", "bad"]);
     await expect(
       block.getByRole("columnheader", { name: "All matches" }),
     ).toHaveCount(1);
@@ -626,7 +636,9 @@ test.describe("the visual block", () => {
     await expect(block.locator("svg[aria-hidden]")).toHaveCount(1);
     // One series: no point is a match, so there are no links.
     await expect(block.locator("a")).toHaveCount(0);
-    await expect(block.locator("svg circle")).toHaveCount(3);
+    // The sparkline's grammar: a dot on the last point only, until one is
+    // hovered.
+    await expect(block.locator("svg circle")).toHaveCount(1);
     await expect(block.locator("[data-ask-trend-last]")).toHaveText("37,5 %");
     // The key names the dashed rule; nothing prints its value (53.83…).
     await expect(block.getByText("Your average")).toBeVisible();
@@ -672,6 +684,10 @@ test.describe("the visual block", () => {
       "Jun 4: 61,0 %; All matches 58,2 %, open match",
     );
     await expect(block.locator("ol")).toHaveCount(0);
+    // A point that opens its match keeps a ring, so the target can be seen;
+    // the last point wears the filled dot instead.
+    await expect(block.locator("circle[data-ask-trend-ring]")).toHaveCount(2);
+    await expect(block.locator("svg circle")).toHaveCount(3);
     // Each link sits on its point: the dot's own place in the box, as a
     // share of the plot's width and height (the harness loads no stylesheet,
     // so the inline position is what can be read).
@@ -798,7 +814,11 @@ test.describe("the visual block", () => {
       "8 matches against left-handed opponents, oldest first.",
     );
     await expect(block.getByText("Last 8: W L L W L W W W")).toHaveCount(1);
-    await expect(block.locator("p")).toHaveText("Won 5–, lost 3");
+    await expect(block.locator("p .sr-only")).toHaveText("Won 5, lost 3");
+    await expect(block.locator("p [aria-hidden]")).toHaveText([
+      "5–3",
+      " · Last 8",
+    ]);
     // The one block that may use the outcome colours.
     const colours = await block
       .locator("[aria-hidden] > span")
@@ -819,9 +839,12 @@ test.describe("the visual block", () => {
 
     // One line from level through twelve points; one divider between the
     // two sets; the level rule.
-    const svg = block.locator("svg");
+    const svg = block.locator("[data-ask-wipe] > svg");
     await expect(svg).toHaveAttribute("aria-hidden", "true");
-    await expect(svg.locator("path")).toHaveCount(1);
+    // The line twice — blue above the level rule, slate below, each clipped
+    // to its side — and its wash on either side.
+    await expect(svg.locator("path[data-ask-momentum-line]")).toHaveCount(2);
+    await expect(svg.locator("path")).toHaveCount(4);
     await expect(svg.locator("line")).toHaveCount(2);
     await expect(svg.locator("circle[data-ask-mark]")).toHaveCount(4);
     // The marks wear the key-moment colour and nothing else does.
@@ -849,10 +872,9 @@ test.describe("the visual block", () => {
     await expect(block.getByText("Set 2")).toHaveCount(1);
     const key = block.locator("ul").first();
     await expect(key.locator("li")).toHaveText([
-      "Ahead or behind, point by point",
-      "Match point",
-      "Set point",
-      "Break point",
+      "Ahead",
+      "Behind",
+      "Break, set and match points",
     ]);
     // No figure on the plot; the words count what is drawn.
     await expect(block.locator("p.sr-only")).toHaveText(
@@ -872,7 +894,13 @@ test.describe("the visual block", () => {
       "tree",
     ]) {
       await openFixture(page, `?case=full&visual=${kind}`);
-      const markup = await visual(page).evaluate((node) => node.outerHTML);
+      // A table's difference column is the design system's Delta, whose
+      // arrow is the one other green/red a row may carry.
+      const markup = await visual(page).evaluate((node) => {
+        const copy = node.cloneNode(true) as HTMLElement;
+        copy.querySelectorAll("[data-ask-delta]").forEach((n) => n.remove());
+        return copy.outerHTML;
+      });
       expect(markup, kind).not.toMatch(/viz-good|viz-bad|success|danger/);
     }
   });
@@ -925,7 +953,8 @@ test.describe("the play tree", () => {
     );
     await expect(branches(page)).toHaveCount(3);
     await expect(branches(page).nth(0)).toContainText("Forehand crosscourt");
-    await expect(branches(page).nth(0)).toContainText("29 points · 14 won");
+    await expect(branches(page).nth(0)).toContainText("Points 29");
+    await expect(branches(page).nth(0)).toContainText("Won 14");
     await expect(branches(page).nth(0)).toContainText("48,3 %");
     await expect(branches(page).nth(2)).toContainText("Forehand inside out");
     // The bar is the share, as geometry; the words are the server's text.
@@ -936,7 +965,14 @@ test.describe("the play tree", () => {
       );
     expect(widths).toEqual(["48.3%", "70%", "37.5%"]);
     await expect(block).not.toContainText("48.3%");
-    await expect(block.getByText("Won %, as a share")).toHaveCount(1);
+    // The columns are named once, over the figures.
+    await expect(block.locator("div[aria-hidden] > span")).toHaveText([
+      "",
+      "",
+      "Points",
+      "Won",
+      "Won %",
+    ]);
     // Over four matches no branch has a film to open.
     await expect(block.locator("a")).toHaveCount(0);
     await expect(page.locator("[data-ask-watch]")).toHaveCount(0);
@@ -1093,7 +1129,11 @@ test.describe("a block that opens the film", () => {
     const block = visual(page);
     const ticks = block.locator("[data-ask-form-tick]");
     await expect(ticks).toHaveCount(8);
-    await expect(block.locator("p")).toHaveText("Won 5–, lost 3");
+    await expect(block.locator("p .sr-only")).toHaveText("Won 5, lost 3");
+    await expect(block.locator("p [aria-hidden]")).toHaveText([
+      "5–3",
+      " · Last 8",
+    ]);
     const links = block.locator("a");
     await expect(links).toHaveCount(2);
     await expect(links.nth(0)).toHaveAttribute(

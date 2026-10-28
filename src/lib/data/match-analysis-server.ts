@@ -212,16 +212,13 @@ export async function loadMatchAnalysis(
  */
 export function analysisFor(
   jobs: Map<string, MatchAnalysis>,
-  match: { id: string; sourceProvider?: string; verificationStatus?: string },
+  match: { id: string; sourceProvider?: string },
 ): MatchAnalysis {
   const job = jobs.get(match.id);
   if (job) return job;
 
   if (!match.sourceProvider) return manualAnalysis();
-  return importedAnalysis(
-    match.sourceProvider,
-    Boolean(match.verificationStatus),
-  );
+  return importedAnalysis(match.sourceProvider);
 }
 
 /**

@@ -212,25 +212,44 @@ be. Doubles teams and existing users depend on it.
 
 > **A sixth reviewed exception, added 2026-10-12: `set_opponent_team`.**
 >
-> The team Opponents drawer's "Add their team" names the program an opponent
-> plays for on matches that were saved before the wizard asked. Allowed
-> because it is metadata about the OTHER side and touches no fact a statistic
-> is computed from: a single explicit action by the program's owner, a coach
-> or staff (the raw role, not the schedule policy — this is not a schedule
-> setting); scoped to matches of that one program, every id re-verified
-> against `program_id` under a row lock, at most 200 per call, all or nothing;
-> touching **only** `opponent_program_id` and `opponent_school` — **never**
-> `player1_id`, `player2_id`, `player2_name`, `score`, `format`, `program_id`,
-> `event_entry_id`, or anything under `match_stats`, `points` or `shots`. A
-> player keeps the plain client UPDATE under the creator-only policy, on the
-> same two columns, for matches they recorded. The wizard and the Edit Match
-> dialog write the same two columns on their own match. Unlike the earlier
-> exceptions this one writes **no** `program_audit_log` row yet — a known gap,
-> to close before the action is offered beyond the drawer. Migrations:
+> The team Opponents drawer's "Plays for" names the program an opponent plays
+> for on matches that were saved before the wizard asked — and, since
+> 2026-10-26, **changes** a team already set and marks an opponent
+> **unattached** (no school or club, said on purpose). Allowed because it is
+> metadata about the OTHER side and touches no fact a statistic is computed
+> from: a single explicit action by the program's owner, a coach or staff (the
+> raw role, not the schedule policy — this is not a schedule setting); scoped
+> to matches of that one program, every id re-verified against `program_id`
+> under a row lock, at most 200 per call, all or nothing; touching **only**
+> `opponent_program_id`, `opponent_school` and `opponent_unattached` — exactly
+> one of the three is set, the others cleared — and **never** `player1_id`,
+> `player2_id`, `player2_name`, `score`, `format`, `program_id`,
+> `event_entry_id`, or anything under `match_stats`, `points` or `shots`.
+>
+> Every call writes one `program_audit_log` row,
+> `match.opponent_team_changed`, whose `details` hold the match ids, the new
+> answer (`to`) and **each match's previous answer** (`from`, read under the
+> lock) — so a wrong pick, the women's program for the men's, can be put back
+> by hand. This closes the gap the first version left open. The four-argument
+> function is a call into the five-argument one, so both are audited in one
+> place.
+>
+> A player keeps the plain client UPDATE under the creator-only policy, on the
+> same three columns, for matches they recorded — unaudited, as the wizard
+> and the Edit Match dialog are on their own match. The drawer offers a
+> player **Change** only when they recorded every match against the opponent
+> (`teamAction`), because the loader shows the newest match's team and a
+> partial rewrite could change nothing anyone sees. A trigger clears
+> `opponent_unattached` whenever a program or school is set, and a CHECK keeps
+> the three exclusive, so no other writer of the two older columns needs to
+> know the third exists. Migrations:
 > `supabase/migrations/20261012003309_matches_opponent_program.sql` (the
 > columns), `20261012071550_set_opponent_team.sql` and
 > `20261012080828_set_opponent_team_lock_fix.sql` (the function; the first
-> version's lock-on-aggregate statement failed every call and was replaced).
+> version's lock-on-aggregate statement failed every call and was replaced),
+> `20261026180116_opponent_unattached.sql` (the third column, its trigger and
+> CHECK, the five-argument function) and
+> `20261026184149_set_opponent_team_audit.sql` (the audit row).
 >
 > **A second writer of the same two columns, added 2026-10-13: the admin
 > console's upload wizard.** It is _not_ the action above and meets none of
@@ -249,6 +268,15 @@ be. Doubles teams and existing users depend on it.
 > with a second door. The other admin-console entries in this file describe
 > the RPCs and do not mention this follow-up write.
 > `src/lib/admin/uploads/opponent-team.ts`.
+
+> **A reviewed exception, added 2026-10-28: the Verified lock on the
+> rebuild paths.** `jobs/[jobId]/rederive` (its `handler.ts` takes a required
+> `matchVerified` dependency) and `jobs/[jobId]/resubmit` refuse a match
+> Verified by Advantage with a 409, before anything is claimed or sent. Both
+> write on the service role, which the database guard
+> (`20261028050138_verified_player_lock`) lets through, so the routes are the
+> lock (decision D1, `docs/plans/advantage-review.md`). The safe direction
+> only: nothing in `derivation/` or `derive-and-publish.ts` changed.
 
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >

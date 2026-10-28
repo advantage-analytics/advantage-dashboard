@@ -2,6 +2,7 @@ import { loadScheduleWriter } from "./helpers/schedule-writer";
 import { expect, test } from "@playwright/test";
 import { matchResultFor } from "@/lib/schedule/entry-state";
 import { DEFAULT_DOUBLES_GAMES_TO, roundRank } from "@/lib/schedule/format";
+import * as courtOptions from "@/components/dashboard/matches/new-match-wizard/court-options";
 import { readFileSync } from "node:fs";
 import {
   canManageTeamSchedule,
@@ -25,6 +26,8 @@ function actions(
     tournament?: { matches: { id: string; round: string }[] };
     /** What `programs` answers for any key — the directory row behind a school. */
     program?: { id: string } | null;
+    /** The event's surface, as the schedule stores it ("hard"). */
+    surface?: string | null;
   } = {},
 ) {
   const writes: unknown[] = [];
@@ -44,6 +47,7 @@ function actions(
       name: options.tournament ? "Invitational" : "Dual",
       kind: options.tournament ? "tournament" : "dual",
       starts_on: "2026-09-10",
+      surface: options.surface ?? null,
       format: {},
     },
     program_event_outcomes: options.outcome ? [{ id: "outcome" }] : [],
@@ -119,6 +123,10 @@ function actions(
         };
       if (name === "./entry-state") return { matchResultFor };
       if (name === "./format") return { DEFAULT_DOUBLES_GAMES_TO, roundRank };
+      if (
+        name === "@/components/dashboard/matches/new-match-wizard/court-options"
+      )
+        return courtOptions;
       if (name === "@/lib/workspace/types")
         return { canManageTeamSchedule, isProgramStaff, uploadPolicyLabel };
       return {};
@@ -326,6 +334,29 @@ test("recordResult defaults college matches to Play On Lets, singles and doubles
     expect(
       (insert!.value as { format: Record<string, unknown> }).format,
     ).toMatchObject({ play_on_lets: true });
+  }
+});
+
+test("recordResult stores the event's surface in the Court field's spelling", async () => {
+  for (const [surface, courtType] of [
+    ["hard", "Outdoor Hard Court"],
+    ["clay", "Clay Court"],
+    ["grass", "Grass Court"],
+    ["carpet", "carpet"],
+    [null, undefined],
+  ] as const) {
+    const run = actions("staff", { surface });
+    expect(await run.actions.recordResult(score)).toEqual({ matchId: "match" });
+    const insert = run.writes.find(
+      (write): write is { table: string; method: string; value: unknown } =>
+        typeof write === "object" &&
+        write !== null &&
+        (write as { table?: string }).table === "matches",
+    );
+    expect(
+      (insert!.value as { court_type?: string }).court_type,
+      String(surface),
+    ).toBe(courtType);
   }
 });
 

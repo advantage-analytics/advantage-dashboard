@@ -541,17 +541,24 @@ export const ASK_PLAN_EXAMPLE_REFUSAL: AskPlanRefusal = {
 /**
  * The five views as the plan prompt lists them: a header line per view, then
  * one line per column — `  name (type): meaning`. Columns marked `hidden` in
- * the schema are left out. The spec parses this block back and holds it
+ * the schema are left out, and `mcpOnly` ones unless `mcp` is set (the MCP
+ * connector's `describe_views`). The spec parses this block back and holds it
  * against `ASK_SCHEMA`.
  */
 export function renderAskSchemaBlock(
   mode: AskScope["kind"] = "personal",
+  { mcp = false }: { mcp?: boolean } = {},
 ): string {
   const team = mode === "team";
   return ASK_SCHEMA.map(
     (view) =>
       `ask.${view.view} — ${team ? view.teamMeaning : view.meaning}\n${view.columns
-        .filter((column) => !column.hidden && (team || !column.teamOnly))
+        .filter(
+          (column) =>
+            !column.hidden &&
+            (team || !column.teamOnly) &&
+            (mcp || !column.mcpOnly),
+        )
         .map((column) => `  ${column.name} (${column.type}): ${column.meaning}`)
         .join("\n")}`,
   ).join("\n\n");

@@ -163,7 +163,6 @@ export function MatchReportScoreboard() {
       players: [
         {
           id: youId,
-          color: "var(--viz-you)",
           name: sides.you.name,
           sets: you.sets,
           points: you.game,
@@ -171,7 +170,6 @@ export function MatchReportScoreboard() {
         },
         {
           id: oppId,
-          color: "var(--viz-opp)",
           name: sides.opp.name,
           sets: opp.sets,
           points: opp.game,
@@ -198,7 +196,6 @@ export function MatchReportScoreboard() {
       const outcomes = sets.map(setOutcome);
       return {
         id: isYou ? youId : oppId,
-        color: isYou ? "var(--viz-you)" : "var(--viz-opp)",
         name: isYou ? sides.you.name : sides.opp.name,
         sets: sets.map((set) => (isYou ? set.player1 : set.player2)),
         // `tiebreakOf` returns the LOSER's points; only drawn on a lost set.

@@ -45,7 +45,7 @@ const BETA_FORCE_PRIVATE = true;
 // so the embed names its foreign key — without the hint PostgREST refuses the
 // read as ambiguous.
 const MATCH_COLUMNS =
-  "id, tournament_name, round, date, match_type, court_type, player1_id, player1_name, player2_name, score, private, format, duration, player_hand, player_backhand, opponent_hand, opponent_backhand, program_id, event_entry_id, source_provider, opponent_program_id, opponent_school, opponent_program:programs!matches_opponent_program_id_fkey(id, school_name, school_abbrev, crest_path, conference, division, team)";
+  "id, tournament_name, round, date, match_type, court_type, player1_id, player1_name, player2_name, score, private, format, duration, player_hand, player_backhand, opponent_hand, opponent_backhand, program_id, event_entry_id, source_provider, opponent_program_id, opponent_school, verified, verified_at, opponent_program:programs!matches_opponent_program_id_fkey(id, school_name, school_abbrev, crest_path, conference, division, team)";
 
 interface MatchRow {
   id: string;
@@ -93,6 +93,30 @@ const PURGE_PROTECTED_MESSAGE =
 
 /** DELETE's answer when that guard could not be checked, or anything else threw. */
 const PURGE_UNAVAILABLE_MESSAGE = "Match deletion is unavailable. Try again.";
+
+/** What a Verified match keeps fixed; the database guard is the backstop. */
+const VERIFIED_LOCKED_FIELDS = [
+  "score",
+  "format",
+  "player1_id",
+  "player1_name",
+  "player2_name",
+] as const;
+
+/** Key-order-insensitive equality for the JSON values a patch carries. */
+function sameValue(a: unknown, b: unknown): boolean {
+  const canon = (v: unknown): unknown =>
+    Array.isArray(v)
+      ? v.map(canon)
+      : v && typeof v === "object"
+        ? Object.fromEntries(
+            Object.keys(v as object)
+              .sort()
+              .map((k) => [k, canon((v as Record<string, unknown>)[k])]),
+          )
+        : (v ?? null);
+  return JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+}
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -402,6 +426,27 @@ export async function PATCH(
   if (!result.ok) return badRequest(result.error, result.field, result.code);
 
   const update = result.update;
+
+  // A match Verified by Advantage locks its score and players (decision D1,
+  // docs/plans/advantage-review.md). The dialog shows those fields locked and
+  // never sends them; a value equal to the stored one is dropped, and a real
+  // change is refused here with a sentence rather than as the database
+  // guard's raw 42501. Date, event, round and court stay editable.
+  if (stored.verified) {
+    for (const key of VERIFIED_LOCKED_FIELDS) {
+      if (!(key in update)) continue;
+      if (sameValue(update[key], stored[key])) {
+        delete update[key];
+        continue;
+      }
+      return badRequest(
+        "This match is Verified by Advantage, so its score and players are locked. Something still wrong? Tell us from the Verified fact.",
+        key,
+        "match_verified",
+        422,
+      );
+    }
+  }
 
   // A roster pick: the id must be a player on this program's roster, and the
   // name comes from that row — a client-sent name never labels someone else.

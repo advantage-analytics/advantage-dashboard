@@ -4,6 +4,7 @@ import type {
   TeamOpponentRecentMatch,
 } from "@/lib/data/team-opponents";
 import type { PersonalOpponentMeasure } from "@/lib/data/personal-opponents";
+import { divisionLabel } from "@/lib/data/programs-server";
 
 /**
  * What the team opponent drawer shows for the scope its "Faced by" control is
@@ -127,20 +128,40 @@ export type OpponentTeamLine =
       name: string;
       shortCode: string | null;
       crestUrl: string | null;
-      /** "Big West · Division I", either half alone, or null for neither. */
+      /**
+       * "D-I · Big West" — division first, as the team picker's rows read —
+       * either half alone, or null for neither.
+       */
       detail: string | null;
     }
   /** A school somebody typed, not in the directory: a team all the same. */
   | { kind: "school"; name: string }
+  /** Said on purpose: they play for no school or club. */
+  | { kind: "unattached" }
   /** Nobody has said where they play. */
   | { kind: "none" };
 
+/**
+ * A team line as one comparable string, so the drawer can tell when the
+ * loader's answer has moved on from the one a pick replaced.
+ */
+export function opponentTeamLineKey(line: OpponentTeamLine): string {
+  return line.kind === "none" || line.kind === "unattached"
+    ? line.kind
+    : `${line.kind}:${line.name}`;
+}
+
 export function opponentTeamLine(
-  opponent: Pick<TeamOpponent, "program" | "school">,
+  opponent: Pick<TeamOpponent, "program" | "school"> & {
+    unattached?: boolean;
+  },
 ): OpponentTeamLine {
   const { program, school } = opponent;
   if (program) {
-    const detail = [program.conference, program.division]
+    const detail = [
+      divisionLabel(program.division?.trim() || null),
+      program.conference,
+    ]
       .map((part) => part?.trim())
       .filter(Boolean)
       .join(" · ");
@@ -153,5 +174,6 @@ export function opponentTeamLine(
     };
   }
   if (school) return { kind: "school", name: school };
+  if (opponent.unattached) return { kind: "unattached" };
   return { kind: "none" };
 }

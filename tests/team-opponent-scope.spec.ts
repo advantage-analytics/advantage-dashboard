@@ -12,6 +12,7 @@ import {
   facedByControl,
   opponentScope,
   opponentTeamLine,
+  opponentTeamLineKey,
   recordLabel,
   scopeHasStats,
   scopePlaceholder,
@@ -189,13 +190,13 @@ test.describe("where the opponent plays", () => {
     division: "Division I",
   };
 
-  test("a directory program carries its crest inputs and conference · division", () => {
+  test("a directory program carries its crest inputs and division · conference", () => {
     expect(opponentTeamLine({ program, school: null })).toEqual({
       kind: "program",
       name: "State University",
       shortCode: "STU",
       crestUrl: null,
-      detail: "Big Sky · Division I",
+      detail: "Division I · Big Sky",
     });
   });
 
@@ -218,6 +219,29 @@ test.describe("where the opponent plays", () => {
     expect(
       opponentTeamLine({ program: null, school: "Harbor Tennis Club" }),
     ).toEqual({ kind: "school", name: "Harbor Tennis Club" });
+  });
+
+  test("a line's key changes when the team does, and only then", () => {
+    const line = opponentTeamLine({ program, school: null });
+    expect(opponentTeamLineKey(line)).toBe(
+      opponentTeamLineKey(opponentTeamLine({ program, school: null })),
+    );
+    expect(opponentTeamLineKey(line)).not.toBe(
+      opponentTeamLineKey(
+        opponentTeamLine({ program: null, school: "State University" }),
+      ),
+    );
+    expect(opponentTeamLineKey({ kind: "none" })).toBe("none");
+  });
+
+  test("unattached is its own answer, and a team said anywhere outranks it", () => {
+    expect(
+      opponentTeamLine({ program: null, school: null, unattached: true }),
+    ).toEqual({ kind: "unattached" });
+    expect(
+      opponentTeamLine({ program: null, school: "Harbor", unattached: true }),
+    ).toEqual({ kind: "school", name: "Harbor" });
+    expect(opponentTeamLineKey({ kind: "unattached" })).toBe("unattached");
   });
 
   test("neither is No team", () => {

@@ -79,7 +79,8 @@ test.describe("matchDraftFromPrefill", () => {
       eventName: "Fall Open",
       round: "QF",
       matchType: "Tournament",
-      courtType: "Hard",
+      // The bare "Hard" opens on the Court field's Hard.
+      courtType: "Outdoor Hard Court",
       playerScores: [6, 3, 7],
       opponentScores: [4, 6, 5],
       playerTiebreaks: [null, null, null],
@@ -114,6 +115,27 @@ test.describe("matchDraftFromPrefill", () => {
       playerName: "Cal Reyes",
       eventLabel: null,
     });
+  });
+
+  test("a court type maps only its bare legacy spellings; other text stays as given", () => {
+    const court = (courtType: string | null) =>
+      matchDraftFromPrefill(
+        {
+          id: ID,
+          provider: "advantage_intelligence",
+          opponentName: "A",
+          date: "2026-10-18",
+          courtType,
+        },
+        null,
+      ).formData.courtType;
+    expect(court("hard")).toBe("Outdoor Hard Court");
+    expect(court(" Clay ")).toBe("Clay Court");
+    expect(court("grass")).toBe("Grass Court");
+    expect(court("Indoor Hard Court")).toBe("Indoor Hard Court");
+    expect(court("Indoor Clay Court")).toBe("Indoor Clay Court");
+    expect(court("carpet")).toBe("carpet");
+    expect(court(null)).toBe("");
   });
 
   test("a five-set score widens the cells to five", () => {

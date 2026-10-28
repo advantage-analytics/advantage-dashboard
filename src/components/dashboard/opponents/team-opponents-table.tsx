@@ -134,7 +134,11 @@ function TeamOpponentRow({
         {opponent.name}
       </button>
 
-      <ProgramCell program={opponent.program} school={opponent.school} />
+      <ProgramCell
+        program={opponent.program}
+        school={opponent.school}
+        unattached={opponent.unattached}
+      />
 
       {/* Faced by — clipped to its track, so a long first name truncates. */}
       <span className="flex min-w-0 items-center">
@@ -168,8 +172,17 @@ function TeamOpponentRow({
 function ProgramCell({
   program,
   school,
-}: Pick<TeamOpponent, "program" | "school">) {
+  unattached,
+}: Pick<TeamOpponent, "program" | "school" | "unattached">) {
   const name = program?.schoolName ?? school;
+  // An answer, not a gap: the word, with no crest and no dash.
+  if (!name && unattached) {
+    return (
+      <span className="min-w-0 truncate text-[12px] text-[var(--ink-600)]">
+        Unattached
+      </span>
+    );
+  }
   if (!name) {
     return (
       <span className="min-w-0 overflow-hidden">

@@ -89,6 +89,9 @@ test.beforeAll(async () => {
             [resolve("src/app/dashboard/onboarding-actions.ts")]: resolve(
               "tests/fixtures/onboarding-actions-browser-mock.ts",
             ),
+            [resolve(
+              "src/components/dashboard/matches/match-detail/report-issue-actions.ts",
+            )]: resolve("tests/fixtures/report-issue-actions-browser-mock.ts"),
             "@/app/dashboard/matches/(detail)/[matchId]/viz-bands-actions":
               resolve("tests/fixtures/viz-fullscreen-actions-browser-mock.ts"),
             "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions":

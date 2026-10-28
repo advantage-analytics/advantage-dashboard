@@ -1,0 +1,187 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { displayName } from "@/lib/services/programs/invite-acceptance";
+import {
+  MATCH_ISSUE_MAX_LENGTH,
+  reportPointLabel,
+  reportPointOf,
+} from "@/lib/data/match-verification";
+import { UUID_RE } from "@/lib/admin/validation";
+import type { ActionResult } from "@/components/dashboard/settings/actions";
+
+/**
+ * "Something still wrong? Tell us" on a match that is Verified by Advantage
+ * (docs/plans/advantage-review.md, step 1): files a `match_issue` row in
+ * `program_requests`, the table /admin Requests reads, so it lands in the
+ * Waiting tab beside claims and join requests.
+ *
+ * `program_requests` carries no policies, so the insert is the service
+ * role's — but only after the reporter's OWN client has read the match: RLS
+ * is what proves they can see it (their match, or a team's they belong to).
+ * A match id they cannot read answers exactly like one that does not exist.
+ * The address and name are the session's, never the form's.
+ *
+ * One open report per match and address: a second Send while the first is
+ * still in the queue says it is already there rather than filing it twice.
+ * The read below answers the usual case; two Sends at once both pass it, and
+ * the partial unique index `program_requests_one_open_match_issue` refuses
+ * the second, which answers the same.
+ *
+ * A report can name a point (`pointId`; no caller passes one until self
+ * review's Video-tab entry returns). It is read back through the reporter's
+ * own client, so it must be a point of THIS match they can see, and its
+ * `point_label` is written here from that row — never from the client — so
+ * the admin queue keeps saying which point once a label publish has replaced
+ * the ids.
+ */
+
+const UNIQUE_VIOLATION = "23505";
+const ALREADY_REPORTED =
+  "We already have your report on this match, and we'll look at it.";
+
+interface PointRow {
+  id: string;
+  point_number: number;
+  set_number: number;
+  game_score: string | null;
+  point_score: string | null;
+  result_type: string | null;
+}
+
+export async function reportMatchIssue(
+  matchId: string,
+  note: string,
+  pointId: string | null = null,
+): Promise<ActionResult> {
+  const text = typeof note === "string" ? note.trim() : "";
+  if (!text) return { ok: false, error: "Say what's still wrong." };
+  if (text.length > MATCH_ISSUE_MAX_LENGTH) {
+    return {
+      ok: false,
+      error: `Keep it under ${MATCH_ISSUE_MAX_LENGTH} characters.`,
+    };
+  }
+  if (typeof matchId !== "string" || !UUID_RE.test(matchId)) {
+    return { ok: false, error: "That match could not be found." };
+  }
+  if (
+    pointId !== null &&
+    (typeof pointId !== "string" || !UUID_RE.test(pointId))
+  ) {
+    return { ok: false, error: "That point could not be found." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email) {
+    return { ok: false, error: "Sign in again to send this." };
+  }
+
+  const [
+    { data: match, error: matchError },
+    { data: profile },
+    { data: pointRow, error: pointError },
+  ] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("id, verified")
+      .eq("id", matchId)
+      .maybeSingle<{ id: string; verified: boolean }>(),
+    supabase
+      .from("users")
+      .select("first_name, last_name")
+      .eq("id", user.id)
+      .maybeSingle<{ first_name: string | null; last_name: string | null }>(),
+    pointId
+      ? supabase
+          .from("points")
+          .select(
+            "id, point_number, set_number, game_score, point_score, result_type",
+          )
+          .eq("id", pointId)
+          .eq("match_id", matchId)
+          .maybeSingle<PointRow>()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (pointError) {
+    console.error("[report-issue] could not read the point", {
+      error: pointError.message,
+    });
+    return { ok: false, error: "Couldn't send that. Try again." };
+  }
+  if (pointId && !pointRow) {
+    return { ok: false, error: "That point could not be found." };
+  }
+  if (matchError) {
+    console.error("[report-issue] could not read the match", {
+      error: matchError.message,
+    });
+    return { ok: false, error: "Couldn't send that. Try again." };
+  }
+  if (!match) return { ok: false, error: "That match could not be found." };
+  // Only offered on a verified match; a stale tab after a Reopen gets this.
+  if (!match.verified) {
+    return {
+      ok: false,
+      error: "This match is no longer Verified by Advantage.",
+    };
+  }
+
+  const email = user.email.trim().toLowerCase();
+  const admin = createAdminClient();
+  const { data: open, error: openError } = await admin
+    .from("program_requests")
+    .select("id")
+    .eq("kind", "match_issue")
+    .eq("match_id", match.id)
+    .eq("email", email)
+    .eq("status", "open")
+    .limit(1);
+  if (openError) {
+    console.error("[report-issue] could not read open reports", {
+      error: openError.message,
+    });
+    return { ok: false, error: "Couldn't send that. Try again." };
+  }
+  if (open && open.length > 0) return { ok: false, error: ALREADY_REPORTED };
+
+  const { error: insertError } = await admin.from("program_requests").insert({
+    kind: "match_issue",
+    match_id: match.id,
+    email,
+    name: displayName(profile?.first_name ?? null, profile?.last_name ?? null),
+    note: text,
+    point_id: pointRow?.id ?? null,
+    point_label: pointRow
+      ? reportPointLabel(
+          reportPointOf(
+            {
+              id: pointRow.id,
+              pointNumber: pointRow.point_number,
+              setNumber: pointRow.set_number,
+              gameScoreRaw: pointRow.game_score,
+              pointScoreRaw: pointRow.point_score,
+            },
+            pointRow.result_type || "Point",
+          ),
+        )
+      : null,
+  });
+  if (insertError?.code === UNIQUE_VIOLATION) {
+    return { ok: false, error: ALREADY_REPORTED };
+  }
+  if (insertError) {
+    console.error("[report-issue] could not file the report", {
+      error: insertError.message,
+    });
+    return { ok: false, error: "Couldn't send that. Try again." };
+  }
+
+  revalidatePath("/admin", "layout");
+  return { ok: true };
+}

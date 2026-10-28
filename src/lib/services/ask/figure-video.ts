@@ -227,14 +227,18 @@ const LABEL_TO_MEASURE: ReadonlyMap<string, string> = new Map(
  * the opponent's ("First serves in, opponent"). Null for a label that is
  * no measure, a measure with no Video preset, or a qualifier that is not
  * this match's own points ("…, all matches"). "…, share" is the paired
- * table's own suffix for a percentage beside its count, and names the same.
+ * table's own suffix for a percentage beside its count, and names the same;
+ * so does "…, count", which the renderer gives a count row whose name an
+ * earlier row of the block already took (`answer-render.ts`).
  */
 export function measureForLabel(label: string): string | null {
   const [name, ...rest] = label.split(",");
   const key = LABEL_TO_MEASURE.get(labelKey(name));
   if (!key) return null;
   const qualifier = rest.join(",").trim().toLowerCase();
-  if (qualifier === "" || qualifier === "share") return key;
+  if (qualifier === "" || qualifier === "share" || qualifier === "count") {
+    return key;
+  }
   if (qualifier === "opponent") return `opp_${key}`;
   return null;
 }

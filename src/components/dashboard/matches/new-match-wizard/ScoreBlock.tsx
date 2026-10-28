@@ -57,6 +57,7 @@ export const ScoreInput = ({
   onEnter,
   onTab,
   set,
+  disabled = false,
 }: {
   value: number | null;
   onValue: (v: string) => void;
@@ -74,9 +75,12 @@ export const ScoreInput = ({
   onTab?: () => boolean;
   /** Zero-based set index, so a caller can find one set's cells in the DOM. */
   set?: number;
+  /** Read-only, as Edit match draws a Verified match's score. */
+  disabled?: boolean;
 }) => (
   <input
     ref={inputRef}
+    disabled={disabled}
     type="text"
     inputMode="numeric"
     data-set={set}
@@ -108,6 +112,8 @@ export const ScoreInput = ({
       CELL_CLS,
       tiebreak && "text-[13px] text-[var(--ink-700)]",
       invalid && "border-[var(--error)]",
+      disabled &&
+        "cursor-not-allowed bg-[var(--surface-subtle)] text-[var(--ink-500)]",
     )}
   />
 );

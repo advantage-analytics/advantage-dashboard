@@ -241,7 +241,7 @@ test.describe("TrendVisual", () => {
     });
     expect(markup).toContain("All matches");
     expect(markup).not.toContain("Your average");
-    expect(markup).not.toContain("<line");
+    expect(markup).not.toMatch(/<line[\s>]/);
     expect(markup.match(/<path[^>]*stroke-dasharray/g)).toHaveLength(1);
     // Each point's words name both series.
     expect(markup).toContain("<li>Sep 28: 37,5 %; All matches 58,2 %</li>");
@@ -328,12 +328,15 @@ test.describe("TreeVisual", () => {
     for (const text of ["29", "14", "48,3 %", "70 %", "37,5 %"]) {
       expect(markup).toContain(text);
     }
-    expect(markup).toContain("points");
-    expect(markup).toContain("won");
+    // The figure columns are named once, over the root's columns.
+    for (const heading of [">Points<", ">Won<", ">Won %<"]) {
+      expect(markup).toContain(heading);
+    }
     expect(markup).not.toContain(">48.3%<");
     expect(markup).toMatch(/width:48\.3%/);
     expect(markup).toMatch(/width:70%/);
-    expect(markup).toContain("Won %, as a share");
+    // The key is gone: the column head names what the bar draws.
+    expect(markup).not.toContain("as a share");
     expect(markup).toContain(
       "Serve, then Plus one: 3 branches, most played first.",
     );
@@ -580,5 +583,99 @@ test.describe("ServeVisual — the court's zones", () => {
       expect(markup).not.toContain("href=");
       expect(markup.match(/data-ask-zone-hover="/g)).toHaveLength(5);
     }
+  });
+});
+
+// ── The table's difference column ───────────────────────────────────────────
+
+test.describe("tableDelta", () => {
+  const { tableDelta, cellNumber } = loader.load(
+    "src/components/dashboard/ask/visuals/table-visual.tsx",
+  ) as {
+    tableDelta: (
+      heading: string,
+      label: string,
+      cell: string,
+      subject: string | undefined,
+      baseline: string | undefined,
+    ) => { arrow: string; text: string; tone: string } | null;
+    cellNumber: (cell: string) => number | null;
+  };
+
+  test("the arrow is the number's direction, the colour whether that is good", () => {
+    expect(
+      tableDelta("Difference", "First serves in", "−20.7", "37.5%", "58.2%"),
+    ).toEqual({ arrow: "↓", text: "20.7", tone: "bad" });
+    expect(
+      tableDelta("Difference", "First serves in", "+2.6", "66,7 %", "64,1 %"),
+    ).toEqual({ arrow: "↑", text: "2.6", tone: "good" });
+    // Fewer double faults is better: rising is a red ↑, falling a green ↓.
+    expect(
+      tableDelta("Difference", "Double faults", "+1.7", "4", "2.3"),
+    ).toEqual({ arrow: "↑", text: "1.7", tone: "bad" });
+    expect(tableDelta("Diff", "Unforced errors", "-3", "9", "12")).toEqual({
+      arrow: "↓",
+      text: "3",
+      tone: "good",
+    });
+    // A zero claims nothing, so it needs no check.
+    expect(tableDelta("Difference", "Aces", "0", "3", "3.4")).toEqual({
+      arrow: "→",
+      text: "0",
+      tone: "flat",
+    });
+  });
+
+  test("a sign that disagrees with subject minus baseline prints as sent", () => {
+    // baseline − subject: the better figure would otherwise read red.
+    expect(
+      tableDelta("Difference", "First serves in", "+20.7", "37.5%", "58.2%"),
+    ).toBeNull();
+    // Either side not one plain number: the direction cannot be checked.
+    expect(
+      tableDelta("Difference", "First serves in", "+3", "12/20", "9/20"),
+    ).toBeNull();
+    expect(
+      tableDelta("Difference", "First serves in", "+3", undefined, "9"),
+    ).toBeNull();
+    // A count over 999 reads as its own size, so a baseline − subject sign
+    // on it is still caught.
+    expect(
+      tableDelta("Difference", "Total points won", "−52", "1,050", "998"),
+    ).toBeNull();
+    expect(
+      tableDelta("Difference", "Total points won", "+52", "1,050", "998"),
+    ).toEqual({ arrow: "↑", text: "52", tone: "good" });
+  });
+
+  test("prints as sent when it cannot tell", () => {
+    // Not a difference column.
+    expect(
+      tableDelta("All matches", "First serves in", "+2.6", "66.7%", "64.1%"),
+    ).toBeNull();
+    // A measure with no better direction, or a row that is not a measure.
+    expect(tableDelta("Difference", "Serves wide", "+3", "9", "6")).toBeNull();
+    expect(
+      tableDelta("Difference", "Theo Lindqvist", "+3", "9", "6"),
+    ).toBeNull();
+    // No sign, or no number.
+    expect(
+      tableDelta("Difference", "First serves in", "2.6", "66.7%", "64.1%"),
+    ).toBeNull();
+    expect(
+      tableDelta("Difference", "First serves in", "—", "66.7%", "64.1%"),
+    ).toBeNull();
+  });
+
+  test("cellNumber reads one plain number, in either decimal mark", () => {
+    expect(cellNumber("37.5%")).toBe(37.5);
+    expect(cellNumber("37,5 %")).toBe(37.5);
+    expect(cellNumber("−20.7")).toBe(-20.7);
+    // A comma before exactly three digits groups thousands.
+    expect(cellNumber("1,204")).toBe(1204);
+    expect(cellNumber("12,345.5")).toBe(12345.5);
+    expect(cellNumber("256/305")).toBeNull();
+    expect(cellNumber("4 of 9")).toBeNull();
+    expect(cellNumber("—")).toBeNull();
   });
 });

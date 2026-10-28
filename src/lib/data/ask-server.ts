@@ -62,7 +62,7 @@ async function getViewerId(): Promise<string | null> {
 
 /** `getPersonalMatches()`'s columns plus the schedule link `programSide()` reads. */
 const TEAM_MATCH_COLUMNS =
-  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, duration, opponent_hand, opponent_backhand, event_entry_id";
+  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, verified_at, duration, opponent_hand, opponent_backhand, event_entry_id";
 
 /**
  * A program's matches and roster as tag options. `program_id = <program>` and

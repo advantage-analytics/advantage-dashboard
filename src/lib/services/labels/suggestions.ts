@@ -15,7 +15,9 @@
 import type { LabelSuggestion } from "./marks";
 import type { Planned } from "./operations";
 import {
+  isLetServe,
   isMissedResult,
+  isServeStroke,
   liveShotsInOrder,
   type LabelPoint,
   type LabelShot,
@@ -128,6 +130,12 @@ export function addedPointBetween(
  * went on, so the vendor's bounce was wrong, not the gap. Done outranks
  * dismissed: the stroke is there either way.
  *
+ * A double fault ends the point however many strokes follow
+ * (`doubleFaultAt`): every slot from the second fault on is `done`, so the
+ * server knocking the ball back, or a practice swing, asks for no stroke
+ * between. Settled 2026-10-26 after "Add the missing shot" was asked on a
+ * double-fault point with three dead-ball hits after it.
+ *
  * A `missing_point` is `done` once the flagged point's ending is
  * `let_replayed` — the second serve from that side was the same point played
  * again, so nothing is missing — or once a live added point sits between the
@@ -159,6 +167,8 @@ export function suggestionState(
     if (after !== null) {
       const live = liveShotsInOrder(point, ghosts);
       const at = live.findIndex((shot) => shot.eventId === after);
+      const ended = doubleFaultAt(live, point.ending);
+      if (at !== -1 && ended !== null && at >= ended) return "done";
       if (
         at !== -1 &&
         isMissedResult(effectiveShotResult(live[at])) &&
@@ -179,6 +189,32 @@ export function suggestionState(
     }
   }
   return point.dismissed.includes(suggestion.key) ? "dismissed" : "open";
+}
+
+/**
+ * Where a point's double fault sits in its live strokes in rally order (as
+ * `liveShotsInOrder` gives them): the second serve, lets aside, when both
+ * serves read out or net (`effectiveShotResult`) — or, with the point's
+ * ending stored as a double fault, its second serve whatever the results
+ * say. Null otherwise: no point to end early.
+ */
+export function doubleFaultAt(
+  live: readonly ResultReadableShot[],
+  ending?: LabelPoint["ending"],
+): number | null {
+  const serves: number[] = [];
+  live.forEach((shot, index) => {
+    const stroke = shot.stroke ?? null;
+    if (!isServeStroke(stroke)) return;
+    if (isLetServe({ stroke, result: shot.result ?? null })) return;
+    serves.push(index);
+  });
+  if (serves.length < 2) return null;
+  const [first, second] = serves;
+  if (ending === "double_fault") return second;
+  const missed = (index: number) =>
+    isMissedResult(effectiveShotResult(live[index]));
+  return missed(first) && missed(second) ? second : null;
 }
 
 /** The one column Dismiss writes: the array read, plus the key. */

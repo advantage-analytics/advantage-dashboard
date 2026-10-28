@@ -3,7 +3,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
-import { rankOpponentTeams } from "@/components/dashboard/matches/new-match-wizard/opponent-team";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { useProgramSearch } from "@/components/dashboard/schedule/static/use-program-search";
 import {
@@ -15,7 +14,8 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
-import { divisionLongLabel, teamLabel } from "@/lib/data/programs-server";
+import { divisionLabel } from "@/lib/data/programs-server";
+import { squadLabel, toGenderedSquad, toSquad } from "@/lib/data/squad";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
 import type {
@@ -54,12 +54,20 @@ const ROW_CLS =
  * - **link** — nothing set: an 11px blue "Add their team".
  * - **search** — a small underline input over the program directory
  *   (`useProgramSearch`, two characters and up). Results are crest + school +
- *   "conference · division · squad"; under a hairline, one row keeps what was
- *   typed for a school the directory does not hold. Esc, or leaving the input
- *   with nothing picked, goes back to whatever was there before.
+ *   "division · conference"; under a hairline, one row keeps what was typed
+ *   for a school the directory does not hold. Esc, or leaving the input with
+ *   nothing picked, goes back to whatever was there before.
  * - **chosen** — crest + school + "Change". A team remembered from the last
  *   match against this opponent says so on a second line; one that came from
  *   the scheduled `line` is the line's to decide, so it has no Change.
+ *
+ * Men's and women's are the same school twice, so the squad decides which
+ * row is right. A men's or women's workspace searches its own squad only
+ * (`useProgramSearch`'s `squad`, a filter in `search_programs`) under a
+ * "Women's teams" label, and its rows and chosen team leave the squad
+ * unsaid. Anywhere else — a personal or co-ed
+ * workspace — every row LEADS with its squad, where truncation cannot cut it,
+ * and the chosen team keeps it: "University of San Diego · Women's".
  *
  * Driven entirely by props so the upload wizard, the edit-match dialog and the
  * opponent drawer can each hold the value their own way. It lives under a name
@@ -70,6 +78,13 @@ const ROW_CLS =
  * Add their team") and belongs to the link state alone, and `searchNote` is a
  * line between the search input and its menu saying what a pick will change.
  * The menu hangs under the note, so the note is never behind it.
+ *
+ * `onDismiss` makes the field its search alone, for a caller that draws the
+ * read-back and the Change link itself (the drawer's "Plays for"): it opens
+ * searching, spans its container, and hands every close back to the caller,
+ * with whether focus should return to the caller's trigger. The program
+ * already set is marked "Current" in the results, so a change is never a
+ * guess about which row is the one there now.
  *
  * Design: Team Opponents → "Giving an opponent a team".
  */
@@ -82,6 +97,8 @@ export function OpponentTeamField({
   readOnly = false,
   lead,
   searchNote,
+  onDismiss,
+  blurStaysOpen,
   className,
 }: {
   /** The directory program, when the team is one. */
@@ -99,9 +116,22 @@ export function OpponentTeamField({
   lead?: React.ReactNode;
   /** A line under the search input, above its menu; the search state only. */
   searchNote?: React.ReactNode;
+  /**
+   * The search alone, open from mount; called when it closes. `restoreFocus`
+   * is true for Esc or a pick (the input is gone) and false for a blur (focus
+   * already went where the person sent it).
+   */
+  onDismiss?: (restoreFocus: boolean) => void;
+  /**
+   * Search-only: a blur onto an element this accepts leaves the search open —
+   * the caller's own option under the field (the drawer's "Unattached"), so
+   * Tab can reach it. The caller then owns closing when focus leaves it.
+   */
+  blurStaysOpen?: (next: Element | null) => boolean;
   className?: string;
 }) {
-  const [searching, setSearching] = useState(false);
+  const searchOnly = onDismiss !== undefined;
+  const [searching, setSearching] = useState(searchOnly);
   const [term, setTerm] = useState("");
   const [active, setActive] = useState(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -113,16 +143,20 @@ export function OpponentTeamField({
   const noteId = useId();
 
   const typed = term.trim();
+  // A men's or women's team searches its own squad only, narrowed in the SQL
+  // so the route's row limit counts only rows it can pick.
+  const { active: workspace } = useWorkspace();
+  const ownSquad = toGenderedSquad(workspace.team);
   // A row the enrichment read could not give an id cannot be pointed at as a
   // program, so it is not offered as one — the as-typed row covers it.
-  // The team's own squad first, before the cut — otherwise a same-squad row
-  // the search ranked seventh would be the one dropped.
-  const { active: workspace } = useWorkspace();
-  const results = rankOpponentTeams(
-    useProgramSearch(searching ? term : "").filter((row) => Boolean(row.id)),
-    workspace.team,
-  ).slice(0, MAX_RESULTS);
+  const results = useProgramSearch(searching ? term : "", ownSquad)
+    .filter((row) => Boolean(row.id))
+    .slice(0, MAX_RESULTS);
   const ready = typed.length >= 2;
+  // Search-only, the menu waits for something to search: its "Type their
+  // school." hint would otherwise open over whatever sits under the field
+  // (the drawer's Faced by) before a key is pressed.
+  const menuOpen = !searchOnly || ready;
   // Directory rows, then the as-typed row.
   const rowCount = ready ? results.length + 1 : 0;
   const activeIndex = Math.min(active, Math.max(rowCount - 1, 0));
@@ -138,14 +172,17 @@ export function OpponentTeamField({
     setActive(0);
     setSearching(true);
   };
-  const close = () => setSearching(false);
+  const close = () => (onDismiss ? onDismiss(false) : setSearching(false));
   const dismiss = () => {
+    if (onDismiss) return onDismiss(true);
     restoreFocus.current = true;
-    close();
+    setSearching(false);
   };
 
   const pickRow = (index: number) => {
     const row = results[index];
+    // The program already set: nothing to change, so nothing is written.
+    if (row?.id && row.id === program?.id) return dismiss();
     if (row?.id) {
       onChange({
         program: {
@@ -155,6 +192,7 @@ export function OpponentTeamField({
           crestUrl: row.crestUrl ?? null,
           conference: row.conference,
           division: row.division,
+          team: row.team,
         },
         school: null,
         source: "picked",
@@ -168,12 +206,14 @@ export function OpponentTeamField({
 
   const locked = readOnly || source === "line";
   const name = program?.schoolName ?? school?.trim() ?? "";
+  // Said only where both squads could have been picked.
+  const chosenSquad = ownSquad ? null : squadLabel(toSquad(program?.team));
 
   if (searching && !locked) {
     return (
       <span className={cn("flex min-w-0 flex-col", className)}>
         <Popover
-          open
+          open={menuOpen}
           // Only Esc reaches this: outside presses are declined below and
           // left to the input's blur, which is the one signal for "left it".
           onOpenChange={(next) => {
@@ -183,8 +223,18 @@ export function OpponentTeamField({
           {/* The anchor is the input AND the note, so the menu opens under
               both — the note is read before a row is picked, not behind it. */}
           <PopoverAnchor asChild>
-            <span className="flex max-w-full flex-col items-start gap-1.5">
-              <span className="relative flex w-[200px] max-w-full items-center">
+            <span
+              className={cn(
+                "flex max-w-full flex-col gap-1.5",
+                searchOnly ? "w-full items-stretch" : "items-start",
+              )}
+            >
+              <span
+                className={cn(
+                  "relative flex max-w-full items-center",
+                  searchOnly ? "w-full" : "w-[200px]",
+                )}
+              >
                 <Search
                   className="pointer-events-none absolute left-0 size-3 text-[var(--ink-500)]"
                   strokeWidth={1.5}
@@ -197,11 +247,12 @@ export function OpponentTeamField({
                   aria-label="Their team"
                   role="combobox"
                   aria-autocomplete="list"
-                  // True for as long as the search is on screen: the menu under
-                  // it is (a hint, then rows), and the wizard's own Escape
-                  // handler stands down for an expanded control.
-                  aria-expanded="true"
-                  aria-controls={listId}
+                  // True whenever the menu is on screen (a hint, then rows) —
+                  // in the wizard, for as long as the search is — and the
+                  // wizard's own Escape handler stands down for an expanded
+                  // control.
+                  aria-expanded={menuOpen}
+                  aria-controls={menuOpen ? listId : undefined}
                   aria-describedby={searchNote ? noteId : undefined}
                   aria-activedescendant={
                     rowCount > 0 ? `${listId}-${activeIndex}` : undefined
@@ -214,7 +265,10 @@ export function OpponentTeamField({
                     setTerm(e.target.value);
                     setActive(0);
                   }}
-                  onBlur={close}
+                  onBlur={(e) => {
+                    if (blurStaysOpen?.(e.relatedTarget)) return;
+                    close();
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") {
                       e.preventDefault();
@@ -256,16 +310,31 @@ export function OpponentTeamField({
             // Keeps focus in the input while a row is pressed, so the press
             // lands as a pick rather than as the blur that cancels the search.
             onMouseDown={(e) => e.preventDefault()}
-            className={cn(floatMenuToneClasses(), "w-[268px]")}
+            className={cn(
+              floatMenuToneClasses(),
+              searchOnly
+                ? "w-[var(--radix-popover-trigger-width)]"
+                : "w-[268px]",
+            )}
           >
             <div
               id={listId}
               role="listbox"
-              aria-label="Their team"
+              aria-label={
+                ownSquad ? `${squadLabel(ownSquad)} teams` : "Their team"
+              }
               className="flex flex-col"
             >
               {ready ? (
                 <>
+                  {ownSquad && results.length > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className="px-2.5 pt-1.5 pb-1 text-[11px] text-[var(--ink-500)]"
+                    >
+                      {squadLabel(ownSquad)} teams
+                    </span>
+                  )}
                   {results.map((row, index) => (
                     <button
                       key={row.id}
@@ -290,16 +359,20 @@ export function OpponentTeamField({
                         <span className="truncate text-[12px] text-[var(--ink-900)]">
                           {row.schoolName}
                         </span>
-                        <span className="truncate text-[11px] text-[var(--ink-500)]">
-                          {[
-                            row.conference,
-                            divisionLongLabel(row.division),
-                            teamLabel(row.team),
-                          ]
+                        <SquadLine
+                          squad={
+                            ownSquad ? null : squadLabel(toSquad(row.team))
+                          }
+                          detail={[divisionLabel(row.division), row.conference]
                             .filter(Boolean)
                             .join(" · ")}
-                        </span>
+                        />
                       </span>
+                      {row.id === program?.id && (
+                        <span className="shrink-0 text-[11px] text-[var(--ink-600)]">
+                          Current
+                        </span>
+                      )}
                     </button>
                   ))}
                   {results.length > 0 && <FloatMenuDivider />}
@@ -338,6 +411,9 @@ export function OpponentTeamField({
     );
   }
 
+  // The caller draws the read-back; this field was only ever its search.
+  if (searchOnly) return null;
+
   if (!name) {
     if (locked) return null;
     const link = (
@@ -370,6 +446,9 @@ export function OpponentTeamField({
         />
         <span className="min-w-0 truncate text-[12px] text-[var(--ink-700)]">
           {name}
+          {chosenSquad && (
+            <span className="text-[var(--ink-500)]"> · {chosenSquad}</span>
+          )}
         </span>
         {!locked && (
           <button
@@ -388,6 +467,29 @@ export function OpponentTeamField({
           From your last match against {opponentFirstName}
         </span>
       )}
+    </span>
+  );
+}
+
+/**
+ * A result row's second line: the squad first, a step darker, then
+ * "division · conference". First because the line truncates, and the squad
+ * is the half that tells two rows of one school apart.
+ */
+function SquadLine({
+  squad,
+  detail,
+}: {
+  squad: string | null;
+  detail: string;
+}) {
+  return (
+    <span className="truncate text-[11px] text-[var(--ink-500)]">
+      {squad && (
+        <span className="font-medium text-[var(--ink-700)]">{squad}</span>
+      )}
+      {squad && detail && " · "}
+      {detail}
     </span>
   );
 }

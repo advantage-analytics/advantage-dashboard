@@ -43,7 +43,14 @@ export type AskRunRoute =
   | "pattern"
   | "mock"
   /** A hit in the answer cache: nothing was computed. */
-  | "cache";
+  | "cache"
+  /**
+   * Agent mode (`agent.ts`) planned it: `agent` when the answer model wrote
+   * the prose, `agent_server_written` when the server did. Agent runs that
+   * landed on a fixed query (a comparison, a review) keep that route.
+   */
+  | "agent"
+  | "agent_server_written";
 
 export interface AskRunRecord {
   question: string;
@@ -92,6 +99,8 @@ export function askRunRoute(input: {
   team: boolean;
   patternRead: boolean;
   answerWritten: boolean;
+  /** Agent mode ran at least one tool turn. */
+  agent?: boolean;
 }): AskRunRoute | null {
   if (!input.configured) return "mock";
   if (input.sql === null) return null;
@@ -111,6 +120,9 @@ export function askRunRoute(input: {
     return "plays";
   }
   if (input.patternRead) return "pattern";
+  if (input.agent) {
+    return input.answerWritten ? "agent" : "agent_server_written";
+  }
   return input.answerWritten ? "model" : "server_written";
 }
 
@@ -131,12 +143,14 @@ export async function* recordAskRun(
   let modelCalls = 0;
   let patternRead = false;
   let answerWritten = false;
+  let agentTurns = 0;
   let queryCount = 0;
   let queryMs = 0;
   let firstQueryAt: number | null = null;
   let lastSql: string | null = null;
   let rowCount: number | null = null;
 
+  const toolTurn = input.model.toolTurn;
   const model: AskModel = {
     configured: input.model.configured,
     stream: (systemPrompt, messages, call) => {
@@ -146,6 +160,17 @@ export async function* recordAskRun(
       if (call?.stage === "answer") answerWritten = true;
       return input.model.stream(systemPrompt, messages, call);
     },
+    // Agent mode's turns are model calls too, and plan attempts: each one
+    // decides what the plan becomes.
+    ...(toolTurn
+      ? {
+          toolTurn: (systemPrompt, messages, tools, call) => {
+            modelCalls += 1;
+            agentTurns += 1;
+            return toolTurn(systemPrompt, messages, tools, call);
+          },
+        }
+      : {}),
   };
   const db: AskDatabase = {
     rpc: async (fn, args) => {
@@ -219,8 +244,9 @@ export async function* recordAskRun(
         team,
         patternRead,
         answerWritten,
+        agent: agentTurns > 0,
       }),
-      planAttempts,
+      planAttempts: planAttempts + agentTurns,
       modelCalls,
       queryCount,
       preStreamMs: options.preStreamMs ?? null,

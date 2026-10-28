@@ -126,7 +126,7 @@ test.describe("the review note", () => {
     );
   });
 
-  test("one line: the fix, n of m when there are several, amber for the score — no court, no answers", () => {
+  test("one line: the fix, n of m when there are several, amber for the score — no pill, no court, no answers", () => {
     const point = acePoint();
     const step = stepOf(point);
     const html = renderNote({ step, count: { index: 2, total: 3 } });
@@ -134,10 +134,21 @@ test.describe("the review note", () => {
     expect(html).toContain("2 of 3");
     expect(html).toContain(`data-review-inline="${step.item.id}"`);
     if (step.item.tone === "score") {
-      expect(html).toContain("bg-[var(--rail-amber-wash)]");
+      expect(html).toContain("text-[var(--rail-amber)]");
     }
-    expect(html).not.toContain("<svg");
+    // A plain line: no pill's fill or rounding, and no dot. Its one glyph is
+    // the hook to the row above, hidden from a screen reader; it starts where
+    // the row's words do.
+    expect(html).not.toContain("rounded-full");
+    expect(html).not.toContain("wash");
+    expect(html).not.toContain("●");
+    expect(html.match(/<svg/g)).toHaveLength(1);
+    expect(html).toMatch(/<svg[^>]*aria-hidden="true"/);
+    expect(html).toContain("pl-[44px]");
     expect(html).not.toContain("<button");
+    // No wash of its own: the well gives it the selected row's
+    // (`data-review-inline-wash`), and only right under that row.
+    expect(html).not.toContain("bg-white/[0.12]");
     // One question alone counts nothing.
     expect(renderNote({ step, count: { index: 1, total: 1 } })).not.toContain(
       " of 1",

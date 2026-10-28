@@ -21,6 +21,7 @@ export function Chip({
   onClick,
   leading,
   detail,
+  ariaLabel,
 }: {
   label: string;
   active: boolean;
@@ -33,11 +34,14 @@ export function Chip({
   leading?: React.ReactNode;
   /** A quiet figure after the label (a record: "3-1"), 11px `--ink-500`. */
   detail?: string;
+  /** What a screen reader says in place of "label detail", when that is terse. */
+  ariaLabel?: string;
 }) {
   return (
     <button
       type="button"
       aria-pressed={active}
+      aria-label={ariaLabel}
       onClick={onClick}
       className={cn(
         "inline-flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[var(--radius-pill)] border text-[12px]",

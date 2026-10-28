@@ -334,7 +334,8 @@ export function askSchemaFocus(input: {
     const scored = schema.columns
       .map((column, order) => ({ column, order }))
       .filter(
-        ({ column }) => !column.hidden && (input.team || !column.teamOnly),
+        ({ column }) =>
+          !column.hidden && !column.mcpOnly && (input.team || !column.teamOnly),
       )
       .map((entry) => ({
         ...entry,

@@ -35,6 +35,12 @@ export interface OpponentTeamProgram {
   crestUrl: string | null;
   conference: string | null;
   division: string | null;
+  /**
+   * `programs.team` — the squad, so a chosen team can say "Women's" where both
+   * squads were on offer. Optional: a reader that never selected it leaves it
+   * out, and the field then shows no squad rather than guessing one.
+   */
+  team?: string | null;
 }
 
 /**
@@ -275,7 +281,6 @@ export interface MatchData {
   analysis_method: string;
   match_type?: string;
   court_type?: string;
-  verified?: boolean;
   duration?: number;
   player_hand?: "right" | "left";
   player_backhand?: "one-handed" | "two-handed";

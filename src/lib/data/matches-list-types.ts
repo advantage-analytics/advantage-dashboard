@@ -2,6 +2,10 @@ import { formatMatchDuration } from "@/lib/format/duration";
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
 import { formatMatchDayLong } from "@/lib/data/match-day";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
+import {
+  verificationFor,
+  type MatchVerification,
+} from "@/lib/data/match-verification";
 
 export interface DbMatch {
   id: string;
@@ -23,6 +27,7 @@ export interface DbMatch {
   match_type: string | null;
   court_type: string | null;
   verified: boolean | null;
+  verified_at?: string | null;
   duration: number | null;
   source_provider?: string | null;
 }
@@ -42,7 +47,8 @@ export interface DisplayMatch {
   date: string;
   matchType: string;
   courtType?: string;
-  verificationStatus?: string;
+  /** Verified by Advantage (`verificationFor`), or null. */
+  verification?: MatchVerification | null;
   round?: string;
   matchContext?: string;
   duration?: string;
@@ -112,7 +118,7 @@ export function transformDbMatch(
     date: formatMatchDayLong(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
-    verificationStatus: row.verified ? "Verified result" : undefined,
+    verification: verificationFor(row),
     round: row.round ?? undefined,
     matchContext: matchContextCaption(row.result),
     duration: formatMatchDuration(row.duration),

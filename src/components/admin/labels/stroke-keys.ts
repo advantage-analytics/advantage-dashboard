@@ -29,24 +29,6 @@ import {
  * `strokeChangePatch`, as the Stroke menu does, so a let keeps its rule. A key
  * that would write what the stroke already holds answers null.
  */
-export const STROKE_KEY_HINTS: readonly { key: string; label: string }[] = [
-  { key: "F", label: "forehand" },
-  { key: "B", label: "backhand" },
-  { key: "V", label: "volley" },
-  { key: "O", label: "overhead" },
-  { key: "S", label: "serve" },
-  { key: "1–4", label: "spin" },
-  // The console's own keys, not the stroke's (label-console.tsx).
-  { key: "C", label: "contact / landing" },
-  { key: "X", label: "flip side" },
-  { key: "T", label: "time = frame" },
-  { key: "A", label: "add shot" },
-  { key: "⇧A", label: "add before" },
-  { key: "R", label: "reset shot" },
-  { key: "⇧R", label: "reset point" },
-  { key: "⌫", label: "delete shot" },
-];
-
 const VOLLEY_OF: Partial<Record<LabelStroke, LabelStroke>> = {
   forehand: "forehand_volley",
   backhand: "backhand_volley",

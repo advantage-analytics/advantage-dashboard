@@ -65,7 +65,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   const query = supabase
     .from("matches")
     .select(
-      "id, created_by, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player2_id",
+      "id, created_by, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, verified_at, duration, source_provider, player2_id",
     )
     .order("date", { ascending: false });
   const [drafts, { data, error }] = await Promise.all([

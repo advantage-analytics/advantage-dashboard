@@ -20,6 +20,7 @@ import {
   isGhostShot,
   isServeStroke,
   isWithdrawnAdd,
+  liveShotsInOrder,
   type LabelPoint,
   type LabelShot,
   type LabelSide,
@@ -39,10 +40,14 @@ import { canSplitAtShot } from "@/lib/services/labels/point-split";
 import { canResetShot } from "@/lib/services/labels/reset";
 import {
   deriveShotResult,
+  landingMiss,
   shotPlacement,
 } from "@/lib/services/labels/shot-derived";
 import type { LabelShotResult } from "@/lib/services/labels/seed";
-import { suggestionState } from "@/lib/services/labels/suggestions";
+import {
+  doubleFaultAt,
+  suggestionState,
+} from "@/lib/services/labels/suggestions";
 import { courtPair } from "./label-black-format";
 import {
   AMBER_SUGGESTION_INK,
@@ -296,6 +301,17 @@ export function BlackShotsWell({
   const inlineRow = inline ? (
     <Fragment key="review-inline">{inline.node}</Fragment>
   ) : null;
+  // A double fault with strokes after it: a "Point over" line above the first
+  // of them, and each a step quieter. They stay rows — the labeller deletes
+  // them — but ask for no missing shot (`suggestionState`). "After" is rally
+  // order (`liveShotsInOrder`, as `doubleFaultAt` reads it), not the order
+  // the rows are stored in, so an untimed stroke is judged where it plays.
+  const inOrder = liveShotsInOrder(point, ghosts);
+  const overAt = doubleFaultAt(inOrder, point.ending);
+  const pastEnd = new Set(
+    overAt === null ? [] : inOrder.slice(overAt + 1).map((shot) => shot.id),
+  );
+  let overDrawn = false;
   for (const [i, shot] of point.shots.entries()) {
     // A stroke the labeller added and then deleted leaves no row.
     if (isWithdrawnAdd(shot)) continue;
@@ -326,6 +342,10 @@ export function BlackShotsWell({
       );
     } else {
       n += 1;
+      if (pastEnd.has(shot.id) && !overDrawn) {
+        overDrawn = true;
+        rows.push(<PointOverLine key="point-over" arrive={arrive()} />);
+      }
       rows.push(
         <BlackShotRow
           key={shot.id}
@@ -335,10 +355,14 @@ export function BlackShotsWell({
           pointNumber={pointNumber}
           edit={edit}
           playing={shot.id === playingShotId}
+          pastEnd={pastEnd.has(shot.id)}
           arrive={arrive()}
         />,
       );
     }
+    // The rows drawn so far: the inline note joins the selected stroke's
+    // block only when nothing has come between them (below).
+    const afterRow = rows.length;
     if (live.has(shot.id)) hintLineAfter(shot.id);
     for (const suggestion of suggested) {
       if (suggestion.afterShotId !== shot.id) continue;
@@ -352,7 +376,24 @@ export function BlackShotsWell({
         />,
       );
     }
-    if (inlineAfter !== null && inlineAfter === shot.id) rows.push(inlineRow);
+    if (inlineAfter !== null && inlineAfter === shot.id && inline) {
+      // Right under the selected stroke and its tray, with no hint or
+      // suggestion row between: the note takes the row's wash, so the three
+      // read as one block. Anything between, and a wash would only band.
+      rows.push(
+        shot.id === edit.selectedShotId && rows.length === afterRow ? (
+          <div
+            key="review-inline"
+            data-review-inline-wash=""
+            className="bg-white/[0.12]"
+          >
+            {inline.node}
+          </div>
+        ) : (
+          inlineRow
+        ),
+      );
+    }
   }
   if (inlineRow && inlineAfter === null) rows.push(inlineRow);
   const addArrival = rowArrival(arrive());
@@ -398,6 +439,29 @@ export function BlackShotsWell({
 }
 
 /**
+ * "Point over · double fault": the line above the first stroke after a double
+ * fault's second serve, starting where the rows' words start (44px), a
+ * hairline running out to the right. Quiet: it explains the dimmed rows
+ * under it and asks nothing.
+ */
+function PointOverLine({ arrive }: { arrive?: number }) {
+  const arrival = rowArrival(arrive);
+  return (
+    <div
+      data-point-over=""
+      style={arrival.style}
+      className={cn(
+        arrival.className,
+        "flex h-[26px] items-center gap-2 pr-[14px] pl-[44px] text-[11px] text-white/45",
+      )}
+    >
+      <span className="shrink-0">Point over · double fault</span>
+      <span aria-hidden="true" className="h-px flex-1 bg-white/[0.08]" />
+    </div>
+  );
+}
+
+/**
  * The row a pointer is pressing on: its cell takes focus before the click
  * lands, and that focus is the click's selection, seek and all — so the
  * click after it finds the row selected and makes no second one. One press
@@ -427,14 +491,17 @@ export function BlackShotRow({
   pointNumber,
   edit,
   playing = false,
+  pastEnd = false,
   arrive,
   resultMenuOpen = false,
 }: {
   shot: LabelShot;
   number: number;
   arrive?: number;
+  /** After a double fault (`PointOverLine`): the row a step quieter. */
+  pastEnd?: boolean;
   /**
-   * The serve-result menu's state when the row first draws: false but for a
+   * The Result menu's state when the row first draws: false but for a
    * spec, which cannot reach a menu's open state any other way.
    */
   resultMenuOpen?: boolean;
@@ -495,7 +562,7 @@ export function BlackShotRow({
   const placement = shotPlacement(labelShotValues(shot));
   // Inside Out / Inside In when the stroke came from its other wing's half.
   const direction = placementLabel(shot, edit.hands);
-  const serveResult = serveResultMenu(shot, edit.playOnLets);
+  const resultMenu = shotResultMenu(shot, edit.playOnLets);
   /** The words' ink, a step down on a fault. */
   const words = fault ? "text-white/35" : "text-white/50";
   const arrival = rowArrival(arrive);
@@ -504,13 +571,6 @@ export function BlackShotRow({
     selected && operations
       ? shotTrayActions({ shot, number, point, pointNumber, operations })
       : null;
-  // The call, one click in the tray: written alone, so the landing stays
-  // where it was placed (`effectiveShotResult` lets this call outrank it).
-  const call: ShotTrayCall | null =
-    trayActions && onPatchShot && shot.stroke !== null
-      ? { value: shot.result, onPick: (result) => patch({ result }) }
-      : null;
-
   return (
     <>
       {/* Selecting is a pointer convenience; the keyboard selects by focusing
@@ -522,6 +582,7 @@ export function BlackShotRow({
         data-selected={selected ? "" : undefined}
         data-playing={playing ? "true" : undefined}
         data-fault={fault ? "" : undefined}
+        data-past-end={pastEnd ? "" : undefined}
         onPointerDown={(event?: { target: EventTarget | null }) => {
           // A press on the time cell is not a seeking press (`clickTime`).
           const quiet = (event?.target as Element | null)?.closest?.(
@@ -539,6 +600,9 @@ export function BlackShotRow({
           lit
             ? "bg-white/[0.12]"
             : editable && "cursor-pointer hover:bg-white/[0.06]",
+          // Dimmed on its cells, not the row, so the arrival and the focus
+          // ring keep their own opacity; lit, it reads at full strength.
+          pastEnd && !lit && "*:opacity-45",
         )}
       >
         <span data-shot-number="" className="flex h-[22px] items-center">
@@ -661,25 +725,25 @@ export function BlackShotRow({
         )}
         {/* The word, then a fixed right-aligned slot for the pencil: the word
           truncates before the pencil is touched. The gap between them is
-          3px; at 4 the pencil's last pixel was clipped. A serve, where lets
-          are replayed, is a "Serve result" select in that first slot. */}
+          3px; at 4 the pencil's last pixel was clipped. Any typed stroke's
+          word is its Result select (`shotResultMenu`). */}
         <span
-          data-calculated={serveResult ? undefined : "result"}
-          data-serve-result={serveResult ? "" : undefined}
+          data-calculated={resultMenu ? undefined : "result"}
+          data-result-menu={resultMenu ? "" : undefined}
           className={cn(
             "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-[3px] overflow-hidden text-[11px] whitespace-nowrap",
-            serveResult && SERVE_RESULT_REACH,
+            resultMenu && RESULT_REACH,
             words,
           )}
         >
-          {serveResult ? (
-            <ServeResultCell
+          {resultMenu ? (
+            <ResultCell
               {...selectCell}
               label={`Shot ${number} result`}
               value={shot.result}
-              options={serveResult.options}
+              options={resultMenu.options}
               initialOpen={resultMenuOpen}
-              onChange={(value) => patch(serveResultPatch(value))}
+              onChange={(value) => patch(shotResultPatch(value))}
             />
           ) : (
             <span className="min-w-0 truncate">
@@ -716,9 +780,7 @@ export function BlackShotRow({
           ) : null}
         </span>
       </div>
-      {trayActions ? (
-        <ShotTray number={number} actions={trayActions} call={call} />
-      ) : null}
+      {trayActions ? <ShotTray number={number} actions={trayActions} /> : null}
     </>
   );
 }
@@ -1360,15 +1422,8 @@ const SHOT_TRAY_ICON = {
   delete: X,
 } as const;
 
-/** The three calls the tray's toggle offers; a let stays the serve menu's. */
+/** The three calls the Result menu offers every stroke; a let is a serve's. */
 export const SHOT_CALLS = ["in", "out", "net"] as const;
-export type ShotCall = (typeof SHOT_CALLS)[number];
-
-/** The tray's call toggle: the stored call, and what picking another writes. */
-export type ShotTrayCall = {
-  value: LabelShotResult | null;
-  onPick: (result: ShotCall) => void;
-};
 
 /**
  * The selected stroke's actions, on a 28px strip right under its row: the
@@ -1378,21 +1433,14 @@ export type ShotTrayCall = {
  * too narrow, the labels truncate before Delete moves. A click here never
  * reaches the row or the point under it.
  *
- * `call`, when given, leads the strip: In · Out · Net, the stored one pressed.
- * Picking another writes the call alone — no landing moves — because a flipped
- * call was otherwise a re-click a few centimetres over the line (median 16 cm
- * on 202 last-ball flips across 13 completed sessions, 2026-10-23).
- *
  * No hooks: a spec calls it and reads its buttons off the tree.
  */
 function ShotTray({
   number,
   actions,
-  call,
 }: {
   number: number;
   actions: readonly ShotTrayAction[];
-  call?: ShotTrayCall | null;
 }) {
   return (
     <div
@@ -1404,38 +1452,6 @@ function ShotTray({
       // so the actions sit clear of the hairline without crowding the row.
       className="flex h-[32px] min-w-0 items-center gap-4 bg-white/[0.12] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
     >
-      {call ? (
-        <span
-          role="group"
-          aria-label={`Shot ${number} call`}
-          data-shot-call=""
-          className="inline-flex shrink-0 rounded-[7px] bg-white/[0.08] p-0.5"
-        >
-          {SHOT_CALLS.map((value) => {
-            const on = call.value === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={on}
-                data-shot-call-option={value}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (!on) call.onPick(value);
-                }}
-                className={cn(
-                  "h-[18px] cursor-pointer rounded-[5px] px-[7px] text-[10px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                  on
-                    ? "bg-white/[0.16] font-medium text-white"
-                    : "font-normal text-white/60 hover:text-white",
-                )}
-              >
-                {RESULT_LABEL[value]}
-              </button>
-            );
-          })}
-        </span>
-      ) : null}
       {actions.map((action) => (
         <Fragment key={action.key}>
           {action.key === "delete" ? (
@@ -1479,60 +1495,78 @@ function Dash({ label }: { label: string }) {
   );
 }
 
-/** The calculated item's second line in the serve-result menu. */
-export const SERVE_RESULT_LANDED = "From where it landed";
+/** The calculated item's second line in the Result menu. */
+export const RESULT_LANDED = "From where it landed";
 /** The Let item's second line. */
-export const SERVE_RESULT_LET =
+export const RESULT_LET =
   "Replayed. Not a fault, so the next serve is still a first serve.";
 /** The No result item's second line, in the calculated item's slot. */
-export const SERVE_RESULT_UNPLACED = "Its landing is not placed yet";
+export const RESULT_UNPLACED = "Its landing is not placed yet";
 /**
  * The No result item's value: a `MenuOption<string>` value cannot be null,
- * so `serveResultPatch` maps this back to `{ result: null }`.
+ * so `shotResultPatch` maps this back to `{ result: null }`.
  */
-export const SERVE_RESULT_NONE = "none";
+export const RESULT_NONE = "none";
 
 /**
- * A serve row's result menu, or null where the result is the landing's alone:
- * any stroke but a serve, and every row when lets are played on (or the
- * console has not said). Two items under "Serve result": the result
- * `deriveShotResult` reads off the coordinates, then — past a hairline —
- * Let. With no landing to read, "No result" takes the calculated item's
- * slot instead — the menu never offers a result the coordinates do not say,
- * and a let is never its only item, so one can always be taken back off.
+ * A stroke's Result menu, or null for a stroke with no type yet. First the
+ * result `deriveShotResult` reads off the coordinates, saying so ("From
+ * where it landed · 0.3 m wide", `landingMiss`); with no landing to read,
+ * "No result" takes that slot. Then, past a hairline, the other calls of
+ * In · Out · Net as overrides, written alone so the landing stays where it
+ * was placed (`effectiveShotResult` lets the labeller's call outrank it).
+ * A serve adds Let past a second hairline where lets are replayed — or
+ * where one is already stored, so it can be undone.
+ *
+ * Settled 2026-10-26: this replaced the tray's In · Out · Net toggle, which
+ * the labeller never used; the cell already said the call, so the override
+ * moved into it.
  */
-export function serveResultMenu(
+export function shotResultMenu(
   shot: LabelShot,
   playOnLets: boolean | undefined,
 ): { derived: LabelShotResult | null; options: SelectOption[] } | null {
-  if (!isServeStroke(shot.stroke)) return null;
-  // Played on, a serve's result is the landing's alone — but a let already
-  // stored (marked before the rule changed) keeps its menu, so it can be undone.
-  if (playOnLets !== false && shot.result !== "let") return null;
-  const derived = deriveShotResult(labelShotValues(shot));
+  if (shot.stroke === null) return null;
+  const serve = isServeStroke(shot.stroke);
+  const group = serve ? "Serve result" : "Result";
+  const geometry = labelShotValues(shot);
+  const derived = deriveShotResult(geometry);
   const options: SelectOption[] = [];
   if (derived && derived !== "let") {
+    const miss = landingMiss(geometry);
     options.push({
       value: derived,
       label: RESULT_LABEL[derived],
-      description: SERVE_RESULT_LANDED,
-      group: "Serve result",
+      description: miss ? `${RESULT_LANDED} · ${miss}` : RESULT_LANDED,
+      group,
     });
   } else {
     options.push({
-      value: SERVE_RESULT_NONE,
+      value: RESULT_NONE,
       label: "No result",
-      description: SERVE_RESULT_UNPLACED,
-      group: "Serve result",
+      description: RESULT_UNPLACED,
+      group,
     });
   }
-  options.push({
-    value: "let",
-    label: RESULT_LABEL.let,
-    description: SERVE_RESULT_LET,
-    group: "Serve result",
-    divider: true,
+  SHOT_CALLS.filter((call) => call !== derived).forEach((call, index) => {
+    options.push({
+      value: call,
+      label: RESULT_LABEL[call],
+      group,
+      ...(index === 0 ? { divider: true } : {}),
+    });
   });
+  // Played on, a serve's let is not offered — but a let already stored
+  // (marked before the rule changed) keeps its row, so it can be undone.
+  if (serve && (playOnLets === false || shot.result === "let")) {
+    options.push({
+      value: "let",
+      label: RESULT_LABEL.let,
+      description: RESULT_LET,
+      group,
+      divider: true,
+    });
+  }
   return { derived, options };
 }
 
@@ -1556,23 +1590,23 @@ export function strokeChangePatch(
   };
 }
 
-/** What picking a serve-result item writes: No result's sentinel is null. */
-export function serveResultPatch(value: string | null): LabelShotPatch {
-  if (value === SERVE_RESULT_NONE) return { result: null };
+/** What picking a Result menu item writes: No result's sentinel is null. */
+export function shotResultPatch(value: string | null): LabelShotPatch {
+  if (value === RESULT_NONE) return { result: null };
   return { result: value as LabelShotResult | null };
 }
 
 /**
- * The serve-result cell's clip, reached 5px into the 8px column gap so the
+ * The Result cell's clip, reached 5px into the 8px column gap so the
  * select trigger's shared -5px nudge (`SELECT_TRIGGER_DARK`) is not cut off.
  */
-const SERVE_RESULT_REACH = "-ml-[5px] pl-[5px]";
+const RESULT_REACH = "-ml-[5px] pl-[5px]";
 
 /**
- * A serve's result: its word, and the "Serve result" select once reached for.
+ * A stroke's result: its word, and the Result select once reached for.
  * It keeps the menu's open state so the cell can say so (`data-menu-open`).
  */
-function ServeResultCell({
+function ResultCell({
   editable,
   rowSelected,
   menu,
@@ -1604,8 +1638,8 @@ function ServeResultCell({
   // No result is an item only where nothing can be calculated; there, a serve
   // with no result selects it, so the menu shows which of it and Let is stored.
   const selected =
-    value === null && options.some((o) => o.value === SERVE_RESULT_NONE)
-      ? SERVE_RESULT_NONE
+    value === null && options.some((o) => o.value === RESULT_NONE)
+      ? RESULT_NONE
       : value;
   return (
     <span

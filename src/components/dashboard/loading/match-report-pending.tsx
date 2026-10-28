@@ -22,7 +22,7 @@ import {
 import { VIZ_TILE_GRID_CLASS } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import { InsightMark } from "@/components/dashboard/matches/match-detail/insight-mark";
 import { INSIGHT_SURFACE } from "@/components/dashboard/matches/match-detail/report-insight-card";
-import { PlayerDot } from "@/components/dashboard/matches/match-detail/rail-scoreboard";
+import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { cn } from "@/lib/utils";
 import { FilmFramePending } from "./film-frame-pending";
 import { PendingBar, PendingRegion } from "./pending";
@@ -74,10 +74,6 @@ function ScoreboardPending() {
         <div className="flex flex-col gap-[11px]">
           {[0, 1].map((row) => (
             <div key={row} className="flex h-[18px] items-center gap-[7px]">
-              {/* The player dot is known chrome: you on top, always. */}
-              <PlayerDot
-                color={row === 0 ? "var(--viz-you)" : "var(--viz-opp)"}
-              />
               <PendingBar className="w-28" />
               <div className="flex-1" />
               <PendingBar className="w-12" />
@@ -177,10 +173,10 @@ function HeadToHeadPending() {
         {["var(--viz-you)", "var(--viz-opp)"].map((color) => (
           <span
             key={color}
-            className="flex h-[18px] w-[64px] shrink-0 items-center justify-end gap-1"
+            className="flex h-[18px] w-[64px] shrink-0 items-center justify-end gap-1.5"
           >
-            {/* Player dot: known chrome, as on the rail. */}
-            <PlayerDot color={color} />
+            {/* Player marker: known chrome, as in the loaded header. */}
+            <LegendMark color={color} />
             <PendingBar className="w-10" />
           </span>
         ))}
@@ -285,7 +281,7 @@ export function StatisticsPanePending() {
           <HeadToHeadPending />
         </div>
         <div className="flex w-full shrink-0 flex-col gap-4 @min-[720px]:w-[416px]">
-          {/* 104px figure, then the set-label row under it. */}
+          {/* 104px figure, the set-label row, then the legend row. */}
           <ChartCardPending
             eyebrow="Performance tracker"
             padding="16px 20px 12px"
@@ -294,6 +290,10 @@ export function StatisticsPanePending() {
             <PendingBar className="h-[104px] rounded-[var(--radius-cell)]" />
             <div className="flex h-[15px] items-center justify-center">
               <PendingBar className="h-2.5 w-10" />
+            </div>
+            <div className="flex h-[15px] items-center gap-3.5">
+              <PendingBar className="h-2.5 w-20" />
+              <PendingBar className="h-2.5 w-20" />
             </div>
           </ChartCardPending>
           {/* The 96px band, its three labels, then the legend row. */}

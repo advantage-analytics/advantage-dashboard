@@ -263,8 +263,21 @@ function compile(source: string): RegExp {
 export function gradeTranscript(
   expect: AskEvalExpect | undefined,
   transcript: AskEvalTranscript,
+  options: {
+    /**
+     * Checks left out of the grade. Agent mode (`--mode agent`) leaves out
+     * `modelCalls` and `queries`: those ceilings are the one-shot planner's
+     * budget, and looking before planning spends more of both by design.
+     */
+    ignore?: readonly (keyof AskEvalExpect)[];
+  } = {},
 ): AskEvalGrade {
   if (expect === undefined) return { scored: false };
+  if (options.ignore && options.ignore.length > 0) {
+    const kept = { ...expect };
+    for (const key of options.ignore) delete kept[key];
+    return gradeTranscript(kept, transcript);
+  }
   const problems = expectProblems(expect);
   if (problems.length > 0) {
     return {

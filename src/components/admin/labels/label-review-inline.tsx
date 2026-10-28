@@ -1,5 +1,6 @@
 "use client";
 
+import { CornerDownRight } from "lucide-react";
 import {
   reviewItemThenLabel,
   type ReviewStep,
@@ -24,6 +25,11 @@ import type { PlacementState } from "./court-placement";
  * Settled 2026-10-19 after #489 drew a compact court and named answers in
  * every flagged row: the labeller wanted the court once, beside the film, and
  * only a note of what is wrong in the rows (canvas option C).
+ *
+ * Redrawn 2026-10-26 without the pill: a plain line hooked to the row above
+ * (`CornerDownRight`), starting where the row's words start, the count at the
+ * right edge. A coloured edge rule was the other option; the DS bans coloured
+ * left stripes. No key hint on the line: the shortcut sheet states the keys.
  */
 
 // ── The count ───────────────────────────────────────────────────────────────
@@ -143,7 +149,13 @@ export function reviewNoteText(
   return fix.charAt(0).toUpperCase() + fix.slice(1);
 }
 
-/** The one-line note under the flagged stroke. */
+/**
+ * The one-line note under the flagged stroke: a hook glyph, the fix, and
+ * "n of m" at the right edge. It starts 44px in, where the row's words and
+ * the tray's actions start. Amber for a score item, the rail's ink for data.
+ * Right under the selected stroke the well gives it that row's wash
+ * (`BlackShotsWell`), so the row, its tray and the note read as one block.
+ */
 export function ReviewNote({
   step,
   anchor,
@@ -163,21 +175,22 @@ export function ReviewNote({
       data-review-inline={step ? step.item.id : "placing"}
       data-review-inline-shot={anchor.strokeId ?? undefined}
       data-review-inline-tone={step?.item.tone}
-      className="flex items-center gap-2 px-[14px] py-1.5"
+      className={cn(
+        "flex h-[26px] min-w-0 items-center gap-1.5 pr-[14px] pl-[44px] text-[11px] font-medium",
+        score ? "text-[var(--rail-amber)]" : "text-white",
+      )}
     >
-      <span
+      <CornerDownRight
+        aria-hidden="true"
+        strokeWidth={2}
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
-          score
-            ? "bg-[var(--rail-amber-wash)] text-[var(--rail-amber)]"
-            : "bg-white/[0.08] text-white/80",
+          "size-3 shrink-0",
+          score ? "text-[var(--rail-amber)] opacity-60" : "text-white/35",
         )}
-      >
-        <span aria-hidden="true">●</span>
-        {note}
-      </span>
+      />
+      <span className="min-w-0 truncate">{note}</span>
       {count && count.total > 1 ? (
-        <span className="font-mono text-[11px] text-white/45">
+        <span className="mono tabular ml-auto shrink-0 pl-3 text-[11px] font-normal text-white/45">
           {count.index} of {count.total}
         </span>
       ) : null}

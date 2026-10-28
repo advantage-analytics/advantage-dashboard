@@ -44,13 +44,14 @@ export interface DbPersonalMatch {
   match_type: string | null;
   court_type: string | null;
   verified: boolean | null;
+  verified_at?: string | null;
   duration: number | null;
   opponent_hand: string | null;
   opponent_backhand: string | null;
 }
 
 const MATCH_COLUMNS =
-  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, duration, opponent_hand, opponent_backhand";
+  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, verified_at, duration, opponent_hand, opponent_backhand";
 
 /**
  * `STAT_COLUMNS` is the season strip's list — every `PLAYER_MEASURES` rate

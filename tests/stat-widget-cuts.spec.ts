@@ -316,7 +316,7 @@ test.describe("performance tracker", () => {
     // first render — so neither path draws the affordance yet.
     for (const video of [false, true]) {
       const html = render(file, "PerformanceTrackerChart", video);
-      expect(html).toContain("above</span>");
+      expect(html).toContain("ahead</span>");
       expect(html).not.toContain("cursor-pointer");
       expect(html).not.toContain("Watch in Video");
       expect(html).not.toContain("Click to watch in Video");

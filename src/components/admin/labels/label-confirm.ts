@@ -89,23 +89,72 @@ export type LabelConfirm =
       fields: boolean;
       /** Edited strokes that go back with it. */
       shots: number;
+      /** Strokes the labeller added, deleted again. */
+      added?: number;
+      /** Strokes the labeller deleted, brought back. */
+      deleted?: number;
+      /**
+       * The point's own fields were changed but stay: it shares its vendor
+       * rally with the point it was split from (`sharesVendorRally`).
+       */
+      fieldsKept?: boolean;
     }
   | {
       kind: "complete-session";
       /** What is still open (`completeWarnings`); empty when nothing is. */
       warnings: readonly string[];
-    };
+    }
+  | { kind: "reopen-session" };
 
-/** What a point's Reset replaces, and what it leaves. */
-function resetPointDescription(fields: boolean, shots: number): string {
-  const edited = `${shots} edited ${shots === 1 ? "shot" : "shots"}`;
-  if (fields && shots > 0) {
-    return `Your changes to this point — its game, server, serve side, winner, ending and who ended it — and to its ${edited} are replaced by the values they were seeded with. Shots you added or deleted, its note and checked mark stay as they are.`;
-  }
+/** "2 edited shots", "1 shot you added" — a count and what it counts. */
+function shotCount(n: number, what: string): string {
+  return `${n} ${n === 1 ? "shot" : "shots"} ${what}`;
+}
+
+/**
+ * What a point's Reset puts back, one sentence for each kind of change, then
+ * what stays. Everything the labeller changed returns to the vendor's: the
+ * fields, the edited shots, the deleted ones come back, the added ones go.
+ */
+function resetPointDescription(
+  fields: boolean,
+  shots: number,
+  added = 0,
+  deleted = 0,
+  fieldsKept = false,
+): string {
+  const one = (n: number, single: string, many: string) =>
+    n === 1 ? single : many;
+  const sentences: string[] = [];
   if (fields) {
-    return "Your changes to this point — its game, server, serve side, winner, ending and who ended it — are replaced by the values it was seeded with. Its shots, note and checked mark stay as they are.";
+    sentences.push(
+      "Its game, server, serve side, winner, ending and who ended it go back to the values they were seeded with.",
+    );
   }
-  return `Your changes to its ${edited} are replaced by the values they were seeded with. Shots you added or deleted, its note and checked mark stay as they are.`;
+  if (shots > 0) {
+    sentences.push(
+      `The ${shotCount(shots, "you edited")} ${one(shots, "goes back to its", "go back to their")} seeded values.`,
+    );
+  }
+  if (deleted > 0) {
+    sentences.push(
+      `The ${shotCount(deleted, "you deleted")} ${one(deleted, "comes", "come")} back.`,
+    );
+  }
+  if (added > 0) {
+    sentences.push(
+      `The ${shotCount(added, "you added")} ${one(added, "is", "are")} deleted.`,
+    );
+  }
+  if (fieldsKept) {
+    sentences.push(
+      "Its game, server, serve side, winner, ending and who ended it stay as you set them: it was split from another point, which shares its original values.",
+    );
+  }
+  sentences.push(
+    "Its note and checked mark stay as they are. Undo takes it all back.",
+  );
+  return sentences.join(" ");
 }
 
 export interface LabelConfirmCopy {
@@ -256,16 +305,31 @@ export function labelConfirmCopy(
         title: "Mark complete and publish?",
         description:
           confirm.warnings.length === 0
-            ? "Every point is checked and the score adds up. The athlete's match is rebuilt from these labels: statistics, points and summary. The version it replaces is backed up, and Reopen lets you edit and publish again."
-            : "Some things are still open. Publishing anyway rebuilds the athlete's match from these labels as they are. The version it replaces is backed up, and Reopen lets you fix them and publish again.",
+            ? "Every point is checked and the score adds up. The athlete's match is rebuilt from these labels: statistics, points and summary, and it shows Verified by Advantage. The version it replaces is backed up, and Reopen lets you edit and publish again."
+            : "Some things are still open. Publishing anyway rebuilds the athlete's match from these labels as they are, and it shows Verified by Advantage. The version it replaces is backed up, and Reopen lets you fix them and publish again.",
         confirmLabel: "Publish",
         pendingLabel: "Publishing…",
+        tone: "primary",
+      };
+    case "reopen-session":
+      return {
+        title: "Reopen and remove Verified by Advantage?",
+        description:
+          "The athlete's match keeps the published points, but no longer shows Verified by Advantage. Mark complete again to publish and verify it again.",
+        confirmLabel: "Reopen",
+        pendingLabel: "Reopening…",
         tone: "primary",
       };
     case "reset-point":
       return {
         title: `Reset point ${confirm.pointNumber} to its original values?`,
-        description: resetPointDescription(confirm.fields, confirm.shots),
+        description: resetPointDescription(
+          confirm.fields,
+          confirm.shots,
+          confirm.added,
+          confirm.deleted,
+          confirm.fieldsKept,
+        ),
         confirmLabel: "Reset",
         pendingLabel: "Resetting…",
         tone: "primary",

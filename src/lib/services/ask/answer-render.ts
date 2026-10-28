@@ -2756,6 +2756,18 @@ export function canonicalLabel(
   return text;
 }
 
+/**
+ * A row's canonical name with its unit, for the second row of a block that
+ * the dictionary would name the same as an earlier one: "Serves to the T,
+ * share" for a percentage column (`serve_t_pct`), "Serves to the T, count"
+ * for any other. Null when the cells are not one known measure.
+ */
+function unitQualifiedLabel(canonical: string, cells: string): string | null {
+  const measures = measureOfCells(cells);
+  if (!measures) return null;
+  return `${canonical}, ${measures[0].key.endsWith("_pct") ? "share" : "count"}`;
+}
+
 // ── A superlative about serve directions or rally lengths ───────────────────
 
 const MOST_WORD = /\b(?:most|highest|largest|biggest|majority)\b/i;
@@ -2860,7 +2872,9 @@ async function* dropSameCellRanges(
   /**
    * The canonical labels already given in the figures and in the block: a
    * second cell of the same measure (the count beside its percentage) keeps
-   * the model's own label, so two lines never print under one name.
+   * the model's own label, so two lines never print under one name. A block
+   * row whose own label is those same words is named for its unit instead
+   * (`unitQualifiedLabel`).
    */
   const figureNames = new Set<string>();
   let rowNames = new Set<string>();
@@ -2970,17 +2984,31 @@ async function* dropSameCellRanges(
           rowTokens,
         )
       ) {
-        const named = once(
-          rowNames,
-          canonicalLabel(
-            "row",
-            body.slice(0, cut),
-            body.slice(cut + 1),
-            rows,
-            rowTokens,
-          ),
+        const own = body.slice(0, cut).trim();
+        const canonical = canonicalLabel(
+          "row",
+          own,
+          body.slice(cut + 1),
+          rows,
+          rowTokens,
         );
-        if (named === null || named === body.slice(0, cut).trim()) return text;
+        let named = once(rowNames, canonical);
+        // The name went to an earlier row — the count beside its share, as
+        // "Serves to the T" over 256 and again over 34.6%. The model's own
+        // label is kept only while it says something the earlier row's
+        // does not; the same words twice read as a duplicated table, so
+        // this row is named for its unit instead.
+        if (
+          named === null &&
+          canonical !== null &&
+          own.toLowerCase() === canonical.toLowerCase()
+        ) {
+          named = once(
+            rowNames,
+            unitQualifiedLabel(canonical, body.slice(cut + 1)),
+          );
+        }
+        if (named === null || named === own) return text;
         result.renamedLabels += 1;
         return `${text.slice(0, text.length - start.length)}${ASK_VISUAL_ROW_PREFIX} ${named} ${body.slice(cut)}`;
       }

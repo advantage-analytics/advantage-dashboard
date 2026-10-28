@@ -430,7 +430,7 @@ interface MatchRow {
   analysis_method: null;
   match_type: string;
   court_type: Court;
-  verified: true;
+  verified: false;
   duration: number;
   opponent_hand: Hand;
   opponent_backhand: string;
@@ -1404,7 +1404,7 @@ function buildMatch(spec: MatchSpec): BuiltMatch {
     analysis_method: null,
     match_type: spec.matchType,
     court_type: spec.court,
-    verified: true,
+    verified: false,
     duration: points.length * 40_000 + lastGame * 30_000,
     opponent_hand: opponent.hand,
     opponent_backhand: opponent.backhand,
@@ -1884,6 +1884,10 @@ function printSummary(season: BuiltMatch[]): void {
     `\nTotals: ${season.length} matches, record ${wins}-${season.length - wins}; ` +
       `${count((m) => m.points.length)} points, ${count((m) => m.shots.length)} shots, ` +
       `${count((m) => m.stats.length)} match_stats rows.`,
+  );
+  // Verified by Advantage is granted only by Advantage, never by a seed.
+  console.log(
+    `verified: ${[...new Set(season.map((m) => m.match.verified))].join(", ")}`,
   );
 }
 

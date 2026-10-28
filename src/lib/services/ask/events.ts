@@ -98,6 +98,12 @@ export function readAskSourceMatch(value: unknown): AskSourceMatch | null {
 export interface AskStatusEvent {
   type: "status";
   stage: AskStatusStage;
+  /**
+   * Agent mode's step within the stage ("Running query 2"), a fixed sentence
+   * the server wrote — never the model's words. Absent on the one-shot path,
+   * where the stage's own line is shown.
+   */
+  detail?: string;
 }
 
 /** The answer's first line: one claim. Sent once, whole. */
