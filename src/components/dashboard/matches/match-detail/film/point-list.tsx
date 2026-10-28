@@ -740,6 +740,19 @@ export const PointList = memo(function PointList({
                           ? `Edited by ${editorName(review.state, edit.editedBy, review.viewerId)}`
                           : question;
                       const baseDetail = pointDetail(point, labelContext.hands);
+                      // The struck reading names its winner when the fix
+                      // changed who won: "Forehand Winner" over "Forehand
+                      // Winner" would otherwise strike the same words.
+                      const originalTitleFor = (p: MatchPoint) => {
+                        const original = review.originalFor(p);
+                        const label = labelFor(original);
+                        if (original.winner === reading.winner) return label;
+                        const name =
+                          original.winner === youSide
+                            ? youLastName
+                            : oppLastName;
+                        return `${label} · ${name}`;
+                      };
                       return (
                         // A fragment, not a wrapper: the well is the row's
                         // SIBLING in the game's own column, so it spans the
@@ -755,9 +768,7 @@ export const PointList = memo(function PointList({
                                 : pointResultLabel(point, labelContext)
                             }
                             originalTitle={
-                              changed
-                                ? labelFor(review.originalFor(point))
-                                : undefined
+                              changed ? originalTitleFor(point) : undefined
                             }
                             detail={
                               note ? `${baseDetail} · ${note}` : baseDetail
