@@ -30,18 +30,33 @@
  * becomes `first_serve` and the second `second_serve`. Any other count is
  * left as it is.
  *
+ * Then every live stroke that is not a serve, sitting between a fault or a
+ * let and the same server's next serve, is deleted as `dead_ball_after_fault`
+ * (`deadBetweenServes`, answered as `cleared`): nothing is in play between a
+ * fault and the second serve, or between a let and its replay. Measured on
+ * every combined point labelled by 2026-10-28: after a serve out, in the net
+ * or a let, labellers deleted 31 of the 33 strokes before the next serve
+ * (the other 2 were ghosts); after a serve called in they kept 16 of 28, so
+ * a serve called in clears nothing. The seed removes those swings
+ * inside one vendor rally (`hit_after_fault`), but a combine joins two
+ * rallies after it, so the swings at the fault end up live. A ghost — a
+ * stroke the site already removed — is left as it is.
+ *
  * Pure: the console runs `applyPointCombine`, `point-combine-session.ts` runs
  * `planPointCombine`.
  */
 
 import {
   planPointDelete,
+  type LabelDeleteReason,
   type Planned,
   type PointDeleteWrite,
+  type ShotDeleteWrite,
 } from "./operations";
 import { applyLabelShotPatch, letResultError } from "./edit";
 import type { LabelShotResult } from "./seed";
 import {
+  isLiveShot,
   isServeStroke,
   orderLabelShots,
   type LabelEnding,
@@ -81,7 +96,14 @@ export type CombinableShot = Pick<LabelShot, "id"> &
   Partial<
     Pick<
       LabelShot,
-      "stroke" | "status" | "videoTime" | "eventId" | "hitter" | "result"
+      | "stroke"
+      | "status"
+      | "videoTime"
+      | "eventId"
+      | "hitter"
+      | "result"
+      | "siteRemoval"
+      | "siteRemovalRestoredAt"
     >
   >;
 
@@ -122,6 +144,61 @@ export interface PointCombinePlan {
   removed: PointDeleteWrite;
   /** Serves relabelled (`combineServeRetypes`), in video order. */
   retyped: CombineRetype[];
+  /**
+   * Strokes between two serves by one server, deleted as
+   * `dead_ball_after_fault` (`deadBetweenServes`), in video order.
+   */
+  cleared: string[];
+}
+
+/**
+ * The live strokes that are not serves between a serve called out, in the
+ * net or a let and the same server's next serve, in video order: swings at
+ * a fault, or at a let, before the serve that followed. A ghost is not
+ * live. A serve with no hitter pairs with any; a serve called in, or not
+ * called, clears nothing.
+ */
+const DEAD_AFTER: ReadonlySet<LabelShotResult | null> = new Set([
+  "out",
+  "net",
+  "let",
+]);
+
+export function deadBetweenServes(shots: readonly CombinableShot[]): string[] {
+  const live = orderLabelShots(
+    shots
+      .filter((shot) =>
+        isLiveShot({
+          status: shot.status ?? "kept",
+          siteRemoval: shot.siteRemoval ?? null,
+          siteRemovalRestoredAt: shot.siteRemovalRestoredAt ?? null,
+        }),
+      )
+      .map((shot) => ({
+        ...shot,
+        videoTime: shot.videoTime ?? null,
+        eventId: shot.eventId ?? null,
+      })),
+  );
+  const dead: string[] = [];
+  let serve: CombinableShot | null = null;
+  let between: string[] = [];
+  for (const shot of live) {
+    if (!isServeStroke(shot.stroke)) {
+      if (serve) between.push(shot.id);
+      continue;
+    }
+    const replayed =
+      serve !== null &&
+      DEAD_AFTER.has(serve.result ?? null) &&
+      (serve.hitter == null ||
+        shot.hitter == null ||
+        serve.hitter === shot.hitter);
+    if (replayed) dead.push(...between);
+    serve = shot;
+    between = [];
+  }
+  return dead;
 }
 
 /**
@@ -355,6 +432,10 @@ export function planPointCombine(
   });
   const retypeError = combineRetypeError(retyped, joined);
   if (retypeError) return { error: retypeError };
+  const retypedById = new Map(retyped.map((r) => [r.shotId, r.patch]));
+  const cleared = deadBetweenServes(
+    joined.map((shot) => ({ ...shot, ...retypedById.get(shot.id) })),
+  );
   return {
     ok: true,
     write: {
@@ -374,6 +455,7 @@ export function planPointCombine(
       },
       removed: removed.write,
       retyped,
+      cleared,
     },
   };
 }
@@ -414,7 +496,15 @@ export function applyPointCombine(
         gameStartLocked: plan.kept.game_start_locked,
         shots: orderLabelShots([...point.shots, ...moved]).map((shot) => {
           const retype = plan.retyped.find((r) => r.shotId === shot.id);
-          return retype ? applyLabelShotPatch(shot, retype.patch) : shot;
+          const next = retype ? applyLabelShotPatch(shot, retype.patch) : shot;
+          return plan.cleared.includes(shot.id) && next.status !== "deleted"
+            ? {
+                ...next,
+                status: "deleted" as const,
+                statusBeforeDelete: next.status,
+                deleteReason: CLEARED_REASON,
+              }
+            : next;
         }),
       };
     }
@@ -453,7 +543,13 @@ export interface PointCombineSaved {
     hitter: LabelSide | null;
     status: LabelShotStatus;
   }[];
+  /** Each stroke deleted between two serves, as written. */
+  cleared: ({ id: string } & ShotDeleteWrite)[];
 }
+
+/** Why a combine deletes a stroke between two serves. */
+export const CLEARED_REASON =
+  "dead_ball_after_fault" satisfies LabelDeleteReason;
 
 export function settlePointCombine(
   points: readonly LabelPoint[],
@@ -471,7 +567,7 @@ export function settlePointCombine(
         gameStartLocked: saved.kept.game_start_locked,
         shots: point.shots.map((shot) => {
           const written = saved.retyped.find((r) => r.id === shot.id);
-          return written
+          const next = written
             ? {
                 ...shot,
                 stroke: written.stroke,
@@ -480,6 +576,15 @@ export function settlePointCombine(
                 status: written.status,
               }
             : shot;
+          const gone = saved.cleared.find((c) => c.id === shot.id);
+          return gone
+            ? {
+                ...next,
+                status: gone.status,
+                statusBeforeDelete: gone.status_before_delete,
+                deleteReason: gone.delete_reason,
+              }
+            : next;
         }),
       };
     }

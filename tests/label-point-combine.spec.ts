@@ -14,6 +14,7 @@ import {
   rallyInPlay,
   combineRetypeError,
   combineServeRetypes,
+  deadBetweenServes,
   isCombinedTombstone,
   planPointCombine,
   settlePointCombine,
@@ -100,6 +101,9 @@ test.describe("planPointCombine", () => {
       // The fixture's two points each open on a first serve: joined, the
       // later one is the second.
       retyped: [{ shotId: "s-ace", patch: { stroke: "second_serve" } }],
+      // Point 1's serve was called in and played: nothing between the serves
+      // is cleared.
+      cleared: [],
     };
     // From either side, the same plan.
     expect(planPointCombine(points(), P2, "above")).toEqual({
@@ -652,6 +656,7 @@ test.describe("the console's rows", () => {
           status: "edited",
         },
       ],
+      cleared: [],
     });
     expect(settled).toEqual(after);
     // The server's word on a retype wins over the optimistic one.
@@ -667,6 +672,7 @@ test.describe("the console's rows", () => {
           status: "kept",
         },
       ],
+      cleared: [],
     })[0];
     expect(kept.shots.find((s) => s.id === "s-ace")?.status).toBe("kept");
   });
@@ -849,6 +855,7 @@ test.describe("writeLabelPointCombine", () => {
         status_before_delete: "unchanged",
       },
       retyped: [],
+      cleared: [],
     });
     expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
       ["label_points", "select"],
@@ -1342,6 +1349,162 @@ test("a combine keeps the game's lock when either part held it", () => {
       kept: { id: P1, ...plan.kept },
       removed: { id: P2, ...plan.removed },
       retyped: [],
+      cleared: [],
     }).find((p) => p.id === P1)?.gameStartLocked,
   ).toBe(true);
+});
+
+test.describe("deadBetweenServes: swings between a fault or a let and the next serve", () => {
+  const shot = (
+    id: string,
+    stroke: "first_serve" | "second_serve" | "forehand" | "backhand",
+    videoTime: number,
+    fields: Record<string, unknown> = {},
+  ) => ({
+    id,
+    stroke,
+    videoTime,
+    eventId: null,
+    status: "kept" as const,
+    hitter: (stroke.endsWith("serve") ? "p1" : "p2") as "p1" | "p2",
+    result: "in" as const,
+    ...fields,
+  });
+
+  test("a fault, swings at the dead ball, then the second serve: the swings go", () => {
+    expect(
+      deadBetweenServes([
+        shot("s1", "first_serve", 1, { result: "out" }),
+        shot("r", "forehand", 2),
+        shot("x", "backhand", 3, { hitter: "p1" }),
+        shot("s2", "second_serve", 6),
+        shot("ret", "forehand", 7),
+      ]),
+    ).toEqual(["r", "x"]);
+    // In the net, or a let, the same.
+    for (const result of ["net", "let"]) {
+      expect(
+        deadBetweenServes([
+          shot("s1", "first_serve", 1, { result }),
+          shot("r", "forehand", 2),
+          shot("s2", "first_serve", 6),
+        ]),
+      ).toEqual(["r"]);
+    }
+  });
+
+  test("a serve called in, or not called, clears nothing; nor does another player's serve", () => {
+    for (const result of ["in", null]) {
+      expect(
+        deadBetweenServes([
+          shot("s1", "first_serve", 1, { result }),
+          shot("r", "forehand", 2),
+          shot("s2", "second_serve", 6),
+        ]),
+      ).toEqual([]);
+    }
+    expect(
+      deadBetweenServes([
+        shot("s1", "first_serve", 1, { result: "out" }),
+        shot("r", "forehand", 2),
+        shot("s2", "second_serve", 6, { hitter: "p2" }),
+      ]),
+    ).toEqual([]);
+    // A serve with no hitter pairs with any.
+    expect(
+      deadBetweenServes([
+        shot("s1", "first_serve", 1, { result: "out" }),
+        shot("r", "forehand", 2),
+        shot("s2", "second_serve", 6, { hitter: null }),
+      ]),
+    ).toEqual(["r"]);
+  });
+
+  test("tombstones and ghosts are not cleared again; a restored ghost is", () => {
+    expect(
+      deadBetweenServes([
+        shot("s1", "first_serve", 1, { result: "out" }),
+        shot("gone", "forehand", 2, { status: "deleted" }),
+        shot("ghost", "forehand", 3, {
+          siteRemoval: "hit_after_fault",
+          siteRemovalRestoredAt: null,
+        }),
+        shot("back", "backhand", 4, {
+          siteRemoval: "hit_after_fault",
+          siteRemovalRestoredAt: "2026-10-28T00:00:00Z",
+        }),
+        shot("s2", "second_serve", 6),
+      ]),
+    ).toEqual(["back"]);
+  });
+
+  test("no second serve after the fault: the swings stay (a double fault's tail is the dead-ball rule's)", () => {
+    expect(
+      deadBetweenServes([
+        shot("s1", "first_serve", 1, { result: "out" }),
+        shot("r", "forehand", 2),
+      ]),
+    ).toEqual([]);
+  });
+
+  test("the combine clears them and the console shows them deleted", async () => {
+    const fake = fakeClient({
+      shots: [
+        labelShotRow(SHOT(1), UUID(1), {
+          stroke: "first_serve",
+          result: "out",
+          video_time: 1,
+        }),
+        labelShotRow(SHOT(4), UUID(1), {
+          hitter: "p2",
+          stroke: "forehand",
+          video_time: 2,
+        }),
+        labelShotRow(SHOT(2), UUID(2), {
+          stroke: "first_serve",
+          video_time: 5,
+        }),
+        labelShotRow(SHOT(3), UUID(2), {
+          hitter: "p2",
+          stroke: "forehand",
+          video_time: 6,
+        }),
+      ],
+    });
+    const result = await writeLabelPointCombine({
+      supabase: fake.supabase,
+      pointId: UUID(2),
+      direction: "above",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      retyped: [{ id: SHOT(2), stroke: "second_serve" }],
+      cleared: [
+        {
+          id: SHOT(4),
+          status: "deleted",
+          status_before_delete: "kept",
+          delete_reason: "dead_ball_after_fault",
+        },
+      ],
+    });
+    const clear = writes(fake).find(
+      (c) => c.table === "label_shots" && c.filters?.id === SHOT(4),
+    );
+    expect(clear).toEqual({
+      table: "label_shots",
+      op: "update",
+      values: {
+        status: "deleted",
+        status_before_delete: "kept",
+        delete_reason: "dead_ball_after_fault",
+      },
+      filters: { id: SHOT(4), status: "kept" },
+    });
+    // After the retype, before the ending is read.
+    const ops = fake.calls.map((c) => [c.table, c.op, c.filters?.id]);
+    const at = ops.findIndex((o) => o[2] === SHOT(4));
+    expect(ops[at - 1]).toEqual(["label_shots", "update", SHOT(2)]);
+    expect(ops[at + 1].slice(0, 2)).toEqual(["label_shots", "select"]);
+  });
 });

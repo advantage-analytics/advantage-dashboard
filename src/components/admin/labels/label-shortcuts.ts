@@ -4,7 +4,7 @@
  * keys under the court went on 2026-10-26; the sheet replaced it.
  *
  * The handlers live in label-console.tsx (shot keys, ↑ ↓, enter, esc, the
- * flag walks, ⌘Z, ⌘ enter, ⌘ /) and label-video.tsx (D, L, M). Key legends
+ * flag walks, ⌘Z, ⌘⇧Z, ⌘ enter, ⌘ /) and label-video.tsx (D, L, M). Key legends
  * follow the DS `Kbd` conventions: word keys lowercase, letters uppercase,
  * arrows as glyphs, each key of a combo its own chip.
  */
@@ -84,6 +84,7 @@ export const LABEL_SHORTCUT_GROUPS: readonly LabelShortcutGroup[] = [
       { keys: ["⌫"], action: "Delete shot" },
       { keys: ["⌘", "enter"], action: "Mark the point checked" },
       { keys: ["⌘", "Z"], action: "Undo" },
+      { keys: ["⌘", "⇧", "Z"], action: "Redo" },
       { keys: ["⌘", "/"], action: "Show this sheet", note: "Or ?" },
     ],
   },

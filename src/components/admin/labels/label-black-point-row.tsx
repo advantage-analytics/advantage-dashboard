@@ -48,6 +48,10 @@ import {
   type GameServeRepeat,
 } from "@/lib/services/labels/game-serve-order";
 import { gameInSetOf, type LabelGame } from "@/lib/services/labels/operations";
+import {
+  courtEndSwapReason,
+  type CourtEndSwap,
+} from "@/lib/services/labels/court-end";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
@@ -779,6 +783,50 @@ export const BlackTiebreakServe = memo(function BlackTiebreakServe({
     ) : null,
     actionLabel: label,
     details,
+  });
+});
+
+/**
+ * Points of a game whose strokes sit at the other player's end (court-end.ts):
+ * a slot above the first of them. "Switch N points" is "Switch players" on
+ * each — winner and ended by flip with the strokes, `server` stays — as one
+ * action, so one ⌘Z takes it back.
+ */
+export const BlackCourtEndSwap = memo(function BlackCourtEndSwap({
+  swap,
+  onSwitch,
+}: {
+  swap: CourtEndSwap;
+  /** The console's switch; absent, the slot only reads. */
+  onSwitch?: (pointIds: readonly string[]) => void;
+}) {
+  const n = swap.pointIds.length;
+  const reason = courtEndSwapReason(swap);
+  const label = n === 1 ? "Switch players" : `Switch ${n} points`;
+  return gameSlot({
+    icon: ArrowLeftRight,
+    row: "court-end-swap",
+    anchor: swap.pointId,
+    title: "Players at the wrong end",
+    reason,
+    action: onSwitch ? (
+      <BlackTextAction
+        ink="amber"
+        data-court-end-fix=""
+        aria-label={`${label}: ${reason}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSwitch(swap.pointIds);
+        }}
+      >
+        {label}
+      </BlackTextAction>
+    ) : null,
+    actionLabel: label,
+    details: [
+      "Ends change after game 1 and every two games, and every six tiebreak points",
+      playersSwitchDetail(n),
+    ],
   });
 });
 

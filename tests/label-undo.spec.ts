@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { readLabelPointsByIds } from "@/lib/data/labels-server";
-import { pointsToRead, undoLabelOp } from "@/lib/services/labels/undo-session";
+import {
+  pointsToRead,
+  redoLabelOp,
+  undoLabelOp,
+} from "@/lib/services/labels/undo-session";
 import type { AdminClient } from "@/lib/supabase/admin";
 import { opHeaders, withLabelOp } from "@/lib/supabase/op-context";
 import { fakeLabelClient, labelShotRow } from "./fixtures/label-session";
@@ -78,9 +82,71 @@ test("one RPC, then only the touched points read back, as a diff", async () => {
     ok: true,
     undone: "Split point",
     remaining: 3,
+    // The old function says nothing of redo: none.
+    redoable: 0,
     changed,
     removedPointIds: ["p9"],
   });
+});
+
+test("redo: one RPC to redo_label_op, the touched points read back the same way", async () => {
+  const { calls, db } = fakeDb({
+    data: {
+      redone: "Combine points",
+      remaining: 1,
+      points: ["p1"],
+      shots: ["s1"],
+      deleted_points: [],
+      deleted_shots: [],
+      shot_points: ["p1", "p2"],
+    },
+  });
+  const changed = [{ id: "p1" }, { id: "p2" }] as never;
+  const result = await redoLabelOp(SESSION, {
+    requireAdmin: async () => ({ id: "admin" }),
+    createAdminClient: () => db,
+    readPoints: async () => changed,
+  });
+  expect(calls).toEqual([["redo_label_op", { p_session_id: SESSION }]]);
+  expect(result).toEqual({
+    ok: true,
+    redone: "Combine points",
+    remaining: 1,
+    changed,
+    removedPointIds: [],
+  });
+  // The undo's count of what is left to redo comes through.
+  const undone = await undoLabelOp(SESSION, {
+    requireAdmin: async () => ({ id: "admin" }),
+    createAdminClient: () =>
+      fakeDb({ data: { undone: "Edit", remaining: 0, redoable: 2 } }).db,
+    readPoints: async () => [],
+  });
+  expect(undone).toMatchObject({ ok: true, redoable: 2 });
+});
+
+test("redo refuses and reports like undo", async () => {
+  expect(
+    await redoLabelOp(SESSION, {
+      requireAdmin: async () => null,
+      createAdminClient: () => ({}) as AdminClient,
+      readPoints: async () => [],
+    }),
+  ).toEqual({ error: "Admin access required." });
+  const log = console.error;
+  console.error = () => {};
+  try {
+    expect(
+      await redoLabelOp(SESSION, {
+        requireAdmin: async () => ({ id: "admin" }),
+        createAdminClient: () =>
+          fakeDb({ error: { code: "42883", message: "nope" } }).db,
+        readPoints: async () => [],
+      }),
+    ).toEqual({ error: "Could not redo. Nothing was changed." });
+  } finally {
+    console.error = log;
+  }
 });
 
 test("the ids to read: touched points and shot owners, never a deleted point", () => {

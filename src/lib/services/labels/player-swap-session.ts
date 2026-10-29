@@ -7,6 +7,9 @@
  * (`updateIfUnchanged`), then the flipped strokes grouped by value tuple
  * (`writeShotSwaps`). `server`, `set_number` and `game_number` are never
  * touched.
+ *
+ * "Switch N points" (court-end.ts) is the same switch on each of a game's
+ * points in turn, inside one action, so ⌘Z takes them all back together.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -95,5 +98,82 @@ export function switchLabelPointPlayers(
     deps,
     (supabase) => writeLabelPlayerSwitch({ supabase, pointId }),
     "switch the point's players",
+  );
+}
+
+/** Most points one "Switch N points" may name: a long tiebreak, with room. */
+export const MAX_SWITCH_POINTS = 40;
+
+export type LabelPlayersSwitchResult = LabelOpResult<{
+  /** Each switched point, in the order given. */
+  points: {
+    pointId: string;
+    status: LabelPointStatus;
+    winner: LabelSide | null;
+    endedBy: LabelSide | null;
+  }[];
+  /** Every stroke of every switched point, flipped. */
+  shots: ShotSwapWrite[];
+  /**
+   * Why the run stopped short of the last id, or null when every point was
+   * switched. The points before the refusal are written and listed above.
+   */
+  stopped: string | null;
+}>;
+
+/**
+ * "Switch N points": {@link writeLabelPlayerSwitch} on each id in turn. Stops
+ * at the first refusal. A refusal on the first point is an error; a later one
+ * answers the points already switched — written, inside the same undo step —
+ * with `stopped` saying why the rest were not, so the console shows exactly
+ * what the database holds.
+ */
+export async function writeLabelPlayersSwitch(params: {
+  supabase: AdminClient;
+  pointIds: unknown;
+}): Promise<LabelPlayersSwitchResult> {
+  const { supabase } = params;
+  const raw = Array.isArray(params.pointIds) ? params.pointIds : null;
+  if (!raw || raw.length === 0 || raw.length > MAX_SWITCH_POINTS) {
+    return { error: "Invalid point ids." };
+  }
+  const ids = raw.map(normaliseId);
+  if (ids.some((id) => !id) || new Set(ids).size !== ids.length) {
+    return { error: "Invalid point ids." };
+  }
+  const points: Extract<LabelPlayersSwitchResult, { ok: true }>["points"] = [];
+  const shots: ShotSwapWrite[] = [];
+  for (const pointId of ids as string[]) {
+    const one = await writeLabelPlayerSwitch({ supabase, pointId });
+    if ("error" in one) {
+      if (points.length === 0) return one;
+      return {
+        ok: true,
+        points,
+        shots,
+        stopped: `${one.error} ${points.length} of ${ids.length} ${
+          ids.length === 1 ? "point was" : "points were"
+        } switched; ⌘Z takes them back.`,
+      };
+    }
+    points.push({
+      pointId,
+      status: one.status,
+      winner: one.winner,
+      endedBy: one.endedBy,
+    });
+    shots.push(...one.shots);
+  }
+  return { ok: true, points, shots, stopped: null };
+}
+
+export function switchLabelPointsPlayers(
+  pointIds: unknown,
+  deps: LabelWriteDependencies = defaultLabelWriteDependencies,
+): Promise<LabelPlayersSwitchResult> {
+  return gated(
+    deps,
+    (supabase) => writeLabelPlayersSwitch({ supabase, pointIds }),
+    "switch the players",
   );
 }
