@@ -323,6 +323,25 @@ test.describe("playedOnResult", () => {
     );
   });
 
+  test("a double fault's serves stay empty, whatever follows them", () => {
+    // A dead ball after the second fault is no return.
+    expect(
+      playedOnResult(
+        { stroke: "second_serve", result: null },
+        { stroke: "forehand" },
+        "double_fault",
+      ),
+    ).toBeNull();
+    // A rally stroke on such a point still fills.
+    expect(
+      playedOnResult(
+        { stroke: "forehand", result: null },
+        { stroke: "backhand" },
+        "double_fault",
+      ),
+    ).toBe("in");
+  });
+
   test("a serve followed by a serve stays empty: it faulted", () => {
     expect(
       playedOnResult(

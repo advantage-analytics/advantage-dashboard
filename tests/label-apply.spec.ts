@@ -382,6 +382,16 @@ test.describe("buildAppliedRows", () => {
       ]),
     ]).points[0];
     expect(fault.shots.map((s) => s.result)).toEqual([null, "In", "Out"]);
+    // A double fault with a dead ball left after it: the empty second serve
+    // is no ball in play.
+    const double = build([
+      pt(0, "p2", "double_fault", (p) => [
+        shot(p, "p1", "first_serve", "out"),
+        shot(p, "p1", "second_serve", null),
+        shot(p, "p2", "forehand", null),
+      ]),
+    ]).points[0];
+    expect(double.shots.map((s) => s.result)).toEqual(["Out", null, null]);
   });
 
   test("a point with no winner is a problem, not a row", () => {

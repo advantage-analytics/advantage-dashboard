@@ -312,6 +312,7 @@ export function BlackShotsWell({
   const pastEnd = new Set(
     overAt === null ? [] : inOrder.slice(overAt + 1).map((shot) => shot.id),
   );
+  const nextOf = new Map(inOrder.map((shot, i) => [shot.id, inOrder[i + 1]]));
   let overDrawn = false;
   for (const [i, shot] of point.shots.entries()) {
     // A stroke the labeller added and then deleted leaves no row.
@@ -351,7 +352,7 @@ export function BlackShotsWell({
         <BlackShotRow
           key={shot.id}
           shot={shot}
-          next={inOrder[inOrder.indexOf(shot) + 1] ?? null}
+          next={nextOf.get(shot.id) ?? null}
           number={n}
           point={point}
           pointNumber={pointNumber}
@@ -514,9 +515,10 @@ export function BlackShotRow({
    */
   resultMenuOpen?: boolean;
   /**
-   * The stroke's point, for "Split point here". Absent, no split is offered.
+   * The stroke's point, for "Split point here" and its ending (a double
+   * fault's serves are never filled In). Absent, no split is offered.
    */
-  point?: Pick<LabelPoint, "id" | "status" | "shots">;
+  point?: Pick<LabelPoint, "id" | "status" | "shots" | "ending">;
   /** The point's number, for the confirm the console opens. */
   pointNumber: number;
   edit: EditContext;
@@ -572,7 +574,7 @@ export function BlackShotRow({
   const direction = placementLabel(shot, edit.hands);
   const resultMenu = shotResultMenu(shot, edit.playOnLets);
   // An empty result the next stroke settles: it played the ball, so In.
-  const result = playedOnResult(shot, next);
+  const result = playedOnResult(shot, next, point?.ending);
   /** The words' ink, a step down on a fault. */
   const words = fault ? "text-white/35" : "text-white/50";
   const arrival = rowArrival(arrive);
