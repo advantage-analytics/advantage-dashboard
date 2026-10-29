@@ -419,7 +419,9 @@ export function AdminUploadEntry({
                       ? "Teams only"
                       : personal && value === "video"
                         ? "Into their personal workspace"
-                        : detail}
+                        : !context && value === "video"
+                          ? "A team’s hours, or a player’s own"
+                          : detail}
                   </span>
                 </label>
               );
@@ -456,7 +458,9 @@ export function AdminUploadEntry({
             <span>
               {personal
                 ? "The match is saved in the player’s personal workspace."
-                : "Uploads are attributed to the selected team."}
+                : context
+                  ? "Uploads are attributed to the selected team."
+                  : "Uploads are attributed to the selected team or player."}
             </span>
             <Link href="/admin/uploads" className="hover:text-[var(--ink-900)]">
               Cancel

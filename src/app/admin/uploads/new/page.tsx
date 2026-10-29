@@ -179,7 +179,7 @@ export default async function AdminNewUploadPage({
                   className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-element)] px-3 py-3 text-[13px] hover:bg-[var(--surface-subtle)]"
                 >
                   <span>{player.title}</span>
-                  {player.subtitle && (
+                  {player.subtitle && player.subtitle !== player.title && (
                     <span className="text-[12px] text-[var(--ink-600)]">
                       {player.subtitle}
                     </span>

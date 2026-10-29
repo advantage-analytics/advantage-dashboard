@@ -252,7 +252,7 @@ export function AdminWorkspaceRow({ context, uploadKind }: AdminTargetProps) {
                     <span className="text-[12px] font-medium whitespace-nowrap text-[var(--ink-900)]">
                       {hit.title}
                     </span>
-                    {hit.subtitle && (
+                    {hit.subtitle && hit.subtitle !== hit.title && (
                       <span className="min-w-0 truncate text-[11px] text-[var(--ink-500)]">
                         {hit.subtitle}
                       </span>
