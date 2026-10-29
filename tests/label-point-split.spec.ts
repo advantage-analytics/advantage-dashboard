@@ -161,6 +161,45 @@ test.describe("a split renumbers the serves that open the new point", () => {
   });
 });
 
+test.describe("a split carries the moved strokes' dismissals", () => {
+  test("the new point holds the anchor's answers about the strokes it took, and nothing else", () => {
+    const anchor = pointOf(P1);
+    const live = anchor.shots.filter((shot) => shot.status !== "deleted");
+    const [stays, moves] = live;
+    expect(stays.eventId).not.toBeNull();
+    expect(moves.eventId).not.toBeNull();
+    const dismissed = [
+      `missing_shot:${stays.eventId}`,
+      `missing_shot:${moves.eventId}`,
+      `point_ended:${moves.id}`,
+      "hint:second_serve",
+      "missing_point",
+    ];
+    const rows = points().map((point) =>
+      point.id === P1 ? { ...point, dismissed } : point,
+    );
+    const plan = planPointSplit(rows, P1, moves.id);
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.write.insert.dismissed).toEqual([
+      `missing_shot:${moves.eventId}`,
+      `point_ended:${moves.id}`,
+    ]);
+    const split = applyPointSplit(
+      rows,
+      P1,
+      draftSplitPoint(plan.write.insert, NEW_ID),
+      plan.write,
+    );
+    expect(split.find((point) => point.id === NEW_ID)?.dismissed).toEqual(
+      plan.write.insert.dismissed,
+    );
+    // The anchor keeps its own column untouched.
+    expect(split.find((point) => point.id === P1)?.dismissed).toEqual(
+      dismissed,
+    );
+  });
+});
+
 // ── The plan ───────────────────────────────────────────────────────────────
 
 test.describe("planPointSplit", () => {
@@ -181,6 +220,7 @@ test.describe("planPointSplit", () => {
       status: "added",
       // The console's rows carry no rally per shot: nothing is known.
       vendor_rally_ids: [],
+      dismissed: [],
     });
     expect(plan.write.shifts).toEqual([
       { id: P4, point_index: 4 },
@@ -543,6 +583,7 @@ test.describe("writeLabelPointSplit", () => {
         game_type: "game",
         status: "added",
         vendor_rally_ids: [1001],
+        dismissed: [],
         serve_side: null,
         // The ending its moved strokes derive, in the same insert.
         winner: "p2",

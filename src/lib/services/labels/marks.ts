@@ -763,7 +763,7 @@ export function buildLabelMarks(
           key: `missing_shot:${a.event_id}`,
           pointId,
           afterShotId,
-          ...(nextShotId !== undefined ? { nextShotId } : {}),
+          nextShotId,
           hitter: opponent(labelSideOf(a.is_player1)),
           videoTime: midpoint(a.video_time, b.video_time),
         });

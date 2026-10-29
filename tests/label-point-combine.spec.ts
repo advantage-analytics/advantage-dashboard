@@ -96,6 +96,7 @@ test.describe("planPointCombine", () => {
         vendor_rally_ids: [1001, 1002],
         status: "edited",
         game_start_locked: false,
+        dismissed: [],
       },
       removed: { status: "deleted", status_before_delete: "unchanged" },
       // The fixture's two points each open on a first serve: joined, the
@@ -645,6 +646,7 @@ test.describe("the console's rows", () => {
         vendor_rally_ids: [1001, 1002],
         status: "edited",
         game_start_locked: false,
+        dismissed: [],
       },
       removed: { id: P2, status: "deleted", status_before_delete: "unchanged" },
       retyped: [
@@ -848,6 +850,7 @@ test.describe("writeLabelPointCombine", () => {
         vendor_rally_ids: [1001, 1002],
         status: "edited",
         game_start_locked: false,
+        dismissed: [],
       },
       removed: {
         id: UUID(2),
@@ -892,6 +895,7 @@ test.describe("writeLabelPointCombine", () => {
         vendor_rally_ids: [1001, 1002],
         status: "edited",
         game_start_locked: false,
+        dismissed: [],
       },
       filters: { id: UUID(1), status: "edited" },
     });
@@ -1507,4 +1511,34 @@ test.describe("deadBetweenServes: swings between a fault or a let and the next s
     expect(ops[at - 1]).toEqual(["label_shots", "update", SHOT(2)]);
     expect(ops[at + 1].slice(0, 2)).toEqual(["label_shots", "select"]);
   });
+});
+
+test("a combine keeps the earlier point's dismissals and takes the later's of its own strokes", () => {
+  const rows = points().map((point) =>
+    point.id === P1
+      ? { ...point, dismissed: ["hint:second_serve", "missing_shot:101"] }
+      : point.id === P2
+        ? {
+            ...point,
+            dismissed: [
+              "missing_shot:101",
+              "missing_shot:201",
+              "point_ended:s-ace",
+              "missing_point",
+            ],
+          }
+        : point,
+  );
+  const plan = planPointCombine(rows, P2, "above");
+  if ("error" in plan) throw new Error(plan.error);
+  expect(plan.write.kept.dismissed).toEqual([
+    "hint:second_serve",
+    "missing_shot:101",
+    "missing_shot:201",
+    "point_ended:s-ace",
+  ]);
+  const after = applyPointCombine(rows, plan.write);
+  expect(after.find((point) => point.id === P1)?.dismissed).toEqual(
+    plan.write.kept.dismissed,
+  );
 });

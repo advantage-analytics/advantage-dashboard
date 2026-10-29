@@ -63,10 +63,11 @@ interface PointRow {
   winner: LabelSide | null;
   ending: LabelEnding | null;
   ended_by: LabelSide | null;
+  dismissed: string[] | null;
 }
 
 const POINT_INDEX_COLUMNS =
-  "id, session_id, point_index, status, set_number, game_number, server, game_type, vendor_rally_ids, winner, ending, ended_by";
+  "id, session_id, point_index, status, set_number, game_number, server, game_type, vendor_rally_ids, winner, ending, ended_by, dismissed";
 
 /**
  * The anchor's shots, whole (each half's ending is derived from them), plus
@@ -98,6 +99,7 @@ function toSplittable(
     server: row.server,
     gameType: row.game_type,
     vendorRallyIds: row.vendor_rally_ids ?? [],
+    dismissed: row.dismissed ?? [],
     shots: row.id === anchorId ? anchorShots.map(toSplittableShot) : [],
   }));
 }

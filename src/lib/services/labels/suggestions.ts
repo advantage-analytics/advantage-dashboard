@@ -217,6 +217,27 @@ export function doubleFaultAt(
   return missed(first) && missed(second) ? second : null;
 }
 
+/**
+ * The keys of `dismissed` that name one of `shots` — a missing shot by its
+ * pair's first stroke's vendor event, "Point ended here" by the stroke's id —
+ * in `dismissed`'s order. What a split hands the new point with the strokes
+ * it takes, and a combine the kept point with the later one's strokes: the
+ * suggestion follows its stroke (`homeShotSuggestions`, marks.ts), so its
+ * answer must too. Point-level keys (a missing point, a hint) stay behind:
+ * they answered a question about the point they were written on.
+ */
+export function strokeDismissals(
+  dismissed: readonly string[],
+  shots: readonly Partial<Pick<LabelShot, "id" | "eventId">>[],
+): string[] {
+  const keys = new Set<string>();
+  for (const shot of shots) {
+    if (shot.eventId != null) keys.add(`${MISSING_SHOT_PREFIX}${shot.eventId}`);
+    if (shot.id) keys.add(pointEndedKey(shot.id));
+  }
+  return dismissed.filter((key) => keys.has(key));
+}
+
 /** The one column Dismiss writes: the array read, plus the key. */
 export interface DismissWrite {
   dismissed: string[];

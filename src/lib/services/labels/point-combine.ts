@@ -66,6 +66,7 @@ import {
   type LabelSide,
   type LabelStroke,
 } from "./session";
+import { strokeDismissals } from "./suggestions";
 
 export type CombineDirection = "above" | "below";
 
@@ -86,7 +87,10 @@ export type CombinablePoint = Pick<
   | "endedBy"
   | "vendorRallyIds"
   | "gameStartLocked"
-> & { shots: readonly CombinableShot[] };
+> &
+  Partial<Pick<LabelPoint, "dismissed">> & {
+    shots: readonly CombinableShot[];
+  };
 
 /**
  * What the plan reads of a shot: its id, and for the serve retype its stroke,
@@ -131,6 +135,11 @@ export interface CombineKeptWrite {
    * joined point still starts that game.
    */
   game_start_locked: boolean;
+  /**
+   * The earlier point's dismissals, then the later one's of its own strokes'
+   * suggestions (`strokeDismissals`), which move with those strokes.
+   */
+  dismissed: string[];
 }
 
 export interface PointCombinePlan {
@@ -452,6 +461,12 @@ export function planPointCombine(
         ],
         status: earlier.status === "added" ? "added" : "edited",
         game_start_locked: earlier.gameStartLocked || later.gameStartLocked,
+        dismissed: [
+          ...new Set([
+            ...(earlier.dismissed ?? []),
+            ...strokeDismissals(later.dismissed ?? [], later.shots),
+          ]),
+        ],
       },
       removed: removed.write,
       retyped,
@@ -494,6 +509,7 @@ export function applyPointCombine(
         vendorRallyIds: plan.kept.vendor_rally_ids,
         status: plan.kept.status,
         gameStartLocked: plan.kept.game_start_locked,
+        dismissed: plan.kept.dismissed,
         shots: orderLabelShots([...point.shots, ...moved]).map((shot) => {
           const retype = plan.retyped.find((r) => r.shotId === shot.id);
           const next = retype ? applyLabelShotPatch(shot, retype.patch) : shot;
@@ -565,6 +581,7 @@ export function settlePointCombine(
         vendorRallyIds: saved.kept.vendor_rally_ids,
         status: saved.kept.status,
         gameStartLocked: saved.kept.game_start_locked,
+        dismissed: saved.kept.dismissed,
         shots: point.shots.map((shot) => {
           const written = saved.retyped.find((r) => r.id === shot.id);
           const next = written
