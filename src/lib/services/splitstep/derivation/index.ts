@@ -218,6 +218,12 @@ export {
 } from "./frozen";
 
 export {
+  hittersByCourtEnd,
+  type HitterProposal,
+  type HitterRelabel,
+} from "./hitters";
+
+export {
   playerAtEnd,
   serveEnd,
   type CompletedSet,
