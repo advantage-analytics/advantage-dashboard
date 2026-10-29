@@ -46,10 +46,11 @@ const loader = createLoader({
         }),
     },
     "./retry-submission": {
-      RetrySubmission: ({ jobId }: { jobId: string }) =>
+      RetrySubmission: ({ jobId, label }: { jobId: string; label?: string }) =>
         React.createElement("button", {
           "data-component": "RetrySubmission",
           "data-job-id": jobId,
+          "data-label": label,
         }),
     },
   },
@@ -165,7 +166,30 @@ test("fix_recording renders a Link to addVideoHref(matchId) labeled from byClass
   expect(html).toContain(byClass.fix_recording.action as string);
 });
 
-test("wait_or_ask, stats_unavailable and no class render nothing", () => {
+test("wait_or_ask on a stalled row (an allowance or permission refusal) sends the stored video again", () => {
+  const html = render({
+    recovery: "wait_or_ask",
+    jobId: "job-5",
+    matchId: "match-1",
+    variant: "card",
+    stalled: true,
+  });
+  expect(html).toContain('data-component="RetrySubmission"');
+  expect(html).toContain('data-job-id="job-5"');
+  expect(html).toContain('data-label="Send for analysis"');
+  // No job to send, nothing to press.
+  expect(
+    render({
+      recovery: "wait_or_ask",
+      jobId: null,
+      matchId: "match-1",
+      variant: "card",
+      stalled: true,
+    }),
+  ).toBe("");
+});
+
+test("wait_or_ask on a failed row (the attempt ceiling), stats_unavailable and no class render nothing", () => {
   for (const recovery of [
     "wait_or_ask",
     "stats_unavailable",
