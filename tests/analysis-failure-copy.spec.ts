@@ -305,7 +305,7 @@ test("e6e8dea4 (internal error while downloading): renders the retry action", ()
   expect(html).toContain('data-component="RetryAnalysis"');
 });
 
-test("stalled quota row: the stored note, the allowance body, no retry", () => {
+test("stalled quota row: the stored note, the allowance body, and Send for analysis", () => {
   const note =
     "This match needs 2 hr 3 min of analysis but only 2 hr is left this month.";
   const updatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -325,7 +325,10 @@ test("stalled quota row: the stored note, the allowance body, no retry", () => {
   expect(headlineOf(html, "status")).toBe(note);
   expect(out).toContain(WAIT_OR_ASK_VARIANTS.allowance.cardBody);
   expect(out).not.toContain("This hasn't been sent for analysis yet");
-  expectNoRetry(html);
+  // The free `{ jobId }` re-submission, never the paid resubmit: the route
+  // re-checks the allowance, so an early press is refused and spends nothing.
+  expect(html).toContain('data-component="RetrySubmission"');
+  expect(html).not.toContain('data-component="RetryAnalysis"');
 });
 
 test("stalled permission row picks the permission variant from its error code", () => {
@@ -343,6 +346,19 @@ test("stalled permission row picks the permission variant from its error code", 
     WAIT_OR_ASK_VARIANTS.permission.title,
   );
   expect(out).toContain(WAIT_OR_ASK_VARIANTS.permission.cardBody);
+  expect(html).toContain('data-component="RetrySubmission"');
+  expect(html).not.toContain('data-component="RetryAnalysis"');
+});
+
+test("a failed job at the attempt ceiling reads ceiling and offers nothing to send", () => {
+  const fields = fromRow(
+    { status: "failed", error_code: "INTERNAL_ERROR", error_message: null },
+    3,
+  );
+  expect(fields.recovery).toBe("wait_or_ask");
+
+  const html = render("failed", fields);
+  expect(decode(html)).toContain(WAIT_OR_ASK_VARIANTS.ceiling.cardBody);
   expectNoRetry(html);
 });
 
@@ -480,9 +496,13 @@ test("WAIT_OR_ASK_VARIANTS has the three variants, and permission tells the play
     "permission",
   ]);
   expect(WAIT_OR_ASK_VARIANTS.permission.cardBody).toMatch(/team's owner/);
-  expect(WAIT_OR_ASK_VARIANTS.allowance.action).toBeNull();
-  expect(WAIT_OR_ASK_VARIANTS.permission.action).toBeNull();
+  // A refusal that clears without us can be sent again; the ceiling cannot.
+  expect(WAIT_OR_ASK_VARIANTS.allowance.action).toBe("Send for analysis");
+  expect(WAIT_OR_ASK_VARIANTS.permission.action).toBe("Send for analysis");
   expect(WAIT_OR_ASK_VARIANTS.ceiling.action).toBeNull();
+  // Both say the video is kept — the thing the player is weighing.
+  expect(WAIT_OR_ASK_VARIANTS.allowance.cardBody).toMatch(/video is kept/);
+  expect(WAIT_OR_ASK_VARIANTS.permission.cardBody).toMatch(/video is kept/);
 });
 
 test("waitOrAskVariant maps error codes to the three variants", () => {

@@ -332,16 +332,20 @@ function DrawerStepBody({ body }: { body: DrawerAnalysisStepBody }) {
 
 /**
  * Does a failed row's recovery class have something to press in a drawer?
- * `byClass`'s `action: null` classes (`wait_or_ask`, `stats_unavailable`)
- * have nothing, and a retry or rebuild needs a job to act on — so a caller
- * never draws an empty footer slot, nor lets an absent action take the
- * footer's primary from "View match".
+ * `stats_unavailable` (`action: null`) has nothing; a retry or rebuild needs a
+ * job to act on; and `wait_or_ask` has "Send for analysis" only on a stalled
+ * hand-off (an allowance or permission refusal) — on a failed job it is the
+ * attempt ceiling, which the route refuses. So a caller never draws an empty
+ * footer slot, nor lets an absent action take the footer's primary from
+ * "View match".
  */
 export function recoveryHasAction(
   recovery: RecoveryClass | null | undefined,
   jobId: string | null | undefined,
+  stalled = false,
 ): recovery is RecoveryClass {
   if (!recovery || byClass[recovery].action === null) return false;
+  if (recovery === "wait_or_ask") return stalled && Boolean(jobId);
   if (recovery === "retry" || recovery === "rederive") return Boolean(jobId);
   return true;
 }
@@ -358,10 +362,15 @@ export function recoveryHasAction(
  *   re-submission: `{ jobId }` POSTed to `/api/splitstep/jobs`, exactly the
  *   request `RetrySubmission` makes on the match page. Nothing was sent, so
  *   there is no vendor job to resubmit.
+ * - `wait_or_ask` on a stalled hand-off — "Send for analysis", the same
+ *   `{ jobId }` re-submission, for a submit refused for allowance or
+ *   permission. The route re-checks both, so an early press is refused with
+ *   its reason and spends nothing.
  * - `rederive` — "Rebuild statistics", POSTed to `…/rederive`.
  * - `upload_again` / `fix_recording` — the wizard link `byClass` names.
  *
- * `wait_or_ask`, `stats_unavailable` or no class draw nothing. The routes
+ * `wait_or_ask` on a failed job (the attempt ceiling), `stats_unavailable`
+ * or no class draw nothing. The routes
  * refuse anyone who may not act, so a caller gates only on what it knows.
  */
 export function DrawerRecoveryAction({
@@ -378,12 +387,20 @@ export function DrawerRecoveryAction({
   /** A hand-off that never happened (`isSubmitStalled`), not a failed job. */
   stalled?: boolean;
 }) {
-  if (!recoveryHasAction(recovery, jobId)) return null;
+  if (!recoveryHasAction(recovery, jobId, stalled)) return null;
 
-  if (recovery === "retry" && jobId && stalled) {
+  if (
+    (recovery === "retry" || recovery === "wait_or_ask") &&
+    jobId &&
+    stalled
+  ) {
     return (
       <DrawerRequestButton
-        label="Try again"
+        label={
+          recovery === "wait_or_ask"
+            ? (byClass.wait_or_ask.action ?? "Send for analysis")
+            : "Try again"
+        }
         pendingLabel="Sending…"
         url="/api/splitstep/jobs"
         init={{
