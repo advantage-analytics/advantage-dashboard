@@ -30,3 +30,13 @@ is the runner's. Newest entries at the bottom.
 2. A later edit that stops a point ending on an error leaves a stale `error_kind`: clear it when the ending settles, or have readers gate on `isMarkableError` (T9/T10/T11/T12 should do the latter at least).
 3. Combine/split don't carry `error_kind` to the surviving or new points.
 4. `session.ts`: the `LabelErrorKind` block sits between the `LabelPoint` doc comment and its interface, orphaning the comment.
+
+## T1 · Migration: errors_judged_at marker and calculate_match_stats counts forced errors — done
+
+**gate:** mechanical PASS · completion VERDICT: pass
+**changed:** Re-run after the user approved the live write ("Fix all teh blockers and then continue with the goal command"). Migration `20261029222042_forced_errors_judged` applied live (plain MCP, first try) and committed: adds `matches.errors_judged_at` with its comment; `calculate_match_stats` counts `forced_errors` (Forced Error, not Unforced) only when `source_provider = 'swing-vision'` or `errors_judged_at` is set, NULL otherwise — rest of the body byte-identical to the previous live one (md5 checked); grants restated without anon; closing DO block recomputes every SwingVision match. Live after apply: 44 SwingVision matches, 0 with NULL forced_errors, sum 261; 0 non-SwingVision rows non-null; 18 verified matches untouched; 0 matches judged. `result-type.ts` header updated; `tests/forced-errors-migration.spec.ts` (6 cases).
+**follow-ups:**
+
+1. `supabase/migrations/20260219000000_populate_serve_return_placement_stats.sql` still carries a stale `calculate_match_stats` — add a pointer comment to the new file.
+2. T11 must run `calculate_match_stats` after stamping `errors_judged_at` (the function reads it at run time); a spec on that order is cheap.
+3. `ask.match_stats` exposes `forced_errors` already, so Ask sees real counts on SwingVision matches now — T7's schema copy should state the NULL = unjudged meaning.

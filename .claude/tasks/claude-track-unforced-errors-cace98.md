@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Migration: errors_judged_at marker and calculate_match_stats counts forced errors
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<timestamp>_forced_errors_judged.sql (new), src/lib/services/splitstep/derivation/result-type.ts (header comment) — guess; the live `calculate_match_stats` body must be read from the live DB (`pg_get_functiondef`), not from supabase/migrations/20260219000000_populate_serve_return_placement_stats.sql, which is ~100 migrations behind
 - **done when:**
