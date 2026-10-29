@@ -436,10 +436,18 @@ export const getAdminPersonalUploadContext = cache(
         };
       const email = row.email ?? "";
       const localPart = email.split("@")[0] ?? "";
+      // The fallback `admin_submit_match_video` records: names, else the
+      // email's local part. With neither it refuses, so this does too.
       const name =
         [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
-        localPart ||
-        "Player";
+        localPart;
+      if (!name)
+        return {
+          ok: false,
+          reason: "player-not-found",
+          message:
+            "This player has no name or email to record the match under.",
+        };
       const initials = getInitials(name) || localPart.slice(0, 2).toUpperCase();
       const avatarUrl = row.avatar_path
         ? admin.storage.from(USER_AVATARS_BUCKET).getPublicUrl(row.avatar_path)

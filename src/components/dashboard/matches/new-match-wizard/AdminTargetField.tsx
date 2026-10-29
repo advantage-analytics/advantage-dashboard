@@ -44,10 +44,16 @@ import { focusRingCls } from "./styles";
 
 /** The console URL for another target, or null when the mode has no kind. */
 function retargetHref(
-  mode: AdminWizardMode,
+  uploadKind: AdminWizardMode["uploadKind"],
   target: string | AdminPlayerTarget,
 ): string | null {
-  return mode.uploadKind ? adminUploadHref(target, mode.uploadKind) : null;
+  return uploadKind ? adminUploadHref(target, uploadKind) : null;
+}
+
+/** What both controls read: the mode's two stable parts, not the mode. */
+interface AdminTargetProps {
+  context: AdminWizardMode["context"];
+  uploadKind: AdminWizardMode["uploadKind"];
 }
 
 const MENU_CLS =
@@ -64,8 +70,9 @@ function allowanceLine(seconds: number) {
 }
 
 /** The Workspace row's subline for the console's target. */
-export function adminWorkspaceSubline(mode: AdminWizardMode): string {
-  const { context } = mode;
+export function adminWorkspaceSubline(
+  context: AdminWizardMode["context"],
+): string {
   if (!context.owner)
     return `Team workspace · ${allowanceLine(context.videoAllowance.remainingSeconds)}`;
   return [
@@ -80,9 +87,8 @@ export function adminWorkspaceSubline(mode: AdminWizardMode): string {
  * a search over every team and player. Rendered inside `SourceStepContent`'s
  * own `Field`, so the underline and caption stay that component's.
  */
-export function AdminWorkspaceRow({ mode }: { mode: AdminWizardMode }) {
+export function AdminWorkspaceRow({ context, uploadKind }: AdminTargetProps) {
   const router = useRouter();
-  const { context } = mode;
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
   const [hits, setHits] = useState<AdminUploadTargetHit[]>([]);
@@ -119,7 +125,7 @@ export function AdminWorkspaceRow({ mode }: { mode: AdminWizardMode }) {
       : !context.owner && context.workspace.id === hit.id;
   const choose = (hit: AdminUploadTargetHit) => {
     const href = retargetHref(
-      mode,
+      uploadKind,
       hit.kind === "team" ? hit.id : { player: hit.id },
     );
     if (chosen(hit) || !href) {
@@ -158,7 +164,7 @@ export function AdminWorkspaceRow({ mode }: { mode: AdminWizardMode }) {
               {label}
             </span>
             <span className="text-micro truncate leading-4">
-              {adminWorkspaceSubline(mode)}
+              {adminWorkspaceSubline(context)}
             </span>
           </span>
           <ChevronsUpDown
@@ -283,9 +289,9 @@ const BILLING_OPTIONS: {
  * administrator's behalf, or the player's own free hours then credits. The
  * same radio cards the trim step's camera questions use.
  */
-export function AdminBillingField({ mode }: { mode: AdminWizardMode }) {
+export function AdminBillingField({ context, uploadKind }: AdminTargetProps) {
   const router = useRouter();
-  const owner = mode.context.owner;
+  const owner = context.owner;
   const [leaving, setLeaving] = useState<AdminUploadBilling | null>(null);
   if (!owner) return null;
   const firstName = owner.viewer.firstName ?? owner.viewer.name;
@@ -312,7 +318,7 @@ export function AdminBillingField({ mode }: { mode: AdminWizardMode }) {
               aria-checked={selected}
               disabled={leaving !== null}
               onClick={() => {
-                const href = retargetHref(mode, {
+                const href = retargetHref(uploadKind, {
                   player: owner.viewer.id,
                   billing: option.value,
                 });

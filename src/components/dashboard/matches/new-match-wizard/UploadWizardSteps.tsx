@@ -101,16 +101,30 @@ export function ProviderStep() {
   const admin = useAdminWizardMode();
   // The console's own Workspace row and billing field. Not for a prepared
   // attachment: its target is the recorded match, fixed before this step.
+  // Keyed on the mode's stable parts: the console rebuilds the mode object
+  // itself on every render of its page.
+  const adminContext = admin && !admin.attachment ? admin.context : null;
+  const adminKind = admin?.uploadKind;
   const adminSlots = useMemo(
     () =>
-      admin && !admin.attachment
+      adminContext
         ? {
-            workspace: <AdminWorkspaceRow mode={admin} />,
-            billing: <AdminBillingField mode={admin} />,
-            player: admin.context.owner?.viewer.name ?? null,
+            workspace: (
+              <AdminWorkspaceRow
+                context={adminContext}
+                uploadKind={adminKind}
+              />
+            ),
+            billing: (
+              <AdminBillingField
+                context={adminContext}
+                uploadKind={adminKind}
+              />
+            ),
+            player: adminContext.owner?.viewer.name ?? null,
           }
         : null,
-    [admin],
+    [adminContext, adminKind],
   );
   return (
     <div className="flex flex-col gap-9">
@@ -389,6 +403,7 @@ export function MatchStep() {
     meta: { workspaceKind, preset },
   } = useUploadWizard();
   const workspaces = useWorkspace();
+  const adminOwner = admin?.context.owner ?? null;
 
   // `DetailsStepContent` is `memo()`-wrapped — it's the largest step body — so
   // this has to be the same object across renders that don't actually change
@@ -411,10 +426,7 @@ export function MatchStep() {
       name: formData.playerName || whoPlayed.uploaderName || "You",
       // The console's player upload is the player's own match, but not the
       // signed-in person's: nothing on it says "you".
-      isSelf:
-        !preset &&
-        whoPlayed.subject?.kind !== "roster" &&
-        !admin?.context.owner,
+      isSelf: !preset && whoPlayed.subject?.kind !== "roster" && !adminOwner,
       playerId,
       userId: workspaces.viewer.id,
       rosterStyle: rosterRow ?? null,
@@ -434,7 +446,7 @@ export function MatchStep() {
     preset,
     workspaces.viewer.id,
     workspaces.active,
-    admin?.context.owner,
+    adminOwner,
   ]);
 
   // Stable for the same reason as `subject`. Only while the File itself is

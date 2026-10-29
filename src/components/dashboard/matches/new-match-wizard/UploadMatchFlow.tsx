@@ -237,6 +237,7 @@ export function UploadMatchFlow({
           ? {
               matchHref: `/admin/matches/${created.matchId}`,
               doneLink: { href: admin.successHref, label: "Back to uploads" },
+              canResubmit: false,
             }
           : {})}
         onResubmitted={() =>
