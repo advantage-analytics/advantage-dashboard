@@ -117,7 +117,7 @@ import {
   openPointSuggestions,
 } from "./label-black-point-row";
 import { BlackShotsWell } from "./label-black-shot-row";
-import { labelHands, type SideNames } from "./label-format";
+import { labelHands, type SideHands, type SideNames } from "./label-format";
 import { RAIL_TONE_CLASS, type RailTone } from "./label-rail-tone";
 import type {
   EditContext,
@@ -180,6 +180,7 @@ export function LabelBlackRail({
   affordance,
   onFollow,
   points,
+  enteredHands,
   scores,
   adScoring = true,
   matchTiebreakSet = null,
@@ -260,6 +261,8 @@ export function LabelBlackRail({
   affordance: FollowAffordance | null;
   onFollow: () => void;
   points: readonly LabelPoint[];
+  /** `session.enteredHands`: they win over the hands read off the rows. */
+  enteredHands?: SideHands;
   /** `labelScores(points, adScoring)`, computed once by the console. */
   scores: LabelScores;
   adScoring?: boolean;
@@ -424,7 +427,10 @@ export function LabelBlackRail({
   // Nothing of the playhead is in it (`EditContext`).
   const pointScores = scores.points;
   // Read off the rows once, for every placement's Inside Out / Inside In.
-  const hands = useMemo(() => labelHands(points), [points]);
+  const hands = useMemo(
+    () => labelHands(points, enteredHands),
+    [points, enteredHands],
+  );
   const edit = useMemo<EditContext>(
     () => ({
       editable,

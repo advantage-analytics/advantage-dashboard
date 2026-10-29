@@ -85,6 +85,12 @@ export function isBackhand(shotType: string | null | undefined): boolean {
   return (shotType ?? "").toLowerCase().includes("backhand");
 }
 
+/** Overheads (and smashes) by label. */
+export function isOverhead(shotType: string | null | undefined): boolean {
+  const type = (shotType ?? "").toLowerCase();
+  return type.includes("overhead") || type.includes("smash");
+}
+
 function baseDirection(
   zone: string | null | undefined,
 ): "Crosscourt" | "Down the Line" | null {
@@ -98,12 +104,13 @@ function baseDirection(
  * The shot's direction for the Custom filter.
  *
  * Starts from `shot.zone`. A stroke struck from the other wing's half is
- * renamed — a FOREHAND from the hitter's backhand half (ad for a
- * right-hander), a BACKHAND from their forehand half (deuce for a
- * right-hander): Crosscourt → Inside Out, Down the Line → Inside In. Any other
- * stroke, an unknown hand, an unmeasured contact, and Middle / serve / null
- * zones are never Inside-*; Middle and anything that is not a rally direction
- * return null.
+ * renamed — a FOREHAND or an OVERHEAD (struck above the forehand shoulder)
+ * from the hitter's backhand half (ad for a right-hander), a BACKHAND from
+ * their forehand half (deuce for a right-hander): Crosscourt → Inside Out,
+ * Down the Line → Inside In. Volleys count with their wing. A serve, an
+ * unknown hand, an unmeasured contact, and Middle / serve / null zones are
+ * never Inside-*; Middle and anything that is not a rally direction return
+ * null.
  */
 export function shotDirection(
   shot: Pick<MatchShot, "shotType" | "zone" | "contactX" | "contactY">,
@@ -114,24 +121,73 @@ export function shotDirection(
   if (hand === null) return base;
   const half = hitterHalf(shot);
   const inside =
-    (isForehand(shot.shotType) && half === backhandHalf(hand)) ||
+    ((isForehand(shot.shotType) || isOverhead(shot.shotType)) &&
+      half === backhandHalf(hand)) ||
     (isBackhand(shot.shotType) && half === forehandHalf(hand));
   if (!inside) return base;
   return base === "Crosscourt" ? "Inside Out" : "Inside In";
 }
 
-/** Fewest qualifying forehands before a hand is inferred at all. */
+/** Fewest qualifying strokes of a wing before it can name a hand. */
 export const INFER_HAND_MIN_FOREHANDS = 10;
-/** Share of those forehands that must come from one half. */
+/** Share of those strokes that must come from one half. */
 export const INFER_HAND_MIN_SHARE = 0.65;
 
+/** How many of a player's strokes of each wing came from each half. */
+export interface WingHalves {
+  forehand: Record<CourtHalf, number>;
+  backhand: Record<CourtHalf, number>;
+}
+
+export const emptyWingHalves = (): WingHalves => ({
+  forehand: { deuce: 0, ad: 0 },
+  backhand: { deuce: 0, ad: 0 },
+});
+
+/** One stroke's evidence: a forehand or backhand with a known half. */
+export function countWingHalf(
+  halves: WingHalves,
+  shotType: string | null | undefined,
+  half: CourtHalf | null,
+): void {
+  if (half === null) return;
+  if (isForehand(shotType)) halves.forehand[half] += 1;
+  else if (isBackhand(shotType)) halves.backhand[half] += 1;
+}
+
+/** The hand one wing's halves name: its own half is `ownHalfForRight`'s. */
+function handFromWing(
+  { deuce, ad }: Record<CourtHalf, number>,
+  ownHalfForRight: CourtHalf,
+): Hand | null {
+  const total = deuce + ad;
+  if (total < INFER_HAND_MIN_FOREHANDS) return null;
+  const own = ownHalfForRight === "deuce" ? deuce : ad;
+  if (own / total >= INFER_HAND_MIN_SHARE) return "right";
+  if ((total - own) / total >= INFER_HAND_MIN_SHARE) return "left";
+  return null;
+}
+
 /**
- * A player's hand, inferred from where their forehands were struck: a
- * right-hander hits most forehands from the deuce half, a left-hander from the
- * ad half. Counts only that player's forehands with a known `hitterHalf` and
- * `shotNumber ≥ 1` (0 is a faulted serve or a feed). Returns a hand only with
- * at least {@link INFER_HAND_MIN_FOREHANDS} such forehands and at least
- * {@link INFER_HAND_MIN_SHARE} of them on one half; otherwise null.
+ * A player's hand from where their forehands, then backhands, were struck: a
+ * right-hander hits most forehands from the deuce half and most backhands from
+ * the ad half. Forehands decide when they can; a player who runs round many
+ * backhands splits them, and then the backhands decide. Each wing needs at
+ * least {@link INFER_HAND_MIN_FOREHANDS} strokes with at least
+ * {@link INFER_HAND_MIN_SHARE} on one half; otherwise null.
+ */
+export function handFromHalves(halves: WingHalves): Hand | null {
+  return (
+    handFromWing(halves.forehand, "deuce") ??
+    handFromWing(halves.backhand, "ad")
+  );
+}
+
+/**
+ * A player's hand, inferred from where their strokes were struck
+ * ({@link handFromHalves}). Counts only that player's forehands and backhands
+ * with a known `hitterHalf` and `shotNumber ≥ 1` (0 is a faulted serve or a
+ * feed).
  *
  * A fallback for when the match row carries no hand — never preferred over a
  * stored one.
@@ -140,21 +196,13 @@ export function inferHand(
   points: readonly Pick<MatchPoint, "shots">[],
   isPlayer1: boolean,
 ): Hand | null {
-  let deuce = 0;
-  let ad = 0;
+  const halves = emptyWingHalves();
   for (const point of points) {
     for (const shot of point.shots ?? []) {
       if (shot.isPlayer1 !== isPlayer1) continue;
       if (!(shot.shotNumber >= 1)) continue;
-      if (!isForehand(shot.shotType)) continue;
-      const half = hitterHalf(shot);
-      if (half === "deuce") deuce += 1;
-      else if (half === "ad") ad += 1;
+      countWingHalf(halves, shot.shotType, hitterHalf(shot));
     }
   }
-  const total = deuce + ad;
-  if (total < INFER_HAND_MIN_FOREHANDS) return null;
-  if (deuce / total >= INFER_HAND_MIN_SHARE) return "right";
-  if (ad / total >= INFER_HAND_MIN_SHARE) return "left";
-  return null;
+  return handFromHalves(halves);
 }

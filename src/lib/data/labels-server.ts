@@ -13,6 +13,7 @@ import { isUuid } from "@/lib/admin/validation";
 import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
 import { parseLabelStartScore } from "@/lib/services/labels/session-fields";
+import { normalizePlayerHand } from "@/components/dashboard/matches/player-hands";
 import {
   PLAYBACK_JOB_COLUMNS,
   choosePlaybackFile,
@@ -105,6 +106,12 @@ interface DbMatch {
    * `readPlayOnLets`.
    */
   format?: unknown;
+  /** The wizard's entered hands: `player_*` is seat 1, `opponent_*` seat 2. */
+  player_hand?: string | null;
+  opponent_hand?: string | null;
+  player1_id?: string | null;
+  player2_id?: string | null;
+  opponent_player_id?: string | null;
 }
 interface DbSession {
   id: string;
@@ -440,7 +447,9 @@ export async function readLabelSessionRows<T = undefined>(
       beside?.(session) as Promise<T>,
       db
         .from("matches")
-        .select("id, player1_name, player2_name, score, format")
+        .select(
+          "id, player1_name, player2_name, score, format, player_hand, opponent_hand, player1_id, player2_id, opponent_player_id",
+        )
         .eq("id", session.match_id)
         .maybeSingle<DbMatch>(),
       // The job's scoring is only the fallback for a session that has not
@@ -471,15 +480,48 @@ export async function readLabelSessionRows<T = undefined>(
     throw new Error(`Could not read the job: ${jobResult.error.message}`);
   }
 
+  const match = matchResult.data ?? null;
+  const built = buildLabelSession(
+    session,
+    match,
+    pointRows,
+    shotRows,
+    jobResult.data ?? null,
+  );
+  built.enteredHands = await readEnteredHands(db, match);
+  return { session: built, beside: extra };
+}
+
+/**
+ * Each seat's entered hand: the match row's own (what was true for THIS
+ * match), else the seat's profile. A seat id is a login (`users.id`) or a
+ * roster profile (`program_players.id`), so both are looked up; seat 2 falls
+ * back to `opponent_player_id`. Never a throw: a failed lookup leaves the
+ * console to infer the hand.
+ */
+async function readEnteredHands(
+  db: AdminClient,
+  match: DbMatch | null,
+): Promise<NonNullable<LabelSession["enteredHands"]>> {
+  const seat1 = match?.player1_id ?? null;
+  const seat2 = match?.player2_id ?? match?.opponent_player_id ?? null;
+  const ids = [seat1, seat2].filter((id): id is string => id !== null);
+  const profile = new Map<string, string | null>();
+  if (ids.length > 0) {
+    const [users, roster] = await Promise.all([
+      db.from("users").select("id, hand").in("id", ids),
+      db.from("program_players").select("id, hand").in("id", ids),
+    ]);
+    for (const row of [...(users.data ?? []), ...(roster.data ?? [])]) {
+      if (!profile.get(row.id)) profile.set(row.id, row.hand ?? null);
+    }
+  }
+  const hand = (entered: string | null | undefined, id: string | null) =>
+    normalizePlayerHand(entered) ??
+    normalizePlayerHand(id ? profile.get(id) : null);
   return {
-    session: buildLabelSession(
-      session,
-      matchResult.data ?? null,
-      pointRows,
-      shotRows,
-      jobResult.data ?? null,
-    ),
-    beside: extra,
+    p1: hand(match?.player_hand, seat1),
+    p2: hand(match?.opponent_hand, seat2),
   };
 }
 

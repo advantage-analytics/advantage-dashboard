@@ -3654,6 +3654,7 @@ export function LabelConsole({
       affordance={affordance}
       onFollow={followPlayback}
       points={points}
+      enteredHands={session.enteredHands}
       adScoring={session.adScoring}
       matchTiebreakSet={matchTiebreakSetNumber}
       playOnLets={session.playOnLets}

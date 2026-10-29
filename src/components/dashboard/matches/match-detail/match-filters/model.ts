@@ -482,7 +482,7 @@ export function isDerivedMatch(match: Pick<Match, "sourceProvider">): boolean {
 /**
  * The filters' context for one match: the match row's hands
  * (`playerHands`, already seat-correct — no swap here) and, where a row has
- * none, the hand inferred from that seat's forehands (`inferHand`); and
+ * none, the hand inferred from that seat's strokes (`inferHand`); and
  * whether the match is derived from video (`isDerived`), off the same row.
  */
 export function buildFilterContext(
