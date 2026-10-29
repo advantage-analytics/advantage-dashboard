@@ -213,6 +213,27 @@ export function inServeLandingMiss(shot: {
 }
 
 /**
+ * A stroke's result, with a gap filled by the stroke after it: a stroke the
+ * next live stroke of its point played was in play, so it is `"in"` — even
+ * one met in the air past the baseline, since a ball volleyed is never out.
+ * Only an empty result is filled; a stored call is the labeller's or the
+ * vendor's and stands. A serve followed by another serve faulted, so that gap
+ * stays empty. With no next stroke the result is the stored one.
+ *
+ * An added stroke starts with no result, and the volley link moves the
+ * stroke before a volley without writing one (volley-link.ts) — this is what
+ * the rail and the publish read instead of a "—".
+ */
+export function playedOnResult(
+  shot: Pick<LabelShot, "stroke" | "result">,
+  next: Pick<LabelShot, "stroke"> | null | undefined,
+): LabelShotResult | null {
+  if (shot.result !== null || !next) return shot.result;
+  if (isServeStroke(shot.stroke) && isServeStroke(next.stroke)) return null;
+  return "in";
+}
+
+/**
  * In, out or net as the stroke's own coordinates say it, when all four are
  * placed; the stored result until then. The one reading the marks and the
  * suggestions share, so a placed landing outranks a stale stored call — but

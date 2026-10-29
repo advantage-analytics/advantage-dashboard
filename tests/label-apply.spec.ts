@@ -363,6 +363,27 @@ test.describe("buildAppliedRows", () => {
     expect(inBox.zone).not.toBeNull();
   });
 
+  test("an empty result the next stroke played is written In", () => {
+    // An added stroke, then an overhead off it: the ball was in play.
+    const point = build([
+      pt(0, "p1", "error", (p) => [
+        shot(p, "p1", "first_serve", null),
+        shot(p, "p2", "backhand", null),
+        shot(p, "p1", "overhead", "out"),
+      ]),
+    ]).points[0];
+    expect(point.shots.map((s) => s.result)).toEqual(["In", "In", "Out"]);
+    // A first serve before a second serve is no ball in play: left empty.
+    const fault = build([
+      pt(0, "p2", "error", (p) => [
+        shot(p, "p1", "first_serve", null),
+        shot(p, "p1", "second_serve", "in"),
+        shot(p, "p2", "forehand", "out"),
+      ]),
+    ]).points[0];
+    expect(fault.shots.map((s) => s.result)).toEqual([null, "In", "Out"]);
+  });
+
   test("a point with no winner is a problem, not a row", () => {
     const points = session().map((p) =>
       p.pointIndex === 6 ? { ...p, winner: null } : p,

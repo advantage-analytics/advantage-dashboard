@@ -47,7 +47,7 @@ import {
   type SplitStepRally,
 } from "@/lib/services/splitstep/derivation";
 import { publishEnding } from "./ending-derived";
-import { inServeLandingMiss } from "./shot-derived";
+import { inServeLandingMiss, playedOnResult } from "./shot-derived";
 import { gameKey, labelScores, type LabelGameBand } from "./score";
 import { labelSetScores } from "./set-scores";
 import {
@@ -436,7 +436,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
         contact_y: shot.contactY,
         landing_x: landed ? shot.landingX : null,
         landing_y: landed ? shot.landingY : null,
-        result: shotResultOf(shot.result),
+        result: shotResultOf(playedOnResult(shot, played[i + 1])),
         video_time: shot.videoTime,
         bounce_video_time: facts?.bounceVideoTime ?? null,
         zone: !landed

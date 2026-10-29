@@ -1970,11 +1970,13 @@ test.describe("a serve's result menu, where lets are replayed", () => {
 
   test("the trigger says which of No result and Let is stored", () => {
     const { BlackShotsWell } = well();
-    const render = (result: "let" | null) => {
+    const render = (result: "let" | null, returned = false) => {
       const point = rally();
-      point.shots = point.shots.map((s) =>
-        s.id === "w-serve" ? { ...s, result } : s,
-      );
+      // The serve as the point's last stroke, unless it was returned.
+      const served = point.shots.findIndex((s) => s.id === "w-serve");
+      point.shots = point.shots
+        .slice(0, returned ? undefined : served + 1)
+        .map((s) => (s.id === "w-serve" ? { ...s, result } : s));
       const html = renderToStaticMarkup(
         React.createElement(BlackShotsWell, {
           point,
@@ -1990,6 +1992,10 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     expect(render(null)).toContain("No result");
     expect(render("let")).toContain("Let");
     expect(render("let")).not.toContain("No result");
+    // Returned, an empty result reads In: the receiver played it
+    // (`playedOnResult`).
+    expect(render(null, true)).toContain("In");
+    expect(render(null, true)).not.toContain("No result");
   });
 
   test("a let already stored keeps its row where lets are played on, so it can be undone", () => {

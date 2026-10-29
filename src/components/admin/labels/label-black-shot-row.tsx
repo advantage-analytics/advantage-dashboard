@@ -41,6 +41,7 @@ import { canResetShot } from "@/lib/services/labels/reset";
 import {
   deriveShotResult,
   landingMiss,
+  playedOnResult,
   shotPlacement,
 } from "@/lib/services/labels/shot-derived";
 import type { LabelShotResult } from "@/lib/services/labels/seed";
@@ -350,6 +351,7 @@ export function BlackShotsWell({
         <BlackShotRow
           key={shot.id}
           shot={shot}
+          next={inOrder[inOrder.indexOf(shot) + 1] ?? null}
           number={n}
           point={point}
           pointNumber={pointNumber}
@@ -486,6 +488,7 @@ let pressedShotId: string | null = null;
  */
 export function BlackShotRow({
   shot,
+  next = null,
   number,
   point,
   pointNumber,
@@ -496,6 +499,11 @@ export function BlackShotRow({
   resultMenuOpen = false,
 }: {
   shot: LabelShot;
+  /**
+   * The point's next live stroke in rally order, or null for its last: a
+   * stroke it played reads In when no result is stored (`playedOnResult`).
+   */
+  next?: LabelShot | null;
   number: number;
   arrive?: number;
   /** After a double fault (`PointOverLine`): the row a step quieter. */
@@ -563,6 +571,8 @@ export function BlackShotRow({
   // Inside Out / Inside In when the stroke came from its other wing's half.
   const direction = placementLabel(shot, edit.hands);
   const resultMenu = shotResultMenu(shot, edit.playOnLets);
+  // An empty result the next stroke settles: it played the ball, so In.
+  const result = playedOnResult(shot, next);
   /** The words' ink, a step down on a fault. */
   const words = fault ? "text-white/35" : "text-white/50";
   const arrival = rowArrival(arrive);
@@ -740,18 +750,14 @@ export function BlackShotRow({
             <ResultCell
               {...selectCell}
               label={`Shot ${number} result`}
-              value={shot.result}
+              value={result}
               options={resultMenu.options}
               initialOpen={resultMenuOpen}
               onChange={(value) => patch(shotResultPatch(value))}
             />
           ) : (
             <span className="min-w-0 truncate">
-              {shot.result ? (
-                RESULT_LABEL[shot.result]
-              ) : (
-                <Dash label="No result" />
-              )}
+              {result ? RESULT_LABEL[result] : <Dash label="No result" />}
             </span>
           )}
           {changed ? (
