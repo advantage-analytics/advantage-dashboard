@@ -86,6 +86,7 @@ export function EditPlayerDialog({
   roster,
   onOpenChange,
   onRemoved,
+  startAt = "edit",
 }: {
   /** The row being edited, or null when closed. */
   member: RosterMember | null;
@@ -98,6 +99,12 @@ export function EditPlayerDialog({
    * Absent where another surface already carries Remove (the roster drawer).
    */
   onRemoved?: () => void;
+  /**
+   * Open on the Remove confirm step rather than the form — the profile's ⋯
+   * menu carries Remove from roster as its own row. Back still reaches the
+   * form. Only meaningful alongside `onRemoved`.
+   */
+  startAt?: "edit" | "confirm";
 }) {
   // A staff-held profile is removed under `archive_program_player`'s ladder,
   // not by any staff member — so the Remove slot follows the same rule the
@@ -116,7 +123,7 @@ export function EditPlayerDialog({
   /** Terminal: the row is not on this roster, so there is nothing to save to. */
   const [gone, setGone] = useState(false);
   const [pending, start] = useTransition();
-  const [step, setStep] = useState<"edit" | "confirm">("edit");
+  const [step, setStep] = useState<"edit" | "confirm">(startAt);
   /**
    * Terminal like `gone`, but a success: the archive landed and `onRemoved` is
    * navigating. Held so the buttons stay disabled between the transition
@@ -140,7 +147,7 @@ export function EditPlayerDialog({
     setFields(null);
     setError(null);
     setGone(false);
-    setStep("edit");
+    setStep(startAt);
     setRemoved(false);
   }
 

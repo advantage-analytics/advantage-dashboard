@@ -25,6 +25,8 @@ import {
   sideOf,
 } from "@/lib/data/roster-ids";
 import { matchOutcome } from "@/lib/data/match-utils";
+import { fromPlayerSide } from "@/lib/data/player-profile";
+import type { DisplayMatch } from "@/lib/data/matches-list-types";
 
 /**
  * The player profile's arithmetic (Platform Audit `Te` / `Te2`).
@@ -554,5 +556,62 @@ test.describe("a claimed player's pre-claim match on their profile", () => {
         BEN_PROFILE,
       ),
     ).toBe(false);
+  });
+});
+
+test.describe("fromPlayerSide", () => {
+  const match: DisplayMatch = {
+    id: "m1",
+    tournamentName: "Fall dual",
+    date: "October 24, 2026",
+    matchType: "Dual",
+    player1: { name: "Avery Teammate", id: "p-avery" },
+    player2: { name: "Maya Okafor" },
+    player2Hand: "right",
+    player2Backhand: "two-handed",
+    score: {
+      sets: [
+        { player1: 6, player2: 4 },
+        { player1: 6, player2: 7, player1Tiebreak: 5, player2Tiebreak: 7 },
+        { player1: 3, player2: 6 },
+      ],
+      winner: "player2",
+    },
+  };
+
+  test("leaves a player1 row alone", () => {
+    expect(fromPlayerSide(match, true)).toBe(match);
+  });
+
+  test("turns a player2 row to their side: names, sets, tiebreaks, winner", () => {
+    const turned = fromPlayerSide(match, false);
+    expect(turned.player1.name).toBe("Maya Okafor");
+    expect(turned.player2.name).toBe("Avery Teammate");
+    expect(turned.score.winner).toBe("player1");
+    expect(turned.score.sets).toEqual([
+      {
+        player1: 4,
+        player2: 6,
+        player1Tiebreak: undefined,
+        player2Tiebreak: undefined,
+      },
+      { player1: 7, player2: 6, player1Tiebreak: 7, player2Tiebreak: 5 },
+      {
+        player1: 6,
+        player2: 3,
+        player1Tiebreak: undefined,
+        player2Tiebreak: undefined,
+      },
+    ]);
+  });
+
+  test("an undecided score keeps its winner, so both sides read alike", () => {
+    expect(fromPlayerSide(match, false, false).score.winner).toBe("player2");
+  });
+
+  test("drops the style it carried, which was this player's own", () => {
+    const turned = fromPlayerSide(match, false);
+    expect(turned.player2Hand).toBeUndefined();
+    expect(turned.player2Backhand).toBeUndefined();
   });
 });

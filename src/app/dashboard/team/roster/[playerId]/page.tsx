@@ -2,7 +2,10 @@ import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
-import { getPlayerProfile } from "@/lib/data/player-profile-server";
+import {
+  getPlayerMatchList,
+  getPlayerProfile,
+} from "@/lib/data/player-profile-server";
 import { getRosterData } from "@/lib/data/team-roster-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { ProfileHeaderSlot } from "@/components/dashboard/team/player-profile/profile-header-slot";
@@ -30,9 +33,11 @@ import { askEntryHref } from "@/lib/services/ask/entry";
  * the trail and the switcher are the same walk whoever is walking it. No
  * data is added or withheld — that is what "fully open" buys a program.
  *
- * Five blocks in a 2:1 split: the things you scan repeatedly (the last
- * match, then every match) on the left, the things you consult (line
- * history, then serve placement) on the right.
+ * Read top to bottom (design canvas, 2026-10-29): who they are, their
+ * season, then the latest match beside their serve placement, then every
+ * match at the page's full width — drawn by the Matches list's own row, so
+ * the history reads like the list its "All N" link opens. Nothing sits
+ * beside the long list, so nothing ends uneven against it.
  *
  * ── Why the numbers match the roster's ──────────────────────────────────────
  * `getPlayerProfile` folds both of a claimed player's ids the way
@@ -75,6 +80,10 @@ export default async function PlayerProfilePage({
   // The loader returns null for an id that names nobody on this roster. It
   // arrives from a URL, so it is untrusted; a 404 is the honest answer.
   if (!profile) notFound();
+
+  // The list's rows need the analysis read and the vendor reconcile, which
+  // the profile itself does not — so they follow it rather than slow it.
+  const matchList = await getPlayerMatchList(profile, workspace.viewer.id);
 
   // Both id eras count: the URL may carry the profile id or, for a claimed
   // player's old links, the user id. `getMyPlayerIds` knows both.
@@ -159,29 +168,27 @@ export default async function PlayerProfilePage({
         />
 
         <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">
+          <LastMatchCard
+            match={profile.lastMatch}
+            matchesPlayed={profile.matchesPlayed}
+            subject={subject}
+          />
           <div className="flex min-w-0 flex-col gap-4">
-            <LastMatchCard
-              match={profile.lastMatch}
-              matchesPlayed={profile.matchesPlayed}
-              subject={subject}
-            />
-            <MatchHistoryCard
-              rows={profile.history}
-              playerName={profile.name}
-              subject={subject}
-              importHref={
-                canUpload ? `${newMatchHref}&source=swing-vision` : null
-              }
-            />
-          </div>
-          <div className="flex min-w-0 flex-col gap-4">
+            <ServePlacementCard serve={profile.serve} subject={subject} />
             {/* Lines come from the schedule, and its empty state sends the
                 reader there; not drawn while the Schedule is a coming-soon
                 page (`lib/schedule/availability.ts`). */}
             {SCHEDULE_ENABLED && <LineHistoryCard lines={profile.lines} />}
-            <ServePlacementCard serve={profile.serve} subject={subject} />
           </div>
         </div>
+
+        <MatchHistoryCard
+          matches={matchList}
+          matchesPlayed={profile.matchesPlayed}
+          playerName={profile.name}
+          subject={subject}
+          importHref={canUpload ? `${newMatchHref}&source=swing-vision` : null}
+        />
       </div>
     </div>
   );
