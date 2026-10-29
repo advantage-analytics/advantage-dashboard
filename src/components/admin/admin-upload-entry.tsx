@@ -96,9 +96,14 @@ const TARGETS = [
 function FileOrVideo({
   context,
   kind,
+  started,
+  onStart,
 }: {
   context: AdminUploadContext;
   kind: "file" | "video";
+  /** The team's "Where does it go?" is answered: the page is the wizard now. */
+  started: boolean;
+  onStart: () => void;
 }) {
   // These survive all wizard rerenders and retries; changing the target remounts
   // this boundary so an operation is never reused for another team or source.
@@ -108,7 +113,7 @@ function FileOrVideo({
   }));
   // A player's personal workspace takes a new match only: there is no
   // recorded team result there to attach analysis to.
-  const personal = context.owner !== null;
+  const personal = Boolean(context.owner);
   const [target, setTarget] = useState("new");
   const [options, setOptions] = useState<AdminAttachmentOption[]>([]);
   const [attachment, setAttachment] = useState<AdminWizardMode["attachment"]>();
@@ -142,124 +147,135 @@ function FileOrVideo({
         matchId: target,
         ...ids,
       });
-      if (result.ok) setAttachment(result.attachment);
-      else setError(result.message);
+      if (result.ok) {
+        setAttachment(result.attachment);
+        onStart();
+      } else setError(result.message);
     } catch {
       setError("We couldn’t prepare this result. Try again.");
     } finally {
       setPending(false);
     }
   }
+  // "Where does it go?" is its own screen, under the page's kind cards, and
+  // the wizard is the next one: never both at once. A player's personal
+  // workspace has only a new match, so it goes straight to the wizard.
+  const inWizard = personal || started || attachment !== undefined;
+  if (inWizard)
+    return (
+      <AdminUploadMatchFlow
+        mode={{
+          context,
+          ...ids,
+          attachment,
+          exitHref: adminUploadHref(targetOf(context), null),
+          successHref: "/admin/uploads",
+          uploadKind: kind,
+        }}
+        initialProvider={kind === "file" ? "swing-vision" : "splitstep"}
+      />
+    );
   return (
-    <div className="flex flex-col gap-5">
-      {!attachment && !personal && (
-        // The wizard below is full-bleed; this row belongs to the page's column.
-        <section
-          aria-label="Analysis target"
-          className="mx-auto flex w-full max-w-[1000px] flex-col gap-3 px-6 pt-9"
-        >
-          <fieldset disabled={pending} className="flex flex-col gap-3">
-            <legend className="mb-3 text-[12px] text-[var(--ink-600)]">
-              Where does it go?
-            </legend>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {TARGETS.map(({ value, label, detail }) => {
-                const checked = (target === "new") === (value === "new");
-                return (
-                  <label
-                    key={value}
-                    className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] py-4 ${checked ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
-                  >
-                    <span className="relative mt-[3px] size-3.5 shrink-0">
-                      <input
-                        type="radio"
-                        name="analysis-target"
-                        value={value}
-                        checked={checked}
-                        onChange={
-                          value === "new"
-                            ? () => {
-                                setTarget("new");
-                                setError(null);
-                              }
-                            : chooseExisting
-                        }
-                        className={CHECK_DOT_INPUT}
-                      />
-                      {checked && (
-                        <Check
-                          aria-hidden="true"
-                          className={CHECK_DOT_MARK}
-                          strokeWidth={2.5}
-                        />
-                      )}
-                    </span>
-                    <span className="flex min-w-0 flex-col gap-1">
-                      <span className="text-[13px] font-medium">{label}</span>
-                      <span className="text-[12px] text-[var(--ink-600)]">
-                        {detail}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-          {target !== "new" && (
-            <>
-              <label className="flex flex-col gap-2 text-[12px] text-[var(--ink-600)]">
-                Recorded result
-                <select
-                  aria-label="Recorded result"
-                  className={advField("boxed")}
-                  value={target === "existing" ? "" : target}
-                  disabled={pending}
-                  onChange={(e) => setTarget(e.target.value || "existing")}
-                >
-                  <option value="">Choose a recorded result</option>
-                  {options.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {!pending && options.length === 0 && (
-                <p role="status" className="text-[13px] text-[var(--ink-600)]">
-                  No eligible recorded results for this analysis kind.
-                </p>
-              )}
-              <button
-                type="button"
-                className={`${advButton("primary", "md")} self-start`}
-                disabled={pending || target === "existing"}
-                onClick={prepare}
+    <section
+      aria-label="Analysis target"
+      className="mx-auto flex w-full max-w-[1000px] flex-col gap-3 px-6 pb-12"
+    >
+      <fieldset disabled={pending} className="flex flex-col gap-3">
+        <legend className="mb-3 text-[12px] text-[var(--ink-600)]">
+          Where does it go?
+        </legend>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {TARGETS.map(({ value, label, detail }) => {
+            const checked = (target === "new") === (value === "new");
+            return (
+              <label
+                key={value}
+                className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] py-4 ${checked ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
               >
-                {pending ? "Loading…" : "Use recorded result"}
-              </button>
-            </>
-          )}
-          {error && (
-            <p role="alert" className="text-[13px] text-[var(--error)]">
-              {error}
+                <span className="relative mt-[3px] size-3.5 shrink-0">
+                  <input
+                    type="radio"
+                    name="analysis-target"
+                    value={value}
+                    checked={checked}
+                    onChange={
+                      value === "new"
+                        ? () => {
+                            setTarget("new");
+                            setError(null);
+                          }
+                        : chooseExisting
+                    }
+                    className={CHECK_DOT_INPUT}
+                  />
+                  {checked && (
+                    <Check
+                      aria-hidden="true"
+                      className={CHECK_DOT_MARK}
+                      strokeWidth={2.5}
+                    />
+                  )}
+                </span>
+                <span className="flex min-w-0 flex-col gap-1">
+                  <span className="text-[13px] font-medium">{label}</span>
+                  <span className="text-[12px] text-[var(--ink-600)]">
+                    {detail}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+      {target !== "new" && (
+        <>
+          <label className="flex flex-col gap-2 text-[12px] text-[var(--ink-600)]">
+            Recorded result
+            <select
+              aria-label="Recorded result"
+              className={advField("boxed")}
+              value={target === "existing" ? "" : target}
+              disabled={pending}
+              onChange={(e) => setTarget(e.target.value || "existing")}
+            >
+              <option value="">Choose a recorded result</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!pending && options.length === 0 && (
+            <p role="status" className="text-[13px] text-[var(--ink-600)]">
+              No eligible recorded results for this analysis kind.
             </p>
           )}
-        </section>
+          <button
+            type="button"
+            className={`${advButton("primary", "md")} self-start`}
+            disabled={pending || target === "existing"}
+            onClick={prepare}
+          >
+            {pending ? "Loading…" : "Use recorded result"}
+          </button>
+        </>
       )}
-      {(target === "new" || attachment) && (
-        <AdminUploadMatchFlow
-          mode={{
-            context,
-            ...ids,
-            attachment,
-            exitHref: adminUploadHref(targetOf(context), null),
-            successHref: "/admin/uploads",
-            uploadKind: kind,
-          }}
-          initialProvider={kind === "file" ? "swing-vision" : "splitstep"}
-        />
+      {target === "new" && (
+        <button
+          type="button"
+          className={`${advButton("primary", "md")} self-start`}
+          onClick={onStart}
+        >
+          Continue
+        </button>
       )}
-    </div>
+      {error && (
+        <p role="alert" className="text-[13px] text-[var(--error)]">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -287,7 +303,12 @@ export function AdminUploadEntry({
   // UploadFor): step 1's Workspace field changes the target, and the wizard's
   // Cancel comes back here to the kind cards. An error keeps the page above
   // it, since that is where its way out lives.
-  const wizardOnly = wizardBelow && !error;
+  // Which file/video boundary has had its "Where does it go?" answered —
+  // keyed so another target or kind starts on that question again.
+  const boundaryKey = `${team ? adminUploadHref(team, null) : ""}:${kind}`;
+  const [startedKey, setStartedKey] = useState<string | null>(null);
+  const started = startedKey === boundaryKey;
+  const wizardOnly = wizardBelow && !error && (personal || started);
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       {!wizardOnly && (
@@ -483,9 +504,11 @@ export function AdminUploadEntry({
       )}
       {context && wizardBelow && (kind === "file" || kind === "video") && (
         <FileOrVideo
-          key={`${adminUploadHref(team, null)}:${kind}`}
+          key={boundaryKey}
           context={context}
           kind={kind}
+          started={started}
+          onStart={() => setStartedKey(boundaryKey)}
         />
       )}
     </div>

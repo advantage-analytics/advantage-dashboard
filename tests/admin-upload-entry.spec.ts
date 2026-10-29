@@ -304,15 +304,31 @@ test("file/video mount shared wizard with target and stable retry identifiers; r
     "./admin-upload-selection": { adminUploadHref },
   }).AdminUploadEntry;
   for (const kind of ["file", "video"] as const) {
+    // A team's file or video first asks "Where does it go?" on its own
+    // screen, under the page's kind cards — never beside the wizard.
     const tree = entry({ context, kind, picker: null });
+    expect(elements(tree).some((e) => e.type === "main")).toBe(true);
     const boundary = elements(tree).find((e) => typeof e.type === "function");
     expect(boundary).toBeDefined();
+    expect(boundary!.props.started).toBe(false);
     cursor = 0;
-    const rendered = (boundary!.type as (props: unknown) => Element)(
+    const asking = (boundary!.type as (props: unknown) => Element)(
       boundary!.props,
     );
+    expect(elements(asking).some((e) => e.type === "wizard")).toBe(false);
+    expect(
+      elements(asking).some(
+        (e) =>
+          e.type === "section" && e.props["aria-label"] === "Analysis target",
+      ),
+    ).toBe(true);
+    // Answered: the boundary is the wizard alone.
+    const started = { ...(boundary!.props as object), started: true };
+    cursor = 0;
+    const rendered = (boundary!.type as (props: unknown) => Element)(started);
     const wizard = elements(rendered).find((e) => e.type === "wizard")!;
     expect(wizard).toBeDefined();
+    expect(elements(rendered).some((e) => e.type === "section")).toBe(false);
     expect(wizard.props.initialProvider).toBe(
       kind === "file" ? "swing-vision" : "splitstep",
     );
@@ -322,19 +338,35 @@ test("file/video mount shared wizard with target and stable retry identifiers; r
     expect(mode.successHref).toBe("/admin/uploads");
     cursor = 0;
     expect(
-      elements(
-        (boundary!.type as (props: unknown) => Element)(boundary!.props),
-      ).find((e) => e.type === "wizard")!.props.mode,
+      elements((boundary!.type as (props: unknown) => Element)(started)).find(
+        (e) => e.type === "wizard",
+      )!.props.mode,
     ).toEqual(mode);
-    // The page is the wizard alone once a file or video is picked: no
-    // header, target or kind cards above it.
-    expect(
-      elements(tree).some(
-        (e) => e.type === "input" && e.props.name === "upload-kind",
-      ),
-    ).toBe(false);
-    expect(elements(tree).some((e) => e.type === "main")).toBe(false);
   }
+  // A player's personal workspace has only a new match: the page is the
+  // wizard straight away, with no header, kind cards or target question.
+  const PLAYER = "22222222-2222-4222-8222-222222222222";
+  const personalContext = {
+    ...context,
+    workspace: { ...context.workspace, id: PLAYER, kind: "personal" },
+    owner: { viewer: { id: PLAYER, name: "Elena Vargas" }, billing: "free" },
+  } as unknown as typeof context;
+  const solo = entry({ context: personalContext, kind: "video", picker: null });
+  expect(elements(solo).some((e) => e.type === "main")).toBe(false);
+  expect(
+    elements(solo).some(
+      (e) => e.type === "input" && e.props.name === "upload-kind",
+    ),
+  ).toBe(false);
+  const soloBoundary = elements(solo).find(
+    (e) => typeof e.type === "function",
+  )!;
+  cursor = 0;
+  expect(
+    elements(
+      (soloBoundary.type as (props: unknown) => Element)(soloBoundary.props),
+    ).some((e) => e.type === "wizard"),
+  ).toBe(true);
   // With no kind yet the cards are there, and a pick navigates.
   const picking = entry({ context, kind: null, picker: null });
   const radio = elements(picking).find(
