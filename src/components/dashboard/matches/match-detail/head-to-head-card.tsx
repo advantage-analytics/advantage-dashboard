@@ -738,14 +738,26 @@ const COLUMN =
   "flex w-[var(--h2h-col,64px)] shrink-0 items-center justify-end gap-1.5";
 
 /**
- * 64 px fits a surname of about six characters at 12px beside the legend marker.
- * A longer one gets roughly 7px a character, plus 18px for the bar and its gap,
+ * The header's name cells sit right-aligned side by side, so a short surname
+ * beside a long one ran its last letter into the next column's marker
+ * ("Quan■ Goodm…"). Each name cell keeps this much clear space on its left.
+ */
+const NAME_GUTTER = 10;
+
+/**
+ * 64 px fits a surname of about five characters at 12px beside the legend
+ * marker. A longer one gets 8.2px a character (Inter 12px medium sets
+ * "Goodman" at 55.6px; 7 a character clipped it), plus 14px for the marker
+ * and its gap and the gutter,
  * capped so the statistic label keeps its space; `truncate` backstops anything
  * beyond.
  */
 function columnWidth(youName: string, oppName: string): number {
   const longest = Math.max(youName.length, oppName.length);
-  return Math.min(130, Math.max(64, Math.ceil(longest * 7) + 18));
+  return Math.min(
+    140,
+    Math.max(64, Math.ceil(longest * 8.2) + 14 + NAME_GUTTER),
+  );
 }
 
 const EASE = "duration-200 ease-[var(--ease-primary)]";
@@ -1307,7 +1319,7 @@ export function HeadToHeadCard() {
           `truncate` on top is the backstop for a longer one-word surname. */}
       <div className="flex items-center border-b border-[var(--border-hairline)] pb-[11px]">
         <span aria-hidden="true" className="min-w-0 flex-1" />
-        <span className={COLUMN}>
+        <span className={COLUMN} style={{ paddingLeft: NAME_GUTTER }}>
           {/* The player's chart colour on the report's one legend marker,
               so a column reads with every chart key on the page. */}
           <LegendMark color="var(--viz-you)" />
@@ -1315,7 +1327,7 @@ export function HeadToHeadCard() {
             {youName}
           </span>
         </span>
-        <span className={COLUMN}>
+        <span className={COLUMN} style={{ paddingLeft: NAME_GUTTER }}>
           <LegendMark color="var(--viz-opp)" />
           <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-600)]">
             {oppName}
