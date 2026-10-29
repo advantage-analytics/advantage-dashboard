@@ -50,3 +50,13 @@ is the runner's. Newest entries at the bottom.
 1. `Match.errorSplitJudged` is optional — a loader that forgets it reads as "Errors"; consider making it required.
 2. `shots/viz-model.ts` fallback context (~:822) leaves the flag absent (= not judged) — fine, worth knowing for T4.
 3. Comment at `match-stats-server.ts:281` (null forced counts as 0 in career averages) vs the per-match "never coerce" rule — reconcile wording.
+
+## T3 · Report cards and Film labels: "Errors" until the split is judged — done
+
+**gate:** mechanical PASS · completion VERDICT: pass
+**changed:** Head to head reads `errorSplitJudged` from the filter context: unjudged shows one "Errors" row (unforced + forced, via a new `plusKey`), judged shows "Unforced errors" then "Forced errors" (`ending: "forced-error"`) — both SwingVision and derived row sets via `withErrorSplit`. `FilmCutEnding` gains `forced-error` and `error`. Point endings: unjudged outcome "Errors" with `{ resultEnding: ["error"], ending: "error" }`, tally includes forced. `pointResultLabel` drops "Unforced"/"Forced" before a closing "Error" when unjudged (stored value untouched); `film-fullscreen.tsx` passes the flag. Specs: match-h2h-rows, head-to-head-cuts, film-cut-intent, match-filters-model; report-empty-states gained a `useMatchFilters` stub. Widget-states checklist run and marked.
+**follow-ups:**
+
+1. Unjudged H2H "Errors" row's cut is `{ resultEnding: ["error"] }` as the criterion said, which in this codebase also opens double faults, while the figure leaves them out. One-line fix: `ERRORS_ROW.cut = { resultEnding: ["error"], ending: "error" }` (matches Point endings). Needs the user's call.
+2. `useMatchFilters()` fallback context (`match-filters/provider.tsx` ~:240) doesn't set `errorSplitJudged`; every current route wraps a provider.
+3. `rowLeader` doc comment still says "Two of the fifteen rows invert".

@@ -70,6 +70,7 @@ export type H2HStatKey = Extract<
   | "netPointsWonPct"
   | "winners"
   | "unforcedErrors"
+  | "forcedErrors"
   | "totalPointsWon"
   | "totalPoints"
 >;
@@ -103,6 +104,12 @@ export interface H2HRowConfig {
   fromFraction?: boolean;
   /** Tooltip reads `of {this field}` in place of a fraction. */
   ofKey?: H2HStatKey;
+  /**
+   * A second field added to `key`'s figure, absent read as 0 — the unjudged
+   * Errors row is `unforcedErrors + (forcedErrors ?? 0)`. Never makes a value
+   * out of nothing: no `key` figure is still no value.
+   */
+  plusKey?: H2HStatKey;
   /** The LOWER number is the better one — double faults, unforced errors. */
   lowerIsBetter?: boolean;
   /** Why a keyless row can never carry a value. */
@@ -320,16 +327,16 @@ export const POINT_ROWS: H2HRowConfig[] = [
   },
 ];
 
+/**
+ * The SwingVision groups with the Points group's errors as published — the
+ * card draws them through `h2hGroups`, which sets the error rows to the
+ * match's split (`withErrorSplit`).
+ */
 export const H2H_GROUPS: { title: string; configs: H2HRowConfig[] }[] = [
   { title: "Serve", configs: SERVE_ROWS },
   { title: "Return", configs: RETURN_ROWS },
   { title: "Points", configs: POINT_ROWS },
 ];
-
-/** Every row's config, flattened once — `H2H_GROUPS` is fixed at module load. */
-const ALL_H2H_CONFIGS: H2HRowConfig[] = H2H_GROUPS.flatMap(
-  (group) => group.configs,
-);
 
 /* ── Advantage Intelligence (video-derived) rows ────────────────────────────
    The derivation (`lib/services/splitstep/derivation/result-type.ts`
@@ -389,9 +396,81 @@ export const DERIVED_H2H_GROUPS: { title: string; configs: H2HRowConfig[] }[] =
     { title: "Points", configs: DERIVED_POINT_ROWS },
   ];
 
-const ALL_DERIVED_H2H_CONFIGS: H2HRowConfig[] = DERIVED_H2H_GROUPS.flatMap(
-  (group) => group.configs,
-);
+/* ── Errors: one row until the split is judged ──────────────────────────────
+   `MatchFilterContext.errorSplitJudged` (`lib/data/error-split.ts`). Until a
+   match's errors are judged forced/unforced, its "unforced" figure is every
+   error, so the Points group says "Errors" — unforced plus forced — and the
+   cut opens every error. Once judged it is two rows, Unforced then Forced.
+   Both apply to the SwingVision and the derived row sets alike. */
+
+/** The unjudged row: every error, one figure, the whole Result › Ending Error. */
+const ERRORS_ROW: H2HRowConfig = {
+  label: "Errors",
+  key: "unforcedErrors",
+  plusKey: "forcedErrors",
+  lowerIsBetter: true,
+  // No Film-only `ending`: the row is every error, so Ending Error alone.
+  cut: { resultEnding: ["error"] },
+  sideBy: "player",
+  noun: "errors",
+};
+
+/** The judged split's second row, after "Unforced errors". */
+const FORCED_ERRORS_ROW: H2HRowConfig = {
+  label: "Forced errors",
+  key: "forcedErrors",
+  lowerIsBetter: true,
+  // Ending Error narrowed to the Film-only "forced error" bucket.
+  cut: { resultEnding: ["error"], ending: "forced-error" },
+  sideBy: "player",
+  noun: "forced errors",
+};
+
+/**
+ * A Points row set with its error rows set to the match's split: the single
+ * Errors row when unjudged, or the Unforced row (unchanged) followed by the
+ * Forced row when judged. Every other row passes through untouched.
+ */
+export function withErrorSplit(
+  configs: H2HRowConfig[],
+  errorSplitJudged: boolean,
+): H2HRowConfig[] {
+  return configs.flatMap((config) => {
+    if (config.key !== "unforcedErrors") return [config];
+    return errorSplitJudged ? [config, FORCED_ERRORS_ROW] : [ERRORS_ROW];
+  });
+}
+
+/**
+ * The groups the card draws for one match: SwingVision or derived
+ * (`isDerived`), with the Points group's errors split or not
+ * (`errorSplitJudged`).
+ */
+export function h2hGroups(
+  isDerived: boolean,
+  errorSplitJudged: boolean,
+): { title: string; configs: H2HRowConfig[] }[] {
+  return (isDerived ? DERIVED_H2H_GROUPS : H2H_GROUPS).map((group) => ({
+    title: group.title,
+    configs: withErrorSplit(group.configs, errorSplitJudged),
+  }));
+}
+
+/** `h2hGroups` for each of its four inputs, built once at module load. */
+const GROUPS_BY_KIND = {
+  plain: h2hGroups(false, false),
+  plainJudged: h2hGroups(false, true),
+  derived: h2hGroups(true, false),
+  derivedJudged: h2hGroups(true, true),
+};
+
+function groupsFor(isDerived: boolean, errorSplitJudged: boolean) {
+  if (isDerived)
+    return errorSplitJudged
+      ? GROUPS_BY_KIND.derivedJudged
+      : GROUPS_BY_KIND.derived;
+  return errorSplitJudged ? GROUPS_BY_KIND.plainJudged : GROUPS_BY_KIND.plain;
+}
 
 // `CutSide`/`sideCut` — one value cell's cut, the row's cut with the cell's
 // side laid over it — now live in `film-cut-context.tsx` beside `FilmCut`
@@ -463,7 +542,12 @@ export function rowValue(config: H2HRowConfig, stats: H2HStats): H2HValue {
   const raw = stats[config.key];
   // Absent must reach here as null rather than 0 — see the mapping in
   // match-stats-server.ts.
-  const value = typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  const base = typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  const plus = config.plusKey ? stats[config.plusKey] : null;
+  const value =
+    base !== null && typeof plus === "number" && Number.isFinite(plus)
+      ? base + plus
+      : base;
   const outOf = config.ofKey ? stats[config.ofKey] : undefined;
 
   return {
@@ -1200,7 +1284,11 @@ export function HeadToHeadCard() {
   // the /m/[token] share page alike. The table and the counts below iterate
   // the SAME configs, so a cell's "Watch all N" and its click open one cut.
   const isDerived = meta.isDerived;
-  const groups = isDerived ? DERIVED_H2H_GROUPS : H2H_GROUPS;
+  // One "Errors" row until the match's errors are judged forced/unforced,
+  // then Unforced + Forced (`withErrorSplit`) — read off the filter context,
+  // never re-derived here.
+  const errorSplitJudged = context.errorSplitJudged === true;
+  const groups = groupsFor(isDerived, errorSplitJudged);
 
   const sections = useMemo(() => {
     if (!youStats || !oppStats) return [];
@@ -1230,7 +1318,7 @@ export function HeadToHeadCard() {
     if (!meta.hasPlayableVideo) return byRow;
     const count = (cut: FilmCut) =>
       applyFilmCut(points, points, cut, context).length;
-    const configs = isDerived ? ALL_DERIVED_H2H_CONFIGS : ALL_H2H_CONFIGS;
+    const configs = groups.flatMap((group) => group.configs);
     for (const config of configs) {
       if (!config.cut) continue;
       // `both` is counted, not summed: a row's own cut carries no side, so
@@ -1244,7 +1332,7 @@ export function HeadToHeadCard() {
       });
     }
     return byRow;
-  }, [meta.hasPlayableVideo, isDerived, points, context]);
+  }, [meta.hasPlayableVideo, groups, points, context]);
 
   if (sections.length === 0) return null;
 

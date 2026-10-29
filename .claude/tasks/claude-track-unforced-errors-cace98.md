@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Report cards and Film labels: "Errors" until the split is judged
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/components/dashboard/matches/match-detail/head-to-head-card.tsx, src/components/dashboard/matches/match-detail/point-endings-card.tsx, src/components/dashboard/matches/match-detail/film-cut-context.tsx, src/components/dashboard/matches/match-detail/match-filters/model.ts (`pointResultLabel`), tests/match-h2h-rows.spec.ts, tests/head-to-head-cuts.spec.ts, tests/film-cut-intent.spec.ts

@@ -666,14 +666,25 @@ export function serveResultOf(
  * Winner", but the head-to-head Aces row counts it and Serve › Result "Ace"
  * opens it (`serveResultOf`), so the rows that click shows must say so. A
  * service winner with a stroke after the serve is not one and keeps its label.
+ *
+ * Until the match's errors are judged (`ctx.errorSplitJudged`, absent = not
+ * judged) an error's kind is dropped from the name — "Backhand Unforced
+ * Error" and "Backhand Forced Error" both read "Backhand Error" — since nobody
+ * has called it either way. The label only: the stored `resultType` keeps the
+ * kind, and a judged match shows it as stored.
  */
 export function pointResultLabel(
   point: MatchPoint,
-  ctx: Pick<MatchFilterContext, "isDerived">,
+  ctx: Pick<MatchFilterContext, "isDerived" | "errorSplitJudged">,
 ): string {
   if (ctx.isDerived && isUnreturnedServe(point)) return "Ace";
-  return point.resultType || "Point";
+  const stored = point.resultType || "Point";
+  if (ctx.errorSplitJudged) return stored;
+  return stored.replace(UNJUDGED_ERROR_KIND, "");
 }
+
+/** "Unforced " / "Forced " before a closing "Error" — the kind an unjudged label drops. */
+const UNJUDGED_ERROR_KIND = /\b(?:un)?forced\s+(?=error\s*$)/i;
 
 /**
  * The point ended on a winning return: the head-to-head card's Return winners

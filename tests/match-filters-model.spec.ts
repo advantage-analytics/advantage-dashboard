@@ -10,6 +10,7 @@ import {
   matchFiltersQuery,
   optionAvailability,
   parseMatchFilters,
+  pointResultLabel,
   returnContactOf,
   serializeMatchFilters,
   shotMatchesCustom,
@@ -1376,4 +1377,45 @@ test("toggleMatchFilter adds/removes list options and sets/clears single choices
   expect(toggleMatchFilter(you, "server", "you").server).toBeNull();
   // EMPTY is never mutated.
   expect(activeFilterCount(EMPTY_MATCH_FILTERS)).toBe(0);
+});
+
+test.describe("pointResultLabel drops an error's kind until the split is judged", () => {
+  const label = (resultType: string, errorSplitJudged?: boolean) =>
+    pointResultLabel(pt({ id: "label", resultType }), {
+      isDerived: false,
+      errorSplitJudged,
+    });
+
+  test("unjudged: the kind goes from the label", () => {
+    expect(label("Backhand Unforced Error", false)).toBe("Backhand Error");
+    expect(label("Forehand Forced Error", false)).toBe("Forehand Error");
+    expect(label("Unforced Error", false)).toBe("Error");
+    expect(label("Forced Error", false)).toBe("Error");
+    // Absent reads as not judged.
+    expect(label("Backhand Unforced Error")).toBe("Backhand Error");
+  });
+
+  test("unjudged: nothing else is renamed", () => {
+    for (const rt of [
+      "Forehand Winner",
+      "Double Fault",
+      "Ace",
+      "Service Winner",
+    ])
+      expect(label(rt, false)).toBe(rt);
+    expect(label("", false)).toBe("Point");
+  });
+
+  test("judged: the stored result type, as today", () => {
+    expect(label("Backhand Unforced Error", true)).toBe(
+      "Backhand Unforced Error",
+    );
+    expect(label("Forehand Forced Error", true)).toBe("Forehand Forced Error");
+  });
+
+  test("the stored result type is untouched", () => {
+    const point = pt({ id: "kept", resultType: "Backhand Unforced Error" });
+    pointResultLabel(point, { isDerived: false, errorSplitJudged: false });
+    expect(point.resultType).toBe("Backhand Unforced Error");
+  });
 });
