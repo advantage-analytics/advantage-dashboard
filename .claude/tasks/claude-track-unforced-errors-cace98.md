@@ -76,7 +76,7 @@ ready).
 
 ## T5 · Cross-match surfaces always say "Errors" (unforced + forced)
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/performance-server.ts, src/lib/data/home-recent-data.ts, src/lib/data/player-profile.ts, src/lib/data/player-profile-server.ts, src/lib/data/match-stats-server.ts (the averaged `unforcedErrors`), src/components/dashboard/matches/analysis-sidebar.tsx (check whether it is cross-match; leave it if it is a single-match surface), tests/player-profile.spec.ts
 - **routes:** /dashboard, /dashboard/team/roster/[playerId], /dashboard/matches/[matchId] (Performance tracker)

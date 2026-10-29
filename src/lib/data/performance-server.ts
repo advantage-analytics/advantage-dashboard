@@ -3,6 +3,7 @@ import type { EvidenceCard } from "@/lib/ui/insight-evidence";
 import { getAuthUser } from "@/lib/supabase/auth-user-server";
 import { getPersonalMatchData } from "@/lib/data/personal-matches-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
+import { totalErrors } from "@/lib/data/player-profile";
 import { viewerSide } from "./viewer-side";
 import { scoreWinner } from "./match-utils";
 import { matchDay, utcToday } from "./match-day";
@@ -146,6 +147,7 @@ interface DbMatchStats {
   double_faults: number | null;
   winners: number | null;
   unforced_errors: number | null;
+  forced_errors: number | null;
   avg_rally_length: number | null;
 }
 
@@ -620,12 +622,14 @@ const KPI_SPECS: KpiSpec[] = [
     pick: (s) => num(s.winners),
   },
   {
+    // The key keeps its old name so saved tile selections still resolve. The
+    // tile is cross-match, so it counts every error and never splits them.
     key: "unforced-errors",
-    label: "UNFORCED ERRORS",
+    label: "ERRORS",
     category: "Other",
     format: "count",
-    description: "Shots into the net or out of bounds",
-    pick: (s) => num(s.unforced_errors),
+    description: "Shots into the net or out of bounds, forced or not",
+    pick: (s) => totalErrors(s.unforced_errors, s.forced_errors),
     lowerIsBetter: true,
   },
   {

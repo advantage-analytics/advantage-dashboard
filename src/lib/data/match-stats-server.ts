@@ -7,6 +7,7 @@ import type {
   StatFraction,
 } from "./types";
 import { playerSeat } from "./viewer-side";
+import { totalErrors } from "./player-profile";
 
 interface DbMatchStatsView {
   is_player1: boolean;
@@ -271,6 +272,26 @@ function countCell(row: PlayerStatRow, column: string): number | null {
 
 /* ── Cross-match averages, over the player's own rows ──── */
 
+/**
+ * Mean total errors per match — `unforced_errors + forced_errors` taken per
+ * match, then averaged — over the rows that measured unforced errors.
+ *
+ * Cross-match surfaces average many matches, most of them unverified, so they
+ * never show a forced/unforced split. `forced_errors` is NULL on video matches
+ * until it is derived and counts as 0; a match with no `unforced_errors` is
+ * left out of the mean rather than counted as zero.
+ */
+export function averageErrors(rows: readonly PlayerStatRow[]): number | null {
+  return meanOfPresent(
+    rows.map((r) =>
+      totalErrors(
+        countCell(r, "unforced_errors"),
+        countCell(r, "forced_errors"),
+      ),
+    ),
+  );
+}
+
 export async function getPlayerAverageStats(
   /**
    * Every id that names this person as a player — their login, plus any roster
@@ -289,7 +310,7 @@ export async function getPlayerAverageStats(
   // player sees diluted deltas (the current match drags the average toward itself).
   const rows = await fetchPlayerStatRows(
     playerIds,
-    "first_serve_pct, first_serve_won_pct, second_serve_won_pct, service_games_won_pct, break_points_converted_pct, first_return_won_pct, second_return_won_pct, return_games_won_pct, net_points_won, net_points_appearances, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct, aces, double_faults, winners, unforced_errors, total_points_won, total_points",
+    "first_serve_pct, first_serve_won_pct, second_serve_won_pct, service_games_won_pct, break_points_converted_pct, first_return_won_pct, second_return_won_pct, return_games_won_pct, net_points_won, net_points_appearances, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct, aces, double_faults, winners, unforced_errors, forced_errors, total_points_won, total_points",
     excludeMatchId,
   );
 
@@ -342,7 +363,9 @@ export async function getPlayerAverageStats(
     aces: avgNum("aces"),
     doubleFaults: avgNum("double_faults"),
     winners: avgNum("winners"),
-    unforcedErrors: avgNum("unforced_errors"),
+    // Cross-match: every error, forced and unforced, never the split. The
+    // field keeps `PlayerStatistics`' name; what it averages is the total.
+    unforcedErrors: averageErrors(rows) ?? undefined,
     totalPointsWon: avgNum("total_points_won"),
     totalPoints: avgNum("total_points"),
   } as Partial<PlayerStatistics>;

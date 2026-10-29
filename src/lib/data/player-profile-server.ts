@@ -27,6 +27,7 @@ import {
   type ServeShotRow,
 } from "@/lib/data/serve-shots-by-match";
 import {
+  chipsFrom,
   dualRecordFrom,
   lineHistoryFrom,
   resolveLine,
@@ -37,6 +38,7 @@ import {
   STAT_COLUMNS,
   type DbStatRow,
   type LineRow,
+  type ProfileChip,
   type ProfileEntry,
   type ProfileEvent,
   type ProfileKpi,
@@ -88,10 +90,7 @@ export interface ProfileMatchRow {
   score: string;
 }
 
-export interface ProfileChip {
-  label: string;
-  value: string;
-}
+export type { ProfileChip } from "@/lib/data/player-profile";
 
 export interface ProfileLastMatch extends ProfileMatchRow {
   /** The opponent's initial, for the 32px square. */
@@ -193,38 +192,6 @@ interface DbInsights {
  * bounds the read the way Home's "last 4" does.
  */
 const SERVE_MAP_MATCHES = 10;
-
-/** The evidence row under the last match — omitted per chip where unmeasured. */
-function chipsFrom(stats: ProfileStatRow | null): ProfileChip[] {
-  if (!stats) return [];
-  const chips: ProfileChip[] = [];
-  const firstServe = stats.rates["first_serve_pct"];
-  const firstServeWon = stats.rates["first_serve_won_pct"];
-  if (firstServe !== null && firstServe !== undefined) {
-    chips.push({ label: "1st serve in", value: `${Math.round(firstServe)}%` });
-  }
-  if (firstServeWon !== null && firstServeWon !== undefined) {
-    chips.push({
-      label: "1st serve won",
-      value: `${Math.round(firstServeWon)}%`,
-    });
-  }
-  if (stats.winners !== null)
-    chips.push({ label: "Winners", value: String(stats.winners) });
-  if (stats.unforcedErrors !== null) {
-    chips.push({ label: "Unforced", value: String(stats.unforcedErrors) });
-  }
-  if (
-    stats.breakPointsConverted !== null &&
-    stats.breakPointOpportunities !== null
-  ) {
-    chips.push({
-      label: "Break pts",
-      value: `${stats.breakPointsConverted} of ${stats.breakPointOpportunities}`,
-    });
-  }
-  return chips;
-}
 
 /**
  * The serve map for a set of matches, from this player's service points.

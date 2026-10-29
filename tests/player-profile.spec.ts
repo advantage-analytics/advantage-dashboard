@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  chipsFrom,
   clipText,
   dualRecordFrom,
   gamesWonPct,
@@ -14,6 +15,8 @@ import {
   resolveLine,
   resolveSchool,
   runningDifferential,
+  statRowsByKey,
+  type DbStatRow,
   type ProfileEntry,
   type ProfileEvent,
   type ProfileResult,
@@ -50,7 +53,7 @@ function stats(
     returnGames: null,
     returnGamesWon: null,
     winners: null,
-    unforcedErrors: null,
+    errors: null,
     ...counts,
   };
 }
@@ -554,5 +557,46 @@ test.describe("a claimed player's pre-claim match on their profile", () => {
         BEN_PROFILE,
       ),
     ).toBe(false);
+  });
+});
+
+test.describe("last-match chips: errors are never split", () => {
+  /** One side's raw row, as `STAT_COLUMNS` selects it. */
+  function dbRow(overrides: Partial<DbStatRow> = {}): DbStatRow {
+    return {
+      match_id: "m1",
+      is_player1: true,
+      break_points_converted: null,
+      break_point_opportunities: null,
+      service_games: null,
+      service_games_won: null,
+      return_games: null,
+      return_games_won: null,
+      winners: null,
+      unforced_errors: null,
+      forced_errors: null,
+      ...overrides,
+    };
+  }
+
+  function chipsOf(row: DbStatRow) {
+    const stats = statRowsByKey([row]).values().next().value ?? null;
+    return chipsFrom(stats);
+  }
+
+  test("forced 3 + unforced 10 reads as Errors 13", () => {
+    const chips = chipsOf(dbRow({ unforced_errors: 10, forced_errors: 3 }));
+    expect(chips).toContainEqual({ label: "Errors", value: "13" });
+    expect(chips.some((c) => c.label === "Unforced")).toBe(false);
+  });
+
+  test("a null forced count adds nothing", () => {
+    const chips = chipsOf(dbRow({ unforced_errors: 8, forced_errors: null }));
+    expect(chips).toContainEqual({ label: "Errors", value: "8" });
+  });
+
+  test("no unforced count, no Errors chip", () => {
+    const chips = chipsOf(dbRow({ unforced_errors: null, forced_errors: 3 }));
+    expect(chips.some((c) => c.label === "Errors")).toBe(false);
   });
 });
