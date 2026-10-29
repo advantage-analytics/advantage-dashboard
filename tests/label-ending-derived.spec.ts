@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   deriveEnding,
   endingPatchForShotChange,
+  isMarkableError,
   winnerContradicted,
 } from "@/lib/services/labels/ending-derived";
 import { endingStale } from "@/lib/services/labels/marks-state";
@@ -548,5 +549,77 @@ test.describe("a winner the strokes contradict", () => {
     });
     // The same point with its winner right raises nothing.
     expect(endingStale(point(rally(), "p2", "error", "p1"), GHOSTS)).toBeNull();
+  });
+});
+
+test.describe("isMarkableError", () => {
+  test("a rally ball that missed is an error: markable", () => {
+    const rally = point([serve(), p2(), p1(), p2({ result: "out" })]);
+    expect(deriveEnding(rally, GHOSTS)?.ending).toBe("error");
+    expect(isMarkableError(rally, GHOSTS)).toBe(true);
+  });
+
+  test("a missed return is a service winner, not a markable error", () => {
+    const missedReturn = point([serve(), p2({ result: "net" })]);
+    expect(deriveEnding(missedReturn, GHOSTS)?.ending).toBe("service_winner");
+    expect(isMarkableError(missedReturn, GHOSTS)).toBe(false);
+  });
+
+  test("a double fault, an ace and a winner are not markable", () => {
+    const doubleFault = point([
+      serve({ result: "out" }),
+      serve({ stroke: "second_serve", result: "net" }),
+    ]);
+    const ace = point([serve()]);
+    const winner = point([serve(), p2(), p1()]);
+    expect(isMarkableError(doubleFault, GHOSTS)).toBe(false);
+    expect(isMarkableError(ace, GHOSTS)).toBe(false);
+    expect(isMarkableError(winner, GHOSTS)).toBe(false);
+  });
+
+  test("a point whose rows settle nothing is not markable", () => {
+    expect(isMarkableError(point([]), GHOSTS)).toBe(false);
+    expect(isMarkableError(point([serve({ result: "out" })]), GHOSTS)).toBe(
+      false,
+    );
+  });
+
+  test("a last ball with no result reads the labelled winner", () => {
+    // p2 hit last with no result; p1 is labelled the winner → an error by p2.
+    const unresolved = point([serve(), p2({ result: null })], "p1");
+    expect(isMarkableError(unresolved, GHOSTS)).toBe(true);
+    expect(
+      isMarkableError(point([serve(), p2({ result: null })], "p2"), GHOSTS),
+    ).toBe(false);
+  });
+
+  test("a let or a non-point is never markable, whatever its strokes say", () => {
+    const strokes = [serve(), p2(), p1({ result: "out" })];
+    expect(isMarkableError(point(strokes, null, "let_replayed"), GHOSTS)).toBe(
+      false,
+    );
+    expect(isMarkableError(point(strokes, null, "not_a_point"), GHOSTS)).toBe(
+      false,
+    );
+  });
+
+  test("a deleted point is not markable", () => {
+    const strokes = [serve(), p2(), p1({ result: "out" })];
+    expect(
+      isMarkableError({ ...point(strokes), status: "deleted" }, GHOSTS),
+    ).toBe(false);
+    expect(
+      isMarkableError({ ...point(strokes), status: "edited" }, GHOSTS),
+    ).toBe(true);
+  });
+
+  test("a let serve is skipped: the rally after it decides", () => {
+    const afterLet = point([
+      serve({ result: "let" }),
+      serve(),
+      p2(),
+      p1({ result: "net" }),
+    ]);
+    expect(isMarkableError(afterLet, GHOSTS)).toBe(true);
   });
 });

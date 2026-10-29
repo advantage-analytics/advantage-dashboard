@@ -104,6 +104,25 @@ export function deriveEnding(
   };
 }
 
+/**
+ * Whether a point can be marked forced or unforced (`label_points.error_kind`):
+ * only when its live strokes say it ended in an error — `deriveEnding()` is
+ * `"error"`. A missed return (`service_winner`), a double fault, an ace or a
+ * winner is not markable, nor a point whose rows settle nothing, nor a
+ * replayed let or non-point (whatever the strokes say, it was not played
+ * out), nor a deleted point.
+ */
+export function isMarkableError(
+  point: EndingPoint &
+    Pick<LabelPoint, "ending"> &
+    Partial<Pick<LabelPoint, "status">>,
+  ghosts: boolean,
+): boolean {
+  if (point.status === "deleted") return false;
+  if (isNonPointEnding(point.ending)) return false;
+  return deriveEnding(point, ghosts)?.ending === "error";
+}
+
 /** The hitter of a last stroke marked in; null with no result or no hitter. */
 function wonBy(last: Pick<LabelShot, "result" | "hitter">): LabelSide | null {
   return last.result === "in" ? last.hitter : null;

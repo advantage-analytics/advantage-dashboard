@@ -1,11 +1,14 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  LABEL_ERROR_KINDS,
   LABEL_POINT_EDIT_FIELDS,
   LABEL_POINT_SEED_FIELDS,
+  LABEL_POINT_VALUE_FIELDS,
   LABEL_SHOT_EDIT_FIELDS,
   LABEL_SHOT_RESULTS,
   LABEL_SPINS,
+  applyLabelPointPatch,
   applyLabelShotPatch,
   labelPointStatusAfterPatch,
   labelShotStatusAfterPatch,
@@ -26,7 +29,7 @@ import {
   writeLabelShotEdit,
 } from "@/lib/services/labels/edit-session";
 import type { AdminClient } from "@/lib/supabase/admin";
-import { POINT_1_SHOTS } from "./fixtures/label-session";
+import { POINT_1_SHOTS, labelPoint } from "./fixtures/label-session";
 
 const SHOT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const POINT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -62,7 +65,14 @@ test.describe("the allowlists", () => {
       ].sort(),
     );
     expect([...LABEL_POINT_EDIT_FIELDS].sort()).toEqual(
-      ["ended_by", "ending", "note", "serve_side", "winner"].sort(),
+      [
+        "ended_by",
+        "ending",
+        "error_kind",
+        "note",
+        "serve_side",
+        "winner",
+      ].sort(),
     );
   });
 
@@ -301,6 +311,37 @@ test.describe("point values", () => {
     );
   });
 
+  test("error_kind is forced, unforced or null — nothing else", () => {
+    expect(LABEL_POINT_VALUE_FIELDS).toContain("error_kind");
+    expect([...LABEL_ERROR_KINDS]).toEqual(["forced", "unforced"]);
+    for (const kind of ["forced", "unforced", null] as const) {
+      expect(parseLabelPointPatch({ error_kind: kind })).toEqual({
+        ok: true,
+        patch: { error_kind: kind },
+      });
+    }
+    for (const bad of [
+      "Forced",
+      "UNFORCED",
+      "forced_error",
+      "unforced ",
+      "",
+      "double_fault",
+      1,
+      true,
+      ["forced"],
+    ]) {
+      expect(
+        parseLabelPointPatch({ error_kind: bad }),
+        JSON.stringify(bad),
+      ).toHaveProperty("error");
+    }
+    // A bad kind rejects the whole patch, the good fields with it.
+    expect(
+      parseLabelPointPatch({ winner: "p1", error_kind: "sort of" }),
+    ).toHaveProperty("error");
+  });
+
   test("a note is trimmed, and blank clears it", () => {
     expect(parseLabelPointPatch({ note: "  net cord  " })).toEqual({
       ok: true,
@@ -519,6 +560,40 @@ test.describe("labelPointStatusAfterPatch", () => {
     expect(
       labelPointStatusAfterChange(moved, { game_number: 3, winner: "p1" }),
     ).toBe("unchanged");
+  });
+
+  test("error_kind is not a seed field: marking it never moves the status", () => {
+    expect(LABEL_POINT_SEED_FIELDS).not.toContain("error_kind");
+    for (const seed of [point, null]) {
+      const unchanged = { ...point, status: "unchanged" as const, seed };
+      for (const kind of ["forced", "unforced", null] as const) {
+        expect(
+          labelPointStatusAfterPatch(unchanged, { error_kind: kind }),
+        ).toBe("unchanged");
+      }
+    }
+    // Alongside a real change, the real change alone decides.
+    expect(
+      labelPointStatusAfterPatch(
+        { ...point, status: "unchanged", seed: point },
+        { error_kind: "forced", winner: "p2" },
+      ),
+    ).toBe("edited");
+  });
+
+  test("applyLabelPointPatch carries errorKind and leaves the status", () => {
+    const unmarked = labelPoint("p-1", 0, { ending: "error" });
+    expect(unmarked.errorKind).toBeNull();
+    const forced = applyLabelPointPatch(unmarked, { error_kind: "forced" });
+    expect(forced.errorKind).toBe("forced");
+    expect(forced.status).toBe("unchanged");
+    expect(applyLabelPointPatch(forced, { error_kind: null }).errorKind).toBe(
+      null,
+    );
+    // A patch that does not name it keeps it.
+    expect(applyLabelPointPatch(forced, { note: "x" }).errorKind).toBe(
+      "forced",
+    );
   });
 
   test("added, edited and deleted are left alone", () => {
@@ -1082,6 +1157,87 @@ test.describe("updateLabelPoint (editLabelPoint)", () => {
         patch: { note: "net cord on the return" },
       }),
     ).toEqual({ ok: true, status: "unchanged" });
+  });
+});
+
+test.describe("updateLabelPoint writes error_kind", () => {
+  test("through the same optimistic update, leaving an unchanged point unchanged", async () => {
+    const fake = fakeClient({ point: pointRow({ ending: "error" }) });
+    expect(
+      await writeLabelPointEdit({
+        supabase: fake.supabase,
+        pointId: POINT_ID,
+        patch: { error_kind: "unforced" },
+      }),
+    ).toEqual({ ok: true, status: "unchanged" });
+    expect(updates(fake)).toEqual([
+      {
+        table: "label_points",
+        op: "update",
+        values: { error_kind: "unforced", status: "unchanged" },
+        filters: { id: POINT_ID, updated_at: UPDATED_AT },
+      },
+    ]);
+  });
+
+  test("against a stored seed, an edited point stays edited and a clean one clean", async () => {
+    const seed = {
+      set_number: 1,
+      game_number: 3,
+      server: "p1",
+      serve_side: "deuce",
+      winner: "p1",
+      ending: "error",
+      ended_by: "p2",
+    };
+    const clean = fakeClient({
+      point: pointRow({ ...seed, status: "unchanged", seed }),
+    });
+    expect(
+      await writeLabelPointEdit({
+        supabase: clean.supabase,
+        pointId: POINT_ID,
+        patch: { error_kind: "forced" },
+      }),
+    ).toEqual({ ok: true, status: "unchanged" });
+
+    const edited = fakeClient({
+      point: pointRow({ ...seed, winner: "p2", status: "edited", seed }),
+    });
+    expect(
+      await writeLabelPointEdit({
+        supabase: edited.supabase,
+        pointId: POINT_ID,
+        patch: { error_kind: "forced" },
+      }),
+    ).toEqual({ ok: true, status: "edited" });
+  });
+
+  test("a lost race re-reads and writes again, like any point value", async () => {
+    const fake = fakeClient({
+      point: pointRow({ ending: "error" }),
+      goneOnce: true,
+    });
+    expect(
+      await writeLabelPointEdit({
+        supabase: fake.supabase,
+        pointId: POINT_ID,
+        patch: { error_kind: "forced" },
+      }),
+    ).toEqual({ ok: true, status: "unchanged" });
+    expect(updates(fake)).toHaveLength(2);
+  });
+
+  test("a bad kind writes nothing", async () => {
+    const fake = fakeClient({ point: pointRow({ ending: "error" }) });
+    expect(
+      await writeLabelPointEdit({
+        supabase: fake.supabase,
+        pointId: POINT_ID,
+        patch: { error_kind: "maybe" },
+      }),
+    ).toHaveProperty("error");
+    expect(fake.calls).toEqual([]);
   });
 });
 

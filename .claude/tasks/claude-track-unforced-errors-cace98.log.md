@@ -19,3 +19,14 @@ is the runner's. Newest entries at the bottom.
 2. `PlayerStatistics.unforcedErrors` now carries a total on the averaged path — consider renaming.
 3. `totalErrors` lives in `player-profile.ts` but is imported by `home-recent-data.ts` and `match-stats-server.ts`; a shared home (e.g. `aggregate.ts`) may suit it better.
 4. Ask design previews (`src/app/design/ask/…`) and the admin label overview still say "Unforced" — out of this task's scope.
+
+## T8 · label_points.error_kind write path, undo/redo and point shape — done
+
+**gate:** mechanical PASS · completion VERDICT: pass
+**changed:** `edit.ts`: `error_kind` joins `LABEL_POINT_VALUE_FIELDS` (forced | unforced | null, anything else rejected); `labelPointStatusAfterPatch` now filters on the unchanged `LABEL_POINT_SEED_FIELDS`, so marking a kind never flips a point to edited. `session.ts`: `LabelErrorKind`, `LabelPoint.errorKind`. `rows.ts`: column selected and mapped. `ending-derived.ts`: `isMarkableError(point, ghosts)`, true only for a derived `error`. The write path (`writeLabelPointEdit`) and undo/redo (whole-row SQL journal, `applyUndoDiff`) needed no change beyond the read-back column. One-line `errorKind: null` in `point-insert.ts`, `point-split.ts` and two fixtures. Specs: `label-edit`, `label-ending-derived`, `label-undo`.
+**follow-ups:**
+
+1. Reset (`reset.ts` / `reset-session.ts`) doesn't clear `error_kind` — decide whether resetting a point should.
+2. A later edit that stops a point ending on an error leaves a stale `error_kind`: clear it when the ending settles, or have readers gate on `isMarkableError` (T9/T10/T11/T12 should do the latter at least).
+3. Combine/split don't carry `error_kind` to the surviving or new points.
+4. `session.ts`: the `LabelErrorKind` block sits between the `LabelPoint` doc comment and its interface, orphaning the comment.

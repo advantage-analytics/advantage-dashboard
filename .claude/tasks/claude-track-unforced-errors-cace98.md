@@ -118,7 +118,7 @@ ready).
 
 ## T8 · label_points.error_kind write path, undo/redo and point shape
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/services/labels/edit.ts, src/lib/services/labels/edit-session.ts, src/lib/services/labels/undo-diff.ts, src/lib/services/labels/rows.ts (point shape), src/lib/services/labels/ending-derived.ts, tests/label-edit.spec.ts, tests/label-console-edit.spec.ts
 - **done when:**
