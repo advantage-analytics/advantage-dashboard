@@ -66,3 +66,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical FAIL (lint pass, typecheck pass, test FAIL) · completion VERDICT: pass (not sufficient)
 **reason:** Six offline Shots browser specs fail with T4's diff: `viz-all-zones-browser.spec.ts:93` and `:198`, `viz-rally-placement-browser.spec.ts:86` and `:164`, `viz-serve-zones-browser.spec.ts:85` and `:138`. Reproduced alone: the harness draws no `[data-viz-mark]` and no `output` (0 of 42 marks), so the Shots view fails to render — most likely the browser harness has no match-filter provider and T4's new `useMatchFilters()` reads (viz-state-context, default-tiles/viz-wall, filters-popover) break it. Fix in the re-run: give the harness a provider or make those reads tolerate the fallback context, then re-run the three specs. Runner note: the first gate's GATE FAIL was misread as a pass and committed; that commit was undone with `git reset --soft` before this entry, nothing was pushed.
 **stash:** beb26b319fb90fdc291a3e33930e8a4299748c29 (`git stash apply beb26b31` restores the work; the completion reviewer had passed it against the criteria)
+
+## T6 · AI summary says "errors" on an unjudged match — blocked
+
+**gate:** not reached — dispatch refused
+**reason:** Claude Code's auto-mode classifier refused to dispatch the subagent as a "Production Deploy": the task ends with `deploy_edge_function` for `generate-insights` on the live project. Needs the user's explicit approval to deploy; reset `status:` to `todo` once given.
+**stash:** no stash — the task produced no changes
