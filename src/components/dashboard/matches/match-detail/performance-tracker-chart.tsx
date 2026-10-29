@@ -202,26 +202,40 @@ export function PerformanceTrackerChart() {
     const y = (diff: number) => MID - (diff / maxAbs) * (MID - Y_PAD);
 
     const coords = samples.map((s, i) => [x(i), y(s.diff)] as const);
-    // The drawn line returns to the midline on each set divider before the
-    // next set's first point, so a set restarts from level rather than
-    // diving across from where the last one ended. `coords` stays one entry
-    // per point: hover and the break lines index it.
-    const vertices: (readonly [number, number])[] = [];
+    // One run of vertices per set, so the line breaks between sets instead of
+    // falling from where one set ended to where the next begins. A later set
+    // starts on the midline under the previous set's last point, so its first
+    // point reads as +1 or −1 from level. `coords` stays one entry per point:
+    // hover and the break lines index it.
+    const runs: (readonly [number, number])[][] = [];
     coords.forEach((coord, i) => {
-      if (i > 0 && samples[i].setNumber !== samples[i - 1].setNumber) {
-        vertices.push([coord[0], MID]);
+      if (i === 0) {
+        runs.push([coord]);
+      } else if (samples[i].setNumber !== samples[i - 1].setNumber) {
+        runs.push([[coords[i - 1][0], MID], coord]);
+      } else {
+        runs[runs.length - 1].push(coord);
       }
-      vertices.push(coord);
     });
-    const polyline = vertices.map(([cx, cy]) => `${cx},${cy}`).join(" ");
-    // Same vertex list closed back along the midline, so the fill sits between
-    // the series and the line the clip paths split on.
-    const area = [
-      `M0,${MID}`,
-      ...vertices.map(([cx, cy]) => `L${cx},${cy}`),
-      `L${CHART_W},${MID}`,
-      "Z",
-    ].join(" ");
+    const linePath = runs
+      .map((run) =>
+        run.map(([cx, cy], k) => `${k ? "L" : "M"}${cx},${cy}`).join(" "),
+      )
+      .join(" ");
+    // Each run closed straight down to the midline, so the fill sits between
+    // the series and the line the clip paths split on and stops with its set.
+    const area = runs
+      .map((run) => {
+        const [x0] = run[0];
+        const [x1] = run[run.length - 1];
+        return [
+          `M${x0},${MID}`,
+          ...run.map(([cx, cy]) => `L${cx},${cy}`),
+          `L${x1},${MID}`,
+          "Z",
+        ].join(" ");
+      })
+      .join(" ");
 
     const setBoundaries: number[] = [];
     for (let i = 1; i < samples.length; i += 1) {
@@ -239,7 +253,7 @@ export function PerformanceTrackerChart() {
       else setCounts.push({ setNumber: s.setNumber, count: 1 });
     }
 
-    return { coords, polyline, area, setBoundaries, setCounts };
+    return { coords, linePath, area, setBoundaries, setCounts };
   }, [samples]);
 
   const selectFromClientX = useCallback(
@@ -496,8 +510,8 @@ export function PerformanceTrackerChart() {
             }
           />
 
-          <motion.polyline
-            points={geometry.polyline}
+          <motion.path
+            d={geometry.linePath}
             fill="none"
             stroke="var(--viz-you)"
             strokeWidth={1.5}
@@ -507,8 +521,8 @@ export function PerformanceTrackerChart() {
             animate={shouldReduceMotion ? { opacity: 1 } : { pathLength: 1 }}
             transition={lineTransition}
           />
-          <motion.polyline
-            points={geometry.polyline}
+          <motion.path
+            d={geometry.linePath}
             fill="none"
             stroke="var(--viz-opp)"
             strokeWidth={1.5}
