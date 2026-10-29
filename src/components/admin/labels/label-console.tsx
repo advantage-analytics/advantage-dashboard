@@ -53,7 +53,10 @@ import {
   type GameShiftWrite,
 } from "@/lib/services/labels/game-shift";
 import type { LabelGameShiftResult } from "@/lib/services/labels/game-shift-session";
-import type { LabelMarks } from "@/lib/services/labels/marks";
+import {
+  homeShotSuggestions,
+  type LabelMarks,
+} from "@/lib/services/labels/marks";
 import type { LabelPointEndingSynced } from "@/lib/services/labels/ending-session";
 import { volleyLinkWrites } from "@/lib/services/labels/volley-link";
 import { labelScores } from "@/lib/services/labels/score";
@@ -543,7 +546,11 @@ export function LabelConsole({
       marks === null
         ? null
         : withLiveScoreMarks(
-            marks,
+            // Split points move strokes after the page built its marks.
+            {
+              ...marks,
+              suggestions: homeShotSuggestions(marks.suggestions, points),
+            },
             points,
             session.adScoring,
             scores,
@@ -554,9 +561,9 @@ export function LabelConsole({
   // Every "Missing shot?" slot still open whose "Add shot" would write: what
   // "Add all missing shots" fills, in rail order.
   const missingShotAdds = useMemo<MissingShotAdd[]>(() => {
-    if (!marks) return [];
+    if (!liveMarks) return [];
     const byId = new Map(points.map((point) => [point.id, point]));
-    return marks.suggestions.flatMap((s) => {
+    return liveMarks.suggestions.flatMap((s) => {
       if (s.kind !== "missing_shot") return [];
       const point = byId.get(s.pointId);
       if (!point || point.status === "deleted") return [];
@@ -564,7 +571,7 @@ export function LabelConsole({
       if ("error" in planAddedShot(point, s.afterShotId)) return [];
       return [{ pointId: s.pointId, afterShotId: s.afterShotId }];
     });
-  }, [marks, points]);
+  }, [liveMarks, points]);
   // The open counts the overview shows — flagged points, amber and grey —
   // saved on the session whenever they change, so the Labels list reads the
   // work left without building marks.
