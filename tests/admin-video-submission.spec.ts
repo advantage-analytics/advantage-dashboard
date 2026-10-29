@@ -333,3 +333,102 @@ test("a team that did not save is answered, not a success, and the same operatio
   const none = harness(true, id(3), null, "connection reset");
   expect((await submitAdminMatchVideo(input, none.deps)).ok).toBe(true);
 });
+
+/**
+ * "Upload for: a player" — the player's personal workspace as the target,
+ * billed free (on the administrator) or to the player's own allowance.
+ */
+function personalHarness(billing: "free" | "player" = "free") {
+  const h = harness();
+  const resolved: { userId: string; billing: string }[] = [];
+  const deps = {
+    ...h.deps,
+    getAdminUploadContext: async () => {
+      throw new Error("a personal target never resolves a program");
+    },
+    getAdminPersonalUploadContext: async (userId: string, asked: string) => {
+      resolved.push({ userId, billing: asked });
+      return {
+        ok: true as const,
+        context: {
+          actorId: id(9),
+          workspace: { id: userId, kind: "personal", canSubmitVideo: true },
+          roster: [],
+          owner: { viewer: { id: userId, name: "Elena Vargas" }, billing },
+        } as unknown as AdminUploadContext,
+      };
+    },
+  };
+  const { programId: _program, ...rest } = input;
+  void _program;
+  const body = {
+    ...rest,
+    personalUserId: id(7),
+    billing,
+    playerId: id(7),
+  };
+  return { deps, calls: h.calls, resolved, body };
+}
+
+test("a player target resolves the personal context and sends owner and billing as identity", async () => {
+  for (const billing of ["free", "player"] as const) {
+    const h = personalHarness(billing);
+    expect(await submitAdminMatchVideo(h.body, h.deps)).toMatchObject({
+      ok: true,
+      matchId: id(5),
+      jobId: id(6),
+    });
+    expect(h.resolved).toEqual([{ userId: id(7), billing }]);
+    expect(h.calls[0]).toEqual({
+      name: "admin_submit_match_video",
+      args: expect.objectContaining({
+        p_actor_id: id(9),
+        p_program_id: null,
+        p_match_id: null,
+        p_request: expect.objectContaining({
+          playerId: id(7),
+          personalUserId: id(7),
+          billing,
+          initialTopPlayerIsPlayer1: false,
+          adScoring: true,
+          fixedCamera: false,
+        }),
+      }),
+    });
+  }
+});
+
+test("a team request never carries a personal identity", async () => {
+  const h = harness();
+  await submitAdminMatchVideo(input, h.deps);
+  const request = h.calls[0].args.p_request as Record<string, unknown>;
+  expect(request).not.toHaveProperty("personalUserId");
+  expect(request).not.toHaveProperty("billing");
+});
+
+test("both targets, a missing billing, another athlete or an attachment are refused before any write", async () => {
+  const cases: Record<string, unknown>[] = [];
+  const base = personalHarness();
+  cases.push({ ...base.body, programId: id(3) });
+  cases.push({ ...base.body, billing: undefined });
+  cases.push({ ...base.body, billing: "house" });
+  cases.push({ ...input, billing: "free" });
+  cases.push({ ...base.body, playerId: id(4) });
+  cases.push({
+    ...base.body,
+    matchId: id(5),
+    fingerprint: "a".repeat(64),
+    playerId: undefined,
+    opponentName: undefined,
+    score: undefined,
+    date: undefined,
+    courtType: undefined,
+    bestOf: undefined,
+  });
+  for (const body of cases) {
+    const h = personalHarness();
+    const result = await submitAdminMatchVideo(body, h.deps);
+    expect(result.ok, JSON.stringify(body)).toBe(false);
+    expect(h.calls).toEqual([]);
+  }
+});

@@ -1039,7 +1039,10 @@ function DetailsStepContentImpl({
   const lookupScope = useMemo(
     () =>
       admin
-        ? { source: "admin" as const, programId: admin.context.workspace.id }
+        ? // A player's personal workspace reads the player's own matches.
+          admin.context.owner
+          ? { source: "admin" as const, userId: admin.context.workspace.id }
+          : { source: "admin" as const, programId: admin.context.workspace.id }
         : undefined,
     [admin],
   );

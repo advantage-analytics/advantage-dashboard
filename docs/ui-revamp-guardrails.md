@@ -429,6 +429,50 @@ to put a testable seam.
 > retry (`resubmit-job.ts`) of a console job for an unapproved team still
 > prices through the `status === "active"` rule and is refused.
 
+> **A reviewed exception, added 2026-10-28: the admin console uploads a
+> match video into a player's personal workspace, from
+> `claude/admin-upload-for-player`.** Owner decision (Cj): "a toggle, free on
+> behalf of admin or using the players". The console's video path, which until
+> now named a program, can name a player instead (`personalUserId` + `billing`
+> on `/api/admin/uploads/video`). The match is the player's own —
+> `created_by` = `player1_id` = the player, `program_id` null — and the
+> administrator is recorded as the uploader on the submission
+> (`actor_user_id`) and the job (`created_by`). On the frozen list:
+>
+> - `jobs/handler.ts` and `upload-url/handler.ts` each change one thing: the
+>   upload contract is asked for `adminVideo.ownerId ?? userId` (both
+>   `viewerId` and `athleteOnRow(match, …)`), because the session is the
+>   administrator's and the match is the player's. `ownerId` is set only by
+>   `authorizeAdminVideo()` from `admin_video_access`, which ties the match to
+>   that player under a row lock; everyone else gets `userId` as before.
+>   `uploadEligibility()` is called unchanged and answers a personal workspace
+>   before it reads approval.
+> - `jobs/route.ts` is unchanged: its admin reservation already passes the
+>   billing workspace to `reserveAdminVideoQuota()`, which now sends a personal
+>   target's own `monthlyCapSecondsFor()` figure as `p_individual_cap`.
+> - SQL (`20261028231751`, `20261028233225`, `20261028233527`,
+>   `20261028234124`, applied live 2026-10-28): `admin_upload_submissions` gains `personal_user_id` and
+>   `billing` (`free` | `player`) behind a check that exactly one target is
+>   set; `admin_submit_match_video`, `admin_video_access`,
+>   `admin_reserve_video_quota`, `admin_begin_upload_item`, `finish_item` and
+>   `admin_reconcile_submission_item` gain personal branches with unchanged
+>   signatures, `service_role`-only EXECUTE and their own `is_admin` checks.
+>   Billing is read from the submission, never the request that spends:
+>   **free** reserves on the administrator's own uncapped individual row (what
+>   an admin's own upload writes — the player's allowance is untouched);
+>   **player** calls `reserve_personal_quota` for the player (free hours, their
+>   `video_hours_override` winning, then credits). `program_audit_log.program_id`
+>   may be null for the two console actions only, so a personal item keeps its
+>   audit row (`details.personal_user_id`, `billing`).
+>
+> Unchanged: what is sent to the vendor, the five vendor fields and the three
+> silent-corruption inputs (the wizard asks them exactly as before), the team
+> console path, and `reserveQuota()` for every dashboard upload. Not covered:
+> an automatic retry (`resubmit-job.ts`) of a personal console job bills the
+> job's creator — the administrator, uncapped — whichever billing was chosen;
+> a player cannot delete a console match (the existing purge guard); a player
+> target takes video only, as a new match.
+
 > **A reviewed exception, added 2026-09-27: input-rejected retries and the
 > frame-rate warning, from `claude/match-analysis-failure-retry-8769f3`**
 > (tasks T1–T3 in its queue). Both touches are a refusal or a constant, never a

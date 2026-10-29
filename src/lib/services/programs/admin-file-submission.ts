@@ -212,7 +212,7 @@ export async function submitAdminMatchFile(
     (await saveAdminOpponentTeam(
       admin,
       attempt.match_id,
-      programId,
+      { programId },
       opponentTeam.team,
     ));
   if (attempt.state === "queued") {

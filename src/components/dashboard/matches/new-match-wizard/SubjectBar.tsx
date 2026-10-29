@@ -14,7 +14,11 @@
  * the For field on step 1, which `onNotSubject` leads back to.
  *
  * Team-only by construction: in a personal workspace the uploader IS the
- * player and step 1 has no picker to return to.
+ * player and step 1 has no picker to return to — except in the admin console,
+ * which uploads into a player's personal workspace (board UploadFor). There
+ * `personalName` names that player, the bar says "Uploading as admin" where
+ * "Not Marcus?" would be (the player is fixed by step 1's Workspace), and a
+ * team upload from the console carries the same note beside its "Not …?".
  */
 
 import { Users } from "lucide-react";
@@ -29,13 +33,42 @@ export function SubjectBar({
   subject,
   workspace,
   onNotSubject,
+  personalName = null,
+  asAdmin = false,
 }: {
   /** `wizard.whoPlayed.subject` — the chosen athlete, read-only here. */
   subject: MatchSubject | null;
   workspace: Workspace;
   /** "Not Marcus?" — back toward the For field. */
   onNotSubject: () => void;
+  /** The console's player upload: whose personal workspace this is. */
+  personalName?: string | null;
+  /** The admin console is uploading — say so at the bar's right edge. */
+  asAdmin?: boolean;
 }) {
+  const adminNote = asAdmin && (
+    <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
+      Uploading as admin
+    </span>
+  );
+  if (personalName)
+    return (
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px]">
+        <span className="text-[11px] text-[var(--ink-500)]">For</span>
+        <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
+          {personalName}
+        </span>
+        <span
+          className="mx-2 h-3.5 w-px shrink-0 bg-[var(--border-medium)]"
+          aria-hidden="true"
+        />
+        <span className="truncate text-[11px] text-[var(--ink-600)]">
+          Personal workspace
+        </span>
+        <span className="flex-1" />
+        {adminNote}
+      </div>
+    );
   // A team subject is always a roster athlete; `self` is personal-only.
   if (subject?.kind !== "roster") return null;
 
@@ -66,6 +99,7 @@ export function SubjectBar({
         <span className="truncate">{workspaceLabel(workspace)}</span>
       </span>
       <span className="flex-1" />
+      {adminNote}
       <button
         type="button"
         onClick={onNotSubject}

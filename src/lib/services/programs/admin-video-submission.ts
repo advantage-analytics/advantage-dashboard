@@ -1,7 +1,10 @@
 import { adminUploadCourt } from "@/lib/admin/uploads/court";
 import { checkAdmin } from "./admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAdminUploadContext } from "@/lib/data/admin-upload-server";
+import {
+  getAdminPersonalUploadContext,
+  getAdminUploadContext,
+} from "@/lib/data/admin-upload-server";
 import { buildSplitStepJobRequest } from "@/lib/services/splitstep/job-request";
 import { UUID_RE as uuid, FINGERPRINT_RE } from "@/lib/admin/validation";
 import {
@@ -10,7 +13,12 @@ import {
   readAdminOpponentTeam,
   saveAdminOpponentTeam,
 } from "@/lib/admin/uploads/opponent-team";
-const defaults = { checkAdmin, createAdminClient, getAdminUploadContext };
+const defaults = {
+  checkAdmin,
+  createAdminClient,
+  getAdminUploadContext,
+  getAdminPersonalUploadContext,
+};
 
 /**
  * A refusal the route answers with its own `status`: 401 with no session, 403
@@ -21,8 +29,18 @@ function refuse(message: string, status: 400 | 401 | 403 | 500 = 400) {
   return { ok: false as const, status, message };
 }
 
-/** Stable operation identity and vendor answers, never an actor or workspace role. */
-export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
+/**
+ * Stable operation identity and vendor answers, never an actor or workspace role.
+ *
+ * The target is a program (`programId`) or a player's personal workspace
+ * (`personalUserId` + `billing`), never both. A personal target is a new
+ * singles match only: no attachment, no roster, and the athlete is the player.
+ */
+export async function submitAdminMatchVideo(
+  input: unknown,
+  overrides: Partial<typeof defaults> = {},
+) {
+  const deps = { ...defaults, ...overrides };
   const actor = await deps.checkAdmin();
   if (!actor.ok)
     return refuse("Administrator access is required.", actor.status);
@@ -33,6 +51,8 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     "operationId",
     "itemId",
     "programId",
+    "personalUserId",
+    "billing",
     "matchId",
     "fingerprint",
     "playerId",
@@ -55,13 +75,18 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
       : null;
   const operationId = id("operationId"),
     itemId = id("itemId"),
-    programId = id("programId");
+    programId = id("programId"),
+    personalUserId = id("personalUserId");
   const matchId = id("matchId");
+  const billing =
+    body.billing === "free" || body.billing === "player" ? body.billing : null;
   if (
     Object.keys(body).some((key) => !allowed.includes(key)) ||
     !operationId ||
     !itemId ||
-    !programId ||
+    // Exactly one target, and billing goes with a personal one only.
+    (programId ? personalUserId !== null || body.billing != null : false) ||
+    (!programId && (!personalUserId || !billing)) ||
     (body.matchId != null && !matchId) ||
     (matchId &&
       (typeof body.fingerprint !== "string" ||
@@ -74,7 +99,11 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     )
   )
     return refuse(
-      "Provide a valid operation, program, trim window and all three video answers.",
+      "Provide a valid operation, target, trim window and all three video answers.",
+    );
+  if (personalUserId && matchId)
+    return refuse(
+      "A player's personal workspace takes a new match only. Choose New match.",
     );
   if (
     matchId &&
@@ -98,9 +127,15 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
   );
   if (!opponentTeam.ok)
     return refuse("Choose their team from the directory, or type a school.");
-  const resolved = await deps.getAdminUploadContext(programId);
+  const resolved = personalUserId
+    ? await deps.getAdminPersonalUploadContext(personalUserId, billing!)
+    : await deps.getAdminUploadContext(programId!);
   if (!resolved.ok || resolved.context.actorId !== actor.id)
-    return refuse("This program is unavailable.");
+    return refuse(
+      personalUserId
+        ? "This player is unavailable."
+        : "This program is unavailable.",
+    );
   const context = resolved.context;
   // Approval is not asked: see `adminCanUploadFor()`, which the context
   // already answered into `canSubmitVideo`.
@@ -113,7 +148,13 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     return refuse(
       "That team isn't in the directory. Choose another, or type the school.",
     );
-  const player = context.roster.find((p) => p.playerId === id("playerId"));
+  // A personal match's athlete is the player whose workspace it is — the
+  // one choice there is, and the id the RPC checks again.
+  const player = personalUserId
+    ? id("playerId") === personalUserId
+      ? { playerId: personalUserId, name: context.owner?.viewer.name ?? "" }
+      : undefined
+    : context.roster.find((p) => p.playerId === id("playerId"));
   let player1Name = player?.name ?? "",
     player2Name =
       typeof body.opponentName === "string" ? body.opponentName.trim() : "";
@@ -144,7 +185,11 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     adminUploadCourt(body.courtType) === undefined ||
     ![1, 3, 5].includes(Number(body.bestOf))
   ) {
-    return refuse("Choose a roster athlete, match date and format.");
+    return refuse(
+      personalUserId
+        ? "Choose a match date and format."
+        : "Choose a roster athlete, match date and format.",
+    );
   }
   if (
     !score ||
@@ -206,6 +251,9 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     initialTopPlayerIsPlayer1: body.initialTopPlayerIsPlayer1,
     adScoring: body.adScoring,
     fixedCamera: body.fixedCamera,
+    // Part of the stored identity: a replay that changes the target or how
+    // it is billed is a conflict, like any other changed answer.
+    ...(personalUserId ? { personalUserId, billing } : {}),
   };
   const { data, error } = await admin.rpc("admin_submit_match_video", {
     p_actor_id: actor.id,
@@ -234,7 +282,7 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     !(await saveAdminOpponentTeam(
       admin,
       data.match_id as string,
-      programId,
+      personalUserId ? { userId: personalUserId } : { programId: programId! },
       opponentTeam.team,
     ))
   )

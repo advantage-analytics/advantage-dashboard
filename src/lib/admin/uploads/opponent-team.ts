@@ -85,8 +85,9 @@ export async function adminOpponentProgramExists(
 
 /**
  * Writes the team onto the match the submission just created. Scoped by
- * `program_id` as well as the id, so it can only land on a match of the
- * program the operation was admitted for, and only while both columns are
+ * `program_id` as well as the id — or, for a player's personal workspace, by
+ * no program and that player as creator — so it can only land on a match of
+ * the target the operation was admitted for, and only while both columns are
  * still null — the RPCs answer a replay with the same match, and a replay
  * must not undo a team set through Edit Match or the opponent drawer since.
  *
@@ -98,14 +99,15 @@ export async function adminOpponentProgramExists(
 export async function saveAdminOpponentTeam(
   admin: AdminClient,
   matchId: string,
-  programId: string,
+  target: { programId: string } | { userId: string },
   team: AdminOpponentTeam,
 ): Promise<boolean> {
-  const { error } = await admin
-    .from("matches")
-    .update(team)
-    .eq("id", matchId)
-    .eq("program_id", programId)
+  const query = admin.from("matches").update(team).eq("id", matchId);
+  const scoped =
+    "programId" in target
+      ? query.eq("program_id", target.programId)
+      : query.is("program_id", null).eq("created_by", target.userId);
+  const { error } = await scoped
     .is("opponent_program_id", null)
     .is("opponent_school", null);
   if (error) {
