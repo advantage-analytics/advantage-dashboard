@@ -29,6 +29,7 @@ import {
   type LabelPoint,
   type LabelSession,
   type LabelShot,
+  type LabelSide,
   type LabelVideo,
   type MatchScore,
 } from "@/lib/services/labels/session";
@@ -106,7 +107,10 @@ interface DbMatch {
    * `readPlayOnLets`.
    */
   format?: unknown;
-  /** The wizard's entered hands: `player_*` is seat 1, `opponent_*` seat 2. */
+  /**
+   * The entered hands: `player_*` is the account holder's, `opponent_*` the
+   * other side's (`enteredSeats` says which seat each is).
+   */
   player_hand?: string | null;
   opponent_hand?: string | null;
   player1_id?: string | null;
@@ -495,33 +499,77 @@ export async function readLabelSessionRows<T = undefined>(
 /**
  * Each seat's entered hand: the match row's own (what was true for THIS
  * match), else the seat's profile. A seat id is a login (`users.id`) or a
- * roster profile (`program_players.id`), so both are looked up; seat 2 falls
- * back to `opponent_player_id`. Never a throw: a failed lookup leaves the
- * console to infer the hand.
+ * roster profile (`program_players.id`), so both are looked up. Never a
+ * throw: a failed lookup leaves the console to infer the hand.
  */
 async function readEnteredHands(
   db: AdminClient,
   match: DbMatch | null,
 ): Promise<NonNullable<LabelSession["enteredHands"]>> {
-  const seat1 = match?.player1_id ?? null;
-  const seat2 = match?.player2_id ?? match?.opponent_player_id ?? null;
-  const ids = [seat1, seat2].filter((id): id is string => id !== null);
+  const { ids } = enteredSeats(match);
   const profile = new Map<string, string | null>();
-  if (ids.length > 0) {
+  const wanted = [ids.p1, ids.p2].filter((id): id is string => id !== null);
+  if (wanted.length > 0) {
     const [users, roster] = await Promise.all([
-      db.from("users").select("id, hand").in("id", ids),
-      db.from("program_players").select("id, hand").in("id", ids),
+      db.from("users").select("id, hand").in("id", wanted),
+      db.from("program_players").select("id, hand").in("id", wanted),
     ]);
     for (const row of [...(users.data ?? []), ...(roster.data ?? [])]) {
       if (!profile.get(row.id)) profile.set(row.id, row.hand ?? null);
     }
   }
-  const hand = (entered: string | null | undefined, id: string | null) =>
-    normalizePlayerHand(entered) ??
-    normalizePlayerHand(id ? profile.get(id) : null);
+  return enteredHandsFor(match, (id) => profile.get(id) ?? null);
+}
+
+/**
+ * Which seat the match row's `player_*` / `opponent_*` columns describe, and
+ * each seat's id. `player_*` is the account holder's ("you"), as the match
+ * page reads it (`transformDbMatchToMatch`), not seat 1's: the wizard seats
+ * them first, but a row with only `player2_id` set seats them second (old
+ * SwingVision imports), and then the opponent — `opponent_player_id` when
+ * the row names one — is seat 1.
+ */
+/** What `enteredHandsFor` reads of the match row. */
+export type EnteredHandsRow = Pick<
+  DbMatch,
+  | "player_hand"
+  | "opponent_hand"
+  | "player1_id"
+  | "player2_id"
+  | "opponent_player_id"
+>;
+
+function enteredSeats(match: EnteredHandsRow | null): {
+  youAreP2: boolean;
+  ids: Record<LabelSide, string | null>;
+} {
+  const youAreP2 = !match?.player1_id && !!match?.player2_id;
+  const opponent = match?.opponent_player_id ?? null;
   return {
-    p1: hand(match?.player_hand, seat1),
-    p2: hand(match?.opponent_hand, seat2),
+    youAreP2,
+    ids: youAreP2
+      ? { p1: opponent, p2: match?.player2_id ?? null }
+      : { p1: match?.player1_id ?? null, p2: match?.player2_id ?? opponent },
+  };
+}
+
+/**
+ * The seats' hands from the row's entered columns, else each seat's profile
+ * hand (`profileHand`, by seat id). Pure and exported for the spec.
+ */
+export function enteredHandsFor(
+  match: EnteredHandsRow | null,
+  profileHand: (id: string) => string | null,
+): NonNullable<LabelSession["enteredHands"]> {
+  const { youAreP2, ids } = enteredSeats(match);
+  const you = match?.player_hand ?? null;
+  const opponent = match?.opponent_hand ?? null;
+  const hand = (entered: string | null, id: string | null) =>
+    normalizePlayerHand(entered) ??
+    normalizePlayerHand(id ? profileHand(id) : null);
+  return {
+    p1: hand(youAreP2 ? opponent : you, ids.p1),
+    p2: hand(youAreP2 ? you : opponent, ids.p2),
   };
 }
 

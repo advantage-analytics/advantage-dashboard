@@ -389,9 +389,16 @@ test.describe("buildAppliedRows", () => {
         shot(p, "p1", "first_serve", "out"),
         shot(p, "p1", "second_serve", null),
         shot(p, "p2", "forehand", null),
+        shot(p, "p1", "backhand", null),
       ]),
     ]).points[0];
-    expect(double.shots.map((s) => s.result)).toEqual(["Out", null, null]);
+    // Neither the serve nor the first dead ball is filled.
+    expect(double.shots.map((s) => s.result)).toEqual([
+      "Out",
+      null,
+      null,
+      null,
+    ]);
   });
 
   test("a point with no winner is a problem, not a row", () => {

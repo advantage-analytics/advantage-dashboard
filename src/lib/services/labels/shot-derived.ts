@@ -222,9 +222,10 @@ export function inServeLandingMiss(shot: {
  * next live stroke of its point played was in play, so it is `"in"` — even
  * one met in the air past the baseline, since a ball volleyed is never out.
  * Only an empty result is filled; a stored call is the labeller's or the
- * vendor's and stands. A serve followed by another serve faulted, and no serve
- * of a double fault (`ending`) was in whatever strokes are left after it, so
- * those gaps stay empty. With no next stroke the result is the stored one.
+ * vendor's and stands. A serve followed by another serve faulted, so that gap
+ * stays empty; so does every gap on a double fault (`ending`): its serves
+ * were not in, and any stroke after them is a dead ball nobody played. With
+ * no next stroke the result is the stored one.
  *
  * An added stroke starts with no result, and the volley link moves the
  * stroke before a volley without writing one (volley-link.ts) — this is what
@@ -235,10 +236,10 @@ export function playedOnResult(
   next: Pick<LabelShot, "stroke"> | null | undefined,
   ending: LabelPoint["ending"] = null,
 ): LabelShotResult | null {
-  if (shot.result !== null || !next) return shot.result;
-  if (isServeStroke(shot.stroke)) {
-    if (isServeStroke(next.stroke) || ending === "double_fault") return null;
+  if (shot.result !== null || !next || ending === "double_fault") {
+    return shot.result;
   }
+  if (isServeStroke(shot.stroke) && isServeStroke(next.stroke)) return null;
   return "in";
 }
 

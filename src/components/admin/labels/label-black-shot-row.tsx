@@ -515,8 +515,8 @@ export function BlackShotRow({
    */
   resultMenuOpen?: boolean;
   /**
-   * The stroke's point, for "Split point here" and its ending (a double
-   * fault's serves are never filled In). Absent, no split is offered.
+   * The stroke's point, for "Split point here" and its ending (nothing on a
+   * double fault is filled In). Absent, no split is offered.
    */
   point?: Pick<LabelPoint, "id" | "status" | "shots" | "ending">;
   /** The point's number, for the confirm the console opens. */

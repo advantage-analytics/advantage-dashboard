@@ -407,8 +407,9 @@ export interface LabelSession {
   bestOf: number;
   /**
    * Each side's hand as someone entered it: the match row's
-   * `player_hand` (player 1) / `opponent_hand` (player 2), else that seat's
-   * profile — `users.hand` or the roster's `program_players.hand`. Null where
+   * `player_hand` (the account holder's) / `opponent_hand`, on their seats,
+   * else that seat's profile — `users.hand` or the roster's
+   * `program_players.hand`. Null where
    * nobody entered one; the console then infers it (`labelHands`). Absent on
    * sessions built without the match.
    */
