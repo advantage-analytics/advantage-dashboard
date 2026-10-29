@@ -50,6 +50,7 @@ function personalWorkspace(
   viewer: Viewer,
   individualPilot: boolean,
   unlimitedVideo: boolean,
+  videoHoursOverride: number | null,
 ): Workspace {
   return {
     // Not an invention: `processing_usage` already keys an individual's
@@ -74,6 +75,8 @@ function personalWorkspace(
     individualPilot,
     // `users.is_admin` — see `Workspace.unlimitedVideo`.
     unlimitedVideo,
+    // `users.video_hours_override` — see `Workspace.videoHoursOverride`.
+    videoHoursOverride,
     // No program row, so no status to carry — see `Workspace.programStatus`.
     programStatus: null,
     // A program-wide policy about *other* people, in a workspace whose only
@@ -350,7 +353,7 @@ export const getWorkspaceContext = cache(
       supabase
         .from("users")
         .select(
-          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source, individual_pilot, is_admin, workspace_hint_done_at, activity_hint_done_at, sample_tour_done_at, first_report_tour_done_at, first_report_seen_at, first_match_feedback_done_at",
+          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source, individual_pilot, is_admin, video_hours_override, workspace_hint_done_at, activity_hint_done_at, sample_tour_done_at, first_report_tour_done_at, first_report_seen_at, first_match_feedback_done_at",
         )
         .eq("id", user.id)
         .single(),
@@ -377,6 +380,9 @@ export const getWorkspaceContext = cache(
         viewer,
         row?.individual_pilot === true,
         row?.is_admin === true,
+        row?.video_hours_override == null
+          ? null
+          : Number(row.video_hours_override),
       ),
       ...programs,
     ];

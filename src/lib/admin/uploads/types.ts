@@ -10,6 +10,19 @@
 export const SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE =
   "Submission response was interrupted. Check this operation before retrying with the same file.";
 
+/**
+ * How a console upload into a player's personal workspace is billed — the
+ * administrator's choice, stored on the submission and read back by
+ * `admin_reserve_video_quota`, never taken from a later request:
+ *
+ * - `free`: billed to nobody. The usage lands on the administrator's own
+ *   uncapped account, as an admin's own uploads do.
+ * - `player`: the player's allowance — free monthly hours first (their
+ *   admin-set hours override wins), then credits they bought.
+ */
+export const ADMIN_UPLOAD_BILLINGS = ["free", "player"] as const;
+export type AdminUploadBilling = (typeof ADMIN_UPLOAD_BILLINGS)[number];
+
 /** Durable console provenance; ordinary dashboard writes never create these rows. */
 export type AdminUploadSubmissionKind =
   "file" | "video" | "dual" | "tournament" | "analysis_attachment";
@@ -27,7 +40,12 @@ export interface DbAdminUploadSubmission {
   operation_id: string;
   /** Null only after account deletion; never accepted from the caller. */
   actor_user_id: string | null;
-  program_id: string;
+  /** Null for a personal target: exactly one of this and `personal_user_id`. */
+  program_id: string | null;
+  /** The player whose personal workspace a console video went into. */
+  personal_user_id: string | null;
+  /** How a personal upload is billed; null for a team's. */
+  billing: AdminUploadBilling | null;
   kind: AdminUploadSubmissionKind;
   event_id: string | null;
   setup_result: { [key: string]: AdminUploadJson };

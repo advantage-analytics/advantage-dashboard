@@ -23,8 +23,18 @@ import type { AdminUploadContext } from "@/lib/data/admin-upload-server";
 import { AdminUploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard/admin-mode";
 import {
   adminUploadHref,
+  type AdminPlayerTarget,
   type AdminUploadKind,
 } from "./admin-upload-selection";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { formatHoursShort, isUnlimitedCap } from "@/lib/data/usage-format";
+
+/** The page's target as `adminUploadHref()` takes it. */
+function targetOf(context: AdminUploadContext): string | AdminPlayerTarget {
+  return context.owner
+    ? { player: context.workspace.id, billing: context.owner.billing }
+    : context.workspace.id;
+}
 
 const choices = [
   {
@@ -86,9 +96,14 @@ const TARGETS = [
 function FileOrVideo({
   context,
   kind,
+  started,
+  onStart,
 }: {
   context: AdminUploadContext;
   kind: "file" | "video";
+  /** The team's "Where does it go?" is answered: the page is the wizard now. */
+  started: boolean;
+  onStart: () => void;
 }) {
   // These survive all wizard rerenders and retries; changing the target remounts
   // this boundary so an operation is never reused for another team or source.
@@ -96,6 +111,9 @@ function FileOrVideo({
     operationId: crypto.randomUUID(),
     itemId: crypto.randomUUID(),
   }));
+  // A player's personal workspace takes a new match only: there is no
+  // recorded team result there to attach analysis to.
+  const personal = Boolean(context.owner);
   const [target, setTarget] = useState("new");
   const [options, setOptions] = useState<AdminAttachmentOption[]>([]);
   const [attachment, setAttachment] = useState<AdminWizardMode["attachment"]>();
@@ -129,123 +147,135 @@ function FileOrVideo({
         matchId: target,
         ...ids,
       });
-      if (result.ok) setAttachment(result.attachment);
-      else setError(result.message);
+      if (result.ok) {
+        setAttachment(result.attachment);
+        onStart();
+      } else setError(result.message);
     } catch {
       setError("We couldn’t prepare this result. Try again.");
     } finally {
       setPending(false);
     }
   }
+  // "Where does it go?" is its own screen, under the page's kind cards, and
+  // the wizard is the next one: never both at once. A player's personal
+  // workspace has only a new match, so it goes straight to the wizard.
+  const inWizard = personal || started || attachment !== undefined;
+  if (inWizard)
+    return (
+      <AdminUploadMatchFlow
+        mode={{
+          context,
+          ...ids,
+          attachment,
+          exitHref: adminUploadHref(targetOf(context), null),
+          successHref: "/admin/uploads",
+          uploadKind: kind,
+        }}
+        initialProvider={kind === "file" ? "swing-vision" : "splitstep"}
+      />
+    );
   return (
-    <div className="flex flex-col gap-5">
-      {!attachment && (
-        // The wizard below is full-bleed; this row belongs to the page's column.
-        <section
-          aria-label="Analysis target"
-          className="mx-auto flex w-full max-w-[1000px] flex-col gap-3 px-6"
-        >
-          <fieldset disabled={pending} className="flex flex-col gap-3">
-            <legend className="mb-3 text-[12px] text-[var(--ink-600)]">
-              Where does it go?
-            </legend>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {TARGETS.map(({ value, label, detail }) => {
-                const checked = (target === "new") === (value === "new");
-                return (
-                  <label
-                    key={value}
-                    className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] py-4 ${checked ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
-                  >
-                    <span className="relative mt-[3px] size-3.5 shrink-0">
-                      <input
-                        type="radio"
-                        name="analysis-target"
-                        value={value}
-                        checked={checked}
-                        onChange={
-                          value === "new"
-                            ? () => {
-                                setTarget("new");
-                                setError(null);
-                              }
-                            : chooseExisting
-                        }
-                        className={CHECK_DOT_INPUT}
-                      />
-                      {checked && (
-                        <Check
-                          aria-hidden="true"
-                          className={CHECK_DOT_MARK}
-                          strokeWidth={2.5}
-                        />
-                      )}
-                    </span>
-                    <span className="flex min-w-0 flex-col gap-1">
-                      <span className="text-[13px] font-medium">{label}</span>
-                      <span className="text-[12px] text-[var(--ink-600)]">
-                        {detail}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-          {target !== "new" && (
-            <>
-              <label className="flex flex-col gap-2 text-[12px] text-[var(--ink-600)]">
-                Recorded result
-                <select
-                  aria-label="Recorded result"
-                  className={advField("boxed")}
-                  value={target === "existing" ? "" : target}
-                  disabled={pending}
-                  onChange={(e) => setTarget(e.target.value || "existing")}
-                >
-                  <option value="">Choose a recorded result</option>
-                  {options.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {!pending && options.length === 0 && (
-                <p role="status" className="text-[13px] text-[var(--ink-600)]">
-                  No eligible recorded results for this analysis kind.
-                </p>
-              )}
-              <button
-                type="button"
-                className={`${advButton("primary", "md")} self-start`}
-                disabled={pending || target === "existing"}
-                onClick={prepare}
+    <section
+      aria-label="Analysis target"
+      className="mx-auto flex w-full max-w-[1000px] flex-col gap-3 px-6 pb-12"
+    >
+      <fieldset disabled={pending} className="flex flex-col gap-3">
+        <legend className="mb-3 text-[12px] text-[var(--ink-600)]">
+          Where does it go?
+        </legend>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {TARGETS.map(({ value, label, detail }) => {
+            const checked = (target === "new") === (value === "new");
+            return (
+              <label
+                key={value}
+                className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] py-4 ${checked ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
               >
-                {pending ? "Loading…" : "Use recorded result"}
-              </button>
-            </>
-          )}
-          {error && (
-            <p role="alert" className="text-[13px] text-[var(--error)]">
-              {error}
+                <span className="relative mt-[3px] size-3.5 shrink-0">
+                  <input
+                    type="radio"
+                    name="analysis-target"
+                    value={value}
+                    checked={checked}
+                    onChange={
+                      value === "new"
+                        ? () => {
+                            setTarget("new");
+                            setError(null);
+                          }
+                        : chooseExisting
+                    }
+                    className={CHECK_DOT_INPUT}
+                  />
+                  {checked && (
+                    <Check
+                      aria-hidden="true"
+                      className={CHECK_DOT_MARK}
+                      strokeWidth={2.5}
+                    />
+                  )}
+                </span>
+                <span className="flex min-w-0 flex-col gap-1">
+                  <span className="text-[13px] font-medium">{label}</span>
+                  <span className="text-[12px] text-[var(--ink-600)]">
+                    {detail}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+      {target !== "new" && (
+        <>
+          <label className="flex flex-col gap-2 text-[12px] text-[var(--ink-600)]">
+            Recorded result
+            <select
+              aria-label="Recorded result"
+              className={advField("boxed")}
+              value={target === "existing" ? "" : target}
+              disabled={pending}
+              onChange={(e) => setTarget(e.target.value || "existing")}
+            >
+              <option value="">Choose a recorded result</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!pending && options.length === 0 && (
+            <p role="status" className="text-[13px] text-[var(--ink-600)]">
+              No eligible recorded results for this analysis kind.
             </p>
           )}
-        </section>
+          <button
+            type="button"
+            className={`${advButton("primary", "md")} self-start`}
+            disabled={pending || target === "existing"}
+            onClick={prepare}
+          >
+            {pending ? "Loading…" : "Use recorded result"}
+          </button>
+        </>
       )}
-      {(target === "new" || attachment) && (
-        <AdminUploadMatchFlow
-          mode={{
-            context,
-            ...ids,
-            attachment,
-            exitHref: adminUploadHref(context.workspace.id, null),
-            successHref: "/admin/uploads",
-          }}
-          initialProvider={kind === "file" ? "swing-vision" : "splitstep"}
-        />
+      {target === "new" && (
+        <button
+          type="button"
+          className={`${advButton("primary", "md")} self-start`}
+          onClick={onStart}
+        >
+          Continue
+        </button>
       )}
-    </div>
+      {error && (
+        <p role="alert" className="text-[13px] text-[var(--error)]">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -266,150 +296,220 @@ export function AdminUploadEntry({
   tournamentResult?: ReactNode;
 }) {
   const router = useRouter();
-  const team = context?.workspace.id ?? null;
+  const team = context ? targetOf(context) : null;
+  const personal = Boolean(context?.owner);
   const wizardBelow = Boolean(context) && (kind === "file" || kind === "video");
+  // Once a match file or video is picked the page is the wizard alone (board
+  // UploadFor): step 1's Workspace field changes the target, and the wizard's
+  // Cancel comes back here to the kind cards. An error keeps the page above
+  // it, since that is where its way out lives.
+  // Which file/video boundary has had its "Where does it go?" answered —
+  // keyed so another target or kind starts on that question again.
+  const boundaryKey = `${team ? adminUploadHref(team, null) : ""}:${kind}`;
+  const [startedKey, setStartedKey] = useState<string | null>(null);
+  const started = startedKey === boundaryKey;
+  const wizardOnly = wizardBelow && !error && (personal || started);
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <main
-        className={`mx-auto flex w-full max-w-[1000px] flex-col gap-6 px-6 pt-9 ${wizardBelow ? "pb-6" : "pb-12"}`}
-      >
-        <div className="flex flex-col gap-1.5">
-          <h1 className="text-display">Upload for a team</h1>
-          <p className="text-[13px] text-[var(--ink-600)]">
-            Add match files, videos and results to the team’s workspace
-          </p>
-        </div>
-        {error && (
-          <div
-            role="alert"
-            className="flex flex-wrap items-center gap-3 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] p-3 text-[13px] text-[var(--ink-700)]"
-          >
-            <span>{error}</span>
-            <Link
-              href={adminUploadHref(null, kind)}
-              className="text-[var(--blue)]"
-            >
-              Choose another team
-            </Link>
-            <button
-              type="button"
-              onClick={() => router.refresh()}
-              className="cursor-pointer text-[var(--blue)]"
-            >
-              Try again
-            </button>
+      {!wizardOnly && (
+        <main
+          className={`mx-auto flex w-full max-w-[1000px] flex-col gap-6 px-6 pt-9 ${wizardBelow ? "pb-6" : "pb-12"}`}
+        >
+          <div className="flex flex-col gap-1.5">
+            <h1 className="text-display">Upload a match</h1>
+            <p className="text-[13px] text-[var(--ink-600)]">
+              Add match files, videos and results to a team’s workspace, or a
+              match video to a player’s own
+            </p>
           </div>
-        )}
-        {context ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <span
-              aria-hidden="true"
-              className="flex size-7 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[11px] font-medium"
+          {error && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] p-3 text-[13px] text-[var(--ink-700)]"
             >
-              {context.workspace.mark}
-            </span>
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="text-[14px] font-medium">
-                {[context.workspace.name, squadLabel(context.workspace.team)]
-                  .filter(Boolean)
-                  .join(" ")}
-              </span>
-              <span className="text-[12px] text-[var(--ink-600)]">
-                {STATUS_LABEL[context.workspace.programStatus ?? ""] ??
-                  "Status unknown"}{" "}
-                · {(context.videoAllowance.remainingSeconds / 3600).toFixed(1)}{" "}
-                h of video left this month
-              </span>
-            </div>
-            <Link
-              href={adminUploadHref(null, kind)}
-              className="text-[12px] text-[var(--blue)]"
-            >
-              Change team
-            </Link>
-          </div>
-        ) : (
-          picker
-        )}
-        <fieldset className="flex flex-col gap-3">
-          <legend className="mb-3 text-[12px] text-[var(--ink-600)]">
-            What are you adding?
-          </legend>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {choices.map(({ kind: value, label, detail, icon: Icon }) => (
-              <label
-                key={value}
-                className={`relative flex cursor-pointer flex-col gap-1 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] pt-[18px] pb-5 ${kind === value ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
+              <span>{error}</span>
+              <Link
+                href={adminUploadHref(null, kind)}
+                className="text-[var(--blue)]"
               >
-                <span className="absolute top-4 right-4 size-3.5">
-                  <input
-                    type="radio"
-                    name="upload-kind"
-                    value={value}
-                    checked={kind === value}
-                    onChange={() => router.push(adminUploadHref(team, value))}
-                    aria-label={label}
-                    className={CHECK_DOT_INPUT}
-                  />
-                  {kind === value && (
-                    <Check
-                      aria-hidden="true"
-                      className={CHECK_DOT_MARK}
-                      strokeWidth={2.5}
-                    />
-                  )}
+                Choose another team or player
+              </Link>
+              <button
+                type="button"
+                onClick={() => router.refresh()}
+                className="cursor-pointer text-[var(--blue)]"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+          {context?.owner ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <PersonAvatar
+                initials={context.owner.viewer.initials}
+                photoUrl={context.owner.viewer.avatarUrl}
+                className="size-7 text-[11px]"
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-[14px] font-medium">
+                  {context.owner.viewer.name}
                 </span>
-                <span className="mb-2 flex size-9 items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-subtle)]">
-                  <Icon
-                    className="size-[18px]"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                </span>
-                <span className="text-[13px] font-medium">{label}</span>
                 <span className="text-[12px] text-[var(--ink-600)]">
-                  {detail}
+                  Personal workspace ·{" "}
+                  {context.owner.billing === "free"
+                    ? "Free"
+                    : isUnlimitedCap(context.videoAllowance.remainingSeconds)
+                      ? "Player’s allowance"
+                      : `Player’s allowance · ${formatHoursShort(context.videoAllowance.remainingSeconds)} h left this month`}
                 </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        {context && (kind === "dual" || kind === "tournament") && (
-          <section
-            aria-label={`${kind === "dual" ? "Dual" : "Tournament"} result`}
-            className="rounded-[var(--radius-card)] border border-[var(--border-card)] p-6 shadow-[var(--shadow-card)]"
-          >
-            {(kind === "dual" ? dualResult : tournamentResult) ?? (
-              <p role="status" className="text-[13px] text-[var(--ink-600)]">
-                {kind === "dual" ? "Dual" : "Tournament"} result entry is coming
-                soon. Choose a match file or video to continue.
-              </p>
-            )}
-          </section>
-        )}
-        {!context && (
-          <p className="text-[13px] text-[var(--ink-600)]">
-            Choose a team to continue.
-          </p>
-        )}
-        {context && !kind && (
-          <p className="text-[13px] text-[var(--ink-600)]">
-            Choose what you’re adding to continue.
-          </p>
-        )}
-        {/* The wizard carries its own Cancel, and this line would otherwise
+              </div>
+              <Link
+                href={adminUploadHref(null, kind)}
+                className="text-[12px] text-[var(--blue)]"
+              >
+                Change player
+              </Link>
+            </div>
+          ) : context ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <span
+                aria-hidden="true"
+                className="flex size-7 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[11px] font-medium"
+              >
+                {context.workspace.mark}
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-[14px] font-medium">
+                  {[context.workspace.name, squadLabel(context.workspace.team)]
+                    .filter(Boolean)
+                    .join(" ")}
+                </span>
+                <span className="text-[12px] text-[var(--ink-600)]">
+                  {STATUS_LABEL[context.workspace.programStatus ?? ""] ??
+                    "Status unknown"}{" "}
+                  ·{" "}
+                  {(context.videoAllowance.remainingSeconds / 3600).toFixed(1)}{" "}
+                  h of video left this month
+                </span>
+              </div>
+              <Link
+                href={adminUploadHref(null, kind)}
+                className="text-[12px] text-[var(--blue)]"
+              >
+                Change team
+              </Link>
+            </div>
+          ) : (
+            picker
+          )}
+          <fieldset className="flex flex-col gap-3">
+            <legend className="mb-3 text-[12px] text-[var(--ink-600)]">
+              What are you adding?
+            </legend>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {choices.map(({ kind: value, label, detail, icon: Icon }) => {
+                // A player's personal workspace takes match video only.
+                const unavailable = personal && value !== "video";
+                return (
+                  <label
+                    key={value}
+                    className={`relative flex flex-col gap-1 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] pt-[18px] pb-5 ${unavailable ? "cursor-default opacity-60" : "cursor-pointer"} ${kind === value ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : unavailable ? "border-[var(--border-field)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
+                  >
+                    <span className="absolute top-4 right-4 size-3.5">
+                      <input
+                        type="radio"
+                        name="upload-kind"
+                        value={value}
+                        checked={kind === value}
+                        disabled={unavailable}
+                        onChange={() =>
+                          router.push(adminUploadHref(team, value))
+                        }
+                        aria-label={label}
+                        className={CHECK_DOT_INPUT}
+                      />
+                      {kind === value && (
+                        <Check
+                          aria-hidden="true"
+                          className={CHECK_DOT_MARK}
+                          strokeWidth={2.5}
+                        />
+                      )}
+                    </span>
+                    <span className="mb-2 flex size-9 items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-subtle)]">
+                      <Icon
+                        className="size-[18px]"
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    </span>
+                    <span className="text-[13px] font-medium">{label}</span>
+                    <span className="text-[12px] text-[var(--ink-600)]">
+                      {unavailable
+                        ? "Teams only"
+                        : personal && value === "video"
+                          ? "Into their personal workspace"
+                          : !context && value === "video"
+                            ? "A team’s hours, or a player’s own"
+                            : detail}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+          {context && (kind === "dual" || kind === "tournament") && (
+            <section
+              aria-label={`${kind === "dual" ? "Dual" : "Tournament"} result`}
+              className="rounded-[var(--radius-card)] border border-[var(--border-card)] p-6 shadow-[var(--shadow-card)]"
+            >
+              {(kind === "dual" ? dualResult : tournamentResult) ?? (
+                <p role="status" className="text-[13px] text-[var(--ink-600)]">
+                  {kind === "dual" ? "Dual" : "Tournament"} result entry is
+                  coming soon. Choose a match file or video to continue.
+                </p>
+              )}
+            </section>
+          )}
+          {!context && (
+            <p className="text-[13px] text-[var(--ink-600)]">
+              Choose a team or player to continue.
+            </p>
+          )}
+          {context && !kind && (
+            <p className="text-[13px] text-[var(--ink-600)]">
+              Choose what you’re adding to continue.
+            </p>
+          )}
+          {/* The wizard carries its own Cancel, and this line would otherwise
             sit between the two questions it should follow. */}
-        {!wizardBelow && (
-          <div className="flex flex-wrap items-center justify-between gap-4 text-[12px] text-[var(--ink-600)]">
-            <span>Uploads are attributed to the selected team.</span>
-            <Link href="/admin/uploads" className="hover:text-[var(--ink-900)]">
-              Cancel
-            </Link>
-          </div>
-        )}
-      </main>
+          {!wizardBelow && (
+            <div className="flex flex-wrap items-center justify-between gap-4 text-[12px] text-[var(--ink-600)]">
+              <span>
+                {personal
+                  ? "The match is saved in the player’s personal workspace."
+                  : context
+                    ? "Uploads are attributed to the selected team."
+                    : "Uploads are attributed to the selected team or player."}
+              </span>
+              <Link
+                href="/admin/uploads"
+                className="hover:text-[var(--ink-900)]"
+              >
+                Cancel
+              </Link>
+            </div>
+          )}
+        </main>
+      )}
       {context && wizardBelow && (kind === "file" || kind === "video") && (
-        <FileOrVideo key={`${team}:${kind}`} context={context} kind={kind} />
+        <FileOrVideo
+          key={boundaryKey}
+          context={context}
+          kind={kind}
+          started={started}
+          onStart={() => setStartedKey(boundaryKey)}
+        />
       )}
     </div>
   );

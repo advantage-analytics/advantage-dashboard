@@ -715,3 +715,52 @@ export async function listAdminRequests({
 
   return mergeRequestRows(claimRows, requestRows, limit);
 }
+
+// ---------------------------------------------------------------------------
+// View counts — the "Waiting on you · 3" pills
+// ---------------------------------------------------------------------------
+
+/**
+ * How many rows each view holds, by the same filters `listAdminRequests`
+ * applies — head-only counts, so the pills cost six cheap queries rather
+ * than four full reads. A failed count reads as null, which the pill draws
+ * as no count at all rather than a zero it never measured.
+ */
+export async function countAdminRequests(): Promise<
+  Record<AdminRequestsView, number | null>
+> {
+  await requireAdminOrNotFound();
+  const admin = createAdminClient();
+  const claims = () =>
+    admin.from("program_claims").select("id", { count: "exact", head: true });
+  const requests = () =>
+    admin.from("program_requests").select("id", { count: "exact", head: true });
+
+  const [
+    claimsWaiting,
+    claimsVerifying,
+    claimsLive,
+    claimsClosed,
+    requestsOpen,
+    requestsClosed,
+  ] = await Promise.all([
+    claims().in("status", NEEDS_DECISION_CLAIM_STATUSES),
+    claims().not("verification_sent_at", "is", null).is("verified_at", null),
+    claims().in("status", LIVE_CLAIM_STATUSES),
+    claims().eq("status", "rejected"),
+    requests().eq("status", "open"),
+    requests().in("status", ["resolved", "dismissed"]),
+  ]);
+
+  const n = (...results: { count: number | null; error: unknown }[]) =>
+    results.some((result) => result.error || result.count === null)
+      ? null
+      : results.reduce((sum, result) => sum + (result.count ?? 0), 0);
+
+  return {
+    waiting: n(claimsWaiting, requestsOpen),
+    verifying: n(claimsVerifying),
+    live: n(claimsLive),
+    closed: n(claimsClosed, requestsClosed),
+  };
+}

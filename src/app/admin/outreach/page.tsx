@@ -1,4 +1,5 @@
 import { OutreachPageContent } from "@/components/admin/outreach-page-content";
+import { loadOutreachCrests } from "@/lib/data/outreach-admin-server";
 import {
   loadPrograms,
   loadRecipients,
@@ -55,6 +56,7 @@ export default async function AdminOutreachPage({
   let sends: Awaited<ReturnType<typeof loadSends>> = [];
   let programs: OutreachProgram[] = [];
   let customized: number[] = [];
+  let crests: Record<string, string> = {};
   try {
     const [loadedRecipients, loadedSends, templates] = await Promise.all([
       loadRecipients(),
@@ -65,9 +67,12 @@ export default async function AdminOutreachPage({
     sends = loadedSends;
     customized = [...templates.keys()];
     // Only the programs the lists point at; the client needs nothing else.
-    programs = await loadPrograms(
-      recipients.flatMap((recipient) => recipient.programKeys),
-    );
+    const keys = recipients.flatMap((recipient) => recipient.programKeys);
+    [programs, crests] = await Promise.all([
+      loadPrograms(keys),
+      // A missing crest is a blank square, never a failed page.
+      loadOutreachCrests(keys).catch(() => ({})),
+    ]);
   } catch (error) {
     // Before the migrations run there are no tables to read. Say so instead of
     // throwing the whole admin area into its error boundary.
@@ -80,6 +85,7 @@ export default async function AdminOutreachPage({
       recipients={recipients}
       sends={sends}
       programs={programs}
+      crests={crests}
       customizedEmails={customized}
       adminEmail={user?.email ?? ""}
       postalSet={Boolean(process.env.OUTREACH_POSTAL_ADDRESS?.trim())}

@@ -101,9 +101,17 @@ export interface SessionTruthJoin {
   excluded: number;
 }
 
-/** The label session's truth rows: checked and not deleted. */
-export function isTruthPoint(point: TruthLabelPoint): boolean {
-  return point.checkedAt !== null && point.status !== "deleted";
+/**
+ * The label session's truth rows: checked and not deleted. `includeUnchecked`
+ * also takes the undeleted points nobody has checked yet.
+ */
+export function isTruthPoint(
+  point: TruthLabelPoint,
+  includeUnchecked = false,
+): boolean {
+  return (
+    point.status !== "deleted" && (includeUnchecked || point.checkedAt !== null)
+  );
 }
 
 export function sideName(side: LabelSide | null, names: TruthNames) {
@@ -130,6 +138,11 @@ export function joinSessionTruth(args: {
   /** `proposedPointsOf(proposal, rallyIds)`, or null without a proposal. */
   proposed: ReadonlyMap<number, ProposedPoint> | null;
   names: TruthNames;
+  /**
+   * Read unchecked, undeleted points as truth too — for a complete session,
+   * where the labeller left a point unticked because it was already right.
+   */
+  includeUnchecked?: boolean;
 }): SessionTruthJoin {
   const byRally = new Map(args.points.map((p) => [p.rally_id, p]));
   const rows: SessionTruthRow[] = [];
@@ -142,7 +155,7 @@ export function joinSessionTruth(args: {
     : new Set<number>();
 
   for (const label of args.labels) {
-    if (!isTruthPoint(label)) {
+    if (!isTruthPoint(label, args.includeUnchecked)) {
       excluded += 1;
       continue;
     }
@@ -315,13 +328,17 @@ export function scoreSessionTruth(
 export function compareMerges(
   proposal: Pick<SegmentationProposal, "merges"> | null,
   labels: readonly TruthLabelPoint[],
+  /** As `joinSessionTruth`'s: unchecked, undeleted points count too. */
+  includeUnchecked = false,
 ): {
   proposed: Array<[number, number]>;
   labelled: number[][];
   agreed: Array<[number, number]>;
 } {
   const labelled = labels
-    .filter((l) => isTruthPoint(l) && l.vendorRallyIds.length > 1)
+    .filter(
+      (l) => isTruthPoint(l, includeUnchecked) && l.vendorRallyIds.length > 1,
+    )
     .map((l) => [...l.vendorRallyIds]);
   const proposed = (proposal?.merges ?? []).map(
     ([a, b]) => [a, b] as [number, number],

@@ -1,3 +1,6 @@
+-- Applied live 2026-10-26 as version 20261026190849, right after the production deploy
+-- that ships the code it pairs with.
+--
 -- Write-once identity: once set, the account itself can no longer change its
 -- date of birth, its persona, or the guardian fields.
 --
@@ -9,7 +12,7 @@
 --   users.junior_class_year
 --
 -- Why: these decide whether an account may hold an account at all, may join
--- a team (`join_age_refusal()`, 20261026080000), and whether its video may
+-- a team (`join_age_refusal()`, 20261026190848), and whether its video may
 -- ever train models (`training_excluded_for()`, 20261026061018). All five are
 -- column-granted to `authenticated` (20260914100000), so before this a
 -- signed-in browser could PATCH an under-13's `dob` to an adult date, or a
@@ -35,7 +38,7 @@
 -- revoking UPDATE would also take away the first write the app's own flows
 -- make with the session client.
 --
--- APPLY WITH THE DEPLOY, alongside 20261025230000 and 20261026080000. Applied
+-- APPLY WITH THE DEPLOY, alongside 20261026190847 and 20261026190848. Applied
 -- early it is harmless to production's flows (they only ever fill these
 -- columns), but Settings › Profile on the code before this change sends the
 -- stored `dob` back on every save, so an edited date there would start

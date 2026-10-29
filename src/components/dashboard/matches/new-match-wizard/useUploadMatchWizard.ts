@@ -855,6 +855,9 @@ export function useUploadMatchWizard({
 }: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
   const admin = useAdminWizardMode();
   const isAdminMode = Boolean(admin);
+  // A server prop, so stable across renders — unlike `admin`, which the
+  // console rebuilds on every render of its page.
+  const adminOwner = admin?.context.owner ?? null;
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   // The workspace this match will belong to and be billed against. Resolved
@@ -1873,23 +1876,38 @@ export function useUploadMatchWizard({
     // doesn't retype it for every match. Skips if any stored data exists for
     // playerName (the user has already typed something they want preserved).
     let cancelled = false;
+    // The admin console uploading into a player's personal workspace: the
+    // match is the player's, so the name and style are theirs — read on the
+    // server with the context — and never the signed-in administrator's.
+    const owner = adminOwner;
     (async () => {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (cancelled || !user) return;
-        cachedUserIdRef.current = user.id;
-        const { data: profile } = await supabase
-          .from("users")
-          .select("first_name, last_name, hand, backhand")
-          .eq("id", user.id)
-          .single();
+        let profile: {
+          hand: string | null;
+          backhand: string | null;
+        } | null;
+        let fullName: string;
+        if (owner) {
+          profile = { hand: owner.hand, backhand: owner.backhand };
+          fullName = owner.viewer.name;
+        } else {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (cancelled || !user) return;
+          cachedUserIdRef.current = user.id;
+          const { data: own } = await supabase
+            .from("users")
+            .select("first_name, last_name, hand, backhand")
+            .eq("id", user.id)
+            .single();
+          profile = own;
+          fullName = [own?.first_name, own?.last_name]
+            .filter(Boolean)
+            .join(" ")
+            .trim();
+        }
         if (cancelled) return;
-        const fullName = [profile?.first_name, profile?.last_name]
-          .filter(Boolean)
-          .join(" ")
-          .trim();
         // Kept regardless of whether the prefill below applies — the
         // who-played picker's "Myself" row reads it back.
         setUploaderName(fullName || null);
@@ -1942,6 +1960,7 @@ export function useUploadMatchWizard({
     resetFileGeneration,
     initialProvider,
     isAdminMode,
+    adminOwner,
     formatDefaults,
     storageWorkspaceKey,
   ]);
@@ -3360,11 +3379,22 @@ export function useUploadMatchWizard({
 
       try {
         if (admin) {
-          const identity = {
-            operationId: admin.operationId,
-            itemId: admin.itemId,
-            programId: activeWorkspace.id,
-          };
+          // A team is named by its program; a player's personal workspace by
+          // the player and how the upload is billed (`personalUserId`,
+          // `billing`). The route re-resolves either from these ids.
+          const owner = admin.context.owner;
+          const identity = owner
+            ? {
+                operationId: admin.operationId,
+                itemId: admin.itemId,
+                personalUserId: activeWorkspace.id,
+                billing: owner.billing,
+              }
+            : {
+                operationId: admin.operationId,
+                itemId: admin.itemId,
+                programId: activeWorkspace.id,
+              };
           const attachment = admin.attachment;
           const target = attachment
             ? {

@@ -16,7 +16,7 @@ import {
 
 /**
  * `users_write_once_identity`'s guarantee, against a live database
- * (`20261026090000_users_write_once_identity.sql`):
+ * (`20261026190849_users_write_once_identity.sql`):
  *
  * a signed-in user may FILL `dob`, `role`, `guardian_consent_at`,
  * `junior_player_name` and `junior_class_year` on their own row — which is

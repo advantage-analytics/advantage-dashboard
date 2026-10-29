@@ -1,18 +1,20 @@
 /**
  * Column tracks for the Admin › Conferences table.
  *
- * The frame's grid is `minmax(0,1fr) 64px 56px 104px 48px`; these are the same
- * tracks as flex widths, the shape `requests-table-layout.ts` and
- * `teams-table-layout.ts` use. Conference is the one fluid cell (Data Table
- * law 1). The three counts are measures compared down their columns, so they
- * sit flush right — header and value on one x.
+ * Conferences2's grid is `minmax(240px,1fr) 84px 56px 160px 48px 13px`; these
+ * are the same tracks as flex widths, the shape `requests-table-layout.ts`
+ * and `teams-table-layout.ts` use. Conference is the one fluid cell (Data
+ * Table law 1). Teams and Pilot are counts compared down their columns, so
+ * they sit flush right; On Advantage is "5 of 18" over a thin bar, read left
+ * to right like the board.
  */
 export const COL = {
-  conference: "min-w-0 flex-1",
-  division: "w-[64px] shrink-0",
+  conference: "min-w-[240px] flex-1",
+  division: "w-[84px] shrink-0",
   teams: "w-[56px] shrink-0 text-right",
-  onAdvantage: "w-[104px] shrink-0 text-right",
+  onAdvantage: "w-[160px] shrink-0",
   pilot: "w-[48px] shrink-0 text-right",
+  chevron: "w-[13px] shrink-0",
 } as const;
 
 export const ROW = "flex items-center gap-4";
@@ -34,6 +36,7 @@ export const CONFERENCES_COLUMNS: readonly {
   { label: "Teams", col: COL.teams },
   { label: "On Advantage", col: COL.onAdvantage },
   { label: "Pilot", col: COL.pilot },
+  { label: "", col: COL.chevron },
 ];
 
 /**

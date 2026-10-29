@@ -71,6 +71,9 @@ export function UploadMatchSuccess({
   exitHref,
   preset,
   returnTo = null,
+  matchHref = `/dashboard/matches/${match.matchId}`,
+  doneLink = null,
+  canResubmit = true,
 }: {
   match: CreatedMatch;
   /** Null until the transfer's `"started"` event lands, and for imports. */
@@ -84,6 +87,20 @@ export function UploadMatchSuccess({
   preset: EventPreset | null;
   /** Ask handed this visit off: the quiet exit goes back there, naming this match. */
   returnTo?: WizardReturnTarget | null;
+  /**
+   * Where View match opens. The admin console uploading into a player's
+   * personal workspace cannot open the player's dashboard page (it is
+   * theirs), so it passes its own match page.
+   */
+  matchHref?: string;
+  /** Replaces the matches-list exit: the console's way back to its uploads. */
+  doneLink?: { href: string; label: string } | null;
+  /**
+   * Whether a failed hand-off offers "Try again". The console's own claim only
+   * takes a job that is still `uploaded`, so a console job that failed is an
+   * administrator's review, not a button.
+   */
+  canResubmit?: boolean;
 }) {
   // Only an import waits on its stats here; a video's analysis is reported
   // by its job, on the match page, long after this screen.
@@ -97,7 +114,6 @@ export function UploadMatchSuccess({
   // starting, uploading, handing off. This screen's own links do not: each
   // is a deliberate exit it offers.
   useLeaveGuard(view.busy);
-  const matchHref = `/dashboard/matches/${match.matchId}`;
   const backToEvent = preset !== null && preset.eventHref !== matchHref;
 
   return (
@@ -124,7 +140,13 @@ export function UploadMatchSuccess({
               value={step.value}
               last={index === view.steps.length - 1}
             >
-              {stepBody(step.key, view, match, upload, onResubmitted)}
+              {stepBody(
+                step.key,
+                view,
+                match,
+                upload,
+                canResubmit ? onResubmitted : null,
+              )}
             </VerticalStep>
           ))}
         </ol>
@@ -173,7 +195,11 @@ export function UploadMatchSuccess({
             // A visit Ask handed off goes back to Ask, naming the match it
             // sent, so that page can say it is on its way.
             !view.busy &&
-            (returnTo === "ask" ? (
+            (doneLink ? (
+              <Link href={doneLink.href} className={QUIET_LINK}>
+                {doneLink.label}
+              </Link>
+            ) : returnTo === "ask" ? (
               <Link href={askReturnHref(match.matchId)} className={QUIET_LINK}>
                 Back to Ask
               </Link>
@@ -418,7 +444,8 @@ function stepBody(
   view: SuccessView,
   match: CreatedMatch,
   upload: UploadState | null,
-  onResubmitted: () => void,
+  /** Null when "Try again" is not offered (`canResubmit`). */
+  onResubmitted: (() => void) | null,
 ): ReactNode {
   const step = view.steps.find((s) => s.key === key);
   if (!step) return null;
@@ -442,10 +469,11 @@ function stepBody(
         return (
           <>
             <p className={NOTE}>
-              Your video is stored. Trying again reuses it, so nothing uploads
-              twice.
+              {onResubmitted
+                ? "Your video is stored. Trying again reuses it, so nothing uploads twice."
+                : "Your video is stored. Administrator review is required before another attempt."}
             </p>
-            {upload?.jobId && (
+            {upload?.jobId && onResubmitted && (
               <ResubmitButton
                 jobId={upload.jobId}
                 onResubmitted={onResubmitted}

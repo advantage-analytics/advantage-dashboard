@@ -1,13 +1,15 @@
 "use client";
 
-import { CheckCircle2, Inbox, Mail, MailOpen } from "lucide-react";
-import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
-import { EmptyMark } from "@/components/ui/empty-mark";
+import { Inbox } from "lucide-react";
+import {
+  AdminPersonCell,
+  TwoLineDate,
+  WorkspaceMark,
+} from "@/components/admin/admin-cells";
 import {
   TableEmptyBody,
   type TableEmptyAction,
 } from "@/components/dashboard/shared/table-empty-body";
-import { shortDate } from "@/lib/data/match-utils";
 import { cn } from "@/lib/utils";
 import type {
   AdminRequestEmailCheck,
@@ -26,7 +28,9 @@ import {
  * rows are **container rows** (Data Table law 3), not record rows: there is
  * no `/admin/requests/[id]` report to navigate to — a request or claim opens
  * a peek drawer (T15) with the selection wash persisting on the open row.
- * That means no `<Link>` and no trailing chevron, unlike `TeamsTable`. The
+ * That means no `<Link>` and no trailing chevron, unlike `TeamsTable` (the
+ * Requests2 board draws one; the table law that a chevron means "this row
+ * navigates" outranks it, since the row opens a drawer here). The
  * click affordance instead lives on a `role="button"` row: click or
  * Enter/Space call `onSelect`, mirroring `team/roster-table.tsx`'s
  * `MemberRow` (the other container-row table in the product) rather than
@@ -59,6 +63,7 @@ export function RequestsTable({
   emptyTitle = "No requests match this view",
   emptyAction,
   selectedId = null,
+  freshIds,
   onSelect,
 }: {
   rows: readonly AdminRequestRow[];
@@ -67,12 +72,14 @@ export function RequestsTable({
   emptyAction?: TableEmptyAction;
   /** The row currently open in the peek drawer, if any (T15). */
   selectedId?: string | null;
+  /** Rows to mark New since the admin last looked (`lookAtSurface`). */
+  freshIds?: ReadonlySet<string>;
   /** Called with the row after it's clicked or activated by keyboard. No-op if omitted. */
   onSelect?: (row: AdminRequestRow) => void;
 }) {
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[760px] px-6 pt-0.5 pb-1.5">
+      <div className="min-w-[640px] px-6 pt-0.5 pb-1.5">
         <div
           className={cn(
             ROW,
@@ -98,6 +105,7 @@ export function RequestsTable({
               key={row.id}
               row={row}
               selected={row.id === selectedId}
+              fresh={freshIds?.has(row.id) ?? false}
               onSelect={onSelect}
             />
           ))
@@ -110,10 +118,12 @@ export function RequestsTable({
 function RequestRow({
   row,
   selected,
+  fresh,
   onSelect,
 }: {
   row: AdminRequestRow;
   selected: boolean;
+  fresh: boolean;
   onSelect?: (row: AdminRequestRow) => void;
 }) {
   return (
@@ -132,7 +142,7 @@ function RequestRow({
       }}
       className={cn(
         ROW,
-        "-mx-4 h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4",
+        "-mx-4 h-[64px] cursor-pointer rounded-[var(--radius-element)] px-4",
         "transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-muted)]",
         "focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
         // The peek drawer's selection wash persists on the open row — see
@@ -140,105 +150,102 @@ function RequestRow({
         selected && "bg-[var(--surface-muted)]",
       )}
     >
-      {/* Date — leads the row (Data Table law 1: newest-first lists lead
-          with the date). */}
-      <span
-        className={cn(COL.date, "tabular text-[12px] text-[var(--ink-700)]")}
-      >
-        {shortDate(row.date)}
+      {/* Request — who asked, in what role, and the program under them. */}
+      <span className={cn(COL.request, "flex min-w-0")}>
+        <AdminPersonCell
+          name={row.from.name}
+          rest={requestRole(row)}
+          sub={<RequestSubject row={row} />}
+          fresh={fresh}
+        />
       </span>
 
-      {/* Team — crest + name. */}
-      <span className={cn(COL.team, "flex min-w-0 items-center gap-2.5")}>
-        <ProgramCrest name={row.team} crestUrl={row.crestUrl} size={26} />
-        <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-          {row.team}
-        </span>
+      <span className={cn(COL.emailCheck, "flex min-w-0 items-center")}>
+        <EmailCheckText row={row} />
       </span>
 
-      {/* For — the role/kind label. */}
-      <span
-        className={cn(COL.for, "truncate text-[12px] text-[var(--ink-700)]")}
-      >
-        {row.for}
-      </span>
-
-      {/* From — the fluid cell. Name leads at 13/500, email trails at 12px
-          ink-600; both truncate rather than wrap, since the row is fixed at
-          52px. */}
-      <span className={cn(COL.from, "flex min-w-0 flex-col justify-center")}>
-        <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-          {row.from.name}
-        </span>
-        <span className="truncate text-[12px] text-[var(--ink-600)]">
-          {row.from.email}
-        </span>
-      </span>
-
-      {/* Email check. */}
-      <span className={cn(COL.emailCheck, "flex items-center")}>
-        <EmailCheckMark value={row.emailCheck} />
+      <span className={cn(COL.received, "flex min-w-0 items-center")}>
+        <TwoLineDate at={row.date} fresh={fresh} />
       </span>
     </div>
   );
 }
 
+/** "head coach", "assistant coach", "match issue" — after the name, in ink-600. */
+export function requestRole(row: AdminRequestRow): string {
+  const label =
+    row.detail.source === "request"
+      ? (row.detail.roleLabel ?? row.for)
+      : row.for;
+  return label.charAt(0).toLowerCase() + label.slice(1);
+}
+
 /**
- * The Email check cell — a signal about the *email*, not an outcome on the
- * request, so it never reaches for the green fill an approved/verified state
- * would otherwise suggest.
- *
- * `verified` is the one state that means "an admin can act now" — a claim
- * whose verification link has actually been clicked — so it earns the same
- * filled-chip treatment `ApproveChip` uses (warm/amber warning register, not
- * green: see `plan-pills.tsx`). `sent` and `opened` are still in flight and
- * read as plain grey text with a mail glyph. Everything else — a bare
- * `contact`/`domain` pre-check match, or `none` — has no verification signal
- * to report at all, so it falls to the table's one shared not-yet mark
- * (`EmptyMark`, Data Table law 1) rather than inventing a fourth voice.
+ * Line 2: the program's 16px crest and name, "· new program" when nothing in
+ * the directory matches it, or — for a match report on a personal match —
+ * the personal mark and the match.
  */
-function EmailCheckMark({ value }: { value: AdminRequestEmailCheck }) {
-  if (value === "verified") {
+export function RequestSubject({ row }: { row: AdminRequestRow }) {
+  const detail = row.detail;
+  const inDirectory =
+    detail.source === "claim" ? true : detail.programId !== null;
+  const personalMatch =
+    detail.source === "request" && detail.match !== null && !inDirectory;
+  return (
+    <>
+      {inDirectory ? (
+        <WorkspaceMark
+          workspace={{ kind: "team", name: row.team, crestUrl: row.crestUrl }}
+        />
+      ) : personalMatch ? (
+        <WorkspaceMark workspace={{ kind: "personal" }} />
+      ) : null}
+      <span className="truncate text-[var(--ink-700)]">{row.team}</span>
+      {!inDirectory && !personalMatch ? (
+        <span className="shrink-0">· new program</span>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The Email check cell: what the claim's verification and pre-checks say
+ * about the address, as one word or two. Verification (sent → opened →
+ * verified) wins over the pre-checks, as `claimEmailCheck` orders them. A
+ * claim with no signal at all is the one warm state — nobody has vouched for
+ * an address off the school's domain. A request carries no email check, so
+ * it reads as the unmeasured dash rather than a judgement.
+ */
+function EmailCheckText({ row }: { row: AdminRequestRow }) {
+  if (row.source === "request") {
     return (
       <span
-        className="inline-flex h-[22px] items-center gap-1 rounded-[var(--radius-pill)] px-[9px] text-[12px] font-medium whitespace-nowrap"
-        style={{
-          background: "var(--warning-bg)",
-          color: "var(--warning-text)",
-          boxShadow: "inset 0 0 0 1px var(--warning-border)",
-        }}
+        aria-label="No email check"
+        className="text-[12px] text-[var(--ink-400)]"
       >
-        <CheckCircle2
-          className="size-[13px]"
-          strokeWidth={1.75}
-          aria-hidden="true"
-        />
-        Verified · Approve
+        —
       </span>
     );
   }
-
-  if (value === "opened") {
-    return (
-      <span className="inline-flex items-center gap-1 text-[13px] text-[var(--ink-600)]">
-        <MailOpen
-          className="size-[13px]"
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
-        Opened · not verified
-      </span>
-    );
-  }
-
-  if (value === "sent") {
-    return (
-      <span className="inline-flex items-center gap-1 text-[13px] text-[var(--ink-600)]">
-        <Mail className="size-[13px]" strokeWidth={1.5} aria-hidden="true" />
-        Sent · not opened
-      </span>
-    );
-  }
-
-  return <EmptyMark label="No verification email sent" />;
+  const words: Record<AdminRequestEmailCheck, string> = {
+    verified: "Verified",
+    opened: "Link opened",
+    sent: "Link sent",
+    contact: "Staff contact",
+    domain: "School domain",
+    none: "Not school domain",
+  };
+  const warn = row.emailCheck === "none";
+  return (
+    <span
+      className={cn(
+        "truncate text-[12px] whitespace-nowrap",
+        warn
+          ? "font-medium text-[var(--warning-text)]"
+          : "text-[var(--ink-600)]",
+      )}
+    >
+      {words[row.emailCheck]}
+    </span>
+  );
 }

@@ -198,7 +198,11 @@ export function UploadMatchFlow({
     return () => window.removeEventListener("match-upload-failed", onFailure);
   }, []);
 
-  if (created && admin) {
+  // A team's console upload keeps its own status card. One into a player's
+  // personal workspace finishes on the dashboard's own success screen — the
+  // match is the player's, exactly as if they had uploaded it — with the
+  // console's match page and uploads list as its two ways on.
+  if (created && admin && !admin.context.owner) {
     const upload = uploads.get(created.matchId);
     return (
       <div className="mx-auto max-w-[640px] py-10">
@@ -229,6 +233,13 @@ export function UploadMatchFlow({
         exitHref={EXIT_HREF}
         preset={preset}
         returnTo={returnTo}
+        {...(admin
+          ? {
+              matchHref: `/admin/matches/${created.matchId}`,
+              doneLink: { href: admin.successHref, label: "Back to uploads" },
+              canResubmit: false,
+            }
+          : {})}
         onResubmitted={() =>
           setUploads((prev) =>
             applyVideoUploadEvent(prev, {
@@ -382,12 +393,15 @@ function UploadWizardPage() {
               outsideHref="/dashboard/matches/new"
             />
           )
-        ) : workspaceKind === "team" && step !== firstStep ? (
+        ) : (workspaceKind === "team" || admin?.context.owner) &&
+          step !== firstStep ? (
           /* No line to pin: keep step 1's For answer on screen instead. */
           <SubjectBar
             subject={whoPlayed.subject}
             workspace={workspace}
             onNotSubject={onNotSubject}
+            personalName={admin?.context.owner?.viewer.name ?? null}
+            asAdmin={Boolean(admin)}
           />
         ) : null
       }

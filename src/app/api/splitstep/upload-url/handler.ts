@@ -261,10 +261,15 @@ export async function handleUploadUrl(
       ? await deps.loadRoster(billingWorkspace.id)
       : undefined);
 
+  // Whose upload contract this is. The session's own, except a console video
+  // into a player's personal workspace: the administrator is signed in, the
+  // match is the player's (`created_by` = `player1_id`), and the contract is
+  // asked for them — `admin_video_access` has already tied the two together.
+  const subjectId = adminVideo?.ownerId ?? userId;
   const eligibility = uploadEligibility({
     workspace: billingWorkspace,
-    viewerId: userId,
-    athlete: athleteOnRow(match, userId),
+    viewerId: subjectId,
+    athlete: athleteOnRow(match, subjectId),
     roster,
     attachesToLine: match.event_entry_id !== null,
     // The console uploads for teams that are not approved yet; only a

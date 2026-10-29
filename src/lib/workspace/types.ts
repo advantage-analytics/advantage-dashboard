@@ -178,6 +178,18 @@ export interface Workspace {
    */
   unlimitedVideo?: boolean;
   /**
+   * `users.video_hours_override` — an admin gave this person a monthly video
+   * allowance of their own (Admin › Pilots › Set hours), in hours. Replaces
+   * every other personal figure, the pilot's 10h and an admin's unlimited
+   * allowance included. See `monthlyCapSecondsFor()`.
+   *
+   * Null or absent means the normal cap, and always for a team workspace: the
+   * override is the person's, never a program's. `reserve_personal_quota`
+   * re-reads the column under its own lock, so a stale value here can only
+   * mislabel a meter, never spend past the real figure.
+   */
+  videoHoursOverride?: number | null;
+  /**
    * `programs.pilot_eligible` — an admin put this NON-college team on the
    * pilot's program processing pool (Admin › Teams › Pilot card, through
    * `admin_set_pilot_eligible`). Raises `quotaTierFor()` to the program figure

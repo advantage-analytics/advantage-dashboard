@@ -145,6 +145,7 @@ function ConferenceBody({ conference }: { conference: AdminTeamConference }) {
         <ConferenceMark
           name={conference.name}
           shortName={conference.shortName}
+          crestUrl={conference.crestUrl}
           size={40}
         />
         <div className="flex min-w-0 flex-col gap-0.5">

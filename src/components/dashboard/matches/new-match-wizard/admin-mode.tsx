@@ -14,6 +14,13 @@ export interface AdminWizardMode {
   itemId: string;
   exitHref: string;
   successHref: string;
+  /**
+   * The console's upload kind, so step 1's Workspace field and billing toggle
+   * can link to the same kind for another target — a team, or a player's
+   * personal workspace with its billing. The page resolves the new target
+   * from scratch, fresh operation ids included. Absent: no retargeting.
+   */
+  uploadKind?: "file" | "video";
   attachment?: {
     programId: string;
     matchId: string;
@@ -36,10 +43,21 @@ export function AdminUploadMatchFlow({
   initialProvider?: ProviderId;
 }) {
   const { context, attachment } = mode;
+  const owner = context.owner ?? null;
+  // A team is billed to its own program; a player's personal workspace to
+  // the player (their allowance) or, free, to the administrator.
+  const consistent =
+    context.workspace.kind === "team"
+      ? owner === null &&
+        context.videoAllowance.accountId === context.workspace.id
+      : owner !== null &&
+        owner.viewer.id === context.workspace.id &&
+        !attachment &&
+        context.videoAllowance.accountId ===
+          (owner.billing === "free" ? context.actorId : context.workspace.id);
   if (
-    context.workspace.kind !== "team" ||
+    !consistent ||
     context.actorId !== context.viewer.id ||
-    context.videoAllowance.accountId !== context.workspace.id ||
     (attachment &&
       (attachment.programId !== context.workspace.id ||
         attachment.operationId !== mode.operationId ||
@@ -56,14 +74,19 @@ export function AdminUploadMatchFlow({
   }
   return (
     <AdminMode
-      key={`${context.workspace.id}:${mode.operationId}:${mode.itemId}:${attachment?.matchId ?? "new"}`}
+      key={`${context.workspace.id}:${owner?.billing ?? ""}:${mode.operationId}:${mode.itemId}:${attachment?.matchId ?? "new"}`}
       value={mode}
     >
+      {/* A personal workspace's viewer is the person it belongs to, so the
+          wizard reads the player as "who played" exactly as it reads a
+          player uploading for themselves. The session stays the
+          administrator's: every write goes through the console's routes,
+          which re-check it. */}
       <WorkspaceProvider
         value={{
           active: context.workspace,
           available: [context.workspace],
-          viewer: context.viewer,
+          viewer: owner?.viewer ?? context.viewer,
         }}
       >
         <UploadMatchFlow

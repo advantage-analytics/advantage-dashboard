@@ -118,7 +118,9 @@ export async function reconcileAdminSubmission(
     };
   const result = data as {
     kind: "video" | "file";
-    programId: string;
+    /** Null for a player's personal workspace, which `personalUserId` names. */
+    programId: string | null;
+    personalUserId?: string | null;
     matchId: string | null;
     /** The abandoned `match_files.storage_path`; non-null only on a file abandon. */
     storagePath: string | null;
@@ -155,11 +157,14 @@ export async function reconcileAdminSubmission(
         } Reload the page to see the updated item.`,
       };
     }
-    const deleted = await admin
-      .from("matches")
-      .delete()
-      .eq("id", result.matchId)
-      .eq("program_id", result.programId);
+    // Scoped to the target the operation was admitted for: the program, or
+    // the player's own program-less match.
+    const target = admin.from("matches").delete().eq("id", result.matchId);
+    const deleted = await (result.programId
+      ? target.eq("program_id", result.programId)
+      : target
+          .is("program_id", null)
+          .eq("created_by", result.personalUserId ?? ""));
     if (deleted.error) {
       await releaseStoragePurgeClaims(
         admin,

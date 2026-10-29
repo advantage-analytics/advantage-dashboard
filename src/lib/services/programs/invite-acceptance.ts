@@ -617,7 +617,7 @@ export type AcceptOutcome =
        *                    not the way back in
        *
        * And two from the age gate both doors run
-       * (`20261026080000_join_age_gate.sql`):
+       * (`20261026190848_join_age_gate.sql`):
        *
        *   age_required     no `users.dob` on file — the screen asks for it
        *   too_young        under 13 by `users.dob` — never joins

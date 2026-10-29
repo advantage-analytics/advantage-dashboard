@@ -198,6 +198,7 @@ export function MergeConferenceDialog({
                 <ConferenceMark
                   name={target.name}
                   shortName={target.shortName}
+                  crestUrl={target.crestUrl}
                   size={24}
                 />
                 <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink-900)]">
@@ -293,6 +294,7 @@ export function MergeConferenceDialog({
                       <ConferenceMark
                         name={row.name}
                         shortName={row.shortName}
+                        crestUrl={row.crestUrl}
                         size={24}
                       />
                       <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]">

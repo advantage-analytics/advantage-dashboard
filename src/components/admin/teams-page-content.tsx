@@ -2,8 +2,12 @@
 
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ListFilter } from "lucide-react";
-import { ViewPills } from "@/components/admin/view-pills";
+import {
+  CountPills,
+  FilterDivider,
+  FilterMenuPill,
+} from "@/components/admin/admin-cells";
+import { markAdminRowSeen } from "@/app/admin/seen-actions";
 import { TeamsTable } from "@/components/admin/teams-table";
 import {
   ApprovePilotPopover,
@@ -11,15 +15,8 @@ import {
 } from "@/components/admin/approve-pilot-popover";
 import { CreateTeamDialog } from "@/components/admin/create-team-dialog";
 import { loadMoreAdminTeams } from "@/components/admin/teams-actions";
-import {
-  FilterTrigger,
-  SortTrigger,
-} from "@/components/dashboard/shared/list-toolbar-trigger";
-import {
-  FloatMenu,
-  FloatMenuDivider,
-  FloatMenuItem,
-} from "@/components/ui/float-menu";
+import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
+import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { advButton } from "@/lib/ui/adv-button";
 import type {
   AdminTeamRow,
@@ -40,15 +37,19 @@ import type {
  * names, and putting a cursor chain in the address bar would make the back
  * button undo one page at a time), and which row's approve popover is open.
  *
- * ## The cut is a sentence, never chips
+ * ## Teams2's toolbar
  *
- * v3's Data Table law 6: on apply the panel closes and a grey strip states the
- * cut in words, with one quiet "Clear filters". Accumulating chips is the
- * banned pattern, and the trigger carries no count badge either — engaged, it
- * just takes the nav-active wash that `FilterTrigger` already implements.
+ * View pills with their counts as text ("On Advantage · 9"), a hairline, then
+ * one pill menu per facet — Division and Conference — whose trigger names the
+ * current value, so the cut reads off the toolbar and no strip restates it. A
+ * view is not a filter (law 7): switching one never clears the other, and
+ * the pill counts are taken under the current facets.
  *
- * View pills sit outside all of that (law 7): a view is not a filter, so
- * switching one never clears the other and the strip never mentions it.
+ * ## New since you last looked
+ *
+ * The server decides which rows are New (`lookAtSurface(adminId, "teams")`,
+ * keyed on program id against `claimed_at`) and passes ids only. Opening a
+ * row calls `markAdminRowSeen` and clears its dot here at once.
  */
 
 const VIEW_OPTIONS: { value: AdminTeamsView; label: string }[] = [
@@ -76,7 +77,12 @@ const SORT_OPTIONS: { value: AdminTeamsSort; label: string }[] = [
 export interface FacetOption {
   value: string;
   label: string;
+  /** Programs in the whole directory with this value. */
+  count?: number;
 }
+
+/** The facet menus' unfiltered option — never a real column value. */
+const ANY = "__any";
 
 export interface TeamsFacetOptions {
   divisions: FacetOption[];
@@ -95,6 +101,9 @@ type FacetKey = (typeof FACET_KEYS)[number];
 
 export function TeamsPageContent({
   rows: serverRows,
+  freshIds,
+  joinedCount,
+  viewCounts,
   nextCursor: serverCursor,
   view,
   sort,
@@ -102,6 +111,12 @@ export function TeamsPageContent({
   facets,
 }: {
   rows: AdminTeamRow[];
+  /** Ids of the rows that are New since this admin last looked. */
+  freshIds: string[];
+  /** Programs that joined since the last look, across the directory. */
+  joinedCount: number;
+  /** Rows per view under the current facets; null when a count failed. */
+  viewCounts: Record<AdminTeamsView, number | null>;
   nextCursor: string | null;
   view: AdminTeamsView;
   sort: AdminTeamsSort;
@@ -111,8 +126,20 @@ export function TeamsPageContent({
   const router = useRouter();
   const pathname = usePathname();
 
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
+
+  // Rows opened during this visit lose their dot at once; the server learns
+  // through `markAdminRowSeen`, fire and forget.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  const fresh = useMemo(() => {
+    const ids = new Set(freshIds);
+    for (const id of opened) ids.delete(id);
+    return ids;
+  }, [freshIds, opened]);
+  const openRow = useCallback((row: AdminTeamRow) => {
+    setOpened((current) => new Set(current).add(row.id));
+    void markAdminRowSeen("teams", row.id).catch(() => {});
+  }, []);
 
   // Pages appended by "Load more", on top of whatever the server rendered. A
   // new server render (any URL change, or `router.refresh()` after a decision)
@@ -209,87 +236,64 @@ export function TeamsPageContent({
     });
   };
 
-  /* ── The cut, in words ────────────────────────────────────────────────── */
+  const hasCut = Boolean(cut.division || cut.conference || cut.state);
+  const stateLabel = cut.state
+    ? (facets.states.find((o) => o.value === cut.state)?.label ?? cut.state)
+    : null;
 
-  const cutSentence = useMemo(() => {
-    const labelOf = (options: FacetOption[], value: string | null) =>
-      value ? (options.find((o) => o.value === value)?.label ?? value) : null;
-    const clauses = [
-      labelOf(facets.divisions, cut.division),
-      labelOf(facets.conferences, cut.conference),
-      labelOf(facets.states, cut.state),
-    ].filter(Boolean);
-    if (clauses.length === 0) return null;
-    return `Teams in ${clauses.join(", ")}`;
-  }, [cut, facets]);
+  const facetOptions = (all: string, options: FacetOption[]) => [
+    { value: ANY, label: all },
+    ...options.map((option) => ({
+      value: option.value,
+      label: option.label,
+      count: option.count ?? null,
+    })),
+  ];
 
-  const hasCut = cutSentence !== null;
+  const total = viewCounts[view];
 
   return (
     <div className="flex flex-col gap-4">
       {/* Title slot — the page's one primary sits here. */}
-      <div className="flex items-end gap-2.5">
-        <div>
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="min-w-0 flex-1">
           <h1 className="text-display">Teams</h1>
           <p className="text-body-sm mt-[9px]">
             Every program in the directory.
+            {joinedCount > 0 && ` ${joinedCount} joined since you last looked.`}
           </p>
         </div>
-        <div className="flex-1" />
         <CreateTeamButton />
       </div>
 
-      {/* Views, then the toolbar. */}
-      <div className="flex flex-wrap items-center gap-3">
-        <ViewPills
-          options={VIEW_OPTIONS}
+      {/* Views, a divider, then one pill menu per facet. */}
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <CountPills
+          options={VIEW_OPTIONS.map((option) => ({
+            ...option,
+            count: viewCounts[option.value],
+          }))}
           value={view}
           onChange={(next) => pushCut({ view: next })}
         />
-        <div className="flex-1" />
-
-        <FloatMenu
-          open={filtersOpen}
-          onOpenChange={setFiltersOpen}
-          label="Filter teams"
-          width={256}
-          trigger={
-            <FilterTrigger
-              aria-expanded={filtersOpen}
-              engaged={filtersOpen || hasCut}
-            />
+        <FilterDivider />
+        <FilterMenuPill<string>
+          label="Division"
+          width={220}
+          options={facetOptions("All divisions", facets.divisions)}
+          value={cut.division ?? ANY}
+          onChange={(next) => pushCut({ division: next === ANY ? null : next })}
+        />
+        <FilterMenuPill<string>
+          label="Conference"
+          width={280}
+          options={facetOptions("All conferences", facets.conferences)}
+          value={cut.conference ?? ANY}
+          onChange={(next) =>
+            pushCut({ conference: next === ANY ? null : next })
           }
-        >
-          <FacetSection
-            heading="Division"
-            options={facets.divisions}
-            value={cut.division}
-            onSelect={(value) => {
-              setFiltersOpen(false);
-              pushCut({ division: value });
-            }}
-          />
-          <FloatMenuDivider />
-          <FacetSection
-            heading="Conference"
-            options={facets.conferences}
-            value={cut.conference}
-            onSelect={(value) => {
-              setFiltersOpen(false);
-              pushCut({ conference: value });
-            }}
-          />
-          <FloatMenuDivider />
-          <FacetSection
-            heading="State"
-            options={facets.states}
-            value={cut.state}
-            onSelect={(value) => {
-              setFiltersOpen(false);
-              pushCut({ state: value });
-            }}
-          />
-        </FloatMenu>
+        />
+        <div className="flex-1" />
 
         <FloatMenu
           open={sortOpen}
@@ -316,43 +320,6 @@ export function TeamsPageContent({
         </FloatMenu>
       </div>
 
-      {/* The applied cut as one grey sentence — never chips. */}
-      {hasCut && (
-        <div
-          className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-          style={{ background: "var(--surface-subtle)" }}
-        >
-          <ListFilter
-            className="size-[13px] shrink-0"
-            strokeWidth={1.5}
-            style={{ color: "var(--ink-500)" }}
-            aria-hidden="true"
-          />
-          <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-            {cutSentence}
-          </span>
-          <span
-            className="size-[3px] rounded-full"
-            style={{ background: "var(--ink-300)" }}
-            aria-hidden="true"
-          />
-          {/* "N shown", not "N of M": keyset pagination never counts the tail,
-              and a total would have to be a second query for a number nothing
-              on this page decides anything with. */}
-          <span className="text-micro tabular">
-            {rows.length} shown{cursor ? "+" : ""}
-          </span>
-          <div className="flex-1" />
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-          >
-            Clear filters
-          </button>
-        </div>
-      )}
-
       <div onClickCapture={captureChip}>
         <TeamsTable
           rows={rows}
@@ -368,8 +335,30 @@ export function TeamsPageContent({
                 }
           }
           onApprove={openApprove}
+          freshIds={fresh}
+          onOpenRow={openRow}
         />
       </div>
+
+      {rows.length > 0 && (
+        <p className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--ink-600)] tabular-nums">
+          <span>
+            {total != null
+              ? `Showing ${rows.length.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "program" : "programs"}`
+              : `Showing ${rows.length.toLocaleString("en-US")} programs`}
+            {stateLabel && ` in ${stateLabel}`}
+          </span>
+          {stateLabel && (
+            <button
+              type="button"
+              onClick={() => pushCut({ state: null })}
+              className="font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+            >
+              Clear state
+            </button>
+          )}
+        </p>
+      )}
 
       {cursor && (
         <div className="flex justify-center">
@@ -392,49 +381,6 @@ export function TeamsPageContent({
         // dash (decline).
         onDecided={() => router.refresh()}
       />
-    </div>
-  );
-}
-
-/**
- * One facet's rows, under a quiet heading, with an "Any" reset at the top.
- *
- * Capped and scrollable because two of the three sets are open-ended — 137
- * conferences and 50 states in the live directory. A single uncapped list
- * would make the panel taller than the window and bury Division, which is the
- * facet with five values and the one an admin actually reaches for.
- */
-function FacetSection({
-  heading,
-  options,
-  value,
-  onSelect,
-}: {
-  heading: string;
-  options: FacetOption[];
-  value: string | null;
-  onSelect: (value: string | null) => void;
-}) {
-  return (
-    <div className="flex flex-col">
-      <p className="px-2.5 pt-1.5 pb-1 text-[11px] text-[var(--ink-400)]">
-        {heading}
-      </p>
-      <div className="flex max-h-[184px] flex-col overflow-y-auto">
-        <FloatMenuItem
-          label="Any"
-          chosen={value === null}
-          onSelect={() => onSelect(null)}
-        />
-        {options.map((option) => (
-          <FloatMenuItem
-            key={option.value}
-            label={option.label}
-            chosen={option.value === value}
-            onSelect={() => onSelect(option.value)}
-          />
-        ))}
-      </div>
     </div>
   );
 }

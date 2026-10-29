@@ -1,7 +1,8 @@
 import { AdminHeader } from "@/components/admin/admin-header";
+import { AdminScrollRoot } from "@/components/admin/admin-scroll-root";
+import { loadAdminNav } from "@/lib/data/admin-nav-server";
 import { getInitials } from "@/lib/data/match-utils";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
 
@@ -21,51 +22,20 @@ import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
  * it anyway — a layout guard protects the page, not the write.
  */
 
-/** Claims a human still has to decide — `needsReview()`'s two statuses. */
-const REVIEWABLE_CLAIM_STATUSES = ["pending_review", "objected"];
-
-/**
- * What the Requests tab counts: claims waiting on a decision plus open
- * program requests.
- *
- * Service role, not the session client, and not by choice: `program_requests`
- * carries no RLS policies at all, so a cookie-scoped read returns zero rows
- * rather than an error — a count that is silently always 0. The guard above
- * has already run, so this only ever executes for an admin.
- *
- * `head: true` with `count: "exact"` so neither query ships a row.
- */
-async function loadRequestsCount(): Promise<number> {
-  const db = createAdminClient();
-
-  const [claims, requests] = await Promise.all([
-    db
-      .from("program_claims")
-      .select("id", { count: "exact", head: true })
-      .in("status", REVIEWABLE_CLAIM_STATUSES),
-    db
-      .from("program_requests")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "open"),
-  ]);
-
-  return (claims.count ?? 0) + (requests.count ?? 0);
-}
-
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await requireAdminOrNotFound();
+  const admin = await requireAdminOrNotFound();
 
   const supabase = await createClient();
   const [
     {
       data: { user },
     },
-    requestsCount,
-  ] = await Promise.all([supabase.auth.getUser(), loadRequestsCount()]);
+    nav,
+  ] = await Promise.all([supabase.auth.getUser(), loadAdminNav(admin.id)]);
 
   // `requireAdminOrNotFound()` already redirected a session-less visitor, so
   // this is a narrowing for the type checker rather than a second gate.
@@ -100,13 +70,18 @@ export default async function AdminLayout({
 
   return (
     // One white surface, per the Admin Console canvas — `--surface-page` is
-    // for inset wells, not the page.
-    <div className="flex min-h-screen flex-col bg-[var(--surface-card)]">
-      <AdminHeader requestsCount={requestsCount} viewer={viewer} />
+    // for inset wells, not the page. The console scrolls inside
+    // `AdminScrollRoot`, not on the document, so the sticky header and every
+    // peek-drawer rail stay put — see that file for why, and for how it keeps
+    // Back/Forward scroll positions.
+    <AdminScrollRoot className="flex flex-col overflow-x-hidden bg-[var(--surface-card)]">
+      <AdminHeader nav={nav} viewer={viewer} />
       {/* No padding or max-width here: each page renders its own `AdminPage`
           column, so the Requests page can seat its peek drawer beside that
-          column, flush to the viewport's right edge — see admin-page.tsx. */}
-      <div className="flex flex-1 items-stretch">{children}</div>
-    </div>
+          column, flush to the viewport's right edge — see admin-page.tsx.
+          `shrink-0` here and on the header: inside the fixed-height scroll
+          root a long page would otherwise squeeze the 44px header to fit. */}
+      <div className="flex flex-1 shrink-0 items-stretch">{children}</div>
+    </AdminScrollRoot>
   );
 }

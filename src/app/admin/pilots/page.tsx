@@ -3,7 +3,9 @@ import { PilotsPageContent } from "@/components/admin/pilots-page-content";
 
 /**
  * Admin › Pilots — the hand-picked individual players on the video pilot, each
- * with 10 hours a month in their personal workspace.
+ * with the pilot's hours a month (or an admin-set figure) in their personal
+ * workspace. `listAdminPilots()` also records this admin's look at the page
+ * ("New since you last looked").
  *
  * `force-dynamic` for the same reason as the other admin pages: every read is
  * service-role and gated on the current session's `is_admin`.

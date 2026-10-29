@@ -141,9 +141,11 @@ export function AdminUploadHistory({
                     </td>
                     <td className="px-5 py-4 text-[13px] font-medium text-[var(--ink-900)]">
                       {row.team.name}
-                      {row.team.side && (
+                      {(row.team.personal || row.team.side) && (
                         <p className="mt-1 text-[11px] font-normal text-[var(--ink-500)]">
-                          {sideLabel(row.team.side)}
+                          {row.team.personal
+                            ? `Personal workspace · ${row.team.personal.billing === "free" ? "Free" : "Player’s allowance"}`
+                            : sideLabel(row.team.side!)}
                         </p>
                       )}
                     </td>

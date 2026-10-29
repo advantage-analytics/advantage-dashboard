@@ -41,6 +41,27 @@ export function adminAskSummary(
   return `${lead} · ${down} down · ${up} up`;
 }
 
+/**
+ * The line under the title (Ask2 board): what the page is, how many rows are
+ * New since the admin last looked, and — when the loader came back full —
+ * that only the newest are shown, so no pill count reads as a total.
+ */
+export function adminAskLede(
+  freshCount: number,
+  capped: boolean,
+  shown: number,
+): string {
+  const parts = ["What players thought of Ask\u2019s answers, newest first."];
+  if (freshCount > 0) parts.push(`${freshCount} new since you last looked.`);
+  if (capped) parts.push(`Newest ${shown} shown.`);
+  return parts.join(" ");
+}
+
+/** The New-since-last-looked key of one thumb (`admin_seen.item_key`). */
+export function askSeenKey(id: string): string {
+  return `ask:${id}`;
+}
+
 export interface AdminAskFeedbackRow {
   id: string;
   /** Null once the conversation was deleted; the copies below stand. */
@@ -71,6 +92,10 @@ export interface AdminAskFeedbackRow {
     mock: boolean;
   };
   posthog: { traces: string; person: string };
+  /** The asker's profile photo, public URL; set by the loader, not the reader. */
+  askerPhotoUrl?: string | null;
+  /** The program's crest, public URL; set by the loader, not the reader. */
+  crestUrl?: string | null;
 }
 
 /** The columns `listAdminAskFeedback()` selects. */
@@ -292,4 +317,24 @@ export function filterAdminAskFeedback(
 ): AdminAskFeedbackRow[] {
   if (view === "all") return [...rows];
   return rows.filter((row) => row.rating === view);
+}
+
+/** Newest change first, whatever the verdict — the All view's order. */
+export function newestAdminAskFeedback(
+  rows: readonly AdminAskFeedbackRow[],
+): AdminAskFeedbackRow[] {
+  return [...rows].sort((a, b) =>
+    a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0,
+  );
+}
+
+/** The Reason filter: "any" keeps every row; a reason keeps the rows that gave it. */
+export type AdminAskReasonFilter = "any" | AskFeedback["reasons"][number];
+
+export function filterAdminAskByReason(
+  rows: readonly AdminAskFeedbackRow[],
+  reason: AdminAskReasonFilter,
+): AdminAskFeedbackRow[] {
+  if (reason === "any") return [...rows];
+  return rows.filter((row) => row.reasons.includes(reason));
 }

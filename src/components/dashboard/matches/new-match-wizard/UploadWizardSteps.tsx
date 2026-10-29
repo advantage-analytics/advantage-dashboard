@@ -2,6 +2,7 @@
 
 import { AdvSelect } from "@/components/ui/adv-select";
 import { useAdminWizardMode, AdminResultLock } from "./admin-mode";
+import { AdminBillingField, AdminWorkspaceRow } from "./AdminTargetField";
 import { useCallback, useMemo } from "react";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { isProgramStaff } from "@/lib/workspace/types";
@@ -97,6 +98,34 @@ export function ProviderStep() {
     },
   } = useUploadWizard();
   const addSelf = useAddSelfOffer(whoPlayed);
+  const admin = useAdminWizardMode();
+  // The console's own Workspace row and billing field. Not for a prepared
+  // attachment: its target is the recorded match, fixed before this step.
+  // Keyed on the mode's stable parts: the console rebuilds the mode object
+  // itself on every render of its page.
+  const adminContext = admin && !admin.attachment ? admin.context : null;
+  const adminKind = admin?.uploadKind;
+  const adminSlots = useMemo(
+    () =>
+      adminContext
+        ? {
+            workspace: (
+              <AdminWorkspaceRow
+                context={adminContext}
+                uploadKind={adminKind}
+              />
+            ),
+            billing: (
+              <AdminBillingField
+                context={adminContext}
+                uploadKind={adminKind}
+              />
+            ),
+            player: adminContext.owner?.viewer.name ?? null,
+          }
+        : null,
+    [adminContext, adminKind],
+  );
   return (
     <div className="flex flex-col gap-9">
       <SourceStepContent
@@ -104,6 +133,7 @@ export function ProviderStep() {
         onProviderSelect={handleProviderSelect}
         whoPlayed={whoPlayed}
         addSelf={addSelf.offer}
+        admin={adminSlots}
         /* Null for an import source and while the allowance is still
            loading — the hook decides both, so this step never has to. */
         quotaRefusal={providerQuotaRefusal}
@@ -373,6 +403,7 @@ export function MatchStep() {
     meta: { workspaceKind, preset },
   } = useUploadWizard();
   const workspaces = useWorkspace();
+  const adminOwner = admin?.context.owner ?? null;
 
   // `DetailsStepContent` is `memo()`-wrapped — it's the largest step body — so
   // this has to be the same object across renders that don't actually change
@@ -393,7 +424,9 @@ export function MatchStep() {
         : whoPlayed.roster?.find((row) => row.playerId === playerId);
     return {
       name: formData.playerName || whoPlayed.uploaderName || "You",
-      isSelf: !preset && whoPlayed.subject?.kind !== "roster",
+      // The console's player upload is the player's own match, but not the
+      // signed-in person's: nothing on it says "you".
+      isSelf: !preset && whoPlayed.subject?.kind !== "roster" && !adminOwner,
       playerId,
       userId: workspaces.viewer.id,
       rosterStyle: rosterRow ?? null,
@@ -413,6 +446,7 @@ export function MatchStep() {
     preset,
     workspaces.viewer.id,
     workspaces.active,
+    adminOwner,
   ]);
 
   // Stable for the same reason as `subject`. Only while the File itself is

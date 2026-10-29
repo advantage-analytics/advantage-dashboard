@@ -100,7 +100,17 @@ function routeHarness({
         if (!allowed) throw new Error("not found");
       },
     },
+    "@/lib/data/admin-search-server": {
+      adminSearch: async () => {
+        if (searchFails) throw new Error("read failure");
+        return [];
+      },
+    },
     "@/lib/data/admin-upload-server": {
+      getAdminPersonalUploadContext: async (id: string) => {
+        reads.push(`player:${id}`);
+        return { ok: false, message: "Player unavailable" };
+      },
       getAdminUploadContext: async (id: string) => {
         reads.push(`context:${id}`);
         return refusal
@@ -134,8 +144,12 @@ test("scope URLs round-trip all kinds and reject ambiguous inputs", () => {
     const url = new URL(adminUploadHref(TEAM, kind), "https://local.test");
     expect(adminUploadSelection(Object.fromEntries(url.searchParams))).toEqual({
       team: TEAM,
+      player: null,
       kind,
+      billing: "free",
       invalidTeam: false,
+      invalidPlayer: false,
+      invalidBilling: false,
       invalidKind: false,
     });
     expect(adminUploadHref(null, kind)).toBe(`/admin/uploads/new?kind=${kind}`);
@@ -290,15 +304,31 @@ test("file/video mount shared wizard with target and stable retry identifiers; r
     "./admin-upload-selection": { adminUploadHref },
   }).AdminUploadEntry;
   for (const kind of ["file", "video"] as const) {
+    // A team's file or video first asks "Where does it go?" on its own
+    // screen, under the page's kind cards — never beside the wizard.
     const tree = entry({ context, kind, picker: null });
+    expect(elements(tree).some((e) => e.type === "main")).toBe(true);
     const boundary = elements(tree).find((e) => typeof e.type === "function");
     expect(boundary).toBeDefined();
+    expect(boundary!.props.started).toBe(false);
     cursor = 0;
-    const rendered = (boundary!.type as (props: unknown) => Element)(
+    const asking = (boundary!.type as (props: unknown) => Element)(
       boundary!.props,
     );
+    expect(elements(asking).some((e) => e.type === "wizard")).toBe(false);
+    expect(
+      elements(asking).some(
+        (e) =>
+          e.type === "section" && e.props["aria-label"] === "Analysis target",
+      ),
+    ).toBe(true);
+    // Answered: the boundary is the wizard alone.
+    const started = { ...(boundary!.props as object), started: true };
+    cursor = 0;
+    const rendered = (boundary!.type as (props: unknown) => Element)(started);
     const wizard = elements(rendered).find((e) => e.type === "wizard")!;
     expect(wizard).toBeDefined();
+    expect(elements(rendered).some((e) => e.type === "section")).toBe(false);
     expect(wizard.props.initialProvider).toBe(
       kind === "file" ? "swing-vision" : "splitstep",
     );
@@ -308,16 +338,45 @@ test("file/video mount shared wizard with target and stable retry identifiers; r
     expect(mode.successHref).toBe("/admin/uploads");
     cursor = 0;
     expect(
-      elements(
-        (boundary!.type as (props: unknown) => Element)(boundary!.props),
-      ).find((e) => e.type === "wizard")!.props.mode,
+      elements((boundary!.type as (props: unknown) => Element)(started)).find(
+        (e) => e.type === "wizard",
+      )!.props.mode,
     ).toEqual(mode);
-    const radio = elements(tree).find(
-      (e) => e.type === "input" && e.props.value === "tournament",
-    )!;
-    (radio.props.onChange as () => void)();
-    expect(pushes.at(-1)).toBe(adminUploadHref(TEAM, "tournament"));
   }
+  // A player's personal workspace has only a new match: the page is the
+  // wizard straight away, with no header, kind cards or target question.
+  const PLAYER = "22222222-2222-4222-8222-222222222222";
+  const personalContext = {
+    ...context,
+    workspace: { ...context.workspace, id: PLAYER, kind: "personal" },
+    owner: { viewer: { id: PLAYER, name: "Elena Vargas" }, billing: "free" },
+  } as unknown as typeof context;
+  const solo = entry({ context: personalContext, kind: "video", picker: null });
+  expect(elements(solo).some((e) => e.type === "main")).toBe(false);
+  expect(
+    elements(solo).some(
+      (e) => e.type === "input" && e.props.name === "upload-kind",
+    ),
+  ).toBe(false);
+  const soloBoundary = elements(solo).find(
+    (e) => typeof e.type === "function",
+  )!;
+  cursor = 0;
+  expect(
+    elements(
+      (soloBoundary.type as (props: unknown) => Element)(soloBoundary.props),
+    ).some((e) => e.type === "wizard"),
+  ).toBe(true);
+  // With no kind yet the cards are there, and a pick navigates.
+  const picking = entry({ context, kind: null, picker: null });
+  const radio = elements(picking).find(
+    (e) => e.type === "input" && e.props.value === "tournament",
+  )!;
+  (radio.props.onChange as () => void)();
+  expect(pushes.at(-1)).toBe(adminUploadHref(TEAM, "tournament"));
+  // An error keeps the page above the wizard, where its way out is.
+  const failed = entry({ context, kind: "video", picker: null, error: "x" });
+  expect(elements(failed).some((e) => e.type === "main")).toBe(true);
   for (const kind of ["dual", "tournament"]) {
     const tree = entry({
       context,
@@ -355,4 +414,37 @@ test("tournament slot is scoped to the selected program", async () => {
   expect(h.reads).toContain("events:kind:tournament");
   expect(result.props.tournamentResult.type).toBe("tournament-form");
   expect(result.props.tournamentResult.props.context).toBe(context);
+});
+
+test("a player target round-trips with its billing and refuses a second target", () => {
+  const PLAYER = "22222222-2222-4222-8222-222222222222";
+  for (const billing of ["free", "player"] as const) {
+    const url = new URL(
+      adminUploadHref({ player: PLAYER, billing }, "video"),
+      "https://local.test",
+    );
+    expect(
+      adminUploadSelection(Object.fromEntries(url.searchParams)),
+    ).toMatchObject({
+      team: null,
+      player: PLAYER,
+      kind: "video",
+      billing,
+      invalidPlayer: false,
+      invalidBilling: false,
+    });
+  }
+  // Free is the default and is not spelled in the URL.
+  expect(adminUploadHref({ player: PLAYER }, "video")).toBe(
+    `/admin/uploads/new?player=${PLAYER}&kind=video`,
+  );
+  expect(adminUploadSelection({ team: TEAM, player: PLAYER })).toMatchObject({
+    invalidPlayer: true,
+  });
+  expect(adminUploadSelection({ player: "bad" })).toMatchObject({
+    invalidPlayer: true,
+  });
+  expect(
+    adminUploadSelection({ player: PLAYER, billing: "house" }),
+  ).toMatchObject({ invalidBilling: true, billing: "free" });
 });

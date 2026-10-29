@@ -133,7 +133,7 @@ export async function getAdminUploadHistory(
     let query = session
       .from("admin_upload_submissions")
       .select(
-        "operation_id, actor_user_id, program_id, kind, event_id, origin, created_at",
+        "operation_id, actor_user_id, program_id, personal_user_id, billing, kind, event_id, origin, created_at",
       )
       .eq("origin", "admin_console")
       .order("created_at", { ascending: false })
@@ -173,7 +173,7 @@ export async function getAdminUploadHistory(
         "programs",
         "id, school_name, team",
         "id",
-        submissions.map((s) => s.program_id),
+        submissions.flatMap((s) => (s.program_id ? [s.program_id] : [])),
       ),
       byIds<{
         id: string;
@@ -185,7 +185,17 @@ export async function getAdminUploadHistory(
         "users",
         "id, first_name, last_name, email",
         "id",
-        submissions.flatMap((s) => (s.actor_user_id ? [s.actor_user_id] : [])),
+        // The administrators, and the players whose personal workspaces a
+        // console video went into — one read for both kinds of name.
+        [
+          ...new Set(
+            submissions.flatMap((s) =>
+              [s.actor_user_id, s.personal_user_id].filter((id): id is string =>
+                Boolean(id),
+              ),
+            ),
+          ),
+        ],
       ),
       byIds<{ id: string; name: string }>(
         admin,
@@ -363,14 +373,37 @@ export async function getAdminUploadHistory(
       };
       const program = programs.find((p) => p.id === s.program_id);
       const actor = actors.find((a) => a.id === s.actor_user_id);
+      const owner = s.personal_user_id
+        ? actors.find((a) => a.id === s.personal_user_id)
+        : undefined;
       return {
         operationId: s.operation_id,
         date: s.created_at,
-        team: {
-          id: s.program_id,
-          name: program?.school_name ?? "Unavailable team",
-          side: program?.team ?? null,
-        },
+        team: s.personal_user_id
+          ? {
+              id: null,
+              name: owner
+                ? [owner.first_name, owner.last_name]
+                    .filter(Boolean)
+                    .join(" ") ||
+                  owner.email ||
+                  "Unavailable player"
+                : "Unavailable player",
+              side: null,
+              personal: {
+                userId: s.personal_user_id,
+                billing:
+                  s.billing === "player"
+                    ? ("player" as const)
+                    : ("free" as const),
+              },
+            }
+          : {
+              id: s.program_id,
+              name: program?.school_name ?? "Unavailable team",
+              side: program?.team ?? null,
+              personal: null,
+            },
         kind: s.kind,
         what:
           events.find((e) => e.id === s.event_id)?.name ??
