@@ -40,3 +40,13 @@ is the runner's. Newest entries at the bottom.
 1. `supabase/migrations/20260219000000_populate_serve_return_placement_stats.sql` still carries a stale `calculate_match_stats` — add a pointer comment to the new file.
 2. T11 must run `calculate_match_stats` after stamping `errors_judged_at` (the function reads it at run time); a spec on that order is cheap.
 3. `ask.match_stats` exposes `forced_errors` already, so Ask sees real counts on SwingVision matches now — T7's schema copy should state the NULL = unjudged meaning.
+
+## T2 · errorSplitJudged predicate and forced-errors plumbing into report data — done
+
+**gate:** mechanical PASS · completion VERDICT: pass
+**changed:** New pure `errorSplitJudged()` in `src/lib/data/error-split.ts` (swing-vision, or verified with `errors_judged_at` set) with `tests/error-split.spec.ts`. `match-detail-server.ts` selects `errors_judged_at` and sets `Match.errorSplitJudged` (shared with the `/m/[token]` loader). `MatchFilterContext.errorSplitJudged` built once in `buildFilterContext` (no `match-report-context.tsx` exists; the provider needed no change). `PlayerStatistics.forcedErrors: number | null` read straight from `forced_errors`, null kept. Sample match is splitstep (anonymised), so unjudged with null forced errors. No user-visible copy changed.
+**follow-ups:**
+
+1. `Match.errorSplitJudged` is optional — a loader that forgets it reads as "Errors"; consider making it required.
+2. `shots/viz-model.ts` fallback context (~:822) leaves the flag absent (= not judged) — fine, worth knowing for T4.
+3. Comment at `match-stats-server.ts:281` (null forced counts as 0 in career averages) vs the per-match "never coerce" rule — reconcile wording.

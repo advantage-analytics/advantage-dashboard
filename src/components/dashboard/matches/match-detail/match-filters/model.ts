@@ -472,6 +472,13 @@ export interface MatchFilterContext {
    * (`serveResultOf`).
    */
   isDerived?: boolean;
+  /**
+   * The match's errors are split into unforced and forced
+   * (`Match.errorSplitJudged`, from `errorSplitJudged()` in the loader).
+   * Absent reads as not judged. Cards read it here rather than re-deriving it
+   * from the row each.
+   */
+  errorSplitJudged?: boolean;
 }
 
 /** A video-derived (Advantage Intelligence) match, off the match row. */
@@ -483,10 +490,14 @@ export function isDerivedMatch(match: Pick<Match, "sourceProvider">): boolean {
  * The filters' context for one match: the match row's hands
  * (`playerHands`, already seat-correct — no swap here) and, where a row has
  * none, the hand inferred from that seat's forehands (`inferHand`); and
- * whether the match is derived from video (`isDerived`), off the same row.
+ * whether the match is derived from video (`isDerived`), off the same row;
+ * and whether its errors are split (`errorSplitJudged`), as the loader set it.
  */
 export function buildFilterContext(
-  match: Pick<Match, "player1" | "player2" | "sourceProvider">,
+  match: Pick<
+    Match,
+    "player1" | "player2" | "sourceProvider" | "errorSplitJudged"
+  >,
   points: readonly Pick<MatchPoint, "shots">[],
   youIsPlayer1: boolean,
 ): MatchFilterContext {
@@ -498,6 +509,7 @@ export function buildFilterContext(
       player2: stored.player2 ?? inferHand(points, false),
     },
     isDerived: isDerivedMatch(match),
+    errorSplitJudged: match.errorSplitJudged === true,
   };
 }
 

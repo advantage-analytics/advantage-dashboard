@@ -51,6 +51,7 @@ interface DbMatchStatsView {
   return_contact_deep_pct: string | null;
   winners: number | null;
   unforced_errors: number | null;
+  forced_errors: number | null;
   net_points_appearances: number | null;
   net_points_won: number | null;
   first_serves: number | null;
@@ -604,7 +605,7 @@ export async function getMatchStatisticsFromSupabase(
     supabase
       .from("match_stats_with_percentages")
       .select(
-        "is_player1, aces, double_faults, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted, first_serve_points_won, second_serve_points_won, service_games_won, service_games_won_pct, first_return_points_won, second_return_points_won, return_games_won, first_return_in_pct, second_return_in_pct, first_returns_in, second_returns_in, first_return_won_pct, second_return_won_pct, return_games_won_pct, break_points_converted_pct, total_points, total_points_won, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct, serve_wide_pct, serve_body_pct, serve_t_pct, return_cross_court_pct, return_down_the_line_pct, return_middle_pct, return_contact_inside_pct, return_contact_middle_pct, return_contact_deep_pct, winners, unforced_errors, net_points_appearances, net_points_won, first_serves, first_serves_in, second_serves_in, service_games, break_points_faced, break_points_saved, break_point_opportunities, first_returns, second_returns, return_games, short_rally_won, short_rally_total, medium_rally_won, medium_rally_total, long_rally_won, long_rally_total",
+        "is_player1, aces, double_faults, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted, first_serve_points_won, second_serve_points_won, service_games_won, service_games_won_pct, first_return_points_won, second_return_points_won, return_games_won, first_return_in_pct, second_return_in_pct, first_returns_in, second_returns_in, first_return_won_pct, second_return_won_pct, return_games_won_pct, break_points_converted_pct, total_points, total_points_won, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct, serve_wide_pct, serve_body_pct, serve_t_pct, return_cross_court_pct, return_down_the_line_pct, return_middle_pct, return_contact_inside_pct, return_contact_middle_pct, return_contact_deep_pct, winners, unforced_errors, forced_errors, net_points_appearances, net_points_won, first_serves, first_serves_in, second_serves_in, service_games, break_points_faced, break_points_saved, break_point_opportunities, first_returns, second_returns, return_games, short_rally_won, short_rally_total, medium_rally_won, medium_rally_total, long_rally_won, long_rally_total",
       )
       .eq("match_id", matchId),
     supabase
@@ -686,6 +687,7 @@ const DEFAULT_STATS: PlayerStatistics = {
   longRallyWonPct: 0,
   winners: 0,
   unforcedErrors: 0,
+  forcedErrors: null,
   netPointsAppearances: 0,
   netPointsWon: 0,
   netPointsWonPct: null,
@@ -831,6 +833,8 @@ function transformToPlayerStats(
     longRallyWonPct: Math.round(parseFloat(row.long_rally_won_pct ?? "0")),
     winners: row.winners ?? 0,
     unforcedErrors: row.unforced_errors ?? 0,
+    // Null is "not judged", never 0 forced errors.
+    forcedErrors: row.forced_errors,
     netPointsAppearances: row.net_points_appearances ?? 0,
     netPointsWon: row.net_points_won ?? 0,
     netPointsWonPct: netPointsWonPct(

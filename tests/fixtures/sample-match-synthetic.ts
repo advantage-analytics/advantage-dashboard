@@ -50,6 +50,7 @@ function playerStats(overrides: Partial<PlayerStatistics>): PlayerStatistics {
     longRallyWonPct: 50,
     winners: 18,
     unforcedErrors: 12,
+    forcedErrors: null,
     netPointsAppearances: 6,
     netPointsWon: 4,
     netPointsWonPct: 67,

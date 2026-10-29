@@ -947,11 +947,15 @@ test("buildFilterContext: the match row's hand first, else inferred from forehan
   const match = {
     player1: { hand: "Right" },
     player2: { hand: null },
-  } as unknown as Pick<Match, "player1" | "player2" | "sourceProvider">;
+  } as unknown as Pick<
+    Match,
+    "player1" | "player2" | "sourceProvider" | "errorSplitJudged"
+  >;
   expect(buildFilterContext(match, lefty, true)).toEqual({
     youIsPlayer1: true,
     hands: { player1: "right", player2: "left" },
     isDerived: false,
+    errorSplitJudged: false,
   });
   // The same row from Advantage Intelligence is a derived match.
   expect(
@@ -960,7 +964,13 @@ test("buildFilterContext: the match row's hand first, else inferred from forehan
     youIsPlayer1: true,
     hands: { player1: "right", player2: "left" },
     isDerived: true,
+    errorSplitJudged: false,
   });
+  // The loader's judgement rides through unchanged.
+  expect(
+    buildFilterContext({ ...match, errorSplitJudged: true }, lefty, true)
+      .errorSplitJudged,
+  ).toBe(true);
 });
 
 /* ── Serve › Result, Return › Result, Result › Missed / Rally length ────── */

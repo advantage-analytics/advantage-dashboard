@@ -32,7 +32,7 @@ ready).
 
 ## T2 · errorSplitJudged predicate and forced-errors plumbing into report data
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/lib/data/error-split.ts (new, guess), src/lib/data/match-detail-server.ts, src/lib/data/match-stats-server.ts, src/lib/data/types.ts, src/components/dashboard/matches/match-detail/match-filters/model.ts (MatchFilterContext), src/components/dashboard/matches/match-detail/match-report-context.tsx, tests/error-split.spec.ts (new)
