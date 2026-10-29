@@ -1847,26 +1847,16 @@ export function LabelConsole({
       shots.push(...plan.shots);
     }
     if (plans.size === 0) return;
-    const shotsBefore = [...befores.values()].flatMap((p) =>
-      shotSwapsOf(p.shots),
-    );
-    const pointOfShot = new Map(
-      [...befores.values()].flatMap((p) =>
-        p.shots.map((shot) => [shot.id, p.id] as const),
-      ),
-    );
-    // Every planned point, back as it was read: the revert, and the settle
+    // The listed points, back as they were read: the revert, and the settle
     // for any point the server stopped short of.
-    const revert = (rows: LabelPoint[], ids: ReadonlySet<string>) =>
-      applyShotSwaps(
-        rows.map((p) => {
-          const before = ids.has(p.id) ? befores.get(p.id) : undefined;
-          if (!before) return p;
-          const { status, winner, endedBy } = before;
-          return { ...p, status, winner, endedBy };
-        }),
-        shotsBefore.filter((shot) => ids.has(pointOfShot.get(shot.id) ?? "")),
+    const revert = (rows: LabelPoint[], ids: Iterable<string>) => {
+      const back = new Map<string, LabelPoint>();
+      for (const id of ids) back.set(id, befores.get(id)!);
+      return applyShotSwaps(
+        takeFields(rows, back, ["status", "winner", "endedBy"]),
+        shotSwapsOf([...back.values()].flatMap((p) => p.shots)),
       );
+    };
     return runOperation(
       (rows) =>
         applyShotSwaps(
@@ -1879,9 +1869,7 @@ export function LabelConsole({
       () => run([...plans.keys()]),
       (rows, result) => {
         const saved = new Map(result.points.map((p) => [p.pointId, p]));
-        const unsaved = new Set(
-          [...plans.keys()].filter((id) => !saved.has(id)),
-        );
+        const unsaved = [...plans.keys()].filter((id) => !saved.has(id));
         const settled = applyShotSwaps(
           rows.map((p) => {
             const one = saved.get(p.id);
@@ -1891,9 +1879,9 @@ export function LabelConsole({
           }),
           result.shots,
         );
-        return unsaved.size > 0 ? revert(settled, unsaved) : settled;
+        return unsaved.length > 0 ? revert(settled, unsaved) : settled;
       },
-      (rows) => revert(rows, new Set(plans.keys())),
+      (rows) => revert(rows, plans.keys()),
     ).then((result) => {
       // Some points were written and the rest refused: say why, after the
       // success runOperation reported for the ones that landed.
