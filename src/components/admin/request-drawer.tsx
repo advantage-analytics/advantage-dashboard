@@ -4,10 +4,8 @@ import Link from "next/link";
 import { squadLabel } from "@/lib/data/squad";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
-  Check,
   Copy,
   ExternalLink,
-  Minus,
   MoreHorizontal,
   RotateCcw,
   Send,
@@ -18,8 +16,7 @@ import {
   PeekDrawerFrame,
   ICON_BUTTON,
 } from "@/components/dashboard/matches/match-drawer";
-import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
-import { PersonAvatar } from "@/components/ui/person-avatar";
+import { RequestSubject, requestRole } from "@/components/admin/requests-table";
 import {
   VerticalStep,
   type StepState,
@@ -30,7 +27,7 @@ import { StatePill } from "@/components/ui/state-pill";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
-import { getInitials, shortDate } from "@/lib/data/match-utils";
+import { shortDate } from "@/lib/data/match-utils";
 import { cn } from "@/lib/utils";
 import {
   approveClaim,
@@ -314,21 +311,29 @@ export function RequestDrawer({
               </p>
             )}
             {canApprove ? (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => run(() => approveClaim(row.id, note))}
-                className={cn(
-                  advButton(unvouched ? "ghost" : "primary", "md"),
-                  "w-full",
+              <>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => run(() => approveClaim(row.id, note))}
+                  className={cn(
+                    advButton(unvouched ? "ghost" : "primary", "md"),
+                    "w-full",
+                  )}
+                >
+                  {pending
+                    ? "Approving…"
+                    : unvouched
+                      ? "Approve anyway"
+                      : "Approve"}
+                </button>
+                {unvouched && (
+                  <p className="text-center text-[11px] leading-[1.5] text-[var(--ink-600)]">
+                    Nobody has vouched for this address. Check the staff page
+                    first.
+                  </p>
                 )}
-              >
-                {pending
-                  ? "Approving…"
-                  : unvouched
-                    ? "Approve anyway"
-                    : "Approve"}
-              </button>
+              </>
             ) : detail.source === "request" && row.status === "open" ? (
               <>
                 <button
@@ -360,103 +365,72 @@ export function RequestDrawer({
           </>
         }
       >
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
-          {/* Identity — the team this concerns, then when it landed. */}
-          <div className="flex flex-col gap-2.5">
-            <div className="flex items-start gap-2.5">
-              <ProgramCrest
-                name={row.team}
-                crestUrl={row.crestUrl}
-                size={38}
-                className="mt-0.5"
-              />
-              <div className="flex min-w-0 flex-col gap-1">
-                {/* Wraps, never truncates — the Peek Drawer's own rule. */}
-                <h2 className="text-title-lg [text-wrap:balance] text-[var(--ink-900)]">
-                  {row.team}
-                </h2>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {teamPills(detail).map((pill) => (
-                    <StatePill key={pill}>{pill}</StatePill>
-                  ))}
-                </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-[22px] overflow-y-auto px-6 pt-5 pb-8">
+          {/* Identity — Requests2: the person and their role, then the
+              program and when it landed. Wraps, never truncates. */}
+          <div className="flex flex-col gap-1">
+            <h2 className="text-[16px] leading-[1.35] font-medium [text-wrap:balance] break-words text-[var(--ink-900)]">
+              {row.from.name}, {requestRole(row)}
+            </h2>
+            <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-[12px] text-[var(--ink-600)]">
+              <RequestSubject row={row} />
+              <span className="shrink-0">· {ageLine(row.date)}</span>
+            </span>
+            <span className="text-[12px] break-all text-[var(--ink-600)]">
+              {row.from.email}
+            </span>
+            {teamPills(detail).length > 0 && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                {teamPills(detail).map((pill) => (
+                  <StatePill key={pill}>{pill}</StatePill>
+                ))}
               </div>
-            </div>
-            <p className="mono tabular text-[11px] text-[var(--ink-500)]">
-              {row.for} · {ageLine(row.date)}
-            </p>
+            )}
           </div>
 
-          {/* Who asked — the one boxed block on the panel, so the person is
-              never mistaken for another fact about the program. */}
-          <div className="flex flex-col gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3">
-            <div className="flex items-start gap-2.5">
-              <PersonAvatar
-                initials={getInitials(row.from.name)}
-                className="size-[26px] text-[9px]"
-              />
-              <div className="flex min-w-0 flex-col">
-                <span className="text-[13px] font-medium break-words text-[var(--ink-900)]">
-                  {row.from.name}
-                </span>
-                <span className="text-[11px] text-[var(--ink-600)]">
-                  {row.for}
-                </span>
-                <span className="text-[11px] break-all text-[var(--ink-600)]">
-                  {row.from.email}
-                </span>
-              </div>
+          {/* What they said — the claimant's or requester's own words. */}
+          {(claimantWords(detail) ||
+            (detail.source === "request" && detail.match?.pointLabel)) && (
+            <div className="flex flex-col gap-2">
+              {detail.source === "request" && detail.match?.pointLabel && (
+                <p className="mono m-0 text-[11px] leading-[1.5] text-[var(--ink-600)]">
+                  Point {detail.match.pointLabel}
+                </p>
+              )}
+              {claimantWords(detail) && (
+                <blockquote className="border-l-2 border-[var(--border-medium)] pl-2.5 text-[12px] leading-[1.6] text-[var(--ink-700)] italic">
+                  {claimantWords(detail)}
+                </blockquote>
+              )}
             </div>
-            {detail.source === "request" && detail.match?.pointLabel && (
-              <p className="mono m-0 text-[11px] leading-[1.5] text-[var(--ink-600)]">
-                Point {detail.match.pointLabel}
-              </p>
-            )}
-            {claimantWords(detail) && (
-              <blockquote className="border-l-2 border-[var(--border-medium)] pl-2.5 text-[11px] leading-[1.6] text-[var(--ink-700)] italic">
-                {claimantWords(detail)}
-              </blockquote>
-            )}
-          </div>
+          )}
 
           {/* What we know — the checks, in the words the review email uses. */}
-          <div className="flex flex-col gap-2.5">
-            <span className="eyebrow-sm">What we know</span>
-            <ul className="flex flex-col gap-2">
-              {checksFor(detail).map((check) => (
-                <li key={check.text} className="flex items-start gap-2">
-                  <span className="mt-[3px] shrink-0">
-                    {check.ok ? (
-                      <Check
-                        className="size-[13px] text-[var(--ink-600)]"
-                        strokeWidth={2}
-                        aria-hidden
-                      />
-                    ) : (
-                      <Minus
-                        className="size-[13px] text-[var(--ink-300)]"
-                        strokeWidth={2}
-                        aria-hidden
-                      />
-                    )}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-[12px] leading-[1.5]",
-                      check.ok
-                        ? "text-[var(--ink-900)]"
-                        : "text-[var(--ink-600)]",
-                    )}
-                  >
-                    {check.text}
-                  </span>
+          <section
+            aria-labelledby="request-know"
+            className="flex flex-col gap-2.5"
+          >
+            <h3
+              id="request-know"
+              className="m-0 text-[12px] font-normal text-[var(--ink-600)]"
+            >
+              What we know
+            </h3>
+            <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+              {checksFor(detail, status).map((check) => (
+                <li
+                  key={check.text}
+                  className="flex items-start gap-2.5 text-[13px] leading-[1.45] text-[var(--ink-900)]"
+                >
+                  <CheckGlyph tone={check.tone} />
+                  <span>{check.text}</span>
                 </li>
               ))}
             </ul>
             {detail.source === "request" && detail.match?.labelSessionId && (
               <Link
                 href={`/admin/labels/${detail.match.labelSessionId}`}
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
               >
                 Open it in the label console
               </Link>
@@ -466,7 +440,7 @@ export function RequestDrawer({
                 href={detail.staffPageUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
               >
                 Open their staff page
                 <ExternalLink
@@ -476,7 +450,7 @@ export function RequestDrawer({
                 />
               </a>
             )}
-          </div>
+          </section>
 
           {claim && (
             <EmailCheckSection
@@ -549,6 +523,25 @@ function claimantWords(detail: AdminRequestRow["detail"]): string | null {
   return detail.source === "claim" ? detail.claimantMessage : detail.note;
 }
 
+type CheckTone = "ok" | "no" | "warn";
+
+/** The 16px round mark before a check: ✓ / – on grey, ! on the warm wash. */
+function CheckGlyph({ tone }: { tone: CheckTone }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "mt-px inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+        tone === "warn"
+          ? "bg-[var(--warning-bg)] text-[var(--warning-text)]"
+          : "bg-[var(--ink-100)] text-[var(--ink-600)]",
+      )}
+    >
+      {tone === "ok" ? "✓" : tone === "warn" ? "!" : "–"}
+    </span>
+  );
+}
+
 /**
  * The check list, built from the columns the loader already carries.
  *
@@ -560,17 +553,20 @@ function claimantWords(detail: AdminRequestRow["detail"]): string | null {
  */
 function checksFor(
   detail: AdminRequestRow["detail"],
-): { ok: boolean; text: string }[] {
+  status: string,
+): { tone: CheckTone; text: string }[] {
+  const tone = (ok: boolean, warn = false): CheckTone =>
+    ok ? "ok" : warn ? "warn" : "no";
   if (detail.source === "request" && detail.match) {
     return [
       {
-        ok: detail.match.verified,
+        tone: tone(detail.match.verified),
         text: detail.match.verified
           ? "The match is still Verified by Advantage"
           : "The match is no longer Verified by Advantage",
       },
       {
-        ok: detail.programId !== null,
+        tone: tone(detail.programId !== null),
         text: detail.programId
           ? "A team match"
           : "A personal match, not a team's",
@@ -578,9 +574,9 @@ function checksFor(
     ];
   }
   if (detail.source === "request") {
-    const checks: { ok: boolean; text: string }[] = [
+    const checks: { tone: CheckTone; text: string }[] = [
       {
-        ok: Boolean(detail.programId),
+        tone: tone(Boolean(detail.programId)),
         text: detail.programId
           ? "This team is already in the directory"
           : "No program in the directory matches this",
@@ -588,41 +584,51 @@ function checksFor(
     ];
     if (detail.roleLabel) {
       checks.push({
-        ok: true,
+        tone: "ok",
         text: `They say they are the ${detail.roleLabel.toLowerCase()}`,
       });
     }
     return checks;
   }
 
-  const checks: { ok: boolean; text: string }[] = [
+  // An address off the school's domain that nobody has vouched for or
+  // verified is the one warm line — the same condition as "Approve anyway".
+  const unvouched =
+    !detail.verifiedAt && !detail.contactMatched && !detail.domainMatched;
+  const checks: { tone: CheckTone; text: string }[] = [
     {
-      ok: detail.domainMatched,
+      tone: tone(detail.domainMatched, unvouched),
       text: detail.domainMatched
         ? `Their address is on ${detail.primaryDomain ?? "the school's domain"}`
         : `Their address is not on ${detail.primaryDomain ?? "the school's domain"}`,
     },
     {
-      ok: detail.contactMatched,
+      tone: tone(detail.contactMatched),
       text: detail.contactMatched
         ? "Matches a staff contact we have on record"
         : "No staff contact on record matches them",
     },
     {
-      ok: detail.skipsManualReview,
+      tone: tone(detail.skipsManualReview),
       text: detail.skipsManualReview
         ? "Cleared the automatic checks"
         : detail.reviewReason,
     },
   ];
+  if (detail.verifiedAt) {
+    checks.push({ tone: "ok", text: "They confirmed the address by email" });
+  }
+  if (status === "objected") {
+    checks.push({ tone: "warn", text: "Someone objected to this claim" });
+  }
   if (detail.matchReason) {
-    checks.push({ ok: true, text: detail.matchReason });
+    checks.push({ tone: "ok", text: detail.matchReason });
   }
   if (detail.reviewReasons) {
-    checks.push({ ok: false, text: detail.reviewReasons });
+    checks.push({ tone: "warn", text: detail.reviewReasons });
   }
   if (detail.voucherNote) {
-    checks.push({ ok: true, text: `Vouched for: “${detail.voucherNote}”` });
+    checks.push({ tone: "ok", text: `Vouched for: “${detail.voucherNote}”` });
   }
   return checks;
 }

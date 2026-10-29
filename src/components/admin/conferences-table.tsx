@@ -2,6 +2,7 @@
 
 import { Network } from "lucide-react";
 import { ConferenceMark } from "@/components/admin/conference-mark";
+import { RowChevron } from "@/components/admin/admin-cells";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import {
   TableEmptyBody,
@@ -23,10 +24,12 @@ import {
 /**
  * The Admin › Conferences table.
  *
- * Built on `requests-table.tsx`'s shape: these are **container rows** (Data
- * Table law 3) — a conference opens a peek drawer rather than a report of its
- * own, so the row is a `role="button"` with no `<Link>` and no chevron, click
- * or Enter/Space calls `onSelect`, and the wash persists on the open row.
+ * Built on `requests-table.tsx`'s shape: a conference opens a peek drawer
+ * rather than a report of its own, so the row is a `role="button"` with no
+ * `<Link>`; click or Enter/Space calls `onSelect`, and the wash persists on
+ * the open row. Conferences2 draws a trailing chevron on every row, so it
+ * carries one (`RowChevron`) — the redesign's board over the older
+ * container-row rule.
  *
  * `onSelect` defaults to a no-op and `selectedId` to nothing selected, so the
  * table renders correctly before the drawer is wired to it.
@@ -53,7 +56,7 @@ export function ConferencesTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[560px] px-6 pt-0.5 pb-1.5">
+      <div className="min-w-[760px] px-6 pt-0.5 pb-1.5">
         <div
           className={cn(
             ROW,
@@ -61,7 +64,11 @@ export function ConferencesTable({
           )}
         >
           {CONFERENCES_COLUMNS.map((column) => (
-            <span key={column.label} className={cn(column.col, "eyebrow-sm")}>
+            <span
+              key={column.label || "chevron"}
+              aria-hidden={column.label ? undefined : true}
+              className={cn(column.col, "eyebrow-sm")}
+            >
               {column.label}
             </span>
           ))}
@@ -98,6 +105,8 @@ function ConferenceRow({
   onSelect?: (row: AdminConferenceRow) => void;
 }) {
   const division = divisionLabel(row.division);
+  const share =
+    row.teams > 0 ? Math.round((row.onAdvantage / row.teams) * 100) : 0;
 
   return (
     <div
@@ -123,11 +132,26 @@ function ConferenceRow({
         selected && "bg-[var(--surface-muted)]",
       )}
     >
-      {/* Conference — mark + name, the fluid cell. */}
+      {/* Conference — 32px mark, then name over website. */}
       <span className={cn(COL.conference, "flex min-w-0 items-center gap-3")}>
-        <ConferenceMark name={row.name} shortName={row.shortName} size={28} />
-        <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-          {row.name}
+        <ConferenceMark
+          name={row.name}
+          shortName={row.shortName}
+          crestUrl={row.crestUrl}
+          size={32}
+        />
+        <span className="flex min-w-0 flex-col gap-1">
+          <span className="truncate text-[13px] leading-none font-medium text-[var(--ink-900)]">
+            {row.name}
+          </span>
+          <span
+            className={cn(
+              "truncate text-[12px] leading-none",
+              row.website ? "text-[var(--ink-600)]" : "text-[var(--ink-500)]",
+            )}
+          >
+            {row.website ?? "No website yet"}
+          </span>
         </span>
       </span>
 
@@ -138,31 +162,54 @@ function ConferenceRow({
           "truncate text-[12px] text-[var(--ink-700)]",
         )}
       >
-        {division ?? <EmptyMark label="No division" />}
+        {division ?? <EmptyMark label="No division set" />}
       </span>
 
-      <Count className={COL.teams} value={row.teams} />
-      <Count className={COL.onAdvantage} value={row.onAdvantage} />
-      <Count className={COL.pilot} value={row.pilot} />
-    </div>
-  );
-}
+      <span
+        className={cn(
+          COL.teams,
+          "text-[13px] text-[var(--ink-900)] tabular-nums",
+        )}
+      >
+        {row.teams}
+      </span>
 
-/**
- * One count cell. A zero is a real value, not an absence — it keeps its digit
- * and steps down to ink-600 (the frame's `.c.soft`) so the non-zero counts
- * carry the column.
- */
-function Count({ className, value }: { className: string; value: number }) {
-  return (
-    <span
-      className={cn(
-        className,
-        "text-[12px] tabular-nums",
-        value === 0 ? "text-[var(--ink-600)]" : "text-[var(--ink-700)]",
-      )}
-    >
-      {value}
-    </span>
+      {/* On Advantage — "5 of 18" over a 3px bar. */}
+      <span className={cn(COL.onAdvantage, "flex flex-col gap-1.5")}>
+        <span
+          className={cn(
+            "truncate text-[12px] leading-none tabular-nums",
+            row.onAdvantage > 0
+              ? "text-[var(--ink-700)]"
+              : "text-[var(--ink-500)]",
+          )}
+        >
+          {row.onAdvantage > 0
+            ? `${row.onAdvantage} of ${row.teams}`
+            : "None yet"}
+        </span>
+        <span
+          aria-hidden="true"
+          className="block h-[3px] overflow-hidden rounded-full bg-[var(--ink-100)]"
+        >
+          <span
+            className="block h-full bg-[var(--viz-you-mid)]"
+            style={{ width: `${share}%` }}
+          />
+        </span>
+      </span>
+
+      <span className={cn(COL.pilot, "text-[13px] tabular-nums")}>
+        {row.pilot > 0 ? (
+          <span className="text-[var(--ink-900)]">{row.pilot}</span>
+        ) : (
+          <EmptyMark label="No pilots" />
+        )}
+      </span>
+
+      <span className={cn(COL.chevron, "flex items-center")}>
+        <RowChevron />
+      </span>
+    </div>
   );
 }

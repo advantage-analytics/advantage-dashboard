@@ -2,24 +2,27 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ListFilter, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { AdminPage } from "@/components/admin/admin-page";
-import { ViewPills } from "@/components/admin/view-pills";
+import {
+  CountPills,
+  FilterDivider,
+  FilterMenuPill,
+  PillSearch,
+} from "@/components/admin/admin-cells";
 import { ConferencesTable } from "@/components/admin/conferences-table";
 import { conferenceRowId } from "@/components/admin/conferences-table-layout";
 import { ConferenceDrawer } from "@/components/admin/conference-drawer";
 import { AddConferenceDialog } from "@/components/admin/add-conference-dialog";
 import { DRAWER_ATTR } from "@/components/dashboard/matches/match-drawer";
-import {
-  FilterTrigger,
-  SortTrigger,
-} from "@/components/dashboard/shared/list-toolbar-trigger";
+import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 // The client-safe half of the data layer — `admin-conferences-server.ts`
 // imports the Supabase server client at top level and must not reach this
 // bundle.
 import {
   applyConferenceView,
+  matchesConferenceSearch,
   sortConferences,
 } from "@/lib/data/admin-conferences-view";
 import type {
@@ -27,11 +30,7 @@ import type {
   AdminConferencesSort,
   AdminConferencesView,
 } from "@/lib/data/admin-conferences-view";
-import {
-  DIVISION_VALUES,
-  divisionLabel,
-  divisionLongLabel,
-} from "@/lib/data/programs-server";
+import { DIVISION_VALUES, divisionLabel } from "@/lib/data/programs-server";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +48,9 @@ import { cn } from "@/lib/utils";
  *
  * The **cut** is `teams-page-content.tsx`'s `pushCut`: view, sort and division
  * are URL state pushed with `router.push`, defaults kept out of the address.
+ * The search pill is local state — typing is not a navigation — and narrows
+ * on name, short name or label. View pill counts are taken after the
+ * division and the search, so each says what pressing it would show.
  *
  * ## Load all, render 50
  *
@@ -69,6 +71,9 @@ const SORT_OPTIONS: { value: AdminConferencesSort; label: string }[] = [
   { value: "most_teams", label: "Most teams" },
   { value: "name_asc", label: "Name A–Z" },
 ];
+
+/** The Division menu's unfiltered option — never a real division value. */
+const ANY_DIVISION = "all";
 
 /** Rows drawn before "Show all". */
 const PAGE_SIZE = 50;
@@ -96,19 +101,34 @@ export function ConferencesPageContent({
   const router = useRouter();
   const pathname = usePathname();
 
-  const inView = useMemo(
-    () => sortConferences(applyConferenceView(rows, view), sort),
-    [rows, view, sort],
+  const [query, setQuery] = useState("");
+
+  // Division and search first — the pills count over what they leave.
+  const narrowed = useMemo(
+    () =>
+      rows.filter(
+        (row) =>
+          (!division || row.division === division) &&
+          matchesConferenceSearch(row, query),
+      ),
+    [rows, division, query],
   );
   const visible = useMemo(
+    () => sortConferences(applyConferenceView(narrowed, view), sort),
+    [narrowed, view, sort],
+  );
+  const viewOptions = useMemo(
     () =>
-      division ? inView.filter((row) => row.division === division) : inView,
-    [inView, division],
+      VIEW_OPTIONS.map((option) => ({
+        ...option,
+        count: applyConferenceView(narrowed, option.value).length,
+      })),
+    [narrowed],
   );
 
   // "Show all" belongs to the cut it was pressed on. Keyed rather than reset
   // in an effect, so a new cut never paints the long list for a frame.
-  const cutKey = `${view}|${sort}|${division ?? ""}`;
+  const cutKey = `${view}|${sort}|${division ?? ""}|${query.trim()}`;
   const initialIndex = initialSelectedId
     ? visible.findIndex((row) => row.id === initialSelectedId)
     : -1;
@@ -139,7 +159,6 @@ export function ConferencesPageContent({
   const [clearUrl, setClearUrl] = useState(0);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [adding, setAdding] = useState(false);
 
@@ -317,6 +336,8 @@ export function ConferencesPageContent({
 
   /* ── Title slot numbers ───────────────────────────────────────────────── */
 
+  // `teams` counts every program pointing at a conference, so the sum is the
+  // programs placed in one; `unplaced` is the programs with no conference.
   const placed = rows.reduce((sum, row) => sum + row.teams, 0);
   const summary = [
     `${count(rows.length)} ${rows.length === 1 ? "conference" : "conferences"}`,
@@ -362,10 +383,10 @@ export function ConferencesPageContent({
       }
     >
       {/* Title slot — the page's one primary sits here. */}
-      <div className="flex items-end gap-2.5">
-        <div className="flex min-w-0 flex-1 items-baseline gap-4">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="min-w-0 flex-1">
           <h1 className="text-display">Conferences</h1>
-          <p className="text-body-sm truncate tabular-nums">{summary}</p>
+          <p className="text-body-sm mt-[9px] tabular-nums">{summary}</p>
         </div>
         <button
           type="button"
@@ -379,50 +400,36 @@ export function ConferencesPageContent({
         </button>
       </div>
 
-      {/* Views, then the toolbar. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <ViewPills
-          options={VIEW_OPTIONS}
+      {/* Search, views, a divider, then the division menu. */}
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <PillSearch
+          value={query}
+          onChange={setQuery}
+          placeholder="Conference"
+          label="Search conferences"
+        />
+        <CountPills
+          options={viewOptions}
           value={view}
           onChange={(next) => pushCut({ view: next })}
         />
-        <div className="flex-1" />
-
-        <FloatMenu
-          open={filtersOpen}
-          onOpenChange={setFiltersOpen}
-          label="Filter conferences"
+        <FilterDivider />
+        <FilterMenuPill<string>
+          label="Division"
           width={196}
-          trigger={
-            <FilterTrigger
-              aria-expanded={filtersOpen}
-              engaged={filtersOpen || division !== null}
-            />
+          options={[
+            { value: ANY_DIVISION, label: "All" },
+            ...DIVISION_VALUES.map((value) => ({
+              value: value as string,
+              label: divisionLabel(value) ?? value,
+            })),
+          ]}
+          value={division ?? ANY_DIVISION}
+          onChange={(next) =>
+            pushCut({ division: next === ANY_DIVISION ? null : next })
           }
-        >
-          <p className="px-2.5 pt-1.5 pb-1 text-[11px] text-[var(--ink-400)]">
-            Division
-          </p>
-          <FloatMenuItem
-            label="Any"
-            chosen={division === null}
-            onSelect={() => {
-              setFiltersOpen(false);
-              pushCut({ division: null });
-            }}
-          />
-          {DIVISION_VALUES.map((value) => (
-            <FloatMenuItem
-              key={value}
-              label={divisionLabel(value) ?? value}
-              chosen={division === value}
-              onSelect={() => {
-                setFiltersOpen(false);
-                pushCut({ division: value });
-              }}
-            />
-          ))}
-        </FloatMenu>
+        />
+        <div className="flex-1" />
 
         <FloatMenu
           open={sortOpen}
@@ -452,19 +459,23 @@ export function ConferencesPageContent({
       <ConferencesTable
         rows={shown}
         emptyTitle={
-          division
-            ? "No conferences fit this filter"
-            : "No conferences in this view"
+          query.trim()
+            ? "No conferences match that search"
+            : division
+              ? "No conferences fit this filter"
+              : "No conferences in this view"
         }
         emptyAction={
-          division
-            ? { label: "Clear filter", onClick: clearFilter }
-            : view !== "all"
-              ? {
-                  label: "Show every conference",
-                  onClick: () => pushCut({ view: "all" }),
-                }
-              : undefined
+          query.trim()
+            ? { label: "Clear search", onClick: () => setQuery("") }
+            : division
+              ? { label: "Clear filter", onClick: clearFilter }
+              : view !== "all"
+                ? {
+                    label: "Show every conference",
+                    onClick: () => pushCut({ view: "all" }),
+                  }
+                : undefined
         }
         selectedId={selectedId}
         onSelect={(row) =>
@@ -472,52 +483,16 @@ export function ConferencesPageContent({
         }
       />
 
-      {division ? (
-        // The applied cut as one grey sentence — never chips (table law 6).
-        <div
-          className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-          style={{ background: "var(--surface-subtle)" }}
-        >
-          <ListFilter
-            className="size-[13px] shrink-0"
-            strokeWidth={1.5}
-            style={{ color: "var(--ink-500)" }}
-            aria-hidden="true"
-          />
-          <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-            {divisionLongLabel(division)}
+      {truncated && (
+        <div className="flex items-center gap-2 text-[12px] whitespace-nowrap text-[var(--ink-600)]">
+          <span className="tabular-nums">
+            {count(shown.length)} of {count(visible.length)}
           </span>
-          <Dot />
-          <span className="text-micro tabular">
-            {count(shown.length)} of {count(inView.length)}
+          <span className="text-[var(--ink-300)]" aria-hidden="true">
+            ·
           </span>
-          {truncated && (
-            <>
-              <Dot />
-              <ShowAll onClick={() => setExpandedFor(cutKey)} small />
-            </>
-          )}
-          <div className="flex-1" />
-          <button
-            type="button"
-            onClick={clearFilter}
-            className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-          >
-            Clear filter
-          </button>
+          <ShowAll onClick={() => setExpandedFor(cutKey)} />
         </div>
-      ) : (
-        truncated && (
-          <div className="flex items-center gap-2 text-[12px] whitespace-nowrap text-[var(--ink-600)]">
-            <span className="tabular-nums">
-              {count(shown.length)} of {count(visible.length)}
-            </span>
-            <span className="text-[var(--ink-300)]" aria-hidden="true">
-              ·
-            </span>
-            <ShowAll onClick={() => setExpandedFor(cutKey)} />
-          </div>
-        )
       )}
 
       <AddConferenceDialog
@@ -532,32 +507,13 @@ export function ConferencesPageContent({
   );
 }
 
-function Dot() {
-  return (
-    <span
-      className="size-[3px] rounded-full"
-      style={{ background: "var(--ink-300)" }}
-      aria-hidden="true"
-    />
-  );
-}
-
-/** The strip's one blue text action. */
-function ShowAll({
-  onClick,
-  small = false,
-}: {
-  onClick: () => void;
-  small?: boolean;
-}) {
+/** The truncation line's one blue text action. */
+function ShowAll({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cn(
-        "font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]",
-        small ? "text-[11px]" : "text-[12px]",
-      )}
+      className="text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
     >
       Show all
     </button>

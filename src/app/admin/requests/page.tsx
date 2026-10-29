@@ -1,8 +1,11 @@
 import {
+  countAdminRequests,
   listAdminRequests,
   type AdminRequestsView,
 } from "@/lib/data/admin-requests-server";
 import { RequestsPageContent } from "@/components/admin/requests-page-content";
+import { isFresh, lookAtSurface } from "@/lib/admin/seen-server";
+import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 
 /**
  * Admin › Requests — the console's queue of claims and invite requests.
@@ -50,7 +53,17 @@ export default async function AdminRequestsPage({
       ? (viewParam as AdminRequestsView)
       : "waiting";
 
-  const page = await listAdminRequests({ view, after: one(params.after) });
+  const admin = await requireAdminOrNotFound();
+  const [page, counts, seen] = await Promise.all([
+    listAdminRequests({ view, after: one(params.after) }),
+    countAdminRequests(),
+    lookAtSurface(admin.id, "requests"),
+  ]);
+  // "New since you last looked": a row's key is `request:<id>`, cleared the
+  // moment it is opened (`markAdminRowSeen`).
+  const freshIds = page.rows
+    .filter((row) => isFresh(seen, `request:${row.id}`, row.date))
+    .map((row) => row.id);
 
   const emptyTitle: Record<AdminRequestsView, string> = {
     waiting: "Nothing is waiting on you",
@@ -63,6 +76,8 @@ export default async function AdminRequestsPage({
     <RequestsPageContent
       rows={page.rows}
       view={view}
+      counts={counts}
+      freshIds={freshIds}
       initialSelectedId={one(params.id)}
       emptyTitle={emptyTitle[view]}
     />

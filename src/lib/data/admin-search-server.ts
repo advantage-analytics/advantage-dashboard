@@ -6,9 +6,184 @@ import {
   programDisplayName,
   programSubtitle,
 } from "@/lib/data/programs-server";
+import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
+import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
+import { formatMatchDayShortYear } from "@/lib/data/match-day";
+import type {
+  AdminSearchHit,
+  AdminSearchKind,
+} from "@/components/admin/search/types";
 
 /**
- * The admin header's jump-to-a-team search.
+ * The admin header's Search: teams, people, matches and conferences.
+ *
+ * Matching is `public.admin_search` (migration `20261028213310_admin_search`):
+ * accent- and case-insensitive, typo-tolerant, at most `limit` rows per kind,
+ * already ordered best-first within each kind. That function is executable by
+ * `service_role` only and re-checks that `p_viewer` is an admin, so this
+ * action passes the id `requireAdminOrNotFound()` resolved — never one the
+ * client sent.
+ *
+ * What it adds on top is the part the browser needs and SQL should not build:
+ * public URLs for crests and photos, a match's calendar day as a label, and
+ * where each row goes.
+ *
+ * A person goes to the team page of a program they belong to (owner, then
+ * coach, staff, player), because that is the one admin page that shows a
+ * person in context and can act on them. Someone with no team goes to
+ * Pilots — the console has no per-person page, and Pilots is where an
+ * individual account is managed. It reads no `?email=`, so none is sent.
+ */
+
+/** Rows per kind. Four groups of five fit the panel without a long scroll. */
+const PER_KIND = 5;
+
+const KINDS = new Set<AdminSearchKind>([
+  "team",
+  "person",
+  "match",
+  "conference",
+]);
+
+/** Which membership a person's row opens, best first. */
+const ROLE_RANK: Record<string, number> = {
+  owner: 0,
+  coach: 1,
+  staff: 2,
+  player: 3,
+};
+
+interface SearchRow {
+  kind: string;
+  id: string;
+  title: string | null;
+  subtitle: string | null;
+  extra: Record<string, unknown> | null;
+}
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+export async function adminSearch(term: string): Promise<AdminSearchHit[]> {
+  const { id: viewer } = await requireAdminOrNotFound();
+
+  const query = term.trim();
+  if (query.length === 0) return [];
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("admin_search", {
+    p_viewer: viewer,
+    p_term: query,
+    p_limit: PER_KIND,
+  });
+
+  // Thrown, not swallowed: the panel's "Couldn't search." is for exactly
+  // this, and an empty list would read as "nothing matches".
+  if (error) {
+    console.error("[admin search] admin_search failed", {
+      error: error.message,
+    });
+    throw new Error("Couldn't search.");
+  }
+
+  const rows = ((data ?? []) as SearchRow[]).filter((row) =>
+    KINDS.has(row.kind as AdminSearchKind),
+  );
+
+  // Where each person goes: the program they hold the most standing in.
+  const personIds = rows.filter((r) => r.kind === "person").map((r) => r.id);
+  const teamOf = new Map<string, { programId: string; rank: number }>();
+  if (personIds.length > 0) {
+    const { data: members, error: membersError } = await admin
+      .from("program_members")
+      .select("user_id, program_id, role")
+      .in("user_id", personIds);
+    if (membersError) {
+      // Not fatal — the row still opens, on Pilots instead of a team.
+      console.error("[admin search] could not read memberships", {
+        error: membersError.message,
+      });
+    }
+    for (const member of (members ?? []) as {
+      user_id: string;
+      program_id: string | null;
+      role: string | null;
+    }[]) {
+      if (!member.program_id) continue;
+      const rank = ROLE_RANK[member.role ?? ""] ?? 9;
+      const held = teamOf.get(member.user_id);
+      if (!held || rank < held.rank) {
+        teamOf.set(member.user_id, { programId: member.program_id, rank });
+      }
+    }
+  }
+
+  const publicUrl = (bucket: string, path: string | null) =>
+    path ? admin.storage.from(bucket).getPublicUrl(path).data.publicUrl : null;
+
+  return rows.map((row): AdminSearchHit => {
+    const extra = row.extra ?? {};
+    const title = row.title ?? "";
+    const subtitle = text(row.subtitle);
+
+    switch (row.kind as AdminSearchKind) {
+      case "team":
+        return {
+          kind: "team",
+          id: row.id,
+          title,
+          subtitle,
+          href: `/admin/teams/${row.id}`,
+          markUrl: publicUrl(PROGRAM_CRESTS_BUCKET, text(extra.crestPath)),
+          shortCode: text(extra.shortCode),
+        };
+      case "person": {
+        const team = teamOf.get(row.id);
+        return {
+          kind: "person",
+          id: row.id,
+          title,
+          subtitle,
+          href: team ? `/admin/teams/${team.programId}` : "/admin/pilots",
+          markUrl: publicUrl(USER_AVATARS_BUCKET, text(extra.avatarPath)),
+          shortCode: null,
+        };
+      }
+      case "match": {
+        const date = text(extra.date);
+        // Some imports store the match title as its tournament; repeating
+        // the title underneath says nothing.
+        const tournament = subtitle && subtitle !== title ? subtitle : null;
+        return {
+          kind: "match",
+          id: row.id,
+          title,
+          subtitle:
+            [date ? formatMatchDayShortYear(date) : null, tournament]
+              .filter(Boolean)
+              .join(" · ") || null,
+          href: `/admin/matches/${row.id}`,
+          markUrl: null,
+          shortCode: null,
+        };
+      }
+      case "conference":
+        return {
+          kind: "conference",
+          id: row.id,
+          title,
+          subtitle,
+          href: `/admin/conferences?id=${row.id}`,
+          markUrl: publicUrl(PROGRAM_CRESTS_BUCKET, text(extra.crestPath)),
+          shortCode: text(extra.shortName),
+        };
+    }
+  });
+}
+
+/**
+ * Team-only search for the Conference drawer's `AddTeamPopover`.
  *
  * **Not `search_programs`.** That RPC exists and is what the claim flow uses,
  * but it is built for a different question: it excludes custom organisations

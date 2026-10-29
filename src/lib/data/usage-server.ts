@@ -63,7 +63,12 @@ export interface ProgramUsage {
 export async function getPersonalUsage(
   personal: Pick<
     Workspace,
-    "id" | "kind" | "orgType" | "individualPilot" | "unlimitedVideo"
+    | "id"
+    | "kind"
+    | "orgType"
+    | "individualPilot"
+    | "unlimitedVideo"
+    | "videoHoursOverride"
   >,
   billingMonth: string,
 ): Promise<PersonalUsage> {

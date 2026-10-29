@@ -95,7 +95,10 @@ function squadsFor(hasMens: boolean, hasWomens: boolean): ConferenceSquads {
   return null;
 }
 
-function toAdminConferenceRow(raw: RawConferenceRow): AdminConferenceRow {
+function toAdminConferenceRow(
+  raw: RawConferenceRow,
+  crestUrl: string | null,
+): AdminConferenceRow {
   return {
     id: raw.id,
     name: raw.name,
@@ -109,6 +112,7 @@ function toAdminConferenceRow(raw: RawConferenceRow): AdminConferenceRow {
     schools: Number(raw.schools) || 0,
     squads: squadsFor(Boolean(raw.has_mens), Boolean(raw.has_womens)),
     updatedAt: raw.updated_at,
+    crestUrl,
   };
 }
 
@@ -130,12 +134,19 @@ export const listAdminConferences = cache(
     const supabase = await createClient();
     const admin = createAdminClient();
 
-    const [listResult, unplacedResult] = await Promise.all([
+    // `admin_list_conferences()` predates `conferences.crest_path`, and
+    // widening its `returns table` needs a DROP — so the crest keys are a
+    // second, service-role read merged in by id.
+    const [listResult, unplacedResult, crestResult] = await Promise.all([
       supabase.rpc("admin_list_conferences"),
       admin
         .from("programs")
         .select("id", { count: "exact", head: true })
         .is("conference_id", null),
+      admin
+        .from("conferences")
+        .select("id, crest_path")
+        .not("crest_path", "is", null),
     ]);
 
     // Throw rather than fall back to `{ rows: [], unplaced: 0 }`: an empty
@@ -152,10 +163,33 @@ export const listAdminConferences = cache(
       );
     }
 
+    // A failed crest read costs the pictures, not the page: every mark falls
+    // back to its initials.
+    if (crestResult.error) {
+      console.error("[admin conferences] could not read crests", {
+        error: crestResult.error.message,
+      });
+    }
+    const crests = admin.storage.from(PROGRAM_CRESTS_BUCKET);
+    const crestById = new Map<string, string>();
+    for (const row of (crestResult.data ?? []) as {
+      id: string;
+      crest_path: string | null;
+    }[]) {
+      if (row.crest_path) {
+        crestById.set(
+          row.id,
+          crests.getPublicUrl(row.crest_path).data.publicUrl,
+        );
+      }
+    }
+
     const raw = (listResult.data ?? []) as unknown as RawConferenceRow[];
 
     return {
-      rows: raw.map(toAdminConferenceRow),
+      rows: raw.map((row) =>
+        toAdminConferenceRow(row, crestById.get(row.id) ?? null),
+      ),
       unplaced: unplacedResult.count ?? 0,
     };
   },
@@ -209,4 +243,29 @@ export async function readConferenceTeams(
       : null,
     status: row.status,
   }));
+}
+
+/**
+ * The More menu's line under "Conferences": "137 conferences · 14 missing
+ * details". Missing details is `isMissingDetails` — no short name, website
+ * or division. Service role, head counts only; the caller (the admin layout)
+ * has already run `requireAdminOrNotFound()`. A failed read returns null, so
+ * the menu prints no line rather than a wrong one.
+ */
+export async function conferencesNavSub(): Promise<string | null> {
+  const admin = createAdminClient();
+  const [all, missing] = await Promise.all([
+    admin.from("conferences").select("id", { count: "exact", head: true }),
+    admin
+      .from("conferences")
+      .select("id", { count: "exact", head: true })
+      .or("short_name.is.null,website.is.null,division.is.null"),
+  ]);
+  if (all.error || missing.error || all.count == null) return null;
+  const total = all.count;
+  const head = `${total.toLocaleString("en-US")} ${total === 1 ? "conference" : "conferences"}`;
+  const gaps = missing.count ?? 0;
+  return gaps > 0
+    ? `${head} · ${gaps.toLocaleString("en-US")} missing details`
+    : head;
 }

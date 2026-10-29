@@ -16,7 +16,7 @@ import {
 } from "@/components/dashboard/matches/match-drawer";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
-import { ConferenceMark } from "@/components/admin/conference-mark";
+import { ConferenceCrestControl } from "@/components/admin/conference-crest-control";
 import { PilotPill } from "@/components/admin/plan-pills";
 import { AddTeamPopover } from "@/components/admin/add-team-popover";
 import { MergeConferenceDialog } from "@/components/admin/merge-conference-dialog";
@@ -67,7 +67,8 @@ import { cn } from "@/lib/utils";
  * header (‹ › · counter · ⋯ · X), stepping and Esc; this file owns the body
  * and the footer.
  *
- *   identity  mark 40 · name (wraps) · "Division I · 8 schools, …"
+ *   identity  crest control 40 (upload / replace / adjust / remove) · name
+ *             (wraps) · "Division I · 8 schools, …"
  *   fields    Name · Short name · Division · Website — one draft, one Save
  *   teams     every program pointing here, plus "Add a team"
  *
@@ -203,6 +204,7 @@ export function ConferenceDrawer({
 
   const [draft, setDraft] = useState<ConferenceDraft>(() => draftFrom(row));
   const [error, setError] = useState<string | null>(null);
+  const [crestError, setCrestError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [pending, start] = useTransition();
 
@@ -224,6 +226,7 @@ export function ConferenceDrawer({
     setDraftFor(row.id);
     setDraft(draftFrom(row));
     setError(null);
+    setCrestError(null);
     setShowAll(false);
     setMenuOpen(false);
     setMerging(false);
@@ -415,10 +418,14 @@ export function ConferenceDrawer({
         <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
           {/* Identity */}
           <div className="flex items-center gap-3.5">
-            <ConferenceMark
+            <ConferenceCrestControl
+              key={row.id}
               name={row.name}
               shortName={row.shortName}
-              size={40}
+              crestUrl={row.crestUrl}
+              conferenceId={row.id}
+              onChanged={onChanged}
+              onError={setCrestError}
             />
             <div className="flex min-w-0 flex-col gap-[3px]">
               {/* Wraps, never truncates — the Peek Drawer's own rule. */}
@@ -432,6 +439,14 @@ export function ConferenceDrawer({
               )}
             </div>
           </div>
+          {crestError && (
+            <p
+              role="alert"
+              className="-mt-3 text-[12px] leading-[18px] text-[var(--danger)]"
+            >
+              {crestError}
+            </p>
+          )}
 
           {/* Fields — the underline vocabulary; the rule going 2px blue is the
             focus mark, so each control opts out of the ring. */}

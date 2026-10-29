@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   applyConferenceView,
   conferenceMeta,
+  matchesConferenceSearch,
   sortConferences,
   type AdminConferenceRow,
 } from "@/lib/data/admin-conferences-view";
@@ -37,6 +38,7 @@ function row(overrides: Partial<AdminConferenceRow>): AdminConferenceRow {
     schools: 8,
     squads: "both",
     updatedAt: "2026-01-01T00:00:00Z",
+    crestUrl: null,
   };
   // A plain `??` merge would treat an explicit `null` override (e.g.
   // shortName: null) as "not provided" and fall back to the default —
@@ -104,6 +106,23 @@ test.describe("applyConferenceView", () => {
     const copy = [...rows];
     applyConferenceView(rows, "on_advantage");
     expect(rows).toEqual(copy);
+  });
+});
+
+test.describe("matchesConferenceSearch", () => {
+  test("matches name, short name or label, ignoring case", () => {
+    const ivy = row({});
+    expect(matchesConferenceSearch(ivy, "")).toBe(true);
+    expect(matchesConferenceSearch(ivy, "  ivy ")).toBe(true);
+    expect(matchesConferenceSearch(ivy, "leag")).toBe(true);
+    expect(matchesConferenceSearch(ivy, "(IVY)")).toBe(true);
+    expect(matchesConferenceSearch(ivy, "big")).toBe(false);
+  });
+
+  test("a null short name is skipped, not matched as text", () => {
+    expect(
+      matchesConferenceSearch(row({ shortName: null, label: "X" }), "null"),
+    ).toBe(false);
   });
 });
 
