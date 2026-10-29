@@ -326,12 +326,25 @@ test("file/video mount shared wizard with target and stable retry identifiers; r
         (boundary!.type as (props: unknown) => Element)(boundary!.props),
       ).find((e) => e.type === "wizard")!.props.mode,
     ).toEqual(mode);
-    const radio = elements(tree).find(
-      (e) => e.type === "input" && e.props.value === "tournament",
-    )!;
-    (radio.props.onChange as () => void)();
-    expect(pushes.at(-1)).toBe(adminUploadHref(TEAM, "tournament"));
+    // The page is the wizard alone once a file or video is picked: no
+    // header, target or kind cards above it.
+    expect(
+      elements(tree).some(
+        (e) => e.type === "input" && e.props.name === "upload-kind",
+      ),
+    ).toBe(false);
+    expect(elements(tree).some((e) => e.type === "main")).toBe(false);
   }
+  // With no kind yet the cards are there, and a pick navigates.
+  const picking = entry({ context, kind: null, picker: null });
+  const radio = elements(picking).find(
+    (e) => e.type === "input" && e.props.value === "tournament",
+  )!;
+  (radio.props.onChange as () => void)();
+  expect(pushes.at(-1)).toBe(adminUploadHref(TEAM, "tournament"));
+  // An error keeps the page above the wizard, where its way out is.
+  const failed = entry({ context, kind: "video", picker: null, error: "x" });
+  expect(elements(failed).some((e) => e.type === "main")).toBe(true);
   for (const kind of ["dual", "tournament"]) {
     const tree = entry({
       context,
