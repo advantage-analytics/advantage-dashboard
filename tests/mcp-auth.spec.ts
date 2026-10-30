@@ -512,13 +512,12 @@ test.describe("createMcpUserReads", () => {
   });
 
   test("programsNamed(): a literal, case-insensitive name among colleges, narrowed to the team when there is one", async () => {
+    const row = { id: PROGRAM_ID, school_name: "ST_JOHN'S 100%" };
     const { client, filters } = fakeClient({
-      programs: { data: [{ id: PROGRAM_ID }], error: null },
+      programs: { data: [row], error: null },
     });
     const reads = createMcpUserReads(client, USER_ID);
-    expect(await reads.programsNamed("St_John's 100%", "mens")).toEqual([
-      { id: PROGRAM_ID },
-    ]);
+    expect(await reads.programsNamed("St_John's 100%", "mens")).toEqual([row]);
     expect(filters.map((f) => [f.op, ...f.args])).toEqual([
       ["ilike", "school_name", "St\\_John's 100\\%"],
       ["eq", "org_type", "college"],
@@ -526,6 +525,31 @@ test.describe("createMcpUserReads", () => {
       ["order", "id"],
       ["limit", 3],
     ]);
+  });
+
+  test("programsNamed(): a row the pattern's * let through is not the name asked for", async () => {
+    const { client } = fakeClient({
+      programs: {
+        data: [{ id: PROGRAM_ID, school_name: "Harvard University" }],
+        error: null,
+      },
+    });
+    expect(
+      await createMcpUserReads(client, USER_ID).programsNamed("Harvard*", null),
+    ).toEqual([]);
+  });
+
+  test("the answer cache's data version moves when the opponent's team does", () => {
+    const source = readFileSync(
+      "supabase/migrations/20261030210829_ask_data_version_opponent_team.sql",
+      "utf8",
+    );
+    for (const fn of ["ask_data_version", "ask_data_version_as"]) {
+      const body = source.slice(source.indexOf(`function public.${fn}(`));
+      const hash = body.slice(0, body.indexOf("from public.matches m"));
+      expect(hash, fn).toContain("m.opponent_school");
+      expect(hash, fn).toContain("m.opponent_program_id");
+    }
   });
 
   test("searchPrograms(): a GET, because the write guard refuses a connector's other POSTs, with '' for any", async () => {

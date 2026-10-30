@@ -174,6 +174,9 @@ const MAX_LISTED_SOURCES = 100;
 
 const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarising one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, and ask to have Advantage answer a whole question (it saves the exchange to the player's Ask history and spends one of their monthly questions). Two more tools write: update_match fixes a match's details (never its score), and prepare_video_upload saves a draft and returns the link where the player picks the video and finishes — confirm what the player wants before calling either. Before setting an opponent's school, call search_programs and pass the program's id to update_match as opponent_program_id; send opponent_school text only for a school the directory does not hold. Every number you report must come from a tool result; the views hold nobody else's data, except the matches of teams the player belongs to.`;
 
+const PROGRAM_NOT_FOUND =
+  "That program isn't in the directory. Find its id with search_programs.";
+
 /** A refusal a tool throws; `guarded()` answers it as the tool result `refusalResult()` shapes. */
 class Refusal extends Error {
   readonly slug: string;
@@ -822,6 +825,14 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     guarded("opponent_scouting", read.opponentScouting),
   );
 
+  // The team to compare a program against: the scope program's squad, or null
+  // for a personal, co-ed or unsaid scope, which any program fits.
+  async function scopeSquad(scope: AskScope): Promise<GenderedSquad | null> {
+    return scope.kind === "team"
+      ? context.reads.programSquad(scope.programId)
+      : null;
+  }
+
   // ── search_programs ────────────────────────────────────────────────────
   server.registerTool(
     "search_programs",
@@ -868,14 +879,6 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
   );
 
   // ── update_match ───────────────────────────────────────────────────────
-  // The team to compare a program against: the scope program's squad, or null
-  // for a personal, co-ed or unsaid scope, which any program fits.
-  async function scopeSquad(scope: AskScope): Promise<GenderedSquad | null> {
-    return scope.kind === "team"
-      ? context.reads.programSquad(scope.programId)
-      : null;
-  }
-
   /**
    * Turns the school fields of `body` into what the dropdown would store,
    * before `normalizeMatchPatch()` sees it: an id is checked, a name that is
@@ -903,10 +906,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       if (typeof id !== "string") return {};
       const program = await context.reads.directoryProgram(id);
       if (!program) {
-        throw refusal(
-          "opponent_program_not_found",
-          "That program isn't in the directory. Find its id with search_programs.",
-        );
+        throw refusal("opponent_program_not_found", PROGRAM_NOT_FOUND);
       }
       const squad = await scopeSquad(scope);
       if (squad && program.team !== squad && !allowTeamMismatch) {
@@ -1077,10 +1077,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
             );
           }
           if (patched.error.code === "23503") {
-            throw refusal(
-              "opponent_program_not_found",
-              "That program isn't in the directory. Find its id with search_programs.",
-            );
+            throw refusal("opponent_program_not_found", PROGRAM_NOT_FOUND);
           }
           throw new Error(`ask_patch_match failed: ${patched.error.message}`);
         }

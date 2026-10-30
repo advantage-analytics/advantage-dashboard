@@ -226,7 +226,12 @@ export function createMcpUserReads(
       if (error) {
         throw new Error("Could not read the directory", { cause: error });
       }
-      return (data ?? []) as McpDirectoryProgram[];
+      // PostgREST reads `*` in a pattern as a wildcard, so the rows are held to
+      // the name itself.
+      const name = schoolName.toLowerCase();
+      return ((data ?? []) as McpDirectoryProgram[]).filter(
+        (program) => program.school_name.toLowerCase() === name,
+      );
     },
 
     async searchPrograms({ query, team, division, limit }) {
