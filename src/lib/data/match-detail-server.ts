@@ -169,6 +169,7 @@ export function transformDbMatchToMatch(
   // The shared rule (a stored winner, then sets). A level score has always
   // read as player2 here.
   const winner = scoreWinner(row.score) ?? "player2";
+  const verification = verificationFor(row);
   const finalScore = sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
   const { isUserPlayer1 } = resolveYouSide(
     row,
@@ -200,11 +201,11 @@ export function transformDbMatchToMatch(
     date: formatMatchDayLong(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
-    verification: verificationFor(row),
+    verification,
     sourceProvider: row.source_provider ?? undefined,
     errorSplitJudged: errorSplitJudged({
       sourceProvider: row.source_provider,
-      verified: verificationFor(row) != null,
+      verified: verification != null,
       errorsJudgedAt: row.errors_judged_at,
     }),
     round: row.round ?? undefined,
