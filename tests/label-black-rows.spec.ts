@@ -1561,6 +1561,181 @@ test.describe("the black shots well", () => {
       expect(html).not.toContain("data-add-shot");
     }
   });
+  test("the Forced | Unforced pair: on a missed last stroke alone, after Reset and before Delete, the stored kind pressed", () => {
+    /** The frame's rally, its last stroke (edited, so it can reset) missed. */
+    const errorRally = (fields: Partial<LabelPoint> = {}): LabelPoint => {
+      const base = rally();
+      return {
+        ...base,
+        winner: "p1",
+        ending: "error",
+        endedBy: "p2",
+        shots: base.shots.map((s) =>
+          s.id === "w-lit"
+            ? {
+                ...s,
+                result: "out",
+                landingY: 25,
+                status: "edited",
+                seed: {
+                  hitter: "p2",
+                  stroke: "backhand",
+                  result: "in",
+                  spin: "flat",
+                  contact_x: -0.31,
+                  contact_y: -1.82,
+                  landing_x: -1.23,
+                  landing_y: 19.59,
+                  video_time: 960.3,
+                },
+              }
+            : s,
+        ),
+        ...fields,
+      };
+    };
+    const render = (
+      point: LabelPoint,
+      overrides: Record<string, unknown>,
+      editable = true,
+    ) =>
+      renderToStaticMarkup(
+        React.createElement(well().BlackShotsWell, {
+          point,
+          edit: wellEdit(overrides, editable),
+        }),
+      );
+
+    const html = render(errorRally(), { selectedShotId: "w-lit" });
+    const row = shotRow(html, "w-lit");
+    expect(count(html, /data-error-kind-pair=""/g)).toBe(1);
+    // Reset shot, the pair, the spacer, then Delete shot.
+    const reset = row.indexOf('data-shot-action="reset"');
+    const pair = row.indexOf("data-error-kind-pair");
+    expect(reset).toBeGreaterThan(-1);
+    expect(pair).toBeGreaterThan(reset);
+    expect(row.indexOf("data-shot-tray-spacer")).toBeGreaterThan(pair);
+    expect(row.indexOf('data-shot-action="delete"')).toBeGreaterThan(
+      row.indexOf("data-shot-tray-spacer"),
+    );
+    expect(
+      text(
+        row.slice(
+          row.lastIndexOf("<", pair),
+          row.lastIndexOf("<", row.indexOf("data-shot-tray-spacer")),
+        ),
+      ),
+    ).toBe("Forced Unforced E");
+    expect(
+      text(row.slice(row.lastIndexOf("<div", row.indexOf("data-shot-tray")))),
+    ).toBe(
+      "Split point here Add shot after Reset shot Forced Unforced E Delete shot",
+    );
+    // Two real buttons, neither pressed while unmarked, both naming E.
+    for (const [kind, label] of [
+      ["forced", "Forced error"],
+      ["unforced", "Unforced error"],
+    ]) {
+      const button = tag(row, `data-error-kind="${kind}"`);
+      expect(button).toMatch(/^<button type="button"/);
+      expect(button).toContain(`aria-label="${label}"`);
+      expect(button).toContain('aria-pressed="false"');
+      expect(button).toContain('aria-keyshortcuts="E"');
+      expect(button).toContain("whitespace-nowrap");
+      expect(button).toContain("shrink-0");
+    }
+    // The key hint: the flag menu's dark chip, no new colour.
+    expect(row).toMatch(/<kbd[^>]*bg-white\/\[0\.08\][^>]*>E<\/kbd>/);
+
+    // The stored kind is the pressed one.
+    for (const kind of ["forced", "unforced"] as const) {
+      const marked = shotRow(
+        render(errorRally({ errorKind: kind }), { selectedShotId: "w-lit" }),
+        "w-lit",
+      );
+      const other = kind === "forced" ? "unforced" : "forced";
+      expect(tag(marked, `data-error-kind="${kind}"`)).toContain(
+        'aria-pressed="true"',
+      );
+      expect(tag(marked, `data-error-kind="${kind}"`)).toContain(
+        "bg-white/[0.16]",
+      );
+      expect(tag(marked, `data-error-kind="${other}"`)).toContain(
+        'aria-pressed="false"',
+      );
+    }
+
+    // Any other stroke of the same point: the tray, no pair.
+    const earlier = render(errorRally(), { selectedShotId: "w-return" });
+    expect(earlier).toContain("data-shot-tray");
+    expect(earlier).not.toContain("data-error-kind");
+    // The same stroke on a point it won (a winner): no pair, even with a
+    // kind still stored from before.
+    const won = rally();
+    for (const point of [won, { ...won, errorKind: "forced" as const }]) {
+      const html = render(point, { selectedShotId: "w-lit" });
+      expect(html).toContain("data-shot-tray");
+      expect(html).not.toContain("data-error-kind");
+    }
+    // Read-only, or nothing to write the point with: no pair.
+    expect(
+      render(errorRally(), { selectedShotId: "w-lit" }, false),
+    ).not.toContain("data-error-kind");
+    expect(
+      render(errorRally(), {
+        selectedShotId: "w-lit",
+        onPatchPoint: undefined,
+      }),
+    ).not.toContain("data-error-kind");
+  });
+
+  test("Forced or Unforced writes the point's error_kind; the pressed one writes nothing", () => {
+    const patched: [string, unknown][] = [];
+    const { BlackShotRow } = createLoader().load(WELL) as {
+      BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    const point = {
+      ...rally(),
+      winner: "p1" as const,
+      ending: "error" as const,
+      endedBy: "p2" as const,
+      errorKind: "forced" as const,
+    };
+    point.shots = point.shots.map((s) =>
+      s.id === "w-lit" ? { ...s, result: "out" as const } : s,
+    );
+    const row = BlackShotRow({
+      shot: point.shots.find((s) => s.id === "w-lit"),
+      number: 4,
+      point,
+      pointNumber: 7,
+      edit: wellEdit({
+        selectedShotId: "w-lit",
+        onPatchPoint: (id: string, patch: unknown) => patched.push([id, patch]),
+      }),
+    });
+    const buttons = elements(row).filter(
+      (element) =>
+        typeof element.type === "function" &&
+        "data-error-kind" in element.props,
+    );
+    expect(buttons.map((b) => b.props["data-error-kind"])).toEqual([
+      "forced",
+      "unforced",
+    ]);
+    let stopped = 0;
+    const click = (kind: string) =>
+      (
+        buttons.find((b) => b.props["data-error-kind"] === kind)!.props
+          .onClick as (e: { stopPropagation: () => void }) => void
+      )({ stopPropagation: () => (stopped += 1) });
+    click("unforced");
+    click("forced");
+    expect(patched).toEqual([["p-well", { error_kind: "unforced" }]]);
+    // Neither click reaches the row under it.
+    expect(stopped).toBe(2);
+  });
+
   test("a stroke the labeller added and then deleted leaves no row", () => {
     const { BlackShotsWell } = well();
     const point = rally();

@@ -131,7 +131,7 @@ ready).
 
 ## T9 · Label console: Forced | Unforced tray pair, key E, shortcut sheet
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8
 - **files:** src/components/admin/labels/label-black-shot-row.tsx (tray), src/components/admin/labels/stroke-keys.ts or label-black-view.tsx (key handling), src/components/admin/labels/label-shortcuts.ts, tests/label-black-rows.spec.ts, tests/label-shortcuts.spec.ts

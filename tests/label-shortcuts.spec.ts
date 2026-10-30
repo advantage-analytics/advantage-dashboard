@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 
 import { createLoader } from "./fixtures/vm-modules";
 
+import { isStrokeKey } from "@/components/admin/labels/stroke-keys";
+
 import {
   LABEL_SHORTCUT_GROUPS,
   isShortcutSheetKey,
@@ -85,6 +87,35 @@ test.describe("the shortcut sheet", () => {
     ]) {
       expect(sheetKeys, keys).toContain(keys);
     }
+  });
+
+  test("E: forced or unforced, right after Serve, and the only binding on E", () => {
+    const shot = LABEL_SHORTCUT_GROUPS.find(
+      (g) => g.label === "Selected shot",
+    )!;
+    const at = shot.items.findIndex((row) => row.keys.join(" ") === "E");
+    expect(shot.items[at]).toEqual({
+      keys: ["E"],
+      action: "Forced or unforced error",
+      note: "On a missed last shot. Again to switch back",
+    });
+    expect(shot.items[at - 1].action).toBe("Serve");
+    // One row on the sheet uses E, alone or in a combo.
+    expect(rows.filter((row) => row.keys.includes("E"))).toHaveLength(1);
+    // No handler but the console's E reads the key: not a stroke key, not the
+    // player's D L M, and the console's dispatcher names it once.
+    expect(isStrokeKey("e")).toBe(false);
+    expect(isStrokeKey("E")).toBe(false);
+    const video = readFileSync(
+      "src/components/admin/labels/label-video.tsx",
+      "utf8",
+    );
+    expect(video).toContain(
+      'if (key !== "d" && key !== "l" && key !== "m") return;',
+    );
+    expect(CONSOLE.match(/isErrorKindKey\(key\)/g)).toHaveLength(1);
+    expect(CONSOLE).not.toMatch(/(lower|key) === "e"/i);
+    expect(RAIL).not.toMatch(/key === "e"/i);
   });
 
   test("legends follow the Kbd rules: word keys lowercase, letters uppercase, one chip per key", () => {

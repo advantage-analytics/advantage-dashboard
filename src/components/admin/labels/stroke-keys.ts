@@ -1,10 +1,17 @@
-import { sameShotValue, type LabelShotPatch } from "@/lib/services/labels/edit";
+import {
+  sameShotValue,
+  type LabelPointPatch,
+  type LabelShotPatch,
+} from "@/lib/services/labels/edit";
+import { isMarkableError } from "@/lib/services/labels/ending-derived";
 import { spinRows } from "./label-format";
 import {
   LABEL_SPINS,
   isLetServe,
   isServeStroke,
   liveShotsInOrder,
+  type LabelErrorKind,
+  type LabelPoint,
   type LabelShot,
   type LabelStroke,
 } from "@/lib/services/labels/session";
@@ -149,4 +156,50 @@ export function frameTimePatch(
   const videoTime = Math.round((fileTime + offset) * 1000) / 1000;
   if (sameShotValue("video_time", shot.videoTime, videoTime)) return null;
   return { video_time: videoTime };
+}
+
+/** What the Forced | Unforced pair and E read off a point. */
+export type ErrorKindPoint = Pick<
+  LabelPoint,
+  "winner" | "shots" | "ending" | "status" | "errorKind"
+>;
+
+/**
+ * The stroke the Forced | Unforced pair sits on, and the one E answers on:
+ * the point's last live stroke (a let aside, as `deriveEnding` reads it),
+ * while the point ended in an error (`isMarkableError`). Null on any other
+ * point. Never read off a stored `errorKind`: a kind stays stored when a
+ * later edit stops the point ending on an error, and then nothing offers it.
+ */
+export function errorKindShotId(
+  point: ErrorKindPoint,
+  ghosts: boolean,
+): string | null {
+  if (!isMarkableError(point, ghosts)) return null;
+  const live = liveShotsInOrder(point, ghosts).filter((s) => !isLetServe(s));
+  return live.at(-1)?.id ?? null;
+}
+
+/** E's next kind: forced when unmarked, then unforced, then forced again. */
+export function nextErrorKind(current: LabelErrorKind | null): LabelErrorKind {
+  return current === "forced" ? "unforced" : "forced";
+}
+
+/** Whether a key is E, the forced-or-unforced key. */
+export function isErrorKindKey(key: string): boolean {
+  return key === "e" || key === "E";
+}
+
+/**
+ * E on `shotId`: the point patch that moves its kind on (`nextErrorKind`),
+ * or null when the stroke is not the one the pair sits on
+ * (`errorKindShotId`) — E anywhere else writes nothing.
+ */
+export function errorKindKeyPatch(
+  point: ErrorKindPoint,
+  shotId: string,
+  ghosts: boolean,
+): LabelPointPatch | null {
+  if (errorKindShotId(point, ghosts) !== shotId) return null;
+  return { error_kind: nextErrorKind(point.errorKind) };
 }

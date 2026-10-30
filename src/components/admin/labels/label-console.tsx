@@ -288,8 +288,10 @@ import {
 } from "./video-clock";
 import { useBrowserFullscreen } from "./use-browser-fullscreen";
 import {
+  errorKindKeyPatch,
   frameTimePatch,
   hasEarlierServe,
+  isErrorKindKey,
   isStrokeKey,
   strokeKeyChange,
   withServeHitter,
@@ -1011,6 +1013,8 @@ export function LabelConsole({
               endedBy: "ended_by" in patch ? before.endedBy : point.endedBy,
               serveSide:
                 "serve_side" in patch ? before.serveSide : point.serveSide,
+              errorKind:
+                "error_kind" in patch ? before.errorKind : point.errorKind,
               note: "note" in patch ? before.note : point.note,
               status: before.status,
             };
@@ -2803,6 +2807,7 @@ export function LabelConsole({
   // C: the court's other end — contact ↔ landing — for the selected stroke.
   // X: Flip side — the placing half across the net, as the court's button.
   // T: the selected stroke's time = the frame the film stands on.
+  // E: forced ↔ unforced on the stroke that ended the point in an error.
   // Delete / Backspace: delete the selected stroke, through the same confirm
   // as its tray's Delete shot.
   const addShotKey = useRef<() => boolean>(() => false);
@@ -2811,6 +2816,7 @@ export function LabelConsole({
   const endKey = useRef<() => boolean>(() => false);
   const flipKey = useRef<() => boolean>(() => false);
   const timeKey = useRef<() => boolean>(() => false);
+  const errorKindKey = useRef<() => boolean>(() => false);
   const resetShotKey = useRef<() => boolean>(() => false);
   const resetPointKey = useRef<() => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
@@ -3083,6 +3089,25 @@ export function LabelConsole({
       if (patch) requestPatchShot(shot.id, patch);
       return true;
     };
+    // E writes only on the stroke already selected — never one it would pick
+    // (`keyShot`) — and only in the open point, and only while that stroke is
+    // the one the tray's Forced | Unforced pair sits on (`errorKindKeyPatch`):
+    // forced when unmarked, then unforced, then forced. Anywhere else the key
+    // is not taken. The write is the pair's own point patch.
+    errorKindKey.current = () => {
+      if (!operable || confirm || placement.shotId === null) return false;
+      const owner = pointOfShot(points, placement.shotId);
+      if (!owner) return false;
+      if (expanded && owner.id !== expanded.id) return false;
+      const patch = errorKindKeyPatch(
+        owner,
+        placement.shotId,
+        drawsGhosts(marks),
+      );
+      if (!patch) return false;
+      void patchPoint(owner.id, patch);
+      return true;
+    };
     strokeKey.current = (key) => {
       if (!operable || confirm) return false;
       const shot = keyShot();
@@ -3211,9 +3236,10 @@ export function LabelConsole({
       }
       // A stroke key reaches the selected stroke from a focused cell too (a
       // cell is a button), and so do A / ⇧A (add a stroke after / before),
-      // C (contact ↔ landing), X (flip side), T (time = frame), Delete /
-      // Backspace (delete the stroke) and R / ⇧R (ask to reset the stroke /
-      // point); a text field, a menu and a dialog keep all of them.
+      // C (contact ↔ landing), X (flip side), T (time = frame), E (forced ↔
+      // unforced), Delete / Backspace (delete the stroke) and R / ⇧R (ask to
+      // reset the stroke / point); a text field, a menu and a dialog keep all
+      // of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
       const consoleKey = isStrokeKey(key)
         ? () => strokeKey.current(key)
@@ -3227,13 +3253,15 @@ export function LabelConsole({
               ? () => flipKey.current()
               : lower === "t" && !event.shiftKey
                 ? () => timeKey.current()
-                : lower === "r"
-                  ? event.shiftKey
-                    ? () => resetPointKey.current()
-                    : () => resetShotKey.current()
-                  : key === "Delete" || key === "Backspace"
-                    ? () => deleteShotKey.current()
-                    : null;
+                : isErrorKindKey(key) && !event.shiftKey
+                  ? () => errorKindKey.current()
+                  : lower === "r"
+                    ? event.shiftKey
+                      ? () => resetPointKey.current()
+                      : () => resetShotKey.current()
+                    : key === "Delete" || key === "Backspace"
+                      ? () => deleteShotKey.current()
+                      : null;
       if (
         consoleKey &&
         !event.metaKey &&

@@ -25,10 +25,21 @@ import {
   saveStatusView,
   type SaveEvent,
 } from "@/components/admin/labels/save-status";
-import type { LabelShotPatch } from "@/lib/services/labels/edit";
-import type { LabelShot } from "@/lib/services/labels/session";
+import { errorKindKeyPatch } from "@/components/admin/labels/stroke-keys";
+import {
+  applyLabelPointPatch,
+  type LabelPointPatch,
+  type LabelShotPatch,
+} from "@/lib/services/labels/edit";
+import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
+import { applyUndoDiff } from "@/lib/services/labels/undo-diff";
 import type { ShotGeometry } from "@/lib/services/labels/shot-derived";
-import { labelSessionFixture } from "./fixtures/label-session";
+import {
+  editContext,
+  labelPoint,
+  labelSessionFixture,
+  labelShot,
+} from "./fixtures/label-session";
 import { elements } from "./fixtures/react-tree";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -565,5 +576,111 @@ test.describe("the time cell's editor", () => {
     const entered = render({ text: "0:10.2", draftKey: "w-return" });
     entered.key("Enter", () => entered.blur());
     expect(commits).toEqual([952.5]);
+  });
+});
+
+test.describe("forced or unforced, through undo and redo", () => {
+  test("a kind set by the tray's click or by E is reverted by ⌘Z and re-applied by ⌘⇧Z", () => {
+    const { BlackShotRow } = createLoader().load(
+      "src/components/admin/labels/label-black-shot-row.tsx",
+    ) as {
+      BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    // A serve, a return, and p1's forehand out: an error point.
+    let row: LabelPoint = labelPoint("u-point", 0, {
+      winner: "p2",
+      ending: "error",
+      endedBy: "p1",
+      shots: [
+        labelShot("u-serve", "u-point", {
+          stroke: "first_serve",
+          result: "in",
+          videoTime: 1,
+        }),
+        labelShot("u-return", "u-point", {
+          hitter: "p2",
+          stroke: "backhand",
+          result: "in",
+          videoTime: 2,
+        }),
+        labelShot("u-last", "u-point", {
+          stroke: "forehand",
+          result: "out",
+          videoTime: 3,
+        }),
+      ],
+    });
+    // The server's journal, as `label_row_history_capture` keeps it: each
+    // write pushes the whole row it replaced; undo and redo swap whole rows,
+    // and the console takes the answer through `applyUndoDiff`.
+    let server = row;
+    const undo: LabelPoint[] = [];
+    const redo: LabelPoint[] = [];
+    const save = (pointId: string, patch: LabelPointPatch) => {
+      expect(pointId).toBe("u-point");
+      undo.push(server);
+      redo.length = 0;
+      server = applyLabelPointPatch(server, patch);
+      // The console's own optimistic row (`patchPoint`).
+      row = applyLabelPointPatch(row, patch);
+    };
+    const rewind = (from: LabelPoint[], to: LabelPoint[]) => {
+      const image = from.pop()!;
+      to.push(server);
+      server = image;
+      [row] = applyUndoDiff([row], [image], []);
+    };
+    const pressed = () => {
+      const tree = BlackShotRow({
+        shot: row.shots[2],
+        number: 3,
+        point: row,
+        pointNumber: 1,
+        edit: editContext({ selectedShotId: "u-last", onPatchPoint: save }),
+      });
+      const buttons = elements(tree).filter(
+        (element) =>
+          typeof element.type === "function" &&
+          "data-error-kind" in element.props,
+      );
+      return {
+        kind:
+          buttons.find((b) => b.props.pressed)?.props["data-error-kind"] ??
+          null,
+        click: (kind: string) =>
+          (
+            buttons.find((b) => b.props["data-error-kind"] === kind)!.props
+              .onClick as (e: { stopPropagation: () => void }) => void
+          )({ stopPropagation: () => {} }),
+      };
+    };
+
+    expect(pressed().kind).toBeNull();
+    // The tray's click: Forced.
+    pressed().click("forced");
+    expect(pressed().kind).toBe("forced");
+    // E on the same stroke: on to Unforced, through the same point write.
+    save("u-point", errorKindKeyPatch(row, "u-last", false)!);
+    expect(server.errorKind).toBe("unforced");
+    expect(pressed().kind).toBe("unforced");
+    // Neither made the point edited: the kind is not a seeded field.
+    expect(row.status).toBe("unchanged");
+
+    // ⌘Z reverts E's write, then the click's.
+    rewind(undo, redo);
+    expect(pressed().kind).toBe("forced");
+    rewind(undo, redo);
+    expect(pressed().kind).toBeNull();
+    expect(server.errorKind).toBeNull();
+    // ⌘⇧Z re-applies them in order.
+    rewind(redo, undo);
+    expect(pressed().kind).toBe("forced");
+    rewind(redo, undo);
+    expect(pressed().kind).toBe("unforced");
+    expect(server.errorKind).toBe("unforced");
+    // And E carries on from the restored kind.
+    expect(errorKindKeyPatch(row, "u-last", false)).toEqual({
+      error_kind: "forced",
+    });
   });
 });

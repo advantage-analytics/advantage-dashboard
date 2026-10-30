@@ -83,3 +83,12 @@ is the runner's. Newest entries at the bottom.
 1. Compare's default "standard" measure set and the "Consistent" quality word still use `unforced_errors`, so a default comparison on an unjudged match prints "Unforced errors". Switch to `errors` (or pick per result).
 2. Planner prompt could ask model-written SQL to return a count of null `forced_errors`, so the answer step can obey the "any match null" rule on aggregated rows.
 3. `answer-render` could relabel `unforced_errors` to "Errors" in code when the row's `forced_errors` is null.
+
+## T9 · Label console: Forced | Unforced tray pair, key E, shortcut sheet — done
+
+**gate:** mechanical PASS · completion VERDICT: pass
+**changed:** `stroke-keys.ts`: `errorKindShotId` (last live non-let stroke, only when `isMarkableError`), `nextErrorKind` (unmarked→forced→unforced→forced), `isErrorKindKey`, `errorKindKeyPatch`. `label-black-shot-row.tsx`: the selected last stroke's tray draws `ErrorKindPair` ("Forced" | "Unforced" + E chip, `aria-pressed`) after Reset, before Delete; tray `flex-nowrap`, gap 16→12px, width budget in the `ShotTray` doc comment (~572px of 640). `label-black-parts.tsx`: `BlackTextAction` gains `pressed`. `label-console.tsx`: E branch in the shared `consoleKey` dispatch (inside `keysAreSpoken`), writes through `patchPoint`; rollback restores `errorKind`. `label-shortcuts.ts`: E row after Serve. Specs: label-black-rows, label-stroke-keys-court-zoom, label-shortcuts, label-console-edit.
+**follow-ups:**
+
+1. No browser harness for the black rail: add one (e.g. in `/design/labels`) so a spec can assert the tray's width at 640px; until then `/pr-check` eyes-on should look at it.
+2. The undo/redo case runs against a modelled whole-row journal, not a real `undoLabelOp` round trip.
