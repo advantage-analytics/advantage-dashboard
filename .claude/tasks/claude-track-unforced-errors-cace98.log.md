@@ -128,3 +128,11 @@ is the runner's. Newest entries at the bottom.
 1. Nothing stops Gemini writing "unforced" by itself on an unjudged match; a post-check that retries a summary containing "forced" would enforce it.
 2. Existing summaries on unjudged matches still say "unforced"; regenerating them is a separate, approved data change.
 3. `presentErrors` drops any key matching /forced/i — implicit; worth a comment if new columns arrive.
+
+## T11 · Publish writes the error kind to result_type and sets the judged marker — blocked
+
+**gate:** not run — criterion 2 unmet (live migration refused)
+**reason:** Re-run after the user approved ("Approve both"). The dispatch was allowed, but the subagent's `apply_migration` for `verify_match_errors_judged` was refused by the auto-mode classifier ("Production Deploy"); it did not retry or route around it. Live is unchanged (only `verify_match(uuid,uuid)`; 0 matches judged). The code calls `verify_match` with `p_errors_judged`, so committing it before the migration lands would break Mark complete — stashed instead. All `tests/label-*` passed (1342) and typecheck was clean in the subagent's run.
+Design in the stash: `resultTypeOf(ending, stroke, errorKind)` writes "{Side} Forced Error"; `planApply().errorsJudged` reuses T12's `unmarkedErrors`; publish order unchanged (points → stats → verify) and `verify_match(p_errors_judged true)` stamps `errors_judged_at` then re-runs `calculate_match_stats` in the same transaction; old 2-arg overload dropped (a wrapper would make 2-arg calls ambiguous); grants service_role only. Migration file: `supabase/migrations/20261030000000_verify_match_errors_judged.sql` (contains a DROP, so it must go through `execute_sql` or be split).
+**To unblock:** the user applies that migration themselves (Supabase SQL editor), or adds a permission rule for the Supabase apply tool; then reset to `todo`, `git stash apply 1bca0a09`, run the gate and review.
+**stash:** 1bca0a09b8e047d35ed15d93d75358cc8831c5dc
