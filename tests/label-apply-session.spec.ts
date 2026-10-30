@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   backupObjectKey,
+  labelFold,
   publishPlanned,
   type ApplyContext,
   type LabelApplyBackup,
@@ -116,4 +117,14 @@ test("backups are keyed match first, so the match purge accepts them as its own"
     "label-backups/m1/s1/2026-10-10T19-00-00-000Z.json",
   );
   expect(backupObjectKey(backup).startsWith("label-backups/m1/")).toBe(true);
+});
+
+test("a publish answers the report's fold note from the labelled score", () => {
+  // Matching score, or a video marked as ending early: the note goes away.
+  expect(labelFold(plan({}))).toEqual({ reconciled: true, source: "labels" });
+  // A mismatch published anyway (Mark complete accepts it): the note stays.
+  expect(labelFold(plan({ mismatch: true }))).toEqual({
+    reconciled: false,
+    source: "labels",
+  });
 });
