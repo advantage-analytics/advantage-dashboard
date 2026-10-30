@@ -100,3 +100,9 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Until T11, `resultTypeOf` still writes every error as "… Unforced Error", so the overview's forced count can be non-zero while the published strings are all unforced.
+
+## T11 · Publish writes the error kind to result_type and sets the judged marker — blocked
+
+**gate:** not reached — dispatch refused
+**reason:** Claude Code's auto-mode classifier refused to dispatch the fable subagent as a "Production Deploy": the task changes the live `verify_match` function (drop + re-create with `p_errors_judged`). Needs the user's explicit approval for that live change; reset `status:` to `todo` once given. Note for the re-run: `calculate_match_stats` reads `errors_judged_at` at run time, so the marker must be stamped before the stats run (or `verify_match` must re-run them), or a fully marked publish still gets NULL forced_errors.
+**stash:** no stash — the task produced no changes
