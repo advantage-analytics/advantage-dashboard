@@ -40,7 +40,6 @@ import {
 } from "./apply";
 import { chunksOf } from "./chunks";
 import { labelScores } from "./score";
-import { unmarkedErrors } from "./session-status";
 import {
   enteredScore,
   labelSetScores,
@@ -138,10 +137,11 @@ export function planApply({ session, beside }: ApplyContext) {
     entered,
     mismatch,
     stats: expectedStats(built.points),
-    // T12's gate, read again here: a publish with an unmarked error can only
-    // come from a stale client. Passed to `verify_match` as p_errors_judged;
-    // false leaves `matches.errors_judged_at` as it is.
-    errorsJudged: unmarkedErrors(session.points, true).length === 0,
+    // False from a partly marked session (scripts/label-apply.ts, a stale
+    // client) or an error with no stroke to mark. It decides the error strings
+    // the build writes, the marker `publishPlanned` sets, and `verify_match`'s
+    // p_errors_judged, so the three cannot disagree.
+    errorsJudged: built.errorsJudged,
   };
 }
 
@@ -285,13 +285,9 @@ export async function restoreRows(db: AdminClient, backup: LabelApplyBackup) {
 
 /**
  * match_stats and the returns backfill, in the order deriveAndPublish runs
- * them, then a new AI summary. Throws on a failed RPC; a failed summary
- * request is reported, not thrown — the statistics are already in.
+ * them. Throws on a failed RPC.
  */
-export async function recompute(
-  db: AdminClient,
-  matchId: string,
-): Promise<{ insightsRequested: boolean }> {
+async function recomputeStats(db: AdminClient, matchId: string) {
   for (const fn of [
     "calculate_match_stats",
     "backfill_returns_in_and_net_points",
@@ -299,8 +295,39 @@ export async function recompute(
     const { error } = await db.rpc(fn, { p_match_id: matchId });
     if (error) throw new Error(`${fn} failed: ${error.message}`);
   }
+}
+
+/**
+ * `recomputeStats`, then a new AI summary. A failed summary request is
+ * reported, not thrown — the statistics are already in.
+ */
+export async function recompute(
+  db: AdminClient,
+  matchId: string,
+): Promise<{ insightsRequested: boolean }> {
+  await recomputeStats(db, matchId);
   const insights = await requestMatchInsights({ supabase: db, matchId });
   return { insightsRequested: insights.ok };
+}
+
+/**
+ * `matches.errors_judged_at`, set before the stats run so `calculate_match_stats`
+ * counts `forced_errors` whatever then happens to `verify_match`, and cleared
+ * when a reopened match is republished with an unmarked error. On an unverified
+ * match it changes nothing a player sees: `error-split.ts` also needs `verified`.
+ */
+async function setErrorsJudged(
+  db: AdminClient,
+  matchId: string,
+  judged: boolean,
+) {
+  const { error } = await db
+    .from("matches")
+    .update({ errors_judged_at: judged ? new Date().toISOString() : null })
+    .eq("id", matchId);
+  if (error) {
+    throw new Error(`Could not set errors_judged_at: ${error.message}`);
+  }
 }
 
 /** Insert the built rows; returns the new points' ids by point_number. */
@@ -371,14 +398,14 @@ export type PublishResult =
       leftOut: string[];
       bookmarksRelinked: number;
       backupKey: string;
+      /** Always false with `deferInsights`: nothing was asked for yet. */
       insightsRequested: boolean;
       statsBefore: Row[];
       /**
        * Every error in the session was marked forced or unforced
-       * (`planApply`): what Mark complete passes `verify_match` as
-       * `p_errors_judged`, which stamps `matches.errors_judged_at` and
-       * re-counts `match_stats.forced_errors`. The publish itself never
-       * stamps it — scripts/label-apply.ts publishes without verifying.
+       * (`planApply`). The publish has already set
+       * `matches.errors_judged_at` to match; Mark complete passes this on to
+       * `verify_match` as `p_errors_judged`.
        */
       errorsJudged: boolean;
     }
@@ -387,7 +414,8 @@ export type PublishResult =
 /**
  * Publish an already-loaded and planned session. The backup is stored before
  * anything is deleted; a failed write puts it back. Throws only if putting it
- * back fails too.
+ * back fails too. Once the rows are in: the judged marker, the statistics, then
+ * the AI summary unless `deferInsights`.
  */
 export async function publishPlanned(params: {
   db: AdminClient;
@@ -396,6 +424,12 @@ export async function publishPlanned(params: {
   acceptScore: boolean;
   /** A local copy too (the script keeps one on disk). */
   onBackup?: (backup: LabelApplyBackup) => void;
+  /**
+   * Leave the AI summary to the caller. Mark complete does, because
+   * generate-insights reads whether errors were judged off `verified`, which
+   * only `verify_match` sets, and that runs after this returns.
+   */
+  deferInsights?: boolean;
 }): Promise<PublishResult> {
   const { db, context, plan, acceptScore } = params;
   const { session } = context;
@@ -466,15 +500,18 @@ export async function publishPlanned(params: {
 
   // The rows are in; a failed recompute leaves match_stats behind them. Said
   // as that, never as "not published" — the athlete already has the points.
-  let insightsRequested: boolean;
   try {
-    ({ insightsRequested } = await recompute(db, matchId));
+    await setErrorsJudged(db, matchId, plan.errorsJudged);
+    await recomputeStats(db, matchId);
   } catch (err) {
     return {
       ok: false,
       error: `The labelled points are published, but the statistics could not be rebuilt (${err instanceof Error ? err.message : String(err)}). Mark complete again to retry; the previous version is backed up at ${backupKey}.`,
     };
   }
+  const insightsRequested = params.deferInsights
+    ? false
+    : (await requestMatchInsights({ supabase: db, matchId })).ok;
   return {
     ok: true,
     points: plan.built.points.length,
@@ -489,8 +526,9 @@ export async function publishPlanned(params: {
 }
 
 /**
- * Load, plan and publish one session. A session labelled with marks off is
- * published whatever its score: it draws no score flag and cannot be told the
+ * Load, plan and publish one session, for Mark complete: it asks for the AI
+ * summary itself, after `verify_match` (session-status-session.ts). A session
+ * labelled with marks off is published whatever its score: it draws no score flag and cannot be told the
  * video ends early (session-fields-session.ts), so a refusal there would have
  * no answer the console can give.
  */
@@ -506,5 +544,6 @@ export async function publishLabelSession(params: {
     context,
     plan: planApply(context),
     acceptScore: params.acceptScore || !context.session.marksEnabled,
+    deferInsights: true,
   });
 }

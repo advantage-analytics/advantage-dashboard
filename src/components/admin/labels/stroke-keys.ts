@@ -3,7 +3,10 @@ import {
   type LabelPointPatch,
   type LabelShotPatch,
 } from "@/lib/services/labels/edit";
-import { isMarkableError } from "@/lib/services/labels/ending-derived";
+import {
+  isMarkableError,
+  markableErrorStroke,
+} from "@/lib/services/labels/ending-derived";
 import { spinRows } from "./label-format";
 import {
   LABEL_SPINS,
@@ -161,23 +164,20 @@ export function frameTimePatch(
 /** What the Forced | Unforced pair and E read off a point. */
 export type ErrorKindPoint = Pick<
   LabelPoint,
-  "winner" | "shots" | "ending" | "status" | "errorKind"
+  "winner" | "shots" | "ending" | "endedBy" | "status" | "errorKind"
 >;
 
 /**
  * The stroke the Forced | Unforced pair sits on, and the one E answers on:
- * the point's last live stroke (a let aside, as `deriveEnding` reads it),
- * while the point ended in an error (`isMarkableError`). Null on any other
- * point. Never read off a stored `errorKind`: a kind stays stored when a
- * later edit stops the point ending on an error, and then nothing offers it.
+ * the last stroke the publish writes (a let aside), while the point will
+ * publish as an error (`isMarkableError`, the Mark complete gate's reading).
+ * Null on any other point. Never read off a stored `errorKind`: a kind stays
+ * stored when a later edit stops the point ending on an error, and then
+ * nothing offers it.
  */
-export function errorKindShotId(
-  point: ErrorKindPoint,
-  ghosts: boolean,
-): string | null {
-  if (!isMarkableError(point, ghosts)) return null;
-  const live = liveShotsInOrder(point, ghosts).filter((s) => !isLetServe(s));
-  return live.at(-1)?.id ?? null;
+export function errorKindShotId(point: ErrorKindPoint): string | null {
+  if (!isMarkableError(point)) return null;
+  return markableErrorStroke(point)?.id ?? null;
 }
 
 /** E's next kind: forced when unmarked, then unforced, then forced again. */
@@ -198,8 +198,7 @@ export function isErrorKindKey(key: string): boolean {
 export function errorKindKeyPatch(
   point: ErrorKindPoint,
   shotId: string,
-  ghosts: boolean,
 ): LabelPointPatch | null {
-  if (errorKindShotId(point, ghosts) !== shotId) return null;
+  if (errorKindShotId(point) !== shotId) return null;
   return { error_kind: nextErrorKind(point.errorKind) };
 }

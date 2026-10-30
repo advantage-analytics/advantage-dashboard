@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 import {
@@ -7,6 +9,7 @@ import {
   type ApplyContext,
   type LabelApplyBackup,
 } from "@/lib/services/labels/apply-session";
+import { buildAppliedRows, expectedStats } from "@/lib/services/labels/apply";
 import { writeLabelSessionComplete } from "@/lib/services/labels/session-status-session";
 import type { AdminClient } from "@/lib/supabase/admin";
 import type { LabelPoint } from "@/lib/services/labels/session";
@@ -177,11 +180,19 @@ interface Recorded {
  * `p_errors_judged` and runs the stat function again (the T11 migration).
  * Every other call answers empty and is recorded.
  */
-function fakeDatabase() {
+function fakeDatabase(
+  options: {
+    /** A marker already on the match: a reopened match's earlier publish. */
+    errorsJudgedAt?: string;
+    failMarker?: boolean;
+    failVerify?: boolean;
+    failInsights?: boolean;
+  } = {},
+) {
   const calls: Recorded[] = [];
   const state = {
     points: [] as Record<string, unknown>[],
-    errorsJudgedAt: null as string | null,
+    errorsJudgedAt: options.errorsJudgedAt ?? (null as string | null),
     stats: null as { forced_errors: number | null } | null,
     /** What the stat function saw of the marker, each time it ran. */
     statsRuns: [] as boolean[],
@@ -210,6 +221,9 @@ function fakeDatabase() {
           calculateMatchStats();
           return { data: null, error: null };
         case "verify_match":
+          if (options.failVerify) {
+            return { data: null, error: { message: "verify refused" } };
+          }
           if (args.p_errors_judged === true) {
             state.errorsJudgedAt = "2026-10-29T20:00:01+00:00";
             calculateMatchStats();
@@ -222,7 +236,12 @@ function fakeDatabase() {
     storage: {
       from: () => ({ upload: async () => ({ error: null }) }),
     },
-    functions: { invoke: async () => ({ error: null }) },
+    functions: {
+      invoke: async (name: string) => {
+        calls.push({ table: name, op: "invoke" });
+        return { error: options.failInsights ? { message: "down" } : null };
+      },
+    },
     from(table: string) {
       const call: Recorded = { table, op: "select" };
       calls.push(call);
@@ -247,6 +266,15 @@ function fakeDatabase() {
             })),
             error: null,
           };
+        }
+        if (call.op === "update" && table === "matches") {
+          if (options.failMarker) {
+            return { data: null, error: { message: "marker refused" } };
+          }
+          state.errorsJudgedAt = (
+            call.values as { errors_judged_at: string | null }
+          ).errors_judged_at;
+          return { data: null, error: null };
         }
         if (call.op === "update") return { data: [{ id: "s" }], error: null };
         if (table === "match_stats") {
@@ -278,9 +306,13 @@ function fakeDatabase() {
 }
 
 /** Mark complete over the fake: the real publish, then the real verify step. */
-async function markComplete(kind: LabelPoint["errorKind"]) {
-  const fake = fakeDatabase();
-  const context = sessionContext(kind);
+async function markComplete(
+  kind: LabelPoint["errorKind"] | ApplyContext,
+  options: Parameters<typeof fakeDatabase>[0] = {},
+) {
+  const fake = fakeDatabase(options);
+  const context =
+    kind !== null && typeof kind === "object" ? kind : sessionContext(kind);
   const result = await writeLabelSessionComplete({
     supabase: fake.db,
     sessionId: context.session.id,
@@ -291,6 +323,7 @@ async function markComplete(kind: LabelPoint["errorKind"]) {
         context,
         plan: planApply(context),
         acceptScore: true,
+        deferInsights: true,
       }),
   });
   return { ...fake, result };
@@ -313,10 +346,9 @@ test("publish with every error marked: points, stats, then verify with p_errors_
     p_errors_judged: true,
   });
 
-  // The publish's own recompute ran before the marker existed, so verify_match
-  // runs the stat function again after stamping it: that second run is what
-  // makes forced_errors a number.
-  expect(state.statsRuns).toEqual([false, true]);
+  // The publish stamps the marker before its own recompute, so forced_errors
+  // is a number from the first run; verify_match's run gives the same answer.
+  expect(state.statsRuns).toEqual([true, true]);
   expect(state.errorsJudgedAt).not.toBeNull();
   expect(state.stats?.forced_errors).toBe(1);
 });
@@ -333,4 +365,183 @@ test("publish with an unmarked error (a stale client): p_errors_judged false, th
   expect(state.points.map((p) => p.result_type)).toContain(
     "Forehand Unforced Error",
   );
+});
+
+/** Two errors, both by Lee: point 1 marked `kind`, and point 2 stored as an error, unmarked. */
+function partlyMarkedContext(kind: LabelPoint["errorKind"]): ApplyContext {
+  const context = sessionContext(kind);
+  context.session.points = context.session.points.map((p) =>
+    p.id === FIXTURE_POINT_IDS.P2
+      ? { ...p, ending: "error" as const, endedBy: "p1" as const }
+      : p,
+  );
+  return context;
+}
+
+const at = (calls: Recorded[], table: string, op = "rpc") =>
+  calls.findIndex((c) => c.table === table && c.op === op);
+
+test("planApply: a partly marked session plans only Unforced strings, and the overview keeps the labeller's forced count", () => {
+  const context = partlyMarkedContext("forced");
+  const plan = planApply(context);
+  expect(plan.errorsJudged).toBe(false);
+  const errors = plan.built.points.filter((p) =>
+    p.result_type?.endsWith("Error"),
+  );
+  expect(errors).toHaveLength(2);
+  expect(errors.every((p) => p.result_type?.endsWith("Unforced Error"))).toBe(
+    true,
+  );
+  // What the publish will count, as the script's preview prints it.
+  expect(plan.stats.p1.forcedErrors).toBe(0);
+  expect(plan.stats.p1.unforcedErrors).toBe(2);
+  // The mark stays beside the row, and the overview's reading counts it.
+  expect(errors.find((p) => p.pointIndex === 0)?.errorKind).toBe("forced");
+  const overview = expectedStats(
+    buildAppliedRows({
+      points: context.session.points,
+      adScoring: context.session.adScoring,
+      bestOf: 3,
+    }).points,
+    { labellerMarks: true },
+  );
+  expect(overview.p1.forcedErrors).toBe(1);
+  expect(overview.p1.unforcedErrors).toBe(1);
+});
+
+test("a partly marked publish writes only Unforced strings and clears a stale marker before the stats run", async () => {
+  const { calls, state, result } = await markComplete(
+    partlyMarkedContext("forced"),
+    { errorsJudgedAt: "2026-10-01T00:00:00+00:00" },
+  );
+  expect(result).toMatchObject({ ok: true, status: "complete" });
+  const types = state.points.map((p) => String(p.result_type));
+  expect(types.filter((t) => t.endsWith("Error"))).toHaveLength(2);
+  expect(types.filter((t) => t.includes("Forced"))).toEqual([]);
+  // Cleared, and the stat function saw it cleared on its one run.
+  const marker = calls.find((c) => c.table === "matches" && c.op === "update");
+  expect(marker?.values).toEqual({ errors_judged_at: null });
+  expect(state.errorsJudgedAt).toBeNull();
+  expect(state.statsRuns).toEqual([false]);
+  expect(calls.find((c) => c.table === "verify_match")?.values).toMatchObject({
+    p_errors_judged: false,
+  });
+});
+
+test("a fully marked publish stamps the marker before calculate_match_stats and writes Forced strings", async () => {
+  const { calls, state, result } = await markComplete("forced");
+  expect(result).toMatchObject({ ok: true, status: "complete" });
+  expect(at(calls, "points", "insert")).toBeLessThan(
+    at(calls, "matches", "update"),
+  );
+  expect(at(calls, "matches", "update")).toBeLessThan(
+    at(calls, "calculate_match_stats"),
+  );
+  expect(state.statsRuns[0]).toBe(true);
+  expect(state.points.map((p) => p.result_type)).toContain(
+    "Forehand Forced Error",
+  );
+});
+
+test("the stat row is right when verify fails: the marker is already on", async () => {
+  const { state, result } = await markComplete("forced", { failVerify: true });
+  expect(result).toMatchObject({
+    error: expect.stringContaining("could not be marked Verified"),
+  });
+  expect(state.statsRuns).toEqual([true]);
+  expect(state.stats?.forced_errors).toBe(1);
+});
+
+test("a failed marker write is the failed-recompute answer: the points are in, no stats run", async () => {
+  const { calls, result } = await markComplete("forced", { failMarker: true });
+  expect(result).toMatchObject({
+    error: expect.stringMatching(
+      /^The labelled points are published, but the statistics could not be rebuilt \(Could not set errors_judged_at: marker refused\)/,
+    ),
+  });
+  expect(at(calls, "calculate_match_stats")).toBe(-1);
+  expect(at(calls, "verify_match")).toBe(-1);
+  expect(at(calls, "generate-insights", "invoke")).toBe(-1);
+});
+
+test("Mark complete asks for the summary once, after verify_match, and reports the answer", async () => {
+  const { calls, result } = await markComplete("forced");
+  expect(calls.filter((c) => c.op === "invoke")).toHaveLength(1);
+  expect(at(calls, "verify_match")).toBeLessThan(
+    at(calls, "generate-insights", "invoke"),
+  );
+  expect(result).toMatchObject({
+    published: { insightsRequested: true },
+  });
+
+  const failed = await markComplete("forced", { failInsights: true });
+  expect(failed.result).toMatchObject({
+    ok: true,
+    published: { insightsRequested: false },
+  });
+});
+
+test("Mark complete still asks for the summary when verify fails: the statistics are in", async () => {
+  const { calls, result } = await markComplete("forced", { failVerify: true });
+  expect(result).toHaveProperty("error");
+  expect(calls.filter((c) => c.op === "invoke")).toHaveLength(1);
+  expect(at(calls, "verify_match")).toBeLessThan(
+    at(calls, "generate-insights", "invoke"),
+  );
+});
+
+test("the publish Mark complete runs leaves the summary to it", () => {
+  // Its path to `publishPlanned` reads the whole session, so this is read off
+  // the source: without the flag the summary goes back ahead of the verify.
+  const source = readFileSync(
+    "src/lib/services/labels/apply-session.ts",
+    "utf8",
+  );
+  const body = source.slice(source.indexOf("function publishLabelSession"));
+  expect(body).toContain("deferInsights: true");
+});
+
+test("deferInsights: the publish writes everything and asks for nothing", async () => {
+  const fake = fakeDatabase();
+  const context = sessionContext("forced");
+  const result = await publishPlanned({
+    db: fake.db,
+    context,
+    plan: planApply(context),
+    acceptScore: true,
+    deferInsights: true,
+  });
+  expect(result).toMatchObject({ ok: true, insightsRequested: false });
+  expect(fake.calls.filter((c) => c.op === "invoke")).toEqual([]);
+  expect(at(fake.calls, "calculate_match_stats")).toBeGreaterThan(-1);
+});
+
+test("the script's publish is unchanged for the summary: asked after the stats, no verify — and it gets the marker", async () => {
+  const fake = fakeDatabase();
+  const context = sessionContext("forced");
+  const result = await publishPlanned({
+    db: fake.db,
+    context,
+    plan: planApply(context),
+    acceptScore: true,
+  });
+  expect(result).toMatchObject({ ok: true, insightsRequested: true });
+  expect(at(fake.calls, "backfill_returns_in_and_net_points")).toBeLessThan(
+    at(fake.calls, "generate-insights", "invoke"),
+  );
+  expect(at(fake.calls, "verify_match")).toBe(-1);
+  expect(at(fake.calls, "matches", "update")).toBeLessThan(
+    at(fake.calls, "calculate_match_stats"),
+  );
+  expect(fake.state.errorsJudgedAt).not.toBeNull();
+
+  const failed = fakeDatabase({ failInsights: true });
+  expect(
+    await publishPlanned({
+      db: failed.db,
+      context,
+      plan: planApply(context),
+      acceptScore: true,
+    }),
+  ).toMatchObject({ ok: true, insightsRequested: false });
 });

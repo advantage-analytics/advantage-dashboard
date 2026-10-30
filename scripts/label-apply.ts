@@ -26,7 +26,9 @@
  *      the labelled rows, flagged `hand_labelled` — persist-transcript.ts then
  *      refuses to re-derive over them without `allowOverwriteLabels`;
  *   3. re-links bookmarks to the new point nearest in video_time;
- *   4. RPC calculate_match_stats, then backfill_returns_in_and_net_points
+ *   4. sets matches.errors_judged_at (now with every error marked, else
+ *      null), so a partly marked session publishes every error as unforced;
+ *      then RPC calculate_match_stats, then backfill_returns_in_and_net_points
  *      (the order deriveAndPublish runs them in), then asks generate-insights
  *      for a new summary;
  *   5. prints match_stats before and after.
@@ -289,6 +291,11 @@ async function main() {
     console.log("score check: labelled sets match the entered score");
   }
   printResultTypes(built.points);
+  console.log(
+    plan.errorsJudged
+      ? "errors: all marked, so they publish forced and unforced"
+      : "errors: not all marked, so every error publishes as unforced",
+  );
   printPreview(stats, names);
 
   if (built.problems.length > 0) {

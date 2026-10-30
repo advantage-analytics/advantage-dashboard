@@ -278,6 +278,31 @@ be. Doubles teams and existing users depend on it.
 > lock (decision D1, `docs/plans/advantage-review.md`). The safe direction
 > only: nothing in `derivation/` or `derive-and-publish.ts` changed.
 
+> **A user-approved exception, added 2026-10-30: `calculate_match_stats` counts
+> forced errors, and the SwingVision matches were recomputed once.**
+>
+> The forced/unforced split (`src/lib/data/error-split.ts`). Migration
+> `20261029222042_forced_errors_judged` changed two expressions: `forced_errors`,
+> previously a literal NULL, is counted when `source_provider = 'swing-vision'`
+> or `matches.errors_judged_at` is set. The rest of the function's body is
+> byte-identical to what ran before (md5 compared on apply), and nothing else in
+> it, `unforced_errors` included, changed. `20261030062341_verify_match_errors_judged`
+> re-runs the function when Mark complete stamps the marker.
+>
+> **The backfill.** The same migration re-ran the function once over every
+> `swing-vision` match (44, 88 `match_stats` rows). It does not write the return
+> or net-point columns, which `backfill_returns_in_and_net_points` owns, so those
+> kept their values. Afterwards `forced_errors` summed to 261, the count of Forced
+> Error points, with no NULLs left on those rows and none set on any other match.
+> Every other column it does write was recomputed too, and no before-and-after
+> diff was taken, so a stale value on those rows would have moved silently. No
+> `points`, `shots` or `matches` row was written.
+>
+> **The approval.** The owner approved the migration in session, knowing it
+> changed the function and recomputed the SwingVision matches, but this rule was
+> not quoted to them at the time. It was raised with them afterwards, by
+> `/pr-check` on 2026-10-30. Not a precedent for backfills.
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in

@@ -4,7 +4,7 @@ import {
   type AskRow,
 } from "@/lib/services/ask/answer-render";
 import { ASK_TABLE_ROWS, numberOrNull } from "@/lib/services/ask/events";
-import { askCounterSql, askMeasureLabel } from "@/lib/services/ask/measures";
+import { askCounterSelect, askMeasureLabel } from "@/lib/services/ask/measures";
 import { sentenceCase } from "@/lib/services/ask/plays";
 
 /**
@@ -228,12 +228,7 @@ function buildReviewSql(): string {
     "with ranked as (",
     "select m.played_on, m.opponent_name, m.player_name,",
     "row_number() over (order by m.played_on desc nulls last, m.match_id desc) as rn,",
-    counters
-      .map((counter) => {
-        const sql = askCounterSql(counter, "s");
-        return sql === `s.${counter}` ? sql : `${sql} as ${counter}`;
-      })
-      .join(", "),
+    counters.map((counter) => askCounterSelect(counter, "s")).join(", "),
     "from ask.match_stats s join ask.matches m on m.match_id = s.match_id",
     "where s.side = 'me' and s.match_id in (select match_id from scope)",
     "and (s.total_points > 0 or s.first_serves > 0)",

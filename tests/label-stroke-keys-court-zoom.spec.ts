@@ -413,21 +413,32 @@ test.describe("E: forced or unforced, on the stroke that ended the point in an e
       ...fields,
     });
 
+  const STORED_WINNER = {
+    ending: "winner",
+    endedBy: "p1",
+    winner: "p1",
+  } as const;
+
   test("the pair's stroke: the last live one, on an error point alone", () => {
-    expect(errorKindShotId(rallyPoint(), false)).toBe("e-last");
+    expect(errorKindShotId(rallyPoint())).toBe("e-last");
     // A winner, a missed return (service winner), a deleted point: none.
-    expect(errorKindShotId(rallyPoint({ result: "in" }), false)).toBeNull();
-    const missedReturn = rallyPoint();
-    missedReturn.shots = missedReturn.shots.filter((s) => s.id !== "e-return");
-    expect(errorKindShotId(missedReturn, false)).toBeNull();
     expect(
-      errorKindShotId(rallyPoint({}, { status: "deleted" }), false),
+      errorKindShotId(rallyPoint({ result: "in" }, STORED_WINNER)),
     ).toBeNull();
+    const missedReturn = rallyPoint({}, { ending: "service_winner" });
+    missedReturn.shots = missedReturn.shots.filter((s) => s.id !== "e-return");
+    expect(errorKindShotId(missedReturn)).toBeNull();
+    // With no ending stored, the strokes say the same thing.
+    expect(errorKindShotId({ ...missedReturn, ending: null })).toBeNull();
+    // The stored ending is what publishes: an error whose last ball is in
+    // is offered, a winner whose last ball missed is not.
+    expect(errorKindShotId(rallyPoint({ result: "in" }))).toBe("e-last");
+    expect(errorKindShotId(rallyPoint({}, STORED_WINNER))).toBeNull();
+    expect(errorKindShotId(rallyPoint({}, { status: "deleted" }))).toBeNull();
     // A stored kind on a point that no longer ends in an error offers nothing.
     expect(
       errorKindShotId(
-        rallyPoint({ result: "in" }, { errorKind: "forced" }),
-        false,
+        rallyPoint({ result: "in" }, { ...STORED_WINNER, errorKind: "forced" }),
       ),
     ).toBeNull();
     // A tombstone after the miss is not the last stroke: the miss still is.
@@ -440,38 +451,30 @@ test.describe("E: forced or unforced, on the stroke that ended the point in an e
         videoTime: 4,
       }),
     );
-    expect(errorKindShotId(tomb, false)).toBe("e-last");
+    expect(errorKindShotId(tomb)).toBe("e-last");
   });
 
   test("E cycles: forced when unmarked, unforced when forced, forced when unforced", () => {
     expect(nextErrorKind(null)).toBe("forced");
     expect(nextErrorKind("forced")).toBe("unforced");
     expect(nextErrorKind("unforced")).toBe("forced");
-    expect(errorKindKeyPatch(rallyPoint(), "e-last", false)).toEqual({
+    expect(errorKindKeyPatch(rallyPoint(), "e-last")).toEqual({
       error_kind: "forced",
     });
     expect(
-      errorKindKeyPatch(
-        rallyPoint({}, { errorKind: "forced" }),
-        "e-last",
-        false,
-      ),
+      errorKindKeyPatch(rallyPoint({}, { errorKind: "forced" }), "e-last"),
     ).toEqual({ error_kind: "unforced" });
     expect(
-      errorKindKeyPatch(
-        rallyPoint({}, { errorKind: "unforced" }),
-        "e-last",
-        false,
-      ),
+      errorKindKeyPatch(rallyPoint({}, { errorKind: "unforced" }), "e-last"),
     ).toEqual({ error_kind: "forced" });
   });
 
   test("E on any other stroke, or on a point not ended in an error, writes nothing", () => {
     for (const other of ["e-serve", "e-return", "e-gone", "nowhere"]) {
-      expect(errorKindKeyPatch(rallyPoint(), other, false), other).toBeNull();
+      expect(errorKindKeyPatch(rallyPoint(), other), other).toBeNull();
     }
     expect(
-      errorKindKeyPatch(rallyPoint({ result: "in" }), "e-last", false),
+      errorKindKeyPatch(rallyPoint({ result: "in" }, STORED_WINNER), "e-last"),
     ).toBeNull();
     expect(isErrorKindKey("e")).toBe(true);
     expect(isErrorKindKey("E")).toBe(true);

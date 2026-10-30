@@ -10,10 +10,15 @@
  * (`tiebreakServeOrders`). Last, how the publish will read each point
  * with no ending stored (`publishEnding`, the rule apply.ts writes by): taken
  * from its strokes, written as score only off the video, published with no
- * ending, or left out — never refused.
+ * ending, or left out — never refused. Then any error with no stroke to mark
+ * (`unmarkableErrors`), which keeps the match at Errors.
  */
 
-import { isMarkableError, publishEnding } from "./ending-derived";
+import {
+  isMarkableError,
+  publishEnding,
+  unmarkableErrors,
+} from "./ending-derived";
 import type { LabelMarks } from "./marks";
 import { ownedEndingPhrase, type MarkNames } from "./marks-copy";
 import { markSummary } from "./marks-state";
@@ -67,20 +72,16 @@ export const PUBLISHED_PAST_TAILS = {
 } as const;
 
 /**
- * The points "Mark complete" will not publish past: every live point whose
- * strokes say it ended in an error (`isMarkableError`, which leaves out a
- * deleted point, a let and a non-point) and that is not yet marked forced or
- * unforced. As the rail numbers them, ascending. A stale `errorKind` on a
- * point that no longer ends in an error does not count either way.
+ * The points "Mark complete" will not publish past: every point that will
+ * publish as an error (`isMarkableError`, which leaves out a deleted point, a
+ * let, a non-point and an error with no stroke to put the mark on) and that is
+ * not yet marked forced or unforced. As the rail numbers them, ascending. A
+ * stale `errorKind` on a point that no longer ends in an error does not count
+ * either way.
  */
-export function unmarkedErrors(
-  points: readonly LabelPoint[],
-  ghosts: boolean,
-): number[] {
+export function unmarkedErrors(points: readonly LabelPoint[]): number[] {
   return points
-    .filter(
-      (point) => point.errorKind == null && isMarkableError(point, ghosts),
-    )
+    .filter((point) => point.errorKind == null && isMarkableError(point))
     .map((point) => point.pointIndex + 1)
     .sort((a, b) => a - b);
 }
@@ -194,6 +195,13 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
         `${at} has no ending its strokes can settle${PUBLISHED_PAST_TAILS.noEnding}`,
       );
     }
+  }
+
+  const unmarkable = unmarkableErrors(points).length;
+  if (unmarkable > 0) {
+    warnings.push(
+      `${plural(unmarkable, "error")} ${unmarkable === 1 ? "has" : "have"} no shots to mark, so this match shows Errors only`,
+    );
   }
   return warnings;
 }

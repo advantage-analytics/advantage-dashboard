@@ -53,6 +53,12 @@ export function askCounterSql(counter: string, table: string): string {
   return derived ? derived(table) : `${table}.${counter}`;
 }
 
+/** `askCounterSql` as a plain select item: a derived counter is aliased to its name. */
+export function askCounterSelect(counter: string, table: string): string {
+  const sql = askCounterSql(counter, table);
+  return sql === `${table}.${counter}` ? sql : `${sql} as ${counter}`;
+}
+
 export interface AskMeasureName {
   /** As the page prints it beside the number. */
   label: string;

@@ -357,7 +357,6 @@ export function BlackShotsWell({
           point={point}
           pointNumber={pointNumber}
           edit={edit}
-          ghosts={ghosts}
           playing={shot.id === playingShotId}
           pastEnd={pastEnd.has(shot.id)}
           arrive={arrive()}
@@ -500,13 +499,10 @@ export function BlackShotRow({
   pastEnd = false,
   arrive,
   resultMenuOpen = false,
-  ghosts = false,
 }: {
   shot: LabelShot;
   number: number;
   arrive?: number;
-  /** The console's ghost flag (`drawsGhosts`): which strokes are live. */
-  ghosts?: boolean;
   /** After a double fault (`PointOverLine`): the row a step quieter. */
   pastEnd?: boolean;
   /**
@@ -520,7 +516,7 @@ export function BlackShotRow({
    */
   point?: Pick<
     LabelPoint,
-    "id" | "status" | "shots" | "winner" | "ending" | "errorKind"
+    "id" | "status" | "shots" | "winner" | "ending" | "endedBy" | "errorKind"
   >;
   /** The point's number, for the confirm the console opens. */
   pointNumber: number;
@@ -587,10 +583,7 @@ export function BlackShotRow({
   // Forced | Unforced: on the stroke that ended the point in an error alone.
   const onPatchPoint = edit.onPatchPoint;
   const errorKind: ShotTrayErrorKind | null =
-    trayActions &&
-    point &&
-    onPatchPoint &&
-    errorKindShotId(point, ghosts) === shot.id
+    trayActions && point && onPatchPoint && errorKindShotId(point) === shot.id
       ? {
           kind: point.errorKind,
           pick: (kind) => {

@@ -291,14 +291,14 @@ export function liveShotsInOrder<T extends LiveOrderableShot>(
   );
 }
 
-/** One `label_points` row with its strokes, already in video order. */
 /**
  * Whether an error was forced or unforced (`label_points.error_kind`): the
- * labeller's call on a point whose strokes say it ended in an error
+ * labeller's call on a point that will publish as an error
  * (`isMarkableError`). Never seeded.
  */
 export type LabelErrorKind = "forced" | "unforced";
 
+/** One `label_points` row with its strokes, already in video order. */
 export interface LabelPoint {
   id: string;
   pointIndex: number;

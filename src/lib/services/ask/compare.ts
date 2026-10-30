@@ -1,5 +1,5 @@
 import type { AskRow } from "@/lib/services/ask/answer-render";
-import { askCounterSql } from "@/lib/services/ask/measures";
+import { askCounterSelect, askCounterSql } from "@/lib/services/ask/measures";
 
 /**
  * The comparisons: three questions the planner used to write SQL for and now
@@ -353,10 +353,7 @@ function buildBaselineSql(prefix: string): string {
   return [
     "with tagged as (",
     "select (s.match_id in (select match_id from scope)) as in_scope,",
-    COUNTERS.map((counter) => {
-      const sql = askCounterSql(counter, "s");
-      return sql === `s.${counter}` ? sql : `${sql} as ${counter}`;
-    }).join(", "),
+    COUNTERS.map((counter) => askCounterSelect(counter, "s")).join(", "),
     `from ask.match_stats s where s.side = 'me' and ${HAS_STATS}`,
     "), agg as (",
     "select sum(case when t.in_scope then 1 else 0 end) as scope_n, count(*) as all_n,",

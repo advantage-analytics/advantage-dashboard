@@ -125,9 +125,12 @@ export function LabelDashboard(props: LabelDashboardProps) {
     changes: useMemo(() => changeCounts(points), [points]),
     stats: useMemo(() => {
       try {
+        // The labeller's own marks: a partly marked session publishes no
+        // forced string, and this still counts what they have marked so far.
         return expectedStats(
           buildAppliedRows({ points, adScoring, bestOf, start: startScore })
             .points,
+          { labellerMarks: true },
         );
       } catch {
         return null;

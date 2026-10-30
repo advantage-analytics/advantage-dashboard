@@ -1948,7 +1948,7 @@ export function LabelConsole({
   function askComplete() {
     setConfirm({
       kind: "complete-session",
-      blockers: unmarkedErrors(points, drawsGhosts(liveMarks)),
+      blockers: unmarkedErrors(points),
       warnings: completeWarnings({
         points,
         adScoring: session.adScoring,
@@ -3124,11 +3124,7 @@ export function LabelConsole({
       const owner = pointOfShot(points, placement.shotId);
       if (!owner) return false;
       if (expanded && owner.id !== expanded.id) return false;
-      const patch = errorKindKeyPatch(
-        owner,
-        placement.shotId,
-        drawsGhosts(marks),
-      );
+      const patch = errorKindKeyPatch(owner, placement.shotId);
       if (!patch) return false;
       void patchPoint(owner.id, patch);
       return true;

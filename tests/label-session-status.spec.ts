@@ -3,6 +3,12 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { labelConfirmCopy } from "@/components/admin/labels/label-confirm";
+import {
+  errorKindKeyPatch,
+  errorKindShotId,
+} from "@/components/admin/labels/stroke-keys";
+import { buildAppliedRows } from "@/lib/services/labels/apply";
+import { allErrorsJudged } from "@/lib/services/labels/ending-derived";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   checkSessionOpen,
@@ -70,6 +76,7 @@ function fakeClient(rows: {
   const calls: Call[] = [];
   let updateCount = 0;
   const client = {
+    functions: { invoke: async () => ({ error: null }) },
     /** `claim_label_publish_lease`: the database's stamp, or none. */
     async rpc(fn: string, args: Record<string, unknown>) {
       calls.push({ table: fn, op: "rpc", values: args, filters: {} });
@@ -143,7 +150,6 @@ const PUBLISHED = async () => ({
   ok: true as const,
   points: 10,
   shots: 40,
-  insightsRequested: true,
   errorsJudged: true,
 });
 
@@ -347,7 +353,11 @@ test.describe("writeLabelSessionComplete", () => {
 
   test("a session labelled without marks completes like any other", async () => {
     const blind = fakeClient({
-      session: { status: "labelling", marks_enabled: false },
+      session: {
+        status: "labelling",
+        marks_enabled: false,
+        match_id: MATCH_ID,
+      },
     });
     expect(
       await writeLabelSessionComplete({
@@ -556,6 +566,25 @@ function warningsOf(session: LabelSession, marks: LabelMarks | null) {
 }
 
 test.describe("completeWarnings", () => {
+  test("an error with no shots to mark says the match shows Errors only", () => {
+    const session = labelSessionFixture();
+    const noShots = (id: string, index: number) =>
+      labelPoint(id, index, { ending: "error", endedBy: "p2", shots: [] });
+    const lines = (points: LabelSession["points"]) =>
+      warningsOf({ ...session, points }, EMPTY_MARKS).filter((w) =>
+        w.includes("no shots to mark"),
+      );
+    expect(lines(session.points)).toEqual([]);
+    expect(lines([...session.points, noShots("x", 9)])).toEqual([
+      "1 error has no shots to mark, so this match shows Errors only",
+    ]);
+    expect(
+      lines([...session.points, noShots("x", 9), noShots("y", 10)]),
+    ).toEqual([
+      "2 errors have no shots to mark, so this match shows Errors only",
+    ]);
+  });
+
   test("the points left to check, each game left short or run over, and the entered score the sets disagree with", () => {
     expect(warningsOf(labelSessionFixture(), EMPTY_MARKS)).toEqual([
       "2 points of 3 not checked",
@@ -813,7 +842,7 @@ test.describe("unmarkedErrors", () => {
       winnerPoint("b", 1, { errorKind: "unforced" }),
       winnerPoint("c", 2),
     ];
-    expect(unmarkedErrors(points, true)).toEqual([]);
+    expect(unmarkedErrors(points)).toEqual([]);
   });
 
   test("one: the rail's number, not an index", () => {
@@ -822,7 +851,7 @@ test.describe("unmarkedErrors", () => {
       errorPoint("b", 1),
       errorPoint("c", 2, { errorKind: "unforced" }),
     ];
-    expect(unmarkedErrors(points, true)).toEqual([2]);
+    expect(unmarkedErrors(points)).toEqual([2]);
   });
 
   test("three, ascending, past deleted points, lets and non-points", () => {
@@ -834,7 +863,105 @@ test.describe("unmarkedErrors", () => {
       errorPoint("b", 57),
       winnerPoint("w", 60),
     ];
-    expect(unmarkedErrors(points, true)).toEqual([31, 58, 140]);
+    expect(unmarkedErrors(points)).toEqual([31, 58, 140]);
+  });
+
+  /** The gate, the tray's pair and E, read together off one point. */
+  const readings = (point: LabelSession["points"][number]) => ({
+    gate: unmarkedErrors([point]),
+    tray: errorKindShotId(point),
+    key: errorKindShotId(point)
+      ? errorKindKeyPatch(point, errorKindShotId(point)!)
+      : null,
+    judged: allErrorsJudged([point]),
+  });
+  const lastLiveId = (point: LabelSession["points"][number]) =>
+    point.shots.at(-1)!.id;
+  const built = (point: LabelSession["points"][number]) =>
+    buildAppliedRows({
+      points: [{ ...point, setNumber: 1, gameNumber: 1, server: "p1" }],
+      adScoring: true,
+      bestOf: 3,
+    });
+
+  test("a stored error whose last ball is in is offered, blocks until marked, and then counts", () => {
+    const point = winnerPoint("a", 0, { ending: "error", endedBy: "p2" });
+    expect(readings(point)).toEqual({
+      gate: [1],
+      tray: lastLiveId(point),
+      key: { error_kind: "forced" },
+      judged: false,
+    });
+    const marked = { ...point, errorKind: "forced" as const };
+    expect(readings(marked)).toMatchObject({
+      gate: [],
+      tray: lastLiveId(point),
+      key: { error_kind: "unforced" },
+      judged: true,
+    });
+    expect(built(marked).points[0].result_type).toBe("Forehand Forced Error");
+  });
+
+  test("a stored winner whose last ball missed is neither offered nor blocked, and a stale kind on it counts nothing", () => {
+    const point = errorPoint("a", 0, {
+      ending: "winner",
+      endedBy: "p2",
+      errorKind: "forced",
+    });
+    expect(readings(point)).toEqual({
+      gate: [],
+      tray: null,
+      key: null,
+      judged: true,
+    });
+    const row = built(point).points[0];
+    expect(row.result_type).toBe("Forehand Winner");
+    expect(row.errorKind).toBeNull();
+  });
+
+  test("a stored error with no strokes does not dead-end: not offered, not blocked, publishes Unforced, keeps the match at Errors", () => {
+    const point = labelPoint("a", 0, {
+      winner: "p1",
+      ending: "error",
+      endedBy: "p2",
+      shots: [],
+    });
+    expect(readings(point)).toEqual({
+      gate: [],
+      tray: null,
+      key: null,
+      judged: false,
+    });
+    const applied = built(point);
+    expect(applied.errorsJudged).toBe(false);
+    expect(applied.points[0].result_type).toBe("Unforced Error");
+
+    // A kind left from before its strokes went cannot make it judged.
+    const stale = { ...point, errorKind: "forced" as const };
+    expect(allErrorsJudged([stale])).toBe(false);
+    expect(built(stale).points[0].result_type).toBe("Unforced Error");
+    expect(built(stale).points[0].errorKind).toBeNull();
+
+    // And it holds down every other point's forced string with it.
+    const other = errorPoint("b", 1, { errorKind: "forced" });
+    expect(allErrorsJudged([other, point])).toBe(false);
+  });
+
+  test("the gate and the tray read a ghost as the publish does, marks on or off", () => {
+    // The miss is the last stroke the publish writes; the site removed the
+    // ball after it, which a session labelled without marks still draws.
+    const point = errorPoint("a", 0);
+    point.shots = [
+      ...point.shots,
+      shot("a", {
+        hitter: "p1",
+        result: "in",
+        siteRemoval: "hit_after_fault",
+      }),
+    ];
+    const miss = point.shots.at(-2)!.id;
+    expect(readings(point)).toMatchObject({ gate: [1], tray: miss });
+    expect(built(point).points[0].result_type).toBe("Forehand Unforced Error");
   });
 });
 

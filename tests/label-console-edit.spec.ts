@@ -660,7 +660,7 @@ test.describe("forced or unforced, through undo and redo", () => {
     pressed().click("forced");
     expect(pressed().kind).toBe("forced");
     // E on the same stroke: on to Unforced, through the same point write.
-    save("u-point", errorKindKeyPatch(row, "u-last", false)!);
+    save("u-point", errorKindKeyPatch(row, "u-last")!);
     expect(server.errorKind).toBe("unforced");
     expect(pressed().kind).toBe("unforced");
     // Neither made the point edited: the kind is not a seeded field.
@@ -679,7 +679,7 @@ test.describe("forced or unforced, through undo and redo", () => {
     expect(pressed().kind).toBe("unforced");
     expect(server.errorKind).toBe("unforced");
     // And E carries on from the restored kind.
-    expect(errorKindKeyPatch(row, "u-last", false)).toEqual({
+    expect(errorKindKeyPatch(row, "u-last")).toEqual({
       error_kind: "forced",
     });
   });
