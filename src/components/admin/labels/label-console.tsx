@@ -92,6 +92,7 @@ import {
   ADD_SHOT_AT_START,
   planAddedShot,
   planPointMove,
+  switchedHitter,
   type PlannedPointMove,
   type LabelDeleteReason,
   type LabelGame,
@@ -2809,6 +2810,7 @@ export function LabelConsole({
   // (a serve the vendor missed).
   // C: the court's other end — contact ↔ landing — for the selected stroke.
   // X: Flip side — the placing half across the net, as the court's button.
+  // H: the selected stroke's hitter to the other player, as its row's menu.
   // T: the selected stroke's time = the frame the film stands on.
   // Delete / Backspace: delete the selected stroke, through the same confirm
   // as its tray's Delete shot.
@@ -2817,6 +2819,7 @@ export function LabelConsole({
   const deleteShotKey = useRef<() => boolean>(() => false);
   const endKey = useRef<() => boolean>(() => false);
   const flipKey = useRef<() => boolean>(() => false);
+  const hitterKey = useRef<() => boolean>(() => false);
   const timeKey = useRef<() => boolean>(() => false);
   const resetShotKey = useRef<() => boolean>(() => false);
   const resetPointKey = useRef<() => boolean>(() => false);
@@ -3072,6 +3075,27 @@ export function LabelConsole({
       setPlacement(flipPlacement);
       return true;
     };
+    // A stroke with no hitter takes the one an added stroke would
+    // (`switchedHitter`). Through `requestPatchShot`, so a serve asks whether
+    // the rest of the point follows, as the menu does.
+    hitterKey.current = () => {
+      if (!operable || confirm) return false;
+      const shot = keyShot();
+      const owner = shot && pointOfShot(points, shot.id);
+      if (!shot || !owner) return false;
+      const live = liveShotsInOrder(owner, drawsGhosts(marks));
+      // A removed stroke is not live: H leaves it alone.
+      const at = live.findIndex((s) => s.id === shot.id);
+      if (at === -1) return false;
+      const hitter = switchedHitter(
+        shot,
+        at > 0 ? live[at - 1] : null,
+        owner.server,
+      );
+      if (!hitter) return false;
+      requestPatchShot(shot.id, { hitter });
+      return true;
+    };
     // T writes only the stroke already selected — never one it would pick
     // (`keyShot`) — and only in the open point: the frame on screen is that
     // stroke's frame, read off the player on the file's clock and put back
@@ -3218,9 +3242,9 @@ export function LabelConsole({
       }
       // A stroke key reaches the selected stroke from a focused cell too (a
       // cell is a button), and so do A / ⇧A (add a stroke after / before),
-      // C (contact ↔ landing), X (flip side), T (time = frame), Delete /
-      // Backspace (delete the stroke) and R / ⇧R (ask to reset the stroke /
-      // point); a text field, a menu and a dialog keep all of them.
+      // C (contact ↔ landing), X (flip side), H (hitter), T (time = frame),
+      // Delete / Backspace (delete the stroke) and R / ⇧R (ask to reset the
+      // stroke / point); a text field, a menu and a dialog keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
       const consoleKey = isStrokeKey(key)
         ? () => strokeKey.current(key)
@@ -3232,15 +3256,17 @@ export function LabelConsole({
             ? () => endKey.current()
             : lower === "x"
               ? () => flipKey.current()
-              : lower === "t" && !event.shiftKey
-                ? () => timeKey.current()
-                : lower === "r"
-                  ? event.shiftKey
-                    ? () => resetPointKey.current()
-                    : () => resetShotKey.current()
-                  : key === "Delete" || key === "Backspace"
-                    ? () => deleteShotKey.current()
-                    : null;
+              : lower === "h" && !event.shiftKey
+                ? () => hitterKey.current()
+                : lower === "t" && !event.shiftKey
+                  ? () => timeKey.current()
+                  : lower === "r"
+                    ? event.shiftKey
+                      ? () => resetPointKey.current()
+                      : () => resetShotKey.current()
+                    : key === "Delete" || key === "Backspace"
+                      ? () => deleteShotKey.current()
+                      : null;
       if (
         consoleKey &&
         !event.metaKey &&

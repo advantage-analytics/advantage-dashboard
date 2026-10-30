@@ -385,6 +385,32 @@ type PlanShot = Pick<
 export const ADD_SHOT_AT_START = "start";
 
 /**
+ * Who hits a stroke from the stroke before it: that stroke's opponent; the
+ * point's server when there is none; null when it has no hitter. An added
+ * stroke is seeded with it, and H gives it to a stroke that has no hitter.
+ */
+export function hitterAfter(
+  before: Pick<LabelShot, "hitter"> | null,
+  server: LabelSide | null,
+): LabelSide | null {
+  if (!before) return server;
+  return before.hitter === null ? null : opponent(before.hitter);
+}
+
+/**
+ * H: the stroke's hitter switched to the other player, or, when it has none,
+ * the one `hitterAfter` reads off the live stroke before it. Null when neither
+ * says.
+ */
+export function switchedHitter(
+  shot: Pick<LabelShot, "hitter">,
+  before: Pick<LabelShot, "hitter"> | null,
+  server: LabelSide | null,
+): LabelSide | null {
+  return shot.hitter ? opponent(shot.hitter) : hitterAfter(before, server);
+}
+
+/**
  * A new stroke for a point, placed after `afterShotId`, after the rally's
  * last live stroke when that is null, or before its first when it is
  * `ADD_SHOT_AT_START`. `shots` must be in video order (`orderLabelShots`).
@@ -440,11 +466,7 @@ export function planAddedShot(
   const before = index >= 0 ? live[index] : null;
   const after = live[index + 1] ?? null;
 
-  const hitter = before
-    ? before.hitter === null
-      ? null
-      : opponent(before.hitter)
-    : point.server;
+  const hitter = hitterAfter(before, point.server);
 
   // Between two timed strokes it sits halfway. With a timed stroke before it
   // and nothing timed after, it sits just after that stroke, so strokes added

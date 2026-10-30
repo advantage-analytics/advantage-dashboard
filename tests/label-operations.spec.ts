@@ -29,6 +29,8 @@ import {
   planPointRestore,
   planShotDelete,
   planShotRestore,
+  hitterAfter,
+  switchedHitter,
 } from "@/lib/services/labels/operations";
 import { endingPatchForShotChange } from "@/lib/services/labels/ending-derived";
 import {
@@ -491,6 +493,29 @@ test.describe("add shot", () => {
 });
 
 // ── Move a point ────────────────────────────────────────────────────────────
+
+test.describe("the hitter H gives (switchedHitter)", () => {
+  test("a stroke with a hitter goes to the other player", () => {
+    expect(switchedHitter({ hitter: "p1" }, { hitter: "p1" }, "p1")).toBe("p2");
+    expect(switchedHitter({ hitter: "p2" }, null, "p2")).toBe("p1");
+  });
+
+  test("a stroke with none takes what an added stroke would", () => {
+    // The opponent of the stroke before it.
+    expect(switchedHitter({ hitter: null }, { hitter: "p1" }, "p1")).toBe("p2");
+    // The rally's first: the point's server.
+    expect(switchedHitter({ hitter: null }, null, "p2")).toBe("p2");
+    // The stroke before has no hitter either: nothing to give.
+    expect(switchedHitter({ hitter: null }, { hitter: null }, "p1")).toBeNull();
+    expect(switchedHitter({ hitter: null }, null, null)).toBeNull();
+  });
+
+  test("one rule with the add: planAddedShot seeds through hitterAfter", () => {
+    expect(hitterAfter({ hitter: "p2" }, "p2")).toBe("p1");
+    expect(hitterAfter(null, "p1")).toBe("p1");
+    expect(hitterAfter({ hitter: null }, "p1")).toBeNull();
+  });
+});
 
 test.describe("move point", () => {
   /** A point with no strokes: a move only ever takes the server. */
