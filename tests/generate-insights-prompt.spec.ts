@@ -703,6 +703,10 @@ for (const [label, match] of [
     // 14 alone, not (14 + 0) / 2.
     expect(comparison).toMatch(/"errors":14[,}]/);
     expect(comparison).not.toContain('"errors":7');
+    // And the prompt doesn't present that one match's figure as a norm of two.
+    expect(comparison).toContain(
+      "across 2 prior matches, each figure over only the matches that measured it",
+    );
   });
 }
 

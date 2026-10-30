@@ -636,7 +636,7 @@ serve(async (req) => {
               comparisonContext = `
 
       Player 1 comparison context (use ONLY for Player 1's headline and description):
-      - Typical averages across ${priorRows.length} prior matches: ${JSON.stringify(averages)}
+      - Typical averages across ${priorRows.length} prior matches, each figure over only the matches that measured it, so it may rest on fewer: ${JSON.stringify(averages)}
       - Immediately previous match: ${prevRow ? JSON.stringify(prevRow) : "unavailable"}
       In Player 1's description, frame THIS match against their typical averages AND their previous match (above/below their usual level; improved or regressed since last time) — qualitatively: do not print the prior-match or average figures (this match's own percentages are still quoted as above).${errorsBasis}`;
             }

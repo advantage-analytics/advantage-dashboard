@@ -37,9 +37,8 @@
  * --restore puts a backup's rows back the same way (delete the derived
  * points, insert the backup's, bookmarks included), sets
  * matches.errors_judged_at to agree with them (`restoredErrorsJudgedAt`) and
- * recomputes. It takes a
- * local file or a `label-backups/…` storage key; a match's first backup is
- * the vendor's original.
+ * recomputes. It takes a local file or a `label-backups/…` storage key; a
+ * match's first backup is the vendor's original.
  *
  * LABELS ARE A REAL ATHLETE'S DATA: the output names the players, and the
  * backups hold the match's rows. Neither belongs in the repo.
