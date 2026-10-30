@@ -271,17 +271,35 @@ function midSentence(label: string, names: PhraseNames): string {
 }
 
 /**
+ * Whether a cut's label already names the shared Result player: a statistic's
+ * side reads "Errors · Revelli", with the surname, where the phrase has the
+ * short name ("G. Revelli"). Another player picked since stays a phrase.
+ */
+function labelNamesResultPlayer(
+  shared: MatchFilters,
+  label: string,
+  names: PhraseNames,
+): boolean {
+  if (shared.resultPlayer === null) return false;
+  const name = playerNameOf(shared.resultPlayer, names);
+  return label
+    .split(" · ")
+    .slice(1)
+    .some((segment) => name === segment || name.endsWith(` ${segment}`));
+}
+
+/**
  * Every applied layer in words, for the filter strip above the video and the
  * zero state (the design system bans accumulating chips — tables.md, Data
  * Table rule 6 — so the cut reads as one sentence): the shared filters
  * (`appliedPhrases`, rally order — a landed cut's `MatchFilters` half reads
  * here, like any other pick), then the statistic's label ("…, from
  * Statistics") ONLY while its Film-only extras are in force — a pure cut is
- * all shared phrases already and names nothing twice, and a shared phrase the
- * label opens with is left to the label ("Errors · Errors, from Statistics"
- * reads "Errors, from Statistics") — then "saved"; joined
- * with " · ", each segment starting with a capital like every other middot
- * line in the dashboard. "G. Revelli serving · Second serve · Break point".
+ * all shared phrases already and names nothing twice, and what the label says
+ * itself is left to it ("G. Revelli's last shot · Errors · Errors · Revelli,
+ * from Statistics" reads "Errors · Revelli, from Statistics") — then "saved";
+ * joined with " · ", each segment starting with a capital like every other
+ * middot line in the dashboard. "G. Revelli serving · Second serve · Break point".
  * "All points" when nothing is applied.
  */
 export function filmListSentence(
@@ -293,7 +311,12 @@ export function filmListSentence(
   },
   names: PhraseNames,
 ): string {
-  let parts = appliedPhrases(f.shared, names);
+  let parts = appliedPhrases(
+    f.remainder && labelNamesResultPlayer(f.shared, f.remainder.label, names)
+      ? { ...f.shared, resultPlayer: null }
+      : f.shared,
+    names,
+  );
   if (f.remainder) {
     const opens = f.remainder.label.split(" · ")[0].toLowerCase();
     parts = parts.filter((phrase) => phrase.toLowerCase() !== opens);
