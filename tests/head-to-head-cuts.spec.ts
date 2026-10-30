@@ -821,12 +821,37 @@ test.describe("error rows follow the match's split", () => {
     const row = pointsRow(false, "Errors");
     expect(youCut(row)).toEqual({
       resultEnding: ["error"],
+      ending: "error",
       resultPlayer: "you",
     });
-    expect(filmCutExtras(youCut(row))).toBeNull();
     const opened = ids(youCut(row));
     expect(opened).toContain("ue-you");
     expect(opened).toContain("fe-you");
+    // Only errors: the row must not offer more than the figure beside it.
+    expect(opened.sort()).toEqual(
+      MATCH.filter(
+        (pt) =>
+          (pt.resultType ?? "").toLowerCase().endsWith("error") &&
+          ids({ resultEnding: ["error"], resultPlayer: "you" }).includes(pt.id),
+      )
+        .map((pt) => pt.id)
+        .sort(),
+    );
+  });
+
+  test("unjudged: Errors leaves out a double fault and a point with no result", () => {
+    const row = pointsRow(false, "Errors");
+    const noResult = { ...MATCH[0], id: "no-result", resultType: "" };
+    const points = [...MATCH, noResult];
+    const opened = applyFilmCut(points, points, youCut(row), CTX).map(
+      (pt) => pt.id,
+    );
+    expect(opened).not.toContain("no-result");
+    for (const pt of MATCH) {
+      if ((pt.resultType ?? "").toLowerCase().includes("double fault")) {
+        expect(opened).not.toContain(pt.id);
+      }
+    }
   });
 
   test("Point endings: unjudged, the errors segment is every error", () => {

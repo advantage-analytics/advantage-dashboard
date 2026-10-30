@@ -609,8 +609,8 @@ test.describe("errors until the split is judged", () => {
         "Total points won",
       ]);
       const errors = configs.find((c) => c.label === "Errors")!;
-      // Result › Ending Error alone — no Film-only `ending` narrowing.
-      expect(errors.cut).toEqual({ resultEnding: ["error"] });
+      // Narrowed to the Film-only "error" bucket, so it opens what it counts.
+      expect(errors.cut).toEqual({ resultEnding: ["error"], ending: "error" });
       expect(errors.sideBy).toBe("player");
       expect(errors.lowerIsBetter).toBe(true);
     });

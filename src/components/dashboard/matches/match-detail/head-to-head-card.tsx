@@ -403,14 +403,17 @@ export const DERIVED_H2H_GROUPS: { title: string; configs: H2HRowConfig[] }[] =
    cut opens every error. Once judged it is two rows, Unforced then Forced.
    Both apply to the SwingVision and the derived row sets alike. */
 
-/** The unjudged row: every error, one figure, the whole Result › Ending Error. */
+/**
+ * The unjudged row: every error, one figure. Its cut is Ending Error narrowed
+ * to the Film-only "error" bucket: Ending Error alone also admits double faults
+ * and points with no result, and the row would offer more than it counts.
+ */
 const ERRORS_ROW: H2HRowConfig = {
   label: "Errors",
   key: "unforcedErrors",
   plusKey: "forcedErrors",
   lowerIsBetter: true,
-  // No Film-only `ending`: the row is every error, so Ending Error alone.
-  cut: { resultEnding: ["error"] },
+  cut: { resultEnding: ["error"], ending: "error" },
   sideBy: "player",
   noun: "errors",
 };
