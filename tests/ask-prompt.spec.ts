@@ -1244,8 +1244,9 @@ test.describe("renderAskSchemaBlock — MCP-only court positions", () => {
       .map((column) => `${view.view}.${column.name}`),
   );
 
-  test("are exactly the positions, has_coords and the two landing helpers", () => {
+  test("are exactly the positions, has_coords, the two landing helpers and the opponent's program id", () => {
     expect(mcpOnly).toEqual([
+      "matches.opponent_program_id",
       "matches.has_coords",
       "shots.contact_x",
       "shots.contact_y",

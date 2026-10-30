@@ -216,7 +216,7 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
       {
         name: "match_id",
         type: "uuid",
-        meaning: "The match's id; the only id in this schema.",
+        meaning: "The match's id; the only match id in this schema.",
       },
       {
         name: "played_on",
@@ -240,6 +240,25 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         type: "text",
         meaning:
           "The opponent's backhand as recorded at upload, e.g. one-handed or two-handed; null when unknown.",
+      },
+      {
+        name: "opponent_school",
+        type: "text",
+        meaning:
+          "The school the opponent plays for: the linked program's name, or the school as typed when it is not in the directory; null when not recorded.",
+      },
+      {
+        name: "opponent_program_id",
+        type: "uuid",
+        meaning:
+          "The opponent's program in the directory; null when the school was typed or not recorded.",
+        mcpOnly: true,
+      },
+      {
+        name: "opponent_conference",
+        type: "text",
+        meaning:
+          "The conference of the opponent's linked program; null when the school is not linked to the directory.",
       },
       {
         name: "tournament",
