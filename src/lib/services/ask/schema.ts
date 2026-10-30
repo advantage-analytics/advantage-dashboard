@@ -368,13 +368,13 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "unforced_errors",
         type: "integer",
         meaning:
-          "Points this side lost by missing a shot that was not forced (unforced errors).",
+          "Points this side lost by missing a shot. This is every error the side made unless forced_errors is non-null; then it is only the unforced ones (unforced errors). For every error whether or not the split was judged, compute unforced_errors + coalesce(forced_errors, 0) as errors.",
       },
       {
         name: "forced_errors",
         type: "integer",
         meaning:
-          "Points this side lost by missing a shot under pressure from the other side (forced errors); null when the source does not count them.",
+          "Points this side lost by missing a shot under pressure from the other side (forced errors); null when nobody judged the split — an unverified video match, or one verified before the split existed; SwingVision matches and matches verified from now on carry it.",
       },
       {
         name: "avg_rally_length",

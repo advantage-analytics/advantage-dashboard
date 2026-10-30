@@ -212,6 +212,7 @@ export function fixtureMatch(): { points: LabelPoint[]; marks: LabelMarks } {
           winner,
           ending,
           endedBy: last.hitter,
+          errorKind: null,
           gameType: "game",
           status: edited ? "edited" : "unchanged",
           statusBeforeDelete: null,

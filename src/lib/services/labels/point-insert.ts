@@ -129,6 +129,7 @@ export function draftInsertedPoint(
     winner: null,
     ending: null,
     endedBy: null,
+    errorKind: null,
     gameType: write.game_type,
     status: "added",
     statusBeforeDelete: null,

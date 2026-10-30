@@ -23,7 +23,9 @@
  * only — the one door `zz_matches_guard_verification` leaves). A failed
  * verify is a failed Complete: the lease is released and Complete again
  * publishes and verifies again. `scripts/label-apply.ts` publishes by hand
- * and never verifies.
+ * and never verifies. The AI summary is asked for after that verify, failed or
+ * not: generate-insights reads whether errors were judged off `verified`, so
+ * asked any sooner it could save an "errors" summary on a judged match.
  *
  * Reopen leaves the published points as they are but removes Verified by
  * Advantage (`unverify_match`), after the status flips; a failed unverify
@@ -34,6 +36,7 @@
  * another session of the match is open.
  */
 
+import { requestMatchInsights } from "@/lib/services/splitstep/request-insights";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   checkSessionOpen,
@@ -53,6 +56,12 @@ export interface LabelPublishSummary {
   insightsRequested: boolean;
   /** What the publish went past: a point left out, or written partly. */
   leftOut?: string[];
+  /**
+   * Every error was marked forced or unforced (apply-session.ts
+   * `planApply`). Passed to `verify_match` as `p_errors_judged`; absent reads
+   * as false, which leaves `matches.errors_judged_at` as the publish set it.
+   */
+  errorsJudged?: boolean;
 }
 
 export type LabelSessionStatusResult = LabelOpResult<{
@@ -60,12 +69,17 @@ export type LabelSessionStatusResult = LabelOpResult<{
   published?: LabelPublishSummary;
 }>;
 
-/** The publish step, injectable so the writer is tested without a database. */
+/**
+ * The publish step, injectable so the writer is tested without a database. It
+ * does not ask for the AI summary (`deferInsights`): the writer does, after
+ * `verify_match`, and reports that answer as `insightsRequested`.
+ */
 export type LabelPublish = (
   supabase: AdminClient,
   sessionId: string,
 ) => Promise<
-  ({ ok: true } & LabelPublishSummary) | { ok: false; error: string }
+  | ({ ok: true } & Omit<LabelPublishSummary, "insightsRequested">)
+  | { ok: false; error: string }
 >;
 
 /**
@@ -126,8 +140,23 @@ export async function writeLabelSessionComplete(params: {
   try {
     const result = await publish(supabase, sessionId);
     const verified = result.ok
-      ? await verifyMatchOf(supabase, sessionId, actorId)
+      ? await verifyMatchOf(
+          supabase,
+          sessionId,
+          actorId,
+          result.errorsJudged === true,
+        )
       : null;
+    // The statistics are in either way, and the verify's outcome is settled.
+    // Not when the session row could not be read: there is no match to name,
+    // and Complete again asks for it.
+    const insights =
+      result.ok && verified?.matchId
+        ? await requestMatchInsights({
+            supabase,
+            matchId: verified.matchId,
+          })
+        : null;
     if (!result.ok) {
       failure = result.error;
     } else if (!verified || "error" in verified) {
@@ -161,7 +190,7 @@ export async function writeLabelSessionComplete(params: {
         published: {
           points: result.points,
           shots: result.shots,
-          insightsRequested: result.insightsRequested,
+          insightsRequested: insights?.ok === true,
           leftOut: result.leftOut ?? [],
         },
       };
@@ -243,13 +272,20 @@ export async function writeLabelSessionReopen(params: {
 
 /**
  * Verify the session's match as `actorId` (`verify_match`): the match it
- * verified, or the sentence Complete answers with.
+ * verified, or the sentence Complete answers with. `errorsJudged` is the
+ * publish's word that every error was marked: `verify_match` then stamps
+ * `matches.errors_judged_at` and re-runs `calculate_match_stats`; the publish
+ * has already set the marker and counted `forced_errors`, so this is the same
+ * answer again. It runs after the publish's own recompute on purpose — a
+ * publish whose statistics could not be rebuilt is never verified. A refused
+ * verify still names the match, for the AI summary the caller then asks for.
  */
 async function verifyMatchOf(
   supabase: AdminClient,
   sessionId: string,
   actorId: string,
-): Promise<{ matchId: string } | { error: string }> {
+  errorsJudged: boolean,
+): Promise<{ matchId: string } | { matchId?: string; error: string }> {
   const { data: row, error: readError } = await supabase
     .from("label_sessions")
     .select("match_id")
@@ -263,9 +299,11 @@ async function verifyMatchOf(
   const { error } = await supabase.rpc("verify_match", {
     p_match_id: row.match_id,
     p_actor: actorId,
+    p_errors_judged: errorsJudged,
   });
   if (error) {
     return {
+      matchId: row.match_id,
       error: `The labels are published, but the match could not be marked Verified by Advantage: ${error.message}. Mark complete again to retry.`,
     };
   }

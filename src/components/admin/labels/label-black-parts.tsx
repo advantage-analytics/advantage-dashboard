@@ -45,6 +45,9 @@ const TEXT_ACTION_INK: Record<BlackTextActionInk, string> = {
  * must not reach the row under it stops propagation there, where a spec can see
  * it. With `icon`, an 11px glyph leads the words, 5px before them; with
  * `shrinks`, the button gives way in a crowded row and its words truncate.
+ * With `pressed`, it is one half of a segmented pair (`aria-pressed`): the
+ * pressed one takes the court panel's pressed wash (`bg-white/[0.16]`, full
+ * ink), the other keeps its resting ink.
  */
 export function BlackTextAction({
   ink,
@@ -52,12 +55,15 @@ export function BlackTextAction({
   shrinks = false,
   small = false,
   large = false,
+  pressed,
   children,
   ...props
 }: {
   ink: BlackTextActionInk;
   icon?: LucideIcon;
   shrinks?: boolean;
+  /** One of a segmented pair: whether it is the chosen one. */
+  pressed?: boolean;
   /** 10px type and icon, for the shot tray's quieter actions. */
   small?: boolean;
   /** 13px type, for the court panel's review answers. */
@@ -67,12 +73,13 @@ export function BlackTextAction({
     <button
       type="button"
       {...props}
+      aria-pressed={pressed}
       className={cn(
         shrinks ? "min-w-0" : "shrink-0",
         Icon && "inline-flex items-center gap-[5px]",
         "cursor-pointer rounded-[var(--radius-button)] px-1 font-medium whitespace-nowrap hover:text-white focus-visible:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
         small ? "text-[10px]" : large ? "text-[13px]" : "text-[11px]",
-        TEXT_ACTION_INK[ink],
+        pressed ? "bg-white/[0.16] text-white" : TEXT_ACTION_INK[ink],
         RAIL_PRESS,
       )}
     >

@@ -3,14 +3,19 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
 import {
+  errorKindKeyPatch,
+  errorKindShotId,
   frameTimePatch,
   hasEarlierServe,
+  isErrorKindKey,
   isStrokeKey,
+  nextErrorKind,
   strokeKeyChange,
   withServeHitter,
 } from "@/components/admin/labels/stroke-keys";
 import { spinOptions } from "@/components/admin/labels/label-format";
-import { labelShot } from "./fixtures/label-session";
+import type { LabelPoint } from "@/lib/services/labels/session";
+import { labelPoint, labelShot } from "./fixtures/label-session";
 import {
   MAX_ZOOM,
   NO_ZOOM,
@@ -377,6 +382,145 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     );
     expect(isStrokeKey("h")).toBe(false);
     expect(source).toMatch(/consoleKey &&\n\s+!event\.metaKey/);
+  });
+});
+
+test.describe("E: forced or unforced, on the stroke that ended the point in an error", () => {
+  const source = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+  /** Serve in, a return, then `last` by p1 — out unless said otherwise. */
+  const rallyPoint = (
+    last: Partial<Parameters<typeof labelShot>[2]> = {},
+    fields: Partial<LabelPoint> = {},
+  ) =>
+    labelPoint("e-point", 0, {
+      ending: "error",
+      endedBy: "p1",
+      winner: "p2",
+      shots: [
+        labelShot("e-serve", "e-point", {
+          hitter: "p1",
+          stroke: "first_serve",
+          result: "in",
+          videoTime: 1,
+        }),
+        labelShot("e-return", "e-point", {
+          hitter: "p2",
+          stroke: "backhand",
+          result: "in",
+          videoTime: 2,
+        }),
+        labelShot("e-last", "e-point", {
+          hitter: "p1",
+          stroke: "forehand",
+          result: "out",
+          videoTime: 3,
+          ...last,
+        }),
+      ],
+      ...fields,
+    });
+
+  const STORED_WINNER = {
+    ending: "winner",
+    endedBy: "p1",
+    winner: "p1",
+  } as const;
+
+  test("the pair's stroke: the last live one, on an error point alone", () => {
+    expect(errorKindShotId(rallyPoint())).toBe("e-last");
+    // A winner, a missed return (service winner), a deleted point: none.
+    expect(
+      errorKindShotId(rallyPoint({ result: "in" }, STORED_WINNER)),
+    ).toBeNull();
+    const missedReturn = rallyPoint({}, { ending: "service_winner" });
+    missedReturn.shots = missedReturn.shots.filter((s) => s.id !== "e-return");
+    expect(errorKindShotId(missedReturn)).toBeNull();
+    // With no ending stored, the strokes say the same thing.
+    expect(errorKindShotId({ ...missedReturn, ending: null })).toBeNull();
+    // The stored ending is what publishes: an error whose last ball is in
+    // is offered, a winner whose last ball missed is not.
+    expect(errorKindShotId(rallyPoint({ result: "in" }))).toBe("e-last");
+    expect(errorKindShotId(rallyPoint({}, STORED_WINNER))).toBeNull();
+    expect(errorKindShotId(rallyPoint({}, { status: "deleted" }))).toBeNull();
+    // A stored kind on a point that no longer ends in an error offers nothing.
+    expect(
+      errorKindShotId(
+        rallyPoint({ result: "in" }, { ...STORED_WINNER, errorKind: "forced" }),
+      ),
+    ).toBeNull();
+    // A tombstone after the miss is not the last stroke: the miss still is.
+    const tomb = rallyPoint();
+    tomb.shots.push(
+      labelShot("e-gone", "e-point", {
+        stroke: "forehand",
+        status: "deleted",
+        statusBeforeDelete: "kept",
+        videoTime: 4,
+      }),
+    );
+    expect(errorKindShotId(tomb)).toBe("e-last");
+  });
+
+  test("E cycles: forced when unmarked, unforced when forced, forced when unforced", () => {
+    expect(nextErrorKind(null)).toBe("forced");
+    expect(nextErrorKind("forced")).toBe("unforced");
+    expect(nextErrorKind("unforced")).toBe("forced");
+    expect(errorKindKeyPatch(rallyPoint(), "e-last")).toEqual({
+      error_kind: "forced",
+    });
+    expect(
+      errorKindKeyPatch(rallyPoint({}, { errorKind: "forced" }), "e-last"),
+    ).toEqual({ error_kind: "unforced" });
+    expect(
+      errorKindKeyPatch(rallyPoint({}, { errorKind: "unforced" }), "e-last"),
+    ).toEqual({ error_kind: "forced" });
+  });
+
+  test("E on any other stroke, or on a point not ended in an error, writes nothing", () => {
+    for (const other of ["e-serve", "e-return", "e-gone", "nowhere"]) {
+      expect(errorKindKeyPatch(rallyPoint(), other), other).toBeNull();
+    }
+    expect(
+      errorKindKeyPatch(rallyPoint({ result: "in" }, STORED_WINNER), "e-last"),
+    ).toBeNull();
+    expect(isErrorKindKey("e")).toBe(true);
+    expect(isErrorKindKey("E")).toBe(true);
+    for (const key of ["r", "f", "Enter", "é", "ee"]) {
+      expect(isErrorKindKey(key), key).toBe(false);
+    }
+  });
+
+  test("E rides the shared dispatcher: never from a field, a menu or a dialog, never with a modifier", () => {
+    // One branch of the stroke keys' dispatcher, so the one reach check
+    // (`keysAreSpoken`: a text field, a menu or dialog open) guards it.
+    expect(source).toMatch(
+      /: isErrorKindKey\(key\) && !event\.shiftKey\s+\? \(\) => errorKindKey\.current\(\)/,
+    );
+    expect(source).toContain("if (!keysAreSpoken(target) && consoleKey()) {");
+    expect(source).toContain(
+      "target?.closest?.(`${FIELD_SELECTOR}, ${OPEN_LAYER_SELECTOR}`) ||",
+    );
+    expect(source).toContain("!!document.querySelector(OPEN_LAYER_SELECTOR)");
+    const body = source.slice(
+      source.indexOf("    errorKindKey.current = () => {"),
+    );
+    const fn = body.slice(0, body.indexOf("\n    };\n"));
+    // Read-only, a confirm open, nothing selected: the key is not taken.
+    expect(fn).toContain(
+      "if (!operable || confirm || placement.shotId === null) return false;",
+    );
+    // Only the open point's stroke, and never one it picks for itself.
+    expect(fn).toContain(
+      "if (expanded && owner.id !== expanded.id) return false;",
+    );
+    expect(fn).not.toContain("keyShot()");
+    // The pair's own rule and its own write: the point patch.
+    expect(fn).toContain("errorKindKeyPatch(");
+    expect(fn).toContain("if (!patch) return false;");
+    expect(fn).toContain("void patchPoint(owner.id, patch);");
   });
 });
 

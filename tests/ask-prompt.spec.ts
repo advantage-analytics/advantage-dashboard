@@ -42,6 +42,8 @@ import {
   ASK_FOLLOW_UP_KEEPS_COLUMNS,
   ASK_FOLLOW_UP_KEEPS_SHAPE,
   ASK_ANSWER_EXAMPLE_ROWS,
+  ASK_ERRORS_RULE,
+  ASK_PLAN_ERRORS_RULE,
   ASK_NO_ADVICE_SENTENCE,
   ASK_PLAN_EXAMPLE_BASELINE,
   ASK_PLAN_EXAMPLE_COMPARE,
@@ -646,6 +648,70 @@ test.describe("buildAnswerPrompt", () => {
       "If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.",
     );
     expect(prompt).toContain("no exclamation marks");
+  });
+
+  test("an unjudged split is errors, never unforced errors — in both answer prompts", () => {
+    // Judged for every match the figure covers.
+    expect(ASK_ERRORS_RULE).toContain(
+      "forced_errors non-null for every match it covers: unforced errors is correct.",
+    );
+    // Unjudged somewhere in what it covers.
+    expect(ASK_ERRORS_RULE).toContain(
+      "Any forced_errors null in what it covers: errors, never unforced errors.",
+    );
+    // Cannot be told: "errors" would understate a judged match, and "unforced
+    // errors" would claim an unjudged one.
+    expect(ASK_ERRORS_RULE).toContain(
+      "No forced_errors beside it, so the split cannot be told: neither word is safe, so call it errors counted as unforced, which is true either way.",
+    );
+    expect(ASK_ERRORS_RULE).toContain(
+      "A column named errors is always errors.",
+    );
+    // The facts block says to call a measure by its given name and no other.
+    expect(ASK_ERRORS_RULE).toContain(
+      "This outranks the name a column is given anywhere else.",
+    );
+    expect(prompt).toContain(ASK_ERRORS_RULE);
+    expect(buildAnswerPrompt({ ...ANSWER_INPUT, scope: TEAM_SCOPE })).toContain(
+      ASK_ERRORS_RULE,
+    );
+    // The worked example says "unforced errors", so its match is judged.
+    for (const row of ASK_ANSWER_EXAMPLE_ROWS) {
+      expect(typeof row.me_forced_errors).toBe("number");
+      expect(typeof row.opp_forced_errors).toBe("number");
+    }
+  });
+
+  test("the planner asks for every error, and never for unforced_errors alone", () => {
+    expect(ASK_PLAN_ERRORS_RULE).toContain(
+      "For a question about errors or mistakes select unforced_errors + coalesce(forced_errors, 0) as errors",
+    );
+    expect(ASK_PLAN_ERRORS_RULE).toContain(
+      "whenever you select unforced_errors also select forced_errors beside it under the same prefix",
+    );
+    // A plain sum over a mix of matches is non-null, which reads as judged.
+    expect(ASK_PLAN_ERRORS_RULE).toContain(
+      "case when count(s.forced_errors) = count(*) then sum(s.forced_errors) end as forced_errors",
+    );
+    const team = {
+      kind: "team" as const,
+      programId: "eeeeeeee-0000-4000-8000-000000000005",
+      programName: "Westbrook College",
+    };
+    for (const plan of [
+      buildPlanPrompt(PLAN_INPUT),
+      buildPlanPrompt({ ...PLAN_INPUT, scope: team }),
+    ]) {
+      expect(plan.slice(0, askPromptStaticPrefixLength(plan))).toContain(
+        ASK_PLAN_ERRORS_RULE,
+      );
+    }
+    // The meanings stay as the migration comments have them.
+    const stats = ASK_SCHEMA.find((view) => view.view === "match_stats");
+    expect(
+      stats?.columns.find((column) => column.name === "unforced_errors")
+        ?.meaning,
+    ).not.toContain("also select");
   });
 
   test("the match count is the server's column, said once at most, never in the headline", () => {

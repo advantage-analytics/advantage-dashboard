@@ -8,6 +8,7 @@ import {
   toggleMatchFilter,
   type MatchFilterValue,
 } from "../match-filters/model";
+import { useErrorSplitJudged } from "../match-filters/provider";
 import { useVizState } from "./use-viz-state";
 import {
   activeFilterEntries,
@@ -50,10 +51,16 @@ export function AppliedStrip({
 } = {}) {
   const { state, setState } = useVizState();
   const sides = useMatchSides();
-  const entries = activeFilterEntries(state, {
-    you: sides.you.shortName,
-    opponent: sides.opp.shortName,
-  });
+  // Unjudged, Unforced + Forced are one "Errors" token (`activeFilterEntries`).
+  const errorSplitJudged = useErrorSplitJudged();
+  const entries = activeFilterEntries(
+    state,
+    {
+      you: sides.you.shortName,
+      opponent: sides.opp.shortName,
+    },
+    { errorSplitJudged },
+  );
   const dark = tone === "dark";
 
   if (entries.length === 0) {
@@ -63,9 +70,12 @@ export function AppliedStrip({
   function removeToken({
     key,
     value,
+    values,
     matchKey,
     matchValue,
   }: ActiveFilterEntry) {
+    // A token standing for several values (unjudged "Errors") removes them all.
+    const removed = new Set(values ?? [value]);
     setState((prev) => {
       // An advanced filter's token toggles its one option back off.
       if (key === "match" && matchKey) {
@@ -90,7 +100,7 @@ export function AppliedStrip({
         };
       }
       const current = prev.filters[key] as readonly (string | number)[];
-      const next = current.filter((v) => String(v) !== value);
+      const next = current.filter((v) => !removed.has(String(v)));
       return {
         ...prev,
         filters: { ...prev.filters, [key]: next },

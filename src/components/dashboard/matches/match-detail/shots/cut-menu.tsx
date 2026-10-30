@@ -184,7 +184,7 @@ export function CutMenu({
       />
       <FloatMenuItem
         label="Errors"
-        description="Where every error landed"
+        description="Where errors landed"
         chosen={state.cut === "errors"}
         onSelect={() => selectCut("errors")}
       />

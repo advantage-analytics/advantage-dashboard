@@ -259,3 +259,79 @@ export function publishEnding(
   const derived = deriveEnding(point, true);
   return derived ? { kind: "derived", ...derived } : { kind: "unresolved" };
 }
+
+type ErrorPoint = Pick<LabelPoint, "ending" | "endedBy" | "winner" | "shots"> &
+  Partial<Pick<LabelPoint, "status">>;
+
+/**
+ * Whether the publish writes this point as an error: `publishEnding` says so,
+ * stored or derived, and the point is neither deleted nor a let or non-point.
+ * The strokes do not get a second opinion: a stored error whose last ball is
+ * in is an error, and a stored winner whose last ball missed is not.
+ */
+export function publishesAsError(point: ErrorPoint): boolean {
+  if (point.status === "deleted" || isNonPointEnding(point.ending)) {
+    return false;
+  }
+  const resolved = publishEnding(point);
+  return (
+    (resolved.kind === "stored" || resolved.kind === "derived") &&
+    resolved.ending === "error"
+  );
+}
+
+/**
+ * The stroke a point's forced-or-unforced mark sits on: the last stroke the
+ * publish writes, a let aside, read with ghosts on as the publish reads it.
+ * Null when there is none.
+ */
+export function markableErrorStroke<T extends ErrorPoint>(
+  point: T,
+): T["shots"][number] | null {
+  return (
+    liveShotsInOrder(point, true)
+      .filter((shot) => !isLetServe(shot))
+      .at(-1) ?? null
+  );
+}
+
+/**
+ * Whether a point can be marked forced or unforced
+ * (`label_points.error_kind`): it publishes as an error (`publishesAsError`)
+ * and has a stroke to put the mark on. The one reading behind the Mark
+ * complete gate (`unmarkedErrors`), the tray's Forced | Unforced pair and the
+ * E key (`errorKindShotId`), whichever way the console draws ghosts.
+ */
+export function isMarkableError(point: ErrorPoint): boolean {
+  return publishesAsError(point) && markableErrorStroke(point) !== null;
+}
+
+/**
+ * Points that publish as an error with no stroke to mark. Each publishes as
+ * unforced and keeps the match at Errors (`allErrorsJudged`), so it cannot
+ * block Mark complete: `completeWarnings` says so instead.
+ */
+export function unmarkableErrors<T extends ErrorPoint>(
+  points: readonly T[],
+): T[] {
+  return points.filter(
+    (point) => publishesAsError(point) && !isMarkableError(point),
+  );
+}
+
+/**
+ * Whether every error in the session has been judged: each one the publish
+ * writes is markable and marked. A kind left on a point that no longer
+ * publishes as an error counts for nothing. Only then does a publish write
+ * "Forced Error" (`buildAppliedRows`) and stamp `matches.errors_judged_at`
+ * (apply-session.ts): the column and the strings always move together.
+ */
+export function allErrorsJudged(
+  points: readonly (ErrorPoint & Pick<LabelPoint, "errorKind">)[],
+): boolean {
+  return points.every(
+    (point) =>
+      !publishesAsError(point) ||
+      (isMarkableError(point) && point.errorKind != null),
+  );
+}

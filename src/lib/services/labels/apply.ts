@@ -46,7 +46,7 @@ import {
   type RawSplitStepStroke,
   type SplitStepRally,
 } from "@/lib/services/splitstep/derivation";
-import { publishEnding } from "./ending-derived";
+import { allErrorsJudged, publishEnding } from "./ending-derived";
 import { inServeLandingMiss, playedOnResult } from "./shot-derived";
 import { gameKey, labelScores, type LabelGameBand } from "./score";
 import { labelSetScores } from "./set-scores";
@@ -57,6 +57,7 @@ import {
   liveShotsInOrder,
   opponent,
   type LabelEnding,
+  type LabelErrorKind,
   type LabelPoint,
   type LabelShot,
   type LabelShotResult,
@@ -123,6 +124,12 @@ export interface AppliedPointRow {
   derived: true;
   /** Not a column: the label point it came from, for messages. */
   labelPointId: string;
+  /**
+   * Not a column: the labeller's forced/unforced mark, kept only on an error
+   * ending with a stroke to carry it. Stays when `result_type` cannot say it
+   * (`AppliedRows.errorsJudged` false): the console's own count reads this.
+   */
+  errorKind: "forced" | "unforced" | null;
   /** Not a column: the label point's `point_index`. */
   pointIndex: number;
   shots: AppliedShotRow[];
@@ -130,6 +137,11 @@ export interface AppliedPointRow {
 
 export interface AppliedRows {
   points: AppliedPointRow[];
+  /**
+   * Every error in the session is marked (`allErrorsJudged`). False, every
+   * error's `result_type` says "Unforced Error"; the marks stay in label_points.
+   */
+  errorsJudged: boolean;
   /** Rows that cannot be written as they stand. A write refuses on any. */
   problems: string[];
   /** Oddities worth reading before a write, that do not block it. */
@@ -202,13 +214,20 @@ const SIDE_OF_STROKE: Partial<Record<LabelStroke, string>> = {
 /**
  * `label_points.ending` → `points.result_type` (inverts seed.ts
  * `labelEnding`), the side from the stroke that ended the point. A volley
- * names no side ("Winner"). Labels do not split forced from unforced errors
- * and the derivation never emits a forced one, so every error is unforced —
- * the only error string `calculate_match_stats` counts.
+ * names no side ("Winner"). An error carries the kind it is given: "Forced
+ * Error" when forced, else "Unforced Error", which is what every reader counted
+ * before the split existed. `calculate_match_stats` counts the forced string
+ * only on a match whose errors were all judged (`matches.errors_judged_at`),
+ * so `buildAppliedRows` passes a forced kind only when the publish stamps that
+ * marker. A forced string on an unjudged match lands in neither stat column.
+ *
+ * `self_review_result_type()` (migration 20261028025013) is this function's
+ * SQL twin, used by the self-review views: change one and change the other.
  */
 export function resultTypeOf(
   ending: LabelEnding | null,
   lastStroke: LabelStroke | null,
+  errorKind: LabelErrorKind | null = null,
 ): string | null {
   const side = lastStroke ? SIDE_OF_STROKE[lastStroke] : undefined;
   switch (ending) {
@@ -220,8 +239,10 @@ export function resultTypeOf(
       return "Service Winner";
     case "winner":
       return side ? `${side} Winner` : "Winner";
-    case "error":
-      return side ? `${side} Unforced Error` : "Unforced Error";
+    case "error": {
+      const kind = errorKind === "forced" ? "Forced Error" : "Unforced Error";
+      return side ? `${side} ${kind}` : kind;
+    }
     default:
       return null;
   }
@@ -349,6 +370,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     scores.games.map((band, index) => [gameKey(band), index + 1]),
   );
   const setsBefore = setsWonBefore(points, scores.games, start);
+  const errorsJudged = allErrorsJudged(points);
 
   const rows: AppliedPointRow[] = [];
   let letsLeftOut = 0;
@@ -492,6 +514,8 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     const first = window.length > 0 ? Math.min(...window) : null;
     const end = window.length > 0 ? Math.max(...window) : null;
 
+    const errorKind =
+      ending === "error" && played.length > 0 ? point.errorKind : null;
     rows.push({
       point_number: rows.length + 1,
       set_number: setNumber,
@@ -500,7 +524,11 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
       won_by_player1: winner === "p1",
       // Null, not 0, off the video: AVG(rally_length) skips it.
       rally_length: offVideo ? null : Math.max(0, played.length - from),
-      result_type: resultTypeOf(ending, last?.stroke ?? null),
+      result_type: resultTypeOf(
+        ending,
+        last?.stroke ?? null,
+        errorsJudged ? errorKind : null,
+      ),
       is_break_point: pressure.isBreakPoint,
       is_set_point: pressure.isSetPoint,
       is_match_point: pressure.isMatchPoint,
@@ -515,12 +543,13 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
         : [HAND_LABELLED_FLAG],
       derived: true,
       labelPointId: point.id,
+      errorKind,
       pointIndex: point.pointIndex,
       shots,
     });
   }
 
-  return { points: rows, problems, warnings, letsLeftOut };
+  return { points: rows, errorsJudged, problems, warnings, letsLeftOut };
 }
 
 /** The dry-run / write-summary line naming the lets left out (always printed). */
@@ -562,6 +591,8 @@ export interface SideStats {
   doubleFaults: number;
   serviceWinners: number;
   winners: number;
+  /** Errors counted forced (`expectedStats`); `unforcedErrors` counts every other error. */
+  forcedErrors: number;
   unforcedErrors: number;
   firstServesIn: number;
   firstServes: number;
@@ -586,6 +617,7 @@ function emptySide(): SideStats {
     doubleFaults: 0,
     serviceWinners: 0,
     winners: 0,
+    forcedErrors: 0,
     unforcedErrors: 0,
     firstServesIn: 0,
     firstServes: 0,
@@ -599,9 +631,15 @@ function emptySide(): SideStats {
  * the built rows, for a dry run to hold against the table it means to fix.
  * An approximation of `calculate_match_stats`, not a copy of it — the write
  * prints the real before/after.
+ *
+ * Errors split as the rows will publish, off `result_type`. `labellerMarks`
+ * splits them by the labeller's own marks instead, for the console's overview:
+ * a partly marked session publishes no forced string, and the labeller still
+ * sees the forced errors marked so far.
  */
 export function expectedStats(
   points: readonly AppliedPointRow[],
+  options: { labellerMarks?: boolean } = {},
 ): ExpectedStats {
   const stats = { p1: emptySide(), p2: emptySide() };
   const servedGames = new Set<string>();
@@ -635,8 +673,14 @@ export function expectedStats(
         break;
       default:
         if (point.result_type?.endsWith("Winner")) stats[striker].winners += 1;
-        else if (point.result_type?.endsWith("Unforced Error")) {
-          stats[striker].unforcedErrors += 1;
+        else if (point.result_type?.endsWith("Error")) {
+          // As calculate_match_stats splits them: "…Forced Error" (not
+          // "…Unforced") is forced, every other error string unforced.
+          const forced = options.labellerMarks
+            ? point.errorKind === "forced"
+            : !point.result_type.endsWith("Unforced Error");
+          if (forced) stats[striker].forcedErrors += 1;
+          else stats[striker].unforcedErrors += 1;
         }
     }
     const firstServe = point.shots.find((s) => s.shot_type === "First Serve");

@@ -8,6 +8,7 @@ import {
   filmCutExtras,
   filmCutFilters,
   hasFilmCut,
+  matchesFilmCutEnding,
   matchesFilmCutExtras,
   sideCut,
   type FilmCutIntent,
@@ -682,4 +683,47 @@ test("legacy ?cut=break&serve=you parse into the new model", () => {
   expect(stripLegacyFilmQuery("tab=film&cut=returnPlacement&serve=you")).toBe(
     "tab=film&cut=returnPlacement",
   );
+});
+
+test.describe("the error endings", () => {
+  // Three buckets over the free-text result type: the judged split's two
+  // (`unforced-error`, `forced-error`) and the unjudged match's one (`error`,
+  // every error). None of them takes a double fault, which the report counts
+  // on its own line, nor a winner.
+  const UE = pt({ id: "ue", resultType: "Backhand Unforced Error" });
+  const FE = pt({ id: "fe", resultType: "Forehand Forced Error" });
+  const BARE_UE = pt({ id: "bare-ue", resultType: "Unforced Error" });
+  const BARE_FE = pt({ id: "bare-fe", resultType: "Forced Error" });
+  const DF = pt({ id: "df", resultType: "Double Fault" });
+  const WINNER = pt({ id: "w", resultType: "Forehand Winner" });
+  const NONE = pt({ id: "none", resultType: "" });
+  const all = [UE, FE, BARE_UE, BARE_FE, DF, WINNER, NONE];
+  const admitted = (ending: "unforced-error" | "forced-error" | "error") =>
+    all.filter((p) => matchesFilmCutEnding(p, ending)).map((p) => p.id);
+
+  test("unforced-error is the unforced errors alone", () => {
+    expect(admitted("unforced-error")).toEqual(["ue", "bare-ue"]);
+  });
+
+  test("forced-error is the forced errors, never an unforced one", () => {
+    // "unforced error" contains "forced error" — the bucket must not take it.
+    expect(admitted("forced-error")).toEqual(["fe", "bare-fe"]);
+  });
+
+  test("error is every error, forced and unforced, and no double fault", () => {
+    expect(admitted("error")).toEqual(["ue", "fe", "bare-ue", "bare-fe"]);
+  });
+
+  test("case and trailing space do not matter", () => {
+    const shouty = pt({ id: "s", resultType: "BACKHAND FORCED ERROR " });
+    expect(matchesFilmCutEnding(shouty, "forced-error")).toBe(true);
+    expect(matchesFilmCutEnding(shouty, "error")).toBe(true);
+    expect(matchesFilmCutEnding(shouty, "unforced-error")).toBe(false);
+  });
+
+  test("the extras check reads the same buckets", () => {
+    expect(matchesFilmCutExtras(FE, { ending: "forced-error" })).toBe(true);
+    expect(matchesFilmCutExtras(UE, { ending: "forced-error" })).toBe(false);
+    expect(matchesFilmCutExtras(DF, { ending: "error" })).toBe(false);
+  });
 });
