@@ -1480,6 +1480,25 @@ test("a tabbed-to row answers Enter, and Space is still play and pause", async (
   expect(await seeks()).toBe(1);
 });
 
+test("a clicked row takes the keys off the control that held them", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "room-click-clears-focus");
+
+  await landOnRowC(page);
+  const next = page
+    .locator("[data-film-chrome]")
+    .getByRole("button", { name: "Next point" })
+    .first();
+  await next.focus();
+  await page.locator(DRAWER_ROW("a")).click();
+  await expect(next).not.toBeFocused();
+
+  const seeks = await countRoomSeeks(page);
+  await page.keyboard.press("Enter");
+  expect(await seeks()).toBe(0);
+});
+
 test("a clicked shot lets go of the keys too", async ({ page }) => {
   await openRoomWithDrawer(page, "room-shot-focus");
 

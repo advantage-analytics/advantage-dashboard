@@ -102,16 +102,21 @@ export function FilmRoomDrawer({
       // the sheet leaves with the rest of the chrome rather than after it.
       data-film-chrome=""
       data-state={shown ? "open" : "closed"}
-      // A pressed row or shot leaves focus where it was. The room's arrows walk
-      // the film without moving focus, so a row kept from its click would still
-      // answer Enter, and send the film back to it, long after the film moved
-      // on. Tabbing to a row still focuses it, with its ring on show.
+      // A pressed row or shot takes no focus, and clears what held it. The
+      // room's arrows walk the film without moving focus, so a row kept from
+      // its click would still answer Enter, and send the film back to it, long
+      // after the film moved on; a transport button left focused would answer
+      // it too. The room's keys are on `window`, and its Tab ring re-enters
+      // from `body`. Tabbing to a row still focuses it, with its ring on show.
       onMouseDown={(e) => {
         if (
           e.target instanceof Element &&
           e.target.closest("[data-point-id], [data-shot-id]")
         ) {
           e.preventDefault();
+          if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+          }
         }
       }}
       // The fast path back to `closed`: the room also runs a timer, because a
