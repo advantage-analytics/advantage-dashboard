@@ -35,9 +35,10 @@
  * No "analysis ready" email is sent.
  *
  * --restore puts a backup's rows back the same way (delete the derived
- * points, insert the backup's, bookmarks included) and recomputes. It takes a
- * local file or a `label-backups/…` storage key; a match's first backup is
- * the vendor's original.
+ * points, insert the backup's, bookmarks included), sets
+ * matches.errors_judged_at to agree with them (`restoredErrorsJudgedAt`) and
+ * recomputes. It takes a local file or a `label-backups/…` storage key; a
+ * match's first backup is the vendor's original.
  *
  * LABELS ARE A REAL ATHLETE'S DATA: the output names the players, and the
  * backups hold the match's rows. Neither belongs in the repo.
@@ -66,6 +67,7 @@ import {
   readPublished,
   readStoredBackup,
   recompute,
+  restoreErrorsJudged,
   restoreFold,
   restoreRows,
   type LabelApplyBackup,
@@ -205,6 +207,11 @@ async function runRestore(
     (await restoreFold(db, backup))
       ? "fold note restored"
       : "fold note left as it is (the backup kept none)",
+  );
+  console.log(
+    (await restoreErrorsJudged(db, backup))
+      ? "errors marked as judged"
+      : "errors marked as not judged",
   );
   const { insightsRequested } = await recompute(db, backup.matchId);
   console.log(

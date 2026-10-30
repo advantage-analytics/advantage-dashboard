@@ -80,6 +80,12 @@ export interface LabelApplyBackup {
   fold?: unknown;
   /** The job that fold was read from and the publish wrote; set with `fold`. */
   jobId?: string;
+  /**
+   * `matches.errors_judged_at` before this publish. Absent from backups made
+   * before it was kept, and from one whose read failed;
+   * `restoredErrorsJudgedAt` then reads the backup's rows instead.
+   */
+  errorsJudgedAt?: string | null;
 }
 
 const chunks = <T>(rows: readonly T[]): T[][] => chunksOf(rows, CHUNK);
@@ -221,6 +227,18 @@ export async function readMatchStats(db: AdminClient, matchId: string) {
   return (data ?? []) as Row[];
 }
 
+async function readErrorsJudgedAt(db: AdminClient, matchId: string) {
+  const { data, error } = await db
+    .from("matches")
+    .select("errors_judged_at")
+    .eq("id", matchId)
+    .maybeSingle<{ errors_judged_at: string | null }>();
+  if (error) {
+    throw new Error(`Could not read errors_judged_at: ${error.message}`);
+  }
+  return data?.errors_judged_at ?? null;
+}
+
 export async function countImported(db: AdminClient, matchId: string) {
   const { count, error } = await db
     .from("points")
@@ -335,6 +353,35 @@ export async function restoreFold(
 }
 
 /**
+ * The marker a backup's rows need, so restored `Forced Error` strings and
+ * `calculate_match_stats` agree. Without the marker the function leaves those
+ * points out of `forced_errors` while they are not in `unforced_errors` either.
+ * What the backup recorded wins, except that forced strings always need a
+ * marker; a backup that recorded nothing and holds none reads as not judged,
+ * since "errors" is never wrong. ("Unforced Error" has a lowercase f, so it
+ * never matches, just as it never matches the function's LIKE.)
+ */
+export function restoredErrorsJudgedAt(
+  backup: Pick<LabelApplyBackup, "points" | "createdAt" | "errorsJudgedAt">,
+): string | null {
+  if (backup.errorsJudgedAt) return backup.errorsJudgedAt;
+  const hasForced = backup.points.some((p) =>
+    String(p.result_type ?? "").includes("Forced Error"),
+  );
+  return hasForced ? backup.createdAt : null;
+}
+
+/** Put the marker back with a backup's rows, before the stats are recomputed. */
+export async function restoreErrorsJudged(
+  db: AdminClient,
+  backup: LabelApplyBackup,
+): Promise<string | null> {
+  const judgedAt = restoredErrorsJudgedAt(backup);
+  await setErrorsJudged(db, backup.matchId, judgedAt);
+  return judgedAt;
+}
+
+/**
  * match_stats and the returns backfill, in the order deriveAndPublish runs
  * them. Throws on a failed RPC.
  */
@@ -370,11 +417,11 @@ export async function recompute(
 async function setErrorsJudged(
   db: AdminClient,
   matchId: string,
-  judged: boolean,
+  judgedAt: string | null,
 ) {
   const { error } = await db
     .from("matches")
-    .update({ errors_judged_at: judged ? new Date().toISOString() : null })
+    .update({ errors_judged_at: judgedAt })
     .eq("id", matchId);
   if (error) {
     throw new Error(`Could not set errors_judged_at: ${error.message}`);
@@ -503,23 +550,28 @@ export async function publishPlanned(params: {
         "Not published: the match's video job is gone, so the backup would have nowhere to be recorded.",
     };
   }
-  const [published, imported, statsBefore, reported] = await Promise.all([
-    readPublished(db, matchId),
-    countImported(db, matchId),
-    readMatchStats(db, matchId),
-    // The job the report reads, which is the session's own unless the match
-    // was analysed again after it was seeded.
-    reportedJobId(db, matchId).then(
-      async (id) =>
-        id
-          ? {
-              jobId: id,
-              fold: (await readDerivationQuality(db, id)).fold ?? null,
-            }
-          : undefined,
-      () => undefined,
-    ),
-  ]);
+  const [published, imported, statsBefore, reported, marker] =
+    await Promise.all([
+      readPublished(db, matchId),
+      countImported(db, matchId),
+      readMatchStats(db, matchId),
+      // The job the report reads, which is the session's own unless the match
+      // was analysed again after it was seeded.
+      reportedJobId(db, matchId).then(
+        async (id) =>
+          id
+            ? {
+                jobId: id,
+                fold: (await readDerivationQuality(db, id)).fold ?? null,
+              }
+            : undefined,
+        () => undefined,
+      ),
+      readErrorsJudgedAt(db, matchId).then(
+        (errorsJudgedAt) => ({ errorsJudgedAt }),
+        () => undefined,
+      ),
+    ]);
   if (imported > 0) {
     return {
       ok: false,
@@ -538,6 +590,7 @@ export async function publishPlanned(params: {
     bookmarks: published.bookmarks,
     matchStats: statsBefore,
     ...(reported ?? {}),
+    ...(marker ?? {}),
   };
   await recordBackupKey(db, jobId, backupObjectKey(backup));
   const backupKey = await storeBackup(db, backup);
@@ -574,7 +627,11 @@ export async function publishPlanned(params: {
   // The rows are in; a failed recompute leaves match_stats behind them. Said
   // as that, never as "not published" — the athlete already has the points.
   try {
-    await setErrorsJudged(db, matchId, plan.errorsJudged);
+    await setErrorsJudged(
+      db,
+      matchId,
+      plan.errorsJudged ? new Date().toISOString() : null,
+    );
     await recomputeStats(db, matchId);
   } catch (err) {
     return {

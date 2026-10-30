@@ -7,6 +7,10 @@ import {
   labelFold,
   planApply,
   publishPlanned,
+  recompute,
+  restoredErrorsJudgedAt,
+  restoreErrorsJudged,
+  restoreRows,
   type ApplyContext,
   type LabelApplyBackup,
 } from "@/lib/services/labels/apply-session";
@@ -265,6 +269,12 @@ function fakeDatabase(
               id: `pt-${r.point_number}`,
               point_number: r.point_number,
             })),
+            error: null,
+          };
+        }
+        if (call.op === "select" && table === "matches") {
+          return {
+            data: { errors_judged_at: state.errorsJudgedAt },
             error: null,
           };
         }
@@ -555,4 +565,109 @@ test("a publish answers the report's fold note from the labelled score", () => {
     reconciled: false,
     source: "labels",
   });
+});
+
+/** A backup of `points`, as the restore path reads one. */
+function backupOf(
+  points: { result_type: string; won_by_player1: boolean }[],
+  extra: Partial<LabelApplyBackup> = {},
+): LabelApplyBackup {
+  return {
+    kind: "label-apply-backup",
+    version: 1,
+    createdAt: "2026-10-20T12:00:00.000Z",
+    matchId: "33333333-3333-4333-8333-333333333333",
+    sessionId: null,
+    points,
+    shots: [],
+    bookmarks: [],
+    matchStats: [],
+    ...extra,
+  };
+}
+
+const FORCED_POINT = {
+  result_type: "Forehand Forced Error",
+  won_by_player1: false,
+};
+const UNFORCED_POINT = {
+  result_type: "Backhand Unforced Error",
+  won_by_player1: false,
+};
+
+/** `--restore`'s writes, in its order (the next test pins that order). */
+async function restore(
+  backup: LabelApplyBackup,
+  options: Parameters<typeof fakeDatabase>[0] = {},
+) {
+  const fake = fakeDatabase(options);
+  await restoreRows(fake.db, backup);
+  await restoreErrorsJudged(fake.db, backup);
+  await recompute(fake.db, backup.matchId);
+  return fake;
+}
+
+test("--restore sets the marker after the rows and before the stats", () => {
+  const source = readFileSync("scripts/label-apply.ts", "utf8");
+  const body = source.slice(source.indexOf("async function runRestore"));
+  const rows = body.indexOf("await restoreRows(db, backup)");
+  const marker = body.indexOf("await restoreErrorsJudged(db, backup)");
+  const stats = body.indexOf("await recompute(db, backup.matchId)");
+  expect(rows).toBeGreaterThan(-1);
+  expect(marker).toBeGreaterThan(rows);
+  expect(stats).toBeGreaterThan(marker);
+});
+
+test("restoring forced strings onto a cleared marker counts them: the undercount", async () => {
+  const fake = await restore(backupOf([FORCED_POINT, UNFORCED_POINT]));
+  expect(fake.state.errorsJudgedAt).not.toBeNull();
+  expect(fake.state.statsRuns).toEqual([true]);
+  expect(fake.state.stats?.forced_errors).toBe(1);
+});
+
+test("restoring the vendor's original clears a marker the labelled publish set", async () => {
+  const fake = await restore(
+    backupOf([UNFORCED_POINT], { errorsJudgedAt: null }),
+    { errorsJudgedAt: "2026-10-29T20:00:00+00:00" },
+  );
+  expect(fake.state.errorsJudgedAt).toBeNull();
+  expect(fake.state.statsRuns).toEqual([false]);
+  expect(fake.state.stats?.forced_errors).toBeNull();
+});
+
+test("the marker a backup recorded comes back as it was, even with no forced point", async () => {
+  const judgedAt = "2026-10-15T09:00:00.000Z";
+  const fake = await restore(
+    backupOf([UNFORCED_POINT], { errorsJudgedAt: judgedAt }),
+  );
+  expect(fake.state.errorsJudgedAt).toBe(judgedAt);
+  expect(fake.state.stats?.forced_errors).toBe(0);
+});
+
+test("restoredErrorsJudgedAt: a backup with no recorded marker reads its rows", () => {
+  const createdAt = "2026-10-20T12:00:00.000Z";
+  expect(restoredErrorsJudgedAt(backupOf([UNFORCED_POINT]))).toBeNull();
+  expect(restoredErrorsJudgedAt(backupOf([FORCED_POINT]))).toBe(createdAt);
+  // Forced strings under a recorded null would still undercount.
+  expect(
+    restoredErrorsJudgedAt(backupOf([FORCED_POINT], { errorsJudgedAt: null })),
+  ).toBe(createdAt);
+});
+
+test("a publish's backup records the marker it is about to replace", async () => {
+  const judgedAt = "2026-10-15T09:00:00.000Z";
+  const fake = fakeDatabase({ errorsJudgedAt: judgedAt });
+  const context = sessionContext("forced");
+  let kept: LabelApplyBackup | undefined;
+  await publishPlanned({
+    db: fake.db,
+    context,
+    plan: planApply(context),
+    acceptScore: true,
+    deferInsights: true,
+    onBackup: (backup) => {
+      kept = backup;
+    },
+  });
+  expect(kept?.errorsJudgedAt).toBe(judgedAt);
 });
