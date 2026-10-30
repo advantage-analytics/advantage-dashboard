@@ -366,6 +366,11 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     expect(source).toContain("? () => flipKey.current()");
     expect(source).toContain("setPlacement(flipPlacement);");
     expect(isStrokeKey("x")).toBe(false);
+    // H gives the stroke to the other player, through the menu's own path,
+    // so a serve still asks whether the rest of the point follows.
+    expect(source).toContain("? () => hitterKey.current()");
+    expect(source).toContain("requestPatchShot(shot.id, { hitter });");
+    expect(isStrokeKey("h")).toBe(false);
     expect(source).toMatch(/consoleKey &&\n\s+!event\.metaKey/);
   });
 });
