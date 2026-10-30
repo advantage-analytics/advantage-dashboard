@@ -16,6 +16,7 @@ import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
 import { formatMatchDuration } from "@/lib/format/duration";
 import type { Match, SetScore } from "@/lib/data/types";
 import { verificationFor } from "@/lib/data/match-verification";
+import { errorSplitJudged } from "@/lib/data/error-split";
 
 export interface DbMatch {
   id: string;
@@ -42,6 +43,8 @@ export interface DbMatch {
   event_entry_id: string | null;
   verified: boolean | null;
   verified_at: string | null;
+  /** When Advantage judged this match's errors forced/unforced (`errorSplitJudged`). */
+  errors_judged_at: string | null;
   duration: number | null;
   source_provider: string | null;
   player_hand: string | null;
@@ -166,6 +169,7 @@ export function transformDbMatchToMatch(
   // The shared rule (a stored winner, then sets). A level score has always
   // read as player2 here.
   const winner = scoreWinner(row.score) ?? "player2";
+  const verification = verificationFor(row);
   const finalScore = sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
   const { isUserPlayer1 } = resolveYouSide(
     row,
@@ -197,8 +201,13 @@ export function transformDbMatchToMatch(
     date: formatMatchDayLong(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
-    verification: verificationFor(row),
+    verification,
     sourceProvider: row.source_provider ?? undefined,
+    errorSplitJudged: errorSplitJudged({
+      sourceProvider: row.source_provider,
+      verified: verification != null,
+      errorsJudgedAt: row.errors_judged_at,
+    }),
     round: row.round ?? undefined,
     matchContext: matchContextCaption(row.result),
     duration: formatMatchDuration(row.duration),
@@ -459,7 +468,7 @@ async function resolveFoldUnreconciled(dbRow: DbMatch): Promise<boolean> {
  * fields `DbMatch` actually carries.
  */
 export const MATCH_DETAIL_COLUMNS =
-  "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, verified_at, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights";
+  "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, verified_at, errors_judged_at, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights";
 
 /**
  * How `loadMatchDetail` orients and scopes one read. The cached export below

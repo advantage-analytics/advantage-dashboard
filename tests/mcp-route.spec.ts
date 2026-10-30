@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
+import type { GenderedSquad } from "@/lib/data/squad";
 import type { AskDatabase } from "@/lib/services/ask/ask";
 import { renderAskSchemaBlock } from "@/lib/services/ask/prompts";
 import {
@@ -12,6 +13,7 @@ import {
 import * as rateLimit from "@/lib/services/mcp/rate-limit";
 import type { AskMcpContext } from "@/lib/services/mcp/server";
 import type {
+  McpDirectoryProgram,
   McpMatchReport,
   McpOwnMatch,
   McpUserReads,
@@ -35,7 +37,7 @@ import { withEnv } from "./fixtures/with-env";
  *
  * What is pinned: a missing token and a refused one are 401s carrying the
  * `WWW-Authenticate` the MCP spec wants, before anything is built; a good
- * token lists the nine tools; a query the guard refuses never reaches the
+ * token lists the ten tools; a query the guard refuses never reaches the
  * database; a query that runs goes to the service client with the TOKEN's
  * user as the viewer and nothing else; membership is checked before a
  * program's rows are read; the two limits refuse by name; `ask` runs the
@@ -91,6 +93,9 @@ const LIST_ANSWER = {
       match_id: MATCH_A,
       played_on: "2026-09-14",
       opponent_name: "Anna Lee",
+      opponent_school: "Harvard University",
+      opponent_program_id: "aaaa0000-0000-4000-8000-000000000001",
+      opponent_conference: "Ivy League (Ivy)",
       score_text: "6-4 6-3",
       i_won: true,
       source: "video",
@@ -124,6 +129,37 @@ const REPORT: McpMatchReport = {
 };
 
 /** What `reads.ownMatch()` answers: a hand-scored personal match, not on a line. */
+type Row = Record<string, unknown>;
+
+const HARVARD_MENS = {
+  id: "aaaa0000-0000-4000-8000-000000000001",
+  school_name: "Harvard University",
+  school_abbrev: null,
+  team: "mens",
+  division: "D1",
+  conference: "Ivy League (Ivy)",
+};
+const HARVARD_WOMENS = {
+  ...HARVARD_MENS,
+  id: "aaaa0000-0000-4000-8000-000000000002",
+  team: "womens",
+};
+const ANDERSON_ONE = {
+  id: "aaaa0000-0000-4000-8000-000000000003",
+  school_name: "Anderson University",
+  school_abbrev: null,
+  team: "mens",
+  division: "D2",
+  conference: "South Atlantic Conference (SAC)",
+};
+const ANDERSON_TWO = {
+  ...ANDERSON_ONE,
+  id: "aaaa0000-0000-4000-8000-000000000004",
+  division: "D3",
+  conference: "Heartland Collegiate Athletic Conference (HCAC)",
+};
+const DIRECTORY = [HARVARD_MENS, HARVARD_WOMENS, ANDERSON_ONE, ANDERSON_TWO];
+
 const OWN_MATCH: McpOwnMatch = {
   id: MATCH_A,
   programId: null,
@@ -259,6 +295,10 @@ interface World {
   report: McpMatchReport | null;
   /** What `reads.ownMatch()` answers for MATCH_A; MATCH_B is never the caller's. */
   ownMatch: McpOwnMatch | null;
+  /** The program directory the three directory reads answer from. */
+  directory: McpDirectoryProgram[];
+  /** What `reads.programSquad()` answers for any program. */
+  squad: GenderedSquad | null;
   /** The one saved conversation `reads.conversation()` finds, if any. */
   conversation: { id: string; messages: [] } | null;
   rpc: Record<string, (args: unknown) => RpcResult>;
@@ -296,6 +336,8 @@ function world(overrides: Partial<World> = {}): World {
     programs: [{ id: PROGRAM_ID, name: "Westbrook College" }],
     report: REPORT,
     ownMatch: OWN_MATCH,
+    directory: DIRECTORY,
+    squad: "mens",
     conversation: null,
     limiter: rateLimit.createRateLimiter(),
     rpc: {
@@ -338,6 +380,25 @@ function fakeReads(state: World, calls: Calls, userId: string): McpUserReads {
     program: async (id) => {
       calls.reads.push(`program:${id}:${userId}`);
       return state.programs.find((program) => program.id === id) ?? null;
+    },
+    programSquad: async () => state.squad,
+    directoryProgram: async (id) =>
+      state.directory.find((program) => program.id === id) ?? null,
+    programsNamed: async (name, team) =>
+      state.directory.filter(
+        (program) =>
+          program.school_name.toLowerCase() === name.toLowerCase() &&
+          (team === null || program.team === team),
+      ),
+    searchPrograms: async ({ query, team, division, limit }) => {
+      calls.reads.push(
+        `search:${query}:${team ?? ""}:${division ?? ""}:${limit}`,
+      );
+      return state.directory.filter(
+        (program) =>
+          program.school_name.toLowerCase().includes(query.toLowerCase()) &&
+          (!team || program.team === team),
+      );
     },
     programs: async () => {
       calls.reads.push(`programs:${userId}`);
@@ -748,7 +809,7 @@ test.describe("POST /api/mcp · the auth ladder", () => {
     expect(calls.rpc).toEqual([]);
   });
 
-  test("a good token: initialize names the server, and the nine tools are listed", async () => {
+  test("a good token: initialize names the server, and the ten tools are listed", async () => {
     const { route, calls } = loadRoute(world());
     const initialized = await rpcResult<{
       serverInfo: { name: string };
@@ -783,6 +844,7 @@ test.describe("POST /api/mcp · the auth ladder", () => {
       "opponent_scouting",
       "prepare_video_upload",
       "run_query",
+      "search_programs",
       "update_match",
     ]);
     // The Connectors Directory checks these against behaviour: `ask` saves the
@@ -851,6 +913,9 @@ test.describe("POST /api/mcp · describe_views and list_matches", () => {
       match_id: MATCH_A,
       played_on: "2026-09-14",
       opponent: "Anna Lee",
+      opponent_school: "Harvard University",
+      opponent_program_id: HARVARD_MENS.id,
+      opponent_conference: "Ivy League (Ivy)",
       score: "6-4 6-3",
       i_won: true,
       source: "video",
@@ -1213,6 +1278,7 @@ test.describe("POST /api/mcp · update_match", () => {
       inputSchema: { properties: Record<string, unknown> };
     };
     expect(Object.keys(tool.inputSchema.properties).sort()).toEqual([
+      "allow_team_mismatch",
       "court_type",
       "date",
       "match_id",
@@ -1220,11 +1286,219 @@ test.describe("POST /api/mcp · update_match", () => {
       "opponent_backhand",
       "opponent_hand",
       "opponent_name",
+      "opponent_program_id",
       "opponent_school",
       "program_id",
       "round",
       "tournament_name",
     ]);
+  });
+});
+
+test.describe("POST /api/mcp · the opponent's school", () => {
+  const TEAM_MATCH = { ...OWN_MATCH, programId: PROGRAM_ID, teamMatch: true };
+  const patchOf = (calls: Calls) =>
+    (
+      userCalls(calls).find((call) => call.fn === "ask_patch_match")?.args as
+        { p_update: Record<string, unknown> } | undefined
+    )?.p_update;
+
+  test("search_programs defaults team to the scope program's, and an explicit team wins", async () => {
+    const { route, calls } = loadRoute(world());
+    const scoped = await callTool(route, "search_programs", {
+      query: "Harvard",
+      program_id: PROGRAM_ID,
+    });
+    expect(scoped.structuredContent).toEqual({
+      count: 1,
+      programs: [HARVARD_MENS],
+    });
+    await callTool(route, "search_programs", {
+      query: "Harvard",
+      program_id: PROGRAM_ID,
+      team: "womens",
+      division: "D1",
+      limit: 25,
+    });
+    await callTool(route, "search_programs", { query: "Harvard" });
+    expect(calls.reads.filter((read) => read.startsWith("search:"))).toEqual([
+      "search:Harvard:mens::10",
+      "search:Harvard:womens:D1:25",
+      "search:Harvard:::10",
+    ]);
+  });
+
+  test("search_programs refuses a program the caller is not in", async () => {
+    const { route } = loadRoute(world());
+    const result = await callTool(route, "search_programs", {
+      query: "Harvard",
+      program_id: OTHER_PROGRAM_ID,
+    });
+    expect(textOf(result)).toMatch(/^not_a_member: /);
+  });
+
+  test("setting by id writes the program and nulls the text, as the dropdown does", async () => {
+    const { route, calls } = loadRoute(world({ ownMatch: TEAM_MATCH }));
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      program_id: PROGRAM_ID,
+      opponent_program_id: HARVARD_MENS.id,
+    });
+    expect(result.isError).toBeUndefined();
+    expect(patchOf(calls)).toEqual({
+      opponent_program_id: HARVARD_MENS.id,
+      opponent_school: null,
+    });
+    expect(result.structuredContent).toMatchObject({
+      linked_program: HARVARD_MENS,
+    });
+  });
+
+  test("an unknown id and both fields together are refused before any write", async () => {
+    const { route, calls } = loadRoute(world({ ownMatch: TEAM_MATCH }));
+    const unknown = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      program_id: PROGRAM_ID,
+      opponent_program_id: "aaaa0000-0000-4000-8000-00000000ffff",
+    });
+    expect(textOf(unknown)).toMatch(/^opponent_program_not_found: /);
+    const both = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      program_id: PROGRAM_ID,
+      opponent_program_id: HARVARD_MENS.id,
+      opponent_school: "Harvard University",
+    });
+    expect(textOf(both)).toMatch(/^opponent_team_exclusive: /);
+    expect(patchOf(calls)).toBeUndefined();
+  });
+
+  test("the other squad's program is refused unless the caller overrides it", async () => {
+    const { route, calls } = loadRoute(world({ ownMatch: TEAM_MATCH }));
+    const refused = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      program_id: PROGRAM_ID,
+      opponent_program_id: HARVARD_WOMENS.id,
+    });
+    expect(textOf(refused)).toMatch(/^opponent_team_mismatch: /);
+    expect(patchOf(calls)).toBeUndefined();
+
+    const allowed = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      program_id: PROGRAM_ID,
+      opponent_program_id: HARVARD_WOMENS.id,
+      allow_team_mismatch: true,
+    });
+    expect(allowed.isError).toBeUndefined();
+    expect(patchOf(calls)).toMatchObject({
+      opponent_program_id: HARVARD_WOMENS.id,
+    });
+  });
+
+  test("a personal match has no team to mismatch", async () => {
+    const { route, calls } = loadRoute(world({ squad: null }));
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      opponent_program_id: HARVARD_WOMENS.id,
+    });
+    expect(result.isError).toBeUndefined();
+    expect(patchOf(calls)).toMatchObject({
+      opponent_program_id: HARVARD_WOMENS.id,
+    });
+  });
+
+  test("a name that is exactly one program of the scope's team links it, ignoring case", async () => {
+    const { route, calls } = loadRoute(world({ ownMatch: TEAM_MATCH }));
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      program_id: PROGRAM_ID,
+      opponent_school: "harvard university",
+    });
+    expect(patchOf(calls)).toEqual({
+      opponent_program_id: HARVARD_MENS.id,
+      opponent_school: null,
+    });
+    const structured = result.structuredContent as Record<string, unknown>;
+    expect(structured.linked_program).toEqual(HARVARD_MENS);
+    expect(structured.candidates).toBeUndefined();
+  });
+
+  test("an ambiguous name stays as text and answers the candidates", async () => {
+    const { route, calls } = loadRoute(world({ ownMatch: TEAM_MATCH }));
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      program_id: PROGRAM_ID,
+      opponent_school: "Anderson University",
+    });
+    expect(patchOf(calls)).toEqual({
+      opponent_school: "Anderson University",
+      opponent_program_id: null,
+    });
+    const structured = result.structuredContent as Record<string, unknown>;
+    expect(structured.candidates).toEqual([ANDERSON_ONE, ANDERSON_TWO]);
+    expect(structured.linked_program).toBeUndefined();
+  });
+
+  test("a name the directory does not hold stays as text with no candidates", async () => {
+    const { route, calls } = loadRoute(world({ ownMatch: TEAM_MATCH }));
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      program_id: PROGRAM_ID,
+      opponent_school: "Lycée Louis-le-Grand",
+    });
+    expect(patchOf(calls)).toMatchObject({
+      opponent_school: "Lycée Louis-le-Grand",
+    });
+    expect(
+      (result.structuredContent as Record<string, unknown>).candidates,
+    ).toEqual([]);
+  });
+
+  test("null on the id clears the link alone; null on the school clears either", async () => {
+    const { route, calls } = loadRoute(world());
+    await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      opponent_program_id: null,
+    });
+    expect(patchOf(calls)).toEqual({ opponent_program_id: null });
+
+    const { route: second, calls: secondCalls } = loadRoute(world());
+    await callTool(second, "update_match", {
+      match_id: MATCH_A,
+      opponent_school: null,
+    });
+    expect(patchOf(secondCalls)).toEqual({
+      opponent_program_id: null,
+      opponent_school: null,
+    });
+  });
+
+  test("the reads return the linked school", async () => {
+    const { route, calls } = loadRoute(world());
+    const listed = await callTool(route, "list_matches", {});
+    expect(
+      (listed.structuredContent as { matches: Row[] }).matches[0],
+    ).toMatchObject({
+      opponent_school: "Harvard University",
+      opponent_program_id: HARVARD_MENS.id,
+      opponent_conference: "Ivy League (Ivy)",
+    });
+    const one = await callTool(route, "get_match", { match_id: MATCH_A });
+    expect((one.structuredContent as { match: Row }).match).toMatchObject({
+      opponent_school: "Harvard University",
+      opponent_program_id: HARVARD_MENS.id,
+      opponent_conference: "Ivy League (Ivy)",
+    });
+    const sql = serviceCalls(calls).map(
+      (call) => (call.args as { sql: string }).sql,
+    );
+    for (const column of [
+      "m.opponent_school",
+      "m.opponent_program_id",
+      "m.opponent_conference",
+    ]) {
+      expect(sql[0]).toContain(column);
+      expect(sql[1]).toContain(column);
+    }
   });
 });
 

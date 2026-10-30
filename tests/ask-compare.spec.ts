@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { ASK_UNFORCED_ERRORS_NOTE } from "@/lib/services/ask/measures";
 import {
   ASK_ALL_MATCHES_SCOPE,
   ASK_NO_STATS_MESSAGE,
@@ -286,11 +287,11 @@ test.describe("selectCompareMeasures", () => {
       "Best overall",
     ]);
     expect(keys("Who is our most consistent player?")).toEqual([
-      "unforced_errors",
+      "errors",
       "total_points_won_pct",
     ]);
     expect(keys("Who is the most solid?")).toEqual([
-      "unforced_errors",
+      "errors",
       "total_points_won_pct",
     ]);
     expect(keys("Which player is most clutch?")).toEqual([
@@ -354,6 +355,84 @@ test.describe("selectCompareMeasures", () => {
       "long_rally_total",
     ]);
     expect(questionMeasures("Why did we lose?")).toEqual([]);
+  });
+
+  test("errors or mistakes is every error; unforced errors keeps its own measure", () => {
+    expect(questionMeasures("Who makes the most errors?")).toEqual(["errors"]);
+    expect(questionMeasures("Did I make more mistakes than Beau?")).toEqual([
+      "errors",
+    ]);
+    expect(questionMeasures("How many unforced errors did I make?")).toEqual([
+      "unforced_errors",
+      "forced_errors",
+    ]);
+    expect(questionMeasures("Compare our unforced errors")).toEqual([
+      "unforced_errors",
+      "forced_errors",
+    ]);
+    // "forced errors" is neither every error nor the unforced ones.
+    expect(questionMeasures("How many forced errors did I make?")).toEqual([]);
+    expect(plannerMeasures(["errors", "opp_errors_per_match"])).toEqual([
+      "errors",
+    ]);
+  });
+
+  test("a default comparison shows errors, never unforced errors: the same count on every match", () => {
+    const standard = ASK_COMPARE_MEASURES.filter(
+      (measure) => measure.standard,
+    ).map((measure) => measure.key);
+    expect(standard).toContain("errors");
+    expect(standard).not.toContain("unforced_errors");
+    expect(selectCompareMeasures("How did I play?", null)).toMatchObject({
+      explicit: false,
+    });
+    expect(
+      selectCompareMeasures("How did I play?", null).measures.map(
+        (measure) => measure.key,
+      ),
+    ).toEqual(standard);
+    // A planner asking for the area gets errors too; only the name itself
+    // reaches unforced_errors.
+    expect(plannerMeasures(["points"])).toEqual([
+      "winners",
+      "errors",
+      "total_points_won_pct",
+    ]);
+    expect(plannerMeasures(["unforced_errors"])).toEqual(["unforced_errors"]);
+    // Nothing a vague word stands for reads the count with two meanings.
+    for (const quality of ASK_QUALITY_MEASURES) {
+      expect(quality.measures).not.toContain("unforced_errors");
+    }
+  });
+
+  test("the errors measure is unforced plus forced counted as zero when unjudged, in every query", () => {
+    const errors = ASK_COMPARE_MEASURES.find(
+      (measure) => measure.key === "errors",
+    );
+    expect(errors).toMatchObject({
+      numerator: ["errors"],
+      standard: true,
+    });
+    expect(errors?.denominator).toBeUndefined();
+    const sum =
+      "sum((s.unforced_errors + coalesce(s.forced_errors, 0))) as errors";
+    expect(ASK_COMPARE_OPPONENT_SQL).toContain(sum);
+    expect(ASK_COMPARE_OPPONENT_SQL).toContain(
+      "max(case when a.side = 'me' then a.errors end) as me_errors",
+    );
+    expect(ASK_COMPARE_PLAYERS_SQL).toContain(sum);
+    expect(ASK_COMPARE_PLAYERS_SQL).toContain(
+      "round(1.0 * a.errors / nullif(a.n, 0), 1) as errors_per_match",
+    );
+    for (const sql of [
+      ASK_COMPARE_BASELINE_SQL,
+      ASK_COMPARE_TEAM_BASELINE_SQL,
+    ]) {
+      expect(sql).toContain(
+        "(s.unforced_errors + coalesce(s.forced_errors, 0)) as errors",
+      );
+    }
+    expect(columnLabel("me_errors")).toBe("Errors");
   });
 
   test("then the planner's list, then every standard measure", () => {
@@ -549,7 +628,7 @@ const PLAYER_ROWS: AskRow[] = [
   {
     player_name: "Rudy Quan",
     group_matches: 6,
-    unforced_errors_per_match: 30.7,
+    errors_per_match: 30.7,
     total_points_won_pct: 52.4,
     first_serve_pct: 64.1,
     matches_in_scope: 10,
@@ -557,7 +636,7 @@ const PLAYER_ROWS: AskRow[] = [
   {
     player_name: "Emon van Loben Sels",
     group_matches: 3,
-    unforced_errors_per_match: 49,
+    errors_per_match: 49,
     total_points_won_pct: 47.5,
     first_serve_pct: 66.8,
     matches_in_scope: 10,
@@ -565,7 +644,7 @@ const PLAYER_ROWS: AskRow[] = [
   {
     player_name: "Andy Nguyen",
     group_matches: 1,
-    unforced_errors_per_match: 36,
+    errors_per_match: 36,
     total_points_won_pct: 54.1,
     first_serve_pct: 68.5,
     matches_in_scope: 10,
@@ -573,7 +652,7 @@ const PLAYER_ROWS: AskRow[] = [
 ];
 
 const CONSISTENT = [
-  { column: "unforced_errors_per_match", percentage: false },
+  { column: "errors_per_match", percentage: false },
   { column: "total_points_won_pct", percentage: true },
 ];
 
@@ -583,7 +662,7 @@ test.describe("buildPlayersAnswer", () => {
       matchCount: 10,
       measures: CONSISTENT,
       explicit: true,
-      notes: ['"Consistent" is read here as unforced errors per match.'],
+      notes: ['"Consistent" is read here as errors per match.'],
     });
     expect(answer).not.toBeNull();
     // No digit typed by the server: every figure and name is a reference.
@@ -593,19 +672,19 @@ test.describe("buildPlayersAnswer", () => {
     expect(result.droppedDigits).toEqual([]);
     expect(result.droppedVisuals).toEqual([]);
     expect(result.headline).toBe(
-      "Unforced errors per match: Emon van Loben Sels had the most (49) and Rudy Quan the fewest (30.7).",
+      "Errors per match: Emon van Loben Sels had the most (49) and Rudy Quan the fewest (30.7).",
     );
     // Three players fit as columns; the measures are the rows.
     expect(result.visual).toMatchObject({
       kind: "table",
       columns: ["Emon van Loben Sels", "Andy Nguyen", "Rudy Quan"],
       rows: [
-        { label: "Unforced errors per match", cells: ["49", "36", "30.7"] },
+        { label: "Errors per match", cells: ["49", "36", "30.7"] },
         { label: "Total points won", cells: ["47.5%", "54.1%", "52.4%"] },
       ],
     });
     expect(result.text).toBe(
-      'Total points won: Andy Nguyen was highest (54.1%) and Emon van Loben Sels lowest (47.5%). Matches with statistics: Emon van Loben Sels 3, Andy Nguyen 1 and Rudy Quan 6. Counts are per-match averages. "Consistent" is read here as unforced errors per match. From 10 matches in all.',
+      'Total points won: Andy Nguyen was highest (54.1%) and Emon van Loben Sels lowest (47.5%). Matches with statistics: Emon van Loben Sels 3, Andy Nguyen 1 and Rudy Quan 6. Counts are per-match averages. "Consistent" is read here as errors per match. From 10 matches in all.',
     );
   });
 
@@ -667,13 +746,13 @@ test.describe("buildPlayersAnswer", () => {
     const { result } = await rendered(answer!.text, answer!.rows);
     expect(result.failure).toBeNull();
     expect(result.headline).toBe(
-      "Emon van Loben Sels was higher on first serves in (66.8% to 64.1%) and had more unforced errors per match (49 to 30.7); Rudy Quan was higher on total points won (52.4% to 47.5%).",
+      "Emon van Loben Sels was higher on first serves in (66.8% to 64.1%) and had more errors per match (49 to 30.7); Rudy Quan was higher on total points won (52.4% to 47.5%).",
     );
     expect(result.visual).toMatchObject({
       columns: ["Rudy Quan", "Emon van Loben Sels"],
       rows: [
         { label: "First serves in", cells: ["64.1%", "66.8%"] },
-        { label: "Unforced errors per match", cells: ["30.7", "49"] },
+        { label: "Errors per match", cells: ["30.7", "49"] },
         { label: "Total points won", cells: ["52.4%", "47.5%"] },
       ],
     });
@@ -721,7 +800,7 @@ test.describe("buildPlayersAnswer", () => {
         PLAYER_ROWS.map((row) => ({
           player_name: row.player_name,
           group_matches: row.group_matches,
-          unforced_errors_per_match: null,
+          errors_per_match: null,
           total_points_won_pct: null,
         })),
         context,
@@ -1451,11 +1530,74 @@ test.describe("players, end to end", () => {
       },
     ]);
     expect(headline).toBe(
-      "Unforced errors per match: Emon van Loben Sels had the most (49) and Rudy Quan the fewest (30.7).",
+      "Errors per match: Emon van Loben Sels had the most (49) and Rudy Quan the fewest (30.7).",
     );
     expect(body).toContain(
-      '"Consistent" is not something the matches record; it is read here as unforced errors per match and total points won.',
+      '"Consistent" is not something the matches record; it is read here as errors per match and total points won.',
     );
+  });
+
+  test("unforced errors by name: that measure, with the sentence that it may not be split; other comparisons go without", async () => {
+    const rows = playerRows.map(({ errors_per_match, ...row }) => ({
+      ...row,
+      unforced_errors_per_match: errors_per_match,
+      forced_errors_per_match: null,
+    }));
+    const plan = JSON.stringify({
+      scope_sql: "select match_id from ask.matches where has_stats",
+      compare: "players",
+    });
+    const named = await ask({
+      db: fakeDb(() => ok(matches, rows)).db,
+      model: fakeModel([plan]).model,
+      question: "Compare our players on unforced errors",
+    });
+    expect(named.headline).toContain("Unforced errors per match");
+    expect(named.body).toContain(ASK_UNFORCED_ERRORS_NOTE);
+    expect(ASK_UNFORCED_ERRORS_NOTE).not.toMatch(/\d/);
+
+    const asked = await ask({
+      db: fakeDb(() => ok(matches, playerRows)).db,
+      model: fakeModel([plan]).model,
+      question: "Who is our most consistent player?",
+    });
+    expect(asked.body).not.toContain(ASK_UNFORCED_ERRORS_NOTE);
+    expect(`${asked.headline} ${asked.body}`).not.toMatch(/unforced/i);
+  });
+
+  test("38 unforced and 11 forced: errors reads 49, and unforced errors shows both", async () => {
+    const judged = (row: (typeof playerRows)[number], index: number) => ({
+      ...row,
+      unforced_errors_per_match: index === 0 ? 38 : 30,
+      forced_errors_per_match: index === 0 ? 11 : 5,
+      errors_per_match: index === 0 ? 49 : 35,
+    });
+    const rows = playerRows.map(judged);
+    const plan = JSON.stringify({
+      scope_sql: "select match_id from ask.matches where has_stats",
+      compare: "players",
+    });
+    const total = await ask({
+      db: fakeDb(() => ok(matches, rows)).db,
+      model: fakeModel([plan]).model,
+      question: "Compare our players on errors",
+    });
+    const totalText = `${total.headline} ${total.body}`;
+    expect(totalText).toContain("49");
+    expect(totalText).not.toContain("38");
+    expect(totalText).not.toMatch(/unforced/i);
+
+    const named = await ask({
+      db: fakeDb(() => ok(matches, rows)).db,
+      model: fakeModel([plan]).model,
+      question: "Compare our players on unforced errors",
+    });
+    const namedText = JSON.stringify(named);
+    expect(namedText).toContain("Unforced errors");
+    expect(namedText).toContain("Forced errors");
+    expect(namedText).toContain("38");
+    expect(namedText).toContain("11");
+    expect(named.body).toContain(ASK_UNFORCED_ERRORS_NOTE);
   });
 
   test("a comparison of players is never refused", async () => {

@@ -419,3 +419,22 @@ test.describe("checkAskSql — a CTE cannot stand in for a catalog relation", ()
     }
   });
 });
+
+test.describe("the planner's errors guidance (ASK_PLAN_ERRORS_RULE)", () => {
+  const FROM =
+    "from ask.match_stats s join scope on scope.match_id = s.match_id";
+
+  test("every error, summed across matches, passes", () => {
+    const got = check(
+      `select sum(s.unforced_errors + coalesce(s.forced_errors, 0)) as errors ${FROM} where s.side = 'me'`,
+    );
+    expect(got).toMatchObject({ ok: true });
+  });
+
+  test("forced errors that read null on a mixed scope pass", () => {
+    const got = check(
+      `select sum(s.unforced_errors) as unforced_errors, case when count(s.forced_errors) = count(*) then sum(s.forced_errors) end as forced_errors ${FROM} where s.side = 'me'`,
+    );
+    expect(got).toMatchObject({ ok: true });
+  });
+});

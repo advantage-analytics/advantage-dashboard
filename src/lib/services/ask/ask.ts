@@ -50,7 +50,11 @@ import {
   qualityNote,
   selectCompareMeasures,
 } from "@/lib/services/ask/compare";
-import { askMeasure } from "@/lib/services/ask/measures";
+import {
+  ASK_UNFORCED_ERRORS_NOTE,
+  askMeasure,
+  unforcedErrorsNotes,
+} from "@/lib/services/ask/measures";
 import { ASK_MOCK_PLAN, mockAskAnswerStream } from "@/lib/services/ask/mock";
 import type { AskExample } from "@/lib/services/ask/examples";
 import {
@@ -1321,17 +1325,26 @@ export async function* askQuestion(
           column: compareColumn(measure, kind, perMatch),
           percentage: measure.denominator !== undefined,
         }));
-        const notes = selection.quality
-          ? [
-              qualityNote(
-                selection.quality,
-                columns.map((entry) => {
-                  const label = pairLabel(entry.column);
-                  return label.charAt(0).toLowerCase() + label.slice(1);
-                }),
-              ),
-            ]
-          : [];
+        const notes = [
+          ...(selection.quality
+            ? [
+                qualityNote(
+                  selection.quality,
+                  columns.map((entry) => {
+                    const label = pairLabel(entry.column);
+                    return label.charAt(0).toLowerCase() + label.slice(1);
+                  }),
+                ),
+              ]
+            : []),
+          // Always, not `unforcedErrorsNotes`: these queries sum forced_errors
+          // plainly, so a figure beside it does not vouch for every match.
+          ...(selection.measures.some(
+            (measure) => measure.key === "unforced_errors",
+          )
+            ? [ASK_UNFORCED_ERRORS_NOTE]
+            : []),
+        ];
         let written: { text: string; rows: AskRow[] } | null = null;
         if (kind === "players") {
           written = buildPlayersAnswer(namedPlayerRows(rows, input.question), {
@@ -2062,8 +2075,10 @@ export async function* askQuestion(
     // higher is worked out in code, so no sentence can say it backwards.
     // Never in mock mode, whose template is the answer there.
     if (reviewText === null && model.configured) {
+      const notes = unforcedErrorsNotes(result.rows);
       const paired = buildPairedAnswer(result.rows, {
         team,
+        notes,
         matchCount: result.matches.length,
         opponentName: onlyName(
           result.matches.map((match) => match.opponentName),
@@ -2077,12 +2092,14 @@ export async function* askQuestion(
         paired ??
         buildTwoGroupAnswer(result.rows, {
           matchCount: result.matches.length,
+          notes,
         }) ??
         // Or a short list of matches to retell.
         buildMatchListAnswer(result.rows, { team }) ??
         // Or one measure over time.
         buildTrendAnswer(result.rows, {
           matchCount: result.matches.length,
+          notes,
         }) ??
         // Or one match point by point, when the question asked how it
         // turned (`momentum.ts`): the shape alone — one row per point of

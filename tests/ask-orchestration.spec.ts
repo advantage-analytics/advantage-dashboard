@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { ASK_UNFORCED_ERRORS_NOTE } from "@/lib/services/ask/measures";
 import {
   buildAskTagOptions,
   type AskMatchSide,
@@ -3308,13 +3309,41 @@ test.describe("a pair-shaped result", () => {
       },
     });
     expect(text(events)).toBe(
-      "Marek Dvorsky was higher on first serves in (65.8% to 60.2%). From 2 matches.",
+      `Marek Dvorsky was higher on first serves in (65.8% to 60.2%). ${ASK_UNFORCED_ERRORS_NOTE} From 2 matches.`,
     );
     const saved = saves()[0].args?.p_answer as AskSavedAnswer;
     expect(saved.noAdvice).toBe(false);
     expect(saved.visual?.kind).toBe("table");
     expect(saved.sql).toBe(PLAN.sql);
     expect(releases()).toHaveLength(0);
+  });
+
+  test("a judged split needs no sentence: forced_errors beside the figure vouches for it", async () => {
+    const judged: AskRpcResult = {
+      data: {
+        matches: [
+          { ...MATCH_ROWS[0], opponent_name: "Marek Dvorsky" },
+          { ...MATCH_ROWS[1], opponent_name: "Marek Dvorsky" },
+        ],
+        rows: [
+          {
+            me_unforced_errors: 134,
+            opp_unforced_errors: 112,
+            me_forced_errors: 9,
+            opp_forced_errors: 12,
+          },
+        ],
+      },
+      error: null,
+    };
+    const { db } = fakeDb({ run: [judged] });
+    const { model } = fakeModel([JSON.stringify(PLAN)]);
+    const events = await collect(
+      askQuestion(
+        input({ db, model, question: "How do I match up with Marek?" }),
+      ),
+    );
+    expect(text(events)).not.toContain(ASK_UNFORCED_ERRORS_NOTE);
   });
 
   test("carries the no-advice notice when the plan flagged advice", async () => {

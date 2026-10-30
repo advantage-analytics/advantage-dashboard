@@ -3,15 +3,31 @@ import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import {
   EMPTY_VIZ_FILTERS,
   chartAllowedOn,
+  collapseErrorFilter,
   computeViz,
   computeVizStats,
+  errorKindOf,
   filterKeysFor,
   servePlacementMetrics,
   statRowAnnouncement,
   statsAreEmpty,
   subjectFor,
   type Cut,
+  type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import {
+  DEFAULT_CUTS,
+  defaultCutsFor,
+} from "@/components/dashboard/matches/match-detail/shots/default-cuts";
+import { buildDefaultTiles } from "@/components/dashboard/matches/match-detail/shots/default-tiles";
+import {
+  activeFilterEntries,
+  vizStateQuery,
+  type VizState,
+} from "@/components/dashboard/matches/match-detail/shots/viz-url";
+import type { MatchFilterContext } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import { servePoint } from "./fixtures/viz-serve-points";
+import { rallyShot } from "./fixtures/viz-rally-points";
 import {
   heatBoundsFor,
   projectServeMetricDot,
@@ -2683,5 +2699,200 @@ test.describe("VizDot.meta — rallyPosition cut", () => {
     expect(meta.shotType).toBe("Backhand");
     expect(meta.result).toBe("Winner");
     expect(meta.speedMph).toBe(61);
+  });
+});
+
+/* ── Forced vs unforced: the errors cut until a match is judged (T4) ───── */
+
+test.describe("errors cut on judged vs unjudged matches", () => {
+  const UNJUDGED_CTX: MatchFilterContext = {
+    youIsPlayer1: true,
+    hands: { player1: null, player2: null },
+  };
+  const JUDGED_CTX: MatchFilterContext = {
+    ...UNJUDGED_CTX,
+    errorSplitJudged: true,
+  };
+
+  /** Player 1 serves, player 2 returns, player 1 misses the third ball. */
+  function p1Error(id: string, resultType: string): MatchPoint {
+    const base = servePoint({ id, player1: true });
+    return {
+      ...base,
+      resultType,
+      wonByPlayer1: false,
+      shots: [
+        ...base.shots!,
+        rallyShot(`${id}-return`, false, true, 1, 8, { shotType: "Backhand" }),
+        rallyShot(`${id}-miss`, true, false, 1, 13, {
+          result: "Out",
+          shotType: "Forehand",
+        }),
+      ],
+    };
+  }
+  const ERRORS = [
+    p1Error("ue", "Forehand Unforced Error"),
+    p1Error("fe", "Backhand Forced Error"),
+    p1Error("bare", "Forehand Error"),
+  ];
+
+  test("errorKindOf: judged reads the stored kind, unjudged is one Errors bucket", () => {
+    // Judged (and the no-match default): today's classification.
+    for (const judged of [true, undefined]) {
+      const kind = (resultType: string) =>
+        judged === undefined
+          ? errorKindOf({ resultType })
+          : errorKindOf({ resultType }, judged);
+      expect(kind("Backhand Forced Error")).toBe("forced");
+      expect(kind("Forehand Unforced Error")).toBe("unforced");
+      expect(kind("Unforced Error")).toBe("unforced");
+      expect(kind("Forehand Error")).toBeNull();
+      expect(kind("Double Fault")).toBe("doubleFault");
+      expect(kind("Winner")).toBeNull();
+    }
+    // Unjudged: every non-double-fault error is the one bucket.
+    expect(errorKindOf({ resultType: "Backhand Forced Error" }, false)).toBe(
+      "unforced",
+    );
+    expect(errorKindOf({ resultType: "Forehand Unforced Error" }, false)).toBe(
+      "unforced",
+    );
+    expect(errorKindOf({ resultType: "Forehand Error" }, false)).toBe(
+      "unforced",
+    );
+    expect(errorKindOf({ resultType: "Double Fault" }, false)).toBe(
+      "doubleFault",
+    );
+    expect(errorKindOf({ resultType: "Winner" }, false)).toBeNull();
+  });
+
+  test("collapseErrorFilter widens either kind to both, only when unjudged", () => {
+    expect(collapseErrorFilter(["forced"], false)).toEqual([
+      "unforced",
+      "forced",
+    ]);
+    expect(collapseErrorFilter(["unforced", "doubleFault"], false)).toEqual([
+      "unforced",
+      "forced",
+      "doubleFault",
+    ]);
+    expect(collapseErrorFilter(["doubleFault"], false)).toEqual([
+      "doubleFault",
+    ]);
+    const forced = ["forced"] as const;
+    expect(collapseErrorFilter(forced, true)).toBe(forced);
+  });
+
+  test("unjudged: Error type catches forced, unforced and bare errors alike — never an empty chart", () => {
+    for (const error of [
+      ["forced"],
+      ["unforced"],
+      ["unforced", "forced"],
+    ] as const) {
+      const r = computeViz(
+        ERRORS,
+        "errors",
+        { ...EMPTY_VIZ_FILTERS, error },
+        true,
+        "scatter",
+        UNJUDGED_CTX,
+      );
+      expect(r.dots.map((d) => d.id)).toEqual(["ue", "fe", "bare"]);
+    }
+  });
+
+  test("judged: Error type reads the stored kind, as today", () => {
+    const run = (error: VizFilters["error"]) =>
+      computeViz(
+        ERRORS,
+        "errors",
+        { ...EMPTY_VIZ_FILTERS, error },
+        true,
+        "scatter",
+        JUDGED_CTX,
+      ).dots.map((d) => d.id);
+    expect(run(["unforced"])).toEqual(["ue"]);
+    expect(run(["forced"])).toEqual(["fe"]);
+    expect(run(["unforced", "forced"])).toEqual(["ue", "fe"]);
+  });
+
+  test("default cuts: unjudged names the cut Errors and opens on every error; judged is unchanged", () => {
+    const unjudged = defaultCutsFor(false).find((c) => c.cut === "errors")!;
+    expect(unjudged).toEqual({
+      cut: "errors",
+      chart: "scatter",
+      name: "Errors",
+      filters: { error: ["unforced", "forced"] },
+      pills: ["Errors", "All strokes"],
+    });
+    const judged = defaultCutsFor(true).find((c) => c.cut === "errors")!;
+    expect(judged).toEqual({
+      cut: "errors",
+      chart: "scatter",
+      name: "Unforced errors",
+      filters: { error: ["unforced"] },
+      pills: ["Unforced", "All strokes"],
+    });
+    expect(defaultCutsFor(true)).toBe(DEFAULT_CUTS);
+    // Serve, return and rally cuts are the same objects either way.
+    const others = (judgedFlag: boolean) =>
+      defaultCutsFor(judgedFlag).filter((c) => c.cut !== "errors");
+    expect(others(false)).toEqual(others(true));
+  });
+
+  test("the wall's errors tile follows the match's judged flag", () => {
+    const href = (s: VizState) => vizStateQuery(new URLSearchParams(), s);
+    const sides = {
+      you: { name: "P1", isPlayer1: true },
+      opp: { name: "P2", isPlayer1: false },
+    };
+    const tile = (ctx?: MatchFilterContext) =>
+      buildDefaultTiles(ERRORS, sides, href, ctx).find(
+        (t) => t.key === "you:errors",
+      )!;
+    const unjudged = tile(UNJUDGED_CTX);
+    expect(unjudged.name).toBe("Errors");
+    expect(unjudged.pills).toEqual(["Errors", "All strokes"]);
+    expect(unjudged.dots.map((d) => d.id)).toEqual(["ue", "fe", "bare"]);
+    expect(unjudged.href).toContain("verr=unforced&verr=forced");
+    const judged = tile(JUDGED_CTX);
+    expect(judged.name).toBe("Unforced errors");
+    expect(judged.dots.map((d) => d.id)).toEqual(["ue"]);
+    // No context at all keeps today's tile.
+    expect(tile().name).toBe("Unforced errors");
+  });
+
+  test("applied strip: the collapsed option is one Errors token, and judged words are unchanged", () => {
+    const state: VizState = {
+      cut: "errors",
+      chart: "scatter",
+      filters: {
+        ...EMPTY_VIZ_FILTERS,
+        error: ["unforced", "forced", "doubleFault"],
+      },
+      viewId: null,
+    };
+    const unjudged = activeFilterEntries(state, undefined, {
+      errorSplitJudged: false,
+    });
+    expect(unjudged.map((e) => e.label)).toEqual(["Errors", "Double faults"]);
+    expect(unjudged[0].values).toEqual(["unforced", "forced"]);
+    // A saved view's lone "forced" still reads Errors, and is not rewritten.
+    const forcedOnly: VizState = {
+      ...state,
+      filters: { ...state.filters, error: ["forced"] },
+    };
+    expect(
+      activeFilterEntries(forcedOnly, undefined, { errorSplitJudged: false }),
+    ).toEqual([
+      { key: "error", value: "forced", values: ["forced"], label: "Errors" },
+    ]);
+    expect(forcedOnly.filters.error).toEqual(["forced"]);
+    for (const opts of [{ errorSplitJudged: true }, undefined]) {
+      expect(
+        activeFilterEntries(state, undefined, opts).map((e) => e.label),
+      ).toEqual(["Unforced errors", "Forced errors", "Double faults"]);
+    }
   });
 });

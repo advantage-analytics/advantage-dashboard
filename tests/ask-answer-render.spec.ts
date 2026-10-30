@@ -2888,6 +2888,56 @@ test.describe("a label for a known measure is the server's, not the model's", ()
     expect(result.droppedDigits).toEqual([]);
   });
 
+  test("canonicalLabel leaves the model's honest name on an unforced_errors cell the result does not vouch for", () => {
+    const none = new Map<string, number>();
+    const cell = "{{r1.me_unforced_errors}}";
+    for (const row of [
+      { me_unforced_errors: 38 },
+      { me_unforced_errors: 38, me_forced_errors: null },
+    ]) {
+      for (const kind of ["figure", "row"] as const) {
+        for (const label of ["Errors", "Errors counted as unforced"]) {
+          expect(canonicalLabel(kind, label, cell, [row], none)).toBeNull();
+        }
+      }
+      // Any other wrong name is still the dictionary's.
+      expect(canonicalLabel("row", "Mistakes", cell, [row], none)).toBe(
+        "Unforced errors",
+      );
+    }
+    // Judged: "Errors" would understate the player's errors.
+    expect(
+      canonicalLabel(
+        "row",
+        "Errors",
+        cell,
+        [{ me_unforced_errors: 38, me_forced_errors: 11 }],
+        none,
+      ),
+    ).toBe("Unforced errors");
+    // One side unjudged is enough, across every cell the label covers.
+    expect(
+      canonicalLabel(
+        "row",
+        "Errors",
+        `${cell} | {{r1.opp_unforced_errors}}`,
+        [
+          {
+            me_unforced_errors: 38,
+            me_forced_errors: 11,
+            opp_unforced_errors: 36,
+            opp_forced_errors: null,
+          },
+        ],
+        none,
+      ),
+    ).toBeNull();
+    // A column named errors was always errors.
+    expect(
+      canonicalLabel("row", "Errors", "{{r1.errors}}", [{ errors: 49 }], none),
+    ).toBe("Errors");
+  });
+
   test("canonicalLabel, figure: the measure's name, what its prefix says, and the row only when the label named it", () => {
     const one: AskRow[] = [
       { me_first_serve_pct: 60, opp_first_serve_pct: 65, all_aces: 3 },

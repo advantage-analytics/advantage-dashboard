@@ -12,7 +12,11 @@ import {
 import { comparedPairs, isNumber, printed } from "@/lib/services/ask/facts";
 import { ASK_SCOPE_COUNT_COLUMN } from "@/lib/services/ask/prompts";
 import { capitalize } from "@/lib/utils";
-import { askMeasure } from "@/lib/services/ask/measures";
+import {
+  askMeasure,
+  forcedErrorsColumn,
+  isUnforcedErrorsColumn,
+} from "@/lib/services/ask/measures";
 
 /**
  * The paired answer: a result that is one row of convention pairs, written
@@ -592,7 +596,7 @@ const DATE_LIKE = /^\d{4}-\d{2}(?:-\d{2})?/;
  */
 export function buildTwoGroupAnswer(
   rows: readonly AskRow[],
-  context: { matchCount: number },
+  context: { matchCount: number; notes?: readonly string[] },
 ): AskPairedAnswer | null {
   if (rows.length !== 2) return null;
   const [first, second] = rows;
@@ -695,6 +699,7 @@ export function buildTwoGroupAnswer(
       `Matches, ${ref(1, label)}: ${ref(1, column)}. Matches, ${ref(2, label)}: ${ref(2, column)}.`,
     );
   }
+  body.push(...(context.notes ?? []));
   body.push(`From ${count} in all.`);
 
   return {
@@ -1134,11 +1139,13 @@ export const MIN_TREND_ROWS = 3;
  * same measure under a qualifier (`all_first_serve_pct` beside
  * `first_serve_pct`): it is drawn as the chart's dashed second line, the
  * measure against its own average. A `match_id` column, when the query
- * selected one, links each point to its match (`answer-render.ts`).
+ * selected one, links each point to its match (`answer-render.ts`). The
+ * forced_errors the planner must select beside an unforced_errors is not a
+ * second measure: it only says whether that figure's split was judged.
  */
 export function buildTrendAnswer(
   rows: readonly AskRow[],
-  context: { matchCount: number },
+  context: { matchCount: number; notes?: readonly string[] },
 ): AskPairedAnswer | null {
   if (rows.length < MIN_TREND_ROWS) return null;
   const keys = Object.keys(rows[0]);
@@ -1150,10 +1157,14 @@ export function buildTrendAnswer(
   );
   const date = dates.includes("played_on") ? "played_on" : dates[0];
   if (date === undefined) return null;
+  const judges = new Set(
+    keys.filter(isUnforcedErrorsColumn).map(forcedErrorsColumn),
+  );
   const measures = keys.filter(
     (column) =>
       column !== ASK_SCOPE_COUNT_COLUMN &&
       !NOT_A_MEASURE.test(column) &&
+      !judges.has(column) &&
       rows.some((row) => isNumber(row[column])) &&
       rows.every((row) => row[column] === null || isNumber(row[column])),
   );
@@ -1216,6 +1227,7 @@ export function buildTrendAnswer(
   const body = [
     `Lowest: ${at(low)}.`,
     `Highest: ${at(high)}.`,
+    ...(context.notes ?? []),
     `From ${count}.`,
   ];
 

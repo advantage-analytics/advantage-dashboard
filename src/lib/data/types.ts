@@ -31,6 +31,12 @@ export interface Match {
   verification?: MatchVerification | null;
   /** `matches.source_provider` — which pipeline produced this match's data. */
   sourceProvider?: string;
+  /**
+   * Whether this match's errors are split into unforced and forced
+   * (`errorSplitJudged`, `error-split.ts`). Set by the match-detail loader;
+   * absent reads as not judged ("Errors").
+   */
+  errorSplitJudged?: boolean;
   round?: string;
   matchContext?: string;
   duration?: string;
@@ -155,6 +161,11 @@ export interface PlayerStatistics {
   longRallyWonPct: number;
   winners: number;
   unforcedErrors: number;
+  /**
+   * `match_stats.forced_errors`. NULL stays null — the match's errors were
+   * never judged forced/unforced — and is never read as 0.
+   */
+  forcedErrors: number | null;
   netPointsAppearances: number;
   netPointsWon: number;
   netPointsWonPct: number | null;

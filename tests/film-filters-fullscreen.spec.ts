@@ -172,8 +172,56 @@ test("the cut in words — the trigger and the zero state", () => {
       names,
     ),
   ).toBe(
-    "Revelli serving · Set 2 · Winners · Long rally (9+) · Winners · Revelli, from Statistics · Saved",
+    "Revelli serving · Set 2 · Long rally (9+) · Winners · Revelli, from Statistics · Saved",
   );
+  // A shared phrase the statistic's label opens with is said once.
+  const errorsCut = {
+    shared: { ...EMPTY_MATCH_FILTERS, resultEnding: ["error" as const] },
+    savedOnly: false,
+  };
+  expect(
+    filmListSentence(
+      {
+        ...errorsCut,
+        remainder: { extras: { ending: "error" }, label: "Errors" },
+      },
+      names,
+    ),
+  ).toBe("Errors, from Statistics");
+  expect(
+    filmListSentence(
+      {
+        ...errorsCut,
+        remainder: { extras: { ending: "error" }, label: "Errors · Revelli" },
+      },
+      names,
+    ),
+  ).toBe("Errors · Revelli, from Statistics");
+  // One player's figure sets the Result player too, and the label names them:
+  // once, surname or short name. A different player picked since stays.
+  const revellisErrors = {
+    shared: { ...errorsCut.shared, resultPlayer: "opponent" as const },
+    savedOnly: false,
+    remainder: {
+      extras: { ending: "error" as const },
+      label: "Errors · Revelli",
+    },
+  };
+  expect(filmListSentence(revellisErrors, names)).toBe(
+    "Errors · Revelli, from Statistics",
+  );
+  expect(
+    filmListSentence(revellisErrors, { ...names, opponent: "G. Revelli" }),
+  ).toBe("Errors · Revelli, from Statistics");
+  expect(
+    filmListSentence(
+      {
+        ...revellisErrors,
+        shared: { ...errorsCut.shared, resultPlayer: "you" as const },
+      },
+      names,
+    ),
+  ).toBe("Stepanov’s last shot · Errors · Revelli, from Statistics");
   // A pure cut (every key a shared filter) lands no remainder, so the strip
   // reads its shared phrases alone and names nothing twice.
   const pure = landFilmCut(EMPTY_MATCH_FILTERS, {

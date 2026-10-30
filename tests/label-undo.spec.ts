@@ -7,7 +7,20 @@ import {
 } from "@/lib/services/labels/undo-session";
 import type { AdminClient } from "@/lib/supabase/admin";
 import { opHeaders, withLabelOp } from "@/lib/supabase/op-context";
-import { fakeLabelClient, labelShotRow } from "./fixtures/label-session";
+import { writeLabelPointEdit } from "@/lib/services/labels/edit-session";
+import { applyLabelPointPatch } from "@/lib/services/labels/edit";
+import {
+  LABEL_POINT_COLUMNS,
+  toLabelPoint,
+  type LabelPointRow,
+} from "@/lib/services/labels/rows";
+import type { LabelPoint } from "@/lib/services/labels/session";
+import { applyUndoDiff } from "@/lib/services/labels/undo-diff";
+import {
+  fakeLabelClient,
+  labelPoint,
+  labelShotRow,
+} from "./fixtures/label-session";
 
 /**
  * The console's Undo, server side (undo-session.ts): the admin gate, the one
@@ -328,4 +341,178 @@ test("an action's requests carry one op id and its name; outside one, nothing", 
   });
   expect(other).not.toBe(seen[0]?.["x-label-op"]);
   expect(opHeaders()).toBeUndefined();
+});
+
+// ── error_kind round trip: patch, undo, redo ───────────────────────────────
+
+const ERROR_POINT = "e0000000-0000-4000-8000-000000000001";
+
+/**
+ * One `label_points` row behind the three calls the console makes: the point
+ * write (`writeLabelPointEdit`), `undo_label_op` and `redo_label_op`. The
+ * journal is modelled on `label_row_history_capture`: every UPDATE keeps the
+ * WHOLE old row (`to_jsonb(old)`), and the undo writes every column of it
+ * back — so a column joins undo and redo without a migration, as long as the
+ * row the console reads back carries it.
+ */
+function journaledPoint(initial: LabelPointRow) {
+  let row: LabelPointRow & { updated_at: string; session_id: string } = {
+    ...initial,
+    session_id: SESSION,
+    updated_at: "t0",
+  };
+  let tick = 0;
+  const undo: (typeof row)[] = [];
+  const redo: (typeof row)[] = [];
+  const client = {
+    rpc: async (fn: string) => {
+      const [from, to] = fn === "undo_label_op" ? [undo, redo] : [redo, undo];
+      const image = from.pop();
+      if (!image) return { data: { points: [] }, error: null };
+      to.push(row);
+      row = image;
+      return {
+        data: { undone: "Edit", redone: "Edit", points: [row.id] },
+        error: null,
+      };
+    },
+    from(table: string) {
+      let values: Record<string, unknown> | null = null;
+      const filters: Record<string, unknown> = {};
+      const answer = () => {
+        if (table === "label_sessions") {
+          return {
+            data: { status: "labelling", marks_enabled: false },
+            error: null,
+          };
+        }
+        if (!values) return { data: row, error: null };
+        if (filters.updated_at !== row.updated_at) {
+          return { data: [], error: null };
+        }
+        undo.push(row);
+        redo.length = 0;
+        tick += 1;
+        row = { ...row, ...values, updated_at: `t${tick}` };
+        return { data: [{ id: row.id }], error: null };
+      };
+      const builder = {
+        select: () => builder,
+        update: (v: Record<string, unknown>) => {
+          values = v;
+          return builder;
+        },
+        eq: (column: string, value: unknown) => {
+          filters[column] = value;
+          return builder;
+        },
+        maybeSingle: async () => answer(),
+        then: (
+          resolve: (v: unknown) => unknown,
+          reject?: (e: unknown) => unknown,
+        ) => Promise.resolve(answer()).then(resolve, reject),
+      };
+      return builder;
+    },
+  } as unknown as AdminClient;
+  const deps = {
+    requireAdmin: async () => ({ id: "admin" }),
+    createAdminClient: () => client,
+    // The read-back maps through rows.ts, as `readLabelPointsByIds` does.
+    readPoints: async () => [toLabelPoint(row)],
+  };
+  return { client, deps, current: () => row };
+}
+
+test("error_kind: forced, then unforced, then undo restores forced and redo re-applies unforced", async () => {
+  const seeded = labelPoint(ERROR_POINT, 0, { ending: "error", endedBy: "p2" });
+  const db = journaledPoint({
+    id: ERROR_POINT,
+    point_index: 0,
+    vendor_rally_ids: [1001],
+    set_number: 1,
+    game_number: 1,
+    server: "p1",
+    serve_side: "deuce",
+    winner: "p1",
+    ending: "error",
+    ended_by: "p2",
+    error_kind: null,
+    game_type: "game",
+    status: "unchanged",
+    status_before_delete: null,
+    checked_at: null,
+    note: null,
+    dismissed: null,
+    game_start_locked: false,
+    seed: null,
+  });
+  let rows: LabelPoint[] = [{ ...seeded, winner: "p1" }];
+  expect(rows[0].errorKind).toBeNull();
+
+  // Each edit as the console makes it: the server write, then the patch on
+  // the console's own row.
+  for (const kind of ["forced", "unforced"] as const) {
+    expect(
+      await writeLabelPointEdit({
+        supabase: db.client,
+        pointId: ERROR_POINT,
+        patch: { error_kind: kind },
+      }),
+    ).toEqual({ ok: true, status: "unchanged" });
+    expect(db.current().error_kind).toBe(kind);
+    rows = rows.map((p) => applyLabelPointPatch(p, { error_kind: kind }));
+    expect(rows[0].errorKind).toBe(kind);
+  }
+
+  const undone = await undoLabelOp(SESSION, db.deps);
+  if (!("ok" in undone)) throw new Error(undone.error);
+  rows = applyUndoDiff(rows, undone.changed, undone.removedPointIds);
+  expect(db.current().error_kind).toBe("forced");
+  expect(rows[0].errorKind).toBe("forced");
+  // Marking the kind never made the point edited, on either side.
+  expect(rows[0].status).toBe("unchanged");
+
+  const redone = await redoLabelOp(SESSION, db.deps);
+  if (!("ok" in redone)) throw new Error(redone.error);
+  rows = applyUndoDiff(rows, redone.changed, redone.removedPointIds);
+  expect(db.current().error_kind).toBe("unforced");
+  expect(rows[0].errorKind).toBe("unforced");
+
+  // Two undos go back to unmarked: null is the baseline.
+  for (const expected of ["forced", null]) {
+    const back = await undoLabelOp(SESSION, db.deps);
+    if (!("ok" in back)) throw new Error(back.error);
+    rows = applyUndoDiff(rows, back.changed, back.removedPointIds);
+    expect(rows[0].errorKind).toBe(expected);
+  }
+});
+
+test("the point read-back carries error_kind, null when the column is unset", () => {
+  const base = {
+    id: ERROR_POINT,
+    point_index: 0,
+    vendor_rally_ids: null,
+    set_number: 1,
+    game_number: 1,
+    server: "p1",
+    serve_side: "deuce",
+    winner: null,
+    ending: "error",
+    ended_by: "p2",
+    game_type: "game",
+    status: "unchanged",
+    status_before_delete: null,
+    checked_at: null,
+    note: null,
+    dismissed: null,
+    game_start_locked: false,
+  } satisfies Omit<LabelPointRow, "error_kind">;
+  // The loader and the undo read-back both select it.
+  expect(LABEL_POINT_COLUMNS.split(", ")).toContain("error_kind");
+  expect(toLabelPoint(base).errorKind).toBeNull();
+  expect(toLabelPoint({ ...base, error_kind: null }).errorKind).toBeNull();
+  expect(toLabelPoint({ ...base, error_kind: "forced" }).errorKind).toBe(
+    "forced",
+  );
 });

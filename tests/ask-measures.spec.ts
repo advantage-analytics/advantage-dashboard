@@ -6,12 +6,17 @@ import {
   ASK_ORDER_SUMMARY_PREFIXES,
 } from "@/lib/services/ask/facts";
 import {
+  ASK_DERIVED_COUNTERS,
   ASK_MEASURES,
   ASK_MEASURE_PREFIX_QUALIFIERS,
   ASK_MEASURE_SUFFIX_QUALIFIERS,
+  ASK_UNFORCED_ERRORS_NOTE,
+  askCounterSql,
   askMeasure,
   askMeasureFullLabel,
   askMeasureLabel,
+  forcedErrorsColumn,
+  unforcedErrorsNotes,
 } from "@/lib/services/ask/measures";
 import {
   ASK_REVIEW_MEASURES,
@@ -73,6 +78,93 @@ test.describe("ASK_MEASURES", () => {
       "chances to break the other side's serve, not break points faced",
     );
     expect(() => askMeasureLabel("no_such_measure")).toThrow();
+  });
+
+  test("errors is every error, judged or not; unforced errors stays its own measure", () => {
+    expect(askMeasureLabel("errors")).toBe("Errors");
+    expect(askMeasureLabel("unforced_errors")).toBe("Unforced errors");
+    expect(askMeasure("me_errors")).toMatchObject({
+      key: "errors",
+      label: "Errors",
+      qualifier: "",
+    });
+    expect(askMeasure("last_errors")?.key).toBe("errors");
+    // Summed as unforced + coalesce(forced, 0): a null forced count (nobody
+    // judged the split) adds nothing instead of nulling the sum.
+    expect(askCounterSql("errors", "s")).toBe(
+      "(s.unforced_errors + coalesce(s.forced_errors, 0))",
+    );
+    expect(askCounterSql("winners", "s")).toBe("s.winners");
+    // Every derived counter is a measure, and reads only documented columns.
+    const stats = ASK_SCHEMA.find((view) => view.view === "match_stats");
+    const columns = new Set((stats?.columns ?? []).map((c) => c.name));
+    for (const [key, sql] of Object.entries(ASK_DERIVED_COUNTERS)) {
+      expect(ASK_MEASURES[key], key).toBeDefined();
+      for (const [, column] of sql("s").matchAll(/\bs\.(\w+)/g)) {
+        expect(columns.has(column), column).toBe(true);
+      }
+    }
+  });
+
+  test("unforced errors keeps its name and says what it can hold; only forced_errors vouches for it", () => {
+    expect(ASK_MEASURES.unforced_errors).toEqual({
+      label: "Unforced errors",
+      note: "every error on a match whose split nobody judged: ERRORS UNTIL JUDGED says what to call it",
+    });
+    expect(ASK_UNFORCED_ERRORS_NOTE).toBe(
+      "Unforced errors can include every error on matches whose forced/unforced split wasn't judged.",
+    );
+    expect(unforcedErrorsNotes([{ me_winners: 3 }])).toEqual([]);
+    expect(unforcedErrorsNotes([{ errors: 3 }])).toEqual([]);
+    // Judged, in every row.
+    expect(
+      unforcedErrorsNotes([
+        { unforced_errors: 3, forced_errors: 1 },
+        { unforced_errors: 4, forced_errors: 0 },
+      ]),
+    ).toEqual([]);
+    expect(
+      unforcedErrorsNotes([
+        {
+          me_unforced_errors: 3,
+          me_forced_errors: 1,
+          opp_unforced_errors: 4,
+          opp_forced_errors: 0,
+        },
+      ]),
+    ).toEqual([]);
+    // Null in any row, on one side, or not selected at all.
+    for (const rows of [
+      [
+        { unforced_errors: 3, forced_errors: 1 },
+        { unforced_errors: 4, forced_errors: null },
+      ],
+      [
+        {
+          me_unforced_errors: 3,
+          me_forced_errors: 1,
+          opp_unforced_errors: 4,
+          opp_forced_errors: null,
+        },
+      ],
+      [{ unforced_errors: 3 }],
+      [{ unforced_errors_per_match: 3.5 }],
+    ]) {
+      expect(unforcedErrorsNotes(rows)).toEqual([ASK_UNFORCED_ERRORS_NOTE]);
+    }
+    expect(forcedErrorsColumn("opp_unforced_errors")).toBe("opp_forced_errors");
+  });
+
+  test("the error meanings say when the split was judged", () => {
+    const stats = ASK_SCHEMA.find((view) => view.view === "match_stats");
+    const meaning = (name: string) =>
+      stats?.columns.find((column) => column.name === name)?.meaning ?? "";
+    expect(meaning("unforced_errors")).toContain(
+      "every error the side made unless forced_errors is non-null; then it is only the unforced ones",
+    );
+    expect(meaning("forced_errors")).toContain(
+      "null when nobody judged the split — an unverified video match, or one verified before the split existed; SwingVision matches and matches verified from now on carry it",
+    );
   });
 
   test("is the review's source of names: one label per measure, everywhere", () => {

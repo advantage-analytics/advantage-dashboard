@@ -1859,6 +1859,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                     activePoint
                       ? pointResultLabel(activePoint, {
                           isDerived: isDerivedMatch(match),
+                          errorSplitJudged: match.errorSplitJudged === true,
                         })
                       : null
                   }

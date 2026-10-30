@@ -7,6 +7,7 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { CourtTile, TileFullscreenGlyph } from "./court-tile";
 import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
 import { buildDefaultTiles } from "./default-tiles";
+import { useMatchFilters } from "../match-filters/provider";
 import { VIZ_TILE_GRID_CLASS } from "./viz-labels";
 
 /**
@@ -44,6 +45,9 @@ export function VizWall({
   const points = useVizPoints(useMatchData());
   const { you, opp } = useMatchSides();
   const { hrefFor } = useVizState();
+  // The errors tile's name, filter and error reading follow whether this
+  // match's errors are judged (`defaultCutsFor`, `errorKindOf`).
+  const { context: matchCtx } = useMatchFilters();
 
   // F5: mirrors `viz-focused.tsx`'s identical fallback — see
   // `useExternalSwapFadeIn`'s doc comment.
@@ -64,9 +68,10 @@ export function VizWall({
           opp: { isPlayer1: opp.isPlayer1, name: opp.name },
         },
         hrefFor,
+        matchCtx,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above
-    [points, you.isPlayer1, you.name, opp.name, hrefFor],
+    [points, you.isPlayer1, you.name, opp.name, hrefFor, matchCtx],
   );
 
   const visibleTiles = tiles.filter((tile) => tile.total > 0);

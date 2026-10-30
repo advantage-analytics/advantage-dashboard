@@ -235,6 +235,9 @@ export function SavedViewsBand({
         viewId: null,
       },
       { you: you.shortName, opponent: opp.shortName },
+      // Unjudged, the tile's pills say "Errors" as the strip does — the
+      // stored `error` array itself is read as is, never rewritten.
+      { errorSplitJudged: matchCtx.errorSplitJudged === true },
     );
     // Every active filter, unfolded — `CourtTile` folds by measured width.
     const pills = entries.map((entry) => entry.label);
@@ -338,10 +341,11 @@ export function SavedViewsBand({
               opp: { isPlayer1: opp.isPlayer1, name: opp.name },
             },
             hrefFor,
+            matchCtx,
           )
         : EMPTY_DEFAULT_TILES,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `opp.isPlayer1` is always `you.isPlayer1`'s inverse (same rule `viz-wall.tsx`'s own memo relies on), so it carries no information this dependency list doesn't already have
-    [points, you.isPlayer1, you.name, opp.name, hrefFor, variant],
+    [points, you.isPlayer1, you.name, opp.name, hrefFor, variant, matchCtx],
   );
 
   // Mirrors `viz-wall.tsx`'s `EmptySubjectRow` rule: a subject with nothing

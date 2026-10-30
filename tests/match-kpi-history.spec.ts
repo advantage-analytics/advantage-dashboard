@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   KPI_SERIES_WINDOW,
+  averageErrors,
   buildKpiHistory,
   hasComparisonBaseline,
   type PlayerStatRow,
@@ -292,5 +293,34 @@ test.describe("the four keys", () => {
     expect("breakPointsSaved" in series).toBe(false);
     expect(baseline.firstServeIn).toBe(60);
     expect(series.firstServeIn).toEqual([60, 64]);
+  });
+});
+
+test.describe("cross-match error average", () => {
+  function errorRow(
+    id: string,
+    unforced: number | null,
+    forced: number | null,
+  ): PlayerStatRow {
+    return {
+      match_id: id,
+      date: null,
+      unforced_errors: unforced,
+      forced_errors: forced,
+    };
+  }
+
+  test("averages the per-match sum, forced counted, null forced as none", () => {
+    // 10 + 3 = 13 and 8 + null = 8 → 10.5, not the unforced-only 9.
+    expect(averageErrors([errorRow("a", 10, 3), errorRow("b", 8, null)])).toBe(
+      10.5,
+    );
+  });
+
+  test("a match without unforced errors stays out of the mean", () => {
+    expect(averageErrors([errorRow("a", 10, 3), errorRow("b", null, 4)])).toBe(
+      13,
+    );
+    expect(averageErrors([errorRow("a", null, 4)])).toBeNull();
   });
 });
