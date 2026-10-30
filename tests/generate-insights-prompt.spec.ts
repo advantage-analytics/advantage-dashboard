@@ -600,8 +600,129 @@ test("a judged match's prompt keeps unforced_errors and forced_errors", async ()
   expect(prompt).toContain('"unforced_errors":9');
   expect(prompt).toContain('"forced_errors":3');
   expect(prompt).not.toContain('call them "errors"');
-  // Averages keep today's field.
-  expect(prompt).toContain('"unforced_errors":11');
+});
+
+/** The part of the prompt that speaks of earlier matches. */
+function comparisonOf(prompt: string): string {
+  const at = prompt.indexOf("Player 1 comparison context");
+  if (at === -1) throw new Error("the prompt has no comparison context");
+  return prompt.slice(at);
+}
+
+const JUDGED_MATCH = {
+  ...VIDEO_MATCH,
+  verified: true,
+  verified_at: "2026-10-26T00:00:00Z",
+  errors_judged_at: "2026-10-26T00:00:00Z",
+};
+
+test("a judged match compares total errors, because an unjudged prior's unforced count is every error", async () => {
+  const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+    match: JUDGED_MATCH,
+    stats: ERROR_STATS(9, 3),
+    ...PRIOR,
+  });
+  const prompt = requests[0].body.contents[0].parts[0].text;
+  const comparison = comparisonOf(prompt);
+  // (14 + 12) / 2: the unforced-only reading would be (10 + 12) / 2 = 11, with
+  // m-older's 12 being every error and m-prev's 10 only some of them.
+  expect(comparison).toContain('"errors":13');
+  expect(comparison).not.toContain('"unforced_errors":');
+  expect(comparison).not.toContain('"forced_errors":');
+  expect(comparison).toContain(
+    "compare them only with this match's 'errors', never with its 'unforced_errors' or 'forced_errors'",
+  );
+  // The row they are read against carries the same total beside its split.
+  expect(prompt.slice(0, prompt.indexOf("Player 2 Stats"))).toContain(
+    '"errors":12',
+  );
+});
+
+test("the one-prior-match wording compares total errors too", async () => {
+  const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+    match: JUDGED_MATCH,
+    stats: ERROR_STATS(9, 3),
+    priorMatches: [{ id: "m-prev" }],
+    priorStats: [PRIOR.priorStats[0]],
+  });
+  const comparison = comparisonOf(requests[0].body.contents[0].parts[0].text);
+  expect(comparison).toContain('"errors":14');
+  expect(comparison).not.toContain('"unforced_errors":');
+  expect(comparison).toContain("compare them only with this match's 'errors'");
+});
+
+test("a null error count reaches the prompt as null, never 0", async () => {
+  const nullRow = {
+    unforced_errors: null,
+    forced_errors: null,
+    forehand_unforced_errors: null,
+    backhand_unforced_errors: null,
+  };
+  const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+    match: { ...VIDEO_MATCH, verified: false, verified_at: null },
+    stats: [
+      { is_player1: true, ...nullRow },
+      // A forced count does not make an unmeasured total: as `totalErrors`.
+      { is_player1: false, ...nullRow, forced_errors: 3 },
+    ],
+  });
+  const prompt = requests[0].body.contents[0].parts[0].text;
+  expect(prompt.match(/"errors":null/g)).toHaveLength(2);
+  expect(prompt).not.toContain('"errors":0');
+  expect(prompt).not.toContain('"errors":3');
+});
+
+test("a measured zero stays 0, and a null forced count beside a figure is none", async () => {
+  const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+    match: { ...VIDEO_MATCH, verified: false, verified_at: null },
+    stats: [
+      { is_player1: true, unforced_errors: 0, forced_errors: null },
+      { is_player1: false, unforced_errors: 5, forced_errors: null },
+    ],
+  });
+  const prompt = requests[0].body.contents[0].parts[0].text;
+  expect(prompt).toContain('"errors":0');
+  expect(prompt).toContain('"errors":5');
+});
+
+for (const [label, match] of [
+  ["unjudged", { ...VIDEO_MATCH, verified: false, verified_at: null }],
+  ["judged", JUDGED_MATCH],
+] as const) {
+  test(`a ${label} match leaves a null prior row out of the average`, async () => {
+    const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+      match,
+      stats: ERROR_STATS(9, 3),
+      priorMatches: [{ id: "m-prev" }, { id: "m-older" }],
+      priorStats: [
+        { match_id: "m-prev", unforced_errors: 10, forced_errors: 4 },
+        { match_id: "m-older", unforced_errors: null, forced_errors: null },
+      ],
+    });
+    const comparison = comparisonOf(requests[0].body.contents[0].parts[0].text);
+    // 14 alone, not (14 + 0) / 2.
+    expect(comparison).toMatch(/"errors":14[,}]/);
+    expect(comparison).not.toContain('"errors":7');
+  });
+}
+
+test("every prior row null leaves the average unmeasured, not 0", async () => {
+  const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+    match: JUDGED_MATCH,
+    stats: ERROR_STATS(9, 3),
+    priorMatches: [{ id: "m-prev" }, { id: "m-older" }],
+    priorStats: [
+      { match_id: "m-prev", unforced_errors: null, forced_errors: null },
+      { match_id: "m-older", unforced_errors: null, forced_errors: null },
+    ],
+  });
+  const comparison = comparisonOf(requests[0].body.contents[0].parts[0].text);
+  const averages = comparison.slice(
+    comparison.indexOf("Typical averages"),
+    comparison.indexOf("Immediately previous"),
+  );
+  expect(averages).toContain('"errors":null');
+  expect(averages).not.toContain('"errors":0');
 });
 
 test("a SwingVision match is judged without being verified", async () => {
