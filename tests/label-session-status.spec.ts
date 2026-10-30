@@ -12,7 +12,10 @@ import {
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import type { LabelSession } from "@/lib/services/labels/session";
-import { completeWarnings } from "@/lib/services/labels/session-status";
+import {
+  completeWarnings,
+  unmarkedErrors,
+} from "@/lib/services/labels/session-status";
 import {
   ANOTHER_SESSION_OPEN,
   completeLabelSession,
@@ -23,6 +26,7 @@ import {
 import { tag } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
+  labelPoint,
   labelSessionFixture,
   labelShot,
 } from "./fixtures/label-session";
@@ -689,7 +693,10 @@ test.describe("completeWarnings", () => {
 
   test("the confirm's copy: warn, then allow", () => {
     expect(
-      labelConfirmCopy({ kind: "complete-session", warnings: [] }, NAMES),
+      labelConfirmCopy(
+        { kind: "complete-session", warnings: [], blockers: [] },
+        NAMES,
+      ),
     ).toEqual({
       title: "Mark complete and publish?",
       description:
@@ -700,7 +707,11 @@ test.describe("completeWarnings", () => {
     });
     expect(
       labelConfirmCopy(
-        { kind: "complete-session", warnings: ["Game 1 unfinished (15–15)"] },
+        {
+          kind: "complete-session",
+          warnings: ["Game 1 unfinished (15–15)"],
+          blockers: [],
+        },
         NAMES,
       ),
     ).toMatchObject({
@@ -710,11 +721,117 @@ test.describe("completeWarnings", () => {
     });
   });
 
+  test("errors not yet marked forced or unforced hold the publish, and the copy names them", () => {
+    const blocked = (blockers: number[]) =>
+      labelConfirmCopy(
+        { kind: "complete-session", warnings: [], blockers },
+        NAMES,
+      );
+    expect(blocked([31, 58, 140])).toEqual({
+      title: "Mark 3 errors before publishing",
+      description:
+        "Every error needs forced or unforced before this match can be verified. They're points 31, 58 and 140.",
+      confirmLabel: "Publish",
+      pendingLabel: "Publishing…",
+      tone: "primary",
+      blocked: { goToLabel: "Go to point 31", pointNumber: 31 },
+    });
+    expect(blocked([31, 58])).toMatchObject({
+      title: "Mark 2 errors before publishing",
+      description:
+        "Every error needs forced or unforced before this match can be verified. They're points 31 and 58.",
+    });
+    expect(blocked([31])).toMatchObject({
+      title: "Mark 1 error before publishing",
+      description:
+        "Every error needs forced or unforced before this match can be verified. It's point 31.",
+      blocked: { goToLabel: "Go to point 31", pointNumber: 31 },
+    });
+  });
+
   test("Reopen asks first, and says Verified by Advantage comes off", () => {
     expect(labelConfirmCopy({ kind: "reopen-session" }, NAMES)).toMatchObject({
       title: "Reopen and remove Verified by Advantage?",
       confirmLabel: "Reopen",
     });
+  });
+});
+
+// ── Unmarked errors ────────────────────────────────────────────────────────
+
+test.describe("unmarkedErrors", () => {
+  let clock = 0;
+  const shot = (pointId: string, fields: Parameters<typeof labelShot>[2]) => {
+    clock += 1;
+    return labelShot(`s-${pointId}-${clock}`, pointId, {
+      eventId: clock,
+      stroke: "forehand",
+      result: "in",
+      videoTime: clock,
+      ...fields,
+    });
+  };
+  /** A rally whose last ball, by p2, went out: an error. */
+  const errorPoint = (
+    id: string,
+    index: number,
+    fields: Parameters<typeof labelPoint>[2] = {},
+  ) =>
+    labelPoint(id, index, {
+      winner: "p1",
+      shots: [
+        shot(id, { hitter: "p1", stroke: "first_serve" }),
+        shot(id, { hitter: "p2" }),
+        shot(id, { hitter: "p1" }),
+        shot(id, { hitter: "p2", result: "out" }),
+      ],
+      ...fields,
+    });
+  /** A rally p1 won with a winner: nothing to mark. */
+  const winnerPoint = (
+    id: string,
+    index: number,
+    fields: Parameters<typeof labelPoint>[2] = {},
+  ) =>
+    labelPoint(id, index, {
+      winner: "p1",
+      shots: [
+        shot(id, { hitter: "p1", stroke: "first_serve" }),
+        shot(id, { hitter: "p2" }),
+        shot(id, { hitter: "p1" }),
+      ],
+      ...fields,
+    });
+
+  test("none when every error is marked, and a stale kind on a winner counts nothing", () => {
+    const points = [
+      errorPoint("a", 0, { errorKind: "forced" }),
+      // Once an error, now a winner: its leftover kind neither blocks nor counts.
+      winnerPoint("b", 1, { errorKind: "unforced" }),
+      winnerPoint("c", 2),
+    ];
+    expect(unmarkedErrors(points, true)).toEqual([]);
+  });
+
+  test("one: the rail's number, not an index", () => {
+    const points = [
+      winnerPoint("a", 0),
+      errorPoint("b", 1),
+      errorPoint("c", 2, { errorKind: "unforced" }),
+    ];
+    expect(unmarkedErrors(points, true)).toEqual([2]);
+  });
+
+  test("three, ascending, past deleted points, lets and non-points", () => {
+    const points = [
+      errorPoint("e", 139),
+      errorPoint("a", 30),
+      errorPoint("deleted", 40, { status: "deleted" }),
+      errorPoint("let", 45, { ending: "let_replayed" }),
+      errorPoint("b", 57),
+      winnerPoint("w", 60),
+    ];
+    expect(unmarkedErrors(points, true)).toEqual([31, 58, 140]);
   });
 });
 

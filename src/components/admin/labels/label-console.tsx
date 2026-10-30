@@ -176,7 +176,10 @@ import {
   planServeHitterFollow,
   type ServeHitterFollow,
 } from "@/lib/services/labels/serve-hitter";
-import { completeWarnings } from "@/lib/services/labels/session-status";
+import {
+  completeWarnings,
+  unmarkedErrors,
+} from "@/lib/services/labels/session-status";
 import type { LabelSessionStatusResult } from "@/lib/services/labels/session-status-session";
 import { advButton } from "@/lib/ui/adv-button";
 import { applySiteRemovalRestore } from "@/lib/services/labels/site-removal";
@@ -1938,10 +1941,14 @@ export function LabelConsole({
     dispatchSave({ type: "success", at: Date.now() });
   }
 
-  /** "Mark complete": the confirm, listing what is still open. */
+  /**
+   * "Mark complete": the confirm, listing what is still open — and holding
+   * the publish while any error is not yet marked forced or unforced.
+   */
   function askComplete() {
     setConfirm({
       kind: "complete-session",
+      blockers: unmarkedErrors(points, drawsGhosts(liveMarks)),
       warnings: completeWarnings({
         points,
         adScoring: session.adScoring,
@@ -1955,6 +1962,24 @@ export function LabelConsole({
         startScore,
       }),
     });
+  }
+
+  /**
+   * A blocked Mark complete's "Go to point n" (the rail's number): the point
+   * opens as a row click on it would, from the overview by way of the full
+   * screen it opens on (`openOnPointId`).
+   */
+  function goToPointNumber(pointNumber: number) {
+    const point = points.find(
+      (p) => p.status !== "deleted" && p.pointIndex + 1 === pointNumber,
+    );
+    if (!point) return;
+    if (overview) {
+      openOnPointId.current = point.id;
+      chooseLayout("black");
+    } else {
+      findGap(point.id);
+    }
   }
 
   /**
@@ -3911,6 +3936,7 @@ export function LabelConsole({
           names={names}
           onCancel={() => setConfirm(null)}
           onConfirm={confirmed}
+          onGoToPoint={goToPointNumber}
           onAlternative={(question) => {
             setConfirm(null);
             if (question.kind === "serve-hitter") {

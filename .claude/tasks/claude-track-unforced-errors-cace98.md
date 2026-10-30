@@ -174,7 +174,7 @@ ready).
 
 ## T12 · Mark complete blocks while any error is unmarked
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8
 - **files:** src/lib/services/labels/session-status.ts, src/components/admin/labels/label-confirm.ts, src/components/admin/labels/label-confirm-dialog.tsx, src/components/admin/labels/label-black-view.tsx (open-point callback), tests/label-session-status.spec.ts, tests/label-console.spec.ts

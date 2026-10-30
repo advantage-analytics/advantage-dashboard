@@ -57,6 +57,7 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   tone = "primary",
   pending = false,
+  confirmDisabled = false,
   error = null,
   onConfirm,
   footerLeft,
@@ -78,6 +79,12 @@ export function ConfirmDialog({
   cancelLabel?: string;
   tone?: "primary" | "danger";
   pending?: boolean;
+  /**
+   * The action is held: the question cannot be answered yes yet (a Mark
+   * complete with points still to mark). The button is `disabled` and its
+   * handler does not run, so no key or click reaches `onConfirm`.
+   */
+  confirmDisabled?: boolean;
   error?: string | null;
   onConfirm: () => void;
   /** A quiet blue text action at the footer's left edge (DS footer grammar). */
@@ -160,9 +167,11 @@ export function ConfirmDialog({
             </AlertDialogPrimitive.Cancel>
             <button
               type="button"
-              disabled={pending}
+              disabled={pending || confirmDisabled}
               aria-busy={pending || undefined}
-              onClick={onConfirm}
+              onClick={() => {
+                if (!confirmDisabled) onConfirm();
+              }}
               className={cn(
                 advButton(tone === "danger" ? "danger-solid" : "primary", "sm"),
                 // Held, not dimmed: the spinner is the state, and a half-opaque

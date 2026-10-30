@@ -13,7 +13,7 @@
  * ending, or left out — never refused.
  */
 
-import { publishEnding } from "./ending-derived";
+import { isMarkableError, publishEnding } from "./ending-derived";
 import type { LabelMarks } from "./marks";
 import { ownedEndingPhrase, type MarkNames } from "./marks-copy";
 import { markSummary } from "./marks-state";
@@ -65,6 +65,25 @@ export const PUBLISHED_PAST_TAILS = {
   noEnding: " — it publishes with no ending",
   labelledWinner: " — it publishes with the labelled winner",
 } as const;
+
+/**
+ * The points "Mark complete" will not publish past: every live point whose
+ * strokes say it ended in an error (`isMarkableError`, which leaves out a
+ * deleted point, a let and a non-point) and that is not yet marked forced or
+ * unforced. As the rail numbers them, ascending. A stale `errorKind` on a
+ * point that no longer ends in an error does not count either way.
+ */
+export function unmarkedErrors(
+  points: readonly LabelPoint[],
+  ghosts: boolean,
+): number[] {
+  return points
+    .filter(
+      (point) => point.errorKind == null && isMarkableError(point, ghosts),
+    )
+    .map((point) => point.pointIndex + 1)
+    .sort((a, b) => a - b);
+}
 
 /** The open items, most general first; empty when nothing is left. */
 export function completeWarnings(input: CompleteWarningInput): string[] {

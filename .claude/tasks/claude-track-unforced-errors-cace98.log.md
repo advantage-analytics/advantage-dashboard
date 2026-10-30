@@ -106,3 +106,14 @@ is the runner's. Newest entries at the bottom.
 **gate:** not reached — dispatch refused
 **reason:** Claude Code's auto-mode classifier refused to dispatch the fable subagent as a "Production Deploy": the task changes the live `verify_match` function (drop + re-create with `p_errors_judged`). Needs the user's explicit approval for that live change; reset `status:` to `todo` once given. Note for the re-run: `calculate_match_stats` reads `errors_judged_at` at run time, so the marker must be stamped before the stats run (or `verify_match` must re-run them), or a fully marked publish still gets NULL forced_errors.
 **stash:** no stash — the task produced no changes
+
+## T12 · Mark complete blocks while any error is unmarked — done
+
+**gate:** mechanical PASS · completion VERDICT: pass
+**changed:** `session-status.ts`: `unmarkedErrors(points, ghosts)` (null kind + `isMarkableError`, rail numbers ascending); `completeWarnings` untouched. `label-confirm.ts`: `complete-session` takes `blockers`; blocked copy "Mark {n} error(s) before publishing" naming the points; unblocked copy byte-identical. `label-confirm-dialog.tsx`: blocked → Publish disabled, cancel reads "Close", blue "Go to point {first}" text action closes and opens that point, list leads with "{n} errors not marked forced or unforced". `label-console.tsx`: `askComplete` passes the blockers; `goToPointNumber` wired via `findGap`. Shared `ui/confirm-dialog.tsx` gains additive `confirmDisabled` (default false). Specs: label-session-status, label-console; label-console-operations fixture gains `blockers: []`.
+**follow-ups:**
+
+1. The publish path (`completeLabelSession` / `writeLabelSessionComplete`) doesn't refuse unmarked errors itself — a stale tab or direct call could still publish past the gate.
+2. The overview's publish checklist (`LabelDashboard` warnings) could show the same unmarked-errors line.
+3. Blockers are a snapshot when the dialog opens; marking an error while it is open doesn't update it.
+4. "the shared confirm holds a disabled action" test asserts on source text with a regex — brittle.
