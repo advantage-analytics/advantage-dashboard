@@ -1,158 +1,147 @@
-import Link from "next/link";
-import { ResultMark } from "@/components/dashboard/result-mark";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
-import { EmptyMark } from "@/components/ui/empty-mark";
-import type { ProfileMatchRow } from "@/lib/data/player-profile-server";
-import { GhostRule } from "@/components/dashboard/home/day-zero-shape";
+import { MatchCardList } from "@/components/dashboard/matches/match-card-list";
+import {
+  LIST_MIN_WIDTH,
+  LIST_ROW_FRAME,
+  MATCHES_PAGE_SIZE,
+  listColumnLabels,
+  listGridCols,
+} from "@/components/dashboard/matches/match-list-layout";
+import {
+  GHOST_OPACITY,
+  GhostRule,
+} from "@/components/dashboard/home/day-zero-shape";
 import {
   CardEmpty,
-  GhostRows,
   type CardSubject,
 } from "@/components/dashboard/shared/card-empty";
+import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import { cn } from "@/lib/utils";
 
 /**
- * Every match, one row each — Date · Name · School · Line · outcome · Score.
+ * Every match this player has played, drawn by the Matches list's own row.
+ *
+ * Same columns, same 52px rows, same Analysis cell as `/dashboard/matches`,
+ * in its personal scope: the Player column drops because the page already
+ * says whose matches these are. So a coach who follows "All N in Matches"
+ * lands on a list that looks like the one they just read. Rows open the
+ * report (no `onToggle`: the Matches page's drawer is not on this page).
+ *
+ * The loader has already turned each row to this player's side
+ * (`fromPlayerSide`) — the list row reads player1 as "you".
+ *
+ * The first page only (`MATCHES_PAGE_SIZE`); the link carries the rest. A
+ * match with no score is left out here as it is on the Matches page, by the
+ * same transform.
+ *
+ * The card's width is the page's, so the full column set fits; below it the
+ * table scrolls inside the card, as the Matches page's does.
  */
-const HISTORY_GRID =
-  "grid-cols-[56px_minmax(0,1.2fr)_minmax(0,1.2fr)_40px_18px_88px]";
-
-const HISTORY_COLUMNS = [
-  "Date",
-  "Name",
-  "School",
-  "Line",
-  "",
-  "Score",
-] as const;
-
-function MatchHistoryHeader() {
-  return (
-    <div
-      className={`grid ${HISTORY_GRID} gap-3 border-b border-[var(--border-hairline)] pb-2`}
-    >
-      {HISTORY_COLUMNS.map((column, i) => (
-        /* The DS eyebrow class is unlayered and would win over a Tailwind
-           colour utility, so the frame's ink-400 is set inline. */
-        <span
-          key={i}
-          className="eyebrow-sm"
-          style={{ color: "var(--ink-400)" }}
-        >
-          {column}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 export function MatchHistoryCard({
-  rows,
+  matches,
+  matchesPlayed,
   playerName,
   subject,
   importHref,
 }: {
-  rows: ProfileMatchRow[];
+  matches: DisplayMatch[];
+  /**
+   * Every match on record, scored or not. Above zero with no rows means the
+   * matches exist but none has a score yet — the list's transform leaves those
+   * out — which is not the same as "no matches yet".
+   */
+  matchesPlayed: number;
   /** For the Matches list's own player filter, which keys on the name. */
   playerName: string;
   subject: CardSubject;
   /**
-   * The wizard with SwingVision preselected, for the empty card's one step —
-   * the only place on the page that opens it that way. Null for a viewer who
-   * cannot upload.
+   * The wizard on its SwingVision import, for the empty state — or null when
+   * this viewer cannot upload for the program, which leaves the band textual.
    */
   importHref: string | null;
 }) {
   const allHref = `/dashboard/matches?player=${encodeURIComponent(playerName)}`;
+  const shown = matches.slice(0, MATCHES_PAGE_SIZE);
 
   return (
     <section
       aria-label="Match history"
-      className="surface-card flex flex-col gap-0.5"
-      style={{ padding: 20 }}
+      className="surface-card flex min-w-0 flex-col"
+      style={{ padding: "20px 24px 8px" }}
     >
-      <div className="flex items-center gap-2.5 pb-3">
+      <div className="flex items-center gap-2.5 pb-1">
         <span className="eyebrow">Match history</span>
         <div className="flex-1" />
         {/* "All 0 matches" would be a link to an empty list. */}
-        {rows.length > 0 && (
-          <RowAction href={allHref}>
-            All {rows.length} {rows.length === 1 ? "match" : "matches"}
-          </RowAction>
+        {matches.length > 0 && (
+          <RowAction href={allHref}>All {matches.length} in Matches</RowAction>
         )}
       </div>
 
-      <MatchHistoryHeader />
+      <div className="-mx-6 overflow-x-auto px-6">
+        <div className={LIST_MIN_WIDTH}>
+          {/* Column headers — the Matches list's own, hairline underneath. */}
+          <div
+            className={cn(
+              LIST_ROW_FRAME,
+              "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+            )}
+            style={listGridCols("personal")}
+            role="row"
+          >
+            {listColumnLabels("personal").map((label, i) => (
+              <span
+                key={label || `col-${i}`}
+                className="eyebrow-sm min-w-0 truncate"
+                role="columnheader"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
 
-      {rows.length === 0 && (
-        <CardEmpty
-          description="No matches yet: this card lists every match with its date, opponent, school, line, result and score."
-          band={{
-            title: subject.isSelf
-              ? "Every match you play, newest first"
-              : `Every match ${subject.firstName} plays, newest first`,
-            body: "Each row opens its full report. Matches tracked in SwingVision import straight in.",
-            action: importHref
-              ? { label: "Import from SwingVision", href: importHref }
-              : undefined,
-          }}
-        >
-          <GhostRows className={`grid ${HISTORY_GRID} h-11 items-center gap-3`}>
-            <GhostRule width="70%" />
-            <GhostRule width="55%" tone="200" shape="tall" />
-            <GhostRule width="60%" />
-            <GhostRule width="20px" />
-            <GhostRule width="14px" shape="dot" />
-            <GhostRule width="65%" />
-          </GhostRows>
-        </CardEmpty>
-      )}
-
-      {/* No rules between rows — the header's hairline is the card's only
-          line, as on the roster (Data Table law 9). */}
-      {rows.map((row) => (
-        <Link
-          key={row.id}
-          href={`/dashboard/matches/${row.id}`}
-          className={`-mx-2 grid ${HISTORY_GRID} h-11 items-center gap-3 rounded-[var(--radius-element)] px-2 transition-colors hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`}
-        >
-          <span className="tabular text-[11px] text-[var(--ink-500)]">
-            {row.date || <EmptyMark label="Undated" />}
-          </span>
-          <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-            {row.opponent}
-          </span>
-          <span className="flex min-w-0 items-center gap-2">
-            {row.school ? (
-              <>
-                <span
-                  aria-hidden
-                  className="flex size-[26px] shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[11px] font-medium text-[var(--ink-700)]"
+          {shown.length === 0 && matchesPlayed > 0 ? (
+            <p role="status" className="text-body-sm py-4">
+              {subject.isSelf ? "Your" : `${subject.firstName}'s`} matches list
+              here once they have a score.
+            </p>
+          ) : shown.length === 0 ? (
+            <CardEmpty
+              description="No matches yet: this card lists every match with its date, opponent, result, score, event and analysis."
+              band={{
+                title: subject.isSelf
+                  ? "Every match you play, newest first"
+                  : `Every match ${subject.firstName} plays, newest first`,
+                body: "Each row opens its full report. Matches tracked in SwingVision import straight in.",
+                action: importHref
+                  ? { label: "Import from SwingVision", href: importHref }
+                  : undefined,
+              }}
+            >
+              {GHOST_OPACITY.slice(0, 3).map((opacity) => (
+                <div
+                  key={opacity}
+                  className={cn(LIST_ROW_FRAME, "h-[52px]")}
+                  style={{ ...listGridCols("personal"), opacity }}
                 >
-                  {row.schoolAbbr}
-                </span>
-                <span className="truncate text-[12px] text-[var(--ink-600)]">
-                  {row.school}
-                </span>
-              </>
-            ) : (
-              <EmptyMark label="No school recorded" />
-            )}
-          </span>
-          <span className="mono text-[11px] text-[var(--ink-500)]">
-            {row.line ?? <EmptyMark label="Not on a line" />}
-          </span>
-          <span className="flex items-center">
-            {row.won === null ? (
-              <EmptyMark label="Score not recorded" />
-            ) : (
-              <ResultMark won={row.won} />
-            )}
-          </span>
-          <span className="tabular text-[12px] text-[var(--ink-700)]">
-            {row.score || "—"}
-          </span>
-        </Link>
-      ))}
+                  <GhostRule width="60%" />
+                  <GhostRule width="55%" tone="200" shape="tall" />
+                  <GhostRule width="14px" shape="dot" />
+                  <GhostRule width="70%" />
+                  <GhostRule width="60%" />
+                  <GhostRule width="50%" />
+                </div>
+              ))}
+            </CardEmpty>
+          ) : (
+            <div>
+              {shown.map((match) => (
+                <MatchCardList key={match.id} match={match} scope="personal" />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
