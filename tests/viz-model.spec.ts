@@ -2824,7 +2824,7 @@ test.describe("errors cut on judged vs unjudged matches", () => {
       chart: "scatter",
       name: "Errors",
       filters: { error: ["unforced", "forced"] },
-      pills: ["All errors", "All strokes"],
+      pills: ["Errors", "All strokes"],
     });
     const judged = defaultCutsFor(true).find((c) => c.cut === "errors")!;
     expect(judged).toEqual({
@@ -2853,7 +2853,7 @@ test.describe("errors cut on judged vs unjudged matches", () => {
       )!;
     const unjudged = tile(UNJUDGED_CTX);
     expect(unjudged.name).toBe("Errors");
-    expect(unjudged.pills).toEqual(["All errors", "All strokes"]);
+    expect(unjudged.pills).toEqual(["Errors", "All strokes"]);
     expect(unjudged.dots.map((d) => d.id)).toEqual(["ue", "fe", "bare"]);
     expect(unjudged.href).toContain("verr=unforced&verr=forced");
     const judged = tile(JUDGED_CTX);

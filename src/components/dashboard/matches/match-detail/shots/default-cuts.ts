@@ -72,7 +72,7 @@ const UNJUDGED_ERRORS_CUT: DefaultCut = {
   chart: "scatter",
   name: "Errors",
   filters: { error: ["unforced", "forced"] },
-  pills: ["All errors", "All strokes"],
+  pills: ["Errors", "All strokes"],
 };
 
 const UNJUDGED_DEFAULT_CUTS: DefaultCut[] = DEFAULT_CUTS.map((c) =>
