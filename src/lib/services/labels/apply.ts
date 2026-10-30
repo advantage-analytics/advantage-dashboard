@@ -123,6 +123,8 @@ export interface AppliedPointRow {
   derived: true;
   /** Not a column: the label point it came from, for messages. */
   labelPointId: string;
+  /** Not a column: the label point's forced/unforced mark, kept only on an error ending. */
+  errorKind: "forced" | "unforced" | null;
   /** Not a column: the label point's `point_index`. */
   pointIndex: number;
   shots: AppliedShotRow[];
@@ -515,6 +517,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
         : [HAND_LABELLED_FLAG],
       derived: true,
       labelPointId: point.id,
+      errorKind: ending === "error" ? point.errorKind : null,
       pointIndex: point.pointIndex,
       shots,
     });
@@ -562,6 +565,8 @@ export interface SideStats {
   doubleFaults: number;
   serviceWinners: number;
   winners: number;
+  /** Errors marked forced; `unforcedErrors` counts every other error, unmarked included. */
+  forcedErrors: number;
   unforcedErrors: number;
   firstServesIn: number;
   firstServes: number;
@@ -586,6 +591,7 @@ function emptySide(): SideStats {
     doubleFaults: 0,
     serviceWinners: 0,
     winners: 0,
+    forcedErrors: 0,
     unforcedErrors: 0,
     firstServesIn: 0,
     firstServes: 0,
@@ -636,7 +642,8 @@ export function expectedStats(
       default:
         if (point.result_type?.endsWith("Winner")) stats[striker].winners += 1;
         else if (point.result_type?.endsWith("Unforced Error")) {
-          stats[striker].unforcedErrors += 1;
+          if (point.errorKind === "forced") stats[striker].forcedErrors += 1;
+          else stats[striker].unforcedErrors += 1;
         }
     }
     const firstServe = point.shots.find((s) => s.shot_type === "First Serve");

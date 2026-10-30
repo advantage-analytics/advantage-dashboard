@@ -372,12 +372,27 @@ test.describe("buildAppliedRows", () => {
     expect(built.points.map((p) => p.pointIndex)).not.toContain(6);
   });
 
+  test("forced errors are counted apart; unmarked errors stay unforced", () => {
+    const base = build().points;
+    const error = base.find((p) => p.result_type?.endsWith("Unforced Error"))!;
+    const copy = (errorKind: AppliedPointRow["errorKind"]) => ({
+      ...error,
+      errorKind,
+    });
+    const stats = expectedStats([copy("forced"), copy(null), copy(null)]);
+    const forced = stats.p1.forcedErrors + stats.p2.forcedErrors;
+    const unforced = stats.p1.unforcedErrors + stats.p2.unforcedErrors;
+    expect(forced).toBe(1);
+    expect(unforced).toBe(2);
+  });
+
   test("the insert row carries only columns", () => {
     const row = pointInsertRow("m-1", build().points[0]);
     expect(row.match_id).toBe("m-1");
     expect(Object.keys(row)).not.toContain("shots");
     expect(Object.keys(row)).not.toContain("labelPointId");
     expect(Object.keys(row)).not.toContain("pointIndex");
+    expect(Object.keys(row)).not.toContain("errorKind");
   });
 
   test("the preview counts aces, double faults and winners per side", () => {
@@ -391,6 +406,7 @@ test.describe("buildAppliedRows", () => {
     expect(stats.p1.winners).toBe(2);
     expect(stats.p2.winners).toBe(1);
     expect(stats.p1.unforcedErrors).toBe(1);
+    expect(stats.p1.forcedErrors).toBe(0);
     expect(stats.p1.pointsWon + stats.p2.pointsWon).toBe(9);
     expect(stats.p1.serviceGames).toBe(1);
     expect(stats.p2.serviceGames).toBe(1);

@@ -92,3 +92,11 @@ is the runner's. Newest entries at the bottom.
 
 1. No browser harness for the black rail: add one (e.g. in `/design/labels`) so a spec can assert the tray's width at 640px; until then `/pr-check` eyes-on should look at it.
 2. The undo/redo case runs against a modelled whole-row journal, not a real `undoLabelOp` round trip.
+
+## T10 · Point sentence names the error kind; overview stats add Forced errors — done
+
+**gate:** mechanical PASS · completion VERDICT: pass
+**changed:** `label-black-format.ts`: `pointSentence` case "error" reads "{Stroke} forced/unforced error by X", or today's "{Stroke} error by X" while unmarked (`SentencePoint.errorKind` optional). `apply.ts`: `SideStats.forcedErrors`; `expectedStats` counts forced apart, unforced counts the rest (null included); `AppliedPointRow` carries a non-column `errorKind`, set only for an error ending, never inserted. `label-dashboard.tsx`: "Forced errors" row after "Unforced errors". Specs: label-black-rows, label-apply.
+**follow-ups:**
+
+1. Until T11, `resultTypeOf` still writes every error as "… Unforced Error", so the overview's forced count can be non-zero while the published strings are all unforced.

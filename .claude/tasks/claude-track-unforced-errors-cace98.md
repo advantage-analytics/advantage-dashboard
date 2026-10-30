@@ -146,7 +146,7 @@ ready).
 
 ## T10 · Point sentence names the error kind; overview stats add Forced errors
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T8
 - **files:** src/components/admin/labels/label-black-format.ts, src/components/admin/labels/label-dashboard.tsx, src/lib/services/labels/apply.ts (`expectedStats`), tests/label-black-rows.spec.ts, tests/label-apply.spec.ts

@@ -86,6 +86,12 @@ test.describe("the two lines", () => {
       ],
     });
     expect(pointSentence(error, FRAME)).toBe("Forehand error by Goodman");
+    expect(pointSentence({ ...error, errorKind: "forced" }, FRAME)).toBe(
+      "Forehand forced error by Goodman",
+    );
+    expect(pointSentence({ ...error, errorKind: "unforced" }, FRAME)).toBe(
+      "Forehand unforced error by Goodman",
+    );
     expect(pointDetail(error)).toBe(
       "Flat Down the Line · 12:45 · 3 shot rally",
     );

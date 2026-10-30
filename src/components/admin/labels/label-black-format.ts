@@ -27,7 +27,8 @@ import {
 type SentencePoint = Pick<
   LabelPoint,
   "pointIndex" | "ending" | "endedBy" | "server" | "shots"
->;
+> &
+  Partial<Pick<LabelPoint, "errorKind">>;
 
 /** The strokes the rally is made of now: no tombstones. */
 function liveShots(point: Pick<LabelPoint, "shots">): LabelShot[] {
@@ -80,7 +81,14 @@ export function pointSentence(point: SentencePoint, names: SideNames): string {
     case "error": {
       const last = liveShots(point).at(-1);
       const stroke = last?.stroke ? STROKE_LABEL[last.stroke] : null;
-      const how = stroke ? `${stroke} ${ending}` : ENDING_LABEL[ending];
+      // An error names its kind once the labeller has marked it.
+      const kind =
+        ending === "error" && point.errorKind ? `${point.errorKind} ` : "";
+      const how = stroke
+        ? `${stroke} ${kind}${ending}`
+        : kind
+          ? `${kind}${ending}`.replace(/^./, (c) => c.toUpperCase())
+          : ENDING_LABEL[ending];
       return `${how}${by(point.endedBy, names)}`;
     }
   }
