@@ -146,3 +146,14 @@ Design in the stash: `resultTypeOf(ending, stroke, errorKind)` writes "{Side} Fo
 1. The migration's header comment says it was run with `execute_sql`; it went through the connector's `apply_migration`. Comment-only nit.
 2. `requestMatchInsights` runs inside the publish recompute, before verify stamps the marker; the AI summary usually sees it (async), but moving the request after verify would remove the race.
 3. No live end-to-end publish was run (Quan v Harazaki untouched); the first real Mark complete with every error marked is the live proof.
+
+## T4 · Shots tab errors cut: "Errors" until judged, forced URL fallback — done
+
+**gate:** mechanical PASS · completion VERDICT: pass
+**changed:** Re-run at the user's request: restored stash beb26b31 and fixed the six failing Shots browser specs without changing their assertions. Root cause (seen as a `pageerror`): T4 made `VizStateProvider` call `useMatchFilters()`, whose no-provider fallback calls `useMatchData()`, which throws outside a `MatchDataProvider` — the viz harnesses mount `VizStateProvider` with neither, so the tree crashed on mount. Fix: `useErrorSplitJudged()` in `match-filters/provider.tsx` reads `MatchFiltersContext` directly (with a provider: `errorSplitJudged === true`; with none: `true`, the stored reading, same as `errorsJudgedIn(undefined)`), used by viz-state-context, applied-strip, filters-popover, viz-fullscreen and save-view-dialog. Every real route mounts the Shots tab under `MatchFiltersProvider`, so their reading is unchanged. The rest is as in the first run: `defaultCutsFor(judged)`, `errorOptionsFor`, `verr` collapse on an unjudged match, `errorKindOf(p, judged)`, one "Errors" strip token. Specs: viz-url, viz-model (14 new tests, none removed).
+**follow-ups:**
+
+1. `useMatchFilters()`'s fallback (match data, no filters provider) doesn't set `errorSplitJudged` from `match.errorSplitJudged`; only harnesses hit it today.
+2. `point-endings-card.tsx` could use `useErrorSplitJudged()` instead of the full context read.
+3. Harnesses that mock `match-data-provider` with a single export break whenever a component imports anything else from it.
+4. Still open from the first run: "N filters" counts in `cut-menu.tsx` / `use-viz-view.ts` count an unjudged "Errors" pick as 2.

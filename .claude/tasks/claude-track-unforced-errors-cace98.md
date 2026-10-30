@@ -61,7 +61,7 @@ ready).
 
 ## T4 · Shots tab errors cut: "Errors" until judged, forced URL fallback
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/components/dashboard/matches/match-detail/shots/default-cuts.ts, src/components/dashboard/matches/match-detail/shots/filters-popover.tsx, src/components/dashboard/matches/match-detail/shots/viz-url.ts, src/components/dashboard/matches/match-detail/shots/viz-model.ts (`errorKindOf`), tests/viz-url.spec.ts, tests/viz-model.spec.ts

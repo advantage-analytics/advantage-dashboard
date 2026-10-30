@@ -16,6 +16,11 @@ export interface DefaultCut {
   pills: string[];
 }
 
+/**
+ * The default cuts as a JUDGED match shows them (`errorSplitJudged`) —
+ * byte-identical to before forced errors existed. Read through
+ * `defaultCutsFor`, never directly, so an unjudged match gets its Errors cut.
+ */
 export const DEFAULT_CUTS: DefaultCut[] = [
   {
     cut: "serve",
@@ -53,3 +58,28 @@ export const DEFAULT_CUTS: DefaultCut[] = [
     pills: ["Unforced", "All strokes"],
   },
 ];
+
+/**
+ * The errors cut on a match whose errors are not judged yet
+ * (`MatchFilterContext.errorSplitJudged` false or absent): nobody has called
+ * any error forced or unforced, so the cut is named "Errors" and opens on
+ * every one of them — both kinds, double faults still out, as on the judged
+ * cut. Error type's collapsed "Errors" option stores the same pair
+ * (`collapseErrorFilter`).
+ */
+const UNJUDGED_ERRORS_CUT: DefaultCut = {
+  cut: "errors",
+  chart: "scatter",
+  name: "Errors",
+  filters: { error: ["unforced", "forced"] },
+  pills: ["All errors", "All strokes"],
+};
+
+const UNJUDGED_DEFAULT_CUTS: DefaultCut[] = DEFAULT_CUTS.map((c) =>
+  c.cut === "errors" ? UNJUDGED_ERRORS_CUT : c,
+);
+
+/** The default cuts for a match, by whether its errors are judged. */
+export function defaultCutsFor(errorSplitJudged: boolean): DefaultCut[] {
+  return errorSplitJudged ? DEFAULT_CUTS : UNJUDGED_DEFAULT_CUTS;
+}

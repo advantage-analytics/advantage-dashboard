@@ -72,6 +72,7 @@ import {
   type LegendItem,
 } from "./viz-labels";
 import { activeFilterEntries, clearedFilters } from "./viz-url";
+import { useErrorSplitJudged } from "../match-filters/provider";
 import { VIZ_FOCUSED_HEADING_ID } from "./viz-court-transition";
 import { useFullscreenReveal } from "./use-fullscreen-reveal";
 
@@ -106,6 +107,8 @@ const ZOOM_READOUT_W = 38;
 
 export function VizFullscreen() {
   const { state, setState } = useVizState();
+  // Unjudged, the summary pill's Error type word is "Errors".
+  const errorSplitJudged = useErrorSplitJudged();
   const { meta, actions } = useMatchReport();
   const {
     cut,
@@ -497,10 +500,14 @@ export function VizFullscreen() {
 
   const heat = state.chart === "heat";
   const stageBackground = heat ? HEAT_APRON_FILL : APRON_FILL;
-  const applied = activeFilterEntries(state, {
-    you: you.shortName,
-    opponent: opp.shortName,
-  });
+  const applied = activeFilterEntries(
+    state,
+    {
+      you: you.shortName,
+      opponent: opp.shortName,
+    },
+    { errorSplitJudged },
+  );
   const pillLabel =
     applied.length > 0 ? applied[0].label : `All ${result.noun}`;
   // P2e/P2f: a saved view that hasn't been edited since it loaded shows its
