@@ -8,7 +8,6 @@ import {
 import { PLAYER_MEASURES } from "@/lib/data/player-measures";
 import type { KpiFormat } from "@/lib/data/performance-server";
 import type { MatchScore } from "@/lib/data/match-utils";
-import type { DisplayMatch } from "@/lib/data/matches-list-types";
 
 /**
  * The arithmetic behind a player's profile — Platform Audit `Te` / `Te2`.
@@ -817,49 +816,4 @@ export function seasonKpis(
   // In catalogue order by construction — the picker looks tiles up by key and
   // renders them in its own order, so this is the order the strip reads in.
   return tiles;
-}
-
-/**
- * A Matches-list row turned to this player's side.
- *
- * The list row reads player1 as "you": its opponent column is player2, its
- * result mark is "player1 won". On a profile that is only true when this
- * player was player1. When they were player2 (an intra-squad match), the two
- * sides swap: names, every set's games and tiebreak points, and the winner.
- * Swapping both tiebreak slots is right whichever way a row stores them
- * (`ScoreLineSet`). The opponent's hand and backhand are dropped rather than
- * swapped: the row only ever carried player2's, which is this player's own.
- *
- * `decided` is whether the score names a winner (`scoreWinner`). When it does
- * not — a level or unfinished score — the list's transform defaults the
- * winner to player2, which is arbitrary; flipping that default would turn it
- * into a win on one teammate's page and a loss on the other's. Left as is, the
- * row reads the same from either side.
- */
-export function fromPlayerSide(
-  match: DisplayMatch,
-  isPlayer1: boolean,
-  decided = true,
-): DisplayMatch {
-  if (isPlayer1) return match;
-  return {
-    ...match,
-    player1: { name: match.player2.name },
-    player2: { name: match.player1.name },
-    player2Hand: undefined,
-    player2Backhand: undefined,
-    score: {
-      winner: !decided
-        ? match.score.winner
-        : match.score.winner === "player1"
-          ? "player2"
-          : "player1",
-      sets: match.score.sets.map((set) => ({
-        player1: set.player2,
-        player2: set.player1,
-        player1Tiebreak: set.player2Tiebreak,
-        player2Tiebreak: set.player1Tiebreak,
-      })),
-    },
-  };
 }

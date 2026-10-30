@@ -28,8 +28,10 @@ import {
   sideOf,
 } from "@/lib/data/roster-ids";
 import { matchOutcome } from "@/lib/data/match-utils";
-import { fromPlayerSide } from "@/lib/data/player-profile";
-import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import {
+  fromPlayerSide,
+  type DisplayMatch,
+} from "@/lib/data/matches-list-types";
 
 /**
  * The player profile's arithmetic (Platform Audit `Te` / `Te2`).
