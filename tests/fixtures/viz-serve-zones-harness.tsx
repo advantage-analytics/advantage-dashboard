@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ChartMenu } from "@/components/dashboard/matches/match-detail/shots/chart-menu";
 import { CourtArt } from "@/components/dashboard/matches/match-detail/shots/court-art";
@@ -14,6 +15,8 @@ import { ASYMMETRIC_SERVES, servePoint } from "./viz-serve-points";
 
 function Harness() {
   const { state, setState } = useVizState();
+  // The fullscreen court pins a mark the way the viewer shell does.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const faults = new URLSearchParams(window.location.search).has("faults");
   const points = faults ? [servePoint({ result: "Net" })] : ASYMMETRIC_SERVES;
   const result = computeViz(
@@ -96,14 +99,20 @@ function Harness() {
           transform={{ px: 0, py: 0, z: 1 }}
           stage={{ w: 700, h: 700 }}
           panning={false}
-          activeId={null}
+          activeId={selectedId}
           focusedId={null}
-          selectedId={null}
+          selectedId={selectedId}
           rovingId={null}
           onActivate={() => {}}
           onDeactivate={() => {}}
           onRove={() => {}}
-          onSelect={() => {}}
+          onSelect={setSelectedId}
+          watchPointId={
+            result.dots.find((dot) => dot.id === selectedId)?.meta?.pointId ??
+            null
+          }
+          canWatchPoint={() => true}
+          onWatchPoint={() => {}}
         />
       </section>
     </>

@@ -123,6 +123,24 @@ test("Serve placement → Zones renders six cells and agrees with scatter, playe
   await expect(fullscreen.locator('[data-serve-zone="ad-wide"]')).toHaveCount(
     0,
   );
+  // The native `<title>` is gone: a zone answers with the dark readout, by
+  // hover and by a tap that pins it until the next press.
+  const zoneReadout = fullscreen.locator("[data-viz-readout]");
+  const zone = fullscreen.locator(deuce);
+  await expect(fullscreen.locator("[data-serve-zone] title")).toHaveCount(0);
+  await expect(zone).toHaveAttribute(
+    "aria-label",
+    "Selected player — deuce wide: 17% of 6 points won",
+  );
+  await fullscreen.locator('[data-serve-zone-cell="deuce-wide"]').hover();
+  await expect(zoneReadout).toContainText("Selected player — deuce wide");
+  await expect(zoneReadout).toContainText("17% of 6 points won");
+  await fullscreen.locator('[data-serve-zone-cell="deuce-wide"]').click();
+  await page.mouse.move(0, 0);
+  await expect(zoneReadout).toBeVisible();
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(zoneReadout).toHaveCount(0);
   await page.screenshot({
     path: test.info().outputPath("filtered-serve-zones.png"),
     fullPage: true,
@@ -133,6 +151,23 @@ test("Serve placement → Zones renders six cells and agrees with scatter, playe
   await expect(fullscreen.locator("[data-serve-zone-cell]")).toHaveCount(6);
   await expect(focused.locator("[data-serve-zone] text")).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test("a mark pinned on Scatter does not stop the fullscreen zones answering on Zones", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?view=shots&cut=serve`);
+  const fullscreen = page.getByTestId("fullscreen");
+  const readout = fullscreen.locator("[data-viz-readout]");
+  await fullscreen.locator('[data-viz-mark="p1-high-0-0"]').click();
+  await expect(readout).toContainText("Watch point");
+  await page.getByRole("button", { name: "Scatter", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: /Zones/ }).click();
+  await expect(fullscreen.locator("[data-viz-mark]")).toHaveCount(0);
+  await expect(readout).toHaveCount(0);
+  await fullscreen.locator('[data-serve-zone-cell="deuce-wide"]').hover();
+  await expect(readout).toContainText("deuce wide");
+  await expect(readout).not.toContainText("Watch point");
 });
 
 test("Zones with only faults keeps the six empty cells instead of falling back to scatter", async ({

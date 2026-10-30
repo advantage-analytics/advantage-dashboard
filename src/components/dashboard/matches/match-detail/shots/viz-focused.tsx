@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Maximize2 } from "lucide-react";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
+import { useDismissOnNextPress } from "@/hooks/use-long-press";
+import type { ZoneKey } from "@/lib/data/serve-zones";
 import { overlayIsOpen } from "@/lib/ui/overlay-is-open";
 import { isTextEntry } from "@/lib/ui/is-text-entry";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -23,7 +31,7 @@ import {
   heatFloorTintRgba,
 } from "./court-geometry";
 import { StatsCard } from "./stats-card";
-import { buildReadout } from "./viz-readout";
+import { buildReadout, buildZoneReadout } from "./viz-readout";
 import { VizToolbar } from "./viz-toolbar";
 import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
@@ -142,6 +150,10 @@ export function VizFocused({
   const [focusedMark, setFocusedMark] = useState<MarkAnchor | null>(null);
   const [selectedMark, setSelectedMark] = useState<MarkAnchor | null>(null);
   const [rovingId, setRovingId] = useState<string | null>(null);
+  const [hoveredZone, setHoveredZone] = useState<MarkAnchor | null>(null);
+  const [pinnedZone, setPinnedZone] = useState<MarkAnchor | null>(null);
+  const unpinZone = useCallback(() => setPinnedZone(null), []);
+  useDismissOnNextPress(pinnedZone !== null, unpinZone);
   const readoutLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -260,12 +272,25 @@ export function VizFocused({
   const selected = inCurrentView(selectedMark);
   const focused = inCurrentView(focusedMark);
   const hovered = inCurrentView(hoveredMark);
-  const activeMark = focused ?? hovered ?? selected;
+  const zoneStats =
+    state.chart === "zones" && !isDraft ? result.zoneStats : null;
+  const zoneAnchor = hoveredZone ?? pinnedZone;
+  const activeZone =
+    zoneStats && zoneAnchor?.viewKey === inspectionKey ? zoneAnchor : null;
+  const activeZoneStats = activeZone
+    ? zoneStats?.[activeZone.id as ZoneKey]
+    : null;
+  const shownZone = activeZoneStats?.count ? activeZone : null;
+  const activeMark = focused ?? hovered ?? selected ?? shownZone;
   const activeDot = scatterDots.find((dot) => dot.id === activeMark?.id);
   const readout =
     activeDot?.meta && cut
       ? buildReadout(activeDot.meta, { subject: subjectName }, cut, unit)
-      : null;
+      : shownZone && activeZoneStats
+        ? buildZoneReadout(shownZone.id as ZoneKey, activeZoneStats, {
+            subject: subjectName,
+          })
+        : null;
   const watchPointId =
     hasPlayableVideo &&
     activeDot?.meta?.pointId &&
@@ -289,6 +314,15 @@ export function VizFocused({
       y: box.top + box.height / 2 - art.top,
       width: art.width,
     };
+  }
+
+  // A zone's card hangs from the top of its cell, where the numbers stay
+  // readable; the cell's centre would cover them.
+  function anchorForZone(key: ZoneKey, cell: SVGGElement): MarkAnchor | null {
+    const anchor = anchorFor(key, cell);
+    const art = courtArtRef.current?.getBoundingClientRect();
+    if (!anchor || !art) return null;
+    return { ...anchor, y: cell.getBoundingClientRect().top - art.top };
   }
 
   function labelForMark(dot: VizDot): string {
@@ -348,7 +382,9 @@ export function VizFocused({
         Math.min(activeMark.x, activeMark.width - readoutWidth / 2 - 8),
       )
     : 0;
-  const readoutBelow = (activeMark?.y ?? 0) < 90;
+  // A zone's card is two lines against a mark's three or four, so it needs
+  // less room above it.
+  const readoutBelow = (activeMark?.y ?? 0) < (shownZone ? 72 : 90);
 
   function backToWall() {
     // F5: the reverse morph. `targetKey` is the WALL TILE's dom id for
@@ -498,6 +534,19 @@ export function VizFocused({
               }
               labels
               markInteraction={markInteraction}
+              zoneInteraction={
+                zoneStats
+                  ? {
+                      activeKey: (shownZone?.id as ZoneKey | undefined) ?? null,
+                      onHover: (key, cell) =>
+                        setHoveredZone(
+                          key && cell ? anchorForZone(key, cell) : null,
+                        ),
+                      onPin: (key, cell) =>
+                        setPinnedZone(anchorForZone(key, cell)),
+                    }
+                  : undefined
+              }
               // The plotted court is capped in both dimensions, centred in
               // the card, with the apron filling the remaining width. Size
               // the SVG itself rather than its wrapper: its intrinsic ratio
