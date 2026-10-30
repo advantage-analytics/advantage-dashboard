@@ -607,6 +607,8 @@ export function forgetMatchSnapshot(matchId: string): void {
 export function useMatchSnapshot(
   matchId: string,
   pending = false,
+  /** `DisplayMatch.turned`: the row reads from seat two. */
+  turned = false,
 ): Snapshot | null | undefined {
   const [loaded, setLoaded] = useState<{
     id: string;
@@ -637,9 +639,9 @@ export function useMatchSnapshot(
         "first_serve_pct, first_serve_won_pct, break_points_converted, break_point_opportunities, double_faults",
       )
       .eq("match_id", matchId)
-      // player1 is always the list's own side — the uploader's player, or
-      // the roster player on a team match — the seat the row's result reads.
-      .eq("is_player1", true)
+      // The side the row reads from: the uploader's player, or the roster
+      // player on a team match. Seat one, unless the row was turned.
+      .eq("is_player1", !turned)
       .maybeSingle()
       .then(({ data }) => {
         const snapshot = toSnapshot(data as SnapshotRow | null);
@@ -651,7 +653,7 @@ export function useMatchSnapshot(
     return () => {
       cancelled = true;
     };
-  }, [matchId, pending, revision]);
+  }, [matchId, pending, revision, turned]);
 
   if (snapshotCache.has(matchId)) return snapshotCache.get(matchId);
   return loaded?.id === matchId ? loaded.snapshot : undefined;

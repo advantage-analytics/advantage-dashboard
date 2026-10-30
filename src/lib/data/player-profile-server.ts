@@ -29,7 +29,6 @@ import {
 } from "@/lib/data/serve-shots-by-match";
 import {
   dualRecordFrom,
-  fromPlayerSide,
   lineHistoryFrom,
   resolveLine,
   resolveSchool,
@@ -47,7 +46,11 @@ import {
 } from "@/lib/data/player-profile";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 import { enrichMatches } from "@/lib/data/matches-page-server";
-import type { DbMatch, DisplayMatch } from "@/lib/data/matches-list-types";
+import {
+  fromPlayerSide,
+  type DbMatch,
+  type DisplayMatch,
+} from "@/lib/data/matches-list-types";
 
 /**
  * One player, everything the program knows about them — Platform Audit
