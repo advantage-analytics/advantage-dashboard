@@ -243,7 +243,11 @@ master-detail split is retired; its detail is the peek drawer below.
    event answers, and leaves under a facet or a New / In progress view, which it
    cannot answer. The strip and the footer count matches and state the listed
    drafts beside the count ("3 of 18 · 1 draft"), so the figures add up to the
-   rows on screen. Lifecycle cell copy: "View report"
+   rows on screen. A workspace with drafts and no matches draws this same list
+   (2026-10-30): the drafts fill the table, no footer pages nothing, and a cut
+   counts the drafts ("1 of 2 drafts"), never "0 of 0". Below `lg` a draft lists
+   as a `DraftCard` above the match cards and peeks the same rail. Lifecycle
+   cell copy: "View report"
    when ready · `StatusChip` while running (no elapsed time — the tray owns
    progress) · "Estimate · Review data" for low confidence (grey fact + blue
    action, never yellow, never red).
