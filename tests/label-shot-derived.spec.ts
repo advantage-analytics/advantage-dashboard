@@ -4,6 +4,7 @@ import { NET_Y } from "@/components/admin/labels/court-geometry";
 import {
   effectiveShotResult,
   deriveShotResult,
+  playedOnResult,
   positionPatch,
   shotPlacement,
   type ShotPosition,
@@ -287,5 +288,66 @@ test.describe("effectiveShotResult", () => {
         ...placedLong,
       }),
     ).toBe("let");
+  });
+});
+
+test.describe("playedOnResult", () => {
+  test("an empty result the next stroke played reads In", () => {
+    expect(
+      playedOnResult(
+        { stroke: "backhand", result: null },
+        { stroke: "overhead" },
+      ),
+    ).toBe("in");
+    // A serve the receiver returned was in.
+    expect(
+      playedOnResult(
+        { stroke: "first_serve", result: null },
+        { stroke: "forehand" },
+      ),
+    ).toBe("in");
+  });
+
+  test("a stored call stands, and the last stroke keeps its own", () => {
+    expect(
+      playedOnResult(
+        { stroke: "forehand", result: "out" },
+        { stroke: "forehand" },
+      ),
+    ).toBe("out");
+    expect(
+      playedOnResult({ stroke: "forehand", result: null }, null),
+    ).toBeNull();
+    expect(playedOnResult({ stroke: "forehand", result: "net" }, null)).toBe(
+      "net",
+    );
+  });
+
+  test("nothing on a double fault fills, whatever follows it", () => {
+    // A dead ball after the second fault is no return.
+    expect(
+      playedOnResult(
+        { stroke: "second_serve", result: null },
+        { stroke: "forehand" },
+        "double_fault",
+      ),
+    ).toBeNull();
+    // Nor does a dead ball after it: nobody played the point on.
+    expect(
+      playedOnResult(
+        { stroke: "forehand", result: null },
+        { stroke: "backhand" },
+        "double_fault",
+      ),
+    ).toBeNull();
+  });
+
+  test("a serve followed by a serve stays empty: it faulted", () => {
+    expect(
+      playedOnResult(
+        { stroke: "first_serve", result: null },
+        { stroke: "second_serve" },
+      ),
+    ).toBeNull();
   });
 });

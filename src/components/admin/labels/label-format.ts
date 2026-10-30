@@ -1,9 +1,9 @@
 import { shotSpinLabel } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import {
-  INFER_HAND_MIN_FOREHANDS,
-  INFER_HAND_MIN_SHARE,
+  countWingHalf,
+  emptyWingHalves,
+  handFromHalves,
   hitterHalf,
-  isForehand,
   shotDirection,
   type Hand,
 } from "@/components/dashboard/matches/match-detail/match-filters/shot-geometry";
@@ -98,37 +98,37 @@ export type SideHands = Record<LabelSide, Hand | null>;
 export const NO_HANDS: SideHands = { p1: null, p2: null };
 
 /**
- * Each player's hand from where their live forehands were struck — the match
- * page's own rule (shot-geometry.ts `inferHand`, the same thresholds) over the
- * labelled rows: a right-hander's forehands come from the deuce half. Null for
- * a player with too few placed forehands, or no clear side.
+ * Each player's hand: the one entered for them (`LabelSession.enteredHands`)
+ * when there is one, else inferred from where their live strokes were struck
+ * — the match page's own rule (shot-geometry.ts `handFromHalves`: forehands
+ * first, then backhands) over the labelled rows. Null for a player with
+ * neither an entered hand nor a clear side.
  */
 export function labelHands(
   points: readonly Pick<LabelPoint, "shots">[],
+  entered: SideHands = NO_HANDS,
 ): SideHands {
-  const counts = { p1: { deuce: 0, ad: 0 }, p2: { deuce: 0, ad: 0 } };
+  const halves = { p1: emptyWingHalves(), p2: emptyWingHalves() };
   for (const point of points) {
     for (const shot of point.shots) {
       if (shot.status === "deleted" || shot.hitter === null) continue;
-      if (!isForehand(shot.stroke ? STROKE_LABEL[shot.stroke] : null)) continue;
-      const half = hitterHalf(shot);
-      if (half) counts[shot.hitter][half] += 1;
+      countWingHalf(
+        halves[shot.hitter],
+        shot.stroke ? STROKE_LABEL[shot.stroke] : null,
+        hitterHalf(shot),
+      );
     }
   }
-  const hand = ({ deuce, ad }: { deuce: number; ad: number }): Hand | null => {
-    const total = deuce + ad;
-    if (total < INFER_HAND_MIN_FOREHANDS) return null;
-    if (deuce / total >= INFER_HAND_MIN_SHARE) return "right";
-    if (ad / total >= INFER_HAND_MIN_SHARE) return "left";
-    return null;
+  return {
+    p1: entered.p1 ?? handFromHalves(halves.p1),
+    p2: entered.p2 ?? handFromHalves(halves.p2),
   };
-  return { p1: hand(counts.p1), p2: hand(counts.p2) };
 }
 
 /**
  * A stroke's placement in the match page's words (shot-geometry.ts
  * `shotDirection`): the derived T / Body / Wide or Crosscourt / Middle / Down
- * the Line, except that a forehand from its hitter's backhand half, or a
+ * the Line, except that a forehand or overhead from its hitter's backhand half, or a
  * backhand from their forehand half, is Inside Out (crosscourt) or Inside In
  * (down the line). Without the hitter's hand it stays as derived.
  */

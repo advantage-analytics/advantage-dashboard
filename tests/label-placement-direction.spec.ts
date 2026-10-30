@@ -66,6 +66,19 @@ test("a backhand from the forehand half is Inside Out / Inside In too", () => {
   ).toBe("Down the Line");
 });
 
+test("an overhead from the backhand half is Inside Out / Inside In", () => {
+  expect(
+    placementLabel(stroke({ stroke: "overhead", ...cross(-2) }), RIGHT),
+  ).toBe("Inside Out");
+  expect(
+    placementLabel(stroke({ stroke: "overhead", ...line(-2) }), RIGHT),
+  ).toBe("Inside In");
+  // From its forehand half, plain.
+  expect(
+    placementLabel(stroke({ stroke: "overhead", ...cross(2) }), RIGHT),
+  ).toBe("Crosscourt");
+});
+
 test("no hand, a serve and Middle stay as derived", () => {
   expect(
     placementLabel(stroke({ stroke: "forehand", ...cross(-2) }), NO_HANDS),
@@ -110,6 +123,35 @@ test("each player's hand is read off their placed forehands", () => {
     status: "deleted" as const,
   }));
   expect(labelHands([...points, { shots: gone }]).p2).toBe("right");
+});
+
+test("split forehands leave the hand to the backhands", () => {
+  const strokes = (kind: "forehand" | "backhand", x: number, count: number) =>
+    Array.from({ length: count }, () => stroke({ stroke: kind, contactX: x }));
+  // Six of ten forehands from each half says nothing; eight of ten backhands
+  // from the ad half (−x at the near end) says right-handed.
+  const shots = [
+    ...strokes("forehand", 2, 6),
+    ...strokes("forehand", -2, 4),
+    ...strokes("backhand", -2, 8),
+    ...strokes("backhand", 2, 2),
+  ];
+  expect(labelHands([{ shots }]).p1).toBe("right");
+});
+
+test("an entered hand wins over the one the rows suggest", () => {
+  const forehands = Array.from({ length: 10 }, () =>
+    stroke({ stroke: "forehand", contactX: 2 }),
+  );
+  // The rows say right-handed; whoever uploaded the match said left.
+  expect(labelHands([{ shots: forehands }]).p1).toBe("right");
+  expect(labelHands([{ shots: forehands }], { p1: "left", p2: null }).p1).toBe(
+    "left",
+  );
+  // Nothing entered for p2, so p2 is still read off the rows (none here).
+  expect(
+    labelHands([{ shots: forehands }], { p1: "left", p2: null }).p2,
+  ).toBeNull();
 });
 
 test("the point's second line names the deciding shot's direction", () => {

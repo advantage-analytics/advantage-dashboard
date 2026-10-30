@@ -284,6 +284,23 @@ test.describe("inferHand", () => {
   test("points without shots infer nothing", () => {
     expect(inferHand([pt({ id: "bare" })], true)).toBeNull();
   });
+
+  test("split forehands fall back to the backhands", () => {
+    // Rozin, Ferra v Rozin: forehands 41 deuce / 64 ad, backhands 19 / 79.
+    const split = forehands(20, 12)[0].shots ?? [];
+    const backhands = (deuce: number, ad: number) =>
+      Array.from({ length: deuce + ad }, (_, i) =>
+        from(i % 2 === 0 ? "low" : "high", i < deuce ? "deuce" : "ad", {
+          shotType: "Backhand",
+        }),
+      );
+    const of = (shots: MatchShot[]) => [pt({ id: "split", shots })];
+    expect(inferHand(of([...split, ...backhands(2, 8)]), true)).toBe("right");
+    expect(inferHand(of([...split, ...backhands(8, 2)]), true)).toBe("left");
+    // Too few, or split too: still null.
+    expect(inferHand(of([...split, ...backhands(0, 9)]), true)).toBeNull();
+    expect(inferHand(of([...split, ...backhands(5, 5)]), true)).toBeNull();
+  });
 });
 
 test.describe("spin normalisation", () => {
