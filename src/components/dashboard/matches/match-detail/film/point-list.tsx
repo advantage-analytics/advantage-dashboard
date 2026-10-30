@@ -227,9 +227,9 @@ interface PointListProps {
   tone?: FilmListTone;
   /**
    * Space belongs to the host, so a focused row answers only Enter. The room
-   * takes Space on `window` as play/pause whatever has focus, and a row keeps
-   * focus after its click: a row that also seeked on Space sent the film back
-   * to the last point clicked, however far the arrows had walked since.
+   * takes Space on `window` as play/pause whatever has focus: a row that also
+   * seeked on Space sent the film back to the focused point, however far the
+   * arrows had walked since.
    */
   spaceIsPlayPause?: boolean;
   /** Drawn only when given: the drawer's 26px collapse glyph in the header. */
@@ -1007,6 +1007,9 @@ export const PointRow = memo(function PointRow({
         else onSelect(point);
       }}
       onKeyDown={(e) => {
+        // The bookmark's keys bubble here. They are the bookmark's own: taking
+        // Enter would seek and cancel its click.
+        if (e.target !== e.currentTarget) return;
         if (
           seekable &&
           (e.key === "Enter" || (e.key === " " && !spaceIsPlayPause))
