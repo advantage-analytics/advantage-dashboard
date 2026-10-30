@@ -23,6 +23,7 @@ import {
   applyDismiss,
   doubleFaultAt,
   planDismiss,
+  strokeDismissals,
   suggestionState,
 } from "@/lib/services/labels/suggestions";
 import {
@@ -1130,3 +1131,29 @@ function find(
   }
   return null;
 }
+
+test.describe("strokeDismissals", () => {
+  test("keeps the keys naming the strokes, in order; point-level keys stay behind", () => {
+    const dismissed = [
+      "hint:second_serve",
+      "missing_shot:202",
+      "point_ended:s-b",
+      "missing_shot:101",
+      "missing_point",
+      "point_ended:s-a",
+    ];
+    const shots = [
+      { id: "s-b", eventId: 202 },
+      // An added stroke: no vendor event, so only its "Point ended here".
+      { id: "s-added", eventId: null },
+    ];
+    expect(strokeDismissals(dismissed, shots)).toEqual([
+      "missing_shot:202",
+      "point_ended:s-b",
+    ]);
+    expect(strokeDismissals(dismissed, [])).toEqual([]);
+    expect(
+      strokeDismissals(["point_ended:s-added"], [{ id: "s-added" }]),
+    ).toEqual(["point_ended:s-added"]);
+  });
+});

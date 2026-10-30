@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/labels/game-operations";
 import { applyShotSwaps } from "@/lib/services/labels/player-swap";
 import { labelScores } from "@/lib/services/labels/score";
+import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelSession, LabelVideo } from "@/lib/services/labels/session";
 import { count, text } from "./fixtures/html-probe";
 import {
@@ -1276,5 +1277,48 @@ test.describe("how it ended follows the shot rows", () => {
     });
     expect(typeof writable.onRemoveShotsAfter).toBe("function");
     expect(typeof writable.onRestoreShots).toBe("function");
+  });
+});
+
+test.describe("Add all missing shots after a split", () => {
+  const { P1, P2 } = FIXTURE_POINT_IDS;
+  // A suggestion the page filed under P2 while its stroke now sits in P1 —
+  // what a split leaves until the page builds its marks again.
+  const marksWith = (nextShotId: string): LabelMarks => ({
+    points: {},
+    shots: {},
+    serveSides: {},
+    suggestions: [
+      {
+        kind: "missing_shot",
+        key: "missing_shot:101",
+        pointId: P2,
+        afterShotId: "s-serve",
+        nextShotId,
+        hitter: "p2",
+        videoTime: 2472.5,
+      },
+    ],
+  });
+  const count = (marks: LabelMarks, session = labelSessionFixture()) =>
+    railProps({ ...SAVES, session, marks }).missingShots;
+
+  test("counts a suggestion under the point that holds its stroke now", () => {
+    expect(count(marksWith("s-return"))).toBe(1);
+  });
+
+  test("a pair the split put in two points asks for nothing", () => {
+    expect(count(marksWith("s-ace"))).toBe(0);
+  });
+
+  test("a dismissal on the point that holds the stroke answers it", () => {
+    const session = labelSessionFixture();
+    const dismissed = {
+      ...session,
+      points: session.points.map((point) =>
+        point.id === P1 ? { ...point, dismissed: ["missing_shot:101"] } : point,
+      ),
+    };
+    expect(count(marksWith("s-return"), dismissed)).toBe(0);
   });
 });
