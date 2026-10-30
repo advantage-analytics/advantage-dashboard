@@ -2,15 +2,19 @@ import type { PersonalOpponent } from "@/lib/data/personal-opponents";
 import { cn } from "@/lib/utils";
 import {
   OpponentLastMatchCell,
+  OpponentNameCell,
   OpponentPlaysCell,
   OpponentRecordCell,
 } from "./opponent-cells";
+import { opponentFormBars } from "./opponent-form-links";
 import {
   OPPONENTS_CARD_PADDING,
   OPPONENTS_GRID_COLS,
   OPPONENTS_MIN_WIDTH,
   OPPONENTS_ROW_BOX,
   OPPONENTS_ROW_FRAME,
+  opponentRowControl,
+  opponentRowWash,
 } from "./opponents-table-layout";
 import { OpponentsTableHeader } from "./opponents-table-header";
 
@@ -33,11 +37,10 @@ export function opponentRowId(key: string): string {
  * table has one set of tracks and nothing slides shut on a row click.
  *
  * An opponent is a CONTAINER row (law 3): it peeks in the drawer rather than
- * travelling, so it carries no chevron. The whole row takes the click and the
- * selected one keeps its wash; the name is the row's one control — a
- * `<button aria-pressed>` — so the selection has somewhere to live for a
- * keyboard and a screen reader. The button has no handler of its own: its
- * click bubbles to the row, so a press is counted once.
+ * travelling. The whole row takes the click and the selected one keeps its
+ * wash; it is focusable and Enter or Space opens it, as a Matches or Roster row
+ * does. The links inside it travel and stop their own clicks: the name to this
+ * opponent's matches, a form bar or Last match to that match's report.
  *
  * Every cell that can be unknown draws the one `EmptyMark`, on the same x as
  * the column's real values — a style nobody recorded, a meeting with no
@@ -55,7 +58,7 @@ export function OpponentsTable({
   selectedKey: string | null;
   /**
    * A row was pressed: open its drawer, or close it when it is the selected
-   * one. `viaKeyboard` is true for Enter/Space on the name, so the drawer can
+   * one. `viaKeyboard` is true for Enter/Space on the row, so the drawer can
    * take focus for the person who cannot click into it.
    */
   onToggle: (key: string, viaKeyboard: boolean) => void;
@@ -106,32 +109,24 @@ function OpponentRow({
   return (
     <div
       id={opponentRowId(opponent.key)}
-      // `detail` is 0 for a click the keyboard made (Enter/Space on the name).
-      onClick={(event) => onToggle(opponent.key, event.detail === 0)}
+      {...opponentRowControl(opponent.key, selected, onToggle)}
       className={cn(
         OPPONENTS_ROW_FRAME,
         OPPONENTS_ROW_BOX,
-        "cursor-pointer transition-[background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-muted)]",
-        selected && "bg-[var(--surface-muted)]",
+        "cursor-pointer transition-[background-color] duration-200 ease-[var(--ease-primary)]",
+        opponentRowWash(selected),
       )}
       style={OPPONENTS_GRID_COLS}
     >
-      {/* Opponent — the name a reader scans for, and the row's one control.
-          It truncates bare; the drawer, one click away, states it in full. */}
-      <button
-        type="button"
-        aria-pressed={selected}
-        className="min-w-0 cursor-pointer truncate rounded-[var(--radius-cell)] text-left text-[13px] font-medium text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-      >
-        {opponent.name}
-      </button>
+      {/* It truncates bare; the drawer, one click away, states it in full. */}
+      <OpponentNameCell name={opponent.name} />
 
       <OpponentPlaysCell hand={opponent.hand} backhand={opponent.backhand} />
 
       <OpponentRecordCell
         wins={opponent.wins}
         losses={opponent.losses}
-        form={opponent.form}
+        bars={opponentFormBars(opponent.form, opponent.recent)}
       />
 
       <OpponentLastMatchCell lastMatch={opponent.lastMatch} />

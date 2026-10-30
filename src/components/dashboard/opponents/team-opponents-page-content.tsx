@@ -6,7 +6,6 @@ import { useRowSelection } from "@/components/dashboard/schedule/use-row-selecti
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { TeamOpponentsGrouping } from "@/lib/data/team-opponents";
 import { cn } from "@/lib/utils";
-import { opponentNameButton } from "./opponent-cells";
 import { OpponentsFilterStrip } from "./opponents-filter-strip";
 import { opponentRowId } from "./opponents-table";
 import {
@@ -106,7 +105,6 @@ export function TeamOpponentsPageContent({
     initialId: initialSelectedKey,
     param: "opponent",
     rowId: opponentRowId,
-    focusTarget: opponentNameButton,
   });
 
   // Looked up in every opponent, not the visible ones: when a cut hides the

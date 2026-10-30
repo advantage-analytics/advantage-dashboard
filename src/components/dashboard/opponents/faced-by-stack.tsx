@@ -30,7 +30,7 @@ type Player = Pick<
  * `players` arrive most-matches-first (`groupTeamOpponents`), so the three
  * faces drawn are the three who have met the opponent most.
  *
- * ── The one tooltip on the page ─────────────────────────────────────────────
+ * ── The faces' tooltip ──────────────────────────────────────────────────────
  * A face is a mark whose label is not on screen, which is exactly what the
  * Dark Tooltip names (`reference/chrome.md`); the clipped text beside it in
  * other cells gets none. The label lists the faces shown, in full; the detail

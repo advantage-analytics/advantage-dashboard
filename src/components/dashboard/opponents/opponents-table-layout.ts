@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, KeyboardEvent } from "react";
 
 /**
  * The Opponents tables' tracks and page frame — the personal table first, the
@@ -119,6 +119,43 @@ export const OPPONENTS_MIN_WIDTH = "min-w-[678px]";
 /** A 52px row, washed on an 8px-inset rounded box: 24px card inset − 16px. */
 export const OPPONENTS_ROW_BOX =
   "-mx-4 h-[52px] rounded-[var(--radius-element)] px-4";
+
+/**
+ * The row's hover, focus and selected wash. A form bar has a hover of its own
+ * (`data-own-hover`) and takes the row's wash away while it holds the pointer,
+ * so one hover shows at a time; a selected row keeps its wash regardless.
+ * `group/row` is what the Last match chevron fades in with.
+ */
+export function opponentRowWash(selected: boolean): string {
+  return selected
+    ? "group/row bg-[var(--surface-muted)] focus-visible:outline-none"
+    : "group/row hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none [&:has([data-own-hover]:hover)]:bg-transparent";
+}
+
+/**
+ * What makes a row the drawer's control, for both tables: a click opens it, and
+ * so does Enter or Space with the row itself focused, never from a link inside.
+ * `viaKeyboard` lets the drawer take focus for someone who cannot click into it.
+ */
+export function opponentRowControl(
+  key: string,
+  selected: boolean,
+  onToggle: (key: string, viaKeyboard: boolean) => void,
+) {
+  return {
+    role: "row",
+    tabIndex: 0,
+    "aria-current": selected ? ("true" as const) : undefined,
+    onClick: () => onToggle(key, false),
+    onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+      if (event.target !== event.currentTarget) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onToggle(key, true);
+      }
+    },
+  };
+}
 
 /**
  * The page's white ground, and the padded column inside it. Two elements, not
