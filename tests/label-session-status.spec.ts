@@ -144,6 +144,7 @@ const PUBLISHED = async () => ({
   points: 10,
   shots: 40,
   insightsRequested: true,
+  errorsJudged: true,
 });
 
 test.describe("writeLabelSessionComplete", () => {
@@ -186,7 +187,9 @@ test.describe("writeLabelSessionComplete", () => {
       {
         table: "verify_match",
         op: "rpc",
-        values: { p_match_id: MATCH_ID, p_actor: ACTOR },
+        // The publish's word that every error was marked rides along: the
+        // function stamps matches.errors_judged_at and recounts forced errors.
+        values: { p_match_id: MATCH_ID, p_actor: ACTOR, p_errors_judged: true },
         filters: {},
       },
     ]);

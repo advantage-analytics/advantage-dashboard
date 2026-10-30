@@ -136,3 +136,13 @@ is the runner's. Newest entries at the bottom.
 Design in the stash: `resultTypeOf(ending, stroke, errorKind)` writes "{Side} Forced Error"; `planApply().errorsJudged` reuses T12's `unmarkedErrors`; publish order unchanged (points → stats → verify) and `verify_match(p_errors_judged true)` stamps `errors_judged_at` then re-runs `calculate_match_stats` in the same transaction; old 2-arg overload dropped (a wrapper would make 2-arg calls ambiguous); grants service_role only. Migration file: `supabase/migrations/20261030000000_verify_match_errors_judged.sql` (contains a DROP, so it must go through `execute_sql` or be split).
 **To unblock:** the user applies that migration themselves (Supabase SQL editor), or adds a permission rule for the Supabase apply tool; then reset to `todo`, `git stash apply 1bca0a09`, run the gate and review.
 **stash:** 1bca0a09b8e047d35ed15d93d75358cc8831c5dc
+
+## T11 · Publish writes the error kind to result_type and sets the judged marker — done
+
+**gate:** mechanical PASS · completion VERDICT: pass
+**changed:** Restored from stash 1bca0a09 after the user asked for the migration to be applied ("apply for me using teh supabase mcp and connector"). The plain MCP declined (DROP); the claude.ai connector applied it as **20261030062341 verify_match_errors_judged**, and the repo file was renamed to that version. Live afterwards: only `verify_match(uuid,uuid,boolean)`, granted service_role (+ owner); body matches the file; 18 verified, 0 judged. Code: `resultTypeOf(ending, stroke, errorKind)` writes "{Side} Forced Error"; `planApply().errorsJudged` (T12's `unmarkedErrors`) passed as `p_errors_judged`; publish order unchanged, and `verify_match` stamps `errors_judged_at` then re-runs `calculate_match_stats` in the same transaction; `expectedStats` splits on the written string; `scripts/label-apply.ts` preview prints Forced errors. Specs: label-apply, label-apply-session, label-session-status.
+**follow-ups:**
+
+1. The migration's header comment says it was run with `execute_sql`; it went through the connector's `apply_migration`. Comment-only nit.
+2. `requestMatchInsights` runs inside the publish recompute, before verify stamps the marker; the AI summary usually sees it (async), but moving the request after verify would remove the race.
+3. No live end-to-end publish was run (Quan v Harazaki untouched); the first real Mark complete with every error marked is the live proof.

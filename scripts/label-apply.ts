@@ -112,6 +112,7 @@ function printPreview(
     ["Service winners", (s) => String(s.serviceWinners)],
     ["Winners", (s) => String(s.winners)],
     ["Unforced errors", (s) => String(s.unforcedErrors)],
+    ["Forced errors", (s) => String(s.forcedErrors)],
     [
       "First serves in",
       (s) =>

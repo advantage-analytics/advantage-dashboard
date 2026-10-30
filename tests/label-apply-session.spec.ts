@@ -2,11 +2,18 @@ import { expect, test } from "@playwright/test";
 
 import {
   backupObjectKey,
+  planApply,
   publishPlanned,
   type ApplyContext,
   type LabelApplyBackup,
-  type planApply,
 } from "@/lib/services/labels/apply-session";
+import { writeLabelSessionComplete } from "@/lib/services/labels/session-status-session";
+import type { AdminClient } from "@/lib/supabase/admin";
+import type { LabelPoint } from "@/lib/services/labels/session";
+import {
+  FIXTURE_POINT_IDS,
+  labelSessionFixture,
+} from "./fixtures/label-session";
 
 /** "Mark complete" publishes; these are the refusals that come before any write. */
 
@@ -116,4 +123,214 @@ test("backups are keyed match first, so the match purge accepts them as its own"
     "label-backups/m1/s1/2026-10-10T19-00-00-000Z.json",
   );
   expect(backupObjectKey(backup).startsWith("label-backups/m1/")).toBe(true);
+});
+
+// ── The judged marker ────────────────────────────────────────────────────────
+
+/**
+ * The fixture session with its one error (point 1, Lee's forehand out)
+ * marked `kind`, or left unmarked with null. Point 4 settles no ending and is
+ * left out of the publish; point 3 is deleted.
+ */
+function sessionContext(kind: LabelPoint["errorKind"]): ApplyContext {
+  const session = labelSessionFixture();
+  session.points = session.points.map((p) =>
+    p.id === FIXTURE_POINT_IDS.P1 ? { ...p, errorKind: kind } : p,
+  );
+  return {
+    session,
+    beside: { vendor: [], startTimeSeconds: 0, bestOf: 3 },
+  } as unknown as ApplyContext;
+}
+
+test("planApply: errorsJudged is T12's gate, and the error's result_type carries the mark", () => {
+  const forced = planApply(sessionContext("forced"));
+  expect(forced.errorsJudged).toBe(true);
+  const one = forced.built.points.find((p) => p.pointIndex === 0)!;
+  expect(one.result_type).toBe("Forehand Forced Error");
+  expect(one.errorKind).toBe("forced");
+  // The preview counts it apart, as calculate_match_stats will.
+  expect(forced.stats.p1.forcedErrors).toBe(1);
+  expect(forced.stats.p1.unforcedErrors).toBe(0);
+
+  expect(planApply(sessionContext("unforced")).errorsJudged).toBe(true);
+
+  const unmarked = planApply(sessionContext(null));
+  expect(unmarked.errorsJudged).toBe(false);
+  expect(
+    unmarked.built.points.find((p) => p.pointIndex === 0)!.result_type,
+  ).toBe("Forehand Unforced Error");
+  expect(unmarked.stats.p1.forcedErrors).toBe(0);
+  expect(unmarked.stats.p1.unforcedErrors).toBe(1);
+});
+
+interface Recorded {
+  table: string;
+  op: string;
+  values?: unknown;
+}
+
+/**
+ * A database for one publish, modelled where the marker matters:
+ * `calculate_match_stats` counts `forced_errors` only once
+ * `matches.errors_judged_at` is set (T1), and `verify_match` stamps it on
+ * `p_errors_judged` and runs the stat function again (the T11 migration).
+ * Every other call answers empty and is recorded.
+ */
+function fakeDatabase() {
+  const calls: Recorded[] = [];
+  const state = {
+    points: [] as Record<string, unknown>[],
+    errorsJudgedAt: null as string | null,
+    stats: null as { forced_errors: number | null } | null,
+    /** What the stat function saw of the marker, each time it ran. */
+    statsRuns: [] as boolean[],
+  };
+  const calculateMatchStats = () => {
+    const judged = state.errorsJudgedAt !== null;
+    state.statsRuns.push(judged);
+    state.stats = {
+      forced_errors: judged
+        ? state.points.filter((p) => {
+            const t = String(p.result_type ?? "");
+            return t.includes("Forced Error") && !t.includes("Unforced");
+          }).length
+        : null,
+    };
+  };
+  const client = {
+    async rpc(fn: string, args: Record<string, unknown>) {
+      calls.push({ table: fn, op: "rpc", values: args });
+      switch (fn) {
+        case "claim_label_publish_lease":
+          return { data: "2026-10-29T20:00:00.000000+00:00", error: null };
+        case "append_label_backup_key":
+          return { data: true, error: null };
+        case "calculate_match_stats":
+          calculateMatchStats();
+          return { data: null, error: null };
+        case "verify_match":
+          if (args.p_errors_judged === true) {
+            state.errorsJudgedAt = "2026-10-29T20:00:01+00:00";
+            calculateMatchStats();
+          }
+          return { data: "2026-10-29T20:00:01+00:00", error: null };
+        default:
+          return { data: null, error: null };
+      }
+    },
+    storage: {
+      from: () => ({ upload: async () => ({ error: null }) }),
+    },
+    functions: { invoke: async () => ({ error: null }) },
+    from(table: string) {
+      const call: Recorded = { table, op: "select" };
+      calls.push(call);
+      const answer = () => {
+        if (table === "label_sessions" && call.op === "select") {
+          return {
+            data: {
+              status: "labelling",
+              marks_enabled: true,
+              match_id: "33333333-3333-4333-8333-333333333333",
+            },
+            error: null,
+          };
+        }
+        if (call.op === "insert" && table === "points") {
+          const rows = call.values as Record<string, unknown>[];
+          state.points.push(...rows);
+          return {
+            data: rows.map((r) => ({
+              id: `pt-${r.point_number}`,
+              point_number: r.point_number,
+            })),
+            error: null,
+          };
+        }
+        if (call.op === "update") return { data: [{ id: "s" }], error: null };
+        if (table === "match_stats") {
+          return { data: state.stats ? [state.stats] : [], error: null };
+        }
+        return { data: [], error: null, count: 0 };
+      };
+      const builder: Record<string, unknown> = {};
+      for (const op of ["insert", "update", "upsert", "delete"]) {
+        builder[op] = (values?: unknown) => {
+          call.op = op;
+          call.values = values;
+          return builder;
+        };
+      }
+      for (const pass of ["select", "eq", "in", "order"]) {
+        builder[pass] = () => builder;
+      }
+      builder.range = async () => answer();
+      builder.maybeSingle = async () => answer();
+      builder.then = (
+        resolve: (v: unknown) => unknown,
+        reject?: (e: unknown) => unknown,
+      ) => Promise.resolve(answer()).then(resolve, reject);
+      return builder;
+    },
+  };
+  return { calls, state, db: client as unknown as AdminClient };
+}
+
+/** Mark complete over the fake: the real publish, then the real verify step. */
+async function markComplete(kind: LabelPoint["errorKind"]) {
+  const fake = fakeDatabase();
+  const context = sessionContext(kind);
+  const result = await writeLabelSessionComplete({
+    supabase: fake.db,
+    sessionId: context.session.id,
+    actorId: "44444444-4444-4444-8444-444444444444",
+    publish: (db) =>
+      publishPlanned({
+        db,
+        context,
+        plan: planApply(context),
+        acceptScore: true,
+      }),
+  });
+  return { ...fake, result };
+}
+
+test("publish with every error marked: points, stats, then verify with p_errors_judged — forced_errors counted", async () => {
+  const { calls, state, result } = await markComplete("forced");
+  expect(result).toMatchObject({ ok: true, status: "complete" });
+
+  // The order the task fixes: the points are written, calculate_match_stats
+  // runs, and only then verify_match — which carries the publish's word.
+  const at = (table: string, op = "rpc") =>
+    calls.findIndex((c) => c.table === table && c.op === op);
+  expect(at("points", "insert")).toBeGreaterThan(-1);
+  expect(at("points", "insert")).toBeLessThan(at("calculate_match_stats"));
+  expect(at("calculate_match_stats")).toBeLessThan(at("verify_match"));
+  expect(calls[at("verify_match")].values).toEqual({
+    p_match_id: "33333333-3333-4333-8333-333333333333",
+    p_actor: "44444444-4444-4444-8444-444444444444",
+    p_errors_judged: true,
+  });
+
+  // The publish's own recompute ran before the marker existed, so verify_match
+  // runs the stat function again after stamping it: that second run is what
+  // makes forced_errors a number.
+  expect(state.statsRuns).toEqual([false, true]);
+  expect(state.errorsJudgedAt).not.toBeNull();
+  expect(state.stats?.forced_errors).toBe(1);
+});
+
+test("publish with an unmarked error (a stale client): p_errors_judged false, the column stays null", async () => {
+  const { calls, state, result } = await markComplete(null);
+  expect(result).toMatchObject({ ok: true, status: "complete" });
+  const verify = calls.find((c) => c.table === "verify_match");
+  expect(verify?.values).toMatchObject({ p_errors_judged: false });
+  expect(state.statsRuns).toEqual([false]);
+  expect(state.errorsJudgedAt).toBeNull();
+  expect(state.stats?.forced_errors).toBeNull();
+  // The unmarked error still publishes, as unforced.
+  expect(state.points.map((p) => p.result_type)).toContain(
+    "Forehand Unforced Error",
+  );
 });

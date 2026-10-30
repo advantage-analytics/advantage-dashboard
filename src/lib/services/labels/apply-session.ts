@@ -40,6 +40,7 @@ import {
 } from "./apply";
 import { chunksOf } from "./chunks";
 import { labelScores } from "./score";
+import { unmarkedErrors } from "./session-status";
 import {
   enteredScore,
   labelSetScores,
@@ -137,6 +138,10 @@ export function planApply({ session, beside }: ApplyContext) {
     entered,
     mismatch,
     stats: expectedStats(built.points),
+    // T12's gate, read again here: a publish with an unmarked error can only
+    // come from a stale client. Passed to `verify_match` as p_errors_judged;
+    // false leaves `matches.errors_judged_at` as it is.
+    errorsJudged: unmarkedErrors(session.points, true).length === 0,
   };
 }
 
@@ -368,6 +373,14 @@ export type PublishResult =
       backupKey: string;
       insightsRequested: boolean;
       statsBefore: Row[];
+      /**
+       * Every error in the session was marked forced or unforced
+       * (`planApply`): what Mark complete passes `verify_match` as
+       * `p_errors_judged`, which stamps `matches.errors_judged_at` and
+       * re-counts `match_stats.forced_errors`. The publish itself never
+       * stamps it — scripts/label-apply.ts publishes without verifying.
+       */
+      errorsJudged: boolean;
     }
   | { ok: false; error: string };
 
@@ -471,6 +484,7 @@ export async function publishPlanned(params: {
     backupKey,
     insightsRequested,
     statsBefore,
+    errorsJudged: plan.errorsJudged,
   };
 }
 

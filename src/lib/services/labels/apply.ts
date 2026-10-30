@@ -57,6 +57,7 @@ import {
   liveShotsInOrder,
   opponent,
   type LabelEnding,
+  type LabelErrorKind,
   type LabelPoint,
   type LabelShot,
   type LabelShotResult,
@@ -204,13 +205,21 @@ const SIDE_OF_STROKE: Partial<Record<LabelStroke, string>> = {
 /**
  * `label_points.ending` → `points.result_type` (inverts seed.ts
  * `labelEnding`), the side from the stroke that ended the point. A volley
- * names no side ("Winner"). Labels do not split forced from unforced errors
- * and the derivation never emits a forced one, so every error is unforced —
- * the only error string `calculate_match_stats` counts.
+ * names no side ("Winner"). An error carries the labeller's
+ * `label_points.error_kind`: "Forced Error" when marked forced, else
+ * "Unforced Error" — an unmarked error (null) still publishes as unforced,
+ * which is what every reader counted before the split existed.
+ * `calculate_match_stats` counts the forced string only on a match whose
+ * errors were all judged (`matches.errors_judged_at`, stamped by
+ * `verify_match` when Mark complete publishes with every error marked).
+ *
+ * `self_review_result_type()` (migration 20261028025013) is this function's
+ * SQL twin, used by the self-review views: change one and change the other.
  */
 export function resultTypeOf(
   ending: LabelEnding | null,
   lastStroke: LabelStroke | null,
+  errorKind: LabelErrorKind | null = null,
 ): string | null {
   const side = lastStroke ? SIDE_OF_STROKE[lastStroke] : undefined;
   switch (ending) {
@@ -222,8 +231,10 @@ export function resultTypeOf(
       return "Service Winner";
     case "winner":
       return side ? `${side} Winner` : "Winner";
-    case "error":
-      return side ? `${side} Unforced Error` : "Unforced Error";
+    case "error": {
+      const kind = errorKind === "forced" ? "Forced Error" : "Unforced Error";
+      return side ? `${side} ${kind}` : kind;
+    }
     default:
       return null;
   }
@@ -502,7 +513,11 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
       won_by_player1: winner === "p1",
       // Null, not 0, off the video: AVG(rally_length) skips it.
       rally_length: offVideo ? null : Math.max(0, played.length - from),
-      result_type: resultTypeOf(ending, last?.stroke ?? null),
+      result_type: resultTypeOf(
+        ending,
+        last?.stroke ?? null,
+        ending === "error" ? point.errorKind : null,
+      ),
       is_break_point: pressure.isBreakPoint,
       is_set_point: pressure.isSetPoint,
       is_match_point: pressure.isMatchPoint,
@@ -641,9 +656,12 @@ export function expectedStats(
         break;
       default:
         if (point.result_type?.endsWith("Winner")) stats[striker].winners += 1;
-        else if (point.result_type?.endsWith("Unforced Error")) {
-          if (point.errorKind === "forced") stats[striker].forcedErrors += 1;
-          else stats[striker].unforcedErrors += 1;
+        else if (point.result_type?.endsWith("Error")) {
+          // As calculate_match_stats splits them: "…Forced Error" (not
+          // "…Unforced") is forced, every other error string unforced.
+          if (point.result_type.endsWith("Unforced Error")) {
+            stats[striker].unforcedErrors += 1;
+          } else stats[striker].forcedErrors += 1;
         }
     }
     const firstServe = point.shots.find((s) => s.shot_type === "First Serve");

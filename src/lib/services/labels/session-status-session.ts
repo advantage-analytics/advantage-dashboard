@@ -53,6 +53,12 @@ export interface LabelPublishSummary {
   insightsRequested: boolean;
   /** What the publish went past: a point left out, or written partly. */
   leftOut?: string[];
+  /**
+   * Every error was marked forced or unforced (apply-session.ts
+   * `planApply`). Passed to `verify_match` as `p_errors_judged`; absent
+   * reads as false, which leaves `matches.errors_judged_at` as it is.
+   */
+  errorsJudged?: boolean;
 }
 
 export type LabelSessionStatusResult = LabelOpResult<{
@@ -126,7 +132,12 @@ export async function writeLabelSessionComplete(params: {
   try {
     const result = await publish(supabase, sessionId);
     const verified = result.ok
-      ? await verifyMatchOf(supabase, sessionId, actorId)
+      ? await verifyMatchOf(
+          supabase,
+          sessionId,
+          actorId,
+          result.errorsJudged === true,
+        )
       : null;
     if (!result.ok) {
       failure = result.error;
@@ -243,12 +254,18 @@ export async function writeLabelSessionReopen(params: {
 
 /**
  * Verify the session's match as `actorId` (`verify_match`): the match it
- * verified, or the sentence Complete answers with.
+ * verified, or the sentence Complete answers with. `errorsJudged` is the
+ * publish's word that every error was marked: `verify_match` then stamps
+ * `matches.errors_judged_at` and re-runs `calculate_match_stats`, so the
+ * stat row the publish already computed picks up `forced_errors`. It runs
+ * after the publish's own recompute on purpose — a publish whose statistics
+ * could not be rebuilt is never verified.
  */
 async function verifyMatchOf(
   supabase: AdminClient,
   sessionId: string,
   actorId: string,
+  errorsJudged: boolean,
 ): Promise<{ matchId: string } | { error: string }> {
   const { data: row, error: readError } = await supabase
     .from("label_sessions")
@@ -263,6 +280,7 @@ async function verifyMatchOf(
   const { error } = await supabase.rpc("verify_match", {
     p_match_id: row.match_id,
     p_actor: actorId,
+    p_errors_judged: errorsJudged,
   });
   if (error) {
     return {
