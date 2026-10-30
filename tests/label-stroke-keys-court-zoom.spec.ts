@@ -370,6 +370,7 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     // so a serve still asks whether the rest of the point follows.
     expect(source).toContain("? () => hitterKey.current()");
     expect(source).toContain("requestPatchShot(shot.id, { hitter });");
+    expect(source).toContain("const hitter = switchedHitter(");
     expect(isStrokeKey("h")).toBe(false);
     expect(source).toMatch(/consoleKey &&\n\s+!event\.metaKey/);
   });

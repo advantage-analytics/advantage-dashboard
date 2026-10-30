@@ -16,7 +16,6 @@ import {
 import {
   labelProgress,
   liveShotsInOrder,
-  opponent,
   orderLabelShots,
   type LabelGameType,
   type LabelPoint,
@@ -90,6 +89,7 @@ import {
   ADD_SHOT_AT_START,
   planAddedShot,
   planPointMove,
+  switchedHitter,
   type PlannedPointMove,
   type LabelDeleteReason,
   type LabelGame,
@@ -3068,20 +3068,21 @@ export function LabelConsole({
       setPlacement(flipPlacement);
       return true;
     };
-    // A stroke with no hitter takes the other player from the stroke before
-    // it; with neither, H has nothing to switch. Through `requestPatchShot`,
-    // so a serve asks whether the rest of the point follows, as the menu does.
+    // A stroke with no hitter takes the one an added stroke would
+    // (`switchedHitter`). Through `requestPatchShot`, so a serve asks whether
+    // the rest of the point follows, as the menu does.
     hitterKey.current = () => {
       if (!operable || confirm) return false;
       const shot = keyShot();
-      if (!shot) return false;
-      let hitter = shot.hitter ? opponent(shot.hitter) : null;
-      if (!hitter) {
-        const owner = pointOfShot(points, shot.id);
-        const live = owner ? liveShotsInOrder(owner, drawsGhosts(marks)) : [];
-        const before = live[live.findIndex((s) => s.id === shot.id) - 1];
-        hitter = before?.hitter ? opponent(before.hitter) : null;
-      }
+      const owner = shot && pointOfShot(points, shot.id);
+      if (!shot || !owner) return false;
+      const live = liveShotsInOrder(owner, drawsGhosts(marks));
+      const at = live.findIndex((s) => s.id === shot.id);
+      const hitter = switchedHitter(
+        shot,
+        at > 0 ? live[at - 1] : null,
+        owner.server,
+      );
       if (!hitter) return false;
       requestPatchShot(shot.id, { hitter });
       return true;

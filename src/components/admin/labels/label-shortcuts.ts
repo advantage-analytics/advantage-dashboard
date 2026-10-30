@@ -74,7 +74,7 @@ export const LABEL_SHORTCUT_GROUPS: readonly LabelShortcutGroup[] = [
       {
         keys: ["H"],
         action: "Switch hitter",
-        note: "To the other player. A serve asks about the rest of the point",
+        note: "To the other player. A serve may ask about the rest of the point",
       },
       { keys: ["T"], action: "Time to this frame" },
     ],
