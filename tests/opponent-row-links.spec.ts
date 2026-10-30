@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { opponentFormBars } from "@/components/dashboard/opponents/opponent-form-links";
 import type { OpponentFormBar } from "@/components/dashboard/opponents/opponent-form-links";
+import { opponentRowControl } from "@/components/dashboard/opponents/opponents-table-layout";
 import type {
   PersonalOpponentForm,
   PersonalOpponentRecentMatch,
@@ -86,7 +87,7 @@ test.describe("opponentFormBars", () => {
       recent("middle", "2026-09-01"),
       recent("oldest", "2026-08-01"),
     ]);
-    expect(bars.map((bar) => [bar.result, bar.match?.id])).toEqual([
+    expect(bars.map((bar) => [bar.result, bar.match.id])).toEqual([
       ["loss", "oldest"],
       ["win", "middle"],
       ["pending", "newest"],
@@ -98,25 +99,24 @@ test.describe("opponentFormBars", () => {
       ["win", "win", "win", "win", "win"],
       ["a", "b", "c", "d", "e", "f"].map((id) => recent(id, "2026-10-01")),
     );
-    expect(bars.map((bar) => bar.match?.id)).toEqual(["e", "d", "c", "b", "a"]);
+    expect(bars.map((bar) => bar.match.id)).toEqual(["e", "d", "c", "b", "a"]);
   });
 
-  test("a bar with no match left to pair stays a plain bar", () => {
+  test("a bar with no match left to pair is dropped, never drawn dead", () => {
     const bars = opponentFormBars(
       ["win", "loss"],
       [recent("only", "2026-10-01")],
     );
-    expect(bars[0].match).toBeNull();
-    expect(bars[1].match?.id).toBe("only");
+    expect(bars.map((bar) => bar.match.id)).toEqual(["only"]);
   });
 
   test("names the player only when the table can say who played", () => {
     const match = { ...recent("a", "2026-10-01"), rosterPlayerId: "p1" };
-    expect(opponentFormBars(["win"], [match])[0].match?.player).toBeNull();
+    expect(opponentFormBars(["win"], [match])[0].match.player).toBeNull();
     expect(
       opponentFormBars(["win"], [match], (m) =>
         m.rosterPlayerId === "p1" ? "Daniel Reyes" : null,
-      )[0].match?.player,
+      )[0].match.player,
     ).toBe("Daniel Reyes");
   });
 });
@@ -228,18 +228,67 @@ test.describe("the form bars", () => {
 });
 
 test.describe("the row stays the drawer's control", () => {
+  const key = (name: string, sameTarget = true) => {
+    const row = {};
+    let prevented = false;
+    return {
+      event: {
+        key: name,
+        target: sameTarget ? row : {},
+        currentTarget: row,
+        preventDefault: () => {
+          prevented = true;
+        },
+      } as unknown as React.KeyboardEvent<HTMLElement>,
+      prevented: () => prevented,
+    };
+  };
+
+  test("a click toggles it, not as a keyboard press", () => {
+    const calls: [string, boolean][] = [];
+    opponentRowControl("k", false, (...a) => calls.push(a)).onClick();
+    expect(calls).toEqual([["k", false]]);
+  });
+
+  test("Enter or Space on the row itself opens it, for the keyboard", () => {
+    for (const name of ["Enter", " "]) {
+      const calls: [string, boolean][] = [];
+      const press = key(name);
+      opponentRowControl("k", false, (...a) => calls.push(a)).onKeyDown(
+        press.event,
+      );
+      expect(calls).toEqual([["k", true]]);
+      expect(press.prevented()).toBe(true);
+    }
+  });
+
+  test("Enter on a link inside the row is left to the link", () => {
+    const calls: [string, boolean][] = [];
+    const press = key("Enter", false);
+    opponentRowControl("k", false, (...a) => calls.push(a)).onKeyDown(
+      press.event,
+    );
+    expect(calls).toEqual([]);
+    expect(press.prevented()).toBe(false);
+  });
+
+  test("only the selected row reads as current", () => {
+    const noop = () => {};
+    expect(opponentRowControl("k", true, noop)["aria-current"]).toBe("true");
+    expect(
+      opponentRowControl("k", false, noop)["aria-current"],
+    ).toBeUndefined();
+  });
+
   for (const file of ["opponents-table.tsx", "team-opponents-table.tsx"]) {
-    test(`${file}: Enter or Space on the row opens it, not on a link inside`, () => {
+    test(`${file} draws its row from that control, with no button`, () => {
       const source = readFileSync(
         `src/components/dashboard/opponents/${file}`,
         "utf8",
       );
-      expect(source).toContain("tabIndex={0}");
       expect(source).toContain(
-        "if (event.target !== event.currentTarget) return;",
+        "{...opponentRowControl(opponent.key, selected, onToggle)}",
       );
-      expect(source).toContain("onToggle(opponent.key, true)");
-      expect(source).toContain("onToggle(opponent.key, false)");
       expect(source).not.toContain("<button");
     });
   }

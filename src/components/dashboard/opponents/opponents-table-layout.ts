@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, KeyboardEvent } from "react";
 
 /**
  * The Opponents tables' tracks and page frame — the personal table first, the
@@ -130,6 +130,31 @@ export function opponentRowWash(selected: boolean): string {
   return selected
     ? "group/row bg-[var(--surface-muted)] focus-visible:outline-none"
     : "group/row hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none [&:has([data-own-hover]:hover)]:bg-transparent";
+}
+
+/**
+ * What makes a row the drawer's control, for both tables: a click opens it, and
+ * so does Enter or Space with the row itself focused, never from a link inside.
+ * `viaKeyboard` lets the drawer take focus for someone who cannot click into it.
+ */
+export function opponentRowControl(
+  key: string,
+  selected: boolean,
+  onToggle: (key: string, viaKeyboard: boolean) => void,
+) {
+  return {
+    role: "row",
+    tabIndex: 0,
+    "aria-current": selected ? ("true" as const) : undefined,
+    onClick: () => onToggle(key, false),
+    onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+      if (event.target !== event.currentTarget) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onToggle(key, true);
+      }
+    },
+  };
 }
 
 /**

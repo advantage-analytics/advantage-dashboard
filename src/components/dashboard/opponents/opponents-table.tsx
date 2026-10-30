@@ -13,6 +13,7 @@ import {
   OPPONENTS_MIN_WIDTH,
   OPPONENTS_ROW_BOX,
   OPPONENTS_ROW_FRAME,
+  opponentRowControl,
   opponentRowWash,
 } from "./opponents-table-layout";
 import { OpponentsTableHeader } from "./opponents-table-header";
@@ -108,17 +109,7 @@ function OpponentRow({
   return (
     <div
       id={opponentRowId(opponent.key)}
-      role="row"
-      tabIndex={0}
-      aria-current={selected ? "true" : undefined}
-      onClick={() => onToggle(opponent.key, false)}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onToggle(opponent.key, true);
-        }
-      }}
+      {...opponentRowControl(opponent.key, selected, onToggle)}
       className={cn(
         OPPONENTS_ROW_FRAME,
         OPPONENTS_ROW_BOX,

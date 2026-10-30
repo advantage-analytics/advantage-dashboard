@@ -4,6 +4,11 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
+import {
+  FORM_TICK,
+  formTickColor,
+  formTicksSummary,
+} from "@/components/dashboard/shared/form-ticks";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import {
   Tooltip,
@@ -108,14 +113,7 @@ export function OpponentRecordCell({
   );
 }
 
-const BAR = "w-[2.5px] rounded-[1px]";
 const BAR_SLOT = "flex h-7 w-[5.5px] items-center justify-center";
-
-function barColor(result: OpponentFormBar["result"]): string {
-  if (result === "win") return "var(--viz-good)";
-  if (result === "loss") return "var(--viz-bad)";
-  return "var(--ink-300)";
-}
 
 function barLabel(bar: OpponentFormBar): string {
   const outcome =
@@ -124,18 +122,19 @@ function barLabel(bar: OpponentFormBar): string {
       : bar.result === "loss"
         ? "Lost"
         : "No result yet";
-  const date = bar.match?.date
+  const date = bar.match.date
     ? formatMatchDayShortYear(bar.match.date)
     : "no date";
   return `${outcome}, ${date}`;
 }
 
 /**
- * `FormTicks`' strip with each bar a link to its match. The bar keeps its
- * geometry; the 5.5px slot around it is the bar plus its 3px gap, so the strip
- * has no dead gaps to fall through, and the -1.5px margin keeps the bars on the
- * shipped x. A hovered bar grows and its siblings fade, and it opens the dark
- * readout the DS gives a hovered chart mark (`reference/components.md`).
+ * `FormTicks`' strip, on its own tick pieces, with each bar a link to its
+ * match. The bar keeps its geometry; the 5.5px slot around it is the bar plus
+ * its 3px gap, so the strip has no dead gaps to fall through, and the -1.5px
+ * margin keeps the bars on the shipped x. A hovered bar grows and its siblings
+ * fade, and it opens the dark readout the DS gives a hovered chart mark
+ * (`reference/components.md`).
  *
  * Bars not yet played take no hover and no click, so the row gets those.
  *
@@ -149,56 +148,41 @@ function OpponentFormStrip({ bars }: { bars: readonly OpponentFormBar[] }) {
   return (
     <>
       <span className="sr-only">
-        {bars.length === 0
-          ? "No form yet"
-          : `Last ${bars.length}: ${bars
-              .map(({ result }) =>
-                result === "win" ? "W" : result === "loss" ? "L" : "Pending",
-              )
-              .join(" ")}`}
+        {formTicksSummary(bars.map((bar) => bar.result))}
       </span>
       {/* One provider, so sliding along the strip swaps readouts at once. */}
       <TooltipProvider delayDuration={0} disableHoverableContent>
         <span className="group/form -mx-[1.5px] flex items-center">
-          {bars.map((bar, index) =>
-            bar.match ? (
-              <Tooltip key={bar.match.id}>
-                <TooltipTrigger asChild>
-                  <Link
-                    href={`/dashboard/matches/${bar.match.id}`}
-                    prefetch={false}
-                    tabIndex={-1}
-                    aria-label={barLabel(bar)}
-                    data-own-hover
-                    onClick={(event) => event.stopPropagation()}
-                    className={`group/bar touch:pointer-events-none ${BAR_SLOT}`}
-                  >
-                    <span
-                      className={`${BAR} h-3 transition-[opacity,height] duration-[var(--duration-hover)] group-hover/bar:h-4 group-hover/bar:!opacity-100 group-hover/form:opacity-40`}
-                      style={{ background: barColor(bar.result) }}
-                    />
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  showArrow={false}
-                  className="flex flex-col items-start gap-0.5 rounded-[12px] border-0 px-3 py-2.5"
+          {bars.map((bar) => (
+            <Tooltip key={bar.match.id}>
+              <TooltipTrigger asChild>
+                <Link
+                  href={`/dashboard/matches/${bar.match.id}`}
+                  prefetch={false}
+                  tabIndex={-1}
+                  aria-label={barLabel(bar)}
+                  data-own-hover
+                  onClick={(event) => event.stopPropagation()}
+                  className={`group/bar touch:pointer-events-none ${BAR_SLOT}`}
                 >
-                  <FormBarReadout match={bar.match} />
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <span key={`plain-${index}`} aria-hidden className={BAR_SLOT}>
-                <span
-                  className={`${BAR} h-3`}
-                  style={{ background: barColor(bar.result) }}
-                />
-              </span>
-            ),
-          )}
+                  <span
+                    className={`${FORM_TICK} h-3 transition-[opacity,height] duration-[var(--duration-hover)] group-hover/bar:h-4 group-hover/bar:!opacity-100 group-hover/form:opacity-40`}
+                    style={{ background: formTickColor(bar.result) }}
+                  />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                showArrow={false}
+                className="flex flex-col items-start gap-0.5 rounded-[12px] border-0 px-3 py-2.5"
+              >
+                <FormBarReadout match={bar.match} />
+              </TooltipContent>
+            </Tooltip>
+          ))}
           {Array.from({ length: ghosts }, (_, index) => (
             <span key={`ghost-${index}`} aria-hidden className={BAR_SLOT}>
-              <span className={`${BAR} h-3 bg-[var(--ink-100)]`} />
+              <span className={`${FORM_TICK} h-3 bg-[var(--ink-100)]`} />
             </span>
           ))}
         </span>
@@ -208,11 +192,7 @@ function OpponentFormStrip({ bars }: { bars: readonly OpponentFormBar[] }) {
 }
 
 /** Score over date and event; the team table adds who played it. */
-function FormBarReadout({
-  match,
-}: {
-  match: NonNullable<OpponentFormBar["match"]>;
-}) {
+function FormBarReadout({ match }: { match: OpponentFormBar["match"] }) {
   const sets = playedSets(match.sets);
   const when = [
     match.date ? formatMatchDayShortYear(match.date) : null,
@@ -258,8 +238,9 @@ function FormBarReadout({
  * The trailing chevron is the DS's mark for a record that travels
  * (`reference/tables.md` law 3), and it is what tells this cell from the row:
  * the row opens the drawer, this leaves the page. It fades in with the row and
- * goes from ink-300 to ink-900 on the link, and it always holds its width, so
- * nothing shifts. No hover on touch, so there it simply stays.
+ * goes from ink-300 to ink-900 on the link. It sits just outside the link's
+ * flow, in the row's padding, so it takes no width from a long score and nothing
+ * shifts. No hover on touch, so there it simply stays.
  *
  * `ResultMark`'s own null means a level dual, which a singles match cannot be,
  * so an undecided result draws the dash and null never reaches it.
@@ -273,7 +254,7 @@ export function OpponentLastMatchCell({
       href={`/dashboard/matches/${lastMatch.id}`}
       prefetch={false}
       onClick={(event) => event.stopPropagation()}
-      className="group/last flex w-fit max-w-full min-w-0 items-center gap-2.5 rounded-[var(--radius-cell)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+      className="group/last relative flex w-fit max-w-full min-w-0 items-center gap-2.5 rounded-[var(--radius-cell)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
     >
       <span className="sr-only">Open last match:</span>
       <span className="tabular min-w-[52px] shrink-0 text-[12px] whitespace-nowrap text-[var(--ink-700)]">
@@ -303,7 +284,7 @@ export function OpponentLastMatchCell({
       <ChevronRight
         aria-hidden
         strokeWidth={1.5}
-        className="-ml-1 size-[13px] shrink-0 text-[var(--ink-300)] opacity-0 transition-[opacity,color] duration-[var(--duration-hover)] group-hover/last:text-[var(--ink-900)] group-hover/row:opacity-100 group-focus-visible/last:text-[var(--ink-900)] group-focus-visible/last:opacity-100 group-focus-visible/row:opacity-100 touch:opacity-100"
+        className="absolute top-1/2 left-full ml-1.5 size-[13px] -translate-y-1/2 text-[var(--ink-300)] opacity-0 transition-[opacity,color] duration-[var(--duration-hover)] group-hover/last:text-[var(--ink-900)] group-hover/row:opacity-100 group-focus-visible/last:text-[var(--ink-900)] group-focus-visible/last:opacity-100 group-focus-visible/row:opacity-100 touch:opacity-100"
       />
     </Link>
   );

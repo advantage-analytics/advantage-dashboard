@@ -101,7 +101,7 @@ master-detail split is retired; its detail is the peek drawer below.
    drawer (below) and carry **no chevron** — there is nothing to travel to;
    the wash persists on the selected row. A link inside a container row that
    travels to a record may carry the chevron in its own cell, faded in with the
-   row (ink-300) and ink-900 on the link, always holding its width: the row
+   row (ink-300) and ink-900 on the link, taking no width from the cell: the row
    still peeks, and the chevron says this one cell leaves the page (2026-10-30,
    the Opponents Last match cell, `opponents/opponent-cells.tsx`; a grey wash on
    the cell was built and rejected). `chevron-down` only when a row
