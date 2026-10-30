@@ -13,12 +13,21 @@ interface RecoveryCopy {
  *
  * - `allowance` — the monthly analysis budget ran out. `note` (from the
  *   job/workspace) already says what's left and when it resets, so callers
- *   show that stored note as the headline/body when one is present; this
- *   entry is the fallback copy.
+ *   show that stored note as the headline when one is present; this entry is
+ *   the fallback title and the body under it.
  * - `permission` — the signed-in account can't submit for this workspace
  *   (role or billing setup). Directs the player to their team's owner.
  * - `ceiling` — the job has used every resubmission `resubmitJob()` allows
  *   (see `MAX_TOTAL_ATTEMPTS`). Nothing left to press; only a human can help.
+ *
+ * `allowance` and `permission` only ever reach a player on a stalled
+ * `uploaded` row (`classifyFailure()` rule 1): the video is stored and the
+ * refusal clears without us — the month resets, credits are bought, an
+ * override or the pilot is granted — and nothing resends it on its own. So
+ * both offer "Send for analysis", the same `{ jobId }` re-submission
+ * `RetrySubmission` makes. The route re-runs the quota and eligibility checks,
+ * so pressing it early is refused again with its own sentence and spends
+ * nothing. `ceiling` stays without one: the route refuses past it.
  */
 export const WAIT_OR_ASK_VARIANTS: Record<
   "allowance" | "permission" | "ceiling",
@@ -26,17 +35,19 @@ export const WAIT_OR_ASK_VARIANTS: Record<
 > = {
   allowance: {
     title: "Not enough analysis time left this month",
-    cardBody: "Your stored note explains what's left and when it resets.",
-    drawerBody: "Your stored note explains what's left and when it resets.",
-    action: null,
+    cardBody:
+      "Your video is kept. Send it for analysis once more time is available — if there still isn't enough, nothing is used.",
+    drawerBody:
+      "Your video is kept. Send it once more time is available; nothing is used if there isn't enough.",
+    action: "Send for analysis",
   },
   permission: {
     title: "This match can't be sent for analysis yet",
     cardBody:
-      "Your account can't send this match for analysis. Ask your team's owner to check your role.",
+      "Your video is kept, but your account can't send it for analysis yet. Ask your team's owner to check your role, then send it.",
     drawerBody:
-      "Your account can't send this match for analysis. Ask your team's owner to check your role.",
-    action: null,
+      "Your video is kept. Ask your team's owner to check your role, then send it.",
+    action: "Send for analysis",
   },
   ceiling: {
     title: "This analysis has been tried three times",

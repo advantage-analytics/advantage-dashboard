@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   backupObjectKey,
+  labelFold,
   planApply,
   publishPlanned,
   type ApplyContext,
@@ -544,4 +545,14 @@ test("the script's publish is unchanged for the summary: asked after the stats, 
       acceptScore: true,
     }),
   ).toMatchObject({ ok: true, insightsRequested: false });
+});
+
+test("a publish answers the report's fold note from the labelled score", () => {
+  // Matching score, or a video marked as ending early: the note goes away.
+  expect(labelFold(plan({}))).toEqual({ reconciled: true, source: "labels" });
+  // A mismatch published anyway (Mark complete accepts it): the note stays.
+  expect(labelFold(plan({ mismatch: true }))).toEqual({
+    reconciled: false,
+    source: "labels",
+  });
 });

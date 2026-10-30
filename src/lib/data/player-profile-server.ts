@@ -5,6 +5,7 @@ import {
   buildScoreString,
   getInitials,
   matchOutcome,
+  scoreWinner,
   shortName,
   type MatchScore,
 } from "@/lib/data/match-utils";
@@ -29,6 +30,7 @@ import {
 import {
   chipsFrom,
   dualRecordFrom,
+  fromPlayerSide,
   lineHistoryFrom,
   resolveLine,
   resolveSchool,
@@ -46,6 +48,8 @@ import {
   type ProfileStatRow,
 } from "@/lib/data/player-profile";
 import type { MemberRole } from "@/lib/data/team-settings-server";
+import { enrichMatches } from "@/lib/data/matches-page-server";
+import type { DbMatch, DisplayMatch } from "@/lib/data/matches-list-types";
 
 /**
  * One player, everything the program knows about them — Platform Audit
@@ -112,6 +116,9 @@ export interface PlayerProfile {
   role: MemberRole;
   classYear: string | null;
   lineupSpot: number | null;
+  /** Their saved hand and backhand, raw ("right", "two-handed"), or null. */
+  hand: string | null;
+  backhand: string | null;
   managedBy: "coach" | "self";
   matchesPlayed: number;
   wins: number;
@@ -123,8 +130,12 @@ export interface PlayerProfile {
   /** Any stats row on this player's side — what turns the empty strip real. */
   hasStats: boolean;
   lastMatch: ProfileLastMatch | null;
-  /** Every match, newest first. */
-  history: ProfileMatchRow[];
+  /**
+   * Every match, newest first, as the raw rows the Matches list is built
+   * from — with which side this player was on. Server-only: `getPlayerMatchList`
+   * turns it into the list's own rows.
+   */
+  listSource: ProfileListSource[];
   lines: LineRow[];
   serve: {
     zoneStats: Record<ZoneKey, ZoneStats> | null;
@@ -141,6 +152,12 @@ export interface PlayerProfile {
   };
 }
 
+/** A match row in the shape `enrichMatches` reads, and this player's side of it. */
+export interface ProfileListSource {
+  row: DbMatch & { player2_id: string | null; created_by: string | null };
+  isPlayer1: boolean;
+}
+
 interface DbRosterFullRow {
   player_id: string;
   profile_id: string | null;
@@ -151,6 +168,9 @@ interface DbRosterFullRow {
   class_year: string | null;
   lineup_spot: number | null;
   managed_by: string;
+  /** `coalesce(users.hand, program_players.hand)` — the claimed player's own once claimed. */
+  hand?: string | null;
+  backhand?: string | null;
 }
 
 interface DbMatchRow {
@@ -163,6 +183,17 @@ interface DbMatchRow {
   date: string | null;
   tournament_name: string | null;
   event_entry_id: string | null;
+  // The rest of what the Matches list reads (`DbMatch`), so the profile's
+  // history can be drawn by the list's own row.
+  round: string | null;
+  result: string | null;
+  match_type: string | null;
+  court_type: string | null;
+  verified: boolean | null;
+  verified_at: string | null;
+  duration: number | null;
+  source_provider: string | null;
+  created_by: string | null;
 }
 
 interface DbEntryRow {
@@ -313,7 +344,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
   const { data: matchRows } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, event_entry_id",
+      "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, event_entry_id, round, result, match_type, court_type, verified, verified_at, duration, source_provider, created_by",
     )
     .eq("program_id", programId)
     .or(
@@ -489,6 +520,8 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
     role: row.role as MemberRole,
     classYear: row.class_year,
     lineupSpot: row.lineup_spot,
+    hand: row.hand ?? null,
+    backhand: row.backhand ?? null,
     managedBy: row.managed_by === "coach" ? "coach" : "self",
     matchesPlayed: results.length,
     wins,
@@ -504,8 +537,58 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
     kpis: strip.kpis,
     hasStats: strip.hasStats,
     lastMatch,
-    history: results.map(toRow),
+    listSource: own.map(({ match, isPlayer1 }) => ({
+      row: {
+        ...match,
+        player1_name: match.player1_name ?? "Unknown",
+        player2_name: match.player2_name ?? "Unknown",
+        // `DbMatch.date` is typed as present; an undated row prints the
+        // list's own fallback for it, as on the Matches page.
+        date: match.date as string,
+        score: match.score as DbMatch["score"],
+      },
+      isPlayer1,
+    })),
     lines: lineHistoryFrom(results, entries),
     serve,
   };
 });
+
+/**
+ * This player's matches as the Matches list draws them — the same rows, with
+ * the same analysis state — so the profile's history reads like the list its
+ * "All N" link opens.
+ *
+ * `enrichMatches` is the list page's own: opponent style, the vendor
+ * reconcile and the analysis read, in that order (guardrails §3.2). The list
+ * row draws player1 as "you", so a match where this player was player2 — an
+ * intra-squad match — is turned to their side first (`fromPlayerSide`), or it
+ * would show their opponent's name and the opposite result.
+ */
+export async function getPlayerMatchList(
+  profile: PlayerProfile,
+  viewerId: string,
+): Promise<DisplayMatch[]> {
+  if (profile.listSource.length === 0) return [];
+  const supabase = await createClient();
+  const sources = new Map(profile.listSource.map((s) => [s.row.id, s]));
+  const rows = await enrichMatches(
+    supabase,
+    profile.listSource.map((s) => s.row),
+    { id: viewerId },
+  );
+  // A row whose side is unknown is left out rather than drawn as player1 —
+  // that default is exactly the misattribution `fromPlayerSide` exists to
+  // prevent. Unreachable today: `enrichMatches` only ever drops rows.
+  return rows.flatMap((match) => {
+    const source = sources.get(match.id);
+    if (!source) return [];
+    return [
+      fromPlayerSide(
+        match,
+        source.isPlayer1,
+        scoreWinner(source.row.score) !== null,
+      ),
+    ];
+  });
+}

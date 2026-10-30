@@ -20,6 +20,7 @@ import {
 } from "@/lib/services/splitstep/derivation";
 import {
   buildLabelMarks,
+  homeShotSuggestions,
   isServeFault,
   LABEL_MARK_META,
   LABEL_ONLY_FLAGS,
@@ -373,6 +374,54 @@ test.describe("buildLabelMarks on the clean fixture", () => {
       afterShotId: "shot-16",
       hitter: "p1",
     });
+  });
+
+  test("a split point carries the missing shots of the strokes it took", () => {
+    const pair = cleanMarks.suggestions.find((s) => s.kind === "missing_shot");
+    if (pair?.kind !== "missing_shot") throw new Error("narrowing");
+    expect(pair.nextShotId).toBeDefined();
+    // Split the pair's point at `at`: that stroke and the rest move to a new
+    // point below, which shares the rally (point-split.ts).
+    const splitAt = (at: string): MarkablePoint[] =>
+      cleanPoints.flatMap((p) => {
+        if (p.id !== pair.pointId) return [p];
+        const cut = p.shots.findIndex((s) => s.id === at);
+        return [
+          { ...p, shots: p.shots.slice(0, cut) },
+          { ...p, id: "split", shots: p.shots.slice(cut) },
+        ];
+      });
+    const others = (marks: LabelMarks) =>
+      marks.suggestions.filter((s) => s.key !== pair.key);
+
+    // At the pair's first stroke: the suggestion follows it to the new point,
+    // whether the marks are built after the split or homed on the live rows.
+    const moved = splitAt(pair.afterShotId);
+    const built = buildLabelMarks(
+      clean.transcript,
+      clean.analysis.rallies,
+      moved,
+      { hidden: true },
+    );
+    expect(built.suggestions.find((s) => s.key === pair.key)).toEqual({
+      ...pair,
+      pointId: "split",
+    });
+    expect(homeShotSuggestions(cleanMarks.suggestions, moved)).toEqual(
+      built.suggestions,
+    );
+    expect(others(built)).toEqual(others(cleanMarks));
+
+    // Between the pair's two: the second opens a new point, nothing is missing.
+    const between = splitAt(pair.nextShotId!);
+    const apart = buildLabelMarks(
+      clean.transcript,
+      clean.analysis.rallies,
+      between,
+      { hidden: true },
+    );
+    expect(apart.suggestions.some((s) => s.key === pair.key)).toBe(false);
+    expect(apart.suggestions).toEqual(others(cleanMarks));
   });
 
   test("no missing_point suggestion comes from the file: it is read off the labelled rows (score-marks.ts)", () => {

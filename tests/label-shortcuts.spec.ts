@@ -54,6 +54,7 @@ test.describe("the shortcut sheet", () => {
       "1 2 3 4",
       "C",
       "X",
+      "H",
       "T",
       "A",
       "⇧ A",

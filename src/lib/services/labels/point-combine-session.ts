@@ -53,10 +53,11 @@ interface PointRow {
   ended_by: LabelSide | null;
   vendor_rally_ids: number[] | null;
   game_start_locked: boolean;
+  dismissed: string[] | null;
 }
 
 const POINT_COLUMNS =
-  "id, point_index, status, set_number, game_number, winner, ending, ended_by, vendor_rally_ids, game_start_locked";
+  "id, point_index, status, set_number, game_number, winner, ending, ended_by, vendor_rally_ids, game_start_locked, dismissed";
 
 /** Move the shots, write the kept point, tombstone the later. Never throws. */
 export async function writeLabelPointCombine(params: {
@@ -112,6 +113,7 @@ export async function writeLabelPointCombine(params: {
     endedBy: row.ended_by,
     vendorRallyIds: row.vendor_rally_ids ?? [],
     gameStartLocked: row.game_start_locked ?? false,
+    dismissed: row.dismissed ?? [],
     shots: [],
   }));
   const dry = planPointCombine(points, pointId, direction);

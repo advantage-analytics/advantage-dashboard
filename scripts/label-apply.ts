@@ -66,6 +66,7 @@ import {
   readPublished,
   readStoredBackup,
   recompute,
+  restoreFold,
   restoreRows,
   type LabelApplyBackup,
 } from "@/lib/services/labels/apply-session";
@@ -200,6 +201,11 @@ async function runRestore(
   const before = await readMatchStats(db, backup.matchId);
   await restoreRows(db, backup);
   console.log("rows restored");
+  console.log(
+    (await restoreFold(db, backup))
+      ? "fold note restored"
+      : "fold note left as it is (the backup kept none)",
+  );
   const { insightsRequested } = await recompute(db, backup.matchId);
   console.log(
     insightsRequested

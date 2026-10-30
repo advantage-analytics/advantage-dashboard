@@ -371,6 +371,16 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     expect(source).toContain("? () => flipKey.current()");
     expect(source).toContain("setPlacement(flipPlacement);");
     expect(isStrokeKey("x")).toBe(false);
+    // H gives the stroke to the other player, through the menu's own path,
+    // so a serve still asks whether the rest of the point follows.
+    expect(source).toContain("? () => hitterKey.current()");
+    expect(source).toContain("requestPatchShot(shot.id, { hitter });");
+    expect(source).toContain("const hitter = switchedHitter(");
+    // Only a live stroke: a removed one is never handed the server.
+    expect(source).toMatch(
+      /const at = live\.findIndex\(\(s\) => s\.id === shot\.id\);\n\s+if \(at === -1\) return false;/,
+    );
+    expect(isStrokeKey("h")).toBe(false);
     expect(source).toMatch(/consoleKey &&\n\s+!event\.metaKey/);
   });
 });
