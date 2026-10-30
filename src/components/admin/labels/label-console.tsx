@@ -3077,7 +3077,9 @@ export function LabelConsole({
       const owner = shot && pointOfShot(points, shot.id);
       if (!shot || !owner) return false;
       const live = liveShotsInOrder(owner, drawsGhosts(marks));
+      // A removed stroke is not live: H leaves it alone.
       const at = live.findIndex((s) => s.id === shot.id);
+      if (at === -1) return false;
       const hitter = switchedHitter(
         shot,
         at > 0 ? live[at - 1] : null,
