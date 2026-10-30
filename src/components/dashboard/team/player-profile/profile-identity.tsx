@@ -3,6 +3,7 @@ import { YouPill } from "@/components/ui/you-pill";
 import { getInitials } from "@/lib/data/match-utils";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { capitalize } from "@/lib/utils";
+import { recordLabel } from "@/lib/data/player-profile";
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
 import {
   opponentBackhandLabel,
@@ -21,8 +22,10 @@ import type { PlayerProfile } from "@/lib/data/player-profile-server";
  * fact about the player, so the two never read as one kind (design canvas
  * H5, 2026-10-29). A fact nobody recorded is left out, not shown as a dash.
  *
- * The record is not here: the season strip's first tile states it, and the
- * page saying 8–3 twice was the old row's redundancy.
+ * The record sits beside the ticks as words ("1–2 this season"). The season
+ * strip's Record tile states it too once a report lands, but until then the
+ * strip draws every tile as "—", and this line is the only place a player
+ * with results and no report has their record on the page.
  *
  * Everything on the row is the same for the player and their coach, because
  * it states facts about the player, not about who is reading. The actions sit
@@ -43,6 +46,7 @@ export function ProfileIdentity({
   photoUrl: string | null;
   actions: React.ReactNode;
 }) {
+  const decided = profile.wins + profile.losses;
   const hand = opponentHandLabel(profile.hand);
   const backhand = opponentBackhandLabel(profile.backhand);
   const facts = [
@@ -71,7 +75,7 @@ export function ProfileIdentity({
             <StatePill>Coach-managed</StatePill>
           )}
         </div>
-        {(facts.length > 0 || profile.form.length > 0) && (
+        {(facts.length > 0 || profile.form.length > 0 || decided > 0) && (
           <div className="flex flex-wrap items-center gap-1.5">
             {facts.length > 0 && (
               <ul aria-label="Player facts" className="contents">
@@ -90,6 +94,14 @@ export function ProfileIdentity({
             {profile.form.length > 0 && (
               <span className="ml-1.5 flex items-center">
                 <FormTicks form={profile.form} />
+              </span>
+            )}
+            {decided > 0 && (
+              <span className="ml-1.5 text-[12px] text-[var(--ink-600)]">
+                <span className="tabular text-[var(--ink-900)]">
+                  {recordLabel(profile.wins, profile.losses)}
+                </span>{" "}
+                this season
               </span>
             )}
           </div>
