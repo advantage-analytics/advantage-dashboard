@@ -117,3 +117,14 @@ is the runner's. Newest entries at the bottom.
 2. The overview's publish checklist (`LabelDashboard` warnings) could show the same unmarked-errors line.
 3. Blockers are a snapshot when the dialog opens; marking an error while it is open doesn't update it.
 4. "the shared confirm holds a disabled action" test asserts on source text with a regex — brittle.
+
+## T6 · AI summary says "errors" on an unjudged match — done
+
+**gate:** mechanical PASS after a flake re-run (lint pass, typecheck pass; full suite had 1 failure, `tests/admin-search.spec.ts:203` "⌘K opens it from the page…", unreachable from this diff — re-run alone `--repeat-each=5`: 25/25 passed) · completion VERDICT: pass
+**changed:** Re-run after the user approved the deploy ("Approve both"). `generate-insights/index.ts`: Deno copy of `errorSplitJudged` (reads `source_provider`, `verified`, `verified_at`, `errors_judged_at`; a failed read counts as unjudged); `presentErrors` gives an unjudged match one `errors` figure (and `forehand_errors`/`backhand_errors`), no key or word with "forced"; one prompt sentence on the unjudged path; prior-match averages summed per match then averaged as `errors`. Judged matches unchanged. `responseSchema`, model and sampling untouched. Spec: 4 new cases in `generate-insights-prompt.spec.ts`.
+**deployed:** `generate-insights` v34 → **v35** via `deploy_edge_function` (plain MCP), `verify_jwt` true as before, single `index.ts`; runner confirmed v35 ACTIVE with `list_edge_functions`.
+**follow-ups:**
+
+1. Nothing stops Gemini writing "unforced" by itself on an unjudged match; a post-check that retries a summary containing "forced" would enforce it.
+2. Existing summaries on unjudged matches still say "unforced"; regenerating them is a separate, approved data change.
+3. `presentErrors` drops any key matching /forced/i — implicit; worth a comment if new columns arrive.

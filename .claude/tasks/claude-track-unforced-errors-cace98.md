@@ -90,7 +90,7 @@ ready).
 
 ## T6 · AI summary says "errors" on an unjudged match
 
-- **status:** doing
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** supabase/functions/generate-insights/index.ts, tests/generate-insights-prompt.spec.ts
