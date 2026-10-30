@@ -496,8 +496,8 @@ test.describe("E: forced or unforced, on the stroke that ended the point in an e
   test("E rides the shared dispatcher: never from a field, a menu or a dialog, never with a modifier", () => {
     // One branch of the stroke keys' dispatcher, so the one reach check
     // (`keysAreSpoken`: a text field, a menu or dialog open) guards it.
-    expect(source).toContain(
-      ": isErrorKindKey(key) && !event.shiftKey\n                  ? () => errorKindKey.current()",
+    expect(source).toMatch(
+      /: isErrorKindKey\(key\) && !event\.shiftKey\s+\? \(\) => errorKindKey\.current\(\)/,
     );
     expect(source).toContain("if (!keysAreSpoken(target) && consoleKey()) {");
     expect(source).toContain(
