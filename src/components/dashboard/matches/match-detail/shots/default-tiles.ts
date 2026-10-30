@@ -11,10 +11,11 @@
  */
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
-import { DEFAULT_CUTS } from "./default-cuts";
+import { defaultCutsFor } from "./default-cuts";
 import {
   EMPTY_VIZ_FILTERS,
   computeViz,
+  errorsJudgedIn,
   tileCountLabel,
   type Chart,
   type Cut,
@@ -22,6 +23,7 @@ import {
   type VizDot,
 } from "./viz-model";
 import type { VizState } from "./viz-url";
+import type { MatchFilterContext } from "../match-filters/model";
 
 export interface DefaultTileSide {
   isPlayer1: boolean;
@@ -52,7 +54,7 @@ export interface DefaultTile {
 
 /**
  * The ten default tiles in wall order: your five (serve, return placement,
- * return contact, rally placement, unforced errors), then the opponent's
+ * return contact, rally placement, unforced errors — or Errors, unjudged), then the opponent's
  * five. `hrefFor` is the caller's
  * `useVizState().hrefFor` (or an equivalent pure function in a test), applied
  * to each tile's own `VizState` to build its `href`.
@@ -61,7 +63,12 @@ export function buildDefaultTiles(
   points: MatchPoint[],
   sides: { you: DefaultTileSide; opp: DefaultTileSide },
   hrefFor: (next: VizState) => string,
+  /** The report's filter context (`useMatchFilters().context`): its
+   *  `errorSplitJudged` picks the errors cut (`defaultCutsFor`) and how the
+   *  cut reads error kinds. Omitted = judged (`errorsJudgedIn`). */
+  matchCtx?: MatchFilterContext,
 ): DefaultTile[] {
+  const cuts = defaultCutsFor(errorsJudgedIn(matchCtx));
   const rows: { subject: PlayerFilter; side: DefaultTileSide }[] = [
     { subject: "you", side: sides.you },
     { subject: "opponent", side: sides.opp },
@@ -69,7 +76,7 @@ export function buildDefaultTiles(
 
   const tiles: DefaultTile[] = [];
   for (const row of rows) {
-    for (const cut of DEFAULT_CUTS) {
+    for (const cut of cuts) {
       const filters = {
         ...EMPTY_VIZ_FILTERS,
         ...cut.filters,
@@ -81,6 +88,7 @@ export function buildDefaultTiles(
         filters,
         row.side.isPlayer1,
         cut.chart,
+        matchCtx,
       );
       const state: VizState = {
         cut: cut.cut,

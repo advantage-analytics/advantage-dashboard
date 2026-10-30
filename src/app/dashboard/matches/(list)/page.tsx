@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import {
   enrichMatches,
   withRosterProfiles,
+  withViewerSide,
 } from "@/lib/data/matches-page-server";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { Suspense } from "react";
@@ -123,7 +124,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
         workspace.active.id,
         enrichMatches(supabase, rows, user),
       )
-    : enrichMatches(supabase, rows, user);
+    : withViewerSide(rows, user.id, enrichMatches(supabase, rows, user));
   const scope = isTeam ? "team" : "personal";
   const canUpload = !isTeam || canUploadForProgram(workspace.active);
   const scopeKey = `${user.id}:${workspace.active.id}`;

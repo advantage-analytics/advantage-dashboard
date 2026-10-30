@@ -7,8 +7,10 @@ import {
 import {
   type DbMatch,
   type DisplayMatch,
+  toViewerSide,
   transformDbMatch,
 } from "@/lib/data/matches-list-types";
+import { getMyPlayerIdsOrThrow } from "@/lib/data/player-identity-server";
 import { canonicalRosterIds, type RosterIdRow } from "@/lib/data/roster-ids";
 
 export async function enrichMatches(
@@ -69,7 +71,9 @@ export async function enrichMatches(
       // `transformDbMatch` ignores the viewer — it decides the winner from
       // the score, player1 against player2, not relative to whoever is
       // looking. That is what makes one row safe to show a coach and the
-      // player alike, and why a team scope needs no second transform.
+      // player alike, and why a team scope needs no second transform. The
+      // personal list reads player1 as "you", so it turns its rows afterwards
+      // (`withViewerSide`).
       const display = transformDbMatch(row, user.id);
       if (!display) return null;
       display.canManage = row.created_by === user.id;
@@ -83,6 +87,29 @@ export async function enrichMatches(
       return display;
     })
     .filter((m): m is DisplayMatch => m !== null);
+}
+
+/**
+ * The personal list's rows turned to the viewer's side. The row reads player1
+ * as "you", so a match that seats the viewer as player two would otherwise name
+ * them as their own opponent, with the result and every set backwards. Throws
+ * when the ids cannot be read: the boundary's retry beats a list that may be
+ * the wrong way round with nothing to say so.
+ */
+export async function withViewerSide(
+  rows: (DbMatch & { player2_id: string | null; created_by: string | null })[],
+  viewerId: string,
+  matches: Promise<DisplayMatch[]>,
+): Promise<DisplayMatch[]> {
+  const [list, myPlayerIds] = await Promise.all([
+    matches,
+    getMyPlayerIdsOrThrow(),
+  ]);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return list.map((match) => {
+    const row = byId.get(match.id);
+    return row ? toViewerSide(match, row, myPlayerIds, viewerId) : match;
+  });
 }
 
 /**

@@ -291,6 +291,13 @@ export function liveShotsInOrder<T extends LiveOrderableShot>(
   );
 }
 
+/**
+ * Whether an error was forced or unforced (`label_points.error_kind`): the
+ * labeller's call on a point that will publish as an error
+ * (`isMarkableError`). Never seeded.
+ */
+export type LabelErrorKind = "forced" | "unforced";
+
 /** One `label_points` row with its strokes, already in video order. */
 export interface LabelPoint {
   id: string;
@@ -308,6 +315,11 @@ export interface LabelPoint {
   winner: LabelSide | null;
   ending: LabelEnding | null;
   endedBy: LabelSide | null;
+  /**
+   * Forced or unforced (`label_points.error_kind`); null when unmarked. Not
+   * part of `seed` and never moves the point's status.
+   */
+  errorKind: LabelErrorKind | null;
   /**
    * What kind of game the point sits in — the same value on every point of
    * the game. Not part of `seed`: a seeded point is always `game`.

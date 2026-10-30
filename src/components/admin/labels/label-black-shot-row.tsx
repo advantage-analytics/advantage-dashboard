@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { Kbd } from "@/components/ui/kbd";
 import { shotRowRevealDelay } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import { cn } from "@/lib/utils";
 import {
@@ -21,6 +22,7 @@ import {
   isServeStroke,
   isWithdrawnAdd,
   liveShotsInOrder,
+  type LabelErrorKind,
   type LabelPoint,
   type LabelShot,
   type LabelSide,
@@ -85,6 +87,7 @@ import {
   type EditContext,
   type LabelRowOperations,
 } from "./label-row-parts";
+import { errorKindShotId } from "./stroke-keys";
 
 /**
  * The rail's strokes: the open point's shots in a recessed well, each edited in
@@ -482,7 +485,9 @@ let pressedShotId: string | null = null;
  * point here, Add shot after, Reset, Delete) sit in a tray (`ShotTray`)
  * drawn right under the row while it is selected, where the console can
  * write. Reset and Delete only ask the console to confirm; Split and Add run
- * at once.
+ * at once. On the point's last live stroke, while the point ended in an
+ * error (`errorKindShotId`), the tray also carries the Forced | Unforced
+ * pair, which writes the point's `error_kind` at once.
  *
  * LIT (selected, or the stroke the film is on) washes the row; a FAULT is a
  * step quieter.
@@ -515,10 +520,14 @@ export function BlackShotRow({
    */
   resultMenuOpen?: boolean;
   /**
-   * The stroke's point, for "Split point here" and its ending (nothing on a
-   * double fault is filled In). Absent, no split is offered.
+   * The stroke's point, for "Split point here", its ending (nothing on a double
+   * fault is filled In) and the Forced | Unforced pair. Absent, neither the
+   * split nor the pair is offered.
    */
-  point?: Pick<LabelPoint, "id" | "status" | "shots" | "ending">;
+  point?: Pick<
+    LabelPoint,
+    "id" | "status" | "shots" | "winner" | "ending" | "endedBy" | "errorKind"
+  >;
   /** The point's number, for the confirm the console opens. */
   pointNumber: number;
   edit: EditContext;
@@ -582,6 +591,19 @@ export function BlackShotRow({
   const trayActions =
     selected && operations
       ? shotTrayActions({ shot, number, point, pointNumber, operations })
+      : null;
+  // Forced | Unforced: on the stroke that ended the point in an error alone.
+  const onPatchPoint = edit.onPatchPoint;
+  const errorKind: ShotTrayErrorKind | null =
+    trayActions && point && onPatchPoint && errorKindShotId(point) === shot.id
+      ? {
+          kind: point.errorKind,
+          pick: (kind) => {
+            if (kind !== point.errorKind) {
+              onPatchPoint(point.id, { error_kind: kind });
+            }
+          },
+        }
       : null;
   return (
     <>
@@ -788,7 +810,9 @@ export function BlackShotRow({
           ) : null}
         </span>
       </div>
-      {trayActions ? <ShotTray number={number} actions={trayActions} /> : null}
+      {trayActions ? (
+        <ShotTray number={number} actions={trayActions} errorKind={errorKind} />
+      ) : null}
     </>
   );
 }
@@ -1202,7 +1226,7 @@ function BlackEndedSuggestion({
       style={arrival.style}
       className={cn(
         arrival.className,
-        "flex h-[32px] min-w-0 cursor-default items-center gap-4 rounded-lg bg-[var(--rail-amber-wash-faint)] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)] outline-dashed",
+        "flex h-[32px] min-w-0 cursor-default items-center gap-3 rounded-lg bg-[var(--rail-amber-wash-faint)] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)] outline-dashed",
       )}
     >
       <ChromeTooltip label={hint.label} detail={hint.detail} side="top" wrap>
@@ -1430,6 +1454,25 @@ const SHOT_TRAY_ICON = {
   delete: X,
 } as const;
 
+/**
+ * The tray's Forced | Unforced pair: the point's stored kind (null unmarked)
+ * and the write a pick makes. A pick of the kind already stored writes
+ * nothing.
+ */
+export type ShotTrayErrorKind = {
+  kind: LabelErrorKind | null;
+  pick: (kind: LabelErrorKind) => void;
+};
+
+/** The pair's two buttons, in order, with their words. */
+export const ERROR_KIND_CHOICES: readonly {
+  kind: LabelErrorKind;
+  label: string;
+}[] = [
+  { kind: "forced", label: "Forced" },
+  { kind: "unforced", label: "Unforced" },
+];
+
 /** The three calls the Result menu offers every stroke; a let is a serve's. */
 export const SHOT_CALLS = ["in", "out", "net"] as const;
 
@@ -1441,14 +1484,31 @@ export const SHOT_CALLS = ["in", "out", "net"] as const;
  * too narrow, the labels truncate before Delete moves. A click here never
  * reaches the row or the point under it.
  *
+ * On a point that ended in an error the Forced | Unforced pair follows Reset
+ * shot, ahead of the spacer and Delete, with its key E as a 16px chip after
+ * it. The pressed one takes the court panel's pressed wash; nothing in it is
+ * a new colour. The pair never gives way: its words stay whole.
+ *
+ * Width (the rail's 640px default, `RAIL_DEFAULT_PX`): the tray's fullest
+ * run on a missed last stroke is Split point here · Add shot after · Reset
+ * shot · Forced | Unforced E · Delete shot. At 10px Inter that is about 44 +
+ * 14 inset, 100 + 92 + 70 for the three actions, 112 for the pair and its
+ * chip, 76 for Delete and 5 × 12 gap — some 570px, with the spacer taking
+ * the rest. Hence 12px gaps and the bare words "Forced" / "Unforced" (no
+ * "error"); every label is `whitespace-nowrap`, and the tray is one
+ * unwrapping flex line, so a narrower rail truncates the first three before
+ * anything wraps.
+ *
  * No hooks: a spec calls it and reads its buttons off the tree.
  */
 function ShotTray({
   number,
   actions,
+  errorKind = null,
 }: {
   number: number;
   actions: readonly ShotTrayAction[];
+  errorKind?: ShotTrayErrorKind | null;
 }) {
   return (
     <div
@@ -1458,10 +1518,13 @@ function ShotTray({
       onClick={(event) => event.stopPropagation()}
       // 32px tall with 10px type, a step quieter than the 34px row above it,
       // so the actions sit clear of the hairline without crowding the row.
-      className="flex h-[32px] min-w-0 items-center gap-4 bg-white/[0.12] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
+      className="flex h-[32px] min-w-0 flex-nowrap items-center gap-3 bg-white/[0.12] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
     >
       {actions.map((action) => (
         <Fragment key={action.key}>
+          {action.key === "delete" && errorKind ? (
+            <ErrorKindPair number={number} errorKind={errorKind} />
+          ) : null}
           {action.key === "delete" ? (
             <span
               data-shot-tray-spacer=""
@@ -1488,6 +1551,57 @@ function ShotTray({
         </Fragment>
       ))}
     </div>
+  );
+}
+
+/**
+ * Forced | Unforced: two tray buttons on the court panel's segmented ground,
+ * the stored kind pressed, then the key E. Each says which point it marks.
+ */
+function ErrorKindPair({
+  number,
+  errorKind,
+}: {
+  number: number;
+  errorKind: ShotTrayErrorKind;
+}) {
+  return (
+    <span
+      data-error-kind-pair=""
+      className="inline-flex shrink-0 items-center gap-1.5"
+    >
+      <span
+        role="group"
+        aria-label={`Shot ${number}: forced or unforced error`}
+        className="inline-flex shrink-0 items-center gap-0.5 rounded-[var(--radius-button)] bg-white/[0.08] p-0.5"
+      >
+        {ERROR_KIND_CHOICES.map(({ kind, label }) => (
+          <BlackTextAction
+            key={kind}
+            ink="plain"
+            small
+            pressed={errorKind.kind === kind}
+            data-error-kind={kind}
+            aria-keyshortcuts="E"
+            aria-label={`${label} error`}
+            onClick={(event) => {
+              event.stopPropagation();
+              errorKind.pick(kind);
+            }}
+          >
+            {label}
+          </BlackTextAction>
+        ))}
+      </span>
+      <Kbd
+        size="sm"
+        variant="flat"
+        mono
+        className="bg-white/[0.08] text-white/60 shadow-none"
+      >
+        E
+      </Kbd>
+    </span>
   );
 }
 

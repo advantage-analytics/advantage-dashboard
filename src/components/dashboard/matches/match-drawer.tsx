@@ -152,7 +152,7 @@ export function MatchDrawer({
   const status = match.analysis?.status;
   const inFlight = status ? isInFlight(status) : false;
   const failed = status ? isAnalysisFailed(status) : false;
-  const snapshot = useMatchSnapshot(match.id, inFlight);
+  const snapshot = useMatchSnapshot(match.id, inFlight, match.turned);
   const schedule = useScheduleLink(match.id, scope);
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";

@@ -45,7 +45,10 @@ interface MatchesGridProps {
   onToggle?: (id: string, viaKeyboard: boolean) => void;
   /** The drawer is open (or closing) beside the table. */
   drawerOpen?: boolean;
-  /** Drawn in the table body (and in place of the cards) when `matches` is empty. */
+  /**
+   * Drawn in place of the cards when `matches` is empty, and in the table body
+   * when `drafts` is too: a listed draft means the table has an answer to give.
+   */
   empty?: React.ReactNode;
 }
 
@@ -186,7 +189,7 @@ export function MatchesGrid({
                   onToggle={onToggle}
                 />
               ))}
-              {matches.length === 0 ? empty : null}
+              {matches.length === 0 && drafts.length === 0 ? empty : null}
             </div>
           </div>
         </div>

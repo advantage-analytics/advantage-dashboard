@@ -165,6 +165,7 @@ export function labelPoint(
     winner: null,
     ending: null,
     endedBy: null,
+    errorKind: null,
     gameType: "game",
     status: "unchanged",
     statusBeforeDelete: null,

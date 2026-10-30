@@ -66,6 +66,12 @@ import {
  * - `unforced-error` — `resultType` containing "unforced error". Result ›
  *   Ending "error" covers forced errors too, and video matches do not
  *   separate the two.
+ * - `forced-error` — `resultType` containing "forced error" and not
+ *   "unforced error" (which contains it): the judged split's second row.
+ * - `error` — any `resultType` ending in "error", forced and unforced alike:
+ *   a match whose errors are not judged yet (`errorSplitJudged`). Unlike
+ *   Result › Ending "error" it leaves double faults out, which the report
+ *   counts on their own line.
  * - `rally-winner` — the `winner` bucket less every unreturned serve
  *   (`isUnreturnedServe`): the derived Winners row on an Advantage
  *   Intelligence match, whose unreturned serves are counted as aces on their
@@ -79,7 +85,8 @@ import {
  * derived match Serve › Result "Ace" IS `isUnreturnedServe` (`serveResultOf`
  * reads `MatchFilterContext.isDerived`), so the same pill serves both.
  */
-export type FilmCutEnding = "winner" | "unforced-error" | "rally-winner";
+export type FilmCutEnding =
+  "winner" | "unforced-error" | "forced-error" | "error" | "rally-winner";
 
 /** What a cut adds that `MatchFilters` cannot say. Film only. */
 export interface FilmCutExtras {
@@ -172,7 +179,7 @@ export function hasFilmCut(cut: FilmCut | null | undefined): boolean {
   );
 }
 
-function matchesFilmCutEnding(
+export function matchesFilmCutEnding(
   point: MatchPoint,
   ending: FilmCutEnding,
 ): boolean {
@@ -182,6 +189,12 @@ function matchesFilmCutEnding(
       return result.includes("winner");
     case "unforced-error":
       return result.includes("unforced error");
+    case "forced-error":
+      return (
+        result.includes("forced error") && !result.includes("unforced error")
+      );
+    case "error":
+      return result.endsWith("error");
     case "rally-winner":
       return result.includes("winner") && !isUnreturnedServe(point);
   }

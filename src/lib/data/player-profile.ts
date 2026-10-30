@@ -8,7 +8,6 @@ import {
 import { PLAYER_MEASURES } from "@/lib/data/player-measures";
 import type { KpiFormat } from "@/lib/data/performance-server";
 import type { MatchScore } from "@/lib/data/match-utils";
-import type { DisplayMatch } from "@/lib/data/matches-list-types";
 
 /**
  * The arithmetic behind a player's profile — Platform Audit `Te` / `Te2`.
@@ -46,7 +45,30 @@ export interface ProfileStatRow {
   returnGames: number | null;
   returnGamesWon: number | null;
   winners: number | null;
-  unforcedErrors: number | null;
+  /**
+   * Every error, forced and unforced: `unforced_errors + forced_errors`.
+   * Cross-match surfaces never show the split — most matches behind them are
+   * unverified — so this is the only error count the profile carries. Null
+   * when `unforced_errors` is; a null `forced_errors` counts as 0.
+   */
+  errors: number | null;
+}
+
+/**
+ * One match side's total errors, forced and unforced.
+ *
+ * Cross-match surfaces (Home, the profile, the Performance tracker) always say
+ * "Errors" and never split the two: they average many matches, most of them
+ * unverified, and `forced_errors` is NULL on video matches until it is derived.
+ * So absent unforced is absent (null) and absent forced counts as none.
+ */
+export function totalErrors(
+  unforced: number | null | undefined,
+  forced: number | null | undefined,
+): number | null {
+  const u = num(unforced);
+  if (u === null) return null;
+  return u + (num(forced) ?? 0);
 }
 
 /** The columns a season strip reads from `match_stats_with_percentages`. */
@@ -62,6 +84,7 @@ export const STAT_COLUMNS = [
   "return_games_won",
   "winners",
   "unforced_errors",
+  "forced_errors",
 ].join(", ");
 
 /**
@@ -83,6 +106,8 @@ export interface DbStatRow {
   return_games_won: number | null;
   winners: number | null;
   unforced_errors: number | null;
+  /** Optional so fixtures predating the column still type; absent reads as 0. */
+  forced_errors?: number | null;
   [measure: string]: unknown;
 }
 
@@ -101,7 +126,7 @@ function toStatRow(row: DbStatRow): ProfileStatRow {
     returnGames: num(row.return_games),
     returnGamesWon: num(row.return_games_won),
     winners: num(row.winners),
-    unforcedErrors: num(row.unforced_errors),
+    errors: totalErrors(row.unforced_errors, row.forced_errors),
   };
 }
 
@@ -537,6 +562,44 @@ export function statRowsByKey(
   return byKey;
 }
 
+/** One evidence chip under the profile's last match. */
+export interface ProfileChip {
+  label: string;
+  value: string;
+}
+
+/** The evidence row under the last match — omitted per chip where unmeasured. */
+export function chipsFrom(stats: ProfileStatRow | null): ProfileChip[] {
+  if (!stats) return [];
+  const chips: ProfileChip[] = [];
+  const firstServe = stats.rates["first_serve_pct"];
+  const firstServeWon = stats.rates["first_serve_won_pct"];
+  if (firstServe !== null && firstServe !== undefined) {
+    chips.push({ label: "1st serve in", value: `${Math.round(firstServe)}%` });
+  }
+  if (firstServeWon !== null && firstServeWon !== undefined) {
+    chips.push({
+      label: "1st serve won",
+      value: `${Math.round(firstServeWon)}%`,
+    });
+  }
+  if (stats.winners !== null)
+    chips.push({ label: "Winners", value: String(stats.winners) });
+  if (stats.errors !== null) {
+    chips.push({ label: "Errors", value: String(stats.errors) });
+  }
+  if (
+    stats.breakPointsConverted !== null &&
+    stats.breakPointOpportunities !== null
+  ) {
+    chips.push({
+      label: "Break pts",
+      value: `${stats.breakPointsConverted} of ${stats.breakPointOpportunities}`,
+    });
+  }
+  return chips;
+}
+
 /** What a season strip needs to render, off the results behind it. */
 export interface SeasonStrip {
   kpis: ProfileKpi[];
@@ -753,49 +816,4 @@ export function seasonKpis(
   // In catalogue order by construction — the picker looks tiles up by key and
   // renders them in its own order, so this is the order the strip reads in.
   return tiles;
-}
-
-/**
- * A Matches-list row turned to this player's side.
- *
- * The list row reads player1 as "you": its opponent column is player2, its
- * result mark is "player1 won". On a profile that is only true when this
- * player was player1. When they were player2 (an intra-squad match), the two
- * sides swap: names, every set's games and tiebreak points, and the winner.
- * Swapping both tiebreak slots is right whichever way a row stores them
- * (`ScoreLineSet`). The opponent's hand and backhand are dropped rather than
- * swapped: the row only ever carried player2's, which is this player's own.
- *
- * `decided` is whether the score names a winner (`scoreWinner`). When it does
- * not — a level or unfinished score — the list's transform defaults the
- * winner to player2, which is arbitrary; flipping that default would turn it
- * into a win on one teammate's page and a loss on the other's. Left as is, the
- * row reads the same from either side.
- */
-export function fromPlayerSide(
-  match: DisplayMatch,
-  isPlayer1: boolean,
-  decided = true,
-): DisplayMatch {
-  if (isPlayer1) return match;
-  return {
-    ...match,
-    player1: { name: match.player2.name },
-    player2: { name: match.player1.name },
-    player2Hand: undefined,
-    player2Backhand: undefined,
-    score: {
-      winner: !decided
-        ? match.score.winner
-        : match.score.winner === "player1"
-          ? "player2"
-          : "player1",
-      sets: match.score.sets.map((set) => ({
-        player1: set.player2,
-        player2: set.player1,
-        player1Tiebreak: set.player2Tiebreak,
-        player2Tiebreak: set.player1Tiebreak,
-      })),
-    },
-  };
 }

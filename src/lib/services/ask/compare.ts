@@ -1,4 +1,5 @@
 import type { AskRow } from "@/lib/services/ask/answer-render";
+import { askCounterSelect, askCounterSql } from "@/lib/services/ask/measures";
 
 /**
  * The comparisons: three questions the planner used to write SQL for and now
@@ -157,16 +158,27 @@ export const ASK_COMPARE_MEASURES: readonly AskCompareMeasure[] = [
     standard: true,
   },
   {
+    // Only when asked for by name. Where nobody judged the split this holds
+    // every error, so it sums two meanings across a mix of matches; `errors`
+    // below is the one a comparison shows by default.
     key: "unforced_errors",
     numerator: ["unforced_errors"],
-    groups: ["points"],
-    standard: true,
+    groups: [],
+    standard: false,
   },
   {
     key: "forced_errors",
     numerator: ["forced_errors"],
     groups: [],
     standard: false,
+  },
+  {
+    // Every error, judged or not: unforced + coalesce(forced, 0), the derived
+    // counter in `measures.ts` (both columns are in ask.match_stats).
+    key: "errors",
+    numerator: ["errors"],
+    groups: ["points"],
+    standard: true,
   },
   {
     key: "total_points_won_pct",
@@ -296,7 +308,9 @@ function buildOpponentSql(): string {
   return [
     "with agg as (",
     "select s.side, count(*) as n,",
-    COUNTERS.map((counter) => `sum(s.${counter}) as ${counter}`).join(", "),
+    COUNTERS.map(
+      (counter) => `sum(${askCounterSql(counter, "s")}) as ${counter}`,
+    ).join(", "),
     "from ask.match_stats s",
     `where s.match_id in (select match_id from scope) and s.side in ('me', 'opponent') and ${HAS_STATS}`,
     "group by s.side",
@@ -313,7 +327,9 @@ function buildPlayersSql(): string {
   return [
     "with agg as (",
     "select m.player_name, count(*) as n,",
-    COUNTERS.map((counter) => `sum(s.${counter}) as ${counter}`).join(", "),
+    COUNTERS.map(
+      (counter) => `sum(${askCounterSql(counter, "s")}) as ${counter}`,
+    ).join(", "),
     "from ask.match_stats s join ask.matches m on m.match_id = s.match_id",
     `where s.side = 'me' and s.match_id in (select match_id from scope) and m.player_name is not null and ${HAS_STATS}`,
     "group by m.player_name",
@@ -340,7 +356,7 @@ function buildBaselineSql(prefix: string): string {
   return [
     "with tagged as (",
     "select (s.match_id in (select match_id from scope)) as in_scope,",
-    COUNTERS.map((counter) => `s.${counter}`).join(", "),
+    COUNTERS.map((counter) => askCounterSelect(counter, "s")).join(", "),
     `from ask.match_stats s where s.side = 'me' and ${HAS_STATS}`,
     "), agg as (",
     "select sum(case when t.in_scope then 1 else 0 end) as scope_n, count(*) as all_n,",
@@ -433,7 +449,7 @@ export const ASK_QUALITY_MEASURES: readonly AskQuality[] = [
   {
     word: "Consistent",
     pattern: /\b(?:consisten\w*|solid|steady|steadiest|reliable)\b/i,
-    measures: ["unforced_errors", "total_points_won_pct"],
+    measures: ["errors", "total_points_won_pct"],
   },
   {
     word: "Clutch",
@@ -484,7 +500,13 @@ const QUESTION_MEASURES: readonly (readonly [RegExp, readonly string[]])[] = [
       "break_point_opportunities",
     ],
   ],
-  [/\bunforced errors?\b/i, ["unforced_errors"]],
+  // Forced errors beside them, so the answer shows what the unforced count
+  // leaves out: 38 unforced and 11 forced never reads as 38 errors.
+  [/\bunforced errors?\b/i, ["unforced_errors", "forced_errors"]],
+  // "errors" or "mistakes" alone is every error: on a match whose split
+  // nobody judged that is the only honest count. "unforced errors" (above)
+  // and "forced errors" keep their own measure.
+  [/(?<!\bforced |\bunforced )\berrors?\b|\bmistakes?\b/i, ["errors"]],
   [/\bwinners\b/i, ["winners"]],
 ];
 
@@ -611,7 +633,7 @@ export function selectCompareMeasures(
   };
 }
 
-/** "Consistent is read here as unforced errors per match and total points won." — no digit in it. */
+/** "Consistent is read here as errors per match and total points won." — no digit in it. */
 export function qualityNote(
   quality: AskQuality,
   labels: readonly string[],

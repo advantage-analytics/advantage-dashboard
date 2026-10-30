@@ -9,6 +9,7 @@ import {
 import { viewerSide } from "@/lib/data/viewer-side";
 // The shared rule: a stored winner (retired, defaulted) first, then sets.
 import { didUserWin } from "@/lib/data/match-utils";
+import { totalErrors } from "@/lib/data/player-profile";
 import {
   formatMatchDayRelative,
   matchDay,
@@ -66,6 +67,7 @@ export interface MatchStats {
   first_serve_pct: string | null;
   winners: number | null;
   unforced_errors: number | null;
+  forced_errors: number | null;
   break_points_saved: number | null;
   break_points_faced: number | null;
   break_point_opportunities: number | null;
@@ -191,7 +193,11 @@ export function groupMatchesIntoEvents(
           ? Math.round(parseFloat(stat.first_serve_pct ?? "0"))
           : null,
         winners: stat?.winners ?? null,
-        errors: stat?.unforced_errors ?? null,
+        // Home is cross-match, so it never splits errors: forced + unforced,
+        // null only when unforced is (a null forced counts as none).
+        errors: stat
+          ? totalErrors(stat.unforced_errors, stat.forced_errors)
+          : null,
         opponentMeta: formatOpponentMeta(m.opponent_hand, m.opponent_backhand),
         analysisStatus:
           status && (isInFlight(status) || isAnalysisFailed(status))
@@ -256,7 +262,7 @@ export async function loadRecentMatches(
     supabase
       .from("match_stats_with_percentages")
       .select(
-        "match_id, is_player1, first_serve_pct, winners, unforced_errors, break_points_saved, break_points_faced, break_point_opportunities, break_points_converted",
+        "match_id, is_player1, first_serve_pct, winners, unforced_errors, forced_errors, break_points_saved, break_points_faced, break_point_opportunities, break_points_converted",
       )
       .in("match_id", matchIds),
     loadMatchAnalysis(supabase, matchIds),

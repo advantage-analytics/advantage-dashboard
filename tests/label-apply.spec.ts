@@ -45,14 +45,45 @@ test.describe("vocabulary: the seed's mappings, inverted", () => {
     // A volley names no side.
     expect(resultTypeOf("winner", "forehand_volley")).toBe("Winner");
     expect(resultTypeOf("winner", "backhand_volley")).toBe("Winner");
-    // Every error is unforced: the one error string the stats count.
-    expect(resultTypeOf("error", "forehand")).toBe("Forehand Unforced Error");
-    expect(resultTypeOf("error", "backhand")).toBe("Backhand Unforced Error");
-    expect(resultTypeOf("error", "backhand_volley")).toBe("Unforced Error");
-    expect(resultTypeOf("error", null)).toBe("Unforced Error");
     expect(resultTypeOf("let_replayed", "first_serve")).toBeNull();
     expect(resultTypeOf("not_a_point", null)).toBeNull();
     expect(resultTypeOf(null, "forehand")).toBeNull();
+  });
+
+  test("an error's result_type carries the labeller's forced/unforced mark", () => {
+    // [last stroke, error kind, result_type]. An unmarked error (null) is
+    // still unforced — what every reader counted before the split; a volley
+    // names no side, as for a winner. The SQL twin is
+    // self_review_result_type() (migration 20261028025013).
+    const table: [LabelStroke | null, "forced" | "unforced" | null, string][] =
+      [
+        ["forehand", "forced", "Forehand Forced Error"],
+        ["forehand", "unforced", "Forehand Unforced Error"],
+        ["forehand", null, "Forehand Unforced Error"],
+        ["backhand", "forced", "Backhand Forced Error"],
+        ["backhand", "unforced", "Backhand Unforced Error"],
+        ["backhand", null, "Backhand Unforced Error"],
+        ["overhead", "forced", "Overhead Forced Error"],
+        ["overhead", null, "Overhead Unforced Error"],
+        ["forehand_volley", "forced", "Forced Error"],
+        ["forehand_volley", "unforced", "Unforced Error"],
+        ["backhand_volley", "forced", "Forced Error"],
+        ["backhand_volley", null, "Unforced Error"],
+        [null, "forced", "Forced Error"],
+        [null, null, "Unforced Error"],
+      ];
+    for (const [stroke, kind, expected] of table) {
+      expect(resultTypeOf("error", stroke, kind), `${stroke} ${kind}`).toBe(
+        expected,
+      );
+    }
+    // The third argument defaults to unmarked.
+    expect(resultTypeOf("error", "forehand")).toBe("Forehand Unforced Error");
+    // The mark changes nothing but an error.
+    expect(resultTypeOf("winner", "forehand", "forced")).toBe(
+      "Forehand Winner",
+    );
+    expect(resultTypeOf("ace", "first_serve", "forced")).toBe("Ace");
   });
 
   test("shot_type, result and spin round-trip through the seed's mappings", () => {
@@ -410,12 +441,31 @@ test.describe("buildAppliedRows", () => {
     expect(built.points.map((p) => p.pointIndex)).not.toContain(6);
   });
 
+  test("forced errors are counted apart; unmarked errors stay unforced", () => {
+    const base = build().points;
+    const error = base.find((p) => p.result_type?.endsWith("Unforced Error"))!;
+    // As the build writes them: the mark is in the result_type string, which
+    // is what calculate_match_stats reads; `errorKind` rides beside it.
+    const copy = (errorKind: AppliedPointRow["errorKind"]) => ({
+      ...error,
+      errorKind,
+      result_type: resultTypeOf("error", "forehand", errorKind),
+    });
+    expect(copy("forced").result_type).toBe("Forehand Forced Error");
+    const stats = expectedStats([copy("forced"), copy(null), copy(null)]);
+    const forced = stats.p1.forcedErrors + stats.p2.forcedErrors;
+    const unforced = stats.p1.unforcedErrors + stats.p2.unforcedErrors;
+    expect(forced).toBe(1);
+    expect(unforced).toBe(2);
+  });
+
   test("the insert row carries only columns", () => {
     const row = pointInsertRow("m-1", build().points[0]);
     expect(row.match_id).toBe("m-1");
     expect(Object.keys(row)).not.toContain("shots");
     expect(Object.keys(row)).not.toContain("labelPointId");
     expect(Object.keys(row)).not.toContain("pointIndex");
+    expect(Object.keys(row)).not.toContain("errorKind");
   });
 
   test("the preview counts aces, double faults and winners per side", () => {
@@ -429,6 +479,7 @@ test.describe("buildAppliedRows", () => {
     expect(stats.p1.winners).toBe(2);
     expect(stats.p2.winners).toBe(1);
     expect(stats.p1.unforcedErrors).toBe(1);
+    expect(stats.p1.forcedErrors).toBe(0);
     expect(stats.p1.pointsWon + stats.p2.pointsWon).toBe(9);
     expect(stats.p1.serviceGames).toBe(1);
     expect(stats.p2.serviceGames).toBe(1);

@@ -23,6 +23,7 @@ import type { Cut, Chart, VizFilters } from "./viz-model";
 import { activeFilterEntries } from "./viz-url";
 import type { PhraseNames } from "../match-filters/applied-words";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { useErrorSplitJudged } from "../match-filters/provider";
 import { CUT_LABEL, CHART_LABEL } from "./viz-labels";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +61,8 @@ export function suggestedViewName(
   cut: Cut,
   filters: VizFilters,
   names?: PhraseNames,
+  /** The match's `errorSplitJudged`; `false` names an unjudged "Errors". */
+  errorSplitJudged?: boolean,
 ): string {
   const first = activeFilterEntries(
     {
@@ -69,6 +72,7 @@ export function suggestedViewName(
       viewId: null,
     },
     names,
+    { errorSplitJudged },
   )[0];
   return first ? `${CUT_LABEL[cut]} · ${first.label}` : CUT_LABEL[cut];
 }
@@ -124,6 +128,7 @@ export function SaveViewDialog({
   const dark = tone === "dark";
   const [name, setName] = useState("");
   const sides = useMatchSides();
+  const errorSplitJudged = useErrorSplitJudged();
   const [shared, setShared] = useState(false);
   const [duplicate, setDuplicate] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -152,10 +157,15 @@ export function SaveViewDialog({
       // eslint-disable-next-line react-hooks/set-state-in-effect -- external source (dialog opened by a click outside this component), not a render-derivable value
       setName(
         dark
-          ? suggestedViewName(cut, filters, {
-              you: sides.you.shortName,
-              opponent: sides.opp.shortName,
-            })
+          ? suggestedViewName(
+              cut,
+              filters,
+              {
+                you: sides.you.shortName,
+                opponent: sides.opp.shortName,
+              },
+              errorSplitJudged,
+            )
           : "",
       );
       setShared(false);
