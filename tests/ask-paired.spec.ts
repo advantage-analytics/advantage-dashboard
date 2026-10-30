@@ -745,6 +745,33 @@ test.describe("buildTrendAnswer — one measure over time", () => {
     );
   });
 
+  test("forced_errors beside unforced_errors is not a second measure; a note goes before the count", async () => {
+    const rows = [
+      { played_on: "2026-02-07", unforced_errors: 24, forced_errors: 3 },
+      { played_on: "2026-05-09", unforced_errors: 57, forced_errors: null },
+      { played_on: "2026-09-28", unforced_errors: 5, forced_errors: 1 },
+    ].map((row) => ({ ...row, matches_in_scope: 4 }));
+    const answer = buildTrendAnswer(rows, {
+      matchCount: 4,
+      notes: ["A note."],
+    });
+    expect(answer?.text).toContain("Unforced errors fell from");
+    expect(answer?.text).toContain("PLOT: played_on | unforced_errors");
+    expect(answer?.text).not.toMatch(/\.forced_errors/);
+    expect(answer?.text).toContain("A note. From {{r1.matches_in_scope}}");
+    // Without an unforced_errors, forced_errors is a measure like any other.
+    expect(
+      buildTrendAnswer(
+        rows.map((row) => ({
+          played_on: row.played_on,
+          forced_errors: row.forced_errors,
+          aces: 2,
+        })),
+        { matchCount: 4 },
+      ),
+    ).toBeNull();
+  });
+
   test("not for two measures, two rows, or rows without dates", () => {
     const context = { matchCount: 4 };
     expect(

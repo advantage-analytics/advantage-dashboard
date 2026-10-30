@@ -158,10 +158,13 @@ export const ASK_COMPARE_MEASURES: readonly AskCompareMeasure[] = [
     standard: true,
   },
   {
+    // Only when asked for by name. Where nobody judged the split this holds
+    // every error, so it sums two meanings across a mix of matches; `errors`
+    // below is the one a comparison shows by default.
     key: "unforced_errors",
     numerator: ["unforced_errors"],
-    groups: ["points"],
-    standard: true,
+    groups: [],
+    standard: false,
   },
   {
     key: "forced_errors",
@@ -174,8 +177,8 @@ export const ASK_COMPARE_MEASURES: readonly AskCompareMeasure[] = [
     // counter in `measures.ts` (both columns are in ask.match_stats).
     key: "errors",
     numerator: ["errors"],
-    groups: [],
-    standard: false,
+    groups: ["points"],
+    standard: true,
   },
   {
     key: "total_points_won_pct",
@@ -446,7 +449,7 @@ export const ASK_QUALITY_MEASURES: readonly AskQuality[] = [
   {
     word: "Consistent",
     pattern: /\b(?:consisten\w*|solid|steady|steadiest|reliable)\b/i,
-    measures: ["unforced_errors", "total_points_won_pct"],
+    measures: ["errors", "total_points_won_pct"],
   },
   {
     word: "Clutch",
@@ -497,7 +500,9 @@ const QUESTION_MEASURES: readonly (readonly [RegExp, readonly string[]])[] = [
       "break_point_opportunities",
     ],
   ],
-  [/\bunforced errors?\b/i, ["unforced_errors"]],
+  // Forced errors beside them, so the answer shows what the unforced count
+  // leaves out: 38 unforced and 11 forced never reads as 38 errors.
+  [/\bunforced errors?\b/i, ["unforced_errors", "forced_errors"]],
   // "errors" or "mistakes" alone is every error: on a match whose split
   // nobody judged that is the only honest count. "unforced errors" (above)
   // and "forced errors" keep their own measure.
@@ -628,7 +633,7 @@ export function selectCompareMeasures(
   };
 }
 
-/** "Consistent is read here as unforced errors per match and total points won." — no digit in it. */
+/** "Consistent is read here as errors per match and total points won." — no digit in it. */
 export function qualityNote(
   quality: AskQuality,
   labels: readonly string[],

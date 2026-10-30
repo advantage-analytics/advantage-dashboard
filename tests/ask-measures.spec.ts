@@ -10,10 +10,13 @@ import {
   ASK_MEASURES,
   ASK_MEASURE_PREFIX_QUALIFIERS,
   ASK_MEASURE_SUFFIX_QUALIFIERS,
+  ASK_UNFORCED_ERRORS_NOTE,
   askCounterSql,
   askMeasure,
   askMeasureFullLabel,
   askMeasureLabel,
+  forcedErrorsColumn,
+  unforcedErrorsNotes,
 } from "@/lib/services/ask/measures";
 import {
   ASK_REVIEW_MEASURES,
@@ -101,6 +104,55 @@ test.describe("ASK_MEASURES", () => {
         expect(columns.has(column), column).toBe(true);
       }
     }
+  });
+
+  test("unforced errors keeps its name and says what it can hold; only forced_errors vouches for it", () => {
+    expect(ASK_MEASURES.unforced_errors).toEqual({
+      label: "Unforced errors",
+      note: "every error on a match whose split nobody judged: ERRORS UNTIL JUDGED says what to call it",
+    });
+    expect(ASK_UNFORCED_ERRORS_NOTE).toBe(
+      "Unforced errors can include every error on matches whose forced/unforced split wasn't judged.",
+    );
+    expect(unforcedErrorsNotes([{ me_winners: 3 }])).toEqual([]);
+    expect(unforcedErrorsNotes([{ errors: 3 }])).toEqual([]);
+    // Judged, in every row.
+    expect(
+      unforcedErrorsNotes([
+        { unforced_errors: 3, forced_errors: 1 },
+        { unforced_errors: 4, forced_errors: 0 },
+      ]),
+    ).toEqual([]);
+    expect(
+      unforcedErrorsNotes([
+        {
+          me_unforced_errors: 3,
+          me_forced_errors: 1,
+          opp_unforced_errors: 4,
+          opp_forced_errors: 0,
+        },
+      ]),
+    ).toEqual([]);
+    // Null in any row, on one side, or not selected at all.
+    for (const rows of [
+      [
+        { unforced_errors: 3, forced_errors: 1 },
+        { unforced_errors: 4, forced_errors: null },
+      ],
+      [
+        {
+          me_unforced_errors: 3,
+          me_forced_errors: 1,
+          opp_unforced_errors: 4,
+          opp_forced_errors: null,
+        },
+      ],
+      [{ unforced_errors: 3 }],
+      [{ unforced_errors_per_match: 3.5 }],
+    ]) {
+      expect(unforcedErrorsNotes(rows)).toEqual([ASK_UNFORCED_ERRORS_NOTE]);
+    }
+    expect(forcedErrorsColumn("opp_unforced_errors")).toBe("opp_forced_errors");
   });
 
   test("the error meanings say when the split was judged", () => {
