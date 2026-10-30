@@ -539,6 +539,16 @@ test.describe("createMcpUserReads", () => {
     ).toEqual([]);
   });
 
+  test("ask.matches names only a college program, because it reads programs as its owner", () => {
+    const source = readFileSync(
+      "supabase/migrations/20261030222658_ask_matches_opponent_college_only.sql",
+      "utf8",
+    );
+    expect(source).toMatch(
+      /left join public\.programs op on op\.id = m\.opponent_program_id and op\.org_type = 'college'/,
+    );
+  });
+
   test("the answer cache's data version moves when the opponent's team does", () => {
     const source = readFileSync(
       "supabase/migrations/20261030210829_ask_data_version_opponent_team.sql",

@@ -197,7 +197,7 @@ email"):
   user. There is no same-origin check because this is not a browser mutation
   — the bearer token is the credential, and a cross-site page has none.
 - **Reads are read-only** at every layer: the SQL guard allows one SELECT,
-  `ask.exec_query()` sets `transaction_read_only`, and the six read tools are
+  `ask.exec_query()` sets `transaction_read_only`, and the seven read tools are
   annotated `readOnlyHint`; the three that write carry `readOnlyHint: false`
   and `destructiveHint: false`. What a call can change: what the page's own
   question would through `ask` (a saved answer, a run row, a question spent),
