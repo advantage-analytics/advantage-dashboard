@@ -344,6 +344,10 @@ function SortDropdown({
   );
 }
 
+function draftCount(count: number): string {
+  return `${count} ${count === 1 ? "draft" : "drafts"}`;
+}
+
 /** The chip's own name, as a heading reads it. */
 const LIFECYCLE_NOUN: Record<Exclude<LifecycleValue, "all">, string> = {
   new: "new matches",
@@ -1043,20 +1047,16 @@ export function MatchesPageContent({
     setSearch("");
   };
 
-  if (matches.length === 0) {
+  // A draft is a match in flight and keeps the list (v3's Data Table law 8).
+  if (matches.length === 0 && drafts.length === 0) {
     return <EmptyMatches scope={scope} />;
   }
 
   // The strip and the footer count matches; the draft rows above them are
-  // stated beside the count so the two add up to the rows on screen. Only where
-  // those rows draw: the cards below `lg` list no drafts.
+  // stated beside the count so the two add up to the rows on screen. With no
+  // match to count, the strip counts the drafts instead of "0 of 0".
   const listedDraftsNote =
-    listedDrafts.length > 0 ? (
-      <span className="hidden lg:inline">
-        {" "}
-        · {listedDrafts.length} {listedDrafts.length === 1 ? "draft" : "drafts"}
-      </span>
-    ) : null;
+    listedDrafts.length > 0 ? ` · ${draftCount(listedDrafts.length)}` : "";
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -1111,8 +1111,9 @@ export function MatchesPageContent({
             aria-hidden="true"
           />
           <span className="text-micro tabular">
-            {sorted.length} of {matches.length}
-            {listedDraftsNote}
+            {matches.length === 0
+              ? `${listedDrafts.length} of ${draftCount(drafts.length)}`
+              : `${sorted.length} of ${matches.length}${listedDraftsNote}`}
           </span>
           <div className="flex-1" />
           <button

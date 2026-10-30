@@ -524,17 +524,6 @@ test.describe("the counts add up to the rows on screen", () => {
     await expect(row(page, "d-new")).toHaveCount(1);
     await expect(listedRows(page)).toHaveCount(3);
   });
-
-  // The harness loads no stylesheet, so the breakpoint is read off the class:
-  // the cards below `lg` list no drafts, so the note must not draw there.
-  test("the draft note draws only where draft rows do", async ({ page }) => {
-    await openCut(page, "?q=Fall");
-    for (const count of [strip(page), footer(page)]) {
-      await expect(count.getByText("· 1 draft")).toHaveClass(
-        "hidden lg:inline",
-      );
-    }
-  });
 });
 
 test.describe("stepping stays in step with the rows shown", () => {
@@ -569,6 +558,134 @@ test.describe("stepping stays in step with the rows shown", () => {
     await openCut(page, "?q=Riley&draft=d-new");
     await expect(row(page, "m-plain")).toHaveCount(1);
     await expect(drawer(page)).toHaveCount(0);
+  });
+});
+
+test.describe("a workspace with drafts and no matches keeps the list", () => {
+  for (const scope of ["personal", "team"] as const) {
+    test(`${scope}: the drafts list, and one opens and continues`, async ({
+      page,
+    }) => {
+      const team = scope === "team" ? "&scope=team" : "";
+      await openCut(page, `?draftsOnly=1${team}`);
+
+      await expect(
+        page.getByText(
+          scope === "team"
+            ? "No matches on the program yet"
+            : "Send your first match",
+        ),
+      ).toHaveCount(0);
+      await expect(listedRows(page)).toHaveCount(2);
+      await expect(tableCard(page).getByRole("columnheader")).not.toHaveCount(
+        0,
+      );
+
+      await row(page, "d-new").click();
+      const panel = drawer(page);
+      await expect(panel.getByText("1 / 2", { exact: true })).toBeVisible();
+      await expect(
+        panel.getByRole("link", { name: /Continue/ }).last(),
+      ).toHaveAttribute(
+        "href",
+        scope === "team"
+          ? "/dashboard/team/upload?draft=d-new"
+          : "/dashboard/matches/new?draft=d-new",
+      );
+      await page.keyboard.press("ArrowDown");
+      await expect(row(page, "d-other")).toHaveAttribute(
+        "aria-current",
+        "true",
+      );
+    });
+  }
+
+  test("nothing claims the list is empty, and no footer pages nothing", async ({
+    page,
+  }) => {
+    await openCut(page, "?draftsOnly=1");
+    await expect(page.getByText("Show all matches")).toHaveCount(0);
+    await expect(page.getByText(/^No matches/)).toHaveCount(0);
+    await expect(footer(page)).toHaveCount(0);
+    await expect(strip(page)).toHaveCount(0);
+  });
+
+  test("the strip counts the drafts, not zero of zero matches", async ({
+    page,
+  }) => {
+    await openCut(page, "?draftsOnly=1&q=Sam%20Ortiz");
+    await expect(listedRows(page)).toHaveCount(1);
+    await expect(strip(page)).toHaveText("1 of 2 drafts");
+
+    await openCut(page, "?draftsOnly=1&q=Nobody");
+    await expect(listedRows(page)).toHaveCount(0);
+    await expect(strip(page)).toHaveText("0 of 2 drafts");
+    await expect(
+      tableCard(page).getByText("No matches for “Nobody”"),
+    ).toHaveCount(1);
+
+    await page.getByRole("button", { name: "Clear filter" }).click();
+    await expect(listedRows(page)).toHaveCount(2);
+    await expect(strip(page)).toHaveCount(0);
+  });
+
+  test("a view with no matches says so and leads back to the drafts", async ({
+    page,
+  }) => {
+    await openCut(page, "?draftsOnly=1&lifecycle=new");
+    await expect(listedRows(page)).toHaveCount(0);
+    await expect(tableCard(page).getByText("No new matches")).toHaveCount(1);
+    await tableCard(page)
+      .getByRole("button", { name: "Show all matches" })
+      .click();
+    await expect(listedRows(page)).toHaveCount(2);
+  });
+});
+
+// The harness loads no stylesheet, so both layouts draw and the cards can be
+// driven directly: the table's rows and these cards answer the same drafts.
+test.describe("the cards below lg list the drafts too", () => {
+  function card(page: Page, id: string) {
+    return page.locator(`a#match-card-${id}`);
+  }
+
+  test("a card reads back the draft and opens the rail", async ({ page }) => {
+    await openCut(page, "?draftsOnly=1");
+    const first = card(page, "d-new");
+    await expect(first).toContainText("vs Sam Ortiz");
+    await expect(first).toContainText("Fall Classic · R16");
+    await expect(first).toContainText("Video check");
+    await expect(first).toHaveAttribute(
+      "href",
+      "/dashboard/matches/new?draft=d-new",
+    );
+    await expect(card(page, "d-other")).toContainText("No event yet");
+
+    await first.click();
+    await expect(
+      drawer(page).getByText("Stopped at Video check", { exact: true }),
+    ).toBeVisible();
+    expect(await page.evaluate(() => location.search)).toContain("draft=d-new");
+  });
+
+  test("beside matches a standalone draft gets a card, a folded one none", async ({
+    page,
+  }) => {
+    await open(page);
+    await expect(card(page, "d-new")).toHaveCount(1);
+    await expect(card(page, "d-folded")).toHaveCount(0);
+  });
+
+  test("the cards drop the empty sentence only while a draft lists", async ({
+    page,
+  }) => {
+    await openCut(page, "?draftsOnly=1&q=Nobody");
+    await expect(card(page, "d-new")).toHaveCount(0);
+    await expect(page.getByText("No matches for “Nobody”")).toHaveCount(2);
+
+    await openCut(page, "?draftsOnly=1&q=Sam%20Ortiz");
+    await expect(card(page, "d-new")).toHaveCount(1);
+    await expect(page.getByText(/^No matches for/)).toHaveCount(0);
   });
 });
 

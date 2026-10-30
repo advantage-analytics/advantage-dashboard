@@ -22,6 +22,8 @@ import type { DraftRowData } from "@/components/dashboard/matches/draft-row";
  * `?manual=1` gives it a score-only analysis instead, which folds as usual.
  * `?queued=1` puts both matches in analysis, so none has a report yet, and
  * `?empty=1` drops them and the drafts, for the title row's subtitle.
+ * `?draftsOnly=1` drops the matches and keeps two standalone drafts (`d-new`,
+ * `d-other`): a workspace whose first match is still in flight.
  * Everything else on the URL
  * (`?match=`, `?draft=`) reaches the page through the navigation mock's
  * `useSearchParams()`, as it would from Next.
@@ -119,7 +121,8 @@ if (params.get("queued") === "1") {
 }
 
 const isEmpty = params.get("empty") === "1";
-const MATCHES: DisplayMatch[] = isEmpty ? [] : [scored, plain];
+const isDraftsOnly = params.get("draftsOnly") === "1";
+const MATCHES: DisplayMatch[] = isEmpty || isDraftsOnly ? [] : [scored, plain];
 
 function draft(
   id: string,
@@ -150,24 +153,39 @@ function draft(
   };
 }
 
+const standaloneDraft = draft(
+  "d-new",
+  "Jordan Park",
+  "2026-09-22T10:00:00Z",
+  null,
+  {
+    opponentName: "Sam Ortiz",
+    matchDate: "2026-09-18",
+    courtType: "hard",
+    eventLabel: "Fall Classic · R16",
+    score: [
+      { player1: 6, player2: 4 },
+      { player1: 3, player2: 6 },
+    ],
+  },
+);
+
 const DRAFTS: DraftRowData[] = isEmpty
   ? []
-  : [
-      draft("d-new", "Jordan Park", "2026-09-22T10:00:00Z", null, {
-        opponentName: "Sam Ortiz",
-        matchDate: "2026-09-18",
-        courtType: "hard",
-        eventLabel: "Fall Classic · R16",
-        score: [
-          { player1: 6, player2: 4 },
-          { player1: 3, player2: 6 },
-        ],
-      }),
-      draft("d-folded", "Avery Stone", "2026-09-21T10:00:00Z", "m-scored", {
-        opponentName: "Avery Stone",
-        matchDate: "2026-09-20",
-      }),
-    ];
+  : isDraftsOnly
+    ? [
+        standaloneDraft,
+        draft("d-other", "Jordan Park", "2026-09-21T10:00:00Z", null, {
+          opponentName: "Quinn Hale",
+        }),
+      ]
+    : [
+        standaloneDraft,
+        draft("d-folded", "Avery Stone", "2026-09-21T10:00:00Z", "m-scored", {
+          opponentName: "Avery Stone",
+          matchDate: "2026-09-20",
+        }),
+      ];
 
 createRoot(document.getElementById("root")!).render(
   <TooltipProvider>
