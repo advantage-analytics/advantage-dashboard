@@ -1103,7 +1103,8 @@ function computeRallyViz(
 /**
  * Errors cut: one dot per point the SUBJECT lost on their own error
  * (`errorMadeBy`, the attribution the Result filters and the Point endings
- * card use — a double fault is the server's), drawn where the erring shot
+ * card use — a double fault is the server's, a service winner's missed return
+ * the returner's), drawn where the erring shot
  * landed, from behind its hitter, on the same full-court landing frame as
  * rally placement. The erring shot is the point's deciding row
  * (`lastShotOf`): its last, or a double fault's last serve. A point

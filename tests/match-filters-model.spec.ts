@@ -449,6 +449,54 @@ test("Winner = the POV player hit a winner, ace or service winner", () => {
   ).toEqual(["rudy-bh-winner", "rudy-ace"]);
 });
 
+test("a service winner's missed return is the returner's error and still the server's winner", () => {
+  const points = [
+    // Your service winner: the last row is Rudy's return into the net.
+    pt({
+      id: "missed-return",
+      resultType: "Service Winner",
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+      shots: rally("Forehand", 2, "Net"),
+    }),
+    // A serve no one touched has no miss to attribute.
+    pt({
+      id: "untouched",
+      resultType: "Service Winner",
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+      shots: [
+        shot({ shotNumber: 1, isPlayer1: true, shotType: "First Serve" }),
+      ],
+    }),
+    // The return landed.
+    pt({
+      id: "return-in",
+      resultType: "Service Winner",
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+      shots: rally("Forehand", 2, "In"),
+    }),
+    // The label says the server's, but the server lost: not a missed return.
+    pt({
+      id: "server-lost",
+      resultType: "Service Winner",
+      serverIsPlayer1: true,
+      wonByPlayer1: false,
+      shots: rally("Forehand", 2, "Out"),
+    }),
+  ];
+  expect(
+    run(points, { resultPlayer: "opponent", resultEnding: ["error"] }),
+  ).toEqual(["missed-return"]);
+  expect(run(points, { resultPlayer: "you", resultEnding: ["error"] })).toEqual(
+    [],
+  );
+  expect(
+    run(points, { resultPlayer: "you", resultEnding: ["winner"] }),
+  ).toContain("missed-return");
+});
+
 test("Error = the POV player made the error, incl. double faults and a null result type ending Out/Net", () => {
   const points = [
     // Rudy's forehand into the net on shot 4.

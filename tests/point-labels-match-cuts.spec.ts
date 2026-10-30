@@ -198,6 +198,22 @@ test.describe("point endings credit", () => {
     expect(opened.map((p) => p.id)).toEqual(["sv-sw"]);
   });
 
+  test("its missed return adds to neither player's unforced errors", () => {
+    for (const isPlayer1 of [true, false]) {
+      expect(
+        outcomeTally([SV_SERVICE_WINNER], isPlayer1, false).unforcedErrors,
+      ).toBe(0);
+      expect(tallySide([SV_SERVICE_WINNER], isPlayer1).unforcedErrors).toBe(0);
+    }
+    const opened = applyFilmCut(
+      [SV_SERVICE_WINNER],
+      [SV_SERVICE_WINNER],
+      outcomeCut("unforcedErrors", "opp"),
+      SV,
+    );
+    expect(opened).toEqual([]);
+  });
+
   test("on a derived match an unreturned serve is an ace, not a winner", () => {
     const points = [DERIVED_UNRETURNED, DERIVED_RALLY_WINNER];
     const t = outcomeTally(points, true, true);

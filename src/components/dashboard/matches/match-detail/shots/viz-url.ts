@@ -625,11 +625,6 @@ export function cutAvailability(
   return out as unknown as MatchFilterAvailability;
 }
 
-/** Serve › Result values for a serve no one returned (an ace, a service
- * winner) — the points that leave no return, rally shot or error to draw. */
-const isUnreturnedServeResult = (v: string) =>
-  v === "ace" || v === "service-winner";
-
 /** `filters` without what can only match a point the court player won (see
  * `carryFilters`). Result › Outcome is yours, so the court player's win is
  * "won" on your court and "lost" on the opponent's. */
@@ -682,14 +677,15 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   if (filters.result.includes("ace")) {
     next.result = filters.result.filter((v) => v !== "ace");
   }
-  // The advanced Serve › Result "Ace" and "Service winner" are points no
-  // one returned — no return, no rally shot, no error to draw off serve. A
-  // "Double fault" has no return or rally shot either; on the errors cut it
-  // IS the server's error, so it stays there.
+  // The advanced Serve › Result "Ace" leaves no return, rally shot or error to
+  // draw off serve. "Double fault" and "Service winner" leave nothing on the
+  // return and rally cuts either, but on the errors cut they stay: a double
+  // fault IS the server's error, and a service winner's missed return is the
+  // returner's (`errorMadeBy`).
   const serveResult = next.match?.serveResult ?? [];
   const drop = (v: (typeof serveResult)[number]) =>
-    isUnreturnedServeResult(v) ||
-    (v === "double-fault" && nextCut !== "errors");
+    v === "ace" ||
+    ((v === "service-winner" || v === "double-fault") && nextCut !== "errors");
   if (serveResult.some(drop)) {
     next.match = {
       ...next.match,

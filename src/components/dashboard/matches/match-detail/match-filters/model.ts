@@ -816,17 +816,28 @@ export function winnerHitBy(point: MatchPoint): boolean | null {
  * on one. A double fault is the server's. Any other "…Error" result is the
  * decisive shot's hitter, else the point's loser. With NO result type, a
  * last shot recorded Out or Net is its hitter's error.
+ *
+ * A service winner the server won, whose last shot is the returner's Out or
+ * Net, is the returner's error as well as the server's winner (`winnerHitBy`),
+ * so one point can answer both Result › Ending options, each for its own
+ * player. A serve no one touched has no such shot and stays nobody's error.
+ * The unforced-error figures are safe from this: they test the result type
+ * before they ask who made the error.
  */
 export function errorMadeBy(point: MatchPoint): boolean | null {
   const rt = lower(point.resultType);
   if (rt.includes("double fault")) return point.serverIsPlayer1;
   const last = lastShotOf(point);
   if (rt.includes("error")) return last ? last.isPlayer1 : !point.wonByPlayer1;
-  if (rt === "" && last) {
-    const result = lower(last.result);
-    if (result === "out" || result === "net") return last.isPlayer1;
-  }
-  return null;
+  if (!last) return null;
+  const result = lower(last.result);
+  if (result !== "out" && result !== "net") return null;
+  if (rt === "") return last.isPlayer1;
+  const returnerMissed =
+    rt === "service winner" &&
+    last.isPlayer1 !== point.serverIsPlayer1 &&
+    point.wonByPlayer1 === point.serverIsPlayer1;
+  return returnerMissed ? last.isPlayer1 : null;
 }
 
 /**
