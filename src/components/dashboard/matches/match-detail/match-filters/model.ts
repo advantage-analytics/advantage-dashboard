@@ -472,6 +472,13 @@ export interface MatchFilterContext {
    * (`serveResultOf`).
    */
   isDerived?: boolean;
+  /**
+   * The match's errors are split into unforced and forced
+   * (`Match.errorSplitJudged`, from `errorSplitJudged()` in the loader).
+   * Absent reads as not judged. Cards read it here rather than re-deriving it
+   * from the row each.
+   */
+  errorSplitJudged?: boolean;
 }
 
 /** A video-derived (Advantage Intelligence) match, off the match row. */
@@ -483,10 +490,14 @@ export function isDerivedMatch(match: Pick<Match, "sourceProvider">): boolean {
  * The filters' context for one match: the match row's hands
  * (`playerHands`, already seat-correct — no swap here) and, where a row has
  * none, the hand inferred from that seat's strokes (`inferHand`); and
- * whether the match is derived from video (`isDerived`), off the same row.
+ * whether the match is derived from video (`isDerived`), off the same row;
+ * and whether its errors are split (`errorSplitJudged`), as the loader set it.
  */
 export function buildFilterContext(
-  match: Pick<Match, "player1" | "player2" | "sourceProvider">,
+  match: Pick<
+    Match,
+    "player1" | "player2" | "sourceProvider" | "errorSplitJudged"
+  >,
   points: readonly Pick<MatchPoint, "shots">[],
   youIsPlayer1: boolean,
 ): MatchFilterContext {
@@ -498,6 +509,7 @@ export function buildFilterContext(
       player2: stored.player2 ?? inferHand(points, false),
     },
     isDerived: isDerivedMatch(match),
+    errorSplitJudged: match.errorSplitJudged === true,
   };
 }
 
@@ -654,14 +666,25 @@ export function serveResultOf(
  * Winner", but the head-to-head Aces row counts it and Serve › Result "Ace"
  * opens it (`serveResultOf`), so the rows that click shows must say so. A
  * service winner with a stroke after the serve is not one and keeps its label.
+ *
+ * Until the match's errors are judged (`ctx.errorSplitJudged`, absent = not
+ * judged) an error's kind is dropped from the name — "Backhand Unforced
+ * Error" and "Backhand Forced Error" both read "Backhand Error" — since nobody
+ * has called it either way. The label only: the stored `resultType` keeps the
+ * kind, and a judged match shows it as stored.
  */
 export function pointResultLabel(
   point: MatchPoint,
-  ctx: Pick<MatchFilterContext, "isDerived">,
+  ctx: Pick<MatchFilterContext, "isDerived" | "errorSplitJudged">,
 ): string {
   if (ctx.isDerived && isUnreturnedServe(point)) return "Ace";
-  return point.resultType || "Point";
+  const stored = point.resultType || "Point";
+  if (ctx.errorSplitJudged) return stored;
+  return stored.replace(UNJUDGED_ERROR_KIND, "");
 }
+
+/** "Unforced " / "Forced " before a closing "Error" — the kind an unjudged label drops. */
+const UNJUDGED_ERROR_KIND = /\b(?:un)?forced\s+(?=error\s*$)/i;
 
 /**
  * The point ended on a winning return: the head-to-head card's Return winners

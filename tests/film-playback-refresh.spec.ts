@@ -1394,6 +1394,136 @@ async function openRoomWithDrawer(
   await page.locator(DRAWER_ROW("a")).waitFor();
 }
 
+/**
+ * Counts every write to the room's clock from here on. Counted at the setter
+ * rather than read off the playhead, because the clip plays through its stops
+ * a tenth of a second apart, and rather than on `seeking`, whose event is
+ * queued: a press has already written by the time `keyboard.press` returns.
+ */
+async function countRoomSeeks(page: Page) {
+  await page.locator(ROOM).evaluate((el) => {
+    const clock = Object.getOwnPropertyDescriptor(
+      HTMLMediaElement.prototype,
+      "currentTime",
+    )!;
+    const w = window as unknown as { roomSeeks: number };
+    w.roomSeeks = 0;
+    Object.defineProperty(el, "currentTime", {
+      configurable: true,
+      get() {
+        return clock.get!.call(el);
+      },
+      set(seconds: number) {
+        w.roomSeeks += 1;
+        clock.set!.call(el, seconds);
+      },
+    });
+  });
+  return () =>
+    page.evaluate(() => (window as unknown as { roomSeeks: number }).roomSeeks);
+}
+
+/** Space twice: from paused to playing, then pausing the film that plays. */
+async function playThenPause(page: Page) {
+  await page.keyboard.press(" ");
+  await expect.poll(async () => (await state(page, ROOM))?.paused).toBe(false);
+  await page.keyboard.press(" ");
+  await expect.poll(async () => (await state(page, ROOM))?.paused).toBe(true);
+}
+
+/** Row `c` is where the film stands, with `←` still having a stop to walk to. */
+async function landOnRowC(page: Page) {
+  await page.locator(DRAWER_ROW("c")).click();
+  await page.waitForFunction((sel) => {
+    const el = document.querySelector<HTMLVideoElement>(sel);
+    return !!el && !el.seeking && el.currentTime > 0.3;
+  }, ROOM);
+  return (await state(page, ROOM))?.time ?? 0;
+}
+
+test("a clicked row lets go of the keys: Space and Enter stay where the arrows left the film", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "room-click-focus");
+
+  const clicked = await landOnRowC(page);
+  await expect(page.locator(DRAWER_ROW("c"))).not.toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect
+    .poll(async () => (await state(page, ROOM))?.time)
+    .toBeLessThan(clicked);
+
+  const seeks = await countRoomSeeks(page);
+  await playThenPause(page);
+  await page.keyboard.press("Enter");
+  expect(await seeks()).toBe(0);
+});
+
+test("a tabbed-to row answers Enter, and Space is still play and pause", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "room-tab-focus");
+
+  const clicked = await landOnRowC(page);
+  await page.locator(DRAWER_ROW("c")).focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect
+    .poll(async () => (await state(page, ROOM))?.time)
+    .toBeLessThan(clicked);
+  await expect(page.locator(DRAWER_ROW("c"))).toBeFocused();
+
+  const seeks = await countRoomSeeks(page);
+  await playThenPause(page);
+  expect(await seeks()).toBe(0);
+
+  await page.keyboard.press("Enter");
+  expect(await seeks()).toBe(1);
+});
+
+test("a clicked row takes the keys off the control that held them", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "room-click-clears-focus");
+
+  await landOnRowC(page);
+  const next = page
+    .locator("[data-film-chrome]")
+    .getByRole("button", { name: "Next point" })
+    .first();
+  await next.focus();
+  await page.locator(DRAWER_ROW("a")).click();
+  await expect(next).not.toBeFocused();
+
+  const seeks = await countRoomSeeks(page);
+  await page.keyboard.press("Enter");
+  expect(await seeks()).toBe(0);
+});
+
+test("a clicked shot lets go of the keys too", async ({ page }) => {
+  await openRoomWithDrawer(page, "room-shot-focus");
+
+  await landOnRowC(page);
+  const shot = page.locator(`${DRAWER} [data-shot-id]`).first();
+  await shot.click();
+  await expect(shot).not.toBeFocused();
+});
+
+test("Enter on a row's bookmark toggles the bookmark and leaves the film alone", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "room-bookmark-keys");
+
+  const row = page.locator(DRAWER_ROW("b"));
+  await row.getByRole("button", { name: "Bookmark this point" }).focus();
+
+  const seeks = await countRoomSeeks(page);
+  await page.keyboard.press("Enter");
+  await expect(
+    row.getByRole("button", { name: "Remove bookmark" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(await seeks()).toBe(0);
+});
+
 /** Three different rows, 200 ms apart, each landing on its own stop. */
 async function jumpRows(page: Page) {
   for (const id of ["c", "a", "b"]) {

@@ -12,6 +12,7 @@ import {
   type AskResolvedMeasure,
   askMeasure,
   askMeasureFullLabel,
+  forcedErrorsColumn,
 } from "@/lib/services/ask/measures";
 import {
   ASK_VISUAL_KINDS,
@@ -2702,6 +2703,27 @@ function measureOfCells(cells: string): AskResolvedMeasure[] | null {
 }
 
 /**
+ * Whether the model named an unforced_errors cell "errors" or "errors counted
+ * as unforced" (ASK_ERRORS_RULE) and the result does not show its split was
+ * judged. That name stands: "Unforced errors" is the one that could be false.
+ * Where forced_errors vouches for the cell, the dictionary's name still wins,
+ * since "errors" would then understate what the player made.
+ */
+function namesUnjudgedErrors(
+  label: string,
+  cells: string,
+  rows: readonly AskRow[],
+  measures: readonly AskResolvedMeasure[],
+): boolean {
+  if (measures[0].key !== "unforced_errors") return false;
+  if (!/^errors(?: counted as unforced)?\b/i.test(label.trim())) return false;
+  return [...cells.matchAll(REFERENCE_ROW_AND_COLUMN)].some(
+    (match) =>
+      !isNumber(rows[Number(match[1]) - 1]?.[forcedErrorsColumn(match[2])]),
+  );
+}
+
+/**
  * The label the server gives a figure, or a table or bars row, in place of
  * the model's — or null to leave the model's alone.
  *
@@ -2728,6 +2750,7 @@ export function canonicalLabel(
 ): string | null {
   const measures = measureOfCells(cells);
   if (!measures) return null;
+  if (namesUnjudgedErrors(label, cells, rows, measures)) return null;
   const named = new Set<number>();
   for (const word of labelWords(label)) {
     const row = tokens.get(word);

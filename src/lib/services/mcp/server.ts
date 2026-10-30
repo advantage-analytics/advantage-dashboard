@@ -1,5 +1,5 @@
 /**
- * The Ask MCP server: nine tools over the signed-in user's own match data,
+ * The Ask MCP server: ten tools over the signed-in user's own match data,
  * for a Claude of their own (claude.ai, Claude Desktop, Claude Code) to
  * call (docs/ask-mcp-connector.md; docs/ask-improvement-roadmap.md, slice 3).
  *
@@ -23,10 +23,11 @@
  *                     same reservation and run record as `POST /api/ask`;
  *                     it reads the page's answer cache but never writes it
  *                     (below)
+ *   search_programs   the program directory, by the school dropdown's matching
  *   update_match      the Edit dialog's metadata fields on a match the
  *                     caller created — never the score, the format or the
  *                     player — through `normalizeMatchPatch()` and
- *                     `ask_patch_match`
+ *                     `ask_patch_match`; a school links to the directory
  *   prepare_video_upload
  *                     a wizard draft from a few typed facts and the
  *                     `?draft=` link that resumes it; the wizard asks for
@@ -131,7 +132,11 @@ import type {
   PersonalOpponentRecentMatch,
 } from "@/lib/data/personal-opponents";
 import type { TeamOpponent } from "@/lib/data/team-opponents";
-import type { McpUserReads } from "@/lib/services/mcp/user-reads";
+import type { GenderedSquad } from "@/lib/data/squad";
+import type {
+  McpDirectoryProgram,
+  McpUserReads,
+} from "@/lib/services/mcp/user-reads";
 import type { LLMTool } from "@/lib/llm/adapter";
 import type { AskAgentToolbox } from "@/lib/services/ask/agent";
 
@@ -167,7 +172,10 @@ const MAX_SQL_LENGTH = 20_000;
 /** How many of the scope's matches a query result lists back. */
 const MAX_LISTED_SOURCES = 100;
 
-const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarising one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, and ask to have Advantage answer a whole question (it saves the exchange to the player's Ask history and spends one of their monthly questions). Two more tools write: update_match fixes a match's details (never its score), and prepare_video_upload saves a draft and returns the link where the player picks the video and finishes — confirm what the player wants before calling either. Every number you report must come from a tool result; the views hold nobody else's data, except the matches of teams the player belongs to.`;
+const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarising one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, and ask to have Advantage answer a whole question (it saves the exchange to the player's Ask history and spends one of their monthly questions). Two more tools write: update_match fixes a match's details (never its score), and prepare_video_upload saves a draft and returns the link where the player picks the video and finishes — confirm what the player wants before calling either. Before setting an opponent's school, call search_programs and pass the program's id to update_match as opponent_program_id; send opponent_school text only for a school the directory does not hold. Every number you report must come from a tool result; the views hold nobody else's data, except the matches of teams the player belongs to.`;
+
+const PROGRAM_NOT_FOUND =
+  "That program isn't in the directory. Find its id with search_programs.";
 
 /** A refusal a tool throws; `guarded()` answers it as the tool result `refusalResult()` shapes. */
 class Refusal extends Error {
@@ -198,6 +206,9 @@ function listMatchesSql(team: boolean): string {
     "m.match_id",
     "m.played_on",
     "m.opponent_name",
+    "m.opponent_school",
+    "m.opponent_program_id",
+    "m.opponent_conference",
     "m.score_text",
     "m.i_won",
     "m.source",
@@ -216,6 +227,9 @@ const MATCH_ROW_COLUMNS = [
   "opponent_name",
   "opponent_hand",
   "opponent_backhand",
+  "opponent_school",
+  "opponent_program_id",
+  "opponent_conference",
   "tournament",
   "round",
   "court_type",
@@ -282,6 +296,9 @@ function listedMatch(row: Row, team: boolean): Row {
     match_id: row.match_id,
     played_on: row.played_on ?? null,
     opponent: row.opponent_name ?? null,
+    opponent_school: row.opponent_school ?? null,
+    opponent_program_id: row.opponent_program_id ?? null,
+    opponent_conference: row.opponent_conference ?? null,
     score: row.score_text ?? null,
     i_won: row.i_won ?? null,
     source: row.source ?? null,
@@ -407,9 +424,9 @@ const PROGRAM_ID = z
 /** The read tools' descriptions, shared by the connector and Ask's agent mode. */
 const READ_TOOL_DESCRIPTIONS = {
   list_matches:
-    "The matches in scope — the signed-in player's own, or one program's with program_id — newest first, with each match's id, date (played_on, UTC), opponent, score from the player's seat, result (i_won), source (video, swingvision, or null when entered by hand), tournament, match type and whether statistics exist for it. These are exactly the rows a query can read.",
+    "The matches in scope — the signed-in player's own, or one program's with program_id — newest first, with each match's id, date (played_on, UTC), opponent, the opponent's school (opponent_school: the linked program's name or the text typed), opponent_program_id and opponent_conference, score from the player's seat, result (i_won), source (video, swingvision, or null when entered by hand), tournament, match type and whether statistics exist for it. These are exactly the rows a query can read.",
   get_match:
-    "One match in full, with no SQL: its ask.matches row (date, opponent, score from the player's seat, result, source, tournament), both sides of ask.match_stats (me and opponent — every count, percentage and rating the views carry), the AI summary with strengths and weaknesses for each side and the key moments where analysis produced them, the match page's URL, and its public share link when one has been created in the app. Call it before summarising a match.",
+    "One match in full, with no SQL: its ask.matches row (date, opponent and their school, score from the player's seat, result, source, tournament), both sides of ask.match_stats (me and opponent — every count, percentage and rating the views carry), the AI summary with strengths and weaknesses for each side and the key moments where analysis produced them, the match page's URL, and its public share link when one has been created in the app. Call it before summarising a match.",
   opponent_scouting:
     "The Opponents page's record, one entry per opponent the player (or the program, with program_id) has faced: hand and backhand, matches played, wins and losses, the last five results as form, the most recent meeting, up to six recent meetings with the player's side of four measures (total points won, first-serve points won, first-return points won, break points converted), and each measure's recent average with its trend against earlier meetings. In a program scope each entry also says which roster players faced them. Pass opponent to filter by name. Tendencies beyond these four measures — serve zones, rally lengths, return depth against one opponent — are a run_query away.",
   describe_views:
@@ -808,13 +825,133 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     guarded("opponent_scouting", read.opponentScouting),
   );
 
+  // The team to compare a program against: the scope program's squad, or null
+  // for a personal, co-ed or unsaid scope, which any program fits.
+  async function scopeSquad(scope: AskScope): Promise<GenderedSquad | null> {
+    return scope.kind === "team"
+      ? context.reads.programSquad(scope.programId)
+      : null;
+  }
+
+  // ── search_programs ────────────────────────────────────────────────────
+  server.registerTool(
+    "search_programs",
+    {
+      title: "Search the program directory",
+      description:
+        'Find a college program to link as an opponent\'s school, with the matching the app\'s school dropdown uses: the term anywhere in the school name or its abbreviation, prefix hits first, then conference names. Returns each program\'s id, school_name, school_abbrev, team, division and conference. With program_id, team defaults to that program\'s team. Short forms work only where the directory holds them ("USD", "Ohio State"): when one finds nothing, search the full name ("North Carolina State").',
+      inputSchema: {
+        query: z
+          .string()
+          .trim()
+          .min(2)
+          .max(OPPONENT_SCHOOL_MAX)
+          .describe("A school name, abbreviation or conference."),
+        program_id: PROGRAM_ID,
+        team: z
+          .enum(["mens", "womens"])
+          .optional()
+          .describe("Men's or women's programs. Omit for the scope's team."),
+        division: z.enum(["D1", "D2", "D3", "NAIA", "JUCO"]).optional(),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(25)
+          .optional()
+          .describe("At most this many programs; 10 when omitted."),
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true },
+    },
+    guarded(
+      "search_programs",
+      async ({ query, program_id, team, division, limit }) => {
+        const scope = await resolveScope(program_id);
+        const programs = await context.reads.searchPrograms({
+          query,
+          team: team ?? (await scopeSquad(scope)),
+          division,
+          limit: limit ?? 10,
+        });
+        return json({ count: programs.length, programs });
+      },
+    ),
+  );
+
   // ── update_match ───────────────────────────────────────────────────────
+  /**
+   * Turns the school fields of `body` into what the dropdown would store,
+   * before `normalizeMatchPatch()` sees it: an id is checked, a name that is
+   * exactly one program of the scope's team becomes that program's id, and
+   * any other name stays as text with the nearest programs alongside.
+   */
+  async function resolveOpponentTeam(
+    body: Record<string, unknown>,
+    scope: AskScope,
+    allowTeamMismatch: boolean,
+  ): Promise<{
+    linked?: McpDirectoryProgram;
+    candidates?: McpDirectoryProgram[];
+  }> {
+    const hasProgram = "opponent_program_id" in body;
+    const hasSchool = "opponent_school" in body;
+    if (hasProgram && hasSchool) {
+      throw refusal(
+        "opponent_team_exclusive",
+        "Send opponent_program_id or opponent_school, not both.",
+      );
+    }
+    if (hasProgram) {
+      const id = body.opponent_program_id;
+      if (typeof id !== "string") return {};
+      const program = await context.reads.directoryProgram(id);
+      if (!program) {
+        throw refusal("opponent_program_not_found", PROGRAM_NOT_FOUND);
+      }
+      const squad = await scopeSquad(scope);
+      if (squad && program.team !== squad && !allowTeamMismatch) {
+        throw refusal(
+          "opponent_team_mismatch",
+          `${program.school_name}'s ${program.team ?? "unlabelled"} program is not this program's team (${squad}). Find the ${squad} program with search_programs, or pass allow_team_mismatch to link this one.`,
+        );
+      }
+      return { linked: program };
+    }
+    if (!hasSchool) return {};
+
+    const school =
+      typeof body.opponent_school === "string"
+        ? body.opponent_school.trim()
+        : "";
+    if (school === "") {
+      // The reads show a linked program as opponent_school, so clearing that
+      // field has to clear the link too.
+      body.opponent_school = null;
+      body.opponent_program_id = null;
+      return {};
+    }
+    const squad = await scopeSquad(scope);
+    const named = await context.reads.programsNamed(school, squad);
+    if (named.length === 1) {
+      delete body.opponent_school;
+      body.opponent_program_id = named[0].id;
+      return { linked: named[0] };
+    }
+    return {
+      candidates: await context.reads.searchPrograms({
+        query: school,
+        team: squad,
+        limit: 5,
+      }),
+    };
+  }
+
   server.registerTool(
     "update_match",
     {
       title: "Update a match's details",
       description:
-        "Change the details of a match the player created: the opponent's name, tournament, round, date (YYYY-MM-DD), match type, court surface, the opponent's school, hand and backhand. Only the fields passed change; pass null to clear one. The score, the format and who played are never changed here — they are edited on the match page, where a score change can rebuild the statistics. A match on a scheduled event takes its tournament, date, round, type and surface from the event and refuses them (field_locked).",
+        "Change the details of a match the player created: the opponent's name, tournament, round, date (YYYY-MM-DD), match type, court surface, the opponent's school, hand and backhand. Only the fields passed change; pass null to clear one. Prefer `opponent_program_id` from `search_programs`. Use `opponent_school` text only for schools that are not in the directory. Text that is exactly one program's name for the scope's team is linked instead and answered as linked_program; any other text is saved as typed and answered with candidates to retry by id. The score, the format and who played are never changed here — they are edited on the match page, where a score change can rebuild the statistics. A match on a scheduled event takes its tournament, date, round, type and surface from the event and refuses them (field_locked).",
       inputSchema: {
         match_id: z.string().uuid().describe("A match id from list_matches."),
         program_id: PROGRAM_ID,
@@ -833,7 +970,24 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           .trim()
           .max(OPPONENT_SCHOOL_MAX)
           .nullable()
-          .optional(),
+          .optional()
+          .describe(
+            "A school not in the directory: a high school, club or foreign school. Null clears the school. Not with opponent_program_id.",
+          ),
+        opponent_program_id: z
+          .string()
+          .uuid()
+          .nullable()
+          .optional()
+          .describe(
+            "The opponent's program, from search_programs. Null clears the link. Not with opponent_school.",
+          ),
+        allow_team_mismatch: z
+          .boolean()
+          .optional()
+          .describe(
+            "Link opponent_program_id even though its team differs from the scope program's team.",
+          ),
         opponent_hand: z.enum(HANDS).nullable().optional(),
         opponent_backhand: z.enum(BACKHANDS).nullable().optional(),
       },
@@ -843,98 +997,111 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         idempotentHint: true,
       },
     },
-    guarded("update_match", async ({ match_id, program_id, ...fields }) => {
-      const scope = await resolveScope(program_id);
-      const team = scope.kind === "team";
-      const stored = await context.reads.ownMatch(match_id);
-      if (
-        !stored ||
-        (team
-          ? stored.programId !== scope.programId
-          : stored.programId !== null)
-      ) {
-        throw refusal(
-          "match_not_found",
-          "This match is not one you created in this workspace.",
-        );
-      }
-
-      // The dialog's body, in its column names; `opponent_name` is the
-      // other seat's name, which the Edit dialog labels the same way.
-      const body: Record<string, unknown> = {};
-      const sent = fields as Record<string, unknown>;
-      for (const [key, value] of Object.entries(sent)) {
-        if (value === undefined) continue;
-        body[key === "opponent_name" ? "player2_name" : key] = value;
-      }
-      if (Object.keys(body).length === 0) {
-        throw refusal(
-          "nothing_to_change",
-          "Pass at least one field to change.",
-        );
-      }
-      // A round only means something against a Tournament or Dual Match
-      // type; `normalizeMatchPatch` clears it for any other, which would be
-      // reported here as a change the caller asked for. Refuse instead.
-      const typeForRound =
-        "match_type" in body
-          ? (body.match_type as string | null)
-          : (stored.matchType ?? null);
-      if (
-        typeof body.round === "string" &&
-        body.round.trim() !== "" &&
-        roundKindFor(typeForRound) === null
-      ) {
-        throw refusal(
-          "invalid_field",
-          "A round needs the match type to be Tournament or Dual Match. (round)",
-        );
-      }
-      const normalised = normalizeMatchPatch(body, stored);
-      if (!normalised.ok) {
-        const slug =
-          stored.linked && normalised.field && !normalised.code
-            ? "field_locked"
-            : "invalid_field";
-        throw refusal(
-          slug,
-          normalised.field
-            ? `${normalised.error} (${normalised.field === "player2_name" ? "opponent_name" : normalised.field})`
-            : normalised.error,
-        );
-      }
-
-      const patched = await context.db.rpc("ask_patch_match", {
-        p_match_id: match_id,
-        p_update: normalised.update,
-      });
-      if (patched.error) {
-        if (patched.error.code === "P0002") {
+    guarded(
+      "update_match",
+      async ({ match_id, program_id, allow_team_mismatch, ...fields }) => {
+        const scope = await resolveScope(program_id);
+        const team = scope.kind === "team";
+        const stored = await context.reads.ownMatch(match_id);
+        if (
+          !stored ||
+          (team
+            ? stored.programId !== scope.programId
+            : stored.programId !== null)
+        ) {
           throw refusal(
             "match_not_found",
             "This match is not one you created in this workspace.",
           );
         }
-        throw new Error(`ask_patch_match failed: ${patched.error.message}`);
-      }
 
-      // Read back as the view states it, so the person sees the oriented row.
-      const { rows } = await runAskQuery(
-        scope,
-        oneMatchScope(match_id),
-        matchRowSql(team),
-      );
-      const row = rows[0];
-      return json({
-        scope: scope.kind,
-        program_id: team ? scope.programId : null,
-        changed: Object.keys(normalised.update).map((key) =>
-          key === "player2_name" ? "opponent_name" : key,
-        ),
-        match: row ? listedMatch(row, team) : null,
-        match_url: matchPageUrl(match_id),
-      });
-    }),
+        // The dialog's body, in its column names; `opponent_name` is the
+        // other seat's name, which the Edit dialog labels the same way.
+        const body: Record<string, unknown> = {};
+        const sent = fields as Record<string, unknown>;
+        for (const [key, value] of Object.entries(sent)) {
+          if (value === undefined) continue;
+          body[key === "opponent_name" ? "player2_name" : key] = value;
+        }
+        if (Object.keys(body).length === 0) {
+          throw refusal(
+            "nothing_to_change",
+            "Pass at least one field to change.",
+          );
+        }
+        // A round only means something against a Tournament or Dual Match
+        // type; `normalizeMatchPatch` clears it for any other, which would be
+        // reported here as a change the caller asked for. Refuse instead.
+        const typeForRound =
+          "match_type" in body
+            ? (body.match_type as string | null)
+            : (stored.matchType ?? null);
+        if (
+          typeof body.round === "string" &&
+          body.round.trim() !== "" &&
+          roundKindFor(typeForRound) === null
+        ) {
+          throw refusal(
+            "invalid_field",
+            "A round needs the match type to be Tournament or Dual Match. (round)",
+          );
+        }
+        const { linked, candidates } = await resolveOpponentTeam(
+          body,
+          scope,
+          allow_team_mismatch === true,
+        );
+        const normalised = normalizeMatchPatch(body, stored);
+        if (!normalised.ok) {
+          const slug =
+            stored.linked && normalised.field && !normalised.code
+              ? "field_locked"
+              : "invalid_field";
+          throw refusal(
+            slug,
+            normalised.field
+              ? `${normalised.error} (${normalised.field === "player2_name" ? "opponent_name" : normalised.field})`
+              : normalised.error,
+          );
+        }
+
+        const patched = await context.db.rpc("ask_patch_match", {
+          p_match_id: match_id,
+          p_update: normalised.update,
+        });
+        if (patched.error) {
+          if (patched.error.code === "P0002") {
+            throw refusal(
+              "match_not_found",
+              "This match is not one you created in this workspace.",
+            );
+          }
+          if (patched.error.code === "23503") {
+            throw refusal("opponent_program_not_found", PROGRAM_NOT_FOUND);
+          }
+          throw new Error(`ask_patch_match failed: ${patched.error.message}`);
+        }
+
+        // Read back as the view states it, so the person sees the oriented row.
+        const { rows } = await runAskQuery(
+          scope,
+          oneMatchScope(match_id),
+          matchRowSql(team),
+        );
+        const row = rows[0];
+        return json({
+          scope: scope.kind,
+          program_id: team ? scope.programId : null,
+          changed: Object.keys(normalised.update).map((key) =>
+            key === "player2_name" ? "opponent_name" : key,
+          ),
+          match: row ? listedMatch(row, team) : null,
+          ...(linked ? { linked_program: linked } : {}),
+          ...(candidates ? { candidates } : {}),
+          match_url: matchPageUrl(match_id),
+        });
+      },
+    ),
   );
 
   // ── prepare_video_upload ───────────────────────────────────────────────

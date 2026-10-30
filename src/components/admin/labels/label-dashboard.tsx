@@ -125,9 +125,12 @@ export function LabelDashboard(props: LabelDashboardProps) {
     changes: useMemo(() => changeCounts(points), [points]),
     stats: useMemo(() => {
       try {
+        // The labeller's own marks: a partly marked session publishes no
+        // forced string, and this still counts what they have marked so far.
         return expectedStats(
           buildAppliedRows({ points, adScoring, bestOf, start: startScore })
             .points,
+          { labellerMarks: true },
         );
       } catch {
         return null;
@@ -940,6 +943,7 @@ function Statistics({ reading, names }: WidgetProps) {
     ["Service winners", p1.serviceWinners, p2.serviceWinners],
     ["Winners", p1.winners, p2.winners],
     ["Unforced errors", p1.unforcedErrors, p2.unforcedErrors],
+    ["Forced errors", p1.forcedErrors, p2.forcedErrors],
     [
       "First serves in",
       pct(p1.firstServesIn, p1.firstServes),

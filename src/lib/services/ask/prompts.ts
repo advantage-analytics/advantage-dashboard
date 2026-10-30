@@ -792,6 +792,7 @@ Shape D, a comparison the app computes itself (see "Comparisons" below):
 - NAME COMPARED COLUMNS BY THE CONVENTION. The app reads column names to work out which of two figures is higher and tells the answer step, so two columns holding the same measure must share its name. The player's figure and the opponent's: me_<measure> and opp_<measure>. A figure and its baseline: <measure> and the same name behind ONE prefix — all_<measure> or all_matches_<measure> (every match of the player's), season_<measure>, overall_<measure>, avg_<measure>, baseline_<measure>, prev5_<measure> (the five matches before) or last_<measure>. second_serve_won_pct beside all_second_serve_won_pct is compared; second_serve_won_pct beside usual_rate is not, and the answer may then not say which is higher.
 - THE BASELINE COLUMN COVERS EVERY MATCH. The query still reads ${SCOPE_NAME} for the scoped figure, as every query must; only the baseline column beside it is summed over every row of the view (from ask.match_stats s where s.side = 'me'), with the scoped figure written as sum(case when s.match_id in (select match_id from ${SCOPE_NAME}) then … else 0 end), as the first example does. A baseline that is itself joined to ${SCOPE_NAME}, or filtered by match_id in (select match_id from ${SCOPE_NAME}), is the scoped figure a second time: the two columns come out equal and the query is sent back.
 - AN ALIAS KEEPS THE MEASURE'S NAME. The app prints a number's name from its column name, not from the answer's wording: total_points_won_pct is printed "Total points won", first_serve_pct "First serves in", win_pct "Matches won". So name a computed column after the view column it is computed from (first_serve_pct, total_points_won_pct, break_points_saved_pct, return_won_pct), behind a prefix when it is one side of a comparison. win_pct is ONLY matches won over matches with a known result; a share of points is never named win_pct, and a share of matches is never named total_points_won_pct. A share of points counted from ask.points is points_won_pct behind what it covers (first_set_points_won_pct, later_sets_points_won_pct), never set_win_pct: a set is won or lost whole.
+${ASK_PLAN_ERRORS_RULE}
 - A result with one row per group (per surface, per opponent, per hand, per month) carries each group's own number of matches in a column named group_matches, so the answer never has to guess how many matches a row covers.
 
 ### Comparisons the app computes (shape D)
@@ -932,6 +933,26 @@ ${JSON.stringify(oneLine(headline))}`;
 }
 
 /**
+ * The one rule on naming errors, in both answer prompts. A match whose
+ * forced/unforced split nobody judged has forced_errors null and every error
+ * filed under unforced_errors; on a judged match unforced_errors is only the
+ * unforced ones. So neither word is safe until forced_errors says which, and
+ * a result without it gets a name true either way. Wording only: the number
+ * is still a reference. The last sentence is there because the facts block
+ * says to call a measure by its given name and no other.
+ */
+export const ASK_ERRORS_RULE =
+  "- ERRORS UNTIL JUDGED. unforced_errors is only the unforced ones where somebody judged the split and every error everywhere else, so name its figure by what forced_errors shows for the matches that figure covers. forced_errors non-null for every match it covers: unforced errors is correct. Any forced_errors null in what it covers: errors, never unforced errors. No forced_errors beside it, so the split cannot be told: neither word is safe, so call it errors counted as unforced, which is true either way. A column named errors is always errors. This outranks the name a column is given anywhere else.";
+
+/**
+ * Keeps ASK_ERRORS_RULE's third case rare: the planner returns the count that
+ * means the same on every match, or the column that says which meaning a
+ * count has. A meaning in `schema.ts` would need a migration comment to match
+ * (`tests/ask-prompt.spec.ts`), so this lives in both plan prompts instead.
+ */
+export const ASK_PLAN_ERRORS_RULE = `- ERRORS OR MISTAKES ARE EVERY ERROR. For a question about errors or mistakes select unforced_errors + coalesce(forced_errors, 0) as errors, behind me_ or opp_ like any measure; over several matches, sum(s.unforced_errors + coalesce(s.forced_errors, 0)). Select unforced_errors only for a question that says unforced, and whenever you select unforced_errors also select forced_errors beside it under the same prefix, because that is how the answer step can tell whether the split was judged. Over several matches write it as case when count(s.forced_errors) = count(*) then sum(s.forced_errors) end as forced_errors, each side's own case inside for me_ and opp_: a plain sum hides a match nobody judged. In shape D's "measures", the same: errors, unless the question says unforced.`;
+
+/**
  * The rows the worked example in the answer prompt is written against: the
  * diagnostic shape, one match, the player against Beau.
  */
@@ -953,6 +974,10 @@ export const ASK_ANSWER_EXAMPLE_ROWS: readonly AskRow[] = [
     opp_winners: 24,
     me_unforced_errors: 38,
     opp_unforced_errors: 36,
+    // Judged: the split exists, so the example may say "unforced errors"
+    // (ASK_ERRORS_RULE).
+    me_forced_errors: 11,
+    opp_forced_errors: 14,
     me_total_points_won_pct: 45.6,
     opp_total_points_won_pct: 54.4,
     [ASK_SCOPE_COUNT_COLUMN]: 1,
@@ -1190,6 +1215,7 @@ The rules below are the product's promise to the player, not style preferences. 
 - NO ADVICE. No recommendation, drill, tactic, strategy, encouragement or praise. Never "you should", "try", "focus on", "work on", "keep it up", "well done". If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.
 - THE MATCH COUNT IS ${ASK_SCOPE_COUNT_COLUMN}. Nowhere else. The headline never mentions sample size, and the body remarks on it at most once, in its last sentence, only when the scope says it may.
 - Say only what the result shows. No cause the result does not hold, no guess about the opponent, no claim about matches outside it.
+${ASK_ERRORS_RULE}
 - Second person, plain sentences. No greeting, no name of the player, no markdown, no bullet points, no headings, no emoji, no quotation marks, no exclamation marks.
 
 ## Example
@@ -1415,6 +1441,7 @@ Shape D, a comparison the app computes itself (see "Comparisons" below):
 - NAME COMPARED COLUMNS BY THE CONVENTION. The app reads column names to work out which of two figures is higher and tells the answer step, so two columns holding the same measure must share its name. The program's figure and the opponents': me_<measure> and opp_<measure>. A figure and its baseline: <measure> and the same name behind ONE prefix — team_<measure> (every match of the program's), all_<measure>, season_<measure>, overall_<measure>, avg_<measure>, baseline_<measure>, prev5_<measure> (the five matches before) or last_<measure>. first_serve_pct beside team_first_serve_pct is compared; first_serve_pct beside usual_rate is not, and the answer may then not say which is higher.
 - THE BASELINE COLUMN COVERS EVERY MATCH. The query still reads ${SCOPE_NAME} for the scoped figure, as every query must; only the baseline column beside it is summed over every row of the view (from ask.match_stats s where s.side = 'me'), with the scoped figure written as sum(case when s.match_id in (select match_id from ${SCOPE_NAME}) then … else 0 end). A baseline that is itself joined to ${SCOPE_NAME}, or filtered by match_id in (select match_id from ${SCOPE_NAME}), is the scoped figure a second time: the two columns come out equal and the query is sent back.
 - AN ALIAS KEEPS THE MEASURE'S NAME. The app prints a number's name from its column name, not from the answer's wording: total_points_won_pct is printed "Total points won", first_serve_pct "First serves in", win_pct "Matches won". So name a computed column after the view column it is computed from (first_serve_pct, total_points_won_pct, break_points_saved_pct, return_won_pct), behind a prefix when it is one side of a comparison. win_pct is ONLY matches won over matches with a known result; a share of points is never named win_pct, and a share of matches is never named total_points_won_pct. A share of points counted from ask.points is points_won_pct behind what it covers (first_set_points_won_pct, later_sets_points_won_pct), never set_win_pct: a set is won or lost whole.
+${ASK_PLAN_ERRORS_RULE}
 - A result with one row per group that is not a player (per surface, per opponent, per match type, per month) carries each group's own number of matches in a column named group_matches, so the answer never has to guess how many matches a row covers.
 
 ### Comparisons the app computes (shape D)
@@ -1723,6 +1750,7 @@ The rules below are the product's promise to the program, not style preferences.
 ${coach ? ASK_COACH_RULE : ASK_TEAM_NO_ADVICE_RULE}
 - THE MATCH COUNT IS ${ASK_SCOPE_COUNT_COLUMN}. Nowhere else. The headline never mentions sample size, and the body remarks on it at most once, in its last sentence, only when the scope says it may.
 - Say only what the result shows. No cause the result does not hold, no guess about an opponent, no claim about matches outside it.
+${ASK_ERRORS_RULE}
 - THIRD PERSON. The players are never "you" and their figures are never "your": name the player as the result spells them ("Sokolov won …"), or say "the team" when the result covers several players. A name may be shortened to the family name after it is clear who is meant. Never invent a name the result does not hold; with no player_name in the result, say "the team".
 - Plain sentences. No greeting, no markdown, no bullet points, no headings, no emoji, no quotation marks, no exclamation marks.
 

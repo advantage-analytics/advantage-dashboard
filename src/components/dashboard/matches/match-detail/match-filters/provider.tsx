@@ -250,6 +250,20 @@ export function useMatchFilters(): MatchFiltersValue {
   return provided ?? fallback;
 }
 
+/**
+ * Whether this match's errors are judged (`MatchFilterContext.errorSplitJudged`)
+ * — the one flag the Shots tab's errors cut, Error type options and link
+ * parsing read. Unlike `useMatchFilters()` it needs no `MatchDataProvider`:
+ * `VizStateProvider` reads it, and offline harnesses mount that provider with
+ * no match at all. Under a `MatchFiltersProvider` (every match page) it is that
+ * provider's flag, absent = not judged; outside one there is no match to
+ * judge, so `true` — the stored reading, `errorsJudgedIn(undefined)`'s rule.
+ */
+export function useErrorSplitJudged(): boolean {
+  const provided = use(MatchFiltersContext);
+  return provided ? provided.context.errorSplitJudged === true : true;
+}
+
 export interface FiltersPanelData {
   /** Every point on the match — the count's denominator. */
   points: MatchPoint[];

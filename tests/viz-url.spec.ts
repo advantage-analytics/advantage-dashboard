@@ -7,7 +7,9 @@ import {
   canonicalSetValues,
   carryFilters,
   clearedFilters,
+  errorOptionsFor,
   focusTargetAfterViewChange,
+  OPTIONS,
   parseVizState,
   reconcileVizState,
   sameView,
@@ -885,4 +887,78 @@ test("sameView: fullscreen does not affect whether a state matches a tile", () =
       filters: EMPTY_VIZ_FILTERS,
     }),
   ).toBe(true);
+});
+
+/* ── Forced vs unforced: unjudged matches (T4) ─────────────────────────── */
+
+test.describe("Error type on a match whose errors are not judged", () => {
+  const UNJUDGED = { errorSplitJudged: false };
+  const JUDGED = { errorSplitJudged: true };
+
+  for (const query of [
+    "cut=errors&verr=forced",
+    "cut=errors&verr=unforced",
+    "cut=errors&verr=unforced&verr=forced",
+  ]) {
+    test(`${query} opens on every error when unjudged`, () => {
+      const s = parseVizState(new URLSearchParams(query), UNJUDGED);
+      expect(s.filters.error).toEqual(["unforced", "forced"]);
+    });
+  }
+
+  test("a forced link keeps its double faults when it collapses", () => {
+    const s = parseVizState(
+      new URLSearchParams("cut=errors&verr=forced&verr=doubleFault"),
+      UNJUDGED,
+    );
+    expect(s.filters.error).toEqual(["unforced", "forced", "doubleFault"]);
+  });
+
+  test("double faults alone are not widened", () => {
+    const s = parseVizState(
+      new URLSearchParams("cut=errors&verr=doubleFault"),
+      UNJUDGED,
+    );
+    expect(s.filters.error).toEqual(["doubleFault"]);
+  });
+
+  test("on a judged match verr parses exactly as today", () => {
+    for (const [query, error] of [
+      ["cut=errors&verr=forced", ["forced"]],
+      ["cut=errors&verr=unforced", ["unforced"]],
+      ["cut=errors&verr=forced&verr=doubleFault", ["forced", "doubleFault"]],
+    ] as const) {
+      const params = new URLSearchParams(query);
+      expect(parseVizState(params, JUDGED).filters.error).toEqual(error);
+      // And no match at all (saved-view validation) reads it as written.
+      expect(parseVizState(params).filters.error).toEqual(error);
+    }
+  });
+
+  test("an external navigation re-parses against the match", () => {
+    const { state } = reconcileVizState({
+      urlQuery: "cut=errors&verr=forced",
+      ownQueries: [],
+      intended: parseVizState(new URLSearchParams("")),
+      match: UNJUDGED,
+    });
+    expect(state.filters.error).toEqual(["unforced", "forced"]);
+  });
+
+  test("Error type pills: Errors · Double faults unjudged, today's three judged — both from OPTIONS.error", () => {
+    expect(errorOptionsFor(false)).toEqual([
+      { values: ["unforced", "forced"], label: "Errors" },
+      { values: ["doubleFault"], label: OPTIONS.error.doubleFault },
+    ]);
+    expect(errorOptionsFor(true)).toEqual([
+      { values: ["unforced"], label: OPTIONS.error.unforced },
+      { values: ["forced"], label: OPTIONS.error.forced },
+      { values: ["doubleFault"], label: OPTIONS.error.doubleFault },
+    ]);
+    expect(errorOptionsFor(true).map((o) => o.label)).toEqual([
+      "Unforced errors",
+      "Forced errors",
+      "Double faults",
+    ]);
+  });
 });

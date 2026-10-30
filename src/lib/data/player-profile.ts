@@ -46,7 +46,30 @@ export interface ProfileStatRow {
   returnGames: number | null;
   returnGamesWon: number | null;
   winners: number | null;
-  unforcedErrors: number | null;
+  /**
+   * Every error, forced and unforced: `unforced_errors + forced_errors`.
+   * Cross-match surfaces never show the split — most matches behind them are
+   * unverified — so this is the only error count the profile carries. Null
+   * when `unforced_errors` is; a null `forced_errors` counts as 0.
+   */
+  errors: number | null;
+}
+
+/**
+ * One match side's total errors, forced and unforced.
+ *
+ * Cross-match surfaces (Home, the profile, the Performance tracker) always say
+ * "Errors" and never split the two: they average many matches, most of them
+ * unverified, and `forced_errors` is NULL on video matches until it is derived.
+ * So absent unforced is absent (null) and absent forced counts as none.
+ */
+export function totalErrors(
+  unforced: number | null | undefined,
+  forced: number | null | undefined,
+): number | null {
+  const u = num(unforced);
+  if (u === null) return null;
+  return u + (num(forced) ?? 0);
 }
 
 /** The columns a season strip reads from `match_stats_with_percentages`. */
@@ -62,6 +85,7 @@ export const STAT_COLUMNS = [
   "return_games_won",
   "winners",
   "unforced_errors",
+  "forced_errors",
 ].join(", ");
 
 /**
@@ -83,6 +107,8 @@ export interface DbStatRow {
   return_games_won: number | null;
   winners: number | null;
   unforced_errors: number | null;
+  /** Optional so fixtures predating the column still type; absent reads as 0. */
+  forced_errors?: number | null;
   [measure: string]: unknown;
 }
 
@@ -101,7 +127,7 @@ function toStatRow(row: DbStatRow): ProfileStatRow {
     returnGames: num(row.return_games),
     returnGamesWon: num(row.return_games_won),
     winners: num(row.winners),
-    unforcedErrors: num(row.unforced_errors),
+    errors: totalErrors(row.unforced_errors, row.forced_errors),
   };
 }
 
@@ -535,6 +561,44 @@ export function statRowsByKey(
     byKey.set(statKey(row.match_id, row.is_player1), toStatRow(row));
   }
   return byKey;
+}
+
+/** One evidence chip under the profile's last match. */
+export interface ProfileChip {
+  label: string;
+  value: string;
+}
+
+/** The evidence row under the last match — omitted per chip where unmeasured. */
+export function chipsFrom(stats: ProfileStatRow | null): ProfileChip[] {
+  if (!stats) return [];
+  const chips: ProfileChip[] = [];
+  const firstServe = stats.rates["first_serve_pct"];
+  const firstServeWon = stats.rates["first_serve_won_pct"];
+  if (firstServe !== null && firstServe !== undefined) {
+    chips.push({ label: "1st serve in", value: `${Math.round(firstServe)}%` });
+  }
+  if (firstServeWon !== null && firstServeWon !== undefined) {
+    chips.push({
+      label: "1st serve won",
+      value: `${Math.round(firstServeWon)}%`,
+    });
+  }
+  if (stats.winners !== null)
+    chips.push({ label: "Winners", value: String(stats.winners) });
+  if (stats.errors !== null) {
+    chips.push({ label: "Errors", value: String(stats.errors) });
+  }
+  if (
+    stats.breakPointsConverted !== null &&
+    stats.breakPointOpportunities !== null
+  ) {
+    chips.push({
+      label: "Break pts",
+      value: `${stats.breakPointsConverted} of ${stats.breakPointOpportunities}`,
+    });
+  }
+  return chips;
 }
 
 /** What a season strip needs to render, off the results behind it. */

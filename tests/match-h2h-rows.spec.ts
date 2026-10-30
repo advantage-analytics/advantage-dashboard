@@ -11,10 +11,12 @@ import {
   SERVE_ROWS,
   buildStatRows,
   figureReadout,
+  h2hGroups,
   hasReadout,
   rowLeader,
   rowReadout,
   tallySide,
+  withErrorSplit,
   withPointRows,
   type H2HRow,
   type H2HRowConfig,
@@ -576,5 +578,108 @@ test.describe("net points won with no net approaches", () => {
     expect(net.opp.display).toBe("0%");
     expect(net.leader).toBe("you");
     expect(hasReadout(figureReadout(net, "opp", "Opp", scope))).toBe(true);
+  });
+});
+
+test.describe("errors until the split is judged", () => {
+  // `MatchFilterContext.errorSplitJudged`: until a match's errors are judged
+  // forced/unforced its "unforced" figure is every error, so the Points group
+  // says "Errors" and opens every error; judged, it is Unforced then Forced.
+  const pointsOf = (isDerived: boolean, judged: boolean) =>
+    h2hGroups(isDerived, judged).find((g) => g.title === "Points")!.configs;
+
+  for (const isDerived of [false, true]) {
+    const kind = isDerived ? "derived" : "SwingVision";
+
+    test(`unjudged (${kind}): one Errors row, every error`, () => {
+      const configs = pointsOf(isDerived, false);
+      expect(configs.map((c) => c.label)).toEqual([
+        "Net points won",
+        "Winners",
+        "Errors",
+        "Total points won",
+      ]);
+      const errors = configs.find((c) => c.label === "Errors")!;
+      // Narrowed to the Film-only "error" bucket, so it opens what it counts.
+      expect(errors.cut).toEqual({ resultEnding: ["error"], ending: "error" });
+      expect(errors.sideBy).toBe("player");
+      expect(errors.lowerIsBetter).toBe(true);
+    });
+
+    test(`judged (${kind}): Unforced errors then Forced errors`, () => {
+      const configs = pointsOf(isDerived, true);
+      expect(configs.map((c) => c.label)).toEqual([
+        "Net points won",
+        "Winners",
+        "Unforced errors",
+        "Forced errors",
+        "Total points won",
+      ]);
+      // Today's row, unchanged.
+      expect(configs.find((c) => c.label === "Unforced errors")).toBe(
+        POINT_ROWS.find((c) => c.label === "Unforced errors"),
+      );
+      const forced = configs.find((c) => c.label === "Forced errors")!;
+      expect(forced.key).toBe("forcedErrors");
+      expect(forced.lowerIsBetter).toBe(true);
+      expect(forced.cut).toEqual({
+        resultEnding: ["error"],
+        ending: "forced-error",
+      });
+      expect(forced.sideBy).toBe("player");
+    });
+
+    test(`the Serve and Return groups never change (${kind})`, () => {
+      for (const judged of [false, true]) {
+        const groups = h2hGroups(isDerived, judged);
+        expect(groups.map((g) => g.title)).toEqual([
+          "Serve",
+          "Return",
+          "Points",
+        ]);
+        expect(groups[0].configs).toEqual(
+          isDerived ? DERIVED_SERVE_ROWS : SERVE_ROWS,
+        );
+        expect(groups[1].configs).toEqual(RETURN_ROWS);
+      }
+    });
+  }
+
+  test("the Errors value is unforced plus forced, forced absent read as 0", () => {
+    const configs = withErrorSplit(POINT_ROWS, false);
+    const rows = buildStatRows(
+      configs,
+      side({ unforcedErrors: 17, forcedErrors: 7 }),
+      side({ unforcedErrors: 20, forcedErrors: null }),
+    );
+    const errors = byLabel(rows, "Errors");
+    expect(errors.you.display).toBe("24");
+    expect(errors.opp.display).toBe("20");
+    // Fewer errors lead — on the summed figure, 20 against 24.
+    expect(errors.leader).toBe("opp");
+    // No unforced figure is no value at all — the forced count alone is not
+    // the row.
+    const none = byLabel(
+      buildStatRows(
+        configs,
+        side({ forcedErrors: 3 }),
+        side({ forcedErrors: 3 }),
+      ),
+      "Errors",
+    );
+    expect(none.you.display).toBe("");
+  });
+
+  test("judged rows read each figure on its own", () => {
+    const rows = buildStatRows(
+      withErrorSplit(POINT_ROWS, true),
+      side({ unforcedErrors: 17, forcedErrors: 7 }),
+      side({ unforcedErrors: 12, forcedErrors: 9 }),
+    );
+    expect(byLabel(rows, "Unforced errors").you.display).toBe("17");
+    expect(byLabel(rows, "Unforced errors").leader).toBe("opp");
+    expect(byLabel(rows, "Forced errors").you.display).toBe("7");
+    expect(byLabel(rows, "Forced errors").opp.display).toBe("9");
+    expect(byLabel(rows, "Forced errors").leader).toBe("you");
   });
 });

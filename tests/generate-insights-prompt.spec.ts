@@ -48,6 +48,17 @@ type Reply = { player1?: PlayerReply; player2?: PlayerReply };
 /** A scripted Gemini turn: an answer, or `null` for a refused call. */
 type Turn = Reply | null;
 
+/** What the stubbed database answers; each part defaults to a bare row. */
+interface Db {
+  /** The `matches` row read by `.single()`. */
+  match?: Record<string, unknown>;
+  /** This match's `match_stats_with_percentages` rows. */
+  stats?: Record<string, unknown>[];
+  /** Prior matches (`matches` list) and their player1 stats rows. */
+  priorMatches?: Record<string, unknown>[];
+  priorStats?: Record<string, unknown>[];
+}
+
 /** A reply whose headlines and descriptions pass the function's check. */
 const GOOD_REPLY: Reply = {
   player1: {
@@ -73,6 +84,7 @@ async function runWithReplies(
   replies: Turn[] = [{}],
   /** When set, a fake clock the function reads that each Gemini call advances by this much. */
   msPerCall?: number,
+  db: Db = {},
 ): Promise<{
   requests: { url: string; body: GeminiRequestBody }[];
   saved: Record<string, PlayerReply> | null;
@@ -83,12 +95,18 @@ async function runWithReplies(
   let clock = 0;
 
   const from = (table: string) => {
-    const resolve = () => {
+    let filteredById = false;
+    const resolve = (single = false) => {
       if (table === "match_stats_with_percentages") {
+        if (filteredById) return { data: db.priorStats ?? [], error: null };
         return {
-          data: [{ is_player1: true }, { is_player1: false }],
+          data: db.stats ?? [{ is_player1: true }, { is_player1: false }],
           error: null,
         };
+      }
+      if (table === "matches") {
+        if (single) return { data: db.match ?? [], error: null };
+        return { data: db.priorMatches ?? [], error: null };
       }
       return { data: [], error: null };
     };
@@ -98,13 +116,16 @@ async function runWithReplies(
       eq: () => query,
       is: () => query,
       lt: () => query,
-      in: () => query,
+      in: () => {
+        filteredById = true;
+        return query;
+      },
       order: () => query,
       update: (values: { insights: Record<string, PlayerReply> }) => {
         saved = values.insights;
         return query;
       },
-      single: async () => resolve(),
+      single: async () => resolve(true),
       then: (onFulfilled: (value: unknown) => unknown) =>
         Promise.resolve(resolve()).then(onFulfilled),
     });
@@ -494,5 +515,101 @@ test("a summary still naming Player 1/2 after the retry is not saved", async () 
   // The other player's summary is untouched.
   expect(saved?.player1?.summary).toBe(
     `${GOOD_REPLY.player1!.headline} ${GOOD_REPLY.player1!.description}`,
+  );
+});
+
+/** A video match whose errors were never judged, and one that was. */
+const VIDEO_MATCH = {
+  player1_id: "p1",
+  date: "2026-10-20T00:00:00Z",
+  program_id: null,
+  created_by: "u1",
+  source_provider: "splitstep",
+};
+const ERROR_STATS = (unforced: number, forced: number | null) => [
+  {
+    is_player1: true,
+    unforced_errors: unforced,
+    forced_errors: forced,
+    forehand_unforced_errors: 4,
+    backhand_unforced_errors: 3,
+  },
+  {
+    is_player1: false,
+    unforced_errors: unforced + 2,
+    forced_errors: forced,
+    forehand_unforced_errors: 5,
+    backhand_unforced_errors: 2,
+  },
+];
+const PRIOR = {
+  priorMatches: [{ id: "m-prev" }, { id: "m-older" }],
+  priorStats: [
+    { match_id: "m-prev", unforced_errors: 10, forced_errors: 4, winners: 8 },
+    {
+      match_id: "m-older",
+      unforced_errors: 12,
+      forced_errors: null,
+      winners: 6,
+    },
+  ],
+};
+
+test("an unjudged match's prompt says errors, never unforced", async () => {
+  const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+    match: { ...VIDEO_MATCH, verified: false, verified_at: null },
+    stats: ERROR_STATS(9, 3),
+    ...PRIOR,
+  });
+  const prompt = requests[0].body.contents[0].parts[0].text;
+  expect(prompt).toContain('"errors":12');
+  expect(prompt).toContain('call them "errors"');
+  expect(prompt).not.toMatch(/unforced/i);
+  expect(prompt).not.toMatch(/forced/i);
+  // The averages sum each prior match first: (14 + 12) / 2.
+  expect(prompt).toContain('"errors":13');
+});
+
+test("a verified match without the judged marker is still unjudged", async () => {
+  const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+    match: {
+      ...VIDEO_MATCH,
+      verified: true,
+      verified_at: "2026-10-26T00:00:00Z",
+      errors_judged_at: null,
+    },
+    stats: ERROR_STATS(9, null),
+  });
+  const prompt = requests[0].body.contents[0].parts[0].text;
+  expect(prompt).toContain('"errors":9');
+  expect(prompt).not.toMatch(/forced/i);
+});
+
+test("a judged match's prompt keeps unforced_errors and forced_errors", async () => {
+  const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+    match: {
+      ...VIDEO_MATCH,
+      verified: true,
+      verified_at: "2026-10-26T00:00:00Z",
+      errors_judged_at: "2026-10-26T00:00:00Z",
+    },
+    stats: ERROR_STATS(9, 3),
+    ...PRIOR,
+  });
+  const prompt = requests[0].body.contents[0].parts[0].text;
+  expect(prompt).toContain('"unforced_errors":9');
+  expect(prompt).toContain('"forced_errors":3');
+  expect(prompt).not.toContain('call them "errors"');
+  // Averages keep today's field.
+  expect(prompt).toContain('"unforced_errors":11');
+});
+
+test("a SwingVision match is judged without being verified", async () => {
+  const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+    match: { ...VIDEO_MATCH, source_provider: "swing-vision", verified: false },
+    stats: ERROR_STATS(9, 3),
+  });
+  expect(requests[0].body.contents[0].parts[0].text).toContain(
+    '"unforced_errors":9',
   );
 });

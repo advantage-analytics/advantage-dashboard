@@ -381,6 +381,9 @@ test("focused scatter points share the fullscreen readout and remain inspectable
 
   await page.goto(`${origin}/?tab=shots&cut=serve&chart=zones&fixture=long`);
   await expect(art.locator("[data-viz-mark]")).toHaveCount(0);
+  // The pointer is still where it clicked the mark, which is over a zone cell
+  // now, and a hovered cell has a readout of its own.
+  await page.mouse.move(2, 2);
   await expect(readout).toHaveCount(0);
 });
 
