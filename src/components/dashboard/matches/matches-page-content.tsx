@@ -453,8 +453,8 @@ export function MatchesPageContent({
   // A draft that fills a listed match (an "Add video" started from a scored
   // line) is more work on that match, not a second one: it folds onto the
   // match's row — a Draft pill there, "Continue upload" in its drawer — and
-  // only the rest list as draft rows. Everything below that says `drafts`
-  // means the standalone ones: the rows, the stepping order, the deep link.
+  // only the rest list as draft rows. `drafts` below means the standalone ones;
+  // `listedDrafts` is those of them the current view shows.
   //
   // Unless that match's video already went in (it carries a job): then the
   // draft is stale and shows nowhere. Read off the live-merged `matches`, so a
@@ -623,6 +623,24 @@ export function MatchesPageContent({
     return result;
   }, [matches, search, filters, lifecycle, unseenIds, openedIds]);
 
+  // A filtered view is its own screen (v3's Data Table law 8), so a draft stays
+  // only if it answers the cut. It can answer the palette's `?q=` with what it
+  // has so far, by the same two needles as a match. It cannot answer a facet or
+  // a lifecycle view: it has no result yet, no report to be new, and no analysis
+  // in flight.
+  const listedDrafts = useMemo(() => {
+    if (filters.length > 0 || lifecycle !== "all") return NO_DRAFTS;
+    if (!search.trim()) return drafts;
+    const q = search.trim().toLowerCase();
+    const person = normalizedPersonName(search);
+    return drafts.filter(
+      (d) =>
+        (d.eventLabel?.toLowerCase().includes(q) ?? false) ||
+        normalizedPersonName(d.playerName ?? "").includes(person) ||
+        normalizedPersonName(d.opponentName ?? "").includes(person),
+    );
+  }, [drafts, search, filters, lifecycle]);
+
   // Sort matches
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -677,7 +695,7 @@ export function MatchesPageContent({
      the selected row closes, ↑ ↓ step, Esc closes, and `?match=` / `?draft=`
      are the deep links that land open. `selectedId` is the washed row;
      `drawerId` outlives it by the slide-out, so the rail can animate closed.
-     Drafts sit above the matches on every page, so stepping walks the drafts
+     Listed drafts sit above the matches on every page, so stepping walks them
      first, then the whole filtered list, turning the page when it has to. */
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     const matchId = searchParams.get("match");
@@ -696,9 +714,10 @@ export function MatchesPageContent({
   const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drawerDraftIndex = drawerId
-    ? drafts.findIndex((d) => d.id === drawerId)
+    ? listedDrafts.findIndex((d) => d.id === drawerId)
     : -1;
-  const drawerDraft = drawerDraftIndex >= 0 ? drafts[drawerDraftIndex] : null;
+  const drawerDraft =
+    drawerDraftIndex >= 0 ? listedDrafts[drawerDraftIndex] : null;
   const drawerIndex =
     drawerId && !drawerDraft ? sorted.findIndex((m) => m.id === drawerId) : -1;
   const drawerMatch = drawerIndex >= 0 ? sorted[drawerIndex] : null;
@@ -713,9 +732,9 @@ export function MatchesPageContent({
   const drawerPosition = drawerDraft
     ? drawerDraftIndex
     : drawerMatch
-      ? drafts.length + drawerIndex
+      ? listedDrafts.length + drawerIndex
       : -1;
-  const rowCount = drafts.length + sorted.length;
+  const rowCount = listedDrafts.length + sorted.length;
 
   // A record that left the list — deleted, discarded, or cut by a filter —
   // takes the drawer with it rather than leaving it open on a row nobody sees.
@@ -781,18 +800,18 @@ export function MatchesPageContent({
   const stepRow = useCallback(
     (direction: 1 | -1) => {
       if (!selectedId) return;
-      const draftAt = drafts.findIndex((d) => d.id === selectedId);
+      const draftAt = listedDrafts.findIndex((d) => d.id === selectedId);
       const position =
         draftAt >= 0
           ? draftAt
-          : drafts.length + sorted.findIndex((m) => m.id === selectedId);
+          : listedDrafts.length + sorted.findIndex((m) => m.id === selectedId);
       const target = position + direction;
-      if (target < 0 || target >= drafts.length + sorted.length) return;
+      if (target < 0 || target >= listedDrafts.length + sorted.length) return;
       let nextId: string;
-      if (target < drafts.length) {
-        nextId = drafts[target].id;
+      if (target < listedDrafts.length) {
+        nextId = listedDrafts[target].id;
       } else {
-        const matchAt = target - drafts.length;
+        const matchAt = target - listedDrafts.length;
         nextId = sorted[matchAt].id;
         setPage(Math.floor(matchAt / PAGE_SIZE) + 1);
       }
@@ -801,7 +820,7 @@ export function MatchesPageContent({
         matchElement(nextId)?.scrollIntoView({ block: "nearest" });
       });
     },
-    [drafts, sorted, selectedId, selectRow],
+    [listedDrafts, sorted, selectedId, selectRow],
   );
 
   useEffect(() => {
@@ -1028,6 +1047,17 @@ export function MatchesPageContent({
     return <EmptyMatches scope={scope} />;
   }
 
+  // The strip and the footer count matches; the draft rows above them are
+  // stated beside the count so the two add up to the rows on screen. Only where
+  // those rows draw: the cards below `lg` list no drafts.
+  const listedDraftsNote =
+    listedDrafts.length > 0 ? (
+      <span className="hidden lg:inline">
+        {" "}
+        · {listedDrafts.length} {listedDrafts.length === 1 ? "draft" : "drafts"}
+      </span>
+    ) : null;
+
   return (
     <div className="flex flex-col gap-[18px]">
       {/* Toolbar — the view pills left; Filters and the sort right. Nothing
@@ -1082,6 +1112,7 @@ export function MatchesPageContent({
           />
           <span className="text-micro tabular">
             {sorted.length} of {matches.length}
+            {listedDraftsNote}
           </span>
           <div className="flex-1" />
           <button
@@ -1097,7 +1128,7 @@ export function MatchesPageContent({
       {/* Table / Grid */}
       <MatchesGrid
         matches={paginatedMatches}
-        drafts={drafts}
+        drafts={listedDrafts}
         foldedDrafts={foldedDrafts}
         scope={scope}
         newMatchId={newMatchId}
@@ -1133,7 +1164,7 @@ export function MatchesPageContent({
             draft={drawerDraft}
             scope={scope}
             index={drawerDraftIndex}
-            total={drafts.length}
+            total={listedDrafts.length}
             canPrev={drawerPosition > 0}
             canNext={drawerPosition < rowCount - 1}
             closing={closing}
@@ -1175,6 +1206,7 @@ export function MatchesPageContent({
         <nav className="flex items-center gap-2" aria-label="Pages">
           <span className="text-micro tabular">
             {rangeStart}–{rangeEnd} of {sorted.length}
+            {listedDraftsNote}
           </span>
           <div className="flex-1" />
           {safePage > 1 && (

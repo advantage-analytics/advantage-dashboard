@@ -233,7 +233,12 @@ master-detail split is retired; its detail is the peek drawer below.
    Once populated the frame never moves again. The resting view is never
    pre-filtered; a filtered view is its own screen, never a mutation of the
    resting one — the resting frame keeps showing its in-flight and estimate
-   rows regardless of what's filtered. Lifecycle cell copy: "View report"
+   rows regardless of what's filtered. A draft row follows the same rule on
+   Matches (2026-10-30): it stays under a search that its opponent, player or
+   event answers, and leaves under a facet or a New / In progress view, which it
+   cannot answer. The strip and the footer count matches and state the listed
+   drafts beside the count ("3 of 18 · 1 draft"), so the figures add up to the
+   rows on screen. Lifecycle cell copy: "View report"
    when ready · `StatusChip` while running (no elapsed time — the tray owns
    progress) · "Estimate · Review data" for low confidence (grey fact + blue
    action, never yellow, never red).
@@ -349,7 +354,7 @@ selected, no chevrons, no gutter.
   pending state and a refusal has a line to land on; on success the rail
   slides out as on Esc, then the row leaves. Footer is one primary "Continue"
   and no ghost, since the wizard is the only page a draft has. ↑↓ walk the
-  drafts, then the matches. _Shipped:_ `matches/draft-drawer.tsx`,
+  listed drafts, then the matches. _Shipped:_ `matches/draft-drawer.tsx`,
   `matches/discard-draft-dialog.tsx`. _Supersedes: "the name as the wizard
   link with an outlined Draft pill → event label or 'No event yet' → edited
   date · file name → 'Stopped at step n of N'; ⋯ holds Discard with its

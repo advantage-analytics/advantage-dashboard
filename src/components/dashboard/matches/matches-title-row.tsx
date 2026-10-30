@@ -42,12 +42,16 @@ export function MatchesTitleRow({
     .map((m) => m.id);
   const unseen = useUnseenReportIds(analyzedIds);
 
+  // A team's line counts what the program has recorded, so a match still in
+  // analysis or one that failed counts. A personal line counts what is analyzed.
+  const count =
+    scope === "team" ? (readyMatches ?? []).length : analyzedIds.length;
   const subline =
-    analyzedIds.length === 0
+    count === 0
       ? scope === "team"
         ? "Nothing recorded yet."
         : "Nothing analyzed yet."
-      : `${analyzedIds.length} ${scope === "team" ? "on the program" : "analyzed"}${
+      : `${count} ${scope === "team" ? "on the program" : "analyzed"}${
           unseen.size > 0 ? ` · ${unseen.size} new` : ""
         }`;
 
