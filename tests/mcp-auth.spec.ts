@@ -456,6 +456,7 @@ function fakeClient(
       };
     self.eq = record("eq");
     self.is = record("is");
+    self.ilike = record("ilike");
     self.order = record("order");
     // `limit()` ends `program()`'s chain and sits mid-chain in `ownMatch()`'s:
     // thenable AND chainable, as PostgREST's builder is.
@@ -508,6 +509,54 @@ test.describe("createMcpUserReads", () => {
       await createMcpUserReads(empty.client, USER_ID).program(PROGRAM_ID),
     ).toBeNull();
     expect(await reads.program("not-a-uuid")).toBeNull();
+  });
+
+  test("programsNamed(): a literal, case-insensitive name among colleges, narrowed to the team when there is one", async () => {
+    const { client, filters } = fakeClient({
+      programs: { data: [{ id: PROGRAM_ID }], error: null },
+    });
+    const reads = createMcpUserReads(client, USER_ID);
+    expect(await reads.programsNamed("St_John's 100%", "mens")).toEqual([
+      { id: PROGRAM_ID },
+    ]);
+    expect(filters.map((f) => [f.op, ...f.args])).toEqual([
+      ["ilike", "school_name", "St\\_John's 100\\%"],
+      ["eq", "org_type", "college"],
+      ["eq", "team", "mens"],
+      ["order", "id"],
+      ["limit", 3],
+    ]);
+  });
+
+  test("searchPrograms(): a GET, because the write guard refuses a connector's other POSTs, with '' for any", async () => {
+    const row = {
+      id: PROGRAM_ID,
+      school_name: "Westbrook",
+      school_abbrev: "WB",
+      team: "mens",
+      division: "D1",
+      conference: "Big West",
+    };
+    const { client, filters } = fakeClient({
+      search_programs: {
+        data: [{ ...row, status: "unclaimed", owner_display: "A Coach" }],
+        error: null,
+      },
+    });
+    const reads = createMcpUserReads(client, USER_ID);
+    expect(
+      await reads.searchPrograms({ query: "West", team: null, limit: 10 }),
+    ).toEqual([row]);
+    expect(filters).toEqual([
+      {
+        table: "search_programs",
+        op: "rpc",
+        args: [
+          { p_term: "West", p_team: "", p_division: "", p_limit: 10 },
+          true,
+        ],
+      },
+    ]);
   });
 
   test("programs(): every membership row the caller holds, filtered to their own user_id, with the squad narrowed", async () => {
@@ -840,6 +889,22 @@ test.describe("the connector's read-only guard", () => {
     expect(patch).not.toMatch(/\bscore\s*=/);
     expect(patch).not.toMatch(/\bformat\s*=/);
     expect(patch).not.toMatch(/player1_id|player2_id|created_by\s*=\s*p_/);
+    // The newest statement, which also takes the opponent's program; the same
+    // file rebuilds ask.matches, which names the seats, so only the function.
+    const linking = readFileSync(
+      "supabase/migrations/20261030204509_ask_school_linking.sql",
+      "utf8",
+    );
+    const latest = linking.slice(
+      linking.indexOf("function public.ask_patch_match("),
+    );
+    expect(latest.slice(0, latest.indexOf("as $"))).not.toMatch(
+      /security definer/i,
+    );
+    expect(latest).not.toMatch(/\bscore\s*=/);
+    expect(latest).not.toMatch(/\bformat\s*=/);
+    expect(latest).not.toMatch(/player1_id|player2_id|created_by\s*=\s*p_/);
+    expect(latest).toMatch(/hint = 'opponent_team_exclusive'/);
     // The direct-call contract: the event lock and the two enums hold in SQL.
     const checks = readFileSync(
       "supabase/migrations/20261021160317_ask_patch_match_checks.sql",

@@ -7,7 +7,12 @@ import {
   type PersonalOpponentsData,
   type TeamOpponentsData,
 } from "@/lib/data/opponents-load";
-import { toSquad, type Squad } from "@/lib/data/squad";
+import {
+  toGenderedSquad,
+  toSquad,
+  type GenderedSquad,
+  type Squad,
+} from "@/lib/data/squad";
 import { playerSeat, viewerSide } from "@/lib/data/viewer-side";
 import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
 import type {
@@ -51,6 +56,10 @@ import type {
  *     `PATCH /api/matches/[id]`: a coach cannot edit a player's match from
  *     the connector either) and whether it was analysed, from its newest
  *     processing job as `analysisFor()` reads it.
+ *   - `programSquad()`, `directoryProgram()`, `programsNamed()`: the program
+ *     directory, under `programs` RLS — college programs and the caller's own.
+ *   - `searchPrograms()`: the school dropdown's `search_programs`, as a GET
+ *     because the write guard refuses a connector token's other POSTs.
  *
  * Nothing here touches the service role: a non-member gets nothing from
  * `program_members`, and a conversation or match that is not the caller's
@@ -94,8 +103,34 @@ export interface McpOwnMatch extends StoredMatchForPatch {
   programId: string | null;
 }
 
+/** A directory program as `search_programs` and `update_match` state it. */
+export interface McpDirectoryProgram {
+  id: string;
+  school_name: string;
+  school_abbrev: string | null;
+  team: string | null;
+  division: string | null;
+  conference: string | null;
+}
+
+export interface McpProgramSearch {
+  query: string;
+  team?: GenderedSquad | null;
+  division?: string | null;
+  limit: number;
+}
+
 export interface McpUserReads {
   program(programId: string): Promise<McpProgram | null>;
+  /** The program's men's or women's squad; null for co-ed or unsaid. */
+  programSquad(programId: string): Promise<GenderedSquad | null>;
+  directoryProgram(programId: string): Promise<McpDirectoryProgram | null>;
+  /** College programs with exactly this name, ignoring case; at most three. */
+  programsNamed(
+    schoolName: string,
+    team: GenderedSquad | null,
+  ): Promise<McpDirectoryProgram[]>;
+  searchPrograms(search: McpProgramSearch): Promise<McpDirectoryProgram[]>;
   ownMatch(matchId: string): Promise<McpOwnMatch | null>;
   programs(): Promise<McpProgramMembership[]>;
   conversation(
@@ -111,6 +146,14 @@ export interface McpUserReads {
 type Embedded<T> = T | T[] | null;
 function one<T>(embed: Embedded<T>): T | null {
   return (Array.isArray(embed) ? embed[0] : embed) ?? null;
+}
+
+const DIRECTORY_COLUMNS =
+  "id, school_name, school_abbrev, team, division, conference";
+
+/** A term as a literal `ilike` pattern: its wildcards match themselves. */
+function ilikeExact(term: string): string {
+  return term.replace(/[\\%_]/g, "\\$&");
 }
 
 /**
@@ -143,6 +186,73 @@ export function createMcpUserReads(
       const program = row ? one(row.programs) : null;
       if (!program) return null;
       return { id: program.id, name: program.school_name };
+    },
+
+    async programSquad(programId) {
+      if (!isUuid(programId)) return null;
+      const { data, error } = await client
+        .from("programs")
+        .select("team")
+        .eq("id", programId)
+        .maybeSingle();
+      if (error) {
+        throw new Error("Could not read the program", { cause: error });
+      }
+      return toGenderedSquad((data as { team?: unknown } | null)?.team);
+    },
+
+    async directoryProgram(programId) {
+      if (!isUuid(programId)) return null;
+      const { data, error } = await client
+        .from("programs")
+        .select(DIRECTORY_COLUMNS)
+        .eq("id", programId)
+        .maybeSingle();
+      if (error) {
+        throw new Error("Could not read the program", { cause: error });
+      }
+      return data as McpDirectoryProgram | null;
+    },
+
+    async programsNamed(schoolName, team) {
+      const named = client
+        .from("programs")
+        .select(DIRECTORY_COLUMNS)
+        .ilike("school_name", ilikeExact(schoolName))
+        .eq("org_type", "college");
+      const { data, error } = await (team ? named.eq("team", team) : named)
+        .order("id")
+        .limit(3);
+      if (error) {
+        throw new Error("Could not read the directory", { cause: error });
+      }
+      return (data ?? []) as McpDirectoryProgram[];
+    },
+
+    async searchPrograms({ query, team, division, limit }) {
+      // Empty, not null, for "any": a GET sends every argument as text, and
+      // the function reads '' as no filter.
+      const { data, error } = await client.rpc(
+        "search_programs",
+        {
+          p_term: query,
+          p_team: team ?? "",
+          p_division: division ?? "",
+          p_limit: limit,
+        },
+        { get: true },
+      );
+      if (error) {
+        throw new Error("Could not search the directory", { cause: error });
+      }
+      return ((data ?? []) as McpDirectoryProgram[]).map((row) => ({
+        id: row.id,
+        school_name: row.school_name,
+        school_abbrev: row.school_abbrev,
+        team: row.team,
+        division: row.division,
+        conference: row.conference,
+      }));
     },
 
     async programs() {
