@@ -6,9 +6,11 @@ import {
   ASK_ORDER_SUMMARY_PREFIXES,
 } from "@/lib/services/ask/facts";
 import {
+  ASK_DERIVED_COUNTERS,
   ASK_MEASURES,
   ASK_MEASURE_PREFIX_QUALIFIERS,
   ASK_MEASURE_SUFFIX_QUALIFIERS,
+  askCounterSql,
   askMeasure,
   askMeasureFullLabel,
   askMeasureLabel,
@@ -73,6 +75,44 @@ test.describe("ASK_MEASURES", () => {
       "chances to break the other side's serve, not break points faced",
     );
     expect(() => askMeasureLabel("no_such_measure")).toThrow();
+  });
+
+  test("errors is every error, judged or not; unforced errors stays its own measure", () => {
+    expect(askMeasureLabel("errors")).toBe("Errors");
+    expect(askMeasureLabel("unforced_errors")).toBe("Unforced errors");
+    expect(askMeasure("me_errors")).toMatchObject({
+      key: "errors",
+      label: "Errors",
+      qualifier: "",
+    });
+    expect(askMeasure("last_errors")?.key).toBe("errors");
+    // Summed as unforced + coalesce(forced, 0): a null forced count (nobody
+    // judged the split) adds nothing instead of nulling the sum.
+    expect(askCounterSql("errors", "s")).toBe(
+      "(s.unforced_errors + coalesce(s.forced_errors, 0))",
+    );
+    expect(askCounterSql("winners", "s")).toBe("s.winners");
+    // Every derived counter is a measure, and reads only documented columns.
+    const stats = ASK_SCHEMA.find((view) => view.view === "match_stats");
+    const columns = new Set((stats?.columns ?? []).map((c) => c.name));
+    for (const [key, sql] of Object.entries(ASK_DERIVED_COUNTERS)) {
+      expect(ASK_MEASURES[key], key).toBeDefined();
+      for (const [, column] of sql("s").matchAll(/\bs\.(\w+)/g)) {
+        expect(columns.has(column), column).toBe(true);
+      }
+    }
+  });
+
+  test("the error meanings say when the split was judged", () => {
+    const stats = ASK_SCHEMA.find((view) => view.view === "match_stats");
+    const meaning = (name: string) =>
+      stats?.columns.find((column) => column.name === name)?.meaning ?? "";
+    expect(meaning("unforced_errors")).toContain(
+      "every error the side made unless forced_errors is non-null; then it is only the unforced ones",
+    );
+    expect(meaning("forced_errors")).toContain(
+      "null when nobody judged the split — an unverified video match, or one verified before the split existed; SwingVision matches and matches verified from now on carry it",
+    );
   });
 
   test("is the review's source of names: one label per measure, everywhere", () => {

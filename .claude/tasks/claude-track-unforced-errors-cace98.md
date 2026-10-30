@@ -104,7 +104,7 @@ ready).
 
 ## T7 · Ask says "errors" on an unjudged match
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/lib/services/ask/schema.ts, src/lib/services/ask/measures.ts, src/lib/services/ask/prompts.ts, src/lib/services/ask/compare.ts, src/lib/services/ask/review.ts, tests/ask-measures.spec.ts, tests/ask-compare.spec.ts

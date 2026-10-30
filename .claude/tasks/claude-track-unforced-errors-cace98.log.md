@@ -72,3 +72,14 @@ is the runner's. Newest entries at the bottom.
 **gate:** not reached — dispatch refused
 **reason:** Claude Code's auto-mode classifier refused to dispatch the subagent as a "Production Deploy": the task ends with `deploy_edge_function` for `generate-insights` on the live project. Needs the user's explicit approval to deploy; reset `status:` to `todo` once given.
 **stash:** no stash — the task produced no changes
+
+## T7 · Ask says "errors" on an unjudged match — done
+
+**gate:** mechanical PASS · completion VERDICT: pass
+**changed:** `measures.ts`: new `errors` measure ("Errors", unforced + coalesce(forced, 0)) via `ASK_DERIVED_COUNTERS`/`askCounterSql`, used by compare and review SQL. `compare.ts`: "errors"/"mistakes" map to `errors`, "unforced errors" stays on `unforced_errors`. `review.ts`: the review's error row is now `errors` ("Errors") for everyone. `schema.ts`: new `unforced_errors`/`forced_errors` meanings. `prompts.ts`: `ASK_ERRORS_RULE` in both answer prompts; the worked example's rows now carry forced errors so it is a judged match. No `database.ts` or SQL-guard change; live `ask.match_stats` already exposes `forced_errors`. Specs: ask-measures, ask-compare, ask-prompt, ask-review.
+**NOT APPLIED LIVE:** `supabase/migrations/20261029233000_ask_error_column_comments.sql` — two `comment on column ask.match_stats.*` statements (comments only; `ask-prompt.spec.ts` holds schema meanings equal to the latest migration comment). Live comments stay stale until it is applied with the user's approval; if the connector applies it, rename the file to the version it records.
+**follow-ups:**
+
+1. Compare's default "standard" measure set and the "Consistent" quality word still use `unforced_errors`, so a default comparison on an unjudged match prints "Unforced errors". Switch to `errors` (or pick per result).
+2. Planner prompt could ask model-written SQL to return a count of null `forced_errors`, so the answer step can obey the "any match null" rule on aggregated rows.
+3. `answer-render` could relabel `unforced_errors` to "Errors" in code when the row's `forced_errors` is null.

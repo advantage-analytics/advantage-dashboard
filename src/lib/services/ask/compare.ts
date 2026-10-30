@@ -1,4 +1,5 @@
 import type { AskRow } from "@/lib/services/ask/answer-render";
+import { askCounterSql } from "@/lib/services/ask/measures";
 
 /**
  * The comparisons: three questions the planner used to write SQL for and now
@@ -169,6 +170,14 @@ export const ASK_COMPARE_MEASURES: readonly AskCompareMeasure[] = [
     standard: false,
   },
   {
+    // Every error, judged or not: unforced + coalesce(forced, 0), the derived
+    // counter in `measures.ts` (both columns are in ask.match_stats).
+    key: "errors",
+    numerator: ["errors"],
+    groups: [],
+    standard: false,
+  },
+  {
     key: "total_points_won_pct",
     numerator: ["total_points_won"],
     denominator: ["total_points"],
@@ -296,7 +305,9 @@ function buildOpponentSql(): string {
   return [
     "with agg as (",
     "select s.side, count(*) as n,",
-    COUNTERS.map((counter) => `sum(s.${counter}) as ${counter}`).join(", "),
+    COUNTERS.map(
+      (counter) => `sum(${askCounterSql(counter, "s")}) as ${counter}`,
+    ).join(", "),
     "from ask.match_stats s",
     `where s.match_id in (select match_id from scope) and s.side in ('me', 'opponent') and ${HAS_STATS}`,
     "group by s.side",
@@ -313,7 +324,9 @@ function buildPlayersSql(): string {
   return [
     "with agg as (",
     "select m.player_name, count(*) as n,",
-    COUNTERS.map((counter) => `sum(s.${counter}) as ${counter}`).join(", "),
+    COUNTERS.map(
+      (counter) => `sum(${askCounterSql(counter, "s")}) as ${counter}`,
+    ).join(", "),
     "from ask.match_stats s join ask.matches m on m.match_id = s.match_id",
     `where s.side = 'me' and s.match_id in (select match_id from scope) and m.player_name is not null and ${HAS_STATS}`,
     "group by m.player_name",
@@ -340,7 +353,10 @@ function buildBaselineSql(prefix: string): string {
   return [
     "with tagged as (",
     "select (s.match_id in (select match_id from scope)) as in_scope,",
-    COUNTERS.map((counter) => `s.${counter}`).join(", "),
+    COUNTERS.map((counter) => {
+      const sql = askCounterSql(counter, "s");
+      return sql === `s.${counter}` ? sql : `${sql} as ${counter}`;
+    }).join(", "),
     `from ask.match_stats s where s.side = 'me' and ${HAS_STATS}`,
     "), agg as (",
     "select sum(case when t.in_scope then 1 else 0 end) as scope_n, count(*) as all_n,",
@@ -485,6 +501,10 @@ const QUESTION_MEASURES: readonly (readonly [RegExp, readonly string[]])[] = [
     ],
   ],
   [/\bunforced errors?\b/i, ["unforced_errors"]],
+  // "errors" or "mistakes" alone is every error: on a match whose split
+  // nobody judged that is the only honest count. "unforced errors" (above)
+  // and "forced errors" keep their own measure.
+  [/(?<!\bforced |\bunforced )\berrors?\b|\bmistakes?\b/i, ["errors"]],
   [/\bwinners\b/i, ["winners"]],
 ];
 

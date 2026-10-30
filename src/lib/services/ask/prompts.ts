@@ -932,6 +932,15 @@ ${JSON.stringify(oneLine(headline))}`;
 }
 
 /**
+ * The one rule on naming errors, in both answer prompts. A match whose
+ * forced/unforced split nobody judged has forced_errors null and every error
+ * filed under unforced_errors, so calling that count "unforced errors" says
+ * something nobody checked. Wording only: the number is still a reference.
+ */
+export const ASK_ERRORS_RULE =
+  "- ERRORS UNTIL JUDGED. When a row's forced_errors is null, or the result spans matches where any forced_errors is null, or the result has no forced_errors beside an unforced_errors, call that figure errors, never unforced errors. Say unforced errors only when forced_errors is non-null for every match the figure covers. A column named errors is always errors.";
+
+/**
  * The rows the worked example in the answer prompt is written against: the
  * diagnostic shape, one match, the player against Beau.
  */
@@ -953,6 +962,10 @@ export const ASK_ANSWER_EXAMPLE_ROWS: readonly AskRow[] = [
     opp_winners: 24,
     me_unforced_errors: 38,
     opp_unforced_errors: 36,
+    // Judged: the split exists, so the example may say "unforced errors"
+    // (ASK_ERRORS_RULE).
+    me_forced_errors: 11,
+    opp_forced_errors: 14,
     me_total_points_won_pct: 45.6,
     opp_total_points_won_pct: 54.4,
     [ASK_SCOPE_COUNT_COLUMN]: 1,
@@ -1190,6 +1203,7 @@ The rules below are the product's promise to the player, not style preferences. 
 - NO ADVICE. No recommendation, drill, tactic, strategy, encouragement or praise. Never "you should", "try", "focus on", "work on", "keep it up", "well done". If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.
 - THE MATCH COUNT IS ${ASK_SCOPE_COUNT_COLUMN}. Nowhere else. The headline never mentions sample size, and the body remarks on it at most once, in its last sentence, only when the scope says it may.
 - Say only what the result shows. No cause the result does not hold, no guess about the opponent, no claim about matches outside it.
+${ASK_ERRORS_RULE}
 - Second person, plain sentences. No greeting, no name of the player, no markdown, no bullet points, no headings, no emoji, no quotation marks, no exclamation marks.
 
 ## Example
@@ -1723,6 +1737,7 @@ The rules below are the product's promise to the program, not style preferences.
 ${coach ? ASK_COACH_RULE : ASK_TEAM_NO_ADVICE_RULE}
 - THE MATCH COUNT IS ${ASK_SCOPE_COUNT_COLUMN}. Nowhere else. The headline never mentions sample size, and the body remarks on it at most once, in its last sentence, only when the scope says it may.
 - Say only what the result shows. No cause the result does not hold, no guess about an opponent, no claim about matches outside it.
+${ASK_ERRORS_RULE}
 - THIRD PERSON. The players are never "you" and their figures are never "your": name the player as the result spells them ("Sokolov won …"), or say "the team" when the result covers several players. A name may be shortened to the family name after it is clear who is meant. Never invent a name the result does not hold; with no player_name in the result, say "the team".
 - Plain sentences. No greeting, no markdown, no bullet points, no headings, no emoji, no quotation marks, no exclamation marks.
 

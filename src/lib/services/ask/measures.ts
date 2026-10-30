@@ -26,6 +26,33 @@
  * A leaf: no imports.
  */
 
+/**
+ * Counters the canned queries sum that are not a column of `ask.match_stats`
+ * but an expression over its columns, keyed by the name the query gives it.
+ *
+ * `errors` reads only `unforced_errors` and `forced_errors`, both columns of
+ * the live `ask.match_stats` view (checked against information_schema on
+ * 2026-10-29), so no view change backs it. `forced_errors` is null where
+ * nobody judged the split; there every error is already in
+ * `unforced_errors`, and coalesce keeps the sum from going null.
+ */
+export const ASK_DERIVED_COUNTERS: Readonly<
+  Record<string, (table: string) => string>
+> = {
+  errors: (t) => `(${t}.unforced_errors + coalesce(${t}.forced_errors, 0))`,
+};
+
+/** A counter as SQL over the row alias `table`: the column itself, or its expression. */
+export function askCounterSql(counter: string, table: string): string {
+  const derived = Object.prototype.hasOwnProperty.call(
+    ASK_DERIVED_COUNTERS,
+    counter,
+  )
+    ? ASK_DERIVED_COUNTERS[counter]
+    : undefined;
+  return derived ? derived(table) : `${table}.${counter}`;
+}
+
 export interface AskMeasureName {
   /** As the page prints it beside the number. */
   label: string;
@@ -41,6 +68,14 @@ export const ASK_MEASURES: Readonly<Record<string, AskMeasureName>> = {
   winners: { label: "Winners" },
   unforced_errors: { label: "Unforced errors" },
   forced_errors: { label: "Forced errors" },
+  // Not a view column: unforced + coalesce(forced, 0), computed in SQL
+  // (`askCounterSql`). The one error count that means the same on a match
+  // whose forced/unforced split nobody judged (forced_errors null, every
+  // error filed as unforced) and on one that was judged.
+  errors: {
+    label: "Errors",
+    note: "every error, forced or unforced",
+  },
   avg_rally_length: { label: "Average rally length" },
   first_serves: { label: "First serves hit" },
   first_serves_in: { label: "First serves in" },

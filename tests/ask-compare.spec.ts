@@ -356,6 +356,54 @@ test.describe("selectCompareMeasures", () => {
     expect(questionMeasures("Why did we lose?")).toEqual([]);
   });
 
+  test("errors or mistakes is every error; unforced errors keeps its own measure", () => {
+    expect(questionMeasures("Who makes the most errors?")).toEqual(["errors"]);
+    expect(questionMeasures("Did I make more mistakes than Beau?")).toEqual([
+      "errors",
+    ]);
+    expect(questionMeasures("How many unforced errors did I make?")).toEqual([
+      "unforced_errors",
+    ]);
+    expect(questionMeasures("Compare our unforced errors")).toEqual([
+      "unforced_errors",
+    ]);
+    // "forced errors" is neither every error nor the unforced ones.
+    expect(questionMeasures("How many forced errors did I make?")).toEqual([]);
+    expect(plannerMeasures(["errors", "opp_errors_per_match"])).toEqual([
+      "errors",
+    ]);
+  });
+
+  test("the errors measure is unforced plus forced counted as zero when unjudged, in every query", () => {
+    const errors = ASK_COMPARE_MEASURES.find(
+      (measure) => measure.key === "errors",
+    );
+    expect(errors).toMatchObject({
+      numerator: ["errors"],
+      standard: false,
+    });
+    expect(errors?.denominator).toBeUndefined();
+    const sum =
+      "sum((s.unforced_errors + coalesce(s.forced_errors, 0))) as errors";
+    expect(ASK_COMPARE_OPPONENT_SQL).toContain(sum);
+    expect(ASK_COMPARE_OPPONENT_SQL).toContain(
+      "max(case when a.side = 'me' then a.errors end) as me_errors",
+    );
+    expect(ASK_COMPARE_PLAYERS_SQL).toContain(sum);
+    expect(ASK_COMPARE_PLAYERS_SQL).toContain(
+      "round(1.0 * a.errors / nullif(a.n, 0), 1) as errors_per_match",
+    );
+    for (const sql of [
+      ASK_COMPARE_BASELINE_SQL,
+      ASK_COMPARE_TEAM_BASELINE_SQL,
+    ]) {
+      expect(sql).toContain(
+        "(s.unforced_errors + coalesce(s.forced_errors, 0)) as errors",
+      );
+    }
+    expect(columnLabel("me_errors")).toBe("Errors");
+  });
+
   test("then the planner's list, then every standard measure", () => {
     expect(plannerMeasures(["return", "ACES", "nonsense", 4])).toEqual([
       "return_won_pct",

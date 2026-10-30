@@ -42,6 +42,7 @@ import {
   ASK_FOLLOW_UP_KEEPS_COLUMNS,
   ASK_FOLLOW_UP_KEEPS_SHAPE,
   ASK_ANSWER_EXAMPLE_ROWS,
+  ASK_ERRORS_RULE,
   ASK_NO_ADVICE_SENTENCE,
   ASK_PLAN_EXAMPLE_BASELINE,
   ASK_PLAN_EXAMPLE_COMPARE,
@@ -646,6 +647,24 @@ test.describe("buildAnswerPrompt", () => {
       "If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.",
     );
     expect(prompt).toContain("no exclamation marks");
+  });
+
+  test("an unjudged split is errors, never unforced errors — in both answer prompts", () => {
+    expect(ASK_ERRORS_RULE).toContain(
+      "When a row's forced_errors is null, or the result spans matches where any forced_errors is null",
+    );
+    expect(ASK_ERRORS_RULE).toContain(
+      "call that figure errors, never unforced errors",
+    );
+    expect(prompt).toContain(ASK_ERRORS_RULE);
+    expect(buildAnswerPrompt({ ...ANSWER_INPUT, scope: TEAM_SCOPE })).toContain(
+      ASK_ERRORS_RULE,
+    );
+    // The worked example says "unforced errors", so its match is judged.
+    for (const row of ASK_ANSWER_EXAMPLE_ROWS) {
+      expect(typeof row.me_forced_errors).toBe("number");
+      expect(typeof row.opp_forced_errors).toBe("number");
+    }
   });
 
   test("the match count is the server's column, said once at most, never in the headline", () => {
