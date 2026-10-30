@@ -277,7 +277,9 @@ function midSentence(label: string, names: PhraseNames): string {
  * (`appliedPhrases`, rally order — a landed cut's `MatchFilters` half reads
  * here, like any other pick), then the statistic's label ("…, from
  * Statistics") ONLY while its Film-only extras are in force — a pure cut is
- * all shared phrases already and names nothing twice — then "saved"; joined
+ * all shared phrases already and names nothing twice, and a shared phrase the
+ * label opens with is left to the label ("Errors · Errors, from Statistics"
+ * reads "Errors, from Statistics") — then "saved"; joined
  * with " · ", each segment starting with a capital like every other middot
  * line in the dashboard. "G. Revelli serving · Second serve · Break point".
  * "All points" when nothing is applied.
@@ -291,8 +293,10 @@ export function filmListSentence(
   },
   names: PhraseNames,
 ): string {
-  const parts = appliedPhrases(f.shared, names);
+  let parts = appliedPhrases(f.shared, names);
   if (f.remainder) {
+    const opens = f.remainder.label.split(" · ")[0].toLowerCase();
+    parts = parts.filter((phrase) => phrase.toLowerCase() !== opens);
     const label =
       parts.length === 0
         ? f.remainder.label
