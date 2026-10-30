@@ -113,6 +113,266 @@ test("fullscreen selected points can open their timed video", async ({
   await expect(page).not.toHaveURL(/fullscreen=1/);
 });
 
+test("fullscreen control tooltips are the site's chrome tooltip, above the viewer", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  await page.getByRole("button", { name: "Open fullscreen" }).click();
+  const viewer = page.getByRole("region", {
+    name: "Serve placement fullscreen",
+  });
+  for (const [name, text] of [
+    ["Exit fullscreen", "Exit fullscreenEsc"],
+    ["Fit the court", "Fit the court"],
+  ]) {
+    await viewer.getByRole("button", { name, exact: true }).hover();
+    const tip = page.locator('[data-slot="tooltip-content"]');
+    await expect(tip).toBeVisible();
+    await expect(tip).toContainText(text);
+    const look = await tip.evaluate((node) => {
+      const style = getComputedStyle(node);
+      const box = node.getBoundingClientRect();
+      const under = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2,
+      );
+      return {
+        radius: style.borderRadius,
+        size: style.fontSize,
+        weight: style.fontWeight,
+        arrow: node.querySelector("svg") !== null,
+        onTop: under !== null && node.contains(under),
+        left: box.left,
+        right: box.right,
+        top: box.top,
+        bottom: box.bottom,
+      };
+    });
+    expect(look.onTop).toBe(true);
+    expect(look.radius).toBe("12px");
+    expect(look.size).toBe("12px");
+    expect(look.weight).toBe("500");
+    expect(look.arrow).toBe(false);
+    expect(look.left).toBeGreaterThanOrEqual(0);
+    expect(look.right).toBeLessThanOrEqual(320);
+    expect(look.top).toBeGreaterThanOrEqual(0);
+    expect(look.bottom).toBeLessThanOrEqual(700);
+    // Radix closes on the move AFTER the pointer leaves its grace area.
+    await page.screenshot({
+      path: test.info().outputPath(`fullscreen-tooltip-${name}.png`),
+    });
+    await page.mouse.move(160, 350, { steps: 5 });
+    await page.mouse.move(150, 340, { steps: 2 });
+    await expect(tip).toHaveCount(0);
+  }
+  // Hovering the Exit button must not take Esc away from the viewer.
+  await viewer.getByRole("button", { name: "Exit fullscreen" }).hover();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+});
+
+for (const [width, height] of [
+  [1100, 800],
+  [320, 568],
+] as const) {
+  test(`every fullscreen mark's readout stays on screen and above the chrome (${width}px)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watch`);
+    await page.getByRole("button", { name: "Open fullscreen" }).click();
+    const viewer = page.getByRole("region", {
+      name: "Serve placement fullscreen",
+    });
+    // Roving focus reaches marks at any edge, panned or not.
+    await viewer.getByRole("button", { name: "Zoom in" }).click();
+    await viewer.getByRole("button", { name: "Zoom in" }).click();
+    const marks = viewer.locator("[data-viz-mark]");
+    const count = await marks.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i += Math.max(1, Math.floor(count / 12))) {
+      await marks.nth(i).dispatchEvent("mouseover");
+      const readout = viewer.locator("[data-viz-readout]");
+      await expect(readout).toBeVisible();
+      const box = await readout.evaluate((node) => {
+        // A read-only readout is `pointer-events-none`, which would hide it
+        // from the paint-order probe below.
+        (node as HTMLElement).style.pointerEvents = "auto";
+        const rect = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        const under = document.elementFromPoint(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2,
+        );
+        return {
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          radius: style.borderRadius,
+          onTop: under !== null && node.contains(under),
+        };
+      });
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(width);
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.bottom).toBeLessThanOrEqual(height);
+      expect(box.onTop).toBe(true);
+      expect(box.radius).toBe("12px");
+      await page.screenshot({
+        path: test.info().outputPath(`fullscreen-readout-${width}-${i}.png`),
+      });
+      await marks.nth(i).dispatchEvent("mouseout");
+      await expect(readout).toHaveCount(0);
+    }
+  });
+}
+
+test("a fullscreen serve zone answers with the dark readout, and a finger can pin it", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 768, height: 1024 },
+  });
+  const page = await context.newPage();
+  await page.goto(`${origin}/?tab=shots&cut=serve&chart=zones`);
+  await page.getByRole("button", { name: "Open fullscreen" }).tap();
+  const viewer = page.getByRole("region", {
+    name: "Serve placement fullscreen",
+  });
+  await viewer.waitFor();
+  const readout = viewer.locator("[data-viz-readout]");
+  const cell = viewer.locator("[data-serve-zone-cell]").first();
+  await expect(viewer.locator("[data-serve-zone] title")).toHaveCount(0);
+  await cell.tap();
+  await expect(readout).toBeVisible();
+  await expect(readout).toContainText("points won");
+  await page.screenshot({
+    path: test.info().outputPath("fullscreen-zone-readout-touch.png"),
+  });
+  await page.touchscreen.tap(8, 500);
+  await expect(readout).toHaveCount(0);
+
+  // A tap only performs; a hold names the control, on the shared primitive.
+  const fit = viewer.getByRole("button", { name: "Fit the court" });
+  await fit.tap();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
+  await fit.dispatchEvent("pointerdown", {
+    pointerType: "touch",
+    button: 0,
+    isPrimary: true,
+    pointerId: 7,
+  });
+  const tip = page.locator('[data-slot="tooltip-content"]');
+  await expect(tip).toContainText("Fit the court");
+  await page.screenshot({
+    path: test.info().outputPath("fullscreen-hold-tooltip-touch.png"),
+  });
+  await context.close();
+});
+
+test("the focused court's serve zones answer with the dark readout, not a native title", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve&chart=zones`);
+  const art = page.locator("[data-viz-focused-art]");
+  const readout = page.locator("[data-viz-focused-readout]");
+  const zone = art.locator('[data-serve-zone="deuce-wide"]');
+  await expect(art.locator("[data-serve-zone]")).toHaveCount(6);
+  await expect(art.locator("title")).toHaveCount(0);
+  await expect(zone).toHaveAttribute(
+    "aria-label",
+    "deuce wide: 2 serves, 100% points won",
+  );
+  await zone.hover();
+  await expect(readout).toContainText("Avery Kim — deuce wide");
+  await expect(readout).toContainText("100% of 2 points won");
+  await page.screenshot({
+    path: test.info().outputPath("focused-zone-readout.png"),
+  });
+  const look = await readout.evaluate((node) => {
+    const style = getComputedStyle(node);
+    const box = node.getBoundingClientRect();
+    return {
+      radius: style.borderRadius,
+      top: box.top,
+      cardTop: node.closest("[data-viz-focused-card]")?.getBoundingClientRect()
+        .top,
+    };
+  });
+  expect(look.radius).toBe("12px");
+  expect(look.top).toBeGreaterThanOrEqual(look.cardTop ?? 0);
+  // Hover leaves; a click pins it until the next press anywhere.
+  await page.mouse.move(2, 2);
+  await expect(readout).toHaveCount(0);
+  await zone.click();
+  await page.mouse.move(2, 2);
+  await expect(readout).toBeVisible();
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(readout).toHaveCount(0);
+});
+
+test("a finger pins a focused zone's readout, and the card never clips it on a phone", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 320, height: 700 },
+  });
+  const page = await context.newPage();
+  await page.goto(`${origin}/?tab=shots&cut=serve&chart=zones`);
+  const art = page.locator("[data-viz-focused-art]");
+  const readout = page.locator("[data-viz-focused-readout]");
+  const zones = art.locator("[data-serve-zone]");
+  for (let i = 0; i < 6; i += 1) {
+    await zones.nth(i).tap();
+    await expect(readout).toBeVisible();
+    const fits = await readout.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const card = node
+        .closest("[data-viz-focused-card]")
+        ?.getBoundingClientRect();
+      return (
+        card !== undefined &&
+        box.left >= card.left &&
+        box.right <= card.right &&
+        box.top >= card.top &&
+        box.bottom <= card.bottom
+      );
+    });
+    expect(fits).toBe(true);
+  }
+  await page.screenshot({
+    path: test.info().outputPath("focused-zone-readout-phone.png"),
+  });
+  await page.touchscreen.tap(4, 690);
+  await expect(readout).toHaveCount(0);
+  await context.close();
+});
+
+test("a pinned fullscreen readout stays until a click outside", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  await page.getByRole("button", { name: "Open fullscreen" }).click();
+  const viewer = page.getByRole("region", {
+    name: "Serve placement fullscreen",
+  });
+  const readout = viewer.locator("[data-viz-readout]");
+  await viewer.locator('[data-viz-mark="p1-high-0-0"]').click({ force: true });
+  await page.mouse.move(4, 400);
+  await page.waitForTimeout(300);
+  await expect(readout).toBeVisible();
+  await page.mouse.click(4, 400);
+  await expect(readout).toHaveCount(0);
+});
+
 test("fullscreen chips scroll in one line, preserve controls and follow both subjects after reopening", async ({
   page,
 }) => {

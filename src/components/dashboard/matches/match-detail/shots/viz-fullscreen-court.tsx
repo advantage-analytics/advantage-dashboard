@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
+import { useDismissOnNextPress } from "@/hooks/use-long-press";
 import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
 import {
   DARK_READOUT_CLASS,
@@ -34,7 +35,7 @@ import {
   VizBandsOverlay,
   type VizBandsOverlayProps,
 } from "./viz-bands-overlay";
-import { buildReadout } from "./viz-readout";
+import { buildReadout, buildZoneReadout, placeReadout } from "./viz-readout";
 import { nextMarkIndex } from "./viz-mark-roving";
 import { isPlacementCut } from "./cut-kinds";
 import {
@@ -73,9 +74,11 @@ import type { DistanceUnit } from "@/lib/format/distance";
  * keep a constant device thickness instead of fattening.
  *
  * Two consequences the rest of this file honours:
- * - anything positioned in ART-pixel space alongside the svg (the readout)
- *   multiplies by `z` itself, and needs no counter-scale — it lives outside
- *   the scaled svg and renders at its natural CSS size;
+ * - anything positioned in ART-pixel space alongside the svg multiplies by
+ *   `z` itself, and needs no counter-scale — it lives outside the scaled svg
+ *   and renders at its natural CSS size;
+ * - the readout is a sibling of the translated layer, in STAGE pixels, so it
+ *   paints above the viewer's chrome slabs and is clamped to the stage itself;
  * - the marks' own coordinates are viewBox units and do NOT depend on `z` or
  *   on the pan, which is what lets `MarkLayer` be `memo`'d away from both.
  */
@@ -113,18 +116,6 @@ const FOCUS_RING_R = 7.6;
 
 /** The handoff's own highlighted-box alpha (P2b's `fill-opacity="0.09"`). */
 const ZONE_HIGHLIGHT_OPACITY = 0.09;
-
-/**
- * The readout's offset from its mark, and the box it is assumed to occupy
- * when deciding which side of the mark to hang from. The card is content-sized
- * with a `maxWidth`, so rather than measure it (and pay a second layout pass
- * on every hover) the flip uses the WORST case: if the widest possible card
- * would overflow the stage on that axis, hang it the other way. It can flip a
- * little early for a short card; it can never leave one clipped.
- */
-const READOUT_OFFSET = 12;
-const READOUT_MAX_W = 260;
-const READOUT_MAX_H = 84;
 
 function fillFor(dot: VizDot): string {
   if (dot.shape === "star") return ACE_STAR_FILL;
@@ -273,179 +264,216 @@ export function VizFullscreenCourt({
   const watchablePointId =
     watchPointId && canWatchPoint?.(watchPointId) ? watchPointId : null;
 
+  // A serve zone answers hover and a tap the way a mark does: the tap pins it
+  // until the next press anywhere.
+  const [hoveredZone, setHoveredZone] = useState<ZoneKey | null>(null);
+  const [pinnedZone, setPinnedZone] = useState<ZoneKey | null>(null);
+  const unpinZone = useCallback(() => setPinnedZone(null), []);
+  useDismissOnNextPress(pinnedZone !== null, unpinZone);
+  const activeZone =
+    panning || editing || active !== null || zoneStats === null
+      ? null
+      : (hoveredZone ?? pinnedZone);
+  const activeZoneStats = activeZone !== null ? zoneStats?.[activeZone] : null;
+  const shownZone = activeZoneStats?.count ? activeZone : null;
+  const zoneReadout =
+    shownZone !== null && activeZoneStats
+      ? buildZoneReadout(shownZone, activeZoneStats, { subject: subjectName })
+      : null;
+
+  const shownReadout = readout ?? zoneReadout;
   let readoutStyle: React.CSSProperties | null = null;
-  if (active !== null && readout !== null) {
-    const p = projectViewerDot(cut, active);
-    const art = viewerArtPoint(p.x, p.y);
-    // Art px -> layer px (the svg is `artPx * z`), then -> stage px (the
-    // wrapper is translated by px/py).
-    const layerX = art.x * z;
-    const layerY = art.y * z;
-    const flipX =
-      transform.px + layerX + READOUT_OFFSET + READOUT_MAX_W > stage.w;
-    const flipY =
-      transform.py + layerY + READOUT_OFFSET + READOUT_MAX_H > stage.h;
-    readoutStyle = {
-      ...DARK_READOUT_STYLE,
-      left: layerX,
-      top: layerY,
-      minWidth: 168,
-      maxWidth: READOUT_MAX_W,
-      transform: `translate(${
-        flipX ? `calc(-100% - ${READOUT_OFFSET}px)` : `${READOUT_OFFSET}px`
-      }, ${
-        flipY ? `calc(-100% - ${READOUT_OFFSET}px)` : `${READOUT_OFFSET}px`
-      })`,
-    };
+  if (shownReadout !== null) {
+    // Viewbox -> art px -> layer px (the svg is `artPx * z`) -> stage px (the
+    // wrapper is translated by px/py). A zone hangs from the net, so the card
+    // sits over its cell and leaves the percentage below the net readable.
+    let art: { x: number; y: number } | null = null;
+    if (active !== null && readout !== null) {
+      const p = projectViewerDot(cut, active);
+      art = viewerArtPoint(p.x, p.y);
+    } else if (shownZone !== null) {
+      const cell = zoneCellX(ZONES.findIndex((z) => z.key === shownZone));
+      art = viewerArtPoint((cell.x1 + cell.x2) / 2, VIEWER_COURT.netY);
+    }
+    if (art !== null) {
+      const place = placeReadout(
+        { x: transform.px + art.x * z, y: transform.py + art.y * z },
+        stage,
+      );
+      readoutStyle = {
+        ...DARK_READOUT_STYLE,
+        left: place.left,
+        top: place.top,
+        width: place.width,
+        transform: `translate(-50%, ${place.below ? "0" : "-100%"})`,
+      };
+    }
   }
 
   return (
-    <div
-      data-court=""
-      className="absolute top-0 left-0"
-      style={{
-        width: VIEWER_COURT.artPx.w * z,
-        height: VIEWER_COURT.artPx.h * z,
-        transformOrigin: "0 0",
-        // TRANSLATE ONLY — see the file docstring. `will-change: transform` is
-        // deliberately absent: it promotes the layer to its own texture, which
-        // is exactly what blurs the art here.
-        transform: `translate(${transform.px}px, ${transform.py}px)`,
-      }}
-    >
-      <svg
-        width={VIEWER_COURT.artPx.w * z}
-        height={VIEWER_COURT.artPx.h * z}
-        viewBox={`${vb.minX} ${vb.minY} ${vb.w} ${vb.h}`}
-        preserveAspectRatio="xMidYMid meet"
-        role="group"
-        aria-label={`${subjectName} — full court, ${dots.length} mark${dots.length === 1 ? "" : "s"}`}
-        className="absolute top-0 left-0 block"
+    <>
+      <div
+        data-court=""
+        className="absolute top-0 left-0"
+        style={{
+          width: VIEWER_COURT.artPx.w * z,
+          height: VIEWER_COURT.artPx.h * z,
+          transformOrigin: "0 0",
+          // TRANSLATE ONLY — see the file docstring. `will-change: transform` is
+          // deliberately absent: it promotes the layer to its own texture, which
+          // is exactly what blurs the art here.
+          transform: `translate(${transform.px}px, ${transform.py}px)`,
+        }}
       >
-        <rect x={vb.minX} y={vb.minY} width={vb.w} height={vb.h} fill={apron} />
-        <rect
-          x={VIEWER_COURT.doubles.x}
-          y={VIEWER_COURT.doubles.y}
-          width={VIEWER_COURT.doubles.w}
-          height={VIEWER_COURT.doubles.h}
-          fill={court}
-        />
-        <rect
-          x={VIEWER_COURT.singlesLeft}
-          y={VIEWER_COURT.doubles.y}
-          width={VIEWER_COURT.singlesRight - VIEWER_COURT.singlesLeft}
-          height={VIEWER_COURT.doubles.h}
-          fill={court}
-        />
+        <svg
+          width={VIEWER_COURT.artPx.w * z}
+          height={VIEWER_COURT.artPx.h * z}
+          viewBox={`${vb.minX} ${vb.minY} ${vb.w} ${vb.h}`}
+          preserveAspectRatio="xMidYMid meet"
+          role="group"
+          aria-label={`${subjectName} — full court, ${dots.length} mark${dots.length === 1 ? "" : "s"}`}
+          className="absolute top-0 left-0 block"
+        >
+          <rect
+            x={vb.minX}
+            y={vb.minY}
+            width={vb.w}
+            height={vb.h}
+            fill={apron}
+          />
+          <rect
+            x={VIEWER_COURT.doubles.x}
+            y={VIEWER_COURT.doubles.y}
+            width={VIEWER_COURT.doubles.w}
+            height={VIEWER_COURT.doubles.h}
+            fill={court}
+          />
+          <rect
+            x={VIEWER_COURT.singlesLeft}
+            y={VIEWER_COURT.doubles.y}
+            width={VIEWER_COURT.singlesRight - VIEWER_COURT.singlesLeft}
+            height={VIEWER_COURT.doubles.h}
+            fill={court}
+          />
 
-        {zoneCells !== null &&
-          ZONES.map((zone, index) => {
-            const cell = zoneCellX(index);
-            return (
-              <rect
-                key={`cell-${zone.key}`}
-                data-serve-zone-cell={zone.key}
-                x={cell.x1}
-                y={VIEWER_COURT.farServiceY}
-                width={cell.x2 - cell.x1}
-                height={VIEWER_COURT.netY - VIEWER_COURT.farServiceY}
-                fill={LINE_COLOR}
-                fillOpacity={zoneOpacity(zoneCells[zone.key].pct, maxZonePct)}
-                stroke={LINE_COLOR}
-                strokeOpacity={0.5}
-                strokeWidth={1}
-                vectorEffect="non-scaling-stroke"
-              />
-            );
-          })}
+          {zoneCells !== null &&
+            ZONES.map((zone, index) => {
+              const cell = zoneCellX(index);
+              return (
+                <rect
+                  key={`cell-${zone.key}`}
+                  data-serve-zone-cell={zone.key}
+                  x={cell.x1}
+                  y={VIEWER_COURT.farServiceY}
+                  width={cell.x2 - cell.x1}
+                  height={VIEWER_COURT.netY - VIEWER_COURT.farServiceY}
+                  fill={LINE_COLOR}
+                  fillOpacity={zoneOpacity(zoneCells[zone.key].pct, maxZonePct)}
+                  stroke={LINE_COLOR}
+                  strokeOpacity={zone.key === shownZone ? 1 : 0.5}
+                  strokeWidth={1}
+                  vectorEffect="non-scaling-stroke"
+                  onMouseEnter={() => setHoveredZone(zone.key)}
+                  onMouseLeave={() => setHoveredZone(null)}
+                  onClick={() => setPinnedZone(zone.key)}
+                />
+              );
+            })}
 
-        {highlighted !== null &&
-          zoneCells === null &&
-          ZONES.map((zone, index) => {
-            if (!highlighted.has(zone.key)) return null;
-            const cell = zoneCellX(index);
-            return (
-              <rect
-                key={zone.key}
-                x={cell.x1}
-                y={VIEWER_COURT.farServiceY}
-                width={cell.x2 - cell.x1}
-                height={VIEWER_COURT.netY - VIEWER_COURT.farServiceY}
-                fill={LINE_COLOR}
-                fillOpacity={ZONE_HIGHLIGHT_OPACITY}
-              />
-            );
-          })}
+          {highlighted !== null &&
+            zoneCells === null &&
+            ZONES.map((zone, index) => {
+              if (!highlighted.has(zone.key)) return null;
+              const cell = zoneCellX(index);
+              return (
+                <rect
+                  key={zone.key}
+                  x={cell.x1}
+                  y={VIEWER_COURT.farServiceY}
+                  width={cell.x2 - cell.x1}
+                  height={VIEWER_COURT.netY - VIEWER_COURT.farServiceY}
+                  fill={LINE_COLOR}
+                  fillOpacity={ZONE_HIGHLIGHT_OPACITY}
+                />
+              );
+            })}
 
-        {/* Under the court lines and the marks: the bands are the ground
+          {/* Under the court lines and the marks: the bands are the ground
             the landings sit on, and a wash drawn over a hairline would
             make the baseline itself look dimmed. Outside `MarkLayer` and
             memo'd on its own props, so a pan frame never re-renders it. */}
-        {bands !== null && (
-          <VizBandsOverlay {...bands} zones={chart === "zones"} />
-        )}
-
-        <CourtLines />
-        {chart === "zones" && cut !== "serve" && bands === null && (
-          <text
-            x={VIEWER_COURT.centreX}
-            y={VIEWER_COURT.farServiceY}
-            textAnchor="middle"
-            fill={LINE_COLOR}
-            fontFamily="var(--font-sans)"
-            fontSize={8}
-          >
-            {isPlacementCut(cut)
-              ? "No depth bands selected"
-              : "No contact bands selected"}
-          </text>
-        )}
-
-        {cut === "serve" && (
-          <ServeBoxLabels zoneStats={zoneStats} subjectName={subjectName} />
-        )}
-
-        <g
-          opacity={editing ? EDITING_ART_OPACITY : undefined}
-          style={editing ? { pointerEvents: "none" } : undefined}
-          aria-hidden={editing || undefined}
-        >
-          {heat && (
-            <HeatLayer
-              cut={cut}
-              dots={dots}
-              project={heatProjectorFor(cut)}
-              radius={VIEWER_HEAT_DOT_RADIUS}
-              region={viewerHeatFilterRegion()}
-            />
+          {bands !== null && (
+            <VizBandsOverlay {...bands} zones={chart === "zones"} />
           )}
 
-          {showMarks && (
-            <MarkLayer
-              cut={cut}
-              dots={dots}
+          <CourtLines />
+          {chart === "zones" && cut !== "serve" && bands === null && (
+            <text
+              x={VIEWER_COURT.centreX}
+              y={VIEWER_COURT.farServiceY}
+              textAnchor="middle"
+              fill={LINE_COLOR}
+              fontFamily="var(--font-sans)"
+              fontSize={8}
+            >
+              {isPlacementCut(cut)
+                ? "No depth bands selected"
+                : "No contact bands selected"}
+            </text>
+          )}
+
+          {cut === "serve" && (
+            <ServeBoxLabels
+              zoneStats={zoneStats}
               subjectName={subjectName}
-              unit={unit}
-              activeId={activeId}
-              focusedId={focusedId}
-              selectedId={selectedId}
-              rovingId={rovingId}
-              interactive={!editing}
-              onActivate={onActivate}
-              onDeactivate={onDeactivate}
-              onRove={onRove}
-              onSelect={onSelect}
+              onZoneHover={setHoveredZone}
+              onZonePin={setPinnedZone}
             />
           )}
-        </g>
-      </svg>
 
-      {editorLayer}
+          <g
+            opacity={editing ? EDITING_ART_OPACITY : undefined}
+            style={editing ? { pointerEvents: "none" } : undefined}
+            aria-hidden={editing || undefined}
+          >
+            {heat && (
+              <HeatLayer
+                cut={cut}
+                dots={dots}
+                project={heatProjectorFor(cut)}
+                radius={VIEWER_HEAT_DOT_RADIUS}
+                region={viewerHeatFilterRegion()}
+              />
+            )}
 
-      {readout !== null && readoutStyle !== null && (
+            {showMarks && (
+              <MarkLayer
+                cut={cut}
+                dots={dots}
+                subjectName={subjectName}
+                unit={unit}
+                activeId={activeId}
+                focusedId={focusedId}
+                selectedId={selectedId}
+                rovingId={rovingId}
+                interactive={!editing}
+                onActivate={onActivate}
+                onDeactivate={onDeactivate}
+                onRove={onRove}
+                onSelect={onSelect}
+              />
+            )}
+          </g>
+        </svg>
+
+        {editorLayer}
+      </div>
+
+      {shownReadout !== null && readoutStyle !== null && (
         <div
+          data-viz-readout=""
           aria-hidden={watchablePointId ? undefined : true}
-          className={`${watchablePointId ? "pointer-events-auto" : "pointer-events-none"} absolute flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
+          className={`${watchablePointId ? "pointer-events-auto" : "pointer-events-none"} absolute z-[2] flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
           onPointerDown={(event) => event.stopPropagation()}
           onPointerEnter={onReadoutEnter}
           onPointerLeave={(event) => {
@@ -460,19 +488,19 @@ export function VizFullscreenCourt({
           style={readoutStyle}
         >
           <span className="text-[12px] font-medium text-white">
-            {readout.title}
+            {shownReadout.title}
           </span>
-          {readout.lines.map((line, index) => (
+          {shownReadout.lines.map((line, index) => (
             <span
               key={index}
               className={
-                index === readout.monoLine
+                index === shownReadout.monoLine
                   ? "mono tabular text-[11px]"
                   : "text-[11px]"
               }
               style={{
                 color:
-                  index === readout.monoLine
+                  index === shownReadout.monoLine
                     ? "rgba(255,255,255,0.45)"
                     : "rgba(255,255,255,0.64)",
               }}
@@ -492,7 +520,7 @@ export function VizFullscreenCourt({
           )}
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -858,9 +886,13 @@ function Mark({
 function ServeBoxLabels({
   zoneStats,
   subjectName,
+  onZoneHover,
+  onZonePin,
 }: {
   zoneStats: Record<ZoneKey, ZoneStats> | null;
   subjectName: string;
+  onZoneHover: (zone: ZoneKey | null) => void;
+  onZonePin: (zone: ZoneKey) => void;
 }) {
   return (
     <>
@@ -906,8 +938,24 @@ function ServeBoxLabels({
             const cell = zoneCellX(index);
             const cx = (cell.x1 + cell.x2) / 2;
             return (
-              <g key={zone.key} data-serve-zone={zone.key}>
-                <title>{`${subjectName} — ${zone.key.replace("-", " ")}: ${stats.winPct}% of ${stats.count} points won`}</title>
+              <g
+                key={zone.key}
+                data-serve-zone={zone.key}
+                role="img"
+                aria-label={`${subjectName} — ${zone.key.replace("-", " ")}: ${stats.winPct}% of ${stats.count} points won`}
+                onMouseEnter={() => onZoneHover(zone.key)}
+                onMouseLeave={() => onZoneHover(null)}
+                onClick={() => onZonePin(zone.key)}
+              >
+                {/* The two numbers alone are a sliver to aim at, and less to
+                    a finger. Under the marks, so it never takes one's hover. */}
+                <rect
+                  x={cell.x1}
+                  y={VIEWER_COURT.netY}
+                  width={cell.x2 - cell.x1}
+                  height={ZONE_COUNT_Y + 3 - VIEWER_COURT.netY}
+                  fill="transparent"
+                />
                 <text
                   x={cx}
                   y={ZONE_PCT_Y}

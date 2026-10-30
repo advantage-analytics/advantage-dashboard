@@ -123,6 +123,24 @@ test("Serve placement → Zones renders six cells and agrees with scatter, playe
   await expect(fullscreen.locator('[data-serve-zone="ad-wide"]')).toHaveCount(
     0,
   );
+  // The native `<title>` is gone: a zone answers with the dark readout, by
+  // hover and by a tap that pins it until the next press.
+  const zoneReadout = fullscreen.locator("[data-viz-readout]");
+  const zone = fullscreen.locator(deuce);
+  await expect(fullscreen.locator("[data-serve-zone] title")).toHaveCount(0);
+  await expect(zone).toHaveAttribute(
+    "aria-label",
+    "Selected player — deuce wide: 17% of 6 points won",
+  );
+  await fullscreen.locator('[data-serve-zone-cell="deuce-wide"]').hover();
+  await expect(zoneReadout).toContainText("Selected player — deuce wide");
+  await expect(zoneReadout).toContainText("17% of 6 points won");
+  await fullscreen.locator('[data-serve-zone-cell="deuce-wide"]').click();
+  await page.mouse.move(0, 0);
+  await expect(zoneReadout).toBeVisible();
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(zoneReadout).toHaveCount(0);
   await page.screenshot({
     path: test.info().outputPath("filtered-serve-zones.png"),
     fullPage: true,

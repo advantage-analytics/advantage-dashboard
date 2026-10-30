@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { buildReadout } from "@/components/dashboard/matches/match-detail/shots/viz-readout";
+import {
+  buildReadout,
+  buildZoneReadout,
+  placeReadout,
+} from "@/components/dashboard/matches/match-detail/shots/viz-readout";
 import type { VizDotMeta } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 
 const NAMES = { subject: "Reid" };
@@ -242,3 +246,58 @@ for (const [i, hole] of HOLES.entries()) {
     });
   }
 }
+
+/* ── Zones and placement ─────────────────────────────────────────────────── */
+
+test("a zone readout names the subject, the zone and its record", () => {
+  expect(
+    buildZoneReadout(
+      "deuce-wide",
+      { count: 12, pct: 40, winPct: 67 } as never,
+      NAMES,
+    ),
+  ).toEqual({
+    title: "Reid — deuce wide",
+    lines: ["67% of 12 points won"],
+    monoLine: -1,
+  });
+});
+
+test("the readout hangs above its mark and flips below at the top", () => {
+  const stage = { w: 1000, h: 800 };
+  expect(placeReadout({ x: 500, y: 400 }, stage)).toEqual({
+    left: 500,
+    top: 390,
+    width: 220,
+    below: false,
+  });
+  expect(placeReadout({ x: 500, y: 40 }, stage)).toEqual({
+    left: 500,
+    top: 50,
+    width: 220,
+    below: true,
+  });
+});
+
+test("the readout slides along the stage's edges and fits a narrow phone", () => {
+  const stage = { w: 320, h: 700 };
+  expect(placeReadout({ x: 2, y: 400 }, stage).left).toBe(118);
+  expect(placeReadout({ x: 318, y: 400 }, stage).left).toBe(202);
+  expect(placeReadout({ x: 160, y: 400 }, { w: 200, h: 700 }).width).toBe(184);
+});
+
+test("a mark panned out of view pins the readout to the nearest edge", () => {
+  const stage = { w: 1000, h: 800 };
+  expect(placeReadout({ x: -50, y: -200 }, stage)).toEqual({
+    left: 118,
+    top: 18,
+    width: 220,
+    below: true,
+  });
+  expect(placeReadout({ x: 1500, y: 2000 }, stage)).toEqual({
+    left: 882,
+    top: 782,
+    width: 220,
+    below: false,
+  });
+});
