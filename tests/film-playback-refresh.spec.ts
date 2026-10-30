@@ -1394,6 +1394,51 @@ async function openRoomWithDrawer(
   await page.locator(DRAWER_ROW("a")).waitFor();
 }
 
+test("Space in the room plays and pauses where the arrows left it, not at the clicked row", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "room-space-focus");
+
+  // The click leaves focus on row `c`, and the arrows do not move it.
+  await page.locator(DRAWER_ROW("c")).click();
+  await page.waitForFunction((sel) => {
+    const el = document.querySelector<HTMLVideoElement>(sel);
+    return !!el && !el.seeking && el.currentTime > 0.3;
+  }, ROOM);
+  const clicked = await state(page, ROOM);
+  await page.keyboard.press("ArrowLeft");
+  await expect
+    .poll(async () => (await state(page, ROOM))?.time)
+    .toBeLessThan(clicked?.time ?? 0);
+  await expect(page.locator(DRAWER_ROW("c"))).toBeFocused();
+  expect((await state(page, ROOM))?.paused).toBe(true);
+
+  // Counted rather than read off the playhead: the clip plays into `c` by
+  // itself a tenth of a second later, so only a seek tells the two apart.
+  await page.locator(ROOM).evaluate((el) => {
+    const counts = { seeks: 0, plays: 0 };
+    el.addEventListener("seeking", () => counts.seeks++);
+    el.addEventListener("play", () => counts.plays++);
+    (window as unknown as { roomCounts: typeof counts }).roomCounts = counts;
+  });
+  const counts = () =>
+    page.evaluate(
+      () =>
+        (window as unknown as { roomCounts: { seeks: number; plays: number } })
+          .roomCounts,
+    );
+
+  await page.keyboard.press(" ");
+  await expect.poll(async () => (await counts()).plays).toBe(1);
+  // A seek's event is queued, so give one from the same press time to land.
+  await page.waitForTimeout(200);
+  expect((await counts()).seeks).toBe(0);
+
+  // Enter is still how a keyboard viewer takes the focused row.
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await counts()).seeks).toBe(1);
+});
+
 /** Three different rows, 200 ms apart, each landing on its own stop. */
 async function jumpRows(page: Page) {
   for (const id of ["c", "a", "b"]) {

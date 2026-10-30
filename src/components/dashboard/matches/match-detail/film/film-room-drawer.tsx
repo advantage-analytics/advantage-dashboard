@@ -134,6 +134,7 @@ export function FilmRoomDrawer({
         onSelect={onSelect}
         onToggleSaved={onToggleSaved}
         tone="dark"
+        spaceIsPlayPause
         onCollapse={onCollapse}
         shotStops={shotStops}
         activeShotId={activeShotId}

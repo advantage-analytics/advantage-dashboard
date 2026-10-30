@@ -225,6 +225,13 @@ interface PointListProps {
   onOpenInRoom?: (point: MatchPoint) => void;
   /** Paint only. "dark" is the fullscreen room's drawer (frame R3). */
   tone?: FilmListTone;
+  /**
+   * Space belongs to the host, so a focused row answers only Enter. The room
+   * takes Space on `window` as play/pause whatever has focus, and a row keeps
+   * focus after its click: a row that also seeked on Space sent the film back
+   * to the last point clicked, however far the arrows had walked since.
+   */
+  spaceIsPlayPause?: boolean;
   /** Drawn only when given: the drawer's 26px collapse glyph in the header. */
   onCollapse?: () => void;
   /** The whole film's shot feed. Only the playing point's slice is drawn. */
@@ -295,6 +302,7 @@ export const PointList = memo(function PointList({
   onToggleSaved,
   onOpenInRoom,
   tone = "light",
+  spaceIsPlayPause = false,
   onCollapse,
   shotStops,
   activeShotId = null,
@@ -650,6 +658,7 @@ export const PointList = memo(function PointList({
                             onToggleSaved={onToggleSaved}
                             onOpenInRoom={onOpenInRoom}
                             tone={tone}
+                            spaceIsPlayPause={spaceIsPlayPause}
                           />
                           {/* Under the DISPLAYED row, not the lit one: while
                             held the well stays here as `isActive` moves on.
@@ -940,6 +949,7 @@ export const PointRow = memo(function PointRow({
   onToggleSaved,
   onOpenInRoom,
   tone = "light",
+  spaceIsPlayPause = false,
 }: {
   point: MatchPoint;
   /** The row's name — `pointResultLabel`, never the raw result type. */
@@ -961,6 +971,8 @@ export const PointRow = memo(function PointRow({
   onOpenInRoom?: (point: MatchPoint) => void;
   /** Paint only. "dark" is the fullscreen room's drawer (frame R3). */
   tone?: FilmListTone;
+  /** The host owns Space (see `PointList`); the row answers only Enter. */
+  spaceIsPlayPause?: boolean;
 }) {
   const t = ROW_TONE[tone];
   const readOnly = useFilmReadOnly();
@@ -995,7 +1007,10 @@ export const PointRow = memo(function PointRow({
         else onSelect(point);
       }}
       onKeyDown={(e) => {
-        if (seekable && (e.key === "Enter" || e.key === " ")) {
+        if (
+          seekable &&
+          (e.key === "Enter" || (e.key === " " && !spaceIsPlayPause))
+        ) {
           e.preventDefault();
           onSelect(point);
         }
