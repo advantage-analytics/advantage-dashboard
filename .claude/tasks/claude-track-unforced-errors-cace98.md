@@ -90,7 +90,7 @@ ready).
 
 ## T6 · AI summary says "errors" on an unjudged match
 
-- **status:** blocked
+- **status:** doing
 - **model:** opus
 - **needs:** T2
 - **files:** supabase/functions/generate-insights/index.ts, tests/generate-insights-prompt.spec.ts
@@ -160,7 +160,7 @@ ready).
 
 ## T11 · Publish writes the error kind to result_type and sets the judged marker
 
-- **status:** blocked
+- **status:** todo
 - **model:** fable
 - **needs:** T1, T8
 - **files:** src/lib/services/labels/apply.ts (`resultTypeOf`), src/lib/services/labels/apply-session.ts, src/lib/services/labels/session-status-session.ts, supabase/migrations/<timestamp>_verify_match_errors_judged.sql (new), tests/label-apply.spec.ts, tests/label-apply-session.spec.ts
