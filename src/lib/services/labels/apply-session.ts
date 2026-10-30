@@ -16,6 +16,12 @@
  *   - the vendor's strokes file stays in storage, so a forced re-derive
  *     (`splitstep-derive.ts --force-over-labels`) rebuilds the original too.
  *
+ * A publish also answers the job's `derivation_quality.fold` for its own
+ * points (`labelFold`): the match report's grey "couldn't match every point to
+ * the final score" note reads it, and once a person has placed the points it
+ * is their score that counts, not the vendor's. The backup keeps the fold it
+ * replaced, and `--restore` puts it back with the rows (`restoreFold`).
+ *
  * Refuses, before writing anything, on: imported points on the match (never
  * mix providers), nothing to write, or a labelled score that differs from the
  * entered one unless `acceptScore` — the console's Mark complete passes it
@@ -29,6 +35,11 @@ import { readAllPages } from "@/lib/data/admin-range-read";
 import { readLabelSessionRows } from "@/lib/data/labels-server";
 import type { AdminClient } from "@/lib/supabase/admin";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
+import {
+  mergeDerivationQuality,
+  readDerivationQuality,
+  reportedJobId,
+} from "@/lib/services/splitstep/derivation-quality";
 import { labelBackupObjectKey } from "@/lib/services/splitstep/object-keys";
 import { requestMatchInsights } from "@/lib/services/splitstep/request-insights";
 import {
@@ -49,6 +60,7 @@ import {
 
 type Row = Record<string, unknown>;
 const CHUNK = 200;
+const LOG = "[labels:publish]";
 
 export interface LabelApplyBackup {
   kind: "label-apply-backup";
@@ -60,6 +72,14 @@ export interface LabelApplyBackup {
   shots: Row[];
   bookmarks: Row[];
   matchStats: Row[];
+  /**
+   * The job's `derivation_quality.fold` before this publish — `null` when it
+   * held none. Absent from backups made before it was kept, and from one
+   * whose read failed; `restoreFold` then leaves the job's fold alone.
+   */
+  fold?: unknown;
+  /** The job that fold was read from and the publish wrote; set with `fold`. */
+  jobId?: string;
 }
 
 const chunks = <T>(rows: readonly T[]): T[][] => chunksOf(rows, CHUNK);
@@ -111,6 +131,18 @@ export async function loadApplyContext(db: AdminClient, sessionId: string) {
 export type ApplyContext = NonNullable<
   Awaited<ReturnType<typeof loadApplyContext>>
 >;
+
+/**
+ * What a publish records as the job's `fold`: reconciled when the labelled
+ * set scores add up to the entered score, or the video is marked as ending
+ * early (`plan.mismatch` is null for both). A mismatch published anyway
+ * (`acceptScore`) stays unreconciled, so the report's note keeps saying so.
+ */
+export function labelFold(
+  plan: Pick<ReturnType<typeof planApply>, "mismatch">,
+) {
+  return { reconciled: plan.mismatch === null, source: "labels" as const };
+}
 
 /** The rows a publish writes, and the checks it refuses on. Pure. */
 export function planApply({ session, beside }: ApplyContext) {
@@ -279,6 +311,25 @@ export async function restoreRows(db: AdminClient, backup: LabelApplyBackup) {
 }
 
 /**
+ * Put back the `fold` a backup replaced, on the job the publish wrote it to.
+ * False when the backup kept none — made before the field existed, or its
+ * read failed at publish time.
+ */
+export async function restoreFold(
+  db: AdminClient,
+  backup: LabelApplyBackup,
+): Promise<boolean> {
+  if (!("fold" in backup) || !backup.jobId) return false;
+  await mergeDerivationQuality(
+    db,
+    backup.jobId,
+    { fold: backup.fold ?? null },
+    LOG,
+  );
+  return true;
+}
+
+/**
  * match_stats and the returns backfill, in the order deriveAndPublish runs
  * them, then a new AI summary. Throws on a failed RPC; a failed summary
  * request is reported, not thrown — the statistics are already in.
@@ -405,10 +456,22 @@ export async function publishPlanned(params: {
         "Not published: the match's video job is gone, so the backup would have nowhere to be recorded.",
     };
   }
-  const [published, imported, statsBefore] = await Promise.all([
+  const [published, imported, statsBefore, reported] = await Promise.all([
     readPublished(db, matchId),
     countImported(db, matchId),
     readMatchStats(db, matchId),
+    // The job the report reads, which is the session's own unless the match
+    // was analysed again after it was seeded.
+    reportedJobId(db, matchId).then(
+      async (id) =>
+        id
+          ? {
+              jobId: id,
+              fold: (await readDerivationQuality(db, id)).fold ?? null,
+            }
+          : undefined,
+      () => undefined,
+    ),
   ]);
   if (imported > 0) {
     return {
@@ -427,6 +490,7 @@ export async function publishPlanned(params: {
     shots: published.shots,
     bookmarks: published.bookmarks,
     matchStats: statsBefore,
+    ...(reported ?? {}),
   };
   await recordBackupKey(db, jobId, backupObjectKey(backup));
   const backupKey = await storeBackup(db, backup);
@@ -450,6 +514,15 @@ export async function publishPlanned(params: {
       error: `Not published — the write failed and the previous version was put back: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+
+  // A failed read above leaves no job named: the session's own is the best
+  // guess, and the backup simply keeps no fold to restore.
+  await mergeDerivationQuality(
+    db,
+    reported?.jobId ?? jobId,
+    { fold: labelFold(plan) },
+    LOG,
+  );
 
   // The rows are in; a failed recompute leaves match_stats behind them. Said
   // as that, never as "not published" — the athlete already has the points.

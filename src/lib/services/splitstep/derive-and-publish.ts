@@ -14,6 +14,7 @@
  */
 
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { mergeDerivationQuality } from "./derivation-quality";
 import { persistTranscript } from "./persist-transcript";
 import {
   insightsWaitMs,
@@ -312,7 +313,9 @@ export async function deriveAndPublish(params: {
     // segmenter's proposal, and never touches `fold` — the match report's grey
     // "unreconciled" note reads `fold`, and a fitting proposal must not clear
     // it. Reached only after a publish: a refusal (hand labels included)
-    // returned above, so a run that wrote nothing records no proposal.
+    // returned above, so a run that wrote nothing records no proposal. A
+    // reconciled fold writes nothing, so a forced re-derive over published
+    // labels leaves the labels' `fold` (apply-session.ts) in place.
     const quality: Record<string, unknown> = {};
     if (!rec.ok) {
       quality.fold = { reconciled: false, reason: rec.reason ?? null };
@@ -323,7 +326,7 @@ export async function deriveAndPublish(params: {
     const proposal = written.transcript.segmentation;
     if (proposal !== undefined) quality.segmentation = proposal;
     if (Object.keys(quality).length > 0) {
-      await mergeDerivationQuality(supabase, jobId, quality);
+      await mergeDerivationQuality(supabase, jobId, quality, LOG);
     }
 
     return {
@@ -350,49 +353,5 @@ export async function deriveAndPublish(params: {
     console.error(`${LOG} threw`, { jobId, reason });
     await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
     return { ok: false, reason };
-  }
-}
-
-/**
- * Merge `patch` into the job's `derivation_quality`, which `grade-results.ts`
- * wrote at grade time — every key it holds (`grade`, `checks`, `failures`, …)
- * and any key not in `patch` is kept. Used for `fold` (an unreconciled fold)
- * and `segmentation` (the segmenter's proposal). A read-modify-write rather
- * than a jsonb `||` because there is no RPC for it and the job is written by
- * nothing else while it is `deriving`/just `completed`.
- *
- * Bookkeeping only: the rows are already published, so a failure here is
- * logged and swallowed — it must never turn a finished derivation into a
- * failed one.
- */
-async function mergeDerivationQuality(
-  supabase: ReturnType<typeof createAdminClient>,
-  jobId: string,
-  patch: Record<string, unknown>,
-): Promise<void> {
-  try {
-    const { data, error: readError } = await supabase
-      .from("processing_jobs")
-      .select("derivation_quality")
-      .eq("id", jobId)
-      .single<{ derivation_quality: Record<string, unknown> | null }>();
-    if (readError) throw new Error(readError.message);
-
-    const existing = data?.derivation_quality;
-    const base =
-      existing && typeof existing === "object" && !Array.isArray(existing)
-        ? existing
-        : {};
-    const { error: writeError } = await supabase
-      .from("processing_jobs")
-      .update({ derivation_quality: { ...base, ...patch } })
-      .eq("id", jobId);
-    if (writeError) throw new Error(writeError.message);
-  } catch (err) {
-    console.error(`${LOG} could not merge derivation_quality`, {
-      jobId,
-      keys: Object.keys(patch),
-      error: err instanceof Error ? err.message : String(err),
-    });
   }
 }
