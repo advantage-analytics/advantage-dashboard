@@ -121,6 +121,18 @@ export const OPPONENTS_ROW_BOX =
   "-mx-4 h-[52px] rounded-[var(--radius-element)] px-4";
 
 /**
+ * The row's hover, focus and selected wash. A form bar has a hover of its own
+ * (`data-own-hover`) and takes the row's wash away while it holds the pointer,
+ * so one hover shows at a time; a selected row keeps its wash regardless.
+ * `group/row` is what the Last match chevron fades in with.
+ */
+export function opponentRowWash(selected: boolean): string {
+  return selected
+    ? "group/row bg-[var(--surface-muted)] focus-visible:outline-none"
+    : "group/row hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none [&:has([data-own-hover]:hover)]:bg-transparent";
+}
+
+/**
  * The page's white ground, and the padded column inside it. Two elements, not
  * one, so the opponent drawer can sit beside the column flush to the right
  * edge — the Matches and Roster arrangement.
