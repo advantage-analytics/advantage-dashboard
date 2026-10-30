@@ -255,14 +255,20 @@ export function VizFullscreenCourt({
     ? Math.max(...ZONES.map((z) => zoneCells[z.key].pct))
     : 0;
 
+  // Marks are drawn only on Scatter: one pinned there is not active on Zones,
+  // where it would hold the readout for a mark nobody can see.
   const active =
-    panning || editing ? null : (dots.find((d) => d.id === activeId) ?? null);
+    panning || editing || !showMarks
+      ? null
+      : (dots.find((d) => d.id === activeId) ?? null);
   const activeMeta = active?.meta ?? null;
   const readout = activeMeta
     ? buildReadout(activeMeta, { subject: subjectName }, cut, unit)
     : null;
   const watchablePointId =
-    watchPointId && canWatchPoint?.(watchPointId) ? watchPointId : null;
+    active !== null && watchPointId && canWatchPoint?.(watchPointId)
+      ? watchPointId
+      : null;
 
   // A serve zone answers hover and a tap the way a mark does: the tap pins it
   // until the next press anywhere.
