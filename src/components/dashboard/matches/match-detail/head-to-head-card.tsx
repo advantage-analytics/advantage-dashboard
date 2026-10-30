@@ -20,6 +20,7 @@ import {
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
+  countsAsWinner,
   errorMadeBy,
   isReturnWinner,
   isUnreturnedServe,
@@ -143,18 +144,15 @@ export interface H2HRowConfig {
    * - `returnWinners` — no provider publishes it.
    * - `unreturnedServes` — the derived Aces row: an Advantage Intelligence
    *   match publishes no aces at all (see `DERIVED_SERVE_ROWS`).
-   * - `winnersLessUnreturned` — the derived Winners row: the published
-   *   `winners` (read through `key`) less the side's unreturned serves,
-   *   which that figure already counts.
    */
-  fromPoints?: "returnWinners" | "unreturnedServes" | "winnersLessUnreturned";
+  fromPoints?: "returnWinners" | "unreturnedServes";
 }
 
 export const SERVE_ROWS: H2HRowConfig[] = [
   {
     // Serve › Result "Ace" by the server: exactly `resultType` "Ace", which
-    // leaves out the service winners the report counts as winners (every
-    // unreturned serve and missed return on a video match).
+    // leaves out the service winners (every unreturned serve and missed return
+    // on a video match).
     label: "Aces",
     key: "aces",
     cut: { serveResult: ["ace"] },
@@ -290,8 +288,8 @@ export const POINT_ROWS: H2HRowConfig[] = [
     label: "Winners",
     key: "winners",
     // Result › Ending Winner narrowed to the Film-only "winner" bucket, which
-    // leaves aces on their own line as the published figure does — Ending
-    // "winner" alone admits them (`winnerHitBy` credits an ace to the server).
+    // leaves out aces and service winners as the published figure does — Ending
+    // "winner" alone admits them (`winnerHitBy` credits both to the server).
     cut: { resultEnding: ["winner"], ending: "winner" },
     sideBy: "player",
     noun: "winners",
@@ -335,16 +333,15 @@ const ALL_H2H_CONFIGS: H2HRowConfig[] = H2H_GROUPS.flatMap(
    The derivation (`lib/services/splitstep/derivation/result-type.ts`
    `classifyPoint()`) never emits "Ace": every unreturned serve is a "Service
    Winner" (as is a return struck and missed, rally length 2), so the
-   published `aces` is 0 and the published `winners` (LIKE '%Winner%')
-   already counts those points. Product decision
-   (2026-09-29): on these matches an unreturned serve the server won IS an
-   ace. So two rows swap, at the widget alone — `match_stats` is untouched. */
+   published `aces` is 0. Product decision (2026-09-29): on these matches an
+   unreturned serve the server won IS an ace. So that row swaps, at the widget
+   alone — `match_stats` is untouched. */
 
 /**
  * The derived Aces row: every unreturned serve the side won, counted from the
  * points (`isUnreturnedServe` — a one-shot rally won by the server). The rule
  * is structural, not the "Service Winner" label, so a service winner with an
- * intermediate stroke (rally length above one) stays a winner. The cut is the
+ * intermediate stroke (rally length above one) is no ace. The cut is the
  * SwingVision Aces row's own pure pill, Serve › Result "Ace" by the server:
  * on a derived match (`MatchFilterContext.isDerived`) that pill IS
  * `isUnreturnedServe`, the very predicate the tally counts.
@@ -357,28 +354,8 @@ const DERIVED_ACES_ROW: H2HRowConfig = {
   noun: "aces",
 };
 
-/**
- * The derived Winners row: the published `winners` less the side's
- * unreturned serves, now counted as aces. Its cut is the `rally-winner`
- * ending — the winner bucket without them — so it never opens a point the
- * derived Aces row does. Double faults stay published: the derivation does
- * emit "Double Fault" on a lost second serve.
- */
-const DERIVED_WINNERS_ROW: H2HRowConfig = {
-  label: "Winners",
-  key: "winners",
-  fromPoints: "winnersLessUnreturned",
-  cut: { resultEnding: ["winner"], ending: "rally-winner" },
-  sideBy: "player",
-  noun: "winners",
-};
-
 export const DERIVED_SERVE_ROWS: H2HRowConfig[] = SERVE_ROWS.map((config) =>
   config.label === "Aces" ? DERIVED_ACES_ROW : config,
-);
-
-export const DERIVED_POINT_ROWS: H2HRowConfig[] = POINT_ROWS.map((config) =>
-  config.label === "Winners" ? DERIVED_WINNERS_ROW : config,
 );
 
 /** `H2H_GROUPS` for an Advantage Intelligence match (`meta.isDerived`). */
@@ -386,7 +363,7 @@ export const DERIVED_H2H_GROUPS: { title: string; configs: H2HRowConfig[] }[] =
   [
     { title: "Serve", configs: DERIVED_SERVE_ROWS },
     { title: "Return", configs: RETURN_ROWS },
-    { title: "Points", configs: DERIVED_POINT_ROWS },
+    { title: "Points", configs: POINT_ROWS },
   ];
 
 const ALL_DERIVED_H2H_CONFIGS: H2HRowConfig[] = DERIVED_H2H_GROUPS.flatMap(
@@ -622,13 +599,13 @@ export function tallySide(
       if (iWon && isReturnWinner(p)) d.returnWinners += 1;
     }
 
-    // `calculate_match_stats` buckets these with LIKE '%Winner%' and
-    // LIKE '%Unforced Error%' against the same free-text `result_type`
-    // (see lib/services/splitstep/derivation/result-type.ts). Matching the
-    // same substrings keeps a scoped row comparable with the published one.
-    // Credited as the Result filters and Point endings credit them: a
-    // service winner to the server, not to the returner's missed last row.
-    if (result.includes("winner")) {
+    // `calculate_match_stats` buckets these with LIKE '%Winner%' (less
+    // 'Service Winner') and LIKE '%Unforced Error%' against the same free-text
+    // `result_type` (see lib/services/splitstep/derivation/result-type.ts).
+    // Matching the same substrings keeps a scoped row comparable with the
+    // published one. Credited as the Result filters and Point endings credit
+    // them.
+    if (countsAsWinner(p)) {
       if (winnerHitBy(p) === isPlayer1) d.winners += 1;
     } else if (result.includes("unforced error")) {
       if (errorMadeBy(p) === isPlayer1) d.unforcedErrors += 1;
@@ -655,30 +632,19 @@ export function tallySide(
 
 /**
  * A `fromPoints` statistic's value, or `null` when the points cannot support
- * it. `published` is the side's published figure for the same row (read
- * through the config's `key`), which the Winners subtraction starts from.
+ * it.
  *
  * - Return winners: 0 is a measurement only where returns were recorded;
  *   with none, a zero would say "no return winners" about points nobody
  *   looked at.
  * - Unreturned serves: likewise only where the side served at all.
- * - Winners less unreturned serves: nothing published is nothing to
- *   subtract from; never below 0.
  */
-function derivedValue(
-  config: H2HRowConfig,
-  d: DerivedSide,
-  published: H2HValue,
-): number | null {
+function derivedValue(config: H2HRowConfig, d: DerivedSide): number | null {
   switch (config.fromPoints) {
     case "returnWinners":
       return d.returnsRecorded > 0 ? d.returnWinners : null;
     case "unreturnedServes":
       return d.servicePoints.total > 0 ? d.unreturnedServes : null;
-    case "winnersLessUnreturned":
-      return published.value === null
-        ? null
-        : Math.max(0, published.value - d.unreturnedServes);
     default:
       return null;
   }
@@ -686,12 +652,8 @@ function derivedValue(
 
 const NO_VALUE: H2HValue = { value: null, display: "" };
 
-function derivedSideValue(
-  config: H2HRowConfig,
-  d: DerivedSide,
-  published: H2HValue,
-): H2HValue {
-  const value = derivedValue(config, d, published);
+function derivedSideValue(config: H2HRowConfig, d: DerivedSide): H2HValue {
+  const value = derivedValue(config, d);
   if (value === null) return NO_VALUE;
   return { value, display: statDisplay(value, config.isPercentage) };
 }
@@ -699,14 +661,13 @@ function derivedSideValue(
 /** One `fromPoints` row, counted from `youDerived`/`oppDerived`. */
 function deriveRow(
   config: H2HRowConfig,
-  published: H2HRow,
   youDerived: DerivedSide,
   oppDerived: DerivedSide,
 ): H2HRow {
   return assembleRow(
     config,
-    derivedSideValue(config, youDerived, published.you),
-    derivedSideValue(config, oppDerived, published.opp),
+    derivedSideValue(config, youDerived),
+    derivedSideValue(config, oppDerived),
   );
 }
 
@@ -722,7 +683,7 @@ export function withPointRows(
 ): H2HRow[] {
   return configs.map((config, i) =>
     config.fromPoints
-      ? deriveRow(config, published[i], youDerived, oppDerived)
+      ? deriveRow(config, youDerived, oppDerived)
       : published[i],
   );
 }

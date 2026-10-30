@@ -343,7 +343,7 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "winners",
         type: "integer",
         meaning:
-          "Shots this side hit that won the point outright (winners), serves included.",
+          "Shots this side hit in the rally that won the point outright (winners). Serves are not included: aces and service_winners are counted on their own.",
       },
       {
         name: "unforced_errors",

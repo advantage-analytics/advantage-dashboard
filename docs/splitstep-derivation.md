@@ -211,8 +211,9 @@ derivation can correct.
 The Head to head card is the one exception, at widget level only: since T1,
 `head-to-head-card.tsx` on a splitstep match counts an unreturned In serve won
 by the server (`rallyLength === 1`, server won the point) as an ace from the
-points table and subtracts those same points from Winners. It never touches
-`match_stats`, which stays suppressed.
+points table. It never touches `match_stats`, which stays suppressed. Winners
+needs no such adjustment: since 2026-10-30 `calculate_match_stats` leaves every
+`Service Winner` out of it.
 
 `suppress_derived_match_stats(match_id)` enforces it, scoped to
 `source_provider = 'splitstep'`.

@@ -812,6 +812,18 @@ export function winnerHitBy(point: MatchPoint): boolean | null {
 }
 
 /**
+ * The point counts toward a Winners figure — the published `winners`, the
+ * head-to-head row and the Point endings segment. A service winner does not:
+ * it has its own `service_winners` figure, and an ace is left out by not being
+ * a "…winner" at all. `winnerHitBy` still credits both, since Result › Ending
+ * "winner" is a filter on how the point ended, not this count.
+ */
+export function countsAsWinner(point: MatchPoint): boolean {
+  const rt = lower(point.resultType);
+  return rt.includes("winner") && rt !== "service winner";
+}
+
+/**
  * Who made the point's error (true = player1), or null when it did not end
  * on one. A double fault is the server's. Any other "…Error" result is the
  * decisive shot's hitter, else the point's loser. With NO result type, a

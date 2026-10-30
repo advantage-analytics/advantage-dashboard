@@ -184,18 +184,20 @@ test.describe("double faults", () => {
 });
 
 test.describe("point endings credit", () => {
-  test("a SwingVision service winner is the server's, as its cut opens it", () => {
-    expect(outcomeTally([SV_SERVICE_WINNER], true, false).winners).toBe(1);
-    expect(outcomeTally([SV_SERVICE_WINNER], false, false).winners).toBe(0);
-    expect(tallySide([SV_SERVICE_WINNER], true).winners).toBe(1);
-    expect(tallySide([SV_SERVICE_WINNER], false).winners).toBe(0);
+  test("a service winner counts as neither player's winner, and its cut agrees", () => {
+    for (const isPlayer1 of [true, false]) {
+      expect(outcomeTally([SV_SERVICE_WINNER], isPlayer1, false).winners).toBe(
+        0,
+      );
+      expect(tallySide([SV_SERVICE_WINNER], isPlayer1).winners).toBe(0);
+    }
     const opened = applyFilmCut(
       [SV_SERVICE_WINNER],
       [SV_SERVICE_WINNER],
       outcomeCut("winners", "you"),
       SV,
     );
-    expect(opened.map((p) => p.id)).toEqual(["sv-sw"]);
+    expect(opened).toEqual([]);
   });
 
   test("its missed return adds to neither player's unforced errors", () => {
@@ -222,14 +224,14 @@ test.describe("point endings credit", () => {
     const aces = applyFilmCut(
       points,
       points,
-      outcomeCut("aces", "you", true),
+      outcomeCut("aces", "you"),
       DERIVED,
     );
     expect(aces.map((p) => p.id)).toEqual(["ai-sw"]);
     const winners = applyFilmCut(
       points,
       points,
-      outcomeCut("winners", "you", true),
+      outcomeCut("winners", "you"),
       DERIVED,
     );
     expect(winners.map((p) => p.id)).toEqual(["ai-fw"]);
@@ -238,7 +240,7 @@ test.describe("point endings credit", () => {
   test("SwingVision still counts aces by result type alone", () => {
     const t = outcomeTally([DERIVED_UNRETURNED], true, false);
     expect(t.aces).toBe(0);
-    expect(t.winners).toBe(1);
+    expect(t.winners).toBe(0);
   });
 });
 

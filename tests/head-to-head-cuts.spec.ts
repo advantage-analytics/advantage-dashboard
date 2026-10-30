@@ -395,19 +395,21 @@ test.describe("a cell opens exactly the points its figure counts", () => {
     expect(count(oppCut(row))).toBe(opp.doubleFaults);
   });
 
-  test("winners leave the aces on their own line", () => {
+  test("winners leave out aces and service winners", () => {
     const row = byConfig("Winners");
     const ids = applyFilmCut(MATCH, MATCH, youCut(row), CTX).map((pt) => pt.id);
     expect(ids).not.toContain("ace-you");
-    expect(ids).toEqual(["sw-you", "fw-you", "bp-saved", "rw-you"]);
+    expect(ids).not.toContain("sw-you");
+    expect(ids).toEqual(["fw-you", "bp-saved", "rw-you"]);
     // Why the row keeps its Film-only `winner` ending: Result › Ending
-    // "winner" by you alone credits your ace to you as a winner.
+    // "winner" by you alone credits both to you as a winner.
     const endingAlone = applyMatchFilters(
       MATCH,
       { ...EMPTY_MATCH_FILTERS, resultEnding: ["winner"], resultPlayer: "you" },
       CTX,
     ).map((pt) => pt.id);
     expect(endingAlone).toContain("ace-you");
+    expect(endingAlone).toContain("sw-you");
   });
 
   test("unforced errors leave the forced ones out", () => {
@@ -662,7 +664,7 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
     expect(derivedAces.sideBy).toBe("server");
     expect(derivedWinners.cut).toEqual({
       resultEnding: ["winner"],
-      ending: "rally-winner",
+      ending: "winner",
     });
     expect(derivedWinners.sideBy).toBe("player");
   });

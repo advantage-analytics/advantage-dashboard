@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 import {
-  DERIVED_POINT_ROWS,
+  DERIVED_H2H_GROUPS,
   DERIVED_SERVE_ROWS,
   H2H_GROUPS,
   POINT_ROWS,
@@ -485,18 +485,16 @@ test.describe("on an Advantage Intelligence match", () => {
     expect(byLabel(rows, "Aces").leader).toBeNull();
   });
 
-  test("winners are the published figure less that side's unreturned serves", () => {
+  test("winners are the published figure, which holds no service winners", () => {
     const rows = derivedRows(
-      DERIVED_POINT_ROWS,
+      POINT_ROWS,
       side({ winners: 18 }),
       side({ winners: 0 }),
     );
-    expect(byLabel(rows, "Winners").you.display).toBe("16");
-    // Never below zero.
+    expect(byLabel(rows, "Winners").you.display).toBe("18");
     expect(byLabel(rows, "Winners").opp.display).toBe("0");
-    // Nothing published is nothing to subtract from.
-    const missing = derivedRows(DERIVED_POINT_ROWS, side(), side());
-    expect(byLabel(missing, "Winners").you.display).toBe("");
+    const config = POINT_ROWS.find((c) => c.label === "Winners");
+    expect(config?.fromPoints).toBeUndefined();
   });
 
   test("double faults are read as published, not counted", () => {
@@ -505,28 +503,21 @@ test.describe("on an Advantage Intelligence match", () => {
     expect(config?.fromPoints).toBeUndefined();
   });
 
-  test("a service winner with a stroke in between stays a winner", () => {
+  test("a service winner with a stroke in between is neither an ace nor a winner", () => {
     // Structural rule: rally length one, won by the server — not the label.
     const points = [
       pt({ id: "sw-long", resultType: "Service Winner", rallyLength: 3 }),
     ];
     expect(tallySide(points, true).unreturnedServes).toBe(0);
-    const rows = derivedRows(
-      DERIVED_POINT_ROWS,
-      side({ winners: 1 }),
-      side({ winners: 0 }),
-      points,
-    );
-    expect(byLabel(rows, "Winners").you.display).toBe("1");
+    expect(tallySide(points, true).winners).toBe(0);
   });
 
   test("the derived groups keep the same fifteen rows in the same order", () => {
     expect(DERIVED_SERVE_ROWS.map((c) => c.label)).toEqual(
       SERVE_ROWS.map((c) => c.label),
     );
-    expect(DERIVED_POINT_ROWS.map((c) => c.label)).toEqual(
-      POINT_ROWS.map((c) => c.label),
-    );
+    const points = DERIVED_H2H_GROUPS.find((g) => g.title === "Points");
+    expect(points?.configs).toEqual(POINT_ROWS);
   });
 });
 

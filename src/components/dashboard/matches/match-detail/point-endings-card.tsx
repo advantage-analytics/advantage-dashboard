@@ -17,6 +17,7 @@ import { EmptyMark } from "@/components/ui/empty-mark";
 import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
 import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import {
+  countsAsWinner,
   errorMadeBy,
   isUnreturnedServe,
   winnerHitBy,
@@ -39,23 +40,22 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * exclusively off the free-text `points.result_type`:
  *   aces           `result_type = 'Ace'`
  *   double faults  `result_type = 'Double Fault'`
- *   winners        `result_type LIKE '%Winner%'`  (so 'Service Winner',
- *                  'Forehand Winner' … all land here, as they do in the
- *                  published card)
+ *   winners        `result_type LIKE '%Winner%'` less 'Service Winner'
+ *                  (`countsAsWinner`), as the published card counts them
  *   unforced errs  `result_type LIKE '%Unforced Error%'`
  * Aces and double faults belong to the server structurally. Winners are
- * credited by `winnerHitBy` — a service winner to the SERVER, though its last
- * shot row is usually the returner's missed return — and unforced errors by
- * `errorMadeBy`: the rules the Result filters a segment opens read, and the
- * one `calculate_match_stats` publishes winners by.
+ * credited by `winnerHitBy` and unforced errors by `errorMadeBy`: the rules
+ * the Result filters a segment opens read.
+ *
+ * A SERVICE WINNER IS NONE OF THE FOUR, unless a derived match reads it as an
+ * ace: product decision (2026-10-30), it does not count as a winner. So that
+ * point is on neither player's bar.
  *
  * ACES ON A DERIVED MATCH. The derivation never emits 'Ace' (see
  * `services/splitstep/derivation/result-type.ts`): every unreturned serve is
  * a 'Service Winner', as is a return struck and missed. Product decision
  * (2026-09-29): on these matches an unreturned serve the server won IS an
- * ace (`isUnreturnedServe`), as the head-to-head Aces row counts it. So the segment counts those, Winners
- * leaves them out, and Winners' cut narrows to `rally-winner` — the derived
- * head-to-head Winners row's own — so the two never open the same point.
+ * ace (`isUnreturnedServe`), as the head-to-head Aces row counts it.
  *
  * Whole match, always: the tally is taken over every point in
  * `useMatchData().points`, the same read every point-derived card on this tab
@@ -134,15 +134,9 @@ const OUTCOME_BASE_CUT: Record<OutcomeKey, FilmCut> = {
  * context's `youIsPlayer1` inside the film tab (guardrails §4); nothing here
  * reads player order.
  */
-export function outcomeCut(
-  key: OutcomeKey,
-  side: "you" | "opp",
-  isDerived = false,
-): FilmCut {
+export function outcomeCut(key: OutcomeKey, side: "you" | "opp"): FilmCut {
   return sideCut(
-    isDerived && key === "winners"
-      ? { resultEnding: ["winner"], ending: "rally-winner" }
-      : OUTCOME_BASE_CUT[key],
+    OUTCOME_BASE_CUT[key],
     side,
     key === "aces" ? "server" : "player",
   );
@@ -174,7 +168,7 @@ export function outcomeTally(
       if (iServed) t.aces += 1;
     } else if (result === "double fault") {
       if (iServed) t.doubleFaults += 1;
-    } else if (result.includes("winner")) {
+    } else if (countsAsWinner(p)) {
       if (winnerHitBy(p) === isPlayer1) t.winners += 1;
     } else if (result.includes("unforced error")) {
       if (errorMadeBy(p) === isPlayer1) t.unforcedErrors += 1;
@@ -345,7 +339,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                 const watch = meta.hasPlayableVideo
                   ? () =>
                       actions.watchCut(
-                        outcomeCut(o.key, row.id, isDerived),
+                        outcomeCut(o.key, row.id),
                         `${o.label} · ${row.name}`,
                       )
                   : undefined;
