@@ -158,6 +158,8 @@ test("the overview is six cards, with the upload's inputs and a publish checklis
   expect(out).toContain("Elena Vargas");
   expect(out).toContain("Right-handed, two-handed backhand");
   expect(out).toContain("Best of 3, no-ad scoring, lets played on");
+  // Read-only here (no operations): the scoring these labels count, as words.
+  expect(out).toContain("Labels counted as");
   expect(out).toContain("0:26 to 1:57:24");
   expect(out).toContain("Not entered");
   expect(out).toContain("Uploaded by Sam Uploader on Aug 29, 2026");

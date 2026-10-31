@@ -3,8 +3,9 @@
  * (the match's score as the labeller read it off the video, one `[p1, p2]`
  * games pair per set) and `label_sessions.video_ends_early`, both from the
  * "Score doesn't add up" chip, and `label_sessions.start_score` (where the
- * video starts in the match, `LabelStartScore`). `matches.score` is read,
- * never written, by any labels code.
+ * video starts in the match, `LabelStartScore`) and `label_sessions.ad_scoring`
+ * (ad or no-ad, from the overview, for a match uploaded with the wrong one).
+ * `matches.score` is read, never written, by any labels code.
  *
  * Pure: the console runs `applyLabelSessionPatch` and
  * `session-fields-session.ts` runs `parseLabelSessionPatch`.
@@ -17,18 +18,20 @@ export interface LabelSessionFieldsPatch {
   final_score?: number[][] | null;
   video_ends_early?: boolean | null;
   start_score?: LabelStartScore | null;
+  ad_scoring?: boolean;
 }
 
 /** The same fields as the console holds them. */
 export type LabelSessionFields = Pick<
   LabelSession,
-  "finalScore" | "videoEndsEarly" | "startScore"
+  "finalScore" | "videoEndsEarly" | "startScore" | "adScoring"
 >;
 
 const KEYS: ReadonlySet<string> = new Set([
   "final_score",
   "video_ends_early",
   "start_score",
+  "ad_scoring",
 ]);
 
 const START_KEYS = ["sets", "games", "points", "server"] as const;
@@ -88,10 +91,11 @@ export const START_SCORE_ERROR =
   "start_score must be null or { sets: [n, n], games: [n, n], points: [n, n], server: 'p1' | 'p2' }.";
 
 /**
- * Validate a session patch: an object with at least one of the three keys and
+ * Validate a session patch: an object with at least one of the four keys and
  * no other; `final_score` null or an array of `[int ≥ 0, int ≥ 0]` pairs;
  * `video_ends_early` null or a boolean; `start_score` null or a
- * `LabelStartScore` (`parseLabelStartScore`).
+ * `LabelStartScore` (`parseLabelStartScore`); `ad_scoring` a boolean, since a
+ * session that has said which scoring it counts does not go back to not saying.
  */
 export function parseLabelSessionPatch(
   patch: unknown,
@@ -126,6 +130,11 @@ export function parseLabelSessionPatch(
       const start = parseLabelStartScore(value);
       if (!start) return { error: START_SCORE_ERROR };
       out.start_score = start;
+    } else if (key === "ad_scoring") {
+      if (typeof value !== "boolean") {
+        return { error: "ad_scoring must be true or false." };
+      }
+      out.ad_scoring = value;
     } else {
       if (value !== null && typeof value !== "boolean") {
         return { error: "video_ends_early must be true, false or null." };
@@ -150,5 +159,6 @@ export function applyLabelSessionPatch(
         : fields.videoEndsEarly,
     startScore:
       "start_score" in patch ? (patch.start_score ?? null) : fields.startScore,
+    adScoring: patch.ad_scoring ?? fields.adScoring,
   };
 }

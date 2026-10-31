@@ -536,14 +536,17 @@ export function LabelConsole({
     finalScore: session.finalScore,
     videoEndsEarly: session.videoEndsEarly,
     startScore: session.startScore,
+    adScoring: session.adScoring,
   });
   // Where the video starts in the match: every scorer below counts from it.
   const startScore = sessionFields.startScore;
+  // Ad or no-ad, as this session counts it: the overview can change it.
+  const adScoring = sessionFields.adScoring;
   // The scoreboard over the rows as they stand, once: the rail's scores and
   // bands and the player's readout and the score marks all read this.
   const scores = useMemo(
-    () => labelScores(points, session.adScoring, startScore),
-    [points, session.adScoring, startScore],
+    () => labelScores(points, adScoring, startScore),
+    [points, adScoring, startScore],
   );
   // The page's marks plus the two score marks read off the live rows
   // (score-marks.ts), which follow the labelled score. Only with marks built.
@@ -558,11 +561,11 @@ export function LabelConsole({
               suggestions: homeShotSuggestions(marks.suggestions, points),
             },
             points,
-            session.adScoring,
+            adScoring,
             scores,
             startScore,
           ),
-    [marks, points, session.adScoring, scores, startScore],
+    [marks, points, adScoring, scores, startScore],
   );
   // Every "Missing shot?" slot still open whose "Add shot" would write: what
   // "Add all missing shots" fills, in rail order.
@@ -1680,7 +1683,7 @@ export function LabelConsole({
     if (!operations) return;
     const plan = planGameShift(
       points,
-      session.adScoring,
+      adScoring,
       fromPointId,
       matchTiebreakSetNumber,
       startScore,
@@ -1712,7 +1715,7 @@ export function LabelConsole({
     if (!operations?.foldTiebreak) return;
     const fold = tiebreakFolds(
       points,
-      session.adScoring,
+      adScoring,
       matchTiebreakSetNumber,
       startScore,
     ).find((f) => f.setNumber === setNumber);
@@ -1738,7 +1741,7 @@ export function LabelConsole({
     const plan = planGamePull(
       points,
       gameKey,
-      session.adScoring,
+      adScoring,
       matchTiebreakSetNumber,
       startScore,
     );
@@ -1905,7 +1908,7 @@ export function LabelConsole({
     });
   }
 
-  /** One of the score banner's two writes, on `label_sessions` only. */
+  /** A write of the session's own fields, on `label_sessions` only. */
   async function updateSessionFields(patch: LabelSessionFieldsPatch) {
     if (!operations) return;
     const before = sessionFields;
@@ -1959,7 +1962,7 @@ export function LabelConsole({
       blockers: unmarkedErrors(points),
       warnings: completeWarnings({
         points,
-        adScoring: session.adScoring,
+        adScoring,
         marks: liveMarks,
         finalScore: sessionFields.finalScore,
         videoEndsEarly: sessionFields.videoEndsEarly,
@@ -2871,12 +2874,7 @@ export function LabelConsole({
     () =>
       operable
         ? [
-            ...slotStops(
-              points,
-              session.adScoring,
-              matchTiebreakSetNumber,
-              startScore,
-            ),
+            ...slotStops(points, adScoring, matchTiebreakSetNumber, startScore),
             // "Players at the wrong end" (court-end.ts) leans on the entered
             // score, which slotStops never reads.
             ...(operations?.switchPlayersByEnd
@@ -2900,7 +2898,7 @@ export function LabelConsole({
       operations,
       points,
       scores,
-      session.adScoring,
+      adScoring,
       session.matchScore,
       sessionFields.finalScore,
       sessionFields.videoEndsEarly,
@@ -3737,7 +3735,7 @@ export function LabelConsole({
       onFollow={followPlayback}
       points={points}
       enteredHands={session.enteredHands}
-      adScoring={session.adScoring}
+      adScoring={adScoring}
       matchTiebreakSet={matchTiebreakSetNumber}
       playOnLets={session.playOnLets}
       fileOffset={fileOffset}
@@ -3915,7 +3913,7 @@ export function LabelConsole({
           points={points}
           marks={liveMarks}
           games={scores.games}
-          adScoring={session.adScoring}
+          adScoring={adScoring}
           startScore={startScore}
           names={names}
           finalScore={sessionFields.finalScore}
@@ -3923,7 +3921,7 @@ export function LabelConsole({
           videoEndsEarly={sessionFields.videoEndsEarly}
           warnings={completeWarnings({
             points,
-            adScoring: session.adScoring,
+            adScoring,
             marks: liveMarks,
             finalScore: sessionFields.finalScore,
             videoEndsEarly: sessionFields.videoEndsEarly,
@@ -3935,6 +3933,11 @@ export function LabelConsole({
           })}
           complete={status === "complete"}
           upload={upload}
+          onAdScoringChange={
+            operations && status !== "complete"
+              ? (next) => void updateSessionFields({ ad_scoring: next })
+              : undefined
+          }
           onOpen={(pointId) => {
             // The gesture the browser's full screen asks for is this click.
             openOnPointId.current = pointId ?? null;
