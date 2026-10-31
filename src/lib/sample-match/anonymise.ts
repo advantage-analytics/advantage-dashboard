@@ -232,6 +232,9 @@ export function anonymiseMatchDetail(
   delete match.uploadedBy;
   match.player1 = { ...match.player1, name: names.player1 };
   match.player2 = { ...match.player2, name: names.player2 };
+  // A crest is a real team's image, and its URL holds the program's id.
+  delete match.player1.crestUrl;
+  delete match.player2.crestUrl;
   // "You" is seat one, so the result follows the seat, not the old viewer.
   match.isUserPlayer1 = true;
   match.won = match.score.winner === "player1";
