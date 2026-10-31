@@ -3934,7 +3934,7 @@ export function LabelConsole({
           complete={status === "complete"}
           upload={upload}
           onAdScoringChange={
-            operations && status !== "complete"
+            operable
               ? (next) => void updateSessionFields({ ad_scoring: next })
               : undefined
           }

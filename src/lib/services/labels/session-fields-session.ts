@@ -63,7 +63,10 @@ export async function writeLabelSessionFields(params: {
     .eq("id", sessionId)
     .eq("status", "labelling")
     .select("id");
-  if (error) return { error: `Could not save the score: ${error.message}` };
+  if (error) {
+    const what = scoringOnly ? "scoring" : "score";
+    return { error: `Could not save the ${what}: ${error.message}` };
+  }
   if (!data || data.length === 0) return { error: RACED };
   return { ok: true, fields: parsed.patch };
 }
