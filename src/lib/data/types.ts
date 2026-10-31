@@ -5,6 +5,8 @@ export interface Player {
   school: string;
   hand?: string;
   backhand?: string;
+  /** Public URL of this seat's team crest, when it has one (`seatCrestUrls`). */
+  crestUrl?: string | null;
 }
 
 export interface SetScore {
