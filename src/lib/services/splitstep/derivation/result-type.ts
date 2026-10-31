@@ -21,6 +21,9 @@
  * Never emit 'Forehand Forced Error' or 'Backhand Forced Error': those strings
  * match neither `LIKE '%Winner%'` nor `LIKE '%Unforced Error%'`, so the point
  * would vanish from every aggregate rather than land in the wrong one.
+ *
+ * `Service Winner` is left out of `winners` by name (product decision
+ * 2026-10-30), so it reaches `service_winners` alone.
  */
 
 import { netHitContradictsHeight } from "./flags";

@@ -379,6 +379,18 @@ be. Doubles teams and existing users depend on it.
 > were not touched. Anything beyond this list on these paths still needs its own
 > entry here.
 
+> **A reviewed exception, added 2026-10-30: a service winner is not a winner.**
+> Product decision by the user, asked and answered for this change, including
+> its live write (`20261030000000_winners_exclude_service_winners.sql`).
+> `calculate_match_stats` leaves `'Service Winner'` out of `winners` and
+> `volley_winners`, and those two columns are recounted from `points` on every
+> existing `match_stats` row, SwingVision included. The measured effect is
+> `winners` 3282 → 2373 across 148 rows, each by exactly its `service_winners`.
+> Nothing else in the function changes, and no other column, table or file-import
+> code is touched. Apply it only after the matching code reaches production: the
+> earlier head-to-head subtracts unreturned serves from `winners` itself. This is
+> not a precedent for backfills.
+
 **These files are the integration, not UI.** Changing them to suit a layout is
 almost always the wrong fix:
 

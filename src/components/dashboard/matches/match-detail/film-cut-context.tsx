@@ -5,9 +5,9 @@ import { createContext, use, useMemo, type ReactNode } from "react";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import {
   applyMatchFilters,
+  countsAsWinner,
   EMPTY_MATCH_FILTERS,
   hasActiveMatchFilters,
-  isUnreturnedServe,
   MATCH_FILTER_KEYS,
   type MatchFilterContext,
   type MatchFilters,
@@ -59,10 +59,10 @@ import {
  * A result-type bucket the report's own tallies count by, which the shared
  * Result › Ending cannot separate. Film only.
  *
- * - `winner` — `resultType` containing "winner" (the published
- *   `LIKE '%Winner%'`), which leaves aces out: the report counts them on their
- *   own line, and Result › Ending "winner" would fold them back in
- *   (`winnerHitBy` credits an ace to the server as a winner).
+ * - `winner` — `countsAsWinner`, the published `winners`: no ace and no service
+ *   winner, which Result › Ending "winner" would fold back in (`winnerHitBy`
+ *   credits both to the server). On a derived match a one-shot rally the vendor
+ *   labelled a stroke winner is in this bucket and the Aces row alike.
  * - `unforced-error` — `resultType` containing "unforced error". Result ›
  *   Ending "error" covers forced errors too, and video matches do not
  *   separate the two.
@@ -71,13 +71,8 @@ import {
  * - `error` — any `resultType` ending in "error", forced and unforced alike:
  *   a match whose errors are not judged yet (`errorSplitJudged`). Unlike
  *   Result › Ending "error" it leaves double faults out, which the report
- *   counts on their own line.
- * - `rally-winner` — the `winner` bucket less every unreturned serve
- *   (`isUnreturnedServe`): the derived Winners row on an Advantage
- *   Intelligence match, whose unreturned serves are counted as aces on their
- *   own line. Pills cannot say "winners minus unreturned serves" — Result ›
- *   Ending "winner" credits every "Service Winner" to the server — so this
- *   one stays Film-only. It never shares a point with the derived Aces row.
+ *   counts on their own line, and a service winner's missed return, which has
+ *   no error result type.
  *
  * Aces — published or derived — return winners and the rally bands are exact
  * shared filters (Serve › Result "Ace", Return › Result "Winner", Result ›
@@ -86,7 +81,7 @@ import {
  * reads `MatchFilterContext.isDerived`), so the same pill serves both.
  */
 export type FilmCutEnding =
-  "winner" | "unforced-error" | "forced-error" | "error" | "rally-winner";
+  "winner" | "unforced-error" | "forced-error" | "error";
 
 /** What a cut adds that `MatchFilters` cannot say. Film only. */
 export interface FilmCutExtras {
@@ -186,7 +181,7 @@ export function matchesFilmCutEnding(
   const result = (point.resultType ?? "").trim().toLowerCase();
   switch (ending) {
     case "winner":
-      return result.includes("winner");
+      return countsAsWinner(point);
     case "unforced-error":
       return result.includes("unforced error");
     case "forced-error":
@@ -195,8 +190,6 @@ export function matchesFilmCutEnding(
       );
     case "error":
       return result.endsWith("error");
-    case "rally-winner":
-      return result.includes("winner") && !isUnreturnedServe(point);
   }
 }
 

@@ -603,7 +603,7 @@ test("switching player changes only the court, on Errors too", () => {
   );
 });
 
-test("leaving serve drops advanced Aces and service winners: they have no return", () => {
+test("leaving serve drops advanced Aces, and service winners off Errors", () => {
   const filters = {
     ...EMPTY_VIZ_FILTERS,
     match: {
@@ -615,12 +615,14 @@ test("leaving serve drops advanced Aces and service winners: they have no return
       ],
     },
   };
-  // No return either: a double fault leaves nothing to draw off serve…
+  // Nothing to draw on the return cuts…
   expect(carryFilters(filters, "returnPlacement").match.serveResult).toEqual(
     [],
   );
-  // …except on Errors, where it is the server's own error.
+  // …but on Errors a double fault is the server's error and a service
+  // winner's missed return the returner's.
   expect(carryFilters(filters, "errors").match.serveResult).toEqual([
+    "service-winner",
     "double-fault",
   ]);
   expect(carryFilters(filters, "serve").match.serveResult).toEqual([
@@ -676,6 +678,68 @@ test("an error with no recorded type is drawn, but under no error kind", () => {
   ).toBe(0);
 });
 
+test("a service winner's missed return is the returner's error, under no kind once judged", () => {
+  const base = servePoint({ id: "sw", player1: true });
+  const missed: MatchPoint = {
+    ...base,
+    resultType: "Service Winner",
+    wonByPlayer1: true,
+    shots: [
+      ...base.shots!,
+      rallyShot("sw-return", false, true, 1, 13, {
+        result: "Out",
+        shotType: "Backhand",
+      }),
+    ],
+  };
+  const untouched: MatchPoint = {
+    ...base,
+    id: "untouched",
+    resultType: "Service Winner",
+    wonByPlayer1: true,
+  };
+  const points = [missed, untouched];
+  // The returner's court draws the return; the server's draws nothing.
+  expect(
+    computeViz(points, "errors", EMPTY_VIZ_FILTERS, false).dots.map(
+      (d) => d.id,
+    ),
+  ).toEqual(["sw"]);
+  expect(computeViz(points, "errors", EMPTY_VIZ_FILTERS, true).total).toBe(0);
+  // "Unforced" stays strict, as the Point endings card counts it.
+  expect(
+    computeViz(
+      points,
+      "errors",
+      { ...EMPTY_VIZ_FILTERS, error: ["unforced"] },
+      false,
+    ).count,
+  ).toBe(0);
+  // Until the split is judged, the Errors tile's two kinds are every error,
+  // and the tile's count agrees with the unfiltered cut.
+  const unjudged = computeViz(
+    points,
+    "errors",
+    { ...EMPTY_VIZ_FILTERS, error: ["unforced", "forced"] },
+    false,
+    "scatter",
+    { ...CTX_P1, errorSplitJudged: false },
+  );
+  expect(unjudged.dots.map((d) => d.id)).toEqual(["sw"]);
+  expect(unjudged.count).toBe(unjudged.total);
+  expect(errorKindOf({ resultType: "Service Winner" }, false)).toBe("unforced");
+  expect(errorKindOf({ resultType: "Service Winner" })).toBeNull();
+  // Serve › Result "Service winner" finds it on Errors, and survives the switch.
+  const carried = carryFilters(
+    {
+      ...EMPTY_VIZ_FILTERS,
+      match: { ...EMPTY_MATCH_FILTERS, serveResult: ["service-winner"] },
+    },
+    "errors",
+  );
+  expect(computeViz(points, "errors", carried, false).count).toBe(1);
+});
+
 test("an error dot is always a point its player lost", () => {
   // The last row credited to the point's winner: not an error that cost
   // them anything.
@@ -723,7 +787,9 @@ test("the advanced panel offers only what the cut keeps", () => {
   };
   const mine = cutAvailability(withAll, EMPTY_VIZ_FILTERS, "errors");
   expect([...mine.resultOutcome]).toEqual([]);
-  expect([...mine.serveResult]).toEqual(["double-fault"]);
+  expect([...mine.serveResult].sort()).toEqual(
+    ["double-fault", "service-winner"].sort(),
+  );
   const theirs = cutAvailability(
     withAll,
     { ...EMPTY_VIZ_FILTERS, player: "opponent" },

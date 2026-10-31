@@ -975,7 +975,10 @@ export function withFoldedFilters(
  * unforced, so every error that is not a double fault — "… Unforced Error",
  * "… Forced Error" or a bare "… Error" — reads as the one Errors bucket,
  * returned as `"unforced"` (the value the collapsed "Errors" option stores
- * first, `collapseErrorFilter`). A judged match reads as stored.
+ * first, `collapseErrorFilter`). A service winner joins it there: the errors
+ * cut only asks about one whose return was missed (`errorMadeBy`), and "every
+ * error" has to mean every dot the cut can draw. A judged match reads as stored,
+ * so there it has no kind.
  */
 export function errorKindOf(
   p: Pick<MatchPoint, "resultType">,
@@ -983,7 +986,9 @@ export function errorKindOf(
 ): ErrorValue | null {
   const rt = (p.resultType ?? "").toLowerCase();
   if (rt.includes("double fault")) return "doubleFault";
-  if (!errorSplitJudged) return rt.includes("error") ? "unforced" : null;
+  if (!errorSplitJudged) {
+    return rt.includes("error") || rt === "service winner" ? "unforced" : null;
+  }
   if (rt.includes("unforced error")) return "unforced";
   if (rt.includes("forced error")) return "forced";
   return null;
@@ -1148,7 +1153,8 @@ function computeRallyViz(
 /**
  * Errors cut: one dot per point the SUBJECT lost on their own error
  * (`errorMadeBy`, the attribution the Result filters and the Point endings
- * card use — a double fault is the server's), drawn where the erring shot
+ * card use — a double fault is the server's, a service winner's missed return
+ * the returner's), drawn where the erring shot
  * landed, from behind its hitter, on the same full-court landing frame as
  * rally placement. The erring shot is the point's deciding row
  * (`lastShotOf`): its last, or a double fault's last serve. A point

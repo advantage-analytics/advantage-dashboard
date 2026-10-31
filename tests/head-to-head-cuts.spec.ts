@@ -401,19 +401,21 @@ test.describe("a cell opens exactly the points its figure counts", () => {
     expect(count(oppCut(row))).toBe(opp.doubleFaults);
   });
 
-  test("winners leave the aces on their own line", () => {
+  test("winners leave out aces and service winners", () => {
     const row = byConfig("Winners");
     const ids = applyFilmCut(MATCH, MATCH, youCut(row), CTX).map((pt) => pt.id);
     expect(ids).not.toContain("ace-you");
-    expect(ids).toEqual(["sw-you", "fw-you", "bp-saved", "rw-you"]);
+    expect(ids).not.toContain("sw-you");
+    expect(ids).toEqual(["fw-you", "bp-saved", "rw-you"]);
     // Why the row keeps its Film-only `winner` ending: Result › Ending
-    // "winner" by you alone credits your ace to you as a winner.
+    // "winner" by you alone credits both to you as a winner.
     const endingAlone = applyMatchFilters(
       MATCH,
       { ...EMPTY_MATCH_FILTERS, resultEnding: ["winner"], resultPlayer: "you" },
       CTX,
     ).map((pt) => pt.id);
     expect(endingAlone).toContain("ace-you");
+    expect(endingAlone).toContain("sw-you");
   });
 
   test("unforced errors leave the forced ones out", () => {
@@ -668,7 +670,7 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
     expect(derivedAces.sideBy).toBe("server");
     expect(derivedWinners.cut).toEqual({
       resultEnding: ["winner"],
-      ending: "rally-winner",
+      ending: "winner",
     });
     expect(derivedWinners.sideBy).toBe("player");
   });
@@ -861,7 +863,7 @@ test.describe("error rows follow the match's split", () => {
       ["Errors", "Errors"],
       ["Double faults", undefined],
     ]);
-    expect(outcomeCut("unforcedErrors", "you", false, false)).toEqual({
+    expect(outcomeCut("unforcedErrors", "you", false)).toEqual({
       resultEnding: ["error"],
       ending: "error",
       resultPlayer: "you",
@@ -870,9 +872,10 @@ test.describe("error rows follow the match's split", () => {
     const tally = outcomeTally(MATCH, true, false, false);
     expect(tally.unforcedErrors).toBe(2);
     expect(tally.doubleFaults).toBe(1);
-    expect(
-      ids(outcomeCut("unforcedErrors", "you", false, false)).sort(),
-    ).toEqual(["fe-you", "ue-you"]);
+    expect(ids(outcomeCut("unforcedErrors", "you", false)).sort()).toEqual([
+      "fe-you",
+      "ue-you",
+    ]);
   });
 
   test("Point endings: judged, today's Unforced segment", () => {
@@ -882,7 +885,7 @@ test.describe("error rows follow the match's split", () => {
       ["Unforced errors", "Unforced"],
       ["Double faults", undefined],
     ]);
-    expect(outcomeCut("unforcedErrors", "you", false, true)).toEqual({
+    expect(outcomeCut("unforcedErrors", "you", true)).toEqual({
       resultEnding: ["error"],
       ending: "unforced-error",
       resultPlayer: "you",
