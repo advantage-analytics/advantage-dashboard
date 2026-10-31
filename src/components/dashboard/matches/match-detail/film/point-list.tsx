@@ -32,6 +32,7 @@ import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 import { useOptionalWorkspace } from "@/components/dashboard/workspace-provider";
 import { useFilmReadOnly } from "./film-read-only";
 import { cn } from "@/lib/utils";
+import { pointScoreLabel } from "@/lib/ui/score-format";
 
 import { filmProgressWidth } from "./film-clock";
 import { FilmAdvancedPanel } from "./film-advanced-panel";
@@ -62,7 +63,6 @@ import {
   UNREAD_SCORE,
   youFirstScore,
 } from "./film-score";
-import { pointScoreLabel } from "@/lib/ui/score-format";
 import {
   filmListActive,
   filmListSentence,
