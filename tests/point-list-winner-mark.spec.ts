@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -112,6 +112,71 @@ test("a point the opponent won carries the initials chip, though they also hit i
   const row = page.locator('[data-point-id="won-by-opp"]');
   await expect(row.locator('[data-mark="opp"]')).toBeVisible();
   await expect(row.locator('[data-mark="you"]')).toHaveCount(0);
+});
+
+/** The crest drawn in a row's mark slot, by the fragment naming its team. */
+async function markCrest(page: Page, pointId: string) {
+  const image = page.locator(`[data-point-id="${pointId}"] [data-mark] img`);
+  if ((await image.count()) === 0) return null;
+  return (await image.getAttribute("src"))?.split("#")[1] ?? null;
+}
+
+async function openHarness(page: Page, query: string) {
+  await page.goto(`${origin}/?${query}`);
+  await expect
+    .poll(() => page.locator("html").getAttribute("data-hydrated"))
+    .toBe("true");
+}
+
+test("the opponent's team crest replaces their initials", async ({ page }) => {
+  await openHarness(page, "crests");
+
+  expect(await markCrest(page, "won-by-opp")).toBe("opponent");
+  await expect(
+    page.locator('[data-point-id="won-by-opp"] [data-mark="opp"]'),
+  ).not.toContainText("JA");
+});
+
+test("on a dashboard the viewer's rows keep the workspace's own mark", async ({
+  page,
+}) => {
+  await openHarness(page, "crests");
+
+  // This workspace has no icon: its letters, never the seat's team crest.
+  expect(await markCrest(page, "won-by-you")).toBeNull();
+  await expect(
+    page.locator('[data-point-id="won-by-you"] [data-mark="you"]'),
+  ).toContainText("CG");
+});
+
+test("a share page draws both teams' crests", async ({ page }) => {
+  await openHarness(page, "crests&public");
+
+  expect(await markCrest(page, "won-by-you")).toBe("team");
+  expect(await markCrest(page, "won-by-opp")).toBe("opponent");
+});
+
+test("a crest stays with its seat when the match is read from seat two", async ({
+  page,
+}) => {
+  await openHarness(page, "crests&public&flipped");
+
+  // Player one won `won-by-you`, and player one is the team, on either reading.
+  expect(await markCrest(page, "won-by-you")).toBe("team");
+  expect(await markCrest(page, "won-by-opp")).toBe("opponent");
+});
+
+test("with no crests a share page keeps initials on both sides", async ({
+  page,
+}) => {
+  await openHarness(page, "public");
+
+  await expect(
+    page.locator('[data-point-id="won-by-you"] [data-mark]'),
+  ).toContainText("MR");
+  await expect(
+    page.locator('[data-point-id="won-by-opp"] [data-mark]'),
+  ).toContainText("JA");
 });
 
 test("a frozen score reads as a dash, never 0-0, and a guessed winner says so", async ({

@@ -6,6 +6,7 @@ import {
   MATCH_DETAIL_COLUMNS,
   resolveAnalysedWindowSeconds,
   resolveRosterSeatIds,
+  setSeatCrests,
   transformDbMatchToMatch,
   type DbMatch,
   type PlayerProfile,
@@ -710,6 +711,7 @@ export const getSharedMatchData = cache(
       profiles,
       rosterIds,
     );
+    setSeatCrests(match, dbRow, admin);
     // No "Unknown Event" on a public page: the facts line, the preview card
     // and the page description all skip an empty name.
     match.tournamentName = realTournamentName(dbRow.tournament_name) ?? "";

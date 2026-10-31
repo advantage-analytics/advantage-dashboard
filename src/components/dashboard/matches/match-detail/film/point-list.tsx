@@ -98,9 +98,11 @@ export {
  *
  * The mark is the point's WINNER, not who hit the last shot: the workspace's
  * mark (profile photo on personal, crest on a team) when the viewer won the
- * point, an initials chip on `--surface-subtle` when the opponent did.
- * Initials come from `sides`, so a two-letter chip is never a hardcoded
- * artboard string. The value is `won_by_player1`, which the Advantage
+ * point, the opponent's team crest when they did and have one, otherwise an
+ * initials chip on `--surface-subtle`. With no workspace (the public share
+ * page) the viewer's side reads the same way as the opponent's: its team crest,
+ * else initials. Crests and initials come from `sides`, so neither is a
+ * hardcoded artboard value. The winner is `won_by_player1`, which the Advantage
  * Intelligence pipeline derives from consecutive point scores
  * (`resolveWinner` in `derivation/winners.ts`, walking the ladder / game /
  * set counts and deliberately ignoring the last stroke's `in` flag) and the
@@ -321,9 +323,9 @@ export const PointList = memo(function PointList({
   const sides = useMatchSides();
   // The viewer's rows lead with the workspace's own mark — the profile photo
   // on personal, the program's crest on a team — so a point you decided reads
-  // as yours at a glance; the opponent's rows keep their initials.
-  // Null on the public share page, which has no workspace: the viewer's rows
-  // then keep initials like the opponent's.
+  // as yours at a glance; the opponent's rows lead with their team's crest,
+  // or their initials without one. Null on the public share page, which has no
+  // workspace: the viewer's rows then read like the opponent's.
   const workspace = useOptionalWorkspace()?.active ?? null;
   // A row's words are the filters' own: an unreturned serve is named "Ace"
   // on a derived match (`pointResultLabel`), as the head-to-head Aces row
@@ -650,6 +652,10 @@ export const PointList = memo(function PointList({
                             initials={
                               isYou ? sides.you.initials : sides.opp.initials
                             }
+                            crestUrl={
+                              (isYou ? sides.you : sides.opp).player.crestUrl ??
+                              null
+                            }
                             workspace={workspace}
                             showPointScore={showPointScore}
                             isActive={isActive}
@@ -941,6 +947,7 @@ export const PointRow = memo(function PointRow({
   detail,
   isYou,
   initials,
+  crestUrl,
   workspace,
   showPointScore,
   isActive,
@@ -959,6 +966,8 @@ export const PointRow = memo(function PointRow({
   detail: string;
   isYou: boolean;
   initials: string;
+  /** The point winner's team crest, drawn in place of their initials. */
+  crestUrl: string | null;
   /** The active workspace, whose mark leads the viewer's own rows. */
   workspace: Pick<Workspace, "kind" | "mark" | "iconUrl"> | null;
   showPointScore: boolean;
@@ -1032,10 +1041,15 @@ export const PointRow = memo(function PointRow({
       >
         {/* The viewer's own mark, never the frame's white initials chip
             (phase-1 decision): a point the viewer WON reads as theirs at a
-            glance on both tones. The opponent keeps initials. */}
-        {isYou && workspace ? (
+            glance on both tones. Anyone else draws their team's crest in the
+            same square, or initials without one. */}
+        {(isYou && workspace) || crestUrl ? (
           <WorkspaceMark
-            workspace={workspace}
+            workspace={
+              isYou && workspace
+                ? workspace
+                : { kind: "team", mark: initials, iconUrl: crestUrl }
+            }
             className="size-[30px] rounded-[var(--radius-button)] text-[11px] tracking-[0.3px]"
           />
         ) : (

@@ -129,6 +129,29 @@ test.describe("anonymiseMatchDetail", () => {
     ).toBe(true);
   });
 
+  test("drops both seats' team crests, set or null", () => {
+    const source = SYNTHETIC_MATCH_DETAIL;
+    const crested = anonymiseMatchDetail(
+      {
+        ...source,
+        match: {
+          ...source.match,
+          player1: {
+            ...source.match.player1,
+            crestUrl: `https://crests/${REAL_PROGRAM_ID}/crest.png`,
+          },
+          player2: { ...source.match.player2, crestUrl: null },
+        },
+      },
+      undefined,
+      SYNTHETIC_REWRITES,
+    );
+
+    expect(crested.match.player1).not.toHaveProperty("crestUrl");
+    expect(crested.match.player2).not.toHaveProperty("crestUrl");
+    expect(() => assertSampleClean(crested)).not.toThrow();
+  });
+
   test("pins the viewer to seat one and ships no KPI history", () => {
     expect(sample.match.isUserPlayer1).toBe(true);
     // The synthetic viewer was seat two and lost; seat one won 6-2 6-2.

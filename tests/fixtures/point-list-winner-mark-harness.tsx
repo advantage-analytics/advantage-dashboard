@@ -19,6 +19,9 @@ import type { WorkspaceContextValue } from "@/lib/workspace/types";
  * opponent's initials chip.
  */
 
+const TEAM_CREST = "data:image/gif;base64,R0lGODlhAQABAAAAACw=#team";
+const OPPONENT_CREST = "data:image/gif;base64,R0lGODlhAQABAAAAACw=#opponent";
+
 const WORKSPACE: WorkspaceContextValue = {
   active: {
     id: "viewer-1",
@@ -137,20 +140,41 @@ const POINTS: MatchPoint[] = [
 
 const root = createRoot(document.getElementById("root")!);
 
+// `?crests` gives each seat a team crest; `?public` drops the workspace, as the
+// share page has none; `?flipped` makes the viewer seat two.
+const query = new URLSearchParams(window.location.search);
+const match: Match = {
+  ...MATCH,
+  isUserPlayer1: !query.has("flipped"),
+  player1: {
+    ...MATCH.player1,
+    crestUrl: query.has("crests") ? TEAM_CREST : null,
+  },
+  player2: {
+    ...MATCH.player2,
+    crestUrl: query.has("crests") ? OPPONENT_CREST : null,
+  },
+};
+const list = (
+  <MatchDataProvider match={match} statsResult={null} points={POINTS}>
+    <PointList
+      allPoints={POINTS}
+      visiblePoints={POINTS}
+      activePointId={null}
+      activeStart={0}
+      activeEnd={0}
+      onSelect={() => {}}
+      onToggleSaved={() => {}}
+    />
+  </MatchDataProvider>
+);
+
 root.render(
-  <WorkspaceProvider value={WORKSPACE}>
-    <MatchDataProvider match={MATCH} statsResult={null} points={POINTS}>
-      <PointList
-        allPoints={POINTS}
-        visiblePoints={POINTS}
-        activePointId={null}
-        activeStart={0}
-        activeEnd={0}
-        onSelect={() => {}}
-        onToggleSaved={() => {}}
-      />
-    </MatchDataProvider>
-  </WorkspaceProvider>,
+  query.has("public") ? (
+    list
+  ) : (
+    <WorkspaceProvider value={WORKSPACE}>{list}</WorkspaceProvider>
+  ),
 );
 
 document.documentElement.dataset.hydrated = "true";

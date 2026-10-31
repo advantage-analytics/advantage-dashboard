@@ -17,8 +17,10 @@ import { formatMatchDuration } from "@/lib/format/duration";
 import type { Match, SetScore } from "@/lib/data/types";
 import { verificationFor } from "@/lib/data/match-verification";
 import { errorSplitJudged } from "@/lib/data/error-split";
+import { seatCrestUrls, type MatchCrestEmbeds } from "@/lib/data/match-crests";
+import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 
-export interface DbMatch {
+export interface DbMatch extends MatchCrestEmbeds {
   id: string;
   program_id: string | null;
   created_by: string | null;
@@ -228,6 +230,26 @@ export function transformDbMatchToMatch(
     won: userWon,
     isUserPlayer1,
   };
+}
+
+/**
+ * Puts each seat's team crest on the match. The bucket is public and the URL
+ * is a function of the key, so this builds it on the client already in hand.
+ * Exported for `match-share-server.ts`, which reads through the service role.
+ */
+export function setSeatCrests(
+  match: Match,
+  row: MatchCrestEmbeds,
+  supabase: SupabaseClient,
+): void {
+  const crests = seatCrestUrls(
+    row,
+    (path) =>
+      supabase.storage.from(PROGRAM_CRESTS_BUCKET).getPublicUrl(path).data
+        .publicUrl,
+  );
+  match.player1.crestUrl = crests.player1;
+  match.player2.crestUrl = crests.player2;
 }
 
 const FILLER_KEY_MOMENTS = [
@@ -465,10 +487,11 @@ async function resolveFoldUnreconciled(dbRow: DbMatch): Promise<boolean> {
 /**
  * The `matches` columns the report reads — one string, so the public share
  * loader (`match-share-server.ts`) and this one cannot drift apart on which
- * fields `DbMatch` actually carries.
+ * fields `DbMatch` actually carries. The embeds name their FKs: `matches`
+ * points at `programs` twice, and PostgREST refuses an ambiguous one.
  */
 export const MATCH_DETAIL_COLUMNS =
-  "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, verified_at, errors_judged_at, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights";
+  "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, verified_at, errors_judged_at, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights, program:programs!matches_program_id_fkey(crest_path), opponent_program:programs!matches_opponent_program_id_fkey(crest_path)";
 
 /**
  * How `loadMatchDetail` orients and scopes one read. The cached export below
@@ -600,6 +623,7 @@ export async function loadMatchDetail(
     await rosterIdsPromise,
     options.youSeat,
   );
+  setSeatCrests(match, dbRow, supabase);
   match.eventId = eventId;
   match.uploadedBy = uploadedBy;
   match.createdBy = dbRow.created_by;
