@@ -17,9 +17,16 @@ import { Monitor, Tablet } from "lucide-react";
  * user-agent sniffing, so there is no SSR/client hydration mismatch.
  *
  * It mounts last in the dashboard layout with a high z-index so it sits over the
- * sidebar, header, and content.
+ * sidebar, header, and content. A shared match report (`/m/[token]`) is the same
+ * report under a public header, so it mounts this too; its reader has no
+ * dashboard to open, hence `subject`.
  */
-export function MobileGate() {
+export function MobileGate({
+  subject = "the dashboard",
+}: {
+  /** What the copy tells a phone reader to open on a bigger screen. */
+  subject?: string;
+}) {
   const shouldReduceMotion = useReducedMotion();
   const pathname = usePathname();
   // Ask is built for a phone (its rail folds into a sheet and the composer
@@ -84,8 +91,8 @@ export function MobileGate() {
             className="mt-3 text-[13px] leading-[1.5] text-[#525252]"
           >
             Advantage&rsquo;s court maps, shot plots, and stat tables need room
-            to read clearly. Open the dashboard on a desktop or tablet for the
-            full picture.
+            to read clearly. Open {subject} on a desktop or tablet for the full
+            picture.
           </p>
 
           {/* Supported surfaces */}
