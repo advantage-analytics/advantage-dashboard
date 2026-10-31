@@ -121,6 +121,36 @@ test.describe("Public match report — browser, signed out (live)", () => {
     expect(page.url()).not.toMatch(/\/login/);
   });
 
+  test("a phone gets the bigger-screen notice, a tablet the report", async () => {
+    const notice = page.getByRole("heading", {
+      name: "Built for the bigger screen",
+    });
+    await page.setViewportSize({ width: 393, height: 852 });
+    try {
+      await page.goto(`${baseURL}/m/${token}`, { timeout: NAV_TIMEOUT });
+      await expect(notice).toBeVisible({ timeout: NAV_TIMEOUT });
+      await expect(page.getByRole("alertdialog")).toContainText(
+        "Open this link on a desktop or tablet",
+      );
+
+      // A bigger screen would not fix a bad link, so it keeps its own pane.
+      await page.goto(`${baseURL}/m/${MARK}-nope`, { timeout: NAV_TIMEOUT });
+      await expect(
+        page.getByRole("heading", { name: "That link isn't valid" }),
+      ).toBeVisible({ timeout: NAV_TIMEOUT });
+      await expect(notice).toHaveCount(0);
+
+      await page.setViewportSize({ width: 768, height: 1024 });
+      await page.goto(`${baseURL}/m/${token}`, { timeout: NAV_TIMEOUT });
+      await expect(
+        page.locator('aside[aria-label="Match summary"]'),
+      ).toBeVisible({ timeout: NAV_TIMEOUT });
+      await expect(notice).toBeHidden();
+    } finally {
+      await page.setViewportSize({ width: 1280, height: 720 });
+    }
+  });
+
   test("the Open Graph image answers with a PNG", async () => {
     const response = await page.request.get(
       `${baseURL}/m/${token}/opengraph-image`,
