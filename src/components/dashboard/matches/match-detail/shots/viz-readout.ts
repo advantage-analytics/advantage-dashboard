@@ -1,6 +1,7 @@
 import type { ZoneKey, ZoneStats } from "@/lib/data/serve-zones";
 import type { Cut, VizDotMeta } from "./viz-model";
 import { formatSpeed, type DistanceUnit } from "@/lib/format/distance";
+import { pointScoreLabel } from "@/lib/ui/score-format";
 
 /**
  * The focused and fullscreen courts' hover/focus readout, as a PURE function of one
@@ -120,7 +121,7 @@ export function buildReadout(
     facts.push(`Set ${meta.setNumber}`);
   }
   const score = (meta.pointScore ?? "").trim();
-  if (score !== "") facts.push(score);
+  if (score !== "") facts.push(pointScoreLabel(score));
   // Unmeasured speed arrives as `null` from `computeViz`, but a stored 0 is
   // equally "not a reading" — never "0 mph"/"0 km/h".
   if (

@@ -11,6 +11,8 @@
  * "edited" (step 2).
  */
 
+import { pointScoreLabel } from "@/lib/ui/score-format";
+
 export const VERIFIED_BY_ADVANTAGE = "Verified by Advantage";
 
 /** The longest "Something still wrong?" note, read by the form and the action. */
@@ -42,7 +44,11 @@ export function reportPointOf(
   return {
     id: point.id,
     number: point.pointNumber,
-    where: [`Set ${point.setNumber}`, point.gameScoreRaw, point.pointScoreRaw]
+    where: [
+      `Set ${point.setNumber}`,
+      point.gameScoreRaw,
+      point.pointScoreRaw && pointScoreLabel(point.pointScoreRaw),
+    ]
       .filter(Boolean)
       .join(" · "),
     reading,

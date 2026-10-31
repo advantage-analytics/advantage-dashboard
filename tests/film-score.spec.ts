@@ -77,6 +77,22 @@ test.describe("boardAt", () => {
     expect(board.pointLine).toBe("30\u201340");
   });
 
+  test("the advantage prints as Ad, though the row stores AD", () => {
+    const point = pt({
+      id: "p",
+      setNumber: 1,
+      serverIsPlayer1: true,
+      pointScore: "AD-40",
+    });
+    const board = boardAt(point, sides, {
+      hasGameScore: false,
+      hasPointScore: true,
+    });
+    expect(board.rows[1].game).toBe("Ad");
+    expect(board.pointLine).toBe("Ad\u201340");
+    expect(readPointScore(point)).toBe("AD-40");
+  });
+
   test("a match with no score columns leaves the cells blank, never 0-0", () => {
     const point = pt({ id: "p", setNumber: 1, serverIsPlayer1: false });
     const board = boardAt(point, sides, {

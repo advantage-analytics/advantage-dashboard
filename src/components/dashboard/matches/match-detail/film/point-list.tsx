@@ -62,6 +62,7 @@ import {
   UNREAD_SCORE,
   youFirstScore,
 } from "./film-score";
+import { pointScoreLabel } from "@/lib/ui/score-format";
 import {
   filmListActive,
   filmListSentence,
@@ -976,6 +977,7 @@ export const PointRow = memo(function PointRow({
 }) {
   const t = ROW_TONE[tone];
   const readOnly = useFilmReadOnly();
+  const pointScore = readPointScore(point);
   // A point with no `videoTime` has nowhere to seek to. It still reads, it
   // just cannot be clicked — imports predating video timing are full of them.
   const seekable = point.videoTime != null;
@@ -1065,7 +1067,9 @@ export const PointRow = memo(function PointRow({
           )}
           style={t.scoreStyle}
         >
-          {readPointScore(point) ?? (
+          {pointScore !== null ? (
+            pointScoreLabel(pointScore)
+          ) : (
             // A frozen reading (`score_frozen`): a dash, never a made-up 0-0.
             <>
               <span aria-hidden="true">{UNREAD_SCORE}</span>

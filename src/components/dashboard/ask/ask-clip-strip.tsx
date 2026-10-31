@@ -16,6 +16,7 @@ import {
   fetchPlaybackSource,
 } from "@/components/dashboard/matches/match-detail/film/use-attachment-playback";
 import { expiredBodyCopy } from "@/lib/match-video/film-entry";
+import { pointScoreLabel } from "@/lib/ui/score-format";
 import type {
   AskShowFilm,
   AskShowPoint,
@@ -90,7 +91,7 @@ function pointLine(point: AskShowPoint | undefined): string {
   if (point.setNumber !== null && point.gameNumber !== null) {
     parts.push(`Set ${point.setNumber} · Game ${point.gameNumber}`);
   }
-  if (point.pointScore) parts.push(point.pointScore);
+  if (point.pointScore) parts.push(pointScoreLabel(point.pointScore));
   if (point.resultType) parts.push(point.resultType);
   return parts.join(" · ");
 }
