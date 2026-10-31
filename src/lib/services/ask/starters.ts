@@ -16,7 +16,7 @@
  * Pure: no database, no React.
  */
 
-import type { AskTagOptions } from "@/lib/data/ask-tags";
+import { askOpponentKey, type AskTagOptions } from "@/lib/data/ask-tags";
 import type { AskScope } from "@/lib/services/ask/scope";
 
 export interface AskStarterTag {
@@ -59,14 +59,60 @@ export function askMatchStarter(
 }
 
 /**
- * Up to `MAX_ASK_STARTERS` questions for a scope with at least one match.
- * Ordered so the one every viewer can use comes first.
+ * The tag options cut down to the matches with statistics, counts included: a
+ * row still uploading, or a failed attempt at the same match, has nothing
+ * behind it and must not make a rival out of one opponent.
+ */
+function analysedOptions(
+  options: AskTagOptions,
+  analysedMatchIds: ReadonlySet<string>,
+): AskTagOptions {
+  const matches = options.matches.filter((match) =>
+    analysedMatchIds.has(match.matchId),
+  );
+  const opponentCounts = new Map<string, number>();
+  const playerCounts = new Map<string, number>();
+  for (const match of matches) {
+    const opponent = askOpponentKey(match.opponentName);
+    if (opponent !== null) {
+      opponentCounts.set(opponent, (opponentCounts.get(opponent) ?? 0) + 1);
+    }
+    if (match.playerId) {
+      playerCounts.set(
+        match.playerId,
+        (playerCounts.get(match.playerId) ?? 0) + 1,
+      );
+    }
+  }
+  return {
+    matches,
+    opponents: options.opponents
+      .map((opponent) => ({
+        ...opponent,
+        matchCount: opponentCounts.get(opponent.id) ?? 0,
+      }))
+      .filter((opponent) => opponent.matchCount > 0),
+    players: options.players
+      .map((player) => ({
+        ...player,
+        matchCount: playerCounts.get(player.id) ?? 0,
+      }))
+      .filter((player) => player.matchCount > 0),
+  };
+}
+
+/**
+ * Up to `MAX_ASK_STARTERS` questions about the scope's analysed matches, none
+ * until there is one. Ordered so the one every viewer can use comes first.
  */
 export function askStarters(
-  options: AskTagOptions,
+  allOptions: AskTagOptions,
   scope: AskScope,
+  /** The matches with statistics (`getAskAnalysedMatchIds()`). */
+  analysedMatchIds: ReadonlySet<string>,
 ): AskStarter[] {
   const starters: AskStarter[] = [];
+  const options = analysedOptions(allOptions, analysedMatchIds);
   const matches = options.matches;
   if (matches.length === 0) return starters;
   // `getPersonalMatches()` and the team read order by date, newest first.

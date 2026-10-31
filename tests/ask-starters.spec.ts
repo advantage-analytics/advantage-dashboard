@@ -43,16 +43,30 @@ const OPTIONS: AskTagOptions = {
     match("m5", "Luca Brandt", false, "2026-07-02"),
   ],
   opponents: [
-    { id: "o1", name: "Marek Dvorsky", matchCount: 2, hand: "right" },
-    { id: "o2", name: "Anna Lee", matchCount: 1, hand: null },
-    { id: "o3", name: "Luca Brandt", matchCount: 2, hand: "left" },
+    {
+      id: "marek dvorsky",
+      name: "Marek Dvorsky",
+      matchCount: 2,
+      hand: "right",
+    },
+    { id: "anna lee", name: "Anna Lee", matchCount: 1, hand: null },
+    { id: "luca brandt", name: "Luca Brandt", matchCount: 2, hand: "left" },
   ],
   players: [],
 };
 
+/** Every match in the options has statistics. */
+function allAnalysed(options: AskTagOptions): Set<string> {
+  return new Set(options.matches.map((m) => m.matchId));
+}
+
 test.describe("askStarters — personal", () => {
   test("names the last match, the most-played opponent by the record against them, left-handers, serve and the review", () => {
-    const starters = askStarters(OPTIONS, PERSONAL_ASK_SCOPE);
+    const starters = askStarters(
+      OPTIONS,
+      PERSONAL_ASK_SCOPE,
+      allAnalysed(OPTIONS),
+    );
     expect(starters.length).toBeLessThanOrEqual(MAX_ASK_STARTERS);
     expect(starters[0]).toEqual({
       text: "How did my match against Marek Dvorsky go?",
@@ -60,7 +74,7 @@ test.describe("askStarters — personal", () => {
     });
     expect(starters[1]).toEqual({
       text: "Why do I lose to Marek Dvorsky?",
-      tags: [{ kind: "opponent", id: "o1", label: "Marek Dvorsky" }],
+      tags: [{ kind: "opponent", id: "marek dvorsky", label: "Marek Dvorsky" }],
     });
     expect(starters.map((starter) => starter.text)).toContain(
       "What is my record against left-handers?",
@@ -78,17 +92,25 @@ test.describe("askStarters — personal", () => {
         match("m2", "Anna Lee", true),
         match("m3", "Anna Lee", false),
       ],
-      opponents: [{ id: "o2", name: "Anna Lee", matchCount: 3, hand: null }],
+      opponents: [
+        { id: "anna lee", name: "Anna Lee", matchCount: 3, hand: null },
+      ],
     };
-    expect(askStarters(winning, PERSONAL_ASK_SCOPE)[1].text).toBe(
-      "How do my matches against Anna Lee go?",
-    );
+    expect(
+      askStarters(winning, PERSONAL_ASK_SCOPE, allAnalysed(winning))[1].text,
+    ).toBe("How do my matches against Anna Lee go?");
     const single: AskTagOptions = {
       matches: [match("m1", "Anna Lee", true)],
-      opponents: [{ id: "o2", name: "Anna Lee", matchCount: 1, hand: null }],
+      opponents: [
+        { id: "anna lee", name: "Anna Lee", matchCount: 1, hand: null },
+      ],
       players: [],
     };
-    const starters = askStarters(single, PERSONAL_ASK_SCOPE);
+    const starters = askStarters(
+      single,
+      PERSONAL_ASK_SCOPE,
+      allAnalysed(single),
+    );
     expect(starters).toHaveLength(1);
     expect(starters[0].tags[0]).toEqual({
       kind: "match",
@@ -102,8 +124,36 @@ test.describe("askStarters — personal", () => {
       askStarters(
         { matches: [], opponents: [], players: [] },
         PERSONAL_ASK_SCOPE,
+        new Set(),
       ),
     ).toEqual([]);
+  });
+
+  test("a match with no statistics yet is not suggested, and two attempts at it are no rival", () => {
+    const pending: AskTagOptions = {
+      matches: [
+        match("uploading", "Suhail Hooker", null, "2026-10-30"),
+        match("failed", "Suhail Hooker", null, "2026-10-30"),
+        match("m1", "Anna Lee", true, "2026-09-14"),
+      ],
+      opponents: [
+        {
+          id: "suhail hooker",
+          name: "Suhail Hooker",
+          matchCount: 2,
+          hand: "left",
+        },
+        { id: "anna lee", name: "Anna Lee", matchCount: 1, hand: null },
+      ],
+      players: [],
+    };
+    expect(askStarters(pending, PERSONAL_ASK_SCOPE, new Set(["m1"]))).toEqual([
+      {
+        text: "How did my match against Anna Lee go?",
+        tags: [{ kind: "match", id: "m1", label: "vs Anna Lee" }],
+      },
+    ]);
+    expect(askStarters(pending, PERSONAL_ASK_SCOPE, new Set())).toEqual([]);
   });
 });
 
@@ -112,12 +162,17 @@ test.describe("askStarters — team", () => {
     const starters = askStarters(
       {
         ...OPTIONS,
+        matches: OPTIONS.matches.map((m, index) => ({
+          ...m,
+          playerId: index < 3 ? "p1" : "p2",
+        })),
         players: [
           { id: "p1", name: "Mara Sokolov", matchCount: 3 },
           { id: "p2", name: "Dana Brooks", matchCount: 1 },
         ],
       },
       TEAM,
+      allAnalysed(OPTIONS),
     );
     expect(starters.map((starter) => starter.text)).toEqual([
       "What is each player's record?",

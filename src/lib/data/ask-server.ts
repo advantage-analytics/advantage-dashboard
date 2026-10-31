@@ -479,6 +479,28 @@ export async function askMatchHasStats(matchId: string): Promise<boolean> {
   return (data?.length ?? 0) > 0;
 }
 
+/**
+ * Which of the scope's matches have statistics — what the starter questions
+ * may be about (`askStarters()`). A failed read answers none: better no
+ * suggestion than one about a match still being analysed.
+ */
+export async function getAskAnalysedMatchIds(
+  programId: string | null = null,
+): Promise<Set<string>> {
+  const { matches } = await getAskTagOptions(programId);
+  if (matches.length === 0) return new Set();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("match_stats")
+    .select("match_id")
+    .in(
+      "match_id",
+      matches.map((match) => match.matchId),
+    );
+  if (error) return new Set();
+  return new Set((data ?? []).map((row) => row.match_id as string));
+}
+
 /** How the match page seats the viewer in one match, with a point to check Ask's seat against. */
 export interface AskPageSeat {
   /** `youSeat()`'s answer — the seat the match page, and its Video filter, call "you". */

@@ -3,6 +3,7 @@ import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { isUuid } from "@/lib/admin/validation";
 import {
   askMatchHasStats,
+  getAskAnalysedMatchIds,
   getAskConversation,
   getAskConversations,
   getAskQuota,
@@ -68,15 +69,23 @@ async function AskContent({ searchParams }: AskRouteProps) {
   // no statistics; once it does, the first answer is in the rail already.
   const sentId = typeof sent === "string" && isUuid(sent) ? sent : null;
 
-  const [workspace, tagOptions, quota, conversations, conversation, hasStats] =
-    await Promise.all([
-      getWorkspaceContext(),
-      getAskTagOptions(),
-      getAskQuota(),
-      getAskConversations(),
-      conversationId ? getAskConversation(conversationId) : null,
-      sentId ? askMatchHasStats(sentId) : true,
-    ]);
+  const [
+    workspace,
+    tagOptions,
+    analysedMatchIds,
+    quota,
+    conversations,
+    conversation,
+    hasStats,
+  ] = await Promise.all([
+    getWorkspaceContext(),
+    getAskTagOptions(),
+    getAskAnalysedMatchIds(),
+    getAskQuota(),
+    getAskConversations(),
+    conversationId ? getAskConversation(conversationId) : null,
+    sentId ? askMatchHasStats(sentId) : true,
+  ]);
 
   return (
     <AskPage
@@ -84,7 +93,7 @@ async function AskContent({ searchParams }: AskRouteProps) {
       scope={PERSONAL_ASK_SCOPE}
       timeZone={workspace?.active.timeZone}
       tagOptions={tagOptions}
-      starters={askStarters(tagOptions, PERSONAL_ASK_SCOPE)}
+      starters={askStarters(tagOptions, PERSONAL_ASK_SCOPE, analysedMatchIds)}
       quota={quota}
       conversations={conversations}
       conversation={conversation}
