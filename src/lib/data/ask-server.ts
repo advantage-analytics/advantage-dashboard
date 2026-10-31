@@ -65,11 +65,32 @@ const TEAM_MATCH_COLUMNS =
   "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, verified_at, duration, opponent_hand, opponent_backhand, event_entry_id";
 
 /**
- * A program's matches and roster as tag options. `program_id = <program>` and
- * nothing else is the team Matches list's own predicate
- * (`scopeToWorkspace()`); who may read those rows is RLS's answer.
+ * A scope's match rows, and the rule that turns any of them into tag options.
+ * The rows stay out of reach so the all-matches menu and the analysed-only
+ * starters can only differ in which rows they keep.
  */
-async function getTeamAskTagOptions(programId: string): Promise<AskTagOptions> {
+interface AskScopeRows {
+  matchIds: string[];
+  optionsFor(keep?: ReadonlySet<string>): AskTagOptions;
+}
+
+function askScopeRows<M extends { id: string }>(
+  rows: readonly M[],
+  build: (rows: readonly M[]) => AskTagOptions,
+): AskScopeRows {
+  return {
+    matchIds: rows.map((row) => row.id),
+    optionsFor: (keep) =>
+      build(keep ? rows.filter((row) => keep.has(row.id)) : rows),
+  };
+}
+
+/**
+ * A program's matches and roster. `program_id = <program>` and nothing else is
+ * the team Matches list's own predicate (`scopeToWorkspace()`); who may read
+ * those rows is RLS's answer.
+ */
+async function readTeamAskScope(programId: string): Promise<AskScopeRows> {
   const supabase = await createClient();
   const [matchesRead, rosterRead] = await Promise.all([
     supabase
@@ -92,11 +113,40 @@ async function getTeamAskTagOptions(programId: string): Promise<AskTagOptions> {
       cause: rosterRead.error,
     });
   }
-  return buildTeamAskTagOptions(
+  const roster = (rosterRead.data ?? []) as AskRosterRow[];
+  return askScopeRows(
     (matchesRead.data ?? []) as unknown as DbAskTeamMatch[],
-    (rosterRead.data ?? []) as AskRosterRow[],
+    (rows) => buildTeamAskTagOptions(rows, roster),
   );
 }
+
+/**
+ * The rows behind a scope, or null when nothing can be read for it: a
+ * signed-out request or a `programId` that is not a uuid. Throws when the
+ * matches cannot be read. `cache()`d, so the menu and the starters share one
+ * read.
+ */
+const readAskScope = cache(async function readAskScope(
+  programId: string | null,
+  knownViewerId: string | undefined,
+): Promise<AskScopeRows | null> {
+  const viewerId = knownViewerId ?? (await getViewerId());
+  if (!viewerId) return null;
+
+  if (programId !== null) {
+    return isUuid(programId) ? readTeamAskScope(programId) : null;
+  }
+
+  const [matches, myPlayerIds] = await Promise.all([
+    getPersonalMatches(viewerId),
+    getMyPlayerIds(),
+  ]);
+  return askScopeRows(matches, (rows) =>
+    buildAskTagOptions(rows, (match) =>
+      playerSide(match, myPlayerIds, viewerId),
+    ),
+  );
+});
 
 /**
  * What the viewer can tag. Personal (`programId` null): their personal
@@ -113,22 +163,38 @@ export const getAskTagOptions = cache(async function getAskTagOptions(
   /** The signed-in user's id when the caller already has it (`POST /api/ask`): one auth read, not two. */
   knownViewerId?: string,
 ): Promise<AskTagOptions> {
-  const viewerId = knownViewerId ?? (await getViewerId());
-  if (!viewerId) return NO_ASK_TAG_OPTIONS;
-
-  if (programId !== null) {
-    if (!isUuid(programId)) return NO_ASK_TAG_OPTIONS;
-    return getTeamAskTagOptions(programId);
-  }
-
-  const [matches, myPlayerIds] = await Promise.all([
-    getPersonalMatches(viewerId),
-    getMyPlayerIds(),
-  ]);
-  return buildAskTagOptions(matches, (match) =>
-    playerSide(match, myPlayerIds, viewerId),
-  );
+  const scope = await readAskScope(programId, knownViewerId);
+  return scope?.optionsFor() ?? NO_ASK_TAG_OPTIONS;
 });
+
+/**
+ * The same options over only the matches with statistics, for the starter
+ * questions (`askStarters()`): a row still uploading, or a failed attempt at
+ * the same match, has nothing to answer from and must not make a rival out of
+ * one opponent. A failed `match_stats` read answers no options, so no starters:
+ * better no suggestion than one about a match still being analysed.
+ */
+export async function getAskStarterOptions(
+  programId: string | null = null,
+): Promise<AskTagOptions> {
+  const scope = await readAskScope(programId, undefined);
+  if (!scope || scope.matchIds.length === 0) return NO_ASK_TAG_OPTIONS;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("match_stats")
+    .select("match_id")
+    .in("match_id", scope.matchIds);
+  if (error) {
+    console.error("[ask] could not read which matches have statistics", {
+      programId,
+      error: error.message,
+    });
+    return NO_ASK_TAG_OPTIONS;
+  }
+  return scope.optionsFor(
+    new Set((data ?? []).map((row) => row.match_id as string)),
+  );
+}
 
 export interface AskQuota {
   /** Questions spent this UTC month. */
@@ -477,28 +543,6 @@ export async function askMatchHasStats(matchId: string): Promise<boolean> {
     .limit(1);
   if (error) return true;
   return (data?.length ?? 0) > 0;
-}
-
-/**
- * Which of the scope's matches have statistics — what the starter questions
- * may be about (`askStarters()`). A failed read answers none: better no
- * suggestion than one about a match still being analysed.
- */
-export async function getAskAnalysedMatchIds(
-  programId: string | null = null,
-): Promise<Set<string>> {
-  const { matches } = await getAskTagOptions(programId);
-  if (matches.length === 0) return new Set();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("match_stats")
-    .select("match_id")
-    .in(
-      "match_id",
-      matches.map((match) => match.matchId),
-    );
-  if (error) return new Set();
-  return new Set((data ?? []).map((row) => row.match_id as string));
 }
 
 /** How the match page seats the viewer in one match, with a point to check Ask's seat against. */

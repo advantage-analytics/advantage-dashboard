@@ -5,8 +5,8 @@ import {
   getAskConversation,
   getAskConversations,
   getAskQuota,
+  getAskStarterOptions,
   getAskTagOptions,
-  getAskAnalysedMatchIds,
 } from "@/lib/data/ask-server";
 import { askTagsFromQuery } from "@/lib/services/ask/entry";
 import type { AskScope } from "@/lib/services/ask/scope";
@@ -70,10 +70,10 @@ async function TeamAskContent({ searchParams }: TeamAskRouteProps) {
     programName: active.name,
   };
 
-  const [tagOptions, analysedMatchIds, quota, conversations, conversation] =
+  const [tagOptions, starterOptions, quota, conversations, conversation] =
     await Promise.all([
       getAskTagOptions(programId),
-      getAskAnalysedMatchIds(programId),
+      getAskStarterOptions(programId),
       getAskQuota(),
       getAskConversations(programId),
       conversationId ? getAskConversation(conversationId, programId) : null,
@@ -93,7 +93,7 @@ async function TeamAskContent({ searchParams }: TeamAskRouteProps) {
       canUpload={explainVideoRefusal(active) === null}
       timeZone={active.timeZone}
       tagOptions={tagOptions}
-      starters={askStarters(tagOptions, scope, analysedMatchIds)}
+      starters={askStarters(starterOptions, scope)}
       quota={quota}
       conversations={conversations}
       conversation={conversation}
