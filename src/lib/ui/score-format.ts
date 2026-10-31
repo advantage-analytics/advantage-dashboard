@@ -32,6 +32,16 @@
  * who is looking — see `scoreSetsFrom`'s `swap`.
  */
 
+/**
+ * A point score as it is printed: the advantage reads "Ad", whatever case the
+ * row holds ("AD-40" → "Ad-40"). Display only — `points.point_score` stays
+ * upper-case, and the scoring rules compare against that, so never feed this
+ * back into them.
+ */
+export function pointScoreLabel(score: string): string {
+  return score.replace(/\bad\b/gi, "Ad");
+}
+
 /** One set, already oriented: `player1` is the side the row is about. */
 export interface ScoreLineSet {
   player1: number;

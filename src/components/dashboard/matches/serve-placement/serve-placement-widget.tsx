@@ -13,6 +13,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ChevronDown, HelpCircle, Maximize2, Target, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { pointScoreLabel } from "@/lib/ui/score-format";
 // Serve type is a data encoding, so its colours come from the viz palette:
 // first serve is --viz-you, second serve --viz-you-mid. The violet that used
 // to mark a second serve was retired with player attribution — SKILL.md
@@ -619,7 +620,9 @@ function DotTooltipBody({
             </span>
             {(gameScore || pointScore) && (
               <span className="shrink-0 text-[9px] font-normal text-[#AAAAAA] tabular-nums">
-                {[gameScore, pointScore].filter(Boolean).join(" • ")}
+                {[gameScore, pointScore && pointScoreLabel(pointScore)]
+                  .filter(Boolean)
+                  .join(" • ")}
               </span>
             )}
           </div>
