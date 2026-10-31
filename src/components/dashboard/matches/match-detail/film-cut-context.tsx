@@ -61,7 +61,8 @@ import {
  *
  * - `winner` — `countsAsWinner`, the published `winners`: no ace and no service
  *   winner, which Result › Ending "winner" would fold back in (`winnerHitBy`
- *   credits both to the server). It never shares a point with an Aces row.
+ *   credits both to the server). On a derived match a one-shot rally the vendor
+ *   labelled a stroke winner is in this bucket and the Aces row alike.
  * - `unforced-error` — `resultType` containing "unforced error". Result ›
  *   Ending "error" covers forced errors too, and video matches do not
  *   separate the two.

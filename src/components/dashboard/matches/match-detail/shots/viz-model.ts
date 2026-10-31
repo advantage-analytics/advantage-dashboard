@@ -975,7 +975,10 @@ export function withFoldedFilters(
  * unforced, so every error that is not a double fault — "… Unforced Error",
  * "… Forced Error" or a bare "… Error" — reads as the one Errors bucket,
  * returned as `"unforced"` (the value the collapsed "Errors" option stores
- * first, `collapseErrorFilter`). A judged match reads as stored.
+ * first, `collapseErrorFilter`). A service winner joins it there: the errors
+ * cut only asks about one whose return was missed (`errorMadeBy`), and "every
+ * error" has to mean every dot the cut can draw. A judged match reads as stored,
+ * so there it has no kind.
  */
 export function errorKindOf(
   p: Pick<MatchPoint, "resultType">,
@@ -983,7 +986,9 @@ export function errorKindOf(
 ): ErrorValue | null {
   const rt = (p.resultType ?? "").toLowerCase();
   if (rt.includes("double fault")) return "doubleFault";
-  if (!errorSplitJudged) return rt.includes("error") ? "unforced" : null;
+  if (!errorSplitJudged) {
+    return rt.includes("error") || rt === "service winner" ? "unforced" : null;
+  }
   if (rt.includes("unforced error")) return "unforced";
   if (rt.includes("forced error")) return "forced";
   return null;

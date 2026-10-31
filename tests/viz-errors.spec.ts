@@ -678,7 +678,7 @@ test("an error with no recorded type is drawn, but under no error kind", () => {
   ).toBe(0);
 });
 
-test("a service winner's missed return is the returner's error, under no error kind", () => {
+test("a service winner's missed return is the returner's error, under no kind once judged", () => {
   const base = servePoint({ id: "sw", player1: true });
   const missed: MatchPoint = {
     ...base,
@@ -715,6 +715,20 @@ test("a service winner's missed return is the returner's error, under no error k
       false,
     ).count,
   ).toBe(0);
+  // Until the split is judged, the Errors tile's two kinds are every error,
+  // and the tile's count agrees with the unfiltered cut.
+  const unjudged = computeViz(
+    points,
+    "errors",
+    { ...EMPTY_VIZ_FILTERS, error: ["unforced", "forced"] },
+    false,
+    "scatter",
+    { ...CTX_P1, errorSplitJudged: false },
+  );
+  expect(unjudged.dots.map((d) => d.id)).toEqual(["sw"]);
+  expect(unjudged.count).toBe(unjudged.total);
+  expect(errorKindOf({ resultType: "Service Winner" }, false)).toBe("unforced");
+  expect(errorKindOf({ resultType: "Service Winner" })).toBeNull();
   // Serve › Result "Service winner" finds it on Errors, and survives the switch.
   const carried = carryFilters(
     {
