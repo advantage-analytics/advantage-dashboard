@@ -1004,7 +1004,11 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(findGapSource).toMatch(/arm && editable && point && liveMarks/);
     expect(findGapSource).toContain("if (arm) setFoldedPointId(null);");
     expect(findGapSource).toMatch(
-      /landOnStep\(\s*point,\s*reviewStep\(\s*point,\s*liveMarks,\s*points,\s*names,\s*drawsGhosts\(liveMarks\),\s*undefined,\s*first,\s*\),\s*\)/,
+      /landOnStep\(\s*point,\s*reviewStep\(\s*point,\s*liveMarks,\s*points,\s*names,\s*drawsGhosts\(liveMarks\),\s*queued,\s*first,\s*\),\s*\)/,
+    );
+    // The grey jump's order lasts only as long as the review it opened.
+    expect(consoleSource).toMatch(
+      /const asksFirst =\s*reviewMode && askFirst\?\.pointId === expanded\?\.id/,
     );
     // With no step the point opens as before, at its first stroke.
     expect(findGapSource).toContain("seekToPointStart(point);");

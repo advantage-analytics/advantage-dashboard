@@ -284,20 +284,21 @@ export function openReviewItems(
 }
 
 /**
- * What a jump from the grey list asks first: "Shot placement" on a point that
- * is in both lists (`openFlags`), or the labeller lands on the amber question
- * from a list that said nothing about it. Undefined elsewhere: the usual order.
+ * What a jump from the grey list asks first: "Shot placement" where an amber
+ * question would otherwise come before it, or the labeller lands on that
+ * question from a list that said nothing about it. That is a point in both lists
+ * (`openFlags`), or one whose settled amber question the console's queue (`keep`)
+ * still asks. Undefined elsewhere: the usual order.
  */
 export function greyJumpFirstItem(
   point: LabelPoint,
   marks: LabelMarks,
   points: readonly LabelPoint[],
+  keep?: readonly ReviewItemId[],
 ): ReviewItemId | undefined {
-  const flag = reviewFlag(point, marks, points);
-  return flag?.tone === "score" &&
-    flag.items.some(
-      (item) => item.id === PLACEMENT_ITEM && item.state === "open",
-    )
+  const asked = openReviewItems(point, marks, points, keep);
+  return asked.some((item) => item.id === PLACEMENT_ITEM) &&
+    asked.some((item) => item.tone === "score")
     ? PLACEMENT_ITEM
     : undefined;
 }

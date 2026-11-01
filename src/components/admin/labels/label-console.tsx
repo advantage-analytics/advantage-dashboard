@@ -2093,9 +2093,12 @@ export function LabelConsole({
     pendingAdvance.current = null;
     // A flag jump enters review mode; any other way here leaves it.
     setReviewMode(Boolean(arm && editable && point && liveMarks));
+    // Read as the panel will read it: an open point's queue still applies.
+    const queued =
+      reviewQueue?.pointId === target ? reviewQueue.keep : undefined;
     const first =
       arm && list === "data" && point && liveMarks
-        ? greyJumpFirstItem(point, liveMarks, points)
+        ? greyJumpFirstItem(point, liveMarks, points, queued)
         : undefined;
     setAskFirst(first === undefined ? null : { pointId: target, item: first });
     if (arm && editable && point && liveMarks) {
@@ -2107,7 +2110,7 @@ export function LabelConsole({
           points,
           names,
           drawsGhosts(liveMarks),
-          undefined,
+          queued,
           first,
         ),
       );
@@ -3543,17 +3546,17 @@ export function LabelConsole({
   );
   // The open point's review step (`reviewStep`), asked in the court panel.
   // Memoised: the console re-renders on every film tick while it plays.
+  // What a jump from the grey list asks first on the point it opened.
+  const [askFirst, setAskFirst] = useState<{
+    pointId: string;
+    item: ReviewItemId;
+  } | null>(null);
   // The open point's queue: the items it had open when it became the open
   // point, less the ones the labeller has answered here. Any edit settles
   // every counted mark on a point (marks-state.ts `markState`), so without
   // it the first answer would take the point's other questions with it; the
   // queue keeps asking them (`reviewStep`'s `keep`) until each is answered,
   // dismissed or no longer raised. Set again whenever another point opens.
-  // What a jump from the grey list asks first on the point it opened.
-  const [askFirst, setAskFirst] = useState<{
-    pointId: string;
-    item: ReviewItemId;
-  } | null>(null);
   const [reviewQueue, setReviewQueue] = useState<{
     pointId: string;
     keep: readonly ReviewItemId[];
@@ -3568,8 +3571,11 @@ export function LabelConsole({
     expanded && reviewQueue?.pointId === expanded.id
       ? reviewQueue.keep
       : undefined;
+  // Only while the jump's review lasts: a row click or a click away leaves it.
   const asksFirst =
-    askFirst?.pointId === expanded?.id ? askFirst?.item : undefined;
+    reviewMode && askFirst?.pointId === expanded?.id
+      ? askFirst?.item
+      : undefined;
   const step = useMemo(
     () =>
       expanded && liveMarks
