@@ -1069,11 +1069,12 @@ function FilmRoom({
   const exitRoom = useCallback(() => {
     // An ordinary exit has already reported its pause. One mid-hand-off has
     // not: the film was the report player's, stopped while it was silent
-    // (`background`), and the room's own element never ran. So ask that player.
-    setFilmPlaying(playerRef.current?.snapshot().playing ?? false);
+    // (`background`), and the room's own element never ran. So ask that player,
+    // and tell the hook too, or the next credential swap would resume the film.
+    handlePlaybackPlaying(playerRef.current?.snapshot().playing ?? false);
     setRoom(null);
     writeRoomParam(false);
-  }, [writeRoomParam]);
+  }, [handlePlaybackPlaying, writeRoomParam]);
   const originRect = useCallback(
     () => playerRef.current?.frameRect() ?? null,
     [],
