@@ -110,6 +110,14 @@ export function classifyPoint(
   // (Return › Result "Error").
   if (isMissedReturn(rally, winner)) return "Service Winner";
 
+  // The kept call and the fold name different winners, so "winner by the
+  // loser" or "error by the winner" would be all this could say, and the stats
+  // would credit it. The point stays, with its fold winner, its ball and
+  // `last_call_contradicts_winner`, but makes no claim about how it ended. The
+  // call beat the fold here on the labelled matches (`trustedLastCall`), so the
+  // call is not overruled to give it a label either.
+  if (lastCallContradictsWinner(rally, winner)) return null;
+
   const side = last.strokeSide ? SIDE_LABEL[last.strokeSide] : null;
   const won = last.playerLabel === winner;
 

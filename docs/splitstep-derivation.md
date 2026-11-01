@@ -82,7 +82,7 @@ Point flags, all review-only since 0.6.0 (`points.flags`; scored against hand la
 | `score_side_mismatch`        | Points played in the game say one court, the server stood on the other            |
 | `tiebreak_score_off_six_all` | Tiebreak point scores while the game score is not 6-6 (the game count drifted)    |
 | `winner_guessed`             | Collapsed score tail: the winner is the last stroke's guess                       |
-| `result_type_unknown`        | No honest `result_type`                                                           |
+| `result_type_unknown`        | No honest `result_type`, including where the last call and the fold disagree      |
 | `phantom_strokes_dropped`    | Strokes at a faulted serve were removed (the one row change `played.ts` makes)    |
 | `second_serve_called_out`    | Out-called second serve with a short tail — a possible double fault               |
 | `winner_to_error_by_bounce`  | The ball before a winner bounced out (trajectories) — demoted from autofix, 0.6.0 |
