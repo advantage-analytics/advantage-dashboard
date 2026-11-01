@@ -148,9 +148,9 @@ const RESUBMITTABLE_STATUSES = new Set(["failed", "cancelled"]);
  * because Edit match can change it on a failed or cancelled analysis and no
  * statistics were built under the old value. Then what the failed attempt sent.
  *
- * A match on a scheduled line keeps the attempt's value first: Edit match cannot
- * change its format, and job b74a1e04 went up `Ad:false` for a no-ad event while
- * its match row said ad.
+ * A match on a scheduled line keeps the attempt's value first: its format comes
+ * from the event and Edit match cannot change it, so nobody has said anything
+ * newer than what the attempt sent.
  */
 export function retryAdScoring(input: {
   corrected: boolean | null;
