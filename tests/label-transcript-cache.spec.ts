@@ -114,6 +114,7 @@ function fakeClient(
   job: Record<string, unknown> = JOB_ROW,
   match: Record<string, unknown> = MATCH_ROW,
   strokes: RawSplitStepStroke[] = clean,
+  correctedAdScoring: boolean | null = null,
 ): Fake {
   const fake: Fake = {
     db: null as unknown as AdminClient,
@@ -128,11 +129,23 @@ function fakeClient(
       const chain = {
         select: () => chain,
         eq: () => chain,
+        not: () => chain,
+        order: () => chain,
+        limit: () => chain,
         single: async () => ({
           data: table === "processing_jobs" ? job : match,
           error: null,
         }),
         maybeSingle: async () => {
+          if (table === "label_sessions") {
+            return {
+              data:
+                correctedAdScoring === null
+                  ? null
+                  : { ad_scoring: correctedAdScoring },
+              error: null,
+            };
+          }
           if (table !== TRANSCRIPT_CACHE_TABLE) {
             throw new Error(`unexpected maybeSingle on ${table}`);
           }
@@ -314,6 +327,33 @@ test.describe("buildJobMarks reads the cache before building", () => {
     await buildJobMarks(edited.db, JOB_ID);
     expect(edited.downloads).toBe(1);
     expect(edited.upserts).toBe(1);
+  });
+
+  test("a labeller's correction misses, and undoing it misses again", async () => {
+    const noAdJob = { ...JOB_ROW, ad_scoring: false };
+    const fake = fakeClient(noAdJob);
+    await buildJobMarks(fake.db, JOB_ID);
+
+    const flipped = fakeClient(noAdJob, MATCH_ROW, clean, true);
+    flipped.row = fake.row;
+    await buildJobMarks(flipped.db, JOB_ID);
+    expect(flipped.downloads).toBe(1);
+    expect(flipped.row?.fingerprint).not.toBe(fake.row?.fingerprint);
+
+    const back = fakeClient(noAdJob, MATCH_ROW, clean, false);
+    back.row = flipped.row;
+    await buildJobMarks(back.db, JOB_ID);
+    expect(back.downloads).toBe(1);
+    expect(back.row?.fingerprint).toBe(fake.row?.fingerprint);
+  });
+
+  test("no correction keeps the row a job's value already keyed", async () => {
+    const fake = fakeClient();
+    await buildJobMarks(fake.db, JOB_ID);
+    const same = fakeClient(JOB_ROW, MATCH_ROW, clean, true);
+    same.row = fake.row;
+    await buildJobMarks(same.db, JOB_ID);
+    expect(same.downloads).toBe(0);
   });
 
   test("a changed match format misses", async () => {

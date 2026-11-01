@@ -106,6 +106,40 @@ test.describe("normalizeMatchPatch", () => {
     ).toMatchObject({ ok: false, field: "format" });
   });
 
+  test("a match awaiting a retry takes its ad scoring, and nothing else of the format", () => {
+    const failed = { ...oneOff, analyzed: true, awaitingRetry: true };
+    const changed = normalizeMatchPatch(
+      { format: { ad_scoring: true } },
+      failed,
+    );
+    expect(changed.ok && changed.update.format).toEqual({
+      ...oneOff.format,
+      ad_scoring: true,
+    });
+    for (const format of [
+      { best_of: 5 },
+      { ad_scoring: true, play_on_lets: true },
+      { ad_scoring: null },
+    ]) {
+      expect(normalizeMatchPatch({ format }, failed)).toMatchObject({
+        ok: false,
+        field: "format",
+      });
+    }
+    expect(
+      normalizeMatchPatch(
+        { format: { ad_scoring: true } },
+        { ...failed, linked: true },
+      ),
+    ).toMatchObject({ ok: false, field: "format" });
+    expect(
+      normalizeMatchPatch(
+        { format: { ad_scoring: true } },
+        { ...failed, awaitingRetry: false },
+      ),
+    ).toMatchObject({ ok: false, field: "format" });
+  });
+
   test("refuses event-owned fields on a match on a line", () => {
     const linked = { ...oneOff, linked: true };
     expect(normalizeMatchPatch({ round: "S3" }, linked)).toMatchObject({

@@ -33,7 +33,7 @@ export interface PressureInput {
   gamesThisSet: Record<string, number>;
   /** Sets won so far, per label, BEFORE this point. */
   setsWon: Record<string, number>;
-  /** From processing_jobs.ad_scoring, else matches.format.ad_scoring. */
+  /** `resolveAdScoring` (persist-transcript.ts). */
   adScoring: boolean;
   /** From matches.format.best_of. */
   bestOf: number;

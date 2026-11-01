@@ -172,6 +172,31 @@ async function analysisFor(supabase: Supabase, matchId: string) {
 }
 
 /**
+ * Whether Edit match may change this match's ad scoring for a retry: its newest
+ * analysis failed or was cancelled, and none has completed, so no statistics
+ * were built under the old value. A failed read answers with its error, like
+ * `analysisFor`, and never passes for yes.
+ */
+async function awaitingRetryFor(
+  supabase: Supabase,
+  matchId: string,
+  analysis: { status: string } | null,
+) {
+  if (analysis?.status !== "failed" && analysis?.status !== "cancelled") {
+    return { awaitingRetry: false, error: null };
+  }
+  const { data, error } = await supabase
+    .from("processing_jobs")
+    .select("id")
+    .eq("match_id", matchId)
+    .eq("status", "completed")
+    .limit(1)
+    .maybeSingle();
+  if (error) return { awaitingRetry: false, error };
+  return { awaitingRetry: !data, error: null };
+}
+
+/**
  * Whether saving a new score should offer to rebuild the statistics, and what
  * the rebuild would cost — null when there is nothing to rebuild.
  *
@@ -341,6 +366,14 @@ export async function GET(
     );
   }
   const { analysis } = analysisRead;
+  const retryRead = await awaitingRetryFor(supabase, matchId, analysis);
+  if (retryRead.error) {
+    return serverError(
+      "GET /api/matches/[matchId]: failed to load analysis status",
+      retryRead.error,
+      "Could not load the match",
+    );
+  }
 
   const active = workspace?.active;
   const runsSchedule =
@@ -358,6 +391,7 @@ export async function GET(
   return NextResponse.json({
     match,
     analysis,
+    awaitingRetry: retryRead.awaitingRetry,
     event,
     canAttach,
     canDetach,
@@ -413,12 +447,24 @@ export async function PATCH(
   }
   const { analysis } = analysisRead;
   const stored = existing as unknown as MatchRow;
+  const retryRead =
+    "format" in body
+      ? await awaitingRetryFor(supabase, matchId, analysis)
+      : { awaitingRetry: false, error: null };
+  if (retryRead.error) {
+    return serverError(
+      "PATCH /api/matches/[matchId]: failed to load analysis status",
+      retryRead.error,
+      "Could not load the match",
+    );
+  }
 
   const result = normalizeMatchPatch(body, {
     score: stored.score,
     format: stored.format,
     linked: stored.event_entry_id !== null,
     analyzed: analysis !== null || stored.source_provider !== null,
+    awaitingRetry: retryRead.awaitingRetry,
     teamMatch: stored.program_id !== null,
     matchType: (stored.match_type as string | null) ?? null,
     round: (stored.round as string | null) ?? null,
