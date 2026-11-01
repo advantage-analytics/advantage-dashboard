@@ -160,20 +160,14 @@ test("a completed delete releases nothing — the claim cascades with the row", 
   expect(h.released).toEqual([]);
 });
 
-test("a protected refusal is a 409 with the console sentence: no delete, no release", async () => {
-  const h = harness({ purgeThrows: "protected" });
-  const response = await h.run();
-  expect(response.status).toBe(409);
-  expect(response.body).toEqual({
-    error:
-      "Matches recorded, analyzed or hand-labeled through the admin console cannot be deleted here.",
-  });
-  expect(JSON.stringify(response.body)).not.toContain(LEAKY);
-  expect(h.effects).toEqual(["purge"]);
-  expect(h.released).toEqual([]);
+test("the route claims with the RPC that never refuses, not the console's guard", async () => {
+  const source = readFileSync("src/app/api/matches/[matchId]/route.ts", "utf8");
+  expect(source).toContain('"admin_claim_match_delete"');
+  expect(source).not.toContain("admin_claim_match_storage_purge");
+  expect(source).not.toContain("cannot be deleted here");
 });
 
-for (const kind of ["unavailable", "unexpected"] as const) {
+for (const kind of ["protected", "unavailable", "unexpected"] as const) {
   test(`an ${kind} purge failure is a 503 that forwards no message: no delete, no release`, async () => {
     const h = harness({ purgeThrows: kind });
     const response = await h.run();

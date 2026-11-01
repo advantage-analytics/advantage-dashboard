@@ -331,7 +331,9 @@ export async function getAdminUploadHistory(
                 : "Schedule outcome unavailable"
               : i.kind === "analysis_attachment"
                 ? "Analysis attachment"
-                : "Match";
+                : i.status === "succeeded" && !i.match_id
+                  ? "Deleted match"
+                  : "Match";
           return {
             itemId: i.item_id,
             kind: i.kind,

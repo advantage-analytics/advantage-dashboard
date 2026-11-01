@@ -23,8 +23,10 @@ export interface PurgeMatchStorageOptions {
   /**
    * The admin console's deletion guard: `admin_claim_match_storage_purge`
    * (codex/admin-uploads T20), a service-role RPC that claims the purge and
-   * answers false for a match the console recorded or analysed. Production
-   * asks the service-role client; the offline purge specs
+   * answers false for a match the console recorded or analysed. The match
+   * delete route replaces it with `admin_claim_match_delete`, which claims
+   * without refusing. Production asks the service-role client; the offline
+   * purge specs
    * (`tests/match-video-purge.spec.ts`, `tests/purge-match-results-keys.spec.ts`)
    * inject an allow-all fake, since they run with no service-role key and are
    * not about this guard — `tests/admin-match-delete-protection.spec.ts` is.

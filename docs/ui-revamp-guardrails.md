@@ -801,6 +801,17 @@ to put a testable seam.
 > The refusal sentence gained "hand-labeled"; the account-deletion copy of it
 > ends "Contact support to remove them." `purgeMatchStorage`'s ordering and
 > the three object keys it covers are unchanged.
+>
+> **Changed 2026-11-01: a user can delete any match they created.** The match
+> delete route no longer refuses a console or hand-labeled match. It claims
+> through `admin_claim_match_delete`, which never refuses, and the
+> `matches_archive_labels_and_console` trigger then acts on that claimed match:
+> analyst sessions are copied to `label_archive` (service-role read only, no
+> player names), and console attempts, reservations and schedule targets are
+> removed. Submission items stay as the console's history with their links
+> cleared. Account deletion and the console's abandon still use
+> `admin_claim_match_storage_purge` and refuse as described above, and a delete
+> with no claim still meets `ON DELETE RESTRICT`.
 
 > **A reviewed exception, added 2026-09-30: cancelling a queued analysis, from
 > `claude/matches-rosters-design-consistency-c31a1d`.** An athlete can now
