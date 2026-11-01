@@ -585,6 +585,34 @@ test.describe("completeWarnings", () => {
     ]);
   });
 
+  test("a stored ending that cannot be true of its winner is named, dismissed hint or not", () => {
+    const session = labelSessionFixture();
+    const lines = (fields: Partial<LabelSession["points"][number]>) =>
+      warningsOf(
+        {
+          ...session,
+          points: [...session.points, labelPoint("x", 9, { ...fields })],
+        },
+        EMPTY_MARKS,
+      ).filter((w) => w.startsWith("Point 10"));
+    expect(
+      lines({ ending: "winner", endedBy: "p2", winner: "p1", shots: [] }),
+    ).toEqual(["Point 10 reads a winner by player 2, but player 1 won it"]);
+    expect(
+      lines({
+        ending: "error",
+        endedBy: "p1",
+        winner: "p1",
+        dismissed: ["ending_stale"],
+        shots: [],
+      }),
+    ).toEqual(["Point 10 reads an error by player 1, but player 1 won it"]);
+    // An ending that fits its winner says nothing.
+    expect(
+      lines({ ending: "error", endedBy: "p2", winner: "p1", shots: [] }),
+    ).toEqual([]);
+  });
+
   test("the points left to check, each game left short or run over, and the entered score the sets disagree with", () => {
     expect(warningsOf(labelSessionFixture(), EMPTY_MARKS)).toEqual([
       "2 points of 3 not checked",
