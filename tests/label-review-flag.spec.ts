@@ -62,6 +62,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   first_serve_fault_alone: {},
   serve_in_landing_out: { shotId: "s1", landing: "out" },
   serve_after_serve_in: { shotId: "s1" },
+  placement_missing: { shotId: "s1", stroke: "serve" },
   pick_winner: {},
   net_hit_contradicts_height: {},
   phantom_strokes_dropped: { eventIds: [41], hitter: "p2" },
@@ -97,6 +98,9 @@ const forehand = (over: Partial<LabelShot> = {}): LabelShot => {
     hitter: "p1",
     stroke: "forehand",
     result: "in",
+    // Placed, so no fixture carries "Shot placement" unless a test asks.
+    contactX: 0,
+    contactY: 1,
     videoTime: 10,
     ...over,
   });
@@ -142,8 +146,8 @@ const codes = (flag: ReviewFlag | null, id: number) =>
 const CHECKED_AT = "2026-10-15T12:00:00.000Z";
 
 test.describe("the item table", () => {
-  test("six items in id order, each with its question and its codes", () => {
-    expect(REVIEW_ITEMS.map((item) => item.id)).toEqual([1, 2, 3, 4, 5, 6]);
+  test("seven items in id order, each with its question and its codes", () => {
+    expect(REVIEW_ITEMS.map((item) => item.id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     for (const item of REVIEW_ITEMS) {
       expect(item.question).toBe(REVIEW_ITEM_QUESTION[item.id]);
     }
@@ -174,6 +178,7 @@ test.describe("the item table", () => {
         "tiebreak_score_off_six_all",
         "segment_proposal_differs",
       ],
+      ["placement_missing"],
     ]);
   });
 

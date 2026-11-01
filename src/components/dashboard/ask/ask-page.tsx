@@ -145,9 +145,9 @@ export interface AskPageProps {
   /** What can be tagged. No matches here is the page's day zero. */
   tagOptions: AskTagOptions;
   /**
-   * Questions to ask with one click, built by the route from the same tag
-   * options (`askStarters()`); shown under an empty composer. None when
-   * omitted.
+   * Questions to ask with one click, built by the route from the analysed
+   * matches' options (`askStarters()`); shown under an empty composer. None
+   * when omitted.
    */
   starters?: AskStarter[];
   /** Null when the count could not be read. */

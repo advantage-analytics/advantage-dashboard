@@ -24,6 +24,7 @@ import {
   lastLandingMissing,
   missingPointAdded,
   pointEndedEarly,
+  placementMissing,
   pointRowMarkList,
   reviewChip,
   reviewFlag,
@@ -335,6 +336,7 @@ export function pointHints(
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
     serveInLandingOut(point, ghosts),
+    placementMissing(point, ghosts),
   ];
   const { hints: own, count } = pointRowMarkList(point, marks);
   // "Was the last ball in?" is a counted mark; its answer is offered (in the
@@ -384,6 +386,7 @@ function hintShotId(mark: LabelMark): string | undefined {
     case "second_serve_as_first":
     case "serve_after_serve_in":
     case "serve_in_landing_out":
+    case "placement_missing":
       return mark.params.shotId;
     default:
       return undefined;

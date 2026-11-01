@@ -5,11 +5,13 @@ import {
   endingStale,
   lastLandingMissing,
   lastShotUnresolved,
+  placementMissing,
   pointEndedEarly,
   secondServeAsFirst,
   serveAfterServeIn,
+  thinTracking,
 } from "@/lib/services/labels/marks-state";
-import type { LabelShot } from "@/lib/services/labels/session";
+import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
 import { POINT_1_SHOTS } from "./fixtures/label-session";
 
 /**
@@ -616,5 +618,225 @@ test.describe("serveAfterServeIn", () => {
         true,
       )?.params,
     ).toEqual({ shotId: "c" });
+  });
+});
+
+test.describe("placementMissing", () => {
+  const SERVE = { stroke: "first_serve", result: "in" } as const;
+  const shots = (...list: LabelShot[]) => ({
+    shots: list.map((shot, i) => ({ ...shot, videoTime: i + 1 })),
+  });
+  const asked = (shotId: string, stroke: "serve" | "return" | "shot") => ({
+    code: "placement_missing",
+    tier: "hint",
+    scope: "shot",
+    params: { shotId, stroke },
+  });
+
+  test("a serve in play with no landing, its return placed", () => {
+    expect(
+      placementMissing(
+        shots(stroke("s", null, SERVE), stroke("r", IN), stroke("n", IN)),
+        true,
+      ),
+    ).toEqual(asked("s", "serve"));
+  });
+
+  test("the serve first, then its return once the serve is placed", () => {
+    const point = shots(
+      stroke("s", null, SERVE),
+      stroke("r", null, { result: "in" }),
+      stroke("n", IN),
+    );
+    expect(placementMissing(point, true)?.params.shotId).toBe("s");
+    point.shots[0] = { ...point.shots[0], landingX: 0, landingY: 5 };
+    expect(placementMissing(point, true)).toEqual(asked("r", "return"));
+  });
+
+  test("the serve that counts, not the fault before it", () => {
+    expect(
+      placementMissing(
+        shots(
+          stroke("f", null, { stroke: "first_serve", result: "out" }),
+          stroke("s", IN, { stroke: "second_serve", result: "in" }),
+          stroke("r", IN),
+          stroke("n", IN),
+        ),
+        true,
+      ),
+    ).toBeNull();
+  });
+
+  test("a return with no contact is asked even as the last stroke", () => {
+    expect(
+      placementMissing(
+        shots(
+          stroke("s", IN, SERVE),
+          stroke("r", IN, { contactX: null, contactY: null, result: "out" }),
+        ),
+        true,
+      ),
+    ).toEqual(asked("r", "return"));
+  });
+
+  test("the last stroke's landing is its own hint, so not asked here", () => {
+    expect(placementMissing(shots(stroke("s", null, SERVE)), true)).toBeNull();
+    expect(
+      placementMissing(
+        shots(stroke("s", IN, SERVE), stroke("r", null, { result: "in" })),
+        true,
+      ),
+    ).toBeNull();
+  });
+
+  test("a return volleyed back never bounced", () => {
+    expect(
+      placementMissing(
+        shots(
+          stroke("s", IN, SERVE),
+          stroke("r", null, { result: "in" }),
+          stroke("v", IN, { stroke: "forehand_volley" }),
+        ),
+        true,
+      ),
+    ).toBeNull();
+  });
+
+  test("called unclear, or a point that was not played: nothing to ask", () => {
+    expect(
+      placementMissing(
+        shots(
+          stroke("s", null, { ...SERVE, unclear: ["landing_x"] }),
+          stroke("r", IN),
+          stroke("n", IN),
+        ),
+        true,
+      ),
+    ).toBeNull();
+    expect(
+      placementMissing(
+        {
+          ending: "not_a_point",
+          ...shots(stroke("s", null, SERVE), stroke("r", IN)),
+        },
+        true,
+      ),
+    ).toBeNull();
+  });
+
+  test("a faulted serve with no landing is not asked, a double fault included", () => {
+    expect(
+      placementMissing(
+        shots(
+          stroke("f", null, { stroke: "first_serve", result: "out" }),
+          stroke("d", null, { stroke: "second_serve", result: "net" }),
+        ),
+        true,
+      ),
+    ).toBeNull();
+  });
+
+  test("a contact is asked on any of them, a fault included", () => {
+    expect(
+      placementMissing(
+        shots(
+          stroke("f", null, {
+            stroke: "first_serve",
+            result: "out",
+            contactX: null,
+            contactY: null,
+          }),
+          stroke("s", IN, { stroke: "second_serve", result: "in" }),
+          stroke("r", IN),
+        ),
+        true,
+      ),
+    ).toEqual(asked("f", "shot"));
+  });
+
+  test("the first four strokes and the last two, not the middle", () => {
+    const rally = (gap: number) =>
+      shots(
+        stroke("0", IN, SERVE),
+        ...[1, 2, 3, 4, 5, 6, 7].map((i) =>
+          stroke(String(i), i === gap ? null : IN, { result: "in" }),
+        ),
+      );
+    expect(placementMissing(rally(3), true)).toEqual(asked("3", "shot"));
+    expect(placementMissing(rally(4), true)).toBeNull();
+    expect(placementMissing(rally(5), true)).toBeNull();
+    expect(placementMissing(rally(6), true)).toEqual(asked("6", "shot"));
+    // The last stroke's landing is "No landing on the last shot".
+    expect(placementMissing(rally(7), true)).toBeNull();
+  });
+
+  test("a short rally: every stroke is in the window, and the first gap is asked", () => {
+    expect(
+      placementMissing(
+        shots(
+          stroke("s", IN, SERVE),
+          stroke("r", IN),
+          stroke("t", null, { result: "in" }),
+          stroke("u", null, { result: "in" }),
+          stroke("n", IN),
+        ),
+        true,
+      ),
+    ).toEqual(asked("t", "shot"));
+  });
+
+  test("the hover says which stroke, and that the stats lose it", () => {
+    const names = { p1: "Ann", p2: "Bea" };
+    expect(markHover(asked("s", "serve") as never, names)).toContain(
+      "serve placement can’t count it",
+    );
+    expect(markHover(asked("r", "return") as never, names)).toContain(
+      "return placement can’t count it",
+    );
+    expect(markHover(asked("t", "shot") as never, names)).toContain(
+      "how the point opened or ended",
+    );
+  });
+});
+
+test.describe("thinTracking", () => {
+  const SEED = (landing: number | null) => ({
+    hitter: "p1" as const,
+    stroke: "first_serve" as const,
+    result: "in" as const,
+    spin: null,
+    contact_x: 0,
+    contact_y: 0,
+    landing_x: landing,
+    landing_y: landing,
+    video_time: 1,
+  });
+  const match = (total: number, missing: number): LabelPoint[] =>
+    Array.from({ length: total }, (_, i) => {
+      const seeded = i < missing ? null : 5;
+      return {
+        status: "unchanged",
+        ending: "winner",
+        // Placed since: the note still reads the seed.
+        shots: [
+          stroke("s", IN, {
+            stroke: "first_serve",
+            result: "in",
+            seed: SEED(seeded),
+          }),
+        ],
+      } as unknown as LabelPoint;
+    });
+
+  test("a fifth of the serves is thin, and placing them keeps the note", () => {
+    expect(thinTracking(match(100, 20), true)).toEqual({
+      missing: 20,
+      serves: 100,
+    });
+  });
+
+  test("an ordinary share, or too few serves to say, is nothing", () => {
+    expect(thinTracking(match(100, 19), true)).toBeNull();
+    expect(thinTracking(match(19, 10), true)).toBeNull();
   });
 });

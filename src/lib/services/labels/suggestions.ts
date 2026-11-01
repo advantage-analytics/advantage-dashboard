@@ -23,7 +23,11 @@ import {
   type LabelShot,
   type LiveOrderableShot,
 } from "./session";
-import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
+import {
+  effectiveShotResult,
+  inServeLandingMiss,
+  type ResultReadableShot,
+} from "./shot-derived";
 
 /**
  * The most live strokes a point's end can carry after the ball that missed:
@@ -34,6 +38,10 @@ import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
  * this bounds the labeller's rows — the two may part.
  */
 export const DEAD_BALL_TAIL = 2;
+
+/** Whether at most `DEAD_BALL_TAIL` live strokes follow `index`. */
+const inDeadBallTail = (live: readonly unknown[], index: number): boolean =>
+  live.length - 1 - index <= DEAD_BALL_TAIL;
 
 export type SuggestionState = "open" | "dismissed" | "done";
 
@@ -172,7 +180,7 @@ export function suggestionState(
       if (
         at !== -1 &&
         isMissedResult(effectiveShotResult(live[at])) &&
-        live.length - 1 - at <= DEAD_BALL_TAIL
+        inDeadBallTail(live, at)
       ) {
         return "done";
       }
@@ -197,6 +205,13 @@ export function suggestionState(
  * serves read out or net (`effectiveShotResult`) — or, with the point's
  * ending stored as a double fault, its second serve whatever the results
  * say. Null otherwise: no point to end early.
+ *
+ * A second serve stored in that only its coordinates read as a miss
+ * (`inServeLandingMiss`), with more than `DEAD_BALL_TAIL` strokes after it, is
+ * no double fault: the rally went on, so the bounce is the wrong one, and the
+ * console flags that landing (`serveInLandingOut`). Measured 2026-10-31 over
+ * the checked points: 0 double faults in 79 such serves with three or more
+ * strokes after, against 29 in 50 with one or two, which stay double faults.
  */
 export function doubleFaultAt(
   live: readonly ResultReadableShot[],
@@ -214,7 +229,9 @@ export function doubleFaultAt(
   if (ending === "double_fault") return second;
   const missed = (index: number) =>
     isMissedResult(effectiveShotResult(live[index]));
-  return missed(first) && missed(second) ? second : null;
+  const playedOn =
+    inServeLandingMiss(live[second]) !== null && !inDeadBallTail(live, second);
+  return missed(first) && missed(second) && !playedOn ? second : null;
 }
 
 /**
