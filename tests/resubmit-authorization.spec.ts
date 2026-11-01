@@ -2,6 +2,10 @@ import { expect, test } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
+import {
+  retryWouldRun,
+  type RetryCandidateRow,
+} from "@/lib/data/match-analysis";
 import type { SplitStepJobRequest } from "@/lib/services/splitstep/job-request";
 import {
   resubmitJob,
@@ -1045,5 +1049,82 @@ test.describe("a retry's ad scoring", () => {
       fixed_camera: true,
       ad_scoring: true,
     });
+  });
+});
+
+// ── What Edit match offers must match what a retry would do ───────────────
+
+test.describe("retryWouldRun", () => {
+  const row = (overrides: Row = {}) =>
+    ({
+      ...parentJob(),
+      error_code: null,
+      error_step: null,
+      created_by: VIEWER,
+      ...overrides,
+    }) as unknown as RetryCandidateRow;
+
+  test("a failed or cancelled job of the viewer's with its video can retry", () => {
+    expect(retryWouldRun([row()], VIEWER)).toBe(true);
+    expect(retryWouldRun([row({ status: "cancelled" })], VIEWER)).toBe(true);
+  });
+
+  test("no jobs, or another person's newest job, cannot", () => {
+    expect(retryWouldRun([], VIEWER)).toBe(false);
+    expect(retryWouldRun([row({ created_by: "admin" })], VIEWER)).toBe(false);
+    expect(retryWouldRun([row({ created_by: null })], VIEWER)).toBe(false);
+  });
+
+  test("any completed job on the match closes it, whoever made it", () => {
+    expect(
+      retryWouldRun(
+        [row(), row({ id: "older", status: "completed", created_by: "admin" })],
+        VIEWER,
+      ),
+    ).toBe(false);
+  });
+
+  test("a running or derivation_failed newest job cannot", () => {
+    for (const status of ["processing", "derivation_failed"]) {
+      expect(retryWouldRun([row({ status })], VIEWER)).toBe(false);
+    }
+  });
+
+  test("a rejected recording cannot", () => {
+    expect(
+      retryWouldRun([row({ error_category: "invalid_input" })], VIEWER),
+    ).toBe(false);
+  });
+
+  test("a job with no finished upload cannot", () => {
+    for (const missing of [
+      { video_object_key: null },
+      { start_time_seconds: null },
+      { end_time_seconds: null },
+    ]) {
+      expect(retryWouldRun([row(missing)], VIEWER)).toBe(false);
+    }
+  });
+
+  test("the attempt ceiling closes it, and cancelled rows spend none", () => {
+    const chain = (status: string) => [
+      row({ id: "c", resubmitted_from_job_id: "b" }),
+      row({ id: "b", status, resubmitted_from_job_id: "a" }),
+      row({ id: "a" }),
+    ];
+    expect(retryWouldRun(chain("failed"), VIEWER)).toBe(false);
+    expect(retryWouldRun(chain("cancelled"), VIEWER)).toBe(true);
+  });
+
+  test("every refusal it predicts, resubmitJob refuses too", async () => {
+    // The gate is only honest while the two agree.
+    const refused = await manual(
+      harness({ job: parentJob({ error_category: "invalid_input" }) }),
+    );
+    expect(refused).toMatchObject({ ok: false, reason: "input_rejected" });
+    const noVideo = await manual(
+      harness({ job: parentJob({ video_object_key: null }) }),
+    );
+    expect(noVideo).toMatchObject({ ok: false, reason: "video_unavailable" });
   });
 });

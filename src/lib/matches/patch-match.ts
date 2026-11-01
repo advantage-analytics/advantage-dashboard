@@ -26,9 +26,10 @@
  * - Format is editable only on a hand-scored match that isn't on a line. An
  *   analyzed match was scored point by point with its format; changing it here
  *   would not re-run anything, and the stats would quietly disagree. One
- *   exception: while an analysis has failed or been cancelled and none has
- *   completed, ad scoring alone can change, and the retry sends the new value
- *   (`retryAdScoring`). Nothing was built under the old one.
+ *   exception: while a retry of a failed or cancelled analysis could run and
+ *   none has completed (`retryWouldRun`), ad scoring alone can change, and the
+ *   retry sends the new value (`retryAdScoring`). Nothing was built under the
+ *   old one.
  */
 
 import {
@@ -123,7 +124,7 @@ export interface StoredMatchForPatch {
   linked: boolean;
   /** Has a processing job (video) or came from a file — not hand-scored. */
   analyzed: boolean;
-  /** Its newest analysis failed or was cancelled, and none has completed. */
+  /** A retry of its newest analysis could run (`retryWouldRun`). */
   awaitingRetry?: boolean;
   /** Filed under a program — a team match, whose player comes from the roster. */
   teamMatch?: boolean;

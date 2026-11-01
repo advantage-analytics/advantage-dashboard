@@ -693,8 +693,9 @@ to put a testable seam.
 > session starts from it. `retryAdScoring` (`resubmit-job.ts`) sends the
 > correction, then the match format, then the failed attempt's value; a match on
 > a scheduled line keeps the attempt's value ahead of its format. Edit match can
-> change ad scoring alone while the newest analysis failed or was cancelled and
-> none has completed (`awaitingRetry`, `patch-match.ts`). Top player and fixed
+> change ad scoring alone while a retry of the newest analysis could run and
+> none has completed (`retryWouldRun`, read with the service role, since a viewer
+> sees only their own jobs). Top player and fixed
 > camera keep their order. `processing_jobs.ad_scoring` still records what each
 > attempt sent. A rebuild still refuses to replace hand-labelled rows unless
 > forced.
