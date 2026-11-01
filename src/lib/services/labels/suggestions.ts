@@ -51,10 +51,11 @@ export type SuggestionState = "open" | "dismissed" | "done";
  * point ended on, `pointEndedKey`) — never a draft stroke's temporary id,
  * which the stroke loses once its insert lands — and any other hint the well
  * draws as a question, by its code (`hintDismissKey`): "Was the last ball
- * in?", "Second serve?", "Different ending?".
+ * in?", "Second serve?", "Different ending?". "Shot placement" is by its stroke
+ * (`placementKey`): a point can have several to answer.
  */
 export const SUGGESTION_KEY_RE =
-  /^(missing_shot:\d+|missing_point|point_ended:(?!pending-)[0-9A-Za-z-]+|hint:[a-z_]+)$/;
+  /^(missing_shot:\d+|missing_point|(?:point_ended|placement):(?!pending-)[0-9A-Za-z-]+|hint:[a-z_]+)$/;
 
 /** A hint the labeller answered "no" to, as `dismissed` stores it. */
 export function hintDismissKey(code: string): string {
@@ -64,6 +65,11 @@ export function hintDismissKey(code: string): string {
 /** "Point ended here" on the stroke `shotId`, as `dismissed` stores it. */
 export function pointEndedKey(shotId: string): string {
   return `point_ended:${shotId}`;
+}
+
+/** "Shot placement" on the stroke `shotId`, as `dismissed` stores it. */
+export function placementKey(shotId: string): string {
+  return `placement:${shotId}`;
 }
 
 export function isSuggestionKey(value: unknown): value is string {
@@ -250,7 +256,10 @@ export function strokeDismissals(
   const keys = new Set<string>();
   for (const shot of shots) {
     if (shot.eventId != null) keys.add(`${MISSING_SHOT_PREFIX}${shot.eventId}`);
-    if (shot.id) keys.add(pointEndedKey(shot.id));
+    if (shot.id) {
+      keys.add(pointEndedKey(shot.id));
+      keys.add(placementKey(shot.id));
+    }
   }
   return dismissed.filter((key) => keys.has(key));
 }
