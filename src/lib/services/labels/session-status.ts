@@ -15,6 +15,7 @@
  */
 
 import {
+  endingContradictsWinner,
   isMarkableError,
   publishEnding,
   unmarkableErrors,
@@ -193,6 +194,10 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
     } else if (resolved.kind === "unresolved") {
       warnings.push(
         `${at} has no ending its strokes can settle${PUBLISHED_PAST_TAILS.noEnding}`,
+      );
+    } else if (point.winner !== null && endingContradictsWinner(point)) {
+      warnings.push(
+        `${at} reads ${ownedEndingPhrase(resolved.ending, resolved.endedBy, point.winner, names)}, but ${names[point.winner]} won it`,
       );
     }
   }
