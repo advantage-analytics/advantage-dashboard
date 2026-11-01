@@ -10,6 +10,7 @@ import {
   SKIP_DEAD_STORAGE_KEY,
 } from "@/components/dashboard/matches/match-detail/film/film-room-prefs";
 import { MatchReportProvider } from "@/components/dashboard/matches/match-detail/match-report-context";
+import { MatchReportScoreboard } from "@/components/dashboard/matches/match-detail/report-scoreboard";
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import type { Match } from "@/lib/data/types";
@@ -260,6 +261,8 @@ function FilmTabSlot({ video }: { video: MatchVideo }) {
  * meta is the minimum a provider takes; nothing here asserts on the rest.
  */
 const READ_ONLY = new URLSearchParams(location.search).get("readOnly") === "1";
+/** `?rail=1`, on top of `?readOnly=1&tab=film`: the rail scoreboard beside it. */
+const RAIL = new URLSearchParams(location.search).get("rail") === "1";
 /**
  * Where the read-only mount renews its credential. The spec's server answers
  * it with a fresh credential, as it does the match route — and the spec names
@@ -331,6 +334,7 @@ function ProviderSlot({
       statsResult={null}
       points={points}
     >
+      {RAIL && <MatchReportScoreboard />}
       <FilmTabSlot video={video} />
     </MatchDataProvider>
   );
