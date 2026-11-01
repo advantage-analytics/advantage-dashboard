@@ -47,6 +47,11 @@ test.describe("resolveAdScoring", () => {
     expect(resolveAdScoring(undefined, { ad_scoring: false })).toBe(false);
   });
 
+  test("a labeller's correction beats the job and the match format", () => {
+    expect(resolveAdScoring(false, { ad_scoring: false }, true)).toBe(true);
+    expect(resolveAdScoring(true, { ad_scoring: true }, false)).toBe(false);
+  });
+
   test("with neither, the default stays ad scoring", () => {
     expect(resolveAdScoring(null, null)).toBe(true);
     expect(resolveAdScoring(null, {})).toBe(true);
@@ -61,6 +66,7 @@ function stubClient(rows: {
   job: Record<string, unknown>;
   match: Record<string, unknown>;
   results: unknown;
+  corrected?: boolean | { error: string };
 }) {
   const selects: Record<string, string> = {};
   const client = {
@@ -68,8 +74,28 @@ function stubClient(rows: {
       return {
         select(columns: string) {
           selects[table] = columns;
+          const correction = () => {
+            if (typeof rows.corrected === "object") {
+              return { data: null, error: { message: rows.corrected.error } };
+            }
+            return {
+              data:
+                rows.corrected === undefined
+                  ? null
+                  : { ad_scoring: rows.corrected },
+              error: null,
+            };
+          };
           return {
             eq: () => ({
+              // The corrected-scoring read.
+              eq: () => ({
+                not: () => ({
+                  order: () => ({
+                    limit: () => ({ maybeSingle: async () => correction() }),
+                  }),
+                }),
+              }),
               single: async () => ({
                 data: table === "processing_jobs" ? rows.job : rows.match,
                 error: null,
@@ -164,6 +190,44 @@ test.describe("buildTranscriptForJob", () => {
     });
     expect(selects.processing_jobs.split(/,\s*/)).toContain("ad_scoring");
     expect(pressure(transcript)).toEqual(pressure(foldedUnder(false)));
+  });
+
+  test("a labeller's correction beats the job, so a rebuild counts it", async () => {
+    const { selects, supabase } = stubClient({
+      job: { ...JOB, ad_scoring: false },
+      match: { ...MATCH, format: { ad_scoring: false, best_of: 3 } },
+      results: clean,
+      corrected: true,
+    });
+    const { transcript, correctedAdScoring } = await buildTranscriptForJob({
+      supabase,
+      jobId: "job",
+    });
+    expect(selects.label_sessions).toBe("ad_scoring");
+    expect(correctedAdScoring).toBe(true);
+    expect(pressure(transcript)).toEqual(pressure(foldedUnder(true)));
+  });
+
+  test("a correction leaves every point where the fold put it", async () => {
+    // Only what is counted at 40-40 moves, so a flip never reshapes a match.
+    const shape = (t: Transcript) => [
+      t.points.map((p) => [p.rally_id, p.set_number, p.game_number]),
+      t.reconciliation.settledWinners,
+    ];
+    expect(shape(foldedUnder(true))).toEqual(shape(foldedUnder(false)));
+  });
+
+  test("a correction that cannot be read fails the build, rather than count the old rule", async () => {
+    const { supabase } = stubClient({
+      job: { ...JOB, ad_scoring: false },
+      match: { ...MATCH, format: { ad_scoring: false, best_of: 3 } },
+      results: clean,
+      corrected: { error: "boom" },
+    });
+    const out = await buildTranscriptForJob({ supabase, jobId: "job" });
+    expect(out.transcript).toBeNull();
+    expect(out.failure).toBe("error");
+    expect(out.reason).toContain("boom");
   });
 
   test("the fixture's pressure flags depend on the rule", () => {
@@ -266,6 +330,10 @@ function persistClient(counts: { imported: number; labelled: number }) {
           return builder;
         },
         eq: () => builder,
+        not: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        maybeSingle: async () => ({ data: null, error: null }),
         contains: (_column: string, value: unknown) => {
           call.contains = value;
           return builder;

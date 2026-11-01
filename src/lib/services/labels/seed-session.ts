@@ -58,12 +58,11 @@ export async function seedLabelSessionForJob(params: {
     if ("error" in open) return open;
     if (open.sessionId) return { sessionId: open.sessionId, existing: true };
 
-    const { transcript, reason, job, raw, match } = await buildTranscriptForJob(
-      {
+    const { transcript, reason, job, raw, match, correctedAdScoring } =
+      await buildTranscriptForJob({
         supabase,
         jobId,
-      },
-    );
+      });
     if (!job) return { error: reason ?? "Job not found." };
     if (!transcript || !transcript.ok) {
       return {
@@ -93,6 +92,9 @@ export async function seedLabelSessionForJob(params: {
         labeller: labellerId,
         status: "labelling",
         started_at: new Date().toISOString(),
+        // A correction made on an earlier session of the match stands; without
+        // one the column stays null, and the job's value stands in.
+        ad_scoring: correctedAdScoring ?? null,
       })
       .select("id")
       .single<{ id: string }>();

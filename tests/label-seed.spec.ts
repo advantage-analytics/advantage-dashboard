@@ -655,6 +655,7 @@ function fakeClient({
   raceSessionId = null as string | null,
   failShots = false,
   match = MATCH as typeof MATCH,
+  corrected = null as boolean | null,
 } = {}) {
   const writes: Write[] = [];
   const reads: string[] = [];
@@ -675,6 +676,12 @@ function fakeClient({
           reads.push(table);
           if (table === "processing_jobs") return { data: JOB, error: null };
           if (table === "matches") return { data: match, error: null };
+          if (table === "label_sessions" && state.filters.match_id) {
+            return {
+              data: corrected === null ? null : { ad_scoring: corrected },
+              error: null,
+            };
+          }
           if (table === "label_sessions") {
             sessionLookups += 1;
             const id = sessionLookups === 1 ? openSessionId : raceSessionId;
@@ -727,6 +734,9 @@ function fakeClient({
           state.filters[column] = value;
           return builder;
         },
+        not: () => builder,
+        order: () => builder,
+        limit: () => builder,
         single: async () => answer(),
         maybeSingle: async () => answer(),
         then: (
@@ -765,6 +775,22 @@ const seedWith = (fake: ReturnType<typeof fakeClient>) =>
   });
 
 test.describe("seedLabelSessionForJob", () => {
+  test("a new session starts from the match's corrected scoring", async () => {
+    const fake = fakeClient({ corrected: true });
+    await seedWith(fake);
+    const session = fake.writes.find((w) => w.table === "label_sessions")!
+      .rows as Record<string, unknown>;
+    expect(session.ad_scoring).toBe(true);
+  });
+
+  test("with no correction the column stays null, so the job's value stands in", async () => {
+    const fake = fakeClient();
+    await seedWith(fake);
+    const session = fake.writes.find((w) => w.table === "label_sessions")!
+      .rows as Record<string, unknown>;
+    expect(session.ad_scoring).toBeNull();
+  });
+
   test("writes a session, its points and its shots — and nothing outside label_*", async () => {
     const fake = fakeClient();
     const result = await seedWith(fake);

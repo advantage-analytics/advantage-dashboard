@@ -231,7 +231,7 @@ export function flagPoint(params: {
   winner: string | null;
   previousInGame: SplitStepRally | null;
   resultType: string | null;
-  /** processing_jobs.ad_scoring. Defaults to ad, as buildTranscript does. */
+  /** `resolveAdScoring`. Defaults to ad, as buildTranscript does. */
   adScoring?: boolean;
   /** Our own line calls; without them only the vendor's call is consulted. */
   lineCalls?: LineCalls;

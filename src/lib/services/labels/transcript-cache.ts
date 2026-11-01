@@ -85,8 +85,8 @@ export function stableStringify(value: unknown): string {
 /**
  * The fingerprint of the inputs the build folds under, beside the files: the
  * match's entered score and format (`best_of`, `ad_scoring`, `play_on_lets`,
- * …), the job's own `ad_scoring`, which beats the format's
- * (`resolveAdScoring`), the trim offset every stroke time is shifted by, who
+ * …), the job's own `ad_scoring`, which beats the format's, or a labeller's
+ * correction, which beats both (`resolveAdScoring`), the trim offset every stroke time is shifted by, who
  * started at the top (job, else match), and the name pairs `reconcile` reads
  * player1 from (`playerNamesFor`). A correction to any of them after the row
  * was written must miss, or the console keeps the old hitters and times.
@@ -119,6 +119,7 @@ export function transcriptCacheKey(
   job: StoredJobRow,
   match: MatchRow,
   derivationVersion: string = DERIVATION_VERSION,
+  correctedAdScoring: boolean | null = null,
 ): TranscriptCacheKey {
   return {
     job_id: job.id,
@@ -128,7 +129,7 @@ export function transcriptCacheKey(
     fingerprint: transcriptFingerprint({
       score: match.score,
       format: match.format,
-      ad_scoring: job.ad_scoring,
+      ad_scoring: correctedAdScoring ?? job.ad_scoring,
       start_time_seconds: job.start_time_seconds,
       initial_top_player_is_player1:
         job.initial_top_player_is_player1 ??
@@ -270,7 +271,12 @@ export async function cachedTranscriptForJob(
 ): Promise<CachedTranscript> {
   const rows = await readJobAndMatch(db, jobId);
   if (!rows.ok) throw new Error(rows.failure.reason);
-  const key = transcriptCacheKey(rows.job, rows.match);
+  const key = transcriptCacheKey(
+    rows.job,
+    rows.match,
+    DERIVATION_VERSION,
+    rows.correctedAdScoring,
+  );
 
   const hit = await readTranscriptCache(db, key);
   if (hit) return hit;
@@ -278,7 +284,11 @@ export async function cachedTranscriptForJob(
   const { transcript, rallies, reason } = await buildTranscriptForJob({
     supabase: db,
     jobId,
-    rows: { job: rows.job, match: rows.match },
+    rows: {
+      job: rows.job,
+      match: rows.match,
+      correctedAdScoring: rows.correctedAdScoring,
+    },
   });
   if (!transcript || !transcript.ok || !rallies) {
     throw new Error(reason ?? "transcript could not be built");

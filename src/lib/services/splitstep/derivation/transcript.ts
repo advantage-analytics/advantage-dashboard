@@ -452,8 +452,8 @@ export interface BuildOptions {
    */
   playerNames?: readonly PlayerNames[] | null;
   /**
-   * processing_jobs.ad_scoring, falling back to matches.format.ad_scoring (see
-   * resolveAdScoring). Decides whether 40-40 is a deciding point.
+   * A labeller's correction, else processing_jobs.ad_scoring, else
+   * matches.format.ad_scoring (see resolveAdScoring). Decides whether 40-40 is a deciding point.
    */
   adScoring?: boolean;
   /** matches.format.best_of. Decides when a set point is also a match point. */

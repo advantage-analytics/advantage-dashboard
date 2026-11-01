@@ -29,6 +29,7 @@ import {
 } from "./derivation";
 import { RESULTS_BUCKET } from "./config";
 import { HAND_LABELLED_FLAG } from "./derivation/flags";
+import { readCorrectedAdScoring } from "@/lib/services/labels/ad-scoring";
 
 const LOG = "[splitstep:persist]";
 
@@ -141,12 +142,18 @@ export interface MatchRow {
  * match's rule then labels 40-40 by rules the vendor never scored under. The
  * match record is the fallback for a job that predates the column, then ad.
  * Same order as `initialTopIsPlayer1` below and the submit/resubmit paths.
+ *
+ * A labeller's correction (`readCorrectedAdScoring`) beats both: a person has
+ * said how the match was really played. It does not change which rally the
+ * fold puts in which game, only what the pressure flags, the point flags and
+ * the segmentation count at 40-40.
  */
 export function resolveAdScoring(
   jobAdScoring: boolean | null | undefined,
   matchFormat: { ad_scoring?: boolean } | null,
+  correctedAdScoring: boolean | null = null,
 ): boolean {
-  return jobAdScoring ?? matchFormat?.ad_scoring ?? true;
+  return correctedAdScoring ?? jobAdScoring ?? matchFormat?.ad_scoring ?? true;
 }
 
 /**
@@ -158,7 +165,13 @@ export async function readJobAndMatch(
   supabase: ReturnType<typeof createAdminClient>,
   jobId: string,
 ): Promise<
-  | { ok: true; job: StoredJobRow; match: MatchRow }
+  | {
+      ok: true;
+      job: StoredJobRow;
+      match: MatchRow;
+      /** `readCorrectedAdScoring`; null when no labeller has set it. */
+      correctedAdScoring: boolean | null;
+    }
   | {
       ok: false;
       failure: {
@@ -219,7 +232,25 @@ export async function readJobAndMatch(
       },
     };
   }
-  return { ok: true, job: job as StoredJobRow, match };
+
+  const corrected = await readCorrectedAdScoring(supabase, job.match_id);
+  if (corrected.error) {
+    return {
+      ok: false,
+      failure: {
+        transcript: null,
+        reason: `could not read the corrected scoring: ${corrected.error.message}`,
+        failure: "error",
+        job,
+      },
+    };
+  }
+  return {
+    ok: true,
+    job: job as StoredJobRow,
+    match,
+    correctedAdScoring: corrected.data,
+  };
 }
 
 /**
@@ -233,10 +264,14 @@ export async function buildTranscriptForJob(params: {
   jobId: string;
   /**
    * The job and match rows, when the caller already read them (the labels
-   * console's transcript cache reads both to key its lookup). Skips the two
+   * console's transcript cache reads them to key its lookup). Skips the
    * SELECTs; the Storage downloads still run.
    */
-  rows?: { job: StoredJobRow; match: MatchRow };
+  rows?: {
+    job: StoredJobRow;
+    match: MatchRow;
+    correctedAdScoring: boolean | null;
+  };
 }): Promise<{
   transcript: Transcript | null;
   reason: string | null;
@@ -263,6 +298,8 @@ export async function buildTranscriptForJob(params: {
    * to type a deciding-set match tiebreak (seed.ts), from the one read.
    */
   match?: MatchRow;
+  /** What the build counted over the job's value; a new session starts from it. */
+  correctedAdScoring?: boolean | null;
 }> {
   const { supabase, jobId } = params;
 
@@ -270,7 +307,7 @@ export async function buildTranscriptForJob(params: {
     ? { ok: true as const, ...params.rows }
     : await readJobAndMatch(supabase, jobId);
   if (!rows.ok) return rows.failure;
-  const { job, match } = rows;
+  const { job, match, correctedAdScoring } = rows;
 
   const { data: blob, error: readError } = await supabase.storage
     .from(RESULTS_BUCKET)
@@ -304,7 +341,11 @@ export async function buildTranscriptForJob(params: {
     // Under no-ad, 40-40 is a deciding point and BOTH players hold game point,
     // so the wrong rule drops (or invents) the most pressured point in a game.
     // See resolveAdScoring for why the job's value beats the match record's.
-    adScoring: resolveAdScoring(job.ad_scoring, match.format),
+    adScoring: resolveAdScoring(
+      job.ad_scoring,
+      match.format,
+      correctedAdScoring,
+    ),
     bestOf: match.format?.best_of ?? 3,
     lineCalls: await lineCallsForJob({
       supabase,
@@ -322,6 +363,7 @@ export async function buildTranscriptForJob(params: {
     raw,
     rallies: analysis.rallies,
     match,
+    correctedAdScoring,
   };
 }
 
