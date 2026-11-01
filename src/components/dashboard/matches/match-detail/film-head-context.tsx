@@ -6,8 +6,8 @@ import type { BoardColumns } from "@/components/dashboard/matches/match-detail/f
 
 /**
  * Where the Video tab's film head is sitting, for the rail scoreboard (H1 ·
- * B2): the point under the head, the head's own time in film seconds, and
- * which score columns the match really carries.
+ * B2): the point under the head, the head's own time in film seconds, which
+ * score columns the match really carries, and whether the film is running.
  *
  * Its own context rather than a field on `MatchReportContext`: the head moves
  * several times a second, and every rail part reads the report context. Here
@@ -18,6 +18,8 @@ export interface FilmHead {
   point: MatchPoint;
   time: number;
   columns: BoardColumns;
+  /** The film is running, as the fullscreen room's own head reports it. */
+  playing: boolean;
 }
 
 const FilmHeadContext = createContext<FilmHead | null>(null);

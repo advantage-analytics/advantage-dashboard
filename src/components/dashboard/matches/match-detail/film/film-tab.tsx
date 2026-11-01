@@ -461,6 +461,23 @@ function FilmRoom({
     retry,
   } = playback;
 
+  // Whether the film is running, for the rail scoreboard's word. Whichever
+  // player is being watched reports it: the report player goes silent while
+  // the room is up (`background`). A refused play fires no `pause`, so it has
+  // to say so too; an exit mid-hand-off is handled in `exitRoom`.
+  const [filmPlaying, setFilmPlaying] = useState(false);
+  const handlePlaybackPlaying = useCallback(
+    (playing: boolean) => {
+      setFilmPlaying(playing);
+      reportPlaying(playing);
+    },
+    [reportPlaying],
+  );
+  const handlePlayRejected = useCallback(() => {
+    setFilmPlaying(false);
+    reportPlayRejected();
+  }, [reportPlayRejected]);
+
   /**
    * The expiry notice (T10) — the server's answer, read off the attachment
    * as rendered. Only an attachment has a retention clock; the Advantage
@@ -688,8 +705,15 @@ function FilmRoom({
   // rewrites all three from one answer.
   const filmHead = useMemo(
     () =>
-      activePoint ? { point: activePoint, time: currentTime, columns } : null,
-    [activePoint, currentTime, columns],
+      activePoint
+        ? {
+            point: activePoint,
+            time: currentTime,
+            columns,
+            playing: filmPlaying,
+          }
+        : null,
+    [activePoint, currentTime, columns, filmPlaying],
   );
   usePublishFilmHead(filmHead);
   // The card always shows the PLAYING point (T22 reverts T20's hold): like the
@@ -1043,6 +1067,10 @@ function FilmRoom({
     playerRef.current?.seekTo(time);
   }, []);
   const exitRoom = useCallback(() => {
+    // An ordinary exit has already reported its pause. One mid-hand-off has
+    // not: the film was the report player's, stopped while it was silent
+    // (`background`), and the room's own element never ran. So ask that player.
+    setFilmPlaying(playerRef.current?.snapshot().playing ?? false);
     setRoom(null);
     writeRoomParam(false);
   }, [writeRoomParam]);
@@ -1120,9 +1148,9 @@ function FilmRoom({
             onSkipDeadToggled={markSkipDeadAnswered}
             onTimeChange={setCurrentTime}
             onPlaybackTime={reportTime}
-            onPlaybackPlaying={reportPlaying}
+            onPlaybackPlaying={handlePlaybackPlaying}
             onLoadFailure={reportLoadFailure}
-            onPlayRejected={reportPlayRejected}
+            onPlayRejected={handlePlayRejected}
             onFirstPlay={recordFirstPlay}
             onRetry={retry}
             onToggleSaved={toggleSavedActiveOrNone}
@@ -1191,9 +1219,9 @@ function FilmRoom({
             problem={problem}
             passthrough={playback.passthrough}
             onPlaybackTime={reportTime}
-            onPlaybackPlaying={reportPlaying}
+            onPlaybackPlaying={handlePlaybackPlaying}
             onLoadFailure={reportLoadFailure}
-            onPlayRejected={reportPlayRejected}
+            onPlayRejected={handlePlayRejected}
             onFirstPlay={recordFirstPlay}
             onRetry={retry}
             clock={clock}

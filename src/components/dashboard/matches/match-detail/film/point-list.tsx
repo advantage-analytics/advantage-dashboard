@@ -611,10 +611,11 @@ export const PointList = memo(function PointList({
             <div className="relative flex min-h-0 flex-1 flex-col">
               {/* The one scroller in the card: the header stays put while the rows
             scroll, the way the room's panel scrolls its list under a fixed
-            header. */}
+            header. It makes room under its last row for a pill no scroll can
+            clear (`FollowPill`). */}
               <div
                 ref={listRef}
-                className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto [&:has(+[data-follow-pill-room])]:pb-12"
               >
                 {groups.map((group) => (
                   <div key={group.key} className="flex flex-col">
@@ -781,6 +782,14 @@ function nextPillPlace(prev: PillPlace, row: DOMRect, box: DOMRect): PillPlace {
  * the lit row is fully inside the scroller's box there is nothing to return
  * to, so the pill is unmounted.
  *
+ * In-cut, the pill floats over rows on their way past, and scrolling to the
+ * lit row sends it away. Out of the cut nothing does: on a one-row list, or at
+ * the end of a long one, it would sit on the last row's text for as long as
+ * the film runs. So that pill carries `data-follow-pill-room`, and the scroller
+ * reserves 48px under its rows while it is mounted: the pill's 28px, its 12px
+ * inset and 8px clear of the row. Off the same mounted pill rather than the
+ * affordance, so the room outlasts its exit fade.
+ *
  * Unmounted when hidden — never `opacity-0` in the tab order. It arrives on
  * `film-follow-pill-in` (150ms, a 4px rise away from its edge — the
  * `--film-pill-rise` sign; the rise drops under reduced motion, the fade
@@ -891,6 +900,7 @@ function FollowPill({
       type="button"
       data-film-chrome
       data-edge={edge}
+      data-follow-pill-room={shown.inCut ? undefined : ""}
       aria-label={shown.ariaLabel}
       onClick={onFollow}
       // Leaving, it is already on its way out: not a target, not a stop.

@@ -2579,6 +2579,143 @@ async function shellHoldAThenPlayBAbove(page: Page) {
   await expect.poll(() => shellLitPlace(page)).toBe("above");
 }
 
+/** Whether two boxes share any pixels. */
+function overlaps(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+): boolean {
+  return (
+    a.x < b.x + b.width &&
+    b.x < a.x + a.width &&
+    a.y < b.y + b.height &&
+    b.y < a.y + a.height
+  );
+}
+
+test("T23: on a one-row cut the out-of-cut pill takes its own room instead of sitting on the row", async ({
+  page,
+}) => {
+  await openShell(page, "shell-pill-short");
+  const list = page.locator(SHELL_LIST);
+  const menu = page.getByRole("menu", { name: "Point filters" });
+  await page.click(SHELL_ROW("a"));
+  await expect.poll(() => playingRow(page)).toBe("a");
+  await list.getByRole("button", { name: "All points" }).click();
+  await menu.getByText("Saved only").click();
+  await expect(list.locator('[data-point-id="b"]')).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  // Nothing to return to yet, so the list keeps its height: no room reserved.
+  const scroller = page.locator(SHELL_SCROLLER);
+  await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+  const before = await scroller.boundingBox();
+
+  await seekTo(page, REPORT, 0.3);
+  const pill = page.locator(SHELL_PILL);
+  await expect(pill).toHaveText("Now playing · Not in this cut");
+  await page.waitForFunction(
+    (sel) =>
+      document
+        .querySelector(sel)
+        ?.getAnimations()
+        .every((a) => a.playState === "finished"),
+    SHELL_PILL,
+  );
+  const row = await list.locator('[data-point-id="a"]').boundingBox();
+  const box = await pill.boundingBox();
+  expect(overlaps(row!, box!)).toBe(false);
+  expect((await scroller.boundingBox())!.height).toBe(before!.height + 48);
+
+  // Following again gives the room back.
+  await pill.click();
+  await expect(pill).toHaveCount(0);
+  await expect
+    .poll(async () => (await scroller.boundingBox())!.height)
+    .toBe(before!.height);
+});
+
+test("T23: an in-cut pill floats and reserves nothing", async ({ page }) => {
+  await openShell(page, "shell-pill-floats", {
+    pad: "12",
+    ttl: String(3600_000),
+  });
+  await boundShellList(page, 240);
+  const before = await page.evaluate(
+    (sel) => document.querySelector(sel)!.scrollHeight,
+    SHELL_SCROLLER,
+  );
+  await shellHoldAThenPlayBAbove(page);
+  await expect(page.locator(SHELL_PILL)).toHaveCount(1);
+  expect(
+    await page.evaluate(
+      (sel) => document.querySelector(sel)!.scrollHeight,
+      SHELL_SCROLLER,
+    ),
+  ).toBe(before);
+});
+
+test("the rail scoreboard's word follows the film, in the report and through the room", async ({
+  page,
+}) => {
+  await open(page, "rail-word", {
+    readOnly: "1",
+    rail: "1",
+    tab: "film",
+    ttl: String(3600_000),
+  });
+  const word = page.locator('[data-tour="scoreboard"] .text-micro').first();
+  const setPlaying = (selector: string, playing: boolean) =>
+    page.evaluate(
+      async ([sel, on]) => {
+        const el = document.querySelector<HTMLVideoElement>(sel as string)!;
+        if (on) await el.play();
+        else el.pause();
+      },
+      [selector, playing] as const,
+    );
+
+  // A point under a head nobody has started: the rail's live state, paused.
+  await seekTo(page, REPORT, 0.3);
+  await expect(word).toHaveText("Paused");
+  await setPlaying(REPORT, true);
+  await expect(word).toHaveText("Playing");
+  await setPlaying(REPORT, false);
+  await expect(word).toHaveText("Paused");
+
+  // Into the room and running, then out: the report player does not resume.
+  const enterRoom = page.getByRole("button", {
+    name: "Open the film room fullscreen",
+  });
+  await enterRoom.click();
+  await page.waitForSelector(ROOM);
+  await setPlaying(ROOM, true);
+  await expect(word).toHaveText("Playing");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(ROOM)).toHaveCount(0);
+  await expect(word).toHaveText("Paused");
+
+  // Out again before the room's element has taken the film over: no element
+  // reports this pause, since the report player was stopped while silent.
+  await seekTo(page, REPORT, 0.3);
+  await setPlaying(REPORT, true);
+  await expect(word).toHaveText("Playing");
+  // The file never reaches the room's element, so the hand-off stays open.
+  await page.route(/\.mp4/, () => {});
+  await enterRoom.click();
+  await page.waitForSelector(ROOM);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(ROOM)).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (sel) => document.querySelector<HTMLVideoElement>(sel)!.paused,
+        REPORT,
+      ),
+    )
+    .toBe(true);
+  await expect(word).toHaveText("Paused");
+});
+
 test("T23: the shell list's pill names the playing point with the drawer's words, pinned top over a floating shadow", async ({
   page,
 }) => {
