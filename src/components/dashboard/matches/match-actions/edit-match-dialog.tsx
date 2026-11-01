@@ -190,7 +190,7 @@ interface EventContext {
 interface Loaded {
   match: RawMatch;
   analysis: { status: AnalysisStatus } | null;
-  /** A failed or cancelled analysis, none completed: its scoring can change. */
+  /** A retry of the analysis could run, so its scoring can change. */
   awaitingRetry: boolean;
   event: EventContext | null;
   canAttach: boolean;
