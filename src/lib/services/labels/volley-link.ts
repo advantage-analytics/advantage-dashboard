@@ -91,8 +91,8 @@ const samePlace = (a: Place, b: Place) => a.x === b.x && a.y === b.y;
  * own ball: the same hitter twice means a stroke is missing between them.
  */
 function linked(
-  shot: Pick<LabelShot, "stroke" | "result" | "hitter">,
-  next: Pick<LabelShot, "stroke" | "hitter">,
+  shot: Pick<LinkShot, "stroke" | "result" | "hitter">,
+  next: Pick<NextShot, "stroke" | "hitter">,
 ): boolean {
   return (
     isAirStroke(next.stroke) &&

@@ -51,6 +51,7 @@ import {
 import {
   landingGapMetres,
   landingLink,
+  landingTakesContact,
   withFilledLanding,
 } from "@/lib/services/labels/volley-link";
 import type { LabelShotResult } from "@/lib/services/labels/seed";
@@ -610,7 +611,7 @@ export function BlackShotRow({
   const resultMenu = shotResultMenu(
     shot,
     edit.playOnLets,
-    link === "filled" || link === "agrees" ? linkedNumber : null,
+    landingTakesContact(shot, next, false) ? linkedNumber : null,
   );
   // An empty result the next stroke settles: it played the ball, so In.
   const result = playedOnResult(shot, next, point?.ending);
