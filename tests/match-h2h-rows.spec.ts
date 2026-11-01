@@ -17,6 +17,7 @@ import {
   h2hGroups,
   hasReadout,
   rowLeader,
+  rowCutLabel,
   rowReadout,
   tallySide,
   withErrorSplit,
@@ -641,6 +642,32 @@ test.describe("net points", () => {
     expect(netPointsWonPct(0, 0)).toBeNull();
     expect(netPointsWonPct(6, 10)).toBe(60);
     expect(netPointsWonPct(0, 4)).toBe(0);
+  });
+});
+
+test.describe("the banner a label click lands", () => {
+  test("a won row's label does not promise only wins", () => {
+    const labels = ALL_ROWS.filter((c) => c.cut && c.sideWon).map((c) =>
+      rowCutLabel(c),
+    );
+    expect(labels).toEqual([
+      "First serve points",
+      "Second serve points",
+      "Break points saved",
+      "First serve returns",
+      "Second serve returns",
+      "Break points converted",
+      "Return winners",
+      "Net points",
+      "Total points",
+    ]);
+  });
+
+  test("a row that opens what it counts keeps its name", () => {
+    expect(rowCutLabel({ label: "Net point attempts" })).toBe(
+      "Net point attempts",
+    );
+    expect(rowCutLabel({ label: "First serve in" })).toBe("First serve in");
   });
 });
 
