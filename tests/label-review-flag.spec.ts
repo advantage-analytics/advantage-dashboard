@@ -14,8 +14,10 @@ import {
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
 import { REVIEW_ITEM_QUESTION } from "@/lib/services/labels/marks-copy";
+import { openFlags } from "@/lib/services/labels/flag-nav";
 import {
   REVIEW_ITEMS,
+  reviewChip,
   reviewFlag,
   type ReviewFlag,
   type ReviewItem,
@@ -144,6 +146,54 @@ const codes = (flag: ReviewFlag | null, id: number) =>
     ?.members.map((member) => member.mark.code);
 
 const CHECKED_AT = "2026-10-15T12:00:00.000Z";
+
+test.describe("a placement gap beside an amber question", () => {
+  const gapped = wonOnForehand({
+    shots: [
+      forehand({ id: "a", eventId: 8, videoTime: 1 }),
+      forehand({
+        id: "b",
+        eventId: 9,
+        videoTime: 2,
+        landingX: 2,
+        landingY: 20,
+      }),
+    ],
+  });
+  const amber = marksOf({ [POINT]: [sample("pick_winner")] });
+
+  test("the chip asks the amber question alone", () => {
+    const chip = reviewChip(reviewFlag(gapped, amber, [gapped])!)!;
+    expect(chip.tone).toBe("score");
+    expect(chip.text).toBe(REVIEW_ITEM_QUESTION[5]);
+    expect(chip.open.map((item) => item.id)).toEqual([5]);
+  });
+
+  test("the point is in both lists, each with its own item", () => {
+    expect(
+      openFlags([gapped], amber).map((flag) => [
+        flag.data,
+        flag.items.map((item) => item.id),
+      ]),
+    ).toEqual([
+      [false, [5]],
+      [true, [7]],
+    ]);
+  });
+
+  test("with nothing amber it is one grey flag, and the chip asks it", () => {
+    const none = marksOf({});
+    expect(
+      openFlags([gapped], none).map((flag) => [
+        flag.data,
+        flag.items.map((item) => item.id),
+      ]),
+    ).toEqual([[true, [7]]]);
+    expect(reviewChip(reviewFlag(gapped, none, [gapped])!)!.text).toBe(
+      REVIEW_ITEM_QUESTION[7],
+    );
+  });
+});
 
 test.describe("the item table", () => {
   test("seven items in id order, each with its question and its codes", () => {

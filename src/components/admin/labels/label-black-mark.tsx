@@ -41,6 +41,7 @@ import { isMissedResult, type LabelPoint } from "@/lib/services/labels/session";
 import {
   hintDismissKey,
   isSuggestionKey,
+  placementKey,
   pointEndedKey,
 } from "@/lib/services/labels/suggestions";
 import { cn } from "@/lib/utils";
@@ -356,7 +357,11 @@ export function pointHints(
     // "Point ended here" is a suggestion: once dismissed it is not drawn.
     const ended =
       mark.code === "shot_after_point_end" ? mark.params.shotId : undefined;
-    const key = ended ? pointEndedKey(ended) : undefined;
+    const key = ended
+      ? pointEndedKey(ended)
+      : mark.code === "placement_missing"
+        ? placementKey(mark.params.shotId)
+        : undefined;
     // A draft stroke has no id to store yet: no Dismiss until it lands.
     const actions = hintActions(mark, point, edit, lastCall?.shotId);
     const afterShotId = ended ?? hintShotId(mark);

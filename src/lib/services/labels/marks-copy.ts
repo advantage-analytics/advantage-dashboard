@@ -155,8 +155,8 @@ export function hintLabel(mark: LabelMark, names?: MarkNames): string {
  * The seven questions a point's review flag asks, by item id (marks-state.ts
  * `REVIEW_ITEMS`), in the order they are answered: strokes, then the last
  * ball, its ending, the winner, the game, and last the strokes still without
- * coordinates. Item 4 is put as the vendor called it (`lastCallQuestion`) where "Was
- * the last ball in?" is among its members.
+ * coordinates. Item 4 is put as the vendor called it (`lastCallQuestion`)
+ * where "Was the last ball in?" is among its members.
  */
 export const REVIEW_ITEM_QUESTION = {
   1: "Missing shot?",
@@ -221,7 +221,7 @@ export const THIN_TRACKING_LABEL = "Thin tracking";
 
 /** Its hover: how many, and what it does to the numbers. */
 export function thinTrackingDetail(missing: number, serves: number): string {
-  return `${missing} of ${serves} serves in play came with no landing, so serve placement on this match is thin until they are placed.`;
+  return `${missing} of ${serves} serves in play came from the video with no landing. Serve placement counts only the ones with a landing.`;
 }
 
 // ── The score chip ──────────────────────────────────────────────────────────

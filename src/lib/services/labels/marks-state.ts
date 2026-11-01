@@ -50,6 +50,7 @@ import {
 import {
   addedPointBetween,
   hintDismissKey,
+  placementKey,
   pointEndedKey,
   suggestionState,
   type SuggestionNeighbour,
@@ -536,8 +537,10 @@ export const PLACED_LAST_STROKES = 2;
  * strokes feed the court views and filters. The first gap in video order.
  *
  * Not asked, because there is no landing to place: a faulted serve, and a ball
- * volleyed back, which never bounced. Nor a last stroke's landing, which is "No
- * landing on the last shot". A contact is asked on any of them.
+ * volleyed or smashed back, which never bounced. Nor a last stroke's landing,
+ * which is "No landing on the last shot". A contact is asked on any of them. A
+ * stroke dismissed is passed over for the next gap: the labeller said the video
+ * doesn't show that one.
  *
  * Measured 2026-10-31 over 42 matches: this flags 33% of points, about 7 more
  * per 100 than the serve and return alone plus the last-shot hint, where taking
@@ -548,21 +551,39 @@ export const PLACED_LAST_STROKES = 2;
  * 32.5% of the rest, so a quiet hint, never counted.
  */
 export function placementMissing(
-  point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "ending">>,
+  point: Pick<LabelPoint, "shots"> &
+    Partial<Pick<LabelPoint, "ending" | "dismissed">>,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "placement_missing" }> | null {
   if (isNonPointEnding(point.ending ?? null)) return null;
-  const live = liveShotsInOrder(point, ghosts).filter((s) => !isLetServe(s));
+  // Cheap exit before the sort: most points have every coordinate.
+  if (
+    point.shots.every(
+      (shot) =>
+        shot.contactX !== null &&
+        shot.contactY !== null &&
+        shot.landingX !== null &&
+        shot.landingY !== null,
+    )
+  ) {
+    return null;
+  }
+  const inOrder = liveShotsInOrder(point, ghosts);
+  const last = inOrder.at(-1);
+  const live = inOrder.filter((s) => !isLetServe(s));
   const serveAt = live.findLastIndex((shot) => isServeStroke(shot.stroke));
   for (const [i, shot] of live.entries()) {
     if (i >= PLACED_FIRST_STROKES && i < live.length - PLACED_LAST_STROKES) {
       continue;
     }
-    const next = live[i + 1];
+    if (point.dismissed?.includes(placementKey(shot.id))) continue;
+    const next = live[i + 1]?.stroke;
     const noLanding =
-      !next ||
-      next.stroke === "forehand_volley" ||
-      next.stroke === "backhand_volley" ||
+      // A let after it means this is not what "the last shot" reads.
+      shot === last ||
+      next === "forehand_volley" ||
+      next === "backhand_volley" ||
+      next === "overhead" ||
       (i <= serveAt && isMissedResult(shot.result));
     const landing = !noLanding && landingMissingOn(shot);
     if (!landing && !contactMissingOn(shot)) continue;
@@ -593,10 +614,10 @@ export const THIN_TRACKING_MIN_SERVES = 20;
 /**
  * Whether the vendor's tracking lost a big share of this match's serves: the
  * serve in play of each live point, read off its seed so that placing them does
- * not take the note away halfway. Null when the share is ordinary. Over 45
- * matches the median is 7% and the 90th percentile 24%, up to 45%: on those
- * the gap is the match, not a point. Added strokes have no seed and are not
- * counted.
+ * not take the note away halfway. Null when the share is ordinary. Measured
+ * 2026-10-31 over 42 matches with 20 or more serves in play: median 7%, 90th
+ * percentile 28%, top 46%, and 8 of them at this share or above: on those the
+ * gap is the match, not a point. Added strokes have no seed and are not counted.
  */
 export function thinTracking(
   points: readonly LabelPoint[],
@@ -814,7 +835,9 @@ export function openHintMarks(
     const key =
       mark.code === "shot_after_point_end"
         ? pointEndedKey(mark.params.shotId)
-        : hintDismissKey(mark.code);
+        : mark.code === "placement_missing"
+          ? placementKey(mark.params.shotId)
+          : hintDismissKey(mark.code);
     return !point.dismissed.includes(key);
   });
 }
@@ -938,6 +961,9 @@ export function mostOpen(states: readonly MarkState[]): MarkState {
 /** The seven questions a point's review flag can ask, by id (`REVIEW_ITEMS`). */
 export type ReviewItemId = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
+/** "Shot placement": never the score, so never the amber list's or chip's. */
+export const PLACEMENT_ITEM: ReviewItemId = 7;
+
 /** One row of `REVIEW_ITEMS`: an item, its question and the codes it absorbs. */
 export interface ReviewItemDef {
   id: ReviewItemId;
@@ -951,9 +977,9 @@ export interface ReviewItemDef {
  * game: each item reads what the ones above decide — a stroke change moves
  * the last ball, the last ball's call derives the ending, the winner drives
  * the labelled score, and `score_side_mismatch` / `service_court_repeat` are
- * read live off it. Placement comes last: it moves no score. Every `count` and `hint` code in `LABEL_MARK_META` is
- * named by exactly one item; a `hidden` code by none, and it is never a
- * member. Item 4 is put as the vendor called it (`lastCallQuestion`) where
+ * read live off it. Placement comes last: it moves no score. Every `count`
+ * and `hint` code in `LABEL_MARK_META` is named by exactly one item; a
+ * `hidden` code by none, and it is never a member. Item 4 is put as the vendor called it (`lastCallQuestion`) where
  * `last_call_overruled` is a member, and `ending_stale` is its "Then:"
  * consequence line, never a question of its own.
  */
@@ -1065,6 +1091,8 @@ function memberDismissKey(mark: LabelMark): string | undefined {
   switch (mark.code) {
     case "shot_after_point_end":
       return pointEndedKey(mark.params.shotId);
+    case "placement_missing":
+      return placementKey(mark.params.shotId);
     case "service_court_repeat":
       return "missing_point";
     case "same_player_consecutive":
@@ -1109,10 +1137,10 @@ function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
  * amber only for a serve replayed after one in; item 3 only for a double
  * fault in question or a point stopping on a faulted first serve; item 4
  * when a counted mark sits under it or the point's winner is the player its
- * strokes say lost; items 5 and 6 are always the score, item 7 never. Like the flag
- * (`foldReviewItems`), an item speaks for its open members while any is
- * open, and for all of them once none is: a settled "Check the ending"
- * does not keep the grey hints still open beside it amber.
+ * strokes say lost; items 5 and 6 are always the score, item 7 never. Like the
+ * flag (`foldReviewItems`), an item speaks for its open members while any is
+ * open, and for all of them once none is: a settled "Check the ending" does
+ * not keep the grey hints still open beside it amber.
  * `contradicted` is `pointWinnerContradicted`, when the caller has it.
  */
 function reviewItemTone(
@@ -1291,11 +1319,17 @@ export interface ReviewChip {
  * before the flag: a flag of hints alone leaves no trace once answered, so a
  * finished match is not strewn with outlines. Every demoted signature is
  * hints alone, so a flag that would be demoted once checked draws nothing
- * either. Tone and state are the flag's.
+ * either. Tone and state are the flag's. An amber chip does not speak for
+ * "Shot placement" (`PLACEMENT_ITEM`): a gap beside a question that can move
+ * the score stays the grey list's (`openFlags`).
  */
 export function reviewChip(flag: ReviewFlag): ReviewChip | null {
   if (flag.demoted) return null;
-  const open = flag.items.filter((item) => item.state === "open");
+  const open = flag.items.filter(
+    (item) =>
+      item.state === "open" &&
+      (flag.tone !== "score" || item.id !== PLACEMENT_ITEM),
+  );
   if (
     open.length === 0 &&
     !flag.items.some((item) =>

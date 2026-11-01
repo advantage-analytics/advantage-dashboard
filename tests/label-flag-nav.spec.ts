@@ -65,7 +65,7 @@ test("a jump names the point's first open question; nothing open, nowhere to go"
   expect(stepFlag([], points, "a", 1)).toBeNull();
 });
 
-test("groups are the six items in order, each point once, counted in points", () => {
+test("groups are the items in order, each point once, counted in points", () => {
   const groups = flagGroups([
     ...flags,
     flag("c", [4, 5]),

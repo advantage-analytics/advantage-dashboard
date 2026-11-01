@@ -689,6 +689,50 @@ test.describe("placementMissing", () => {
     ).toBeNull();
   });
 
+  test("a ball smashed back never bounced either", () => {
+    expect(
+      placementMissing(
+        shots(
+          stroke("s", IN, SERVE),
+          stroke("r", IN),
+          stroke("l", null, { result: "in" }),
+          stroke("o", IN, { stroke: "overhead" }),
+        ),
+        true,
+      ),
+    ).toBeNull();
+  });
+
+  test("a dismissed stroke is passed over for the next gap, and only that one", () => {
+    const point = shots(
+      stroke("s", null, SERVE),
+      stroke("r", null, { result: "in" }),
+      stroke("n", IN),
+    );
+    expect(
+      placementMissing({ ...point, dismissed: ["placement:s"] }, true),
+    ).toEqual(asked("r", "return"));
+    expect(
+      placementMissing(
+        { ...point, dismissed: ["placement:s", "placement:r"] },
+        true,
+      ),
+    ).toBeNull();
+  });
+
+  test("a point ending on a let: the ball before it is still asked", () => {
+    expect(
+      placementMissing(
+        shots(
+          stroke("s", IN, SERVE),
+          stroke("r", null, { result: "in" }),
+          stroke("l", IN, { stroke: "first_serve", result: "let" }),
+        ),
+        true,
+      ),
+    ).toEqual(asked("r", "return"));
+  });
+
   test("a return volleyed back never bounced", () => {
     expect(
       placementMissing(

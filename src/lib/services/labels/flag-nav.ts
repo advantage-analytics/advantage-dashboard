@@ -7,6 +7,7 @@
 
 import type { LabelMarks } from "./marks";
 import {
+  PLACEMENT_ITEM,
   REVIEW_ITEMS,
   reviewFlag,
   reviewItemQuestion,
@@ -153,6 +154,11 @@ export function flagStopLabel(stop: FlagStop): string {
  * (`reviewFlag`) is open, carrying the items still open on it. Grey (`data`)
  * when the whole flag is, as the row's chip draws it; a demoted flag is left
  * out, as the row leaves it off. Deleted points have none.
+ *
+ * "Shot placement" beside an open amber question splits off as a grey flag of
+ * its own, so that point is in both lists: the amber one says only what can
+ * move the score, and the grey one counts every gap. A jump still lands on the
+ * point once (`firstPerPoint`).
  */
 export function openFlags(
   points: readonly LabelPoint[],
@@ -162,12 +168,20 @@ export function openFlags(
   for (const point of points) {
     const flag = reviewFlag(point, marks, points);
     if (!flag || flag.demoted || flag.state !== "open") continue;
+    const pointId = point.id;
+    const pointNumber = point.pointIndex + 1;
+    const open = flag.items.filter((item) => item.state === "open");
+    const placement = open.filter((item) => item.id === PLACEMENT_ITEM);
+    const amber = flag.tone === "score" && placement.length > 0;
     flags.push({
-      pointId: point.id,
-      pointNumber: point.pointIndex + 1,
+      pointId,
+      pointNumber,
       data: flag.tone === "data",
-      items: flag.items.filter((item) => item.state === "open"),
+      items: amber ? open.filter((item) => item.id !== PLACEMENT_ITEM) : open,
     });
+    if (amber) {
+      flags.push({ pointId, pointNumber, data: true, items: placement });
+    }
   }
   return flags;
 }

@@ -870,6 +870,22 @@ test.describe("the header's total", () => {
     expect(header(black(match(2), EMPTY_MARKS))).not.toContain(
       "data-label-flag-notice",
     );
+    // Every point checked, so no grey flag is open: the note still stands.
+    const checked = match(6);
+    const done = header(
+      black(
+        {
+          ...checked,
+          points: checked.points.map((p) => ({
+            ...p,
+            checkedAt: "2026-10-31T00:00:00.000Z",
+          })),
+        },
+        EMPTY_MARKS,
+      ),
+    );
+    expect(done).toContain("data-label-flag-notice");
+    expect(done).not.toContain("data-label-rail-data-count");
   });
 
   test("a flag with the match's count, named for a reader", () => {

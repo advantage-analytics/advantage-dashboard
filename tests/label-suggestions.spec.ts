@@ -525,6 +525,15 @@ test.describe("planDismiss", () => {
     });
   });
 
+  test("a stroke's placement can be dismissed, but not a draft's", () => {
+    const row = { dismissed: [] as string[] };
+    expect(planDismiss(row, "placement:s-1")).toEqual({
+      ok: true,
+      write: { dismissed: ["placement:s-1"] },
+    });
+    expect(planDismiss(row, "placement:pending-1")).toHaveProperty("error");
+  });
+
   test("refuses a key of any other shape, and one already there", () => {
     for (const key of [
       "",
@@ -1199,6 +1208,9 @@ test.describe("strokeDismissals", () => {
       "point_ended:s-b",
     ]);
     expect(strokeDismissals(dismissed, [])).toEqual([]);
+    expect(
+      strokeDismissals(["placement:s-b", "placement:s-other"], [{ id: "s-b" }]),
+    ).toEqual(["placement:s-b"]);
     expect(
       strokeDismissals(["point_ended:s-added"], [{ id: "s-added" }]),
     ).toEqual(["point_ended:s-added"]);

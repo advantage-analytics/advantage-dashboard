@@ -158,8 +158,36 @@ export function LabelFlagSummary({
     onGoToPoint?.(pointId);
   };
 
-  // No grey flag open: the grey control is not drawn at all.
-  if (data && count === 0) return null;
+  const noticeChip = notice ? (
+    <ChromeTooltip
+      label={notice.label}
+      detail={notice.detail}
+      side="bottom"
+      hidden={open}
+    >
+      <span
+        role="img"
+        data-label-flag-notice=""
+        aria-label={`${notice.label}: ${notice.detail}`}
+        className={cn(
+          "mr-1 h-6 min-w-0 truncate rounded-[6px] px-[7px] text-[11px] leading-6 whitespace-nowrap",
+          ink.note,
+        )}
+      >
+        {notice.label}
+      </span>
+    </ChromeTooltip>
+  ) : null;
+
+  // No grey flag open: the grey control is not drawn, and a note about the
+  // whole match, which is still true, stands alone.
+  if (data && count === 0) {
+    return noticeChip ? (
+      <span data-label-flag-summary="" className="inline-flex min-w-0 shrink">
+        {noticeChip}
+      </span>
+    ) : null;
+  }
   // Nothing open and the score adds up: today's quiet total, not a control.
   if (count === 0 && score === null) {
     return (
@@ -194,7 +222,10 @@ export function LabelFlagSummary({
   return (
     <span
       data-label-flag-summary=""
-      className="inline-flex shrink-0 items-center"
+      className={cn(
+        "inline-flex items-center",
+        notice ? "min-w-0 shrink" : "shrink-0",
+      )}
     >
       {scoreStop ? (
         <ChromeTooltip
@@ -223,26 +254,7 @@ export function LabelFlagSummary({
           </button>
         </ChromeTooltip>
       ) : null}
-      {notice ? (
-        <ChromeTooltip
-          label={notice.label}
-          detail={notice.detail}
-          side="bottom"
-          hidden={open}
-        >
-          <span
-            role="img"
-            data-label-flag-notice=""
-            aria-label={`${notice.label}: ${notice.detail}`}
-            className={cn(
-              "mr-1 inline-flex h-6 items-center rounded-[6px] px-[7px] text-[11px] whitespace-nowrap",
-              ink.note,
-            )}
-          >
-            {notice.label}
-          </span>
-        </ChromeTooltip>
-      ) : null}
+      {noticeChip}
       {next && onGoToPoint ? (
         <ChromeTooltip
           label={`${data ? "Next data flag" : "Next flag"} · point ${next.pointNumber}`}
