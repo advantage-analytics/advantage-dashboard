@@ -215,6 +215,21 @@ test.describe("a placement gap beside an amber question", () => {
     ).toBe(5);
   });
 
+  test("a settled amber question the queue still asks counts as amber", () => {
+    const names = { p1: "Ann", p2: "Bea" };
+    // An edit has settled the counted mark, so the flag now reads grey.
+    const edited = { ...gapped, status: "edited" as const };
+    expect(reviewFlag(edited, amber, [edited])!.tone).toBe("data");
+    // With nothing queued it is grey alone; with item 5 queued the gap still
+    // comes first, and the court and the panel read the same step.
+    expect(greyJumpFirstItem(edited, amber, [edited])).toBeUndefined();
+    const first = greyJumpFirstItem(edited, amber, [edited], [5, 7]);
+    expect(first).toBe(7);
+    expect(
+      reviewStep(edited, amber, [edited], names, true, [5, 7], first)!.item.id,
+    ).toBe(7);
+  });
+
   test("a point only in the grey list keeps its order", () => {
     expect(greyJumpFirstItem(gapped, marksOf({}), [gapped])).toBeUndefined();
   });
