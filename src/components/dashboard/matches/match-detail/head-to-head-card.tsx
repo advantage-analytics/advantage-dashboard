@@ -886,6 +886,16 @@ export function watchLine(count: number): string {
   return count === 1 ? "Watch it in Video" : `Watch all ${count} in Video`;
 }
 
+/**
+ * What the Video tab's banner names a label click by. The label opens every
+ * point the row is about, won or not, so "Net points won · 16 of 87" would read
+ * as 16 won: it says "Net points" instead. A figure's click keeps the row's own
+ * name, because it does open the points that side won.
+ */
+export function rowCutLabel(row: Pick<H2HRow, "label" | "sideWon">): string {
+  return row.sideWon ? row.label.replace(/ won$/, "") : row.label;
+}
+
 /** The same click, for a screen reader, which has no readout title to lean on. */
 export function watchLabel(count: number, noun: string): string {
   return count === 1
@@ -1558,7 +1568,7 @@ export function HeadToHeadCard() {
                     aria-label={`${row.label}, both players. ${watchLabel(rowFooter.count, noun)}`}
                     data-focus-ring="none"
                     {...handlersFor(row.label, "row", () =>
-                      actions.watchCut(row.cut!, row.label),
+                      actions.watchCut(row.cut!, rowCutLabel(row)),
                     )}
                     className={cn(
                       "flex min-w-0 flex-1 cursor-pointer items-center self-stretch border-0 bg-transparent p-0 pr-3 text-left text-[12px] transition-colors",
