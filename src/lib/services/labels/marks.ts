@@ -84,6 +84,8 @@ export const LABEL_ONLY_FLAGS = {
   FIRST_SERVE_FAULT_ALONE: "first_serve_fault_alone",
   /** A serve right after a serve that was in: a played let, or two points. */
   SERVE_AFTER_SERVE_IN: "serve_after_serve_in",
+  /** One of a point's first four or last two strokes lacks its coordinates. */
+  PLACEMENT_MISSING: "placement_missing",
   /**
    * The point's last stroke is seeded off its landing against the vendor's own
    * call on it — In where the vendor said out or net, or Out or Net where it
@@ -152,6 +154,7 @@ export const LABEL_MARK_META = {
   [LABEL_ONLY_FLAGS.LAST_LANDING_MISSING]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_AFTER_SERVE_IN]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.SERVE_IN_LANDING_OUT]: { tier: "hint", scope: "shot" },
+  [LABEL_ONLY_FLAGS.PLACEMENT_MISSING]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "count", scope: "point" },
   [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
   [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
@@ -240,6 +243,8 @@ export interface LabelMarkParams {
   serve_in_landing_out: { shotId: string; landing: "out" | "net" };
   /** The serve that follows a serve in play — where "Split here" cuts. */
   serve_after_serve_in: { shotId: string };
+  /** The stroke to place, and what the gap costs: see `markHover`. */
+  placement_missing: { shotId: string; stroke: "serve" | "return" | "shot" };
   net_hit_contradicts_height: NoParams;
   phantom_strokes_dropped: {
     /** The rally's strokes the transcript has no shot for. */

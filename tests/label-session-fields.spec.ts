@@ -821,6 +821,57 @@ test.describe("a score that doesn't add up, in the flag list", () => {
 });
 
 test.describe("the header's total", () => {
+  test("thin tracking says so once beside the grey count, not on an ordinary match", () => {
+    const session = { ...labelSessionFixture(), matchScore: null };
+    const [point] = session.points;
+    const [shot] = point.shots;
+    const serve = {
+      ...shot,
+      stroke: "first_serve" as const,
+      result: "in" as const,
+      landingX: null,
+      landingY: null,
+    };
+    const seed = (landing: number | null) => ({
+      hitter: shot.hitter,
+      stroke: "first_serve" as const,
+      result: "in" as const,
+      spin: null,
+      contact_x: 0,
+      contact_y: 0,
+      landing_x: landing,
+      landing_y: landing,
+      video_time: shot.videoTime,
+    });
+    const match = (missing: number) => ({
+      ...session,
+      points: Array.from({ length: 24 }, (_, i) => ({
+        ...point,
+        id: `p-${i}`,
+        pointIndex: i,
+        // No winner for the serve to contradict: the flag stays grey.
+        winner: null,
+        ending: null,
+        endedBy: null,
+        shots: [
+          {
+            ...serve,
+            id: `s-${i}`,
+            seed: seed(i < missing ? null : 5),
+          },
+        ],
+      })),
+    });
+    const notice = tag(
+      header(black(match(6), EMPTY_MARKS)),
+      'data-label-flag-notice=""',
+    );
+    expect(notice).toContain("Thin tracking: 6 of 24 serves in play");
+    expect(header(black(match(2), EMPTY_MARKS))).not.toContain(
+      "data-label-flag-notice",
+    );
+  });
+
   test("a flag with the match's count, named for a reader", () => {
     const html = black(
       { ...labelSessionFixture(), matchScore: null },
