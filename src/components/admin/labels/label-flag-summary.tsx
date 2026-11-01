@@ -38,6 +38,7 @@ const ROW_INK: Record<
     pt: string;
     next: string;
     warn: string;
+    note: string;
   }
 > = {
   dark: {
@@ -47,6 +48,7 @@ const ROW_INK: Record<
     pt: "bg-white/[0.06] text-white/70 hover:bg-white/[0.14] hover:text-white",
     next: "bg-[rgba(253,230,138,0.14)] text-[rgb(252,211,77)]",
     warn: "text-[rgb(252,211,77)]",
+    note: "bg-white/[0.06] text-white/70",
   },
   light: {
     row: "hover:bg-[var(--surface-subtle)] has-[button:focus-visible]:bg-[var(--surface-subtle)]",
@@ -55,6 +57,7 @@ const ROW_INK: Record<
     pt: "bg-[var(--surface-subtle)] text-[var(--ink-500)] hover:text-[var(--ink-900)]",
     next: "bg-[var(--warning-bg)] text-[var(--warning-text)]",
     warn: "text-[var(--warning-text)]",
+    note: "bg-[var(--surface-subtle)] text-[var(--ink-500)]",
   },
 };
 
@@ -90,6 +93,7 @@ export function LabelFlagSummary({
   kind = "score",
   tone = "dark",
   bulk = null,
+  notice = null,
 }: {
   /** `openFlags(points, marks)`: one per flagged point. */
   openMarks: readonly OpenFlag[];
@@ -118,6 +122,12 @@ export function LabelFlagSummary({
   tone?: RailTone;
   /** One action over the whole list ("Add all 12 missing shots"); null: none. */
   bulk?: { label: string; description: string; onSelect: () => void } | null;
+  /**
+   * Something true of the whole match rather than a point ("Thin tracking"):
+   * a quiet chip beside the count, and its sentence at the foot of the list.
+   * It answers nothing and goes nowhere, so it is not a stop.
+   */
+  notice?: { label: string; detail: string } | null;
 }) {
   const data = kind === "data";
   const keys = data ? DATA_KEYS : SCORE_KEYS;
@@ -211,6 +221,26 @@ export function LabelFlagSummary({
             />
             <span className="truncate">{scoreStop.label}</span>
           </button>
+        </ChromeTooltip>
+      ) : null}
+      {notice ? (
+        <ChromeTooltip
+          label={notice.label}
+          detail={notice.detail}
+          side="bottom"
+          hidden={open}
+        >
+          <span
+            role="img"
+            data-label-flag-notice=""
+            aria-label={`${notice.label}: ${notice.detail}`}
+            className={cn(
+              "mr-1 inline-flex h-6 items-center rounded-[6px] px-[7px] text-[11px] whitespace-nowrap",
+              ink.note,
+            )}
+          >
+            {notice.label}
+          </span>
         </ChromeTooltip>
       ) : null}
       {next && onGoToPoint ? (
@@ -372,6 +402,7 @@ export function LabelFlagSummary({
         ))}
         {groups.length > 0 ? (
           <FloatMenuNote>
+            {notice ? `${notice.detail} ` : null}
             {data
               ? "Wrong data that rarely moves the score. Each goes when its point is checked."
               : "Only what can move the score. Wrong data is the grey list beside this one."}

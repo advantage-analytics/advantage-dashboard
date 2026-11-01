@@ -1,7 +1,7 @@
 /**
  * The header's flag list and its jumps: every point whose review flag is open,
  * read exactly as the row's chip reads it (`reviewFlag`), then grouped by the
- * six items the flag asks and stepped through point by point. Pure, so the
+ * seven items the flag asks and stepped through point by point. Pure, so the
  * rail and the console's `[` / `]` keys share one answer.
  */
 
@@ -173,7 +173,7 @@ export function openFlags(
 }
 
 export interface FlagRow {
-  /** The item's id as a string ("1"…"6"): the row's key and `data-flag-kind`. */
+  /** The item's id as a string ("1"…"7"): the row's key and `data-flag-kind`. */
   code: string;
   /** The item's question: "How did the last ball end?". */
   label: string;
@@ -192,7 +192,7 @@ export interface FlagGroup {
 
 /**
  * `flags` grouped by review item, in the order the items are answered
- * (`REVIEW_ITEMS`), and only where something is open: at most six. A point
+ * (`REVIEW_ITEMS`), and only where something is open: at most seven. A point
  * with two items open is in both groups, so the groups' counts may add up to
  * more than the points.
  */

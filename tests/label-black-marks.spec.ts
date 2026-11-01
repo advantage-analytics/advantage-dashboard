@@ -81,7 +81,14 @@ function fixturePoint(fields: Partial<LabelPoint> = {}): LabelPoint {
     ...seeded,
     checkedAt: null,
     note: null,
-    shots: seeded.shots.map((s) => ({ ...s, landingX: 0.6, landingY: 17.79 })),
+    shots: seeded.shots.map((s) => ({
+      ...s,
+      // Placed, so no fixture carries "Shot placement" unless a test asks.
+      contactX: s.contactX ?? -0.5,
+      contactY: s.contactY ?? 1,
+      landingX: 0.6,
+      landingY: 17.79,
+    })),
     ...fields,
   };
 }
@@ -339,8 +346,7 @@ test.describe("a closed row draws only what can change the score", () => {
     // The open point still asks it: the court panel's item 4.
     const asked = review(point, netOnly)!;
     expect(asked.id).toBe(4);
-    // The fixture's stroke has no contact: the step asks for it first.
-    expect(asked.question).toBe("Where was it hit?");
+    expect(asked.question).toBe("How did the last ball end?");
 
     // Beside a counted mark on the same item, the hints are that one question.
     const withCount = renderRow(
@@ -433,7 +439,7 @@ test.describe("the open point's current review item", () => {
     expect(html).not.toContain("Review · in this order");
     expect(chips(html)).toHaveLength(0);
     const item = review(point, marks)!;
-    expect([item.id, item.question]).toEqual([4, "Where was it hit?"]);
+    expect([item.id, item.question]).toEqual([4, "How did the last ball end?"]);
     // The last ball's endings by its hitter, the item's Dismiss (both are
     // hints with a key), then the check tick.
     expect(item.answers.map((a) => [a.kind, a.label])).toEqual([
@@ -835,6 +841,7 @@ test.describe("the hints read off the rows, with their answers", () => {
           hitter: "p2" as const,
           stroke: "backhand" as const,
           result: "out" as const,
+          landingY: 25,
           videoTime: 2,
         },
         {
@@ -965,7 +972,12 @@ test.describe("the hints read off the rows, with their answers", () => {
         ...withEarly,
         shots: withEarly.shots.map((s) =>
           s.id === "s-long"
-            ? { ...s, result: "in" as const, status: "edited" as const }
+            ? {
+                ...s,
+                result: "in" as const,
+                landingY: 17.79,
+                status: "edited" as const,
+              }
             : s,
         ),
       }),

@@ -395,6 +395,12 @@ function landingMissingOn(shot: LabelShot): boolean {
   return !shot.unclear.some((f) => f === "landing_x" || f === "landing_y");
 }
 
+/** A contact the labeller has neither placed nor called unclear. */
+export function contactMissingOn(shot: LabelShot): boolean {
+  if (shot.contactX !== null && shot.contactY !== null) return false;
+  return !shot.unclear.some((f) => f === "contact_x" || f === "contact_y");
+}
+
 /**
  * "No landing on the last shot": the point's last live stroke has no landing
  * placed and the labeller has not marked it unclear. The result is derived
@@ -514,6 +520,102 @@ export function serveInLandingOut(
     };
   }
   return null;
+}
+
+/** How many strokes from the start of a point must carry their coordinates. */
+export const PLACED_FIRST_STROKES = 4;
+
+/** How many strokes from the end of a point must carry their coordinates. */
+export const PLACED_LAST_STROKES = 2;
+
+/**
+ * "Shot placement": the first four strokes and the last two must carry their
+ * coordinates, so how a point opened and ended can be read in full. A serve's
+ * zone is read off its landing and a return's off its contact and landing
+ * (apply.ts), which is all `calculate_match_stats` counts; the rest of these
+ * strokes feed the court views and filters. The first gap in video order.
+ *
+ * Not asked, because there is no landing to place: a faulted serve, and a ball
+ * volleyed back, which never bounced. Nor a last stroke's landing, which is "No
+ * landing on the last shot". A contact is asked on any of them.
+ *
+ * Measured 2026-10-31 over 42 matches: this flags 33% of points, about 7 more
+ * per 100 than the serve and return alone plus the last-shot hint, where taking
+ * every gap in these strokes would add about 14 and every stroke of the rally
+ * more still. Over the checked points of 19 complete sessions, unprompted,
+ * labellers placed 31 of 104 serves in, 34 of 102 returns and 88 of 165
+ * second-last balls. Winner changed on 36.5% of those serves' points against
+ * 32.5% of the rest, so a quiet hint, never counted.
+ */
+export function placementMissing(
+  point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "ending">>,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "placement_missing" }> | null {
+  if (isNonPointEnding(point.ending ?? null)) return null;
+  const live = liveShotsInOrder(point, ghosts).filter((s) => !isLetServe(s));
+  const serveAt = live.findLastIndex((shot) => isServeStroke(shot.stroke));
+  for (const [i, shot] of live.entries()) {
+    if (i >= PLACED_FIRST_STROKES && i < live.length - PLACED_LAST_STROKES) {
+      continue;
+    }
+    const next = live[i + 1];
+    const noLanding =
+      !next ||
+      next.stroke === "forehand_volley" ||
+      next.stroke === "backhand_volley" ||
+      (i <= serveAt && isMissedResult(shot.result));
+    const landing = !noLanding && landingMissingOn(shot);
+    if (!landing && !contactMissingOn(shot)) continue;
+    return {
+      code: "placement_missing",
+      tier: "hint",
+      scope: "shot",
+      params: {
+        shotId: shot.id,
+        stroke:
+          i === serveAt && landing
+            ? "serve"
+            : serveAt !== -1 && i === serveAt + 1
+              ? "return"
+              : "shot",
+      },
+    };
+  }
+  return null;
+}
+
+/** The share of seeded serves in play with no landing that reads as thin. */
+export const THIN_TRACKING_SHARE = 0.2;
+
+/** Fewer serves than this are too few to call the tracking thin. */
+export const THIN_TRACKING_MIN_SERVES = 20;
+
+/**
+ * Whether the vendor's tracking lost a big share of this match's serves: the
+ * serve in play of each live point, read off its seed so that placing them does
+ * not take the note away halfway. Null when the share is ordinary. Over 45
+ * matches the median is 7% and the 90th percentile 24%, up to 45%: on those
+ * the gap is the match, not a point. Added strokes have no seed and are not
+ * counted.
+ */
+export function thinTracking(
+  points: readonly LabelPoint[],
+  ghosts: boolean,
+): { missing: number; serves: number } | null {
+  let serves = 0;
+  let missing = 0;
+  for (const point of points) {
+    if (point.status === "deleted" || isNonPointEnding(point.ending)) continue;
+    const live = liveShotsInOrder(point, ghosts).filter((s) => !isLetServe(s));
+    const seed = live.findLast((shot) => isServeStroke(shot.stroke))?.seed;
+    if (!seed || seed.result !== "in") continue;
+    serves += 1;
+    if (seed.landing_x === null || seed.landing_y === null) missing += 1;
+  }
+  return serves >= THIN_TRACKING_MIN_SERVES &&
+    missing / serves >= THIN_TRACKING_SHARE
+    ? { missing, serves }
+    : null;
 }
 
 /**
@@ -701,6 +803,7 @@ export function openHintMarks(
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
     serveInLandingOut(point, ghosts),
+    placementMissing(point, ghosts),
   ];
   return [
     ...(lastCall
@@ -832,8 +935,8 @@ export function mostOpen(states: readonly MarkState[]): MarkState {
 
 // ── The review flag ─────────────────────────────────────────────────────────
 
-/** The six questions a point's review flag can ask, by id (`REVIEW_ITEMS`). */
-export type ReviewItemId = 1 | 2 | 3 | 4 | 5 | 6;
+/** The seven questions a point's review flag can ask, by id (`REVIEW_ITEMS`). */
+export type ReviewItemId = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 /** One row of `REVIEW_ITEMS`: an item, its question and the codes it absorbs. */
 export interface ReviewItemDef {
@@ -848,7 +951,7 @@ export interface ReviewItemDef {
  * game: each item reads what the ones above decide — a stroke change moves
  * the last ball, the last ball's call derives the ending, the winner drives
  * the labelled score, and `score_side_mismatch` / `service_court_repeat` are
- * read live off it. Every `count` and `hint` code in `LABEL_MARK_META` is
+ * read live off it. Placement comes last: it moves no score. Every `count` and `hint` code in `LABEL_MARK_META` is
  * named by exactly one item; a `hidden` code by none, and it is never a
  * member. Item 4 is put as the vendor called it (`lastCallQuestion`) where
  * `last_call_overruled` is a member, and `ending_stale` is its "Then:"
@@ -904,6 +1007,11 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
       "tiebreak_score_off_six_all",
       "segment_proposal_differs",
     ],
+  },
+  {
+    id: 7,
+    question: REVIEW_ITEM_QUESTION[7],
+    codes: ["placement_missing"],
   },
 ];
 
@@ -1001,7 +1109,7 @@ function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
  * amber only for a serve replayed after one in; item 3 only for a double
  * fault in question or a point stopping on a faulted first serve; item 4
  * when a counted mark sits under it or the point's winner is the player its
- * strokes say lost; items 5 and 6 are always the score. Like the flag
+ * strokes say lost; items 5 and 6 are always the score, item 7 never. Like the flag
  * (`foldReviewItems`), an item speaks for its open members while any is
  * open, and for all of them once none is: a settled "Check the ending"
  * does not keep the grey hints still open beside it amber.
@@ -1038,6 +1146,8 @@ function reviewItemTone(
     case 5:
     case 6:
       return "score";
+    case 7:
+      return "data";
   }
 }
 

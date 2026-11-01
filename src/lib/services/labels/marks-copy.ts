@@ -37,6 +37,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   first_serve_fault_alone: "Fault, no second serve",
   serve_in_landing_out: "Serve in, landing outside the box",
   serve_after_serve_in: "Serve after a serve in play",
+  placement_missing: "No placement",
   pick_winner: "Pick the winner",
   last_call_overruled: "Was the last ball in?",
   phantom_strokes_dropped: "1 shot removed",
@@ -151,10 +152,11 @@ export function hintLabel(mark: LabelMark, names?: MarkNames): string {
 }
 
 /**
- * The six questions a point's review flag asks, by item id (marks-state.ts
+ * The seven questions a point's review flag asks, by item id (marks-state.ts
  * `REVIEW_ITEMS`), in the order they are answered: strokes, then the last
- * ball, its ending, the winner, the game. Item 4 is put as the vendor called
- * it (`lastCallQuestion`) where "Was the last ball in?" is among its members.
+ * ball, its ending, the winner, the game, and last the strokes still without
+ * coordinates. Item 4 is put as the vendor called it (`lastCallQuestion`) where "Was
+ * the last ball in?" is among its members.
  */
 export const REVIEW_ITEM_QUESTION = {
   1: "Missing shot?",
@@ -163,6 +165,7 @@ export const REVIEW_ITEM_QUESTION = {
   4: "How did the last ball end?",
   5: "Who won?",
   6: "Game & serve order",
+  7: "Shot placement",
 } as const;
 
 /** The action a live hint offers, by code; the rest offer none. */
@@ -211,6 +214,14 @@ export function toCheckLabel(count: number): string {
 /** "12 data points" — the header's grey count, beside the amber one. */
 export function dataFlagsLabel(count: number): string {
   return `${count} data ${count === 1 ? "point" : "points"}: wrong data that rarely moves the score`;
+}
+
+/** The grey list's note on a match whose vendor tracking lost many serves. */
+export const THIN_TRACKING_LABEL = "Thin tracking";
+
+/** Its hover: how many, and what it does to the numbers. */
+export function thinTrackingDetail(missing: number, serves: number): string {
+  return `${missing} of ${serves} serves in play came with no landing, so serve placement on this match is thin until they are placed.`;
 }
 
 // ── The score chip ──────────────────────────────────────────────────────────
@@ -324,6 +335,15 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
         : "The serve counts as in, but its landing is outside the service box. It publishes as in with no placement: place the bounce in the box to count where it went.";
     case "serve_after_serve_in":
       return "A let that was played, or two points in one rally.";
+    case "placement_missing":
+      switch (mark.params.stroke) {
+        case "serve":
+          return "This serve has no landing, so serve placement can’t count it. Place the bounce, or dismiss this if the video doesn’t show it.";
+        case "return":
+          return "This return is missing its position, so return placement can’t count it. Place it, or dismiss this if the video doesn’t show it.";
+        case "shot":
+          return "This shot is missing its position, so how the point opened or ended can’t be read in full. Place it, or dismiss this if the video doesn’t show it.";
+      }
     case "phantom_strokes_dropped": {
       const count = mark.params.eventIds.length;
       if (count > 1) {

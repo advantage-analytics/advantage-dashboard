@@ -10,7 +10,11 @@
  * once and moves on. Pure, so a spec reads every rule without a console.
  */
 
-import { lastCallAnswer, pointRowMarkList } from "./marks-state";
+import {
+  contactMissingOn,
+  lastCallAnswer,
+  pointRowMarkList,
+} from "./marks-state";
 import type { LabelMarkCode, LabelMarks } from "./marks";
 import type { ReviewFlag, ReviewItem, ReviewMember } from "./marks-state";
 import { liveShotsInOrder, type LabelPoint, type LabelShot } from "./session";
@@ -51,9 +55,9 @@ export function openMissingShot(point: LabelPoint, marks: LabelMarks) {
 /**
  * The stroke an open member's inline suggestion row sits under in the well,
  * if it has one: "Missing shot?" at its first open slot, "Did the point end
- * here?" at the ball called out, and "Second serve?", "Serve after a serve in
- * play" and "Serve in, landing outside the box" at their own serve. Null for
- * every other member.
+ * here?" at the ball called out, "Second serve?", "Serve after a serve in play"
+ * and "Serve in, landing outside the box" at their own serve, and placement at
+ * its stroke. Null for every other member.
  */
 export function memberShotId(
   member: ReviewMember,
@@ -68,6 +72,7 @@ export function memberShotId(
     case "second_serve_as_first":
     case "serve_after_serve_in":
     case "serve_in_landing_out":
+    case "placement_missing":
       return mark.params.shotId;
     default:
       return null;
@@ -82,12 +87,6 @@ const ENDING_ONLY: ReadonlySet<LabelMarkCode> = new Set([
   "ending_stale",
   "result_type_unknown",
 ]);
-
-/** A contact the labeller has neither placed nor called unclear. */
-function contactMissing(shot: LabelShot): boolean {
-  if (shot.contactX !== null && shot.contactY !== null) return false;
-  return !shot.unclear.some((f) => f === "contact_x" || f === "contact_y");
-}
 
 /**
  * Where a jump to `item` lands: the stroke it is about and the end of the
@@ -107,6 +106,7 @@ function contactMissing(shot: LabelShot): boolean {
  *   winner — all on the landing; a stale or unreadable ending alone at the
  *   last stroke, no end.
  * - 5 at the last stroke, 6 at the first; no end.
+ * - 7 at the stroke to place, on the landing.
  *
  * The first open member, in the item's order, that names a live stroke wins.
  * A stroke with no contact yet opens on the contact whatever the end: a
@@ -133,7 +133,7 @@ export function reviewItemTarget(
     if (!stroke) continue;
     return {
       shotId: stroke.id,
-      place: place !== null && contactMissing(stroke) ? "contact" : place,
+      place: place !== null && contactMissingOn(stroke) ? "contact" : place,
     };
   }
   return NO_TARGET;
@@ -158,6 +158,7 @@ function memberTarget(
     case "reserve_after_in":
       return [first, null];
     case "serve_in_landing_out":
+    case "placement_missing":
       return [mark.params.shotId, "landing"];
     case "first_serve_fault_alone":
       return [last, "landing"];

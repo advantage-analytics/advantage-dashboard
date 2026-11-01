@@ -40,9 +40,12 @@ import type { LabelMarks } from "@/lib/services/labels/marks";
 import {
   SCORE_MISMATCH_ANSWERS,
   SCORE_MISMATCH_LABEL,
+  THIN_TRACKING_LABEL,
   findGapDescription,
   scoreMismatchDetail,
+  thinTrackingDetail,
 } from "@/lib/services/labels/marks-copy";
+import { drawsGhosts, thinTracking } from "@/lib/services/labels/marks-state";
 import {
   openFlags,
   scoreStop,
@@ -422,6 +425,17 @@ export function LabelBlackRail({
     () => openMarks.filter((flag) => flag.data),
     [openMarks],
   );
+  // A match whose tracking lost many serves says so once, beside the grey count.
+  const trackingNotice = useMemo(() => {
+    if (!marks) return null;
+    const thin = thinTracking(points, drawsGhosts(marks));
+    return thin
+      ? {
+          label: THIN_TRACKING_LABEL,
+          detail: thinTrackingDetail(thin.missing, thin.serves),
+        }
+      : null;
+  }, [points, marks]);
   // One object for every row, the same one until an input moves: the rows
   // are memoised, and a fresh context per render would re-render them all.
   // Nothing of the playhead is in it (`EditContext`).
@@ -738,6 +752,7 @@ export function LabelBlackRail({
           {marks !== null ? (
             <LabelFlagSummary
               kind="data"
+              notice={trackingNotice}
               openMarks={dataMarks}
               points={points}
               fromPointId={expandedPointId ?? playingPointId}

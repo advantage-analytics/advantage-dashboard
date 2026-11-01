@@ -200,6 +200,8 @@ export function reviewItemThenLabel(item: ReviewItem): string {
       return "pick the winner";
     case 6:
       return "check the game and serve order";
+    case 7:
+      return "place the shot";
   }
 }
 
@@ -673,6 +675,7 @@ function stepAnswers(
       }
       break;
     case 6:
+    case 7:
       break;
   }
   const dismiss = dismissAnswer(item, extraDismiss);
