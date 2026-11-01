@@ -366,6 +366,39 @@ test.describe("buildAppliedRows", () => {
     expect(points[7].shots[1].zone).toBe("Crosscourt");
   });
 
+  test("a stroke before an air stroke publishes the contact as its landing, its stored row untouched", () => {
+    const rows = (next: "forehand_volley" | "forehand") =>
+      build([
+        pt(0, "p1", "winner", (p) => [
+          shot(p, "p1", "first_serve", "in", {
+            contactX: 1,
+            contactY: 0,
+            landingX: -1,
+            landingY: 16,
+          }),
+          shot(p, "p2", "backhand", null, { contactX: -2, contactY: 23 }),
+          shot(p, "p1", next, "in", {
+            contactX: 1,
+            contactY: 6,
+            landingX: 2,
+            landingY: 20,
+          }),
+        ]),
+      ]).points[0].shots[1];
+    expect(rows("forehand_volley")).toMatchObject({
+      landing_x: 1,
+      landing_y: 6,
+      zone: "Middle",
+      // Played on, whatever its filled landing would call: never a derived out.
+      result: "In",
+    });
+    expect(rows("forehand")).toMatchObject({
+      landing_x: null,
+      landing_y: null,
+      zone: null,
+    });
+  });
+
   test("an in serve whose landing is outside the box is written in, with no landing and no zone", () => {
     // Hit from behind the baseline on +x; the far service box ends 6.4 m
     // past the net, so y 23 is long. The seed keeps such a serve in when a

@@ -1,15 +1,20 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, Link2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   isLetServe,
   isLiveShot,
+  liveShotsInOrder,
   opponent,
   type LabelPoint,
   type LabelShot,
 } from "@/lib/services/labels/session";
+import {
+  landingLink,
+  withFilledLandings,
+} from "@/lib/services/labels/volley-link";
 import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
 import {
@@ -55,6 +60,9 @@ import type { VideoClock } from "./video-clock";
  *   to review (`pointInfoLine`, label-point-info.tsx). The review step itself
  *   is asked in the rail (`ReviewInlineBlock`, label-review-inline.tsx), never
  *   here: while it is open this panel follows the film and takes no click.
+ * - Placing the landing of a stroke before an air stroke (volley-link.ts): the
+ *   header carries the link's toggle, and the court that stroke's contact as a
+ *   faint ring. A filled landing's dot is drawn a step down from a placed one.
  */
 
 /** No point open: one shared empty list, so the marks memo holds. */
@@ -212,6 +220,8 @@ export function LabelCourtPanel({
   ghosts = true,
   info = null,
   notice = null,
+  landingOnly = false,
+  onLandingLink,
   onEstimate,
   clock,
   onPlace,
@@ -241,6 +251,10 @@ export function LabelCourtPanel({
    * landing moved the court on to the next stroke. Null: the usual subtitle.
    */
   notice?: string | null;
+  /** The next click moves the landing and leaves the next stroke's contact. */
+  landingOnly?: boolean;
+  /** The link's toggle (volley-link.ts). Absent: never drawn. */
+  onLandingLink?: () => void;
   /**
    * "Off screen, so this is an estimate" on the end being placed. Absent:
    * the box is not drawn.
@@ -290,10 +304,36 @@ export function LabelCourtPanel({
     marksSnapshot,
     marksSnapshot,
   );
+  // Each live stroke with the landing the next air stroke gives it.
+  const drawn = useMemo(
+    () => (point ? withFilledLandings(point, ghosts) : NO_SHOTS),
+    [point, ghosts],
+  );
+  const inOrder = useMemo(
+    () => (point ? liveShotsInOrder(point, ghosts) : NO_SHOTS),
+    [point, ghosts],
+  );
+  const selectedAt = selected
+    ? inOrder.findIndex((shot) => shot.id === selected.id)
+    : -1;
+  const nextStroke =
+    selectedAt === -1 ? null : (inOrder[selectedAt + 1] ?? null);
+  const link = selected ? landingLink(selected, nextStroke) : null;
+  const linkShown = placing && placement.target === "landing" && link !== null;
   const strokes = useMemo<CourtStroke[]>(() => {
+    const byId = new Map(drawn.map((shot) => [shot.id, shot]));
     // A selected stroke alone, at full strength; none of it yet is a blank court.
-    if (placement.shotId !== null) return selected ? [{ shot: selected }] : [];
-    const byId = new Map(shots.map((shot) => [shot.id, shot]));
+    if (placement.shotId !== null) {
+      const shot = selected ? byId.get(selected.id) : null;
+      if (!shot) return [];
+      const own: CourtStroke =
+        link === "filled"
+          ? { shot, opacity: { hit: 1, landed: 0.65 } }
+          : { shot };
+      return linkShown && nextStroke
+        ? [own, { shot: nextStroke, opacity: { hit: 0.55, landed: 0 } }]
+        : [own];
+    }
     const out: CourtStroke[] = [];
     for (const mark of parseCourtMarksKey(marksKey)) {
       const shot = byId.get(mark.shotId);
@@ -304,7 +344,15 @@ export function LabelCourtPanel({
       });
     }
     return out;
-  }, [placement.shotId, selected, shots, marksKey]);
+  }, [
+    placement.shotId,
+    selected,
+    drawn,
+    marksKey,
+    link,
+    linkShown,
+    nextStroke,
+  ]);
 
   const estimate =
     placing && selected && onEstimate ? (
@@ -379,6 +427,17 @@ export function LabelCourtPanel({
   // (the cursor and the switch carry the end's glyph); a let serve keeps its
   // " · let".
   const isLet = selected !== null && isLetServe(selected);
+  const nextNumber = selectedAt + 2;
+  const linkOn = link !== "apart" && !landingOnly;
+  const linkLine = !linkShown
+    ? null
+    : landingOnly
+      ? "Next click moves the landing only"
+      : link === "filled"
+        ? `Filled from shot ${nextNumber} · moves with its contact`
+        : link === "agrees"
+          ? `Moves with shot ${nextNumber} contact`
+          : `Apart from shot ${nextNumber} contact`;
   const titleLine =
     placing && prompt ? (
       <span
@@ -404,24 +463,49 @@ export function LabelCourtPanel({
       data-court-panel=""
       className={cn("flex min-h-0 flex-1 flex-col", RAIL_TONE_CLASS.dark)}
     >
-      <div className="flex h-[34px] min-w-0 shrink-0 flex-col gap-0.5">
-        {titleLine}
-        {placing && notice ? (
-          <span
-            data-court-subtitle=""
-            data-placement-notice=""
-            className="truncate text-[10px] leading-[13px] text-white/70"
+      <div className="flex h-[34px] min-w-0 shrink-0 items-start gap-2.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          {titleLine}
+          {placing && notice ? (
+            <span
+              data-court-subtitle=""
+              data-placement-notice=""
+              className="truncate text-[10px] leading-[13px] text-white/70"
+            >
+              {notice}
+            </span>
+          ) : (
+            <span
+              data-court-subtitle=""
+              className="truncate text-[10px] leading-[13px] text-white/55"
+            >
+              {linkLine ?? readout.subtitle}
+            </span>
+          )}
+        </div>
+        {linkShown && onLandingLink ? (
+          <button
+            type="button"
+            aria-pressed={linkOn}
+            data-court-link=""
+            onClick={onLandingLink}
+            className={cn(
+              "inline-flex h-6 shrink-0 cursor-pointer items-center gap-[5px] rounded-[6px] px-2 text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+              linkOn
+                ? "bg-white/[0.16] text-white"
+                : "text-white/70 hover:bg-white/[0.08] hover:text-white",
+            )}
           >
-            {notice}
-          </span>
-        ) : (
-          <span
-            data-court-subtitle=""
-            className="truncate text-[10px] leading-[13px] text-white/55"
-          >
-            {readout.subtitle}
-          </span>
-        )}
+            <Link2
+              className="size-[13px]"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+            {linkOn
+              ? `Linked to shot ${nextNumber}`
+              : `Link to shot ${nextNumber}`}
+          </button>
+        ) : null}
       </div>
       {info && !placing ? <PointInfoLine info={info} /> : null}
 

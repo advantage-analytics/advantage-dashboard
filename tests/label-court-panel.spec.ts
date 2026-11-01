@@ -13,7 +13,10 @@ import {
   createVideoClock,
   type VideoClock,
 } from "@/components/admin/labels/video-clock";
-import type { LabelPoint } from "@/lib/services/labels/session";
+import {
+  liveShotsInOrder,
+  type LabelPoint,
+} from "@/lib/services/labels/session";
 import { tag as tagOf } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
@@ -37,6 +40,8 @@ type PanelProps = {
   info?: PointInfo | null;
   notice?: string | null;
   onEstimate?: (estimate: boolean) => void;
+  landingOnly?: boolean;
+  onLandingLink?: () => void;
 };
 
 type ViewProps = {
@@ -98,6 +103,79 @@ const cursorSvg = (tag: string) =>
   decodeURIComponent(tag.replace(/&#x27;/g, "'").replace(/&quot;/g, '"'));
 const subtitle = (html: string) =>
   /data-court-subtitle="[^"]*"[^>]*>([^<]*)</.exec(html)?.[1];
+
+test.describe("the landing's link on the court", () => {
+  /** P1 with its second stroke met in the air at (1, 6), its first unplaced. */
+  const linked = (landing: { x: number; y: number } | null): LabelPoint => {
+    const nextId = liveShotsInOrder(P1, true)[2].id;
+    return {
+      ...P1,
+      shots: P1.shots.map((shot) =>
+        shot.id === "s-return"
+          ? {
+              ...shot,
+              landingX: landing?.x ?? null,
+              landingY: landing?.y ?? null,
+            }
+          : shot.id === nextId
+            ? { ...shot, stroke: "overhead", contactX: 1, contactY: 6 }
+            : shot,
+      ),
+    };
+  };
+  const onLandingLink = () => {};
+  const armed = (target: "contact" | "landing") => {
+    const start = startPlacement("s-return");
+    return target === "landing" ? setPlacementTarget(start, "landing") : start;
+  };
+
+  test("filled: pressed, says where it comes from, draws the landing", () => {
+    const html = render({
+      point: linked(null),
+      placement: armed("landing"),
+      onLandingLink,
+    });
+    const button = tagOf(html, "data-court-link");
+    expect(button).toContain('aria-pressed="true"');
+    expect(html).toContain("Linked to shot 3");
+    expect(subtitle(html)).toBe("Filled from shot 3 · moves with its contact");
+  });
+
+  test("landing only armed: not pressed, says so", () => {
+    const html = render({
+      point: linked(null),
+      placement: armed("landing"),
+      landingOnly: true,
+      onLandingLink,
+    });
+    expect(tagOf(html, "data-court-link")).toContain('aria-pressed="false"');
+    expect(html).toContain("Link to shot 3");
+    expect(subtitle(html)).toBe("Next click moves the landing only");
+  });
+
+  test("stored apart: not pressed", () => {
+    const html = render({
+      point: linked({ x: 3, y: 3 }),
+      placement: armed("landing"),
+      onLandingLink,
+    });
+    expect(tagOf(html, "data-court-link")).toContain('aria-pressed="false"');
+    expect(subtitle(html)).toBe("Apart from shot 3 contact");
+  });
+
+  test("placing the contact, or no air stroke next: no toggle", () => {
+    expect(
+      render({
+        point: linked(null),
+        placement: armed("contact"),
+        onLandingLink,
+      }),
+    ).not.toContain("data-court-link");
+    expect(
+      render({ point: P1, placement: armed("landing"), onLandingLink }),
+    ).not.toContain("data-court-link");
+  });
+});
 
 test.describe("the court panel", () => {
   test("not placing: the whole court, read-only, the playing stroke named", () => {

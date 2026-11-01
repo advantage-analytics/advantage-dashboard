@@ -48,6 +48,7 @@ import {
 } from "@/lib/services/splitstep/derivation";
 import { allErrorsJudged, publishEnding } from "./ending-derived";
 import { inServeLandingMiss, playedOnResult } from "./shot-derived";
+import { withFilledLanding } from "./volley-link";
 import { gameKey, labelScores, type LabelGameBand } from "./score";
 import { labelSetScores } from "./set-scores";
 import {
@@ -435,7 +436,9 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     const from = Math.max(serveIndex, 0);
 
     const shots: AppliedShotRow[] = [];
-    played.forEach((shot, i) => {
+    played.forEach((stored, i) => {
+      // A stroke met in the air publishes the landing the rail shows.
+      const shot = withFilledLanding(stored, played[i + 1]);
       if (shot.hitter === null) {
         problems.push(`${at}: stroke ${i + 1} has no hitter`);
         return;

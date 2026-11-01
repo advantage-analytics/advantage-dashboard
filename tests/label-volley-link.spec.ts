@@ -6,8 +6,12 @@ import {
 } from "@/lib/services/labels/edit";
 import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
 import {
+  filledLanding,
   isAirStroke,
+  landingGapMetres,
+  landingLink,
   volleyLinkWrites,
+  withFilledLandings,
 } from "@/lib/services/labels/volley-link";
 import { labelShot } from "./fixtures/label-session";
 
@@ -32,6 +36,7 @@ function edit(
   shotId: string,
   patch: LabelShotPatch,
   ghosts?: boolean,
+  landingOnly?: boolean,
 ) {
   const before = shots.find((s) => s.id === shotId)!;
   const point: Pick<LabelPoint, "shots"> = {
@@ -42,9 +47,10 @@ function edit(
   return volleyLinkWrites({
     point,
     shotId,
-    strokeBefore: before.stroke,
+    before,
     patch,
     ghosts,
+    landingOnly,
   });
 }
 
@@ -301,7 +307,7 @@ test.describe("previous and next are the nearest LIVE strokes", () => {
     });
 
   test("a deleted stroke between the two is skipped, both ways", () => {
-    const a = shot("a", BACK);
+    const a = shot("a", { ...BACK, landingX: 0, landingY: 20 });
     const b = shot("b", { hitter: "p2", stroke: "forehand_volley" });
     const rows = [a, tombstone("x"), b];
     expect(
@@ -326,7 +332,7 @@ test.describe("previous and next are the nearest LIVE strokes", () => {
   });
 
   test("a ghost is skipped while ghosts are drawn, and is a stroke when not", () => {
-    const a = shot("a", BACK);
+    const a = shot("a", { ...BACK, landingX: 0, landingY: 20 });
     const b = shot("b", { hitter: "p2", stroke: "forehand_volley" });
     const rows = [a, ghost("g"), b];
     const patch = { contact_x: AT_NET.x, contact_y: AT_NET.y };
@@ -349,5 +355,151 @@ test.describe("previous and next are the nearest LIVE strokes", () => {
     const a = shot("a", BACK);
     const b = shot("b", { status: "deleted", stroke: "forehand_volley" });
     expect(edit([a, b], "b", { contact_x: 1, contact_y: 14 })).toEqual([]);
+  });
+});
+
+test.describe("a landing filled from the next air stroke", () => {
+  const volley = (fields: Partial<LabelShot> = {}) =>
+    shot("b", {
+      hitter: "p2",
+      stroke: "forehand_volley",
+      contactX: AT_NET.x,
+      contactY: AT_NET.y,
+      ...fields,
+    });
+
+  test("no landing stored: it reads the air stroke's contact", () => {
+    for (const stroke of [
+      "forehand_volley",
+      "backhand_volley",
+      "overhead",
+    ] as const) {
+      expect(
+        filledLanding(shot("a", BACK), volley({ stroke })),
+        stroke,
+      ).toEqual(AT_NET);
+    }
+  });
+
+  test("a half-set landing is no landing", () => {
+    expect(
+      filledLanding(shot("a", { ...BACK, landingX: 3 }), volley()),
+    ).toEqual(AT_NET);
+  });
+
+  test("nothing fills it: a stored landing, a bounce next, no contact, no next", () => {
+    const stored = shot("a", { ...BACK, landingX: 0, landingY: 20 });
+    expect(filledLanding(stored, volley())).toBeNull();
+    expect(
+      filledLanding(shot("a", BACK), volley({ stroke: "forehand" })),
+    ).toBeNull();
+    expect(
+      filledLanding(
+        shot("a", BACK),
+        volley({ contactX: null, contactY: null }),
+      ),
+    ).toBeNull();
+    expect(filledLanding(shot("a", BACK), null)).toBeNull();
+  });
+
+  test("a serve's landing is a bounce: never filled, never linked", () => {
+    const serve = shot("a", { ...BACK, stroke: "first_serve" });
+    expect(filledLanding(serve, volley())).toBeNull();
+    expect(landingLink(serve, volley())).toBeNull();
+    const placed = { ...serve, landingX: 0, landingY: 16 };
+    expect(
+      edit([placed, volley()], "b", { contact_x: 1, contact_y: 2 }),
+    ).toEqual([]);
+    expect(
+      edit([placed, volley()], "a", { landing_x: 1, landing_y: 2 }),
+    ).toEqual([]);
+  });
+
+  test("the point's readers get it; tombstones skipped, order and rows kept", () => {
+    const a = shot("a", BACK);
+    const gone = shot("gone", { status: "deleted", stroke: "backhand" });
+    const b = volley();
+    const filled = withFilledLandings({ shots: [a, gone, b] });
+    expect(filled.map((s) => s.id)).toEqual(["a", "gone", "b"]);
+    expect(filled[0]).toMatchObject({ landingX: AT_NET.x, landingY: AT_NET.y });
+    expect(filled[1].landingX).toBeNull();
+    // The stored row is untouched: it is not an edit.
+    expect(a.landingX).toBeNull();
+    expect(a.status).toBe(filled[0].status);
+  });
+
+  test("the link's three states and the gap", () => {
+    expect(landingLink(shot("a", BACK), volley())).toBe("filled");
+    const agrees = shot("a", {
+      ...BACK,
+      landingX: AT_NET.x,
+      landingY: AT_NET.y,
+    });
+    expect(landingLink(agrees, volley())).toBe("agrees");
+    const apart = shot("a", { ...BACK, landingX: AT_NET.x, landingY: 10 });
+    expect(landingLink(apart, volley())).toBe("apart");
+    expect(landingGapMetres(apart, volley())).toBeCloseTo(4);
+    expect(landingGapMetres(shot("a", BACK), volley())).toBeNull();
+    expect(landingLink(shot("a", BACK), shot("b"))).toBeNull();
+  });
+
+  test("the air stroke's contact moved over a filled landing: no write", () => {
+    expect(
+      edit([shot("a", BACK), volley()], "b", {
+        contact_x: ELSEWHERE.x,
+        contact_y: ELSEWHERE.y,
+      }),
+    ).toEqual([]);
+  });
+
+  test("changed to an air stroke over an empty landing: no write", () => {
+    const b = shot("b", { contactX: AT_NET.x, contactY: AT_NET.y });
+    expect(edit([shot("a", BACK), b], "b", { stroke: "overhead" })).toEqual([]);
+  });
+
+  test("a filled landing placed: the contact moves with it", () => {
+    expect(
+      edit([shot("a", BACK), volley()], "a", {
+        landing_x: ELSEWHERE.x,
+        landing_y: ELSEWHERE.y,
+      }),
+    ).toEqual([
+      {
+        shotId: "b",
+        patch: { contact_x: ELSEWHERE.x, contact_y: ELSEWHERE.y },
+      },
+    ]);
+  });
+
+  test("landing only: the contact stays", () => {
+    expect(
+      edit(
+        [shot("a", BACK), volley()],
+        "a",
+        { landing_x: ELSEWHERE.x, landing_y: ELSEWHERE.y },
+        undefined,
+        true,
+      ),
+    ).toEqual([]);
+  });
+
+  test("ends already apart stay apart, moved from either side", () => {
+    const a = shot("a", { ...BACK, landingX: 0, landingY: 20 });
+    expect(edit([a, volley()], "a", { landing_x: 1, landing_y: 19 })).toEqual(
+      [],
+    );
+    expect(edit([a, volley()], "b", { contact_x: 1, contact_y: 19 })).toEqual(
+      [],
+    );
+  });
+
+  test("ends that agree move together, from either side", () => {
+    const a = shot("a", { ...BACK, landingX: AT_NET.x, landingY: AT_NET.y });
+    expect(edit([a, volley()], "b", { contact_x: 1, contact_y: 19 })).toEqual([
+      { shotId: "a", patch: { landing_x: 1, landing_y: 19 } },
+    ]);
+    expect(edit([a, volley()], "a", { landing_x: 1, landing_y: 19 })).toEqual([
+      { shotId: "b", patch: { contact_x: 1, contact_y: 19 } },
+    ]);
   });
 });

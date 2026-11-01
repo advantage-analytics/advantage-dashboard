@@ -6,6 +6,7 @@ import {
   Check,
   CornerDownRight,
   EyeOff,
+  Link2,
   Plus,
   RotateCcw,
   Split,
@@ -46,6 +47,11 @@ import {
   playedOnResult,
   shotPlacement,
 } from "@/lib/services/labels/shot-derived";
+import {
+  landingGapMetres,
+  landingLink,
+  withFilledLanding,
+} from "@/lib/services/labels/volley-link";
 import type { LabelShotResult } from "@/lib/services/labels/seed";
 import {
   doubleFaultAt,
@@ -578,9 +584,15 @@ export function BlackShotRow({
     shot.videoTime !== null
       ? formatFileTime(shot.videoTime, edit.fileOffset)
       : null;
-  const placement = shotPlacement(labelShotValues(shot));
+  // The landing the next air stroke gives it (volley-link.ts), drawn and read
+  // for placement. Its result stays the stored one: a filled landing calls
+  // nothing.
+  const landed = withFilledLanding(shot, next);
+  const link = landingLink(shot, next);
+  const gap = link === "apart" && next ? landingGapMetres(shot, next) : null;
+  const placement = shotPlacement(labelShotValues(landed));
   // Inside Out / Inside In when the stroke came from its other wing's half.
-  const direction = placementLabel(shot, edit.hands);
+  const direction = placementLabel(landed, edit.hands);
   const resultMenu = shotResultMenu(shot, edit.playOnLets);
   // An empty result the next stroke settles: it played the ball, so In.
   const result = playedOnResult(shot, next, point?.ending);
@@ -725,16 +737,18 @@ export function BlackShotRow({
           {...cell}
           end="landed"
           label={`Shot ${number} landed at`}
-          x={shot.landingX}
-          y={shot.landingY}
+          x={landed.landingX}
+          y={landed.landingY}
           muted={fault}
+          filledFrom={link === "filled" ? number + 1 : null}
+          apart={gap === null ? null : { shot: number + 1, metres: gap }}
           onPick={() => pick("landing")}
         />
         {placement ? (
           // The one word here nobody can open an editor on, in a track that
           // narrows with the rail: whole in the tooltip when it is cut.
           <ChromeTooltip
-            {...directionWords(placement, direction, shot)}
+            {...directionWords(placement, direction, landed)}
             side="top"
             wrap
           >
@@ -1872,6 +1886,9 @@ function BlackPositionCell({
   x,
   y,
   muted,
+  filledFrom = null,
+  apart = null,
+  rowSelected = false,
   onPick,
 }: {
   editable: boolean;
@@ -1881,26 +1898,51 @@ function BlackPositionCell({
   y: number | null;
   /** A fault row: the numbers a step quieter. */
   muted: boolean;
+  /** The stroke whose contact fills this landing: a link glyph, a step quieter. */
+  filledFrom?: number | null;
+  /** A stored landing away from the next air stroke's contact: said in the tooltip. */
+  apart?: { shot: number; metres: number } | null;
+  rowSelected?: boolean;
   /** Select the row with the court on this end. */
   onPick: () => void;
 }) {
   const pair = courtPair(x, y);
   const text = formatCourtPoint(x, y);
-  const words = positionWords(end, x, y, editable);
+  const placed = positionWords(end, x, y, editable);
+  const words =
+    filledFrom !== null
+      ? {
+          label: `Filled from shot ${filledFrom}`,
+          detail: [
+            `No bounce, so this is where shot ${filledFrom} met the ball`,
+            ...(editable ? ["Click to move it on the court"] : []),
+          ],
+        }
+      : apart
+        ? {
+            ...placed,
+            detail: [
+              `${apart.metres.toFixed(1)} m from where shot ${apart.shot} met the ball`,
+              ...placed.detail,
+            ],
+          }
+        : placed;
+  const ink =
+    filledFrom !== null
+      ? rowSelected
+        ? VALUE_INK
+        : QUIET_INK
+      : muted
+        ? QUIET_INK
+        : VALUE_INK;
   const numbers = (
     <span className="inline-flex items-center gap-1.5 align-middle">
       {pair ? (
         <>
-          <b
-            className={cn(NUM, "font-normal")}
-            style={{ color: muted ? QUIET_INK : VALUE_INK }}
-          >
+          <b className={cn(NUM, "font-normal")} style={{ color: ink }}>
             {pair[0]}
           </b>
-          <b
-            className={cn(NUM, "font-normal")}
-            style={{ color: muted ? QUIET_INK : VALUE_INK }}
-          >
+          <b className={cn(NUM, "font-normal")} style={{ color: ink }}>
             {pair[1]}
           </b>
         </>
@@ -1922,6 +1964,21 @@ function BlackPositionCell({
           aria-label="Hit at"
           className="size-[7px] flex-none rounded-full border border-white/50"
         />
+      ) : filledFrom !== null ? (
+        // The dot's 7px slot, the glyph spilling over it, so the numbers stay
+        // under their neighbours'.
+        <span className="flex w-[7px] flex-none justify-center">
+          <Link2
+            role="img"
+            aria-label={`Filled from shot ${filledFrom}`}
+            data-landing-filled=""
+            className={cn(
+              "size-[11px] flex-none",
+              rowSelected ? "text-white/85" : "text-white/60",
+            )}
+            strokeWidth={2}
+          />
+        </span>
       ) : (
         <i
           role="img"

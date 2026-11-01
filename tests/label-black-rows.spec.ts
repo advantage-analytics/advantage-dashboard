@@ -2445,3 +2445,57 @@ test.describe("the inline review note in the well", () => {
     expect(render("w-serve", "w-lit")).not.toContain("data-review-inline-wash");
   });
 });
+
+test.describe("a landing filled from the next air stroke", () => {
+  const rowHtml = (
+    fields: Partial<LabelShot>,
+    nextFields: Partial<LabelShot> | null,
+  ) => {
+    const { BlackShotRow } = createLoader().load(WELL) as {
+      BlackShotRow: React.ComponentType<Record<string, unknown>>;
+    };
+    const base = labelSessionFixture().points[0].shots[1];
+    return renderToStaticMarkup(
+      React.createElement(BlackShotRow, {
+        shot: {
+          ...base,
+          stroke: "backhand",
+          contactX: 2,
+          contactY: 20,
+          landingX: null,
+          landingY: null,
+          ...fields,
+        },
+        next: nextFields && {
+          ...base,
+          id: "next",
+          stroke: "overhead",
+          contactX: -1,
+          contactY: 6,
+          ...nextFields,
+        },
+        number: 4,
+        pointNumber: 7,
+        edit: wellEdit({}),
+      }),
+    );
+  };
+
+  test("draws the contact with the glyph, and a placement", () => {
+    const html = rowHtml({}, {});
+    expect(html).toContain("data-landing-filled");
+    expect(html).toContain('aria-label="Filled from shot 5"');
+    expect(html).toContain("-1.00");
+    expect(html).toContain(">Middle<");
+  });
+
+  test("a stored landing or a bounce next: no glyph", () => {
+    expect(rowHtml({ landingX: 1, landingY: 7 }, {})).not.toContain(
+      "data-landing-filled",
+    );
+    expect(rowHtml({}, { stroke: "forehand" })).not.toContain(
+      "data-landing-filled",
+    );
+    expect(rowHtml({}, null)).not.toContain("data-landing-filled");
+  });
+});
