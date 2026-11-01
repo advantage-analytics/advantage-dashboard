@@ -551,7 +551,8 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
       {
         name: "net_points_appearances",
         type: "integer",
-        meaning: "Points on which this side came to the net.",
+        meaning:
+          "Points on which this side came to the net: a volley, an overhead up the court, or any rally shot from inside the service line.",
       },
       {
         name: "net_points_won",

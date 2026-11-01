@@ -540,8 +540,8 @@ function FilmRoom({
   // same two predicates the report's cards count "Watch all N" with, so N
   // is what lands here when nothing else is applied.
   const filteredPoints = useMemo(
-    () => filmListPoints(sharedPoints, local),
-    [sharedPoints, local],
+    () => filmListPoints(sharedPoints, local, filterContext),
+    [sharedPoints, local, filterContext],
   );
   // The filters drawer's live count: what this list would show if the draft
   // replaced the shared filters, under the same remainder and saved toggle.

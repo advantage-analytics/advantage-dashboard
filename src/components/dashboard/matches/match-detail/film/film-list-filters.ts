@@ -111,13 +111,14 @@ export const INERT_FILM_LIST_FILTERS: FilmListFilters = Object.freeze({
 export function filmListPoints(
   sharedPoints: MatchPoint[],
   local: FilmLocalFilters,
+  ctx: Pick<MatchFilterContext, "youIsPlayer1">,
 ): MatchPoint[] {
   const extras = local.remainder?.extras ?? null;
   const set = hasPointSet(local) ? new Set(local.pointSet) : null;
   if (!extras && !local.savedOnly && !set) return sharedPoints;
   return sharedPoints.filter(
     (point) =>
-      (!extras || matchesFilmCutExtras(point, extras)) &&
+      (!extras || matchesFilmCutExtras(point, extras, ctx)) &&
       (!local.savedOnly || point.saved) &&
       (!set || set.has(point.pointNumber)),
   );
@@ -368,7 +369,8 @@ export function filmDraftCount(
   local: FilmLocalFilters,
   ctx: MatchFilterContext,
 ): number {
-  return filmListPoints(applyMatchFilters(points, draft, ctx), local).length;
+  return filmListPoints(applyMatchFilters(points, draft, ctx), local, ctx)
+    .length;
 }
 
 /**

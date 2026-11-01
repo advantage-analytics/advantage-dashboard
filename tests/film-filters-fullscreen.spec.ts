@@ -83,7 +83,7 @@ function list(
     ctx,
   );
   return ids(
-    filmListPoints(sharedPoints, { ...NO_FILM_LOCAL_FILTERS, ...local }),
+    filmListPoints(sharedPoints, { ...NO_FILM_LOCAL_FILTERS, ...local }, ctx),
   );
 }
 const extras = (e: FilmCutExtras) => ({

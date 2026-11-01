@@ -1,6 +1,9 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+
 import { expect, test } from "@playwright/test";
 
-import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 
 import {
   DERIVED_H2H_GROUPS,
@@ -22,10 +25,15 @@ import {
   type H2HRowConfig,
   type H2HStats,
 } from "@/components/dashboard/matches/match-detail/head-to-head-card";
+import {
+  NET_OVERHEAD_DEPTH_M,
+  NET_ZONE_DEPTH_M,
+  cameToNet,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { netPointsWonPct } from "@/lib/data/match-stats-server";
 
 /**
- * The head-to-head table's fifteen rows and the rule that emphasises one of
+ * The head-to-head table's sixteen rows and the rule that emphasises one of
  * them.
  *
  * Pure and offline: the card is a table, and what goes wrong with a table is
@@ -51,14 +59,14 @@ function byLabel(rows: H2HRow[], label: string): H2HRow {
 const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 
 test.describe("the row configuration", () => {
-  test("is fifteen rows in three groups of seven, four and four", () => {
+  test("is sixteen rows in three groups of seven, four and five", () => {
     expect(H2H_GROUPS.map((group) => group.title)).toEqual([
       "Serve",
       "Return",
       "Points",
     ]);
-    expect(H2H_GROUPS.map((group) => group.configs.length)).toEqual([7, 4, 4]);
-    expect(ALL_ROWS).toHaveLength(15);
+    expect(H2H_GROUPS.map((group) => group.configs.length)).toEqual([7, 4, 5]);
+    expect(ALL_ROWS).toHaveLength(16);
   });
 
   test("every label is sentence case", () => {
@@ -313,18 +321,18 @@ test.describe("hover readouts, with and without video", () => {
     side({
       aces: 3,
       winners: 12,
-      netPointsWonPct: 60,
-      fractions: { netPointsWonPct: { made: 6, attempts: 10 } },
+      serviceGamesWonPct: 60,
+      fractions: { serviceGamesWonPct: { made: 6, attempts: 10 } },
     }),
     side({
       aces: 0,
       winners: 0,
-      netPointsWonPct: 50,
-      fractions: { netPointsWonPct: { made: 4, attempts: 8 } },
+      serviceGamesWonPct: 50,
+      fractions: { serviceGamesWonPct: { made: 4, attempts: 8 } },
     }),
   );
   const aces = byLabel(rows, "Aces");
-  const net = byLabel(rows, "Net points won");
+  const uncut = byLabel(rows, "Service games won");
   const noVideo = { hasVideo: false, count: 0, noVideoLine: true };
   const shareLink = { hasVideo: false, count: 0, noVideoLine: false };
   const videoNoPoints = { hasVideo: true, count: 0, noVideoLine: false };
@@ -354,7 +362,7 @@ test.describe("hover readouts, with and without video", () => {
 
   test("a row with no cut shows its fraction and no footer either way", () => {
     for (const scope of [noVideo, videoNoPoints]) {
-      const readout = figureReadout(net, "you", "Ace", scope);
+      const readout = figureReadout(uncut, "you", "Ace", scope);
       expect(readout?.lines.map((line) => line.name)).toEqual(["6 of 10 won"]);
       expect(readout?.footer).toBeUndefined();
     }
@@ -367,8 +375,8 @@ test.describe("hover readouts, with and without video", () => {
     expect(
       rowReadout(aces, "Ace", "Opp", { ...videoNoPoints, count: 3 }).footer,
     ).toEqual({ kind: "watch", count: 3 });
-    expect(rowReadout(net, "Ace", "Opp", noVideo).footer).toBeUndefined();
-    expect(hasReadout(rowReadout(net, "Ace", "Opp", noVideo))).toBe(true);
+    expect(rowReadout(uncut, "Ace", "Opp", noVideo).footer).toBeUndefined();
+    expect(hasReadout(rowReadout(uncut, "Ace", "Opp", noVideo))).toBe(true);
   });
 
   test("a read-only share link never says no video — it may have one", () => {
@@ -378,7 +386,7 @@ test.describe("hover readouts, with and without video", () => {
     const figure = figureReadout(aces, "you", "Ace", shareLink);
     expect(figure?.footer).toBeUndefined();
     expect(rowReadout(aces, "Ace", "Opp", shareLink).footer).toBeUndefined();
-    const fraction = figureReadout(net, "you", "Ace", shareLink);
+    const fraction = figureReadout(uncut, "you", "Ace", shareLink);
     expect(hasReadout(fraction)).toBe(true);
     expect(figureReadout(aces, "opp", "Opp", shareLink)?.note).toBe(
       "No aces in this match",
@@ -514,7 +522,7 @@ test.describe("on an Advantage Intelligence match", () => {
     expect(tallySide(points, true).winners).toBe(0);
   });
 
-  test("the derived groups keep the same fifteen rows in the same order", () => {
+  test("the derived groups keep the same sixteen rows in the same order", () => {
     expect(DERIVED_SERVE_ROWS.map((c) => c.label)).toEqual(
       SERVE_ROWS.map((c) => c.label),
     );
@@ -523,61 +531,116 @@ test.describe("on an Advantage Intelligence match", () => {
   });
 });
 
-test.describe("net points won with no net approaches", () => {
-  // A match where nobody came to the net has not measured the rate. The
-  // loader used to publish 0% for both sides, which says each player lost
-  // every net point they played; unmeasured renders the em dash, like the
-  // other no-data rows.
-  const scope = { hasVideo: true, count: 0, noVideoLine: true };
+test.describe("net points", () => {
+  const shot = (
+    shotNumber: number,
+    isPlayer1: boolean,
+    shotType: string,
+    contactY: number | null,
+  ) => ({ shotNumber, isPlayer1, shotType, contactY }) as MatchShot;
+  const point = (wonByPlayer1: boolean, ...shots: MatchShot[]) =>
+    ({ wonByPlayer1, serverIsPlayer1: true, shots }) as MatchPoint;
+  const serve = shot(1, true, "First Serve", 0);
+  const NET = 11.885;
 
-  test("the loader publishes no rate when there were no appearances", () => {
+  test("a volley counts anywhere", () => {
+    expect(
+      cameToNet(point(true, serve, shot(3, true, "Volley", null)), true),
+    ).toBe(true);
+    expect(
+      cameToNet(point(true, serve, shot(3, true, "Forehand Volley", 1)), true),
+    ).toBe(true);
+  });
+
+  test("a groundstroke counts from inside the service line, either end", () => {
+    const at = (y: number) => point(true, serve, shot(3, true, "Forehand", y));
+    expect(cameToNet(at(NET - 5), true)).toBe(true);
+    expect(cameToNet(at(NET + 5), true)).toBe(true);
+    expect(cameToNet(at(NET - 7), true)).toBe(false);
+    expect(cameToNet(at(0.5), true)).toBe(false);
+  });
+
+  test("an overhead from the back of the court does not count", () => {
+    const at = (y: number | null) =>
+      point(true, serve, shot(3, true, "Overhead", y));
+    expect(cameToNet(at(NET - 7), true)).toBe(true);
+    expect(cameToNet(at(NET - 11), true)).toBe(false);
+    expect(cameToNet(at(null), true)).toBe(true);
+  });
+
+  test("the serve, a return and the other player's shots do not count", () => {
+    const close = NET - 3;
+    expect(
+      cameToNet(point(true, shot(1, true, "First Serve", close)), true),
+    ).toBe(false);
+    expect(
+      cameToNet(point(true, serve, shot(2, false, "Forehand", close)), false),
+    ).toBe(false);
+    expect(
+      cameToNet(point(true, serve, shot(3, true, "Volley", close)), false),
+    ).toBe(false);
+  });
+
+  test("attempts and won are counted per side, won as a rate with its fraction", () => {
+    const youIn = shot(3, true, "Volley", NET - 3);
+    const points = [
+      point(true, serve, youIn),
+      point(false, serve, youIn),
+      point(true, serve, shot(3, true, "Forehand", NET - 5)),
+      point(true, serve, shot(3, true, "Forehand", 1)),
+    ];
+    const you = tallySide(points, true);
+    const opp = tallySide(points, false);
+    const configs = POINT_ROWS.filter((c) => c.label.startsWith("Net"));
+    const rows = withPointRows(configs, [], you, opp);
+
+    const attempts = byLabel(rows, "Net point attempts");
+    expect(attempts.you.display).toBe("3");
+    // No shots of theirs on record: unmeasured, not a zero.
+    expect(attempts.opp.display).toBe("");
+
+    const won = byLabel(rows, "Net points won");
+    expect(won.you).toMatchObject({ display: "67%", detail: "2/3" });
+    expect(won.opp.display).toBe("");
+  });
+
+  test("nobody at the net: zero attempts, and no rate rather than 0%", () => {
+    const back = (isPlayer1: boolean) =>
+      shot(isPlayer1 ? 3 : 2, isPlayer1, "Forehand", 1);
+    const points = [point(true, serve, back(false), back(true))];
+    const scope = { hasVideo: true, count: 0, noVideoLine: false };
+    const rows = withPointRows(
+      POINT_ROWS.filter((c) => c.label.startsWith("Net")),
+      [],
+      tallySide(points, true),
+      tallySide(points, false),
+    );
+    expect(byLabel(rows, "Net point attempts").you.display).toBe("0");
+    const won = byLabel(rows, "Net points won");
+    expect(won.you).toMatchObject({ value: null, display: "" });
+    expect(figureReadout(won, "you", "You", scope)).toBeNull();
+  });
+
+  test("the published figures' SQL rule uses the same distances", () => {
+    // `net_attempt_shot` is the twin behind `match_stats.net_points_*`: drift
+    // and the card disagrees with Ask and the AI summary with nothing broken.
+    const dir = join(process.cwd(), "supabase/migrations");
+    const sql = readdirSync(dir)
+      .sort()
+      .map((file) => readFileSync(join(dir, file), "utf8"))
+      .filter((text) => text.includes("function public.net_attempt_shot"))
+      .at(-1)!;
+    expect(sql).toContain(
+      `abs(p_contact_y - 11.885) <= ${NET_OVERHEAD_DEPTH_M}\n`,
+    );
+    expect(sql).toContain(`abs(p_contact_y - 11.885) <= ${NET_ZONE_DEPTH_M}\n`);
+    expect(sql).toContain("p_shot_number >= 3");
+  });
+
+  test("the loader's published rate is still no rate without appearances", () => {
     expect(netPointsWonPct(0, 0)).toBeNull();
-    expect(netPointsWonPct(null, null)).toBeNull();
     expect(netPointsWonPct(6, 10)).toBe(60);
-    // Came to the net and lost every one: that zero is a measurement.
     expect(netPointsWonPct(0, 4)).toBe(0);
-  });
-
-  test("a zero-attempt net row is a dash on both sides with no readout", () => {
-    // What the loader hands the card: no rate, and `frac()` drops the
-    // zero-attempt fraction.
-    const none = side({
-      netPointsWonPct: netPointsWonPct(0, 0),
-      fractions: {},
-    });
-    const net = byLabel(
-      buildStatRows(POINT_ROWS, none, none),
-      "Net points won",
-    );
-
-    expect(net.you).toMatchObject({ value: null, display: "" });
-    expect(net.opp).toMatchObject({ value: null, display: "" });
-    expect(net.leader).toBeNull();
-    expect(figureReadout(net, "you", "You", scope)).toBeNull();
-    expect(figureReadout(net, "opp", "Opp", scope)).toBeNull();
-    expect(hasReadout(rowReadout(net, "You", "Opp", scope))).toBe(false);
-  });
-
-  test("a match with net points keeps its percentage and fraction", () => {
-    const net = byLabel(
-      buildStatRows(
-        POINT_ROWS,
-        side({
-          netPointsWonPct: netPointsWonPct(6, 10),
-          fractions: { netPointsWonPct: { made: 6, attempts: 10 } },
-        }),
-        side({
-          netPointsWonPct: netPointsWonPct(0, 4),
-          fractions: { netPointsWonPct: { made: 0, attempts: 4 } },
-        }),
-      ),
-      "Net points won",
-    );
-
-    expect(net.you.display).toBe("60%");
-    expect(net.opp.display).toBe("0%");
-    expect(net.leader).toBe("you");
-    expect(hasReadout(figureReadout(net, "opp", "Opp", scope))).toBe(true);
   });
 });
 
@@ -594,6 +657,7 @@ test.describe("errors until the split is judged", () => {
     test(`unjudged (${kind}): one Errors row, every error`, () => {
       const configs = pointsOf(isDerived, false);
       expect(configs.map((c) => c.label)).toEqual([
+        "Net point attempts",
         "Net points won",
         "Winners",
         "Errors",
@@ -609,6 +673,7 @@ test.describe("errors until the split is judged", () => {
     test(`judged (${kind}): Unforced errors then Forced errors`, () => {
       const configs = pointsOf(isDerived, true);
       expect(configs.map((c) => c.label)).toEqual([
+        "Net point attempts",
         "Net points won",
         "Winners",
         "Unforced errors",
