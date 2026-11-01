@@ -86,10 +86,11 @@ export function stableStringify(value: unknown): string {
  * The fingerprint of the inputs the build folds under, beside the files: the
  * match's entered score and format (`best_of`, `ad_scoring`, `play_on_lets`,
  * …), the job's own `ad_scoring`, which beats the format's, or a labeller's
- * correction, which beats both (`resolveAdScoring`), the trim offset every stroke time is shifted by, who
- * started at the top (job, else match), and the name pairs `reconcile` reads
- * player1 from (`playerNamesFor`). A correction to any of them after the row
- * was written must miss, or the console keeps the old hitters and times.
+ * correction, which beats both (`resolveAdScoring`), the trim offset every
+ * stroke time is shifted by, who started at the top (job, else match), and the
+ * name pairs `reconcile` reads player1 from (`playerNamesFor`). A correction to
+ * any of them after the row was written must miss, or the console keeps the old
+ * hitters and times.
  */
 export function transcriptFingerprint(input: {
   score: unknown;

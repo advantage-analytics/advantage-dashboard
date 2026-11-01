@@ -233,17 +233,14 @@ export async function readJobAndMatch(
     };
   }
 
+  // Optional, so an unreadable one never stops a publish: the job's value
+  // stands in until the next build reads it.
   const corrected = await readCorrectedAdScoring(supabase, job.match_id);
   if (corrected.error) {
-    return {
-      ok: false,
-      failure: {
-        transcript: null,
-        reason: `could not read the corrected scoring: ${corrected.error.message}`,
-        failure: "error",
-        job,
-      },
-    };
+    console.error(`${LOG} could not read the corrected scoring`, {
+      jobId: job.id,
+      error: corrected.error.message,
+    });
   }
   return {
     ok: true,

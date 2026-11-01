@@ -217,7 +217,7 @@ test.describe("buildTranscriptForJob", () => {
     expect(shape(foldedUnder(true))).toEqual(shape(foldedUnder(false)));
   });
 
-  test("a correction that cannot be read fails the build, rather than count the old rule", async () => {
+  test("a correction that cannot be read falls back to the job, and the build still publishes", async () => {
     const { supabase } = stubClient({
       job: { ...JOB, ad_scoring: false },
       match: { ...MATCH, format: { ad_scoring: false, best_of: 3 } },
@@ -225,9 +225,9 @@ test.describe("buildTranscriptForJob", () => {
       corrected: { error: "boom" },
     });
     const out = await buildTranscriptForJob({ supabase, jobId: "job" });
-    expect(out.transcript).toBeNull();
-    expect(out.failure).toBe("error");
-    expect(out.reason).toContain("boom");
+    expect(out.failure).toBeNull();
+    expect(out.correctedAdScoring).toBeNull();
+    expect(pressure(out.transcript)).toEqual(pressure(foldedUnder(false)));
   });
 
   test("the fixture's pressure flags depend on the rule", () => {
