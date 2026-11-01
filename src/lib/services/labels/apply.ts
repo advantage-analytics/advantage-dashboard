@@ -50,7 +50,11 @@ import {
   type RawSplitStepStroke,
   type SplitStepRally,
 } from "@/lib/services/splitstep/derivation";
-import { allErrorsJudged, publishEnding } from "./ending-derived";
+import {
+  allErrorsJudged,
+  endingContradictsWinner,
+  publishEnding,
+} from "./ending-derived";
 import { inServeLandingMiss, playedOnResult } from "./shot-derived";
 import { filledLanding, landingTakesContact } from "./volley-link";
 import { gameKey, labelScores, type LabelGameBand } from "./score";
@@ -486,6 +490,9 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
       warnings.push(
         `${at}: ended by ${endedBy}, but the last stroke is ${last.hitter}'s`,
       );
+    }
+    if (endingContradictsWinner({ ending, endedBy, winner })) {
+      warnings.push(`${at}: ${ending} by ${endedBy}, won by ${winner}`);
     }
     const serverWins = ending === "ace" || ending === "service_winner";
     if (serverWins && winner !== server) {

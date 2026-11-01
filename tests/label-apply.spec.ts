@@ -567,6 +567,12 @@ test.describe("a point with no ending stored", () => {
     expect(point.flags).toEqual([HAND_LABELLED_FLAG]);
   });
 
+  test("a stored ending that cannot be true of its winner is warned about", () => {
+    expect(
+      build(withPoint(9, { winner: "p2", endedBy: "p1" })).warnings,
+    ).toContain("point 10: winner by p1, won by p2");
+  });
+
   test("strokes that name the other winner are refused, never flipped", () => {
     const built = build(withPoint(9, { ending: null, winner: "p2" }));
     expect(built.problems).toContain(

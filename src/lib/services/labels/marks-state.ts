@@ -15,7 +15,11 @@
  */
 
 import { landingTakesContact } from "./volley-link";
-import { deriveEnding, winnerContradicted } from "./ending-derived";
+import {
+  deriveEnding,
+  endingContradictsWinner,
+  winnerContradicted,
+} from "./ending-derived";
 import {
   isDataMark,
   type LabelMark,
@@ -1197,7 +1201,9 @@ function reviewItemTone(
  * member, and "Net or out?" is dropped while "Was the last ball in?" still
  * has its answer. On a checked point a hint member reads `checked-as-is`,
  * except "Different ending?" with the winner contradicted, which stays
- * `open`: the score, as `openFlags` has always read it.
+ * `open`: the score, as `openFlags` has always read it. It also stays open
+ * when the stored ending cannot be true of the winner
+ * (`endingContradictsWinner`), in the grey tone since the score is right.
  */
 export function reviewFlag(
   point: LabelPoint,
@@ -1210,9 +1216,10 @@ export function reviewFlag(
   const checked = point.checkedAt !== null;
   const contradicted = pointWinnerContradicted(point, marks);
   const answered = lastBallAnswered(point, drawsGhosts(marks));
+  const endingWrong = contradicted || endingContradictsWinner(point);
   const hintState = (mark: LabelMark): MarkState => {
     if (checked) {
-      return contradicted && mark.code === "ending_stale"
+      return endingWrong && mark.code === "ending_stale"
         ? "open"
         : "checked-as-is";
     }
