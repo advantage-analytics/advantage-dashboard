@@ -9,7 +9,10 @@ import {
   type LabelMarks,
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
-import { markState } from "@/lib/services/labels/marks-state";
+import {
+  markState,
+  serveInLandingOut,
+} from "@/lib/services/labels/marks-state";
 import { planAddedShot } from "@/lib/services/labels/operations";
 import { reviewStep } from "@/lib/services/labels/review-step";
 import { effectiveShotResult } from "@/lib/services/labels/shot-derived";
@@ -937,6 +940,50 @@ test.describe("a double fault ends the point for its slots", () => {
     expect(doubleFaultAt(withLet.shots)).toBe(2);
     // One serve: nothing to end.
     expect(doubleFaultAt(doubleFaultPoint().shots.slice(1))).toBeNull();
+  });
+
+  test("a second serve stored in that reads out with a rally after it is flagged, not a double fault", () => {
+    // The first serve stored out, the second stored in with a landing long of
+    // the box: what the seed leaves when a rally followed.
+    const misread = (
+      strokesAfter: number,
+      ending: LabelPoint["ending"] = null,
+    ): LabelPoint => {
+      const point = doubleFaultPoint(["out", "in"], ending);
+      return {
+        ...point,
+        shots: point.shots.slice(0, 2 + strokesAfter).map((shot) =>
+          shot.id === "d2"
+            ? {
+                ...shot,
+                contactX: 0.83,
+                contactY: 0.08,
+                landingX: -2.66,
+                landingY: 23.95,
+              }
+            : shot,
+        ),
+      };
+    };
+    const rally = misread(4);
+    expect(doubleFaultAt(rally.shots)).toBeNull();
+    expect(serveInLandingOut(rally, true)?.params).toEqual({
+      shotId: "d2",
+      landing: "out",
+    });
+    const well = renderWell(rally, null);
+    expect(well).not.toContain("data-point-over");
+    expect(well).not.toContain("data-past-end");
+    // The rally was played, so a gap in it is still a question.
+    expect(suggestionState(doubleFaultSlot("d5", 605), rally)).toBe("open");
+    // Three strokes is past the tail too; one or two can still be dead balls.
+    expect(doubleFaultAt(misread(3).shots)).toBeNull();
+    expect(doubleFaultAt(misread(2).shots)).toBe(1);
+    expect(doubleFaultAt(misread(1).shots)).toBe(1);
+    // A stored double fault is the labeller's, however many strokes follow.
+    expect(
+      doubleFaultAt(misread(4, "double_fault").shots, "double_fault"),
+    ).toBe(1);
   });
 
   test("every slot from the second fault on is done, however many strokes follow", () => {
