@@ -352,6 +352,7 @@ export function placementNotice(
   before: PlacementState,
   after: PlacementState,
   shotNumber: number | null,
+  contactMoved = false,
 ): string | null {
   if (
     before.target !== "landing" ||
@@ -362,7 +363,9 @@ export function placementNotice(
   ) {
     return null;
   }
-  return `Landing placed · next: shot ${shotNumber} contact`;
+  return contactMoved
+    ? `Landing placed · shot ${shotNumber} contact moved with it`
+    : `Landing placed · next: shot ${shotNumber} contact`;
 }
 
 /** The two `unclear` names of a placement end: `contact_x`, `contact_y`. */

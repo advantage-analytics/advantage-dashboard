@@ -58,7 +58,17 @@ import {
   type LabelMarks,
 } from "@/lib/services/labels/marks";
 import type { LabelPointEndingSynced } from "@/lib/services/labels/ending-session";
-import { volleyLinkWrites } from "@/lib/services/labels/volley-link";
+import { positionPatch } from "@/lib/services/labels/shot-derived";
+import {
+  followerAnswer,
+  landingLinkToggle,
+  landingTakesContact,
+  nextLiveStroke,
+  playedOnPatch,
+  saveInOrder,
+  volleyLinkWrites,
+  withFilledLanding,
+} from "@/lib/services/labels/volley-link";
 import { labelScores } from "@/lib/services/labels/score";
 import {
   drawsGhosts,
@@ -464,6 +474,7 @@ export function LabelConsole({
   initialExpandedPointId,
   initialSelectedShotId = null,
   onSaveShot,
+  onSaveShots,
   onSavePoint,
   operations,
   initialConfirm = null,
@@ -488,6 +499,13 @@ export function LabelConsole({
     shotId: string,
     patch: LabelShotPatch,
   ) => Promise<LabelShotEditResult>;
+  /**
+   * A click's linked writes, saved in order as one undo step. Absent: each goes
+   * through `onSaveShot`.
+   */
+  onSaveShots?: (
+    writes: { shotId: string; patch: LabelShotPatch }[],
+  ) => Promise<LabelShotEditResult[]>;
   onSavePoint?: (
     pointId: string,
     patch: LabelPointPatch,
@@ -631,9 +649,21 @@ export function LabelConsole({
   const followPlayback = useCallback(() => setPointFocus(FOLLOW), []);
   const held = pointFocus.mode === "held";
   const [placement, setPlacement] = useState<PlacementState>(() =>
-    placementOf(session.points, initialSelectedShotId),
+    placementOf(
+      session.points,
+      initialSelectedShotId,
+      drawsGhosts(initialMarks),
+    ),
   );
   const [armedSlot, setArmedSlot] = useState<ArmedSlot | null>(null);
+  // The stroke whose next landing click leaves the next stroke's contact where
+  // it is; let go as soon as the court moves to another stroke.
+  const [landingOnlyShotId, setLandingOnlyShotId] = useState<string | null>(
+    null,
+  );
+  const landingOnly =
+    landingOnlyShotId !== null && landingOnlyShotId === placement.shotId;
+  if (landingOnlyShotId !== null && !landingOnly) setLandingOnlyShotId(null);
   // "Landing placed · next: shot 4 contact" (`placementNotice`): shown while
   // the stroke the landing moved on to is still waiting for its contact.
   const [placementNoticeState, setPlacementNoticeState] = useState<{
@@ -964,7 +994,7 @@ export function LabelConsole({
     if (owner?.id !== lastFlagPointId.current) lastFlagPointId.current = null;
     const shot = findShot(points, shotId);
     // A position cell names its end: the court opens on that end's half.
-    const start = placementOf(points, shotId);
+    const start = placementOf(points, shotId, drawsGhosts(marks));
     setPlacement(
       target
         ? setPlacementTarget(start, target, shot?.contactY ?? null)
@@ -1067,6 +1097,8 @@ export function LabelConsole({
       rows: readonly LabelPoint[],
       shotId: string,
       patch: LabelShotPatch,
+      /** This write's answer, when a batch is saving it (`patchShot`). */
+      saving?: Promise<LabelShotEditResult>,
     ): Promise<LabelPoint | null> => {
       const before = findShot(rows, shotId);
       if (!before || !onSaveShot) return null;
@@ -1151,7 +1183,7 @@ export function LabelConsole({
         });
         return null;
       }
-      const result = await settle(onSaveShot(shotId, patch));
+      const result = await settle(saving ?? onSaveShot(shotId, patch));
       if ("error" in result) {
         // Put back exactly the fields this edit changed, and its status.
         const prior = labelShotValues(before);
@@ -1229,26 +1261,68 @@ export function LabelConsole({
   );
 
   /**
-   * The labeller's edit of one stroke and, once it has saved, the volley link
-   * (volley-link.ts): the other end goes out as a shot write of its own through
-   * `writeShot`. A follower's write never plans followers of its own.
+   * The labeller's edit of one stroke and what the volley link (volley-link.ts)
+   * moves with it. They are planned before anything is sent and saved as one
+   * request, so a click made while it is out comes after both, and one undo
+   * takes both back.
    */
   const patchShot = useCallback(
-    async (shotId: string, patch: LabelShotPatch) => {
-      const strokeBefore = findShot(points, shotId)?.stroke ?? null;
-      const saved = await writeShot(points, shotId, patch);
-      if (!saved) return;
-      for (const follower of volleyLinkWrites({
-        point: saved,
-        shotId,
-        strokeBefore,
-        patch,
-        ghosts: drawsGhosts(marks),
-      })) {
-        void writeShot([saved], follower.shotId, follower.patch);
+    async (
+      shotId: string,
+      patch: LabelShotPatch,
+      options?: { landingOnly?: boolean },
+    ) => {
+      const before = findShot(points, shotId);
+      const owner = pointOfShot(points, shotId);
+      const applied = owner && {
+        ...owner,
+        shots: owner.shots.map((shot) =>
+          shot.id === shotId ? applyLabelShotPatch(shot, patch) : shot,
+        ),
+      };
+      const followers =
+        before && applied && !("error" in planShotWrite(before, patch))
+          ? volleyLinkWrites({
+              point: applied,
+              shotId,
+              before,
+              patch,
+              ghosts: drawsGhosts(marks),
+              landingOnly: options?.landingOnly,
+            })
+          : [];
+      if (followers.length === 0 || !applied || !onSaveShot) {
+        await writeShot(points, shotId, patch);
+        return;
       }
+      const writes = [{ shotId, patch }, ...followers];
+      const answers = Promise.all(
+        writes.map((write) => addsInFlight.current.get(write.shotId)),
+      ).then(() =>
+        onSaveShots
+          ? onSaveShots(writes)
+          : saveInOrder(writes, (write) =>
+              onSaveShot(write.shotId, write.patch),
+            ),
+      );
+      await Promise.all([
+        writeShot(
+          points,
+          shotId,
+          patch,
+          answers.then(([own]) => own),
+        ),
+        ...followers.map((follower, i) =>
+          writeShot(
+            [applied],
+            follower.shotId,
+            follower.patch,
+            answers.then((all) => followerAnswer(all[0], all[i + 1])),
+          ),
+        ),
+      ]);
     },
-    [points, writeShot, marks],
+    [points, writeShot, marks, onSaveShot, onSaveShots],
   );
 
   /**
@@ -2227,7 +2301,9 @@ export function LabelConsole({
     };
     // The new stroke is the one a court click places next, from now: its id
     // is the row's own.
-    setPlacement(placementOf(insertShot(points, pointId, draft), id));
+    setPlacement(
+      placementOf(insertShot(points, pointId, draft), id, drawsGhosts(marks)),
+    );
     const added = runOperation<{
       shot: LabelShot;
       point?: LabelPointEndingSynced;
@@ -3486,6 +3562,19 @@ export function LabelConsole({
     );
     if (!next) return;
     stopReplay();
+    // The stroke after this one, and whether its contact moves with this
+    // landing (volley-link.ts).
+    const following = owner
+      ? nextLiveStroke(owner, shot.id, drawsGhosts(marks))
+      : null;
+    const patch = playedOnPatch(next.patch, shot, following);
+    const contactMoves =
+      placement.target === "landing" &&
+      landingTakesContact(
+        { ...shot, result: patch.result ?? shot.result },
+        following,
+        landingOnly,
+      );
     // A placement answers the step only once its stroke has both ends: a
     // missing contact is placed first and its landing still to come must not
     // be skipped. On the step's own stroke the item is answered — in review
@@ -3494,7 +3583,7 @@ export function LabelConsole({
     // them). In review mode a stroke with no step about it (the one an
     // answer added) forces the move on regardless — its landing on the
     // next stroke's contact (`nextPlacement`) stands until the advance lands.
-    if (placesBothEnds(shot, next.patch)) {
+    if (placesBothEnds(withFilledLanding(shot, following), next.patch)) {
       if (step?.target.shotId === shot.id) {
         if (reviewMode) noteAnswered();
         else closeQueuedItem();
@@ -3511,6 +3600,7 @@ export function LabelConsole({
       placement,
       next.state,
       nextNumber === -1 ? null : nextNumber + 1,
+      contactMoves,
     );
     setPlacementNoticeState(
       notice && next.state.shotId
@@ -3518,7 +3608,30 @@ export function LabelConsole({
         : null,
     );
     setPlacement(next.state);
-    void patchShot(shot.id, next.patch);
+    void patchShot(shot.id, patch, { landingOnly });
+  }
+
+  // The court's "Linked to shot N": on ends apart it puts the landing back to
+  // reading the contact; otherwise it arms the next click to move the landing
+  // alone, or disarms it.
+  function toggleLandingLink() {
+    const shot =
+      placement.shotId === null ? null : findShot(points, placement.shotId);
+    const owner = shot ? pointOfShot(points, shot.id) : null;
+    if (!shot || !owner) return;
+    const toggled = landingLinkToggle(
+      shot,
+      nextLiveStroke(owner, shot.id, drawsGhosts(marks)),
+      landingOnly,
+    );
+    if ("clearLanding" in toggled) {
+      void patchShot(
+        shot.id,
+        positionPatch(labelShotValues(shot), "landing", null),
+      );
+      return;
+    }
+    setLandingOnlyShotId(toggled.landingOnly ? shot.id : null);
   }
 
   // The court panel's Contact / Landing switch: the stored contact, when there is
@@ -3716,6 +3829,8 @@ export function LabelConsole({
           ? placementNoticeState.text
           : null
       }
+      landingOnly={landingOnly}
+      onLandingLink={editable ? toggleLandingLink : undefined}
       onPlace={place}
       // A click on a mark already drawn opens that stroke on that end.
       onSelectShot={(shotId, end) => selectShot(shotId, end)}
@@ -4231,6 +4346,7 @@ function pointOfShot(
 function placementOf(
   points: readonly LabelPoint[],
   shotId: string | null,
+  ghosts: boolean,
 ): PlacementState {
   const owner = shotId === null ? null : pointOfShot(points, shotId);
   if (!owner) return startPlacement(shotId);
@@ -4245,8 +4361,13 @@ function placementOf(
       tiebreakHitterHalf(points, owner.id, shot.hitter) ?? "near",
     ),
   );
+  // A filled landing is a landing: the row opens as a placed one does.
+  const landed = withFilledLanding(
+    shot,
+    nextLiveStroke(owner, shot.id, ghosts),
+  );
   const hasContact = shot.contactX !== null && shot.contactY !== null;
-  const hasLanding = shot.landingX !== null && shot.landingY !== null;
+  const hasLanding = landed.landingX !== null && landed.landingY !== null;
   return hasContact && !hasLanding
     ? setPlacementTarget(start, "landing", shot.contactY)
     : start;

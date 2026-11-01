@@ -1,3 +1,4 @@
+import { liveShotsInOrder } from "@/lib/services/labels/session";
 import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
@@ -1099,6 +1100,43 @@ test.describe("how it ended follows the shot rows", () => {
     await settled();
     expect(shot).toEqual([["s-added", { result: "out" }]]);
     expect(point).toEqual([]);
+  });
+
+  test("a linked move goes out as one save, planned before anything is sent", async () => {
+    const session = labelSessionFixture();
+    const point = session.points[0];
+    const next = liveShotsInOrder(point, true)[2].id;
+    session.points[0] = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.id === "s-return"
+          ? { ...s, landingX: null, landingY: null }
+          : s.id === next
+            ? { ...s, stroke: "overhead", contactX: 1, contactY: 6 }
+            : s,
+      ),
+    };
+    const batches: unknown[] = [];
+    const { shot, saves } = saveSpies();
+    const table = consoleTable({
+      ...saves,
+      session,
+      onSaveShots: async (writes: unknown[]) => {
+        batches.push(writes);
+        return writes.map(() => ({ ok: true, status: "edited" }));
+      },
+      operations: spies().operations,
+    });
+    const patch = { landing_x: 2, landing_y: 8 };
+    await (table.onPatchShot as PatchShot)("s-return", patch);
+    await settled();
+    expect(shot).toEqual([]);
+    expect(batches).toEqual([
+      [
+        { shotId: "s-return", patch },
+        { shotId: next, patch: { contact_x: 2, contact_y: 8 } },
+      ],
+    ]);
   });
 
   test("a spin edit, and a shot write that fails, send nothing either", async () => {

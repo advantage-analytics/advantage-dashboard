@@ -24,6 +24,7 @@
  * cannot live there without a cycle.
  */
 
+import { saveInOrder } from "./volley-link";
 import type { AdminClient } from "@/lib/supabase/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/services/programs/admin-guard";
@@ -552,6 +553,26 @@ export async function editLabelShot(
     shotId: typeof shotId === "string" ? shotId.toLowerCase() : shotId,
     patch,
   });
+}
+
+/** One click writes its edit and what follows it: never more than these. */
+const MAX_LINKED_WRITES = 4;
+
+/** `editLabelShot` for a click's linked writes, in order (`saveInOrder`). */
+export async function editLabelShots(
+  writes: unknown,
+  deps: LabelWriteDependencies = defaults,
+): Promise<LabelShotEditResult[]> {
+  if (
+    !Array.isArray(writes) ||
+    writes.length === 0 ||
+    writes.length > MAX_LINKED_WRITES
+  ) {
+    return [{ error: "Could not save those shots." }];
+  }
+  return saveInOrder(writes as { shotId: unknown; patch: unknown }[], (write) =>
+    editLabelShot(write.shotId, write.patch, deps),
+  );
 }
 
 export async function editLabelPoint(

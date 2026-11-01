@@ -7,6 +7,7 @@ import {
 import {
   editLabelPoint,
   editLabelShot,
+  editLabelShots,
   type LabelPointEditResult,
   type LabelShotEditResult,
 } from "@/lib/services/labels/edit-session";
@@ -130,6 +131,16 @@ export async function updateLabelShot(
   patch: Record<string, unknown>,
 ): Promise<LabelShotEditResult> {
   return withLabelOp("Edit shot", () => editLabelShot(shotId, patch));
+}
+
+/**
+ * A click's linked writes (volley-link.ts), in order and as one undo step. The
+ * first to fail stops the rest, so a follower never moves without its edit.
+ */
+export async function updateLabelShots(
+  writes: { shotId: string; patch: Record<string, unknown> }[],
+): Promise<LabelShotEditResult[]> {
+  return withLabelOp("Edit shot", () => editLabelShots(writes));
 }
 
 /**

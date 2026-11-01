@@ -10,6 +10,10 @@ import {
   type LabelPoint,
   type LabelShot,
 } from "@/lib/services/labels/session";
+import {
+  nextLiveStroke,
+  withFilledLanding,
+} from "@/lib/services/labels/volley-link";
 import { cn } from "@/lib/utils";
 import type { PlacementState } from "./court-placement";
 
@@ -122,7 +126,12 @@ export function inlineReviewAnchor(
   // the one to place next — contact first, then landing — whatever the step
   // says: "Add the shot" answered the step's question, and its new stroke
   // is what is left of it.
-  if (selected && addedAndUnplaced(selected)) {
+  if (
+    selected &&
+    addedAndUnplaced(
+      withFilledLanding(selected, nextLiveStroke(point, selected.id, ghosts)),
+    )
+  ) {
     return { shotId: selected.id, strokeId: selected.id };
   }
   if (step) return { shotId: step.target.shotId, strokeId: step.target.shotId };
