@@ -7,6 +7,7 @@ import {
 import {
   editLabelPoint,
   editLabelShot,
+  editLabelShots,
   type LabelPointEditResult,
   type LabelShotEditResult,
 } from "@/lib/services/labels/edit-session";
@@ -124,14 +125,22 @@ export async function seedLabelSessionAction(
  * Autosave one edit to a label shot — `hitter`, `stroke`, `result`, a
  * `contact_*` or `landing_*` pair, `video_time` or `unclear`, and nothing
  * else. Returns the status the shot now has, or why nothing was written.
- * `opId` makes it one undo step with the edit it follows (volley-link.ts).
  */
 export async function updateLabelShot(
   shotId: string,
   patch: Record<string, unknown>,
-  opId?: string,
 ): Promise<LabelShotEditResult> {
-  return withLabelOp("Edit shot", () => editLabelShot(shotId, patch), opId);
+  return withLabelOp("Edit shot", () => editLabelShot(shotId, patch));
+}
+
+/**
+ * A click's linked writes (volley-link.ts), in order and as one undo step. The
+ * first to fail stops the rest, so a follower never moves without its edit.
+ */
+export async function updateLabelShots(
+  writes: { shotId: string; patch: Record<string, unknown> }[],
+): Promise<LabelShotEditResult[]> {
+  return withLabelOp("Edit shot", () => editLabelShots(writes));
 }
 
 /**

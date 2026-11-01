@@ -1,3 +1,4 @@
+import { liveShotsInOrder } from "@/lib/services/labels/session";
 import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
@@ -172,7 +173,6 @@ function railProps(props: Props): Props {
   let rail: Props = {};
   dialogs = [];
   const { LabelConsole } = createLoader({
-    globals: { crypto },
     stubs: {
       "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps },
       "@/components/admin/labels/label-black-rail": {
@@ -1044,15 +1044,12 @@ test.describe("how it ended follows the shot rows", () => {
   function saveSpies(shotAnswer: unknown = { ok: true, status: "edited" }) {
     const shot: unknown[][] = [];
     const point: unknown[][] = [];
-    const opIds: unknown[] = [];
     return {
       shot,
       point,
-      opIds,
       saves: {
         onSaveShot: async (...args: unknown[]) => {
-          shot.push(args.slice(0, 2));
-          opIds.push(args[2]);
+          shot.push(args);
           return shotAnswer;
         },
         onSavePoint: async (...args: unknown[]) => {
@@ -1105,13 +1102,41 @@ test.describe("how it ended follows the shot rows", () => {
     expect(point).toEqual([]);
   });
 
-  test("a shot write names its undo step, so what follows it can join", async () => {
-    const { saves, opIds } = saveSpies();
-    const table = consoleTable({ ...saves, operations: spies().operations });
-    await (table.onPatchShot as PatchShot)("s-added", { spin: "flat" });
+  test("a linked move goes out as one save, planned before anything is sent", async () => {
+    const session = labelSessionFixture();
+    const point = session.points[0];
+    const next = liveShotsInOrder(point, true)[2].id;
+    session.points[0] = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.id === "s-return"
+          ? { ...s, landingX: null, landingY: null }
+          : s.id === next
+            ? { ...s, stroke: "overhead", contactX: 1, contactY: 6 }
+            : s,
+      ),
+    };
+    const batches: unknown[] = [];
+    const { shot, saves } = saveSpies();
+    const table = consoleTable({
+      ...saves,
+      session,
+      onSaveShots: async (writes: unknown[]) => {
+        batches.push(writes);
+        return writes.map(() => ({ ok: true, status: "edited" }));
+      },
+      operations: spies().operations,
+    });
+    const patch = { landing_x: 2, landing_y: 8 };
+    await (table.onPatchShot as PatchShot)("s-return", patch);
     await settled();
-    expect(opIds).toHaveLength(1);
-    expect(String(opIds[0])).toMatch(/^[0-9a-f-]{36}$/);
+    expect(shot).toEqual([]);
+    expect(batches).toEqual([
+      [
+        { shotId: "s-return", patch },
+        { shotId: next, patch: { contact_x: 2, contact_y: 8 } },
+      ],
+    ]);
   });
 
   test("a spin edit, and a shot write that fails, send nothing either", async () => {

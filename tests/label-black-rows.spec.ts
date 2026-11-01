@@ -2530,7 +2530,7 @@ test.describe("a landing filled from the next air stroke", () => {
     expect(html).toContain('aria-label="Filled from shot 9"');
   });
 
-  test("the Result menu says a filled landing calls nothing", () => {
+  test("the Result menu says a landing met in the air calls nothing", () => {
     const { shotResultMenu } = createLoader().load(WELL) as {
       shotResultMenu: (
         shot: LabelShot,
@@ -2546,7 +2546,7 @@ test.describe("a landing filled from the next air stroke", () => {
       landingY: null,
     };
     expect(shotResultMenu(shot, false, 5)!.options[0].description).toBe(
-      "Its landing is filled from shot 5, which calls nothing",
+      "Shot 5 met it in the air, so its landing calls nothing",
     );
     expect(shotResultMenu(shot, false)!.options[0].description).toBe(
       "Its landing is not placed yet",

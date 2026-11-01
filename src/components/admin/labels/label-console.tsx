@@ -60,10 +60,12 @@ import {
 import type { LabelPointEndingSynced } from "@/lib/services/labels/ending-session";
 import { positionPatch } from "@/lib/services/labels/shot-derived";
 import {
+  followerAnswer,
   landingLinkToggle,
   landingTakesContact,
   nextLiveStroke,
   playedOnPatch,
+  saveInOrder,
   volleyLinkWrites,
   withFilledLanding,
 } from "@/lib/services/labels/volley-link";
@@ -470,6 +472,7 @@ export function LabelConsole({
   initialExpandedPointId,
   initialSelectedShotId = null,
   onSaveShot,
+  onSaveShots,
   onSavePoint,
   operations,
   initialConfirm = null,
@@ -493,9 +496,14 @@ export function LabelConsole({
   onSaveShot?: (
     shotId: string,
     patch: LabelShotPatch,
-    /** Makes this write one undo step with others of the same click. */
-    opId?: string,
   ) => Promise<LabelShotEditResult>;
+  /**
+   * A click's linked writes, saved in order as one undo step. Absent: each goes
+   * through `onSaveShot`.
+   */
+  onSaveShots?: (
+    writes: { shotId: string; patch: LabelShotPatch }[],
+  ) => Promise<LabelShotEditResult[]>;
   onSavePoint?: (
     pointId: string,
     patch: LabelPointPatch,
@@ -1082,7 +1090,8 @@ export function LabelConsole({
       rows: readonly LabelPoint[],
       shotId: string,
       patch: LabelShotPatch,
-      options?: { failureNote?: string; opId?: string },
+      /** This write's answer, when a batch is saving it (`patchShot`). */
+      saving?: Promise<LabelShotEditResult>,
     ): Promise<LabelPoint | null> => {
       const before = findShot(rows, shotId);
       if (!before || !onSaveShot) return null;
@@ -1167,7 +1176,7 @@ export function LabelConsole({
         });
         return null;
       }
-      const result = await settle(onSaveShot(shotId, patch, options?.opId));
+      const result = await settle(saving ?? onSaveShot(shotId, patch));
       if ("error" in result) {
         // Put back exactly the fields this edit changed, and its status.
         const prior = labelShotValues(before);
@@ -1187,12 +1196,7 @@ export function LabelConsole({
             ),
           ),
         );
-        dispatchSave({
-          type: "failure",
-          message: options?.failureNote
-            ? `${options.failureNote} · ${result.error}`
-            : result.error,
-        });
+        dispatchSave({ type: "failure", message: result.error });
         return null;
       }
       const removed = result.removedAfter;
@@ -1250,9 +1254,10 @@ export function LabelConsole({
   );
 
   /**
-   * The labeller's edit of one stroke and, once it has saved, the volley link
-   * (volley-link.ts): the other end goes out as a shot write of its own through
-   * `writeShot`. A follower's write never plans followers of its own.
+   * The labeller's edit of one stroke and what the volley link (volley-link.ts)
+   * moves with it. They are planned before anything is sent and saved as one
+   * request, so a click made while it is out comes after both, and one undo
+   * takes both back.
    */
   const patchShot = useCallback(
     async (
@@ -1261,25 +1266,56 @@ export function LabelConsole({
       options?: { landingOnly?: boolean },
     ) => {
       const before = findShot(points, shotId);
-      // One undo step with whatever follows it.
-      const opId = crypto.randomUUID();
-      const saved = await writeShot(points, shotId, patch, { opId });
-      if (!saved || !before) return;
-      for (const follower of volleyLinkWrites({
-        point: saved,
-        shotId,
-        before,
-        patch,
-        ghosts: drawsGhosts(marks),
-        landingOnly: options?.landingOnly,
-      })) {
-        void writeShot([saved], follower.shotId, follower.patch, {
-          failureNote: "The linked end did not move, so the two are now apart",
-          opId,
-        });
+      const owner = pointOfShot(points, shotId);
+      const applied = owner && {
+        ...owner,
+        shots: owner.shots.map((shot) =>
+          shot.id === shotId ? applyLabelShotPatch(shot, patch) : shot,
+        ),
+      };
+      const followers =
+        before && applied && !("error" in planShotWrite(before, patch))
+          ? volleyLinkWrites({
+              point: applied,
+              shotId,
+              before,
+              patch,
+              ghosts: drawsGhosts(marks),
+              landingOnly: options?.landingOnly,
+            })
+          : [];
+      if (followers.length === 0 || !applied || !onSaveShot) {
+        await writeShot(points, shotId, patch);
+        return;
       }
+      const writes = [{ shotId, patch }, ...followers];
+      const answers = Promise.all(
+        writes.map((write) => addsInFlight.current.get(write.shotId)),
+      ).then(() =>
+        onSaveShots
+          ? onSaveShots(writes)
+          : saveInOrder(writes, (write) =>
+              onSaveShot(write.shotId, write.patch),
+            ),
+      );
+      await Promise.all([
+        writeShot(
+          points,
+          shotId,
+          patch,
+          answers.then(([own]) => own),
+        ),
+        ...followers.map((follower, i) =>
+          writeShot(
+            [applied],
+            follower.shotId,
+            follower.patch,
+            answers.then((all) => followerAnswer(all[0], all[i + 1])),
+          ),
+        ),
+      ]);
     },
-    [points, writeShot, marks],
+    [points, writeShot, marks, onSaveShot, onSaveShots],
   );
 
   /**
@@ -3511,9 +3547,14 @@ export function LabelConsole({
     const following = owner
       ? nextLiveStroke(owner, shot.id, drawsGhosts(marks))
       : null;
+    const patch = playedOnPatch(next.patch, shot, following);
     const contactMoves =
       placement.target === "landing" &&
-      landingTakesContact(shot, following, landingOnly);
+      landingTakesContact(
+        { ...shot, result: patch.result ?? shot.result },
+        following,
+        landingOnly,
+      );
     // A placement answers the step only once its stroke has both ends: a
     // missing contact is placed first and its landing still to come must not
     // be skipped. On the step's own stroke the item is answered — in review
@@ -3547,9 +3588,7 @@ export function LabelConsole({
         : null,
     );
     setPlacement(next.state);
-    void patchShot(shot.id, playedOnPatch(next.patch, shot, following), {
-      landingOnly,
-    });
+    void patchShot(shot.id, patch, { landingOnly });
   }
 
   // The court's "Linked to shot N": on ends apart it puts the landing back to

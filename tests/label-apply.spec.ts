@@ -392,6 +392,37 @@ test.describe("buildAppliedRows", () => {
       // Played on, whatever its filled landing would call: never a derived out.
       result: "In",
     });
+    // Stored at the volley's contact it is the same ball; stored elsewhere it
+    // is a bounce.
+    const stored = (landingX: number, landingY: number) =>
+      build([
+        pt(0, "p1", "winner", (p) => [
+          shot(p, "p1", "first_serve", "in", {
+            contactX: 1,
+            contactY: 0,
+            landingX: -1,
+            landingY: 16,
+          }),
+          shot(p, "p2", "backhand", "in", {
+            contactX: -2,
+            contactY: 23,
+            landingX,
+            landingY,
+          }),
+          shot(p, "p1", "forehand_volley", "in", {
+            contactX: 1,
+            contactY: 6,
+            landingX: 2,
+            landingY: 20,
+          }),
+        ]),
+      ]).points[0].shots[1];
+    expect(stored(1, 6)).toMatchObject({
+      landing_x: null,
+      landing_y: null,
+      zone: "Middle",
+    });
+    expect(stored(3, 4)).toMatchObject({ landing_x: 3, landing_y: 4 });
     expect(rows("forehand")).toMatchObject({
       landing_x: null,
       landing_y: null,

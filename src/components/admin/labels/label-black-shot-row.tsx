@@ -610,7 +610,7 @@ export function BlackShotRow({
   const resultMenu = shotResultMenu(
     shot,
     edit.playOnLets,
-    link === "filled" ? linkedNumber : null,
+    link === "filled" || link === "agrees" ? linkedNumber : null,
   );
   // An empty result the next stroke settles: it played the ball, so In.
   const result = playedOnResult(shot, next, point?.ending);
@@ -1679,14 +1679,14 @@ export const RESULT_NONE = "none";
 export function shotResultMenu(
   shot: LabelShot,
   playOnLets: boolean | undefined,
-  /** The stroke its landing is filled from: a fill calls nothing, and says so. */
-  filledFrom: number | null = null,
+  /** The stroke that met it in the air: that landing calls nothing, and says so. */
+  metBy: number | null = null,
 ): { derived: LabelShotResult | null; options: SelectOption[] } | null {
   if (shot.stroke === null) return null;
   const serve = isServeStroke(shot.stroke);
   const group = serve ? "Serve result" : "Result";
   const geometry = labelShotValues(shot);
-  const derived = deriveShotResult(geometry);
+  const derived = metBy === null ? deriveShotResult(geometry) : null;
   const options: SelectOption[] = [];
   if (derived && derived !== "let") {
     const miss = landingMiss(geometry);
@@ -1701,9 +1701,9 @@ export function shotResultMenu(
       value: RESULT_NONE,
       label: "No result",
       description:
-        filledFrom === null
+        metBy === null
           ? RESULT_UNPLACED
-          : `Its landing is filled from shot ${filledFrom}, which calls nothing`,
+          : `Shot ${metBy} met it in the air, so its landing calls nothing`,
       group,
     });
   }

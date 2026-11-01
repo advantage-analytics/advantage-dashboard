@@ -39,6 +39,7 @@ import {
   updateLabelPoint,
   updateLabelSessionFieldsAction,
   updateLabelShot,
+  updateLabelShots,
 } from "../actions";
 
 /**
@@ -110,6 +111,7 @@ export default async function AdminLabelSessionPage({
         video={video}
         marks={marks}
         onSaveShot={updateLabelShot}
+        onSaveShots={updateLabelShots}
         onSavePoint={updateLabelPoint}
         operations={{
           deleteShot: deleteLabelShotAction,

@@ -958,20 +958,11 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(placeSource).toContain("placementNotice(");
     // The link: the notice reads the same rule the write does, and a landing
     // moved alone reaches `volleyLinkWrites`.
-    expect(placeSource).toContain(
-      "landingTakesContact(shot, following, landingOnly)",
-    );
     expect(placeSource).toMatch(
-      /patchShot\(shot\.id, playedOnPatch\(next\.patch, shot, following\), \{\s+landingOnly,\s+\}\)/,
+      /landingTakesContact\(\s*\{ \.\.\.shot, result: patch\.result \?\? shot\.result \},\s*following,\s*landingOnly,?\s*\)/,
     );
-    // The two writes of a linked move are one undo step, and a follower that
-    // fails says the two ends are now apart.
-    expect(consoleSource).toContain(
-      "writeShot(points, shotId, patch, { opId })",
-    );
-    expect(consoleSource).toMatch(
-      /failureNote: "The linked end did not move, so the two are now apart",\s+opId,/,
-    );
+    expect(placeSource).toContain("playedOnPatch(next.patch, shot, following)");
+    expect(placeSource).toContain("patchShot(shot.id, patch, { landingOnly })");
     // The toggle on ends apart puts the landing back to reading the contact.
     expect(consoleSource).toMatch(
       /"clearLanding" in toggled[\s\S]{0,120}positionPatch\(labelShotValues\(shot\), "landing", null\)/,

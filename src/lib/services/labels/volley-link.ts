@@ -1,16 +1,16 @@
 /**
  * A ball taken out of the air has no bounce between two strokes: where the
  * previous stroke's ball "landed" is where the volley (or the overhead) met it,
- * so the labeller sets that place once. Pure; the console calls it after each
- * of the labeller's own shot writes (`patchShot`).
+ * so the labeller sets that place once. Pure; the console plans each of the
+ * labeller's own shot writes through it (`patchShot`) and saves them together.
  *
  * A stroke with no landing stored reads the next air stroke's contact
  * (`filledLanding`) wherever a landing is read on the console: the rail and the
- * court. The publish takes its placement but not its place: the ball never
- * bounced there, so no bounce goes out for it. Nothing is written, so a vendor row stays as seeded and the fill
- * keeps up with the contact by itself. It never decides In / Out: a ball
- * volleyed was played (`playedOnResult`). A stroke called out or net gets none:
- * it never reached anyone, so what follows is a dead ball.
+ * court. Nothing is written, so a vendor row stays as seeded and the fill keeps
+ * up with the contact by itself. It never decides In / Out: a ball volleyed was
+ * played (`playedOnResult`). A stroke called out or net gets none: it never
+ * reached anyone, so what follows is a dead ball. The publish takes the
+ * placement of a ball met in the air but no landing, since it never bounced.
  *
  * Stored ends are linked while they agree. The writes that keep them so:
  *
@@ -41,6 +41,7 @@ import {
   type LabelShot,
   type LiveOrderableShot,
 } from "./session";
+import { deriveShotResult } from "./shot-derived";
 
 /** A volley or an overhead: the ball is hit before it bounces. */
 export function isAirStroke(stroke: LabelShot["stroke"] | undefined): boolean {
@@ -175,20 +176,59 @@ export function landingLink(
 }
 
 /**
- * A court click's patch to `shot`, with any out or net its coordinates derived
- * taken off when the next stroke met the ball in the air: that ball was played,
- * wherever it was met, and a stored miss would remove the strokes after it.
+ * A court click's patch to `shot`, with a derived out or net taken off when the
+ * next stroke met the ball at a place that reads the same: that ball was played
+ * and a stored miss would remove the strokes after it. A click that reads a miss
+ * the next stroke's contact does not is the labeller saying the ball missed and
+ * nothing met it, so it stands.
  */
 export function playedOnPatch(
   patch: LabelShotPatch,
   shot: LinkShot,
   next: NextShot | null | undefined,
 ): LabelShotPatch {
-  if (!next || !linked(shot, next) || !isMissedResult(patch.result)) {
-    return patch;
-  }
+  const ends = linkEnds(shot, next);
+  if (!ends || !isMissedResult(patch.result)) return patch;
+  const metReads = deriveShotResult({
+    stroke: patch.stroke ?? shot.stroke,
+    contact_x: "contact_x" in patch ? (patch.contact_x ?? null) : shot.contactX,
+    contact_y: "contact_y" in patch ? (patch.contact_y ?? null) : shot.contactY,
+    landing_x: ends.contact.x,
+    landing_y: ends.contact.y,
+  });
+  if (metReads !== patch.result) return patch;
   const { result: _result, ...rest } = patch;
   return rest;
+}
+
+/**
+ * Writes saved in order, each answered: the first to fail stops the rest, which
+ * answer its error, so a follower never moves without the edit it follows.
+ */
+export async function saveInOrder<W, R extends object>(
+  writes: readonly W[],
+  save: (write: W) => Promise<R | { error: string }>,
+): Promise<(R | { error: string })[]> {
+  const answers: (R | { error: string })[] = [];
+  let failed: { error: string } | null = null;
+  for (const write of writes) {
+    const answer: R | { error: string } = failed ?? (await save(write));
+    if ("error" in answer) failed = { error: answer.error as string };
+    answers.push(answer);
+  }
+  return answers;
+}
+
+/** A follower's answer as the labeller should read it, beside its edit's. */
+export function followerAnswer<R extends object>(
+  own: R | { error: string },
+  follower: R | { error: string },
+): R | { error: string } {
+  return "error" in follower && !("error" in own)
+    ? {
+        error: `The linked end did not move, so the two are now apart · ${follower.error}`,
+      }
+    : follower;
 }
 
 /** Whether placing `shot`'s landing now takes `next`'s contact with it. */

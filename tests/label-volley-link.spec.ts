@@ -7,6 +7,7 @@ import {
 import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
 import {
   filledLanding,
+  followerAnswer,
   isAirStroke,
   landingGapMetres,
   landingLink,
@@ -14,6 +15,7 @@ import {
   landingTakesContact,
   nextLiveStroke,
   playedOnPatch,
+  saveInOrder,
   volleyLinkWrites,
   withFilledLandings,
 } from "@/lib/services/labels/volley-link";
@@ -599,21 +601,48 @@ test.describe("a landing filled from the next air stroke", () => {
     }
   });
 
-  test("a click's derived miss comes off when the next stroke met the ball", () => {
+  test("a click's derived miss comes off only where the next stroke met it there", () => {
     const patch = { landing_x: 0, landing_y: 30, result: "out" as const };
-    expect(playedOnPatch(patch, shot("a", BACK), volley())).toEqual({
+    const deep = volley({ contactX: 0, contactY: 29 });
+    expect(playedOnPatch(patch, shot("a", BACK), deep)).toEqual({
       landing_x: 0,
       landing_y: 30,
     });
-    expect(
-      playedOnPatch({ ...patch, result: "net" }, shot("a", BACK), volley()),
-    ).toEqual({ landing_x: 0, landing_y: 30 });
+    // Met inside the court, so a long click is the labeller saying it missed.
+    expect(playedOnPatch(patch, shot("a", BACK), volley())).toBe(patch);
+    // A click on the hitter's own side says net; the contact does not.
+    const net = { landing_x: 0, landing_y: 5, result: "net" as const };
+    expect(playedOnPatch(net, shot("a", BACK), volley())).toBe(net);
     // A derived In stays, and so does a miss with a bounce next or no stroke.
     const inPatch = { ...patch, result: "in" as const };
-    expect(playedOnPatch(inPatch, shot("a", BACK), volley())).toBe(inPatch);
+    expect(playedOnPatch(inPatch, shot("a", BACK), deep)).toBe(inPatch);
     expect(
       playedOnPatch(patch, shot("a", BACK), volley({ stroke: "forehand" })),
     ).toBe(patch);
     expect(playedOnPatch(patch, shot("a", BACK), null)).toBe(patch);
+  });
+
+  test("saved in order: the first failure stops the rest, which answer it", async () => {
+    const sent: number[] = [];
+    const answers = await saveInOrder([1, 2, 3], async (n) => {
+      sent.push(n);
+      return n === 2 ? { error: "busy" } : { ok: true };
+    });
+    expect(sent).toEqual([1, 2]);
+    expect(answers).toEqual([
+      { ok: true },
+      { error: "busy" },
+      { error: "busy" },
+    ]);
+  });
+
+  test("a follower's failure says the ends are apart, unless its edit failed too", () => {
+    const ok = { ok: true };
+    const failed = { error: "busy" };
+    expect(followerAnswer(ok, ok)).toBe(ok);
+    expect(followerAnswer(ok, failed)).toEqual({
+      error: "The linked end did not move, so the two are now apart · busy",
+    });
+    expect(followerAnswer(failed, failed)).toBe(failed);
   });
 });
