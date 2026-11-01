@@ -14,6 +14,7 @@
  * `lastLandingMissing`, `serveAfterServeIn`).
  */
 
+import { landingTakesContact } from "./volley-link";
 import { deriveEnding, winnerContradicted } from "./ending-derived";
 import {
   isDataMark,
@@ -362,6 +363,8 @@ export function pointEndedEarly(
   const shot = live[i];
   if (!endsPointWhenMissed(shot.stroke)) return null;
   if (effectiveShotResult(shot) !== "out") return null;
+  // Met in the air where it reads out: played on, not a point over.
+  if (landingTakesContact(shot, live[i + 1], false)) return null;
   // Settled once the labeller has looked at this stroke or one after it:
   // dismissed the question there, or edited, added or deleted a stroke
   // after it.

@@ -6,6 +6,7 @@ import {
   Check,
   CornerDownRight,
   EyeOff,
+  Link2,
   Plus,
   RotateCcw,
   Split,
@@ -18,6 +19,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { shotRowRevealDelay } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import { cn } from "@/lib/utils";
 import {
+  isLiveShot,
   isGhostShot,
   isServeStroke,
   isWithdrawnAdd,
@@ -46,6 +48,12 @@ import {
   playedOnResult,
   shotPlacement,
 } from "@/lib/services/labels/shot-derived";
+import {
+  landingGapMetres,
+  landingLink,
+  landingTakesContact,
+  withFilledLanding,
+} from "@/lib/services/labels/volley-link";
 import type { LabelShotResult } from "@/lib/services/labels/seed";
 import {
   doubleFaultAt,
@@ -316,6 +324,13 @@ export function BlackShotsWell({
     overAt === null ? [] : inOrder.slice(overAt + 1).map((shot) => shot.id),
   );
   const nextOf = new Map(inOrder.map((shot, i) => [shot.id, inOrder[i + 1]]));
+  // The rail numbers rows as they are stored, which an untimed stroke can set
+  // apart from rally order.
+  const numberOf = new Map(
+    point.shots
+      .filter((shot) => isLiveShot(shot, ghosts))
+      .map((shot, i) => [shot.id, i + 1]),
+  );
   let overDrawn = false;
   for (const [i, shot] of point.shots.entries()) {
     // A stroke the labeller added and then deleted leaves no row.
@@ -347,6 +362,7 @@ export function BlackShotsWell({
       );
     } else {
       n += 1;
+      const next = nextOf.get(shot.id);
       if (pastEnd.has(shot.id) && !overDrawn) {
         overDrawn = true;
         rows.push(<PointOverLine key="point-over" arrive={arrive()} />);
@@ -355,7 +371,8 @@ export function BlackShotsWell({
         <BlackShotRow
           key={shot.id}
           shot={shot}
-          next={nextOf.get(shot.id) ?? null}
+          next={next ?? null}
+          nextNumber={next ? numberOf.get(next.id) : undefined}
           number={n}
           point={point}
           pointNumber={pointNumber}
@@ -495,6 +512,7 @@ let pressedShotId: string | null = null;
 export function BlackShotRow({
   shot,
   next = null,
+  nextNumber,
   number,
   point,
   pointNumber,
@@ -510,6 +528,8 @@ export function BlackShotRow({
    * stroke it played reads In when no result is stored (`playedOnResult`).
    */
   next?: LabelShot | null;
+  /** The rail's number for `next`; by default the row after this one. */
+  nextNumber?: number;
   number: number;
   arrive?: number;
   /** After a double fault (`PointOverLine`): the row a step quieter. */
@@ -578,10 +598,21 @@ export function BlackShotRow({
     shot.videoTime !== null
       ? formatFileTime(shot.videoTime, edit.fileOffset)
       : null;
-  const placement = shotPlacement(labelShotValues(shot));
+  // The landing the next air stroke gives it (volley-link.ts), drawn and read
+  // for placement. Its result stays the stored one: a filled landing calls
+  // nothing.
+  const landed = withFilledLanding(shot, next);
+  const link = landingLink(shot, next);
+  const linkedNumber = nextNumber ?? number + 1;
+  const gap = link === "apart" && next ? landingGapMetres(shot, next) : null;
+  const placement = shotPlacement(labelShotValues(landed));
   // Inside Out / Inside In when the stroke came from its other wing's half.
-  const direction = placementLabel(shot, edit.hands);
-  const resultMenu = shotResultMenu(shot, edit.playOnLets);
+  const direction = placementLabel(landed, edit.hands);
+  const resultMenu = shotResultMenu(
+    shot,
+    edit.playOnLets,
+    landingTakesContact(shot, next, false) ? linkedNumber : null,
+  );
   // An empty result the next stroke settles: it played the ball, so In.
   const result = playedOnResult(shot, next, point?.ending);
   /** The words' ink, a step down on a fault. */
@@ -725,16 +756,18 @@ export function BlackShotRow({
           {...cell}
           end="landed"
           label={`Shot ${number} landed at`}
-          x={shot.landingX}
-          y={shot.landingY}
+          x={landed.landingX}
+          y={landed.landingY}
           muted={fault}
+          filledFrom={link === "filled" ? linkedNumber : null}
+          apart={gap === null ? null : { shot: linkedNumber, metres: gap }}
           onPick={() => pick("landing")}
         />
         {placement ? (
           // The one word here nobody can open an editor on, in a track that
           // narrows with the rail: whole in the tooltip when it is cut.
           <ChromeTooltip
-            {...directionWords(placement, direction, shot)}
+            {...directionWords(placement, direction, landed)}
             side="top"
             wrap
           >
@@ -1652,12 +1685,14 @@ export const RESULT_NONE = "none";
 export function shotResultMenu(
   shot: LabelShot,
   playOnLets: boolean | undefined,
+  /** The stroke that met it in the air: that landing calls nothing, and says so. */
+  metBy: number | null = null,
 ): { derived: LabelShotResult | null; options: SelectOption[] } | null {
   if (shot.stroke === null) return null;
   const serve = isServeStroke(shot.stroke);
   const group = serve ? "Serve result" : "Result";
   const geometry = labelShotValues(shot);
-  const derived = deriveShotResult(geometry);
+  const derived = metBy === null ? deriveShotResult(geometry) : null;
   const options: SelectOption[] = [];
   if (derived && derived !== "let") {
     const miss = landingMiss(geometry);
@@ -1671,7 +1706,10 @@ export function shotResultMenu(
     options.push({
       value: RESULT_NONE,
       label: "No result",
-      description: RESULT_UNPLACED,
+      description:
+        metBy === null
+          ? RESULT_UNPLACED
+          : `Shot ${metBy} met it in the air, so its landing calls nothing`,
       group,
     });
   }
@@ -1877,6 +1915,9 @@ function BlackPositionCell({
   x,
   y,
   muted,
+  filledFrom = null,
+  apart = null,
+  rowSelected = false,
   onPick,
 }: {
   editable: boolean;
@@ -1886,26 +1927,46 @@ function BlackPositionCell({
   y: number | null;
   /** A fault row: the numbers a step quieter. */
   muted: boolean;
+  /** The stroke whose contact fills this landing: a link glyph, a step quieter. */
+  filledFrom?: number | null;
+  /** A stored landing away from the next air stroke's contact: said in the tooltip. */
+  apart?: { shot: number; metres: number } | null;
+  rowSelected?: boolean;
   /** Select the row with the court on this end. */
   onPick: () => void;
 }) {
   const pair = courtPair(x, y);
   const text = formatCourtPoint(x, y);
-  const words = positionWords(end, x, y, editable);
+  const placed = positionWords(end, x, y, editable);
+  const words =
+    filledFrom !== null
+      ? {
+          label: `Filled from shot ${filledFrom}`,
+          detail: [
+            `No bounce, so this is where shot ${filledFrom} met the ball`,
+            ...(editable ? ["Click to move it on the court"] : []),
+          ],
+        }
+      : apart
+        ? {
+            ...placed,
+            detail: [
+              `${apart.metres.toFixed(1)} m from where shot ${apart.shot} met the ball`,
+              ...placed.detail,
+            ],
+          }
+        : placed;
+  const ink = (filledFrom !== null ? !rowSelected : muted)
+    ? QUIET_INK
+    : VALUE_INK;
   const numbers = (
     <span className="inline-flex items-center gap-1.5 align-middle">
       {pair ? (
         <>
-          <b
-            className={cn(NUM, "font-normal")}
-            style={{ color: muted ? QUIET_INK : VALUE_INK }}
-          >
+          <b className={cn(NUM, "font-normal")} style={{ color: ink }}>
             {pair[0]}
           </b>
-          <b
-            className={cn(NUM, "font-normal")}
-            style={{ color: muted ? QUIET_INK : VALUE_INK }}
-          >
+          <b className={cn(NUM, "font-normal")} style={{ color: ink }}>
             {pair[1]}
           </b>
         </>
@@ -1927,6 +1988,21 @@ function BlackPositionCell({
           aria-label="Hit at"
           className="size-[7px] flex-none rounded-full border border-white/50"
         />
+      ) : filledFrom !== null ? (
+        // The dot's 7px slot, the glyph spilling over it, so the numbers stay
+        // under their neighbours'.
+        <span className="flex w-[7px] flex-none justify-center">
+          <Link2
+            role="img"
+            aria-label={`Filled from shot ${filledFrom}`}
+            data-landing-filled=""
+            className={cn(
+              "size-[11px] flex-none",
+              rowSelected ? "text-white/85" : "text-white/60",
+            )}
+            strokeWidth={2}
+          />
+        </span>
       ) : (
         <i
           role="img"

@@ -1137,6 +1137,13 @@ test.describe("a click on a placed end selects it", () => {
     expect(markEndAt([stroke], TOP, NO_ZOOM, at(1.5, 2), BOX, none)).toBeNull();
   });
 
+  test("a stroke drawn for reference is never picked: a click on it places", () => {
+    const reference = { ...stroke, reference: true };
+    expect(
+      markEndAt([reference], TOP, NO_ZOOM, at(1, 2), BOX, none),
+    ).toBeNull();
+  });
+
   test("the end being placed is never picked: placing beside an existing mark still places", () => {
     // Re-placing the armed contact right on its old mark places it.
     expect(

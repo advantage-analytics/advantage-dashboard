@@ -278,6 +278,8 @@ const FULL_OPACITY: MarkOpacity = { hit: 1, landed: 1 };
 export interface CourtStroke {
   shot: LabelShot;
   opacity?: MarkOpacity;
+  /** Drawn to read by, never picked: a click on it places. */
+  reference?: boolean;
 }
 
 /** A stroke on screen: whichever ends are drawn, in percent of the box. */
@@ -353,7 +355,8 @@ export function markEndAt(
   const clicked = toCourtInWindow(top, artPoint(zoom, at.sx, at.sy));
   const byId = new Map(strokes.map(({ shot }) => [shot.id, shot]));
   let best: (MarkPick & { distance: number }) | null = null;
-  for (const mark of marksFor(strokes, "near", top)) {
+  const pickable = strokes.filter((stroke) => !stroke.reference);
+  for (const mark of marksFor(pickable, "near", top)) {
     const shot = byId.get(mark.id);
     if (!shot) continue;
     const isArmed = mark.id === armed.shotId;

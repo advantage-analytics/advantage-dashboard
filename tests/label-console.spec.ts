@@ -946,7 +946,7 @@ test.describe("a flag jump lands on the point's review step", () => {
     // stops asking the item and nothing lands. A stroke with no step about
     // it (the one an answer added) forces the move on, in review mode only.
     expect(placeSource).toMatch(
-      /if \(placesBothEnds\(shot, next\.patch\)\) \{\n\s+if \(step\?\.target\.shotId === shot\.id\) \{\n\s+if \(reviewMode\) noteAnswered\(\);\n\s+else closeQueuedItem\(\);\n\s+\} else if \(reviewMode && inlineAnchor\?\.strokeId === shot\.id\) \{\n\s+notePlaced\(\);\n\s+\}\n\s+\}/,
+      /if \(placesBothEnds\(withFilledLanding\(shot, following\), next\.patch\)\) \{\n\s+if \(step\?\.target\.shotId === shot\.id\) \{\n\s+if \(reviewMode\) noteAnswered\(\);\n\s+else closeQueuedItem\(\);\n\s+\} else if \(reviewMode && inlineAnchor\?\.strokeId === shot\.id\) \{\n\s+notePlaced\(\);\n\s+\}\n\s+\}/,
     );
     expect(placeSource.match(/noteAnswered\(\)/g)).toHaveLength(1);
     expect(placeSource.match(/closeQueuedItem\(\)/g)).toHaveLength(1);
@@ -958,6 +958,17 @@ test.describe("a flag jump lands on the point's review step", () => {
       /nextPlacement\(\s*placement,\s*point,\s*labelShotValues\(shot\),\s*strokes,?\s*\)/,
     );
     expect(placeSource).toContain("placementNotice(");
+    // The link: the notice reads the same rule the write does, and a landing
+    // moved alone reaches `volleyLinkWrites`.
+    expect(placeSource).toMatch(
+      /landingTakesContact\(\s*\{ \.\.\.shot, result: patch\.result \?\? shot\.result \},\s*following,\s*landingOnly,?\s*\)/,
+    );
+    expect(placeSource).toContain("playedOnPatch(next.patch, shot, following)");
+    expect(placeSource).toContain("patchShot(shot.id, patch, { landingOnly })");
+    // The toggle on ends apart puts the landing back to reading the contact.
+    expect(consoleSource).toMatch(
+      /"clearLanding" in toggled[\s\S]{0,120}positionPatch\(labelShotValues\(shot\), "landing", null\)/,
+    );
   });
 
   test("landing on a step about no stroke clears the selection, so the point-level question is the one asked", () => {
