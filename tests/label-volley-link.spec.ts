@@ -645,4 +645,22 @@ test.describe("a landing filled from the next air stroke", () => {
     });
     expect(followerAnswer(failed, failed)).toBe(failed);
   });
+
+  test("the same player's next stroke fills nothing and links nothing", () => {
+    const own = volley({ hitter: "p1" });
+    expect(filledLanding(shot("a", BACK), own)).toBeNull();
+    expect(landingLink(shot("a", BACK), own)).toBeNull();
+    expect(landingTakesContact(shot("a", BACK), own, false)).toBe(false);
+    const placed = shot("a", { ...BACK, landingX: 0, landingY: 20 });
+    expect(edit([placed, own], "a", { landing_x: 1, landing_y: 19 })).toEqual(
+      [],
+    );
+    expect(edit([placed, own], "b", { contact_x: 1, contact_y: 19 })).toEqual(
+      [],
+    );
+    // A stroke with no hitter yet is not ruled out.
+    expect(filledLanding(shot("a", { ...BACK, hitter: null }), own)).toEqual(
+      AT_NET,
+    );
+  });
 });

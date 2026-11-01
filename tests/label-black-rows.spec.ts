@@ -2459,6 +2459,7 @@ test.describe("a landing filled from the next air stroke", () => {
       React.createElement(BlackShotRow, {
         shot: {
           ...base,
+          hitter: "p2",
           stroke: "backhand",
           contactX: 2,
           contactY: 20,
@@ -2469,6 +2470,7 @@ test.describe("a landing filled from the next air stroke", () => {
         next: nextFields && {
           ...base,
           id: "next",
+          hitter: "p1",
           stroke: "overhead",
           contactX: -1,
           contactY: 6,
@@ -2508,6 +2510,7 @@ test.describe("a landing filled from the next air stroke", () => {
       React.createElement(BlackShotRow, {
         shot: {
           ...base,
+          hitter: "p2",
           stroke: "backhand",
           contactX: 2,
           contactY: 20,
@@ -2517,6 +2520,7 @@ test.describe("a landing filled from the next air stroke", () => {
         next: {
           ...base,
           id: "n",
+          hitter: "p1",
           stroke: "overhead",
           contactX: -1,
           contactY: 6,

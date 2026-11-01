@@ -170,6 +170,7 @@ test.describe("where the block sits (`inlineReviewAnchor`)", () => {
     const added = {
       ...first,
       id: "s-added-air",
+      hitter: "p2" as const,
       status: "added" as const,
       stroke: "forehand" as const,
       contactX: 1,
@@ -182,6 +183,7 @@ test.describe("where the block sits (`inlineReviewAnchor`)", () => {
     const volley = {
       ...first,
       id: "s-volley",
+      hitter: "p1" as const,
       stroke: "forehand_volley" as const,
       contactX: 2,
       contactY: 6,

@@ -25,7 +25,8 @@
  *
  * "Previous" and "next" are the nearest live strokes of the point: never a
  * tombstone, nor a ghost while the session draws ghosts (`ghosts`). A serve is
- * never linked: its landing is a bounce, since a return cannot be volleyed.
+ * never linked: its landing is a bounce, since a return cannot be volleyed. Nor
+ * is a stroke followed by the same player's: nothing says who met that ball.
  * Clearing a coordinate clears nothing else, and no write goes out when the two
  * already agree. The follower's patch is coordinates only: its In / Out / Net is
  * left as stored, since a ball met in the air was played wherever the hitter
@@ -65,9 +66,9 @@ type ShotEnds = Pick<
   "contactX" | "contactY" | "landingX" | "landingY"
 >;
 /** What the link reads of the stroke whose landing it is. */
-type LinkShot = ShotEnds & Pick<LabelShot, "stroke" | "result">;
+type LinkShot = ShotEnds & Pick<LabelShot, "stroke" | "result" | "hitter">;
 /** What the link reads of the stroke after it. */
-type NextShot = ShotEnds & Pick<LabelShot, "stroke">;
+type NextShot = ShotEnds & Pick<LabelShot, "stroke" | "hitter">;
 
 /** The end's place, or null unless BOTH of its coordinates are set. */
 function placeOf(shot: ShotEnds, end: End): Place | null {
@@ -86,16 +87,18 @@ const samePlace = (a: Place, b: Place) => a.x === b.x && a.y === b.y;
 
 /**
  * Whether `next` is an air stroke that met the ball `shot` hit. A serve bounces,
- * and a stroke called out or net reached nobody.
+ * a stroke called out or net reached nobody, and a player does not return their
+ * own ball: the same hitter twice means a stroke is missing between them.
  */
 function linked(
-  shot: Pick<LabelShot, "stroke" | "result">,
-  next: Pick<LabelShot, "stroke">,
+  shot: Pick<LabelShot, "stroke" | "result" | "hitter">,
+  next: Pick<LabelShot, "stroke" | "hitter">,
 ): boolean {
   return (
     isAirStroke(next.stroke) &&
     !isServeStroke(shot.stroke) &&
-    !isMissedResult(shot.result)
+    !isMissedResult(shot.result) &&
+    (shot.hitter === null || shot.hitter !== next.hitter)
   );
 }
 

@@ -468,7 +468,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
         contact_y: shot.contactY,
         landing_x: landed && !metInAir ? shot.landingX : null,
         landing_y: landed && !metInAir ? shot.landingY : null,
-        result: shotResultOf(playedOnResult(shot, played[i + 1], ending)),
+        result: shotResultOf(playedOnResult(shot, next, ending)),
         video_time: shot.videoTime,
         bounce_video_time: facts?.bounceVideoTime ?? null,
         zone: !landed
