@@ -1215,6 +1215,8 @@ function BlackEndedSuggestion({
 }) {
   const arrival = rowArrival(arrive);
   const operations = edit.editable ? edit.operations : undefined;
+  // "Shot placement" can't move the score, so it never wears the amber.
+  const grey = hint.code === "placement_missing";
   // Split first, as the tray orders it; then the removal.
   const actions = [...hint.actions].sort(
     (x, y) => Number(!isSplit(x.label)) - Number(!isSplit(y.label)),
@@ -1226,7 +1228,10 @@ function BlackEndedSuggestion({
       style={arrival.style}
       className={cn(
         arrival.className,
-        "flex h-[32px] min-w-0 cursor-default items-center gap-3 rounded-lg bg-[var(--rail-amber-wash-faint)] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)] outline-dashed",
+        "flex h-[32px] min-w-0 cursor-default items-center gap-3 rounded-lg pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium outline-1 -outline-offset-4 outline-dashed",
+        grey
+          ? "bg-white/[0.04] text-white/70 outline-white/20"
+          : "bg-[var(--rail-amber-wash-faint)] outline-[color:var(--rail-amber-line)]",
       )}
     >
       <ChromeTooltip label={hint.label} detail={hint.detail} side="top" wrap>
@@ -1234,7 +1239,7 @@ function BlackEndedSuggestion({
           data-suggestion-text=""
           aria-label={hoverLine({ name: hint.label, detail: hint.detail })}
           className="inline-flex min-w-0 shrink items-center gap-[5px] px-1"
-          style={{ color: AMBER_SUGGESTION_INK }}
+          style={grey ? undefined : { color: AMBER_SUGGESTION_INK }}
         >
           <CornerDownRight
             className="size-[10px] shrink-0"

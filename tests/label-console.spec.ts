@@ -977,10 +977,10 @@ test.describe("a flag jump lands on the point's review step", () => {
       /stepToFlag\.current\(key === "\]" \? 1 : -1, "score"\)/,
     );
     expect(consoleSource).toMatch(
-      /if \(!flag\) return;\s*lastFlagPointId\.current = flag\.pointId;\s*findGap\(flag\.pointId, \{ arm: true \}\);/,
+      /if \(!flag\) return;\s*lastFlagPointId\.current = flag\.pointId;\s*findGap\(flag\.pointId, \{ arm: true, list: kind \}\);/,
     );
     expect(consoleSource).toMatch(
-      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
+      /goToFlag: \(pointId: string, list: FlagList = "score"\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true, list \}\);/,
     );
     expect(consoleSource).toContain("onGoToPoint={railHandlers.goToFlag}");
     // "Find the gap", the overview's open-on-point and a clicked row do not.
@@ -1004,7 +1004,7 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(findGapSource).toMatch(/arm && editable && point && liveMarks/);
     expect(findGapSource).toContain("if (arm) setFoldedPointId(null);");
     expect(findGapSource).toMatch(
-      /landOnStep\(\s*point,\s*reviewStep\(point, liveMarks, points, names, drawsGhosts\(liveMarks\)\),\s*\)/,
+      /landOnStep\(\s*point,\s*reviewStep\(\s*point,\s*liveMarks,\s*points,\s*names,\s*drawsGhosts\(liveMarks\),\s*undefined,\s*first,\s*\),\s*\)/,
     );
     // With no step the point opens as before, at its first stroke.
     expect(findGapSource).toContain("seekToPointStart(point);");
@@ -1194,7 +1194,7 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(stepFlag).toContain("lastFlagPointId.current = flag.pointId;");
     // The header's flag rows land on a flag too.
     expect(consoleSource).toMatch(
-      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
+      /goToFlag: \(pointId: string, list: FlagList = "score"\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true, list \}\);/,
     );
     // A row click, or ← / →, lets it go.
     const body = (name: string) => {

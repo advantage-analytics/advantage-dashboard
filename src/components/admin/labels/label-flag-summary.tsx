@@ -15,6 +15,7 @@ import {
   flagGroups,
   flagStopLabel,
   stepFlag,
+  type FlagList,
   type FlagRow,
   type FlagStop,
   type OpenFlag,
@@ -95,12 +96,13 @@ export function LabelFlagSummary({
   bulk = null,
   notice = null,
 }: {
-  /** `openFlags(points, marks)`: one per flagged point. */
+  /** This list's share of `openFlags(points, marks)`: one per flagged point. */
   openMarks: readonly OpenFlag[];
   points: readonly Pick<LabelPoint, "id">[];
   /** Where a jump starts: the current point, else none (the top). */
   fromPointId: string | null;
-  onGoToPoint?: (pointId: string) => void;
+  /** Told which list the jump came from: see `FlagList`. */
+  onGoToPoint?: (pointId: string, list: FlagList) => void;
   /** The score mismatch's rows, given the menu's close; null when it adds up. */
   score: ((close: () => void) => ReactNode) | null;
   /** The mismatch as a stop (`scoreStop`, flag-nav.ts); null when it adds up. */
@@ -118,7 +120,7 @@ export function LabelFlagSummary({
    * one beside it: wrong data that rarely moves the score, stepped with the
    * two keys under those, `'` and `;`. The caller passes each its own list.
    */
-  kind?: "score" | "data";
+  kind?: FlagList;
   tone?: RailTone;
   /** One action over the whole list ("Add all 12 missing shots"); null: none. */
   bulk?: { label: string; description: string; onSelect: () => void } | null;
@@ -155,7 +157,7 @@ export function LabelFlagSummary({
   const go = (pointId: string) => {
     jumped.current = open;
     setOpen(false);
-    onGoToPoint?.(pointId);
+    onGoToPoint?.(pointId, kind);
   };
 
   const noticeChip = notice ? (

@@ -832,12 +832,8 @@ export function openHintMarks(
       : own),
     ...live.filter((mark): mark is LabelMark => mark !== null),
   ].filter((mark) => {
-    const key =
-      mark.code === "shot_after_point_end"
-        ? pointEndedKey(mark.params.shotId)
-        : mark.code === "placement_missing"
-          ? placementKey(mark.params.shotId)
-          : hintDismissKey(mark.code);
+    // `placementMissing` has already passed over a dismissed stroke.
+    const key = strokeHintKey(mark) ?? hintDismissKey(mark.code);
     return !point.dismissed.includes(key);
   });
 }
@@ -1086,13 +1082,23 @@ export interface ReviewFlag {
   demoted: boolean;
 }
 
-/** The `dismissed` key a per-item Dismiss stores for `mark`, if it has one. */
-function memberDismissKey(mark: LabelMark): string | undefined {
+/** The `dismissed` key of a hint about one stroke: by that stroke, not its code. */
+export function strokeHintKey(mark: LabelMark): string | undefined {
   switch (mark.code) {
     case "shot_after_point_end":
       return pointEndedKey(mark.params.shotId);
     case "placement_missing":
       return placementKey(mark.params.shotId);
+    default:
+      return undefined;
+  }
+}
+
+/** The `dismissed` key a per-item Dismiss stores for `mark`, if it has one. */
+function memberDismissKey(mark: LabelMark): string | undefined {
+  const byStroke = strokeHintKey(mark);
+  if (byStroke) return byStroke;
+  switch (mark.code) {
     case "service_court_repeat":
       return "missing_point";
     case "same_player_consecutive":

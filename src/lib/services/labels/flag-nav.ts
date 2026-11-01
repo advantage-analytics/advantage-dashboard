@@ -21,7 +21,13 @@ import { tiebreakFolds } from "./tiebreak-fold";
 import { tiebreakServeOrders, type TiebreakServeOrder } from "./tiebreak-serve";
 import { foldedPointIds, gameServeRepeats } from "./game-serve-order";
 
-/** One point's open review flag. */
+/** The header's two lists: amber for what can move the score, grey for data. */
+export type FlagList = "score" | "data";
+
+/**
+ * One point's open review flag. A point is in one list, except a placement gap
+ * beside an amber question, which is in both (`openFlags`).
+ */
 export interface OpenFlag {
   pointId: string;
   /** As the rail numbers the point: `pointIndex + 1`. */
