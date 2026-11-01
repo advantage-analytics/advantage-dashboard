@@ -165,8 +165,14 @@
  * alternation or voting in `geometryTopLabel`. Only a stream whose first
  * rally has no set score, or a renamed player, can derive differently from
  * 0.8.7. Job fb00f837 now names Ivan H by geometry.
+ * 0.8.9 (2026-11-01) stores no `result_type` where the last call and the fold
+ * name different winners (result-type.ts `classifyPoint`,
+ * `last_call_contradicts_winner`), where it wrote "Forehand Winner" on a ball
+ * in the net and credited a false winner. Those points gain
+ * `result_type_unknown` and seed with no ending. Winners, games, scores and
+ * `shots.result` do not move; winners and errors in `match_stats` can.
  */
-export const DERIVATION_VERSION = "0.8.8-unreconciled";
+export const DERIVATION_VERSION = "0.8.9-unreconciled";
 
 export type {
   RawSplitStepStroke,
