@@ -806,10 +806,13 @@ to put a testable seam.
 > delete route no longer refuses a console or hand-labeled match. It claims
 > through `admin_claim_match_delete`, which never refuses, and the
 > `matches_archive_labels_and_console` trigger then acts on that claimed match:
-> analyst sessions are copied to `label_archive` (service-role read only, no
-> player names), and console attempts, reservations and schedule targets are
-> removed. Submission items stay as the console's history with their links
-> cleared. Account deletion and the console's abandon still use
+> analyst sessions are copied to `label_archive` (service-role read only, with
+> `vendor.pred_player_id` recorded as a seat rather than a name; a labeller's
+> free-text note is kept as written), and console attempts, reservations and
+> schedule targets are removed. Submission items stay as the console's history
+> with their links cleared and `result.match_deleted_at` stamped. The route
+> purges as the service role after its `created_by` lookup, because through RLS
+> it would miss jobs and files someone else made on the match. Account deletion and the console's abandon still use
 > `admin_claim_match_storage_purge` and refuse as described above, and a delete
 > with no claim still meets `ON DELETE RESTRICT`.
 

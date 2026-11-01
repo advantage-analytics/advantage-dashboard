@@ -636,15 +636,15 @@ export async function DELETE(
   // `label_archive` when the row is deleted. The id is the one the
   // `created_by = user.id` lookup admitted. `error.message` is never
   // forwarded: any failure is a retryable 503.
+  //
+  // The purge runs as the service role because of that lookup. Through RLS it
+  // would read only the jobs and files this user made, and remove nothing from
+  // the results bucket, stranding what an admin's analysis left on the match.
   try {
-    await purgeMatchStorage(supabase, [matchId], "match delete", {
-      claimPurge: async (ids) => {
-        const { data, error } = await createAdminClient().rpc(
-          "admin_claim_match_delete",
-          { p_match_ids: ids },
-        );
-        return { data, error };
-      },
+    const admin = createAdminClient();
+    await purgeMatchStorage(admin, [matchId], "match delete", {
+      claimPurge: async (ids) =>
+        admin.rpc("admin_claim_match_delete", { p_match_ids: ids }),
     });
   } catch (error) {
     console.error(
@@ -657,19 +657,21 @@ export async function DELETE(
     );
   }
 
-  const { error: deleteError } = await supabase
+  const { data: deleted, error: deleteError } = await supabase
     .from("matches")
     .delete()
     .eq("id", matchId)
-    .eq("created_by", user.id);
+    .eq("created_by", user.id)
+    .select("id");
 
-  if (deleteError) {
+  // RLS filtering the row out is no error, only no rows: it failed all the same.
+  if (deleteError || !deleted?.length) {
     // The 503 above takes no claim (the claim RPC fails before its insert), so
     // only this failed-delete branch releases. Keeping the claim would leave
-    // the console refused on this match. The id is the one the
-    // `created_by = user.id` lookup already
-    // admitted, never a body field. See `releaseStoragePurgeClaims` for why
-    // this matters.
+    // the console refused on this match, and a later delete by any path acting
+    // on its labels. The id is the one the `created_by = user.id` lookup
+    // already admitted, never a body field. See `releaseStoragePurgeClaims` for
+    // why this matters.
     await releaseStoragePurgeClaims(
       createAdminClient(),
       [matchId],
@@ -677,7 +679,7 @@ export async function DELETE(
     );
     return serverError(
       "DELETE /api/matches/[matchId]: failed to delete match",
-      deleteError,
+      deleteError ?? "no row deleted",
       "Could not delete the match",
     );
   }

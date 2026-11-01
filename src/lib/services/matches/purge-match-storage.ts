@@ -26,10 +26,10 @@ export interface PurgeMatchStorageOptions {
    * answers false for a match the console recorded or analysed. The match
    * delete route replaces it with `admin_claim_match_delete`, which claims
    * without refusing. Production asks the service-role client; the offline
-   * purge specs
-   * (`tests/match-video-purge.spec.ts`, `tests/purge-match-results-keys.spec.ts`)
-   * inject an allow-all fake, since they run with no service-role key and are
-   * not about this guard — `tests/admin-match-delete-protection.spec.ts` is.
+   * purge specs (`tests/match-video-purge.spec.ts`,
+   * `tests/purge-match-results-keys.spec.ts`) inject an allow-all fake, since
+   * they run with no service-role key and are not about this guard —
+   * `tests/admin-match-delete-protection.spec.ts` is.
    */
   claimPurge?: (
     matchIds: string[],
@@ -52,8 +52,9 @@ export interface PurgeMatchStorageOptions {
  *     answered outside its boolean contract). Retrying may succeed.
  *
  * `message` is written for the account-deletion flow, which shows it as is.
- * HTTP callers map `kind` to their own status and sentence instead; `cause`
- * carries the raw RPC error for logs and must never reach a response.
+ * The match delete route's claim never refuses, so `protected` does not reach
+ * it, and any refusal there is its generic 503. `cause` carries the raw RPC
+ * error for logs and must never reach a response.
  */
 export class PurgeRefusedError extends Error {
   readonly kind: "protected" | "unavailable";
@@ -257,9 +258,10 @@ export async function purgeMatchStorage(
 ): Promise<void> {
   if (matchIds.length === 0) return;
 
-  // Console references intentionally block row deletion. Ordinary creators cannot
-  // see this provenance through RLS, so a server-only claim RPC checks it for
-  // both single-match and account cleanup before any object is removed.
+  // Console references block account cleanup and the console's abandon. Ordinary
+  // creators cannot see this provenance through RLS, so a server-only claim RPC
+  // checks it before any object is removed. The match delete route passes its
+  // own claim, which does not refuse.
   const sharedKeyReader = options.sharedKeyReader ?? createAdminClient();
   const claimPurge =
     options.claimPurge ??
