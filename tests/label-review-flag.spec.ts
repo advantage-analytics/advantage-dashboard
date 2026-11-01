@@ -649,6 +649,27 @@ test.describe("state", () => {
     expect(flag?.state).toBe("open");
     expect(flag?.tone).toBe("score");
   });
+
+  test("a checked point stays open while its ending cannot be true of its winner", () => {
+    const stale = point({
+      checkedAt: CHECKED_AT,
+      winner: "p2",
+      ending: "winner",
+      endedBy: "p1",
+      shots: [forehand({ result: "net", landingX: 2, landingY: 12 })],
+    });
+    const flag = reviewFlag(stale, marksOf({}), [stale]);
+    expect(
+      flag?.items[0].members.map((member) => [member.mark.code, member.state]),
+    ).toEqual([["ending_stale", "open"]]);
+    // Grey: the winner, and so the score, is right.
+    expect(flag?.tone).toBe("data");
+
+    // A hand-set ending that fits its winner still reads as checked.
+    const handSet = { ...stale, endedBy: "p2" as const };
+    const fits = reviewFlag(handSet, marksOf({}), [handSet]);
+    expect(fits?.state).toBe("checked-as-is");
+  });
 });
 
 test.describe("demoted", () => {

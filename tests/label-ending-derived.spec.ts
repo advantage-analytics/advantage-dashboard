@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   deriveEnding,
+  endingContradictsWinner,
   endingPatchForShotChange,
   allErrorsJudged,
   isMarkableError,
@@ -493,7 +494,7 @@ test.describe("a winner the strokes contradict", () => {
     p1({ result: "out" }),
   ];
 
-  test("re-saving the stroke puts the winner right, and leaves the ending alone", () => {
+  test("re-saving the stroke puts the winner right", () => {
     const shots = rally();
     const stored = point(shots, "p1", "error", "p1");
     // The rows say the same thing before and after: only the winner is off.
@@ -506,6 +507,66 @@ test.describe("a winner the strokes contradict", () => {
     // No winner labelled yet is not a contradiction.
     const unset = point(shots, null, "error", "p1");
     expect(endingPatchForShotChange(unset, unset, GHOSTS)).toBeNull();
+  });
+
+  // Gimena v Hooker, point 5: seeded "winner by p2" on p2's return into the net.
+  // Placing that ball moved the winner alone, and "Forehand winner by Hooker"
+  // sat under Gimena and published as Gimena's winner.
+  test("the ending moves with the winner when both are wrong", () => {
+    const replaced = (result: LabelShot["result"], hitter: "p1" | "p2") => [
+      serve(),
+      (hitter === "p1" ? p1 : p2)({ result, landingY: 12 }),
+    ];
+    const missedReturn = replaced("net", "p2");
+    expect(
+      endingPatchForShotChange(
+        point(
+          missedReturn.map((shot, i) =>
+            i === 1 ? { ...shot, landingY: 15 } : shot,
+          ),
+          "p2",
+          "winner",
+          "p2",
+        ),
+        point(missedReturn, "p2", "winner", "p2"),
+        GHOSTS,
+      ),
+    ).toEqual({ ending: "service_winner", ended_by: "p2", winner: "p1" });
+
+    const missedRally = rally();
+    expect(
+      endingPatchForShotChange(
+        point(missedRally, "p1", "winner", "p1"),
+        point(missedRally, "p1", "winner", "p1"),
+        GHOSTS,
+      ),
+    ).toEqual({ ending: "error", ended_by: "p1", winner: "p2" });
+
+    const inRally = [serve({ hitter: "p2" }), p1(), p2(), p1({ result: "in" })];
+    expect(
+      endingPatchForShotChange(
+        point(inRally, "p2", "error", "p1"),
+        point(inRally, "p2", "error", "p1"),
+        GHOSTS,
+      ),
+    ).toEqual({ ending: "winner", ended_by: "p1", winner: "p1" });
+  });
+
+  test("a stored ending that cannot be true of its winner is told apart", () => {
+    const of = (
+      ending: LabelPoint["ending"],
+      endedBy: LabelPoint["endedBy"],
+      winner: LabelPoint["winner"],
+    ) => endingContradictsWinner({ ending, endedBy, winner });
+    expect(of("winner", "p2", "p1")).toBe(true);
+    expect(of("error", "p1", "p1")).toBe(true);
+    expect(of("winner", "p1", "p1")).toBe(false);
+    expect(of("error", "p2", "p1")).toBe(false);
+    // Nobody named, or an ending the winner's side does not decide this way.
+    expect(of("winner", null, "p1")).toBe(false);
+    expect(of("winner", "p2", null)).toBe(false);
+    expect(of("double_fault", "p1", "p2")).toBe(false);
+    expect(of("service_winner", "p2", "p1")).toBe(false);
   });
 
   test("an edit further back in the rally leaves a winner set by hand alone", () => {

@@ -140,9 +140,11 @@ export const SHOT_FIELDS_MOVING_ENDING = [
  * a winner and the point holds the other player. That is not a hand-set
  * ending surviving, it is a contradiction — "error by Quan", won by Quan —
  * left by a write from before the winner was kept in step, and a labeller who
- * re-saves the stroke is asking for it to be put right. The winner alone
- * moves and the stored ending stays. Not for an edit further back in the
- * rally that left the last shot as it was: a winner set by hand stands.
+ * re-saves the stroke is asking for it to be put right. The ending moves with
+ * the winner: moving the winner alone turned a seeded "winner by Hooker" whose
+ * ball went in the net into a point Hooker lost with a winner. Not for an edit
+ * further back in the rally that left the last shot as it was: a winner set by
+ * hand stands.
  */
 export function endingPatchForShotChange(
   before: EndingPoint,
@@ -161,7 +163,7 @@ export function endingPatchForShotChange(
   ) {
     return winnerContradicted(after, now) &&
       !editedEarlierShot(before, after, ghosts)
-      ? { winner: now.winner }
+      ? endingPatchTo(after, now)
       : null;
   }
   return endingPatchTo(after, now);
@@ -203,6 +205,23 @@ export function winnerContradicted(
     point.winner !== null &&
     point.winner !== derived.winner
   );
+}
+
+/**
+ * Whether a stored ending cannot be true of the stored winner, whatever the
+ * strokes say: a winner struck by the player who lost the point, or an error
+ * made by the player who won it. The rail's sentence names one player and its
+ * mark the other (or blames the point's winner), and the publish would write
+ * both.
+ */
+export function endingContradictsWinner(
+  point: Pick<LabelPoint, "ending" | "endedBy" | "winner">,
+): boolean {
+  const { ending, endedBy, winner } = point;
+  if (endedBy === null || winner === null) return false;
+  return ending === "winner"
+    ? endedBy !== winner
+    : ending === "error" && endedBy === winner;
 }
 
 /**
