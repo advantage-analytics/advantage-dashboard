@@ -55,7 +55,11 @@ import type {
 import { useSeekSettling } from "./use-seek-settling";
 import { useFilmReadOnly } from "./film-read-only";
 import { useSkipDead } from "./use-skip-dead";
-import { skipDeadAction, type SkipDeadMemo } from "./film-sequence";
+import {
+  endOfCutSettle,
+  skipDeadAction,
+  type SkipDeadMemo,
+} from "./film-sequence";
 
 /**
  * The match video with the room's transport under it, in the tab.
@@ -639,7 +643,11 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
         if (skipDead && el && !el.paused) {
           const action = skipDeadAction(stops, t, skipMemoRef.current);
           if (action?.kind === "seek") seekTo(action.to);
-          else if (action?.kind === "pause") el.pause();
+          else if (action?.kind === "pause") {
+            el.pause();
+            const rest = endOfCutSettle(allStops, stops, t);
+            if (rest !== null) seekTo(rest);
+          }
         }
       },
       [allStops, stops, looping, skipDead, seekTo, pushTime],

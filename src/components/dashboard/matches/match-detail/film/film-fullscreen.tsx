@@ -69,7 +69,11 @@ import {
 } from "./film-room-prefs";
 import { boardAt, type BoardColumns } from "./film-score";
 import { useSkipDead } from "./use-skip-dead";
-import { skipDeadAction, type SkipDeadMemo } from "./film-sequence";
+import {
+  endOfCutSettle,
+  skipDeadAction,
+  type SkipDeadMemo,
+} from "./film-sequence";
 import { FilmScoreboard } from "./film-scoreboard";
 import { useFilmClockVars } from "./film-clock";
 import { useFilmTrace } from "./use-film-trace";
@@ -1319,7 +1323,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       if (skipDead && el && !el.paused) {
         const action = skipDeadAction(p.walkStops, t, skipMemoRef.current);
         if (action?.kind === "seek") seek(action.to);
-        else if (action?.kind === "pause") el.pause();
+        else if (action?.kind === "pause") {
+          el.pause();
+          const rest = endOfCutSettle(p.stops, p.walkStops, t);
+          if (rest !== null) seek(rest);
+        }
       }
     },
     [p.stops, p.walkStops, looping, skipDead, seek, syncClock, mark],

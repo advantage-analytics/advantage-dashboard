@@ -26,7 +26,11 @@ import type { WorkspaceContextValue } from "@/lib/workspace/types";
 // walk is pinned by `tests/film-point-set.spec.ts` instead.
 try {
   localStorage.setItem(SKIP_DEAD_HINT_SEEN_STORAGE_KEY, "1");
-  localStorage.setItem(SKIP_DEAD_STORAGE_KEY, "0");
+  // `?touching=1` is the one case about that walk in this harness: it needs
+  // the real player reaching the end of a cut with a real `timeupdate`.
+  if (!new URLSearchParams(location.search).has("touching")) {
+    localStorage.setItem(SKIP_DEAD_STORAGE_KEY, "0");
+  }
 } catch {
   /* blocked storage: the hint reads that as seen anyway */
 }
@@ -187,7 +191,17 @@ function shots(pointId: string, first: number): MatchShot[] {
  */
 const PAD = Number(new URLSearchParams(location.search).get("pad") ?? "0");
 
-const POINTS: MatchPoint[] = [
+/**
+ * `?touching=1`: two points whose windows touch at film second 0.5, long enough
+ * for `timeupdate` to report from inside the first. `a` is saved, so "Saved
+ * only" is a cut whose last window runs straight into an unlisted point's.
+ */
+const TOUCHING_POINTS: MatchPoint[] = [
+  point("a", 0, { saved: true }),
+  point("b", 2, { pointNumber: 2, resultType: "Ace" }),
+];
+
+const STANDARD_POINTS: MatchPoint[] = [
   // Saved from the start so a spec can drive the unsave path — a delete
   // that matches zero rows (the mock's default shape) without first having
   // to land a save through the same mock.
@@ -211,6 +225,10 @@ const POINTS: MatchPoint[] = [
     }),
   ),
 ];
+
+const POINTS = new URLSearchParams(location.search).has("touching")
+  ? TOUCHING_POINTS
+  : STANDARD_POINTS;
 
 /**
  * The `FilmTab` behind the harness's remount seam.

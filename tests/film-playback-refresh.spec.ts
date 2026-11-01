@@ -2432,6 +2432,61 @@ async function openShell(
   await open(page, matchId, extra);
 }
 
+test("a cut whose last window touches the next point's ends on its own point, and play runs on", async ({
+  page,
+}) => {
+  await openShell(page, "cut-end", { touching: "1" });
+  await page
+    .locator(SHELL_LIST)
+    .getByRole("button", { name: "All points" })
+    .click();
+  await page
+    .getByRole("menu", { name: "Point filters" })
+    .getByText("Saved only")
+    .click();
+  await expect(page.locator(SHELL_ROW("b"))).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  // From somewhere else: the click has to be a jump for the row to be held.
+  await seekTo(page, REPORT, 1);
+  await page.click(SHELL_ROW("a"));
+
+  const playFilm = () =>
+    page.evaluate((sel) => {
+      const el = document.querySelector<HTMLVideoElement>(sel)!;
+      el.muted = true;
+      return el.play();
+    }, REPORT);
+  await playFilm();
+
+  // Skip dead time paused it at `a`'s end, a report past `b`'s opening.
+  await page.waitForFunction((sel) => {
+    const el = document.querySelector<HTMLVideoElement>(sel)!;
+    return el.paused && !el.seeking && el.currentTime > 0.1;
+  }, REPORT);
+  const rest = await page.evaluate(
+    (sel) => document.querySelector<HTMLVideoElement>(sel)!.currentTime,
+    REPORT,
+  );
+  expect(rest).toBeCloseTo(0.25, 2);
+  await expect(page.locator(SHELL_ROW("a"))).toHaveAttribute(
+    "data-playing",
+    "true",
+  );
+  await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+
+  // Play again is the viewer going on: past the cut, and now the pill is true.
+  await playFilm();
+  await expect(page.locator(SHELL_PILL)).toHaveText(
+    "Now playing · Not in this cut",
+  );
+  expect(
+    await page.evaluate(
+      (sel) => document.querySelector<HTMLVideoElement>(sel)!.paused,
+      REPORT,
+    ),
+  ).toBe(false);
+});
+
 test("T22: with the list held, the card follows the playing point and draws no header line", async ({
   page,
 }) => {
