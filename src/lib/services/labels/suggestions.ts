@@ -39,6 +39,10 @@ import {
  */
 export const DEAD_BALL_TAIL = 2;
 
+/** Whether at most `DEAD_BALL_TAIL` live strokes follow `index`. */
+const inDeadBallTail = (live: readonly unknown[], index: number): boolean =>
+  live.length - 1 - index <= DEAD_BALL_TAIL;
+
 export type SuggestionState = "open" | "dismissed" | "done";
 
 /**
@@ -176,7 +180,7 @@ export function suggestionState(
       if (
         at !== -1 &&
         isMissedResult(effectiveShotResult(live[at])) &&
-        live.length - 1 - at <= DEAD_BALL_TAIL
+        inDeadBallTail(live, at)
       ) {
         return "done";
       }
@@ -226,8 +230,7 @@ export function doubleFaultAt(
   const missed = (index: number) =>
     isMissedResult(effectiveShotResult(live[index]));
   const playedOn =
-    inServeLandingMiss(live[second]) !== null &&
-    live.length - 1 - second > DEAD_BALL_TAIL;
+    inServeLandingMiss(live[second]) !== null && !inDeadBallTail(live, second);
   return missed(first) && missed(second) && !playedOn ? second : null;
 }
 
