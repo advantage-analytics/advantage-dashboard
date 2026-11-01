@@ -901,6 +901,36 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(tag(html, 'data-row="suggested-end"')).toContain("outline-dashed");
   });
 
+  test("“No placement” is drawn grey, unlike the amber questions beside it", () => {
+    const base = fixturePoint();
+    const [serve] = base.shots;
+    const point = {
+      ...base,
+      shots: [
+        {
+          ...serve,
+          stroke: "first_serve" as const,
+          result: "in" as const,
+          landingX: null,
+          landingY: null,
+          videoTime: 1,
+        },
+        {
+          ...serve,
+          id: "s-back",
+          eventId: 202,
+          stroke: "forehand" as const,
+          result: "in" as const,
+          videoTime: 2,
+        },
+      ],
+    };
+    const html = renderWell(point, marksOf(point, []));
+    const row = tag(html, 'data-point-hint="placement_missing"');
+    expect(row).toContain("outline-white/20");
+    expect(row).not.toContain("rail-amber");
+  });
+
   test("“Point ended here” can be dismissed, and stays gone once it is", () => {
     const calls: unknown[][] = [];
     const point = endedEarly();

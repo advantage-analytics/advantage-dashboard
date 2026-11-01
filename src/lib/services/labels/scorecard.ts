@@ -1019,7 +1019,7 @@ export function renderScorecard(
     "",
     "## Items, against what the labeller changed",
     "",
-    "The same marks folded into the review flag's items, as the session opened: a point counts once per item it carries, however many of the item's marks it has, amber items before grey. Live row marks (a stale ending, a missing last landing) are not in the opening marks, so they add no members here. The demoted row is the points whose flag is grey and open on item 4 alone for the evidence-only codes; they are also counted in their item 4 row.",
+    "The same marks folded into the review flag's items, as the session opened: a point counts once per item it carries, however many of the item's marks it has, amber items before grey. Live row marks (a stale ending, a missing last landing) are not in the opening marks, so they add no members here, except Shot placement, read off the seed. The demoted row is the points whose flag is grey and open on item 4 alone for the evidence-only codes; they are also counted in their item 4 row.",
     "",
     card.items.length === 0
       ? "No items."

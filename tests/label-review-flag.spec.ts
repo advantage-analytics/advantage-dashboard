@@ -16,6 +16,10 @@ import {
 import { REVIEW_ITEM_QUESTION } from "@/lib/services/labels/marks-copy";
 import { openFlags } from "@/lib/services/labels/flag-nav";
 import {
+  greyJumpFirstItem,
+  reviewStep,
+} from "@/lib/services/labels/review-step";
+import {
   REVIEW_ITEMS,
   reviewChip,
   reviewFlag,
@@ -179,6 +183,40 @@ test.describe("a placement gap beside an amber question", () => {
       [false, [5]],
       [true, [7]],
     ]);
+  });
+
+  test("a jump from the grey list asks the gap first, and then the amber question", () => {
+    const names = { p1: "Ann", p2: "Bea" };
+    const first = greyJumpFirstItem(gapped, amber, [gapped]);
+    expect(first).toBe(7);
+    const asked = reviewStep(
+      gapped,
+      amber,
+      [gapped],
+      names,
+      true,
+      undefined,
+      first,
+    )!;
+    expect(asked.item.id).toBe(7);
+    expect(asked.target.shotId).toBe("a");
+    expect(asked.then).toBe("Then: pick the winner");
+    // Any other way in keeps the usual order.
+    expect(reviewStep(gapped, amber, [gapped], names, true)!.item.id).toBe(5);
+    // With the gap answered, the amber question is next.
+    const placed = {
+      ...gapped,
+      dismissed: ["placement:a"],
+    };
+    expect(greyJumpFirstItem(placed, amber, [placed])).toBeUndefined();
+    expect(
+      reviewStep(placed, amber, [placed], names, true, undefined, first)!.item
+        .id,
+    ).toBe(5);
+  });
+
+  test("a point only in the grey list keeps its order", () => {
+    expect(greyJumpFirstItem(gapped, marksOf({}), [gapped])).toBeUndefined();
   });
 
   test("with nothing amber it is one grey flag, and the chip asks it", () => {

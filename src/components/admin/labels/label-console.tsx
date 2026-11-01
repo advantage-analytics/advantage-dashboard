@@ -71,6 +71,7 @@ import {
 } from "@/lib/services/labels/review-flow";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
+  greyJumpFirstItem,
   openReviewItems,
   reviewStep,
   type ReviewStep,
@@ -256,6 +257,7 @@ import {
   scoreStop,
   slotStops,
   stepFlag,
+  type FlagList,
   type FlagStop,
 } from "@/lib/services/labels/flag-nav";
 import {
@@ -587,6 +589,8 @@ export function LabelConsole({
   const openCounts = useMemo(() => {
     if (!liveMarks) return null;
     const open = openFlags(points, liveMarks);
+    // Each list's own count: a point in both (`openFlags`) is one in each, so
+    // the two are never a total of points.
     const grey = open.filter((flag) => flag.data).length;
     return { amber: open.length - grey, grey };
   }, [points, liveMarks]);
@@ -2067,12 +2071,14 @@ export function LabelConsole({
    * clicks the court or an answer once and the console moves on. With no
    * step the point opens as it would otherwise. Nothing else sets `arm` — a
    * row opened by a click, "Find the gap" or the overview's open-on-point
-   * leaves the court and focus as they were.
+   * leaves the court and focus as they were. `list` is the header list the
+   * jump came from: from the grey one, a point in both asks its placement first
+   * (`greyJumpFirstItem`).
    */
   const jumpToPointId = useRef<string | null>(null);
   function findGap(
     pointId: string | null,
-    { arm = false }: { arm?: boolean } = {},
+    { arm = false, list = "score" }: { arm?: boolean; list?: FlagList } = {},
   ) {
     const live = points.filter((point) => point.status !== "deleted");
     const target = pointId ?? live[live.length - 1]?.id ?? null;
@@ -2087,10 +2093,23 @@ export function LabelConsole({
     pendingAdvance.current = null;
     // A flag jump enters review mode; any other way here leaves it.
     setReviewMode(Boolean(arm && editable && point && liveMarks));
+    const first =
+      arm && list === "data" && point && liveMarks
+        ? greyJumpFirstItem(point, liveMarks, points)
+        : undefined;
+    setAskFirst(first === undefined ? null : { pointId: target, item: first });
     if (arm && editable && point && liveMarks) {
       landOnStep(
         point,
-        reviewStep(point, liveMarks, points, names, drawsGhosts(liveMarks)),
+        reviewStep(
+          point,
+          liveMarks,
+          points,
+          names,
+          drawsGhosts(liveMarks),
+          undefined,
+          first,
+        ),
       );
     } else {
       seekToPointStart(point);
@@ -2809,9 +2828,9 @@ export function LabelConsole({
     switchPlayersByEnd,
     setGameType,
     findGap,
-    goToFlag: (pointId: string) => {
+    goToFlag: (pointId: string, list: FlagList = "score") => {
       lastFlagPointId.current = pointId;
-      findGap(pointId, { arm: true });
+      findGap(pointId, { arm: true, list });
     },
     pullGamePoints,
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
@@ -2959,7 +2978,7 @@ export function LabelConsole({
       const flag = stepFlag(flagStops[kind], points, from, direction);
       if (!flag) return;
       lastFlagPointId.current = flag.pointId;
-      findGap(flag.pointId, { arm: true });
+      findGap(flag.pointId, { arm: true, list: kind });
     };
     stepShot.current = (direction) => {
       if (confirm || !expanded) return;
@@ -3530,6 +3549,11 @@ export function LabelConsole({
   // it the first answer would take the point's other questions with it; the
   // queue keeps asking them (`reviewStep`'s `keep`) until each is answered,
   // dismissed or no longer raised. Set again whenever another point opens.
+  // What a jump from the grey list asks first on the point it opened.
+  const [askFirst, setAskFirst] = useState<{
+    pointId: string;
+    item: ReviewItemId;
+  } | null>(null);
   const [reviewQueue, setReviewQueue] = useState<{
     pointId: string;
     keep: readonly ReviewItemId[];
@@ -3544,6 +3568,8 @@ export function LabelConsole({
     expanded && reviewQueue?.pointId === expanded.id
       ? reviewQueue.keep
       : undefined;
+  const asksFirst =
+    askFirst?.pointId === expanded?.id ? askFirst?.item : undefined;
   const step = useMemo(
     () =>
       expanded && liveMarks
@@ -3554,9 +3580,10 @@ export function LabelConsole({
             names,
             drawsGhosts(liveMarks),
             keep,
+            asksFirst,
           )
         : null,
-    [expanded, liveMarks, points, names, keep],
+    [expanded, liveMarks, points, names, keep, asksFirst],
   );
   const stepKey = expanded ? stepKeyOf(expanded.id, step) : "";
   // "n of m": the count the point's review opened with, latched in render.
