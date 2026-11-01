@@ -40,10 +40,14 @@ import type { LabelMarks } from "@/lib/services/labels/marks";
 import {
   SCORE_MISMATCH_ANSWERS,
   SCORE_MISMATCH_LABEL,
+  THIN_TRACKING_LABEL,
   findGapDescription,
   scoreMismatchDetail,
+  thinTrackingDetail,
 } from "@/lib/services/labels/marks-copy";
+import { drawsGhosts, thinTracking } from "@/lib/services/labels/marks-state";
 import {
+  type FlagList,
   openFlags,
   scoreStop,
   type ScoreStop,
@@ -363,7 +367,7 @@ export function LabelBlackRail({
   onVideoEndsEarly?: () => void;
   onFindGap?: (pointId: string | null) => void;
   /** Make a point current, hold the rail and bring the row up: the flag jumps. */
-  onGoToPoint?: (pointId: string) => void;
+  onGoToPoint?: (pointId: string, list?: FlagList) => void;
   /**
    * Forget the entered score (`final_score: null`), so the match record's is
    * held against the rows again. Offered only while one is stored.
@@ -406,8 +410,9 @@ export function LabelBlackRail({
   // The mismatch as a flag of its own: counted, jumped to, and a slot after
   // the set's last point (`BlackSetScoreSlot`).
   const setScoreStop = scoreStop(mismatch, points);
-  // The header's open flags, over every live row — one per point, as the
-  // row's chip reads it. None on the marks-off session.
+  // The header's open flags, over every live row, as the row's chip reads
+  // them: one per point, or one in each list for a placement gap beside an
+  // amber question (`openFlags`). None on the marks-off session.
   const openMarks = useMemo(
     () => (marks ? openFlags(points, marks) : []),
     [points, marks],
@@ -422,6 +427,17 @@ export function LabelBlackRail({
     () => openMarks.filter((flag) => flag.data),
     [openMarks],
   );
+  // A match whose tracking lost many serves says so once, beside the grey count.
+  const trackingNotice = useMemo(() => {
+    if (!marks) return null;
+    const thin = thinTracking(points, drawsGhosts(marks));
+    return thin
+      ? {
+          label: THIN_TRACKING_LABEL,
+          detail: thinTrackingDetail(thin.missing, thin.serves),
+        }
+      : null;
+  }, [points, marks]);
   // One object for every row, the same one until an input moves: the rows
   // are memoised, and a fresh context per render would re-render them all.
   // Nothing of the playhead is in it (`EditContext`).
@@ -738,6 +754,7 @@ export function LabelBlackRail({
           {marks !== null ? (
             <LabelFlagSummary
               kind="data"
+              notice={trackingNotice}
               openMarks={dataMarks}
               points={points}
               fromPointId={expandedPointId ?? playingPointId}

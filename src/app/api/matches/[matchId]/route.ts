@@ -7,7 +7,11 @@ import {
   PurgeRefusedError,
 } from "@/lib/services/matches/purge-match-storage";
 import { releaseStoragePurgeClaims } from "@/lib/services/matches/release-storage-purge-claim";
-import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
+import {
+  resolveAnalysisStatus,
+  retryWouldRun,
+  type RetryCandidateRow,
+} from "@/lib/data/match-analysis";
 import { isUuid } from "@/lib/services/match-video/access";
 import { isPlainObject } from "@/lib/services/match-video/http";
 import {
@@ -169,6 +173,35 @@ async function analysisFor(supabase: Supabase, matchId: string) {
   const row = data as { status: string; derivation_version: string | null };
   const status = resolveAnalysisStatus(row.status, row.derivation_version);
   return { analysis: status ? { status } : null, error: null };
+}
+
+/**
+ * Whether Edit match may change this match's ad scoring for a retry
+ * (`retryWouldRun`). Only after the caller's RLS read has returned the match
+ * does this read its jobs with the service role: a viewer sees only the jobs
+ * they made, and someone else's completed job must still hold the lock. A failed
+ * read answers with its error, like `analysisFor`, and never passes for yes.
+ */
+async function awaitingRetryFor(
+  matchId: string,
+  viewerId: string,
+  analysis: { status: string } | null,
+) {
+  if (analysis?.status !== "failed" && analysis?.status !== "cancelled") {
+    return { awaitingRetry: false, error: null };
+  }
+  const { data, error } = await createAdminClient()
+    .from("processing_jobs")
+    .select(
+      "id, status, created_by, error_code, error_category, error_step, video_object_key, start_time_seconds, end_time_seconds, resubmitted_from_job_id",
+    )
+    .eq("match_id", matchId)
+    .order("created_at", { ascending: false });
+  if (error) return { awaitingRetry: false, error };
+  return {
+    awaitingRetry: retryWouldRun((data ?? []) as RetryCandidateRow[], viewerId),
+    error: null,
+  };
 }
 
 /**
@@ -341,6 +374,14 @@ export async function GET(
     );
   }
   const { analysis } = analysisRead;
+  const retryRead = await awaitingRetryFor(matchId, user.id, analysis);
+  if (retryRead.error) {
+    return serverError(
+      "GET /api/matches/[matchId]: failed to load analysis status",
+      retryRead.error,
+      "Could not load the match",
+    );
+  }
 
   const active = workspace?.active;
   const runsSchedule =
@@ -358,6 +399,7 @@ export async function GET(
   return NextResponse.json({
     match,
     analysis,
+    awaitingRetry: retryRead.awaitingRetry,
     event,
     canAttach,
     canDetach,
@@ -413,12 +455,24 @@ export async function PATCH(
   }
   const { analysis } = analysisRead;
   const stored = existing as unknown as MatchRow;
+  const retryRead =
+    "format" in body
+      ? await awaitingRetryFor(matchId, user.id, analysis)
+      : { awaitingRetry: false, error: null };
+  if (retryRead.error) {
+    return serverError(
+      "PATCH /api/matches/[matchId]: failed to load analysis status",
+      retryRead.error,
+      "Could not load the match",
+    );
+  }
 
   const result = normalizeMatchPatch(body, {
     score: stored.score,
     format: stored.format,
     linked: stored.event_entry_id !== null,
     analyzed: analysis !== null || stored.source_provider !== null,
+    awaitingRetry: retryRead.awaitingRetry,
     teamMatch: stored.program_id !== null,
     matchType: (stored.match_type as string | null) ?? null,
     round: (stored.round as string | null) ?? null,

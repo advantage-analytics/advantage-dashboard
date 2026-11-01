@@ -24,6 +24,7 @@ import {
   lastLandingMissing,
   missingPointAdded,
   pointEndedEarly,
+  placementMissing,
   pointRowMarkList,
   reviewChip,
   reviewFlag,
@@ -32,6 +33,7 @@ import {
   serveAfterServeIn,
   serveInLandingOut,
   stateHoverParts,
+  strokeHintKey,
   type MarkState,
   type MarkTone,
   type ReviewItem,
@@ -335,6 +337,7 @@ export function pointHints(
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
     serveInLandingOut(point, ghosts),
+    placementMissing(point, ghosts),
   ];
   const { hints: own, count } = pointRowMarkList(point, marks);
   // "Was the last ball in?" is a counted mark; its answer is offered (in the
@@ -354,7 +357,7 @@ export function pointHints(
     // "Point ended here" is a suggestion: once dismissed it is not drawn.
     const ended =
       mark.code === "shot_after_point_end" ? mark.params.shotId : undefined;
-    const key = ended ? pointEndedKey(ended) : undefined;
+    const key = strokeHintKey(mark);
     // A draft stroke has no id to store yet: no Dismiss until it lands.
     const actions = hintActions(mark, point, edit, lastCall?.shotId);
     const afterShotId = ended ?? hintShotId(mark);
@@ -384,6 +387,7 @@ function hintShotId(mark: LabelMark): string | undefined {
     case "second_serve_as_first":
     case "serve_after_serve_in":
     case "serve_in_landing_out":
+    case "placement_missing":
       return mark.params.shotId;
     default:
       return undefined;

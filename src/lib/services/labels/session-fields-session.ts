@@ -3,7 +3,9 @@
  * stores the labelled sets as `label_sessions.final_score`; "Video ends early"
  * stores `label_sessions.video_ends_early = true`. Admin-gated like
  * edit-session.ts, with the marks gate (`checkSessionOpen` with `blind`); the
- * patch is validated first (`parseLabelSessionPatch`).
+ * patch is validated first (`parseLabelSessionPatch`). The overview's scoring
+ * (`ad_scoring`) passes the same way, but a session labelled without marks
+ * takes it too: it still counts its games by one scoring or the other.
  *
  * Its one write is an UPDATE of `label_sessions` with the parsed patch, matched
  * on the id and on `status = 'labelling'`, so a session completed in another
@@ -45,7 +47,14 @@ export async function writeLabelSessionFields(params: {
   const parsed = parseLabelSessionPatch(params.patch);
   if ("error" in parsed) return parsed;
 
-  const refused = await checkSessionOpen(supabase, sessionId, { blind: BLIND });
+  const scoringOnly = Object.keys(parsed.patch).every(
+    (key) => key === "ad_scoring",
+  );
+  const refused = await checkSessionOpen(
+    supabase,
+    sessionId,
+    scoringOnly ? {} : { blind: BLIND },
+  );
   if (refused) return { error: refused };
 
   const { data, error } = await supabase
@@ -54,7 +63,10 @@ export async function writeLabelSessionFields(params: {
     .eq("id", sessionId)
     .eq("status", "labelling")
     .select("id");
-  if (error) return { error: `Could not save the score: ${error.message}` };
+  if (error) {
+    const what = scoringOnly ? "scoring" : "score";
+    return { error: `Could not save the ${what}: ${error.message}` };
+  }
   if (!data || data.length === 0) return { error: RACED };
   return { ok: true, fields: parsed.patch };
 }

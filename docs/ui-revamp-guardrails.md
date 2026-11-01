@@ -308,6 +308,32 @@ be. Doubles teams and existing users depend on it.
 > not quoted to them at the time. It was raised with them afterwards, by
 > `/pr-check` on 2026-10-30. Not a precedent for backfills.
 
+> **A user-approved exception, added 2026-11-01: net points count a player who
+> came forward, and every match's net figures were recomputed once.**
+>
+> Migration `20261101021214_net_points_came_forward` adds
+> `public.net_attempt_shot`, the SQL twin of `cameToNet` (`match-filters/model.ts`),
+> and changes only the two `net_points_*` subqueries of
+> `backfill_returns_in_and_net_points`. The Statistics card and its Video cut count
+> from the points with `cameToNet` and no longer read these columns; Ask and new AI
+> summaries read the columns, which the twin keeps equal to it.
+> `calculate_match_stats` did not change.
+>
+> **The backfill.** One `UPDATE` wrote `net_points_appearances` and `net_points_won`
+> on the rows whose figures moved, SwingVision included: 117 of 178 `match_stats`
+> rows on 67 of 89 matches, attempts 1,109 to 1,480 and won 643 to 836. It did not
+> re-run the function, which would have un-suppressed the return columns on video
+> matches. A checksum of every other `match_stats` column except `updated_at` was
+> identical before and after, and a checksum of the new figures matched
+> `cameToNet` through the real point loader on all 178 rows. No `points`, `shots`
+> or `matches` row was written. Only totals were kept from before, so the old
+> values are recomputable from the old rule rather than stored. Stored AI summaries
+> were not regenerated.
+>
+> **The approval.** The owner approved the change and the dry-run table in session,
+> but this section's "no backfills" rule was not read or quoted to them until after
+> it was applied. Not a precedent for backfills.
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in
@@ -686,6 +712,20 @@ to put a testable seam.
 > is written. It corrupts silently the way the §4 inputs do, one level down.
 > `DERIVATION_VERSION` is `0.3.2-unreconciled`.
 
+> **A reviewed exception, added 2026-10-31: a corrected ad scoring outranks the
+> job.** The owner decided a person's correction should reach the vendor on a
+> retry and the derivation on a rebuild. `label_sessions.ad_scoring`
+> (`readCorrectedAdScoring`) now beats the job in `resolveAdScoring`, and a new
+> session starts from it. `retryAdScoring` (`resubmit-job.ts`) sends the
+> correction, then the match format, then the failed attempt's value; a match on
+> a scheduled line keeps the attempt's value ahead of its format. Edit match can
+> change ad scoring alone while a retry of the newest analysis could run and
+> none has completed (`retryWouldRun`, read with the service role, since a viewer
+> sees only their own jobs). Top player and fixed
+> camera keep their order. `processing_jobs.ad_scoring` still records what each
+> attempt sent. A rebuild still refuses to replace hand-labelled rows unless
+> forced.
+
 > **A reviewed exception, added 2026-09-28: a collapsed score tail, in
 > `derivation/rallies.ts` and `transcript.ts`.** On job 45ff4bd7 the vendor's
 > score stream reset to point 0-0 / game 0-0 / set NaN for the last four rallies
@@ -803,9 +843,9 @@ to put a testable seam.
 >   vendor has started.
 > - `resubmit-job.ts` — **accepts a cancelled parent.** "Send for analysis
 >   again" is a normal resubmission: a new child row, `reserveQuota()` reserves
->   the month's time anew, and the parent's `initial_top_player_is_player1`,
->   `ad_scoring` and `fixed_camera` are reused (falling back to the match row)
->   exactly as for a failed parent.
+>   the month's time anew, and the parent's `initial_top_player_is_player1`
+>   and `fixed_camera` are reused (falling back to the match row) exactly as for
+>   a failed parent. Ad scoring follows `retryAdScoring`.
 >   It is **manual only** — `auto` callers (webhook, reconciler, jobs route) are
 >   refused, because the cancel was a person's decision — and skips
 >   `classifyFailure()`, which has nothing to say about a job that did not fail.

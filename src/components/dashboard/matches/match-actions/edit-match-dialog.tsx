@@ -190,6 +190,8 @@ interface EventContext {
 interface Loaded {
   match: RawMatch;
   analysis: { status: AnalysisStatus } | null;
+  /** A retry of the analysis could run, so its scoring can change. */
+  awaitingRetry: boolean;
   event: EventContext | null;
   canAttach: boolean;
   /** On a line, and the viewer may take it off (`detach_match_from_event_line`). */
@@ -490,6 +492,8 @@ export function EditMatchDialog({
       ? "import"
       : null;
   const formatEditable = !!match && !linked && !analyzed && !pendingLine;
+  const scoringEditable =
+    !!match && !linked && !pendingLine && loaded?.awaitingRetry === true;
   /**
    * The score in the cells differs from the stored one on a match whose
    * analysis can be rebuilt: the note shows, and Save splits in two. The
@@ -774,6 +778,12 @@ export function EditMatchDialog({
         ad_scoring: format.adScoring,
         play_on_lets: format.playOnLets,
       };
+    } else if (
+      scoringEditable &&
+      format.adScoring !== null &&
+      format.adScoring !== (match?.format?.ad_scoring ?? null)
+    ) {
+      body.format = { ad_scoring: format.adScoring };
     }
 
     try {
@@ -1001,7 +1011,8 @@ export function EditMatchDialog({
           adScoring: match.format?.ad_scoring ?? null,
           playOnLets: match.format?.play_on_lets ?? null,
         },
-        analyzed,
+        // The analysis failed, so nothing was analyzed as anything yet.
+        analyzed: scoringEditable ? null : analyzed,
         linked,
         durationMs: match.duration,
       })
@@ -1492,23 +1503,25 @@ export function EditMatchDialog({
                 </div>
               </div>
 
-              {formatEditable && (
+              {(formatEditable || scoringEditable) && (
                 <div className="grid grid-cols-3 gap-x-4">
-                  <div className="flex min-w-0 flex-col gap-2">
-                    <span className="text-[11px] text-[var(--ink-600)]">
-                      Format
-                    </span>
-                    <MenuSelect
-                      label="Format"
-                      variant="underline"
-                      value={String(format.bestOf) as "1" | "3" | "5"}
-                      options={BEST_OF}
-                      disabled={saving}
-                      onChange={(v) =>
-                        setFormat((f) => ({ ...f, bestOf: Number(v) }))
-                      }
-                    />
-                  </div>
+                  {formatEditable && (
+                    <div className="flex min-w-0 flex-col gap-2">
+                      <span className="text-[11px] text-[var(--ink-600)]">
+                        Format
+                      </span>
+                      <MenuSelect
+                        label="Format"
+                        variant="underline"
+                        value={String(format.bestOf) as "1" | "3" | "5"}
+                        options={BEST_OF}
+                        disabled={saving}
+                        onChange={(v) =>
+                          setFormat((f) => ({ ...f, bestOf: Number(v) }))
+                        }
+                      />
+                    </div>
+                  )}
                   <div className="flex min-w-0 flex-col gap-2">
                     <span className="text-[11px] text-[var(--ink-600)]">
                       Scoring
@@ -1531,31 +1544,33 @@ export function EditMatchDialog({
                       }
                     />
                   </div>
-                  <div className="flex min-w-0 flex-col gap-2">
-                    <span className="text-[11px] text-[var(--ink-600)]">
-                      Lets
-                    </span>
-                    <MenuSelect
-                      label="Lets"
-                      variant="underline"
-                      placeholder="Not set"
-                      value={
-                        format.playOnLets === null
-                          ? undefined
-                          : format.playOnLets
-                            ? "play-on"
-                            : "replay"
-                      }
-                      options={LETS}
-                      disabled={saving}
-                      onChange={(v) =>
-                        setFormat((f) => ({
-                          ...f,
-                          playOnLets: v === "play-on",
-                        }))
-                      }
-                    />
-                  </div>
+                  {formatEditable && (
+                    <div className="flex min-w-0 flex-col gap-2">
+                      <span className="text-[11px] text-[var(--ink-600)]">
+                        Lets
+                      </span>
+                      <MenuSelect
+                        label="Lets"
+                        variant="underline"
+                        placeholder="Not set"
+                        value={
+                          format.playOnLets === null
+                            ? undefined
+                            : format.playOnLets
+                              ? "play-on"
+                              : "replay"
+                        }
+                        options={LETS}
+                        disabled={saving}
+                        onChange={(v) =>
+                          setFormat((f) => ({
+                            ...f,
+                            playOnLets: v === "play-on",
+                          }))
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 

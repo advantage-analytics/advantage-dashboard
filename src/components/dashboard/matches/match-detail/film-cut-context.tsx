@@ -5,6 +5,7 @@ import { createContext, use, useMemo, type ReactNode } from "react";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import {
   applyMatchFilters,
+  cameToNet,
   countsAsWinner,
   EMPTY_MATCH_FILTERS,
   hasActiveMatchFilters,
@@ -95,6 +96,12 @@ export interface FilmCutExtras {
    * Result cannot say it either: it reads the return row, not the serve.
    */
   serveIn?: boolean | null;
+  /**
+   * Only points where this side came to the net (`cameToNet`); "either" is
+   * both players' net points, with a side resolved through the filter context.
+   * Not a shared filter, so the Filters drawer has no pill for it.
+   */
+  netBy?: PlayerSide | "either" | null;
 }
 
 /** A statistic's cut: the shared vocabulary plus the Film-only extras. */
@@ -104,6 +111,7 @@ export type FilmCut = Partial<MatchFilters> & FilmCutExtras;
 export const FILM_CUT_EXTRA_KEYS: readonly (keyof FilmCutExtras)[] = [
   "ending",
   "serveIn",
+  "netBy",
 ];
 
 /**
@@ -194,10 +202,21 @@ export function matchesFilmCutEnding(
 }
 
 /** Whether one point passes the cut's Film-only extras. */
-export function matchesFilmCutExtras(point: MatchPoint, cut: FilmCut): boolean {
+export function matchesFilmCutExtras(
+  point: MatchPoint,
+  cut: FilmCut,
+  ctx: Pick<MatchFilterContext, "youIsPlayer1">,
+): boolean {
   const ending = cut.ending ?? null;
   if (ending !== null && !matchesFilmCutEnding(point, ending)) return false;
   if (cut.serveIn && point.firstShotResult !== "In") return false;
+  const netBy = cut.netBy ?? null;
+  if (netBy === "either") {
+    if (!cameToNet(point, true) && !cameToNet(point, false)) return false;
+  } else if (netBy !== null) {
+    const isPlayer1 = netBy === "you" ? ctx.youIsPlayer1 : !ctx.youIsPlayer1;
+    if (!cameToNet(point, isPlayer1)) return false;
+  }
   return true;
 }
 
@@ -228,7 +247,7 @@ export function applyFilmCut(
   return base.filter(
     (point) =>
       (admitted === null || admitted.has(point.id)) &&
-      matchesFilmCutExtras(point, cut),
+      matchesFilmCutExtras(point, cut, ctx),
   );
 }
 
@@ -245,6 +264,8 @@ export function applyFilmCut(
  * - `player`: the side is Result › Hit by, the point of view Result › Ending
  *   reads — whoever hit the winner or made the error (a double fault is the
  *   server's, an ace the server's).
+ * - `net`: the side came to the net (`netBy`), so under `won` it still narrows
+ *   to the points that side came in on.
  *
  * `won` adds Result › Outcome, which is always read from the VIEWER's side:
  * "Won" for you, "Lost" for the opponent — the opponent's 26 of 100 are the
@@ -259,7 +280,7 @@ export function applyFilmCut(
  * player order. Shared by `head-to-head-card.tsx` and `point-endings-card.tsx`
  * — both compose a `FilmCut` this same way.
  */
-export type CutSide = "server" | "returner" | "player";
+export type CutSide = "server" | "returner" | "player" | "net";
 
 function playerSide(side: "you" | "opp"): PlayerSide {
   return side === "you" ? "you" : "opponent";
@@ -277,11 +298,13 @@ export function sideCut(
 ): FilmCut {
   const who = playerSide(side);
   const attributed: FilmCut =
-    by === "player"
-      ? won
-        ? cut
-        : { ...cut, resultPlayer: who }
-      : { ...cut, server: by === "returner" ? otherSide(side) : who };
+    by === "net"
+      ? { ...cut, netBy: who }
+      : by === "player"
+        ? won
+          ? cut
+          : { ...cut, resultPlayer: who }
+        : { ...cut, server: by === "returner" ? otherSide(side) : who };
   return won
     ? { ...attributed, resultOutcome: [side === "you" ? "won" : "lost"] }
     : attributed;

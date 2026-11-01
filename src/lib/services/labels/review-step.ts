@@ -21,6 +21,7 @@ import type { LabelMarks } from "./marks";
 import { markHover, type MarkNames } from "./marks-copy";
 import {
   lastCallAnswer,
+  PLACEMENT_ITEM,
   pointRowMarkList,
   reviewFlag,
   reviewItemQuestion,
@@ -200,6 +201,8 @@ export function reviewItemThenLabel(item: ReviewItem): string {
       return "pick the winner";
     case 6:
       return "check the game and serve order";
+    case 7:
+      return "place the shot";
   }
 }
 
@@ -247,13 +250,15 @@ function reopenSettled(item: ReviewItem): ReviewItem | null {
  * 4 when that is open: the strokes after the point's end are the follow-up
  * to how it ended, not a question before it. `keep` names the items the
  * console's queue still has to ask, which an edit elsewhere on the point
- * may have settled (`reopenSettled`).
+ * may have settled (`reopenSettled`). `first`, while open, is asked before the
+ * rest: a jump from the grey list (`greyJumpFirstItem`).
  */
 export function openReviewItems(
   point: LabelPoint,
   marks: LabelMarks,
   points: readonly LabelPoint[],
   keep?: readonly ReviewItemId[],
+  first?: ReviewItemId,
 ): ReviewItem[] {
   const flag = reviewFlag(point, marks, points);
   if (!flag) return [];
@@ -264,10 +269,38 @@ export function openReviewItems(
   });
   const ending = open.find((item) => item.id === 4);
   const followUp = open.find(isFollowUp);
-  if (!ending || !followUp) return open;
-  const rest = open.filter((item) => item !== followUp);
-  const at = rest.indexOf(ending);
-  return [...rest.slice(0, at + 1), followUp, ...rest.slice(at + 1)];
+  let asked = open;
+  if (ending && followUp) {
+    const rest = open.filter((item) => item !== followUp);
+    const at = rest.indexOf(ending);
+    asked = [...rest.slice(0, at + 1), followUp, ...rest.slice(at + 1)];
+  }
+  return first === undefined
+    ? asked
+    : [
+        ...asked.filter((item) => item.id === first),
+        ...asked.filter((item) => item.id !== first),
+      ];
+}
+
+/**
+ * What a jump from the grey list asks first: "Shot placement" where an amber
+ * question would otherwise come before it, or the labeller lands on that
+ * question from a list that said nothing about it. That is a point in both lists
+ * (`openFlags`), or one whose settled amber question the console's queue (`keep`)
+ * still asks. Undefined elsewhere: the usual order.
+ */
+export function greyJumpFirstItem(
+  point: LabelPoint,
+  marks: LabelMarks,
+  points: readonly LabelPoint[],
+  keep?: readonly ReviewItemId[],
+): ReviewItemId | undefined {
+  const asked = openReviewItems(point, marks, points, keep);
+  return asked.some((item) => item.id === PLACEMENT_ITEM) &&
+    asked.some((item) => item.tone === "score")
+    ? PLACEMENT_ITEM
+    : undefined;
 }
 
 // ── The step ────────────────────────────────────────────────────────────────
@@ -673,6 +706,7 @@ function stepAnswers(
       }
       break;
     case 6:
+    case 7:
       break;
   }
   const dismiss = dismissAnswer(item, extraDismiss);
@@ -727,8 +761,10 @@ export function reviewStep(
   ghosts: boolean,
   /** The console's queue: items still to ask though an edit settled them. */
   keep?: readonly ReviewItemId[],
+  /** Asked before the rest while open (`greyJumpFirstItem`). */
+  first?: ReviewItemId,
 ): ReviewStep | null {
-  const open = openReviewItems(point, marks, points, keep);
+  const open = openReviewItems(point, marks, points, keep, first);
   const item = open[0];
   if (!item) return null;
   const target = reviewStepTarget(item, point, marks, ghosts);

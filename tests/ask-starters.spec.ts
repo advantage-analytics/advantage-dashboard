@@ -1,6 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-import type { AskTagOptions } from "@/lib/data/ask-tags";
+import {
+  buildAskTagOptions,
+  buildTeamAskTagOptions,
+  type AskRosterRow,
+  type AskTagOptions,
+  type DbAskTeamMatch,
+} from "@/lib/data/ask-tags";
+import type { DbPersonalMatch } from "@/lib/data/personal-matches-server";
 import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import {
   askFollowUps,
@@ -127,6 +134,162 @@ test.describe("askStarters — team", () => {
     ]);
     expect(starters[2].tags).toEqual([
       { kind: "player", id: "p1", label: "Mara Sokolov" },
+    ]);
+  });
+});
+
+/**
+ * `getAskStarterOptions()` keeps only the rows with statistics and hands them
+ * to the same builders as the `@` menu. These pin what that buys, over the
+ * real builders and with the rows the loader would keep.
+ */
+test.describe("askStarters — over the analysed rows only", () => {
+  const ME = "11111111-1111-4111-8111-111111111111";
+
+  function row(
+    id: string,
+    over: Partial<DbPersonalMatch> = {},
+  ): DbPersonalMatch {
+    return {
+      id,
+      date: "2026-09-01T15:00:00+00:00",
+      player1_id: ME,
+      player2_id: null,
+      player1_name: "Me Myself",
+      player2_name: "Marek Dvorsky",
+      created_by: ME,
+      score: { player1: [4, 3], player2: [6, 6] },
+      tournament_name: null,
+      round: null,
+      result: null,
+      match_type: null,
+      court_type: null,
+      verified: null,
+      duration: null,
+      opponent_hand: null,
+      opponent_backhand: null,
+      ...over,
+    };
+  }
+
+  function personal(
+    rows: DbPersonalMatch[],
+    analysed: string[],
+  ): AskTagOptions {
+    return buildAskTagOptions(
+      rows.filter((match) => analysed.includes(match.id)),
+      () => "player1",
+    );
+  }
+
+  test("two attempts at a match with no statistics name nobody and make no rival", () => {
+    const rows = [
+      row("uploading", {
+        date: "2026-10-30T15:00:00+00:00",
+        player2_name: "Suhail Hooker",
+      }),
+      row("failed", {
+        date: "2026-10-30T15:00:00+00:00",
+        player2_name: "Suhail Hooker",
+      }),
+      row("m1", { player2_name: "Anna Lee" }),
+    ];
+    expect(
+      askStarters(personal(rows, ["m1"]), PERSONAL_ASK_SCOPE).map(
+        (starter) => starter.text,
+      ),
+    ).toEqual(["How did my match against Anna Lee go?"]);
+    expect(askStarters(personal(rows, []), PERSONAL_ASK_SCOPE)).toEqual([]);
+  });
+
+  test("a newer unanalysed spelling does not lose the record against a rival", () => {
+    const rows = [
+      row("failed", {
+        date: "2026-10-30T15:00:00+00:00",
+        player2_name: "marek dvorsky",
+      }),
+      row("m1", { date: "2026-09-02T15:00:00+00:00" }),
+      row("m2", { date: "2026-09-01T15:00:00+00:00" }),
+    ];
+    expect(
+      askStarters(personal(rows, ["m1", "m2"]), PERSONAL_ASK_SCOPE)[1].text,
+    ).toBe("Why do I lose to Marek Dvorsky?");
+  });
+
+  test("a hand only an unanalysed match recorded asks nothing about left-handers", () => {
+    const rows = [
+      row("failed", {
+        date: "2026-10-30T15:00:00+00:00",
+        opponent_hand: "left",
+      }),
+      row("m1", { date: "2026-09-02T15:00:00+00:00" }),
+      row("m2", { date: "2026-09-01T15:00:00+00:00" }),
+    ];
+    expect(
+      askStarters(personal(rows, ["m1", "m2"]), PERSONAL_ASK_SCOPE).map(
+        (starter) => starter.text,
+      ),
+    ).not.toContain("What is my record against left-handers?");
+  });
+
+  test("team: a player or opponent with only unanalysed matches is not suggested", () => {
+    const SOKOLOV = "33333333-3333-4333-8333-333333333333";
+    const BROOKS = "44444444-4444-4444-8444-444444444444";
+    const roster: AskRosterRow[] = [
+      {
+        player_id: SOKOLOV,
+        user_id: null,
+        display_name: "Mara Sokolov",
+        role: "player",
+      },
+      {
+        player_id: BROOKS,
+        user_id: null,
+        display_name: "Dana Brooks",
+        role: "player",
+      },
+    ];
+    const teamRow = (
+      id: string,
+      over: Partial<DbPersonalMatch>,
+    ): DbAskTeamMatch => ({
+      ...row(id, over),
+      event_entry_id: null,
+    });
+    const rows = [
+      teamRow("uploading", {
+        date: "2026-10-30T15:00:00+00:00",
+        player1_id: SOKOLOV,
+        player2_name: "Suhail Hooker",
+      }),
+      teamRow("failed", {
+        date: "2026-10-30T15:00:00+00:00",
+        player1_id: SOKOLOV,
+        player2_name: "Suhail Hooker",
+      }),
+      teamRow("m1", {
+        date: "2026-09-02T15:00:00+00:00",
+        player1_id: BROOKS,
+        player2_name: "Anna Lee",
+      }),
+      teamRow("m2", {
+        date: "2026-09-01T15:00:00+00:00",
+        player1_id: BROOKS,
+        player2_name: "Bea Ortiz",
+      }),
+    ];
+    const starters = askStarters(
+      buildTeamAskTagOptions(
+        rows.filter((match) => ["m1", "m2"].includes(match.id)),
+        roster,
+      ),
+      TEAM,
+    );
+    expect(starters.map((starter) => starter.text)).toEqual([
+      "What is each player's record?",
+      "How did we do against Anna Lee?",
+      "How is Dana Brooks playing this season?",
+      "Who has the best first serve?",
     ]);
   });
 });

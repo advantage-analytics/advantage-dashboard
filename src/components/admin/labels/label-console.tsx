@@ -81,6 +81,7 @@ import {
 } from "@/lib/services/labels/review-flow";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
+  greyJumpFirstItem,
   openReviewItems,
   reviewStep,
   type ReviewStep,
@@ -266,6 +267,7 @@ import {
   scoreStop,
   slotStops,
   stepFlag,
+  type FlagList,
   type FlagStop,
 } from "@/lib/services/labels/flag-nav";
 import {
@@ -554,14 +556,17 @@ export function LabelConsole({
     finalScore: session.finalScore,
     videoEndsEarly: session.videoEndsEarly,
     startScore: session.startScore,
+    adScoring: session.adScoring,
   });
   // Where the video starts in the match: every scorer below counts from it.
   const startScore = sessionFields.startScore;
+  // Ad or no-ad, as this session counts it: the overview can change it.
+  const adScoring = sessionFields.adScoring;
   // The scoreboard over the rows as they stand, once: the rail's scores and
   // bands and the player's readout and the score marks all read this.
   const scores = useMemo(
-    () => labelScores(points, session.adScoring, startScore),
-    [points, session.adScoring, startScore],
+    () => labelScores(points, adScoring, startScore),
+    [points, adScoring, startScore],
   );
   // The page's marks plus the two score marks read off the live rows
   // (score-marks.ts), which follow the labelled score. Only with marks built.
@@ -576,11 +581,11 @@ export function LabelConsole({
               suggestions: homeShotSuggestions(marks.suggestions, points),
             },
             points,
-            session.adScoring,
+            adScoring,
             scores,
             startScore,
           ),
-    [marks, points, session.adScoring, scores, startScore],
+    [marks, points, adScoring, scores, startScore],
   );
   // Every "Missing shot?" slot still open whose "Add shot" would write: what
   // "Add all missing shots" fills, in rail order.
@@ -602,6 +607,8 @@ export function LabelConsole({
   const openCounts = useMemo(() => {
     if (!liveMarks) return null;
     const open = openFlags(points, liveMarks);
+    // Each list's own count: a point in both (`openFlags`) is one in each, so
+    // the two are never a total of points.
     const grey = open.filter((flag) => flag.data).length;
     return { amber: open.length - grey, grey };
   }, [points, liveMarks]);
@@ -1754,7 +1761,7 @@ export function LabelConsole({
     if (!operations) return;
     const plan = planGameShift(
       points,
-      session.adScoring,
+      adScoring,
       fromPointId,
       matchTiebreakSetNumber,
       startScore,
@@ -1786,7 +1793,7 @@ export function LabelConsole({
     if (!operations?.foldTiebreak) return;
     const fold = tiebreakFolds(
       points,
-      session.adScoring,
+      adScoring,
       matchTiebreakSetNumber,
       startScore,
     ).find((f) => f.setNumber === setNumber);
@@ -1812,7 +1819,7 @@ export function LabelConsole({
     const plan = planGamePull(
       points,
       gameKey,
-      session.adScoring,
+      adScoring,
       matchTiebreakSetNumber,
       startScore,
     );
@@ -1979,7 +1986,7 @@ export function LabelConsole({
     });
   }
 
-  /** One of the score banner's two writes, on `label_sessions` only. */
+  /** A write of the session's own fields, on `label_sessions` only. */
   async function updateSessionFields(patch: LabelSessionFieldsPatch) {
     if (!operations) return;
     const before = sessionFields;
@@ -2033,7 +2040,7 @@ export function LabelConsole({
       blockers: unmarkedErrors(points),
       warnings: completeWarnings({
         points,
-        adScoring: session.adScoring,
+        adScoring,
         marks: liveMarks,
         finalScore: sessionFields.finalScore,
         videoEndsEarly: sessionFields.videoEndsEarly,
@@ -2138,12 +2145,14 @@ export function LabelConsole({
    * clicks the court or an answer once and the console moves on. With no
    * step the point opens as it would otherwise. Nothing else sets `arm` — a
    * row opened by a click, "Find the gap" or the overview's open-on-point
-   * leaves the court and focus as they were.
+   * leaves the court and focus as they were. `list` is the header list the
+   * jump came from: from the grey one, a point in both asks its placement first
+   * (`greyJumpFirstItem`).
    */
   const jumpToPointId = useRef<string | null>(null);
   function findGap(
     pointId: string | null,
-    { arm = false }: { arm?: boolean } = {},
+    { arm = false, list = "score" }: { arm?: boolean; list?: FlagList } = {},
   ) {
     const live = points.filter((point) => point.status !== "deleted");
     const target = pointId ?? live[live.length - 1]?.id ?? null;
@@ -2158,10 +2167,26 @@ export function LabelConsole({
     pendingAdvance.current = null;
     // A flag jump enters review mode; any other way here leaves it.
     setReviewMode(Boolean(arm && editable && point && liveMarks));
+    // Read as the panel will read it: an open point's queue still applies.
+    const queued =
+      reviewQueue?.pointId === target ? reviewQueue.keep : undefined;
+    const first =
+      arm && list === "data" && point && liveMarks
+        ? greyJumpFirstItem(point, liveMarks, points, queued)
+        : undefined;
+    setAskFirst(first === undefined ? null : { pointId: target, item: first });
     if (arm && editable && point && liveMarks) {
       landOnStep(
         point,
-        reviewStep(point, liveMarks, points, names, drawsGhosts(liveMarks)),
+        reviewStep(
+          point,
+          liveMarks,
+          points,
+          names,
+          drawsGhosts(liveMarks),
+          queued,
+          first,
+        ),
       );
     } else {
       seekToPointStart(point);
@@ -2882,9 +2907,9 @@ export function LabelConsole({
     switchPlayersByEnd,
     setGameType,
     findGap,
-    goToFlag: (pointId: string) => {
+    goToFlag: (pointId: string, list: FlagList = "score") => {
       lastFlagPointId.current = pointId;
-      findGap(pointId, { arm: true });
+      findGap(pointId, { arm: true, list });
     },
     pullGamePoints,
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
@@ -2947,12 +2972,7 @@ export function LabelConsole({
     () =>
       operable
         ? [
-            ...slotStops(
-              points,
-              session.adScoring,
-              matchTiebreakSetNumber,
-              startScore,
-            ),
+            ...slotStops(points, adScoring, matchTiebreakSetNumber, startScore),
             // "Players at the wrong end" (court-end.ts) leans on the entered
             // score, which slotStops never reads.
             ...(operations?.switchPlayersByEnd
@@ -2976,7 +2996,7 @@ export function LabelConsole({
       operations,
       points,
       scores,
-      session.adScoring,
+      adScoring,
       session.matchScore,
       sessionFields.finalScore,
       sessionFields.videoEndsEarly,
@@ -3037,7 +3057,7 @@ export function LabelConsole({
       const flag = stepFlag(flagStops[kind], points, from, direction);
       if (!flag) return;
       lastFlagPointId.current = flag.pointId;
-      findGap(flag.pointId, { arm: true });
+      findGap(flag.pointId, { arm: true, list: kind });
     };
     stepShot.current = (direction) => {
       if (confirm || !expanded) return;
@@ -3639,6 +3659,11 @@ export function LabelConsole({
   );
   // The open point's review step (`reviewStep`), asked in the court panel.
   // Memoised: the console re-renders on every film tick while it plays.
+  // What a jump from the grey list asks first on the point it opened.
+  const [askFirst, setAskFirst] = useState<{
+    pointId: string;
+    item: ReviewItemId;
+  } | null>(null);
   // The open point's queue: the items it had open when it became the open
   // point, less the ones the labeller has answered here. Any edit settles
   // every counted mark on a point (marks-state.ts `markState`), so without
@@ -3659,6 +3684,11 @@ export function LabelConsole({
     expanded && reviewQueue?.pointId === expanded.id
       ? reviewQueue.keep
       : undefined;
+  // Only while the jump's review lasts: a row click or a click away leaves it.
+  const asksFirst =
+    reviewMode && askFirst?.pointId === expanded?.id
+      ? askFirst?.item
+      : undefined;
   const step = useMemo(
     () =>
       expanded && liveMarks
@@ -3669,9 +3699,10 @@ export function LabelConsole({
             names,
             drawsGhosts(liveMarks),
             keep,
+            asksFirst,
           )
         : null,
-    [expanded, liveMarks, points, names, keep],
+    [expanded, liveMarks, points, names, keep, asksFirst],
   );
   const stepKey = expanded ? stepKeyOf(expanded.id, step) : "";
   // "n of m": the count the point's review opened with, latched in render.
@@ -3852,7 +3883,7 @@ export function LabelConsole({
       onFollow={followPlayback}
       points={points}
       enteredHands={session.enteredHands}
-      adScoring={session.adScoring}
+      adScoring={adScoring}
       matchTiebreakSet={matchTiebreakSetNumber}
       playOnLets={session.playOnLets}
       fileOffset={fileOffset}
@@ -4030,7 +4061,7 @@ export function LabelConsole({
           points={points}
           marks={liveMarks}
           games={scores.games}
-          adScoring={session.adScoring}
+          adScoring={adScoring}
           startScore={startScore}
           names={names}
           finalScore={sessionFields.finalScore}
@@ -4038,7 +4069,7 @@ export function LabelConsole({
           videoEndsEarly={sessionFields.videoEndsEarly}
           warnings={completeWarnings({
             points,
-            adScoring: session.adScoring,
+            adScoring,
             marks: liveMarks,
             finalScore: sessionFields.finalScore,
             videoEndsEarly: sessionFields.videoEndsEarly,
@@ -4050,6 +4081,11 @@ export function LabelConsole({
           })}
           complete={status === "complete"}
           upload={upload}
+          onAdScoringChange={
+            operable
+              ? (next) => void updateSessionFields({ ad_scoring: next })
+              : undefined
+          }
           onOpen={(pointId) => {
             // The gesture the browser's full screen asks for is this click.
             openOnPointId.current = pointId ?? null;

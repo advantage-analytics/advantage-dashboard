@@ -401,6 +401,16 @@ function stubJobClient(job: Record<string, unknown>) {
         upsert: async () => ({ error: null }),
         select: () => ({
           eq: () => ({
+            // The corrected-scoring read: this job has none.
+            eq: () => ({
+              not: () => ({
+                order: () => ({
+                  limit: () => ({
+                    maybeSingle: async () => ({ data: null, error: null }),
+                  }),
+                }),
+              }),
+            }),
             maybeSingle: async () => ({ data: null, error: null }),
             single: async () => ({
               data:

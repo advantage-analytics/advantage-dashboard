@@ -15,6 +15,7 @@ import {
   flagGroups,
   flagStopLabel,
   stepFlag,
+  type FlagList,
   type FlagRow,
   type FlagStop,
   type OpenFlag,
@@ -38,6 +39,7 @@ const ROW_INK: Record<
     pt: string;
     next: string;
     warn: string;
+    note: string;
   }
 > = {
   dark: {
@@ -47,6 +49,7 @@ const ROW_INK: Record<
     pt: "bg-white/[0.06] text-white/70 hover:bg-white/[0.14] hover:text-white",
     next: "bg-[rgba(253,230,138,0.14)] text-[rgb(252,211,77)]",
     warn: "text-[rgb(252,211,77)]",
+    note: "bg-white/[0.06] text-white/70",
   },
   light: {
     row: "hover:bg-[var(--surface-subtle)] has-[button:focus-visible]:bg-[var(--surface-subtle)]",
@@ -55,6 +58,7 @@ const ROW_INK: Record<
     pt: "bg-[var(--surface-subtle)] text-[var(--ink-500)] hover:text-[var(--ink-900)]",
     next: "bg-[var(--warning-bg)] text-[var(--warning-text)]",
     warn: "text-[var(--warning-text)]",
+    note: "bg-[var(--surface-subtle)] text-[var(--ink-500)]",
   },
 };
 
@@ -90,13 +94,15 @@ export function LabelFlagSummary({
   kind = "score",
   tone = "dark",
   bulk = null,
+  notice = null,
 }: {
-  /** `openFlags(points, marks)`: one per flagged point. */
+  /** This list's share of `openFlags(points, marks)`: one per flagged point. */
   openMarks: readonly OpenFlag[];
   points: readonly Pick<LabelPoint, "id">[];
   /** Where a jump starts: the current point, else none (the top). */
   fromPointId: string | null;
-  onGoToPoint?: (pointId: string) => void;
+  /** Told which list the jump came from: see `FlagList`. */
+  onGoToPoint?: (pointId: string, list: FlagList) => void;
   /** The score mismatch's rows, given the menu's close; null when it adds up. */
   score: ((close: () => void) => ReactNode) | null;
   /** The mismatch as a stop (`scoreStop`, flag-nav.ts); null when it adds up. */
@@ -114,10 +120,16 @@ export function LabelFlagSummary({
    * one beside it: wrong data that rarely moves the score, stepped with the
    * two keys under those, `'` and `;`. The caller passes each its own list.
    */
-  kind?: "score" | "data";
+  kind?: FlagList;
   tone?: RailTone;
   /** One action over the whole list ("Add all 12 missing shots"); null: none. */
   bulk?: { label: string; description: string; onSelect: () => void } | null;
+  /**
+   * Something true of the whole match rather than a point ("Thin tracking"):
+   * a quiet chip beside the count, and its sentence at the foot of the list.
+   * It answers nothing and goes nowhere, so it is not a stop.
+   */
+  notice?: { label: string; detail: string } | null;
 }) {
   const data = kind === "data";
   const keys = data ? DATA_KEYS : SCORE_KEYS;
@@ -145,11 +157,39 @@ export function LabelFlagSummary({
   const go = (pointId: string) => {
     jumped.current = open;
     setOpen(false);
-    onGoToPoint?.(pointId);
+    onGoToPoint?.(pointId, kind);
   };
 
-  // No grey flag open: the grey control is not drawn at all.
-  if (data && count === 0) return null;
+  const noticeChip = notice ? (
+    <ChromeTooltip
+      label={notice.label}
+      detail={notice.detail}
+      side="bottom"
+      hidden={open}
+    >
+      <span
+        role="img"
+        data-label-flag-notice=""
+        aria-label={`${notice.label}: ${notice.detail}`}
+        className={cn(
+          "mr-1 h-6 min-w-0 truncate rounded-[6px] px-[7px] text-[11px] leading-6 whitespace-nowrap",
+          ink.note,
+        )}
+      >
+        {notice.label}
+      </span>
+    </ChromeTooltip>
+  ) : null;
+
+  // No grey flag open: the grey control is not drawn, and a note about the
+  // whole match, which is still true, stands alone.
+  if (data && count === 0) {
+    return noticeChip ? (
+      <span data-label-flag-summary="" className="inline-flex min-w-0 shrink">
+        {noticeChip}
+      </span>
+    ) : null;
+  }
   // Nothing open and the score adds up: today's quiet total, not a control.
   if (count === 0 && score === null) {
     return (
@@ -184,7 +224,10 @@ export function LabelFlagSummary({
   return (
     <span
       data-label-flag-summary=""
-      className="inline-flex shrink-0 items-center"
+      className={cn(
+        "inline-flex items-center",
+        notice ? "min-w-0 shrink" : "shrink-0",
+      )}
     >
       {scoreStop ? (
         <ChromeTooltip
@@ -213,6 +256,7 @@ export function LabelFlagSummary({
           </button>
         </ChromeTooltip>
       ) : null}
+      {noticeChip}
       {next && onGoToPoint ? (
         <ChromeTooltip
           label={`${data ? "Next data flag" : "Next flag"} · point ${next.pointNumber}`}
@@ -372,6 +416,7 @@ export function LabelFlagSummary({
         ))}
         {groups.length > 0 ? (
           <FloatMenuNote>
+            {notice ? `${notice.detail} ` : null}
             {data
               ? "Wrong data that rarely moves the score. Each goes when its point is checked."
               : "Only what can move the score. Wrong data is the grey list beside this one."}

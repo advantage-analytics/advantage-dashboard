@@ -158,6 +158,8 @@ test("the overview is six cards, with the upload's inputs and a publish checklis
   expect(out).toContain("Elena Vargas");
   expect(out).toContain("Right-handed, two-handed backhand");
   expect(out).toContain("Best of 3, no-ad scoring, lets played on");
+  // Read-only here (no operations): the scoring these labels count, as words.
+  expect(out).toContain("Labels counted as");
   expect(out).toContain("0:26 to 1:57:24");
   expect(out).toContain("Not entered");
   expect(out).toContain("Uploaded by Sam Uploader on Aug 29, 2026");
@@ -986,10 +988,10 @@ test.describe("a flag jump lands on the point's review step", () => {
       /stepToFlag\.current\(key === "\]" \? 1 : -1, "score"\)/,
     );
     expect(consoleSource).toMatch(
-      /if \(!flag\) return;\s*lastFlagPointId\.current = flag\.pointId;\s*findGap\(flag\.pointId, \{ arm: true \}\);/,
+      /if \(!flag\) return;\s*lastFlagPointId\.current = flag\.pointId;\s*findGap\(flag\.pointId, \{ arm: true, list: kind \}\);/,
     );
     expect(consoleSource).toMatch(
-      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
+      /goToFlag: \(pointId: string, list: FlagList = "score"\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true, list \}\);/,
     );
     expect(consoleSource).toContain("onGoToPoint={railHandlers.goToFlag}");
     // "Find the gap", the overview's open-on-point and a clicked row do not.
@@ -1013,7 +1015,11 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(findGapSource).toMatch(/arm && editable && point && liveMarks/);
     expect(findGapSource).toContain("if (arm) setFoldedPointId(null);");
     expect(findGapSource).toMatch(
-      /landOnStep\(\s*point,\s*reviewStep\(point, liveMarks, points, names, drawsGhosts\(liveMarks\)\),\s*\)/,
+      /landOnStep\(\s*point,\s*reviewStep\(\s*point,\s*liveMarks,\s*points,\s*names,\s*drawsGhosts\(liveMarks\),\s*queued,\s*first,\s*\),\s*\)/,
+    );
+    // The grey jump's order lasts only as long as the review it opened.
+    expect(consoleSource).toMatch(
+      /const asksFirst =\s*reviewMode && askFirst\?\.pointId === expanded\?\.id/,
     );
     // With no step the point opens as before, at its first stroke.
     expect(findGapSource).toContain("seekToPointStart(point);");
@@ -1203,7 +1209,7 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(stepFlag).toContain("lastFlagPointId.current = flag.pointId;");
     // The header's flag rows land on a flag too.
     expect(consoleSource).toMatch(
-      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
+      /goToFlag: \(pointId: string, list: FlagList = "score"\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true, list \}\);/,
     );
     // A row click, or ← / →, lets it go.
     const body = (name: string) => {

@@ -94,29 +94,45 @@ test.describe("the list's fourth layer", () => {
 
   test("narrows to the numbers named, ANDed with the saved toggle; an empty set is no layer", () => {
     expect(
-      filmListPoints(points, {
-        remainder: null,
-        savedOnly: false,
-        pointSet: [7, 12, 99],
-      }).map((p) => p.id),
+      filmListPoints(
+        points,
+        {
+          remainder: null,
+          savedOnly: false,
+          pointSet: [7, 12, 99],
+        },
+        { youIsPlayer1: true },
+      ).map((p) => p.id),
     ).toEqual(["b", "c"]);
     expect(
-      filmListPoints(points, {
-        remainder: null,
-        savedOnly: true,
-        pointSet: [7, 12],
-      }).map((p) => p.id),
+      filmListPoints(
+        points,
+        {
+          remainder: null,
+          savedOnly: true,
+          pointSet: [7, 12],
+        },
+        { youIsPlayer1: true },
+      ).map((p) => p.id),
     ).toEqual(["c"]);
     expect(
-      filmListPoints(points, {
-        remainder: null,
-        savedOnly: false,
-        pointSet: [],
-      }),
+      filmListPoints(
+        points,
+        {
+          remainder: null,
+          savedOnly: false,
+          pointSet: [],
+        },
+        { youIsPlayer1: true },
+      ),
     ).toBe(points);
-    expect(filmListPoints(points, { remainder: null, savedOnly: false })).toBe(
-      points,
-    );
+    expect(
+      filmListPoints(
+        points,
+        { remainder: null, savedOnly: false },
+        { youIsPlayer1: true },
+      ),
+    ).toBe(points);
     expect(hasPointSet({ pointSet: null })).toBe(false);
     expect(hasPointSet({ pointSet: [1] })).toBe(true);
   });

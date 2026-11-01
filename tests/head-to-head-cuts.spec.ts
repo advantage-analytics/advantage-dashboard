@@ -50,6 +50,8 @@ import {
 const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 
 const EXPECTED_CUTS: Record<string, FilmCut> = {
+  "Net point attempts": { netBy: "either" },
+  "Net points won": { netBy: "either" },
   Aces: { serveResult: ["ace"] },
   "Double faults": { resultEnding: ["error"], resultShot: ["Serve"] },
   "First serve in": { serveType: ["first"], serveIn: true },
@@ -72,6 +74,8 @@ const EXPECTED_CUTS: Record<string, FilmCut> = {
  * opponent's error ended.
  */
 const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
+  "Net point attempts": { netBy: "you" },
+  "Net points won": { netBy: "you", resultOutcome: ["won"] },
   // An ace is the server's: Serve › Player, never Hit by.
   Aces: { serveResult: ["ace"], server: "you" },
   "Double faults": {
@@ -172,7 +176,7 @@ test.describe("head-to-head cuts", () => {
 
   test("rows without a point-level equivalent carry no cut", () => {
     const uncut = ALL_ROWS.filter((row) => !row.cut).map((row) => row.label);
-    expect(uncut).toEqual(["Service games won", "Net points won"]);
+    expect(uncut).toEqual(["Service games won"]);
   });
 
   test("every cut row names its points for the screen-reader label", () => {
@@ -747,7 +751,7 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
       ...MATCH_FILTER_KEYS,
       ...FILM_CUT_EXTRA_KEYS,
     ]);
-    expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending", "serveIn"]);
+    expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending", "serveIn", "netBy"]);
     for (const row of DERIVED_ROWS) {
       if (!row.cut) continue;
       for (const key of Object.keys(row.cut)) {

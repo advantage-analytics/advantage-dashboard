@@ -25,7 +25,11 @@
  *   so a stale dialog learns why.
  * - Format is editable only on a hand-scored match that isn't on a line. An
  *   analyzed match was scored point by point with its format; changing it here
- *   would not re-run anything, and the stats would quietly disagree.
+ *   would not re-run anything, and the stats would quietly disagree. One
+ *   exception: while a retry of a failed or cancelled analysis could run and
+ *   none has completed (`retryWouldRun`), ad scoring alone can change, and the
+ *   retry sends the new value (`retryAdScoring`). Nothing was built under the
+ *   old one.
  */
 
 import {
@@ -120,6 +124,8 @@ export interface StoredMatchForPatch {
   linked: boolean;
   /** Has a processing job (video) or came from a file — not hand-scored. */
   analyzed: boolean;
+  /** A retry of its newest analysis could run (`retryWouldRun`). */
+  awaitingRetry?: boolean;
   /** Filed under a program — a team match, whose player comes from the roster. */
   teamMatch?: boolean;
   /** As stored, for judging a round against its match type. */
@@ -456,7 +462,8 @@ export function normalizeMatchPatch(
   }
 
   if ("format" in body) {
-    if (stored.analyzed || stored.linked) {
+    const scoringOnly = stored.analyzed && stored.awaitingRetry === true;
+    if ((stored.analyzed && !scoringOnly) || stored.linked) {
       return {
         ok: false,
         error: stored.linked
@@ -468,6 +475,17 @@ export function normalizeMatchPatch(
     const f = body.format as Record<string, unknown> | null;
     if (!f || typeof f !== "object") {
       return { ok: false, error: "Choose a format.", field: "format" };
+    }
+    if (
+      scoringOnly &&
+      (typeof f.ad_scoring !== "boolean" ||
+        Object.keys(f).some((key) => key !== "ad_scoring"))
+    ) {
+      return {
+        ok: false,
+        error: "Only the scoring can change before this match is analyzed.",
+        field: "format",
+      };
     }
     const next: MatchFormat = { ...(stored.format ?? {}) };
     if ("best_of" in f) {

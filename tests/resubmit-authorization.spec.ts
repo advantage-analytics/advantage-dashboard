@@ -2,6 +2,10 @@ import { expect, test } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
+import {
+  retryWouldRun,
+  type RetryCandidateRow,
+} from "@/lib/data/match-analysis";
 import type { SplitStepJobRequest } from "@/lib/services/splitstep/job-request";
 import {
   resubmitJob,
@@ -209,8 +213,18 @@ class FakeQuery implements PromiseLike<DbResult> {
     this.filters.push({ kind: "in", col, value });
     return this;
   }
-  not(col: string, operator: string, value: string): this {
-    if (operator !== "in")
+  order(): this {
+    return this;
+  }
+  limit(): this {
+    return this;
+  }
+  not(col: string, operator: string, value: string | null): this {
+    if (operator === "is" && value === null) {
+      this.filters.push({ kind: "notin", col, value: [null, undefined] });
+      return this;
+    }
+    if (operator !== "in" || value === null)
       throw new Error(`fake: .not(${operator}) unsupported`);
     // PostgREST's "(a,b,c)" spelling, as the live query writes it.
     const list = value.replace(/^\(|\)$/g, "").split(",");
@@ -944,4 +958,173 @@ test("three failed attempts still hit the ceiling", async () => {
     ],
   );
   expectRefused(h, await manual(h), "attempt_ceiling");
+});
+
+// ── Which ad scoring a retry sends ────────────────────────────────────────
+
+test.describe("a retry's ad scoring", () => {
+  const sent = async (input: {
+    parent: boolean | null;
+    format: boolean | null;
+    corrected?: boolean;
+    onLine?: boolean;
+  }) => {
+    const h = harness({
+      job: parentJob({ ad_scoring: input.parent }),
+      match: matchRow({
+        format: { ad_scoring: input.format },
+        event_entry_id: input.onLine ? "entry-1" : null,
+      }),
+    });
+    if (input.corrected !== undefined) {
+      h.db.tables.label_sessions = [
+        {
+          id: "s-1",
+          match_id: "m-1",
+          kind: "analyst",
+          ad_scoring: input.corrected,
+        },
+      ];
+    }
+    const r = await auto(h);
+    expect(r.ok).toBe(true);
+    return h.db.inserts[0].row.ad_scoring;
+  };
+
+  test("a failed job sends the value Edit match changed, and the child records it", async () => {
+    expect(await sent({ parent: false, format: true })).toBe(true);
+    expect(await sent({ parent: true, format: false })).toBe(false);
+  });
+
+  test("a labeller's correction beats Edit match and the attempt", async () => {
+    expect(await sent({ parent: false, format: false, corrected: true })).toBe(
+      true,
+    );
+    expect(await sent({ parent: true, format: true, corrected: false })).toBe(
+      false,
+    );
+  });
+
+  test("a match on a line keeps what the attempt sent over its format", async () => {
+    expect(await sent({ parent: false, format: true, onLine: true })).toBe(
+      false,
+    );
+    expect(
+      await sent({
+        parent: false,
+        format: true,
+        onLine: true,
+        corrected: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("a blank format falls back to what the attempt sent", async () => {
+    expect(await sent({ parent: false, format: null })).toBe(false);
+  });
+
+  test("a correction that cannot be read refuses, and nothing is sent", async () => {
+    const h = harness({ job: parentJob(), match: matchRow() });
+    h.db.failures["label_sessions.select"] = { message: "boom" };
+    const r = await auto(h);
+    expect(r).toMatchObject({ ok: false, reason: "submit_failed" });
+    expect(h.db.inserts).toEqual([]);
+  });
+
+  test("top player and fixed camera keep the attempt's values", async () => {
+    const h = harness({
+      job: parentJob({
+        initial_top_player_is_player1: true,
+        fixed_camera: true,
+      }),
+      match: matchRow({
+        initial_top_player_is_player1: false,
+        fixed_camera: false,
+        format: { ad_scoring: true },
+      }),
+    });
+    expect((await auto(h)).ok).toBe(true);
+    expect(h.db.inserts[0].row).toMatchObject({
+      initial_top_player_is_player1: true,
+      fixed_camera: true,
+      ad_scoring: true,
+    });
+  });
+});
+
+// ── What Edit match offers must match what a retry would do ───────────────
+
+test.describe("retryWouldRun", () => {
+  const row = (overrides: Row = {}) =>
+    ({
+      ...parentJob(),
+      error_code: null,
+      error_step: null,
+      created_by: VIEWER,
+      ...overrides,
+    }) as unknown as RetryCandidateRow;
+
+  test("a failed or cancelled job of the viewer's with its video can retry", () => {
+    expect(retryWouldRun([row()], VIEWER)).toBe(true);
+    expect(retryWouldRun([row({ status: "cancelled" })], VIEWER)).toBe(true);
+  });
+
+  test("no jobs, or another person's newest job, cannot", () => {
+    expect(retryWouldRun([], VIEWER)).toBe(false);
+    expect(retryWouldRun([row({ created_by: "admin" })], VIEWER)).toBe(false);
+    expect(retryWouldRun([row({ created_by: null })], VIEWER)).toBe(false);
+  });
+
+  test("any completed job on the match closes it, whoever made it", () => {
+    expect(
+      retryWouldRun(
+        [row(), row({ id: "older", status: "completed", created_by: "admin" })],
+        VIEWER,
+      ),
+    ).toBe(false);
+  });
+
+  test("a running or derivation_failed newest job cannot", () => {
+    for (const status of ["processing", "derivation_failed"]) {
+      expect(retryWouldRun([row({ status })], VIEWER)).toBe(false);
+    }
+  });
+
+  test("a rejected recording cannot", () => {
+    expect(
+      retryWouldRun([row({ error_category: "invalid_input" })], VIEWER),
+    ).toBe(false);
+  });
+
+  test("a job with no finished upload cannot", () => {
+    for (const missing of [
+      { video_object_key: null },
+      { start_time_seconds: null },
+      { end_time_seconds: null },
+    ]) {
+      expect(retryWouldRun([row(missing)], VIEWER)).toBe(false);
+    }
+  });
+
+  test("the attempt ceiling closes it, and cancelled rows spend none", () => {
+    const chain = (status: string) => [
+      row({ id: "c", resubmitted_from_job_id: "b" }),
+      row({ id: "b", status, resubmitted_from_job_id: "a" }),
+      row({ id: "a" }),
+    ];
+    expect(retryWouldRun(chain("failed"), VIEWER)).toBe(false);
+    expect(retryWouldRun(chain("cancelled"), VIEWER)).toBe(true);
+  });
+
+  test("every refusal it predicts, resubmitJob refuses too", async () => {
+    // The gate is only honest while the two agree.
+    const refused = await manual(
+      harness({ job: parentJob({ error_category: "invalid_input" }) }),
+    );
+    expect(refused).toMatchObject({ ok: false, reason: "input_rejected" });
+    const noVideo = await manual(
+      harness({ job: parentJob({ video_object_key: null }) }),
+    );
+    expect(noVideo).toMatchObject({ ok: false, reason: "video_unavailable" });
+  });
 });

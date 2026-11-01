@@ -8,6 +8,18 @@
  *
  * The loader (`lib/data/labels-server.ts`) and the writers that plan from the
  * score (`game-shift-session.ts`) resolve it the same way, from here.
+ *
+ * How far a correction on a session travels (`readCorrectedAdScoring`):
+ *   - a new session of the match starts from it (seed-session.ts);
+ *   - the derivation counts it, so the console's marks and a rebuild of
+ *     the match's rows count it (`buildTranscriptForJob`). The marks are held
+ *     for the console's mount, so a flip reaches them on the next load;
+ *   - a publish writes rows counted with it (apply-session.ts), and a rebuild
+ *     leaves those rows alone unless forced (`persistTranscript`);
+ *   - a retry of a failed analysis tells the vendor (`retryAdScoring`).
+ *
+ * Deliberately not written anywhere else. `processing_jobs.ad_scoring` stays
+ * what the vendor was told, and `matches.format` belongs to Edit match.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -86,4 +98,27 @@ export async function readMatchAdScoring(
     .select("format")
     .eq("id", session.match_id)
     .maybeSingle<MatchScoringRow>();
+}
+
+/**
+ * What a labeller last set this match's scoring to: the newest analyst session
+ * with its own `ad_scoring`, or null when none has one. A self review has no
+ * writer for the column and is left out. The caller decides what a read error
+ * means to it.
+ */
+export async function readCorrectedAdScoring(
+  db: AdminClient,
+  matchId: string,
+): Promise<{ data: boolean | null; error: { message: string } | null }> {
+  const { data, error } = await db
+    .from("label_sessions")
+    .select("ad_scoring")
+    .eq("match_id", matchId)
+    .eq("kind", "analyst")
+    .not("ad_scoring", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ ad_scoring: boolean }>();
+  if (error) return { data: null, error };
+  return { data: data?.ad_scoring ?? null, error: null };
 }
