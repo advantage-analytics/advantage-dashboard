@@ -209,8 +209,18 @@ class FakeQuery implements PromiseLike<DbResult> {
     this.filters.push({ kind: "in", col, value });
     return this;
   }
-  not(col: string, operator: string, value: string): this {
-    if (operator !== "in")
+  order(): this {
+    return this;
+  }
+  limit(): this {
+    return this;
+  }
+  not(col: string, operator: string, value: string | null): this {
+    if (operator === "is" && value === null) {
+      this.filters.push({ kind: "notin", col, value: [null, undefined] });
+      return this;
+    }
+    if (operator !== "in" || value === null)
       throw new Error(`fake: .not(${operator}) unsupported`);
     // PostgREST's "(a,b,c)" spelling, as the live query writes it.
     const list = value.replace(/^\(|\)$/g, "").split(",");
@@ -944,4 +954,96 @@ test("three failed attempts still hit the ceiling", async () => {
     ],
   );
   expectRefused(h, await manual(h), "attempt_ceiling");
+});
+
+// ── Which ad scoring a retry sends ────────────────────────────────────────
+
+test.describe("a retry's ad scoring", () => {
+  const sent = async (input: {
+    parent: boolean | null;
+    format: boolean | null;
+    corrected?: boolean;
+    onLine?: boolean;
+  }) => {
+    const h = harness({
+      job: parentJob({ ad_scoring: input.parent }),
+      match: matchRow({
+        format: { ad_scoring: input.format },
+        event_entry_id: input.onLine ? "entry-1" : null,
+      }),
+    });
+    if (input.corrected !== undefined) {
+      h.db.tables.label_sessions = [
+        {
+          id: "s-1",
+          match_id: "m-1",
+          kind: "analyst",
+          ad_scoring: input.corrected,
+        },
+      ];
+    }
+    const r = await auto(h);
+    expect(r.ok).toBe(true);
+    return h.db.inserts[0].row.ad_scoring;
+  };
+
+  test("a failed job sends the value Edit match changed, and the child records it", async () => {
+    expect(await sent({ parent: false, format: true })).toBe(true);
+    expect(await sent({ parent: true, format: false })).toBe(false);
+  });
+
+  test("a labeller's correction beats Edit match and the attempt", async () => {
+    expect(await sent({ parent: false, format: false, corrected: true })).toBe(
+      true,
+    );
+    expect(await sent({ parent: true, format: true, corrected: false })).toBe(
+      false,
+    );
+  });
+
+  test("a match on a line keeps what the attempt sent over its format", async () => {
+    expect(await sent({ parent: false, format: true, onLine: true })).toBe(
+      false,
+    );
+    expect(
+      await sent({
+        parent: false,
+        format: true,
+        onLine: true,
+        corrected: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("a blank format falls back to what the attempt sent", async () => {
+    expect(await sent({ parent: false, format: null })).toBe(false);
+  });
+
+  test("a correction that cannot be read refuses, and nothing is sent", async () => {
+    const h = harness({ job: parentJob(), match: matchRow() });
+    h.db.failures["label_sessions.select"] = { message: "boom" };
+    const r = await auto(h);
+    expect(r).toMatchObject({ ok: false, reason: "submit_failed" });
+    expect(h.db.inserts).toEqual([]);
+  });
+
+  test("top player and fixed camera keep the attempt's values", async () => {
+    const h = harness({
+      job: parentJob({
+        initial_top_player_is_player1: true,
+        fixed_camera: true,
+      }),
+      match: matchRow({
+        initial_top_player_is_player1: false,
+        fixed_camera: false,
+        format: { ad_scoring: true },
+      }),
+    });
+    expect((await auto(h)).ok).toBe(true);
+    expect(h.db.inserts[0].row).toMatchObject({
+      initial_top_player_is_player1: true,
+      fixed_camera: true,
+      ad_scoring: true,
+    });
+  });
 });

@@ -114,6 +114,7 @@ import {
   MAX_TOTAL_ATTEMPTS,
 } from "@/lib/data/match-analysis";
 import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
+import { readCorrectedAdScoring } from "@/lib/services/labels/ad-scoring";
 
 // Defined in match-analysis.ts so client code can classify with them (this
 // file pulls in @azure/storage-blob); re-exported so the webhook route, the
@@ -139,6 +140,27 @@ const TERMINAL_STATUSES = [
  * analysis"; `cancelled` for "Send for analysis again" (manual only).
  */
 const RESUBMITTABLE_STATUSES = new Set(["failed", "cancelled"]);
+
+/**
+ * The ad scoring a retry sends. A labeller's correction first: someone has
+ * watched the match, and Edit match is closed once an analysis has completed
+ * (patch-match.ts), so a correction is the later word. Then the match's format,
+ * because Edit match can change it on a failed or cancelled analysis and no
+ * statistics were built under the old value. Then what the failed attempt sent.
+ *
+ * A match on a scheduled line keeps the attempt's value first: Edit match cannot
+ * change its format, and job b74a1e04 went up `Ad:false` for a no-ad event while
+ * its match row said ad.
+ */
+export function retryAdScoring(input: {
+  corrected: boolean | null;
+  parent: boolean | null;
+  format: boolean | null | undefined;
+  onLine: boolean;
+}): boolean | null | undefined {
+  const { corrected, parent, format, onLine } = input;
+  return corrected ?? (onLine ? (parent ?? format) : (format ?? parent));
+}
 
 export type ResubmitRefusalReason =
   | "not_found"
@@ -492,29 +514,31 @@ export async function resubmitJob(params: {
   // the Azure blob existence check, and the match metadata. This is the
   // manual "Retry analysis" button's response time; three round trips
   // (two Postgres, one Azure HEAD) run as one wait instead of three.
-  const [liveResult, blobResult, matchResult] = await Promise.all([
-    supabase
-      .from("processing_jobs")
-      .select("id, status")
-      .eq("match_id", parent.match_id)
-      .not("status", "in", `(${TERMINAL_STATUSES.join(",")})`),
-    // Wrapped so a synchronous throw from the Azure client (an incomplete
-    // storage config) lands in the same refusal as a failed HEAD.
-    Promise.resolve()
-      .then(() => io.blobExists(parent.video_object_key as string))
-      .then((exists) => ({ ok: true as const, exists }))
-      .catch((err) => ({ ok: false as const, err })),
-    // `player1_id` and `event_entry_id` for the upload contract — whose match
-    // this is and whether it sits on a scheduled line — same columns the
-    // submit route reads for the same check.
-    supabase
-      .from("matches")
-      .select(
-        "id, player1_name, player2_name, score, match_type, program_id, player1_id, event_entry_id, format, fixed_camera, initial_top_player_is_player1",
-      )
-      .eq("id", parent.match_id)
-      .maybeSingle(),
-  ]);
+  const [liveResult, blobResult, matchResult, correctedResult] =
+    await Promise.all([
+      supabase
+        .from("processing_jobs")
+        .select("id, status")
+        .eq("match_id", parent.match_id)
+        .not("status", "in", `(${TERMINAL_STATUSES.join(",")})`),
+      // Wrapped so a synchronous throw from the Azure client (an incomplete
+      // storage config) lands in the same refusal as a failed HEAD.
+      Promise.resolve()
+        .then(() => io.blobExists(parent.video_object_key as string))
+        .then((exists) => ({ ok: true as const, exists }))
+        .catch((err) => ({ ok: false as const, err })),
+      // `player1_id` and `event_entry_id` for the upload contract — whose match
+      // this is and whether it sits on a scheduled line — same columns the
+      // submit route reads for the same check.
+      supabase
+        .from("matches")
+        .select(
+          "id, player1_name, player2_name, score, match_type, program_id, player1_id, event_entry_id, format, fixed_camera, initial_top_player_is_player1",
+        )
+        .eq("id", parent.match_id)
+        .maybeSingle(),
+      readCorrectedAdScoring(supabase, parent.match_id),
+    ]);
 
   // 3. No concurrent duplicates: nothing non-terminal may exist for this
   //    match. (Not just this chain — a fresh upload in flight for the same
@@ -584,13 +608,27 @@ export async function resubmitJob(params: {
     initial_top_player_is_player1: boolean | null;
   };
 
+  if (correctedResult.error) {
+    return {
+      ok: false,
+      reason: "submit_failed",
+      message: "Could not read this match's scoring.",
+    };
+  }
+
   // Job row first, match row second — same fallback order as the submit
   // route, minus the request body no caller here has. The parent's columns
   // are what the failed attempt actually sent, which is exactly what a retry
-  // must send again.
+  // must send again. Ad scoring alone can have been corrected since
+  // (`retryAdScoring`).
   const effectiveTopPlayer =
     parent.initial_top_player_is_player1 ?? match.initial_top_player_is_player1;
-  const effectiveAdScoring = parent.ad_scoring ?? match.format?.ad_scoring;
+  const effectiveAdScoring = retryAdScoring({
+    corrected: correctedResult.data,
+    parent: parent.ad_scoring,
+    format: match.format?.ad_scoring,
+    onLine: match.event_entry_id !== null,
+  });
   const effectiveFixedCamera = parent.fixed_camera ?? match.fixed_camera;
 
   if (typeof effectiveTopPlayer !== "boolean") {

@@ -11,7 +11,8 @@
  * form shows on them (`tests/edit-match-pending.spec.ts` reads the form's
  * sources for each). Only rows every one-off draws are listed: the Round
  * menu (beside Court, when the match type has rounds) and the
- * Format · Scoring · Lets row (an unanalysed one-off) are conditional, so
+ * Format · Scoring · Lets row (an unanalysed one-off; Scoring alone on a failed
+ * analysis) are conditional, so
  * the skeleton does not promise them. A match on a schedule line swaps the
  * Details rows for its event's sentence.
  */

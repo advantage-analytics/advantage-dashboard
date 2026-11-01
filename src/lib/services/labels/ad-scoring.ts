@@ -15,7 +15,8 @@
  *     the match's rows count it (`buildTranscriptForJob`). The marks are held
  *     for the console's mount, so a flip reaches them on the next load;
  *   - a publish writes rows counted with it (apply-session.ts), and a rebuild
- *     leaves those rows alone unless forced (`persistTranscript`).
+ *     leaves those rows alone unless forced (`persistTranscript`);
+ *   - a retry of a failed analysis tells the vendor (`retryAdScoring`).
  *
  * Deliberately not written anywhere else. `processing_jobs.ad_scoring` stays
  * what the vendor was told, and `matches.format` belongs to Edit match.

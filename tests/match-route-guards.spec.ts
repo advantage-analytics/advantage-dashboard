@@ -47,15 +47,21 @@ function harness(
   scenario: {
     match?: Record<string, unknown> | null;
     jobs?: Read;
+    /** The check for a completed job, read after a failed or cancelled one. */
+    completedJob?: Read;
     roster?: Read;
     program?: Read;
   } = {},
 ) {
   const calls: string[] = [];
   const chain = (table: string) => {
+    let wantsCompleted = false;
     const q = {
       select: () => q,
-      eq: () => q,
+      eq: (column: string, value: unknown) => {
+        if (column === "status" && value === "completed") wantsCompleted = true;
+        return q;
+      },
       is: () => q,
       order: () => q,
       limit: () => q,
@@ -64,6 +70,9 @@ function harness(
         return q;
       },
       maybeSingle: async (): Promise<Read> => {
+        if (table === "processing_jobs" && wantsCompleted) {
+          return scenario.completedJob ?? { data: null, error: null };
+        }
         if (table === "processing_jobs") {
           return scenario.jobs ?? { data: null, error: null };
         }
@@ -271,6 +280,51 @@ test("PATCH saves when the analysis read succeeds with no job", async () => {
   const response = await h.PATCH({ tournament_name: "Open" });
   expect(response.status).toBe(200);
   expect(h.calls).toContain("update:matches");
+});
+
+/* ------------------------------------------- ad scoring awaiting a retry */
+
+const FAILED_JOB: Read = {
+  data: { status: "failed", derivation_version: null },
+  error: null,
+};
+const FORMAT_PATCH = { format: { ad_scoring: true } };
+
+test("PATCH takes ad scoring on a failed analysis, and GET says so", async () => {
+  const h = harness({ jobs: FAILED_JOB });
+  expect((await h.PATCH(FORMAT_PATCH)).status).toBe(200);
+  expect(h.calls).toContain("update:matches");
+  const read = harness({ jobs: FAILED_JOB });
+  expect((await read.GET()).body).toMatchObject({ awaitingRetry: true });
+});
+
+test("PATCH refuses ad scoring once any analysis of the match has completed", async () => {
+  const h = harness({
+    jobs: FAILED_JOB,
+    completedJob: { data: { id: "older" }, error: null },
+  });
+  expect((await h.PATCH(FORMAT_PATCH)).status).toBe(400);
+  expect(h.calls).not.toContain("update:matches");
+});
+
+test("PATCH refuses ad scoring while an analysis is running", async () => {
+  const h = harness({
+    jobs: {
+      data: { status: "processing", derivation_version: null },
+      error: null,
+    },
+  });
+  expect((await h.PATCH(FORMAT_PATCH)).status).toBe(400);
+  expect(h.calls).not.toContain("update:matches");
+});
+
+test("a failed read of completed jobs answers 500, never an unlocked format", async () => {
+  const failing = { data: null, error: { message: RAW } };
+  const patched = harness({ jobs: FAILED_JOB, completedJob: failing });
+  expect((await patched.PATCH(FORMAT_PATCH)).status).toBe(500);
+  expect(patched.calls).not.toContain("update:matches");
+  const read = harness({ jobs: FAILED_JOB, completedJob: failing });
+  expect((await read.GET()).status).toBe(500);
 });
 
 /* -------------------------------------------------- roster read errors */

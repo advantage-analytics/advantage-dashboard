@@ -686,6 +686,19 @@ to put a testable seam.
 > is written. It corrupts silently the way the §4 inputs do, one level down.
 > `DERIVATION_VERSION` is `0.3.2-unreconciled`.
 
+> **A reviewed exception, added 2026-10-31: a corrected ad scoring outranks the
+> job.** The owner decided a person's correction should reach the vendor on a
+> retry and the derivation on a rebuild. `label_sessions.ad_scoring`
+> (`readCorrectedAdScoring`) now beats the job in `resolveAdScoring`, and a new
+> session starts from it. `retryAdScoring` (`resubmit-job.ts`) sends the
+> correction, then the match format, then the failed attempt's value; a match on
+> a scheduled line keeps the attempt's value ahead of its format. Edit match can
+> change ad scoring alone while the newest analysis failed or was cancelled and
+> none has completed (`awaitingRetry`, `patch-match.ts`). Top player and fixed
+> camera keep their order. `processing_jobs.ad_scoring` still records what each
+> attempt sent. A rebuild still refuses to replace hand-labelled rows unless
+> forced.
+
 > **A reviewed exception, added 2026-09-28: a collapsed score tail, in
 > `derivation/rallies.ts` and `transcript.ts`.** On job 45ff4bd7 the vendor's
 > score stream reset to point 0-0 / game 0-0 / set NaN for the last four rallies
@@ -803,9 +816,9 @@ to put a testable seam.
 >   vendor has started.
 > - `resubmit-job.ts` — **accepts a cancelled parent.** "Send for analysis
 >   again" is a normal resubmission: a new child row, `reserveQuota()` reserves
->   the month's time anew, and the parent's `initial_top_player_is_player1`,
->   `ad_scoring` and `fixed_camera` are reused (falling back to the match row)
->   exactly as for a failed parent.
+>   the month's time anew, and the parent's `initial_top_player_is_player1`
+>   and `fixed_camera` are reused (falling back to the match row) exactly as for
+>   a failed parent. Ad scoring follows `retryAdScoring`.
 >   It is **manual only** — `auto` callers (webhook, reconciler, jobs route) are
 >   refused, because the cancel was a person's decision — and skips
 >   `classifyFailure()`, which has nothing to say about a job that did not fail.
