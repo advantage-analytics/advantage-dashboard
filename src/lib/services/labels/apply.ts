@@ -22,6 +22,9 @@
  *   is written as in with no `landing_x` / `landing_y` and no `zone`: the
  *   landing is the vendor's wrong bounce, and a serve with no placement is
  *   one every reader already skips (the derivation writes them too).
+ * - A stroke whose landing is filled from the next air stroke (volley-link.ts)
+ *   is written with the `zone` that place reads as, and no `landing_x` /
+ *   `landing_y`: the ball never bounced there.
  * - Score strings come from the console's own scoreboard (`labelScores`),
  *   server-first like the vendor's, and the pressure flags from the same
  *   `pressureFor` the derivation runs over them — both counted from the
@@ -48,7 +51,7 @@ import {
 } from "@/lib/services/splitstep/derivation";
 import { allErrorsJudged, publishEnding } from "./ending-derived";
 import { inServeLandingMiss, playedOnResult } from "./shot-derived";
-import { withFilledLanding } from "./volley-link";
+import { filledLanding } from "./volley-link";
 import { gameKey, labelScores, type LabelGameBand } from "./score";
 import { labelSetScores } from "./set-scores";
 import {
@@ -436,9 +439,10 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     const from = Math.max(serveIndex, 0);
 
     const shots: AppliedShotRow[] = [];
-    played.forEach((stored, i) => {
-      // A stroke met in the air publishes the landing the rail shows.
-      const shot = withFilledLanding(stored, played[i + 1]);
+    played.forEach((shot, i) => {
+      // Met in the air, so its zone reads off where the next stroke met it. It
+      // never bounced, so no landing goes out for the courts to draw as one.
+      const filled = filledLanding(shot, played[i + 1]);
       if (shot.hitter === null) {
         problems.push(`${at}: stroke ${i + 1} has no hitter`);
         return;
@@ -468,7 +472,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
           ? null
           : isServeStroke(shot.stroke)
             ? serveZone(shot.landingX)
-            : directionZone(shot.landingX, shot.contactX),
+            : directionZone(filled?.x ?? shot.landingX, shot.contactX),
         flags: [],
         derived: true,
       });

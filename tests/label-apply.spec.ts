@@ -366,7 +366,7 @@ test.describe("buildAppliedRows", () => {
     expect(points[7].shots[1].zone).toBe("Crosscourt");
   });
 
-  test("a stroke before an air stroke publishes the contact as its landing, its stored row untouched", () => {
+  test("a stroke before an air stroke publishes a placement but no landing: it never bounced", () => {
     const rows = (next: "forehand_volley" | "forehand") =>
       build([
         pt(0, "p1", "winner", (p) => [
@@ -386,8 +386,8 @@ test.describe("buildAppliedRows", () => {
         ]),
       ]).points[0].shots[1];
     expect(rows("forehand_volley")).toMatchObject({
-      landing_x: 1,
-      landing_y: 6,
+      landing_x: null,
+      landing_y: null,
       zone: "Middle",
       // Played on, whatever its filled landing would call: never a derived out.
       result: "In",

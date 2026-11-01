@@ -2498,4 +2498,58 @@ test.describe("a landing filled from the next air stroke", () => {
     );
     expect(rowHtml({}, null)).not.toContain("data-landing-filled");
   });
+
+  test("the row after it in the rail names the stroke it reads", () => {
+    const { BlackShotRow } = createLoader().load(WELL) as {
+      BlackShotRow: React.ComponentType<Record<string, unknown>>;
+    };
+    const base = labelSessionFixture().points[0].shots[1];
+    const html = renderToStaticMarkup(
+      React.createElement(BlackShotRow, {
+        shot: {
+          ...base,
+          stroke: "backhand",
+          contactX: 2,
+          contactY: 20,
+          landingX: null,
+          landingY: null,
+        },
+        next: {
+          ...base,
+          id: "n",
+          stroke: "overhead",
+          contactX: -1,
+          contactY: 6,
+        },
+        nextNumber: 9,
+        number: 4,
+        pointNumber: 7,
+        edit: wellEdit({}),
+      }),
+    );
+    expect(html).toContain('aria-label="Filled from shot 9"');
+  });
+
+  test("the Result menu says a filled landing calls nothing", () => {
+    const { shotResultMenu } = createLoader().load(WELL) as {
+      shotResultMenu: (
+        shot: LabelShot,
+        playOnLets: boolean | undefined,
+        filledFrom?: number | null,
+      ) => { options: { description?: string }[] } | null;
+    };
+    const base = labelSessionFixture().points[0].shots[1];
+    const shot = {
+      ...base,
+      stroke: "backhand" as const,
+      landingX: null,
+      landingY: null,
+    };
+    expect(shotResultMenu(shot, false, 5)!.options[0].description).toBe(
+      "Its landing is filled from shot 5, which calls nothing",
+    );
+    expect(shotResultMenu(shot, false)!.options[0].description).toBe(
+      "Its landing is not placed yet",
+    );
+  });
 });

@@ -124,12 +124,14 @@ export async function seedLabelSessionAction(
  * Autosave one edit to a label shot — `hitter`, `stroke`, `result`, a
  * `contact_*` or `landing_*` pair, `video_time` or `unclear`, and nothing
  * else. Returns the status the shot now has, or why nothing was written.
+ * `opId` makes it one undo step with the edit it follows (volley-link.ts).
  */
 export async function updateLabelShot(
   shotId: string,
   patch: Record<string, unknown>,
+  opId?: string,
 ): Promise<LabelShotEditResult> {
-  return withLabelOp("Edit shot", () => editLabelShot(shotId, patch));
+  return withLabelOp("Edit shot", () => editLabelShot(shotId, patch), opId);
 }
 
 /**

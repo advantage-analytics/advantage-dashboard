@@ -165,6 +165,55 @@ const pointLevel = (step: ReviewStep): ReviewStep => ({
 });
 
 test.describe("where the block sits (`inlineReviewAnchor`)", () => {
+  test("an added stroke whose landing is filled counts as placed", () => {
+    const first = P1.shots[0];
+    const added = {
+      ...first,
+      id: "s-added-air",
+      status: "added" as const,
+      stroke: "forehand" as const,
+      contactX: 1,
+      contactY: 20,
+      landingX: null,
+      landingY: null,
+      result: null,
+      videoTime: 1,
+    };
+    const volley = {
+      ...first,
+      id: "s-volley",
+      stroke: "forehand_volley" as const,
+      contactX: 2,
+      contactY: 6,
+      videoTime: 2,
+    };
+    const point = { ...P1, shots: [added, volley] };
+    expect(
+      inlineReviewAnchor(point, null, startPlacement("s-added-air"), true),
+    ).toEqual({ shotId: "s-added-air", strokeId: "s-added-air" });
+    // With a step elsewhere the filled stroke no longer holds the block.
+    const noted = inlineReviewAnchor(
+      point,
+      { target: { shotId: "s-volley" } } as never,
+      startPlacement("s-added-air"),
+      true,
+    );
+    expect(noted).toEqual({ shotId: "s-volley", strokeId: "s-volley" });
+    // Followed by a bounce it is still unplaced, and still holds it.
+    const bounced = {
+      ...point,
+      shots: [added, { ...volley, stroke: "forehand" as const }],
+    };
+    expect(
+      inlineReviewAnchor(
+        bounced,
+        { target: { shotId: "s-volley" } } as never,
+        startPlacement("s-added-air"),
+        true,
+      ),
+    ).toEqual({ shotId: "s-added-air", strokeId: "s-added-air" });
+  });
+
   const point = acePoint();
   const step = stepOf(point);
   const ghosts = drawsGhosts(EMPTY_MARKS);

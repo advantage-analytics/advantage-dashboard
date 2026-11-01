@@ -163,6 +163,31 @@ test.describe("the landing's link on the court", () => {
     expect(subtitle(html)).toBe("Apart from shot 3 contact");
   });
 
+  test("a slid court says why, ahead of the link", () => {
+    // Hit from y 24.49: a landing on that side of the net is a short ball.
+    const html = render({
+      point: linked({ x: 1, y: 20 }),
+      placement: armed("landing"),
+      onLandingLink,
+    });
+    expect(subtitle(html)).toContain("Didn’t clear the net");
+  });
+
+  test("a stroke called out or net has no toggle", () => {
+    const point = linked(null);
+    const html = render({
+      point: {
+        ...point,
+        shots: point.shots.map((shot) =>
+          shot.id === "s-return" ? { ...shot, result: "net" } : shot,
+        ),
+      },
+      placement: armed("landing"),
+      onLandingLink,
+    });
+    expect(html).not.toContain("data-court-link");
+  });
+
   test("placing the contact, or no air stroke next: no toggle", () => {
     expect(
       render({

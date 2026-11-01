@@ -5,10 +5,12 @@
  * of the labeller's own shot writes (`patchShot`).
  *
  * A stroke with no landing stored reads the next air stroke's contact
- * (`filledLanding`) wherever a landing is read: the rail, the court, the
- * publish. Nothing is written, so a vendor row stays as seeded and the fill
+ * (`filledLanding`) wherever a landing is read on the console: the rail and the
+ * court. The publish takes its placement but not its place: the ball never
+ * bounced there, so no bounce goes out for it. Nothing is written, so a vendor row stays as seeded and the fill
  * keeps up with the contact by itself. It never decides In / Out: a ball
- * volleyed was played (`playedOnResult`).
+ * volleyed was played (`playedOnResult`). A stroke called out or net gets none:
+ * it never reached anyone, so what follows is a dead ball.
  *
  * Stored ends are linked while they agree. The writes that keep them so:
  *
@@ -32,11 +34,12 @@
 
 import type { LabelShotPatch } from "./edit";
 import {
-  isLiveShot,
+  isMissedResult,
   isServeStroke,
   liveShotsInOrder,
   type LabelPoint,
   type LabelShot,
+  type LiveOrderableShot,
 } from "./session";
 
 /** A volley or an overhead: the ball is hit before it bounces. */
@@ -60,6 +63,10 @@ type ShotEnds = Pick<
   LabelShot,
   "contactX" | "contactY" | "landingX" | "landingY"
 >;
+/** What the link reads of the stroke whose landing it is. */
+type LinkShot = ShotEnds & Pick<LabelShot, "stroke" | "result">;
+/** What the link reads of the stroke after it. */
+type NextShot = ShotEnds & Pick<LabelShot, "stroke">;
 
 /** The end's place, or null unless BOTH of its coordinates are set. */
 function placeOf(shot: ShotEnds, end: End): Place | null {
@@ -76,14 +83,29 @@ function touches(patch: LabelShotPatch, end: End): boolean {
 
 const samePlace = (a: Place, b: Place) => a.x === b.x && a.y === b.y;
 
-/** Whether `next` is an air stroke that met the ball `shot` hit. */
+/**
+ * Whether `next` is an air stroke that met the ball `shot` hit. A serve bounces,
+ * and a stroke called out or net reached nobody.
+ */
 function linked(
-  shot: Pick<LabelShot, "stroke">,
-  next: Pick<LabelShot, "stroke"> | null | undefined,
+  shot: Pick<LabelShot, "stroke" | "result">,
+  next: Pick<LabelShot, "stroke">,
 ): boolean {
   return (
-    Boolean(next) && isAirStroke(next?.stroke) && !isServeStroke(shot.stroke)
+    isAirStroke(next.stroke) &&
+    !isServeStroke(shot.stroke) &&
+    !isMissedResult(shot.result)
   );
+}
+
+/** The two ends a link joins: null when none applies or `next` has no contact. */
+function linkEnds(
+  shot: LinkShot,
+  next: NextShot | null | undefined,
+): { contact: Place; landing: Place | null } | null {
+  if (!next || !linked(shot, next)) return null;
+  const contact = placeOf(next, "contact");
+  return contact && { contact, landing: placeOf(shot, "landing") };
 }
 
 /**
@@ -92,19 +114,34 @@ function linked(
  * fills it.
  */
 export function filledLanding(
-  shot: ShotEnds & Pick<LabelShot, "stroke">,
-  next: (ShotEnds & Pick<LabelShot, "stroke">) | null | undefined,
+  shot: LinkShot,
+  next: NextShot | null | undefined,
 ): Place | null {
-  if (placeOf(shot, "landing") || !next || !linked(shot, next)) return null;
-  return placeOf(next, "contact");
+  const ends = linkEnds(shot, next);
+  return ends && !ends.landing ? ends.contact : null;
 }
 
 /** `shot` with its filled landing in the landing's place, if it has one. */
-export function withFilledLanding<
-  T extends ShotEnds & Pick<LabelShot, "stroke">,
->(shot: T, next: (ShotEnds & Pick<LabelShot, "stroke">) | null | undefined): T {
+export function withFilledLanding<T extends LinkShot>(
+  shot: T,
+  next: NextShot | null | undefined,
+): T {
   const place = filledLanding(shot, next);
   return place ? { ...shot, landingX: place.x, landingY: place.y } : shot;
+}
+
+/**
+ * The live stroke after `shotId` in rally order. Null for the last, and for a
+ * stroke that is not live, which has no place in the rally.
+ */
+export function nextLiveStroke<T extends LiveOrderableShot>(
+  point: { shots: readonly T[] },
+  shotId: string,
+  ghosts = true,
+): T | null {
+  const live = liveShotsInOrder(point, ghosts);
+  const at = live.findIndex((shot) => shot.id === shotId);
+  return at === -1 ? null : (live[at + 1] ?? null);
 }
 
 /**
@@ -128,15 +165,55 @@ export function withFilledLandings(
  * no link applies, or `next` has no contact to read.
  */
 export function landingLink(
-  shot: ShotEnds & Pick<LabelShot, "stroke">,
-  next: (ShotEnds & Pick<LabelShot, "stroke">) | null | undefined,
+  shot: LinkShot,
+  next: NextShot | null | undefined,
 ): "filled" | "agrees" | "apart" | null {
-  if (!next || !linked(shot, next)) return null;
-  const contact = placeOf(next, "contact");
-  if (!contact) return null;
-  const landing = placeOf(shot, "landing");
-  if (!landing) return "filled";
-  return samePlace(landing, contact) ? "agrees" : "apart";
+  const ends = linkEnds(shot, next);
+  if (!ends) return null;
+  if (!ends.landing) return "filled";
+  return samePlace(ends.landing, ends.contact) ? "agrees" : "apart";
+}
+
+/**
+ * A court click's patch to `shot`, with any out or net its coordinates derived
+ * taken off when the next stroke met the ball in the air: that ball was played,
+ * wherever it was met, and a stored miss would remove the strokes after it.
+ */
+export function playedOnPatch(
+  patch: LabelShotPatch,
+  shot: LinkShot,
+  next: NextShot | null | undefined,
+): LabelShotPatch {
+  if (!next || !linked(shot, next) || !isMissedResult(patch.result)) {
+    return patch;
+  }
+  const { result: _result, ...rest } = patch;
+  return rest;
+}
+
+/** Whether placing `shot`'s landing now takes `next`'s contact with it. */
+export function landingTakesContact(
+  shot: LinkShot,
+  next: NextShot | null | undefined,
+  landingOnly: boolean,
+): boolean {
+  if (landingOnly) return false;
+  const link = landingLink(shot, next);
+  return link === "filled" || link === "agrees";
+}
+
+/**
+ * What the court's link toggle does: ends apart go back to reading the contact
+ * (`clearLanding`); otherwise it arms or disarms moving the landing alone.
+ */
+export function landingLinkToggle(
+  shot: LinkShot,
+  next: NextShot | null | undefined,
+  landingOnly: boolean,
+): { clearLanding: true } | { landingOnly: boolean } {
+  return landingLink(shot, next) === "apart"
+    ? { clearLanding: true }
+    : { landingOnly: !landingOnly };
 }
 
 /** Metres between a stored landing and the next stroke's contact. */
@@ -187,7 +264,7 @@ export function volleyLinkWrites({
   ghosts?: boolean;
   landingOnly?: boolean;
 }): VolleyLinkWrite[] {
-  const live = point.shots.filter((shot) => isLiveShot(shot, ghosts));
+  const live = liveShotsInOrder(point, ghosts);
   const at = live.findIndex((shot) => shot.id === shotId);
   // Not a live stroke of this point: a tombstone's values link to nothing.
   if (at === -1) return [];

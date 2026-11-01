@@ -172,6 +172,7 @@ function railProps(props: Props): Props {
   let rail: Props = {};
   dialogs = [];
   const { LabelConsole } = createLoader({
+    globals: { crypto },
     stubs: {
       "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps },
       "@/components/admin/labels/label-black-rail": {
@@ -1043,12 +1044,15 @@ test.describe("how it ended follows the shot rows", () => {
   function saveSpies(shotAnswer: unknown = { ok: true, status: "edited" }) {
     const shot: unknown[][] = [];
     const point: unknown[][] = [];
+    const opIds: unknown[] = [];
     return {
       shot,
       point,
+      opIds,
       saves: {
         onSaveShot: async (...args: unknown[]) => {
-          shot.push(args);
+          shot.push(args.slice(0, 2));
+          opIds.push(args[2]);
           return shotAnswer;
         },
         onSavePoint: async (...args: unknown[]) => {
@@ -1099,6 +1103,15 @@ test.describe("how it ended follows the shot rows", () => {
     await settled();
     expect(shot).toEqual([["s-added", { result: "out" }]]);
     expect(point).toEqual([]);
+  });
+
+  test("a shot write names its undo step, so what follows it can join", async () => {
+    const { saves, opIds } = saveSpies();
+    const table = consoleTable({ ...saves, operations: spies().operations });
+    await (table.onPatchShot as PatchShot)("s-added", { spin: "flat" });
+    await settled();
+    expect(opIds).toHaveLength(1);
+    expect(String(opIds[0])).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   test("a spin edit, and a shot write that fails, send nothing either", async () => {

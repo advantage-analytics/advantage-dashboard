@@ -19,6 +19,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { shotRowRevealDelay } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import { cn } from "@/lib/utils";
 import {
+  isLiveShot,
   isGhostShot,
   isServeStroke,
   isWithdrawnAdd,
@@ -322,6 +323,13 @@ export function BlackShotsWell({
     overAt === null ? [] : inOrder.slice(overAt + 1).map((shot) => shot.id),
   );
   const nextOf = new Map(inOrder.map((shot, i) => [shot.id, inOrder[i + 1]]));
+  // The rail numbers rows as they are stored, which an untimed stroke can set
+  // apart from rally order.
+  const numberOf = new Map(
+    point.shots
+      .filter((shot) => isLiveShot(shot, ghosts))
+      .map((shot, i) => [shot.id, i + 1]),
+  );
   let overDrawn = false;
   for (const [i, shot] of point.shots.entries()) {
     // A stroke the labeller added and then deleted leaves no row.
@@ -353,6 +361,7 @@ export function BlackShotsWell({
       );
     } else {
       n += 1;
+      const next = nextOf.get(shot.id);
       if (pastEnd.has(shot.id) && !overDrawn) {
         overDrawn = true;
         rows.push(<PointOverLine key="point-over" arrive={arrive()} />);
@@ -361,7 +370,8 @@ export function BlackShotsWell({
         <BlackShotRow
           key={shot.id}
           shot={shot}
-          next={nextOf.get(shot.id) ?? null}
+          next={next ?? null}
+          nextNumber={next ? numberOf.get(next.id) : undefined}
           number={n}
           point={point}
           pointNumber={pointNumber}
@@ -501,6 +511,7 @@ let pressedShotId: string | null = null;
 export function BlackShotRow({
   shot,
   next = null,
+  nextNumber,
   number,
   point,
   pointNumber,
@@ -516,6 +527,8 @@ export function BlackShotRow({
    * stroke it played reads In when no result is stored (`playedOnResult`).
    */
   next?: LabelShot | null;
+  /** The rail's number for `next`; by default the row after this one. */
+  nextNumber?: number;
   number: number;
   arrive?: number;
   /** After a double fault (`PointOverLine`): the row a step quieter. */
@@ -589,11 +602,16 @@ export function BlackShotRow({
   // nothing.
   const landed = withFilledLanding(shot, next);
   const link = landingLink(shot, next);
+  const linkedNumber = nextNumber ?? number + 1;
   const gap = link === "apart" && next ? landingGapMetres(shot, next) : null;
   const placement = shotPlacement(labelShotValues(landed));
   // Inside Out / Inside In when the stroke came from its other wing's half.
   const direction = placementLabel(landed, edit.hands);
-  const resultMenu = shotResultMenu(shot, edit.playOnLets);
+  const resultMenu = shotResultMenu(
+    shot,
+    edit.playOnLets,
+    link === "filled" ? linkedNumber : null,
+  );
   // An empty result the next stroke settles: it played the ball, so In.
   const result = playedOnResult(shot, next, point?.ending);
   /** The words' ink, a step down on a fault. */
@@ -740,8 +758,8 @@ export function BlackShotRow({
           x={landed.landingX}
           y={landed.landingY}
           muted={fault}
-          filledFrom={link === "filled" ? number + 1 : null}
-          apart={gap === null ? null : { shot: number + 1, metres: gap }}
+          filledFrom={link === "filled" ? linkedNumber : null}
+          apart={gap === null ? null : { shot: linkedNumber, metres: gap }}
           onPick={() => pick("landing")}
         />
         {placement ? (
@@ -1661,6 +1679,8 @@ export const RESULT_NONE = "none";
 export function shotResultMenu(
   shot: LabelShot,
   playOnLets: boolean | undefined,
+  /** The stroke its landing is filled from: a fill calls nothing, and says so. */
+  filledFrom: number | null = null,
 ): { derived: LabelShotResult | null; options: SelectOption[] } | null {
   if (shot.stroke === null) return null;
   const serve = isServeStroke(shot.stroke);
@@ -1680,7 +1700,10 @@ export function shotResultMenu(
     options.push({
       value: RESULT_NONE,
       label: "No result",
-      description: RESULT_UNPLACED,
+      description:
+        filledFrom === null
+          ? RESULT_UNPLACED
+          : `Its landing is filled from shot ${filledFrom}, which calls nothing`,
       group,
     });
   }
@@ -1927,14 +1950,9 @@ function BlackPositionCell({
             ],
           }
         : placed;
-  const ink =
-    filledFrom !== null
-      ? rowSelected
-        ? VALUE_INK
-        : QUIET_INK
-      : muted
-        ? QUIET_INK
-        : VALUE_INK;
+  const ink = (filledFrom !== null ? !rowSelected : muted)
+    ? QUIET_INK
+    : VALUE_INK;
   const numbers = (
     <span className="inline-flex items-center gap-1.5 align-middle">
       {pair ? (

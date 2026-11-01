@@ -17,13 +17,23 @@ import { randomUUID } from "node:crypto";
  */
 const store = new AsyncLocalStorage<Record<string, string>>();
 
-/** Run one console action with its writes grouped as one undo step. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Run one console action with its writes grouped as one undo step. `opId` joins
+ * it to an earlier action of the same click, when one click takes two requests;
+ * anything but a uuid starts a step of its own.
+ */
 export function withLabelOp<T>(
   action: string,
   run: () => Promise<T>,
+  opId?: string,
 ): Promise<T> {
   return store.run(
-    { "x-label-op": randomUUID(), "x-label-action": action },
+    {
+      "x-label-op": opId && UUID.test(opId) ? opId : randomUUID(),
+      "x-label-action": action,
+    },
     run,
   );
 }

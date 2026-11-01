@@ -6,13 +6,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   isLetServe,
   isLiveShot,
-  liveShotsInOrder,
   opponent,
   type LabelPoint,
   type LabelShot,
 } from "@/lib/services/labels/session";
 import {
   landingLink,
+  nextLiveStroke,
   withFilledLandings,
 } from "@/lib/services/labels/volley-link";
 import { cn } from "@/lib/utils";
@@ -309,15 +309,8 @@ export function LabelCourtPanel({
     () => (point ? withFilledLandings(point, ghosts) : NO_SHOTS),
     [point, ghosts],
   );
-  const inOrder = useMemo(
-    () => (point ? liveShotsInOrder(point, ghosts) : NO_SHOTS),
-    [point, ghosts],
-  );
-  const selectedAt = selected
-    ? inOrder.findIndex((shot) => shot.id === selected.id)
-    : -1;
   const nextStroke =
-    selectedAt === -1 ? null : (inOrder[selectedAt + 1] ?? null);
+    point && selected ? nextLiveStroke(point, selected.id, ghosts) : null;
   const link = selected ? landingLink(selected, nextStroke) : null;
   const linkShown = placing && placement.target === "landing" && link !== null;
   const strokes = useMemo<CourtStroke[]>(() => {
@@ -331,7 +324,14 @@ export function LabelCourtPanel({
           ? { shot, opacity: { hit: 1, landed: 0.65 } }
           : { shot };
       return linkShown && nextStroke
-        ? [own, { shot: nextStroke, opacity: { hit: 0.55, landed: 0 } }]
+        ? [
+            own,
+            {
+              shot: nextStroke,
+              opacity: { hit: 0.55, landed: 0 },
+              reference: true,
+            },
+          ]
         : [own];
     }
     const out: CourtStroke[] = [];
@@ -427,7 +427,11 @@ export function LabelCourtPanel({
   // (the cursor and the switch carry the end's glyph); a let serve keeps its
   // " · let".
   const isLet = selected !== null && isLetServe(selected);
-  const nextNumber = selectedAt + 2;
+  // The rail's number for it, as the title's is.
+  const nextNumber =
+    point && nextStroke
+      ? liveShots(point, ghosts).findIndex((s) => s.id === nextStroke.id) + 1
+      : null;
   const linkOn = link !== "apart" && !landingOnly;
   const linkLine = !linkShown
     ? null
@@ -479,7 +483,8 @@ export function LabelCourtPanel({
               data-court-subtitle=""
               className="truncate text-[10px] leading-[13px] text-white/55"
             >
-              {linkLine ?? readout.subtitle}
+              {/* A slid court says why first. */}
+              {slide ? readout.subtitle : (linkLine ?? readout.subtitle)}
             </span>
           )}
         </div>

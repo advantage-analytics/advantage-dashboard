@@ -10,6 +10,10 @@ import {
   isAirStroke,
   landingGapMetres,
   landingLink,
+  landingLinkToggle,
+  landingTakesContact,
+  nextLiveStroke,
+  playedOnPatch,
   volleyLinkWrites,
   withFilledLandings,
 } from "@/lib/services/labels/volley-link";
@@ -334,14 +338,19 @@ test.describe("previous and next are the nearest LIVE strokes", () => {
   test("a ghost is skipped while ghosts are drawn, and is a stroke when not", () => {
     const a = shot("a", { ...BACK, landingX: 0, landingY: 20 });
     const b = shot("b", { hitter: "p2", stroke: "forehand_volley" });
-    const rows = [a, ghost("g"), b];
+    // Between the two in rally order.
+    const between = (restored = false) => ({
+      ...ghost("g", restored),
+      videoTime: a.videoTime! + 0.5,
+    });
+    const rows = [a, between(), b];
     const patch = { contact_x: AT_NET.x, contact_y: AT_NET.y };
     expect(edit(rows, "b", patch)[0].shotId).toBe("a");
     expect(edit(rows, "b", patch, true)[0].shotId).toBe("a");
     // The marks-off session numbers it as an ordinary stroke.
     expect(edit(rows, "b", patch, false)[0].shotId).toBe("g");
     // Restored, it is a stroke again in either session.
-    expect(edit([a, ghost("g", true), b], "b", patch)[0].shotId).toBe("g");
+    expect(edit([a, between(true), b], "b", patch)[0].shotId).toBe("g");
   });
 
   test("only tombstones before it: an air stroke with no previous stroke", () => {
@@ -501,5 +510,110 @@ test.describe("a landing filled from the next air stroke", () => {
     expect(edit([a, volley()], "a", { landing_x: 1, landing_y: 19 })).toEqual([
       { shotId: "b", patch: { contact_x: 1, contact_y: 19 } },
     ]);
+  });
+
+  test("a stroke called out or net gets no fill and no link", () => {
+    for (const result of ["out", "net"] as const) {
+      const missed = shot("a", { ...BACK, result });
+      expect(filledLanding(missed, volley()), result).toBeNull();
+      expect(landingLink(missed, volley()), result).toBeNull();
+    }
+    expect(
+      filledLanding(shot("a", { ...BACK, result: "in" }), volley()),
+    ).toEqual(AT_NET);
+  });
+
+  test("whether a placed landing takes the contact", () => {
+    const filled = shot("a", BACK);
+    const agrees = shot("a", {
+      ...BACK,
+      landingX: AT_NET.x,
+      landingY: AT_NET.y,
+    });
+    const apart = shot("a", { ...BACK, landingX: 0, landingY: 20 });
+    expect(landingTakesContact(filled, volley(), false)).toBe(true);
+    expect(landingTakesContact(agrees, volley(), false)).toBe(true);
+    expect(landingTakesContact(apart, volley(), false)).toBe(false);
+    expect(landingTakesContact(filled, volley(), true)).toBe(false);
+    expect(landingTakesContact(filled, null, false)).toBe(false);
+  });
+
+  test("the toggle clears ends apart, and otherwise arms and disarms", () => {
+    const apart = shot("a", { ...BACK, landingX: 0, landingY: 20 });
+    expect(landingLinkToggle(apart, volley(), false)).toEqual({
+      clearLanding: true,
+    });
+    expect(landingLinkToggle(shot("a", BACK), volley(), false)).toEqual({
+      landingOnly: true,
+    });
+    expect(landingLinkToggle(shot("a", BACK), volley(), true)).toEqual({
+      landingOnly: false,
+    });
+  });
+
+  test("the next live stroke: rally order, and none for a stroke not live", () => {
+    const a = shot("a", BACK);
+    const gone = shot("gone", { status: "deleted" });
+    const b = volley();
+    const point = { shots: [a, gone, b] };
+    expect(nextLiveStroke(point, "a")?.id).toBe("b");
+    expect(nextLiveStroke(point, "b")).toBeNull();
+    // Never the rally's first stroke, as `findIndex + 1` would answer.
+    expect(nextLiveStroke(point, "gone")).toBeNull();
+    expect(nextLiveStroke(point, "nowhere")).toBeNull();
+  });
+
+  test("writes follow rally order, as the fill does, not stored order", () => {
+    // Stored first but untimed, so it plays last: `b` is after `a`.
+    const untimed = shot("u", { videoTime: null, eventId: null });
+    const a = shot("a", { ...BACK, landingX: AT_NET.x, landingY: AT_NET.y });
+    const b = volley();
+    expect(nextLiveStroke({ shots: [untimed, a, b] }, "a")?.id).toBe("b");
+    expect(edit([untimed, a, b], "b", { contact_x: 1, contact_y: 19 })).toEqual(
+      [{ shotId: "a", patch: { landing_x: 1, landing_y: 19 } }],
+    );
+  });
+
+  test("a missed stroke's writes leave the next stroke alone, from either side", () => {
+    for (const result of ["out", "net"] as const) {
+      const placed = {
+        ...BACK,
+        result,
+        landingX: AT_NET.x,
+        landingY: AT_NET.y,
+      };
+      expect(
+        edit([shot("a", placed), volley()], "a", {
+          landing_x: 1,
+          landing_y: 19,
+        }),
+        result,
+      ).toEqual([]);
+      expect(
+        edit([shot("a", placed), volley()], "b", {
+          contact_x: 1,
+          contact_y: 19,
+        }),
+        result,
+      ).toEqual([]);
+    }
+  });
+
+  test("a click's derived miss comes off when the next stroke met the ball", () => {
+    const patch = { landing_x: 0, landing_y: 30, result: "out" as const };
+    expect(playedOnPatch(patch, shot("a", BACK), volley())).toEqual({
+      landing_x: 0,
+      landing_y: 30,
+    });
+    expect(
+      playedOnPatch({ ...patch, result: "net" }, shot("a", BACK), volley()),
+    ).toEqual({ landing_x: 0, landing_y: 30 });
+    // A derived In stays, and so does a miss with a bounce next or no stroke.
+    const inPatch = { ...patch, result: "in" as const };
+    expect(playedOnPatch(inPatch, shot("a", BACK), volley())).toBe(inPatch);
+    expect(
+      playedOnPatch(patch, shot("a", BACK), volley({ stroke: "forehand" })),
+    ).toBe(patch);
+    expect(playedOnPatch(patch, shot("a", BACK), null)).toBe(patch);
   });
 });
