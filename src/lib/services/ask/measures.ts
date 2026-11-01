@@ -128,7 +128,7 @@ export const ASK_MEASURES: Readonly<Record<string, AskMeasureName>> = {
   forehand_unforced_errors: { label: "Forehand unforced errors" },
   backhand_unforced_errors: { label: "Backhand unforced errors" },
   volley_winners: { label: "Volley winners" },
-  net_points_appearances: { label: "Net points played" },
+  net_points_appearances: { label: "Net point attempts" },
   net_points_won: { label: "Net points won" },
   serve_wide: { label: "Serves wide" },
   serve_body: { label: "Serves to the body" },

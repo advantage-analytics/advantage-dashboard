@@ -303,8 +303,13 @@ const GLOSSARY: GlossaryGroup[] = [
         definition: "Percentage of break points won while returning.",
       },
       {
+        term: "Net Point Attempts",
+        definition:
+          "Points where a player came forward: a volley, an overhead from up the court, or any rally shot from inside the service line.",
+      },
+      {
         term: "Net Points Won %",
-        definition: "Percentage of points won when finishing at the net.",
+        definition: "Percentage of net point attempts the player won.",
       },
       {
         term: "Total Points Won %",

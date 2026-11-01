@@ -308,6 +308,32 @@ be. Doubles teams and existing users depend on it.
 > not quoted to them at the time. It was raised with them afterwards, by
 > `/pr-check` on 2026-10-30. Not a precedent for backfills.
 
+> **A user-approved exception, added 2026-11-01: net points count a player who
+> came forward, and every match's net figures were recomputed once.**
+>
+> Migration `20261101021214_net_points_came_forward` adds
+> `public.net_attempt_shot`, the SQL twin of `cameToNet` (`match-filters/model.ts`),
+> and changes only the two `net_points_*` subqueries of
+> `backfill_returns_in_and_net_points`. The Statistics card and its Video cut count
+> from the points with `cameToNet` and no longer read these columns; Ask and new AI
+> summaries read the columns, which the twin keeps equal to it.
+> `calculate_match_stats` did not change.
+>
+> **The backfill.** One `UPDATE` wrote `net_points_appearances` and `net_points_won`
+> on the rows whose figures moved, SwingVision included: 117 of 178 `match_stats`
+> rows on 67 of 89 matches, attempts 1,109 to 1,480 and won 643 to 836. It did not
+> re-run the function, which would have un-suppressed the return columns on video
+> matches. A checksum of every other `match_stats` column except `updated_at` was
+> identical before and after, and a checksum of the new figures matched
+> `cameToNet` through the real point loader on all 178 rows. No `points`, `shots`
+> or `matches` row was written. Only totals were kept from before, so the old
+> values are recomputable from the old rule rather than stored. Stored AI summaries
+> were not regenerated.
+>
+> **The approval.** The owner approved the change and the dry-run table in session,
+> but this section's "no backfills" rule was not read or quoted to them until after
+> it was applied. Not a precedent for backfills.
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in

@@ -111,13 +111,14 @@ export const INERT_FILM_LIST_FILTERS: FilmListFilters = Object.freeze({
 export function filmListPoints(
   sharedPoints: MatchPoint[],
   local: FilmLocalFilters,
+  ctx: Pick<MatchFilterContext, "youIsPlayer1">,
 ): MatchPoint[] {
   const extras = local.remainder?.extras ?? null;
   const set = hasPointSet(local) ? new Set(local.pointSet) : null;
   if (!extras && !local.savedOnly && !set) return sharedPoints;
   return sharedPoints.filter(
     (point) =>
-      (!extras || matchesFilmCutExtras(point, extras)) &&
+      (!extras || matchesFilmCutExtras(point, extras, ctx)) &&
       (!local.savedOnly || point.saved) &&
       (!set || set.has(point.pointNumber)),
   );
@@ -281,11 +282,31 @@ function labelNamesResultPlayer(
   names: PhraseNames,
 ): boolean {
   if (shared.resultPlayer === null) return false;
-  const name = playerNameOf(shared.resultPlayer, names);
+  return labelNames(label, playerNameOf(shared.resultPlayer, names));
+}
+
+function labelNames(label: string, name: string): boolean {
   return label
     .split(" · ")
     .slice(1)
     .some((segment) => name === segment || name.endsWith(` ${segment}`));
+}
+
+/**
+ * Whether a cut's label already says the shared Result › Outcome: "Net points
+ * won · Ellis" is the points Ellis won, which Outcome reads from the viewer's
+ * side as Lost, so "Points lost · Net points won · Ellis" contradicts itself.
+ * An outcome that disagrees with the label was picked since, and stays a phrase.
+ */
+function labelStatesOutcome(
+  shared: MatchFilters,
+  label: string,
+  names: PhraseNames,
+): boolean {
+  if (shared.resultOutcome.length !== 1) return false;
+  if (!label.split(" · ")[0].endsWith(" won")) return false;
+  const [outcome] = shared.resultOutcome;
+  return labelNames(label, outcome === "won" ? names.you : names.opponent);
 }
 
 /**
@@ -297,7 +318,8 @@ function labelNamesResultPlayer(
  * Statistics") ONLY while its Film-only extras are in force — a pure cut is
  * all shared phrases already and names nothing twice, and what the label says
  * itself is left to it ("G. Revelli's last shot · Errors · Errors · Revelli,
- * from Statistics" reads "Errors · Revelli, from Statistics") — then "saved";
+ * from Statistics" reads "Errors · Revelli, from Statistics", and "Net points
+ * won · Ellis" says its own outcome) — then "saved";
  * joined with " · ", each segment starting with a capital like every other
  * middot line in the dashboard. "G. Revelli serving · Second serve · Break point".
  * "All points" when nothing is applied.
@@ -311,10 +333,19 @@ export function filmListSentence(
   },
   names: PhraseNames,
 ): string {
+  const cutLabel = f.remainder?.label;
   let parts = appliedPhrases(
-    f.remainder && labelNamesResultPlayer(f.shared, f.remainder.label, names)
-      ? { ...f.shared, resultPlayer: null }
-      : f.shared,
+    {
+      ...f.shared,
+      resultPlayer:
+        cutLabel && labelNamesResultPlayer(f.shared, cutLabel, names)
+          ? null
+          : f.shared.resultPlayer,
+      resultOutcome:
+        cutLabel && labelStatesOutcome(f.shared, cutLabel, names)
+          ? []
+          : f.shared.resultOutcome,
+    },
     names,
   );
   if (f.remainder) {
@@ -368,7 +399,8 @@ export function filmDraftCount(
   local: FilmLocalFilters,
   ctx: MatchFilterContext,
 ): number {
-  return filmListPoints(applyMatchFilters(points, draft, ctx), local).length;
+  return filmListPoints(applyMatchFilters(points, draft, ctx), local, ctx)
+    .length;
 }
 
 /**

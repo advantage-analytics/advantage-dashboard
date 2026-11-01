@@ -741,6 +741,46 @@ function strokeOf(shotType: string | null | undefined): ShotStroke | null {
   return null;
 }
 
+/** The service line, in metres from the net. */
+export const NET_ZONE_DEPTH_M = 6.4;
+
+/**
+ * How far from the net an overhead still counts. Past this it is a lob smashed
+ * from the back of the court, which says nothing about coming in.
+ */
+export const NET_OVERHEAD_DEPTH_M = 8;
+
+/**
+ * Whether this seat came to the net in this point: it hit a volley, an overhead
+ * from up the court, or any other rally shot from inside the service line.
+ *
+ * `contact_y` is the hitter's position, so this sees a player only when they
+ * strike the ball: one who approaches and is passed before hitting again is not
+ * counted. A volley or overhead with no measured position still counts, since
+ * half of SwingVision's shots carry no coordinates. The return is left out of
+ * the position test (the rally starts at shot 3), because a return struck that
+ * close is a tracking error rather than an approach.
+ *
+ * `public.net_attempt_shot` is the SQL twin behind the published
+ * `net_points_*` figures. Change one and you must change the other.
+ */
+export function cameToNet(point: MatchPoint, isPlayer1: boolean): boolean {
+  return (point.shots ?? []).some((shot) => {
+    if (shot.isPlayer1 !== isPlayer1) return false;
+    if (isServeShotType(shot.shotType) || isFeedShotType(shot.shotType)) {
+      return false;
+    }
+    const type = lower(shot.shotType);
+    const depth =
+      shot.contactY === null ? null : Math.abs(shot.contactY - NET_Y_M);
+    if (type.includes("volley")) return true;
+    if (type === "overhead") {
+      return depth === null || depth <= NET_OVERHEAD_DEPTH_M;
+    }
+    return shot.shotNumber >= 3 && depth !== null && depth <= NET_ZONE_DEPTH_M;
+  });
+}
+
 /**
  * The shot that ended the point — its kind and who struck it. Serve and
  * Return are picked by ROLE (a serve row; the first non-serve, non-feed row),

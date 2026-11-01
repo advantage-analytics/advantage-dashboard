@@ -20,6 +20,7 @@ import {
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
+  cameToNet,
   countsAsWinner,
   errorMadeBy,
   isReturnWinner,
@@ -55,7 +56,7 @@ import { cn } from "@/lib/utils";
    Pure data, exported so `tests/match-h2h-rows.spec.ts` can pin the shape of
    the table without rendering it. */
 
-/** The `PlayerStatistics` fields the fifteen rows read, and nothing else. */
+/** The `PlayerStatistics` fields the published rows read, and nothing else. */
 export type H2HStatKey = Extract<
   keyof PlayerStatistics,
   | "aces"
@@ -68,7 +69,6 @@ export type H2HStatKey = Extract<
   | "firstReturnWonPct"
   | "secondReturnWonPct"
   | "breakpointsWonPct"
-  | "netPointsWonPct"
   | "winners"
   | "unforcedErrors"
   | "forcedErrors"
@@ -151,8 +151,11 @@ export interface H2HRowConfig {
    * - `returnWinners` — no provider publishes it.
    * - `unreturnedServes` — the derived Aces row: an Advantage Intelligence
    *   match publishes no aces at all (see `DERIVED_SERVE_ROWS`).
+   * - `netAttempts`, `netPointsWon` — counted with `cameToNet`, the predicate
+   *   the rows' cut opens, so a figure and its "Watch all N" cannot disagree.
    */
-  fromPoints?: "returnWinners" | "unreturnedServes";
+  fromPoints?:
+    "returnWinners" | "unreturnedServes" | "netAttempts" | "netPointsWon";
 }
 
 export const SERVE_ROWS: H2HRowConfig[] = [
@@ -283,12 +286,23 @@ export const RETURN_ROWS: H2HRowConfig[] = [
 ];
 
 export const POINT_ROWS: H2HRowConfig[] = [
-  // No cut: the match filters have no net-approach axis to open.
+  // Both net rows open the same points; a Net points won cell narrows to the
+  // ones that side won. Counted and cut with one predicate, `cameToNet`.
+  {
+    label: "Net point attempts",
+    fromPoints: "netAttempts",
+    cut: { netBy: "either" },
+    sideBy: "net",
+    noun: "net points",
+  },
   {
     label: "Net points won",
-    key: "netPointsWonPct",
+    fromPoints: "netPointsWon",
     isPercentage: true,
-    fractionKey: "netPointsWonPct",
+    cut: { netBy: "either" },
+    sideBy: "net",
+    sideWon: true,
+    noun: "net points",
     verb: "won",
   },
   {
@@ -626,6 +640,10 @@ interface DerivedSide {
    * (`isUnreturnedServe`) — the derived Aces row.
    */
   unreturnedServes: number;
+  /** Points this side came to the net (`cameToNet`); `won` = won them. */
+  netPoints: Tally;
+  /** Whether the points carry this side's shots, so a net zero is measured. */
+  shotsRecorded: boolean;
 }
 
 function emptyTally(): Tally {
@@ -652,6 +670,8 @@ export function tallySide(
     returnWinners: 0,
     returnsRecorded: 0,
     unreturnedServes: 0,
+    netPoints: emptyTally(),
+    shotsRecorded: false,
   };
   for (const p of points) {
     const iWon = p.wonByPlayer1 === isPlayer1;
@@ -660,6 +680,14 @@ export function tallySide(
 
     d.allPoints.total += 1;
     if (iWon) d.allPoints.won += 1;
+
+    if (p.shots?.some((shot) => shot.isPlayer1 === isPlayer1)) {
+      d.shotsRecorded = true;
+    }
+    if (cameToNet(p, isPlayer1)) {
+      d.netPoints.total += 1;
+      if (iWon) d.netPoints.won += 1;
+    }
 
     if (iServed) {
       d.servicePoints.total += 1;
@@ -725,6 +753,9 @@ export function tallySide(
  *   with none, a zero would say "no return winners" about points nobody
  *   looked at.
  * - Unreturned serves: likewise only where the side served at all.
+ * - Net attempts: likewise only where the side's shots were recorded.
+ * - Net points won: a rate needs an attempt. Coming in and losing every one is
+ *   a measured 0%; never coming in is no rate at all.
  */
 function derivedValue(config: H2HRowConfig, d: DerivedSide): number | null {
   switch (config.fromPoints) {
@@ -732,6 +763,12 @@ function derivedValue(config: H2HRowConfig, d: DerivedSide): number | null {
       return d.returnsRecorded > 0 ? d.returnWinners : null;
     case "unreturnedServes":
       return d.servicePoints.total > 0 ? d.unreturnedServes : null;
+    case "netAttempts":
+      return d.shotsRecorded ? d.netPoints.total : null;
+    case "netPointsWon":
+      return d.netPoints.total > 0
+        ? (d.netPoints.won / d.netPoints.total) * 100
+        : null;
     default:
       return null;
   }
@@ -742,7 +779,14 @@ const NO_VALUE: H2HValue = { value: null, display: "" };
 function derivedSideValue(config: H2HRowConfig, d: DerivedSide): H2HValue {
   const value = derivedValue(config, d);
   if (value === null) return NO_VALUE;
-  return { value, display: statDisplay(value, config.isPercentage) };
+  return {
+    value,
+    display: statDisplay(value, config.isPercentage),
+    detail:
+      config.fromPoints === "netPointsWon"
+        ? `${d.netPoints.won}/${d.netPoints.total}`
+        : undefined,
+  };
 }
 
 /** One `fromPoints` row, counted from `youDerived`/`oppDerived`. */
