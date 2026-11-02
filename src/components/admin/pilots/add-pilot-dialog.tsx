@@ -11,6 +11,7 @@ import { PilotDialog } from "@/components/admin/pilots/pilot-dialog";
 import { PILOT_DEFAULT_HOURS, parseHours } from "@/lib/data/admin-pilots-view";
 import { addIndividualPilot } from "@/lib/services/programs/admin-pilot-actions";
 import { advField } from "@/lib/ui/adv-field";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { cn } from "@/lib/utils";
 
 /**
@@ -38,7 +39,9 @@ export function AddPilotDialog({ onClose }: { onClose: () => void }) {
     if (!parsed.ok) return;
     setProblem(null);
     startAdding(async () => {
-      const result = await addIndividualPilot(email, parsed.hours);
+      const result = await addIndividualPilot(email, parsed.hours).catch(
+        actionRejected,
+      );
       if (!result.ok) {
         setProblem(result.error);
         // A partial add (flag set, hours not) still changed the list.

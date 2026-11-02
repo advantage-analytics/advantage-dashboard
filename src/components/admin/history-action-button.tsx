@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { ConfirmDialog, Em } from "@/components/ui/confirm-dialog";
+import { actionRejectedMessage } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 
 /** What every upload-history action returns: a refusal carries a sentence. */
@@ -77,15 +78,9 @@ export function HistoryActionButton({
       const formData = new FormData();
       for (const [name, value] of Object.entries(fields))
         formData.set(name, value);
-      let result: HistoryActionResult;
-      try {
-        result = await action(formData);
-      } catch {
-        result = {
-          ok: false,
-          message: "The request did not complete. Try again.",
-        };
-      }
+      const result: HistoryActionResult = await action(formData).catch(
+        actionRejectedMessage,
+      );
       if (result.ok) {
         setError(null);
         setOpen(false);

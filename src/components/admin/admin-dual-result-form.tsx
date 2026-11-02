@@ -2,6 +2,7 @@
 
 import { squadLabel } from "@/lib/data/squad";
 import { useState, useTransition } from "react";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import {
@@ -123,7 +124,10 @@ export function AdminDualResultForm({
         setExisting(loaded.context);
         setDual(loaded.context.dual);
         setDrafts(seedDrafts(loaded.context.dual));
-      } catch {
+      } catch (error) {
+        // Rethrows navigation and reports a real failure. The sentence stays:
+        // the operation id makes a retry the way back to a saved result.
+        actionRejected(error);
         setError("We couldn’t load this dual. Choose it again to retry.");
       }
     });
@@ -146,7 +150,10 @@ export function AdminDualResultForm({
           return;
         }
         setStatuses((old) => retainSuccesses(old, result.items));
-      } catch {
+      } catch (error) {
+        // Rethrows navigation and reports a real failure. The sentence stays:
+        // the operation id makes a retry the way back to a saved result.
+        actionRejected(error);
         setError(
           "The response was interrupted. Retry to recover saved results.",
         );

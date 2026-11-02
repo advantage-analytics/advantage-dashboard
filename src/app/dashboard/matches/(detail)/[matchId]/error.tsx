@@ -9,6 +9,7 @@ import {
   writeRetryCount,
 } from "@/components/dashboard/matches/retry-state";
 import { SUPPORT_EMAIL } from "@/lib/constants";
+import { useReportBoundaryError } from "@/lib/ui/report-boundary-error";
 
 const ESCALATION_THRESHOLD = 3;
 
@@ -53,6 +54,7 @@ export default function Error({
   useEffect(() => {
     console.error("match-detail error", { matchId, error });
   }, [error, matchId]);
+  useReportBoundaryError(error);
 
   useEffect(() => {
     if (!matchId) return;

@@ -25,6 +25,7 @@ import type {
   CreateProgramOwnerOutcome,
   ProgramOrgType,
 } from "@/lib/services/programs/admin-program-actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
@@ -248,7 +249,7 @@ export function CreateTeamDialog({
         primaryDomain: domain.trim() || null,
         ownerEmail: ownerEmail.trim() || null,
         startPilot,
-      });
+      }).catch(actionRejected);
       if (!result.ok) {
         setProblem(result.error);
         return;
@@ -562,7 +563,8 @@ function CrestStep({
     );
     onProblem(null);
     startSaving(async () => {
-      const result = await adminUploadProgramCrest(formData);
+      const result =
+        await adminUploadProgramCrest(formData).catch(actionRejected);
       if (!result.ok) {
         onProblem(result.error);
         return;

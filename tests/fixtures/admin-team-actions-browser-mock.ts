@@ -51,7 +51,7 @@ declare global {
 type Outcome =
   { ok: true; id: string; profileId: string } | { ok: false; error: string };
 
-async function answer(): Promise<Outcome> {
+export async function answer(): Promise<Outcome> {
   await new Promise((done) => setTimeout(done, 20));
   const failure = window.__actionFailure;
   if (failure) throw failures[failure]();
@@ -81,3 +81,33 @@ export const transferProgramOwnership = answer;
 export const uploadProgramCrest = answer;
 export const removeProgramCrest = answer;
 export const addSelfAsPlayer = answer;
+
+// The rest of /admin, for `tests/admin-writes.spec.ts`.
+export const saveConference = answer;
+export const deleteConference = answer;
+export const mergeConferences = answer;
+export const createConference = answer;
+export const adminUploadConferenceCrest = answer;
+export const adminRemoveConferenceCrest = answer;
+export const approveClaim = answer;
+export const rejectClaim = answer;
+export const handBackClaim = answer;
+export const reopenClaim = answer;
+export const sendClaimVerification = answer;
+export const saveClaimNote = answer;
+export const resolveRequest = answer;
+export const seedLabelSessionAction = answer;
+export const createProgram = answer;
+export const markAdminRowSeen = async () => {};
+export const conferenceOptionsFor = async () => [];
+export const adminSearchTeams = async () => [];
+
+export async function loadConferenceTeams() {
+  const outcome = await answer();
+  return outcome.ok ? { ok: true as const, teams: [] } : outcome;
+}
+
+export async function loadMoreAdminTeams() {
+  await answer();
+  return { rows: [], nextCursor: null };
+}

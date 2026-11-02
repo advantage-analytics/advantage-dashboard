@@ -25,7 +25,11 @@ export const STALE_PAGE = "This page is out of date. Reload it and try again.";
  * whatever it was on the server.
  */
 function isDroppedConnection(error: unknown): boolean {
-  if (error instanceof TypeError) return true;
+  return error instanceof TypeError || isClosedResponse(error);
+}
+
+/** A response that died part-way through, in dev's words or production's. */
+export function isClosedResponse(error: unknown): boolean {
   return (
     error instanceof Error &&
     (error.message === "Connection closed." ||
@@ -72,4 +76,25 @@ export function actionRejected(error: unknown): {
     });
   }
   return { ok: false, error: SERVER_FAILED };
+}
+
+/** `actionRejected`, for the actions that answer `{ ok, message }`. */
+export function actionRejectedMessage(error: unknown): {
+  ok: false;
+  message: string;
+} {
+  return { ok: false, message: actionRejected(error).error };
+}
+
+/**
+ * `actionRejected`, for a call whose failure has its own sentence: a read, where
+ * "whether the change was saved" means nothing, or the second half of a write
+ * that must say which half landed. Navigation still rethrows and a real failure
+ * is still reported.
+ */
+export function actionRejectedWith(sentence: string) {
+  return (error: unknown): { ok: false; error: string } => {
+    actionRejected(error);
+    return { ok: false, error: sentence };
+  };
 }
