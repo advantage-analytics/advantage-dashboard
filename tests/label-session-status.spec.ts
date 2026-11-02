@@ -607,6 +607,41 @@ test.describe("completeWarnings", () => {
         shots: [],
       }),
     ).toEqual(["Point 10 reads an error by player 1, but player 1 won it"]);
+    // A server's ending against the serve: live points 133 and 31 read this
+    // way, and the confirm said nothing about them.
+    expect(
+      lines({
+        ending: "service_winner",
+        endedBy: "p1",
+        winner: "p2",
+        server: "p1",
+        shots: [],
+      }),
+    ).toEqual([
+      "Point 10 reads a service winner, but player 2 won it and player 1 served",
+    ]);
+    expect(
+      lines({
+        ending: "ace",
+        endedBy: "p1",
+        winner: "p1",
+        server: "p2",
+        shots: [],
+      }),
+    ).toEqual([
+      "Point 10 reads an ace, but player 1 won it and player 2 served",
+    ]);
+    expect(
+      lines({
+        ending: "double_fault",
+        endedBy: "p2",
+        winner: "p1",
+        server: "p1",
+        shots: [],
+      }),
+    ).toEqual([
+      "Point 10 reads a double fault, but player 1 served and won it",
+    ]);
     // An ending that fits its winner says nothing.
     expect(
       lines({ ending: "error", endedBy: "p2", winner: "p1", shots: [] }),

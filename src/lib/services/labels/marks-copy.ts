@@ -31,6 +31,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   serve_fault: "Serve fault?",
   shot_after_point_end: "Did the point end here?",
   ending_stale: "Different ending?",
+  ending_contradicts_winner: "Ending and winner disagree",
   second_serve_as_first: "Second serve?",
   last_landing_missing: "No landing on the last shot",
   last_shot_unresolved: "Ending can’t be read",
@@ -83,6 +84,31 @@ export function ownedEndingPhrase(
   names: MarkNames,
 ): string {
   return endingPhrase(ending, endingOwner(ending, endedBy, winner), names);
+}
+
+/**
+ * A stored ending against the winner it cannot be true of, the one sentence
+ * the review hint and the Mark complete confirm share: "a winner by Quan, but
+ * Kim won it", "an ace, but Kim won it and Quan served", "a double fault, but
+ * Quan served and won it". A server's ending names no owner: a service winner
+ * reads as the winner's (`endingOwner`), which here is the thing in doubt.
+ */
+export function endingContradictionPhrase(
+  ending: LabelEnding,
+  endedBy: LabelSide | null,
+  winner: LabelSide,
+  server: LabelSide | null,
+  names: MarkNames,
+): string {
+  const won = names[winner];
+  if (ending === "double_fault") {
+    return `${ENDING_PHRASE[ending]}, but ${won} served and won it`;
+  }
+  if (ending === "ace" || ending === "service_winner") {
+    const served = server ? ` and ${names[server]} served` : "";
+    return `${ENDING_PHRASE[ending]}, but ${won} won it${served}`;
+  }
+  return `${endingPhrase(ending, endedBy, names)}, but ${won} won it`;
 }
 
 /** An ending as the start of a question: "Ace", "Double fault". */
@@ -320,6 +346,10 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       const { ending, endedBy, winner } = mark.params;
       const who = endingOwner(ending, endedBy, winner);
       return `The shots add up to ${endingPhrase(ending, who, names)}, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.`;
+    }
+    case "ending_contradicts_winner": {
+      const { ending, endedBy, winner, server } = mark.params;
+      return `This point reads ${endingContradictionPhrase(ending, endedBy, winner, server, names)}. Check the clip and change whichever is wrong, or dismiss this if it stands.`;
     }
     case "second_serve_as_first":
       return "Follows a faulted serve, so it is the second serve.";

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   deriveEnding,
+  endingContradictsServer,
   endingContradictsWinner,
   endingPatchForShotChange,
   allErrorsJudged,
@@ -567,6 +568,26 @@ test.describe("a winner the strokes contradict", () => {
     expect(of("winner", "p2", null)).toBe(false);
     expect(of("double_fault", "p1", "p2")).toBe(false);
     expect(of("service_winner", "p2", "p1")).toBe(false);
+  });
+
+  test("a server's ending cannot go to the wrong side of the serve", () => {
+    const of = (
+      ending: LabelPoint["ending"],
+      server: LabelPoint["server"],
+      winner: LabelPoint["winner"],
+    ) => endingContradictsServer({ ending, server, winner });
+    expect(of("ace", "p1", "p2")).toBe(true);
+    expect(of("service_winner", "p1", "p2")).toBe(true);
+    expect(of("double_fault", "p1", "p1")).toBe(true);
+    expect(of("ace", "p1", "p1")).toBe(false);
+    expect(of("service_winner", "p1", "p1")).toBe(false);
+    expect(of("double_fault", "p1", "p2")).toBe(false);
+    // Nobody labelled, or an ending the serve does not decide.
+    expect(of("ace", null, "p2")).toBe(false);
+    expect(of("double_fault", "p1", null)).toBe(false);
+    expect(of("winner", "p1", "p2")).toBe(false);
+    expect(of("error", "p1", "p1")).toBe(false);
+    expect(of(null, "p1", "p2")).toBe(false);
   });
 
   test("an edit further back in the rally leaves a winner set by hand alone", () => {
