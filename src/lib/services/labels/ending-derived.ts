@@ -225,6 +225,29 @@ export function endingContradictsWinner(
 }
 
 /**
+ * Whether a stored ending cannot be true of who served and who won, whatever
+ * the strokes say: an ace or a service winner won by the receiver, or a double
+ * fault won by the server. The publish warns on these (`buildAppliedRows`) and
+ * writes them as they stand. Never true with no server or winner labelled.
+ */
+export function endingContradictsServer(
+  point: Pick<LabelPoint, "ending" | "server" | "winner">,
+): boolean {
+  const { ending, server, winner } = point;
+  if (server === null || winner === null) return false;
+  return ending === "ace" || ending === "service_winner"
+    ? winner !== server
+    : ending === "double_fault" && winner === server;
+}
+
+/** Either way a stored ending can be untrue of its point's winner. */
+export function storedEndingContradicted(
+  point: Pick<LabelPoint, "ending" | "endedBy" | "server" | "winner">,
+): boolean {
+  return endingContradictsWinner(point) || endingContradictsServer(point);
+}
+
+/**
  * The patch that brings a point's ending and ended-by to `now`, the winner
  * with them when `now` settles one the point does not hold (and
  * `settleWinner` is on); null when nothing differs.

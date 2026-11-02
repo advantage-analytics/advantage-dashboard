@@ -18,7 +18,7 @@ import type { LabelPointPatch, LabelShotPatch } from "./edit";
 import { deriveEnding, endingPatchTo } from "./ending-derived";
 import { openFlags, stepFlag } from "./flag-nav";
 import type { LabelMarks } from "./marks";
-import { markHover, type MarkNames } from "./marks-copy";
+import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import {
   lastCallAnswer,
   PLACEMENT_ITEM,
@@ -193,6 +193,7 @@ export function reviewItemThenLabel(item: ReviewItem): string {
           "ending_suspect_line",
           "winner_to_error_by_bounce",
           "ending_stale",
+          "ending_contradicts_winner",
           "result_type_unknown",
         )
         ? "place the last bounce"
@@ -221,6 +222,20 @@ function isFollowUp(item: ReviewItem): boolean {
     item.id === 2 &&
     open.length > 0 &&
     open.every((member) => member.mark.code === "shot_after_point_end")
+  );
+}
+
+/**
+ * An item 4 open only on "Ending and winner disagree". The strokes already say
+ * what the ending says, so a last-ball answer has nothing to change: the step
+ * says what disagrees and leaves the fix to the labeller.
+ */
+function isContradictionOnly(item: ReviewItem): boolean {
+  const open = openMembers(item);
+  return (
+    item.id === 4 &&
+    open.length === 1 &&
+    open[0].mark.code === "ending_contradicts_winner"
   );
 }
 
@@ -367,6 +382,7 @@ function stepQuestion(
   target: ReviewStepTarget,
   point: LabelPoint,
 ): string {
+  if (isContradictionOnly(item)) return MARK_LABEL.ending_contradicts_winner;
   if (target.place === "contact") return REVIEW_STEP_QUESTION.contact;
   if (item.id === 3 && hasOpen(item, "first_serve_fault_alone")) {
     return REVIEW_STEP_QUESTION.serve;
@@ -387,6 +403,9 @@ function stepExplanation(
   names: MarkNames,
   ghosts: boolean,
 ): string {
+  if (isContradictionOnly(item)) {
+    return markHover(openMembers(item)[0].mark, names);
+  }
   const stroke = targetStroke(target, point);
   if (target.place === "contact") return CONTACT_EXPLANATION;
   if (item.id === 3 && hasOpen(item, "first_serve_fault_alone")) {
@@ -692,7 +711,9 @@ function stepAnswers(
       break;
     }
     case 4:
-      answers.push(...lastBallAnswers(item, point, marks, names, ghosts));
+      if (!isContradictionOnly(item)) {
+        answers.push(...lastBallAnswers(item, point, marks, names, ghosts));
+      }
       break;
     case 5:
       for (const side of ["p1", "p2"] as const) {

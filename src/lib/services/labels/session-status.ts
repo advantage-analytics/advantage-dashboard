@@ -15,13 +15,17 @@
  */
 
 import {
-  endingContradictsWinner,
+  storedEndingContradicted,
   isMarkableError,
   publishEnding,
   unmarkableErrors,
 } from "./ending-derived";
 import type { LabelMarks } from "./marks";
-import { ownedEndingPhrase, type MarkNames } from "./marks-copy";
+import {
+  endingContradictionPhrase,
+  ownedEndingPhrase,
+  type MarkNames,
+} from "./marks-copy";
 import { markSummary } from "./marks-state";
 import { labelScores, type LabelGameBand } from "./score";
 import { enteredScore, labelSetScores, scoreMismatch } from "./set-scores";
@@ -195,9 +199,9 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
       warnings.push(
         `${at} has no ending its strokes can settle${PUBLISHED_PAST_TAILS.noEnding}`,
       );
-    } else if (point.winner !== null && endingContradictsWinner(point)) {
+    } else if (point.winner !== null && storedEndingContradicted(point)) {
       warnings.push(
-        `${at} reads ${ownedEndingPhrase(resolved.ending, resolved.endedBy, point.winner, names)}, but ${names[point.winner]} won it`,
+        `${at} reads ${endingContradictionPhrase(resolved.ending, resolved.endedBy, point.winner, point.server, names)}`,
       );
     }
   }

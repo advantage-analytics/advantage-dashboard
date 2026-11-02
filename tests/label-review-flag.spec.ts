@@ -62,6 +62,12 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   serve_fault: {},
   shot_after_point_end: { shotId: "s1", after: ["s2"] },
   ending_stale: { ending: "error", endedBy: "p2", winner: "p1" },
+  ending_contradicts_winner: {
+    ending: "ace",
+    endedBy: "p1",
+    winner: "p2",
+    server: "p1",
+  },
   second_serve_as_first: { shotId: "s1" },
   last_landing_missing: {},
   last_shot_unresolved: {},
@@ -270,6 +276,7 @@ test.describe("the item table", () => {
         "ending_suspect_line",
         "winner_to_error_by_bounce",
         "ending_stale",
+        "ending_contradicts_winner",
         "last_landing_missing",
         "last_shot_unresolved",
         "result_type_unknown",
@@ -648,6 +655,117 @@ test.describe("state", () => {
     ]);
     expect(flag?.state).toBe("open");
     expect(flag?.tone).toBe("score");
+  });
+
+  test.describe("Ending and winner disagree", () => {
+    const NAMES = { p1: "Ace", p2: "Goodman" };
+    // Live point 31's shape: the strokes derive this very service winner, so
+    // "Different ending?" has nothing to say.
+    const returnMissed = () =>
+      point({
+        checkedAt: CHECKED_AT,
+        server: "p1",
+        winner: "p2",
+        ending: "service_winner",
+        endedBy: "p1",
+        shots: [
+          forehand({
+            id: "s-serve",
+            stroke: "first_serve",
+            result: "in",
+            videoTime: 1,
+          }),
+          forehand({
+            id: "s-return",
+            hitter: "p1",
+            result: "net",
+            landingX: 2,
+            landingY: 12,
+            videoTime: 2,
+          }),
+        ],
+      });
+    const members = (flag: ReviewFlag | null) =>
+      flag?.items.flatMap((item) =>
+        item.members.map((member) => [member.mark.code, member.state]),
+      );
+
+    test("a checked point gets an open grey question where the strokes agree with the ending", () => {
+      const p = returnMissed();
+      const flag = reviewFlag(p, marksOf({}), [p]);
+      expect(members(flag)).toContainEqual([
+        "ending_contradicts_winner",
+        "open",
+      ]);
+      expect(members(flag)?.some(([code]) => code === "ending_stale")).toBe(
+        false,
+      );
+      expect(flag?.state).toBe("open");
+      // Grey: the winner, and so the score, is right.
+      expect(flag?.tone).toBe("data");
+      expect(flag?.demoted).toBe(false);
+      expect(reviewChip(flag!)?.tone).toBe("data");
+      // In the rail's list and the grey jump, as an open flag.
+      expect(openFlags([p], marksOf({}))[0]).toMatchObject({ data: true });
+    });
+
+    test("a stored winner or error is asked about with no strokes to read", () => {
+      const noStrokes = point({
+        checkedAt: CHECKED_AT,
+        winner: "p2",
+        ending: "winner",
+        endedBy: "p1",
+        shots: [],
+      });
+      expect(members(reviewFlag(noStrokes, marksOf({}), [noStrokes]))).toEqual([
+        ["ending_contradicts_winner", "open"],
+      ]);
+    });
+
+    test("it never doubles “Different ending?”, and nothing is asked of an ending that fits", () => {
+      const stale = point({
+        checkedAt: CHECKED_AT,
+        winner: "p2",
+        ending: "winner",
+        endedBy: "p1",
+        shots: [forehand({ result: "net", landingX: 2, landingY: 12 })],
+      });
+      expect(members(reviewFlag(stale, marksOf({}), [stale]))).toEqual([
+        ["ending_stale", "open"],
+      ]);
+      const fits = { ...returnMissed(), server: "p2" as const };
+      expect(
+        members(reviewFlag(fits, marksOf({}), [fits]))?.some(
+          ([code]) => code === "ending_contradicts_winner",
+        ) ?? false,
+      ).toBe(false);
+    });
+
+    test("a Dismiss closes it, for the labeller who has looked", () => {
+      const p = {
+        ...returnMissed(),
+        dismissed: ["hint:ending_contradicts_winner"],
+      };
+      expect(
+        members(reviewFlag(p, marksOf({}), [p]))?.some(
+          ([code]) => code === "ending_contradicts_winner",
+        ) ?? false,
+      ).toBe(false);
+    });
+
+    test("the step says what disagrees and offers no last-ball answer that cannot fix it", () => {
+      const p = returnMissed();
+      const step = reviewStep(p, marksOf({}), [p], NAMES, true);
+      expect(step?.question).toBe("Ending and winner disagree");
+      expect(step?.explanation).toContain(
+        "a service winner, but Goodman won it and Ace served",
+      );
+      const answers = step?.answers ?? [];
+      expect(answers.map((answer) => answer.id)).toEqual(["dismiss"]);
+      expect(answers[0].writes).toEqual([
+        { write: "dismiss", keys: ["hint:ending_contradicts_winner"] },
+      ]);
+    });
   });
 
   test("a checked point stays open while its ending cannot be true of its winner", () => {

@@ -398,6 +398,23 @@ test.describe("a closed row draws only what can change the score", () => {
     expect(chip.tag).toContain("rail-amber");
   });
 
+  test("an ending the strokes agree with but the winner cannot have keeps a grey chip once checked", () => {
+    // The ace is the server's, the strokes say so, and the point's server is
+    // the other player: "Different ending?" has nothing to say.
+    const point = fixturePoint({
+      winner: "p1",
+      ending: "ace",
+      endedBy: "p1",
+      server: "p2",
+      checkedAt: "2026-10-12T00:00:00Z",
+    });
+    const [chip, ...rest] = chips(renderRow(point, marksOf(point, [])));
+    expect(rest).toHaveLength(0);
+    expect(chip.state).toBe("open");
+    expect(chip.tag).toContain('data-mark-tone="data"');
+    expect(chip.tag).not.toContain("rail-amber");
+  });
+
   test("a hidden mark is drawn nowhere: not on the row, not in the well, not on a stroke", () => {
     const point = fixturePoint();
     const shot = point.shots[0];

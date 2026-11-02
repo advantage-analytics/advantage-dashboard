@@ -17,7 +17,7 @@
 import { landingTakesContact } from "./volley-link";
 import {
   deriveEnding,
-  endingContradictsWinner,
+  storedEndingContradicted,
   winnerContradicted,
 } from "./ending-derived";
 import {
@@ -710,6 +710,31 @@ export function endingStale(
 }
 
 /**
+ * "Ending and winner disagree": the stored ending cannot be true of the winner
+ * (`storedEndingContradicted`) and "Different ending?" has nothing to say,
+ * because the strokes settle nothing or add up to that same ending. Nothing
+ * while `endingStale` is raised: that question, and its "Make it …", already
+ * cover the point. A grey hint with no fix to offer: the rows do not say which
+ * of the ending, the winner or the server is wrong.
+ */
+export function endingContradiction(
+  point: Pick<LabelPoint, "ending" | "endedBy" | "winner" | "server" | "shots">,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "ending_contradicts_winner" }> | null {
+  const { ending, endedBy, winner, server } = point;
+  if (ending === null || winner === null) return null;
+  if (!storedEndingContradicted(point) || endingStale(point, ghosts)) {
+    return null;
+  }
+  return {
+    code: "ending_contradicts_winner",
+    tier: "hint",
+    scope: "point",
+    params: { ending, endedBy, winner, server },
+  };
+}
+
+/**
  * "Was the last ball in?"'s answer: the point's `last_call_overruled` count
  * mark, and the stroke it was built for (`eventId`) to write the vendor's call
  * onto — only while that stroke is still the point's last live stroke with a
@@ -827,6 +852,7 @@ export function openHintMarks(
   const live: (LabelMark | null)[] = [
     pointEndedEarly(point, ghosts),
     endingStale(point, ghosts),
+    endingContradiction(point, ghosts),
     secondServeAsFirst(point, ghosts),
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
@@ -1017,6 +1043,7 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
       "ending_suspect_line",
       "winner_to_error_by_bounce",
       "ending_stale",
+      "ending_contradicts_winner",
       "last_landing_missing",
       "last_shot_unresolved",
       "result_type_unknown",
@@ -1203,7 +1230,9 @@ function reviewItemTone(
  * except "Different ending?" with the winner contradicted, which stays
  * `open`: the score, as `openFlags` has always read it. It also stays open
  * when the stored ending cannot be true of the winner
- * (`endingContradictsWinner`), in the grey tone since the score is right.
+ * (`storedEndingContradicted`), in the grey tone since the score is right, and
+ * so does "Ending and winner disagree", which asks the same where "Different
+ * ending?" has nothing to say. Only a Dismiss closes either.
  */
 export function reviewFlag(
   point: LabelPoint,
@@ -1216,10 +1245,12 @@ export function reviewFlag(
   const checked = point.checkedAt !== null;
   const contradicted = pointWinnerContradicted(point, marks);
   const answered = lastBallAnswered(point, drawsGhosts(marks));
-  const endingWrong = contradicted || endingContradictsWinner(point);
+  const endingWrong = contradicted || storedEndingContradicted(point);
   const hintState = (mark: LabelMark): MarkState => {
     if (checked) {
-      return endingWrong && mark.code === "ending_stale"
+      return endingWrong &&
+        (mark.code === "ending_stale" ||
+          mark.code === "ending_contradicts_winner")
         ? "open"
         : "checked-as-is";
     }
