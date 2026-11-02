@@ -6,7 +6,7 @@
  * kept because the scorecard names every code by them.
  */
 
-import type { LabelMark, LabelMarkCode } from "./marks";
+import type { LabelMark, LabelMarkCode, PlacementGap } from "./marks";
 import type { LabelEnding, LabelSide } from "./session";
 
 /**
@@ -48,6 +48,22 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   segment_proposal_differs: "Game cut differs",
   geometry_discarded: "No position",
 };
+
+/**
+ * What one stroke is missing, where `MARK_LABEL`'s "No placement" is every such
+ * stroke at once. "Contact point", not "contact": "No contact" reads as a
+ * swing that missed the ball.
+ */
+const PLACEMENT_GAP_WORDS: Record<PlacementGap, string> = {
+  contact: "contact point",
+  landing: "landing",
+  both: "contact point or landing",
+};
+
+/** "No contact point": what the stroke's flag asks for. */
+export function placementGapLabel(missing: PlacementGap): string {
+  return `No ${PLACEMENT_GAP_WORDS[missing]}`;
+}
 
 /** A point score ("0-15") with an en dash ("0–15"). */
 const scoreText = (score: string) => score.replace(/\s*-\s*/g, "–");
@@ -170,6 +186,9 @@ export function hintLabel(mark: LabelMark, names?: MarkNames): string {
   // last ball out?" → "Yes, make it out".
   if (mark.code === "last_call_overruled") {
     return lastCallQuestion(mark.params.vendorCall);
+  }
+  if (mark.code === "placement_missing") {
+    return placementGapLabel(mark.params.missing);
   }
   const label = MARK_LABEL[mark.code];
   if (mark.code !== "shot_after_point_end") return label;
@@ -365,15 +384,24 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
         : "The serve counts as in, but its landing is outside the service box. It publishes as in with no placement: place the bounce in the box to count where it went.";
     case "serve_after_serve_in":
       return "A let that was played, or two points in one rally.";
-    case "placement_missing":
-      switch (mark.params.stroke) {
+    case "placement_missing": {
+      const { stroke, missing } = mark.params;
+      const gap = PLACEMENT_GAP_WORDS[missing];
+      const fix = {
+        contact: "Place it, or dismiss this if the video doesn’t show it.",
+        landing:
+          "Place the bounce, or dismiss this if the video doesn’t show it.",
+        both: "Place them, or dismiss this if the video doesn’t show them.",
+      }[missing];
+      switch (stroke) {
         case "serve":
-          return "This serve has no landing, so serve placement can’t count it. Place the bounce, or dismiss this if the video doesn’t show it.";
+          return `This serve has no ${gap}, so serve placement can’t count it. ${fix}`;
         case "return":
-          return "This return is missing its position, so return placement can’t count it. Place it, or dismiss this if the video doesn’t show it.";
+          return `This return has no ${gap}, so return placement can’t count it. ${fix}`;
         case "shot":
-          return "This shot is missing its position, so how the point opened or ended can’t be read in full. Place it, or dismiss this if the video doesn’t show it.";
+          return `This shot has no ${gap}, so how the point opened or ended can’t be read in full. ${fix}`;
       }
+    }
     case "phantom_strokes_dropped": {
       const count = mark.params.eventIds.length;
       if (count > 1) {

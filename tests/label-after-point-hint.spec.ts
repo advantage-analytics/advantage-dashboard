@@ -626,11 +626,15 @@ test.describe("placementMissing", () => {
   const shots = (...list: LabelShot[]) => ({
     shots: list.map((shot, i) => ({ ...shot, videoTime: i + 1 })),
   });
-  const asked = (shotId: string, stroke: "serve" | "return" | "shot") => ({
+  const asked = (
+    shotId: string,
+    stroke: "serve" | "return" | "shot",
+    missing: "contact" | "landing" | "both" = "landing",
+  ) => ({
     code: "placement_missing",
     tier: "hint",
     scope: "shot",
-    params: { shotId, stroke },
+    params: { shotId, stroke, missing },
   });
 
   test("a serve in play with no landing, its return placed", () => {
@@ -676,7 +680,29 @@ test.describe("placementMissing", () => {
         ),
         true,
       ),
-    ).toEqual(asked("r", "return"));
+    ).toEqual(asked("r", "return", "contact"));
+  });
+
+  test("the words name what is missing: the contact, the landing or both", () => {
+    const words = (missing: "contact" | "landing" | "both") => {
+      const mark = {
+        ...asked("r", "return", missing),
+        code: "placement_missing",
+      } as Parameters<typeof hintLabel>[0];
+      return [hintLabel(mark), markHover(mark, { p1: "Quan", p2: "Kim" })];
+    };
+    expect(words("contact")).toEqual([
+      "No contact point",
+      "This return has no contact point, so return placement can’t count it. Place it, or dismiss this if the video doesn’t show it.",
+    ]);
+    expect(words("landing")).toEqual([
+      "No landing",
+      "This return has no landing, so return placement can’t count it. Place the bounce, or dismiss this if the video doesn’t show it.",
+    ]);
+    expect(words("both")).toEqual([
+      "No contact point or landing",
+      "This return has no contact point or landing, so return placement can’t count it. Place them, or dismiss this if the video doesn’t show them.",
+    ]);
   });
 
   test("the last stroke's landing is its own hint, so not asked here", () => {
@@ -795,7 +821,7 @@ test.describe("placementMissing", () => {
         ),
         true,
       ),
-    ).toEqual(asked("f", "shot"));
+    ).toEqual(asked("f", "shot", "contact"));
   });
 
   test("the first four strokes and the last two, not the middle", () => {

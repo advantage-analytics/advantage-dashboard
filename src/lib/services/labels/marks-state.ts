@@ -31,6 +31,7 @@ import {
   lastCallQuestion,
   MARK_LABEL,
   markHover,
+  placementGapLabel,
   REVIEW_ITEM_QUESTION,
   type MarkNames,
 } from "./marks-copy";
@@ -255,7 +256,10 @@ export function stateHoverParts(
   sentence: string,
   pointAdded = false,
 ): MarkHoverParts {
-  const label = MARK_LABEL[mark.code];
+  const label =
+    mark.code === "placement_missing"
+      ? placementGapLabel(mark.params.missing)
+      : MARK_LABEL[mark.code];
   switch (state) {
     case "open":
       return { name: label, detail: markHover(mark, names) };
@@ -593,7 +597,8 @@ export function placementMissing(
       next === "overhead" ||
       (i <= serveAt && isMissedResult(shot.result));
     const landing = !noLanding && landingMissingOn(shot);
-    if (!landing && !contactMissingOn(shot)) continue;
+    const contact = contactMissingOn(shot);
+    if (!landing && !contact) continue;
     return {
       code: "placement_missing",
       tier: "hint",
@@ -606,6 +611,7 @@ export function placementMissing(
             : serveAt !== -1 && i === serveAt + 1
               ? "return"
               : "shot",
+        missing: contact && landing ? "both" : contact ? "contact" : "landing",
       },
     };
   }
