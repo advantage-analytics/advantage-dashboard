@@ -5,6 +5,7 @@ import {
   presentPairs,
   statKey,
 } from "@/lib/data/aggregate";
+import { playerFormBar, type FormBar } from "@/lib/data/form-bar";
 import { PLAYER_MEASURES } from "@/lib/data/player-measures";
 import type { KpiFormat } from "@/lib/data/performance-server";
 import type { MatchScore } from "@/lib/data/match-utils";
@@ -174,7 +175,7 @@ export interface LineRow {
   /** Rounded, or null with nothing decided. */
   winPct: number | null;
   /** The last five decided results at this line, oldest left. */
-  form: ("win" | "loss")[];
+  form: FormBar[];
 }
 
 /** One tile of the season strip — `KpiTile`'s own vocabulary. */
@@ -374,6 +375,19 @@ function slotRank(slot: string): [number, number, string] {
   return [match[1].toUpperCase() === "S" ? 0 : 1, Number(match[2]), slot];
 }
 
+/** One result as a form bar, from this player's side of the score. */
+export function profileFormBar(result: ProfileResult): FormBar {
+  return playerFormBar({
+    id: result.id,
+    date: result.date,
+    score: result.score,
+    isPlayer1: result.isPlayer1,
+    won: result.won,
+    event: result.tournamentName,
+    opponent: result.opponentName,
+  });
+}
+
 /**
  * The player's matches grouped by the line they were played on.
  *
@@ -407,10 +421,7 @@ export function lineHistoryFrom(
       losses,
       winPct:
         decided.length === 0 ? null : Math.round((wins / decided.length) * 100),
-      form: decided
-        .slice(0, RECENT_WINDOW)
-        .reverse()
-        .map((m) => (m.won ? ("win" as const) : ("loss" as const))),
+      form: decided.slice(0, RECENT_WINDOW).reverse().map(profileFormBar),
     });
   }
 

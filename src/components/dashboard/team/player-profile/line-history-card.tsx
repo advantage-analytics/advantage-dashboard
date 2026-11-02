@@ -1,4 +1,4 @@
-import { FormTicks } from "@/components/dashboard/shared/form-ticks";
+import { FormStrip } from "@/components/dashboard/shared/form-strip";
 import { GhostRule } from "@/components/dashboard/home/day-zero-shape";
 import { recordLabel, type LineRow } from "@/lib/data/player-profile";
 import { CardEmpty, GhostRows } from "@/components/dashboard/shared/card-empty";
@@ -89,7 +89,7 @@ export function LineHistoryCard({ lines }: { lines: LineRow[] }) {
                 {line.slot}
               </span>
               <span className="flex items-center">
-                <FormTicks form={line.form} />
+                <FormStrip bars={line.form} />
               </span>
               <span className="tabular text-right text-[12px] text-[var(--ink-900)]">
                 {recordLabel(line.wins, line.losses)}

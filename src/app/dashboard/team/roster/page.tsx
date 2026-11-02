@@ -265,11 +265,11 @@ async function RosterContent({
     : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 
   const title = (
-    /* Every element that crosses to `RosterView` as a prop carries a key —
-       the fragment children below AND these two. React drops the
-       "statically created" marker on JSX serialised from a server component,
-       and then treats a two-child `<div>` like a keyless array. */
-    <TeamListHeading title="Roster">
+    /* Every element that crosses to `RosterView` as a prop carries a key — this
+       one, `actions`, `notices`, `footer` and the children inside them. React
+       drops the "statically created" marker on JSX serialised from a server
+       component, and then treats a two-child `<div>` like a keyless array. */
+    <TeamListHeading key="title" title="Roster">
       {/* 9px under the title, the one gap tuned by hand — 8 reads as attached,
           12 as unrelated. The clauses are the roster's shared vocabulary, so
           Team Home's card and this page cannot describe the same two people
@@ -289,13 +289,15 @@ async function RosterContent({
             {unclaimed > 0 && (
               <Fragment key="unclaimed">
                 {" · "}
-                <span className="tabular">{unclaimed} coach-managed</span>
+                <span key="count" className="tabular">
+                  {unclaimed} coach-managed
+                </span>
               </Fragment>
             )}
             {roster.invites.length > 0 && (
               <Fragment key="invites">
                 {" · "}
-                <span className="tabular">
+                <span key="count" className="tabular">
                   {invitesPendingLabel(roster.invites.length)}
                 </span>
               </Fragment>
@@ -313,11 +315,13 @@ async function RosterContent({
               <Fragment key="seats">
                 {" · "}
                 <span
+                  key="count"
                   className="tabular inline-flex items-center gap-1"
                   style={seatsLow ? { color: "var(--viz-key)" } : undefined}
                 >
                   {seatsLow && (
                     <AlertTriangle
+                      key="low"
                       className="size-3"
                       strokeWidth={1.5}
                       aria-hidden
@@ -341,6 +345,7 @@ async function RosterContent({
     /* `players` rather than the whole roster: Add player's duplicate note and
        the invite picker are both about people who play. */
     <RosterHeaderButtons
+      key="actions"
       managedPlayers={managedPlayers}
       seats={roster.seats}
       openInviteEmails={roster.invites.map((invite) => invite.email)}
@@ -352,7 +357,7 @@ async function RosterContent({
   ) : null;
 
   const notices = (
-    <>
+    <Fragment key="notices">
       {/* Somebody bound a login to a roster row today. Stated once, above the
           table, in the terms a coach worries about: the credits stayed, and
           so did the seats — the player held theirs from the day they were
@@ -363,14 +368,18 @@ async function RosterContent({
           className="flex items-center gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3"
         >
           <UserCheck
+            key="mark"
             className="size-3.5 shrink-0 text-[var(--ink-600)]"
             strokeWidth={1.5}
             aria-hidden
           />
-          <p className="text-[11px] leading-[1.6] text-[var(--ink-700)]">
+          <p
+            key="line"
+            className="text-[11px] leading-[1.6] text-[var(--ink-700)]"
+          >
             {/* "their", never "her" or "his": the roster carries no pronoun for
                 anybody, and a name is not one. */}
-            <strong className="font-medium text-[var(--ink-900)]">
+            <strong key="who" className="font-medium text-[var(--ink-900)]">
               {claimantNames} now{" "}
               {soloClaim
                 ? "manages their own profile"
@@ -380,6 +389,7 @@ async function RosterContent({
             Upload credits and seats unchanged.
           </p>
           <RowAction
+            key="view"
             href={`/dashboard/team/roster/${claimant.playerId}`}
             ariaLabel={`View ${claimant.name}'s profile`}
             className="ml-auto shrink-0 whitespace-nowrap"
@@ -401,7 +411,7 @@ async function RosterContent({
           openInviteEmails={roster.invites.map((invite) => invite.email)}
         />
       )}
-    </>
+    </Fragment>
   );
 
   /* Two sentences, both left, staff first.
@@ -410,7 +420,7 @@ async function RosterContent({
      edge — the right edge is for short numeric readouts, which neither is.
      This is the shape Schedule's own footer already uses. */
   const footer = (
-    <div className="flex flex-col gap-2">
+    <div key="footer" className="flex flex-col gap-2">
       {staff.length > 0 && (
         <p
           key="staff"
