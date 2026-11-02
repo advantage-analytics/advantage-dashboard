@@ -414,6 +414,16 @@ async function callerOwnsMatch(
 }
 
 /**
+ * `normalizedPersonName` in `src/lib/data/person-name.ts`, the app's one
+ * definition of "the same name", copied because this function deploys without
+ * `src/`. `tests/insights-workspace-history.spec.ts` holds the two together.
+ * Blank is `""`, which a caller must not treat as a name.
+ */
+function normalizedPersonName(name: string | null | undefined): string {
+  return (name ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
  * Whether a match's errors are split into unforced and forced. A Deno copy of
  * `errorSplitJudged` in `src/lib/data/error-split.ts`, which is the source of
  * the rule — change that one and copy it here:
@@ -522,7 +532,7 @@ serve(async (req) => {
     const { data: matchRow } = await supabase
       .from("matches")
       .select(
-        "player1_id, date, program_id, created_by, source_provider, verified, verified_at, errors_judged_at",
+        "player1_id, player1_name, date, program_id, created_by, source_provider, verified, verified_at, errors_judged_at",
       )
       .eq("id", matchId)
       .single();
@@ -538,9 +548,16 @@ serve(async (req) => {
       errorsJudged,
     );
 
-    // 3b. Comparison context (uploading user = player1, matching getPlayerAverageStats):
-    // the player's career averages over PRIOR matches + their immediately previous match,
-    // so the LLM can frame this match against them. Best-effort — any failure just omits it.
+    // 3b. Comparison context: the player's career averages over PRIOR matches +
+    // their immediately previous match, so the LLM can frame this match against
+    // them. Best-effort — any failure just omits it.
+    //
+    // A prior match counts only when it carries both this match's `player1_id`
+    // and this match's player name. The id alone is not the player: on a personal
+    // match it is the uploading account, so an account that files other people's
+    // matches holds several players under one id. An unnamed player, or one with
+    // no earlier match under that name, gets no comparison: the summary states it
+    // as fact, so none is better than someone else's.
     let comparisonContext = "";
     // Who PostHog attributes the generation to: the account that filed the
     // match, read from the row rather than taken from the request body — any
@@ -552,11 +569,17 @@ serve(async (req) => {
       uploaderId = matchRow?.created_by ?? undefined;
       const userId = matchRow?.player1_id;
       const matchDate = matchRow?.date;
+      const playerName = normalizedPersonName(matchRow?.player1_name);
 
-      if (userId && matchDate && matchRow.program_id !== undefined) {
+      if (
+        userId &&
+        playerName &&
+        matchDate &&
+        matchRow.program_id !== undefined
+      ) {
         let historyQuery = supabase
           .from("matches")
-          .select("id, date")
+          .select("id, date, player1_name")
           .eq("player1_id", userId)
           .lt("date", matchDate);
 
@@ -566,9 +589,12 @@ serve(async (req) => {
           matchRow.program_id === null
             ? historyQuery.is("program_id", null)
             : historyQuery.eq("program_id", matchRow.program_id);
-        const { data: priorMatches } = await historyQuery.order("date", {
+        const { data: accountMatches } = await historyQuery.order("date", {
           ascending: false,
         });
+        const priorMatches = accountMatches?.filter(
+          (m) => normalizedPersonName(m.player1_name) === playerName,
+        );
 
         if (priorMatches && priorMatches.length > 0) {
           const priorIds = priorMatches.map((m) => m.id);
