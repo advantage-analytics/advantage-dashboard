@@ -210,6 +210,11 @@ us" lands in /admin Requests.
   service role, which the triggers let through).
 - Only analyst sessions protect a match or an account from deletion; a
   match's self session is deleted with it.
+- Paused on 2026-10-28 (#579 reverted the app code and
+  `20261028155028_self_review_paused` revoked the functions from
+  `authenticated`). Bringing it back needs
+  `20261029000000_self_review_resumed`, which re-grants
+  `can_fix_match_points`, `self_review_state` and `self_review_save`.
 - Not yet: a rebuild of the analysis after fixes replaces the points, and the
   fixes stay in the session unlinked (`point_id` null) rather than being
   re-applied. Step 3a's "start from the player's fixes" is where they join
