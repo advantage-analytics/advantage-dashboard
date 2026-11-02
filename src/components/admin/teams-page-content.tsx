@@ -17,7 +17,7 @@ import { CreateTeamDialog } from "@/components/admin/create-team-dialog";
 import { loadMoreAdminTeams } from "@/components/admin/teams-actions";
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
-import { actionRejected } from "@/lib/ui/action-rejected";
+import { actionRejectedWith } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import type {
   AdminTeamRow,
@@ -200,7 +200,7 @@ export function TeamsPageContent({
           conference: cut.conference ?? undefined,
           state: cut.state ?? undefined,
         },
-      }).catch(actionRejected);
+      }).catch(actionRejectedWith("Couldn't load more teams. Try again."));
       // The rows already on screen are good, so this stays beside the button
       // rather than taking the page down with a failed next page.
       if ("ok" in page) {

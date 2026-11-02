@@ -85,3 +85,16 @@ export function actionRejectedMessage(error: unknown): {
 } {
   return { ok: false, message: actionRejected(error).error };
 }
+
+/**
+ * `actionRejected`, for a call whose failure has its own sentence: a read, where
+ * "whether the change was saved" means nothing, or the second half of a write
+ * that must say which half landed. Navigation still rethrows and a real failure
+ * is still reported.
+ */
+export function actionRejectedWith(sentence: string) {
+  return (error: unknown): { ok: false; error: string } => {
+    actionRejected(error);
+    return { ok: false, error: sentence };
+  };
+}

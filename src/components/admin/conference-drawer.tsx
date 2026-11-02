@@ -56,7 +56,7 @@ import {
   divisionLabel,
   type Division,
 } from "@/lib/data/programs-server";
-import { actionRejected } from "@/lib/ui/action-rejected";
+import { actionRejected, actionRejectedWith } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
@@ -128,13 +128,9 @@ function useConferenceTeams(
     let stale = false;
 
     startLoading(async () => {
-      const result = await loadConferenceTeams(conferenceId).catch((error) => {
-        // Rethrows navigation and reports a real failure, but the section keeps
-        // its own sentence: this is a read, so "whether the change was saved"
-        // would make no sense here.
-        actionRejected(error);
-        return { ok: false, error: LOAD_TEAMS_ERROR } as const;
-      });
+      const result = await loadConferenceTeams(conferenceId).catch(
+        actionRejectedWith(LOAD_TEAMS_ERROR),
+      );
       if (stale) return;
       setLoaded({
         id: conferenceId,

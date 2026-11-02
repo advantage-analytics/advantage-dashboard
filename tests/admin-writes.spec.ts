@@ -36,6 +36,8 @@ const dialogOf = (page: Page) =>
 const CASES: {
   name: string;
   surface: string;
+  /** Where the failure has its own sentence: a read has no change to check. */
+  sentence?: string;
   run: (page: Page) => Promise<Locator>;
 }[] = [
   {
@@ -113,6 +115,7 @@ const CASES: {
   {
     name: "Load more teams",
     surface: "teams",
+    sentence: "Couldn't load more teams. Try again.",
     run: async (page) => {
       await page.getByRole("button", { name: "Load more" }).click();
       return page.locator("body");
@@ -120,7 +123,7 @@ const CASES: {
   },
 ];
 
-for (const { name, surface, run } of CASES) {
+for (const { name, surface, sentence, run } of CASES) {
   test(`a dropped request on ${name} stays on its surface`, async ({
     page,
   }) => {
@@ -130,7 +133,7 @@ for (const { name, surface, run } of CASES) {
 
     const on = await run(page);
 
-    await expect(on.getByText(DROPPED_CONNECTION)).toBeVisible();
+    await expect(on.getByText(sentence ?? DROPPED_CONNECTION)).toBeVisible();
     expect(await boundaryErrors(page)).toEqual([]);
     expect(errors).toEqual([]);
     expect(await capturedExceptions(page)).toEqual([]);

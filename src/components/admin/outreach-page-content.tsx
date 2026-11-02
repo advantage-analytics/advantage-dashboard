@@ -47,8 +47,8 @@ import {
   type OutreachTrancheResult,
 } from "@/lib/services/outreach/types";
 import {
-  actionRejected,
   actionRejectedMessage,
+  actionRejectedWith,
 } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
@@ -332,7 +332,7 @@ export function OutreachPageContent({
     if (preview?.key === previewKey) return;
     startPreview(async () => {
       const next = await previewOutreach(selectedRecipientId, emailNo).catch(
-        actionRejected,
+        actionRejectedWith("Couldn't load the preview. Try again."),
       );
       if (next.ok) {
         setPreview({ key: previewKey, subject: next.subject, html: next.html });

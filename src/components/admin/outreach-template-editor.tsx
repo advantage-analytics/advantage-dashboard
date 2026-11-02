@@ -22,8 +22,8 @@ import {
   OUTREACH_MERGE_FIELDS,
 } from "@/lib/services/outreach/types";
 import {
-  actionRejected,
   actionRejectedMessage,
+  actionRejectedWith,
 } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
@@ -78,7 +78,9 @@ export function OutreachTemplateEditor({
   useEffect(() => {
     if (draft?.emailNo === emailNo) return;
     startLoad(async () => {
-      const result = await loadOutreachTemplate(emailNo).catch(actionRejected);
+      const result = await loadOutreachTemplate(emailNo).catch(
+        actionRejectedWith("Couldn't load this template. Try again."),
+      );
       if (result.ok) {
         setDraft({
           emailNo,
@@ -123,7 +125,7 @@ export function OutreachTemplateEditor({
       const result = await previewOutreach(recipientId, emailNo, {
         subject: source.subject,
         html: source.html,
-      }).catch(actionRejected);
+      }).catch(actionRejectedWith("Couldn't load the preview. Try again."));
       if (result.ok) {
         setPreview({
           key: `${emailNo}:${recipientId}`,
@@ -195,8 +197,9 @@ export function OutreachTemplateEditor({
 
   function startFromOriginal() {
     startSave(async () => {
-      const result =
-        await loadOriginalOutreachTemplate(emailNo).catch(actionRejected);
+      const result = await loadOriginalOutreachTemplate(emailNo).catch(
+        actionRejectedWith("Couldn't load the original. Try again."),
+      );
       if (result.ok) {
         edit({ subject: result.subject, html: result.html });
         setNotice({

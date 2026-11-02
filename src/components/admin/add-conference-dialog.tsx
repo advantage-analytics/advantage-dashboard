@@ -16,7 +16,7 @@ import { ConferenceCrestControl } from "@/components/admin/conference-crest-cont
 import { createConference } from "@/lib/services/programs/admin-conference-actions";
 import { adminUploadConferenceCrest } from "@/lib/services/programs/admin-conference-crest-actions";
 import { DIVISION_VALUES, divisionLabel } from "@/lib/data/programs-server";
-import { actionRejected } from "@/lib/ui/action-rejected";
+import { actionRejected, actionRejectedWith } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
@@ -126,12 +126,7 @@ export function AddConferenceDialog({
           new File([crest], `crest.${ext}`, { type: crest.type }),
         );
         const uploaded = await adminUploadConferenceCrest(formData).catch(
-          (error) => {
-            // The conference exists by now, so the sentence below has to say
-            // which half landed, and "reload to see" would not tell them that.
-            actionRejected(error);
-            return { ok: false, error: "Couldn't upload the crest." } as const;
-          },
+          actionRejectedWith("Couldn't upload the crest."),
         );
         if (!uploaded.ok) {
           setCreatedId(result.id);
