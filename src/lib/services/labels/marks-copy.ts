@@ -397,7 +397,11 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
         case "serve":
           return `This serve has no ${gap}, so serve placement can’t count it. ${fix}`;
         case "return":
-          return `This return has no ${gap}, so return placement can’t count it. ${fix}`;
+          // A landing near the centre reads "Middle" with no contact
+          // (`directionZone`), so a missing contact only costs the direction.
+          return missing === "contact"
+            ? `This return has no ${gap}, so return placement can’t tell crosscourt from down the line. ${fix}`
+            : `This return has no ${gap}, so return placement can’t count it. ${fix}`;
         case "shot":
           return `This shot has no ${gap}, so how the point opened or ended can’t be read in full. ${fix}`;
       }

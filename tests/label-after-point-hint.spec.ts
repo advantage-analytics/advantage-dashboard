@@ -685,15 +685,14 @@ test.describe("placementMissing", () => {
 
   test("the words name what is missing: the contact, the landing or both", () => {
     const words = (missing: "contact" | "landing" | "both") => {
-      const mark = {
-        ...asked("r", "return", missing),
-        code: "placement_missing",
-      } as Parameters<typeof hintLabel>[0];
+      const mark = asked("r", "return", missing) as Parameters<
+        typeof hintLabel
+      >[0];
       return [hintLabel(mark), markHover(mark, { p1: "Quan", p2: "Kim" })];
     };
     expect(words("contact")).toEqual([
       "No contact point",
-      "This return has no contact point, so return placement can’t count it. Place it, or dismiss this if the video doesn’t show it.",
+      "This return has no contact point, so return placement can’t tell crosscourt from down the line. Place it, or dismiss this if the video doesn’t show it.",
     ]);
     expect(words("landing")).toEqual([
       "No landing",
