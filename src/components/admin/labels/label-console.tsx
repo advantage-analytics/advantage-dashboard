@@ -835,7 +835,7 @@ export function LabelConsole({
   const jumpAfterOpen = useRef<(pointId: string) => void>(() => {});
   // That open is the one that starts marking errors (`startMarkingErrors`).
   const openToMarkError = useRef(false);
-  const goToErrorLatest = useRef<(pointId: string) => void>(() => {});
+  const returnToRefusedError = useRef<(pointId: string) => void>(() => {});
   useEffect(() => {
     const pointId = openOnPointId.current;
     if (!fullScreen || pointId === null) return;
@@ -3139,9 +3139,9 @@ export function LabelConsole({
     if (!expanded) return;
     const answered = expanded.id;
     // Moves on without waiting, so the keys stay quick; a refused save puts
-    // the mark back and comes back to ask again.
+    // the mark back and, if the walk is still going, asks about it again.
     void patchPoint(answered, { error_kind: kind }).then((saved) => {
-      if (!saved) goToErrorLatest.current(answered);
+      if (!saved) returnToRefusedError.current(answered);
     });
     const next = errorAfterAnswer(errorsToMark, points, answered);
     if (next) {
@@ -3455,7 +3455,13 @@ export function LabelConsole({
       player.current?.play();
     };
     stepFilmRef.current = stepFilm;
-    goToErrorLatest.current = goToError;
+    // Only while the walk is on: a labeller who has moved on keeps their place,
+    // and the point's chip and the save status say the mark did not land.
+    returnToRefusedError.current = (pointId) => {
+      if (askedErrorShotId === null && !errorsFinished) return;
+      if (confirm || document.querySelector(OPEN_LAYER_SELECTOR)) return;
+      goToError(pointId);
+    };
     jumpAfterOpen.current = (pointId) => {
       if (openToMarkError.current) {
         openToMarkError.current = false;

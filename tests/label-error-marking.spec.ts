@@ -207,9 +207,15 @@ test.describe("while it asks", () => {
     expect(consoleSource).toContain("editable={courtEditable}");
   });
 
-  test("a refused save comes back to ask again", () => {
+  test("a refused save asks again only while the walk is on", () => {
     expect(consoleSource).toContain(
-      "if (!saved) goToErrorLatest.current(answered);",
+      "if (!saved) returnToRefusedError.current(answered);",
+    );
+    expect(consoleSource).toContain(
+      "if (askedErrorShotId === null && !errorsFinished) return;",
+    );
+    expect(consoleSource).toContain(
+      "if (confirm || document.querySelector(OPEN_LAYER_SELECTOR)) return;",
     );
   });
 
