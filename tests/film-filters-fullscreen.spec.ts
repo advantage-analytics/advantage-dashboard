@@ -9,7 +9,10 @@ import {
   NO_FILM_LOCAL_FILTERS,
   type FilmLocalFilters,
 } from "@/components/dashboard/matches/match-detail/film/film-list-filters";
-import type { FilmCutExtras } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import {
+  sideCut,
+  type FilmCutExtras,
+} from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
   applyMatchFilters,
   EMPTY_MATCH_FILTERS,
@@ -166,6 +169,7 @@ test("the cut in words — the trigger and the zero state", () => {
         remainder: {
           extras: { ending: "winner" },
           label: "Winners · Revelli",
+          landed: EMPTY_MATCH_FILTERS,
         },
         savedOnly: true,
       },
@@ -183,7 +187,11 @@ test("the cut in words — the trigger and the zero state", () => {
     filmListSentence(
       {
         ...errorsCut,
-        remainder: { extras: { ending: "error" }, label: "Errors" },
+        remainder: {
+          extras: { ending: "error" },
+          label: "Errors",
+          landed: errorsCut.shared,
+        },
       },
       names,
     ),
@@ -192,19 +200,28 @@ test("the cut in words — the trigger and the zero state", () => {
     filmListSentence(
       {
         ...errorsCut,
-        remainder: { extras: { ending: "error" }, label: "Errors · Revelli" },
+        remainder: {
+          extras: { ending: "error" },
+          label: "Errors · Revelli",
+          landed: errorsCut.shared,
+        },
       },
       names,
     ),
   ).toBe("Errors · Revelli, from Statistics");
   // One player's figure sets the Result player too, and the label names them:
   // once, surname or short name. A different player picked since stays.
+  const opponentsErrors = {
+    ...errorsCut.shared,
+    resultPlayer: "opponent" as const,
+  };
   const revellisErrors = {
-    shared: { ...errorsCut.shared, resultPlayer: "opponent" as const },
+    shared: opponentsErrors,
     savedOnly: false,
     remainder: {
       extras: { ending: "error" as const },
       label: "Errors · Revelli",
+      landed: opponentsErrors,
     },
   };
   expect(filmListSentence(revellisErrors, names)).toBe(
@@ -222,13 +239,20 @@ test("the cut in words — the trigger and the zero state", () => {
       names,
     ),
   ).toBe("Stepanov’s last shot · Errors · Revelli, from Statistics");
-  // A side's "won" figure says its own outcome. Outcome reads from the viewer's
-  // side, so the opponent's wins are Lost, and printing that beside "Net points
-  // won · Revelli" contradicts the label.
-  const wonCut = (outcome: "won" | "lost", label: string) => ({
+  // A side's "won" figure says its own outcome, so the phrase is not repeated.
+  // `landedAs` is the outcome the figure's landing wrote; another is a pick.
+  const wonCut = (
+    outcome: "won" | "lost",
+    label: string,
+    landedAs: "won" | "lost" = outcome,
+  ) => ({
     shared: { ...EMPTY_MATCH_FILTERS, resultOutcome: [outcome] },
     savedOnly: false,
-    remainder: { extras: { netBy: "opponent" as const }, label },
+    remainder: {
+      extras: { netBy: "opponent" as const },
+      label,
+      landed: { ...EMPTY_MATCH_FILTERS, resultOutcome: [landedAs] },
+    },
   });
   expect(
     filmListSentence(wonCut("lost", "Net points won · Revelli"), names),
@@ -244,12 +268,63 @@ test("the cut in words — the trigger and the zero state", () => {
   ).toBe("Net points won · Revelli, from Statistics");
   // Picked since, against the label: a real change, so it stays visible.
   expect(
-    filmListSentence(wonCut("won", "Net points won · Revelli"), names),
-  ).toBe("Points won · Net points won · Revelli, from Statistics");
+    filmListSentence(wonCut("won", "Net points won · Revelli", "lost"), names),
+  ).toBe("Points Stepanov won · Net points won · Revelli, from Statistics");
   // A label that is not about winning says nothing about the outcome.
   expect(
     filmListSentence(wonCut("lost", "Net point attempts · Revelli"), names),
-  ).toBe("Points lost · Net point attempts · Revelli, from Statistics");
+  ).toBe("Points Revelli won · Net point attempts · Revelli, from Statistics");
+  // Two players with one surname: a label's name fits both, and what was picked
+  // since is still in force, so it is still named.
+  const sameSurname = { you: "M. Reid", opponent: "Reid" };
+  expect(
+    filmListSentence(
+      wonCut("won", "Net points won · Reid", "lost"),
+      sameSurname,
+    ),
+  ).toBe("Points M. Reid won · Net points won · Reid, from Statistics");
+  expect(
+    filmListSentence(wonCut("lost", "Net points won · Reid"), sameSurname),
+  ).toBe("Net points won · Reid, from Statistics");
+  expect(
+    filmListSentence(
+      {
+        ...revellisErrors,
+        shared: { ...errorsCut.shared, resultPlayer: "you" as const },
+        remainder: { ...revellisErrors.remainder, label: "Errors · Reid" },
+      },
+      sameSurname,
+    ),
+  ).toBe("M. Reid’s last shot · Errors · Reid, from Statistics");
+  // A cut with no extras lands no label, so the phrase is the banner's only
+  // words: the opponent's own figure must not read as "Points lost".
+  const totalPointsWon = landFilmCut(EMPTY_MATCH_FILTERS, {
+    cut: sideCut({}, "opp", "player", true),
+    label: "Total points won · Revelli",
+  });
+  expect(totalPointsWon.remainder).toBeNull();
+  expect(totalPointsWon.shared.resultOutcome).toEqual(["lost"]);
+  expect(
+    filmListSentence(
+      { shared: totalPointsWon.shared, remainder: null, savedOnly: false },
+      names,
+    ),
+  ).toBe("Points Revelli won");
+  const breakPointsConverted = landFilmCut(EMPTY_MATCH_FILTERS, {
+    cut: sideCut({ scoreType: ["breakpoint"] }, "opp", "returner", true),
+    label: "Break points converted · Revelli",
+  });
+  expect(breakPointsConverted.remainder).toBeNull();
+  expect(
+    filmListSentence(
+      {
+        shared: breakPointsConverted.shared,
+        remainder: null,
+        savedOnly: false,
+      },
+      names,
+    ),
+  ).toBe("Stepanov serving · Break point · Points Revelli won");
   // A pure cut (every key a shared filter) lands no remainder, so the strip
   // reads its shared phrases alone and names nothing twice.
   const pure = landFilmCut(EMPTY_MATCH_FILTERS, {
@@ -257,9 +332,12 @@ test("the cut in words — the trigger and the zero state", () => {
     label: "Set 2 · Revelli serving",
   });
   expect(pure.remainder).toBeNull();
-  expect(filmListSentence({ ...pure, savedOnly: false }, names)).toBe(
-    "Revelli serving · Set 2",
-  );
+  expect(
+    filmListSentence(
+      { shared: pure.shared, remainder: null, savedOnly: false },
+      names,
+    ),
+  ).toBe("Revelli serving · Set 2");
 });
 
 test("the filters drawer's count is the list's own rule over the DRAFT", () => {
