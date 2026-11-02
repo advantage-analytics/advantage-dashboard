@@ -177,6 +177,7 @@ import {
 } from "@/lib/services/labels/session-fields";
 import type { LabelSessionFieldsResult } from "@/lib/services/labels/session-fields-session";
 import {
+  allErrorsJudged,
   endingPatchForShotChange,
   isMarkableError,
   SHOT_FIELDS_MOVING_ENDING,
@@ -197,7 +198,6 @@ import {
 import {
   completeWarnings,
   errorMarkingReady,
-  unmarkedErrors,
 } from "@/lib/services/labels/session-status";
 import type { LabelSessionStatusResult } from "@/lib/services/labels/session-status-session";
 import { advButton } from "@/lib/ui/adv-button";
@@ -273,6 +273,7 @@ import {
 } from "./label-now-playing";
 import {
   flagStepOrigin,
+  errorAfterAnswer,
   errorStops,
   openFlags,
   scoreStop,
@@ -834,6 +835,7 @@ export function LabelConsole({
   const jumpAfterOpen = useRef<(pointId: string) => void>(() => {});
   // That open is the one that starts marking errors (`startMarkingErrors`).
   const openToMarkError = useRef(false);
+  const goToErrorLatest = useRef<(pointId: string) => void>(() => {});
   useEffect(() => {
     const pointId = openOnPointId.current;
     if (!fullScreen || pointId === null) return;
@@ -844,7 +846,11 @@ export function LabelConsole({
       () => jumpAfterOpen.current(pointId),
       OPEN_JUMP_DELAY_MS,
     );
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      // The jump it was for may never have run: the next open is a plain one.
+      openToMarkError.current = false;
+    };
   }, [fullScreen]);
   const scrollerRef = blackScrollerRef;
 
@@ -1046,10 +1052,10 @@ export function LabelConsole({
   const patchPoint = useCallback(
     async (pointId: string, patch: LabelPointPatch) => {
       const before = points.find((point) => point.id === pointId);
-      if (!before || !onSavePoint) return;
+      if (!before || !onSavePoint) return false;
       // A draft point has no id the server knows yet; its insert is still in
       // flight, and the saved row replaces it when that lands.
-      if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
+      if (pointId.startsWith(PENDING_POINT_PREFIX)) return false;
       setPoints((current) =>
         current.map((point) =>
           point.id === pointId
@@ -1094,6 +1100,7 @@ export function LabelConsole({
           ? { type: "failure", message: result.error }
           : { type: "success", at: Date.now() },
       );
+      return !("error" in result);
     },
     [points, onSavePoint],
   );
@@ -2052,7 +2059,7 @@ export function LabelConsole({
   function askComplete() {
     setConfirm({
       kind: "complete-session",
-      unmarked: unmarkedErrors(points),
+      unmarked: errorsToMark.length,
       warnings: sessionWarnings,
     });
   }
@@ -2914,9 +2921,9 @@ export function LabelConsole({
   // Never from inside a control, where those keys already mean something.
   const unfoldOpenPoint = useRef<() => void>(() => {});
   const toggleOpenPointCheck = useRef<() => void>(() => {});
+  const unforcedKey = useRef<() => boolean>(() => false);
   // `]` and `[`: the next and previous amber flag, as the header's amber list
   // does; `'` and `;`, the two keys under them, the same for the grey list.
-  const unforcedKey = useRef<() => boolean>(() => false);
   const stepToFlag = useRef<
     (direction: 1 | -1, kind: "score" | "data") => void
   >(() => {});
@@ -3060,7 +3067,7 @@ export function LabelConsole({
   );
   // Forced or unforced, asked once nothing is left that can move the score
   // (`errorMarkingReady`), or sooner when the labeller says "Mark now". A third
-  // list after the amber one: `]` and `[` carry on into it (`bracketStops`).
+  // list after the amber one: `]` and `[` carry on into it.
   const errorsToMark = useMemo(() => errorStops(points), [points]);
   const errorTotal = useMemo(
     () => points.filter(isMarkableError).length,
@@ -3130,9 +3137,13 @@ export function LabelConsole({
   /** The asked error answered: marked, and on to the next one still to mark. */
   function answerError(kind: LabelErrorKind) {
     if (!expanded) return;
-    void patchPoint(expanded.id, { error_kind: kind });
-    const rest = errorsToMark.filter((stop) => stop.pointId !== expanded.id);
-    const next = stepFlag(rest, points, expanded.id, 1);
+    const answered = expanded.id;
+    // Moves on without waiting, so the keys stay quick; a refused save puts
+    // the mark back and comes back to ask again.
+    void patchPoint(answered, { error_kind: kind }).then((saved) => {
+      if (!saved) goToErrorLatest.current(answered);
+    });
+    const next = errorAfterAnswer(errorsToMark, points, answered);
     if (next) {
       goToError(next.pointId);
     } else {
@@ -3140,6 +3151,14 @@ export function LabelConsole({
       setAskedErrorPointId(null);
       setErrorsFinished(true);
     }
+  }
+
+  /** The selected stroke's point, while it is the open one (E and U). */
+  function openPointOfSelectedShot(): LabelPoint | null {
+    if (placement.shotId === null) return null;
+    const owner = pointOfShot(points, placement.shotId);
+    if (!owner || (expanded && owner.id !== expanded.id)) return null;
+    return owner;
   }
 
   /** "Start", "Mark 50 errors", "Mark now": the first error still to mark. */
@@ -3379,9 +3398,8 @@ export function LabelConsole({
         answerError("forced");
         return true;
       }
-      const owner = pointOfShot(points, placement.shotId);
+      const owner = openPointOfSelectedShot();
       if (!owner) return false;
-      if (expanded && owner.id !== expanded.id) return false;
       const patch = errorKindKeyPatch(owner, placement.shotId);
       if (!patch) return false;
       void patchPoint(owner.id, patch);
@@ -3394,10 +3412,8 @@ export function LabelConsole({
         answerError("unforced");
         return true;
       }
-      const owner = pointOfShot(points, placement.shotId);
-      if (!owner) return false;
-      if (expanded && owner.id !== expanded.id) return false;
-      if (errorKindShotId(owner) !== placement.shotId) return false;
+      const owner = openPointOfSelectedShot();
+      if (!owner || errorKindShotId(owner) !== placement.shotId) return false;
       if (owner.errorKind !== "unforced") {
         void patchPoint(owner.id, { error_kind: "unforced" });
       }
@@ -3439,6 +3455,7 @@ export function LabelConsole({
       player.current?.play();
     };
     stepFilmRef.current = stepFilm;
+    goToErrorLatest.current = goToError;
     jumpAfterOpen.current = (pointId) => {
       if (openToMarkError.current) {
         openToMarkError.current = false;
@@ -3966,17 +3983,20 @@ export function LabelConsole({
   // The left court is the one placement surface, in review too: the rail
   // only notes what to fix (`ReviewNote`).
   const panelPlacement = placement;
-  const placing = isPlacing(expanded, panelPlacement, editable);
+  // While the rail asks forced or unforced the court only shows the stroke: a
+  // stray click there must not move what the question is about.
+  const courtEditable = editable && askedErrorShotId === null;
+  const placing = isPlacing(expanded, panelPlacement, courtEditable);
   const courtPanel = (
     <LabelCourtPanel
       point={expanded}
       names={names}
       placement={panelPlacement}
-      editable={editable}
+      editable={courtEditable}
       playingShotId={playing?.shotId ?? null}
       ghosts={drawsGhosts(liveMarks)}
       info={pointInfo}
-      onEstimate={editable ? setEstimate : undefined}
+      onEstimate={courtEditable ? setEstimate : undefined}
       clock={clock}
       notice={
         placementNoticeState &&
@@ -3986,7 +4006,7 @@ export function LabelConsole({
           : null
       }
       landingOnly={landingOnly}
-      onLandingLink={editable ? toggleLandingLink : undefined}
+      onLandingLink={courtEditable ? toggleLandingLink : undefined}
       onPlace={place}
       // A click on a mark already drawn opens that stroke on that end.
       onSelectShot={(shotId, end) => selectShot(shotId, end)}
@@ -4126,6 +4146,7 @@ export function LabelConsole({
         ) : errorsFinished && errorsToMark.length === 0 && errorTotal > 0 ? (
           <LabelErrorsDone
             total={errorTotal}
+            split={allErrorsJudged(points)}
             onDismiss={() => setErrorsFinished(false)}
           />
         ) : null

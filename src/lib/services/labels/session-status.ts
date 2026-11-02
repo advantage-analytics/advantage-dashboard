@@ -16,7 +16,7 @@
 
 import {
   storedEndingContradicted,
-  isMarkableError,
+  isUnmarkedError,
   publishEnding,
   unmarkableErrors,
 } from "./ending-derived";
@@ -86,7 +86,7 @@ export const PUBLISHED_PAST_TAILS = {
  */
 export function unmarkedErrors(points: readonly LabelPoint[]): number[] {
   return points
-    .filter((point) => point.errorKind == null && isMarkableError(point))
+    .filter(isUnmarkedError)
     .map((point) => point.pointIndex + 1)
     .sort((a, b) => a - b);
 }

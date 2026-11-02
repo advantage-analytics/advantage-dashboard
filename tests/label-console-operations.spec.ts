@@ -781,7 +781,7 @@ test("Mark complete: the confirm lists what is still open, and the session is co
         return { ok: true, status: "complete" };
       },
     },
-    initialConfirm: { kind: "complete-session", warnings, unmarked: [] },
+    initialConfirm: { kind: "complete-session", warnings, unmarked: 0 },
   });
   const dialog = dialogs.at(-1)!;
   expect(dialog).toMatchObject({

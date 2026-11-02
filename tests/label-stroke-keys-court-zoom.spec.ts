@@ -513,8 +513,9 @@ test.describe("E: forced or unforced, on the stroke that ended the point in an e
       "if (!operable || confirm || placement.shotId === null) return false;",
     );
     // Only the open point's stroke, and never one it picks for itself.
-    expect(fn).toContain(
-      "if (expanded && owner.id !== expanded.id) return false;",
+    expect(fn).toContain("openPointOfSelectedShot()");
+    expect(source).toContain(
+      "if (!owner || (expanded && owner.id !== expanded.id)) return null;",
     );
     expect(fn).not.toContain("keyShot()");
     // The pair's own rule and its own write: the point patch.

@@ -1693,7 +1693,7 @@ test.describe("Undo applies a diff (undo-diff.ts), never a whole re-read", () =>
   });
 });
 
-test.describe("Mark complete with errors still unmarked (T12)", () => {
+test.describe("Mark complete with errors still unmarked", () => {
   type Props = Record<string, unknown>;
   const passThrough = (tagName: string) =>
     function PassThrough({
@@ -1785,7 +1785,7 @@ test.describe("Mark complete with errors still unmarked (T12)", () => {
     const html = renderWith({
       kind: "complete-session",
       warnings: WARNINGS,
-      unmarked: [31, 58, 140],
+      unmarked: 3,
     });
     expect(text(html.slice(html.indexOf("<h2"), html.indexOf("</h2>")))).toBe(
       "Publish with 3 errors unmarked?",
@@ -1805,7 +1805,7 @@ test.describe("Mark complete with errors still unmarked (T12)", () => {
     const html = renderWith({
       kind: "complete-session",
       warnings: WARNINGS,
-      unmarked: [],
+      unmarked: 0,
     });
     expect(text(html.slice(html.indexOf("<h2"), html.indexOf("</h2>")))).toBe(
       "Mark complete and publish?",
@@ -1836,7 +1836,7 @@ test.describe("Mark complete with errors still unmarked (T12)", () => {
         confirm: {
           kind: "complete-session",
           warnings: WARNINGS,
-          unmarked: [31, 58],
+          unmarked: 2,
         },
         names: { p1: "Lee", p2: "Vargas" },
         onCancel: () => events.push("cancel"),

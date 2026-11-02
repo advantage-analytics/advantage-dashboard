@@ -341,11 +341,18 @@ export function markableErrorStroke<T extends ErrorPoint>(
  * Whether a point can be marked forced or unforced
  * (`label_points.error_kind`): it publishes as an error (`publishesAsError`)
  * and has a stroke to put the mark on. The one reading behind the Mark
- * complete warning (`unmarkedErrors`), the errors the rail asks for (`errorStops`), the tray's Forced | Unforced pair and the
+ * complete warning and the errors the rail asks for (`errorStops`), the tray's Forced | Unforced pair and the
  * E key (`errorKindShotId`), whichever way the console draws ghosts.
  */
 export function isMarkableError(point: ErrorPoint): boolean {
   return publishesAsError(point) && markableErrorStroke(point) !== null;
+}
+
+/** An error still to mark forced or unforced: the rail and the confirm's one rule. */
+export function isUnmarkedError(
+  point: ErrorPoint & Pick<LabelPoint, "errorKind">,
+): boolean {
+  return point.errorKind == null && isMarkableError(point);
 }
 
 /**

@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createLoader } from "./fixtures/vm-modules";
 import { readFileSync } from "node:fs";
 import {
+  errorAfterAnswer,
   errorStops,
   ERROR_STOP_LABEL,
 } from "../src/lib/services/labels/flag-nav";
@@ -45,6 +49,173 @@ test.describe("the errors to mark", () => {
   test("a missed return that publishes as a service winner is not asked about", () => {
     expect(errorStops([errorPoint(0, { ending: "service_winner" })])).toEqual(
       [],
+    );
+  });
+});
+
+test.describe("the walk", () => {
+  const points = [errorPoint(0), errorPoint(1), errorPoint(2)];
+  const stops = errorStops(points);
+
+  test("an answer goes on to the next error still to mark", () => {
+    expect(errorAfterAnswer(stops, points, "p0")?.pointId).toBe("p1");
+  });
+
+  test("past the end it wraps round to one skipped earlier", () => {
+    expect(errorAfterAnswer(stops, points, "p2")?.pointId).toBe("p0");
+  });
+
+  test("the last one answered ends it", () => {
+    expect(errorAfterAnswer([stops[1]], points, "p1")).toBeNull();
+  });
+});
+
+test.describe("what it promises", () => {
+  const { errorsCheck } = createLoader().load(
+    "src/components/admin/labels/label-dashboard.tsx",
+  ) as {
+    errorsCheck: (
+      points: LabelPoint[],
+      ready: boolean,
+      onMarkErrors?: () => void,
+    ) => {
+      state: string;
+      detail: string;
+      link?: { label: string };
+      button?: { label: string };
+    };
+  };
+  const marked = (index: number, errorKind: "forced" | "unforced") =>
+    errorPoint(index, { errorKind });
+  const noShots = (index: number) => errorPoint(index, { shots: [] });
+  const noop = () => {};
+
+  test("every error marked: done, with the two counts", () => {
+    expect(
+      errorsCheck([marked(0, "forced"), marked(1, "unforced")], true),
+    ).toMatchObject({ state: "done", detail: "1 forced, 1 unforced." });
+  });
+
+  test("an error with no shots stays open and says the split is held back", () => {
+    expect(errorsCheck([marked(0, "forced"), noShots(1)], true)).toMatchObject({
+      state: "open",
+      detail:
+        "1 forced, 0 unforced. 1 error has no shots to mark, so this match shows Errors only.",
+    });
+    expect(errorsCheck([noShots(0), noShots(1)], true)).toMatchObject({
+      state: "open",
+      detail:
+        "2 errors have no shots to mark, so this match shows Errors only.",
+    });
+  });
+
+  test("no errors at all: done", () => {
+    expect(errorsCheck([], true)).toMatchObject({
+      state: "done",
+      detail: "No error to mark.",
+    });
+  });
+
+  test("it waits with a quiet way in, then asks; never blocking", () => {
+    const waiting = errorsCheck([errorPoint(0)], false, noop);
+    expect(waiting).toMatchObject({
+      state: "open",
+      link: { label: "Mark now" },
+    });
+    expect(waiting.button).toBeUndefined();
+    const asking = errorsCheck(
+      [errorPoint(0), marked(1, "forced")],
+      true,
+      noop,
+    );
+    expect(asking).toMatchObject({
+      state: "open",
+      button: { label: "Mark 1 error" },
+    });
+    expect(asking.detail).toContain("reports plain Errors");
+  });
+});
+
+test.describe("the statistics card", () => {
+  const { LabelDashboard } = createLoader().load(
+    "src/components/admin/labels/label-dashboard.tsx",
+  ) as { LabelDashboard: React.ComponentType<Record<string, unknown>> };
+  const { fixtureMatch, NAMES, UPLOAD } = createLoader().load(
+    "src/app/design/labels/fixture.ts",
+  ) as {
+    fixtureMatch: () => { points: LabelPoint[] };
+    NAMES: unknown;
+    UPLOAD: unknown;
+  };
+  const { labelScores } = createLoader().load(
+    "src/lib/services/labels/score.ts",
+  ) as {
+    labelScores: (points: LabelPoint[], ad: boolean) => { games: unknown };
+  };
+  const card = (points: LabelPoint[]) =>
+    renderToStaticMarkup(
+      React.createElement(LabelDashboard, {
+        points,
+        marks: null,
+        games: labelScores(points, false).games,
+        adScoring: false,
+        names: NAMES,
+        finalScore: null,
+        matchScore: null,
+        videoEndsEarly: true,
+        warnings: [],
+        complete: false,
+        upload: UPLOAD,
+        onOpen: () => {},
+      }),
+    );
+
+  test("errors read as one row until every one is marked", () => {
+    const { points } = fixtureMatch();
+    const unmarked = card(points);
+    expect(unmarked).toContain(">Errors<");
+    expect(unmarked).not.toContain("Forced errors");
+    const partly = points.map((p, i) =>
+      i === points.findIndex((q) => q.ending === "error")
+        ? { ...p, errorKind: "forced" as const }
+        : p,
+    );
+    expect(card(partly)).not.toContain("Forced errors");
+  });
+
+  test("every error marked: the split", () => {
+    const all = fixtureMatch().points.map((p) => ({
+      ...p,
+      errorKind: "unforced" as const,
+    }));
+    const html = card(all);
+    expect(html).toContain("Unforced errors");
+    expect(html).toContain("Forced errors");
+  });
+});
+
+test.describe("while it asks", () => {
+  const consoleSource = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+
+  test("the court only shows the stroke: a stray click places nothing", () => {
+    expect(consoleSource).toContain(
+      "const courtEditable = editable && askedErrorShotId === null;",
+    );
+    expect(consoleSource).toContain("editable={courtEditable}");
+  });
+
+  test("a refused save comes back to ask again", () => {
+    expect(consoleSource).toContain(
+      "if (!saved) goToErrorLatest.current(answered);",
+    );
+  });
+
+  test("an open that never jumped does not leave marking armed", () => {
+    expect(consoleSource).toMatch(
+      /window\.clearTimeout\(timer\);[\s\S]{0,120}openToMarkError\.current = false;/,
     );
   });
 });

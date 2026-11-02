@@ -104,11 +104,11 @@ export type LabelConfirm =
       /** What is still open (`completeWarnings`); empty when nothing is. */
       warnings: readonly string[];
       /**
-       * The errors not yet marked forced or unforced (`unmarkedErrors`), as
-       * the rail numbers the points, ascending. Any at all and the confirm
-       * says what publishing past them means, and offers to mark them.
+       * How many errors are not yet marked forced or unforced (`errorStops`).
+       * Any at all and the confirm says what publishing past them means, and
+       * offers to mark them.
        */
-      unmarked: readonly number[];
+      unmarked: number;
     }
   | { kind: "reopen-session" };
 
@@ -174,8 +174,7 @@ export interface LabelConfirmCopy {
 }
 
 /** Mark complete with errors unmarked: what publishing past them means. */
-function unmarkedCompleteCopy(unmarked: readonly number[]): LabelConfirmCopy {
-  const n = unmarked.length;
+function unmarkedCompleteCopy(n: number): LabelConfirmCopy {
   return {
     title: `Publish with ${n} ${n === 1 ? "error" : "errors"} unmarked?`,
     description:
@@ -321,7 +320,7 @@ export function labelConfirmCopy(
         tone: "primary",
       };
     case "complete-session":
-      if (confirm.unmarked.length > 0) {
+      if (confirm.unmarked > 0) {
         return unmarkedCompleteCopy(confirm.unmarked);
       }
       return {

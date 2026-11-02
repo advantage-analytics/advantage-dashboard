@@ -5,7 +5,7 @@
  * rail and the console's `[` / `]` keys share one answer.
  */
 
-import { isMarkableError } from "./ending-derived";
+import { isUnmarkedError } from "./ending-derived";
 import type { LabelMarks } from "./marks";
 import {
   PLACEMENT_ITEM,
@@ -104,13 +104,30 @@ export const ERROR_STOP_LABEL = "Forced or unforced?";
  */
 export function errorStops(points: readonly LabelPoint[]): ScoreStop[] {
   return points
-    .filter((point) => point.errorKind == null && isMarkableError(point))
+    .filter(isUnmarkedError)
     .map((point) => ({
       pointId: point.id,
       pointNumber: point.pointIndex + 1,
       label: ERROR_STOP_LABEL,
     }))
     .sort((a, b) => a.pointNumber - b.pointNumber);
+}
+
+/**
+ * Where the walk goes once `pointId` is answered: the next error still to mark
+ * after it, wrapping round the match. Null when it was the last.
+ */
+export function errorAfterAnswer<F extends Pick<OpenFlag, "pointId">>(
+  stops: readonly F[],
+  points: readonly Pick<LabelPoint, "id">[],
+  pointId: string,
+): F | null {
+  return stepFlag(
+    stops.filter((stop) => stop.pointId !== pointId),
+    points,
+    pointId,
+    1,
+  );
 }
 
 /**

@@ -6,7 +6,6 @@ import { Kbd } from "@/components/ui/kbd";
 import { ERROR_STOP_LABEL } from "@/lib/services/labels/flag-nav";
 import type { LabelErrorKind } from "@/lib/services/labels/session";
 import { advButton } from "@/lib/ui/adv-button";
-import { cn } from "@/lib/utils";
 import { ERROR_KIND_CHOICES } from "./label-black-shot-row";
 
 /**
@@ -170,7 +169,7 @@ function Strip({
 const STRIP_QUIET =
   "h-8 shrink-0 cursor-pointer rounded-[var(--radius-button)] px-2 text-[12px] font-medium whitespace-nowrap text-white/70 transition-colors duration-150 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
 
-/** The moment it starts: the score is settled and errors are left. */
+/** The moment it starts: nothing can move the score and errors are left. */
 export function LabelErrorPrompt({
   count,
   onStart,
@@ -183,7 +182,7 @@ export function LabelErrorPrompt({
   return (
     <Strip
       data-error-prompt=""
-      title={`The score is settled. ${count} ${count === 1 ? "error" : "errors"} left to mark.`}
+      title={`Nothing left can move the score. ${count} ${count === 1 ? "error" : "errors"} left to mark.`}
       detail="Forced or unforced, one at a time. Skip it and the match reports plain Errors."
     >
       <button
@@ -199,7 +198,7 @@ export function LabelErrorPrompt({
         data-error-prompt-start=""
         aria-keyshortcuts="]"
         onClick={onStart}
-        className={cn(advButton("primary", "sm"))}
+        className={advButton("primary", "sm")}
       >
         Start
         <Kbd
@@ -218,9 +217,12 @@ export function LabelErrorPrompt({
 /** The moment it ends: every error marked, in this sitting. */
 export function LabelErrorsDone({
   total,
+  split,
   onDismiss,
 }: {
   total: number;
+  /** Every error the publish writes is marked (`allErrorsJudged`). */
+  split: boolean;
   onDismiss: () => void;
 }) {
   return (
@@ -229,7 +231,11 @@ export function LabelErrorsDone({
       title={
         total === 1 ? "The error is marked." : `All ${total} errors marked.`
       }
-      detail="This match will report forced and unforced."
+      detail={
+        split
+          ? "This match will report forced and unforced."
+          : "An error with no shots to mark keeps this match at plain Errors."
+      }
     >
       <button
         type="button"
