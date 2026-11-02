@@ -201,6 +201,10 @@ export function LabelBlackRail({
   onSelectShot,
   onExitReview,
   onPatchPoint,
+  errorCount = null,
+  errorStrip = null,
+  errorPointIds,
+  errorAskedShotId = null,
   onPatchShot,
   operations,
   onRemoveShotsAfter,
@@ -289,6 +293,14 @@ export function LabelBlackRail({
   selectedShotId?: string | null;
   /** The "Missing shot?" slot a flag jump armed (`EditContext`). */
   armedSlotAfterShotId?: string | null;
+  /** The header's count of errors to mark (`LabelErrorCount`); null: none. */
+  errorCount?: React.ReactNode;
+  /** The strip under the header: the errors' prompt, or their end. */
+  errorStrip?: React.ReactNode;
+  /** The points whose row wears the error chip; empty while nothing asks. */
+  errorPointIds?: ReadonlySet<string>;
+  /** The stroke being asked about (`EditContext.errorAskedShotId`). */
+  errorAskedShotId?: string | null;
   /**
    * The console's inline review block for the open point
    * (`ReviewInlineBlock`), drawn in its well under the stroke it is about.
@@ -456,6 +468,7 @@ export function LabelBlackRail({
       onSelectShot,
       onExitReview,
       onPatchPoint,
+      errorAskedShotId,
       onPatchShot,
       operations: editable ? operations : undefined,
       onRemoveShotsAfter: editable ? onRemoveShotsAfter : undefined,
@@ -480,6 +493,7 @@ export function LabelBlackRail({
       onSelectShot,
       onExitReview,
       onPatchPoint,
+      errorAskedShotId,
       onPatchShot,
       operations,
       onRemoveShotsAfter,
@@ -751,6 +765,7 @@ export function LabelBlackRail({
               }
             />
           ) : null}
+          {errorCount}
           {marks !== null ? (
             <LabelFlagSummary
               kind="data"
@@ -936,6 +951,8 @@ export function LabelBlackRail({
           ) : null}
         </div>
 
+        {errorStrip}
+
         {startScore !== null ? (
           <LabelStartScoreLine
             start={startScore}
@@ -1113,6 +1130,7 @@ export function LabelBlackRail({
                       onToggle={onTogglePoint}
                       edit={edit}
                       marks={marks}
+                      errorToMark={errorPointIds?.has(point.id) ?? false}
                     >
                       {open ? (
                         <BlackShotsWell

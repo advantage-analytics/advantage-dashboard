@@ -37,9 +37,9 @@ export type RailTone = "dark" | "light";
  *   `-wash-strong` its three fills; `-line` the slot's dashed edge.
  */
 export const RAIL_TONE_CLASS: Record<RailTone, string> = {
-  dark: "[--rail-ground:var(--surface-dark)] [--rail-on-accent:rgb(255,255,255)] [--rail-amber:rgba(252,211,77,1)] [--rail-amber-wash-faint:rgba(253,230,138,0.06)] [--rail-amber-wash:rgba(253,230,138,0.14)] [--rail-amber-wash-strong:rgba(253,230,138,0.22)] [--rail-amber-line:rgba(252,211,77,0.45)]",
+  dark: "[--rail-ground:var(--surface-dark)] [--rail-on-accent:rgb(255,255,255)] [--rail-amber:rgba(252,211,77,1)] [--rail-amber-wash-faint:rgba(253,230,138,0.06)] [--rail-amber-wash:rgba(253,230,138,0.14)] [--rail-amber-wash-strong:rgba(253,230,138,0.22)] [--rail-amber-line:rgba(252,211,77,0.45)] [--rail-blue:rgb(147,197,253)] [--rail-blue-wash:rgba(59,130,246,0.16)]",
   light:
-    "text-[var(--ink-900)] [--color-white:var(--ink-900)] [--rail-ground:var(--surface-card)] [--rail-on-accent:rgb(255,255,255)] [--rail-amber:var(--warning-text)] [--rail-amber-wash-faint:var(--warning-bg)] [--rail-amber-wash:var(--warning-bg)] [--rail-amber-wash-strong:var(--warning-border)] [--rail-amber-line:var(--warning-border)]",
+    "text-[var(--ink-900)] [--color-white:var(--ink-900)] [--rail-ground:var(--surface-card)] [--rail-on-accent:rgb(255,255,255)] [--rail-amber:var(--warning-text)] [--rail-amber-wash-faint:var(--warning-bg)] [--rail-amber-wash:var(--warning-bg)] [--rail-amber-wash-strong:var(--warning-border)] [--rail-amber-line:var(--warning-border)] [--rail-blue:var(--blue)] [--rail-blue-wash:color-mix(in_oklab,var(--blue)_12%,transparent)]",
 };
 
 /**

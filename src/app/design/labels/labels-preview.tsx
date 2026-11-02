@@ -81,6 +81,7 @@ export function LabelsDesignPreview() {
             complete={false}
             upload={UPLOAD}
             onOpen={() => {}}
+            onMarkErrors={() => {}}
           />
         </div>
       </section>

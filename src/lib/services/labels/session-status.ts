@@ -77,7 +77,7 @@ export const PUBLISHED_PAST_TAILS = {
 } as const;
 
 /**
- * The points "Mark complete" will not publish past: every point that will
+ * The points the Mark complete confirm warns about: every point that will
  * publish as an error (`isMarkableError`, which leaves out a deleted point, a
  * let, a non-point and an error with no stroke to put the mark on) and that is
  * not yet marked forced or unforced. As the rail numbers them, ascending. A
@@ -89,6 +89,34 @@ export function unmarkedErrors(points: readonly LabelPoint[]): number[] {
     .filter((point) => point.errorKind == null && isMarkableError(point))
     .map((point) => point.pointIndex + 1)
     .sort((a, b) => a - b);
+}
+
+/**
+ * The warnings about a point a publish writes only partly or leaves out, of
+ * `completeWarnings`' list: the "Every point can be written" check.
+ */
+export function partialPublishWarnings(
+  warnings: readonly string[],
+): readonly string[] {
+  const tails = Object.values(PUBLISHED_PAST_TAILS) as readonly string[];
+  return warnings.filter(
+    (warning) =>
+      !warning.startsWith("Set ") &&
+      tails.some((tail) => warning.endsWith(tail)),
+  );
+}
+
+/**
+ * Whether the console asks for the errors now: nothing is left that can move
+ * the score or that a publish cannot write. Checking every point is not a
+ * condition, and marking is never required: a publish with errors unmarked
+ * reports plain Errors (`allErrorsJudged`).
+ */
+export function errorMarkingReady(
+  scoreStopCount: number,
+  warnings: readonly string[],
+): boolean {
+  return scoreStopCount === 0 && partialPublishWarnings(warnings).length === 0;
 }
 
 /** The open items, most general first; empty when nothing is left. */

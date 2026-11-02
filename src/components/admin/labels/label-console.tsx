@@ -17,6 +17,7 @@ import {
   labelProgress,
   liveShotsInOrder,
   orderLabelShots,
+  type LabelErrorKind,
   type LabelGameType,
   type LabelPoint,
   type LabelSession,
@@ -77,6 +78,7 @@ import {
 import {
   advanceAfterAnswer,
   replayWindow,
+  type ReplayWindow,
   stepKeyOf,
 } from "@/lib/services/labels/review-flow";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
@@ -176,6 +178,7 @@ import {
 import type { LabelSessionFieldsResult } from "@/lib/services/labels/session-fields-session";
 import {
   endingPatchForShotChange,
+  isMarkableError,
   SHOT_FIELDS_MOVING_ENDING,
 } from "@/lib/services/labels/ending-derived";
 import {
@@ -193,6 +196,7 @@ import {
 } from "@/lib/services/labels/serve-hitter";
 import {
   completeWarnings,
+  errorMarkingReady,
   unmarkedErrors,
 } from "@/lib/services/labels/session-status";
 import type { LabelSessionStatusResult } from "@/lib/services/labels/session-status-session";
@@ -233,6 +237,12 @@ import { strokeChangePatch } from "./label-black-shot-row";
 import { LabelBlackView } from "./label-black-view";
 import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
+import {
+  LabelErrorCount,
+  LabelErrorPrompt,
+  LabelErrorQuestion,
+  LabelErrorsDone,
+} from "./label-error-marking";
 import { LabelShortcutsDialog } from "./label-shortcuts-dialog";
 import { isShortcutSheetKey } from "./label-shortcuts";
 import { LabelCourtPanel, isPlacing } from "./label-court-panel";
@@ -263,6 +273,7 @@ import {
 } from "./label-now-playing";
 import {
   flagStepOrigin,
+  errorStops,
   openFlags,
   scoreStop,
   slotStops,
@@ -308,6 +319,8 @@ import {
 import { useBrowserFullscreen } from "./use-browser-fullscreen";
 import {
   errorKindKeyPatch,
+  errorKindShotId,
+  isUnforcedKey,
   frameTimePatch,
   hasEarlierServe,
   isErrorKindKey,
@@ -819,6 +832,8 @@ export function LabelConsole({
   // mounted until the layout has switched, so the jump waits for that.
   const openOnPointId = useRef<string | null>(null);
   const jumpAfterOpen = useRef<(pointId: string) => void>(() => {});
+  // That open is the one that starts marking errors (`startMarkingErrors`).
+  const openToMarkError = useRef(false);
   useEffect(() => {
     const pointId = openOnPointId.current;
     if (!fullScreen || pointId === null) return;
@@ -2031,44 +2046,15 @@ export function LabelConsole({
   }
 
   /**
-   * "Mark complete": the confirm, listing what is still open — and holding
-   * the publish while any error is not yet marked forced or unforced.
+   * "Mark complete": the confirm, listing what is still open, and saying what
+   * publishing past any error not yet marked forced or unforced means.
    */
   function askComplete() {
     setConfirm({
       kind: "complete-session",
-      blockers: unmarkedErrors(points),
-      warnings: completeWarnings({
-        points,
-        adScoring,
-        marks: liveMarks,
-        finalScore: sessionFields.finalScore,
-        videoEndsEarly: sessionFields.videoEndsEarly,
-        matchScore: session.matchScore,
-        games: scores.games,
-        names,
-        matchTiebreakSet: matchTiebreakSetNumber,
-        startScore,
-      }),
+      unmarked: unmarkedErrors(points),
+      warnings: sessionWarnings,
     });
-  }
-
-  /**
-   * A blocked Mark complete's "Go to point n" (the rail's number): the point
-   * opens as a row click on it would, from the overview by way of the full
-   * screen it opens on (`openOnPointId`).
-   */
-  function goToPointNumber(pointNumber: number) {
-    const point = points.find(
-      (p) => p.status !== "deleted" && p.pointIndex + 1 === pointNumber,
-    );
-    if (!point) return;
-    if (overview) {
-      openOnPointId.current = point.id;
-      chooseLayout("black");
-    } else {
-      findGap(point.id);
-    }
   }
 
   /**
@@ -2122,15 +2108,19 @@ export function LabelConsole({
       setPlacement(NO_PLACEMENT);
       if (film === null) seekToPointStart(point);
     }
-    if (film && player.current) {
-      const handle = player.current;
-      replay.current = runReplay(film, {
-        seekTo: (at) => handle.seekTo(at),
-        play: () => handle.play(),
-        pause: () => handle.pause(),
-        clock,
-      });
-    }
+    if (film) playFilmWindow(film);
+  }
+
+  /** A stretch of film played once, as a landing's replay. */
+  function playFilmWindow(film: ReplayWindow) {
+    if (!player.current) return;
+    const handle = player.current;
+    replay.current = runReplay(film, {
+      seekTo: (at) => handle.seekTo(at),
+      play: () => handle.play(),
+      pause: () => handle.pause(),
+      clock,
+    });
   }
 
   /**
@@ -2926,6 +2916,7 @@ export function LabelConsole({
   const toggleOpenPointCheck = useRef<() => void>(() => {});
   // `]` and `[`: the next and previous amber flag, as the header's amber list
   // does; `'` and `;`, the two keys under them, the same for the grey list.
+  const unforcedKey = useRef<() => boolean>(() => false);
   const stepToFlag = useRef<
     (direction: 1 | -1, kind: "score" | "data") => void
   >(() => {});
@@ -3038,6 +3029,133 @@ export function LabelConsole({
     session.matchScore,
     slotJumpStops,
   ]);
+  // What Mark complete would list. Memoised: the console re-renders on every
+  // film tick while it plays.
+  const sessionWarnings = useMemo(
+    () =>
+      completeWarnings({
+        points,
+        adScoring,
+        marks: liveMarks,
+        finalScore: sessionFields.finalScore,
+        videoEndsEarly: sessionFields.videoEndsEarly,
+        matchScore: session.matchScore,
+        games: scores.games,
+        names,
+        matchTiebreakSet: matchTiebreakSetNumber,
+        startScore,
+      }),
+    [
+      points,
+      adScoring,
+      liveMarks,
+      sessionFields.finalScore,
+      sessionFields.videoEndsEarly,
+      session.matchScore,
+      scores.games,
+      names,
+      matchTiebreakSetNumber,
+      startScore,
+    ],
+  );
+  // Forced or unforced, asked once nothing is left that can move the score
+  // (`errorMarkingReady`), or sooner when the labeller says "Mark now". A third
+  // list after the amber one: `]` and `[` carry on into it (`bracketStops`).
+  const errorsToMark = useMemo(() => errorStops(points), [points]);
+  const errorTotal = useMemo(
+    () => points.filter(isMarkableError).length,
+    [points],
+  );
+  const [errorsOpened, setErrorsOpened] = useState(false);
+  const [errorPromptClosed, setErrorPromptClosed] = useState(false);
+  const [errorsFinished, setErrorsFinished] = useState(false);
+  const [askedErrorPointId, setAskedErrorPointId] = useState<string | null>(
+    null,
+  );
+  const errorsReady = errorMarkingReady(
+    flagStops.score.length,
+    sessionWarnings,
+  );
+  const errorsShown =
+    operable && errorsToMark.length > 0 && (errorsReady || errorsOpened);
+  const errorPointIds = useMemo(
+    () => new Set(errorsShown ? errorsToMark.map((stop) => stop.pointId) : []),
+    [errorsShown, errorsToMark],
+  );
+  // The question stands while its point is open, still unmarked, and its
+  // missed stroke is the selected one: selecting anything else leaves it.
+  const askedErrorShotId =
+    operable &&
+    expanded &&
+    expanded.id === askedErrorPointId &&
+    expanded.errorKind == null &&
+    placement.shotId !== null &&
+    errorKindShotId(expanded) === placement.shotId
+      ? placement.shotId
+      : null;
+
+  /**
+   * Land on an error to ask about: the point open, its missed stroke selected,
+   * and the film playing its last two strokes once, since the shot before the
+   * miss is what decides it.
+   */
+  function goToError(pointId: string) {
+    const point = points.find((p) => p.id === pointId);
+    const shotId = point ? errorKindShotId(point) : null;
+    if (!point || shotId === null) return;
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.closest?.(JUMP_BLURS_SELECTOR)) active.blur();
+    lastFlagPointId.current = pointId;
+    setErrorPromptClosed(true);
+    setErrorsFinished(false);
+    setAskedErrorPointId(pointId);
+    findGap(pointId);
+    setFoldedPointId(null);
+    selectShot(shotId, undefined, { seek: false });
+    const ghosts = drawsGhosts(liveMarks);
+    const strokes = liveShotsInOrder(point, ghosts);
+    const at = strokes.findIndex((shot) => shot.id === shotId);
+    const film = replayWindow(
+      point,
+      {
+        fromShotId: strokes[Math.max(0, at - 1)]?.id ?? shotId,
+        toShotId: shotId,
+      },
+      points,
+      ghosts,
+    );
+    if (film) playFilmWindow(film);
+  }
+
+  /** The asked error answered: marked, and on to the next one still to mark. */
+  function answerError(kind: LabelErrorKind) {
+    if (!expanded) return;
+    void patchPoint(expanded.id, { error_kind: kind });
+    const rest = errorsToMark.filter((stop) => stop.pointId !== expanded.id);
+    const next = stepFlag(rest, points, expanded.id, 1);
+    if (next) {
+      goToError(next.pointId);
+    } else {
+      stopReplay();
+      setAskedErrorPointId(null);
+      setErrorsFinished(true);
+    }
+  }
+
+  /** "Start", "Mark 50 errors", "Mark now": the first error still to mark. */
+  function startMarkingErrors() {
+    const first = errorsToMark[0];
+    if (!first) return;
+    setErrorsOpened(true);
+    if (overview) {
+      openToMarkError.current = true;
+      openOnPointId.current = first.pointId;
+      chooseLayout("black");
+    } else {
+      goToError(first.pointId);
+    }
+  }
+
   useEffect(() => {
     unfoldOpenPoint.current = () => {
       if (confirm || !expanded) return;
@@ -3054,6 +3172,14 @@ export function LabelConsole({
         currentPointId,
         points,
       );
+      // With no amber stop open, `]` and `[` carry on into the errors to mark.
+      if (kind === "score" && flagStops.score.length === 0) {
+        const error = errorsShown
+          ? stepFlag(errorsToMark, points, from, direction)
+          : null;
+        if (error) goToError(error.pointId);
+        return;
+      }
       const flag = stepFlag(flagStops[kind], points, from, direction);
       if (!flag) return;
       lastFlagPointId.current = flag.pointId;
@@ -3248,12 +3374,33 @@ export function LabelConsole({
     // is not taken. The write is the pair's own point patch.
     errorKindKey.current = () => {
       if (!operable || confirm || placement.shotId === null) return false;
+      // While the rail is asking, E says forced outright and moves on.
+      if (askedErrorShotId !== null) {
+        answerError("forced");
+        return true;
+      }
       const owner = pointOfShot(points, placement.shotId);
       if (!owner) return false;
       if (expanded && owner.id !== expanded.id) return false;
       const patch = errorKindKeyPatch(owner, placement.shotId);
       if (!patch) return false;
       void patchPoint(owner.id, patch);
+      return true;
+    };
+    // U, on the stroke E answers on: unforced outright, and on while asked.
+    unforcedKey.current = () => {
+      if (!operable || confirm || placement.shotId === null) return false;
+      if (askedErrorShotId !== null) {
+        answerError("unforced");
+        return true;
+      }
+      const owner = pointOfShot(points, placement.shotId);
+      if (!owner) return false;
+      if (expanded && owner.id !== expanded.id) return false;
+      if (errorKindShotId(owner) !== placement.shotId) return false;
+      if (owner.errorKind !== "unforced") {
+        void patchPoint(owner.id, { error_kind: "unforced" });
+      }
       return true;
     };
     strokeKey.current = (key) => {
@@ -3292,7 +3439,14 @@ export function LabelConsole({
       player.current?.play();
     };
     stepFilmRef.current = stepFilm;
-    jumpAfterOpen.current = (pointId) => findGap(pointId);
+    jumpAfterOpen.current = (pointId) => {
+      if (openToMarkError.current) {
+        openToMarkError.current = false;
+        goToError(pointId);
+      } else {
+        findGap(pointId);
+      }
+    };
     foldOpenPoint.current = () => {
       if (confirm || !expanded || unfoldedPointId !== expanded.id) return false;
       setFoldedPointId(expanded.id);
@@ -3405,13 +3559,15 @@ export function LabelConsole({
                   ? () => timeKey.current()
                   : isErrorKindKey(key) && !event.shiftKey
                     ? () => errorKindKey.current()
-                    : lower === "r"
-                      ? event.shiftKey
-                        ? () => resetPointKey.current()
-                        : () => resetShotKey.current()
-                      : key === "Delete" || key === "Backspace"
-                        ? () => deleteShotKey.current()
-                        : null;
+                    : isUnforcedKey(key) && !event.shiftKey
+                      ? () => unforcedKey.current()
+                      : lower === "r"
+                        ? event.shiftKey
+                          ? () => resetPointKey.current()
+                          : () => resetShotKey.current()
+                        : key === "Delete" || key === "Backspace"
+                          ? () => deleteShotKey.current()
+                          : null;
       if (
         consoleKey &&
         !event.metaKey &&
@@ -3840,20 +3996,32 @@ export function LabelConsole({
   );
   // The review step, noted in the rail under the stroke it is about.
   const reviewInline =
-    expanded && inlineAnchor
+    expanded && askedErrorShotId !== null
       ? {
           pointId: expanded.id,
-          afterShotId: inlineAnchor.shotId,
+          afterShotId: askedErrorShotId,
           node: (
-            <ReviewNote
-              step={step}
-              anchor={inlineAnchor}
-              placement={placement}
-              count={step ? stepCount(keptOpened, step) : null}
+            <LabelErrorQuestion
+              index={errorTotal - errorsToMark.length + 1}
+              total={errorTotal}
+              onAnswer={answerError}
             />
           ),
         }
-      : null;
+      : expanded && inlineAnchor
+        ? {
+            pointId: expanded.id,
+            afterShotId: inlineAnchor.shotId,
+            node: (
+              <ReviewNote
+                step={step}
+                anchor={inlineAnchor}
+                placement={placement}
+                count={step ? stepCount(keptOpened, step) : null}
+              />
+            ),
+          }
+        : null;
   const rail = (
     <LabelBlackRail
       tone={fullScreen ? "dark" : "light"}
@@ -3930,6 +4098,40 @@ export function LabelConsole({
       onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
       onFindGap={operable ? railHandlers.findGap : undefined}
       onGoToPoint={railHandlers.goToFlag}
+      errorCount={
+        errorsShown ? (
+          <LabelErrorCount
+            count={errorsToMark.length}
+            nextPointNumber={
+              (
+                stepFlag(errorsToMark, points, currentPointId, 1) ??
+                errorsToMark[0]
+              ).pointNumber
+            }
+            onNext={() => {
+              const next = stepFlag(errorsToMark, points, currentPointId, 1);
+              if (next) goToError(next.pointId);
+            }}
+            keyed={flagStops.score.length === 0}
+          />
+        ) : null
+      }
+      errorStrip={
+        errorsShown && errorsReady && !errorPromptClosed ? (
+          <LabelErrorPrompt
+            count={errorsToMark.length}
+            onStart={startMarkingErrors}
+            onDismiss={() => setErrorPromptClosed(true)}
+          />
+        ) : errorsFinished && errorsToMark.length === 0 && errorTotal > 0 ? (
+          <LabelErrorsDone
+            total={errorTotal}
+            onDismiss={() => setErrorsFinished(false)}
+          />
+        ) : null
+      }
+      errorPointIds={errorPointIds}
+      errorAskedShotId={askedErrorShotId}
     />
   );
 
@@ -4067,18 +4269,9 @@ export function LabelConsole({
           finalScore={sessionFields.finalScore}
           matchScore={session.matchScore}
           videoEndsEarly={sessionFields.videoEndsEarly}
-          warnings={completeWarnings({
-            points,
-            adScoring,
-            marks: liveMarks,
-            finalScore: sessionFields.finalScore,
-            videoEndsEarly: sessionFields.videoEndsEarly,
-            matchScore: session.matchScore,
-            games: scores.games,
-            names,
-            matchTiebreakSet: matchTiebreakSetNumber,
-            startScore,
-          })}
+          warnings={sessionWarnings}
+          errorsReady={errorsReady}
+          onMarkErrors={operable ? startMarkingErrors : undefined}
           complete={status === "complete"}
           upload={upload}
           onAdScoringChange={
@@ -4117,9 +4310,9 @@ export function LabelConsole({
           names={names}
           onCancel={() => setConfirm(null)}
           onConfirm={confirmed}
-          onGoToPoint={goToPointNumber}
           onAlternative={(question) => {
             setConfirm(null);
+            if (question.kind === "complete-session") startMarkingErrors();
             if (question.kind === "serve-hitter") {
               void patchShot(question.shotId, {
                 hitter: question.follow.hitter,

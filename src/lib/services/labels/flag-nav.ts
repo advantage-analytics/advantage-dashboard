@@ -5,6 +5,7 @@
  * rail and the console's `[` / `]` keys share one answer.
  */
 
+import { isMarkableError } from "./ending-derived";
 import type { LabelMarks } from "./marks";
 import {
   PLACEMENT_ITEM,
@@ -90,6 +91,26 @@ export function tiebreakServeStops(
     pointNumber: order.off[0].pointNumber,
     label: `${order.type === "tiebreak" ? "Tiebreak" : "Match tiebreak"} serve order is off`,
   }));
+}
+
+/** What an error stop asks, in the rail's tooltip and under its stroke. */
+export const ERROR_STOP_LABEL = "Forced or unforced?";
+
+/**
+ * Every error still to mark forced or unforced, as stops in rail order: the
+ * third list the rail steps (`isMarkableError`, what the tray's pair offers).
+ * Not a flag: nothing about it can move the score or is wrong, so it is read
+ * off the points alone and never joins `openFlags`.
+ */
+export function errorStops(points: readonly LabelPoint[]): ScoreStop[] {
+  return points
+    .filter((point) => point.errorKind == null && isMarkableError(point))
+    .map((point) => ({
+      pointId: point.id,
+      pointNumber: point.pointIndex + 1,
+      label: ERROR_STOP_LABEL,
+    }))
+    .sort((a, b) => a.pointNumber - b.pointNumber);
 }
 
 /**

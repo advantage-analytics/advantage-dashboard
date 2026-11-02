@@ -789,7 +789,7 @@ test.describe("completeWarnings", () => {
   test("the confirm's copy: warn, then allow", () => {
     expect(
       labelConfirmCopy(
-        { kind: "complete-session", warnings: [], blockers: [] },
+        { kind: "complete-session", warnings: [], unmarked: [] },
         NAMES,
       ),
     ).toEqual({
@@ -805,7 +805,7 @@ test.describe("completeWarnings", () => {
         {
           kind: "complete-session",
           warnings: ["Game 1 unfinished (15–15)"],
-          blockers: [],
+          unmarked: [],
         },
         NAMES,
       ),
@@ -816,32 +816,22 @@ test.describe("completeWarnings", () => {
     });
   });
 
-  test("errors not yet marked forced or unforced hold the publish, and the copy names them", () => {
-    const blocked = (blockers: number[]) =>
+  test("errors not yet marked never hold the publish: the copy says what it means, and offers to mark", () => {
+    const unmarked = (points: number[]) =>
       labelConfirmCopy(
-        { kind: "complete-session", warnings: [], blockers },
+        { kind: "complete-session", warnings: [], unmarked: points },
         NAMES,
       );
-    expect(blocked([31, 58, 140])).toEqual({
-      title: "Mark 3 errors before publishing",
+    expect(unmarked([31, 58, 140])).toEqual({
+      title: "Publish with 3 errors unmarked?",
       description:
-        "Every error needs forced or unforced before this match can be verified. They're points 31, 58 and 140.",
-      confirmLabel: "Publish",
+        "The athlete's match is rebuilt from these labels and shows Verified by Advantage, with plain Errors and no forced and unforced split. Any marks you made are kept, and Reopen lets you finish them and publish again.",
+      confirmLabel: "Publish anyway",
       pendingLabel: "Publishing…",
       tone: "primary",
-      blocked: { goToLabel: "Go to point 31", pointNumber: 31 },
+      alternativeLabel: "Mark errors",
     });
-    expect(blocked([31, 58])).toMatchObject({
-      title: "Mark 2 errors before publishing",
-      description:
-        "Every error needs forced or unforced before this match can be verified. They're points 31 and 58.",
-    });
-    expect(blocked([31])).toMatchObject({
-      title: "Mark 1 error before publishing",
-      description:
-        "Every error needs forced or unforced before this match can be verified. It's point 31.",
-      blocked: { goToLabel: "Go to point 31", pointNumber: 31 },
-    });
+    expect(unmarked([31]).title).toBe("Publish with 1 error unmarked?");
   });
 
   test("Reopen asks first, and says Verified by Advantage comes off", () => {
