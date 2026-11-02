@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Check, Mail } from "lucide-react";
+import { SUPPORT_EMAIL } from "@/lib/constants";
 import { teamLabel } from "@/lib/data/programs-server";
 import { openWorkspace } from "@/lib/workspace/actions";
 import {
@@ -7,6 +8,7 @@ import {
   ClaimHeading,
   ClaimActions,
   CLAIM_BUTTON,
+  CLAIM_LINK,
   CLAIM_MICRO,
 } from "@/components/claim/claim-shell";
 
@@ -28,6 +30,13 @@ export const metadata = { title: "Claim under review" };
  * panel. Two ticks and one dot say more about the shape of the wait than a
  * paragraph does, and the answer to "what can I do right now" is not off to one
  * side.
+ *
+ * The wording must not read as a refusal. Matching is exact against a scraped
+ * staff list, so real coaches land here every day: UGA's assistant was recorded
+ * at `sport.uga.edu` and writes from `sports.uga.edu`, and took "isn't on the
+ * recorded staff list" for a rejection on a live demo. So this says what is
+ * happening and why it is routine, and names who to ask for video sooner. The
+ * review is ours, too: nobody contacts the school.
  */
 export default async function ClaimUnderReviewPage({
   searchParams,
@@ -61,9 +70,9 @@ export default async function ClaimUnderReviewPage({
       <ClaimHeading
         gap={6}
         eyebrow={eyebrow || undefined}
-        title={`We're confirming this with ${schoolName}`}
+        title="Your program is open while we check your address"
         titlePadTop={4}
-        body="Your address isn't on the recorded staff list, so a person checks it. You can set the program up in the meantime."
+        body={`Someone on our team checks any address we can't match to ${schoolName}'s staff page. Those pages go out of date, so this doesn't mean anything is wrong. Everything except sending video works now.`}
         bodyMax="58ch"
       />
 
@@ -130,7 +139,12 @@ export default async function ClaimUnderReviewPage({
             </>
           ) : (
             <>We&#39;ll email you either way.</>
-          )}
+          )}{" "}
+          Need video sooner? Write to{" "}
+          <a href={`mailto:${SUPPORT_EMAIL}`} className={CLAIM_LINK}>
+            {SUPPORT_EMAIL}
+          </a>
+          .
         </span>
       </ClaimActions>
     </ClaimShell>
