@@ -14,13 +14,19 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { EmptyMark } from "@/components/ui/empty-mark";
-import type { FormBar, FormBarMatch } from "@/lib/data/form-bar";
+import type { FormBar, FormBarMatch, FormResult } from "@/lib/data/form-bar";
 import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { playedSets } from "@/lib/ui/score-format";
 
 const BAR_SLOT = "flex h-7 w-[5.5px] items-center justify-center";
 
+const BAR_HIT = `group/bar pointer-events-auto touch:pointer-events-none ${BAR_SLOT}`;
+
 const BAR = `${FORM_TICK} h-3 transition-[opacity,height] duration-[var(--duration-hover)] group-hover/bar:h-4 group-hover/bar:!opacity-100 group-hover/form:opacity-40`;
+
+function FormBarMark({ result }: { result: FormResult }) {
+  return <span className={BAR} style={{ background: formTickColor(result) }} />;
+}
 
 function barLabel(bar: FormBar): string {
   const outcome =
@@ -89,22 +95,13 @@ export function FormStrip({
                     aria-label={barLabel(bar)}
                     data-own-hover
                     onClick={(event) => event.stopPropagation()}
-                    className={`group/bar pointer-events-auto touch:pointer-events-none ${BAR_SLOT}`}
+                    className={BAR_HIT}
                   >
-                    <span
-                      className={BAR}
-                      style={{ background: formTickColor(bar.result) }}
-                    />
+                    <FormBarMark result={bar.result} />
                   </Link>
                 ) : (
-                  <span
-                    aria-hidden
-                    className={`group/bar pointer-events-auto touch:pointer-events-none ${BAR_SLOT}`}
-                  >
-                    <span
-                      className={BAR}
-                      style={{ background: formTickColor(bar.result) }}
-                    />
+                  <span aria-hidden className={BAR_HIT}>
+                    <FormBarMark result={bar.result} />
                   </span>
                 )}
               </TooltipTrigger>

@@ -1,6 +1,5 @@
 import { EmptyMark } from "@/components/ui/empty-mark";
-
-type FormResult = "win" | "loss" | "pending";
+import type { FormResult } from "@/lib/data/form-bar";
 
 /** A tick's width and radius; each caller sets its height. */
 export const FORM_TICK = "w-[2.5px] rounded-[1px]";

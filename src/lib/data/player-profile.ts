@@ -5,9 +5,8 @@ import {
   presentPairs,
   statKey,
 } from "@/lib/data/aggregate";
-import { formResult, formVersus, type FormBar } from "@/lib/data/form-bar";
+import { playerFormBar, type FormBar } from "@/lib/data/form-bar";
 import { PLAYER_MEASURES } from "@/lib/data/player-measures";
-import { scoreSetsFrom } from "@/lib/ui/score-format";
 import type { KpiFormat } from "@/lib/data/performance-server";
 import type { MatchScore } from "@/lib/data/match-utils";
 
@@ -378,16 +377,15 @@ function slotRank(slot: string): [number, number, string] {
 
 /** One result as a form bar, from this player's side of the score. */
 export function profileFormBar(result: ProfileResult): FormBar {
-  return {
-    result: formResult(result.won),
-    match: {
-      id: result.id,
-      date: result.date,
-      sets: scoreSetsFrom(result.score, { swap: !result.isPlayer1 }),
-      event: result.tournamentName?.trim() || null,
-      person: formVersus(result.opponentName),
-    },
-  };
+  return playerFormBar({
+    id: result.id,
+    date: result.date,
+    score: result.score,
+    isPlayer1: result.isPlayer1,
+    won: result.won,
+    event: result.tournamentName,
+    opponent: result.opponentName,
+  });
 }
 
 /**

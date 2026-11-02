@@ -4,7 +4,8 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { opponentFormBars } from "@/components/dashboard/opponents/opponent-form-links";
-import type { FormBar } from "@/lib/data/form-bar";
+import { playerFormBar, type FormBar } from "@/lib/data/form-bar";
+import { UNKNOWN_OPPONENT_NAME } from "@/lib/data/personal-opponents";
 import { opponentRowControl } from "@/components/dashboard/opponents/opponents-table-layout";
 import type {
   PersonalOpponentForm,
@@ -224,6 +225,37 @@ test.describe("the form bars", () => {
     expect(barLinks(html)).toHaveLength(0);
     expect(html.match(/bg-\[var\(--ink-100\)\]/g)).toHaveLength(5);
     expect(html).toContain("No form yet");
+  });
+});
+
+test.describe("playerFormBar", () => {
+  const match = {
+    id: "m",
+    date: "2026-10-12",
+    score: { player1: [4, 3], player2: [6, 6] },
+    won: false,
+    event: " Regionals ",
+    opponent: "Daniel Reyes",
+  };
+
+  test("states the score from the player's own side, in either seat", () => {
+    const seatOne = playerFormBar({ ...match, isPlayer1: true });
+    const seatTwo = playerFormBar({ ...match, isPlayer1: false, won: true });
+    expect(seatOne.result).toBe("loss");
+    expect(seatOne.match.sets[0]).toMatchObject({ player1: 4, player2: 6 });
+    expect(seatTwo.result).toBe("win");
+    expect(seatTwo.match.sets[0]).toMatchObject({ player1: 6, player2: 4 });
+  });
+
+  test("names the opponent, and nobody when the match does not", () => {
+    const named = playerFormBar({ ...match, isPlayer1: true });
+    expect(named.match.person).toBe("vs Daniel Reyes");
+    expect(named.match.event).toBe("Regionals");
+    for (const opponent of [null, "  ", "Unknown", UNKNOWN_OPPONENT_NAME]) {
+      expect(
+        playerFormBar({ ...match, isPlayer1: true, opponent }).match.person,
+      ).toBeNull();
+    }
   });
 });
 
