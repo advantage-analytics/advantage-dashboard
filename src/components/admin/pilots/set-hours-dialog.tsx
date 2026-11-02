@@ -14,6 +14,7 @@ import {
 import { capLabel, parseHours } from "@/lib/data/admin-pilots-view";
 import { setVideoHours } from "@/lib/services/programs/admin-pilot-actions";
 import { advField } from "@/lib/ui/adv-field";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { cn } from "@/lib/utils";
 
 /**
@@ -53,7 +54,9 @@ export function SetHoursDialog({
     setProblem(null);
     setActing(hours === null ? "clear" : "set");
     startSaving(async () => {
-      const result = await setVideoHours(account.id, hours);
+      const result = await setVideoHours(account.id, hours).catch(
+        actionRejected,
+      );
       if (!result.ok) {
         setProblem(result.error);
         setActing(null);

@@ -7,6 +7,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { DialogProblem } from "@/components/ui/dialog-problem";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import {
   approveClaim,
@@ -90,8 +91,8 @@ export function ApprovePilotPopover({
         kind === "approve"
           ? // No reviewer note from this surface: the popover asks one
             // question and the approval email carries no note field anyway.
-            await approveClaim(target.claimId)
-          : await rejectClaim(target.claimId);
+            await approveClaim(target.claimId).catch(actionRejected)
+          : await rejectClaim(target.claimId).catch(actionRejected);
       if (!result.ok) {
         setError(result.error);
         setActing(null);

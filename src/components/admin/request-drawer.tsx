@@ -25,6 +25,7 @@ import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatePill } from "@/components/ui/state-pill";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { shortDate } from "@/lib/data/match-utils";
@@ -174,7 +175,7 @@ export function RequestDrawer({
   const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
     start(async () => {
       setError(null);
-      const result = await action();
+      const result = await action().catch(actionRejected);
       if (!result.ok) {
         setError(result.error ?? "That didn't go through.");
         return;
@@ -721,7 +722,9 @@ function EmailCheckSection({
   const issue = (copy: boolean) => {
     start(async () => {
       setProblem(null);
-      const result = await sendClaimVerification(claim.claimId);
+      const result = await sendClaimVerification(claim.claimId).catch(
+        actionRejected,
+      );
       if (!result.ok) {
         setProblem(result.error);
         return;
@@ -841,7 +844,9 @@ function NoteField({
           onClick={() =>
             start(async () => {
               setProblem(null);
-              const result = await saveClaimNote(claimId, value);
+              const result = await saveClaimNote(claimId, value).catch(
+                actionRejected,
+              );
               if (!result.ok) setProblem(result.error);
             })
           }

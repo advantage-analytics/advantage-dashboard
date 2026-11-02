@@ -50,10 +50,22 @@ export async function serveHarness(
           alias: {
             "@/lib/services/programs/admin-team-actions$": ACTIONS,
             "@/lib/services/programs/admin-conference-actions$": ACTIONS,
+            "@/lib/services/programs/admin-conference-crest-actions$": ACTIONS,
+            "@/lib/services/programs/admin-actions$": ACTIONS,
+            "@/lib/services/programs/admin-program-actions$": ACTIONS,
+            "@/lib/data/admin-search-server$": ACTIONS,
+            "@/app/admin/labels/actions$": ACTIONS,
+            "@/components/admin/teams-actions$": ACTIONS,
+            "@/app/admin/seen-actions$": ACTIONS,
             "@/components/dashboard/settings/team-actions$": ACTIONS,
             // By file: `add-self-dialog` reaches this one with a relative import.
             [resolve("src/components/dashboard/team/roster-actions.ts")]:
               ACTIONS,
+            // Behind `match-drawer`, whose frame the conference drawer borrows.
+            [resolve(
+              "src/components/dashboard/matches/match-detail/report-issue-actions.ts",
+            )]: ACTIONS,
+            [resolve("src/lib/schedule/attach-line.ts")]: ACTIONS,
             "@/lib/posthog-client$": resolve(
               "tests/fixtures/posthog-client-browser-mock.ts",
             ),
@@ -83,7 +95,8 @@ export async function serveHarness(
     }
     response.setHeader("content-type", "text/html; charset=utf-8");
     response.end(
-      '<!doctype html><html><body><div id="root"></div><script src="/bundle.js"></script></body></html>',
+      // `next/image`, behind the drawer frame, reads `process.env` as it loads.
+      '<!doctype html><html><body><div id="root"></div><script>window.process={env:{}}</script><script src="/bundle.js"></script></body></html>',
     );
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
@@ -103,9 +116,10 @@ export async function openHarness(
   page: Page,
   origin: string,
   errors: string[],
+  path = "/",
 ) {
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto(`${origin}/`);
+  await page.goto(`${origin}${path}`);
   await expect
     .poll(() => page.locator("html").getAttribute("data-hydrated"))
     .toBe("true");

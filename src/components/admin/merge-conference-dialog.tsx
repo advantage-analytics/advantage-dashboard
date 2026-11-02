@@ -21,6 +21,7 @@ import { ConferenceMark } from "@/components/admin/conference-mark";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 import { mergeConferences } from "@/lib/services/programs/admin-conference-actions";
 import type { AdminConferenceRow } from "@/lib/data/admin-conferences-view";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
@@ -142,7 +143,9 @@ export function MergeConferenceDialog({
     const into = target;
     setProblem(null);
     startMerging(async () => {
-      const result = await mergeConferences(source.id, into.id);
+      const result = await mergeConferences(source.id, into.id).catch(
+        actionRejected,
+      );
       if (!result.ok) {
         setProblem(result.error);
         return;

@@ -5,6 +5,7 @@ import { AlertCircle } from "lucide-react";
 
 import { AdminPage } from "@/components/admin/admin-page";
 import { advButton } from "@/lib/ui/adv-button";
+import { useReportBoundaryError } from "@/lib/ui/report-boundary-error";
 
 /**
  * The admin area's error boundary.
@@ -28,6 +29,7 @@ export default function AdminError({
   useEffect(() => {
     console.error("[admin] page error", error);
   }, [error]);
+  useReportBoundaryError(error);
 
   return (
     <AdminPage>

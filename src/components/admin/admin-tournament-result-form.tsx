@@ -1,6 +1,7 @@
 "use client";
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { emptyScore } from "@/lib/admin/results/dual-form";
@@ -148,7 +149,10 @@ export function AdminTournamentResultForm({
           tournament: loaded.context.tournament,
           score: emptyScore(loaded.context.tournament.bestOf),
         });
-      } catch {
+      } catch (error) {
+        // Rethrows navigation and reports a real failure. The sentence stays:
+        // the operation id makes a retry the way back to a saved result.
+        actionRejected(error);
         setError("We couldn’t load this tournament. Choose it again to retry.");
       }
     });
@@ -175,7 +179,10 @@ export function AdminTournamentResultForm({
           return;
         }
         setResponse(result);
-      } catch {
+      } catch (error) {
+        // Rethrows navigation and reports a real failure. The sentence stays:
+        // the operation id makes a retry the way back to a saved result.
+        actionRejected(error);
         setError(
           "The response was interrupted. Retry the same operation to recover your result.",
         );

@@ -56,6 +56,7 @@ import {
   divisionLabel,
   type Division,
 } from "@/lib/data/programs-server";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
@@ -118,24 +119,30 @@ function useConferenceTeams(
     state: TeamsState;
   } | null>(null);
   const [revision, setRevision] = useState(0);
+  // A transition, though nothing reads its pending state: the admin check
+  // behind this action answers with `notFound()`, and only a transition carries
+  // that rejection to Next's boundary. From a bare promise it goes nowhere.
+  const [, startLoading] = useTransition();
 
   useEffect(() => {
     let stale = false;
 
-    loadConferenceTeams(conferenceId)
-      // The action itself rejecting (network, a thrown auth check) is the
-      // same failure — without this the section would sit on "Loading teams…"
-      // for good.
-      .catch(() => ({ ok: false, error: LOAD_TEAMS_ERROR }) as const)
-      .then((result) => {
-        if (stale) return;
-        setLoaded({
-          id: conferenceId,
-          state: result.ok
-            ? { status: "ready", teams: result.teams }
-            : { status: "error", error: result.error },
-        });
+    startLoading(async () => {
+      const result = await loadConferenceTeams(conferenceId).catch((error) => {
+        // Rethrows navigation and reports a real failure, but the section keeps
+        // its own sentence: this is a read, so "whether the change was saved"
+        // would make no sense here.
+        actionRejected(error);
+        return { ok: false, error: LOAD_TEAMS_ERROR } as const;
       });
+      if (stale) return;
+      setLoaded({
+        id: conferenceId,
+        state: result.ok
+          ? { status: "ready", teams: result.teams }
+          : { status: "error", error: result.error },
+      });
+    });
 
     return () => {
       stale = true;
@@ -261,7 +268,7 @@ export function ConferenceDrawer({
         shortName: sent.shortName,
         division: sent.division,
         website: sent.website,
-      });
+      }).catch(actionRejected);
       // The drawer has stepped to another conference: this reply's fields and
       // error belong to `savedId`, not to the one on screen.
       const stillHere = currentId.current === savedId;
@@ -294,7 +301,7 @@ export function ConferenceDrawer({
   const remove = () => {
     startDeleting(async () => {
       setDeleteError(null);
-      const result = await deleteConference(row.id);
+      const result = await deleteConference(row.id).catch(actionRejected);
       if (!result.ok) {
         // The RPC's own sentence ("This conference still has N teams — …").
         setDeleteError(result.error);
