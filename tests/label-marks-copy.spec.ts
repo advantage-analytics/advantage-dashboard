@@ -73,7 +73,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   first_serve_fault_alone: {},
   serve_in_landing_out: { shotId: "s-1", landing: "out" },
   serve_after_serve_in: { shotId: "s-2" },
-  placement_missing: { shotId: "s-1", stroke: "serve" },
+  placement_missing: { shotId: "s-1", stroke: "serve", missing: "landing" },
   pick_winner: {},
   net_hit_contradicts_height: {},
   phantom_strokes_dropped: { eventIds: [41], hitter: "p2" },

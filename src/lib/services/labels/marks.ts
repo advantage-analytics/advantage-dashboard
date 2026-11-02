@@ -203,6 +203,9 @@ export function isLabelMarkCode(value: string): value is LabelMarkCode {
 
 type NoParams = Record<string, never>;
 
+/** Which end of a stroke "Shot placement" is asking for. */
+export type PlacementGap = "contact" | "landing" | "both";
+
 /** What each mark carries for its hover line. Sides, never names. */
 export interface LabelMarkParams {
   winner_disputed: { scoreWinner: LabelSide; lastStrokeWinner: LabelSide };
@@ -257,7 +260,11 @@ export interface LabelMarkParams {
   /** The serve that follows a serve in play — where "Split here" cuts. */
   serve_after_serve_in: { shotId: string };
   /** The stroke to place, and what the gap costs: see `markHover`. */
-  placement_missing: { shotId: string; stroke: "serve" | "return" | "shot" };
+  placement_missing: {
+    shotId: string;
+    stroke: "serve" | "return" | "shot";
+    missing: PlacementGap;
+  };
   net_hit_contradicts_height: NoParams;
   phantom_strokes_dropped: {
     /** The rally's strokes the transcript has no shot for. */
