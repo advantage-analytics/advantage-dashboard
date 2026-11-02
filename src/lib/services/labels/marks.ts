@@ -72,6 +72,8 @@ export const LABEL_ONLY_FLAGS = {
   SHOT_AFTER_POINT_END: "shot_after_point_end",
   /** The stored ending is not what the point's strokes now derive. */
   ENDING_STALE: "ending_stale",
+  /** The stored ending cannot be true of the winner, and the strokes agree with it. */
+  ENDING_CONTRADICTS_WINNER: "ending_contradicts_winner",
   /** A first serve that follows a faulted serve of the same point. */
   SECOND_SERVE_AS_FIRST: "second_serve_as_first",
   /** The point's last stroke has no landing, and it is not marked unclear. */
@@ -150,6 +152,10 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SHOT_AFTER_POINT_END]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.ENDING_STALE]: { tier: "hint", scope: "point" },
+  [LABEL_ONLY_FLAGS.ENDING_CONTRADICTS_WINNER]: {
+    tier: "hint",
+    scope: "point",
+  },
   [LABEL_ONLY_FLAGS.SECOND_SERVE_AS_FIRST]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.LAST_LANDING_MISSING]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_AFTER_SERVE_IN]: { tier: "hint", scope: "shot" },
@@ -233,6 +239,13 @@ export interface LabelMarkParams {
     endedBy: LabelSide | null;
     /** Who the rows say won; null when they do not settle it. */
     winner: LabelSide | null;
+  };
+  /** The point as stored, for the sentence: nothing here derives a fix. */
+  ending_contradicts_winner: {
+    ending: LabelEnding;
+    endedBy: LabelSide | null;
+    winner: LabelSide;
+    server: LabelSide | null;
   };
   /** The serve typed as a first serve that follows a faulted one. */
   second_serve_as_first: { shotId: string };

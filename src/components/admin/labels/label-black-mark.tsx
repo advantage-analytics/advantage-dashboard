@@ -18,6 +18,7 @@ import {
 } from "@/lib/services/labels/marks-copy";
 import {
   drawsGhosts,
+  endingContradiction,
   endingStale,
   hoverLine,
   lastCallAnswer,
@@ -333,6 +334,7 @@ export function pointHints(
   const live: (LabelMark | null)[] = [
     pointEndedEarly(point, ghosts),
     endingStale(point, ghosts),
+    endingContradiction(point, ghosts),
     secondServeAsFirst(point, ghosts),
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
