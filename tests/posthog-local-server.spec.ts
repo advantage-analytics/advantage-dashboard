@@ -35,19 +35,31 @@ test("`next dev` is left to isPostHogOffInDev", () => {
 });
 
 test("getPostHogServerConfig is null on a local production server", () => {
-  const saved = { ...process.env };
+  // Restore only the keys this test touches: swapping in a copy of the whole
+  // object would replace Node's env with a plain one for every later spec the
+  // worker runs.
+  const env: Record<string, string | undefined> = process.env;
+  const keys = [
+    "NODE_ENV",
+    "VERCEL",
+    "NEXT_PUBLIC_POSTHOG_IN_DEV",
+    "NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN",
+    "NEXT_PUBLIC_POSTHOG_HOST",
+  ];
+  const saved = keys.map((key) => [key, env[key]] as const);
   try {
-    Object.assign(process.env, {
-      NODE_ENV: "production",
-      NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: "phc_test",
-      NEXT_PUBLIC_POSTHOG_HOST: "https://us.i.posthog.com",
-    });
-    delete process.env.VERCEL;
-    delete process.env.NEXT_PUBLIC_POSTHOG_IN_DEV;
+    env.NODE_ENV = "production";
+    env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = "phc_test";
+    env.NEXT_PUBLIC_POSTHOG_HOST = "https://us.i.posthog.com";
+    delete env.VERCEL;
+    delete env.NEXT_PUBLIC_POSTHOG_IN_DEV;
     expect(getPostHogServerConfig()).toBeNull();
-    process.env.VERCEL = "1";
+    env.VERCEL = "1";
     expect(getPostHogServerConfig()).not.toBeNull();
   } finally {
-    process.env = saved;
+    for (const [key, value] of saved) {
+      if (value === undefined) delete env[key];
+      else env[key] = value;
+    }
   }
 });
