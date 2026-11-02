@@ -14,6 +14,7 @@ import {
 } from "@/lib/data/match-analysis";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { EmptyMark } from "@/components/ui/empty-mark";
+import { FormStrip } from "@/components/dashboard/shared/form-strip";
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
 import { recordLabel } from "@/lib/data/player-profile";
 import { PlayerMark } from "@/components/ui/player-mark";
@@ -545,6 +546,8 @@ function MemberRow({
            opaque and shadowed — so it must not take the hover tint the
            pointer sitting on top of it would otherwise give it. */
         !lifted && "hover:bg-[var(--surface-muted)]",
+        /* A form bar has a hover of its own, so one hover shows at a time. */
+        !selected && "[&:has([data-own-hover]:hover)]:bg-transparent",
         selected && !inLineupMode && "bg-[var(--surface-muted)]",
         /* One outline, two weights of it.
 
@@ -632,7 +635,11 @@ function MemberRow({
 
       <Record wins={member.wins} losses={member.losses} />
       <span className={cn(COL.form, "flex items-center gap-[3px]")}>
-        <FormTicks form={member.form} slots={5} />
+        {inLineupMode ? (
+          <FormTicks form={member.form.map((bar) => bar.result)} slots={5} />
+        ) : (
+          <FormStrip bars={member.form} slots={5} />
+        )}
       </span>
       <LastMatchCell member={member} yielding={offersMerge} />
 

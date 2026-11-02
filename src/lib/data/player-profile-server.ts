@@ -45,7 +45,9 @@ import {
   type ProfileKpi,
   type ProfileResult,
   type ProfileStatRow,
+  profileFormBar,
 } from "@/lib/data/player-profile";
+import type { FormBar } from "@/lib/data/form-bar";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 import { enrichMatches } from "@/lib/data/matches-page-server";
 import {
@@ -128,7 +130,7 @@ export interface PlayerProfile {
   losses: number;
   duals: { wins: number; losses: number };
   /** Oldest first, at most five. Unscored matches are left out. */
-  form: ("win" | "loss")[];
+  form: FormBar[];
   kpis: ProfileKpi[];
   /** Any stats row on this player's side — what turns the empty strip real. */
   hasStats: boolean;
@@ -536,7 +538,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
       .filter((r) => r.won !== null)
       .slice(0, RECENT_WINDOW)
       .reverse()
-      .map((r) => (r.won ? ("win" as const) : ("loss" as const))),
+      .map(profileFormBar),
     kpis: strip.kpis,
     hasStats: strip.hasStats,
     lastMatch,

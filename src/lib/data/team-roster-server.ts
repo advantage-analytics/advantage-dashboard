@@ -13,6 +13,7 @@ import { meanOfPresent, pct, statKey } from "@/lib/data/aggregate";
 import { ROSTER_DRAWER_MEASURES } from "@/lib/data/player-measures";
 import { canonicalRosterIds } from "@/lib/data/roster-ids";
 import { normalizedPersonName } from "@/lib/data/person-name";
+import { formResult, formVersus, type FormBar } from "@/lib/data/form-bar";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
@@ -203,7 +204,7 @@ export interface RosterMember {
    * is `"pending"` rather than left out, so its slot in the strip lines up
    * with the same match's "Analyzing"/"Review score" token in `lastMatch`.
    */
-  form: ("win" | "loss" | "pending")[];
+  form: FormBar[];
   lastMatch: RosterMatch | null;
   /** Newest first, at most `DRAWER_WINDOW`. What the drawer reads. */
   recent: RosterRecentMatch[];
@@ -280,6 +281,7 @@ interface DbMatchRow {
   player2_name: string | null;
   score: MatchScore | null;
   date: string | null;
+  tournament_name: string | null;
 }
 
 /**
@@ -396,7 +398,7 @@ export const getRosterData = cache(async function getRosterData(
       const { data, error } = await supabase
         .from("matches")
         .select(
-          "id, player1_id, player2_id, player1_name, player2_name, score, date",
+          "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name",
         )
         .eq("program_id", programId)
         // `nullsFirst` is not a detail here: Postgres puts NULLs first on a
@@ -594,13 +596,18 @@ export const getRosterData = cache(async function getRosterData(
       form: results
         .slice(0, FORM_WINDOW)
         .reverse()
-        .map((r) =>
-          r.won === null
-            ? ("pending" as const)
-            : r.won
-              ? ("win" as const)
-              : ("loss" as const),
-        ),
+        .map((r) => ({
+          result: formResult(r.won),
+          match: {
+            id: r.match.id,
+            date: r.match.date,
+            sets: scoreSetsFrom(r.match.score, { swap: !r.isPlayer1 }),
+            event: r.match.tournament_name?.trim() || null,
+            person: formVersus(
+              r.isPlayer1 ? r.match.player2_name : r.match.player1_name,
+            ),
+          },
+        })),
       lastMatch: latest
         ? {
             opponent: shortName(

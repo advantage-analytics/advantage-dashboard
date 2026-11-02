@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
-import { FormTicks } from "@/components/dashboard/shared/form-ticks";
+import { FormStrip } from "@/components/dashboard/shared/form-strip";
 import {
   DayZeroShape,
   GHOST_OPACITY,
@@ -104,7 +104,7 @@ function Row({ mover }: { mover: TopMover }) {
         {mover.name}
       </span>
       <span className="flex items-center">
-        <FormTicks form={mover.form} empty={null} />
+        <FormStrip bars={mover.form} empty={null} linked={false} />
       </span>
       <span className="grid grid-cols-[1fr_44px_40px] items-baseline gap-2.5">
         <span className="text-micro whitespace-nowrap">{mover.metric}</span>

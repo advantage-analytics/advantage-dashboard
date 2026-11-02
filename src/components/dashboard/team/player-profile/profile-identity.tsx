@@ -4,7 +4,7 @@ import { getInitials } from "@/lib/data/match-utils";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { capitalize } from "@/lib/utils";
 import { recordLabel } from "@/lib/data/player-profile";
-import { FormTicks } from "@/components/dashboard/shared/form-ticks";
+import { FormStrip } from "@/components/dashboard/shared/form-strip";
 import {
   opponentBackhandLabel,
   opponentHandLabel,
@@ -93,7 +93,7 @@ export function ProfileIdentity({
             )}
             {profile.form.length > 0 && (
               <span className="ml-1.5 flex items-center">
-                <FormTicks form={profile.form} />
+                <FormStrip bars={profile.form} />
               </span>
             )}
             {decided > 0 && (
