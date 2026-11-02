@@ -22,6 +22,7 @@ import {
 import { claimRoleLabel } from "@/lib/services/programs/claim-roles";
 import { getInitials, shortDate } from "@/lib/data/match-utils";
 import { adminResolveJoinRequest } from "@/lib/services/programs/admin-team-actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import type {
   AdminTeamClaim,
   AdminTeamJoinRequest,
@@ -71,7 +72,7 @@ export function AdminRequestsCard({
     setError(null);
     setNote(null);
     startTransition(async () => {
-      const result = await work();
+      const result = await work().catch(actionRejected);
       if (!result.ok) {
         setError(result.error);
         return;

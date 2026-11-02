@@ -1,3 +1,6 @@
+export { unstable_rethrow } from "next/dist/client/components/unstable-rethrow.browser";
+export { unstable_isUnrecognizedActionError } from "next/dist/client/components/unrecognized-action-error";
+
 declare global {
   interface Window {
     routerReplaces?: string[];
