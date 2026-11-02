@@ -6,6 +6,7 @@ import {
   CLAIM_LINK,
 } from "@/components/claim/claim-shell";
 import { ResendTimer } from "@/components/claim/resend-timer";
+import { toClaimRole } from "@/lib/services/programs/claim-roles";
 
 export const metadata = { title: "Check your email" };
 
@@ -21,12 +22,17 @@ export const metadata = { title: "Check your email" };
 export default async function CheckEmailPage({
   searchParams,
 }: {
-  searchParams: Promise<{ to?: string; program?: string }>;
+  searchParams: Promise<{ to?: string; program?: string; role?: string }>;
 }) {
-  const { to, program } = await searchParams;
+  const { to, program, role } = await searchParams;
   const email = to?.trim() || "your address";
   const programKey = program?.trim() ?? "";
-  const backHref = program ? `/claim/${program}/setup` : "/claim/program";
+  // The role survives the trip back. The form used to reset to its first
+  // option, so a coach not watching it would resubmit as head coach.
+  const claimRole = toClaimRole(role);
+  const backHref = program
+    ? `/claim/${program}/setup${claimRole ? `?role=${claimRole}` : ""}`
+    : "/claim/program";
 
   return (
     <ClaimShell width={440} gap={20} back={backHref}>

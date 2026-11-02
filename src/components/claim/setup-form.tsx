@@ -87,14 +87,23 @@ export function SetupAside() {
 export function SetupForm({
   programKey,
   program,
+  initialName = "",
+  initialEmail = "",
+  initialRole,
 }: {
   programKey: string;
   program: ClaimProgram;
+  /** The signed-in account's name, so a coach is not asked for it twice. */
+  initialName?: string;
+  /** The signed-in account's address, when it belongs to this school. */
+  initialEmail?: string;
+  /** The role picked before "Use a different address" came back here. */
+  initialRole?: string | null;
 }) {
   const router = useRouter();
-  const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<string>(CLAIM_ROLES[0].value);
-  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState(initialName);
+  const [role, setRole] = useState<string>(initialRole ?? CLAIM_ROLES[0].value);
+  const [email, setEmail] = useState(initialEmail);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   // The address the claimant chose to keep over our suggestion. Compared by
@@ -171,7 +180,8 @@ export function SetupForm({
       // being able to park an open claim on every program in the directory.
       router.push(
         `/claim/check-email?to=${encodeURIComponent(email)}` +
-          `&program=${encodeURIComponent(programKey)}`,
+          `&program=${encodeURIComponent(programKey)}` +
+          `&role=${encodeURIComponent(role)}`,
       );
     });
   }

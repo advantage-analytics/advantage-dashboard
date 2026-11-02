@@ -5,6 +5,11 @@ import {
   programSubtitle,
   CRESTS_BUCKET,
 } from "@/lib/data/programs-server";
+import { toClaimRole } from "@/lib/services/programs/claim-roles";
+import {
+  checkClaimEmail,
+  type ClaimProgram,
+} from "@/lib/services/programs/domain-match";
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { ProgramMark } from "@/components/claim/program-mark";
 import { SetupAside, SetupForm } from "@/components/claim/setup-form";
@@ -26,10 +31,13 @@ export const metadata = { title: "Set up your program" };
  */
 export default async function SetupProgramPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ programKey: string }>;
+  searchParams: Promise<{ role?: string }>;
 }) {
   const { programKey } = await params;
+  const { role } = await searchParams;
   const supabase = await createClient();
 
   // These columns are readable by anon — the same fields the browser needs
@@ -44,6 +52,35 @@ export default async function SetupProgramPage({
     .maybeSingle();
 
   if (!program) notFound();
+
+  const claimProgram: ClaimProgram = {
+    school_name: program.school_name as string,
+    primary_domain: program.primary_domain as string | null,
+    athletics_domains: program.athletics_domains as string[] | null,
+    domain_match_skips_review: program.domain_match_skips_review as boolean,
+  };
+
+  // What a signed-in coach has already told us. A blank "School email" under a
+  // session that already holds one is how a UGA assistant, signed in with their
+  // own address, sent the link to the head coach's. Offered only when it is at
+  // this school: any other address would be a wrong answer filled in for them.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const initialEmail =
+    user?.email && checkClaimEmail(user.email, claimProgram).domainMatched
+      ? user.email
+      : "";
+  const { data: profile } = user
+    ? await supabase
+        .from("users")
+        .select("first_name, last_name")
+        .eq("id", user.id)
+        .maybeSingle()
+    : { data: null };
+  const initialName = [profile?.first_name, profile?.last_name]
+    .filter(Boolean)
+    .join(" ");
 
   const squad = teamLabel(program.team as string);
   const crest = program.crest_path
@@ -78,13 +115,10 @@ export default async function SetupProgramPage({
       />
       <SetupForm
         programKey={programKey}
-        program={{
-          school_name: program.school_name as string,
-          primary_domain: program.primary_domain as string | null,
-          athletics_domains: program.athletics_domains as string[] | null,
-          domain_match_skips_review:
-            program.domain_match_skips_review as boolean,
-        }}
+        program={claimProgram}
+        initialName={initialName}
+        initialEmail={initialEmail}
+        initialRole={toClaimRole(role)}
       />
     </ClaimShell>
   );
