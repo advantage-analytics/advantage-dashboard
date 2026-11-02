@@ -3089,6 +3089,13 @@ export function LabelConsole({
     () => new Set(errorsShown ? errorsToMark.map((stop) => stop.pointId) : []),
     [errorsShown, errorsToMark],
   );
+  // The console re-renders on every film tick; the next error moves only with
+  // the point or the list.
+  const nextError = useMemo(
+    () =>
+      errorsShown ? stepFlag(errorsToMark, points, currentPointId, 1) : null,
+    [errorsShown, errorsToMark, points, currentPointId],
+  );
   // The question stands while its point is open, still unmarked, and its
   // missed stroke is the selected one: selecting anything else leaves it.
   const askedErrorShotId =
@@ -4054,9 +4061,6 @@ export function LabelConsole({
             ),
           }
         : null;
-  const nextError = errorsShown
-    ? stepFlag(errorsToMark, points, currentPointId, 1)
-    : null;
   const rail = (
     <LabelBlackRail
       tone={fullScreen ? "dark" : "light"}

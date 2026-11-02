@@ -348,7 +348,7 @@ export function isMarkableError(point: ErrorPoint): boolean {
   return publishesAsError(point) && markableErrorStroke(point) !== null;
 }
 
-/** An error still to mark forced or unforced: the rail and the confirm's one rule. */
+/** An error still to mark forced or unforced: the rail's rule. */
 export function isUnmarkedError(
   point: ErrorPoint & Pick<LabelPoint, "errorKind">,
 ): boolean {
