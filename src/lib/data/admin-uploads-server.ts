@@ -329,9 +329,11 @@ export async function getAdminUploadHistory(
               ? outcome
                 ? `${outcome.kind} · ${outcome.side}`
                 : "Schedule outcome unavailable"
-              : i.kind === "analysis_attachment"
-                ? "Analysis attachment"
-                : "Match";
+              : i.result?.match_deleted_at
+                ? "Deleted match"
+                : i.kind === "analysis_attachment"
+                  ? "Analysis attachment"
+                  : "Match";
           return {
             itemId: i.item_id,
             kind: i.kind,

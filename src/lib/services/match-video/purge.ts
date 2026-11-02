@@ -23,8 +23,9 @@
  *                  was given. The attachment table has no client-role access
  *                  and everything below runs as service role, so an id the
  *                  caller cannot read is dropped before it reaches that
- *                  client. Both callers already filtered to matches the user
- *                  created; this narrows, never widens.
+ *                  client. Both callers pass the admin client over ids already
+ *                  filtered to matches the user created, so for them this only
+ *                  drops an id that no longer exists.
  *   2. snapshot    the rows filed under those matches, read as service role,
  *                  so the log can say how many objects the delete will strand
  *                  for the worker — and so a match with no attachment (the
@@ -109,7 +110,7 @@ export interface AttachmentPurgeReport {
  * the caller's per-lane catch logs it; never touches storage itself.
  */
 export async function purgeMatchAttachments(input: {
-  /** The caller's client — RLS-scoped for the match route, admin for account deletion. */
+  /** The caller's client — admin for the match route and account deletion. */
   caller: SupabaseClient;
   matchIds: string[];
   label: string;
@@ -123,9 +124,8 @@ export async function purgeMatchAttachments(input: {
   };
   if (matchIds.length === 0) return none;
 
-  // 1. Authorize through the caller's own client. For the match route that
-  //    is the user's RLS view; for account deletion it is the admin client
-  //    over ids the action already filtered to the caller's personal matches.
+  // 1. Authorize through the caller's own client: the admin client, over ids
+  //    the route or action already filtered to matches the caller created.
   const { data: visible, error: visibleError } = await caller
     .from("matches")
     .select("id")

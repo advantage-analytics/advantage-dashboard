@@ -379,6 +379,30 @@ test("actual outcome rows preserve kind and side, absent evidence stays unknown"
   });
 });
 
+test("a player's deleted match reads as deleted, with no link or reconcile", async () => {
+  const h = harness();
+  for (const [n, kind] of [
+    [1, "video"],
+    [2, "analysis_attachment"],
+  ] as const) {
+    const item = h.add(n, kind);
+    item.kind = kind === "video" ? "match" : kind;
+    item.match_id = null;
+    item.processing_job_id = null;
+    item.result = { match_deleted_at: date };
+  }
+  const result = await getAdminUploadHistory({}, h.deps);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  for (const row of result.rows) {
+    expect(row.items[0]).toMatchObject({
+      what: "Deleted match",
+      state: "unknown",
+      matchHref: null,
+    });
+  }
+});
+
 test("member and nonmember attachments retain provenance; missing jobs and unknown saves stay unknown", async () => {
   const h = harness();
   const first = h.add(1, "analysis_attachment");

@@ -91,11 +91,7 @@ function notFound() {
   return NextResponse.json({ error: "Not found" }, { status: 404 });
 }
 
-/** DELETE's answer when the admin console's purge guard refuses the match. */
-const PURGE_PROTECTED_MESSAGE =
-  "Matches recorded, analyzed or hand-labeled through the admin console cannot be deleted here.";
-
-/** DELETE's answer when that guard could not be checked, or anything else threw. */
+/** DELETE's answer when the purge claim failed, or anything else threw. */
 const PURGE_UNAVAILABLE_MESSAGE = "Match deletion is unavailable. Try again.";
 
 /** What a Verified match keeps fixed; the database guard is the backstop. */
@@ -635,18 +631,23 @@ export async function DELETE(
   // this is a function call rather than a foreign-key cascade — see
   // purgeMatchStorage().
   //
-  // A refusal maps by kind, never by forwarding `error.message`: the console
-  // guard is a 409 with its fixed sentence, and everything else — the guard
-  // unreadable, or any other throw — is a retryable 503.
+  // A user may delete any match they created, so this claim never refuses: a
+  // console or hand-labeled match goes too, and its labels move to
+  // `label_archive` when the row is deleted. The id is the one the
+  // `created_by = user.id` lookup admitted. `error.message` is never
+  // forwarded: any failure is a retryable 503.
+  //
+  // The purge runs as the service role because of that lookup. Through RLS it
+  // would read only the jobs and files this user made, and remove nothing from
+  // the results bucket, stranding what an admin's analysis left on the match.
   try {
-    await purgeMatchStorage(supabase, [matchId]);
+    const admin = createAdminClient();
+    await purgeMatchStorage(admin, [matchId], "match delete", {
+      sharedKeyReader: admin,
+      claimPurge: async (ids) =>
+        admin.rpc("admin_claim_match_delete", { p_match_ids: ids }),
+    });
   } catch (error) {
-    if (error instanceof PurgeRefusedError && error.kind === "protected") {
-      return NextResponse.json(
-        { error: PURGE_PROTECTED_MESSAGE },
-        { status: 409 },
-      );
-    }
     console.error(
       "DELETE /api/matches/[matchId]: storage purge unavailable",
       error instanceof PurgeRefusedError ? (error.cause ?? error) : error,
@@ -657,18 +658,21 @@ export async function DELETE(
     );
   }
 
-  const { error: deleteError } = await supabase
+  const { data: deleted, error: deleteError } = await supabase
     .from("matches")
     .delete()
     .eq("id", matchId)
-    .eq("created_by", user.id);
+    .eq("created_by", user.id)
+    .select("id");
 
-  if (deleteError) {
-    // The 409 and 503 refusals above take no claim (the claim RPC answers
-    // false, or fails, before its insert), so only this failed-delete branch
-    // releases. The id is the one the `created_by = user.id` lookup already
-    // admitted, never a body field. See `releaseStoragePurgeClaims` for why
-    // this matters.
+  // RLS filtering the row out is no error, only no rows: it failed all the same.
+  if (deleteError || !deleted?.length) {
+    // The 503 above takes no claim (the claim RPC fails before its insert), so
+    // only this failed-delete branch releases. Keeping the claim would leave
+    // the console refused on this match, and a later delete by any path acting
+    // on its labels. The id is the one the `created_by = user.id` lookup
+    // already admitted, never a body field. See `releaseStoragePurgeClaims` for
+    // why this matters.
     await releaseStoragePurgeClaims(
       createAdminClient(),
       [matchId],
@@ -676,7 +680,7 @@ export async function DELETE(
     );
     return serverError(
       "DELETE /api/matches/[matchId]: failed to delete match",
-      deleteError,
+      deleteError ?? "no row deleted",
       "Could not delete the match",
     );
   }
