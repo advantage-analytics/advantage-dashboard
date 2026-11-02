@@ -19,6 +19,7 @@ import {
   adminUpdateProgramDetails,
   type AdminProgramDetailsPatch,
 } from "@/lib/services/programs/admin-team-actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import type { AdminTeamProgram } from "@/lib/data/admin-team-server";
 import {
   EVENTS_POLICIES,
@@ -229,7 +230,7 @@ export function AdminTeamDetailsDialog({
       const result = await adminUpdateProgramDetails({
         programId: program.id,
         patch,
-      });
+      }).catch(actionRejected);
       if (!result.ok) {
         setProblem(result.error);
         return;

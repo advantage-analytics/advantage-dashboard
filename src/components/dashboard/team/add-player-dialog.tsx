@@ -46,6 +46,7 @@ import {
 } from "./add-self-dialog";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
+import { actionRejected } from "@/lib/ui/action-rejected";
 
 /**
  * Design 6c — put a player on the roster now.
@@ -591,11 +592,13 @@ export function AddPlayerDialog({
     failureName: string;
     warningName: string;
   }): Promise<string | null> {
-    const invited = await actions.invite({
-      email: input.email,
-      role: "player",
-      playerId: input.profileId,
-    });
+    const invited = await actions
+      .invite({
+        email: input.email,
+        role: "player",
+        playerId: input.profileId,
+      })
+      .catch(actionRejected);
     if (!invited.ok) {
       return `${input.failureName} ${input.onRoster}, but the invitation did not send: ${invited.error}`;
     }
@@ -608,15 +611,17 @@ export function AddPlayerDialog({
   function submit() {
     setError(null);
     start(async () => {
-      const result = await actions.add({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        classYear: classYear || null,
-        lineupSpot: lineupSpot ? Number(lineupSpot) : null,
-        hand: hand || null,
-        backhand: backhand || null,
-        email: email.trim() || null,
-      });
+      const result = await actions
+        .add({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          classYear: classYear || null,
+          lineupSpot: lineupSpot ? Number(lineupSpot) : null,
+          hand: hand || null,
+          backhand: backhand || null,
+          email: email.trim() || null,
+        })
+        .catch(actionRejected);
 
       if (!result.ok) {
         setError(result.error);
@@ -686,7 +691,9 @@ export function AddPlayerDialog({
     setRestoreTarget({ form: formKey, person });
     startRestore(async () => {
       if (createdProfileId !== person.profileId) {
-        const result = await restoreProfile(person.profileId);
+        const result = await restoreProfile(person.profileId).catch(
+          actionRejected,
+        );
         if (!result.ok) {
           setError(result.error);
           return;
