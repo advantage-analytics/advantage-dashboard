@@ -7,6 +7,7 @@ import { MoreHorizontal } from "lucide-react";
 import { AdminTeamDetailsDialog } from "@/components/admin/admin-team-details-dialog";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { adminRemoveProgramCrest } from "@/lib/services/programs/admin-team-actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import type { AdminTeamProgram } from "@/lib/data/admin-team-server";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
@@ -53,7 +54,9 @@ export function TeamHeaderActions({ program }: { program: AdminTeamProgram }) {
     setMenuOpen(false);
     setError(null);
     startRemoving(async () => {
-      const result = await adminRemoveProgramCrest(program.id);
+      const result = await adminRemoveProgramCrest(program.id).catch(
+        actionRejected,
+      );
       if (!result.ok) setError(result.error);
     });
   };

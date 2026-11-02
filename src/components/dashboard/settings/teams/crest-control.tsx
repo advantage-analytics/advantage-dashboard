@@ -10,6 +10,7 @@ import {
   removeProgramCrest,
   uploadProgramCrest,
 } from "@/components/dashboard/settings/team-actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/svg+xml";
 
@@ -74,7 +75,7 @@ export function CrestControl({
     );
     onError(null);
     startTransition(async () => {
-      const result = await upload(formData);
+      const result = await upload(formData).catch(actionRejected);
       if (!result.ok) onError(result.error);
       else setAdjusting(null);
     });
@@ -83,7 +84,7 @@ export function CrestControl({
   const remove = () => {
     onError(null);
     startTransition(async () => {
-      const result = await removeAction(programId);
+      const result = await removeAction(programId).catch(actionRejected);
       if (!result.ok) onError(result.error);
     });
   };

@@ -39,6 +39,7 @@ import {
 } from "@/lib/services/programs/admin-team-actions";
 import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
 import { advButton } from "@/lib/ui/adv-button";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import type { AdminTeamPilot } from "@/lib/data/admin-team-server";
 import type { ProgramUsage } from "@/lib/data/usage-server";
 import type { ProgramOrgType } from "@/lib/workspace/types";
@@ -231,24 +232,6 @@ export function PilotUsageCard({
   );
 }
 
-/**
- * The answer when a write's request never came back — Safari's `TypeError:
- * Load failed`, a dropped connection, a deploy mid-request. The actions
- * answer refusals as `{ ok: false }`, but a fetch that fails rejects instead,
- * and a rejection inside `startTransition` is thrown to the error boundary:
- * the whole page swapped for an error screen over one button. This keeps it
- * in the dialog, where the other refusals already show. The request may have
- * reached the server before the connection dropped, so the copy sends the
- * admin to a reload rather than straight to a retry.
- */
-function unreachable() {
-  return {
-    ok: false,
-    error:
-      "Couldn't reach the server. Reload the page to see whether the change was saved.",
-  } as const;
-}
-
 /** One fact line — label left at ink-500, value right at ink-900. */
 function Kv({ label, value }: { label: string; value: string }) {
   return (
@@ -375,7 +358,7 @@ function ChangeEndDate({
     setError(null);
     startSave(async () => {
       const result = await adminSetPilotEnd({ programId, endsOn: value }).catch(
-        unreachable,
+        actionRejected,
       );
       if (!result.ok) {
         setError(result.error);
@@ -505,7 +488,7 @@ function EndPilot({
     if (pending) return;
     setError(null);
     startEnd(async () => {
-      const result = await adminEndPilot(programId).catch(unreachable);
+      const result = await adminEndPilot(programId).catch(actionRejected);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -596,7 +579,7 @@ function PoolAccess({
       const result = await adminSetPilotEligible({
         programId,
         eligible: !eligible,
-      }).catch(unreachable);
+      }).catch(actionRejected);
       if (!result.ok) {
         setError(result.error);
         return;

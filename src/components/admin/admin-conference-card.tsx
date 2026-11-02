@@ -17,6 +17,7 @@ import {
   addTeamToConference,
   conferenceIdForLabel,
 } from "@/lib/services/programs/admin-conference-actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { cn } from "@/lib/utils";
 import type {
   AdminTeamConference,
@@ -76,12 +77,14 @@ export function AdminConferenceCard({
     if (pending) return;
     setError(null);
     startMove(async () => {
-      const resolved = await conferenceIdForLabel(label);
+      const resolved = await conferenceIdForLabel(label).catch(actionRejected);
       if (!resolved.ok) {
         setError(resolved.error);
         return;
       }
-      const result = await addTeamToConference(programId, resolved.id);
+      const result = await addTeamToConference(programId, resolved.id).catch(
+        actionRejected,
+      );
       if (!result.ok) {
         setError(result.error);
         return;

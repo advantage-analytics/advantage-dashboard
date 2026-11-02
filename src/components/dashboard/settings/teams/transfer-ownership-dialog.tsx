@@ -12,6 +12,7 @@ import { ConfirmAside, ConfirmProse, Em } from "@/components/ui/confirm-dialog";
 import { RolePill } from "@/components/ui/role-pill";
 import { YouPill } from "@/components/ui/you-pill";
 import { transferProgramOwnership } from "@/components/dashboard/settings/team-actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { getInitials } from "@/lib/data/match-utils";
 import type { TeamMember } from "@/lib/data/team-settings-server";
 import { PROGRAM_ROLE_LABEL, type ProgramRole } from "@/lib/workspace/types";
@@ -73,7 +74,7 @@ export function TransferOwnershipDialog({
       const result = await action({
         programId,
         newOwnerUserId: target.userId,
-      });
+      }).catch(actionRejected);
       if (!result.ok) {
         setError(result.error);
         return;
