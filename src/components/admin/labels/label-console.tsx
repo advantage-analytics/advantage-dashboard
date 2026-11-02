@@ -4054,6 +4054,9 @@ export function LabelConsole({
             ),
           }
         : null;
+  const nextError = errorsShown
+    ? stepFlag(errorsToMark, points, currentPointId, 1)
+    : null;
   const rail = (
     <LabelBlackRail
       tone={fullScreen ? "dark" : "light"}
@@ -4134,15 +4137,9 @@ export function LabelConsole({
         errorsShown ? (
           <LabelErrorCount
             count={errorsToMark.length}
-            nextPointNumber={
-              (
-                stepFlag(errorsToMark, points, currentPointId, 1) ??
-                errorsToMark[0]
-              ).pointNumber
-            }
+            nextPointNumber={(nextError ?? errorsToMark[0]).pointNumber}
             onNext={() => {
-              const next = stepFlag(errorsToMark, points, currentPointId, 1);
-              if (next) goToError(next.pointId);
+              if (nextError) goToError(nextError.pointId);
             }}
             keyed={flagStops.score.length === 0}
           />

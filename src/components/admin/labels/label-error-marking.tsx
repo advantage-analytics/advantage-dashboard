@@ -105,29 +105,32 @@ export function LabelErrorQuestion({
         aria-label={ERROR_STOP_LABEL}
         className="ml-1 inline-flex shrink-0 items-center gap-1"
       >
-        {ERROR_KIND_CHOICES.map(({ kind, label }) => (
-          <button
-            key={kind}
-            type="button"
-            data-error-answer={kind}
-            aria-keyshortcuts={kind === "forced" ? "E" : "U"}
-            onClick={(event) => {
-              event.stopPropagation();
-              onAnswer(kind);
-            }}
-            className="inline-flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[var(--radius-button)] bg-white/[0.10] px-2 text-[11px] font-medium whitespace-nowrap text-white transition-colors duration-150 hover:bg-white/[0.18] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-          >
-            {label}
-            <Kbd
-              size="sm"
-              variant="flat"
-              mono
-              className="bg-white/[0.08] text-white/60 shadow-none"
+        {ERROR_KIND_CHOICES.map(({ kind, label }) => {
+          const key = kind === "forced" ? "E" : "U";
+          return (
+            <button
+              key={kind}
+              type="button"
+              data-error-answer={kind}
+              aria-keyshortcuts={key}
+              onClick={(event) => {
+                event.stopPropagation();
+                onAnswer(kind);
+              }}
+              className="inline-flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[var(--radius-button)] bg-white/[0.10] px-2 text-[11px] font-medium whitespace-nowrap text-white transition-colors duration-150 hover:bg-white/[0.18] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >
-              {kind === "forced" ? "E" : "U"}
-            </Kbd>
-          </button>
-        ))}
+              {label}
+              <Kbd
+                size="sm"
+                variant="flat"
+                mono
+                className="bg-white/[0.08] text-white/60 shadow-none"
+              >
+                {key}
+              </Kbd>
+            </button>
+          );
+        })}
       </span>
       <span className="mono tabular ml-auto shrink-0 pl-3 font-normal text-white/45">
         {index} of {total}
