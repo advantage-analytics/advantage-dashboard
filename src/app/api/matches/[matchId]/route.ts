@@ -643,6 +643,7 @@ export async function DELETE(
   try {
     const admin = createAdminClient();
     await purgeMatchStorage(admin, [matchId], "match delete", {
+      sharedKeyReader: admin,
       claimPurge: async (ids) =>
         admin.rpc("admin_claim_match_delete", { p_match_ids: ids }),
     });
