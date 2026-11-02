@@ -271,42 +271,41 @@ function midSentence(label: string, names: PhraseNames): string {
     : label;
 }
 
+/** A statistic's side reads "Errors · Revelli": the segment after the name of the row. */
+function labelNamesAPlayer(label: string): boolean {
+  return label.includes(" · ");
+}
+
 /**
- * Whether a cut's label already names the shared Result player: a statistic's
- * side reads "Errors · Revelli", with the surname, where the phrase has the
- * short name ("G. Revelli"). Another player picked since stays a phrase.
+ * Whether a cut's label already names the shared Result player: the one its
+ * landing wrote, and the label's name is that side's. Compared with the landing
+ * and never with the names, because two players can share a surname. Another
+ * player picked since stays a phrase.
  */
 function labelNamesResultPlayer(
   shared: MatchFilters,
-  label: string,
-  names: PhraseNames,
+  cut: LandedFilmCut,
 ): boolean {
-  if (shared.resultPlayer === null) return false;
-  return labelNames(label, playerNameOf(shared.resultPlayer, names));
-}
-
-function labelNames(label: string, name: string): boolean {
-  return label
-    .split(" · ")
-    .slice(1)
-    .some((segment) => name === segment || name.endsWith(` ${segment}`));
+  return (
+    shared.resultPlayer !== null &&
+    shared.resultPlayer === cut.landed.resultPlayer &&
+    labelNamesAPlayer(cut.label)
+  );
 }
 
 /**
  * Whether a cut's label already says the shared Result › Outcome: "Net points
- * won · Ellis" is the points Ellis won, which Outcome reads from the viewer's
- * side as Lost, so "Points lost · Net points won · Ellis" contradicts itself.
- * An outcome that disagrees with the label was picked since, and stays a phrase.
+ * won · Ellis" is the points Ellis won, so "Points Ellis won" beside it says it
+ * twice. As above, only the outcome its landing wrote: one picked since stays a
+ * phrase.
  */
-function labelStatesOutcome(
-  shared: MatchFilters,
-  label: string,
-  names: PhraseNames,
-): boolean {
-  if (shared.resultOutcome.length !== 1) return false;
-  if (!label.split(" · ")[0].endsWith(" won")) return false;
-  const [outcome] = shared.resultOutcome;
-  return labelNames(label, outcome === "won" ? names.you : names.opponent);
+function labelStatesOutcome(shared: MatchFilters, cut: LandedFilmCut): boolean {
+  return (
+    shared.resultOutcome.length === 1 &&
+    shared.resultOutcome[0] === cut.landed.resultOutcome[0] &&
+    cut.label.split(" · ")[0].endsWith(" won") &&
+    labelNamesAPlayer(cut.label)
+  );
 }
 
 /**
@@ -327,24 +326,22 @@ function labelStatesOutcome(
 export function filmListSentence(
   f: {
     shared: MatchFilters;
-    remainder: FilmCutRemainder | null;
+    remainder: LandedFilmCut | null;
     savedOnly: boolean;
     pointSet?: readonly number[] | null;
   },
   names: PhraseNames,
 ): string {
-  const cutLabel = f.remainder?.label;
+  const cut = f.remainder;
   let parts = appliedPhrases(
     {
       ...f.shared,
       resultPlayer:
-        cutLabel && labelNamesResultPlayer(f.shared, cutLabel, names)
+        cut && labelNamesResultPlayer(f.shared, cut)
           ? null
           : f.shared.resultPlayer,
       resultOutcome:
-        cutLabel && labelStatesOutcome(f.shared, cutLabel, names)
-          ? []
-          : f.shared.resultOutcome,
+        cut && labelStatesOutcome(f.shared, cut) ? [] : f.shared.resultOutcome,
     },
     names,
   );
