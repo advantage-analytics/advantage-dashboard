@@ -3456,9 +3456,15 @@ export function LabelConsole({
     };
     stepFilmRef.current = stepFilm;
     // Only while the walk is on: a labeller who has moved on keeps their place,
-    // and the point's chip and the save status say the mark did not land.
+    // and the point's chip and the save status say the mark did not land. After
+    // the last answer the walk is on while its stroke is still the one selected.
     returnToRefusedError.current = (pointId) => {
-      if (askedErrorShotId === null && !errorsFinished) return;
+      const onLastAnswer =
+        errorsFinished &&
+        expanded?.id === pointId &&
+        placement.shotId !== null &&
+        errorKindShotId(expanded) === placement.shotId;
+      if (askedErrorShotId === null && !onLastAnswer) return;
       if (confirm || document.querySelector(OPEN_LAYER_SELECTOR)) return;
       goToError(pointId);
     };

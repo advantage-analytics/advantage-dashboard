@@ -16,7 +16,6 @@
 
 import {
   storedEndingContradicted,
-  isUnmarkedError,
   publishEnding,
   unmarkableErrors,
 } from "./ending-derived";
@@ -75,21 +74,6 @@ export const PUBLISHED_PAST_TAILS = {
   noEnding: " — it publishes with no ending",
   labelledWinner: " — it publishes with the labelled winner",
 } as const;
-
-/**
- * The points the Mark complete confirm warns about: every point that will
- * publish as an error (`isMarkableError`, which leaves out a deleted point, a
- * let, a non-point and an error with no stroke to put the mark on) and that is
- * not yet marked forced or unforced. As the rail numbers them, ascending. A
- * stale `errorKind` on a point that no longer ends in an error does not count
- * either way.
- */
-export function unmarkedErrors(points: readonly LabelPoint[]): number[] {
-  return points
-    .filter(isUnmarkedError)
-    .map((point) => point.pointIndex + 1)
-    .sort((a, b) => a - b);
-}
 
 /**
  * The warnings about a point a publish writes only partly or leaves out, of

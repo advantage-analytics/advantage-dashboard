@@ -120,6 +120,7 @@ test.describe("what it promises", () => {
     const waiting = errorsCheck([errorPoint(0)], false, noop);
     expect(waiting).toMatchObject({
       state: "open",
+      detail: "1 to mark. It asks once the score is settled.",
       link: { label: "Mark now" },
     });
     expect(waiting.button).toBeUndefined();
@@ -212,7 +213,10 @@ test.describe("while it asks", () => {
       "if (!saved) returnToRefusedError.current(answered);",
     );
     expect(consoleSource).toContain(
-      "if (askedErrorShotId === null && !errorsFinished) return;",
+      "if (askedErrorShotId === null && !onLastAnswer) return;",
+    );
+    expect(consoleSource).toMatch(
+      /const onLastAnswer =\s+errorsFinished &&\s+expanded\?\.id === pointId &&/,
     );
     expect(consoleSource).toContain(
       "if (confirm || document.querySelector(OPEN_LAYER_SELECTOR)) return;",

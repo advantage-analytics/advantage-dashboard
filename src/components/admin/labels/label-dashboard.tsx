@@ -784,7 +784,7 @@ export function errorsCheck(
     return {
       state: "open",
       title,
-      detail: `${left} to mark, once the score is settled.`,
+      detail: `${left} to mark. It asks once the score is settled.`,
       link: onMarkErrors
         ? { label: "Mark now", onClick: onMarkErrors }
         : undefined,

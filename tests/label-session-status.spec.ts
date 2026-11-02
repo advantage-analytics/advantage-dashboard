@@ -17,11 +17,9 @@ import {
 } from "@/lib/services/labels/edit-session";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
+import { errorStops } from "@/lib/services/labels/flag-nav";
 import type { LabelSession } from "@/lib/services/labels/session";
-import {
-  completeWarnings,
-  unmarkedErrors,
-} from "@/lib/services/labels/session-status";
+import { completeWarnings } from "@/lib/services/labels/session-status";
 import {
   ANOTHER_SESSION_OPEN,
   completeLabelSession,
@@ -844,7 +842,10 @@ test.describe("completeWarnings", () => {
 
 // ── Unmarked errors ────────────────────────────────────────────────────────
 
-test.describe("unmarkedErrors", () => {
+test.describe("unmarked errors", () => {
+  /** The rail's numbers of the errors still to mark (`errorStops`). */
+  const unmarkedErrors = (points: LabelSession["points"]) =>
+    errorStops(points).map((stop) => stop.pointNumber);
   let clock = 0;
   const shot = (pointId: string, fields: Parameters<typeof labelShot>[2]) => {
     clock += 1;
