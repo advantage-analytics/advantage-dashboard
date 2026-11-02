@@ -622,20 +622,55 @@ test.describe("net points", () => {
     expect(figureReadout(won, "you", "You", scope)).toBeNull();
   });
 
-  test("the published figures' SQL rule uses the same distances", () => {
+  test("the rule's floor, exclusions and missing positions", () => {
+    const at = (type: string, number: number, y: number | null) =>
+      cameToNet(point(true, serve, shot(number, true, type, y)), true);
+    const close = NET - 3;
+    // Shot 3 is the floor for a position alone; a volley or overhead has none.
+    expect(at("Forehand", 2, close)).toBe(false);
+    expect(at("Forehand", 3, close)).toBe(true);
+    expect(at("Volley", 2, close)).toBe(true);
+    expect(at("Overhead", 2, close)).toBe(true);
+    // A serve or a feed is never coming in, however close or however numbered.
+    for (const type of ["First Serve", "Second Serve", "Feed"]) {
+      expect(at(type, 3, close)).toBe(false);
+      expect(at(type, 3, null)).toBe(false);
+    }
+    // No position: a volley or overhead still counts, a groundstroke cannot.
+    expect(at("Volley", 3, null)).toBe(true);
+    expect(at("Overhead", 3, null)).toBe(true);
+    expect(at("Forehand", 3, null)).toBe(false);
+  });
+
+  test("the published figures' SQL rule is the same rule", () => {
     // `net_attempt_shot` is the twin behind `match_stats.net_points_*`: drift
     // and the card disagrees with Ask and the AI summary with nothing broken.
+    // The whole body, so every clause `cameToNet` is held to above is held here.
     const dir = join(process.cwd(), "supabase/migrations");
     const sql = readdirSync(dir)
       .sort()
       .map((file) => readFileSync(join(dir, file), "utf8"))
       .filter((text) => text.includes("function public.net_attempt_shot"))
       .at(-1)!;
-    expect(sql).toContain(
-      `abs(p_contact_y - 11.885) <= ${NET_OVERHEAD_DEPTH_M}\n`,
+    const body = sql
+      .split("function public.net_attempt_shot")[1]
+      .split("$function$")[1]
+      .replace(/\s+/g, " ")
+      .trim();
+    expect(body).toBe(
+      [
+        "select case",
+        "when p_shot_type in ('First Serve', 'Second Serve', 'Feed') then false",
+        "when lower(btrim(coalesce(p_shot_type, ''))) like '%volley%' then true",
+        "when lower(btrim(coalesce(p_shot_type, ''))) = 'overhead' then",
+        `p_contact_y is null or abs(p_contact_y - ${NET}) <= ${NET_OVERHEAD_DEPTH_M}`,
+        "else",
+        "p_shot_number >= 3",
+        "and p_contact_y is not null",
+        `and abs(p_contact_y - ${NET}) <= ${NET_ZONE_DEPTH_M}`,
+        "end",
+      ].join(" "),
     );
-    expect(sql).toContain(`abs(p_contact_y - 11.885) <= ${NET_ZONE_DEPTH_M}\n`);
-    expect(sql).toContain("p_shot_number >= 3");
   });
 
   test("the loader's published rate is still no rate without appearances", () => {
