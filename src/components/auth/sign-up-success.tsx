@@ -80,7 +80,14 @@ export function SignUpSuccess({
       </ol>
 
       <div className="flex flex-col gap-[16px]">
-        <AuthButton onClick={() => window.open("mailto:", "_blank")}>
+        {/* In place, not `window.open`: a popup per click puts Chrome's "Open
+            Mail?" prompt on a new tab each time. Either answer leaves this
+            page and its next steps where they are. */}
+        <AuthButton
+          onClick={() => {
+            window.location.href = "mailto:";
+          }}
+        >
           Open Email App
         </AuthButton>
 
