@@ -45,14 +45,45 @@ test.describe("vocabulary: the seed's mappings, inverted", () => {
     // A volley names no side.
     expect(resultTypeOf("winner", "forehand_volley")).toBe("Winner");
     expect(resultTypeOf("winner", "backhand_volley")).toBe("Winner");
-    // Every error is unforced: the one error string the stats count.
-    expect(resultTypeOf("error", "forehand")).toBe("Forehand Unforced Error");
-    expect(resultTypeOf("error", "backhand")).toBe("Backhand Unforced Error");
-    expect(resultTypeOf("error", "backhand_volley")).toBe("Unforced Error");
-    expect(resultTypeOf("error", null)).toBe("Unforced Error");
     expect(resultTypeOf("let_replayed", "first_serve")).toBeNull();
     expect(resultTypeOf("not_a_point", null)).toBeNull();
     expect(resultTypeOf(null, "forehand")).toBeNull();
+  });
+
+  test("an error's result_type carries the labeller's forced/unforced mark", () => {
+    // [last stroke, error kind, result_type]. An unmarked error (null) is
+    // still unforced — what every reader counted before the split; a volley
+    // names no side, as for a winner. The SQL twin is
+    // self_review_result_type() (migration 20261028025013).
+    const table: [LabelStroke | null, "forced" | "unforced" | null, string][] =
+      [
+        ["forehand", "forced", "Forehand Forced Error"],
+        ["forehand", "unforced", "Forehand Unforced Error"],
+        ["forehand", null, "Forehand Unforced Error"],
+        ["backhand", "forced", "Backhand Forced Error"],
+        ["backhand", "unforced", "Backhand Unforced Error"],
+        ["backhand", null, "Backhand Unforced Error"],
+        ["overhead", "forced", "Overhead Forced Error"],
+        ["overhead", null, "Overhead Unforced Error"],
+        ["forehand_volley", "forced", "Forced Error"],
+        ["forehand_volley", "unforced", "Unforced Error"],
+        ["backhand_volley", "forced", "Forced Error"],
+        ["backhand_volley", null, "Unforced Error"],
+        [null, "forced", "Forced Error"],
+        [null, null, "Unforced Error"],
+      ];
+    for (const [stroke, kind, expected] of table) {
+      expect(resultTypeOf("error", stroke, kind), `${stroke} ${kind}`).toBe(
+        expected,
+      );
+    }
+    // The third argument defaults to unmarked.
+    expect(resultTypeOf("error", "forehand")).toBe("Forehand Unforced Error");
+    // The mark changes nothing but an error.
+    expect(resultTypeOf("winner", "forehand", "forced")).toBe(
+      "Forehand Winner",
+    );
+    expect(resultTypeOf("ace", "first_serve", "forced")).toBe("Ace");
   });
 
   test("shot_type, result and spin round-trip through the seed's mappings", () => {
@@ -335,6 +366,70 @@ test.describe("buildAppliedRows", () => {
     expect(points[7].shots[1].zone).toBe("Crosscourt");
   });
 
+  test("a stroke before an air stroke publishes a placement but no landing: it never bounced", () => {
+    const rows = (next: "forehand_volley" | "forehand") =>
+      build([
+        pt(0, "p1", "winner", (p) => [
+          shot(p, "p1", "first_serve", "in", {
+            contactX: 1,
+            contactY: 0,
+            landingX: -1,
+            landingY: 16,
+          }),
+          shot(p, "p2", "backhand", null, { contactX: -2, contactY: 23 }),
+          shot(p, "p1", next, "in", {
+            contactX: 1,
+            contactY: 6,
+            landingX: 2,
+            landingY: 20,
+          }),
+        ]),
+      ]).points[0].shots[1];
+    expect(rows("forehand_volley")).toMatchObject({
+      landing_x: null,
+      landing_y: null,
+      zone: "Middle",
+      // Played on, whatever its filled landing would call: never a derived out.
+      result: "In",
+    });
+    // Stored at the volley's contact it is the same ball; stored elsewhere it
+    // is a bounce.
+    const stored = (landingX: number, landingY: number) =>
+      build([
+        pt(0, "p1", "winner", (p) => [
+          shot(p, "p1", "first_serve", "in", {
+            contactX: 1,
+            contactY: 0,
+            landingX: -1,
+            landingY: 16,
+          }),
+          shot(p, "p2", "backhand", "in", {
+            contactX: -2,
+            contactY: 23,
+            landingX,
+            landingY,
+          }),
+          shot(p, "p1", "forehand_volley", "in", {
+            contactX: 1,
+            contactY: 6,
+            landingX: 2,
+            landingY: 20,
+          }),
+        ]),
+      ]).points[0].shots[1];
+    expect(stored(1, 6)).toMatchObject({
+      landing_x: null,
+      landing_y: null,
+      zone: "Middle",
+    });
+    expect(stored(3, 4)).toMatchObject({ landing_x: 3, landing_y: 4 });
+    expect(rows("forehand")).toMatchObject({
+      landing_x: null,
+      landing_y: null,
+      zone: null,
+    });
+  });
+
   test("an in serve whose landing is outside the box is written in, with no landing and no zone", () => {
     // Hit from behind the baseline on +x; the far service box ends 6.4 m
     // past the net, so y 23 is long. The seed keeps such a serve in when a
@@ -363,6 +458,44 @@ test.describe("buildAppliedRows", () => {
     expect(inBox.zone).not.toBeNull();
   });
 
+  test("an empty result the next stroke played is written In", () => {
+    // An added stroke, then an overhead off it: the ball was in play.
+    const point = build([
+      pt(0, "p1", "error", (p) => [
+        shot(p, "p1", "first_serve", null),
+        shot(p, "p2", "backhand", null),
+        shot(p, "p1", "overhead", "out"),
+      ]),
+    ]).points[0];
+    expect(point.shots.map((s) => s.result)).toEqual(["In", "In", "Out"]);
+    // A first serve before a second serve is no ball in play: left empty.
+    const fault = build([
+      pt(0, "p2", "error", (p) => [
+        shot(p, "p1", "first_serve", null),
+        shot(p, "p1", "second_serve", "in"),
+        shot(p, "p2", "forehand", "out"),
+      ]),
+    ]).points[0];
+    expect(fault.shots.map((s) => s.result)).toEqual([null, "In", "Out"]);
+    // A double fault with a dead ball left after it: the empty second serve
+    // is no ball in play.
+    const double = build([
+      pt(0, "p2", "double_fault", (p) => [
+        shot(p, "p1", "first_serve", "out"),
+        shot(p, "p1", "second_serve", null),
+        shot(p, "p2", "forehand", null),
+        shot(p, "p1", "backhand", null),
+      ]),
+    ]).points[0];
+    // Neither the serve nor the first dead ball is filled.
+    expect(double.shots.map((s) => s.result)).toEqual([
+      "Out",
+      null,
+      null,
+      null,
+    ]);
+  });
+
   test("a point with no winner is a problem, not a row", () => {
     const points = session().map((p) =>
       p.pointIndex === 6 ? { ...p, winner: null } : p,
@@ -372,12 +505,31 @@ test.describe("buildAppliedRows", () => {
     expect(built.points.map((p) => p.pointIndex)).not.toContain(6);
   });
 
+  test("forced errors are counted apart; unmarked errors stay unforced", () => {
+    const base = build().points;
+    const error = base.find((p) => p.result_type?.endsWith("Unforced Error"))!;
+    // As the build writes them: the mark is in the result_type string, which
+    // is what calculate_match_stats reads; `errorKind` rides beside it.
+    const copy = (errorKind: AppliedPointRow["errorKind"]) => ({
+      ...error,
+      errorKind,
+      result_type: resultTypeOf("error", "forehand", errorKind),
+    });
+    expect(copy("forced").result_type).toBe("Forehand Forced Error");
+    const stats = expectedStats([copy("forced"), copy(null), copy(null)]);
+    const forced = stats.p1.forcedErrors + stats.p2.forcedErrors;
+    const unforced = stats.p1.unforcedErrors + stats.p2.unforcedErrors;
+    expect(forced).toBe(1);
+    expect(unforced).toBe(2);
+  });
+
   test("the insert row carries only columns", () => {
     const row = pointInsertRow("m-1", build().points[0]);
     expect(row.match_id).toBe("m-1");
     expect(Object.keys(row)).not.toContain("shots");
     expect(Object.keys(row)).not.toContain("labelPointId");
     expect(Object.keys(row)).not.toContain("pointIndex");
+    expect(Object.keys(row)).not.toContain("errorKind");
   });
 
   test("the preview counts aces, double faults and winners per side", () => {
@@ -391,6 +543,7 @@ test.describe("buildAppliedRows", () => {
     expect(stats.p1.winners).toBe(2);
     expect(stats.p2.winners).toBe(1);
     expect(stats.p1.unforcedErrors).toBe(1);
+    expect(stats.p1.forcedErrors).toBe(0);
     expect(stats.p1.pointsWon + stats.p2.pointsWon).toBe(9);
     expect(stats.p1.serviceGames).toBe(1);
     expect(stats.p2.serviceGames).toBe(1);
@@ -412,6 +565,12 @@ test.describe("a point with no ending stored", () => {
     const point = built.points.find((p) => p.pointIndex === 9)!;
     expect(point.result_type).toBe("Overhead Winner");
     expect(point.flags).toEqual([HAND_LABELLED_FLAG]);
+  });
+
+  test("a stored ending that cannot be true of its winner is warned about", () => {
+    expect(
+      build(withPoint(9, { winner: "p2", endedBy: "p1" })).warnings,
+    ).toContain("point 10: winner by p1, won by p2");
   });
 
   test("strokes that name the other winner are refused, never flipped", () => {

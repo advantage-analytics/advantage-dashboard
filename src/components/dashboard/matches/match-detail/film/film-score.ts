@@ -1,5 +1,5 @@
 import type { MatchPoint } from "@/lib/data/match-points-server";
-import type { ScoreLineSet } from "@/lib/ui/score-format";
+import { pointScoreLabel, type ScoreLineSet } from "@/lib/ui/score-format";
 
 /**
  * The scoreboard's numbers, oriented you-first.
@@ -63,7 +63,7 @@ export interface BoardRow {
   serving: boolean;
   /** One entry per set column; null renders blank, never 0. */
   sets: (number | null)[];
-  /** The live game score cell ("30", "AD"); null renders blank. */
+  /** The live game score cell ("30", "Ad"); null renders blank. */
   game: string | null;
 }
 
@@ -178,8 +178,10 @@ export function boardAt(
     oppSets.push(null);
   }
 
+  const pointScore = readPointScore(point);
+  const pointLabel = pointScore === null ? null : pointScoreLabel(pointScore);
   const pts = columns.hasPointScore
-    ? absolutize(readPointScore(point), point.serverIsPlayer1)
+    ? absolutize(pointLabel, point.serverIsPlayer1)
     : null;
   const [youPts, oppPts] = pts
     ? youFirst(pts, sides.youIsPlayer1)
@@ -204,7 +206,7 @@ export function boardAt(
     ],
     liveSet,
     gameNumber: point.gameNumber,
-    pointLine: pts ? serverFirstScore(readPointScore(point)) : null,
+    pointLine: pts ? serverFirstScore(pointLabel) : null,
   };
 }
 

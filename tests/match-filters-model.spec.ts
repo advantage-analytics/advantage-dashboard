@@ -10,6 +10,7 @@ import {
   matchFiltersQuery,
   optionAvailability,
   parseMatchFilters,
+  pointResultLabel,
   returnContactOf,
   serializeMatchFilters,
   shotMatchesCustom,
@@ -447,6 +448,54 @@ test("Winner = the POV player hit a winner, ace or service winner", () => {
   expect(
     run(points, { resultPlayer: "opponent", resultEnding: ["winner"] }),
   ).toEqual(["rudy-bh-winner", "rudy-ace"]);
+});
+
+test("a service winner's missed return is the returner's error and still the server's winner", () => {
+  const points = [
+    // Your service winner: the last row is Rudy's return into the net.
+    pt({
+      id: "missed-return",
+      resultType: "Service Winner",
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+      shots: rally("Forehand", 2, "Net"),
+    }),
+    // A serve no one touched has no miss to attribute.
+    pt({
+      id: "untouched",
+      resultType: "Service Winner",
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+      shots: [
+        shot({ shotNumber: 1, isPlayer1: true, shotType: "First Serve" }),
+      ],
+    }),
+    // The return landed.
+    pt({
+      id: "return-in",
+      resultType: "Service Winner",
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+      shots: rally("Forehand", 2, "In"),
+    }),
+    // The label says the server's, but the server lost: not a missed return.
+    pt({
+      id: "server-lost",
+      resultType: "Service Winner",
+      serverIsPlayer1: true,
+      wonByPlayer1: false,
+      shots: rally("Forehand", 2, "Out"),
+    }),
+  ];
+  expect(
+    run(points, { resultPlayer: "opponent", resultEnding: ["error"] }),
+  ).toEqual(["missed-return"]);
+  expect(run(points, { resultPlayer: "you", resultEnding: ["error"] })).toEqual(
+    [],
+  );
+  expect(
+    run(points, { resultPlayer: "you", resultEnding: ["winner"] }),
+  ).toContain("missed-return");
 });
 
 test("Error = the POV player made the error, incl. double faults and a null result type ending Out/Net", () => {
@@ -947,11 +996,15 @@ test("buildFilterContext: the match row's hand first, else inferred from forehan
   const match = {
     player1: { hand: "Right" },
     player2: { hand: null },
-  } as unknown as Pick<Match, "player1" | "player2" | "sourceProvider">;
+  } as unknown as Pick<
+    Match,
+    "player1" | "player2" | "sourceProvider" | "errorSplitJudged"
+  >;
   expect(buildFilterContext(match, lefty, true)).toEqual({
     youIsPlayer1: true,
     hands: { player1: "right", player2: "left" },
     isDerived: false,
+    errorSplitJudged: false,
   });
   // The same row from Advantage Intelligence is a derived match.
   expect(
@@ -960,7 +1013,13 @@ test("buildFilterContext: the match row's hand first, else inferred from forehan
     youIsPlayer1: true,
     hands: { player1: "right", player2: "left" },
     isDerived: true,
+    errorSplitJudged: false,
   });
+  // The loader's judgement rides through unchanged.
+  expect(
+    buildFilterContext({ ...match, errorSplitJudged: true }, lefty, true)
+      .errorSplitJudged,
+  ).toBe(true);
 });
 
 /* ── Serve › Result, Return › Result, Result › Missed / Rally length ────── */
@@ -1366,4 +1425,45 @@ test("toggleMatchFilter adds/removes list options and sets/clears single choices
   expect(toggleMatchFilter(you, "server", "you").server).toBeNull();
   // EMPTY is never mutated.
   expect(activeFilterCount(EMPTY_MATCH_FILTERS)).toBe(0);
+});
+
+test.describe("pointResultLabel drops an error's kind until the split is judged", () => {
+  const label = (resultType: string, errorSplitJudged?: boolean) =>
+    pointResultLabel(pt({ id: "label", resultType }), {
+      isDerived: false,
+      errorSplitJudged,
+    });
+
+  test("unjudged: the kind goes from the label", () => {
+    expect(label("Backhand Unforced Error", false)).toBe("Backhand Error");
+    expect(label("Forehand Forced Error", false)).toBe("Forehand Error");
+    expect(label("Unforced Error", false)).toBe("Error");
+    expect(label("Forced Error", false)).toBe("Error");
+    // Absent reads as not judged.
+    expect(label("Backhand Unforced Error")).toBe("Backhand Error");
+  });
+
+  test("unjudged: nothing else is renamed", () => {
+    for (const rt of [
+      "Forehand Winner",
+      "Double Fault",
+      "Ace",
+      "Service Winner",
+    ])
+      expect(label(rt, false)).toBe(rt);
+    expect(label("", false)).toBe("Point");
+  });
+
+  test("judged: the stored result type, as today", () => {
+    expect(label("Backhand Unforced Error", true)).toBe(
+      "Backhand Unforced Error",
+    );
+    expect(label("Forehand Forced Error", true)).toBe("Forehand Forced Error");
+  });
+
+  test("the stored result type is untouched", () => {
+    const point = pt({ id: "kept", resultType: "Backhand Unforced Error" });
+    pointResultLabel(point, { isDerived: false, errorSplitJudged: false });
+    expect(point.resultType).toBe("Backhand Unforced Error");
+  });
 });

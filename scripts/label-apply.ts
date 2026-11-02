@@ -26,16 +26,19 @@
  *      the labelled rows, flagged `hand_labelled` — persist-transcript.ts then
  *      refuses to re-derive over them without `allowOverwriteLabels`;
  *   3. re-links bookmarks to the new point nearest in video_time;
- *   4. RPC calculate_match_stats, then backfill_returns_in_and_net_points
+ *   4. sets matches.errors_judged_at (now with every error marked, else
+ *      null), so a partly marked session publishes every error as unforced;
+ *      then RPC calculate_match_stats, then backfill_returns_in_and_net_points
  *      (the order deriveAndPublish runs them in), then asks generate-insights
  *      for a new summary;
  *   5. prints match_stats before and after.
  * No "analysis ready" email is sent.
  *
  * --restore puts a backup's rows back the same way (delete the derived
- * points, insert the backup's, bookmarks included) and recomputes. It takes a
- * local file or a `label-backups/…` storage key; a match's first backup is
- * the vendor's original.
+ * points, insert the backup's, bookmarks included), sets
+ * matches.errors_judged_at to agree with them (`restoredErrorsJudgedAt`) and
+ * recomputes. It takes a local file or a `label-backups/…` storage key; a
+ * match's first backup is the vendor's original.
  *
  * LABELS ARE A REAL ATHLETE'S DATA: the output names the players, and the
  * backups hold the match's rows. Neither belongs in the repo.
@@ -64,6 +67,8 @@ import {
   readPublished,
   readStoredBackup,
   recompute,
+  restoreErrorsJudged,
+  restoreFold,
   restoreRows,
   type LabelApplyBackup,
 } from "@/lib/services/labels/apply-session";
@@ -112,6 +117,7 @@ function printPreview(
     ["Service winners", (s) => String(s.serviceWinners)],
     ["Winners", (s) => String(s.winners)],
     ["Unforced errors", (s) => String(s.unforcedErrors)],
+    ["Forced errors", (s) => String(s.forcedErrors)],
     [
       "First serves in",
       (s) =>
@@ -197,6 +203,16 @@ async function runRestore(
   const before = await readMatchStats(db, backup.matchId);
   await restoreRows(db, backup);
   console.log("rows restored");
+  console.log(
+    (await restoreFold(db, backup))
+      ? "fold note restored"
+      : "fold note left as it is (the backup kept none)",
+  );
+  console.log(
+    (await restoreErrorsJudged(db, backup))
+      ? "errors marked as judged"
+      : "errors marked as not judged",
+  );
   const { insightsRequested } = await recompute(db, backup.matchId);
   console.log(
     insightsRequested
@@ -288,6 +304,11 @@ async function main() {
     console.log("score check: labelled sets match the entered score");
   }
   printResultTypes(built.points);
+  console.log(
+    plan.errorsJudged
+      ? "errors: all marked, so they publish forced and unforced"
+      : "errors: not all marked, so every error publishes as unforced",
+  );
   printPreview(stats, names);
 
   if (built.problems.length > 0) {

@@ -8,6 +8,7 @@ import {
   filmCutExtras,
   filmCutFilters,
   hasFilmCut,
+  matchesFilmCutEnding,
   matchesFilmCutExtras,
   sideCut,
   type FilmCutIntent,
@@ -128,7 +129,7 @@ test("a cut's MatchFilters half is laid over the empty filters", () => {
   expect(filmCutExtras({ ending: "winner" })).toEqual({ ending: "winner" });
   expect(filmCutExtras({ scoreType: ["breakpoint"], ending: null })).toBeNull();
   // The ending and the landed-serve bound.
-  expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending", "serveIn"]);
+  expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending", "serveIn", "netBy"]);
 });
 
 test("the Film list is applyMatchFilters(shared) AND the remainder's extras AND saved", () => {
@@ -153,11 +154,12 @@ test("the Film list is applyMatchFilters(shared) AND the remainder's extras AND 
       filmListPoints(
         applyMatchFilters(points, EMPTY_MATCH_FILTERS, ctx()),
         local,
+        ctx(),
       ),
     ),
   ).toEqual(["b"]);
   // Breakpoint picked again afterwards ANDs with the extras, as any pick.
-  expect(ids(filmListPoints(sharedPoints, local))).toEqual([]);
+  expect(ids(filmListPoints(sharedPoints, local, ctx()))).toEqual([]);
 
   // A landed pure cut is the shared filters alone — sides resolve through
   // the filter context, never in the cut (Won is read from the viewer's
@@ -172,6 +174,7 @@ test("the Film list is applyMatchFilters(shared) AND the remainder's extras AND 
       filmListPoints(
         applyMatchFilters(points, won.shared, ctx()),
         NO_FILM_LOCAL_FILTERS,
+        ctx(),
       ),
     ),
   ).toEqual(["a"]);
@@ -180,17 +183,20 @@ test("the Film list is applyMatchFilters(shared) AND the remainder's extras AND 
       filmListPoints(
         applyMatchFilters(points, won.shared, ctx(false)),
         NO_FILM_LOCAL_FILTERS,
+        ctx(),
       ),
     ),
   ).toEqual(["c"]);
 
   // Saved is ANDed on top of both.
   expect(
-    ids(filmListPoints(sharedPoints, { remainder: null, savedOnly: true })),
+    ids(
+      filmListPoints(sharedPoints, { remainder: null, savedOnly: true }, ctx()),
+    ),
   ).toEqual(["c"]);
 
   // Nothing Film-only applied: the shared points themselves, same array.
-  expect(filmListPoints(sharedPoints, NO_FILM_LOCAL_FILTERS)).toBe(
+  expect(filmListPoints(sharedPoints, NO_FILM_LOCAL_FILTERS, ctx())).toBe(
     sharedPoints,
   );
 });
@@ -219,7 +225,7 @@ test("un-setting a landed cut's serveType widens the list to every point the ext
   });
   const local = { remainder: landed.remainder, savedOnly: false };
   const listOf = (shared: MatchFilters) =>
-    ids(filmListPoints(applyMatchFilters(served, shared, ctx()), local));
+    ids(filmListPoints(applyMatchFilters(served, shared, ctx()), local, ctx()));
   expect(listOf(landed.shared)).toEqual(["f5"]);
 
   // The viewer un-picks Serve › Type "First" in the drawer: nothing else
@@ -227,7 +233,9 @@ test("un-setting a landed cut's serveType widens the list to every point the ext
   const widened = listOf({ ...landed.shared, serveType: [] });
   expect(widened).toEqual(
     ids(
-      served.filter((p) => matchesFilmCutExtras(p, landed.remainder!.extras)),
+      served.filter((p) =>
+        matchesFilmCutExtras(p, landed.remainder!.extras, ctx()),
+      ),
     ),
   );
   expect(widened).toEqual(["f5", "s6", "s8"]);
@@ -327,10 +335,14 @@ test("a second statistic's cut replaces the first instead of stacking on it", ()
   ];
   const listOf = (f: { shared: MatchFilters; remainder: unknown }) =>
     ids(
-      filmListPoints(applyMatchFilters(firstServe, f.shared, ctx()), {
-        remainder: f.remainder as LandedFilmCut | null,
-        savedOnly: false,
-      }),
+      filmListPoints(
+        applyMatchFilters(firstServe, f.shared, ctx()),
+        {
+          remainder: f.remainder as LandedFilmCut | null,
+          savedOnly: false,
+        },
+        ctx(),
+      ),
     );
 
   // Head to head: "1st serve points won" for you.
@@ -682,4 +694,51 @@ test("legacy ?cut=break&serve=you parse into the new model", () => {
   expect(stripLegacyFilmQuery("tab=film&cut=returnPlacement&serve=you")).toBe(
     "tab=film&cut=returnPlacement",
   );
+});
+
+test.describe("the error endings", () => {
+  // Three buckets over the free-text result type: the judged split's two
+  // (`unforced-error`, `forced-error`) and the unjudged match's one (`error`,
+  // every error). None of them takes a double fault, which the report counts
+  // on its own line, nor a winner.
+  const UE = pt({ id: "ue", resultType: "Backhand Unforced Error" });
+  const FE = pt({ id: "fe", resultType: "Forehand Forced Error" });
+  const BARE_UE = pt({ id: "bare-ue", resultType: "Unforced Error" });
+  const BARE_FE = pt({ id: "bare-fe", resultType: "Forced Error" });
+  const DF = pt({ id: "df", resultType: "Double Fault" });
+  const WINNER = pt({ id: "w", resultType: "Forehand Winner" });
+  const NONE = pt({ id: "none", resultType: "" });
+  const all = [UE, FE, BARE_UE, BARE_FE, DF, WINNER, NONE];
+  const admitted = (ending: "unforced-error" | "forced-error" | "error") =>
+    all.filter((p) => matchesFilmCutEnding(p, ending)).map((p) => p.id);
+
+  test("unforced-error is the unforced errors alone", () => {
+    expect(admitted("unforced-error")).toEqual(["ue", "bare-ue"]);
+  });
+
+  test("forced-error is the forced errors, never an unforced one", () => {
+    // "unforced error" contains "forced error" — the bucket must not take it.
+    expect(admitted("forced-error")).toEqual(["fe", "bare-fe"]);
+  });
+
+  test("error is every error, forced and unforced, and no double fault", () => {
+    expect(admitted("error")).toEqual(["ue", "fe", "bare-ue", "bare-fe"]);
+  });
+
+  test("case and trailing space do not matter", () => {
+    const shouty = pt({ id: "s", resultType: "BACKHAND FORCED ERROR " });
+    expect(matchesFilmCutEnding(shouty, "forced-error")).toBe(true);
+    expect(matchesFilmCutEnding(shouty, "error")).toBe(true);
+    expect(matchesFilmCutEnding(shouty, "unforced-error")).toBe(false);
+  });
+
+  test("the extras check reads the same buckets", () => {
+    expect(matchesFilmCutExtras(FE, { ending: "forced-error" }, ctx())).toBe(
+      true,
+    );
+    expect(matchesFilmCutExtras(UE, { ending: "forced-error" }, ctx())).toBe(
+      false,
+    );
+    expect(matchesFilmCutExtras(DF, { ending: "error" }, ctx())).toBe(false);
+  });
 });

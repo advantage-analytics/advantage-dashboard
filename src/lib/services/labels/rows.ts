@@ -11,6 +11,7 @@
 import { parseLabelPointSeed, parseLabelShotSeed } from "./edit";
 import type {
   LabelEnding,
+  LabelErrorKind,
   LabelGameType,
   LabelPoint,
   LabelPointStatus,
@@ -35,6 +36,8 @@ export interface LabelPointRow {
   winner: LabelSide | null;
   ending: LabelEnding | null;
   ended_by: LabelSide | null;
+  /** Absent from a read that did not ask for it; read as null. */
+  error_kind?: LabelErrorKind | null;
   game_type: LabelGameType;
   status: LabelPointStatus;
   status_before_delete: Exclude<LabelPointStatus, "deleted"> | null;
@@ -47,7 +50,7 @@ export interface LabelPointRow {
 }
 
 export const LABEL_POINT_COLUMNS =
-  "id, point_index, vendor_rally_ids, set_number, game_number, server, serve_side, winner, ending, ended_by, game_type, status, status_before_delete, checked_at, note, dismissed, game_start_locked, seed";
+  "id, point_index, vendor_rally_ids, set_number, game_number, server, serve_side, winner, ending, ended_by, error_kind, game_type, status, status_before_delete, checked_at, note, dismissed, game_start_locked, seed";
 
 /** A point row as the console draws it, with `shots` already in video order. */
 export function toLabelPoint(
@@ -65,6 +68,7 @@ export function toLabelPoint(
     winner: row.winner ?? null,
     ending: row.ending ?? null,
     endedBy: row.ended_by ?? null,
+    errorKind: row.error_kind ?? null,
     gameType: row.game_type,
     status: row.status,
     statusBeforeDelete: row.status_before_delete ?? null,

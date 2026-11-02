@@ -83,7 +83,7 @@ function list(
     ctx,
   );
   return ids(
-    filmListPoints(sharedPoints, { ...NO_FILM_LOCAL_FILTERS, ...local }),
+    filmListPoints(sharedPoints, { ...NO_FILM_LOCAL_FILTERS, ...local }, ctx),
   );
 }
 const extras = (e: FilmCutExtras) => ({
@@ -172,8 +172,84 @@ test("the cut in words — the trigger and the zero state", () => {
       names,
     ),
   ).toBe(
-    "Revelli serving · Set 2 · Winners · Long rally (9+) · Winners · Revelli, from Statistics · Saved",
+    "Revelli serving · Set 2 · Long rally (9+) · Winners · Revelli, from Statistics · Saved",
   );
+  // A shared phrase the statistic's label opens with is said once.
+  const errorsCut = {
+    shared: { ...EMPTY_MATCH_FILTERS, resultEnding: ["error" as const] },
+    savedOnly: false,
+  };
+  expect(
+    filmListSentence(
+      {
+        ...errorsCut,
+        remainder: { extras: { ending: "error" }, label: "Errors" },
+      },
+      names,
+    ),
+  ).toBe("Errors, from Statistics");
+  expect(
+    filmListSentence(
+      {
+        ...errorsCut,
+        remainder: { extras: { ending: "error" }, label: "Errors · Revelli" },
+      },
+      names,
+    ),
+  ).toBe("Errors · Revelli, from Statistics");
+  // One player's figure sets the Result player too, and the label names them:
+  // once, surname or short name. A different player picked since stays.
+  const revellisErrors = {
+    shared: { ...errorsCut.shared, resultPlayer: "opponent" as const },
+    savedOnly: false,
+    remainder: {
+      extras: { ending: "error" as const },
+      label: "Errors · Revelli",
+    },
+  };
+  expect(filmListSentence(revellisErrors, names)).toBe(
+    "Errors · Revelli, from Statistics",
+  );
+  expect(
+    filmListSentence(revellisErrors, { ...names, opponent: "G. Revelli" }),
+  ).toBe("Errors · Revelli, from Statistics");
+  expect(
+    filmListSentence(
+      {
+        ...revellisErrors,
+        shared: { ...errorsCut.shared, resultPlayer: "you" as const },
+      },
+      names,
+    ),
+  ).toBe("Stepanov’s last shot · Errors · Revelli, from Statistics");
+  // A side's "won" figure says its own outcome. Outcome reads from the viewer's
+  // side, so the opponent's wins are Lost, and printing that beside "Net points
+  // won · Revelli" contradicts the label.
+  const wonCut = (outcome: "won" | "lost", label: string) => ({
+    shared: { ...EMPTY_MATCH_FILTERS, resultOutcome: [outcome] },
+    savedOnly: false,
+    remainder: { extras: { netBy: "opponent" as const }, label },
+  });
+  expect(
+    filmListSentence(wonCut("lost", "Net points won · Revelli"), names),
+  ).toBe("Net points won · Revelli, from Statistics");
+  expect(
+    filmListSentence(wonCut("won", "Net points won · Stepanov"), names),
+  ).toBe("Net points won · Stepanov, from Statistics");
+  expect(
+    filmListSentence(wonCut("lost", "Net points won · Revelli"), {
+      ...names,
+      opponent: "G. Revelli",
+    }),
+  ).toBe("Net points won · Revelli, from Statistics");
+  // Picked since, against the label: a real change, so it stays visible.
+  expect(
+    filmListSentence(wonCut("won", "Net points won · Revelli"), names),
+  ).toBe("Points won · Net points won · Revelli, from Statistics");
+  // A label that is not about winning says nothing about the outcome.
+  expect(
+    filmListSentence(wonCut("lost", "Net point attempts · Revelli"), names),
+  ).toBe("Points lost · Net point attempts · Revelli, from Statistics");
   // A pure cut (every key a shared filter) lands no remainder, so the strip
   // reads its shared phrases alone and names nothing twice.
   const pure = landFilmCut(EMPTY_MATCH_FILTERS, {

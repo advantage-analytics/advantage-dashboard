@@ -8,7 +8,11 @@ import {
   LABEL_DELETE_REASONS,
   type LabelDeleteReason,
 } from "@/lib/services/labels/operations";
-import { labelConfirmCopy, type LabelConfirm } from "./label-confirm";
+import {
+  labelConfirmCopy,
+  unmarkedErrorsWarning,
+  type LabelConfirm,
+} from "./label-confirm";
 import { DELETE_REASON_LABEL, type SideNames } from "./label-format";
 
 /**
@@ -18,6 +22,11 @@ import { DELETE_REASON_LABEL, type SideNames } from "./label-format";
  * seed, give a serve to the other player (with "Only this shot" as its second
  * answer), or mark the session complete (listing what is still open). The dialog closes on its action without waiting on the server
  * (`runOperation`'s contract); nothing is written on Cancel.
+ *
+ * A Mark complete with errors still unmarked (`blockers`) cannot publish:
+ * its Publish is disabled — no click or Enter reaches `onConfirm` — Cancel
+ * reads Close, and the footer's left goes to the first of them
+ * (`onGoToPoint`).
  */
 export function LabelConfirmDialog({
   confirm,
@@ -25,6 +34,7 @@ export function LabelConfirmDialog({
   onCancel,
   onConfirm,
   onAlternative,
+  onGoToPoint,
   initialReason = null,
 }: {
   confirm: LabelConfirm | null;
@@ -34,6 +44,11 @@ export function LabelConfirmDialog({
   onConfirm: (confirm: LabelConfirm, reason: LabelDeleteReason | null) => void;
   /** The second answer, on the one confirm that has it (`alternativeLabel`). */
   onAlternative?: (confirm: LabelConfirm) => void;
+  /**
+   * A blocked Mark complete's "Go to point n": the console closes the
+   * confirm and opens that point (as the rail numbers it).
+   */
+  onGoToPoint?: (pointNumber: number) => void;
   /** A reason already chosen on first render — for specs. None by default. */
   initialReason?: LabelDeleteReason | null;
 }) {
@@ -56,6 +71,7 @@ export function LabelConfirmDialog({
       onCancel={onCancel}
       onConfirm={onConfirm}
       onAlternative={onAlternative}
+      onGoToPoint={onGoToPoint}
       initialReason={initialReason}
     />
   );
@@ -67,6 +83,7 @@ function LabelConfirmBody({
   onCancel,
   onConfirm,
   onAlternative,
+  onGoToPoint,
   initialReason,
 }: {
   confirm: LabelConfirm | null;
@@ -74,6 +91,7 @@ function LabelConfirmBody({
   onCancel: () => void;
   onConfirm: (confirm: LabelConfirm, reason: LabelDeleteReason | null) => void;
   onAlternative?: (confirm: LabelConfirm) => void;
+  onGoToPoint?: (pointNumber: number) => void;
   initialReason: LabelDeleteReason | null;
 }) {
   const [reason, setReason] = useState<LabelDeleteReason | null>(initialReason);
@@ -81,6 +99,16 @@ function LabelConfirmBody({
   if (!confirm) return null;
   const copy = labelConfirmCopy(confirm, names);
   const needsReason = confirm.kind === "delete-shot";
+  const blocked = copy.blocked ?? null;
+  const completeList =
+    confirm.kind === "complete-session"
+      ? [
+          ...(confirm.blockers.length > 0
+            ? [unmarkedErrorsWarning(confirm.blockers.length)]
+            : []),
+          ...confirm.warnings,
+        ]
+      : [];
 
   return (
     <ConfirmDialog
@@ -93,20 +121,36 @@ function LabelConfirmBody({
       confirmLabel={copy.confirmLabel}
       pendingLabel={copy.pendingLabel}
       tone={copy.tone}
+      cancelLabel={blocked ? "Close" : undefined}
+      confirmDisabled={blocked !== null}
       error={problem}
       footerLeft={
-        copy.alternativeLabel && onAlternative ? (
+        blocked ? (
+          <button
+            type="button"
+            data-go-to-point={blocked.pointNumber}
+            onClick={() => {
+              onCancel();
+              onGoToPoint?.(blocked.pointNumber);
+            }}
+            className={TEXT_ACTION}
+          >
+            {blocked.goToLabel}
+          </button>
+        ) : copy.alternativeLabel && onAlternative ? (
           <button
             type="button"
             data-confirm-alternative=""
             onClick={() => onAlternative(confirm)}
-            className="cursor-pointer rounded-[var(--radius-cell)] text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+            className={TEXT_ACTION}
           >
             {copy.alternativeLabel}
           </button>
         ) : undefined
       }
       onConfirm={() => {
+        // Held as well as disabled: nothing publishes past an unmarked error.
+        if (blocked) return;
         if (needsReason && reason === null) {
           setProblem("Pick a reason to delete this shot.");
           return;
@@ -122,12 +166,12 @@ function LabelConfirmBody({
             setProblem(null);
           }}
         />
-      ) : confirm.kind === "complete-session" && confirm.warnings.length > 0 ? (
+      ) : completeList.length > 0 ? (
         <ul
           data-complete-warnings=""
           className="flex list-disc flex-col gap-1 pl-4 text-[13px] text-[var(--ink-700)]"
         >
-          {confirm.warnings.map((warning) => (
+          {completeList.map((warning) => (
             <li key={warning}>{warning}</li>
           ))}
         </ul>
@@ -135,6 +179,10 @@ function LabelConfirmBody({
     </ConfirmDialog>
   );
 }
+
+/** The footer's quiet blue text action (DS footer grammar): no icon. */
+const TEXT_ACTION =
+  "cursor-pointer rounded-[var(--radius-cell)] text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
 
 /** Why the stroke goes: required by `label_shots` for a deleted stroke. */
 export function DeleteReasonChoice({

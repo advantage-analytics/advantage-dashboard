@@ -27,6 +27,7 @@ import {
   VIZ_COURT_TRANSITION_NAME,
   VIZ_FOCUSED_HEADING_ID,
 } from "./viz-court-transition";
+import { useErrorSplitJudged } from "../match-filters/provider";
 
 interface VizStateContextValue {
   state: VizState;
@@ -195,6 +196,10 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const query = searchParams.toString();
+  // A link's Error type is read against this match: unjudged, `forced` opens
+  // on every error (`parseVizState`'s `match`). The flag is fixed for the
+  // page's life, so the parse below needn't rerun when it is read.
+  const errorSplitJudged = useErrorSplitJudged();
 
   // Lazy initializer: `parseVizState` only needs to run once, on mount — on
   // every later render `state` already holds what it would recompute to (or,
@@ -202,7 +207,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   // below sets), so calling it unconditionally here would re-parse the query
   // string on every render for no reason.
   const [state, setRenderedState] = useState<VizState>(() =>
-    parseVizState(searchParams),
+    parseVizState(searchParams, { errorSplitJudged }),
   );
   const intendedRef = useRef<VizState>(state);
   const ownQueriesRef = useRef<string[]>([query]);
@@ -264,6 +269,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
       urlQuery: query,
       ownQueries: ownQueriesRef.current,
       intended: intendedRef.current,
+      match: { errorSplitJudged },
     });
     intendedRef.current = reconciled.state;
     ownQueriesRef.current = reconciled.ownQueries;
@@ -274,7 +280,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
     if (!wasOwnQuery && prevKey !== viewIdentityKey(reconciled.state)) {
       setExternalCourtSwap(true);
     }
-  }, [query]);
+  }, [query, errorSplitJudged]);
 
   // `hrefFor`/`setState` wrapped in `useCallback`, and the context value
   // itself in `useMemo`: every reader downstream of

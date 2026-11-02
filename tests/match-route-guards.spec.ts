@@ -5,7 +5,10 @@ import { isUuid } from "@/lib/services/match-video/access";
 import { isPlainObject } from "@/lib/services/match-video/http";
 import { normalizeMatchPatch } from "@/lib/matches/patch-match";
 import { takenRoundCodes } from "@/lib/matches/round-options";
-import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
+import {
+  resolveAnalysisStatus,
+  retryWouldRun,
+} from "@/lib/data/match-analysis";
 import { rosterPlayerOptions } from "@/lib/data/roster-shared";
 
 /**
@@ -47,6 +50,8 @@ function harness(
   scenario: {
     match?: Record<string, unknown> | null;
     jobs?: Read;
+    /** Every job of the match, read after a failed or cancelled one. */
+    allJobs?: Read;
     roster?: Read;
     program?: Read;
   } = {},
@@ -56,9 +61,12 @@ function harness(
     const q = {
       select: () => q,
       eq: () => q,
-      is: () => q,
       order: () => q,
       limit: () => q,
+      then: (done: (read: Read) => unknown) =>
+        Promise.resolve(scenario.allJobs ?? { data: [], error: null }).then(
+          done,
+        ),
       update: () => {
         calls.push(`update:${table}`);
         return q;
@@ -126,7 +134,7 @@ function harness(
     "@/lib/services/matches/release-storage-purge-claim": {
       releaseStoragePurgeClaims: async () => {},
     },
-    "@/lib/data/match-analysis": { resolveAnalysisStatus },
+    "@/lib/data/match-analysis": { resolveAnalysisStatus, retryWouldRun },
     "@/lib/matches/patch-match": { normalizeMatchPatch },
     "@/lib/matches/round-options": { takenRoundCodes },
     "@/lib/workspace/active-workspace-server": {
@@ -271,6 +279,83 @@ test("PATCH saves when the analysis read succeeds with no job", async () => {
   const response = await h.PATCH({ tournament_name: "Open" });
   expect(response.status).toBe(200);
   expect(h.calls).toContain("update:matches");
+});
+
+/* ------------------------------------------- ad scoring awaiting a retry */
+
+const FAILED_JOB: Read = {
+  data: { status: "failed", derivation_version: null },
+  error: null,
+};
+const FAILED_ROW = {
+  id: "j-1",
+  status: "failed",
+  created_by: "owner",
+  error_code: null,
+  error_category: null,
+  error_step: null,
+  video_object_key: "video.mp4",
+  start_time_seconds: 0,
+  end_time_seconds: 60,
+  resubmitted_from_job_id: null,
+};
+const ONLY_FAILED: Read = { data: [FAILED_ROW], error: null };
+const FORMAT_PATCH = { format: { ad_scoring: true } };
+
+test("PATCH takes ad scoring on a retryable analysis, and GET says so", async () => {
+  const h = harness({ jobs: FAILED_JOB, allJobs: ONLY_FAILED });
+  expect((await h.PATCH(FORMAT_PATCH)).status).toBe(200);
+  expect(h.calls).toContain("update:matches");
+  const read = harness({ jobs: FAILED_JOB, allJobs: ONLY_FAILED });
+  expect((await read.GET()).body).toMatchObject({ awaitingRetry: true });
+});
+
+test("the match's jobs are read with the service role, whoever made them", async () => {
+  const h = harness({
+    jobs: FAILED_JOB,
+    allJobs: {
+      data: [
+        FAILED_ROW,
+        { ...FAILED_ROW, id: "j-0", status: "completed", created_by: "admin" },
+      ],
+      error: null,
+    },
+  });
+  expect((await h.PATCH(FORMAT_PATCH)).status).toBe(400);
+  expect(h.calls).toContain("createAdminClient");
+  expect(h.calls).not.toContain("update:matches");
+});
+
+test("PATCH refuses ad scoring when no retry could run", async () => {
+  const h = harness({
+    jobs: FAILED_JOB,
+    allJobs: {
+      data: [{ ...FAILED_ROW, error_category: "invalid_input" }],
+      error: null,
+    },
+  });
+  expect((await h.PATCH(FORMAT_PATCH)).status).toBe(400);
+  expect(h.calls).not.toContain("update:matches");
+});
+
+test("PATCH refuses ad scoring while an analysis is running", async () => {
+  const h = harness({
+    jobs: {
+      data: { status: "processing", derivation_version: null },
+      error: null,
+    },
+  });
+  expect((await h.PATCH(FORMAT_PATCH)).status).toBe(400);
+  expect(h.calls).not.toContain("update:matches");
+});
+
+test("a failed read of the match's jobs answers 500, never an unlocked format", async () => {
+  const failing = { data: null, error: { message: RAW } };
+  const patched = harness({ jobs: FAILED_JOB, allJobs: failing });
+  expect((await patched.PATCH(FORMAT_PATCH)).status).toBe(500);
+  expect(patched.calls).not.toContain("update:matches");
+  const read = harness({ jobs: FAILED_JOB, allJobs: failing });
+  expect((await read.GET()).status).toBe(500);
 });
 
 /* -------------------------------------------------- roster read errors */

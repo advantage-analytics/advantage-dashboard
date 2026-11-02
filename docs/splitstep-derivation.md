@@ -82,7 +82,7 @@ Point flags, all review-only since 0.6.0 (`points.flags`; scored against hand la
 | `score_side_mismatch`        | Points played in the game say one court, the server stood on the other            |
 | `tiebreak_score_off_six_all` | Tiebreak point scores while the game score is not 6-6 (the game count drifted)    |
 | `winner_guessed`             | Collapsed score tail: the winner is the last stroke's guess                       |
-| `result_type_unknown`        | No honest `result_type`                                                           |
+| `result_type_unknown`        | No honest `result_type`, including where the last call and the fold disagree      |
 | `phantom_strokes_dropped`    | Strokes at a faulted serve were removed (the one row change `played.ts` makes)    |
 | `second_serve_called_out`    | Out-called second serve with a short tail — a possible double fault               |
 | `winner_to_error_by_bounce`  | The ball before a winner bounced out (trajectories) — demoted from autofix, 0.6.0 |
@@ -211,8 +211,9 @@ derivation can correct.
 The Head to head card is the one exception, at widget level only: since T1,
 `head-to-head-card.tsx` on a splitstep match counts an unreturned In serve won
 by the server (`rallyLength === 1`, server won the point) as an ace from the
-points table and subtracts those same points from Winners. It never touches
-`match_stats`, which stays suppressed.
+points table. It never touches `match_stats`, which stays suppressed. Winners
+needs no such adjustment: since 2026-10-30 `calculate_match_stats` leaves every
+`Service Winner` out of it.
 
 `suppress_derived_match_stats(match_id)` enforces it, scoped to
 `source_provider = 'splitstep'`.

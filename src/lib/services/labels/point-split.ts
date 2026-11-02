@@ -39,6 +39,7 @@ import {
   type LabelShotStatus,
   type LabelSide,
 } from "./session";
+import { strokeDismissals } from "./suggestions";
 
 /** What the plan reads of a shot. A `LabelShot` satisfies it. */
 export type SplittableShot = Pick<
@@ -86,7 +87,10 @@ export function serveRestrokes(
 
 /** What the plan reads of a point. A `LabelPoint` satisfies it. */
 export type SplittablePoint = InsertablePoint &
-  Pick<LabelPoint, "vendorRallyIds"> & { shots: readonly SplittableShot[] };
+  Pick<LabelPoint, "vendorRallyIds"> &
+  Partial<Pick<LabelPoint, "dismissed">> & {
+    shots: readonly SplittableShot[];
+  };
 
 /** The new row's columns; the labeller sets its winner next. */
 export interface SplitPointWrite {
@@ -98,6 +102,12 @@ export interface SplitPointWrite {
   status: "added";
   /** The distinct rallies of the moved vendor shots; `[]` when none is known. */
   vendor_rally_ids: number[];
+  /**
+   * The anchor's dismissals of the moved strokes' suggestions
+   * (`strokeDismissals`): they move with the strokes, so a missing shot the
+   * labeller said no to stays answered on the new point.
+   */
+  dismissed: string[];
 }
 
 export interface SplitAnchorWrite {
@@ -161,6 +171,7 @@ export function planPointSplit(
       insert: {
         ...inserted.write.insert,
         vendor_rally_ids: [...movedRallies],
+        dismissed: strokeDismissals(anchor.dismissed ?? [], moved),
       },
       shifts: inserted.write.shifts,
       movedShotIds: moved.map((shot) => shot.id),
@@ -236,12 +247,13 @@ export function draftSplitPoint(
     winner: null,
     ending: null,
     endedBy: null,
+    errorKind: null,
     gameType: write.game_type,
     status: "added",
     statusBeforeDelete: null,
     checkedAt: null,
     note: null,
-    dismissed: [],
+    dismissed: write.dismissed,
     gameStartLocked: false,
     seed: null,
     shots: [],

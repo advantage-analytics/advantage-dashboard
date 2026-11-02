@@ -7,16 +7,23 @@
  * every one of those stats then reads 0, and 0 is indistinguishable from a
  * clean match on screen.
  *
- * Two things it does NOT read, which shapes what we bother to derive:
- *   - `Forced Error` — `match_stats.forced_errors` is inserted as literal NULL,
- *     so the forced/unforced split is not consumed anywhere. Forced errors fold
- *     into the Unforced Error bucket by construction, and the column means
- *     "forced plus unforced" for this provider.
- *   - `shots.zone` — placement stats are recomputed from `landing_x` directly.
+ * Two things shape what we bother to derive:
+ *   - `Forced Error` — `match_stats.forced_errors` is counted only on a judged
+ *     match: SwingVision (`source_provider = 'swing-vision'`), or a video match
+ *     whose `matches.errors_judged_at` was set at publish because every error
+ *     was marked forced or unforced. Everywhere else the column is NULL, never
+ *     0. This derivation still never emits a Forced Error string: forced errors
+ *     fold into the Unforced Error bucket by construction, so until a match is
+ *     judged the column means "forced plus unforced" for this provider.
+ *   - `shots.zone` — not read; placement stats are recomputed from `landing_x`
+ *     directly.
  *
  * Never emit 'Forehand Forced Error' or 'Backhand Forced Error': those strings
  * match neither `LIKE '%Winner%'` nor `LIKE '%Unforced Error%'`, so the point
  * would vanish from every aggregate rather than land in the wrong one.
+ *
+ * `Service Winner` is left out of `winners` by name (product decision
+ * 2026-10-30), so it reaches `service_winners` alone.
  */
 
 import { netHitContradictsHeight } from "./flags";
@@ -102,6 +109,14 @@ export function classifyPoint(
   // the returner. It stays findable as a miss by the return's own result
   // (Return › Result "Error").
   if (isMissedReturn(rally, winner)) return "Service Winner";
+
+  // The kept call and the fold name different winners, so "winner by the
+  // loser" or "error by the winner" would be all this could say, and the stats
+  // would credit it. The point stays, with its fold winner, its ball and
+  // `last_call_contradicts_winner`, but makes no claim about how it ended. The
+  // call beat the fold here on the labelled matches (`trustedLastCall`), so the
+  // call is not overruled to give it a label either.
+  if (lastCallContradictsWinner(rally, winner)) return null;
 
   const side = last.strokeSide ? SIDE_LABEL[last.strokeSide] : null;
   const won = last.playerLabel === winner;

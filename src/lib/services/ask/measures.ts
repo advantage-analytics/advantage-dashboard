@@ -26,6 +26,39 @@
  * A leaf: no imports.
  */
 
+/**
+ * Counters the canned queries sum that are not a column of `ask.match_stats`
+ * but an expression over its columns, keyed by the name the query gives it.
+ *
+ * `errors` reads only `unforced_errors` and `forced_errors`, both columns of
+ * the live `ask.match_stats` view (checked against information_schema on
+ * 2026-10-29), so no view change backs it. `forced_errors` is null where
+ * nobody judged the split; there every error is already in
+ * `unforced_errors`, and coalesce keeps the sum from going null.
+ */
+export const ASK_DERIVED_COUNTERS: Readonly<
+  Record<string, (table: string) => string>
+> = {
+  errors: (t) => `(${t}.unforced_errors + coalesce(${t}.forced_errors, 0))`,
+};
+
+/** A counter as SQL over the row alias `table`: the column itself, or its expression. */
+export function askCounterSql(counter: string, table: string): string {
+  const derived = Object.prototype.hasOwnProperty.call(
+    ASK_DERIVED_COUNTERS,
+    counter,
+  )
+    ? ASK_DERIVED_COUNTERS[counter]
+    : undefined;
+  return derived ? derived(table) : `${table}.${counter}`;
+}
+
+/** `askCounterSql` as a plain select item: a derived counter is aliased to its name. */
+export function askCounterSelect(counter: string, table: string): string {
+  const sql = askCounterSql(counter, table);
+  return sql === `${table}.${counter}` ? sql : `${sql} as ${counter}`;
+}
+
 export interface AskMeasureName {
   /** As the page prints it beside the number. */
   label: string;
@@ -39,8 +72,21 @@ export const ASK_MEASURES: Readonly<Record<string, AskMeasureName>> = {
   aces: { label: "Aces" },
   double_faults: { label: "Double faults" },
   winners: { label: "Winners" },
-  unforced_errors: { label: "Unforced errors" },
+  // Reaches the model through the names statement (`facts.ts`). Printed
+  // comparisons carry ASK_UNFORCED_ERRORS_NOTE instead: nothing prints `note`.
+  unforced_errors: {
+    label: "Unforced errors",
+    note: "every error on a match whose split nobody judged: ERRORS UNTIL JUDGED says what to call it",
+  },
   forced_errors: { label: "Forced errors" },
+  // Not a view column: unforced + coalesce(forced, 0), computed in SQL
+  // (`askCounterSql`). The one error count that means the same on a match
+  // whose forced/unforced split nobody judged (forced_errors null, every
+  // error filed as unforced) and on one that was judged.
+  errors: {
+    label: "Errors",
+    note: "every error, forced or unforced",
+  },
   avg_rally_length: { label: "Average rally length" },
   first_serves: { label: "First serves hit" },
   first_serves_in: { label: "First serves in" },
@@ -82,7 +128,7 @@ export const ASK_MEASURES: Readonly<Record<string, AskMeasureName>> = {
   forehand_unforced_errors: { label: "Forehand unforced errors" },
   backhand_unforced_errors: { label: "Backhand unforced errors" },
   volley_winners: { label: "Volley winners" },
-  net_points_appearances: { label: "Net points played" },
+  net_points_appearances: { label: "Net point attempts" },
   net_points_won: { label: "Net points won" },
   serve_wide: { label: "Serves wide" },
   serve_body: { label: "Serves to the body" },
@@ -236,6 +282,43 @@ export function askMeasure(
     }
   }
   return null;
+}
+
+/**
+ * Said under a server-written answer that prints unforced errors, where the
+ * label alone would claim a split nobody may have judged. No digit in it.
+ */
+export const ASK_UNFORCED_ERRORS_NOTE =
+  "Unforced errors can include every error on matches whose forced/unforced split wasn't judged.";
+
+/** Whether a column holds `unforced_errors`, behind any qualifier or as a per-match mean. */
+export function isUnforcedErrorsColumn(column: string): boolean {
+  return (
+    askMeasure(column.replace(/_per_match$/, ""))?.key === "unforced_errors"
+  );
+}
+
+/** The column that says whether an `unforced_errors` column's split was judged: same qualifiers. */
+export function forcedErrorsColumn(column: string): string {
+  return column.replace("unforced_errors", "forced_errors");
+}
+
+/**
+ * ASK_UNFORCED_ERRORS_NOTE when rows from a planner's query hold an
+ * unforced-errors column whose forced_errors beside it is missing or null in
+ * any row; nothing when every figure's split was judged.
+ */
+export function unforcedErrorsNotes(
+  rows: readonly Readonly<Record<string, unknown>>[],
+): string[] {
+  const unjudged = rows.some((row) =>
+    Object.keys(row).some(
+      (column) =>
+        isUnforcedErrorsColumn(column) &&
+        typeof row[forcedErrorsColumn(column)] !== "number",
+    ),
+  );
+  return unjudged ? [ASK_UNFORCED_ERRORS_NOTE] : [];
 }
 
 /** A documented measure's label. Throws for a name that is not one: a typo in code, never data. */

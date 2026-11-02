@@ -90,7 +90,7 @@ const SEASON: Record<string, Values> = {
   first_return_won_pct: [40, 33, 34, 35, 34],
   break_points_converted_pct: [null, 44, 41, 40, 42],
   winners: [22, 26, 21, 24, 21],
-  unforced_errors: [30, 30.4, 31, 30, 31],
+  errors: [30, 30.4, 31, 30, 31],
   total_points_won_pct: [49, 50, 50.5, 50, 50.4],
 };
 
@@ -202,7 +202,7 @@ test.describe("ASK_REVIEW_SQL", () => {
     expect(ASK_REVIEW_SQL).not.toMatch(/_pct\b(?!')/);
   });
 
-  test("covers the measures the product owner listed; only double faults and unforced errors run lower-is-better", () => {
+  test("covers the measures the product owner listed; only double faults and errors run lower-is-better", () => {
     expect(ASK_REVIEW_MEASURES.map((measure) => measure.key)).toEqual([
       "first_serve_pct",
       "first_serve_won_pct",
@@ -214,7 +214,7 @@ test.describe("ASK_REVIEW_SQL", () => {
       "break_points_converted_pct",
       "break_points_saved_pct",
       "winners",
-      "unforced_errors",
+      "errors",
       "total_points_won_pct",
       "short_rally_won_pct",
       "medium_rally_won_pct",
@@ -224,7 +224,7 @@ test.describe("ASK_REVIEW_SQL", () => {
       ASK_REVIEW_MEASURES.filter((measure) => !measure.higherIsBetter).map(
         (measure) => measure.key,
       ),
-    ).toEqual(["double_faults", "unforced_errors"]);
+    ).toEqual(["double_faults", "errors"]);
     for (const measure of ASK_REVIEW_MEASURES) {
       expect(measure.label).not.toMatch(/\d/);
     }
@@ -310,7 +310,7 @@ test.describe("classifyReview", () => {
     expect(status("winners")).toBe("worse_than_one");
     // Within tolerance of both.
     expect(status("first_serve_pct")).toBe("in_line");
-    expect(status("unforced_errors")).toBe("in_line");
+    expect(status("errors")).toBe("in_line");
     expect(status("aces")).toBe("in_line");
     expect(status("first_return_won_pct")).toBe("better");
   });
@@ -396,7 +396,7 @@ test.describe("buildReviewAnswer", () => {
       "Your last match with statistics was against Riley Marsh on Sep 28, 2026. " +
         "Worse than both your previous-five average and your overall average: second-serve points won at 38% (previous five 50%, overall 52%); double faults at 5 (previous five 2.4, overall 2.9). " +
         "Worse than one of the two averages: winners at 22 (previous five 26, overall 21). " +
-        "In line with both averages: total points won, first serves in, aces and unforced errors. " +
+        "In line with both averages: total points won, first serves in, aces and errors. " +
         "Better than at least one average and worse than neither: first-serve points won and first-serve return points won.",
     );
     expect(declined).toBe(

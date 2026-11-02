@@ -500,6 +500,22 @@ test("an accepted submission records what was sent, then queued, and schedules a
   expect(h.released).toEqual([]);
 });
 
+test("a resend after an allowance refusal leaves no error on the queued row", async () => {
+  // The 2026-10-29 case: refused at quota, the program granted the pilot, the
+  // same job sent again with `{ jobId }`. The queued row must not keep
+  // carrying the refusal's code.
+  const h = harness({ job: job({ attempt_count: 1 }) });
+  const r = await call(h);
+  expect(r.status).toBe(200);
+  expect(h.patches).toHaveLength(1);
+  expect(h.patches[0].patch).toMatchObject({
+    status: "queued",
+    error_message: null,
+    error_code: null,
+    error_category: null,
+  });
+});
+
 // ── The match's workspace, not the switcher's ─────────────────────────────
 
 test("a match under a program the caller is not in → 403, nothing reserved", async () => {

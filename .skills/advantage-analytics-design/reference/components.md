@@ -189,7 +189,11 @@ gap, 1px radius, oldest left, `--viz-good` / `--viz-bad`. Shipped as
 7") where there is room. A played-but-unscored match is `"pending"` and draws
 `--ink-300`. The roster table passes `slots={5}`, which pads the strip with
 `--ink-100` ghost bars for matches not yet played (and replaces the em dash for
-a player with none); other call sites leave `slots` off. The pre-v3 treatment — a 20px `rounded-[3px]` square
+a player with none); other call sites leave `slots` off. On Opponents each
+played bar also links to its match (`OpponentFormStrip`, `opponents/opponent-cells.tsx`):
+the hovered bar grows to 16px, its siblings fade to 40%, and it opens the dark
+readout (Data Tooltip); on touch and from the keyboard the drawer lists the same
+matches instead. The pre-v3 treatment — a 20px `rounded-[3px]` square
 with a 9px semibold letter on the 15% tint — is retired.
 
 ### Activity Indicator Line

@@ -1282,3 +1282,58 @@ export function importedAnalysis(sourceProvider: string): MatchAnalysis {
 export function manualAnalysis(): MatchAnalysis {
   return { status: "manual", providerId: null };
 }
+
+/** The columns of a match's job rows {@link retryWouldRun} reads. */
+export interface RetryCandidateRow {
+  id: string;
+  status: string;
+  created_by: string | null;
+  error_code: string | null;
+  error_category: string | null;
+  error_step: string | null;
+  video_object_key: string | null;
+  start_time_seconds: number | string | null;
+  end_time_seconds: number | string | null;
+  resubmitted_from_job_id: string | null;
+}
+
+/**
+ * Whether this viewer's retry of the match's newest job would get past
+ * `resubmitJob()`, and no analysis of the match has completed. `jobs` is every
+ * job of the match, newest first and whoever made it: only the uploader can
+ * retry, and one completed job means statistics were built.
+ *
+ * The same checks in the same terms, read from the rows. It does not ask whether
+ * the blob is still stored or whether the allowance has room: those need a call
+ * each and can change before the retry, which still refuses them itself.
+ */
+export function retryWouldRun(
+  jobs: readonly RetryCandidateRow[],
+  viewerId: string,
+): boolean {
+  const newest = jobs[0];
+  if (!newest || newest.created_by !== viewerId) return false;
+  if (jobs.some((job) => job.status === "completed")) return false;
+  if (newest.status !== "failed" && newest.status !== "cancelled") return false;
+  if (
+    !newest.video_object_key ||
+    newest.start_time_seconds === null ||
+    newest.end_time_seconds === null
+  ) {
+    return false;
+  }
+  if (newest.status === "failed") {
+    const recovery = classifyFailure({
+      dbStatus: newest.status,
+      errorCode: newest.error_code,
+      errorCategory: newest.error_category,
+      errorStep: newest.error_step,
+      hasVideo: true,
+      hasResults: false,
+      attemptsUsed: 0,
+      stalledSubmit: false,
+    });
+    if (recovery !== "retry") return false;
+  }
+  return chainAttempts(jobs, newest.id) < MAX_TOTAL_ATTEMPTS;
+}

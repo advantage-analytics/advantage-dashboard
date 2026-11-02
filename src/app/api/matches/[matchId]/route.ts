@@ -7,7 +7,11 @@ import {
   PurgeRefusedError,
 } from "@/lib/services/matches/purge-match-storage";
 import { releaseStoragePurgeClaims } from "@/lib/services/matches/release-storage-purge-claim";
-import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
+import {
+  resolveAnalysisStatus,
+  retryWouldRun,
+  type RetryCandidateRow,
+} from "@/lib/data/match-analysis";
 import { isUuid } from "@/lib/services/match-video/access";
 import { isPlainObject } from "@/lib/services/match-video/http";
 import {
@@ -87,11 +91,7 @@ function notFound() {
   return NextResponse.json({ error: "Not found" }, { status: 404 });
 }
 
-/** DELETE's answer when the admin console's purge guard refuses the match. */
-const PURGE_PROTECTED_MESSAGE =
-  "Matches recorded, analyzed or hand-labeled through the admin console cannot be deleted here.";
-
-/** DELETE's answer when that guard could not be checked, or anything else threw. */
+/** DELETE's answer when the purge claim failed, or anything else threw. */
 const PURGE_UNAVAILABLE_MESSAGE = "Match deletion is unavailable. Try again.";
 
 /** What a Verified match keeps fixed; the database guard is the backstop. */
@@ -169,6 +169,35 @@ async function analysisFor(supabase: Supabase, matchId: string) {
   const row = data as { status: string; derivation_version: string | null };
   const status = resolveAnalysisStatus(row.status, row.derivation_version);
   return { analysis: status ? { status } : null, error: null };
+}
+
+/**
+ * Whether Edit match may change this match's ad scoring for a retry
+ * (`retryWouldRun`). Only after the caller's RLS read has returned the match
+ * does this read its jobs with the service role: a viewer sees only the jobs
+ * they made, and someone else's completed job must still hold the lock. A failed
+ * read answers with its error, like `analysisFor`, and never passes for yes.
+ */
+async function awaitingRetryFor(
+  matchId: string,
+  viewerId: string,
+  analysis: { status: string } | null,
+) {
+  if (analysis?.status !== "failed" && analysis?.status !== "cancelled") {
+    return { awaitingRetry: false, error: null };
+  }
+  const { data, error } = await createAdminClient()
+    .from("processing_jobs")
+    .select(
+      "id, status, created_by, error_code, error_category, error_step, video_object_key, start_time_seconds, end_time_seconds, resubmitted_from_job_id",
+    )
+    .eq("match_id", matchId)
+    .order("created_at", { ascending: false });
+  if (error) return { awaitingRetry: false, error };
+  return {
+    awaitingRetry: retryWouldRun((data ?? []) as RetryCandidateRow[], viewerId),
+    error: null,
+  };
 }
 
 /**
@@ -341,6 +370,14 @@ export async function GET(
     );
   }
   const { analysis } = analysisRead;
+  const retryRead = await awaitingRetryFor(matchId, user.id, analysis);
+  if (retryRead.error) {
+    return serverError(
+      "GET /api/matches/[matchId]: failed to load analysis status",
+      retryRead.error,
+      "Could not load the match",
+    );
+  }
 
   const active = workspace?.active;
   const runsSchedule =
@@ -358,6 +395,7 @@ export async function GET(
   return NextResponse.json({
     match,
     analysis,
+    awaitingRetry: retryRead.awaitingRetry,
     event,
     canAttach,
     canDetach,
@@ -413,12 +451,24 @@ export async function PATCH(
   }
   const { analysis } = analysisRead;
   const stored = existing as unknown as MatchRow;
+  const retryRead =
+    "format" in body
+      ? await awaitingRetryFor(matchId, user.id, analysis)
+      : { awaitingRetry: false, error: null };
+  if (retryRead.error) {
+    return serverError(
+      "PATCH /api/matches/[matchId]: failed to load analysis status",
+      retryRead.error,
+      "Could not load the match",
+    );
+  }
 
   const result = normalizeMatchPatch(body, {
     score: stored.score,
     format: stored.format,
     linked: stored.event_entry_id !== null,
     analyzed: analysis !== null || stored.source_provider !== null,
+    awaitingRetry: retryRead.awaitingRetry,
     teamMatch: stored.program_id !== null,
     matchType: (stored.match_type as string | null) ?? null,
     round: (stored.round as string | null) ?? null,
@@ -581,18 +631,23 @@ export async function DELETE(
   // this is a function call rather than a foreign-key cascade — see
   // purgeMatchStorage().
   //
-  // A refusal maps by kind, never by forwarding `error.message`: the console
-  // guard is a 409 with its fixed sentence, and everything else — the guard
-  // unreadable, or any other throw — is a retryable 503.
+  // A user may delete any match they created, so this claim never refuses: a
+  // console or hand-labeled match goes too, and its labels move to
+  // `label_archive` when the row is deleted. The id is the one the
+  // `created_by = user.id` lookup admitted. `error.message` is never
+  // forwarded: any failure is a retryable 503.
+  //
+  // The purge runs as the service role because of that lookup. Through RLS it
+  // would read only the jobs and files this user made, and remove nothing from
+  // the results bucket, stranding what an admin's analysis left on the match.
   try {
-    await purgeMatchStorage(supabase, [matchId]);
+    const admin = createAdminClient();
+    await purgeMatchStorage(admin, [matchId], "match delete", {
+      sharedKeyReader: admin,
+      claimPurge: async (ids) =>
+        admin.rpc("admin_claim_match_delete", { p_match_ids: ids }),
+    });
   } catch (error) {
-    if (error instanceof PurgeRefusedError && error.kind === "protected") {
-      return NextResponse.json(
-        { error: PURGE_PROTECTED_MESSAGE },
-        { status: 409 },
-      );
-    }
     console.error(
       "DELETE /api/matches/[matchId]: storage purge unavailable",
       error instanceof PurgeRefusedError ? (error.cause ?? error) : error,
@@ -603,18 +658,21 @@ export async function DELETE(
     );
   }
 
-  const { error: deleteError } = await supabase
+  const { data: deleted, error: deleteError } = await supabase
     .from("matches")
     .delete()
     .eq("id", matchId)
-    .eq("created_by", user.id);
+    .eq("created_by", user.id)
+    .select("id");
 
-  if (deleteError) {
-    // The 409 and 503 refusals above take no claim (the claim RPC answers
-    // false, or fails, before its insert), so only this failed-delete branch
-    // releases. The id is the one the `created_by = user.id` lookup already
-    // admitted, never a body field. See `releaseStoragePurgeClaims` for why
-    // this matters.
+  // RLS filtering the row out is no error, only no rows: it failed all the same.
+  if (deleteError || !deleted?.length) {
+    // The 503 above takes no claim (the claim RPC fails before its insert), so
+    // only this failed-delete branch releases. Keeping the claim would leave
+    // the console refused on this match, and a later delete by any path acting
+    // on its labels. The id is the one the `created_by = user.id` lookup
+    // already admitted, never a body field. See `releaseStoragePurgeClaims` for
+    // why this matters.
     await releaseStoragePurgeClaims(
       createAdminClient(),
       [matchId],
@@ -622,7 +680,7 @@ export async function DELETE(
     );
     return serverError(
       "DELETE /api/matches/[matchId]: failed to delete match",
-      deleteError,
+      deleteError ?? "no row deleted",
       "Could not delete the match",
     );
   }

@@ -85,6 +85,17 @@ function render(
             actions: {},
           }),
         },
+        // The filter context, as the provider builds it with no filters: the
+        // cards read only `errorSplitJudged` (and `youIsPlayer1`) off it.
+        "@/components/dashboard/matches/match-detail/match-filters/provider": {
+          useMatchFilters: () => ({
+            context: {
+              youIsPlayer1: true,
+              hands: { player1: null, player2: null },
+              errorSplitJudged: false,
+            },
+          }),
+        },
         ...stubs,
         "@/components/dashboard/matches/match-data-provider": {
           useMatchData: () => ({ points, match: {}, statsResult: null }),

@@ -86,6 +86,12 @@ test.describe("the two lines", () => {
       ],
     });
     expect(pointSentence(error, FRAME)).toBe("Forehand error by Goodman");
+    expect(pointSentence({ ...error, errorKind: "forced" }, FRAME)).toBe(
+      "Forehand forced error by Goodman",
+    );
+    expect(pointSentence({ ...error, errorKind: "unforced" }, FRAME)).toBe(
+      "Forehand unforced error by Goodman",
+    );
     expect(pointDetail(error)).toBe(
       "Flat Down the Line · 12:45 · 3 shot rally",
     );
@@ -1561,6 +1567,181 @@ test.describe("the black shots well", () => {
       expect(html).not.toContain("data-add-shot");
     }
   });
+  test("the Forced | Unforced pair: on a missed last stroke alone, after Reset and before Delete, the stored kind pressed", () => {
+    /** The frame's rally, its last stroke (edited, so it can reset) missed. */
+    const errorRally = (fields: Partial<LabelPoint> = {}): LabelPoint => {
+      const base = rally();
+      return {
+        ...base,
+        winner: "p1",
+        ending: "error",
+        endedBy: "p2",
+        shots: base.shots.map((s) =>
+          s.id === "w-lit"
+            ? {
+                ...s,
+                result: "out",
+                landingY: 25,
+                status: "edited",
+                seed: {
+                  hitter: "p2",
+                  stroke: "backhand",
+                  result: "in",
+                  spin: "flat",
+                  contact_x: -0.31,
+                  contact_y: -1.82,
+                  landing_x: -1.23,
+                  landing_y: 19.59,
+                  video_time: 960.3,
+                },
+              }
+            : s,
+        ),
+        ...fields,
+      };
+    };
+    const render = (
+      point: LabelPoint,
+      overrides: Record<string, unknown>,
+      editable = true,
+    ) =>
+      renderToStaticMarkup(
+        React.createElement(well().BlackShotsWell, {
+          point,
+          edit: wellEdit(overrides, editable),
+        }),
+      );
+
+    const html = render(errorRally(), { selectedShotId: "w-lit" });
+    const row = shotRow(html, "w-lit");
+    expect(count(html, /data-error-kind-pair=""/g)).toBe(1);
+    // Reset shot, the pair, the spacer, then Delete shot.
+    const reset = row.indexOf('data-shot-action="reset"');
+    const pair = row.indexOf("data-error-kind-pair");
+    expect(reset).toBeGreaterThan(-1);
+    expect(pair).toBeGreaterThan(reset);
+    expect(row.indexOf("data-shot-tray-spacer")).toBeGreaterThan(pair);
+    expect(row.indexOf('data-shot-action="delete"')).toBeGreaterThan(
+      row.indexOf("data-shot-tray-spacer"),
+    );
+    expect(
+      text(
+        row.slice(
+          row.lastIndexOf("<", pair),
+          row.lastIndexOf("<", row.indexOf("data-shot-tray-spacer")),
+        ),
+      ),
+    ).toBe("Forced Unforced E");
+    expect(
+      text(row.slice(row.lastIndexOf("<div", row.indexOf("data-shot-tray")))),
+    ).toBe(
+      "Split point here Add shot after Reset shot Forced Unforced E Delete shot",
+    );
+    // Two real buttons, neither pressed while unmarked, both naming E.
+    for (const [kind, label] of [
+      ["forced", "Forced error"],
+      ["unforced", "Unforced error"],
+    ]) {
+      const button = tag(row, `data-error-kind="${kind}"`);
+      expect(button).toMatch(/^<button type="button"/);
+      expect(button).toContain(`aria-label="${label}"`);
+      expect(button).toContain('aria-pressed="false"');
+      expect(button).toContain('aria-keyshortcuts="E"');
+      expect(button).toContain("whitespace-nowrap");
+      expect(button).toContain("shrink-0");
+    }
+    // The key hint: the flag menu's dark chip, no new colour.
+    expect(row).toMatch(/<kbd[^>]*bg-white\/\[0\.08\][^>]*>E<\/kbd>/);
+
+    // The stored kind is the pressed one.
+    for (const kind of ["forced", "unforced"] as const) {
+      const marked = shotRow(
+        render(errorRally({ errorKind: kind }), { selectedShotId: "w-lit" }),
+        "w-lit",
+      );
+      const other = kind === "forced" ? "unforced" : "forced";
+      expect(tag(marked, `data-error-kind="${kind}"`)).toContain(
+        'aria-pressed="true"',
+      );
+      expect(tag(marked, `data-error-kind="${kind}"`)).toContain(
+        "bg-white/[0.16]",
+      );
+      expect(tag(marked, `data-error-kind="${other}"`)).toContain(
+        'aria-pressed="false"',
+      );
+    }
+
+    // Any other stroke of the same point: the tray, no pair.
+    const earlier = render(errorRally(), { selectedShotId: "w-return" });
+    expect(earlier).toContain("data-shot-tray");
+    expect(earlier).not.toContain("data-error-kind");
+    // The same stroke on a point it won (a winner): no pair, even with a
+    // kind still stored from before.
+    const won = rally();
+    for (const point of [won, { ...won, errorKind: "forced" as const }]) {
+      const html = render(point, { selectedShotId: "w-lit" });
+      expect(html).toContain("data-shot-tray");
+      expect(html).not.toContain("data-error-kind");
+    }
+    // Read-only, or nothing to write the point with: no pair.
+    expect(
+      render(errorRally(), { selectedShotId: "w-lit" }, false),
+    ).not.toContain("data-error-kind");
+    expect(
+      render(errorRally(), {
+        selectedShotId: "w-lit",
+        onPatchPoint: undefined,
+      }),
+    ).not.toContain("data-error-kind");
+  });
+
+  test("Forced or Unforced writes the point's error_kind; the pressed one writes nothing", () => {
+    const patched: [string, unknown][] = [];
+    const { BlackShotRow } = createLoader().load(WELL) as {
+      BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    const point = {
+      ...rally(),
+      winner: "p1" as const,
+      ending: "error" as const,
+      endedBy: "p2" as const,
+      errorKind: "forced" as const,
+    };
+    point.shots = point.shots.map((s) =>
+      s.id === "w-lit" ? { ...s, result: "out" as const } : s,
+    );
+    const row = BlackShotRow({
+      shot: point.shots.find((s) => s.id === "w-lit"),
+      number: 4,
+      point,
+      pointNumber: 7,
+      edit: wellEdit({
+        selectedShotId: "w-lit",
+        onPatchPoint: (id: string, patch: unknown) => patched.push([id, patch]),
+      }),
+    });
+    const buttons = elements(row).filter(
+      (element) =>
+        typeof element.type === "function" &&
+        "data-error-kind" in element.props,
+    );
+    expect(buttons.map((b) => b.props["data-error-kind"])).toEqual([
+      "forced",
+      "unforced",
+    ]);
+    let stopped = 0;
+    const click = (kind: string) =>
+      (
+        buttons.find((b) => b.props["data-error-kind"] === kind)!.props
+          .onClick as (e: { stopPropagation: () => void }) => void
+      )({ stopPropagation: () => (stopped += 1) });
+    click("unforced");
+    click("forced");
+    expect(patched).toEqual([["p-well", { error_kind: "unforced" }]]);
+    // Neither click reaches the row under it.
+    expect(stopped).toBe(2);
+  });
+
   test("a stroke the labeller added and then deleted leaves no row", () => {
     const { BlackShotsWell } = well();
     const point = rally();
@@ -1970,11 +2151,13 @@ test.describe("a serve's result menu, where lets are replayed", () => {
 
   test("the trigger says which of No result and Let is stored", () => {
     const { BlackShotsWell } = well();
-    const render = (result: "let" | null) => {
+    const render = (result: "let" | null, returned = false) => {
       const point = rally();
-      point.shots = point.shots.map((s) =>
-        s.id === "w-serve" ? { ...s, result } : s,
-      );
+      // The serve as the point's last stroke, unless it was returned.
+      const served = point.shots.findIndex((s) => s.id === "w-serve");
+      point.shots = point.shots
+        .slice(0, returned ? undefined : served + 1)
+        .map((s) => (s.id === "w-serve" ? { ...s, result } : s));
       const html = renderToStaticMarkup(
         React.createElement(BlackShotsWell, {
           point,
@@ -1990,6 +2173,10 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     expect(render(null)).toContain("No result");
     expect(render("let")).toContain("Let");
     expect(render("let")).not.toContain("No result");
+    // Returned, an empty result reads In: the receiver played it
+    // (`playedOnResult`).
+    expect(render(null, true)).toContain("In");
+    expect(render(null, true)).not.toContain("No result");
   });
 
   test("a let already stored keeps its row where lets are played on, so it can be undone", () => {
@@ -2256,5 +2443,117 @@ test.describe("the inline review note in the well", () => {
     // Under a stroke that is not selected: the note alone.
     expect(render(null, "w-lit")).not.toContain("data-review-inline-wash");
     expect(render("w-serve", "w-lit")).not.toContain("data-review-inline-wash");
+  });
+});
+
+test.describe("a landing filled from the next air stroke", () => {
+  const rowHtml = (
+    fields: Partial<LabelShot>,
+    nextFields: Partial<LabelShot> | null,
+  ) => {
+    const { BlackShotRow } = createLoader().load(WELL) as {
+      BlackShotRow: React.ComponentType<Record<string, unknown>>;
+    };
+    const base = labelSessionFixture().points[0].shots[1];
+    return renderToStaticMarkup(
+      React.createElement(BlackShotRow, {
+        shot: {
+          ...base,
+          hitter: "p2",
+          stroke: "backhand",
+          contactX: 2,
+          contactY: 20,
+          landingX: null,
+          landingY: null,
+          ...fields,
+        },
+        next: nextFields && {
+          ...base,
+          id: "next",
+          hitter: "p1",
+          stroke: "overhead",
+          contactX: -1,
+          contactY: 6,
+          ...nextFields,
+        },
+        number: 4,
+        pointNumber: 7,
+        edit: wellEdit({}),
+      }),
+    );
+  };
+
+  test("draws the contact with the glyph, and a placement", () => {
+    const html = rowHtml({}, {});
+    expect(html).toContain("data-landing-filled");
+    expect(html).toContain('aria-label="Filled from shot 5"');
+    expect(html).toContain("-1.00");
+    expect(html).toContain(">Middle<");
+  });
+
+  test("a stored landing or a bounce next: no glyph", () => {
+    expect(rowHtml({ landingX: 1, landingY: 7 }, {})).not.toContain(
+      "data-landing-filled",
+    );
+    expect(rowHtml({}, { stroke: "forehand" })).not.toContain(
+      "data-landing-filled",
+    );
+    expect(rowHtml({}, null)).not.toContain("data-landing-filled");
+  });
+
+  test("the row after it in the rail names the stroke it reads", () => {
+    const { BlackShotRow } = createLoader().load(WELL) as {
+      BlackShotRow: React.ComponentType<Record<string, unknown>>;
+    };
+    const base = labelSessionFixture().points[0].shots[1];
+    const html = renderToStaticMarkup(
+      React.createElement(BlackShotRow, {
+        shot: {
+          ...base,
+          hitter: "p2",
+          stroke: "backhand",
+          contactX: 2,
+          contactY: 20,
+          landingX: null,
+          landingY: null,
+        },
+        next: {
+          ...base,
+          id: "n",
+          hitter: "p1",
+          stroke: "overhead",
+          contactX: -1,
+          contactY: 6,
+        },
+        nextNumber: 9,
+        number: 4,
+        pointNumber: 7,
+        edit: wellEdit({}),
+      }),
+    );
+    expect(html).toContain('aria-label="Filled from shot 9"');
+  });
+
+  test("the Result menu says a landing met in the air calls nothing", () => {
+    const { shotResultMenu } = createLoader().load(WELL) as {
+      shotResultMenu: (
+        shot: LabelShot,
+        playOnLets: boolean | undefined,
+        filledFrom?: number | null,
+      ) => { options: { description?: string }[] } | null;
+    };
+    const base = labelSessionFixture().points[0].shots[1];
+    const shot = {
+      ...base,
+      stroke: "backhand" as const,
+      landingX: null,
+      landingY: null,
+    };
+    expect(shotResultMenu(shot, false, 5)!.options[0].description).toBe(
+      "Shot 5 met it in the air, so its landing calls nothing",
+    );
+    expect(shotResultMenu(shot, false)!.options[0].description).toBe(
+      "Its landing is not placed yet",
+    );
   });
 });

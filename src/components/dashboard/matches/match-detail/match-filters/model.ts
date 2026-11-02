@@ -472,6 +472,13 @@ export interface MatchFilterContext {
    * (`serveResultOf`).
    */
   isDerived?: boolean;
+  /**
+   * The match's errors are split into unforced and forced
+   * (`Match.errorSplitJudged`, from `errorSplitJudged()` in the loader).
+   * Absent reads as not judged. Cards read it here rather than re-deriving it
+   * from the row each.
+   */
+  errorSplitJudged?: boolean;
 }
 
 /** A video-derived (Advantage Intelligence) match, off the match row. */
@@ -482,11 +489,15 @@ export function isDerivedMatch(match: Pick<Match, "sourceProvider">): boolean {
 /**
  * The filters' context for one match: the match row's hands
  * (`playerHands`, already seat-correct — no swap here) and, where a row has
- * none, the hand inferred from that seat's forehands (`inferHand`); and
- * whether the match is derived from video (`isDerived`), off the same row.
+ * none, the hand inferred from that seat's strokes (`inferHand`); and
+ * whether the match is derived from video (`isDerived`), off the same row;
+ * and whether its errors are split (`errorSplitJudged`), as the loader set it.
  */
 export function buildFilterContext(
-  match: Pick<Match, "player1" | "player2" | "sourceProvider">,
+  match: Pick<
+    Match,
+    "player1" | "player2" | "sourceProvider" | "errorSplitJudged"
+  >,
   points: readonly Pick<MatchPoint, "shots">[],
   youIsPlayer1: boolean,
 ): MatchFilterContext {
@@ -498,6 +509,7 @@ export function buildFilterContext(
       player2: stored.player2 ?? inferHand(points, false),
     },
     isDerived: isDerivedMatch(match),
+    errorSplitJudged: match.errorSplitJudged === true,
   };
 }
 
@@ -654,14 +666,25 @@ export function serveResultOf(
  * Winner", but the head-to-head Aces row counts it and Serve › Result "Ace"
  * opens it (`serveResultOf`), so the rows that click shows must say so. A
  * service winner with a stroke after the serve is not one and keeps its label.
+ *
+ * Until the match's errors are judged (`ctx.errorSplitJudged`, absent = not
+ * judged) an error's kind is dropped from the name — "Backhand Unforced
+ * Error" and "Backhand Forced Error" both read "Backhand Error" — since nobody
+ * has called it either way. The label only: the stored `resultType` keeps the
+ * kind, and a judged match shows it as stored.
  */
 export function pointResultLabel(
   point: MatchPoint,
-  ctx: Pick<MatchFilterContext, "isDerived">,
+  ctx: Pick<MatchFilterContext, "isDerived" | "errorSplitJudged">,
 ): string {
   if (ctx.isDerived && isUnreturnedServe(point)) return "Ace";
-  return point.resultType || "Point";
+  const stored = point.resultType || "Point";
+  if (ctx.errorSplitJudged) return stored;
+  return stored.replace(UNJUDGED_ERROR_KIND, "");
 }
+
+/** "Unforced " / "Forced " before a closing "Error" — the kind an unjudged label drops. */
+const UNJUDGED_ERROR_KIND = /\b(?:un)?forced\s+(?=error\s*$)/i;
 
 /**
  * The point ended on a winning return: the head-to-head card's Return winners
@@ -716,6 +739,46 @@ function strokeOf(shotType: string | null | undefined): ShotStroke | null {
   if (t.includes("forehand")) return "Forehand";
   if (t.includes("backhand")) return "Backhand";
   return null;
+}
+
+/** The service line, in metres from the net. */
+export const NET_ZONE_DEPTH_M = 6.4;
+
+/**
+ * How far from the net an overhead still counts. Past this it is a lob smashed
+ * from the back of the court, which says nothing about coming in.
+ */
+export const NET_OVERHEAD_DEPTH_M = 8;
+
+/**
+ * Whether this seat came to the net in this point: it hit a volley, an overhead
+ * from up the court, or any other rally shot from inside the service line.
+ *
+ * `contact_y` is the hitter's position, so this sees a player only when they
+ * strike the ball: one who approaches and is passed before hitting again is not
+ * counted. A volley or overhead with no measured position still counts, since
+ * half of SwingVision's shots carry no coordinates. The return is left out of
+ * the position test (the rally starts at shot 3), because a return struck that
+ * close is a tracking error rather than an approach.
+ *
+ * `public.net_attempt_shot` is the SQL twin behind the published
+ * `net_points_*` figures. Change one and you must change the other.
+ */
+export function cameToNet(point: MatchPoint, isPlayer1: boolean): boolean {
+  return (point.shots ?? []).some((shot) => {
+    if (shot.isPlayer1 !== isPlayer1) return false;
+    if (isServeShotType(shot.shotType) || isFeedShotType(shot.shotType)) {
+      return false;
+    }
+    const type = lower(shot.shotType);
+    const depth =
+      shot.contactY === null ? null : Math.abs(shot.contactY - NET_Y_M);
+    if (type.includes("volley")) return true;
+    if (type === "overhead") {
+      return depth === null || depth <= NET_OVERHEAD_DEPTH_M;
+    }
+    return shot.shotNumber >= 3 && depth !== null && depth <= NET_ZONE_DEPTH_M;
+  });
 }
 
 /**
@@ -812,21 +875,44 @@ export function winnerHitBy(point: MatchPoint): boolean | null {
 }
 
 /**
+ * The point counts toward a Winners figure — the published `winners`, the
+ * head-to-head row and the Point endings segment. A service winner does not:
+ * it has its own `service_winners` figure, and an ace is left out by not being
+ * a "…winner" at all. `winnerHitBy` still credits both, since Result › Ending
+ * "winner" is a filter on how the point ended, not this count.
+ */
+export function countsAsWinner(point: MatchPoint): boolean {
+  const rt = lower(point.resultType);
+  return rt.includes("winner") && rt !== "service winner";
+}
+
+/**
  * Who made the point's error (true = player1), or null when it did not end
  * on one. A double fault is the server's. Any other "…Error" result is the
  * decisive shot's hitter, else the point's loser. With NO result type, a
  * last shot recorded Out or Net is its hitter's error.
+ *
+ * A service winner the server won, whose last shot is the returner's Out or
+ * Net, is the returner's error as well as the server's winner (`winnerHitBy`),
+ * so one point can answer both Result › Ending options, each for its own
+ * player. A serve no one touched has no such shot and stays nobody's error.
+ * The unforced-error figures are safe from this: they test the result type
+ * before they ask who made the error.
  */
 export function errorMadeBy(point: MatchPoint): boolean | null {
   const rt = lower(point.resultType);
   if (rt.includes("double fault")) return point.serverIsPlayer1;
   const last = lastShotOf(point);
   if (rt.includes("error")) return last ? last.isPlayer1 : !point.wonByPlayer1;
-  if (rt === "" && last) {
-    const result = lower(last.result);
-    if (result === "out" || result === "net") return last.isPlayer1;
-  }
-  return null;
+  if (!last) return null;
+  const result = lower(last.result);
+  if (result !== "out" && result !== "net") return null;
+  if (rt === "") return last.isPlayer1;
+  const returnerMissed =
+    rt === "service winner" &&
+    last.isPlayer1 !== point.serverIsPlayer1 &&
+    point.wonByPlayer1 === point.serverIsPlayer1;
+  return returnerMissed ? last.isPlayer1 : null;
 }
 
 /**

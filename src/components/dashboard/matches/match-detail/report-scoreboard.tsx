@@ -157,7 +157,7 @@ export function MatchReportScoreboard() {
     const server = you.serving ? sides.you.name : sides.opp.name;
     props = {
       status: "live",
-      label: "Playing",
+      label: head.playing ? "Playing" : "Paused",
       headTime: formatClock(head.time),
       caption: `Set ${head.point.setNumber} · Game ${head.point.gameNumber} · ${surname(server)} serving`,
       players: [

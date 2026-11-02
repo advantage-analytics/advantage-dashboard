@@ -19,14 +19,29 @@ import { RetryActionButton } from "./retry-action-button";
  * press retry. The row holds the answers the first attempt used, so the retry
  * reproduces that attempt exactly rather than approximating it.
  *
+ * ── Also after a refusal ────────────────────────────────────────────────────
+ * A submit refused for allowance or permission leaves the row `uploaded` just
+ * the same, and nothing resends it once the refusal clears. This is its way
+ * out too, labelled "Send for analysis": the route re-runs the quota and
+ * eligibility checks, so pressing it too early is refused again — the reason
+ * shown under the button — and spends nothing.
+ *
  * ── No re-upload ────────────────────────────────────────────────────────────
  * The bytes are already in Azure and the job still points at them. This costs
  * the wait, not the transfer.
  */
-export function RetrySubmission({ jobId }: { jobId: string }) {
+export function RetrySubmission({
+  jobId,
+  label = "Try again",
+}: {
+  jobId: string;
+  /** "Send for analysis" when the first attempt was refused for allowance or
+   * permission (`WAIT_OR_ASK_VARIANTS`) — the same request, a different ask. */
+  label?: string;
+}) {
   return (
     <RetryActionButton
-      label="Try again"
+      label={label}
       pendingLabel="Sending…"
       request={() =>
         fetch("/api/splitstep/jobs", {

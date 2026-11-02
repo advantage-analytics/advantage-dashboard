@@ -7,7 +7,6 @@ import { useRowSelection } from "@/components/dashboard/schedule/use-row-selecti
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { PersonalOpponentsData } from "@/lib/data/personal-opponents-server";
 import { cn } from "@/lib/utils";
-import { opponentNameButton } from "./opponent-cells";
 import { OpponentDrawer } from "./opponent-drawer";
 import { OpponentsFilterStrip } from "./opponents-filter-strip";
 import { OpponentsTable, opponentRowId } from "./opponents-table";
@@ -97,7 +96,6 @@ export function OpponentsPageContent({
     initialId: initialSelectedKey,
     param: "opponent",
     rowId: opponentRowId,
-    focusTarget: opponentNameButton,
   });
 
   // Looked up in every opponent, not the visible ones: when a cut hides the

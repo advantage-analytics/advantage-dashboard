@@ -62,6 +62,11 @@ const sections = loader.load(
     status: string | null | undefined,
     recovery: string | null | undefined,
   ) => string | null;
+  recoveryHasAction: (
+    recovery: string | null | undefined,
+    jobId: string | null | undefined,
+    stalled?: boolean,
+  ) => boolean;
   DrawerRecoveryAction: React.ComponentType<{
     recovery: string | null | undefined;
     jobId: string | null | undefined;
@@ -149,7 +154,7 @@ test("drawerRecovery: a failed row's class, the pre-class fallback, null otherwi
   expect(sections.drawerRecovery(null, undefined)).toBeNull();
 });
 
-test("DrawerRecoveryAction: Retry and Rebuild statistics are buttons in the caller's variant; wait_or_ask and stats_unavailable draw nothing", () => {
+test("DrawerRecoveryAction: Retry and Rebuild statistics are buttons in the caller's variant; a failed wait_or_ask and stats_unavailable draw nothing", () => {
   const retry = action({ recovery: "retry" });
   expect(retry).toMatch(/<button[^>]*>Retry<\/button>/);
   expect(retry).toContain("bg-[var(--blue)]");
@@ -426,7 +431,32 @@ test("DrawerRecoveryAction: a stalled retry is 'Try again', POSTing { jobId } to
   });
   expect(retry?.props.label).toBe("Retry");
   expect(retry?.props.url).toBe("/api/splitstep/jobs/job-1/resubmit");
-  // Stalled changes nothing for a class without a retry.
-  expect(action({ recovery: "wait_or_ask", stalled: true })).toBe("");
   expect(action({ recovery: "retry", jobId: null, stalled: true })).toBe("");
+});
+
+test("DrawerRecoveryAction: a stalled wait_or_ask is 'Send for analysis', POSTing { jobId } to /api/splitstep/jobs", () => {
+  const html = action({ recovery: "wait_or_ask", stalled: true });
+  expect(html).toMatch(/<button[^>]*>Send for analysis<\/button>/);
+
+  const element = drawerParts.DrawerRecoveryAction({
+    recovery: "wait_or_ask",
+    jobId: "job-1",
+    matchId: "match-1",
+    variant: "outline",
+    stalled: true,
+  });
+  expect(element?.props.url).toBe("/api/splitstep/jobs");
+  expect(element?.props.init?.method).toBe("POST");
+  expect(JSON.parse(String(element?.props.init?.body))).toEqual({
+    jobId: "job-1",
+  });
+
+  // A failed job at the attempt ceiling, or no job: nothing to press.
+  expect(action({ recovery: "wait_or_ask" })).toBe("");
+  expect(action({ recovery: "wait_or_ask", stalled: true, jobId: null })).toBe(
+    "",
+  );
+  expect(sections.recoveryHasAction("wait_or_ask", "job-1", true)).toBe(true);
+  expect(sections.recoveryHasAction("wait_or_ask", "job-1")).toBe(false);
+  expect(sections.recoveryHasAction("wait_or_ask", null, true)).toBe(false);
 });

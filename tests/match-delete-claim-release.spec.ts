@@ -19,6 +19,7 @@ const LEAKY = "internal: admin_claim_match_storage_purge said no";
 
 function harness(scenario: {
   deleteError?: { message: string } | null;
+  deletedRows?: { id: string }[];
   purgeThrows?: "protected" | "unavailable" | "unexpected";
 }) {
   const effects: string[] = [];
@@ -33,17 +34,20 @@ function harness(scenario: {
       return deletion;
     },
   };
-  // A thenable chain: `.delete().eq().eq()` resolves when awaited.
+  // A thenable chain: `.delete().eq().eq().select()` resolves when awaited.
   const deletion = {
     eq: () => deletion,
+    select: () => deletion,
     then: (
-      resolve: (value: { error: unknown }) => unknown,
+      resolve: (value: { data: unknown; error: unknown }) => unknown,
       reject: (reason: unknown) => unknown,
     ) =>
-      Promise.resolve({ error: scenario.deleteError ?? null }).then(
-        resolve,
-        reject,
-      ),
+      Promise.resolve({
+        data: scenario.deleteError
+          ? null
+          : (scenario.deletedRows ?? [{ id: matchId }]),
+        error: scenario.deleteError ?? null,
+      }).then(resolve, reject),
   };
   const session = {
     auth: {
@@ -71,6 +75,7 @@ function harness(scenario: {
     "@/lib/supabase/server": { createClient: async () => session },
     "@/lib/supabase/admin": {
       createAdminClient: () => ({
+        isAdmin: true,
         rpc: async (name: string, args: { p_match_ids: string[] }) => {
           expect(name).toBe("admin_release_match_storage_purge");
           effects.push("release");
@@ -83,8 +88,11 @@ function harness(scenario: {
     "@/lib/services/match-video/http": { isPlainObject },
     "@/lib/services/matches/purge-match-storage": {
       PurgeRefusedError,
-      purgeMatchStorage: async (_client: unknown, ids: string[]) => {
-        effects.push("purge");
+      purgeMatchStorage: async (
+        client: { isAdmin?: boolean },
+        ids: string[],
+      ) => {
+        effects.push(client.isAdmin ? "purge" : "purge-through-rls");
         expect(ids).toEqual([matchId]);
         if (scenario.purgeThrows === "unexpected") throw new Error(LEAKY);
         if (scenario.purgeThrows) {
@@ -151,6 +159,15 @@ test("a failed row delete releases the purge claim, after the purge and the dele
   expect(h.released).toEqual([[h.matchId]]);
 });
 
+test("a delete that removes no row fails and releases the claim", async () => {
+  const h = harness({ deletedRows: [] });
+  const response = await h.run();
+  expect(response.status).toBe(500);
+  expect(response.body).toEqual({ error: "Could not delete the match" });
+  expect(h.effects).toEqual(["purge", "delete", "release"]);
+  expect(h.released).toEqual([[h.matchId]]);
+});
+
 test("a completed delete releases nothing — the claim cascades with the row", async () => {
   const h = harness({});
   const response = await h.run();
@@ -160,20 +177,14 @@ test("a completed delete releases nothing — the claim cascades with the row", 
   expect(h.released).toEqual([]);
 });
 
-test("a protected refusal is a 409 with the console sentence: no delete, no release", async () => {
-  const h = harness({ purgeThrows: "protected" });
-  const response = await h.run();
-  expect(response.status).toBe(409);
-  expect(response.body).toEqual({
-    error:
-      "Matches recorded, analyzed or hand-labeled through the admin console cannot be deleted here.",
-  });
-  expect(JSON.stringify(response.body)).not.toContain(LEAKY);
-  expect(h.effects).toEqual(["purge"]);
-  expect(h.released).toEqual([]);
+test("the route claims with the RPC that never refuses, not the console's guard", async () => {
+  const source = readFileSync("src/app/api/matches/[matchId]/route.ts", "utf8");
+  expect(source).toContain('"admin_claim_match_delete"');
+  expect(source).not.toContain("admin_claim_match_storage_purge");
+  expect(source).not.toContain("cannot be deleted here");
 });
 
-for (const kind of ["unavailable", "unexpected"] as const) {
+for (const kind of ["protected", "unavailable", "unexpected"] as const) {
   test(`an ${kind} purge failure is a 503 that forwards no message: no delete, no release`, async () => {
     const h = harness({ purgeThrows: kind });
     const response = await h.run();

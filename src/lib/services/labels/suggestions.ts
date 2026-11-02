@@ -23,7 +23,11 @@ import {
   type LabelShot,
   type LiveOrderableShot,
 } from "./session";
-import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
+import {
+  effectiveShotResult,
+  inServeLandingMiss,
+  type ResultReadableShot,
+} from "./shot-derived";
 
 /**
  * The most live strokes a point's end can carry after the ball that missed:
@@ -35,6 +39,10 @@ import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
  */
 export const DEAD_BALL_TAIL = 2;
 
+/** Whether at most `DEAD_BALL_TAIL` live strokes follow `index`. */
+const inDeadBallTail = (live: readonly unknown[], index: number): boolean =>
+  live.length - 1 - index <= DEAD_BALL_TAIL;
+
 export type SuggestionState = "open" | "dismissed" | "done";
 
 /**
@@ -43,10 +51,11 @@ export type SuggestionState = "open" | "dismissed" | "done";
  * point ended on, `pointEndedKey`) — never a draft stroke's temporary id,
  * which the stroke loses once its insert lands — and any other hint the well
  * draws as a question, by its code (`hintDismissKey`): "Was the last ball
- * in?", "Second serve?", "Different ending?".
+ * in?", "Second serve?", "Different ending?". "Shot placement" is by its stroke
+ * (`placementKey`): a point can have several to answer.
  */
 export const SUGGESTION_KEY_RE =
-  /^(missing_shot:\d+|missing_point|point_ended:(?!pending-)[0-9A-Za-z-]+|hint:[a-z_]+)$/;
+  /^(missing_shot:\d+|missing_point|(?:point_ended|placement):(?!pending-)[0-9A-Za-z-]+|hint:[a-z_]+)$/;
 
 /** A hint the labeller answered "no" to, as `dismissed` stores it. */
 export function hintDismissKey(code: string): string {
@@ -56,6 +65,11 @@ export function hintDismissKey(code: string): string {
 /** "Point ended here" on the stroke `shotId`, as `dismissed` stores it. */
 export function pointEndedKey(shotId: string): string {
   return `point_ended:${shotId}`;
+}
+
+/** "Shot placement" on the stroke `shotId`, as `dismissed` stores it. */
+export function placementKey(shotId: string): string {
+  return `placement:${shotId}`;
 }
 
 export function isSuggestionKey(value: unknown): value is string {
@@ -172,7 +186,7 @@ export function suggestionState(
       if (
         at !== -1 &&
         isMissedResult(effectiveShotResult(live[at])) &&
-        live.length - 1 - at <= DEAD_BALL_TAIL
+        inDeadBallTail(live, at)
       ) {
         return "done";
       }
@@ -197,6 +211,13 @@ export function suggestionState(
  * serves read out or net (`effectiveShotResult`) — or, with the point's
  * ending stored as a double fault, its second serve whatever the results
  * say. Null otherwise: no point to end early.
+ *
+ * A second serve stored in that only its coordinates read as a miss
+ * (`inServeLandingMiss`), with more than `DEAD_BALL_TAIL` strokes after it, is
+ * no double fault: the rally went on, so the bounce is the wrong one, and the
+ * console flags that landing (`serveInLandingOut`). Measured 2026-10-31 over
+ * the checked points: 0 double faults in 79 such serves with three or more
+ * strokes after, against 29 in 50 with one or two, which stay double faults.
  */
 export function doubleFaultAt(
   live: readonly ResultReadableShot[],
@@ -214,7 +235,33 @@ export function doubleFaultAt(
   if (ending === "double_fault") return second;
   const missed = (index: number) =>
     isMissedResult(effectiveShotResult(live[index]));
-  return missed(first) && missed(second) ? second : null;
+  const playedOn =
+    inServeLandingMiss(live[second]) !== null && !inDeadBallTail(live, second);
+  return missed(first) && missed(second) && !playedOn ? second : null;
+}
+
+/**
+ * The keys of `dismissed` that name one of `shots` — a missing shot by its
+ * pair's first stroke's vendor event, "Point ended here" by the stroke's id —
+ * in `dismissed`'s order. What a split hands the new point with the strokes
+ * it takes, and a combine the kept point with the later one's strokes: the
+ * suggestion follows its stroke (`homeShotSuggestions`, marks.ts), so its
+ * answer must too. Point-level keys (a missing point, a hint) stay behind:
+ * they answered a question about the point they were written on.
+ */
+export function strokeDismissals(
+  dismissed: readonly string[],
+  shots: readonly Partial<Pick<LabelShot, "id" | "eventId">>[],
+): string[] {
+  const keys = new Set<string>();
+  for (const shot of shots) {
+    if (shot.eventId != null) keys.add(`${MISSING_SHOT_PREFIX}${shot.eventId}`);
+    if (shot.id) {
+      keys.add(pointEndedKey(shot.id));
+      keys.add(placementKey(shot.id));
+    }
+  }
+  return dismissed.filter((key) => keys.has(key));
 }
 
 /** The one column Dismiss writes: the array read, plus the key. */

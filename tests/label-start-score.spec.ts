@@ -386,6 +386,49 @@ test.describe("the inline editor", () => {
     expect(railProps(complete, operations).onSaveStartScore).toBe(undefined);
   });
 
+  test("the overview's scoring saves as ad_scoring, and not on a complete session", async () => {
+    const dashboardProps = (
+      session: LabelSession,
+      operations: Props,
+    ): Props => {
+      let dashboard: Props = {};
+      const { LabelConsole } = createLoader({
+        stubs: {
+          "@/components/admin/labels/label-dashboard": {
+            LabelDashboard: (given: Props) => {
+              dashboard = given;
+              return null;
+            },
+          },
+        },
+      }).load(CONSOLE) as { LabelConsole: React.ComponentType<Props> };
+      renderToStaticMarkup(
+        React.createElement(LabelConsole, {
+          session,
+          video: null,
+          marks: EMPTY_MARKS,
+          initialLayoutMode: "overview",
+          operations,
+          ...SAVES,
+        }),
+      );
+      return dashboard;
+    };
+    const { calls, operations } = spies();
+    const session = { ...labelSessionFixture(), adScoring: false };
+    const dashboard = dashboardProps(session, operations);
+    expect(dashboard.adScoring).toBe(false);
+    (dashboard.onAdScoringChange as (next: boolean) => void)(true);
+    await Promise.resolve();
+    expect(calls.updateSessionFields).toEqual([
+      [session.id, { ad_scoring: true }],
+    ]);
+    expect(
+      dashboardProps({ ...session, status: "complete" }, operations)
+        .onAdScoringChange,
+    ).toBe(undefined);
+  });
+
   test("startScoreError: an ordinary game stops at 40; a tiebreak at its target and two clear", () => {
     const { startScoreError } = startModule();
     const at = (points: [number, number]): LabelStartScore => ({

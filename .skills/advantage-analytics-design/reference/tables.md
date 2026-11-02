@@ -99,7 +99,12 @@ master-detail split is retired; its detail is the peek drawer below.
    inside an event drawer, a player's match list) navigate to the report."_
    **Container rows** (events on Schedule, players on Roster) open the peek
    drawer (below) and carry **no chevron** — there is nothing to travel to;
-   the wash persists on the selected row. `chevron-down` only when a row
+   the wash persists on the selected row. A link inside a container row that
+   travels to a record may carry the chevron in its own cell, faded in with the
+   row (ink-300) and ink-900 on the link, taking no width from the cell: the row
+   still peeks, and the chevron says this one cell leaves the page (2026-10-30,
+   the Opponents Last match cell, `opponents/opponent-cells.tsx`; a grey wash on
+   the cell was built and rejected). `chevron-down` only when a row
    expands in place, rotating 180° on open (200ms). The same noun never opens
    two ways, and the report's pinned left column is chrome, not a peek. _The
    hover wash and cursor say a row is clickable, but not whether clicking
@@ -233,7 +238,16 @@ master-detail split is retired; its detail is the peek drawer below.
    Once populated the frame never moves again. The resting view is never
    pre-filtered; a filtered view is its own screen, never a mutation of the
    resting one — the resting frame keeps showing its in-flight and estimate
-   rows regardless of what's filtered. Lifecycle cell copy: "View report"
+   rows regardless of what's filtered. A draft row follows the same rule on
+   Matches (2026-10-30): it stays under a search that its opponent, player or
+   event answers, and leaves under a facet or a New / In progress view, which it
+   cannot answer. The strip and the footer count matches and state the listed
+   drafts beside the count ("3 of 18 · 1 draft"), so the figures add up to the
+   rows on screen. A workspace with drafts and no matches draws this same list
+   (2026-10-30): the drafts fill the table, no footer pages nothing, and a cut
+   counts the drafts ("1 of 2 drafts"), never "0 of 0". Below `lg` a draft lists
+   as a `DraftCard` above the match cards and peeks the same rail. Lifecycle
+   cell copy: "View report"
    when ready · `StatusChip` while running (no elapsed time — the tray owns
    progress) · "Estimate · Review data" for low confidence (grey fact + blue
    action, never yellow, never red).
@@ -349,7 +363,7 @@ selected, no chevrons, no gutter.
   pending state and a refusal has a line to land on; on success the rail
   slides out as on Esc, then the row leaves. Footer is one primary "Continue"
   and no ghost, since the wizard is the only page a draft has. ↑↓ walk the
-  drafts, then the matches. _Shipped:_ `matches/draft-drawer.tsx`,
+  listed drafts, then the matches. _Shipped:_ `matches/draft-drawer.tsx`,
   `matches/discard-draft-dialog.tsx`. _Supersedes: "the name as the wizard
   link with an outlined Draft pill → event label or 'No event yet' → edited
   date · file name → 'Stopped at step n of N'; ⋯ holds Discard with its

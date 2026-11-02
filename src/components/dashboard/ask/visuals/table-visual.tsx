@@ -15,6 +15,7 @@ const DIFFERENCE_HEADING = /^(difference|diff|change|gap)$/i;
  */
 const LOWER_IS_BETTER = new Set([
   "double faults",
+  "errors",
   "unforced errors",
   "forehand unforced errors",
   "backhand unforced errors",

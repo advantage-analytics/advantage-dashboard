@@ -18,12 +18,8 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import { scoreboardCells } from "@/components/dashboard/matches/match-detail/report-scoreboard";
 import { TIEBREAK_STYLE } from "@/components/dashboard/score-line";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { contactBandRows, depthBandRows } from "@/lib/data/viz-bands";
 import { formatScoreboardStatus } from "@/lib/data/match-utils";
 import { playedSets } from "@/lib/ui/score-format";
@@ -72,6 +68,7 @@ import {
   type LegendItem,
 } from "./viz-labels";
 import { activeFilterEntries, clearedFilters } from "./viz-url";
+import { useErrorSplitJudged } from "../match-filters/provider";
 import { VIZ_FOCUSED_HEADING_ID } from "./viz-court-transition";
 import { useFullscreenReveal } from "./use-fullscreen-reveal";
 
@@ -106,6 +103,8 @@ const ZOOM_READOUT_W = 38;
 
 export function VizFullscreen() {
   const { state, setState } = useVizState();
+  // Unjudged, the summary pill's Error type word is "Errors".
+  const errorSplitJudged = useErrorSplitJudged();
   const { meta, actions } = useMatchReport();
   const {
     cut,
@@ -497,10 +496,14 @@ export function VizFullscreen() {
 
   const heat = state.chart === "heat";
   const stageBackground = heat ? HEAT_APRON_FILL : APRON_FILL;
-  const applied = activeFilterEntries(state, {
-    you: you.shortName,
-    opponent: opp.shortName,
-  });
+  const applied = activeFilterEntries(
+    state,
+    {
+      you: you.shortName,
+      opponent: opp.shortName,
+    },
+    { errorSplitJudged },
+  );
   const pillLabel =
     applied.length > 0 ? applied[0].label : `All ${result.noun}`;
   // P2e/P2f: a saved view that hasn't been edited since it loaded shows its
@@ -542,6 +545,21 @@ export function VizFullscreen() {
           onPointerMove={pz.onPointerMove}
           onPointerUp={pz.onPointerUp}
           onPointerCancel={pz.onPointerUp}
+          // A pinned readout stays until a tap outside, as it does on the
+          // focused court. `contains`: a menu portalled out of the chrome
+          // still bubbles here through the React tree.
+          onClick={(event) => {
+            const target = event.target;
+            if (
+              target instanceof Element &&
+              event.currentTarget.contains(target) &&
+              target.closest(
+                "[data-viz-mark],[data-viz-readout],[data-chrome]",
+              ) === null
+            ) {
+              dropActiveMark();
+            }
+          }}
         >
           <VizFullscreenCourt
             cut={cut}
@@ -712,26 +730,17 @@ export function VizFullscreen() {
                 )}
               />
             </span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Exit fullscreen"
-                  onClick={exit}
-                  className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/85 backdrop-blur-[6px] transition-colors duration-200 hover:text-white touch:hit-area"
-                  style={{ background: "rgba(13,13,13,0.72)" }}
-                >
-                  <X
-                    className="size-3.5"
-                    strokeWidth={1.6}
-                    aria-hidden="true"
-                  />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="end">
-                Exit fullscreen · Esc
-              </TooltipContent>
-            </Tooltip>
+            <ChromeTooltip label="Exit fullscreen" shortcut="Esc" align="end">
+              <button
+                type="button"
+                aria-label="Exit fullscreen"
+                onClick={exit}
+                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/85 backdrop-blur-[6px] transition-colors duration-200 hover:text-white touch:hit-area"
+                style={{ background: "rgba(13,13,13,0.72)" }}
+              >
+                <X className="size-3.5" strokeWidth={1.6} aria-hidden="true" />
+              </button>
+            </ChromeTooltip>
           </div>
 
           {activeEditor !== null && (
@@ -948,21 +957,18 @@ function ZoomButton({
   onClick: () => void;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          onClick={onClick}
-          // `touch:hit-area`: 44px to a finger. The slab is 48px tall, so the
-          // area fits inside its clip.
-          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/85 transition-colors duration-200 hover:bg-white/10 hover:text-white touch:hit-area"
-        >
-          {icon}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
+    <ChromeTooltip label={label} side="top">
+      <button
+        type="button"
+        aria-label={label}
+        onClick={onClick}
+        // `touch:hit-area`: 44px to a finger. The slab is 48px tall, so the
+        // area fits inside its clip.
+        className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/85 transition-colors duration-200 hover:bg-white/10 hover:text-white touch:hit-area"
+      >
+        {icon}
+      </button>
+    </ChromeTooltip>
   );
 }
 

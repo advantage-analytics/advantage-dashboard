@@ -331,13 +331,13 @@
   },
   {
     "q": "Who is our most consistent player?",
-    "want": "the players comparison; the headline names the measure it used (unforced errors per match) and the body says what 'consistent' was read as; nobody crowned by opinion",
+    "want": "the players comparison; the headline names the measure it used (errors per match) and the body says what 'consistent' was read as; nobody crowned by opinion",
     "expect": {
       "error": "none",
       "shape": "D",
       "visual": "table",
       "absent": ["\\byou\\b|\\byour\\b"],
-      "headline": ["unforced error"],
+      "headline": ["errors per match"],
       "note": "The headline names the measure 'consistent' was read as."
     }
   },

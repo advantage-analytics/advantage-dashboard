@@ -132,6 +132,13 @@ export interface CourtMarkInteraction {
   onSelect: (id: string, mark: SVGGElement) => void;
 }
 
+/** Focused Zones inspection: a cell answers hover, and a tap pins it. */
+export interface CourtZoneInteraction {
+  activeKey: ZoneKey | null;
+  onHover: (key: ZoneKey | null, cell: SVGGElement | null) => void;
+  onPin: (key: ZoneKey, cell: SVGGElement) => void;
+}
+
 function CourtMark({
   dot,
   cut,
@@ -572,6 +579,7 @@ export function CourtArt({
   labels,
   draft = false,
   markInteraction,
+  zoneInteraction,
 }: {
   cut: Cut;
   dots: VizDot[];
@@ -617,6 +625,8 @@ export function CourtArt({
   draft?: boolean;
   /** Focused scatter inspection. Preview courts omit it and remain static. */
   markInteraction?: CourtMarkInteraction;
+  /** The same for the Zones chart. */
+  zoneInteraction?: CourtZoneInteraction;
 }) {
   const clipId = useId();
   const showHeat = chart === "heat";
@@ -666,7 +676,7 @@ export function CourtArt({
         {...(fill ? { height: "100%" } : {})}
         width="100%"
         preserveAspectRatio="xMidYMid meet"
-        role={markInteraction ? "group" : "img"}
+        role={markInteraction || zoneInteraction ? "group" : "img"}
         aria-label={ariaLabel}
         className={className}
       >
@@ -708,8 +718,24 @@ export function CourtArt({
                 const cellCy =
                   (SERVE_COURT.zoneTop + SERVE_COURT.zoneBottom) / 2;
                 return (
-                  <g key={z.key} data-serve-zone={z.key}>
-                    <title>{`${z.key.replace("-", " ")}: ${zs.count} serves, ${zs.winPct}% points won`}</title>
+                  <g
+                    key={z.key}
+                    data-serve-zone={z.key}
+                    {...(zoneInteraction
+                      ? {
+                          role: "img",
+                          "aria-label": `${z.key.replace("-", " ")}: ${zs.count} serves, ${zs.winPct}% points won`,
+                          onMouseEnter: (
+                            event: React.MouseEvent<SVGGElement>,
+                          ) =>
+                            zoneInteraction.onHover(z.key, event.currentTarget),
+                          onMouseLeave: () =>
+                            zoneInteraction.onHover(null, null),
+                          onClick: (event: React.MouseEvent<SVGGElement>) =>
+                            zoneInteraction.onPin(z.key, event.currentTarget),
+                        }
+                      : {})}
+                  >
                     <rect
                       x={cell.x1}
                       y={SERVE_COURT.zoneTop}
@@ -718,7 +744,9 @@ export function CourtArt({
                       fill={LINE_COLOR}
                       fillOpacity={zoneOpacity(zs.pct, maxZonePct)}
                       stroke={LINE_COLOR}
-                      strokeOpacity={0.5}
+                      strokeOpacity={
+                        zoneInteraction?.activeKey === z.key ? 1 : 0.5
+                      }
                       strokeWidth={1}
                     />
                     {labels && zs.count > 0 && (

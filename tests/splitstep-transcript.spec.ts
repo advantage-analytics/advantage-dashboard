@@ -342,7 +342,7 @@ test.describe("result_type", () => {
     const serverMiss = rally([
       served(),
       stroke({ playerLabel: "B", strokeSide: "forehand" }),
-      stroke({ playerLabel: "A", strokeSide: "backhand" }),
+      stroke({ playerLabel: "A", strokeSide: "backhand", in: false }),
     ]);
     expect(classifyPoint(serverMiss, "B")).toBe("Backhand Unforced Error");
   });
@@ -350,14 +350,16 @@ test.describe("result_type", () => {
   test("the missed-return rule needs a serve and a receiver's return", () => {
     // No serve recorded: a lone stroke is not a return, so no service winner.
     const noServe = {
-      ...rally([stroke({ playerLabel: "B", strokeSide: "forehand" })]),
+      ...rally([
+        stroke({ playerLabel: "B", strokeSide: "forehand", in: false }),
+      ]),
       server: "A",
     };
     expect(classifyPoint(noServe, "A")).toBe("Forehand Unforced Error");
     // The stroke after the serve credited to the server is not a return.
     const serverAfterServe = rally([
       served(),
-      stroke({ playerLabel: "A", strokeSide: "backhand" }),
+      stroke({ playerLabel: "A", strokeSide: "backhand", in: false }),
     ]);
     expect(classifyPoint(serverAfterServe, "B")).toBe(
       "Backhand Unforced Error",
@@ -481,8 +483,9 @@ test.describe("the last rally stroke keeps the vendor's in and net calls", () =>
     const r = ending({ in: false, netHit: true, heightAtNetM: 0.6 });
     expect(resultOfLast(r, "A")).toBe("Net");
     expect(lastCallContradictsWinner(r, "A")).toBe(true);
-    // The winner and result_type are not rewritten to fit the ball either.
-    expect(classifyPoint(r, "A")).toBe("Forehand Winner");
+    // The ball isn't rewritten to fit the winner, and no ending is claimed:
+    // "Forehand Winner" on a ball in the net credited a false winner.
+    expect(classifyPoint(r, "A")).toBeNull();
   });
 
   test("a net call with no height reading is kept", () => {
@@ -495,7 +498,7 @@ test.describe("the last rally stroke keeps the vendor's in and net calls", () =>
     const r = ending({ in: true });
     expect(resultOfLast(r, "B")).toBe("In");
     expect(lastCallContradictsWinner(r, "B")).toBe(true);
-    expect(classifyPoint(r, "B")).toBe("Forehand Unforced Error");
+    expect(classifyPoint(r, "B")).toBeNull();
   });
 
   test("an out call defers to the fold: In for its winner, unflagged", () => {
@@ -592,7 +595,7 @@ test.describe("the last rally stroke keeps the vendor's in and net calls", () =>
       // Not a missed return: the returner won, so the rule above is silent
       // and a kept net call reads against the winner as anywhere else.
       const r = missedReturn({ in: false, netHit: true, heightAtNetM: 0.6 });
-      expect(classifyPoint(r, "B")).toBe("Forehand Winner");
+      expect(classifyPoint(r, "B")).toBeNull();
       expect(resultOfLast(r, "B")).toBe("Net");
       expect(lastCallContradictsWinner(r, "B")).toBe(true);
     });

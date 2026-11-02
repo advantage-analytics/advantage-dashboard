@@ -9,11 +9,14 @@
  */
 
 import {
+  COLLAPSED_ERROR_VALUES,
   EMPTY_VIZ_FILTERS,
   chartAllowedOn,
+  collapseErrorFilter,
   filterKeysFor,
   type Chart,
   type Cut,
+  type ErrorValue,
   type PlayerFilter,
   type VizFilters,
 } from "./viz-model";
@@ -257,6 +260,38 @@ export const OPTIONS = {
   },
 } as const;
 
+/**
+ * The word for the one option an unjudged match's Error type offers in place
+ * of Unforced / Forced (`errorOptionsFor`), and its applied-strip token.
+ */
+export const UNJUDGED_ERRORS_LABEL = "Errors";
+
+/** One Error type pill: the values it toggles together, and its word. */
+export interface ErrorOption {
+  values: readonly ErrorValue[];
+  label: string;
+}
+
+/**
+ * Error type's pills, from `OPTIONS.error` — the source of both wordings.
+ * Judged (`MatchFilterContext.errorSplitJudged`): today's three, one value
+ * each. Unjudged: nobody has called an error forced or unforced, so the two
+ * kinds are one "Errors" pill that toggles both together — never a "Forced"
+ * pick that could only draw an empty chart — then Double faults.
+ */
+export function errorOptionsFor(errorSplitJudged: boolean): ErrorOption[] {
+  if (errorSplitJudged) {
+    return (Object.keys(OPTIONS.error) as ErrorValue[]).map((value) => ({
+      values: [value],
+      label: OPTIONS.error[value],
+    }));
+  }
+  return [
+    { values: COLLAPSED_ERROR_VALUES, label: UNJUDGED_ERRORS_LABEL },
+    { values: ["doubleFault"], label: OPTIONS.error.doubleFault },
+  ];
+}
+
 const ORDER = [
   "player",
   "ball",
@@ -413,26 +448,47 @@ export function reconcileVizState({
   urlQuery,
   ownQueries,
   intended,
+  match,
 }: {
   urlQuery: string;
   ownQueries: string[];
   intended: VizState;
+  /** Passed straight to `parseVizState` for an external query. */
+  match?: VizParseMatch;
 }): { state: VizState; ownQueries: string[] } {
   const idx = ownQueries.indexOf(urlQuery);
   if (idx !== -1) {
     return { state: intended, ownQueries: ownQueries.slice(idx + 1) };
   }
   return {
-    state: parseVizState(new URLSearchParams(urlQuery)),
+    state: parseVizState(new URLSearchParams(urlQuery), match),
     ownQueries: [urlQuery],
   };
+}
+
+/** What `parseVizState` needs to know about the match the URL is opened on. */
+export interface VizParseMatch {
+  /** `MatchFilterContext.errorSplitJudged === true` — pass a boolean, never
+   *  the raw optional flag. */
+  errorSplitJudged: boolean;
 }
 
 /**
  * URLSearchParams → VizState. Garbage values read as defaults.
  * Every supported cut preserves Zones.
+ *
+ * `match` (the Shots tab passes it): on a match whose errors are not judged,
+ * an Error type of `unforced` or `forced` — alone or together, e.g. a link
+ * copied off a judged match — resolves to the all-errors pair
+ * (`collapseErrorFilter`), so it opens on every error rather than an empty
+ * chart. Omitted (saved-view validation, `saved-views-logic.ts`), the values
+ * parse exactly as written: a saved view's `error` array is read, never
+ * rewritten.
  */
-export function parseVizState(params: URLSearchParams): VizState {
+export function parseVizState(
+  params: URLSearchParams,
+  match?: VizParseMatch,
+): VizState {
   const cutParam = params.get("cut");
   let cut: Cut | null = null;
   if (
@@ -466,7 +522,14 @@ export function parseVizState(params: URLSearchParams): VizState {
   // serialize or be saved — `carryFilters` is otherwise only ever applied
   // when switching cuts client-side, but garbage/hand-crafted params must be
   // held to the same rule.
-  const filters = cut === null ? rawFilters : carryFilters(rawFilters, cut);
+  const carried = cut === null ? rawFilters : carryFilters(rawFilters, cut);
+  const filters =
+    match === undefined
+      ? carried
+      : {
+          ...carried,
+          error: collapseErrorFilter(carried.error, match.errorSplitJudged),
+        };
 
   // `draft` only means anything alongside a real cut — on the wall
   // (`cut === null`) it's dropped, same as every other viz key. Omitted
@@ -625,11 +688,6 @@ export function cutAvailability(
   return out as unknown as MatchFilterAvailability;
 }
 
-/** Serve › Result values for a serve no one returned (an ace, a service
- * winner) — the points that leave no return, rally shot or error to draw. */
-const isUnreturnedServeResult = (v: string) =>
-  v === "ace" || v === "service-winner";
-
 /** `filters` without what can only match a point the court player won (see
  * `carryFilters`). Result › Outcome is yours, so the court player's win is
  * "won" on your court and "lost" on the opponent's. */
@@ -682,14 +740,15 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   if (filters.result.includes("ace")) {
     next.result = filters.result.filter((v) => v !== "ace");
   }
-  // The advanced Serve › Result "Ace" and "Service winner" are points no
-  // one returned — no return, no rally shot, no error to draw off serve. A
-  // "Double fault" has no return or rally shot either; on the errors cut it
-  // IS the server's error, so it stays there.
+  // The advanced Serve › Result "Ace" leaves no return, rally shot or error to
+  // draw off serve. "Double fault" and "Service winner" leave nothing on the
+  // return and rally cuts either, but on the errors cut they stay: a double
+  // fault IS the server's error, and a service winner's missed return is the
+  // returner's (`errorMadeBy`).
   const serveResult = next.match?.serveResult ?? [];
   const drop = (v: (typeof serveResult)[number]) =>
-    isUnreturnedServeResult(v) ||
-    (v === "double-fault" && nextCut !== "errors");
+    v === "ace" ||
+    ((v === "service-winner" || v === "double-fault") && nextCut !== "errors");
   if (serveResult.some(drop)) {
     next.match = {
       ...next.match,
@@ -707,6 +766,10 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
 export interface ActiveFilterEntry {
   key: keyof VizFilters;
   value: string;
+  /** Every value the token stands for, when it is more than `value` — an
+   *  unjudged match's one "Errors" token holds both error kinds, and its X
+   *  removes both. */
+  values?: readonly string[];
   label: string;
   matchKey?: MatchFilterKey;
   matchValue?: unknown;
@@ -724,6 +787,12 @@ export function activeFilterEntries(
   state: VizState,
   /** Player names for the advanced filters' phrases ("Rudy serving"). */
   names: PhraseNames = DEFAULT_PHRASE_NAMES,
+  /**
+   * `errorSplitJudged: false` (the match's errors are not judged) words the
+   * Error type as its pills do (`errorOptionsFor`): Unforced and Forced are
+   * one "Errors" token. Omitted, every value is its own token, as stored.
+   */
+  options: { errorSplitJudged?: boolean } = {},
 ): ActiveFilterEntry[] {
   if (state.cut === null) {
     return [];
@@ -741,6 +810,22 @@ export function activeFilterEntries(
           key: "player",
           value: "opponent",
           label: names.opponent,
+        });
+      }
+      continue;
+    }
+
+    if (key === "error" && options.errorSplitJudged === false) {
+      for (const option of errorOptionsFor(false)) {
+        const picked = option.values.filter((v) =>
+          state.filters.error.includes(v),
+        );
+        if (picked.length === 0) continue;
+        result.push({
+          key,
+          value: picked[0],
+          ...(option.values.length > 1 ? { values: picked } : {}),
+          label: option.label,
         });
       }
       continue;

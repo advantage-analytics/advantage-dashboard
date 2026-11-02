@@ -1,3 +1,4 @@
+import { liveShotsInOrder } from "@/lib/services/labels/session";
 import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
@@ -11,6 +12,7 @@ import {
 } from "@/lib/services/labels/game-operations";
 import { applyShotSwaps } from "@/lib/services/labels/player-swap";
 import { labelScores } from "@/lib/services/labels/score";
+import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelSession, LabelVideo } from "@/lib/services/labels/session";
 import { count, text } from "./fixtures/html-probe";
 import {
@@ -779,7 +781,7 @@ test("Mark complete: the confirm lists what is still open, and the session is co
         return { ok: true, status: "complete" };
       },
     },
-    initialConfirm: { kind: "complete-session", warnings },
+    initialConfirm: { kind: "complete-session", warnings, blockers: [] },
   });
   const dialog = dialogs.at(-1)!;
   expect(dialog).toMatchObject({
@@ -1100,6 +1102,43 @@ test.describe("how it ended follows the shot rows", () => {
     expect(point).toEqual([]);
   });
 
+  test("a linked move goes out as one save, planned before anything is sent", async () => {
+    const session = labelSessionFixture();
+    const point = session.points[0];
+    const next = liveShotsInOrder(point, true)[2].id;
+    session.points[0] = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.id === "s-return"
+          ? { ...s, landingX: null, landingY: null }
+          : s.id === next
+            ? { ...s, stroke: "overhead", contactX: 1, contactY: 6 }
+            : s,
+      ),
+    };
+    const batches: unknown[] = [];
+    const { shot, saves } = saveSpies();
+    const table = consoleTable({
+      ...saves,
+      session,
+      onSaveShots: async (writes: unknown[]) => {
+        batches.push(writes);
+        return writes.map(() => ({ ok: true, status: "edited" }));
+      },
+      operations: spies().operations,
+    });
+    const patch = { landing_x: 2, landing_y: 8 };
+    await (table.onPatchShot as PatchShot)("s-return", patch);
+    await settled();
+    expect(shot).toEqual([]);
+    expect(batches).toEqual([
+      [
+        { shotId: "s-return", patch },
+        { shotId: next, patch: { contact_x: 2, contact_y: 8 } },
+      ],
+    ]);
+  });
+
   test("a spin edit, and a shot write that fails, send nothing either", async () => {
     const { shot, point, saves } = saveSpies();
     const table = consoleTable({ ...saves, operations: spies().operations });
@@ -1276,5 +1315,48 @@ test.describe("how it ended follows the shot rows", () => {
     });
     expect(typeof writable.onRemoveShotsAfter).toBe("function");
     expect(typeof writable.onRestoreShots).toBe("function");
+  });
+});
+
+test.describe("Add all missing shots after a split", () => {
+  const { P1, P2 } = FIXTURE_POINT_IDS;
+  // A suggestion the page filed under P2 while its stroke now sits in P1 —
+  // what a split leaves until the page builds its marks again.
+  const marksWith = (nextShotId: string): LabelMarks => ({
+    points: {},
+    shots: {},
+    serveSides: {},
+    suggestions: [
+      {
+        kind: "missing_shot",
+        key: "missing_shot:101",
+        pointId: P2,
+        afterShotId: "s-serve",
+        nextShotId,
+        hitter: "p2",
+        videoTime: 2472.5,
+      },
+    ],
+  });
+  const count = (marks: LabelMarks, session = labelSessionFixture()) =>
+    railProps({ ...SAVES, session, marks }).missingShots;
+
+  test("counts a suggestion under the point that holds its stroke now", () => {
+    expect(count(marksWith("s-return"))).toBe(1);
+  });
+
+  test("a pair the split put in two points asks for nothing", () => {
+    expect(count(marksWith("s-ace"))).toBe(0);
+  });
+
+  test("a dismissal on the point that holds the stroke answers it", () => {
+    const session = labelSessionFixture();
+    const dismissed = {
+      ...session,
+      points: session.points.map((point) =>
+        point.id === P1 ? { ...point, dismissed: ["missing_shot:101"] } : point,
+      ),
+    };
+    expect(count(marksWith("s-return"), dismissed)).toBe(0);
   });
 });

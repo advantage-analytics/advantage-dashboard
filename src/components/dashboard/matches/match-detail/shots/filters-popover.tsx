@@ -26,6 +26,7 @@ import {
   type MatchFilters,
 } from "../match-filters/model";
 import {
+  useErrorSplitJudged,
   useFiltersPanelData,
   useMatchFilters,
 } from "../match-filters/provider";
@@ -49,15 +50,18 @@ import {
   clearedFilters,
   courtFor,
   cutAvailability,
+  errorOptionsFor,
   OPTIONS,
+  type ErrorOption,
 } from "./viz-url";
 import { useVizPoints } from "./use-viz-points";
 import { useVizState } from "./use-viz-state";
 import { VizMenuTrigger, VIZ_PILL_RADIUS } from "./viz-labels";
 
-/** The `VizFilters` keys still drawn as live pills here — everything else
- *  lives in the advanced panel. */
-type OptionFilterKey = "error" | "zone" | "court" | "ball";
+/** The `VizFilters` keys still drawn as live `OPTIONS` pills here — Error
+ *  type draws its own (`errorOptionsFor`), everything else lives in the
+ *  advanced panel. */
+type OptionFilterKey = "zone" | "court" | "ball";
 
 const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
   serves: { one: "serve", many: "serves" },
@@ -133,6 +137,9 @@ export function FiltersPopover({
   onOpenChange?: (open: boolean) => void;
 }) {
   const { state, setState } = useVizState();
+  // Error type's wording and grouping follow whether this match's errors are
+  // judged (`errorOptionsFor`).
+  const errorSplitJudged = useErrorSplitJudged();
   const [open, setOpenState] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const setOpen = (next: boolean) => {
@@ -173,7 +180,9 @@ export function FiltersPopover({
     return null;
   }
 
-  const applied = activeFilterEntries(state).length;
+  const applied = activeFilterEntries(state, undefined, {
+    errorSplitJudged,
+  }).length;
   // The advanced filters actually applied. Pill groups the panel would
   // fold in already count as their own strip tokens — never twice.
   const advancedCount = activeFilterCount(filters.match ?? EMPTY_MATCH_FILTERS);
@@ -189,7 +198,7 @@ export function FiltersPopover({
     }));
   }
 
-  // Zone, Court and Error type toggle membership, kept in canonical (OPTIONS) order so the
+  // Serve, Zone and Court toggle membership, kept in canonical (OPTIONS) order so the
   // same set of picks always serialises identically.
   function toggle<K extends OptionFilterKey>(
     key: K,
@@ -205,6 +214,27 @@ export function FiltersPopover({
         filters: {
           ...prev.filters,
           [key]: canonicalOptionValues(key, next as readonly string[]),
+        },
+        viewId: null,
+      };
+    });
+  }
+
+  // One Error type pill: on when any of its values is applied, and a click
+  // turns every one of them on or off together (unjudged, "Errors" holds
+  // both kinds).
+  function toggleError(option: ErrorOption) {
+    setState((prev) => {
+      const current = prev.filters.error;
+      const on = option.values.some((v) => current.includes(v));
+      const next = on
+        ? current.filter((v) => !option.values.includes(v))
+        : [...current, ...option.values];
+      return {
+        ...prev,
+        filters: {
+          ...prev.filters,
+          error: canonicalOptionValues("error", next),
         },
         viewId: null,
       };
@@ -377,13 +407,19 @@ export function FiltersPopover({
                 />
 
                 {cut === "errors" && (
-                  <OptionsGroup
-                    filterKey="error"
-                    label="Error type"
-                    dark={dark}
-                    active={filters.error}
-                    onToggle={(value) => toggle("error", value)}
-                  />
+                  <FilterGroup label="Error type" dark={dark}>
+                    {errorOptionsFor(errorSplitJudged).map((option) => (
+                      <FilterPill
+                        key={option.values.join("+")}
+                        label={option.label}
+                        active={option.values.some((v) =>
+                          filters.error.includes(v),
+                        )}
+                        onClick={() => toggleError(option)}
+                        dark={dark}
+                      />
+                    ))}
+                  </FilterGroup>
                 )}
 
                 <button
@@ -536,8 +572,9 @@ function AdvancedPanel({
 }
 
 /**
- * One `OPTIONS`-backed group — Serve, Zone, Court, Error type (Player stays
- * hand-written above: it's single-select, not an `OPTIONS` group).
+ * One `OPTIONS`-backed group — Serve, Zone, Court (Player stays hand-written
+ * above: it's single-select, not an `OPTIONS` group; Error type is drawn from
+ * `errorOptionsFor`, whose unjudged pill toggles two values at once).
  */
 function OptionsGroup<K extends OptionFilterKey>({
   filterKey,

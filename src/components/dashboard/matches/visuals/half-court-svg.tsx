@@ -7,6 +7,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import { pointScoreLabel } from "@/lib/ui/score-format";
 
 /* Court dimensions (matches Figma frame 98:4736) */
 export const COURT_W = 447;
@@ -242,7 +243,9 @@ function DotTooltipContent({ dot }: { dot: CourtDot }) {
           <span className="text-[11px] font-medium tracking-tight text-[#0D0D0D]">
             {meta.gameScore}
           </span>
-          <span className="text-[11px] text-[#525252]">{meta.pointScore}</span>
+          <span className="text-[11px] text-[#525252]">
+            {pointScoreLabel(meta.pointScore)}
+          </span>
         </div>
         <div className="h-px bg-[var(--border-hairline)]" />
         <div className="flex items-center justify-between">
@@ -497,7 +500,9 @@ function renderDots(
         tabIndex={0}
         role="button"
         aria-label={
-          dot.meta ? `${dot.meta.resultLabel}, ${dot.meta.pointScore}` : "Point"
+          dot.meta
+            ? `${dot.meta.resultLabel}, ${pointScoreLabel(dot.meta.pointScore)}`
+            : "Point"
         }
       >
         {shape}

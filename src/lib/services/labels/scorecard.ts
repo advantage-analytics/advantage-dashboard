@@ -46,7 +46,9 @@ import {
 import { MARK_LABEL } from "./marks-copy";
 import { isCombinedTombstone } from "./point-combine";
 import {
+  drawsGhosts,
   foldReviewItems,
+  placementMissing,
   serveAfterServeIn,
   type MarkTone,
   type ReviewItemId,
@@ -428,6 +430,33 @@ function seededOutOrNet(shot: LabelShot): "out" | "net" | null {
   return isMissedResult(derived) ? derived : null;
 }
 
+/** "Shot placement" as the session opened, off the strokes' seeds. */
+function seededPlacementGap(point: LabelPoint, ghosts: boolean): LabelMark[] {
+  const shots = seededOrder(point).flatMap((shot) =>
+    shot.seed
+      ? [
+          {
+            ...shot,
+            status: "kept" as const,
+            stroke: shot.seed.stroke,
+            result: shot.seed.result,
+            contactX: shot.seed.contact_x,
+            contactY: shot.seed.contact_y,
+            landingX: shot.seed.landing_x,
+            landingY: shot.seed.landing_y,
+            videoTime: shot.seed.video_time,
+            unclear: [],
+          },
+        ]
+      : [],
+  );
+  const mark = placementMissing(
+    { shots, ending: point.seed?.ending ?? null },
+    ghosts,
+  );
+  return mark ? [mark] : [];
+}
+
 /**
  * The point's vendor strokes in the order they were seeded in: by seeded
  * time, or the row's own where a stroke has no stored seed. A stroke the
@@ -692,12 +721,15 @@ export function buildScorecard(
       rows.set(key, row);
     }
     // The point's review flag as the session opened: its count and hint
-    // marks as open members, folded into items. A tombstone is read like any
-    // row and measured against the point it became, as above.
+    // marks as open members, folded into items, plus "Shot placement" read
+    // off the seed, since no stored mark carries it. A tombstone is read like
+    // any row and measured against the point it became, as above.
+    const placement = seededPlacementGap(point, drawsGhosts(marks));
     const opening = foldReviewItems(
-      pointMarks
-        .filter((mark) => mark.tier !== "hidden")
-        .map((mark) => ({ mark, state: "open" as const })),
+      [
+        ...pointMarks.filter((mark) => mark.tier !== "hidden"),
+        ...placement,
+      ].map((mark) => ({ mark, state: "open" as const })),
       point,
       marks,
     );
@@ -987,7 +1019,7 @@ export function renderScorecard(
     "",
     "## Items, against what the labeller changed",
     "",
-    "The same marks folded into the review flag's items, as the session opened: a point counts once per item it carries, however many of the item's marks it has, amber items before grey. Live row marks (a stale ending, a missing last landing) are not in the opening marks, so they add no members here. The demoted row is the points whose flag is grey and open on item 4 alone for the evidence-only codes; they are also counted in their item 4 row.",
+    "The same marks folded into the review flag's items, as the session opened: a point counts once per item it carries, however many of the item's marks it has, amber items before grey. Live row marks (a stale ending, a missing last landing) are not in the opening marks, so they add no members here, except Shot placement, read off the seed. The demoted row is the points whose flag is grey and open on item 4 alone for the evidence-only codes; they are also counted in their item 4 row.",
     "",
     card.items.length === 0
       ? "No items."

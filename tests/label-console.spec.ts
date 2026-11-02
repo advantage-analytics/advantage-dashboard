@@ -158,6 +158,8 @@ test("the overview is six cards, with the upload's inputs and a publish checklis
   expect(out).toContain("Elena Vargas");
   expect(out).toContain("Right-handed, two-handed backhand");
   expect(out).toContain("Best of 3, no-ad scoring, lets played on");
+  // Read-only here (no operations): the scoring these labels count, as words.
+  expect(out).toContain("Labels counted as");
   expect(out).toContain("0:26 to 1:57:24");
   expect(out).toContain("Not entered");
   expect(out).toContain("Uploaded by Sam Uploader on Aug 29, 2026");
@@ -944,7 +946,7 @@ test.describe("a flag jump lands on the point's review step", () => {
     // stops asking the item and nothing lands. A stroke with no step about
     // it (the one an answer added) forces the move on, in review mode only.
     expect(placeSource).toMatch(
-      /if \(placesBothEnds\(shot, next\.patch\)\) \{\n\s+if \(step\?\.target\.shotId === shot\.id\) \{\n\s+if \(reviewMode\) noteAnswered\(\);\n\s+else closeQueuedItem\(\);\n\s+\} else if \(reviewMode && inlineAnchor\?\.strokeId === shot\.id\) \{\n\s+notePlaced\(\);\n\s+\}\n\s+\}/,
+      /if \(placesBothEnds\(withFilledLanding\(shot, following\), next\.patch\)\) \{\n\s+if \(step\?\.target\.shotId === shot\.id\) \{\n\s+if \(reviewMode\) noteAnswered\(\);\n\s+else closeQueuedItem\(\);\n\s+\} else if \(reviewMode && inlineAnchor\?\.strokeId === shot\.id\) \{\n\s+notePlaced\(\);\n\s+\}\n\s+\}/,
     );
     expect(placeSource.match(/noteAnswered\(\)/g)).toHaveLength(1);
     expect(placeSource.match(/closeQueuedItem\(\)/g)).toHaveLength(1);
@@ -956,6 +958,17 @@ test.describe("a flag jump lands on the point's review step", () => {
       /nextPlacement\(\s*placement,\s*point,\s*labelShotValues\(shot\),\s*strokes,?\s*\)/,
     );
     expect(placeSource).toContain("placementNotice(");
+    // The link: the notice reads the same rule the write does, and a landing
+    // moved alone reaches `volleyLinkWrites`.
+    expect(placeSource).toMatch(
+      /landingTakesContact\(\s*\{ \.\.\.shot, result: patch\.result \?\? shot\.result \},\s*following,\s*landingOnly,?\s*\)/,
+    );
+    expect(placeSource).toContain("playedOnPatch(next.patch, shot, following)");
+    expect(placeSource).toContain("patchShot(shot.id, patch, { landingOnly })");
+    // The toggle on ends apart puts the landing back to reading the contact.
+    expect(consoleSource).toMatch(
+      /"clearLanding" in toggled[\s\S]{0,120}positionPatch\(labelShotValues\(shot\), "landing", null\)/,
+    );
   });
 
   test("landing on a step about no stroke clears the selection, so the point-level question is the one asked", () => {
@@ -975,10 +988,10 @@ test.describe("a flag jump lands on the point's review step", () => {
       /stepToFlag\.current\(key === "\]" \? 1 : -1, "score"\)/,
     );
     expect(consoleSource).toMatch(
-      /if \(!flag\) return;\s*lastFlagPointId\.current = flag\.pointId;\s*findGap\(flag\.pointId, \{ arm: true \}\);/,
+      /if \(!flag\) return;\s*lastFlagPointId\.current = flag\.pointId;\s*findGap\(flag\.pointId, \{ arm: true, list: kind \}\);/,
     );
     expect(consoleSource).toMatch(
-      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
+      /goToFlag: \(pointId: string, list: FlagList = "score"\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true, list \}\);/,
     );
     expect(consoleSource).toContain("onGoToPoint={railHandlers.goToFlag}");
     // "Find the gap", the overview's open-on-point and a clicked row do not.
@@ -1002,7 +1015,11 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(findGapSource).toMatch(/arm && editable && point && liveMarks/);
     expect(findGapSource).toContain("if (arm) setFoldedPointId(null);");
     expect(findGapSource).toMatch(
-      /landOnStep\(\s*point,\s*reviewStep\(point, liveMarks, points, names, drawsGhosts\(liveMarks\)\),\s*\)/,
+      /landOnStep\(\s*point,\s*reviewStep\(\s*point,\s*liveMarks,\s*points,\s*names,\s*drawsGhosts\(liveMarks\),\s*queued,\s*first,\s*\),\s*\)/,
+    );
+    // The grey jump's order lasts only as long as the review it opened.
+    expect(consoleSource).toMatch(
+      /const asksFirst =\s*reviewMode && askFirst\?\.pointId === expanded\?\.id/,
     );
     // With no step the point opens as before, at its first stroke.
     expect(findGapSource).toContain("seekToPointStart(point);");
@@ -1192,7 +1209,7 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(stepFlag).toContain("lastFlagPointId.current = flag.pointId;");
     // The header's flag rows land on a flag too.
     expect(consoleSource).toMatch(
-      /goToFlag: \(pointId: string\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true \}\);/,
+      /goToFlag: \(pointId: string, list: FlagList = "score"\) => \{\s*lastFlagPointId\.current = pointId;\s*findGap\(pointId, \{ arm: true, list \}\);/,
     );
     // A row click, or ← / →, lets it go.
     const body = (name: string) => {
@@ -1673,5 +1690,206 @@ test.describe("Undo applies a diff (undo-diff.ts), never a whole re-read", () =>
     expect(rows[0].shots.map((s) => s.id)).toEqual(p1.shots.map((s) => s.id));
     expect(rows[1].shots.map((s) => s.id)).toEqual(p2.shots.map((s) => s.id));
     expect(rows[1].status).toBe(p2.status);
+  });
+});
+
+test.describe("Mark complete with errors still unmarked (T12)", () => {
+  type Props = Record<string, unknown>;
+  const passThrough = (tagName: string) =>
+    function PassThrough({
+      children,
+      className,
+      id,
+    }: {
+      children?: React.ReactNode;
+      className?: string;
+      id?: string;
+    }) {
+      return React.createElement(tagName, { className, id }, children);
+    };
+  /**
+   * The product's real `ConfirmDialog`, drawn inline: Radix's portal and
+   * focus machinery stubbed down to the elements they hold.
+   */
+  const inlineDialog = {
+    "@/components/ui/alert-dialog": {
+      AlertDialog: ({
+        open,
+        children,
+      }: {
+        open: boolean;
+        children: React.ReactNode;
+      }) =>
+        open
+          ? React.createElement("div", { "data-dialog": "" }, children)
+          : null,
+      AlertDialogContent: passThrough("div"),
+      AlertDialogTitle: passThrough("h2"),
+      AlertDialogDescription: React.forwardRef(function Description(
+        { children }: { children?: React.ReactNode },
+        _ref,
+      ) {
+        return React.createElement("p", { "data-description": "" }, children);
+      }),
+    },
+    "@radix-ui/react-alert-dialog": {
+      Cancel: ({
+        children,
+        className,
+        disabled,
+      }: {
+        children?: React.ReactNode;
+        className?: string;
+        disabled?: boolean;
+      }) =>
+        React.createElement(
+          "button",
+          { type: "button", "data-cancel": "", className, disabled },
+          children,
+        ),
+    },
+  };
+
+  function renderWith(
+    confirm: Props,
+    stubs: Record<string, unknown> = inlineDialog,
+  ): string {
+    const { LabelConsole } = createLoader({ stubs }).load(
+      "src/components/admin/labels/label-console.tsx",
+    ) as { LabelConsole: React.ComponentType<Props> };
+    return renderToStaticMarkup(
+      React.createElement(LabelConsole, {
+        session: labelSessionFixture(),
+        video: null,
+        ...SAVES,
+        operations: { completeSession: async () => ({ error: "unused" }) },
+        initialConfirm: confirm,
+      }),
+    );
+  }
+
+  /** The dialog's footer: its buttons in order, and whether each is disabled. */
+  function footer(html: string): { label: string; disabled: boolean }[] {
+    const dialog = html.slice(html.indexOf("data-dialog"));
+    return [...dialog.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)]
+      .map(([, attrs, inner]) => ({
+        label: text(inner),
+        disabled: /\sdisabled=""/.test(attrs),
+      }))
+      .filter((b) => b.label !== "");
+  }
+
+  const WARNINGS = ["4 points of 188 not checked"];
+
+  test("blocked: Publish is disabled, Go to point comes before Close, the errors line leads the list", () => {
+    const html = renderWith({
+      kind: "complete-session",
+      warnings: WARNINGS,
+      blockers: [31, 58, 140],
+    });
+    expect(text(html.slice(html.indexOf("<h2"), html.indexOf("</h2>")))).toBe(
+      "Mark 3 errors before publishing",
+    );
+    expect(
+      text(html.slice(html.indexOf("data-description"), html.indexOf("</p>"))),
+    ).toContain(
+      "Every error needs forced or unforced before this match can be verified. They're points 31, 58 and 140.",
+    );
+    const list = html.slice(html.indexOf("data-complete-warnings"));
+    expect(
+      [...list.matchAll(/<li>([^<]*)<\/li>/g)].map(([, item]) => item),
+    ).toEqual([
+      "3 errors not marked forced or unforced",
+      "4 points of 188 not checked",
+    ]);
+    // The X, then the footer: the quiet blue text action, Close, Publish held.
+    expect(footer(html)).toEqual([
+      { label: "Go to point 31", disabled: false },
+      { label: "Close", disabled: false },
+      { label: "Publish", disabled: true },
+    ]);
+    const goTo = tagOf(html, "data-go-to-point");
+    expect(goTo).toContain('data-go-to-point="31"');
+    expect(goTo).toContain("text-[var(--blue)]");
+    expect(goTo).not.toContain("bg-[var(--blue)]");
+  });
+
+  test("not blocked: the dialog is today's — unchecked points a warning, Publish enabled", () => {
+    const html = renderWith({
+      kind: "complete-session",
+      warnings: WARNINGS,
+      blockers: [],
+    });
+    expect(text(html.slice(html.indexOf("<h2"), html.indexOf("</h2>")))).toBe(
+      "Mark complete and publish?",
+    );
+    const list = html.slice(html.indexOf("data-complete-warnings"));
+    expect(
+      [...list.matchAll(/<li>([^<]*)<\/li>/g)].map(([, item]) => item),
+    ).toEqual(["4 points of 188 not checked"]);
+    expect(html).not.toContain("data-go-to-point");
+    expect(footer(html)).toEqual([
+      { label: "Cancel", disabled: false },
+      { label: "Publish", disabled: false },
+    ]);
+  });
+
+  test("blocked: the action publishes nothing, by key or click; Go to point closes and opens the point", () => {
+    const seen: Props[] = [];
+    const { LabelConfirmDialog } = createLoader({
+      stubs: {
+        "@/components/ui/confirm-dialog": {
+          ConfirmDialog: (props: Props) => {
+            seen.push(props);
+            return null;
+          },
+        },
+      },
+    }).load("src/components/admin/labels/label-confirm-dialog.tsx") as {
+      LabelConfirmDialog: React.ComponentType<Props>;
+    };
+    const events: unknown[][] = [];
+    const draw = (blockers: number[]) => {
+      renderToStaticMarkup(
+        React.createElement(LabelConfirmDialog, {
+          confirm: { kind: "complete-session", warnings: WARNINGS, blockers },
+          names: { p1: "Lee", p2: "Vargas" },
+          onCancel: () => events.push(["cancel"]),
+          onConfirm: () => events.push(["confirm"]),
+          onGoToPoint: (n: number) => events.push(["go", n]),
+        }),
+      );
+      return seen.at(-1)!;
+    };
+
+    const blocked = draw([31, 58]);
+    expect(blocked).toMatchObject({
+      confirmDisabled: true,
+      cancelLabel: "Close",
+    });
+    // Enter on the dialog runs its action: held while disabled.
+    (blocked.onConfirm as () => void)();
+    expect(events).toEqual([]);
+    const goTo = blocked.footerLeft as React.ReactElement<{
+      onClick: () => void;
+    }>;
+    goTo.props.onClick();
+    expect(events).toEqual([["cancel"], ["go", 31]]);
+
+    events.length = 0;
+    const open = draw([]);
+    expect(open).toMatchObject({ confirmDisabled: false });
+    expect(open.cancelLabel).toBeUndefined();
+    (open.onConfirm as () => void)();
+    expect(events).toEqual([["confirm"]]);
+  });
+
+  test("the shared confirm holds a disabled action: no onConfirm, by click or key", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/components/ui/confirm-dialog.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("disabled={pending || confirmDisabled}");
+    expect(source).toMatch(/if \(!confirmDisabled\) onConfirm\(\);/);
   });
 });

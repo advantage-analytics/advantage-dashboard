@@ -11,11 +11,15 @@ import {
 } from "@/components/dashboard/matches/match-detail/film/film-list-filters";
 import {
   sequenceStep,
+  endOfCutSettle,
   skipDeadAction,
   type SkipDeadMemo,
   stopForPointNumber,
 } from "@/components/dashboard/matches/match-detail/film/film-sequence";
-import type { FilmStop } from "@/components/dashboard/matches/match-detail/film/film-timeline";
+import {
+  activeStopAt,
+  type FilmStop,
+} from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import {
   EMPTY_MATCH_FILTERS,
   serializeMatchFilters,
@@ -94,29 +98,45 @@ test.describe("the list's fourth layer", () => {
 
   test("narrows to the numbers named, ANDed with the saved toggle; an empty set is no layer", () => {
     expect(
-      filmListPoints(points, {
-        remainder: null,
-        savedOnly: false,
-        pointSet: [7, 12, 99],
-      }).map((p) => p.id),
+      filmListPoints(
+        points,
+        {
+          remainder: null,
+          savedOnly: false,
+          pointSet: [7, 12, 99],
+        },
+        { youIsPlayer1: true },
+      ).map((p) => p.id),
     ).toEqual(["b", "c"]);
     expect(
-      filmListPoints(points, {
-        remainder: null,
-        savedOnly: true,
-        pointSet: [7, 12],
-      }).map((p) => p.id),
+      filmListPoints(
+        points,
+        {
+          remainder: null,
+          savedOnly: true,
+          pointSet: [7, 12],
+        },
+        { youIsPlayer1: true },
+      ).map((p) => p.id),
     ).toEqual(["c"]);
     expect(
-      filmListPoints(points, {
-        remainder: null,
-        savedOnly: false,
-        pointSet: [],
-      }),
+      filmListPoints(
+        points,
+        {
+          remainder: null,
+          savedOnly: false,
+          pointSet: [],
+        },
+        { youIsPlayer1: true },
+      ),
     ).toBe(points);
-    expect(filmListPoints(points, { remainder: null, savedOnly: false })).toBe(
-      points,
-    );
+    expect(
+      filmListPoints(
+        points,
+        { remainder: null, savedOnly: false },
+        { youIsPlayer1: true },
+      ),
+    ).toBe(points);
     expect(hasPointSet({ pointSet: null })).toBe(false);
     expect(hasPointSet({ pointSet: [1] })).toBe(true);
   });
@@ -235,6 +255,45 @@ test.describe("skip dead time over the cut", () => {
     expect(skipDeadAction(stops, 50.2, fresh)).toBeNull();
     // An empty cut asks nothing.
     expect(skipDeadAction([], 5, fresh)).toBeNull();
+  });
+
+  test("a cut's end that overran into the next point's window settles back on its last point", () => {
+    // A point with no recorded length: its window ends where the next opens.
+    const listed = stop("ace", 1, 10, 20);
+    const next = stop("next", 2, 20, 30);
+    const all = [listed, next];
+    const cut = [listed];
+    const memo: SkipDeadMemo<typeof listed> = { inside: null, lastJump: null };
+
+    expect(skipDeadAction(cut, 15, memo)).toBeNull();
+    // `timeupdate` notices the crossing already inside `next`.
+    expect(skipDeadAction(cut, 20.11, memo)).toEqual({ kind: "pause" });
+    const rest = endOfCutSettle(all, cut, 20.11);
+    expect(rest).toBe(19.75);
+    expect(activeStopAt(all, rest!)?.stop).toBe(listed);
+
+    // Play from there runs on through the end, and past it asks nothing.
+    expect(skipDeadAction(cut, 19.9, memo)).toBeNull();
+    expect(skipDeadAction(cut, 20.15, memo)).toBeNull();
+    expect(skipDeadAction(cut, 25, memo)).toBeNull();
+    // Replaying the point earns the pause back.
+    expect(skipDeadAction(cut, 10, memo)).toBeNull();
+    expect(skipDeadAction(cut, 20.05, memo)).toEqual({ kind: "pause" });
+  });
+
+  test("a cut's end followed by dead time stays where it paused", () => {
+    const listed = stop("a", 1, 10, 20);
+    const all = [listed, stop("b", 2, 40, 50)];
+    expect(endOfCutSettle(all, [listed], 20.2)).toBeNull();
+    // The cut's last point is under the head: nothing to correct.
+    expect(endOfCutSettle(all, [listed], 15)).toBeNull();
+    expect(endOfCutSettle(all, [], 20.2)).toBeNull();
+  });
+
+  test("a window shorter than the rest settles on its own start", () => {
+    const listed = stop("a", 1, 10, 10.1);
+    const all = [listed, stop("b", 2, 10.1, 20)];
+    expect(endOfCutSettle(all, [listed], 10.3)).toBe(10);
   });
 
   test("finds a stop by its point's number", () => {

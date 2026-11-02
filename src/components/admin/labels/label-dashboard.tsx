@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { ArrowUpRight, Check, CircleAlert } from "lucide-react";
 import type { LabelUploadInfo } from "@/lib/data/label-overview-server";
 import { buildAppliedRows, expectedStats } from "@/lib/services/labels/apply";
@@ -28,6 +28,7 @@ import {
   type LabelSetScore,
 } from "@/lib/services/labels/set-scores";
 import { PUBLISHED_PAST_TAILS } from "@/lib/services/labels/session-status";
+import { MenuSelect } from "@/components/ui/menu-select";
 import { cn } from "@/lib/utils";
 
 /**
@@ -74,6 +75,8 @@ export interface LabelDashboardProps {
   complete: boolean;
   /** What the uploader entered; null when it could not be read. */
   upload: LabelUploadInfo | null;
+  /** Change the scoring this session counts by; absent where it cannot change. */
+  onAdScoringChange?: (adScoring: boolean) => void;
   /** Open full screen, on a point when one is named. */
   onOpen: (pointId?: string) => void;
 }
@@ -125,9 +128,12 @@ export function LabelDashboard(props: LabelDashboardProps) {
     changes: useMemo(() => changeCounts(points), [points]),
     stats: useMemo(() => {
       try {
+        // The labeller's own marks: a partly marked session publishes no
+        // forced string, and this still counts what they have marked so far.
         return expectedStats(
           buildAppliedRows({ points, adScoring, bestOf, start: startScore })
             .points,
+          { labellerMarks: true },
         );
       } catch {
         return null;
@@ -816,13 +822,27 @@ function PublishCheck(props: WidgetProps) {
 
 // ── Entered at upload ──────────────────────────────────────────────────────
 
+const SCORING = [
+  { value: "no-ad", label: "No-ad" },
+  { value: "ad", label: "Ad" },
+] as const;
+
 /**
  * What the uploader told the wizard, which is what the derivation was run
  * with: a grid of facts, two across. A labeller reads it to tell a wrong
  * label from a wrong input — above all who starts on the far side, the one
  * input that credits every stroke to the other player when it is wrong.
+ *
+ * "Format" keeps saying what was sent to the vendor. "Labels counted as" is
+ * the one fact here that can change: a wrong scoring is corrected for the
+ * session's scoreboard and its publish, without resubmitting the video.
  */
-function UploadInputs({ upload, names }: WidgetProps) {
+function UploadInputs({
+  upload,
+  names,
+  adScoring,
+  onAdScoringChange,
+}: WidgetProps) {
   if (!upload) {
     return (
       <Card title="Entered at upload">
@@ -840,7 +860,7 @@ function UploadInputs({ upload, names }: WidgetProps) {
     upload.trim.start === null && upload.trim.end === null
       ? null
       : `${clock(upload.trim.start) ?? "start"} to ${clock(upload.trim.end) ?? "end"}`;
-  const facts: [string, string | null][] = [
+  const facts: [string, ReactNode][] = [
     [
       "Played",
       [day(upload.playedAt), upload.event, upload.round]
@@ -865,6 +885,25 @@ function UploadInputs({ upload, names }: WidgetProps) {
       ]
         .filter(Boolean)
         .join(", ") || null,
+    ],
+    [
+      "Labels counted as",
+      onAdScoringChange ? (
+        <MenuSelect
+          label="Labels counted as"
+          variant="text"
+          align="start"
+          width={140}
+          className="-my-0.5 h-6 text-[13px]"
+          value={adScoring ? "ad" : "no-ad"}
+          options={SCORING}
+          onChange={(next) => onAdScoringChange(next === "ad")}
+        />
+      ) : adScoring ? (
+        "Ad"
+      ) : (
+        "No-ad"
+      ),
     ],
     [
       "Court",
@@ -940,6 +979,7 @@ function Statistics({ reading, names }: WidgetProps) {
     ["Service winners", p1.serviceWinners, p2.serviceWinners],
     ["Winners", p1.winners, p2.winners],
     ["Unforced errors", p1.unforcedErrors, p2.unforcedErrors],
+    ["Forced errors", p1.forcedErrors, p2.forcedErrors],
     [
       "First serves in",
       pct(p1.firstServesIn, p1.firstServes),

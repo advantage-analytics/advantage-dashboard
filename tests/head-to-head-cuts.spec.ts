@@ -7,12 +7,18 @@ import {
   H2H_GROUPS,
   buildStatRows,
   fractionWords,
+  h2hGroups,
   sideCut,
   tallySide,
   watchLine,
   withPointRows,
   type H2HRowConfig,
 } from "@/components/dashboard/matches/match-detail/head-to-head-card";
+import {
+  outcomeCut,
+  outcomesFor,
+  outcomeTally,
+} from "@/components/dashboard/matches/match-detail/point-endings-card";
 import {
   applyFilmCut,
   FILM_CUT_EXTRA_KEYS,
@@ -44,6 +50,8 @@ import {
 const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 
 const EXPECTED_CUTS: Record<string, FilmCut> = {
+  "Net point attempts": { netBy: "either" },
+  "Net points won": { netBy: "either" },
   Aces: { serveResult: ["ace"] },
   "Double faults": { resultEnding: ["error"], resultShot: ["Serve"] },
   "First serve in": { serveType: ["first"], serveIn: true },
@@ -66,6 +74,8 @@ const EXPECTED_CUTS: Record<string, FilmCut> = {
  * opponent's error ended.
  */
 const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
+  "Net point attempts": { netBy: "you" },
+  "Net points won": { netBy: "you", resultOutcome: ["won"] },
   // An ace is the server's: Serve › Player, never Hit by.
   Aces: { serveResult: ["ace"], server: "you" },
   "Double faults": {
@@ -166,7 +176,7 @@ test.describe("head-to-head cuts", () => {
 
   test("rows without a point-level equivalent carry no cut", () => {
     const uncut = ALL_ROWS.filter((row) => !row.cut).map((row) => row.label);
-    expect(uncut).toEqual(["Service games won", "Net points won"]);
+    expect(uncut).toEqual(["Service games won"]);
   });
 
   test("every cut row names its points for the screen-reader label", () => {
@@ -395,19 +405,21 @@ test.describe("a cell opens exactly the points its figure counts", () => {
     expect(count(oppCut(row))).toBe(opp.doubleFaults);
   });
 
-  test("winners leave the aces on their own line", () => {
+  test("winners leave out aces and service winners", () => {
     const row = byConfig("Winners");
     const ids = applyFilmCut(MATCH, MATCH, youCut(row), CTX).map((pt) => pt.id);
     expect(ids).not.toContain("ace-you");
-    expect(ids).toEqual(["sw-you", "fw-you", "bp-saved", "rw-you"]);
+    expect(ids).not.toContain("sw-you");
+    expect(ids).toEqual(["fw-you", "bp-saved", "rw-you"]);
     // Why the row keeps its Film-only `winner` ending: Result › Ending
-    // "winner" by you alone credits your ace to you as a winner.
+    // "winner" by you alone credits both to you as a winner.
     const endingAlone = applyMatchFilters(
       MATCH,
       { ...EMPTY_MATCH_FILTERS, resultEnding: ["winner"], resultPlayer: "you" },
       CTX,
     ).map((pt) => pt.id);
     expect(endingAlone).toContain("ace-you");
+    expect(endingAlone).toContain("sw-you");
   });
 
   test("unforced errors leave the forced ones out", () => {
@@ -662,7 +674,7 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
     expect(derivedAces.sideBy).toBe("server");
     expect(derivedWinners.cut).toEqual({
       resultEnding: ["winner"],
-      ending: "rally-winner",
+      ending: "winner",
     });
     expect(derivedWinners.sideBy).toBe("player");
   });
@@ -739,7 +751,7 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
       ...MATCH_FILTER_KEYS,
       ...FILM_CUT_EXTRA_KEYS,
     ]);
-    expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending", "serveIn"]);
+    expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending", "serveIn", "netBy"]);
     for (const row of DERIVED_ROWS) {
       if (!row.cut) continue;
       for (const key of Object.keys(row.cut)) {
@@ -782,5 +794,108 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
     expect(isUnreturnedServe(rallied)).toBe(false);
     expect(pointResultLabel(rallied, DERIVED_CTX)).toBe(sw.resultType);
     expect(pointResultLabel({ ...sw, resultType: "" }, CTX)).toBe("Point");
+  });
+});
+
+/* ── Errors until the split is judged ───────────────────────────────────── */
+
+test.describe("error rows follow the match's split", () => {
+  const pointsRow = (judged: boolean, label: string) => {
+    const row = h2hGroups(false, judged)
+      .flatMap((g) => g.configs)
+      .find((r) => r.label === label);
+    if (!row) throw new Error(`no row labelled "${label}"`);
+    return row;
+  };
+  const ids = (cut: FilmCut) =>
+    applyFilmCut(MATCH, MATCH, cut, CTX).map((pt) => pt.id);
+
+  test("judged: Forced errors opens the forced error alone, by its side", () => {
+    const row = pointsRow(true, "Forced errors");
+    expect(youCut(row)).toEqual({
+      resultEnding: ["error"],
+      ending: "forced-error",
+      resultPlayer: "you",
+    });
+    expect(oppCut(row)).toEqual(mirrored(youCut(row)));
+    expect(ids(youCut(row))).toEqual(["fe-you"]);
+    // And Unforced errors keeps today's cut and points.
+    expect(ids(youCut(pointsRow(true, "Unforced errors")))).toEqual(["ue-you"]);
+  });
+
+  test("unjudged: Errors opens every error, forced and unforced", () => {
+    const row = pointsRow(false, "Errors");
+    expect(youCut(row)).toEqual({
+      resultEnding: ["error"],
+      ending: "error",
+      resultPlayer: "you",
+    });
+    const opened = ids(youCut(row));
+    expect(opened).toContain("ue-you");
+    expect(opened).toContain("fe-you");
+    // Only errors: the row must not offer more than the figure beside it.
+    expect(opened.sort()).toEqual(
+      MATCH.filter(
+        (pt) =>
+          (pt.resultType ?? "").toLowerCase().endsWith("error") &&
+          ids({ resultEnding: ["error"], resultPlayer: "you" }).includes(pt.id),
+      )
+        .map((pt) => pt.id)
+        .sort(),
+    );
+  });
+
+  test("unjudged: Errors leaves out a double fault and a point with no result", () => {
+    const row = pointsRow(false, "Errors");
+    const noResult = { ...MATCH[0], id: "no-result", resultType: "" };
+    const points = [...MATCH, noResult];
+    const opened = applyFilmCut(points, points, youCut(row), CTX).map(
+      (pt) => pt.id,
+    );
+    expect(opened).not.toContain("no-result");
+    for (const pt of MATCH) {
+      if ((pt.resultType ?? "").toLowerCase().includes("double fault")) {
+        expect(opened).not.toContain(pt.id);
+      }
+    }
+  });
+
+  test("Point endings: unjudged, the errors segment is every error", () => {
+    expect(outcomesFor(false).map((o) => [o.label, o.legendLabel])).toEqual([
+      ["Winners", undefined],
+      ["Aces", undefined],
+      ["Errors", "Errors"],
+      ["Double faults", undefined],
+    ]);
+    expect(outcomeCut("unforcedErrors", "you", false)).toEqual({
+      resultEnding: ["error"],
+      ending: "error",
+      resultPlayer: "you",
+    });
+    // Forced errors counted; the double fault stays on its own segment.
+    const tally = outcomeTally(MATCH, true, false, false);
+    expect(tally.unforcedErrors).toBe(2);
+    expect(tally.doubleFaults).toBe(1);
+    expect(ids(outcomeCut("unforcedErrors", "you", false)).sort()).toEqual([
+      "fe-you",
+      "ue-you",
+    ]);
+  });
+
+  test("Point endings: judged, today's Unforced segment", () => {
+    expect(outcomesFor(true).map((o) => [o.label, o.legendLabel])).toEqual([
+      ["Winners", undefined],
+      ["Aces", undefined],
+      ["Unforced errors", "Unforced"],
+      ["Double faults", undefined],
+    ]);
+    expect(outcomeCut("unforcedErrors", "you", true)).toEqual({
+      resultEnding: ["error"],
+      ending: "unforced-error",
+      resultPlayer: "you",
+    });
+    const tally = outcomeTally(MATCH, true, false, true);
+    expect(tally.unforcedErrors).toBe(1);
+    expect(tally.doubleFaults).toBe(1);
   });
 });

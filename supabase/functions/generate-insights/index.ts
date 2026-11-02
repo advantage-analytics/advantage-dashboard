@@ -413,6 +413,72 @@ async function callerOwnsMatch(
   return match.created_by === caller.userId;
 }
 
+/**
+ * Whether a match's errors are split into unforced and forced. A Deno copy of
+ * `errorSplitJudged` in `src/lib/data/error-split.ts`, which is the source of
+ * the rule — change that one and copy it here:
+ * - a SwingVision match ("swing-vision") is always judged;
+ * - any other match only once it is verified AND its errors were judged
+ *   (`matches.errors_judged_at`) — Reopen clears `verified` but keeps the
+ *   marker, so the marker alone is not enough.
+ * `verified` is read as `match-verification.ts` reads it: `verified` true
+ * with a `verified_at` beside it.
+ */
+function errorSplitJudged(
+  row: {
+    source_provider?: string | null;
+    verified?: boolean | null;
+    verified_at?: string | null;
+    errors_judged_at?: string | null;
+  } | null,
+): boolean {
+  if (!row) return false;
+  if (row.source_provider === "swing-vision") return true;
+  const verified = row.verified === true && !!row.verified_at;
+  return verified && row.errors_judged_at != null;
+}
+
+/**
+ * Every error a row counts. A Deno copy of `totalErrors` in
+ * `src/lib/data/player-profile.ts`: a null `unforced_errors` is unmeasured and
+ * stays null, and a null `forced_errors` beside a count is none.
+ */
+function totalErrors(
+  unforced: number | null | undefined,
+  forced: number | null | undefined,
+): number | null {
+  if (unforced == null) return null;
+  return Number(unforced) + Number(forced ?? 0);
+}
+
+/**
+ * A stats row as Gemini sees it. On an unjudged match the "unforced" count is
+ * every error, so no key that says "unforced" or "forced" may reach the
+ * prompt: the two collapse into `errors` (`totalErrors`) and the per-wing
+ * counts lose the word. A judged match's row keeps its split and gains the same
+ * `errors`, the one count that means the same on every match, so a comparison
+ * with earlier matches has something to read.
+ */
+// deno-lint-ignore no-explicit-any
+function presentErrors(row: any, judged: boolean): any {
+  if (!row || typeof row !== "object") return row;
+  const errors = totalErrors(row.unforced_errors, row.forced_errors);
+  if (judged) return { ...row, errors };
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (/forced/i.test(key)) continue;
+    out[key] = value;
+  }
+  out.errors = errors;
+  if ("forehand_unforced_errors" in row) {
+    out.forehand_errors = row.forehand_unforced_errors;
+  }
+  if ("backhand_unforced_errors" in row) {
+    out.backhand_errors = row.backhand_unforced_errors;
+  }
+  return out;
+}
+
 serve(async (req) => {
   const requestStartedAt = Date.now();
   try {
@@ -450,9 +516,27 @@ serve(async (req) => {
       throw new Error(`Failed to fetch stats from view: ${viewError?.message}`);
     }
 
+    // The match row: the error-split judgement, the comparison history and
+    // the PostHog attribution all read it. Unreadable reads as unjudged —
+    // "errors" is never wrong, "unforced errors" can be.
+    const { data: matchRow } = await supabase
+      .from("matches")
+      .select(
+        "player1_id, date, program_id, created_by, source_provider, verified, verified_at, errors_judged_at",
+      )
+      .eq("id", matchId)
+      .single();
+    const errorsJudged = errorSplitJudged(matchRow ?? null);
+
     // 3. Separate the players based on the boolean
-    const player1Stats = matchStats.find((stat) => stat.is_player1 === true);
-    const player2Stats = matchStats.find((stat) => stat.is_player1 === false);
+    const player1Stats = presentErrors(
+      matchStats.find((stat) => stat.is_player1 === true),
+      errorsJudged,
+    );
+    const player2Stats = presentErrors(
+      matchStats.find((stat) => stat.is_player1 === false),
+      errorsJudged,
+    );
 
     // 3b. Comparison context (uploading user = player1, matching getPlayerAverageStats):
     // the player's career averages over PRIOR matches + their immediately previous match,
@@ -465,12 +549,6 @@ serve(async (req) => {
     // a program_players id rather than an account.
     let uploaderId: string | undefined;
     try {
-      const { data: matchRow } = await supabase
-        .from("matches")
-        .select("player1_id, date, program_id, created_by")
-        .eq("id", matchId)
-        .single();
-
       uploaderId = matchRow?.created_by ?? undefined;
       const userId = matchRow?.player1_id;
       const matchDate = matchRow?.date;
@@ -505,22 +583,32 @@ serve(async (req) => {
             "first_return_won_pct",
             "return_games_won_pct",
             "winners",
-            "unforced_errors",
+            // Always `errors` (each prior match's total, then averaged), judged
+            // or not: on an unjudged prior match `unforced_errors` holds every
+            // error, so it cannot be set beside a judged match's unforced count.
+            "errors",
             "aces",
             "double_faults",
           ];
+          const selectFields = AVG_FIELDS.flatMap((field) =>
+            field === "errors" ? ["unforced_errors", "forced_errors"] : [field],
+          );
 
-          const { data: priorRows } = await supabase
+          const { data: rawPriorRows } = await supabase
             .from("match_stats_with_percentages")
-            .select(["match_id", ...AVG_FIELDS].join(", "))
+            .select(["match_id", ...selectFields].join(", "))
             .in("match_id", priorIds)
             .eq("is_player1", true);
+          const priorRows = rawPriorRows?.map((r) => presentErrors(r, false));
 
           if (priorRows && priorRows.length > 0) {
             const averages: Record<string, number | null> = {};
             for (const field of AVG_FIELDS) {
+              // A null is unmeasured: it stays out of the average, not in as 0.
               const vals = priorRows
-                .map((r) => Number(r[field] ?? 0))
+                .map((r) => r[field])
+                .filter((v) => v != null)
+                .map(Number)
                 .filter((v) => !isNaN(v));
               averages[field] = vals.length
                 ? Math.round(
@@ -530,6 +618,11 @@ serve(async (req) => {
             }
             const prevRow =
               priorRows.find((r) => r.match_id === prevMatchId) ?? null;
+            // Only a judged match has another error count to mistake it for.
+            const errorsBasis = errorsJudged
+              ? `
+      The prior figures count every error as 'errors': compare them only with this match's 'errors', never with its 'unforced_errors' or 'forced_errors'.`
+              : "";
 
             if (priorRows.length === 1) {
               // Only one prior match: the "average" IS that match, so present a single
@@ -538,14 +631,14 @@ serve(async (req) => {
 
       Player 1 comparison context (use ONLY for Player 1's headline and description):
       - This is only the player's 2nd recorded match. Their single prior match (their baseline AND previous match): ${JSON.stringify(prevRow ?? averages)}
-      In Player 1's description, briefly note whether they improved or regressed since that previous match — qualitatively: do not print the prior-match or average figures (this match's own percentages are still quoted as above). Do NOT imply an established trend or long history from a single prior match.`;
+      In Player 1's description, briefly note whether they improved or regressed since that previous match — qualitatively: do not print the prior-match or average figures (this match's own percentages are still quoted as above). Do NOT imply an established trend or long history from a single prior match.${errorsBasis}`;
             } else {
               comparisonContext = `
 
       Player 1 comparison context (use ONLY for Player 1's headline and description):
-      - Typical averages across ${priorRows.length} prior matches: ${JSON.stringify(averages)}
+      - Typical averages across ${priorRows.length} prior matches, each figure over only the matches that measured it, so it may rest on fewer: ${JSON.stringify(averages)}
       - Immediately previous match: ${prevRow ? JSON.stringify(prevRow) : "unavailable"}
-      In Player 1's description, frame THIS match against their typical averages AND their previous match (above/below their usual level; improved or regressed since last time) — qualitatively: do not print the prior-match or average figures (this match's own percentages are still quoted as above).`;
+      In Player 1's description, frame THIS match against their typical averages AND their previous match (above/below their usual level; improved or regressed since last time) — qualitatively: do not print the prior-match or average figures (this match's own percentages are still quoted as above).${errorsBasis}`;
             }
           }
         }
@@ -609,7 +702,12 @@ serve(async (req) => {
 
       Crucially, contextualize their performances against each other. If Player 1 dominated at the net, factor that into Player 2's weaknesses.
       Keep everything encouraging and actionable for college athletes.
-      Speak to each player as "you"; never write "we", "us", "our" or "let's" — there is no coach speaking. Call the other player "your opponent", never "Player 1" or "Player 2".
+      Speak to each player as "you"; never write "we", "us", "our" or "let's" — there is no coach speaking. Call the other player "your opponent", never "Player 1" or "Player 2".${
+        errorsJudged
+          ? ""
+          : `
+      This match's errors were not judged by kind, so the 'errors' figure counts every error a player made: call them "errors" and never describe them as any kind of error.`
+      }
 
       Player 1 Stats: ${JSON.stringify(player1Stats || { note: "Stats unavailable" })}
       Player 2 Stats: ${JSON.stringify(player2Stats || { note: "Stats unavailable" })}${comparisonContext}

@@ -103,6 +103,12 @@ export type LabelConfirm =
       kind: "complete-session";
       /** What is still open (`completeWarnings`); empty when nothing is. */
       warnings: readonly string[];
+      /**
+       * The errors not yet marked forced or unforced (`unmarkedErrors`), as
+       * the rail numbers the points, ascending. Any at all and the confirm
+       * will not publish: it names them and goes to the first instead.
+       */
+      blockers: readonly number[];
     }
   | { kind: "reopen-session" };
 
@@ -165,6 +171,42 @@ export interface LabelConfirmCopy {
   tone: "primary" | "danger";
   /** A second answer at the footer's left; absent on every confirm but one. */
   alternativeLabel?: string;
+  /**
+   * Set only on a Mark complete that cannot publish yet: the action is held,
+   * and the footer's left goes to the first point still to mark instead.
+   */
+  blocked?: { goToLabel: string; pointNumber: number };
+}
+
+/** "31", "31 and 58", "31, 58 and 140". */
+function listPoints(numbers: readonly number[]): string {
+  if (numbers.length <= 1) return numbers.join("");
+  return `${numbers.slice(0, -1).join(", ")} and ${numbers[numbers.length - 1]}`;
+}
+
+/** The blocked confirm's first line in its list: what the title asks for. */
+export function unmarkedErrorsWarning(n: number): string {
+  return `${n} ${n === 1 ? "error" : "errors"} not marked forced or unforced`;
+}
+
+/** Mark complete while errors are unmarked: name them, publish nothing. */
+function blockedCompleteCopy(blockers: readonly number[]): LabelConfirmCopy {
+  const n = blockers.length;
+  const which =
+    n === 1
+      ? `It's point ${blockers[0]}.`
+      : `They're points ${listPoints(blockers)}.`;
+  return {
+    title: `Mark ${n} ${n === 1 ? "error" : "errors"} before publishing`,
+    description: `Every error needs forced or unforced before this match can be verified. ${which}`,
+    confirmLabel: "Publish",
+    pendingLabel: "Publishing…",
+    tone: "primary",
+    blocked: {
+      goToLabel: `Go to point ${blockers[0]}`,
+      pointNumber: blockers[0],
+    },
+  };
 }
 
 /** What a serve changing hands takes with it, as the confirm says it. */
@@ -301,6 +343,9 @@ export function labelConfirmCopy(
         tone: "primary",
       };
     case "complete-session":
+      if (confirm.blockers.length > 0) {
+        return blockedCompleteCopy(confirm.blockers);
+      }
       return {
         title: "Mark complete and publish?",
         description:

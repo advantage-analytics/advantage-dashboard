@@ -17,6 +17,7 @@ import {
   isServeStroke,
   LABEL_SPINS,
   type LabelEnding,
+  type LabelErrorKind,
   type LabelPoint,
   type LabelPointSeedValues,
   type LabelPointStatus,
@@ -148,7 +149,19 @@ export const LABEL_POINT_VALUE_FIELDS = [
   "ending",
   "ended_by",
   "serve_side",
+  "error_kind",
 ] as const;
+
+/**
+ * Whether an error was forced or unforced (`label_points.error_kind`). A
+ * labeller's call on top of the ending, never seeded: `seed` has no key for
+ * it, so null is the baseline and setting it never makes a point `edited`
+ * (it is not in {@link LABEL_POINT_SEED_FIELDS}).
+ */
+export const LABEL_ERROR_KINDS: readonly LabelErrorKind[] = [
+  "forced",
+  "unforced",
+];
 
 /**
  * Every key `updateLabelPoint` accepts: the values, plus the free-text note.
@@ -165,6 +178,7 @@ export interface LabelPointValues {
   ending: LabelEnding | null;
   ended_by: LabelSide | null;
   serve_side: LabelServeSide | null;
+  error_kind: LabelErrorKind | null;
 }
 
 export type LabelPointPatch = Partial<LabelPointValues> & {
@@ -372,6 +386,13 @@ export function parseLabelPointPatch(
     if (v === undefined) return { error: "Serve side must be deuce or ad." };
     patch.serve_side = v;
   }
+  if ("error_kind" in input) {
+    const v = vocab(input.error_kind, LABEL_ERROR_KINDS);
+    if (v === undefined) {
+      return { error: "Error kind must be forced or unforced." };
+    }
+    patch.error_kind = v;
+  }
   if ("note" in input) {
     const note = input.note;
     if (note !== null && typeof note !== "string") {
@@ -544,17 +565,19 @@ export function labelPointStatusAfterChange(
 
 /**
  * The status a point takes after a patch — {@link labelPointStatusAfterChange}
- * over its value fields. The note never moves it: it annotates the point, it
- * is not a label.
+ * over its seeded value fields. The note never moves it: it annotates the
+ * point, it is not a label. Nor does `error_kind`: it is never seeded, so
+ * marking an error forced or unforced is not a correction of the seed.
  */
 export function labelPointStatusAfterPatch(
   current: LabelPointState,
   patch: LabelPointPatch,
 ): LabelPointStatus {
+  // Only the seeded fields move the status: `error_kind` is not one of them.
   const change = Object.fromEntries(
-    LABEL_POINT_VALUE_FIELDS.filter((field) => field in patch).map((field) => [
+    LABEL_POINT_SEED_FIELDS.filter((field) => field in patch).map((field) => [
       field,
-      patch[field] ?? null,
+      (patch as Partial<LabelPointFields>)[field] ?? null,
     ]),
   ) as Partial<LabelPointFields>;
   return labelPointStatusAfterChange(current, change);
@@ -782,5 +805,6 @@ export function applyLabelPointPatch(
   if ("ending" in patch) next.ending = patch.ending ?? null;
   if ("ended_by" in patch) next.endedBy = patch.ended_by ?? null;
   if ("serve_side" in patch) next.serveSide = patch.serve_side ?? null;
+  if ("error_kind" in patch) next.errorKind = patch.error_kind ?? null;
   return next;
 }

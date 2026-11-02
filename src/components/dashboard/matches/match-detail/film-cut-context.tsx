@@ -5,9 +5,10 @@ import { createContext, use, useMemo, type ReactNode } from "react";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import {
   applyMatchFilters,
+  cameToNet,
+  countsAsWinner,
   EMPTY_MATCH_FILTERS,
   hasActiveMatchFilters,
-  isUnreturnedServe,
   MATCH_FILTER_KEYS,
   type MatchFilterContext,
   type MatchFilters,
@@ -59,19 +60,20 @@ import {
  * A result-type bucket the report's own tallies count by, which the shared
  * Result › Ending cannot separate. Film only.
  *
- * - `winner` — `resultType` containing "winner" (the published
- *   `LIKE '%Winner%'`), which leaves aces out: the report counts them on their
- *   own line, and Result › Ending "winner" would fold them back in
- *   (`winnerHitBy` credits an ace to the server as a winner).
+ * - `winner` — `countsAsWinner`, the published `winners`: no ace and no service
+ *   winner, which Result › Ending "winner" would fold back in (`winnerHitBy`
+ *   credits both to the server). On a derived match a one-shot rally the vendor
+ *   labelled a stroke winner is in this bucket and the Aces row alike.
  * - `unforced-error` — `resultType` containing "unforced error". Result ›
  *   Ending "error" covers forced errors too, and video matches do not
  *   separate the two.
- * - `rally-winner` — the `winner` bucket less every unreturned serve
- *   (`isUnreturnedServe`): the derived Winners row on an Advantage
- *   Intelligence match, whose unreturned serves are counted as aces on their
- *   own line. Pills cannot say "winners minus unreturned serves" — Result ›
- *   Ending "winner" credits every "Service Winner" to the server — so this
- *   one stays Film-only. It never shares a point with the derived Aces row.
+ * - `forced-error` — `resultType` containing "forced error" and not
+ *   "unforced error" (which contains it): the judged split's second row.
+ * - `error` — any `resultType` ending in "error", forced and unforced alike:
+ *   a match whose errors are not judged yet (`errorSplitJudged`). Unlike
+ *   Result › Ending "error" it leaves double faults out, which the report
+ *   counts on their own line, and a service winner's missed return, which has
+ *   no error result type.
  *
  * Aces — published or derived — return winners and the rally bands are exact
  * shared filters (Serve › Result "Ace", Return › Result "Winner", Result ›
@@ -79,7 +81,8 @@ import {
  * derived match Serve › Result "Ace" IS `isUnreturnedServe` (`serveResultOf`
  * reads `MatchFilterContext.isDerived`), so the same pill serves both.
  */
-export type FilmCutEnding = "winner" | "unforced-error" | "rally-winner";
+export type FilmCutEnding =
+  "winner" | "unforced-error" | "forced-error" | "error";
 
 /** What a cut adds that `MatchFilters` cannot say. Film only. */
 export interface FilmCutExtras {
@@ -93,6 +96,12 @@ export interface FilmCutExtras {
    * Result cannot say it either: it reads the return row, not the serve.
    */
   serveIn?: boolean | null;
+  /**
+   * Only points where this side came to the net (`cameToNet`); "either" is
+   * both players' net points, with a side resolved through the filter context.
+   * Not a shared filter, so the Filters drawer has no pill for it.
+   */
+  netBy?: PlayerSide | "either" | null;
 }
 
 /** A statistic's cut: the shared vocabulary plus the Film-only extras. */
@@ -102,6 +111,7 @@ export type FilmCut = Partial<MatchFilters> & FilmCutExtras;
 export const FILM_CUT_EXTRA_KEYS: readonly (keyof FilmCutExtras)[] = [
   "ending",
   "serveIn",
+  "netBy",
 ];
 
 /**
@@ -172,26 +182,41 @@ export function hasFilmCut(cut: FilmCut | null | undefined): boolean {
   );
 }
 
-function matchesFilmCutEnding(
+export function matchesFilmCutEnding(
   point: MatchPoint,
   ending: FilmCutEnding,
 ): boolean {
   const result = (point.resultType ?? "").trim().toLowerCase();
   switch (ending) {
     case "winner":
-      return result.includes("winner");
+      return countsAsWinner(point);
     case "unforced-error":
       return result.includes("unforced error");
-    case "rally-winner":
-      return result.includes("winner") && !isUnreturnedServe(point);
+    case "forced-error":
+      return (
+        result.includes("forced error") && !result.includes("unforced error")
+      );
+    case "error":
+      return result.endsWith("error");
   }
 }
 
 /** Whether one point passes the cut's Film-only extras. */
-export function matchesFilmCutExtras(point: MatchPoint, cut: FilmCut): boolean {
+export function matchesFilmCutExtras(
+  point: MatchPoint,
+  cut: FilmCut,
+  ctx: Pick<MatchFilterContext, "youIsPlayer1">,
+): boolean {
   const ending = cut.ending ?? null;
   if (ending !== null && !matchesFilmCutEnding(point, ending)) return false;
   if (cut.serveIn && point.firstShotResult !== "In") return false;
+  const netBy = cut.netBy ?? null;
+  if (netBy === "either") {
+    if (!cameToNet(point, true) && !cameToNet(point, false)) return false;
+  } else if (netBy !== null) {
+    const isPlayer1 = netBy === "you" ? ctx.youIsPlayer1 : !ctx.youIsPlayer1;
+    if (!cameToNet(point, isPlayer1)) return false;
+  }
   return true;
 }
 
@@ -222,7 +247,7 @@ export function applyFilmCut(
   return base.filter(
     (point) =>
       (admitted === null || admitted.has(point.id)) &&
-      matchesFilmCutExtras(point, cut),
+      matchesFilmCutExtras(point, cut, ctx),
   );
 }
 
@@ -239,6 +264,8 @@ export function applyFilmCut(
  * - `player`: the side is Result › Hit by, the point of view Result › Ending
  *   reads — whoever hit the winner or made the error (a double fault is the
  *   server's, an ace the server's).
+ * - `net`: the side came to the net (`netBy`), so under `won` it still narrows
+ *   to the points that side came in on.
  *
  * `won` adds Result › Outcome, which is always read from the VIEWER's side:
  * "Won" for you, "Lost" for the opponent — the opponent's 26 of 100 are the
@@ -253,7 +280,7 @@ export function applyFilmCut(
  * player order. Shared by `head-to-head-card.tsx` and `point-endings-card.tsx`
  * — both compose a `FilmCut` this same way.
  */
-export type CutSide = "server" | "returner" | "player";
+export type CutSide = "server" | "returner" | "player" | "net";
 
 function playerSide(side: "you" | "opp"): PlayerSide {
   return side === "you" ? "you" : "opponent";
@@ -271,11 +298,13 @@ export function sideCut(
 ): FilmCut {
   const who = playerSide(side);
   const attributed: FilmCut =
-    by === "player"
-      ? won
-        ? cut
-        : { ...cut, resultPlayer: who }
-      : { ...cut, server: by === "returner" ? otherSide(side) : who };
+    by === "net"
+      ? { ...cut, netBy: who }
+      : by === "player"
+        ? won
+          ? cut
+          : { ...cut, resultPlayer: who }
+        : { ...cut, server: by === "returner" ? otherSide(side) : who };
   return won
     ? { ...attributed, resultOutcome: [side === "you" ? "won" : "lost"] }
     : attributed;

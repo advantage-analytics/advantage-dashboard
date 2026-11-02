@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { LabelDashboard } from "@/components/admin/labels/label-dashboard";
 import { LabelsBoard } from "@/components/admin/labels/labels-board";
 import { labelScores } from "@/lib/services/labels/score";
@@ -23,12 +23,16 @@ import {
  */
 export function LabelsDesignPreview() {
   const { points, marks } = useMemo(() => fixtureMatch(), []);
-  const games = useMemo(() => labelScores(points, false).games, [points]);
+  const [adScoring, setAdScoring] = useState(false);
+  const games = useMemo(
+    () => labelScores(points, adScoring).games,
+    [points, adScoring],
+  );
   const warnings = useMemo(
     () =>
       completeWarnings({
         points,
-        adScoring: false,
+        adScoring,
         marks,
         finalScore: null,
         videoEndsEarly: null,
@@ -36,7 +40,7 @@ export function LabelsDesignPreview() {
         games,
         names: NAMES,
       }),
-    [points, marks, games],
+    [points, adScoring, marks, games],
   );
 
   return (
@@ -67,7 +71,8 @@ export function LabelsDesignPreview() {
             points={points}
             marks={marks}
             games={games}
-            adScoring={false}
+            adScoring={adScoring}
+            onAdScoringChange={setAdScoring}
             names={NAMES}
             finalScore={null}
             matchScore={MATCH_SCORE}

@@ -65,12 +65,22 @@ export const LABEL_SHORTCUT_GROUPS: readonly LabelShortcutGroup[] = [
       { keys: ["O"], action: "Overhead" },
       { keys: ["S"], action: "Serve", note: "Again to switch 1st and 2nd" },
       {
+        keys: ["E"],
+        action: "Forced or unforced error",
+        note: "On a missed last shot. Again to switch back",
+      },
+      {
         keys: ["1", "2", "3", "4"],
         action: "Spin",
         note: "Topspin, flat, backspin, sidespin",
       },
       { keys: ["C"], action: "Contact or landing" },
       { keys: ["X"], action: "Flip side" },
+      {
+        keys: ["H"],
+        action: "Switch hitter",
+        note: "To the other player. A serve may ask about the rest of the point",
+      },
       { keys: ["T"], action: "Time to this frame" },
     ],
   },

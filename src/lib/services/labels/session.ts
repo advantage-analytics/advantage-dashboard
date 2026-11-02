@@ -291,6 +291,13 @@ export function liveShotsInOrder<T extends LiveOrderableShot>(
   );
 }
 
+/**
+ * Whether an error was forced or unforced (`label_points.error_kind`): the
+ * labeller's call on a point that will publish as an error
+ * (`isMarkableError`). Never seeded.
+ */
+export type LabelErrorKind = "forced" | "unforced";
+
 /** One `label_points` row with its strokes, already in video order. */
 export interface LabelPoint {
   id: string;
@@ -308,6 +315,11 @@ export interface LabelPoint {
   winner: LabelSide | null;
   ending: LabelEnding | null;
   endedBy: LabelSide | null;
+  /**
+   * Forced or unforced (`label_points.error_kind`); null when unmarked. Not
+   * part of `seed` and never moves the point's status.
+   */
+  errorKind: LabelErrorKind | null;
   /**
    * What kind of game the point sits in — the same value on every point of
    * the game. Not part of `seed`: a seeded point is always `game`.
@@ -405,6 +417,15 @@ export interface LabelSession {
    * 10-point match tiebreak the wizard stores it as.
    */
   bestOf: number;
+  /**
+   * Each side's hand as someone entered it: the match row's
+   * `player_hand` (the account holder's) / `opponent_hand`, on their seats,
+   * else that seat's profile — `users.hand` or the roster's
+   * `program_players.hand`. Null where
+   * nobody entered one; the console then infers it (`labelHands`). Absent on
+   * sessions built without the match.
+   */
+  enteredHands?: Record<LabelSide, "right" | "left" | null>;
   /** In `point_index` order. */
   points: LabelPoint[];
 }

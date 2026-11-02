@@ -79,11 +79,12 @@
         "shortRallyWonPct": 63,
         "mediumRallyWonPct": 63,
         "longRallyWonPct": 50,
-        "winners": 18,
+        "winners": 17,
         "unforcedErrors": 17,
-        "netPointsAppearances": 6,
-        "netPointsWon": 6,
-        "netPointsWonPct": 100,
+        "forcedErrors": null,
+        "netPointsAppearances": 9,
+        "netPointsWon": 8,
+        "netPointsWonPct": 89,
         "breakpointsSaved": 7,
         "fractions": {
           "firstServeInPct": {
@@ -139,8 +140,8 @@
             "attempts": 8
           },
           "netPointsWonPct": {
-            "made": 6,
-            "attempts": 6
+            "made": 8,
+            "attempts": 9
           },
           "shortRallyWonPct": {
             "made": 24,
@@ -196,9 +197,10 @@
         "longRallyWonPct": 50,
         "winners": 16,
         "unforcedErrors": 34,
-        "netPointsAppearances": 7,
+        "forcedErrors": null,
+        "netPointsAppearances": 8,
         "netPointsWon": 2,
-        "netPointsWonPct": 29,
+        "netPointsWonPct": 25,
         "breakpointsSaved": 0,
         "fractions": {
           "firstServeInPct": {
@@ -255,7 +257,7 @@
           },
           "netPointsWonPct": {
             "made": 2,
-            "attempts": 7
+            "attempts": 8
           },
           "shortRallyWonPct": {
             "made": 14,
@@ -12567,7 +12569,7 @@
   ],
   "insights": {
     "player1": {
-      "summary": "Your exceptional first-serve consistency and flawless net play completely dismantled your opponent's rhythm. By landing over eighty percent of your first serves and converting all break point opportunities, you controlled the match from start to finish. Keep utilizing your aggressive court positioning in your next training block.",
+      "summary": "Your exceptional first-serve consistency and sharp net play completely dismantled your opponent's rhythm. By landing over eighty percent of your first serves and converting all break point opportunities, you controlled the match from start to finish. Keep utilizing your aggressive court positioning in your next training block.",
       "strengths": [
         {
           "name": "First Serve Percentage",

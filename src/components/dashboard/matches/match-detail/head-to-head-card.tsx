@@ -20,6 +20,8 @@ import {
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
+  cameToNet,
+  countsAsWinner,
   errorMadeBy,
   isReturnWinner,
   isUnreturnedServe,
@@ -54,7 +56,7 @@ import { cn } from "@/lib/utils";
    Pure data, exported so `tests/match-h2h-rows.spec.ts` can pin the shape of
    the table without rendering it. */
 
-/** The `PlayerStatistics` fields the fifteen rows read, and nothing else. */
+/** The `PlayerStatistics` fields the published rows read, and nothing else. */
 export type H2HStatKey = Extract<
   keyof PlayerStatistics,
   | "aces"
@@ -67,9 +69,9 @@ export type H2HStatKey = Extract<
   | "firstReturnWonPct"
   | "secondReturnWonPct"
   | "breakpointsWonPct"
-  | "netPointsWonPct"
   | "winners"
   | "unforcedErrors"
+  | "forcedErrors"
   | "totalPointsWon"
   | "totalPoints"
 >;
@@ -103,6 +105,12 @@ export interface H2HRowConfig {
   fromFraction?: boolean;
   /** Tooltip reads `of {this field}` in place of a fraction. */
   ofKey?: H2HStatKey;
+  /**
+   * A second field added to `key`'s figure, absent read as 0 — the unjudged
+   * Errors row is `unforcedErrors + (forcedErrors ?? 0)`. Never makes a value
+   * out of nothing: no `key` figure is still no value.
+   */
+  plusKey?: H2HStatKey;
   /** The LOWER number is the better one — double faults, unforced errors. */
   lowerIsBetter?: boolean;
   /** Why a keyless row can never carry a value. */
@@ -143,18 +151,18 @@ export interface H2HRowConfig {
    * - `returnWinners` — no provider publishes it.
    * - `unreturnedServes` — the derived Aces row: an Advantage Intelligence
    *   match publishes no aces at all (see `DERIVED_SERVE_ROWS`).
-   * - `winnersLessUnreturned` — the derived Winners row: the published
-   *   `winners` (read through `key`) less the side's unreturned serves,
-   *   which that figure already counts.
+   * - `netAttempts`, `netPointsWon` — counted with `cameToNet`, the predicate
+   *   the rows' cut opens, so a figure and its "Watch all N" cannot disagree.
    */
-  fromPoints?: "returnWinners" | "unreturnedServes" | "winnersLessUnreturned";
+  fromPoints?:
+    "returnWinners" | "unreturnedServes" | "netAttempts" | "netPointsWon";
 }
 
 export const SERVE_ROWS: H2HRowConfig[] = [
   {
     // Serve › Result "Ace" by the server: exactly `resultType` "Ace", which
-    // leaves out the service winners the report counts as winners (every
-    // unreturned serve and missed return on a video match).
+    // leaves out the service winners (every unreturned serve and missed return
+    // on a video match).
     label: "Aces",
     key: "aces",
     cut: { serveResult: ["ace"] },
@@ -278,20 +286,31 @@ export const RETURN_ROWS: H2HRowConfig[] = [
 ];
 
 export const POINT_ROWS: H2HRowConfig[] = [
-  // No cut: the match filters have no net-approach axis to open.
+  // Both net rows open the same points; a Net points won cell narrows to the
+  // ones that side won. Counted and cut with one predicate, `cameToNet`.
+  {
+    label: "Net point attempts",
+    fromPoints: "netAttempts",
+    cut: { netBy: "either" },
+    sideBy: "net",
+    noun: "net points",
+  },
   {
     label: "Net points won",
-    key: "netPointsWonPct",
+    fromPoints: "netPointsWon",
     isPercentage: true,
-    fractionKey: "netPointsWonPct",
+    cut: { netBy: "either" },
+    sideBy: "net",
+    sideWon: true,
+    noun: "net points",
     verb: "won",
   },
   {
     label: "Winners",
     key: "winners",
     // Result › Ending Winner narrowed to the Film-only "winner" bucket, which
-    // leaves aces on their own line as the published figure does — Ending
-    // "winner" alone admits them (`winnerHitBy` credits an ace to the server).
+    // leaves out aces and service winners as the published figure does — Ending
+    // "winner" alone admits them (`winnerHitBy` credits both to the server).
     cut: { resultEnding: ["winner"], ending: "winner" },
     sideBy: "player",
     noun: "winners",
@@ -320,31 +339,30 @@ export const POINT_ROWS: H2HRowConfig[] = [
   },
 ];
 
+/**
+ * The SwingVision groups with the Points group's errors as published — the
+ * card draws them through `h2hGroups`, which sets the error rows to the
+ * match's split (`withErrorSplit`).
+ */
 export const H2H_GROUPS: { title: string; configs: H2HRowConfig[] }[] = [
   { title: "Serve", configs: SERVE_ROWS },
   { title: "Return", configs: RETURN_ROWS },
   { title: "Points", configs: POINT_ROWS },
 ];
 
-/** Every row's config, flattened once — `H2H_GROUPS` is fixed at module load. */
-const ALL_H2H_CONFIGS: H2HRowConfig[] = H2H_GROUPS.flatMap(
-  (group) => group.configs,
-);
-
 /* ── Advantage Intelligence (video-derived) rows ────────────────────────────
    The derivation (`lib/services/splitstep/derivation/result-type.ts`
    `classifyPoint()`) never emits "Ace": every unreturned serve is a "Service
    Winner" (as is a return struck and missed, rally length 2), so the
-   published `aces` is 0 and the published `winners` (LIKE '%Winner%')
-   already counts those points. Product decision
-   (2026-09-29): on these matches an unreturned serve the server won IS an
-   ace. So two rows swap, at the widget alone — `match_stats` is untouched. */
+   published `aces` is 0. Product decision (2026-09-29): on these matches an
+   unreturned serve the server won IS an ace. So that row swaps, at the widget
+   alone — `match_stats` is untouched. */
 
 /**
  * The derived Aces row: every unreturned serve the side won, counted from the
  * points (`isUnreturnedServe` — a one-shot rally won by the server). The rule
  * is structural, not the "Service Winner" label, so a service winner with an
- * intermediate stroke (rally length above one) stays a winner. The cut is the
+ * intermediate stroke (rally length above one) is no ace. The cut is the
  * SwingVision Aces row's own pure pill, Serve › Result "Ace" by the server:
  * on a derived match (`MatchFilterContext.isDerived`) that pill IS
  * `isUnreturnedServe`, the very predicate the tally counts.
@@ -357,28 +375,8 @@ const DERIVED_ACES_ROW: H2HRowConfig = {
   noun: "aces",
 };
 
-/**
- * The derived Winners row: the published `winners` less the side's
- * unreturned serves, now counted as aces. Its cut is the `rally-winner`
- * ending — the winner bucket without them — so it never opens a point the
- * derived Aces row does. Double faults stay published: the derivation does
- * emit "Double Fault" on a lost second serve.
- */
-const DERIVED_WINNERS_ROW: H2HRowConfig = {
-  label: "Winners",
-  key: "winners",
-  fromPoints: "winnersLessUnreturned",
-  cut: { resultEnding: ["winner"], ending: "rally-winner" },
-  sideBy: "player",
-  noun: "winners",
-};
-
 export const DERIVED_SERVE_ROWS: H2HRowConfig[] = SERVE_ROWS.map((config) =>
   config.label === "Aces" ? DERIVED_ACES_ROW : config,
-);
-
-export const DERIVED_POINT_ROWS: H2HRowConfig[] = POINT_ROWS.map((config) =>
-  config.label === "Winners" ? DERIVED_WINNERS_ROW : config,
 );
 
 /** `H2H_GROUPS` for an Advantage Intelligence match (`meta.isDerived`). */
@@ -386,12 +384,87 @@ export const DERIVED_H2H_GROUPS: { title: string; configs: H2HRowConfig[] }[] =
   [
     { title: "Serve", configs: DERIVED_SERVE_ROWS },
     { title: "Return", configs: RETURN_ROWS },
-    { title: "Points", configs: DERIVED_POINT_ROWS },
+    { title: "Points", configs: POINT_ROWS },
   ];
 
-const ALL_DERIVED_H2H_CONFIGS: H2HRowConfig[] = DERIVED_H2H_GROUPS.flatMap(
-  (group) => group.configs,
-);
+/* ── Errors: one row until the split is judged ──────────────────────────────
+   `MatchFilterContext.errorSplitJudged` (`lib/data/error-split.ts`). Until a
+   match's errors are judged forced/unforced, its "unforced" figure is every
+   error, so the Points group says "Errors" — unforced plus forced — and the
+   cut opens every error. Once judged it is two rows, Unforced then Forced.
+   Both apply to the SwingVision and the derived row sets alike. */
+
+/**
+ * The unjudged row: every error, one figure. Its cut is Ending Error narrowed
+ * to the Film-only "error" bucket: Ending Error alone also admits double faults
+ * and points with no result, and the row would offer more than it counts.
+ */
+const ERRORS_ROW: H2HRowConfig = {
+  label: "Errors",
+  key: "unforcedErrors",
+  plusKey: "forcedErrors",
+  lowerIsBetter: true,
+  cut: { resultEnding: ["error"], ending: "error" },
+  sideBy: "player",
+  noun: "errors",
+};
+
+/** The judged split's second row, after "Unforced errors". */
+const FORCED_ERRORS_ROW: H2HRowConfig = {
+  label: "Forced errors",
+  key: "forcedErrors",
+  lowerIsBetter: true,
+  // Ending Error narrowed to the Film-only "forced error" bucket.
+  cut: { resultEnding: ["error"], ending: "forced-error" },
+  sideBy: "player",
+  noun: "forced errors",
+};
+
+/**
+ * A Points row set with its error rows set to the match's split: the single
+ * Errors row when unjudged, or the Unforced row (unchanged) followed by the
+ * Forced row when judged. Every other row passes through untouched.
+ */
+export function withErrorSplit(
+  configs: H2HRowConfig[],
+  errorSplitJudged: boolean,
+): H2HRowConfig[] {
+  return configs.flatMap((config) => {
+    if (config.key !== "unforcedErrors") return [config];
+    return errorSplitJudged ? [config, FORCED_ERRORS_ROW] : [ERRORS_ROW];
+  });
+}
+
+/**
+ * The groups the card draws for one match: SwingVision or derived
+ * (`isDerived`), with the Points group's errors split or not
+ * (`errorSplitJudged`).
+ */
+export function h2hGroups(
+  isDerived: boolean,
+  errorSplitJudged: boolean,
+): { title: string; configs: H2HRowConfig[] }[] {
+  return (isDerived ? DERIVED_H2H_GROUPS : H2H_GROUPS).map((group) => ({
+    title: group.title,
+    configs: withErrorSplit(group.configs, errorSplitJudged),
+  }));
+}
+
+/** `h2hGroups` for each of its four inputs, built once at module load. */
+const GROUPS_BY_KIND = {
+  plain: h2hGroups(false, false),
+  plainJudged: h2hGroups(false, true),
+  derived: h2hGroups(true, false),
+  derivedJudged: h2hGroups(true, true),
+};
+
+function groupsFor(isDerived: boolean, errorSplitJudged: boolean) {
+  if (isDerived)
+    return errorSplitJudged
+      ? GROUPS_BY_KIND.derivedJudged
+      : GROUPS_BY_KIND.derived;
+  return errorSplitJudged ? GROUPS_BY_KIND.plainJudged : GROUPS_BY_KIND.plain;
+}
 
 // `CutSide`/`sideCut` — one value cell's cut, the row's cut with the cell's
 // side laid over it — now live in `film-cut-context.tsx` beside `FilmCut`
@@ -463,7 +536,12 @@ export function rowValue(config: H2HRowConfig, stats: H2HStats): H2HValue {
   const raw = stats[config.key];
   // Absent must reach here as null rather than 0 — see the mapping in
   // match-stats-server.ts.
-  const value = typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  const base = typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  const plus = config.plusKey ? stats[config.plusKey] : null;
+  const value =
+    base !== null && typeof plus === "number" && Number.isFinite(plus)
+      ? base + plus
+      : base;
   const outOf = config.ofKey ? stats[config.ofKey] : undefined;
 
   return {
@@ -562,6 +640,10 @@ interface DerivedSide {
    * (`isUnreturnedServe`) — the derived Aces row.
    */
   unreturnedServes: number;
+  /** Points this side came to the net (`cameToNet`); `won` = won them. */
+  netPoints: Tally;
+  /** Whether the points carry this side's shots, so a net zero is measured. */
+  shotsRecorded: boolean;
 }
 
 function emptyTally(): Tally {
@@ -588,6 +670,8 @@ export function tallySide(
     returnWinners: 0,
     returnsRecorded: 0,
     unreturnedServes: 0,
+    netPoints: emptyTally(),
+    shotsRecorded: false,
   };
   for (const p of points) {
     const iWon = p.wonByPlayer1 === isPlayer1;
@@ -596,6 +680,14 @@ export function tallySide(
 
     d.allPoints.total += 1;
     if (iWon) d.allPoints.won += 1;
+
+    if (p.shots?.some((shot) => shot.isPlayer1 === isPlayer1)) {
+      d.shotsRecorded = true;
+    }
+    if (cameToNet(p, isPlayer1)) {
+      d.netPoints.total += 1;
+      if (iWon) d.netPoints.won += 1;
+    }
 
     if (iServed) {
       d.servicePoints.total += 1;
@@ -622,13 +714,13 @@ export function tallySide(
       if (iWon && isReturnWinner(p)) d.returnWinners += 1;
     }
 
-    // `calculate_match_stats` buckets these with LIKE '%Winner%' and
-    // LIKE '%Unforced Error%' against the same free-text `result_type`
-    // (see lib/services/splitstep/derivation/result-type.ts). Matching the
-    // same substrings keeps a scoped row comparable with the published one.
-    // Credited as the Result filters and Point endings credit them: a
-    // service winner to the server, not to the returner's missed last row.
-    if (result.includes("winner")) {
+    // `calculate_match_stats` buckets these with LIKE '%Winner%' (less
+    // 'Service Winner') and LIKE '%Unforced Error%' against the same free-text
+    // `result_type` (see lib/services/splitstep/derivation/result-type.ts).
+    // Matching the same substrings keeps a scoped row comparable with the
+    // published one. Credited as the Result filters and Point endings credit
+    // them.
+    if (countsAsWinner(p)) {
       if (winnerHitBy(p) === isPlayer1) d.winners += 1;
     } else if (result.includes("unforced error")) {
       if (errorMadeBy(p) === isPlayer1) d.unforcedErrors += 1;
@@ -655,30 +747,28 @@ export function tallySide(
 
 /**
  * A `fromPoints` statistic's value, or `null` when the points cannot support
- * it. `published` is the side's published figure for the same row (read
- * through the config's `key`), which the Winners subtraction starts from.
+ * it.
  *
  * - Return winners: 0 is a measurement only where returns were recorded;
  *   with none, a zero would say "no return winners" about points nobody
  *   looked at.
  * - Unreturned serves: likewise only where the side served at all.
- * - Winners less unreturned serves: nothing published is nothing to
- *   subtract from; never below 0.
+ * - Net attempts: likewise only where the side's shots were recorded.
+ * - Net points won: a rate needs an attempt. Coming in and losing every one is
+ *   a measured 0%; never coming in is no rate at all.
  */
-function derivedValue(
-  config: H2HRowConfig,
-  d: DerivedSide,
-  published: H2HValue,
-): number | null {
+function derivedValue(config: H2HRowConfig, d: DerivedSide): number | null {
   switch (config.fromPoints) {
     case "returnWinners":
       return d.returnsRecorded > 0 ? d.returnWinners : null;
     case "unreturnedServes":
       return d.servicePoints.total > 0 ? d.unreturnedServes : null;
-    case "winnersLessUnreturned":
-      return published.value === null
-        ? null
-        : Math.max(0, published.value - d.unreturnedServes);
+    case "netAttempts":
+      return d.shotsRecorded ? d.netPoints.total : null;
+    case "netPointsWon":
+      return d.netPoints.total > 0
+        ? (d.netPoints.won / d.netPoints.total) * 100
+        : null;
     default:
       return null;
   }
@@ -686,27 +776,29 @@ function derivedValue(
 
 const NO_VALUE: H2HValue = { value: null, display: "" };
 
-function derivedSideValue(
-  config: H2HRowConfig,
-  d: DerivedSide,
-  published: H2HValue,
-): H2HValue {
-  const value = derivedValue(config, d, published);
+function derivedSideValue(config: H2HRowConfig, d: DerivedSide): H2HValue {
+  const value = derivedValue(config, d);
   if (value === null) return NO_VALUE;
-  return { value, display: statDisplay(value, config.isPercentage) };
+  return {
+    value,
+    display: statDisplay(value, config.isPercentage),
+    detail:
+      config.fromPoints === "netPointsWon"
+        ? `${d.netPoints.won}/${d.netPoints.total}`
+        : undefined,
+  };
 }
 
 /** One `fromPoints` row, counted from `youDerived`/`oppDerived`. */
 function deriveRow(
   config: H2HRowConfig,
-  published: H2HRow,
   youDerived: DerivedSide,
   oppDerived: DerivedSide,
 ): H2HRow {
   return assembleRow(
     config,
-    derivedSideValue(config, youDerived, published.you),
-    derivedSideValue(config, oppDerived, published.opp),
+    derivedSideValue(config, youDerived),
+    derivedSideValue(config, oppDerived),
   );
 }
 
@@ -722,7 +814,7 @@ export function withPointRows(
 ): H2HRow[] {
   return configs.map((config, i) =>
     config.fromPoints
-      ? deriveRow(config, published[i], youDerived, oppDerived)
+      ? deriveRow(config, youDerived, oppDerived)
       : published[i],
   );
 }
@@ -792,6 +884,16 @@ export function fractionWords(value: H2HValue): string | null {
 export function watchLine(count: number): string {
   // "Watch all 1" reads as a miscount; one point is just "it".
   return count === 1 ? "Watch it in Video" : `Watch all ${count} in Video`;
+}
+
+/**
+ * What the Video tab's banner names a label click by. The label opens every
+ * point the row is about, won or not, so "Net points won · 16 of 87" would read
+ * as 16 won: it says "Net points" instead. A figure's click keeps the row's own
+ * name, because it does open the points that side won.
+ */
+export function rowCutLabel(row: Pick<H2HRow, "label" | "sideWon">): string {
+  return row.sideWon ? row.label.replace(/ won$/, "") : row.label;
 }
 
 /** The same click, for a screen reader, which has no readout title to lean on. */
@@ -1212,7 +1314,11 @@ export function HeadToHeadCard() {
   // the /m/[token] share page alike. The table and the counts below iterate
   // the SAME configs, so a cell's "Watch all N" and its click open one cut.
   const isDerived = meta.isDerived;
-  const groups = isDerived ? DERIVED_H2H_GROUPS : H2H_GROUPS;
+  // One "Errors" row until the match's errors are judged forced/unforced,
+  // then Unforced + Forced (`withErrorSplit`) — read off the filter context,
+  // never re-derived here.
+  const errorSplitJudged = context.errorSplitJudged === true;
+  const groups = groupsFor(isDerived, errorSplitJudged);
 
   const sections = useMemo(() => {
     if (!youStats || !oppStats) return [];
@@ -1242,7 +1348,7 @@ export function HeadToHeadCard() {
     if (!meta.hasPlayableVideo) return byRow;
     const count = (cut: FilmCut) =>
       applyFilmCut(points, points, cut, context).length;
-    const configs = isDerived ? ALL_DERIVED_H2H_CONFIGS : ALL_H2H_CONFIGS;
+    const configs = groups.flatMap((group) => group.configs);
     for (const config of configs) {
       if (!config.cut) continue;
       // `both` is counted, not summed: a row's own cut carries no side, so
@@ -1256,7 +1362,7 @@ export function HeadToHeadCard() {
       });
     }
     return byRow;
-  }, [meta.hasPlayableVideo, isDerived, points, context]);
+  }, [meta.hasPlayableVideo, groups, points, context]);
 
   if (sections.length === 0) return null;
 
@@ -1462,7 +1568,7 @@ export function HeadToHeadCard() {
                     aria-label={`${row.label}, both players. ${watchLabel(rowFooter.count, noun)}`}
                     data-focus-ring="none"
                     {...handlersFor(row.label, "row", () =>
-                      actions.watchCut(row.cut!, row.label),
+                      actions.watchCut(row.cut!, rowCutLabel(row)),
                     )}
                     className={cn(
                       "flex min-w-0 flex-1 cursor-pointer items-center self-stretch border-0 bg-transparent p-0 pr-3 text-left text-[12px] transition-colors",

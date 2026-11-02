@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import type { WorkspaceContextValue } from "@/lib/workspace/types";
 import { MatchesPageContent } from "@/components/dashboard/matches/matches-page-content";
+import { MatchesTitleRow } from "@/components/dashboard/matches/matches-title-row";
 import { MatchDrawerSlot } from "@/components/dashboard/matches/match-drawer-slot";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import type { DraftRowData } from "@/components/dashboard/matches/draft-row";
@@ -19,6 +20,10 @@ import type { DraftRowData } from "@/components/dashboard/matches/draft-row";
  * `?scope=team` mounts the team table. `?job=1` gives `m-scored` a video job
  * (`analysis.jobId`), which makes `d-folded` stale: it shows nowhere.
  * `?manual=1` gives it a score-only analysis instead, which folds as usual.
+ * `?queued=1` puts both matches in analysis, so none has a report yet, and
+ * `?empty=1` drops them and the drafts, for the title row's subtitle.
+ * `?draftsOnly=1` drops the matches and keeps two standalone drafts (`d-new`,
+ * `d-other`): a workspace whose first match is still in flight.
  * Everything else on the URL
  * (`?match=`, `?draft=`) reaches the page through the navigation mock's
  * `useSearchParams()`, as it would from Next.
@@ -104,10 +109,20 @@ if (params.get("job") === "1") {
   scored.analysis = { status: "manual", providerId: null };
 }
 
-const MATCHES: DisplayMatch[] = [
-  scored,
-  match("m-plain", "Riley Chen", "2026-09-10", "player2"),
-];
+const plain = match("m-plain", "Riley Chen", "2026-09-10", "player2");
+if (params.get("queued") === "1") {
+  for (const queued of [scored, plain]) {
+    queued.analysis = {
+      status: "queued",
+      jobId: `job-${queued.id}`,
+      providerId: "splitstep",
+    };
+  }
+}
+
+const isEmpty = params.get("empty") === "1";
+const isDraftsOnly = params.get("draftsOnly") === "1";
+const MATCHES: DisplayMatch[] = isEmpty || isDraftsOnly ? [] : [scored, plain];
 
 function draft(
   id: string,
@@ -138,8 +153,12 @@ function draft(
   };
 }
 
-const DRAFTS: DraftRowData[] = [
-  draft("d-new", "Jordan Park", "2026-09-22T10:00:00Z", null, {
+const standaloneDraft = draft(
+  "d-new",
+  "Jordan Park",
+  "2026-09-22T10:00:00Z",
+  null,
+  {
     opponentName: "Sam Ortiz",
     matchDate: "2026-09-18",
     courtType: "hard",
@@ -148,18 +167,38 @@ const DRAFTS: DraftRowData[] = [
       { player1: 6, player2: 4 },
       { player1: 3, player2: 6 },
     ],
-  }),
-  draft("d-folded", "Avery Stone", "2026-09-21T10:00:00Z", "m-scored", {
-    opponentName: "Avery Stone",
-    matchDate: "2026-09-20",
-  }),
-];
+  },
+);
+
+const DRAFTS: DraftRowData[] = isEmpty
+  ? []
+  : isDraftsOnly
+    ? [
+        standaloneDraft,
+        draft("d-other", "Jordan Park", "2026-09-21T10:00:00Z", null, {
+          opponentName: "Quinn Hale",
+        }),
+      ]
+    : [
+        standaloneDraft,
+        draft("d-folded", "Avery Stone", "2026-09-21T10:00:00Z", "m-scored", {
+          opponentName: "Avery Stone",
+          matchDate: "2026-09-20",
+        }),
+      ];
 
 createRoot(document.getElementById("root")!).render(
   <TooltipProvider>
     <WorkspaceProvider value={WORKSPACE}>
       <div className="flex w-full">
         <div className="flex min-w-0 flex-1 flex-col">
+          <MatchesTitleRow
+            scope={scope}
+            readyMatches={MATCHES.map((m) => ({
+              id: m.id,
+              status: m.analysis?.status,
+            }))}
+          />
           <MatchesPageContent matches={MATCHES} drafts={DRAFTS} scope={scope} />
         </div>
         <MatchDrawerSlot />

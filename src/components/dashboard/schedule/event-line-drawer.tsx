@@ -89,7 +89,7 @@ import type {
  *      snapshot, video or report to offer).
  *   2. The recovery action of a singles match whose analysis failed, or
  *      whose hand-off stalled (`DrawerRecoveryAction`: "Retry", "Try again",
- *      "Rebuild statistics", or the upload link), for a viewer who can edit
+ *      "Send for analysis", "Rebuild statistics", or the upload link), for a viewer who can edit
  *      the schedule. It is the stopped step's, off the same
  *      `drawerAnalysisStepsView()` the body's `DrawerAnalysisSteps` draws, at
  *      the same clock, so the footer and the steps cannot disagree. A class with nothing to
@@ -230,7 +230,9 @@ export function EventLineDrawer({
     ? drawerAnalysisStepsView(analysis, now, canEdit)?.failure
     : undefined;
   const showRecovery =
-    !doubles && canEdit && recoveryHasAction(stopped?.recovery, played?.jobId);
+    !doubles &&
+    canEdit &&
+    recoveryHasAction(stopped?.recovery, played?.jobId, stopped?.stalled);
   // The first follow-up on offer is the footer's one primary; "View match"
   // is primary only when there is none (the Matches drawer's rule).
   const primary: "result" | "recovery" | "video" | "next" | "view" = resultLink

@@ -6,9 +6,10 @@
  * box, which a first visit met with "what can I even ask?". A starter is a
  * question the viewer's own data can answer — the last match by name, the
  * opponent they have played most, left-handers when there are some — built
- * from the same tag options the composer's `@` menu uses, so every tag in it
- * resolves and every question has rows behind it. Nothing here is personal
- * beyond names the viewer already sees in the menu.
+ * from the composer's `@` menu options cut down to the matches with statistics
+ * (`getAskStarterOptions()`), so every tag in it resolves and every question
+ * has rows behind it. Nothing here is personal beyond names the viewer already
+ * sees in the menu.
  *
  * The same questions asked over and over are also what makes an answer cache
  * worth having, so the wording is fixed per situation rather than varied.
@@ -59,8 +60,8 @@ export function askMatchStarter(
 }
 
 /**
- * Up to `MAX_ASK_STARTERS` questions for a scope with at least one match.
- * Ordered so the one every viewer can use comes first.
+ * Up to `MAX_ASK_STARTERS` questions for a scope with at least one analysed
+ * match. Ordered so the one every viewer can use comes first.
  */
 export function askStarters(
   options: AskTagOptions,

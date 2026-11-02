@@ -216,7 +216,7 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
       {
         name: "match_id",
         type: "uuid",
-        meaning: "The match's id; the only id in this schema.",
+        meaning: "The match's id; the only match id in this schema.",
       },
       {
         name: "played_on",
@@ -240,6 +240,25 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         type: "text",
         meaning:
           "The opponent's backhand as recorded at upload, e.g. one-handed or two-handed; null when unknown.",
+      },
+      {
+        name: "opponent_school",
+        type: "text",
+        meaning:
+          "The school the opponent plays for: the linked program's name, or the school as typed when it is not in the directory; null when not recorded.",
+      },
+      {
+        name: "opponent_program_id",
+        type: "uuid",
+        meaning:
+          "The opponent's program in the directory; null when the school was typed or not recorded.",
+        mcpOnly: true,
+      },
+      {
+        name: "opponent_conference",
+        type: "text",
+        meaning:
+          "The conference of the opponent's linked program; null when the school is not linked to the directory.",
       },
       {
         name: "tournament",
@@ -343,19 +362,19 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "winners",
         type: "integer",
         meaning:
-          "Shots this side hit that won the point outright (winners), serves included.",
+          "Shots this side hit in the rally that won the point outright (winners). Serves are not included: aces and service_winners are counted on their own.",
       },
       {
         name: "unforced_errors",
         type: "integer",
         meaning:
-          "Points this side lost by missing a shot that was not forced (unforced errors).",
+          "Points this side lost by missing a shot. This is every error the side made unless forced_errors is non-null; then it is only the unforced ones (unforced errors). For every error whether or not the split was judged, compute unforced_errors + coalesce(forced_errors, 0) as errors.",
       },
       {
         name: "forced_errors",
         type: "integer",
         meaning:
-          "Points this side lost by missing a shot under pressure from the other side (forced errors); null when the source does not count them.",
+          "Points this side lost by missing a shot under pressure from the other side (forced errors); null when nobody judged the split — an unverified video match, or one verified before the split existed; SwingVision matches and matches verified from now on carry it.",
       },
       {
         name: "avg_rally_length",
@@ -532,7 +551,8 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
       {
         name: "net_points_appearances",
         type: "integer",
-        meaning: "Points on which this side came to the net.",
+        meaning:
+          "Points on which this side came to the net: a volley, an overhead up the court, or any rally shot from inside the service line.",
       },
       {
         name: "net_points_won",

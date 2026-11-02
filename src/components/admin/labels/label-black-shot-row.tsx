@@ -6,6 +6,7 @@ import {
   Check,
   CornerDownRight,
   EyeOff,
+  Link2,
   Plus,
   RotateCcw,
   Split,
@@ -14,13 +15,16 @@ import {
   X,
 } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { Kbd } from "@/components/ui/kbd";
 import { shotRowRevealDelay } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import { cn } from "@/lib/utils";
 import {
+  isLiveShot,
   isGhostShot,
   isServeStroke,
   isWithdrawnAdd,
   liveShotsInOrder,
+  type LabelErrorKind,
   type LabelPoint,
   type LabelShot,
   type LabelSide,
@@ -41,8 +45,15 @@ import { canResetShot } from "@/lib/services/labels/reset";
 import {
   deriveShotResult,
   landingMiss,
+  playedOnResult,
   shotPlacement,
 } from "@/lib/services/labels/shot-derived";
+import {
+  landingGapMetres,
+  landingLink,
+  landingTakesContact,
+  withFilledLanding,
+} from "@/lib/services/labels/volley-link";
 import type { LabelShotResult } from "@/lib/services/labels/seed";
 import {
   doubleFaultAt,
@@ -84,6 +95,7 @@ import {
   type EditContext,
   type LabelRowOperations,
 } from "./label-row-parts";
+import { errorKindShotId } from "./stroke-keys";
 
 /**
  * The rail's strokes: the open point's shots in a recessed well, each edited in
@@ -311,6 +323,14 @@ export function BlackShotsWell({
   const pastEnd = new Set(
     overAt === null ? [] : inOrder.slice(overAt + 1).map((shot) => shot.id),
   );
+  const nextOf = new Map(inOrder.map((shot, i) => [shot.id, inOrder[i + 1]]));
+  // The rail numbers rows as they are stored, which an untimed stroke can set
+  // apart from rally order.
+  const numberOf = new Map(
+    point.shots
+      .filter((shot) => isLiveShot(shot, ghosts))
+      .map((shot, i) => [shot.id, i + 1]),
+  );
   let overDrawn = false;
   for (const [i, shot] of point.shots.entries()) {
     // A stroke the labeller added and then deleted leaves no row.
@@ -342,6 +362,7 @@ export function BlackShotsWell({
       );
     } else {
       n += 1;
+      const next = nextOf.get(shot.id);
       if (pastEnd.has(shot.id) && !overDrawn) {
         overDrawn = true;
         rows.push(<PointOverLine key="point-over" arrive={arrive()} />);
@@ -350,6 +371,8 @@ export function BlackShotsWell({
         <BlackShotRow
           key={shot.id}
           shot={shot}
+          next={next ?? null}
+          nextNumber={next ? numberOf.get(next.id) : undefined}
           number={n}
           point={point}
           pointNumber={pointNumber}
@@ -479,13 +502,17 @@ let pressedShotId: string | null = null;
  * point here, Add shot after, Reset, Delete) sit in a tray (`ShotTray`)
  * drawn right under the row while it is selected, where the console can
  * write. Reset and Delete only ask the console to confirm; Split and Add run
- * at once.
+ * at once. On the point's last live stroke, while the point ended in an
+ * error (`errorKindShotId`), the tray also carries the Forced | Unforced
+ * pair, which writes the point's `error_kind` at once.
  *
  * LIT (selected, or the stroke the film is on) washes the row; a FAULT is a
  * step quieter.
  */
 export function BlackShotRow({
   shot,
+  next = null,
+  nextNumber,
   number,
   point,
   pointNumber,
@@ -496,6 +523,13 @@ export function BlackShotRow({
   resultMenuOpen = false,
 }: {
   shot: LabelShot;
+  /**
+   * The point's next live stroke in rally order, or null for its last: a
+   * stroke it played reads In when no result is stored (`playedOnResult`).
+   */
+  next?: LabelShot | null;
+  /** The rail's number for `next`; by default the row after this one. */
+  nextNumber?: number;
   number: number;
   arrive?: number;
   /** After a double fault (`PointOverLine`): the row a step quieter. */
@@ -506,9 +540,14 @@ export function BlackShotRow({
    */
   resultMenuOpen?: boolean;
   /**
-   * The stroke's point, for "Split point here". Absent, no split is offered.
+   * The stroke's point, for "Split point here", its ending (nothing on a double
+   * fault is filled In) and the Forced | Unforced pair. Absent, neither the
+   * split nor the pair is offered.
    */
-  point?: Pick<LabelPoint, "id" | "status" | "shots">;
+  point?: Pick<
+    LabelPoint,
+    "id" | "status" | "shots" | "winner" | "ending" | "endedBy" | "errorKind"
+  >;
   /** The point's number, for the confirm the console opens. */
   pointNumber: number;
   edit: EditContext;
@@ -559,10 +598,23 @@ export function BlackShotRow({
     shot.videoTime !== null
       ? formatFileTime(shot.videoTime, edit.fileOffset)
       : null;
-  const placement = shotPlacement(labelShotValues(shot));
+  // The landing the next air stroke gives it (volley-link.ts), drawn and read
+  // for placement. Its result stays the stored one: a filled landing calls
+  // nothing.
+  const landed = withFilledLanding(shot, next);
+  const link = landingLink(shot, next);
+  const linkedNumber = nextNumber ?? number + 1;
+  const gap = link === "apart" && next ? landingGapMetres(shot, next) : null;
+  const placement = shotPlacement(labelShotValues(landed));
   // Inside Out / Inside In when the stroke came from its other wing's half.
-  const direction = placementLabel(shot, edit.hands);
-  const resultMenu = shotResultMenu(shot, edit.playOnLets);
+  const direction = placementLabel(landed, edit.hands);
+  const resultMenu = shotResultMenu(
+    shot,
+    edit.playOnLets,
+    landingTakesContact(shot, next, false) ? linkedNumber : null,
+  );
+  // An empty result the next stroke settles: it played the ball, so In.
+  const result = playedOnResult(shot, next, point?.ending);
   /** The words' ink, a step down on a fault. */
   const words = fault ? "text-white/35" : "text-white/50";
   const arrival = rowArrival(arrive);
@@ -570,6 +622,19 @@ export function BlackShotRow({
   const trayActions =
     selected && operations
       ? shotTrayActions({ shot, number, point, pointNumber, operations })
+      : null;
+  // Forced | Unforced: on the stroke that ended the point in an error alone.
+  const onPatchPoint = edit.onPatchPoint;
+  const errorKind: ShotTrayErrorKind | null =
+    trayActions && point && onPatchPoint && errorKindShotId(point) === shot.id
+      ? {
+          kind: point.errorKind,
+          pick: (kind) => {
+            if (kind !== point.errorKind) {
+              onPatchPoint(point.id, { error_kind: kind });
+            }
+          },
+        }
       : null;
   return (
     <>
@@ -691,16 +756,18 @@ export function BlackShotRow({
           {...cell}
           end="landed"
           label={`Shot ${number} landed at`}
-          x={shot.landingX}
-          y={shot.landingY}
+          x={landed.landingX}
+          y={landed.landingY}
           muted={fault}
+          filledFrom={link === "filled" ? linkedNumber : null}
+          apart={gap === null ? null : { shot: linkedNumber, metres: gap }}
           onPick={() => pick("landing")}
         />
         {placement ? (
           // The one word here nobody can open an editor on, in a track that
           // narrows with the rail: whole in the tooltip when it is cut.
           <ChromeTooltip
-            {...directionWords(placement, direction, shot)}
+            {...directionWords(placement, direction, landed)}
             side="top"
             wrap
           >
@@ -740,18 +807,14 @@ export function BlackShotRow({
             <ResultCell
               {...selectCell}
               label={`Shot ${number} result`}
-              value={shot.result}
+              value={result}
               options={resultMenu.options}
               initialOpen={resultMenuOpen}
               onChange={(value) => patch(shotResultPatch(value))}
             />
           ) : (
             <span className="min-w-0 truncate">
-              {shot.result ? (
-                RESULT_LABEL[shot.result]
-              ) : (
-                <Dash label="No result" />
-              )}
+              {result ? RESULT_LABEL[result] : <Dash label="No result" />}
             </span>
           )}
           {changed ? (
@@ -780,7 +843,9 @@ export function BlackShotRow({
           ) : null}
         </span>
       </div>
-      {trayActions ? <ShotTray number={number} actions={trayActions} /> : null}
+      {trayActions ? (
+        <ShotTray number={number} actions={trayActions} errorKind={errorKind} />
+      ) : null}
     </>
   );
 }
@@ -1183,6 +1248,8 @@ function BlackEndedSuggestion({
 }) {
   const arrival = rowArrival(arrive);
   const operations = edit.editable ? edit.operations : undefined;
+  // "Shot placement" can't move the score, so it never wears the amber.
+  const grey = hint.code === "placement_missing";
   // Split first, as the tray orders it; then the removal.
   const actions = [...hint.actions].sort(
     (x, y) => Number(!isSplit(x.label)) - Number(!isSplit(y.label)),
@@ -1194,7 +1261,10 @@ function BlackEndedSuggestion({
       style={arrival.style}
       className={cn(
         arrival.className,
-        "flex h-[32px] min-w-0 cursor-default items-center gap-4 rounded-lg bg-[var(--rail-amber-wash-faint)] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)] outline-dashed",
+        "flex h-[32px] min-w-0 cursor-default items-center gap-3 rounded-lg pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium outline-1 -outline-offset-4 outline-dashed",
+        grey
+          ? "bg-white/[0.04] text-white/70 outline-white/20"
+          : "bg-[var(--rail-amber-wash-faint)] outline-[color:var(--rail-amber-line)]",
       )}
     >
       <ChromeTooltip label={hint.label} detail={hint.detail} side="top" wrap>
@@ -1202,7 +1272,7 @@ function BlackEndedSuggestion({
           data-suggestion-text=""
           aria-label={hoverLine({ name: hint.label, detail: hint.detail })}
           className="inline-flex min-w-0 shrink items-center gap-[5px] px-1"
-          style={{ color: AMBER_SUGGESTION_INK }}
+          style={grey ? undefined : { color: AMBER_SUGGESTION_INK }}
         >
           <CornerDownRight
             className="size-[10px] shrink-0"
@@ -1422,6 +1492,25 @@ const SHOT_TRAY_ICON = {
   delete: X,
 } as const;
 
+/**
+ * The tray's Forced | Unforced pair: the point's stored kind (null unmarked)
+ * and the write a pick makes. A pick of the kind already stored writes
+ * nothing.
+ */
+export type ShotTrayErrorKind = {
+  kind: LabelErrorKind | null;
+  pick: (kind: LabelErrorKind) => void;
+};
+
+/** The pair's two buttons, in order, with their words. */
+export const ERROR_KIND_CHOICES: readonly {
+  kind: LabelErrorKind;
+  label: string;
+}[] = [
+  { kind: "forced", label: "Forced" },
+  { kind: "unforced", label: "Unforced" },
+];
+
 /** The three calls the Result menu offers every stroke; a let is a serve's. */
 export const SHOT_CALLS = ["in", "out", "net"] as const;
 
@@ -1433,14 +1522,31 @@ export const SHOT_CALLS = ["in", "out", "net"] as const;
  * too narrow, the labels truncate before Delete moves. A click here never
  * reaches the row or the point under it.
  *
+ * On a point that ended in an error the Forced | Unforced pair follows Reset
+ * shot, ahead of the spacer and Delete, with its key E as a 16px chip after
+ * it. The pressed one takes the court panel's pressed wash; nothing in it is
+ * a new colour. The pair never gives way: its words stay whole.
+ *
+ * Width (the rail's 640px default, `RAIL_DEFAULT_PX`): the tray's fullest
+ * run on a missed last stroke is Split point here · Add shot after · Reset
+ * shot · Forced | Unforced E · Delete shot. At 10px Inter that is about 44 +
+ * 14 inset, 100 + 92 + 70 for the three actions, 112 for the pair and its
+ * chip, 76 for Delete and 5 × 12 gap — some 570px, with the spacer taking
+ * the rest. Hence 12px gaps and the bare words "Forced" / "Unforced" (no
+ * "error"); every label is `whitespace-nowrap`, and the tray is one
+ * unwrapping flex line, so a narrower rail truncates the first three before
+ * anything wraps.
+ *
  * No hooks: a spec calls it and reads its buttons off the tree.
  */
 function ShotTray({
   number,
   actions,
+  errorKind = null,
 }: {
   number: number;
   actions: readonly ShotTrayAction[];
+  errorKind?: ShotTrayErrorKind | null;
 }) {
   return (
     <div
@@ -1450,10 +1556,13 @@ function ShotTray({
       onClick={(event) => event.stopPropagation()}
       // 32px tall with 10px type, a step quieter than the 34px row above it,
       // so the actions sit clear of the hairline without crowding the row.
-      className="flex h-[32px] min-w-0 items-center gap-4 bg-white/[0.12] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
+      className="flex h-[32px] min-w-0 flex-nowrap items-center gap-3 bg-white/[0.12] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
     >
       {actions.map((action) => (
         <Fragment key={action.key}>
+          {action.key === "delete" && errorKind ? (
+            <ErrorKindPair number={number} errorKind={errorKind} />
+          ) : null}
           {action.key === "delete" ? (
             <span
               data-shot-tray-spacer=""
@@ -1480,6 +1589,57 @@ function ShotTray({
         </Fragment>
       ))}
     </div>
+  );
+}
+
+/**
+ * Forced | Unforced: two tray buttons on the court panel's segmented ground,
+ * the stored kind pressed, then the key E. Each says which point it marks.
+ */
+function ErrorKindPair({
+  number,
+  errorKind,
+}: {
+  number: number;
+  errorKind: ShotTrayErrorKind;
+}) {
+  return (
+    <span
+      data-error-kind-pair=""
+      className="inline-flex shrink-0 items-center gap-1.5"
+    >
+      <span
+        role="group"
+        aria-label={`Shot ${number}: forced or unforced error`}
+        className="inline-flex shrink-0 items-center gap-0.5 rounded-[var(--radius-button)] bg-white/[0.08] p-0.5"
+      >
+        {ERROR_KIND_CHOICES.map(({ kind, label }) => (
+          <BlackTextAction
+            key={kind}
+            ink="plain"
+            small
+            pressed={errorKind.kind === kind}
+            data-error-kind={kind}
+            aria-keyshortcuts="E"
+            aria-label={`${label} error`}
+            onClick={(event) => {
+              event.stopPropagation();
+              errorKind.pick(kind);
+            }}
+          >
+            {label}
+          </BlackTextAction>
+        ))}
+      </span>
+      <Kbd
+        size="sm"
+        variant="flat"
+        mono
+        className="bg-white/[0.08] text-white/60 shadow-none"
+      >
+        E
+      </Kbd>
+    </span>
   );
 }
 
@@ -1525,12 +1685,14 @@ export const RESULT_NONE = "none";
 export function shotResultMenu(
   shot: LabelShot,
   playOnLets: boolean | undefined,
+  /** The stroke that met it in the air: that landing calls nothing, and says so. */
+  metBy: number | null = null,
 ): { derived: LabelShotResult | null; options: SelectOption[] } | null {
   if (shot.stroke === null) return null;
   const serve = isServeStroke(shot.stroke);
   const group = serve ? "Serve result" : "Result";
   const geometry = labelShotValues(shot);
-  const derived = deriveShotResult(geometry);
+  const derived = metBy === null ? deriveShotResult(geometry) : null;
   const options: SelectOption[] = [];
   if (derived && derived !== "let") {
     const miss = landingMiss(geometry);
@@ -1544,7 +1706,10 @@ export function shotResultMenu(
     options.push({
       value: RESULT_NONE,
       label: "No result",
-      description: RESULT_UNPLACED,
+      description:
+        metBy === null
+          ? RESULT_UNPLACED
+          : `Shot ${metBy} met it in the air, so its landing calls nothing`,
       group,
     });
   }
@@ -1750,6 +1915,9 @@ function BlackPositionCell({
   x,
   y,
   muted,
+  filledFrom = null,
+  apart = null,
+  rowSelected = false,
   onPick,
 }: {
   editable: boolean;
@@ -1759,26 +1927,46 @@ function BlackPositionCell({
   y: number | null;
   /** A fault row: the numbers a step quieter. */
   muted: boolean;
+  /** The stroke whose contact fills this landing: a link glyph, a step quieter. */
+  filledFrom?: number | null;
+  /** A stored landing away from the next air stroke's contact: said in the tooltip. */
+  apart?: { shot: number; metres: number } | null;
+  rowSelected?: boolean;
   /** Select the row with the court on this end. */
   onPick: () => void;
 }) {
   const pair = courtPair(x, y);
   const text = formatCourtPoint(x, y);
-  const words = positionWords(end, x, y, editable);
+  const placed = positionWords(end, x, y, editable);
+  const words =
+    filledFrom !== null
+      ? {
+          label: `Filled from shot ${filledFrom}`,
+          detail: [
+            `No bounce, so this is where shot ${filledFrom} met the ball`,
+            ...(editable ? ["Click to move it on the court"] : []),
+          ],
+        }
+      : apart
+        ? {
+            ...placed,
+            detail: [
+              `${apart.metres.toFixed(1)} m from where shot ${apart.shot} met the ball`,
+              ...placed.detail,
+            ],
+          }
+        : placed;
+  const ink = (filledFrom !== null ? !rowSelected : muted)
+    ? QUIET_INK
+    : VALUE_INK;
   const numbers = (
     <span className="inline-flex items-center gap-1.5 align-middle">
       {pair ? (
         <>
-          <b
-            className={cn(NUM, "font-normal")}
-            style={{ color: muted ? QUIET_INK : VALUE_INK }}
-          >
+          <b className={cn(NUM, "font-normal")} style={{ color: ink }}>
             {pair[0]}
           </b>
-          <b
-            className={cn(NUM, "font-normal")}
-            style={{ color: muted ? QUIET_INK : VALUE_INK }}
-          >
+          <b className={cn(NUM, "font-normal")} style={{ color: ink }}>
             {pair[1]}
           </b>
         </>
@@ -1800,6 +1988,21 @@ function BlackPositionCell({
           aria-label="Hit at"
           className="size-[7px] flex-none rounded-full border border-white/50"
         />
+      ) : filledFrom !== null ? (
+        // The dot's 7px slot, the glyph spilling over it, so the numbers stay
+        // under their neighbours'.
+        <span className="flex w-[7px] flex-none justify-center">
+          <Link2
+            role="img"
+            aria-label={`Filled from shot ${filledFrom}`}
+            data-landing-filled=""
+            className={cn(
+              "size-[11px] flex-none",
+              rowSelected ? "text-white/85" : "text-white/60",
+            )}
+            strokeWidth={2}
+          />
+        </span>
       ) : (
         <i
           role="img"

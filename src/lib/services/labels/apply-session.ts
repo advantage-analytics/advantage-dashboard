@@ -16,6 +16,12 @@
  *   - the vendor's strokes file stays in storage, so a forced re-derive
  *     (`splitstep-derive.ts --force-over-labels`) rebuilds the original too.
  *
+ * A publish also answers the job's `derivation_quality.fold` for its own
+ * points (`labelFold`): the match report's grey "couldn't match every point to
+ * the final score" note reads it, and once a person has placed the points it
+ * is their score that counts, not the vendor's. The backup keeps the fold it
+ * replaced, and `--restore` puts it back with the rows (`restoreFold`).
+ *
  * Refuses, before writing anything, on: imported points on the match (never
  * mix providers), nothing to write, or a labelled score that differs from the
  * entered one unless `acceptScore` — the console's Mark complete passes it
@@ -29,6 +35,11 @@ import { readAllPages } from "@/lib/data/admin-range-read";
 import { readLabelSessionRows } from "@/lib/data/labels-server";
 import type { AdminClient } from "@/lib/supabase/admin";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
+import {
+  mergeDerivationQuality,
+  readDerivationQuality,
+  reportedJobId,
+} from "@/lib/services/splitstep/derivation-quality";
 import { labelBackupObjectKey } from "@/lib/services/splitstep/object-keys";
 import { requestMatchInsights } from "@/lib/services/splitstep/request-insights";
 import {
@@ -49,6 +60,7 @@ import {
 
 type Row = Record<string, unknown>;
 const CHUNK = 200;
+const LOG = "[labels:publish]";
 
 export interface LabelApplyBackup {
   kind: "label-apply-backup";
@@ -60,6 +72,20 @@ export interface LabelApplyBackup {
   shots: Row[];
   bookmarks: Row[];
   matchStats: Row[];
+  /**
+   * The job's `derivation_quality.fold` before this publish — `null` when it
+   * held none. Absent from backups made before it was kept, and from one
+   * whose read failed; `restoreFold` then leaves the job's fold alone.
+   */
+  fold?: unknown;
+  /** The job that fold was read from and the publish wrote; set with `fold`. */
+  jobId?: string;
+  /**
+   * `matches.errors_judged_at` before this publish. Absent from backups made
+   * before it was kept, and from one whose read failed;
+   * `restoredErrorsJudgedAt` then reads the backup's rows instead.
+   */
+  errorsJudgedAt?: string | null;
 }
 
 const chunks = <T>(rows: readonly T[]): T[][] => chunksOf(rows, CHUNK);
@@ -112,6 +138,18 @@ export type ApplyContext = NonNullable<
   Awaited<ReturnType<typeof loadApplyContext>>
 >;
 
+/**
+ * What a publish records as the job's `fold`: reconciled when the labelled
+ * set scores add up to the entered score, or the video is marked as ending
+ * early (`plan.mismatch` is null for both). A mismatch published anyway
+ * (`acceptScore`) stays unreconciled, so the report's note keeps saying so.
+ */
+export function labelFold(
+  plan: Pick<ReturnType<typeof planApply>, "mismatch">,
+) {
+  return { reconciled: plan.mismatch === null, source: "labels" as const };
+}
+
 /** The rows a publish writes, and the checks it refuses on. Pure. */
 export function planApply({ session, beside }: ApplyContext) {
   const built = buildAppliedRows({
@@ -137,6 +175,11 @@ export function planApply({ session, beside }: ApplyContext) {
     entered,
     mismatch,
     stats: expectedStats(built.points),
+    // False from a partly marked session (scripts/label-apply.ts, a stale
+    // client) or an error with no stroke to mark. It decides the error strings
+    // the build writes, the marker `publishPlanned` sets, and `verify_match`'s
+    // p_errors_judged, so the three cannot disagree.
+    errorsJudged: built.errorsJudged,
   };
 }
 
@@ -182,6 +225,18 @@ export async function readMatchStats(db: AdminClient, matchId: string) {
     .eq("match_id", matchId);
   if (error) throw new Error(`Could not read match_stats: ${error.message}`);
   return (data ?? []) as Row[];
+}
+
+async function readErrorsJudgedAt(db: AdminClient, matchId: string) {
+  const { data, error } = await db
+    .from("matches")
+    .select("errors_judged_at")
+    .eq("id", matchId)
+    .maybeSingle<{ errors_judged_at: string | null }>();
+  if (error) {
+    throw new Error(`Could not read errors_judged_at: ${error.message}`);
+  }
+  return data?.errors_judged_at ?? null;
 }
 
 export async function countImported(db: AdminClient, matchId: string) {
@@ -279,14 +334,58 @@ export async function restoreRows(db: AdminClient, backup: LabelApplyBackup) {
 }
 
 /**
- * match_stats and the returns backfill, in the order deriveAndPublish runs
- * them, then a new AI summary. Throws on a failed RPC; a failed summary
- * request is reported, not thrown — the statistics are already in.
+ * Put back the `fold` a backup replaced, on the job the publish wrote it to.
+ * False when the backup kept none — made before the field existed, or its
+ * read failed at publish time.
  */
-export async function recompute(
+export async function restoreFold(
   db: AdminClient,
-  matchId: string,
-): Promise<{ insightsRequested: boolean }> {
+  backup: LabelApplyBackup,
+): Promise<boolean> {
+  if (!("fold" in backup) || !backup.jobId) return false;
+  await mergeDerivationQuality(
+    db,
+    backup.jobId,
+    { fold: backup.fold ?? null },
+    LOG,
+  );
+  return true;
+}
+
+/**
+ * The marker a backup's rows need, so restored `Forced Error` strings and
+ * `calculate_match_stats` agree. Without the marker the function leaves those
+ * points out of `forced_errors` while they are not in `unforced_errors` either.
+ * What the backup recorded wins, except that forced strings always need a
+ * marker; a backup that recorded nothing and holds none reads as not judged,
+ * since "errors" is never wrong. ("Unforced Error" has a lowercase f, so it
+ * never matches, just as it never matches the function's LIKE.)
+ */
+export function restoredErrorsJudgedAt(
+  backup: Pick<LabelApplyBackup, "points" | "createdAt" | "errorsJudgedAt">,
+): string | null {
+  if (backup.errorsJudgedAt) return backup.errorsJudgedAt;
+  const hasForced = backup.points.some((p) =>
+    String(p.result_type ?? "").includes("Forced Error"),
+  );
+  return hasForced ? backup.createdAt : null;
+}
+
+/** Put the marker back with a backup's rows, before the stats are recomputed. */
+export async function restoreErrorsJudged(
+  db: AdminClient,
+  backup: LabelApplyBackup,
+): Promise<string | null> {
+  const judgedAt = restoredErrorsJudgedAt(backup);
+  await setErrorsJudged(db, backup.matchId, judgedAt);
+  return judgedAt;
+}
+
+/**
+ * match_stats and the returns backfill, in the order deriveAndPublish runs
+ * them. Throws on a failed RPC.
+ */
+async function recomputeStats(db: AdminClient, matchId: string) {
   for (const fn of [
     "calculate_match_stats",
     "backfill_returns_in_and_net_points",
@@ -294,8 +393,39 @@ export async function recompute(
     const { error } = await db.rpc(fn, { p_match_id: matchId });
     if (error) throw new Error(`${fn} failed: ${error.message}`);
   }
+}
+
+/**
+ * `recomputeStats`, then a new AI summary. A failed summary request is
+ * reported, not thrown — the statistics are already in.
+ */
+export async function recompute(
+  db: AdminClient,
+  matchId: string,
+): Promise<{ insightsRequested: boolean }> {
+  await recomputeStats(db, matchId);
   const insights = await requestMatchInsights({ supabase: db, matchId });
   return { insightsRequested: insights.ok };
+}
+
+/**
+ * `matches.errors_judged_at`, set before the stats run so `calculate_match_stats`
+ * counts `forced_errors` whatever then happens to `verify_match`, and cleared
+ * when a reopened match is republished with an unmarked error. On an unverified
+ * match it changes nothing a player sees: `error-split.ts` also needs `verified`.
+ */
+async function setErrorsJudged(
+  db: AdminClient,
+  matchId: string,
+  judgedAt: string | null,
+) {
+  const { error } = await db
+    .from("matches")
+    .update({ errors_judged_at: judgedAt })
+    .eq("id", matchId);
+  if (error) {
+    throw new Error(`Could not set errors_judged_at: ${error.message}`);
+  }
 }
 
 /** Insert the built rows; returns the new points' ids by point_number. */
@@ -366,15 +496,24 @@ export type PublishResult =
       leftOut: string[];
       bookmarksRelinked: number;
       backupKey: string;
+      /** Always false with `deferInsights`: nothing was asked for yet. */
       insightsRequested: boolean;
       statsBefore: Row[];
+      /**
+       * Every error in the session was marked forced or unforced
+       * (`planApply`). The publish has already set
+       * `matches.errors_judged_at` to match; Mark complete passes this on to
+       * `verify_match` as `p_errors_judged`.
+       */
+      errorsJudged: boolean;
     }
   | { ok: false; error: string };
 
 /**
  * Publish an already-loaded and planned session. The backup is stored before
  * anything is deleted; a failed write puts it back. Throws only if putting it
- * back fails too.
+ * back fails too. Once the rows are in: the judged marker, the statistics, then
+ * the AI summary unless `deferInsights`.
  */
 export async function publishPlanned(params: {
   db: AdminClient;
@@ -383,6 +522,12 @@ export async function publishPlanned(params: {
   acceptScore: boolean;
   /** A local copy too (the script keeps one on disk). */
   onBackup?: (backup: LabelApplyBackup) => void;
+  /**
+   * Leave the AI summary to the caller. Mark complete does, because
+   * generate-insights reads whether errors were judged off `verified`, which
+   * only `verify_match` sets, and that runs after this returns.
+   */
+  deferInsights?: boolean;
 }): Promise<PublishResult> {
   const { db, context, plan, acceptScore } = params;
   const { session } = context;
@@ -405,11 +550,28 @@ export async function publishPlanned(params: {
         "Not published: the match's video job is gone, so the backup would have nowhere to be recorded.",
     };
   }
-  const [published, imported, statsBefore] = await Promise.all([
-    readPublished(db, matchId),
-    countImported(db, matchId),
-    readMatchStats(db, matchId),
-  ]);
+  const [published, imported, statsBefore, reported, marker] =
+    await Promise.all([
+      readPublished(db, matchId),
+      countImported(db, matchId),
+      readMatchStats(db, matchId),
+      // The job the report reads, which is the session's own unless the match
+      // was analysed again after it was seeded.
+      reportedJobId(db, matchId).then(
+        async (id) =>
+          id
+            ? {
+                jobId: id,
+                fold: (await readDerivationQuality(db, id)).fold ?? null,
+              }
+            : undefined,
+        () => undefined,
+      ),
+      readErrorsJudgedAt(db, matchId).then(
+        (errorsJudgedAt) => ({ errorsJudgedAt }),
+        () => undefined,
+      ),
+    ]);
   if (imported > 0) {
     return {
       ok: false,
@@ -427,6 +589,8 @@ export async function publishPlanned(params: {
     shots: published.shots,
     bookmarks: published.bookmarks,
     matchStats: statsBefore,
+    ...(reported ?? {}),
+    ...(marker ?? {}),
   };
   await recordBackupKey(db, jobId, backupObjectKey(backup));
   const backupKey = await storeBackup(db, backup);
@@ -451,17 +615,33 @@ export async function publishPlanned(params: {
     };
   }
 
+  // A failed read above leaves no job named: the session's own is the best
+  // guess, and the backup simply keeps no fold to restore.
+  await mergeDerivationQuality(
+    db,
+    reported?.jobId ?? jobId,
+    { fold: labelFold(plan) },
+    LOG,
+  );
+
   // The rows are in; a failed recompute leaves match_stats behind them. Said
   // as that, never as "not published" — the athlete already has the points.
-  let insightsRequested: boolean;
   try {
-    ({ insightsRequested } = await recompute(db, matchId));
+    await setErrorsJudged(
+      db,
+      matchId,
+      plan.errorsJudged ? new Date().toISOString() : null,
+    );
+    await recomputeStats(db, matchId);
   } catch (err) {
     return {
       ok: false,
       error: `The labelled points are published, but the statistics could not be rebuilt (${err instanceof Error ? err.message : String(err)}). Mark complete again to retry; the previous version is backed up at ${backupKey}.`,
     };
   }
+  const insightsRequested = params.deferInsights
+    ? false
+    : (await requestMatchInsights({ supabase: db, matchId })).ok;
   return {
     ok: true,
     points: plan.built.points.length,
@@ -471,12 +651,14 @@ export async function publishPlanned(params: {
     backupKey,
     insightsRequested,
     statsBefore,
+    errorsJudged: plan.errorsJudged,
   };
 }
 
 /**
- * Load, plan and publish one session. A session labelled with marks off is
- * published whatever its score: it draws no score flag and cannot be told the
+ * Load, plan and publish one session, for Mark complete: it asks for the AI
+ * summary itself, after `verify_match` (session-status-session.ts). A session
+ * labelled with marks off is published whatever its score: it draws no score flag and cannot be told the
  * video ends early (session-fields-session.ts), so a refusal there would have
  * no answer the console can give.
  */
@@ -492,5 +674,6 @@ export async function publishLabelSession(params: {
     context,
     plan: planApply(context),
     acceptScore: params.acceptScore || !context.session.marksEnabled,
+    deferInsights: true,
   });
 }

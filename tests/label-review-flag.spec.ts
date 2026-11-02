@@ -14,8 +14,14 @@ import {
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
 import { REVIEW_ITEM_QUESTION } from "@/lib/services/labels/marks-copy";
+import { openFlags } from "@/lib/services/labels/flag-nav";
+import {
+  greyJumpFirstItem,
+  reviewStep,
+} from "@/lib/services/labels/review-step";
 import {
   REVIEW_ITEMS,
+  reviewChip,
   reviewFlag,
   type ReviewFlag,
   type ReviewItem,
@@ -62,6 +68,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   first_serve_fault_alone: {},
   serve_in_landing_out: { shotId: "s1", landing: "out" },
   serve_after_serve_in: { shotId: "s1" },
+  placement_missing: { shotId: "s1", stroke: "serve" },
   pick_winner: {},
   net_hit_contradicts_height: {},
   phantom_strokes_dropped: { eventIds: [41], hitter: "p2" },
@@ -97,6 +104,9 @@ const forehand = (over: Partial<LabelShot> = {}): LabelShot => {
     hitter: "p1",
     stroke: "forehand",
     result: "in",
+    // Placed, so no fixture carries "Shot placement" unless a test asks.
+    contactX: 0,
+    contactY: 1,
     videoTime: 10,
     ...over,
   });
@@ -141,9 +151,106 @@ const codes = (flag: ReviewFlag | null, id: number) =>
 
 const CHECKED_AT = "2026-10-15T12:00:00.000Z";
 
+test.describe("a placement gap beside an amber question", () => {
+  const gapped = wonOnForehand({
+    shots: [
+      forehand({ id: "a", eventId: 8, videoTime: 1 }),
+      forehand({
+        id: "b",
+        eventId: 9,
+        videoTime: 2,
+        landingX: 2,
+        landingY: 20,
+      }),
+    ],
+  });
+  const amber = marksOf({ [POINT]: [sample("pick_winner")] });
+
+  test("the chip asks the amber question alone", () => {
+    const chip = reviewChip(reviewFlag(gapped, amber, [gapped])!)!;
+    expect(chip.tone).toBe("score");
+    expect(chip.text).toBe(REVIEW_ITEM_QUESTION[5]);
+    expect(chip.open.map((item) => item.id)).toEqual([5]);
+  });
+
+  test("the point is in both lists, each with its own item", () => {
+    expect(
+      openFlags([gapped], amber).map((flag) => [
+        flag.data,
+        flag.items.map((item) => item.id),
+      ]),
+    ).toEqual([
+      [false, [5]],
+      [true, [7]],
+    ]);
+  });
+
+  test("a jump from the grey list asks the gap first, and then the amber question", () => {
+    const names = { p1: "Ann", p2: "Bea" };
+    const first = greyJumpFirstItem(gapped, amber, [gapped]);
+    expect(first).toBe(7);
+    const asked = reviewStep(
+      gapped,
+      amber,
+      [gapped],
+      names,
+      true,
+      undefined,
+      first,
+    )!;
+    expect(asked.item.id).toBe(7);
+    expect(asked.target.shotId).toBe("a");
+    expect(asked.then).toBe("Then: pick the winner");
+    // Any other way in keeps the usual order.
+    expect(reviewStep(gapped, amber, [gapped], names, true)!.item.id).toBe(5);
+    // With the gap answered, the amber question is next.
+    const placed = {
+      ...gapped,
+      dismissed: ["placement:a"],
+    };
+    expect(greyJumpFirstItem(placed, amber, [placed])).toBeUndefined();
+    expect(
+      reviewStep(placed, amber, [placed], names, true, undefined, first)!.item
+        .id,
+    ).toBe(5);
+  });
+
+  test("a settled amber question the queue still asks counts as amber", () => {
+    const names = { p1: "Ann", p2: "Bea" };
+    // An edit has settled the counted mark, so the flag now reads grey.
+    const edited = { ...gapped, status: "edited" as const };
+    expect(reviewFlag(edited, amber, [edited])!.tone).toBe("data");
+    // With nothing queued it is grey alone; with item 5 queued the gap still
+    // comes first, and the court and the panel read the same step.
+    expect(greyJumpFirstItem(edited, amber, [edited])).toBeUndefined();
+    const first = greyJumpFirstItem(edited, amber, [edited], [5, 7]);
+    expect(first).toBe(7);
+    expect(
+      reviewStep(edited, amber, [edited], names, true, [5, 7], first)!.item.id,
+    ).toBe(7);
+  });
+
+  test("a point only in the grey list keeps its order", () => {
+    expect(greyJumpFirstItem(gapped, marksOf({}), [gapped])).toBeUndefined();
+  });
+
+  test("with nothing amber it is one grey flag, and the chip asks it", () => {
+    const none = marksOf({});
+    expect(
+      openFlags([gapped], none).map((flag) => [
+        flag.data,
+        flag.items.map((item) => item.id),
+      ]),
+    ).toEqual([[true, [7]]]);
+    expect(reviewChip(reviewFlag(gapped, none, [gapped])!)!.text).toBe(
+      REVIEW_ITEM_QUESTION[7],
+    );
+  });
+});
+
 test.describe("the item table", () => {
-  test("six items in id order, each with its question and its codes", () => {
-    expect(REVIEW_ITEMS.map((item) => item.id)).toEqual([1, 2, 3, 4, 5, 6]);
+  test("seven items in id order, each with its question and its codes", () => {
+    expect(REVIEW_ITEMS.map((item) => item.id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     for (const item of REVIEW_ITEMS) {
       expect(item.question).toBe(REVIEW_ITEM_QUESTION[item.id]);
     }
@@ -174,6 +281,7 @@ test.describe("the item table", () => {
         "tiebreak_score_off_six_all",
         "segment_proposal_differs",
       ],
+      ["placement_missing"],
     ]);
   });
 
@@ -540,6 +648,27 @@ test.describe("state", () => {
     ]);
     expect(flag?.state).toBe("open");
     expect(flag?.tone).toBe("score");
+  });
+
+  test("a checked point stays open while its ending cannot be true of its winner", () => {
+    const stale = point({
+      checkedAt: CHECKED_AT,
+      winner: "p2",
+      ending: "winner",
+      endedBy: "p1",
+      shots: [forehand({ result: "net", landingX: 2, landingY: 12 })],
+    });
+    const flag = reviewFlag(stale, marksOf({}), [stale]);
+    expect(
+      flag?.items[0].members.map((member) => [member.mark.code, member.state]),
+    ).toEqual([["ending_stale", "open"]]);
+    // Grey: the winner, and so the score, is right.
+    expect(flag?.tone).toBe("data");
+
+    // A hand-set ending that fits its winner still reads as checked.
+    const handSet = { ...stale, endedBy: "p2" as const };
+    const fits = reviewFlag(handSet, marksOf({}), [handSet]);
+    expect(fits?.state).toBe("checked-as-is");
   });
 });
 

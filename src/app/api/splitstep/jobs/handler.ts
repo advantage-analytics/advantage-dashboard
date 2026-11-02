@@ -127,6 +127,8 @@ export interface SubmitJobPatch {
   submitted_at?: string;
   video_url_expires_at?: string | null;
   error_message?: string | null;
+  error_code?: string | null;
+  error_category?: string | null;
 }
 
 export type SubmitJobDeploymentConfig =
@@ -768,7 +770,12 @@ export async function handleSubmitJob(
       external_job_id: externalJobId,
       submitted_at: new Date().toISOString(),
       video_url_expires_at: vendorUrl.expiresAt?.toISOString() ?? null,
+      // The whole error, not just its sentence: an earlier refusal's code
+      // (QUOTA_EXCEEDED, say — `submit-match-video.ts` records it) would
+      // otherwise ride along on a job the vendor now holds.
       error_message: null,
+      error_code: null,
+      error_category: null,
     });
 
     if (queued.error && adminVideo) {

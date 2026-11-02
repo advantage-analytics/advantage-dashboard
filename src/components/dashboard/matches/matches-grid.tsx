@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import { DraftCard } from "./draft-card";
 import { DraftRow, type DraftRowData } from "./draft-row";
 import { MatchCardGallery } from "./match-card-gallery";
 import { MatchCardList } from "./match-card-list";
@@ -45,7 +46,10 @@ interface MatchesGridProps {
   onToggle?: (id: string, viaKeyboard: boolean) => void;
   /** The drawer is open (or closing) beside the table. */
   drawerOpen?: boolean;
-  /** Drawn in the table body (and in place of the cards) when `matches` is empty. */
+  /**
+   * Drawn in place of the cards and in the table body when neither `matches`
+   * nor `drafts` lists anything: a listed draft is an answer to give.
+   */
   empty?: React.ReactNode;
 }
 
@@ -96,6 +100,18 @@ export function MatchesGrid({
   return (
     <>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:hidden">
+        {drafts.map((draft) => (
+          <DraftCard
+            key={draft.id}
+            draft={draft}
+            scope={scope}
+            onOpen={
+              onToggle
+                ? (viaKeyboard) => onToggle(draft.id, viaKeyboard)
+                : undefined
+            }
+          />
+        ))}
         {matches.map((match) => (
           <MatchCardGallery
             key={match.id}
@@ -111,7 +127,7 @@ export function MatchesGrid({
             }
           />
         ))}
-        {matches.length === 0 ? (
+        {matches.length === 0 && drafts.length === 0 ? (
           <div className="surface-card md:col-span-2">{empty}</div>
         ) : null}
       </div>
@@ -186,7 +202,7 @@ export function MatchesGrid({
                   onToggle={onToggle}
                 />
               ))}
-              {matches.length === 0 ? empty : null}
+              {matches.length === 0 && drafts.length === 0 ? empty : null}
             </div>
           </div>
         </div>

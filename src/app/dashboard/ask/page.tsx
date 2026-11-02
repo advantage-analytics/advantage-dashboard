@@ -6,6 +6,7 @@ import {
   getAskConversation,
   getAskConversations,
   getAskQuota,
+  getAskStarterOptions,
   getAskTagOptions,
 } from "@/lib/data/ask-server";
 import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
@@ -68,15 +69,23 @@ async function AskContent({ searchParams }: AskRouteProps) {
   // no statistics; once it does, the first answer is in the rail already.
   const sentId = typeof sent === "string" && isUuid(sent) ? sent : null;
 
-  const [workspace, tagOptions, quota, conversations, conversation, hasStats] =
-    await Promise.all([
-      getWorkspaceContext(),
-      getAskTagOptions(),
-      getAskQuota(),
-      getAskConversations(),
-      conversationId ? getAskConversation(conversationId) : null,
-      sentId ? askMatchHasStats(sentId) : true,
-    ]);
+  const [
+    workspace,
+    tagOptions,
+    starterOptions,
+    quota,
+    conversations,
+    conversation,
+    hasStats,
+  ] = await Promise.all([
+    getWorkspaceContext(),
+    getAskTagOptions(),
+    getAskStarterOptions(),
+    getAskQuota(),
+    getAskConversations(),
+    conversationId ? getAskConversation(conversationId) : null,
+    sentId ? askMatchHasStats(sentId) : true,
+  ]);
 
   return (
     <AskPage
@@ -84,7 +93,7 @@ async function AskContent({ searchParams }: AskRouteProps) {
       scope={PERSONAL_ASK_SCOPE}
       timeZone={workspace?.active.timeZone}
       tagOptions={tagOptions}
-      starters={askStarters(tagOptions, PERSONAL_ASK_SCOPE)}
+      starters={askStarters(starterOptions, PERSONAL_ASK_SCOPE)}
       quota={quota}
       conversations={conversations}
       conversation={conversation}

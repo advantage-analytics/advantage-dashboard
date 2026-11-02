@@ -618,6 +618,17 @@ test.describe("tableDelta", () => {
       text: "3",
       tone: "good",
     });
+    // "Errors" is the name a review and a default comparison print.
+    expect(tableDelta("Diff", "Errors", "-3", "9", "12")).toEqual({
+      arrow: "↓",
+      text: "3",
+      tone: "good",
+    });
+    expect(tableDelta("Difference", "Errors", "+3", "12", "9")).toEqual({
+      arrow: "↑",
+      text: "3",
+      tone: "bad",
+    });
     // A zero claims nothing, so it needs no check.
     expect(tableDelta("Difference", "Aces", "0", "3", "3.4")).toEqual({
       arrow: "→",

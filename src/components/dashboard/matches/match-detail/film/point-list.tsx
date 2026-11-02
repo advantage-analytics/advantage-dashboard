@@ -32,6 +32,7 @@ import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 import { useOptionalWorkspace } from "@/components/dashboard/workspace-provider";
 import { useFilmReadOnly } from "./film-read-only";
 import { cn } from "@/lib/utils";
+import { pointScoreLabel } from "@/lib/ui/score-format";
 
 import { filmProgressWidth } from "./film-clock";
 import { FilmAdvancedPanel } from "./film-advanced-panel";
@@ -97,9 +98,11 @@ export {
  *
  * The mark is the point's WINNER, not who hit the last shot: the workspace's
  * mark (profile photo on personal, crest on a team) when the viewer won the
- * point, an initials chip on `--surface-subtle` when the opponent did.
- * Initials come from `sides`, so a two-letter chip is never a hardcoded
- * artboard string. The value is `won_by_player1`, which the Advantage
+ * point, the opponent's team crest when they did and have one, otherwise an
+ * initials chip on `--surface-subtle`. With no workspace (the public share
+ * page) the viewer's side reads the same way as the opponent's: its team crest,
+ * else initials. Crests and initials come from `sides`, so neither is a
+ * hardcoded artboard value. The winner is `won_by_player1`, which the Advantage
  * Intelligence pipeline derives from consecutive point scores
  * (`resolveWinner` in `derivation/winners.ts`, walking the ladder / game /
  * set counts and deliberately ignoring the last stroke's `in` flag) and the
@@ -225,6 +228,13 @@ interface PointListProps {
   onOpenInRoom?: (point: MatchPoint) => void;
   /** Paint only. "dark" is the fullscreen room's drawer (frame R3). */
   tone?: FilmListTone;
+  /**
+   * Space belongs to the host, so a focused row answers only Enter. The room
+   * takes Space on `window` as play/pause whatever has focus: a row that also
+   * seeked on Space sent the film back to the focused point, however far the
+   * arrows had walked since.
+   */
+  spaceIsPlayPause?: boolean;
   /** Drawn only when given: the drawer's 26px collapse glyph in the header. */
   onCollapse?: () => void;
   /** The whole film's shot feed. Only the playing point's slice is drawn. */
@@ -295,6 +305,7 @@ export const PointList = memo(function PointList({
   onToggleSaved,
   onOpenInRoom,
   tone = "light",
+  spaceIsPlayPause = false,
   onCollapse,
   shotStops,
   activeShotId = null,
@@ -312,9 +323,9 @@ export const PointList = memo(function PointList({
   const sides = useMatchSides();
   // The viewer's rows lead with the workspace's own mark — the profile photo
   // on personal, the program's crest on a team — so a point you decided reads
-  // as yours at a glance; the opponent's rows keep their initials.
-  // Null on the public share page, which has no workspace: the viewer's rows
-  // then keep initials like the opponent's.
+  // as yours at a glance; the opponent's rows lead with their team's crest,
+  // or their initials without one. Null on the public share page, which has no
+  // workspace: the viewer's rows then read like the opponent's.
   const workspace = useOptionalWorkspace()?.active ?? null;
   // A row's words are the filters' own: an unreturned serve is named "Ace"
   // on a derived match (`pointResultLabel`), as the head-to-head Aces row
@@ -600,10 +611,11 @@ export const PointList = memo(function PointList({
             <div className="relative flex min-h-0 flex-1 flex-col">
               {/* The one scroller in the card: the header stays put while the rows
             scroll, the way the room's panel scrolls its list under a fixed
-            header. */}
+            header. It makes room under its last row for a pill no scroll can
+            clear (`FollowPill`). */}
               <div
                 ref={listRef}
-                className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto [&:has(+[data-follow-pill-room])]:pb-12"
               >
                 {groups.map((group) => (
                   <div key={group.key} className="flex flex-col">
@@ -641,6 +653,10 @@ export const PointList = memo(function PointList({
                             initials={
                               isYou ? sides.you.initials : sides.opp.initials
                             }
+                            crestUrl={
+                              (isYou ? sides.you : sides.opp).player.crestUrl ??
+                              null
+                            }
                             workspace={workspace}
                             showPointScore={showPointScore}
                             isActive={isActive}
@@ -650,6 +666,7 @@ export const PointList = memo(function PointList({
                             onToggleSaved={onToggleSaved}
                             onOpenInRoom={onOpenInRoom}
                             tone={tone}
+                            spaceIsPlayPause={spaceIsPlayPause}
                           />
                           {/* Under the DISPLAYED row, not the lit one: while
                             held the well stays here as `isActive` moves on.
@@ -765,6 +782,14 @@ function nextPillPlace(prev: PillPlace, row: DOMRect, box: DOMRect): PillPlace {
  * the lit row is fully inside the scroller's box there is nothing to return
  * to, so the pill is unmounted.
  *
+ * In-cut, the pill floats over rows on their way past, and scrolling to the
+ * lit row sends it away. Out of the cut nothing does: on a one-row list, or at
+ * the end of a long one, it would sit on the last row's text for as long as
+ * the film runs. So that pill carries `data-follow-pill-room`, and the scroller
+ * reserves 48px under its rows while it is mounted: the pill's 28px, its 12px
+ * inset and 8px clear of the row. Off the same mounted pill rather than the
+ * affordance, so the room outlasts its exit fade.
+ *
  * Unmounted when hidden — never `opacity-0` in the tab order. It arrives on
  * `film-follow-pill-in` (150ms, a 4px rise away from its edge — the
  * `--film-pill-rise` sign; the rise drops under reduced motion, the fade
@@ -875,6 +900,7 @@ function FollowPill({
       type="button"
       data-film-chrome
       data-edge={edge}
+      data-follow-pill-room={shown.inCut ? undefined : ""}
       aria-label={shown.ariaLabel}
       onClick={onFollow}
       // Leaving, it is already on its way out: not a target, not a stop.
@@ -931,6 +957,7 @@ export const PointRow = memo(function PointRow({
   detail,
   isYou,
   initials,
+  crestUrl,
   workspace,
   showPointScore,
   isActive,
@@ -940,6 +967,7 @@ export const PointRow = memo(function PointRow({
   onToggleSaved,
   onOpenInRoom,
   tone = "light",
+  spaceIsPlayPause = false,
 }: {
   point: MatchPoint;
   /** The row's name — `pointResultLabel`, never the raw result type. */
@@ -948,6 +976,8 @@ export const PointRow = memo(function PointRow({
   detail: string;
   isYou: boolean;
   initials: string;
+  /** The point winner's team crest, drawn in place of their initials. */
+  crestUrl: string | null;
   /** The active workspace, whose mark leads the viewer's own rows. */
   workspace: Pick<Workspace, "kind" | "mark" | "iconUrl"> | null;
   showPointScore: boolean;
@@ -961,9 +991,12 @@ export const PointRow = memo(function PointRow({
   onOpenInRoom?: (point: MatchPoint) => void;
   /** Paint only. "dark" is the fullscreen room's drawer (frame R3). */
   tone?: FilmListTone;
+  /** The host owns Space (see `PointList`); the row answers only Enter. */
+  spaceIsPlayPause?: boolean;
 }) {
   const t = ROW_TONE[tone];
   const readOnly = useFilmReadOnly();
+  const pointScore = readPointScore(point);
   // A point with no `videoTime` has nowhere to seek to. It still reads, it
   // just cannot be clicked — imports predating video timing are full of them.
   const seekable = point.videoTime != null;
@@ -995,7 +1028,13 @@ export const PointRow = memo(function PointRow({
         else onSelect(point);
       }}
       onKeyDown={(e) => {
-        if (seekable && (e.key === "Enter" || e.key === " ")) {
+        // The bookmark's keys bubble here. They are the bookmark's own: taking
+        // Enter would seek and cancel its click.
+        if (e.target !== e.currentTarget) return;
+        if (
+          seekable &&
+          (e.key === "Enter" || (e.key === " " && !spaceIsPlayPause))
+        ) {
           e.preventDefault();
           onSelect(point);
         }
@@ -1012,10 +1051,15 @@ export const PointRow = memo(function PointRow({
       >
         {/* The viewer's own mark, never the frame's white initials chip
             (phase-1 decision): a point the viewer WON reads as theirs at a
-            glance on both tones. The opponent keeps initials. */}
-        {isYou && workspace ? (
+            glance on both tones. Anyone else draws their team's crest in the
+            same square, or initials without one. */}
+        {(isYou && workspace) || crestUrl ? (
           <WorkspaceMark
-            workspace={workspace}
+            workspace={
+              isYou && workspace
+                ? workspace
+                : { kind: "team", mark: initials, iconUrl: crestUrl }
+            }
             className="size-[30px] rounded-[var(--radius-button)] text-[11px] tracking-[0.3px]"
           />
         ) : (
@@ -1047,7 +1091,9 @@ export const PointRow = memo(function PointRow({
           )}
           style={t.scoreStyle}
         >
-          {readPointScore(point) ?? (
+          {pointScore !== null ? (
+            pointScoreLabel(pointScore)
+          ) : (
             // A frozen reading (`score_frozen`): a dash, never a made-up 0-0.
             <>
               <span aria-hidden="true">{UNREAD_SCORE}</span>

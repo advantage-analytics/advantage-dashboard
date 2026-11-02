@@ -278,6 +278,62 @@ be. Doubles teams and existing users depend on it.
 > lock (decision D1, `docs/plans/advantage-review.md`). The safe direction
 > only: nothing in `derivation/` or `derive-and-publish.ts` changed.
 
+> **A user-approved exception, added 2026-10-30: `calculate_match_stats` counts
+> forced errors, and the SwingVision matches were recomputed once.**
+>
+> The forced/unforced split (`src/lib/data/error-split.ts`). Migration
+> `20261029222042_forced_errors_judged` changed two expressions: `forced_errors`,
+> which the function wrote as a literal NULL, is counted when
+> `source_provider = 'swing-vision'` or `matches.errors_judged_at` is set. The
+> rest of the function's body was compared against the live `pg_get_functiondef`
+> before applying, and nothing else in it, `unforced_errors` included, changed.
+> The marker is written by the label publish (`setErrorsJudged`, apply-session.ts)
+> before the function runs, including from `scripts/label-apply.ts`, which never
+> verifies. `20261030062341_verify_match_errors_judged` runs the function again
+> when Mark complete verifies a judged match, which gives the same answer.
+>
+> **The backfill.** The same migration re-ran the function once over every
+> `swing-vision` match (44, 88 `match_stats` rows). 28 of those rows, on 14
+> matches, already held a non-null `forced_errors` from an older writer, and those
+> values were overwritten. The function does not write the return or net-point
+> columns, which `backfill_returns_in_and_net_points` owns, so those kept their
+> values. Afterwards `forced_errors` summed to 261, the count of Forced Error
+> points, with no NULLs left on those rows and none set on any other match. Every
+> other column it does write was recomputed too, and no before-and-after diff was
+> taken, so a stale value on those rows would have moved silently. No `points`,
+> `shots` or `matches` row was written.
+>
+> **The approval.** The owner approved the migration in session, knowing it
+> changed the function and recomputed the SwingVision matches, but this rule was
+> not quoted to them at the time. It was raised with them afterwards, by
+> `/pr-check` on 2026-10-30. Not a precedent for backfills.
+
+> **A user-approved exception, added 2026-11-01: net points count a player who
+> came forward, and every match's net figures were recomputed once.**
+>
+> Migration `20261101021214_net_points_came_forward` adds
+> `public.net_attempt_shot`, the SQL twin of `cameToNet` (`match-filters/model.ts`),
+> and changes only the two `net_points_*` subqueries of
+> `backfill_returns_in_and_net_points`. The Statistics card and its Video cut count
+> from the points with `cameToNet` and no longer read these columns; Ask and new AI
+> summaries read the columns, which the twin keeps equal to it.
+> `calculate_match_stats` did not change.
+>
+> **The backfill.** One `UPDATE` wrote `net_points_appearances` and `net_points_won`
+> on the rows whose figures moved, SwingVision included: 117 of 178 `match_stats`
+> rows on 67 of 89 matches, attempts 1,109 to 1,480 and won 643 to 836. It did not
+> re-run the function, which would have un-suppressed the return columns on video
+> matches. A checksum of every other `match_stats` column except `updated_at` was
+> identical before and after, and a checksum of the new figures matched
+> `cameToNet` through the real point loader on all 178 rows. No `points`, `shots`
+> or `matches` row was written. Only totals were kept from before, so the old
+> values are recomputable from the old rule rather than stored. Stored AI summaries
+> were not regenerated.
+>
+> **The approval.** The owner approved the change and the dry-run table in session,
+> but this section's "no backfills" rule was not read or quoted to them until after
+> it was applied. Not a precedent for backfills.
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in
@@ -348,6 +404,18 @@ be. Doubles teams and existing users depend on it.
 > `calculate_match_stats`, `swingvision-validator.ts` and existing match data
 > were not touched. Anything beyond this list on these paths still needs its own
 > entry here.
+
+> **A reviewed exception, added 2026-10-30: a service winner is not a winner.**
+> Product decision by the user, asked and answered for this change, including
+> its live write (`20261030000000_winners_exclude_service_winners.sql`).
+> `calculate_match_stats` leaves `'Service Winner'` out of `winners` and
+> `volley_winners`, and those two columns are recounted from `points` on every
+> existing `match_stats` row, SwingVision included. The measured effect is
+> `winners` 3282 → 2373 across 148 rows, each by exactly its `service_winners`.
+> Nothing else in the function changes, and no other column, table or file-import
+> code is touched. Apply it only after the matching code reaches production: the
+> earlier head-to-head subtracts unreturned serves from `winners` itself. This is
+> not a precedent for backfills.
 
 **These files are the integration, not UI.** Changing them to suit a layout is
 almost always the wrong fix:
@@ -644,6 +712,20 @@ to put a testable seam.
 > is written. It corrupts silently the way the §4 inputs do, one level down.
 > `DERIVATION_VERSION` is `0.3.2-unreconciled`.
 
+> **A reviewed exception, added 2026-10-31: a corrected ad scoring outranks the
+> job.** The owner decided a person's correction should reach the vendor on a
+> retry and the derivation on a rebuild. `label_sessions.ad_scoring`
+> (`readCorrectedAdScoring`) now beats the job in `resolveAdScoring`, and a new
+> session starts from it. `retryAdScoring` (`resubmit-job.ts`) sends the
+> correction, then the match format, then the failed attempt's value; a match on
+> a scheduled line keeps the attempt's value ahead of its format. Edit match can
+> change ad scoring alone while a retry of the newest analysis could run and
+> none has completed (`retryWouldRun`, read with the service role, since a viewer
+> sees only their own jobs). Top player and fixed
+> camera keep their order. `processing_jobs.ad_scoring` still records what each
+> attempt sent. A rebuild still refuses to replace hand-labelled rows unless
+> forced.
+
 > **A reviewed exception, added 2026-09-28: a collapsed score tail, in
 > `derivation/rallies.ts` and `transcript.ts`.** On job 45ff4bd7 the vendor's
 > score stream reset to point 0-0 / game 0-0 / set NaN for the last four rallies
@@ -719,6 +801,20 @@ to put a testable seam.
 > The refusal sentence gained "hand-labeled"; the account-deletion copy of it
 > ends "Contact support to remove them." `purgeMatchStorage`'s ordering and
 > the three object keys it covers are unchanged.
+>
+> **Changed 2026-11-01: a user can delete any match they created.** The match
+> delete route no longer refuses a console or hand-labeled match. It claims
+> through `admin_claim_match_delete`, which never refuses, and the
+> `matches_archive_labels_and_console` trigger then acts on that claimed match:
+> analyst sessions are copied to `label_archive` (service-role read only, with
+> `vendor.pred_player_id` recorded as a seat rather than a name; a labeller's
+> free-text note is kept as written), and console attempts, reservations and
+> schedule targets are removed. Submission items stay as the console's history
+> with their links cleared and `result.match_deleted_at` stamped. The route
+> purges as the service role after its `created_by` lookup, because through RLS
+> it would miss jobs and files someone else made on the match. Account deletion and the console's abandon still use
+> `admin_claim_match_storage_purge` and refuse as described above, and a delete
+> with no claim still meets `ON DELETE RESTRICT`.
 
 > **A reviewed exception, added 2026-09-30: cancelling a queued analysis, from
 > `claude/matches-rosters-design-consistency-c31a1d`.** An athlete can now
@@ -761,9 +857,9 @@ to put a testable seam.
 >   vendor has started.
 > - `resubmit-job.ts` — **accepts a cancelled parent.** "Send for analysis
 >   again" is a normal resubmission: a new child row, `reserveQuota()` reserves
->   the month's time anew, and the parent's `initial_top_player_is_player1`,
->   `ad_scoring` and `fixed_camera` are reused (falling back to the match row)
->   exactly as for a failed parent.
+>   the month's time anew, and the parent's `initial_top_player_is_player1`
+>   and `fixed_camera` are reused (falling back to the match row) exactly as for
+>   a failed parent. Ad scoring follows `retryAdScoring`.
 >   It is **manual only** — `auto` callers (webhook, reconciler, jobs route) are
 >   refused, because the cancel was a person's decision — and skips
 >   `classifyFailure()`, which has nothing to say about a job that did not fail.

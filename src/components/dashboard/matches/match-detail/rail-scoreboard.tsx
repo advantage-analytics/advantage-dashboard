@@ -43,7 +43,7 @@ export interface RailScoreboardPlayer {
 export interface RailScoreboardProps {
   players: [RailScoreboardPlayer, RailScoreboardPlayer];
   status: RailScoreboardStatus;
-  /** The status word in sentence case ("Playing", "Final", "Retired"). */
+  /** The status word in sentence case ("Playing", "Paused", "Final", "Retired"). */
   label: string;
   /** The film head, e.g. "41:12". Live only. */
   headTime?: string | null;

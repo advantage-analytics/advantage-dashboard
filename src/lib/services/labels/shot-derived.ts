@@ -19,7 +19,12 @@ import {
 } from "../splitstep/derivation/court";
 import type { LabelShotPatch } from "./edit";
 import type { LabelShotResult, LabelShotSeedValues } from "./seed";
-import { isLetServe, isServeStroke, type LabelShot } from "./session";
+import {
+  isLetServe,
+  isServeStroke,
+  type LabelPoint,
+  type LabelShot,
+} from "./session";
 
 /**
  * What `effectiveShotResult` reads of a stroke; absent columns read as unset.
@@ -210,6 +215,32 @@ export function inServeLandingMiss(shot: {
     landing_y: shot.landingY ?? null,
   });
   return landing === "out" || landing === "net" ? landing : null;
+}
+
+/**
+ * A stroke's result, with a gap filled by the stroke after it: a stroke the
+ * next live stroke of its point played was in play, so it is `"in"` — even
+ * one met in the air past the baseline, since a ball volleyed is never out.
+ * Only an empty result is filled; a stored call is the labeller's or the
+ * vendor's and stands. A serve followed by another serve faulted, so that gap
+ * stays empty; so does every gap on a double fault (`ending`): its serves
+ * were not in, and any stroke after them is a dead ball nobody played. With
+ * no next stroke the result is the stored one.
+ *
+ * An added stroke starts with no result, and the volley link moves the
+ * stroke before a volley without writing one (volley-link.ts) — this is what
+ * the rail and the publish read instead of a "—".
+ */
+export function playedOnResult(
+  shot: Pick<LabelShot, "stroke" | "result">,
+  next: Pick<LabelShot, "stroke"> | null | undefined,
+  ending: LabelPoint["ending"] = null,
+): LabelShotResult | null {
+  if (shot.result !== null || !next || ending === "double_fault") {
+    return shot.result;
+  }
+  if (isServeStroke(shot.stroke) && isServeStroke(next.stroke)) return null;
+  return "in";
 }
 
 /**

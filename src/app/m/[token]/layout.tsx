@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MobileGate } from "@/components/dashboard/mobile-gate";
 import { PublicReportHeader } from "@/components/public/public-report-header";
 import { getSharedMatchData } from "@/lib/data/match-share-server";
 import { surname } from "@/lib/data/match-utils";
@@ -13,6 +14,10 @@ import { readShareToken, sharedMatchPair } from "@/lib/data/match-share-format";
  * The header's crumb names the match. `getSharedMatchData` is `cache()`d, so
  * this and the page share one read; a token that resolves to nothing gives
  * the header no crumb and the page its not-found pane.
+ *
+ * The report's rail and pane sit side by side at every width, so a phone gets
+ * `MobileGate` in place of a clipped report. Only over a report: the not-found
+ * pane reads fine on a phone, and a bigger screen would not fix its link.
  */
 export default async function SharedMatchLayout({
   children,
@@ -32,6 +37,7 @@ export default async function SharedMatchLayout({
       <div className="flex h-[calc(100dvh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
         {children}
       </div>
+      {data && <MobileGate subject="this link" />}
     </div>
   );
 }

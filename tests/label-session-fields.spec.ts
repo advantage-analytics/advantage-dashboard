@@ -84,9 +84,10 @@ test.describe("parseLabelSessionPatch", () => {
     for (const [patch, error] of [
       [{ status: "complete" }, '"status" is not a field the session takes.'],
       [
-        { final_score: [[1, 0]], ad_scoring: false },
-        '"ad_scoring" is not a field the session takes.',
+        { final_score: [[1, 0]], marks_enabled: false },
+        '"marks_enabled" is not a field the session takes.',
       ],
+      [{ ad_scoring: null }, "ad_scoring must be true or false."],
       [{ score: [[1, 0]] }, '"score" is not a field the session takes.'],
       [{}, "Nothing to change."],
       [null, "The session patch must be an object."],
@@ -188,6 +189,23 @@ test.describe("parseLabelSessionPatch", () => {
     }
   });
 
+  test("applyLabelSessionPatch moves the scoring and leaves it otherwise", () => {
+    const fields = {
+      finalScore: [[1, 0]],
+      videoEndsEarly: null,
+      startScore: null,
+      adScoring: false,
+    };
+    expect(applyLabelSessionPatch(fields, { ad_scoring: true })).toEqual({
+      ...fields,
+      adScoring: true,
+    });
+    expect(applyLabelSessionPatch(fields, { final_score: null })).toEqual({
+      ...fields,
+      finalScore: null,
+    });
+  });
+
   test("applyLabelSessionPatch moves only the keys the patch carries", () => {
     const start = {
       sets: [0, 0] as [number, number],
@@ -195,40 +213,78 @@ test.describe("parseLabelSessionPatch", () => {
       points: [1, 0] as [number, number],
       server: "p1" as const,
     };
-    const fields = { finalScore: null, videoEndsEarly: null, startScore: null };
+    const base = { adScoring: true };
+    const fields = {
+      ...base,
+      finalScore: null,
+      videoEndsEarly: null,
+      startScore: null,
+    };
     expect(applyLabelSessionPatch(fields, { final_score: [[1, 0]] })).toEqual({
+      ...base,
       finalScore: [[1, 0]],
       videoEndsEarly: null,
       startScore: null,
     });
     expect(
       applyLabelSessionPatch(
-        { finalScore: [[1, 0]], videoEndsEarly: null, startScore: null },
+        {
+          ...base,
+          finalScore: [[1, 0]],
+          videoEndsEarly: null,
+          startScore: null,
+        },
         { video_ends_early: true },
       ),
-    ).toEqual({ finalScore: [[1, 0]], videoEndsEarly: true, startScore: null });
+    ).toEqual({
+      ...base,
+      finalScore: [[1, 0]],
+      videoEndsEarly: true,
+      startScore: null,
+    });
     expect(
       applyLabelSessionPatch(
-        { finalScore: [[1, 0]], videoEndsEarly: true, startScore: null },
+        {
+          ...base,
+          finalScore: [[1, 0]],
+          videoEndsEarly: true,
+          startScore: null,
+        },
         { final_score: null },
       ),
-    ).toEqual({ finalScore: null, videoEndsEarly: true, startScore: null });
+    ).toEqual({
+      ...base,
+      finalScore: null,
+      videoEndsEarly: true,
+      startScore: null,
+    });
     expect(
       applyLabelSessionPatch(
-        { finalScore: [[1, 0]], videoEndsEarly: true, startScore: null },
+        {
+          ...base,
+          finalScore: [[1, 0]],
+          videoEndsEarly: true,
+          startScore: null,
+        },
         { start_score: start },
       ),
     ).toEqual({
+      ...base,
       finalScore: [[1, 0]],
       videoEndsEarly: true,
       startScore: start,
     });
     expect(
       applyLabelSessionPatch(
-        { finalScore: null, videoEndsEarly: null, startScore: start },
+        { ...base, finalScore: null, videoEndsEarly: null, startScore: start },
         { start_score: null },
       ),
-    ).toEqual({ finalScore: null, videoEndsEarly: null, startScore: null });
+    ).toEqual({
+      ...base,
+      finalScore: null,
+      videoEndsEarly: null,
+      startScore: null,
+    });
   });
 });
 
@@ -363,6 +419,46 @@ test.describe("writeLabelSessionFields", () => {
         supabase: frozen.supabase,
         sessionId: SESSION_ID,
         patch: { video_ends_early: true },
+      }),
+    ).toEqual({
+      error: "This session is complete, so its labels can no longer change.",
+    });
+    expect(updates(frozen)).toEqual([]);
+  });
+
+  test("the scoring is written on a session labelled without marks, and only while it is open", async () => {
+    const blind = fakeClient({
+      session: { status: "labelling", marks_enabled: false },
+    });
+    expect(
+      await writeLabelSessionFields({
+        supabase: blind.supabase,
+        sessionId: SESSION_ID,
+        patch: { ad_scoring: true },
+      }),
+    ).toEqual({ ok: true, fields: { ad_scoring: true } });
+    expect(updates(blind)[0].values).toEqual({ ad_scoring: true });
+
+    const mixed = fakeClient({
+      session: { status: "labelling", marks_enabled: false },
+    });
+    expect(
+      await writeLabelSessionFields({
+        supabase: mixed.supabase,
+        sessionId: SESSION_ID,
+        patch: { ad_scoring: true, video_ends_early: true },
+      }),
+    ).toHaveProperty("error");
+    expect(updates(mixed)).toEqual([]);
+
+    const frozen = fakeClient({
+      session: { status: "complete", marks_enabled: true },
+    });
+    expect(
+      await writeLabelSessionFields({
+        supabase: frozen.supabase,
+        sessionId: SESSION_ID,
+        patch: { ad_scoring: true },
       }),
     ).toEqual({
       error: "This session is complete, so its labels can no longer change.",
@@ -725,6 +821,73 @@ test.describe("a score that doesn't add up, in the flag list", () => {
 });
 
 test.describe("the header's total", () => {
+  test("thin tracking says so once beside the grey count, not on an ordinary match", () => {
+    const session = { ...labelSessionFixture(), matchScore: null };
+    const [point] = session.points;
+    const [shot] = point.shots;
+    const serve = {
+      ...shot,
+      stroke: "first_serve" as const,
+      result: "in" as const,
+      landingX: null,
+      landingY: null,
+    };
+    const seed = (landing: number | null) => ({
+      hitter: shot.hitter,
+      stroke: "first_serve" as const,
+      result: "in" as const,
+      spin: null,
+      contact_x: 0,
+      contact_y: 0,
+      landing_x: landing,
+      landing_y: landing,
+      video_time: shot.videoTime,
+    });
+    const match = (missing: number) => ({
+      ...session,
+      points: Array.from({ length: 24 }, (_, i) => ({
+        ...point,
+        id: `p-${i}`,
+        pointIndex: i,
+        // No winner for the serve to contradict: the flag stays grey.
+        winner: null,
+        ending: null,
+        endedBy: null,
+        shots: [
+          {
+            ...serve,
+            id: `s-${i}`,
+            seed: seed(i < missing ? null : 5),
+          },
+        ],
+      })),
+    });
+    const notice = tag(
+      header(black(match(6), EMPTY_MARKS)),
+      'data-label-flag-notice=""',
+    );
+    expect(notice).toContain("Thin tracking: 6 of 24 serves in play");
+    expect(header(black(match(2), EMPTY_MARKS))).not.toContain(
+      "data-label-flag-notice",
+    );
+    // Every point checked, so no grey flag is open: the note still stands.
+    const checked = match(6);
+    const done = header(
+      black(
+        {
+          ...checked,
+          points: checked.points.map((p) => ({
+            ...p,
+            checkedAt: "2026-10-31T00:00:00.000Z",
+          })),
+        },
+        EMPTY_MARKS,
+      ),
+    );
+    expect(done).toContain("data-label-flag-notice");
+    expect(done).not.toContain("data-label-rail-data-count");
+  });
+
   test("a flag with the match's count, named for a reader", () => {
     const html = black(
       { ...labelSessionFixture(), matchScore: null },

@@ -84,6 +84,8 @@ export const LABEL_ONLY_FLAGS = {
   FIRST_SERVE_FAULT_ALONE: "first_serve_fault_alone",
   /** A serve right after a serve that was in: a played let, or two points. */
   SERVE_AFTER_SERVE_IN: "serve_after_serve_in",
+  /** One of a point's first four or last two strokes lacks its coordinates. */
+  PLACEMENT_MISSING: "placement_missing",
   /**
    * The point's last stroke is seeded off its landing against the vendor's own
    * call on it — In where the vendor said out or net, or Out or Net where it
@@ -152,6 +154,7 @@ export const LABEL_MARK_META = {
   [LABEL_ONLY_FLAGS.LAST_LANDING_MISSING]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_AFTER_SERVE_IN]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.SERVE_IN_LANDING_OUT]: { tier: "hint", scope: "shot" },
+  [LABEL_ONLY_FLAGS.PLACEMENT_MISSING]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "count", scope: "point" },
   [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
   [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
@@ -240,6 +243,8 @@ export interface LabelMarkParams {
   serve_in_landing_out: { shotId: string; landing: "out" | "net" };
   /** The serve that follows a serve in play — where "Split here" cuts. */
   serve_after_serve_in: { shotId: string };
+  /** The stroke to place, and what the gap costs: see `markHover`. */
+  placement_missing: { shotId: string; stroke: "serve" | "return" | "shot" };
   net_hit_contradicts_height: NoParams;
   phantom_strokes_dropped: {
     /** The rally's strokes the transcript has no shot for. */
@@ -281,6 +286,12 @@ export type LabelSuggestion =
       pointId: string;
       /** The label shot the missing one would follow (the pair's first). */
       afterShotId: string;
+      /**
+       * The pair's second label shot, when it has a row: a split that puts
+       * the two in different points answers the suggestion
+       * (`homeShotSuggestions`).
+       */
+      nextShotId?: string;
       /** The side that did not get a stroke between the pair's two. */
       hitter: LabelSide;
       /** Midpoint of the pair's times; one of them when the other is missing. */
@@ -616,6 +627,36 @@ export function withoutDeadTail(rally: SplitStepRally): SplitStepRally | null {
   };
 }
 
+/**
+ * Each `missing_shot` filed under the label point that holds its pair's first
+ * stroke (`afterShotId`) in `points` — not the first point carrying the
+ * rally, which after a split (point-split.ts) is the earlier half while the
+ * stroke sits in the later one. A pair a split put in two points is dropped:
+ * the second stroke opens a new point, so nothing is missing between them.
+ * A suggestion whose stroke no row holds keeps its point. Other suggestions
+ * pass through.
+ *
+ * Run on the server's marks and again on the console's live rows, whose
+ * splits happen after the page built its marks.
+ */
+export function homeShotSuggestions(
+  suggestions: readonly LabelSuggestion[],
+  points: readonly { id: string; shots?: readonly { id: string }[] }[],
+): LabelSuggestion[] {
+  const pointOf = new Map<string, string>();
+  for (const point of points) {
+    for (const shot of point.shots ?? []) pointOf.set(shot.id, point.id);
+  }
+  return suggestions.flatMap((s): LabelSuggestion[] => {
+    if (s.kind !== "missing_shot") return [s];
+    const home = pointOf.get(s.afterShotId);
+    if (home === undefined) return [s];
+    const next = s.nextShotId ? pointOf.get(s.nextShotId) : undefined;
+    if (next !== undefined && next !== home) return [];
+    return home === s.pointId ? [s] : [{ ...s, pointId: home }];
+  });
+}
+
 function midpoint(a: number | null, b: number | null): number | null {
   if (a !== null && b !== null) return (a + b) / 2;
   return a ?? b;
@@ -721,17 +762,23 @@ export function buildLabelMarks(
       for (const [a, b] of samePlayerPairs(point.shots)) {
         const afterShotId = shotIdByEvent.get(a.event_id);
         if (afterShotId === undefined) continue;
+        const nextShotId = shotIdByEvent.get(b.event_id);
         marks.suggestions.push({
           kind: "missing_shot",
           key: `missing_shot:${a.event_id}`,
           pointId,
           afterShotId,
+          nextShotId,
           hitter: opponent(labelSideOf(a.is_player1)),
           videoTime: midpoint(a.video_time, b.video_time),
         });
       }
     }
   }
+  // A split point shares its rally with the point it came from, so the
+  // rally's suggestions were filed under the earlier one: file each under
+  // the point that holds its stroke now.
+  marks.suggestions = homeShotSuggestions(marks.suggestions, points);
 
   // "Game cut differs" on most of the match is not a question about each
   // point: the entered score the re-cut was fitted to is wrong, and the

@@ -1,5 +1,25 @@
 import { EmptyMark } from "@/components/ui/empty-mark";
 
+type FormResult = "win" | "loss" | "pending";
+
+/** A tick's width and radius; each caller sets its height. */
+export const FORM_TICK = "w-[2.5px] rounded-[1px]";
+
+export function formTickColor(result: FormResult): string {
+  if (result === "win") return "var(--viz-good)";
+  if (result === "loss") return "var(--viz-bad)";
+  return "var(--ink-300)";
+}
+
+/** The strip's text equivalent, for a reader who cannot tell the colours apart. */
+export function formTicksSummary(form: readonly FormResult[]): string {
+  return form.length === 0
+    ? "No form yet"
+    : `Last ${form.length}: ${form
+        .map((r) => (r === "win" ? "W" : r === "loss" ? "L" : "Pending"))
+        .join(" ")}`;
+}
+
 /**
  * The last five results as a strip, oldest at the left — SKILL.md → Form
  * Ticks (`FormPills` in the design system): 2.5×12px bars, 3px gap, 1px
@@ -20,7 +40,7 @@ export function FormTicks({
   slots,
   empty = <EmptyMark label="No form yet" />,
 }: {
-  form: readonly ("win" | "loss" | "pending")[];
+  form: readonly FormResult[];
   /**
    * Pad the strip to a fixed width with faint `--ink-100` ghost bars for the
    * matches that haven't happened yet — the roster table's "five, eventually"
@@ -43,32 +63,19 @@ export function FormTicks({
   const ghostCount = slots === undefined ? 0 : Math.max(0, slots - form.length);
   return (
     <>
-      <span className="sr-only">
-        {form.length === 0
-          ? "No form yet"
-          : `Last ${form.length}: ${form
-              .map((r) => (r === "win" ? "W" : r === "loss" ? "L" : "Pending"))
-              .join(" ")}`}
-      </span>
+      <span className="sr-only">{formTicksSummary(form)}</span>
       <span aria-hidden className="flex items-center gap-[3px]">
         {form.map((result, index) => (
           <span
             key={index}
-            className="h-3 w-[2.5px] rounded-[1px]"
-            style={{
-              background:
-                result === "win"
-                  ? "var(--viz-good)"
-                  : result === "loss"
-                    ? "var(--viz-bad)"
-                    : "var(--ink-300)",
-            }}
+            className={`h-3 ${FORM_TICK}`}
+            style={{ background: formTickColor(result) }}
           />
         ))}
         {Array.from({ length: ghostCount }, (_, index) => (
           <span
             key={`ghost-${index}`}
-            className="h-3 w-[2.5px] rounded-[1px] bg-[var(--ink-100)]"
+            className={`h-3 ${FORM_TICK} bg-[var(--ink-100)]`}
           />
         ))}
       </span>

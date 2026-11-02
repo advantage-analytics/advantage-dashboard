@@ -1062,6 +1062,29 @@ test.describe("the per-item table", () => {
   const GUESSED = mark("winner_guessed", {});
   const SUSPECT = mark("ending_suspect_line", {} as never);
 
+  test("a stroke seeded with a gap is measured as Shot placement, placed since or not", () => {
+    const NO_LANDING = { landing_x: null, landing_y: null };
+    const gap = point("a", 0, [
+      shot(
+        "a1",
+        { ...NO_LANDING, video_time: 1 },
+        { landingX: 1, landingY: 5 },
+      ),
+      shot("a2", { video_time: 2 }),
+    ]);
+    const clean = point("b", 1, [
+      shot("b1", { video_time: 3 }),
+      shot("b2", { video_time: 4 }),
+    ]);
+    expect(
+      buildScorecard([gap, clean], marksOf({})).items.map((r) => [
+        r.id,
+        r.tone,
+        r.points,
+      ]),
+    ).toEqual([[7, "data", 1]]);
+  });
+
   test("two marks of one item on a point make one row with one point", () => {
     const a = point("a", 0, [shot("a1")], { winner: "p2" });
     const card = buildScorecard([a], marksOf({ a: [DISPUTED, COUNT_4] }));

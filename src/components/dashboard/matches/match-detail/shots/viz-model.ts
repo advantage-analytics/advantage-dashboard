@@ -968,15 +968,65 @@ export function withFoldedFilters(
  * same substrings `calculate_match_stats` buckets (`LIKE '%Unforced
  * Error%'`). `null` for a point that is not one of the three (a winner, or
  * an error the source did not classify).
+ *
+ * `errorSplitJudged` (`MatchFilterContext.errorSplitJudged`; defaults to
+ * judged so a caller with no match in hand keeps the stored reading): until a
+ * match's errors are judged nobody has called any of them forced or
+ * unforced, so every error that is not a double fault — "… Unforced Error",
+ * "… Forced Error" or a bare "… Error" — reads as the one Errors bucket,
+ * returned as `"unforced"` (the value the collapsed "Errors" option stores
+ * first, `collapseErrorFilter`). A service winner joins it there: the errors
+ * cut only asks about one whose return was missed (`errorMadeBy`), and "every
+ * error" has to mean every dot the cut can draw. A judged match reads as stored,
+ * so there it has no kind.
  */
 export function errorKindOf(
   p: Pick<MatchPoint, "resultType">,
+  errorSplitJudged = true,
 ): ErrorValue | null {
   const rt = (p.resultType ?? "").toLowerCase();
   if (rt.includes("double fault")) return "doubleFault";
+  if (!errorSplitJudged) {
+    return rt.includes("error") || rt === "service winner" ? "unforced" : null;
+  }
   if (rt.includes("unforced error")) return "unforced";
   if (rt.includes("forced error")) return "forced";
   return null;
+}
+
+/** The two error kinds an unjudged match folds into one "Errors" option. */
+export const COLLAPSED_ERROR_VALUES = [
+  "unforced",
+  "forced",
+] as const satisfies readonly ErrorValue[];
+
+/**
+ * The Error type selection as an unjudged match reads it: picking either
+ * kind picks the whole Errors bucket, so `["forced"]` (a link or saved view
+ * from a judged reading) means every error rather than an empty chart. On a
+ * judged match — or when neither kind is picked — `error` comes back as is
+ * (same reference). Canonical (`unforced`, `forced`, `doubleFault`) order.
+ */
+export function collapseErrorFilter(
+  error: ErrorFilter,
+  errorSplitJudged: boolean,
+): ErrorFilter {
+  if (errorSplitJudged) return error;
+  const hasKind = error.some((v) => v === "unforced" || v === "forced");
+  if (!hasKind) return error;
+  if (error.includes("unforced") && error.includes("forced")) return error;
+  return error.includes("doubleFault")
+    ? [...COLLAPSED_ERROR_VALUES, "doubleFault"]
+    : [...COLLAPSED_ERROR_VALUES];
+}
+
+/**
+ * Whether the errors cut reads `ctx`'s match as judged. No context at all (a
+ * caller with no match in hand, e.g. a unit fixture) keeps the stored
+ * reading; a context reads its own flag, absent = not judged (T2's rule).
+ */
+export function errorsJudgedIn(ctx: MatchFilterContext | undefined): boolean {
+  return ctx === undefined ? true : ctx.errorSplitJudged === true;
 }
 
 export function subjectFor(
@@ -1103,7 +1153,8 @@ function computeRallyViz(
 /**
  * Errors cut: one dot per point the SUBJECT lost on their own error
  * (`errorMadeBy`, the attribution the Result filters and the Point endings
- * card use — a double fault is the server's), drawn where the erring shot
+ * card use — a double fault is the server's, a service winner's missed return
+ * the returner's), drawn where the erring shot
  * landed, from behind its hitter, on the same full-court landing frame as
  * rally placement. The erring shot is the point's deciding row
  * (`lastShotOf`): its last, or a double fault's last serve. A point
@@ -1120,10 +1171,14 @@ function computeErrorsViz(
   filters: VizFilters,
   subjectIsPlayer1: boolean,
   matchPass: MatchPass | null,
+  /** `errorsJudgedIn(matchCtx)`: unjudged, Error type reads one Errors
+   *  bucket (`errorKindOf`, `collapseErrorFilter`). */
+  errorSplitJudged: boolean,
 ): VizResult {
   let total = 0;
   let count = 0;
   const dots: VizDot[] = [];
+  const wantedErrors = collapseErrorFilter(filters.error, errorSplitJudged);
 
   for (const p of points) {
     // Their error AND their lost point: a last row credited to the point's
@@ -1144,13 +1199,13 @@ function computeErrorsViz(
       if (!matchPass.point(p)) continue;
       if (matchPass.shot && !matchPass.shot(shot)) continue;
     }
-    if (filters.error.length) {
+    if (wantedErrors.length) {
       // Strictly by the recorded result type — the rule the Point endings
       // card's unforced-error count uses. (The tile can still read fewer:
       // it draws only errors with a measured landing.) An error the source
       // left unclassified is drawn on the unfiltered cut, under no kind.
-      const kind = errorKindOf(p);
-      if (kind === null || !filters.error.includes(kind)) continue;
+      const kind = errorKindOf(p, errorSplitJudged);
+      if (kind === null || !wantedErrors.includes(kind)) continue;
     }
     count++;
 
@@ -1248,7 +1303,13 @@ export function computeViz(
     );
   }
   if (cut === "errors") {
-    return computeErrorsViz(points, filters, subjectIsPlayer1, matchPass);
+    return computeErrorsViz(
+      points,
+      filters,
+      subjectIsPlayer1,
+      matchPass,
+      errorsJudgedIn(matchCtx),
+    );
   }
 
   const frame = cutFrame(cut);

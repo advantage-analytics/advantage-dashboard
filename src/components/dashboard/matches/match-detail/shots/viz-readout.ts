@@ -1,5 +1,7 @@
+import type { ZoneKey, ZoneStats } from "@/lib/data/serve-zones";
 import type { Cut, VizDotMeta } from "./viz-model";
 import { formatSpeed, type DistanceUnit } from "@/lib/format/distance";
+import { pointScoreLabel } from "@/lib/ui/score-format";
 
 /**
  * The focused and fullscreen courts' hover/focus readout, as a PURE function of one
@@ -119,7 +121,7 @@ export function buildReadout(
     facts.push(`Set ${meta.setNumber}`);
   }
   const score = (meta.pointScore ?? "").trim();
-  if (score !== "") facts.push(score);
+  if (score !== "") facts.push(pointScoreLabel(score));
   // Unmeasured speed arrives as `null` from `computeViz`, but a stored 0 is
   // equally "not a reading" — never "0 mph"/"0 km/h".
   if (
@@ -136,4 +138,66 @@ export function buildReadout(
   if (facts.length > 0) lines.push(facts.join(" · "));
 
   return { title, lines, monoLine };
+}
+
+/** A serve zone's readout: the same sentence the zone's `aria-label` reads. */
+export function buildZoneReadout(
+  zone: ZoneKey,
+  stats: ZoneStats,
+  names: ReadoutNames,
+): Readout {
+  return {
+    title: `${names.subject} — ${zone.replace("-", " ")}`,
+    lines: [`${stats.winPct}% of ${stats.count} points won`],
+    monoLine: -1,
+  };
+}
+
+const READOUT_WIDTH = 220;
+const READOUT_GAP = 10;
+const READOUT_MARGIN = 8;
+/**
+ * The tallest card the flip plans for: a title, two lines of which one wraps,
+ * and "Watch point". Rather than measure on every hover, the flip uses the
+ * worst case; it can flip a little early for a short card and never clips one.
+ */
+const READOUT_MAX_HEIGHT = 132;
+
+export interface ReadoutPlacement {
+  /** The card's horizontal centre, in stage px. */
+  left: number;
+  /** The card's bottom edge, or its top edge when `below`, in stage px. */
+  top: number;
+  width: number;
+  below: boolean;
+}
+
+/**
+ * Where the fullscreen readout sits: above its mark, as every chart readout
+ * does, below it when there is no room, slid along the stage's edge rather than
+ * run off it. A mark panned out of view pins the card to the nearest edge.
+ */
+export function placeReadout(
+  anchor: { x: number; y: number },
+  stage: { w: number; h: number },
+): ReadoutPlacement {
+  const width = Math.min(
+    READOUT_WIDTH,
+    Math.max(0, stage.w - READOUT_MARGIN * 2),
+  );
+  const left = Math.max(
+    READOUT_MARGIN + width / 2,
+    Math.min(anchor.x, stage.w - READOUT_MARGIN - width / 2),
+  );
+  const y = Math.max(
+    READOUT_MARGIN,
+    Math.min(anchor.y, stage.h - READOUT_MARGIN),
+  );
+  const below = y - READOUT_GAP - READOUT_MAX_HEIGHT < READOUT_MARGIN;
+  return {
+    left,
+    top: y + (below ? READOUT_GAP : -READOUT_GAP),
+    width,
+    below,
+  };
 }

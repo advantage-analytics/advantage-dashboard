@@ -95,9 +95,10 @@ export function forgetMatchDetails(matchId: string): void {
  * and the footer does not change shape from one viewer to the next. On a
  * failed analysis, or a hand-off that stalled (`isSubmitStalled`), the stopped
  * step's recovery action (`DrawerRecoveryAction`: "Retry", "Try again",
- * "Rebuild statistics", or the upload link) sits outlined under it for the
- * person who uploaded it (the routes refuse anyone else). A class with nothing
- * to press — waiting on the allowance, statistics unavailable — adds nothing.
+ * "Send for analysis", "Rebuild statistics", or the upload link) sits outlined
+ * under it for the person who uploaded it (the routes refuse anyone else). A
+ * class with nothing to press — the attempt ceiling, statistics unavailable —
+ * adds nothing.
  *
  * When a saved upload fills this match (a draft folded onto its row), the
  * footer's one primary is "Continue upload", back into that draft's wizard,
@@ -151,7 +152,7 @@ export function MatchDrawer({
   const status = match.analysis?.status;
   const inFlight = status ? isInFlight(status) : false;
   const failed = status ? isAnalysisFailed(status) : false;
-  const snapshot = useMatchSnapshot(match.id, inFlight);
+  const snapshot = useMatchSnapshot(match.id, inFlight, match.turned);
   const schedule = useScheduleLink(match.id, scope);
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";

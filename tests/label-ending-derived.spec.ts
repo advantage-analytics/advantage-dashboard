@@ -2,7 +2,12 @@ import { expect, test } from "@playwright/test";
 
 import {
   deriveEnding,
+  endingContradictsWinner,
   endingPatchForShotChange,
+  allErrorsJudged,
+  isMarkableError,
+  publishesAsError,
+  unmarkableErrors,
   winnerContradicted,
 } from "@/lib/services/labels/ending-derived";
 import { endingStale } from "@/lib/services/labels/marks-state";
@@ -489,7 +494,7 @@ test.describe("a winner the strokes contradict", () => {
     p1({ result: "out" }),
   ];
 
-  test("re-saving the stroke puts the winner right, and leaves the ending alone", () => {
+  test("re-saving the stroke puts the winner right", () => {
     const shots = rally();
     const stored = point(shots, "p1", "error", "p1");
     // The rows say the same thing before and after: only the winner is off.
@@ -502,6 +507,66 @@ test.describe("a winner the strokes contradict", () => {
     // No winner labelled yet is not a contradiction.
     const unset = point(shots, null, "error", "p1");
     expect(endingPatchForShotChange(unset, unset, GHOSTS)).toBeNull();
+  });
+
+  // Gimena v Hooker, point 5: seeded "winner by p2" on p2's return into the net.
+  // Placing that ball moved the winner alone, and "Forehand winner by Hooker"
+  // sat under Gimena and published as Gimena's winner.
+  test("the ending moves with the winner when both are wrong", () => {
+    const replaced = (result: LabelShot["result"], hitter: "p1" | "p2") => [
+      serve(),
+      (hitter === "p1" ? p1 : p2)({ result, landingY: 12 }),
+    ];
+    const missedReturn = replaced("net", "p2");
+    expect(
+      endingPatchForShotChange(
+        point(
+          missedReturn.map((shot, i) =>
+            i === 1 ? { ...shot, landingY: 15 } : shot,
+          ),
+          "p2",
+          "winner",
+          "p2",
+        ),
+        point(missedReturn, "p2", "winner", "p2"),
+        GHOSTS,
+      ),
+    ).toEqual({ ending: "service_winner", ended_by: "p2", winner: "p1" });
+
+    const missedRally = rally();
+    expect(
+      endingPatchForShotChange(
+        point(missedRally, "p1", "winner", "p1"),
+        point(missedRally, "p1", "winner", "p1"),
+        GHOSTS,
+      ),
+    ).toEqual({ ending: "error", ended_by: "p1", winner: "p2" });
+
+    const inRally = [serve({ hitter: "p2" }), p1(), p2(), p1({ result: "in" })];
+    expect(
+      endingPatchForShotChange(
+        point(inRally, "p2", "error", "p1"),
+        point(inRally, "p2", "error", "p1"),
+        GHOSTS,
+      ),
+    ).toEqual({ ending: "winner", ended_by: "p1", winner: "p1" });
+  });
+
+  test("a stored ending that cannot be true of its winner is told apart", () => {
+    const of = (
+      ending: LabelPoint["ending"],
+      endedBy: LabelPoint["endedBy"],
+      winner: LabelPoint["winner"],
+    ) => endingContradictsWinner({ ending, endedBy, winner });
+    expect(of("winner", "p2", "p1")).toBe(true);
+    expect(of("error", "p1", "p1")).toBe(true);
+    expect(of("winner", "p1", "p1")).toBe(false);
+    expect(of("error", "p2", "p1")).toBe(false);
+    // Nobody named, or an ending the winner's side does not decide this way.
+    expect(of("winner", null, "p1")).toBe(false);
+    expect(of("winner", "p2", null)).toBe(false);
+    expect(of("double_fault", "p1", "p2")).toBe(false);
+    expect(of("service_winner", "p2", "p1")).toBe(false);
   });
 
   test("an edit further back in the rally leaves a winner set by hand alone", () => {
@@ -548,5 +613,98 @@ test.describe("a winner the strokes contradict", () => {
     });
     // The same point with its winner right raises nothing.
     expect(endingStale(point(rally(), "p2", "error", "p1"), GHOSTS)).toBeNull();
+  });
+});
+
+test.describe("isMarkableError", () => {
+  test("a rally ball that missed is an error: markable", () => {
+    const rally = point([serve(), p2(), p1(), p2({ result: "out" })]);
+    expect(deriveEnding(rally, GHOSTS)?.ending).toBe("error");
+    expect(isMarkableError(rally)).toBe(true);
+  });
+
+  test("a missed return is a service winner, not a markable error", () => {
+    const missedReturn = point([serve(), p2({ result: "net" })]);
+    expect(deriveEnding(missedReturn, GHOSTS)?.ending).toBe("service_winner");
+    expect(isMarkableError(missedReturn)).toBe(false);
+  });
+
+  test("a double fault, an ace and a winner are not markable", () => {
+    const doubleFault = point([
+      serve({ result: "out" }),
+      serve({ stroke: "second_serve", result: "net" }),
+    ]);
+    const ace = point([serve()]);
+    const winner = point([serve(), p2(), p1()]);
+    expect(isMarkableError(doubleFault)).toBe(false);
+    expect(isMarkableError(ace)).toBe(false);
+    expect(isMarkableError(winner)).toBe(false);
+  });
+
+  test("a point whose rows settle nothing is not markable", () => {
+    expect(isMarkableError(point([]))).toBe(false);
+    expect(isMarkableError(point([serve({ result: "out" })]))).toBe(false);
+  });
+
+  test("a last ball with no result reads the labelled winner", () => {
+    // p2 hit last with no result; p1 is labelled the winner → an error by p2.
+    const unresolved = point([serve(), p2({ result: null })], "p1");
+    expect(isMarkableError(unresolved)).toBe(true);
+    expect(isMarkableError(point([serve(), p2({ result: null })], "p2"))).toBe(
+      false,
+    );
+  });
+
+  test("a let or a non-point is never markable, whatever its strokes say", () => {
+    const strokes = [serve(), p2(), p1({ result: "out" })];
+    expect(isMarkableError(point(strokes, null, "let_replayed"))).toBe(false);
+    expect(isMarkableError(point(strokes, null, "not_a_point"))).toBe(false);
+  });
+
+  test("a deleted point is not markable", () => {
+    const strokes = [serve(), p2(), p1({ result: "out" })];
+    expect(isMarkableError({ ...point(strokes), status: "deleted" })).toBe(
+      false,
+    );
+    expect(isMarkableError({ ...point(strokes), status: "edited" })).toBe(true);
+  });
+
+  test("a let serve is skipped: the rally after it decides", () => {
+    const afterLet = point([
+      serve({ result: "let" }),
+      serve(),
+      p2(),
+      p1({ result: "net" }),
+    ]);
+    expect(isMarkableError(afterLet)).toBe(true);
+  });
+
+  test("the stored ending decides, as the publish reads it", () => {
+    const lastIn = [serve(), p2(), p1()];
+    const lastMissed = [serve(), p2(), p1({ result: "out" })];
+    expect(isMarkableError(point(lastIn, "p2", "error", "p1"))).toBe(true);
+    expect(isMarkableError(point(lastMissed, "p2", "winner", "p1"))).toBe(
+      false,
+    );
+    // A stored error with no stroke to carry the mark is not offered.
+    expect(isMarkableError(point([], "p2", "error", "p1"))).toBe(false);
+    expect(publishesAsError(point([], "p2", "error", "p1"))).toBe(true);
+    expect(unmarkableErrors([point([], "p2", "error", "p1")])).toHaveLength(1);
+    expect(unmarkableErrors([point(lastIn, "p2", "error", "p1")])).toEqual([]);
+  });
+
+  test("allErrorsJudged: only every publishing error, markable and marked", () => {
+    const error = point([serve(), p2(), p1({ result: "out" })], "p2");
+    const marked = { ...error, errorKind: "unforced" as const };
+    const open = { ...error, errorKind: null };
+    expect(allErrorsJudged([marked])).toBe(true);
+    expect(allErrorsJudged([marked, open])).toBe(false);
+    expect(allErrorsJudged([])).toBe(true);
+    // A deleted or non-point error is not published, so it asks for nothing.
+    expect(allErrorsJudged([{ ...open, status: "deleted" }])).toBe(true);
+    expect(allErrorsJudged([{ ...open, ending: "not_a_point" }])).toBe(true);
+    // Nor a winner holding a kind.
+    const winner = point([serve(), p2(), p1()], "p1");
+    expect(allErrorsJudged([{ ...winner, errorKind: null }])).toBe(true);
   });
 });
