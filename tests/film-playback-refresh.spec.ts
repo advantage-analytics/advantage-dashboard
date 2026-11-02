@@ -545,6 +545,41 @@ test("a playing viewer keeps playing across the swap", async ({ page }) => {
   expect(after?.time).toBeGreaterThan(0.04);
 });
 
+test("a film stopped by leaving the room mid-hand-off stays paused across the swap", async ({
+  page,
+}) => {
+  const matchId = "ok-room-hand-off";
+  await open(page, matchId);
+
+  await seekTo(page, REPORT, 0.05);
+  await page.getByRole("button", { name: "Play", exact: true }).first().click();
+  await page.waitForFunction(
+    (sel) => document.querySelector<HTMLVideoElement>(sel)?.paused === false,
+    REPORT,
+  );
+
+  // The file never reaches the room's element, so the hand-off stays open and
+  // the exit stops a film only the silent report player was running.
+  const clip = /\.mp4/;
+  await page.route(clip, () => {});
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(ROOM)).toHaveCount(0);
+  await page.unroute(clip);
+  expect((await state(page, REPORT))?.paused).toBe(true);
+
+  await release(page, matchId);
+  await awaitCredential(page, REPORT, 1);
+
+  // The wrong answer is a play() that lands just after the credential does,
+  // so give it the time to.
+  await page.waitForTimeout(500);
+  expect((await state(page, REPORT))?.paused).toBe(true);
+});
+
 /* -------------------------------------------------------------------------
  * A correction made somewhere else
  * ---------------------------------------------------------------------- */
