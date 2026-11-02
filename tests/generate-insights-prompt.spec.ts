@@ -521,6 +521,7 @@ test("a summary still naming Player 1/2 after the retry is not saved", async () 
 /** A video match whose errors were never judged, and one that was. */
 const VIDEO_MATCH = {
   player1_id: "p1",
+  player1_name: "Ana Castillo",
   date: "2026-10-20T00:00:00Z",
   program_id: null,
   created_by: "u1",
@@ -543,7 +544,10 @@ const ERROR_STATS = (unforced: number, forced: number | null) => [
   },
 ];
 const PRIOR = {
-  priorMatches: [{ id: "m-prev" }, { id: "m-older" }],
+  priorMatches: [
+    { id: "m-prev", player1_name: "Ana Castillo" },
+    { id: "m-older", player1_name: "Ana Castillo" },
+  ],
   priorStats: [
     { match_id: "m-prev", unforced_errors: 10, forced_errors: 4, winners: 8 },
     {
@@ -642,7 +646,7 @@ test("the one-prior-match wording compares total errors too", async () => {
   const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
     match: JUDGED_MATCH,
     stats: ERROR_STATS(9, 3),
-    priorMatches: [{ id: "m-prev" }],
+    priorMatches: [{ id: "m-prev", player1_name: "Ana Castillo" }],
     priorStats: [PRIOR.priorStats[0]],
   });
   const comparison = comparisonOf(requests[0].body.contents[0].parts[0].text);
@@ -693,7 +697,10 @@ for (const [label, match] of [
     const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
       match,
       stats: ERROR_STATS(9, 3),
-      priorMatches: [{ id: "m-prev" }, { id: "m-older" }],
+      priorMatches: [
+        { id: "m-prev", player1_name: "Ana Castillo" },
+        { id: "m-older", player1_name: "Ana Castillo" },
+      ],
       priorStats: [
         { match_id: "m-prev", unforced_errors: 10, forced_errors: 4 },
         { match_id: "m-older", unforced_errors: null, forced_errors: null },
@@ -714,7 +721,10 @@ test("every prior row null leaves the average unmeasured, not 0", async () => {
   const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
     match: JUDGED_MATCH,
     stats: ERROR_STATS(9, 3),
-    priorMatches: [{ id: "m-prev" }, { id: "m-older" }],
+    priorMatches: [
+      { id: "m-prev", player1_name: "Ana Castillo" },
+      { id: "m-older", player1_name: "Ana Castillo" },
+    ],
     priorStats: [
       { match_id: "m-prev", unforced_errors: null, forced_errors: null },
       { match_id: "m-older", unforced_errors: null, forced_errors: null },
