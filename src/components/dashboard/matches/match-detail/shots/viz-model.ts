@@ -11,6 +11,7 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import { readPointScore } from "../film/film-score";
 import {
+  countedShots,
   isFeedShotType,
   isServeShotType,
   pickRallyShots,
@@ -408,7 +409,11 @@ export function deriveZoneFromX(lx: number): "t" | "body" | "wide" {
 }
 
 function resolvedServe(p: MatchPoint) {
-  const shot = pickServeShotBy(p.shots ?? [], (s) => s.shotType);
+  const shot = pickServeShotBy(
+    p.shots ?? [],
+    (s) => s.shotType,
+    (s) => s.shotNumber,
+  );
   // A resolved row is authoritative as a pair. Never manufacture a landing
   // by mixing one missing shot coordinate with a different flattened row.
   const landingX = shot ? shot.landingX : p.firstShotLandingX;
@@ -1114,7 +1119,11 @@ function computeRallyViz(
       (matchPass === null || matchPass.point(p));
     const subjectWon = p.wonByPlayer1 === subjectIsPlayer1;
 
-    const rallyShots = pickRallyShots(p.shots ?? [], (s) => s.shotType);
+    const rallyShots = pickRallyShots(
+      p.shots ?? [],
+      (s) => s.shotType,
+      (s) => s.shotNumber,
+    );
     for (const shot of rallyShots) {
       if (shot.isPlayer1 !== subjectIsPlayer1) continue;
 
@@ -1273,7 +1282,7 @@ function pointDotMeta(
  * `serve-return-shots.ts` for a single internal call site.
  */
 function pointReturnShot(p: MatchPoint): MatchShot | undefined {
-  return p.shots?.find(
+  return countedShots(p.shots ?? [], (s) => s.shotNumber).find(
     (s) => !isServeShotType(s.shotType) && !isFeedShotType(s.shotType),
   );
 }

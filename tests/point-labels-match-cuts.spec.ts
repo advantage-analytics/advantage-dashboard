@@ -343,3 +343,35 @@ test.describe("labels use the filters' words", () => {
     );
   });
 });
+
+/**
+ * A hand-labelled replay (Sage v Hunter point 25): a serve and a returner's
+ * backhand played out at shot 0, then the counted serve and a return into
+ * the net. The point ended on the return, not on "a backhand".
+ */
+test("a point ending on its return after a played-out let reads Return", () => {
+  const replay = pt({
+    id: "replay",
+    resultType: "Service Winner",
+    rallyLength: 2,
+    shots: [
+      shot({ id: "r0", shotNumber: 0, shotType: "First Serve", result: "In" }),
+      shot({
+        id: "r0b",
+        shotNumber: 0,
+        isPlayer1: false,
+        shotType: "Backhand",
+        result: "In",
+      }),
+      shot({ id: "r1", shotNumber: 1, shotType: "First Serve", result: "In" }),
+      shot({
+        id: "r2",
+        shotNumber: 2,
+        isPlayer1: false,
+        shotType: "Backhand",
+        result: "Net",
+      }),
+    ],
+  });
+  expect(finalShotOf(replay)).toEqual({ kind: "Return", isPlayer1: false });
+});
