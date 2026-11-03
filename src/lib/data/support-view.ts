@@ -243,11 +243,14 @@ export function foldOlderDays<T extends { createdAt: string }>(
   const todayDay =
     typeof today === "string" ? today : zonedDayString(today, timeZone);
   const yesterday = previousDay(todayDay);
+  const dayOf = (message: T) => {
+    const ms = momentMs(message.createdAt);
+    return ms === null ? null : zonedDayString(new Date(ms), timeZone);
+  };
   const earlier: T[] = [];
   const recent: T[] = [];
   for (const message of messages) {
-    const ms = momentMs(message.createdAt);
-    const day = ms === null ? null : zonedDayString(new Date(ms), timeZone);
+    const day = dayOf(message);
     if (day !== null && day < yesterday) earlier.push(message);
     else recent.push(message);
   }
@@ -255,17 +258,10 @@ export function foldOlderDays<T extends { createdAt: string }>(
   // and the reply someone opened the thread to read behind a click. The
   // newest day always stays out.
   if (recent.length === 0 && earlier.length > 0) {
-    const lastDayOf = (message: T) => {
-      const ms = momentMs(message.createdAt);
-      return ms === null ? null : zonedDayString(new Date(ms), timeZone);
-    };
-    const lastDay = lastDayOf(earlier[earlier.length - 1]);
-    while (
-      earlier.length > 0 &&
-      lastDayOf(earlier[earlier.length - 1]) === lastDay
-    ) {
-      recent.unshift(earlier.pop() as T);
-    }
+    const lastDay = dayOf(earlier[earlier.length - 1]);
+    let from = earlier.length;
+    while (from > 0 && dayOf(earlier[from - 1]) === lastDay) from--;
+    recent.push(...earlier.splice(from));
   }
   return { earlier, recent };
 }

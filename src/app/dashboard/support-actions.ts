@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import {
   getRecentMatchesForSupport,
   getSupportThread,
@@ -131,10 +132,16 @@ export type SupportDialogLoad =
  */
 export async function loadSupportDialog(): Promise<SupportDialogLoad> {
   try {
-    const supabase = await createClient();
+    const [supabase, workspace] = await Promise.all([
+      createClient(),
+      getWorkspaceContext(),
+    ]);
     const [thread, matches] = await Promise.allSettled([
       getSupportThread(supabase),
-      getRecentMatchesForSupport(supabase),
+      // The thread is the person's; the match picker is the workspace's.
+      workspace
+        ? getRecentMatchesForSupport(supabase, workspace.active)
+        : Promise.resolve([]),
     ]);
     if (thread.status === "rejected") {
       console.error("[support] thread read failed", thread.reason);

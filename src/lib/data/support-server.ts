@@ -3,6 +3,8 @@ import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { buildScoreString, type MatchScore } from "@/lib/data/match-utils";
 import { readMyPlayerIds } from "@/lib/data/opponents-load";
 import { viewerSide } from "@/lib/data/viewer-side";
+import { scopeToWorkspace } from "@/lib/workspace/scope";
+import type { Workspace } from "@/lib/workspace/types";
 import {
   STAFF_NAME_FALLBACK,
   hasUnreadStaff,
@@ -195,6 +197,7 @@ const RECENT_MATCH_LIMIT = 5;
  */
 export async function getRecentMatchesForSupport(
   supabase: SupabaseClient,
+  workspace: Pick<Workspace, "id" | "kind">,
 ): Promise<SupportMatchOption[]> {
   const {
     data: { user },
@@ -204,14 +207,19 @@ export async function getRecentMatchesForSupport(
   const ids = [...new Set([user.id, ...myPlayerIds])];
   const idList = ids.join(",");
 
-  const { data, error } = await supabase
+  // "Your match" (the same rule `send_support_message` checks), inside the
+  // workspace being looked at: a team workspace offers that program's matches,
+  // a personal one the viewer's own unfiled ones — never the other
+  // workspace's, which would read as a personal match filed under the team.
+  const mine = supabase
     .from("matches")
     .select(
       "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, created_at",
     )
     .or(
       `created_by.eq.${user.id},player1_id.in.(${idList}),player2_id.in.(${idList})`,
-    )
+    );
+  const { data, error } = await scopeToWorkspace(mine, workspace, user.id)
     // NULLs last, or an undated row would read as the newest match.
     .order("date", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
