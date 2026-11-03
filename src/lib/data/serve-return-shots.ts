@@ -17,8 +17,10 @@ type ShotLike = { shot_type: string | null; shot_number?: number | null };
 /**
  * The shots from the serve that counted on. Shot 0 holds everything struck
  * before it (`shotNumber`, `splitstep/derivation/result-type.ts`): a faulted
- * first serve, a SwingVision Feed and — on a hand-labelled point — a let or a
- * fault the players played out, rally and all. None of that is the point's
+ * first serve, a SwingVision Feed — typed or not: a serve-less SwingVision
+ * point's shot-0 Forehand is its feed (product decision 2026-11-03) — and, on
+ * a hand-labelled point, a let or a fault the players played out, rally and
+ * all. None of that is the point's
  * return or rally, and a groundstroke there read as the return drew a
  * "backhand return" on an ace. Every shot when the point has nothing numbered
  * from 1 (an untimed import), so a read never comes back empty for want of

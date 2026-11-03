@@ -87,6 +87,14 @@ test.describe("strokes before the counted serve", () => {
     expect(pickReturnShot(shots)).toBe(ret);
   });
 
+  test("a serve-less SwingVision point's shot-0 stroke is its feed", () => {
+    // Live shape: no serve row, a Forehand at 0, the rally from 1
+    // (rally_length 2). Shot 0 is the feed, so the return is shot 1.
+    const ret = row(1, "Forehand");
+    const shots = [row(0, "Forehand"), ret, row(2, "Forehand")];
+    expect(pickReturnShot(shots)).toBe(ret);
+  });
+
   test("a point numbered only 0 keeps every shot", () => {
     const forehand = row(0, "Forehand");
     expect(pickReturnShot([row(0, "Feed"), forehand])).toBe(forehand);
