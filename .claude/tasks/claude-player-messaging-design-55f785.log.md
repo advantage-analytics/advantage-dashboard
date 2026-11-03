@@ -43,3 +43,16 @@ is the runner's. Newest entries at the bottom.
 2. `markStaffRead` is a loader, not a server action — T6 needs a small action wrapping it if called from the browser.
 3. `listSupportThreads` limits 200 by `created_at` before sorting by activity — order by last activity once threads exceed 200.
 4. `internal-activity-mail.ts` keeps its own `SUPPORT_TOPICS` list; import support-view's.
+
+## T6 · Admin › Messages page and header tab — done
+
+**gate:** mechanical pass (full suite again failed only `tests/admin-writes.spec.ts:142` "Delete conference … boundary" — same as T1's gate, before any admin change; with this diff it ran 120/120 under `--repeat-each=5` — load-only flake) · completion `VERDICT: pass`
+**changed:** "Messages · N" tab in admin-header.tsx fed by `countMessagesForNav()` through `loadAdminNav`; `/admin/messages` (force-dynamic) with view pills, "Started from" filter, Player · Started from · Last table and `?id=` deep links; `SupportThreadDrawer` on PeekDrawerFrame (kind "Thread") with folded older days, Read receipts, match links to `/admin/matches/<id>`, and a pinned reply with "Also email a copy" checked by default; `openSupportThread` action wraps the load + `markStaffRead`; MAP.md regenerated. Not opened in a browser.
+**follow-ups:**
+
+1. No `src/app/admin/messages/loading.tsx` skeleton, unlike other admin pages.
+2. The list has no last-message preview or message count (the canvas shows both) — needs a loader change.
+3. "<Player> was last in …" needs a last-seen field the loaders don't have.
+4. `sendStaffMessage` doesn't return `created_at` / author name, so an appended reply uses the browser clock and "You" until reload.
+5. No offline or eyes-on spec for Admin › Messages yet.
+6. "Open the match" goes to `/admin/matches/<id>`; a Labels link needs a match→session lookup.

@@ -5,6 +5,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, supportReplyEmail } from "@/lib/services/email";
 import { claimSend } from "@/lib/services/notifications/should-notify";
 import {
+  getSupportThreadForAdmin,
+  markStaffRead,
+  type AdminSupportThreadDetail,
+} from "@/lib/data/support-admin-server";
+import {
   STAFF_NAME_FALLBACK,
   SUPPORT_MESSAGE_MAX,
 } from "@/lib/data/support-view";
@@ -152,4 +157,45 @@ async function emailReply(
     });
   }
   return true;
+}
+
+export type OpenSupportThreadResult =
+  { ok: true; detail: AdminSupportThreadDetail } | { ok: false; error: string };
+
+/**
+ * The thread drawer opened: read the whole thread and stamp
+ * `staff_read_at` in one round trip. Both loaders re-run
+ * `requireAdminOrNotFound()`. A failed stamp does not keep the thread from
+ * showing — the read is what the admin came for.
+ */
+export async function openSupportThread(
+  threadId: string,
+): Promise<OpenSupportThreadResult> {
+  // First, outside the catches below: a non-admin gets the 404, not a
+  // swallowed error.
+  await requireAdminOrNotFound();
+  if (typeof threadId !== "string" || threadId === "") {
+    return { ok: false, error: "That thread does not exist." };
+  }
+  const [detail] = await Promise.all([
+    getSupportThreadForAdmin(threadId).catch((error: unknown) => {
+      console.error("[support] admin thread read failed", {
+        threadId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }),
+    markStaffRead(threadId).catch((error: unknown) => {
+      console.error("[support] could not mark the thread read", {
+        threadId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }),
+  ]);
+  if (detail === undefined) {
+    return { ok: false, error: "This thread didn't load. Please try again." };
+  }
+  if (detail === null)
+    return { ok: false, error: "That thread does not exist." };
+  return { ok: true, detail };
 }

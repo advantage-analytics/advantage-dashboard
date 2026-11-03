@@ -84,7 +84,7 @@ ready).
 
 ## T6 · Admin › Messages page and header tab
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** src/app/admin/messages/page.tsx (new), src/components/admin/messages-page-content.tsx (new), src/components/admin/messages-table.tsx (new), src/components/admin/support-thread-drawer.tsx (new), src/components/admin/admin-header.tsx, src/lib/data/admin-nav-server.ts, MAP.md — a guess

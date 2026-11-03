@@ -30,6 +30,7 @@ markers is hand-written — edit it as things move.
 | `/admin/labels` | [`src/app/admin/labels/page.tsx`](src/app/admin/labels/page.tsx) |
 | `/admin/matches/[matchId]` | [`src/app/admin/matches/[matchId]/page.tsx`](src/app/admin/matches/[matchId]/page.tsx) |
 | `/admin/matches` | [`src/app/admin/matches/page.tsx`](src/app/admin/matches/page.tsx) |
+| `/admin/messages` | [`src/app/admin/messages/page.tsx`](src/app/admin/messages/page.tsx) |
 | `/admin/outreach` | [`src/app/admin/outreach/page.tsx`](src/app/admin/outreach/page.tsx) |
 | `/admin` | [`src/app/admin/page.tsx`](src/app/admin/page.tsx) |
 | `/admin/pilots` | [`src/app/admin/pilots/page.tsx`](src/app/admin/pilots/page.tsx) |
