@@ -178,12 +178,18 @@ const MAX_EDIT_ATTEMPTS = 3;
  * refuses a session whose `marks_enabled` is false, the gate the marks' own
  * writes share (Restore a ghost, Dismiss a suggestion): that session was
  * labelled blind to the derivation and carries no mark to act on. `blind` is
- * the sentence that says so.
+ * the sentence that says so. With `allowSubmitted`, a `submitted` session
+ * passes like a `labelling` one (the lease still refuses) — for the one write
+ * an admin makes on it, Mark complete (session-status-session.ts); every
+ * labelling write leaves it unset and is refused with `SUBMITTED`.
  */
 export async function readSessionGate(
   supabase: AdminClient,
   sessionId: string,
-  { blind }: { blind?: string } = {},
+  {
+    blind,
+    allowSubmitted = false,
+  }: { blind?: string; allowSubmitted?: boolean } = {},
 ): Promise<{ ghosts: boolean } | { error: string }> {
   const { data, error } = await supabase
     .from("label_sessions")
@@ -196,8 +202,11 @@ export async function readSessionGate(
     }>();
   if (error) return { error: `Could not read the session: ${error.message}` };
   if (!data) return { error: "Session not found." };
-  if (data.status === "submitted") return { error: SUBMITTED };
-  if (data.status !== "labelling") return { error: FROZEN };
+  if (data.status === "submitted") {
+    if (!allowSubmitted) return { error: SUBMITTED };
+  } else if (data.status !== "labelling") {
+    return { error: FROZEN };
+  }
   if (publishLeaseHeld(data.publishing_since)) return { error: PUBLISHING };
   const ghosts = data.marks_enabled === true;
   if (blind !== undefined && !ghosts) return { error: blind };
@@ -208,7 +217,7 @@ export async function readSessionGate(
 export async function checkSessionOpen(
   supabase: AdminClient,
   sessionId: string,
-  options: { blind?: string } = {},
+  options: { blind?: string; allowSubmitted?: boolean } = {},
 ): Promise<string | null> {
   const gate = await readSessionGate(supabase, sessionId, options);
   return "error" in gate ? gate.error : null;

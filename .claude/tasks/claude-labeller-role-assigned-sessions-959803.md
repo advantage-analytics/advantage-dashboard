@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Submit-for-review service and admin status paths
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T2
 - **files:** src/lib/services/labels/submit-session.ts (new), src/lib/services/labels/session-status-session.ts, src/app/admin/labels/actions.ts, tests/label-submit.spec.ts (new) — guesses

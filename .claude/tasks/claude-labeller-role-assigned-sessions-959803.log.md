@@ -32,3 +32,13 @@ is the runner's. Newest entries at the bottom.
 1. `src/lib/data/labels-server.ts` reads (`getLabelSession`, `readLabelPointsByIds`, …) still gate on `requireAdmin`; the labeller console (T6) must pass its own actor.
 2. `editLabelShots` gates each linked write separately (up to 4 round trips per click for a labeller); a single `{ shotIds }` gate would be cheaper.
 3. Labeller-facing UI may want to branch on `ACTOR_REQUIRED` vs `ADMIN_REQUIRED`.
+
+## T4 · Submit-for-review service and admin status paths — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `submit-session.ts` (`submitLabelSession`, gated on `requireLabelActor`): snapshot into `label_submissions` (`rows = { points }`, shots nested), then `label_sessions` → `submitted` / `submitted_at` / `labeller`, matched on `labelling`. Complete accepts a submitted session via `checkSessionOpen(..., { allowSubmitted: true })` and clears `submitted_at` (forced by the live `label_sessions_submitted_check`; the snapshot row keeps the hand-in time). Reopen from submitted → labelling without `unverify_match`. `submitLabelSessionAction` exported; status unions widened to include `submitted`. New `tests/label-submit.spec.ts` (12 tests).
+**follow-ups:**
+
+1. Review diff: read the newest `label_submissions` row for a session and diff against current label rows.
+2. A status race after the snapshot insert leaves an orphan submission row; delete it or have the diff reader take the newest.
+3. Labels board could give submitted sessions their own "review" group instead of folding them into "doing".

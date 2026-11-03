@@ -67,7 +67,7 @@ export interface LabelJobRow {
   /** Null when nobody has started a session for this job yet. */
   session: {
     id: string;
-    status: "labelling" | "complete";
+    status: "labelling" | "submitted" | "complete";
     /** `label_points` with `checked_at` set, excluding tombstones. */
     checked: number;
     /** `label_points` excluding tombstones — the denominator "N of M". */
@@ -120,7 +120,7 @@ interface DbMatch {
 interface DbSession {
   id: string;
   job_id: string;
-  status: "labelling" | "complete";
+  status: "labelling" | "submitted" | "complete";
   started_at: string;
   open_counts: unknown;
 }
@@ -351,7 +351,7 @@ interface DbSessionRow {
   /** Null once the job row is gone (the key is ON DELETE SET NULL). */
   job_id: string | null;
   match_id: string;
-  status: "labelling" | "complete";
+  status: "labelling" | "submitted" | "complete";
   derivation_version: string;
   /** Null until the labeller sets it — then the job's value stands in. */
   ad_scoring: boolean | null;

@@ -52,7 +52,7 @@ export interface GroupableJob {
   player1Name: string;
   player2Name: string;
   completedAt: string | null;
-  session: { status: "labelling" | "complete" } | null;
+  session: { status: "labelling" | "submitted" | "complete" } | null;
 }
 
 /** What grouping reads of a match's owner. A `LabelJobOwner` satisfies it. */

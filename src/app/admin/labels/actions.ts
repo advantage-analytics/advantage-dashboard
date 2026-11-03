@@ -89,6 +89,10 @@ import {
   type LabelSessionStatusResult,
 } from "@/lib/services/labels/session-status-session";
 import {
+  submitLabelSession,
+  type LabelSubmitResult,
+} from "@/lib/services/labels/submit-session";
+import {
   redoLabelOp,
   undoLabelOp,
   type LabelRedoResult,
@@ -506,10 +510,23 @@ export async function updateLabelSessionFieldsAction(
 }
 
 /**
+ * The console header's "Submit for review" (submit-session.ts): the one
+ * status write a labeller may make. A snapshot of the session's rows goes to
+ * `label_submissions`, then `label_sessions.status` to `submitted`; nothing is
+ * published. Refused on a session that is not labelling. Outside
+ * `withLabelOp`, like Mark complete: a status move is not a step to undo.
+ */
+export async function submitLabelSessionAction(
+  sessionId: string,
+): Promise<LabelSubmitResult> {
+  return submitLabelSession(sessionId);
+}
+
+/**
  * The console header's "Mark complete": publishes the labels to the match
  * (apply-session.ts, the replaced version backed up), then `label_sessions.status`
- * to `complete`. Refused on a session that is not labelling, and left open
- * when the publish refuses.
+ * to `complete`. Refused on a session that is not labelling or submitted, and
+ * left as it was when the publish refuses. Admin only.
  */
 export async function completeLabelSessionAction(
   sessionId: string,
@@ -518,8 +535,9 @@ export async function completeLabelSessionAction(
 }
 
 /**
- * The console header's "Reopen": a complete session back to `labelling`.
- * Refused while another session of the same match is open.
+ * The console header's "Reopen": a complete or submitted session back to
+ * `labelling`. From complete, refused while another session of the same
+ * match is open. Admin only.
  */
 export async function reopenLabelSessionAction(
   sessionId: string,

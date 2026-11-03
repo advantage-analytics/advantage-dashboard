@@ -9,8 +9,14 @@
  *
  * Complete is the ordinary gate (`checkSessionOpen`), then a lease: ONE update
  * (`claim_label_publish_lease`) stamping `publishing_since` with the
- * database's clock, matched on `status = 'labelling'` and no fresh lease.
- * While it is held the session stays `labelling` but takes no edits
+ * database's clock, matched on `status in ('labelling', 'submitted')` and no
+ * fresh lease. A `submitted` session (submit-session.ts) is the one the gate
+ * lets through here and nowhere else (`allowSubmitted`): the admin has
+ * reviewed it read-only and Mark complete publishes it as it stands. The close
+ * clears `submitted_at` with the status (the CHECK
+ * `label_sessions_submitted_check` holds the pair together); the
+ * `label_submissions` row keeps the time it was handed in.
+ * While it is held the session stays as it was but takes no edits
  * (the gate refuses them, and so does the database: a label row's write
  * share-locks its session row, so the lease waits for an edit already under
  * way — `20261010212629_label_publish_guards.sql`), no second Complete and
@@ -37,6 +43,12 @@
  * status and writes the reverse, matched on `status = 'complete'`; the partial unique index that allows one open
  * session per job (`label_sessions_one_open_per_job`) refuses it while
  * another session of the match is open.
+ *
+ * Reopen from `submitted` is the smaller move: back to `labelling` with
+ * `submitted_at` cleared, matched on `status = 'submitted'`, so the assigned
+ * labeller may edit again. Nothing was published, so `unverify_match` is not
+ * called and the unique index cannot refuse it (the session already held the
+ * job). The submission row stays, for the diff a later review draws.
  */
 
 import { requestMatchInsights } from "@/lib/services/splitstep/request-insights";
@@ -128,7 +140,11 @@ export async function writeLabelSessionComplete(params: {
   const sessionId = normaliseId(params.sessionId);
   if (!sessionId) return { error: "Invalid session id." };
 
-  const refused = await checkSessionOpen(supabase, sessionId);
+  // A submitted session passes here and nowhere else: this writer is reached
+  // only through `adminGated`, so the admin's review is what lets it through.
+  const refused = await checkSessionOpen(supabase, sessionId, {
+    allowSubmitted: true,
+  });
   if (refused) return { error: refused };
 
   // The lease: taken only on an open session with no fresh lease on it, and
@@ -173,6 +189,9 @@ export async function writeLabelSessionComplete(params: {
         .update({
           status: "complete",
           completed_at: new Date(now()).toISOString(),
+          // Null with the status: `label_sessions_submitted_check` wants the
+          // pair to agree. A no-op on a session that was never submitted.
+          submitted_at: null,
           publishing_since: null,
         })
         .eq("id", sessionId)
@@ -220,7 +239,11 @@ export async function writeLabelSessionComplete(params: {
   return { error: failure };
 }
 
-/** Open a complete session for labelling again. Never throws. */
+/**
+ * Open a complete or submitted session for labelling again. Never throws.
+ * From `complete` the published points stay and Verified by Advantage comes
+ * off; from `submitted` only the status moves.
+ */
 export async function writeLabelSessionReopen(params: {
   supabase: AdminClient;
   sessionId: unknown;
@@ -242,6 +265,22 @@ export async function writeLabelSessionReopen(params: {
     return { error: `Could not read the session: ${readError.message}` };
   }
   if (!session) return { error: "Session not found." };
+  if (session.status === "submitted") {
+    // Nothing was published, so there is no Verified by Advantage to remove
+    // and no second open session to collide with: one UPDATE, matched on the
+    // status it was read in.
+    const { data, error } = await supabase
+      .from("label_sessions")
+      .update({ status: "labelling", submitted_at: null })
+      .eq("id", sessionId)
+      .eq("status", "submitted")
+      .select("id");
+    if (error) {
+      return { error: `Could not reopen the session: ${error.message}` };
+    }
+    if (!data || data.length === 0) return { error: RACED };
+    return { ok: true, status: "labelling" };
+  }
   if (session.status !== "complete") return { error: ALREADY_OPEN };
 
   const { data, error } = await supabase
