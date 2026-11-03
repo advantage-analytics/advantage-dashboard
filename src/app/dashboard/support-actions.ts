@@ -2,11 +2,18 @@
 
 import { createClient } from "@/lib/supabase/server";
 import {
+  getRecentMatchesForSupport,
+  getSupportThread,
+  type SupportMatchOption,
+} from "@/lib/data/support-server";
+import {
   SUPPORT_MESSAGE_MAX,
   isSupportOrigin,
   isSupportTopic,
   sendErrorMessage,
+  type SupportMessage,
   type SupportOrigin,
+  type SupportThread,
   type SupportTopic,
 } from "@/lib/data/support-view";
 
@@ -101,5 +108,54 @@ export async function markPlayerThreadRead(): Promise<SupportActionResult> {
   } catch (cause) {
     console.error("[support] mark_support_thread_read threw", cause);
     return { ok: false, error: "Could not mark your messages as read." };
+  }
+}
+
+export interface SupportDialogData {
+  thread: SupportThread | null;
+  messages: SupportMessage[];
+  /** The composer's "Your matches" group; empty when the read failed. */
+  matches: SupportMatchOption[];
+}
+
+export type SupportDialogLoad =
+  { ok: true; data: SupportDialogData } | { ok: false; error: string };
+
+/**
+ * What "Message Advantage" needs, read when the dialog opens rather than on
+ * every dashboard render: the dialog is closed on nearly every page view, and
+ * the recent-matches read alone is three round trips. Session client, RLS as
+ * the player. A failed matches read only empties the picker; a failed thread
+ * read fails the load, since without it the dialog cannot tell a reply from a
+ * first message.
+ */
+export async function loadSupportDialog(): Promise<SupportDialogLoad> {
+  try {
+    const supabase = await createClient();
+    const [thread, matches] = await Promise.allSettled([
+      getSupportThread(supabase),
+      getRecentMatchesForSupport(supabase),
+    ]);
+    if (thread.status === "rejected") {
+      console.error("[support] thread read failed", thread.reason);
+      return {
+        ok: false,
+        error: "Your messages didn't load. Please try again.",
+      };
+    }
+    if (matches.status === "rejected") {
+      console.error("[support] recent matches read failed", matches.reason);
+    }
+    return {
+      ok: true,
+      data: {
+        thread: thread.value?.thread ?? null,
+        messages: thread.value?.messages ?? [],
+        matches: matches.status === "fulfilled" ? matches.value : [],
+      },
+    };
+  } catch (cause) {
+    console.error("[support] loadSupportDialog threw", cause);
+    return { ok: false, error: "Your messages didn't load. Please try again." };
   }
 }

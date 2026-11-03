@@ -99,7 +99,7 @@ ready).
 
 ## T7 · SupportThreadDialog, "Message Advantage" row, `?messages=open`
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** src/components/dashboard/support/support-thread-dialog.tsx (new), src/components/dashboard/support/support-dialog-mount.tsx (new), src/components/dashboard/dashboard-shell.tsx, src/app/dashboard/header.tsx, src/app/dashboard/layout.tsx, tests/support-dialog.spec.ts (new) — a guess

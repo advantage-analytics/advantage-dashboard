@@ -67,3 +67,14 @@ is the runner's. Newest entries at the bottom.
 1. Fix is one word: "· From {day}" in the fold button, then re-gate. Same wording may be worth aligning in T6's admin drawer.
 2. `MenuSelect` descriptions can't render a mono score sub line; the canvas draws one.
 3. `MenuSelect` can't clear a chosen "About" value.
+
+## T7 · SupportThreadDialog, "Message Advantage" row, `?messages=open` — done
+
+**gate:** mechanical pass (re-run after the fix and again after the widget-states audit) · completion `VERDICT: pass` (given on the pre-stash diff; changes since: "· from" → "· From" plus its spec string, and two widget-states fixes below — none touches a criterion)
+**changed:** Restored stash 0e34674d (applied by SHA, then dropped). `SupportThreadDialog` (RosterDialog 520, compose with grouped "About" MenuSelect, thread view with folded days) and `SupportDialogMount` (`?messages=open` via useSearchParams, closed with router.replace; marks read on open; PostHog `support_message_sent {topic, origin}`), mounted once in DashboardShell; "Message Advantage" row after Help in the account menu; `loadSupportDialog()` loads on open; offline spec 6/6. widget-states audit: skeleton gained `role="status"` + `aria-label="Loading messages"`; a thrown load now settles into the error line instead of an endless skeleton. Empty = compose form; error = DialogProblem.
+**follow-ups:**
+
+1. T6's admin drawer has the same "Show N earlier · from" wording (src/components/admin/support-thread-drawer.tsx:378) — capitalise for consistency.
+2. `MenuSelect` descriptions can't render a mono score sub line; the canvas draws one.
+3. `MenuSelect` can't clear a chosen "About" value.
+4. Each send reloads the dialog's data a second time.
