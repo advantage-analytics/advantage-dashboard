@@ -32,8 +32,9 @@ export const metadata = { title: "Claim under review" };
  * side.
  *
  * The wording must not read as a refusal. Matching is exact against a scraped
- * staff list, so real coaches land here every day: UGA's assistant was recorded
- * at `sport.uga.edu` and writes from `sports.uga.edu`, and took "isn't on the
+ * staff list, so real coaches land here routinely: all 11 claims up to Nov 2,
+ * 2026 did, and none auto-approved. UGA's assistant was recorded at
+ * `sport.uga.edu` and writes from `sports.uga.edu`, and took "isn't on the
  * recorded staff list" for a rejection on a live demo. So this says what is
  * happening and why it is routine, and names who to ask for video sooner. The
  * review is ours, too: nobody contacts the school.
