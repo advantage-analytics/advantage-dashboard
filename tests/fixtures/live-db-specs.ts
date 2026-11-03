@@ -47,6 +47,7 @@ export const LIVE_DB_SPECS = [
   "schedule-outcomes-db.spec.ts",
   "seats-count-players.spec.ts",
   "set-opponent-team-rls.spec.ts",
+  "support-messaging-rls.spec.ts",
   "teams-management.spec.ts",
   // Loopback-only (a local Docker stack), but it creates users all the same.
   "upload-write-eligibility.spec.ts",

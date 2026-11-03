@@ -1,13 +1,16 @@
 /**
  * `POST /api/webhooks/internal-events` — mail the internal alerts inbox about
- * a new signup, a new upload or a first-match feedback answer. The work is
- * `notifyInternalEvent` (`services/notifications/internal-activity-mail.ts`);
- * this file is the wiring.
+ * a new signup, a new upload, a first-match feedback answer or a player's
+ * support message. The work is `notifyInternalEvent`
+ * (`services/notifications/internal-activity-mail.ts`); this file is the
+ * wiring.
  *
- * Called by Postgres: triggers on `public.users`, `processing_jobs`,
- * `match_files` and `product_feedback` post `{ kind, id }` here through
- * `pg_net`, set up by the `internal_activity_alerts` and
- * `internal_alert_feedback` migrations, with the same
+ * Called by Postgres: triggers on `public.users` (`signup`),
+ * `processing_jobs` (`video_upload`), `match_files` (`swingvision_upload`),
+ * `product_feedback` (`feedback`) and `support_messages` (`support_message`,
+ * player rows only) post `{ kind, id }` here through `pg_net`, set up by the
+ * `internal_activity_alerts`, `internal_alert_feedback` and
+ * `support_messaging_triggers` migrations, with the same
  * `Authorization: Bearer $CRON_SECRET` the cron routes take, read there from
  * Vault (`cron_secret`). Excluded from the proxy matcher with the rest of
  * `api/webhooks`.

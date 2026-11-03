@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
@@ -15,8 +15,10 @@ import { LeaveGuardProvider } from "@/components/dashboard/leave-guard-context";
 import { HeaderStatusProvider } from "@/components/dashboard/header-status";
 import { HeaderSlotProvider } from "@/components/dashboard/header-slot";
 import { WorkspaceSync } from "@/components/dashboard/workspace-sync";
+import { ProgramStatusSync } from "@/components/dashboard/program-status-sync";
 import { BetaWelcome } from "@/components/dashboard/beta-welcome-dialog";
 import { FirstMatchFeedback } from "@/components/dashboard/feedback/first-match-feedback";
+import { SupportDialogMount } from "@/components/dashboard/support/support-dialog-mount";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
   STORAGE_KEYS,
@@ -127,6 +129,7 @@ export function DashboardShell({
                 {/* Keeps this chrome on the workspace the cookie names — see
                   WorkspaceSync for why a navigation can leave it behind. */}
                 <WorkspaceSync />
+                <ProgramStatusSync />
                 <div className="flex h-dvh w-full overflow-hidden bg-white">
                   <AppSidebar />
                   {/* The gutter is reserved even when nothing overflows: with
@@ -154,6 +157,14 @@ export function DashboardShell({
                             <FirstMatchFeedback />
                           </>
                         )}
+                      {/* "Message Advantage": everywhere, the wizard
+                        included — the player asked for it, so nothing here
+                        is an interruption. Open while `?messages=open` is
+                        in the URL. Suspense because it reads
+                        `useSearchParams()`. */}
+                      <Suspense fallback={null}>
+                        <SupportDialogMount />
+                      </Suspense>
                       <PageTransition>{children}</PageTransition>
                     </main>
                   </div>

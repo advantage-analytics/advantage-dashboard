@@ -12,7 +12,28 @@
  * ordered by `shot_number` ascending so "first" means earliest.
  */
 
-type ShotLike = { shot_type: string | null };
+type ShotLike = { shot_type: string | null; shot_number?: number | null };
+
+/**
+ * The shots from the serve that counted on. Shot 0 holds everything struck
+ * before it (`shotNumber`, `splitstep/derivation/result-type.ts`): a faulted
+ * first serve, a SwingVision Feed — typed or not: a serve-less SwingVision
+ * point's shot-0 Forehand is its feed (product decision 2026-11-03) — and, on
+ * a hand-labelled point, a let or a fault the players played out, rally and
+ * all. None of that is the point's
+ * return or rally, and a groundstroke there read as the return drew a
+ * "backhand return" on an ace. Every shot when the point has nothing numbered
+ * from 1 (an untimed import), so a read never comes back empty for want of
+ * numbering. Without `shotNumber` the list is returned as it is.
+ */
+export function countedShots<T>(
+  shots: readonly T[],
+  shotNumber?: (shot: T) => number | null | undefined,
+): readonly T[] {
+  if (!shotNumber) return shots;
+  const counted = shots.filter((s) => (shotNumber(s) ?? 0) >= 1);
+  return counted.length > 0 ? counted : shots;
+}
 
 /** True for either serve row (`First Serve`/`Second Serve`) — a faulted
  * first serve and the second serve actually played can share `shot_number`,
@@ -42,8 +63,13 @@ export function isFeedShotType(shotType: string | null | undefined): boolean {
 export function pickServeShotBy<T>(
   shots: T[],
   shotType: (shot: T) => string | null | undefined,
+  /** Each shot's `shot_number`, to skip what came before the serve that
+   * counted ({@link countedShots}). */
+  shotNumber?: (shot: T) => number | null | undefined,
 ): T | undefined {
-  const serveRows = shots.filter((s) => isServeShotType(shotType(s)));
+  const serveRows = countedShots(shots, shotNumber).filter((s) =>
+    isServeShotType(shotType(s)),
+  );
   return (
     serveRows.find((s) => shotType(s) === "Second Serve") ??
     serveRows.find((s) => shotType(s) === "First Serve")
@@ -55,12 +81,17 @@ export function pickServeShotBy<T>(
  * `undefined` when the point has no serve row at all.
  */
 export function pickServeShot<T extends ShotLike>(shots: T[]): T | undefined {
-  return pickServeShotBy(shots, (s) => s.shot_type);
+  return pickServeShotBy(
+    shots,
+    (s) => s.shot_type,
+    (s) => s.shot_number,
+  );
 }
 
-/** The return: the first shot that is neither a serve nor a feed. */
+/** The return: the first shot from the counted serve on
+ * ({@link countedShots}) that is neither a serve nor a feed. */
 export function pickReturnShot<T extends ShotLike>(shots: T[]): T | undefined {
-  return shots.find(
+  return countedShots(shots, (s) => s.shot_number).find(
     (s) => !isServeShotType(s.shot_type) && !isFeedShotType(s.shot_type),
   );
 }
@@ -83,8 +114,10 @@ export function pickReturnShot<T extends ShotLike>(shots: T[]): T | undefined {
 export function pickRallyShots<T>(
   shots: T[],
   shotType: (shot: T) => string | null | undefined,
+  /** Each shot's `shot_number` ({@link countedShots}). */
+  shotNumber?: (shot: T) => number | null | undefined,
 ): T[] {
-  const afterServe = shots.filter((s) => {
+  const afterServe = countedShots(shots, shotNumber).filter((s) => {
     const t = shotType(s);
     return !isServeShotType(t) && !isFeedShotType(t);
   });

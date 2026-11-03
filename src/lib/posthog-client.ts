@@ -3,7 +3,8 @@
 // posthog-js directly reads this instead of re-deriving it.
 // instrumentation-client.ts keeps its own read because posthog.init() needs
 // the values, not just a boolean; server code uses getPostHogServerConfig()
-// in posthog-logs.ts. Both honour isPostHogOffInDev below.
+// in posthog-logs.ts. Both honour isPostHogOffInDev below; the server also
+// stays off on a production build outside Vercel (isLocalProductionServer).
 
 /**
  * `next dev` sends nothing to PostHog unless NEXT_PUBLIC_POSTHOG_IN_DEV=true.

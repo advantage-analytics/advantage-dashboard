@@ -144,7 +144,12 @@ export default function Page() {
       <div className="flex flex-col gap-[16px]">
         {error ? <ErrorText>{error}</ErrorText> : null}
 
-        <AuthButton onClick={() => window.open("mailto:", "_blank")}>
+        {/* In place, not `window.open` — see `SignUpSuccess`. */}
+        <AuthButton
+          onClick={() => {
+            window.location.href = "mailto:";
+          }}
+        >
           Open Email App
         </AuthButton>
 

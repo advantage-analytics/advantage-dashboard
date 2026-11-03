@@ -1,5 +1,9 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
-import { isFeedShotType, isServeShotType } from "@/lib/data/serve-return-shots";
+import {
+  countedShots,
+  isFeedShotType,
+  isServeShotType,
+} from "@/lib/data/serve-return-shots";
 import type { Match } from "@/lib/data/types";
 
 import { playerHands } from "../../player-hands";
@@ -785,7 +789,9 @@ export function cameToNet(point: MatchPoint, isPlayer1: boolean): boolean {
  * The shot that ended the point — its kind and who struck it. Serve and
  * Return are picked by ROLE (a serve row; the first non-serve, non-feed row),
  * the same classification the loader uses for `firstShot*`/`secondShot*`, so
- * a Feed row or two serve rows sharing shot 1 do not shift them. A row with no
+ * a Feed row or two serve rows sharing shot 1 do not shift them, and the
+ * return is looked for only from the counted serve on (`countedShots`): a
+ * stroke of a played-out let or fault is not it. A row with no
  * type falls back to its shot number (1 = serve, 2 = return). Without shot
  * rows it reads `lastShotType` and the loader's `point.player`.
  */
@@ -811,7 +817,7 @@ export function finalShotOf(
     kind = "Serve";
   } else if (
     last ===
-    shots.find(
+    countedShots(shots, (s) => s.shotNumber).find(
       (s) => !isServeShotType(s.shotType) && !isFeedShotType(s.shotType),
     )
   ) {

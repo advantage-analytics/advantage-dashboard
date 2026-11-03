@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { unstable_rethrow, usePathname } from "next/navigation";
+import { unstable_rethrow, usePathname, useRouter } from "next/navigation";
 import { Activity, Check, ChevronRight, Circle, Users } from "lucide-react";
 import {
   Popover,
@@ -32,6 +32,8 @@ import { invitationHref } from "@/lib/services/programs/join-links";
 import { acceptPendingInvite } from "@/lib/services/programs/join-actions";
 import { inviteSubtitle } from "@/lib/services/programs/join-role";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
+import { messagesHref } from "@/components/dashboard/support/support-dialog-mount";
+import { STAFF_NAME_FALLBACK } from "@/lib/data/support-view";
 import { trayDetail } from "./tray-detail";
 import { setupOutstanding, type SetupStep } from "./tray-setup";
 import { trayStartedDay, trayStartedTitle } from "./tray-started";
@@ -53,6 +55,8 @@ import type {
 // Supabase server client. This file is `"use client"`, so a value import would
 // drag the server module into the browser bundle.
 import type { PendingInvite } from "@/lib/data/pending-invites-server";
+// Type-only for the same reason: `support-server.ts` is the server loader.
+import { NO_SUPPORT, type SupportUnread } from "@/lib/data/support-view";
 import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
 import { cn } from "@/lib/utils";
 
@@ -78,8 +82,17 @@ import { cn } from "@/lib/utils";
  * the tray and the page it opens say "running" and "failed" in one glyph. The
  * blue dot is left to the one row waiting on the reader, an invitation: blue
  * in the chrome means "this needs you", on the row and on the trigger alike.
- * The Roster's ink-400 `Users` marks a staff-only "joined the team" row,
+ * An unread note from Advantage staff is the other such row and takes the
+ * same dot; once read, its row stays (the newest note, for the "Open match"
+ * link and the way back into the thread) with the column left empty, and
+ * stops lighting the trigger. The Roster's ink-400 `Users` marks a staff-only "joined the team" row,
  * which is news rather than a task. Nothing renders without one.
+ *
+ * ── Row order ──────────────────────────────────────────────────────────────
+ * Getting set up (grey, its own section) · a staff note · invitations ·
+ * in-flight work · failures · joins (behind a hairline) · other workspaces'
+ * uploads (behind a hairline). The staff note leads the feed: a person at
+ * Advantage wrote to this reader, which no other row can say.
  *
  * ── Actions are always visible ─────────────────────────────────────────────
  * A popover cannot be hovered on touch, and the rows with an action are the
@@ -456,6 +469,80 @@ function InviteRow({
 }
 
 /**
+ * The newest note from Advantage staff, in the invitation row's anatomy.
+ *
+ * Wash, 12px title, an 11px one-line preview, then the action line: a blue
+ * "Read and reply" that opens the "Message Advantage" dialog over this page
+ * (`?messages=open`, through the account menu row's own `messagesHref`), and
+ * a grey "Open match" when the note was written about a match. The dialog
+ * stamps the thread read on open and refreshes, which is what clears this
+ * row's dot and the trigger's — no "mark read" here.
+ *
+ * "Read and reply" is a button, not a link, for the same reason the account
+ * menu's is: the search string is read at click time, so every other param on
+ * the page survives without this component subscribing to `useSearchParams`.
+ */
+function SupportNoteRow({
+  note,
+  unread,
+  onOpen,
+}: {
+  note: NonNullable<SupportUnread["latestStaff"]>;
+  unread: boolean;
+  onOpen: () => void;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const from =
+    note.authorName === STAFF_NAME_FALLBACK
+      ? STAFF_NAME_FALLBACK
+      : `${note.authorName} at Advantage`;
+
+  return (
+    <div
+      data-row="support-note"
+      className={cn(ROW_CLASS, "bg-[var(--surface-subtle)]")}
+    >
+      <Lead>{unread && DOT}</Lead>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="min-w-0 text-[12px] [text-wrap:pretty] text-[var(--ink-900)]">
+          Note from <b className="font-medium">{from}</b>
+          {unread && <span className="sr-only">, unread</span>}
+        </span>
+        <span className="mt-[3px] truncate text-[11px] text-[var(--ink-500)]">
+          {note.preview}
+        </span>
+
+        <span className="mt-2.5 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => {
+              onOpen();
+              router.replace(
+                messagesHref(pathname, window.location.search, true),
+                { scroll: false },
+              );
+            }}
+            className={TEXT_ACTION_CLASS}
+          >
+            Read and reply
+          </button>
+          {note.matchId && (
+            <Link
+              href={`/dashboard/matches/${note.matchId}`}
+              onClick={onOpen}
+              className={TEXT_LINK_CLASS}
+            >
+              Open match
+            </Link>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Someone who joined the active program — staff see this, nobody else.
  *
  * News, not a task: the leading glyph is the Roster's own `Users` in ink-400
@@ -646,6 +733,7 @@ export function ActivityTray({
   elsewhere,
   joins,
   setup = [],
+  support = NO_SUPPORT,
 }: {
   feed: ActivityFeed;
   invites: PendingInvite[];
@@ -659,6 +747,11 @@ export function ActivityTray({
    * open, and never counted toward the dot or the tooltip.
    */
   setup?: SetupStep[];
+  /**
+   * The viewer's "Message Advantage" thread. Its newest staff note is a row
+   * whenever there is one; only an unread one lights the dot and the tooltip.
+   */
+  support?: SupportUnread;
 }) {
   const { viewer } = useWorkspace();
   const [isOpen, setIsOpen] = useState(false);
@@ -722,7 +815,13 @@ export function ActivityTray({
   // would learn about anyway. Failures count because their row is a way out
   // of the failure — a dot that vanished the moment an upload failed was
   // saying "nothing here" over the one row that needed someone.
-  const unread = inFlight.length + invites.length + failed.length;
+  // An unread staff note counts for the same reason an invitation does — it
+  // is addressed to the reader — and stops counting once the dialog stamps it
+  // read. `feedRows` is the feed alone, for the empty line beneath the note.
+  const note = support.latestStaff;
+  const unreadNotes = note && support.unreadStaff ? 1 : 0;
+  const feedRows = inFlight.length + invites.length + failed.length;
+  const unread = feedRows + unreadNotes;
   const elsewhereCount = elsewhere.reduce((sum, work) => sum + work.count, 0);
 
   // The trigger carries a dot, not a number: the chrome has no numeric badges,
@@ -734,6 +833,7 @@ export function ActivityTray({
     elsewhereCount,
     failed.length,
     joins.length,
+    unreadNotes,
   );
   const approved = useMemo(
     () => new Set(approvedInviteIds),
@@ -807,7 +907,17 @@ export function ActivityTray({
           {setupOutstanding(setup) && (
             <SetupSection steps={setup} onOpen={() => setIsOpen(false)} />
           )}
-          {unread > 0 || joins.length > 0 ? (
+          {/* Outside the feed's conditional, like setup above it: a note the
+              reader has already read is still a row, and the feed's own empty
+              line still prints beneath it when nothing else is here. */}
+          {note && (
+            <SupportNoteRow
+              note={note}
+              unread={support.unreadStaff}
+              onOpen={() => setIsOpen(false)}
+            />
+          )}
+          {feedRows > 0 || joins.length > 0 ? (
             <>
               {invites.map((invite) => (
                 <InviteRow
@@ -824,7 +934,7 @@ export function ActivityTray({
               ))}
               {/* News after anything waiting on the reader, behind a hairline
                   when there is something above it to separate from. */}
-              {joins.length > 0 && unread > 0 && (
+              {joins.length > 0 && (feedRows > 0 || note) && (
                 <div className="mx-2.5 my-1.5 h-px bg-[var(--border-hairline)]" />
               )}
               {joins.map((join) => (
