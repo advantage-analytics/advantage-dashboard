@@ -11,7 +11,8 @@
  * (`seed`), added strokes left out and nothing dismissed — the match as the
  * console first opens it. The flags are the console's own point builders
  * (marks-state.ts) run on that view twice, before and after the autofix,
- * with ghosts off. The truth for a stroke is its row now: where the labeller
+ * with ghosts on, as a marks-on session draws them and as the seed leaves
+ * the site's removed strokes out of a serve's rally. The truth for a stroke is its row now: where the labeller
  * left it, moved it, re-called it or deleted it. A session seeded after the
  * autofix shipped already carries it in its seed, so it moves nothing there.
  *
@@ -33,6 +34,8 @@ import {
 } from "@/lib/services/labels/marks-state";
 import {
   pulledBackServeLanding,
+  pullbackShot,
+  serveMiss,
   servePlayedOn,
   type CourtPoint,
 } from "@/lib/services/labels/serve-autofix";
@@ -47,7 +50,8 @@ import { loadEnvLocal } from "./lib/env";
 
 loadEnvLocal();
 
-const GHOSTS = false;
+/** The site's removed strokes are ghosts, never rally strokes. */
+const GHOSTS = true;
 
 /** The point builders whose answer can move with a stroke's coordinates. */
 const FLAGS = {
@@ -99,17 +103,6 @@ function seedView(point: LabelPoint): LabelPoint {
   };
 }
 
-function geometry(shot: LabelShot) {
-  return {
-    stroke: shot.stroke,
-    contact_x: shot.contactX,
-    contact_y: shot.contactY,
-    landing_x: shot.landingX,
-    landing_y: shot.landingY,
-    result: shot.result,
-  };
-}
-
 /** Whether the rally went on after `shot`, read off its point's live strokes. */
 function playedOn(point: LabelPoint, shot: LabelShot): boolean {
   const live = liveShotsInOrder(point, GHOSTS);
@@ -119,7 +112,7 @@ function playedOn(point: LabelPoint, shot: LabelShot): boolean {
 
 /** The pulled-back landing for `shot`, or null when the autofix leaves it. */
 function fixFor(point: LabelPoint, shot: LabelShot): CourtPoint | null {
-  return pulledBackServeLanding(geometry(shot), {
+  return pulledBackServeLanding(pullbackShot(shot), {
     playedOn: playedOn(point, shot),
   });
 }
@@ -158,9 +151,10 @@ function countLandingMisses(points: readonly LabelPoint[]): number {
 
 /** How far past the box the vendor's bounce was, as a band. */
 function missBand(shot: LabelShot): string {
-  const towards = Math.sign(11.885 - shot.contactY!);
-  const depth = (shot.landingY! - 11.885) * towards;
-  const miss = Math.max(depth - 6.4, Math.abs(shot.landingX!) - 4.115);
+  const miss = serveMiss(shot.contactY!, {
+    x: shot.landingX!,
+    y: shot.landingY!,
+  });
   return miss <= 0.3 ? "a ≤0.3 m" : miss <= 1 ? "b 0.3–1 m" : "c 1–2 m";
 }
 

@@ -31,7 +31,7 @@ import {
 } from "../splitstep/derivation/court";
 import type { LabelPointSeed, LabelShotResult } from "./seed";
 import { deriveShotResult, type ShotGeometry } from "./shot-derived";
-import { isServeStroke, type LabelStroke } from "./session";
+import { isServeStroke, type LabelShot, type LabelStroke } from "./session";
 import { DEAD_BALL_TAIL } from "./suggestions";
 
 /** How far inside the line a pulled-back landing is put, metres. */
@@ -58,11 +58,23 @@ export interface CourtPoint {
 /** What the pull-back reads of a stroke: its ends, and the stored call. */
 export type PullbackShot = ShotGeometry & { result: LabelShotResult | null };
 
+/** The pull-back's view of a console stroke. */
+export function pullbackShot(shot: LabelShot): PullbackShot {
+  return {
+    stroke: shot.stroke,
+    result: shot.result,
+    contact_x: shot.contactX,
+    contact_y: shot.contactY,
+    landing_x: shot.landingX,
+    landing_y: shot.landingY,
+  };
+}
+
 /**
  * How far past the box a serve's landing is, metres — the larger of long and
  * wide, negative inside — measured on the receiving side.
  */
-function serveMiss(contactY: number, landing: CourtPoint): number {
+export function serveMiss(contactY: number, landing: CourtPoint): number {
   const depth = (landing.y - NET_Y) * Math.sign(NET_Y - contactY);
   return Math.max(
     depth - SERVICE_LINE_M,
@@ -115,10 +127,12 @@ export function pulledBackServeLanding(
     landingDepth > longLine
       ? (longLine - contactDepth) / (landingDepth - contactDepth)
       : 1;
-  const tWide =
-    Math.abs(landing_x) > sideLine
-      ? (Math.sign(landing_x) * sideLine - contact_x) / (landing_x - contact_x)
-      : 1;
+  const wide = Math.abs(landing_x) > sideLine;
+  // Wide, on a path parallel to the sideline: it never comes back inside.
+  if (wide && landing_x === contact_x) return null;
+  const tWide = wide
+    ? (Math.sign(landing_x) * sideLine - contact_x) / (landing_x - contact_x)
+    : 1;
   const t = Math.min(tLong, tWide);
   const pulled = {
     x: round(contact_x + t * (landing_x - contact_x)),

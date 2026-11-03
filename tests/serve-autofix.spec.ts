@@ -93,6 +93,12 @@ test.describe("pulledBackServeLanding", () => {
         playedOn: true,
       }),
     ).toBeNull();
+    // Wide on a path parallel to the sideline.
+    expect(
+      pulledBackServeLanding(
+        serve({ contact_x: -4.5, landing_x: -4.5, landing_y: NET_Y + 4 }),
+      ),
+    ).toBeNull();
     // An end missing.
     expect(pulledBackServeLanding(serve({ landing_x: null }))).toBeNull();
   });

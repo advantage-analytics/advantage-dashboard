@@ -25,6 +25,7 @@ import { UUID_RE } from "@/lib/admin/validation";
 import { readLabelSessionRows } from "@/lib/data/labels-server";
 import {
   pulledBackServeLanding,
+  pullbackShot,
   servePlayedOn,
 } from "@/lib/services/labels/serve-autofix";
 import { liveShotsInOrder } from "@/lib/services/labels/session";
@@ -52,20 +53,13 @@ async function plan(db: AdminClient, sessionId: string): Promise<Move[]> {
   const moves: Move[] = [];
   for (const point of built.session.points) {
     if (point.status === "deleted") continue;
-    const live = liveShotsInOrder(point, false);
+    // Ghosts left out, as the seed leaves the site's removed strokes out.
+    const live = liveShotsInOrder(point, true);
     live.forEach((shot, index) => {
       if (shot.status !== "kept" || !shot.seed) return;
-      const to = pulledBackServeLanding(
-        {
-          stroke: shot.stroke,
-          result: shot.result,
-          contact_x: shot.contactX,
-          contact_y: shot.contactY,
-          landing_x: shot.landingX,
-          landing_y: shot.landingY,
-        },
-        { playedOn: servePlayedOn(live, index) },
-      );
+      const to = pulledBackServeLanding(pullbackShot(shot), {
+        playedOn: servePlayedOn(live, index),
+      });
       if (!to) return;
       moves.push({
         shotId: shot.id,
