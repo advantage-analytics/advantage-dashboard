@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { redirect, notFound } from "next/navigation";
 import { loginRedirectPath } from "@/lib/auth/request-path";
+import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -92,3 +93,96 @@ export const requireAdminOrNotFound = cache(
     return { id: user.id };
   },
 );
+
+// ── Labelling: admin or assigned labeller ──────────────────────────────────
+
+export type LabelActorKind = "admin" | "labeller";
+/** Who may work a labelling session: an admin, or the labeller it is assigned to. */
+export interface LabelActor {
+  id: string;
+  kind: LabelActorKind;
+}
+
+/**
+ * The session a label write names, for `requireLabelActor`. Only the row
+ * columns the gate reads; `label-actor.ts` resolves a point or shot to one.
+ */
+interface LabelSessionGateRow {
+  assigned_to: string | null;
+  status: string;
+}
+
+/** What `requireLabelActor` needs; specs pass fakes. */
+export interface LabelActorDependencies {
+  checkAdmin: () => Promise<AdminCheck>;
+  createClient: () => Promise<{
+    auth: {
+      getUser: () => Promise<{
+        data: { user: { id: string } | null };
+      }>;
+    };
+  }>;
+  createAdminClient: () => AdminClient;
+}
+export const defaultLabelActorDependencies: LabelActorDependencies = {
+  checkAdmin,
+  createClient,
+  createAdminClient,
+};
+
+/**
+ * The labelling console's gate, where every label service used to ask
+ * `requireAdmin()` alone.
+ *
+ * An admin is `kind: "admin"` on any session, decided by `checkAdmin()` with
+ * no session read — the console they already hold works every match. Anyone
+ * else must be a labeller (`users.is_labeller`, read service-role: the column
+ * has no client grant, so a user cannot read — or write — their own) AND the
+ * session must be assigned to them AND still `labelling`. A `submitted`
+ * session is out of the labeller's hands until an admin reopens it, and a
+ * `complete` one is frozen for everyone, so both refuse here before the
+ * service's own `checkSessionOpen` would.
+ *
+ * Every refusal is `null`, never a throw: the services turn it into the one
+ * sentence they already show (`ACTOR_REQUIRED`). Not `cache()`d: the admin
+ * branch is cached through `checkAdmin()`, and the labeller branch varies on
+ * `sessionId` — a server action is one request working one session, so a
+ * second read in the same request is the rare case, not the common one.
+ */
+export async function requireLabelActor(
+  sessionId: string,
+  deps: LabelActorDependencies = defaultLabelActorDependencies,
+): Promise<LabelActor | null> {
+  const check = await deps.checkAdmin();
+  if (check.ok) return { id: check.id, kind: "admin" };
+  // No session at all: nothing to look up a labeller for.
+  if (check.status === 401) return null;
+  if (!sessionId) return null;
+
+  const supabase = await deps.createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const admin = deps.createAdminClient();
+  const [labeller, session] = await Promise.all([
+    admin
+      .from("users")
+      .select("is_labeller")
+      .eq("id", user.id)
+      .maybeSingle<{ is_labeller: boolean }>(),
+    admin
+      .from("label_sessions")
+      .select("assigned_to, status")
+      .eq("id", sessionId)
+      .maybeSingle<LabelSessionGateRow>(),
+  ]);
+  if (labeller.error || session.error) return null;
+  if (labeller.data?.is_labeller !== true) return null;
+  if (!session.data) return null;
+  if (session.data.assigned_to !== user.id) return null;
+  if (session.data.status !== "labelling") return null;
+
+  return { id: user.id, kind: "labeller" };
+}

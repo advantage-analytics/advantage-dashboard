@@ -12,3 +12,13 @@ is the runner's. Newest entries at the bottom.
 1. Note in the users-column-grants memory: SELECT on `users` is table-wide, so only UPDATE needs a column grant.
 2. Consider a CHECK `(assigned_to is null) = (assigned_at is null)` once T7's unassign semantics settle.
 3. A live spec asserting an authenticated user cannot set their own `is_labeller`.
+
+## T2 · requireLabelActor guard and session resolver — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `admin-guard.ts` gains `requireLabelActor(sessionId, deps?)` (admin via `checkAdmin` with no session read; labeller needs `is_labeller`, `assigned_to = uid`, `status = 'labelling'`, read service-role; otherwise `null`) with injectable `LabelActorDependencies`; existing guards untouched. New `src/lib/services/labels/label-actor.ts` with `LabelActorTarget`, `resolveLabelSessionId` and `requireLabelActorFor`. New offline `tests/label-actor.spec.ts` (16 tests).
+**follow-ups:**
+
+1. Batch targets use one `.in("id", ids)`; switch to `idChunks` if a batch can exceed ~100 ids.
+2. The labeller branch calls `getUser()` again because `checkAdmin`'s 403 carries no uid; widening it would save a call.
+3. A join could cut a labeller's check from three reads to two.

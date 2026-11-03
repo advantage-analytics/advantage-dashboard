@@ -32,7 +32,7 @@ ready).
 
 ## T2 · requireLabelActor guard and session resolver
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** src/lib/services/programs/admin-guard.ts, src/lib/services/labels/label-actor.ts (new), tests/label-actor.spec.ts (new) — guesses
