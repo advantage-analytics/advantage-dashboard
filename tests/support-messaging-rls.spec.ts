@@ -10,6 +10,7 @@ import {
   runMarker,
 } from "./fixtures/live-db";
 import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
+import { getRecentMatchesForSupport } from "@/lib/data/support-server";
 
 /**
  * In-app player messaging (migration 20261103055820, `support_messaging`):
@@ -335,5 +336,32 @@ test.describe("support messaging: RLS and send guards (live)", () => {
     );
     expect(byUser.get(a.userId)).not.toBeNull();
     expect(byUser.get(b.userId)).toBeNull();
+  });
+
+  // ── 6. The "About" picker reads the real schema ─────────────────────────
+  //
+  // The offline spec's fake client accepts any column name, so a select
+  // naming a column `matches` does not have (it once asked for `created_at`)
+  // passed there and emptied the picker in the app. This runs the real query.
+
+  test("the About picker lists A's own personal match and not B's", async () => {
+    const personal = await getRecentMatchesForSupport(a.client, {
+      id: a.userId,
+      kind: "personal",
+    });
+    const ids = personal.map((m) => m.id);
+    expect(ids).toContain(aMatchId);
+    expect(ids).not.toContain(bMatchId);
+    const mine = personal.find((m) => m.id === aMatchId);
+    expect(mine?.label).toBe("vs. Support RLS Opp a");
+    expect(mine?.scoreText).not.toBe("");
+  });
+
+  test("the About picker in a program A is not in lists nothing", async () => {
+    const team = await getRecentMatchesForSupport(a.client, {
+      id: "00000000-0000-0000-0000-000000000000",
+      kind: "team",
+    });
+    expect(team).toEqual([]);
   });
 });

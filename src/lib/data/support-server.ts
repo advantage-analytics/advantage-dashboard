@@ -183,17 +183,19 @@ interface DbRecentMatch {
   player2_name: string | null;
   created_by: string | null;
   score: MatchScore | null;
-  created_at: string;
 }
 
 const RECENT_MATCH_LIMIT = 5;
 
 /**
- * The composer's "About a match" picker: the viewer's five newest matches.
+ * The composer's "About a match" picker: the viewer's five newest matches in
+ * the workspace they are looking at.
  *
  * "The viewer's" is the rule `send_support_message()` checks a match against
  * — they recorded it, or sit in a seat under either id `my_player_ids()`
- * returns — so every option offered is one the RPC accepts.
+ * returns — so every option offered is one the RPC accepts. The workspace
+ * narrows that further (`scopeToWorkspace()`), so a team workspace never lists
+ * a personal match or the reverse.
  */
 export async function getRecentMatchesForSupport(
   supabase: SupabaseClient,
@@ -207,14 +209,10 @@ export async function getRecentMatchesForSupport(
   const ids = [...new Set([user.id, ...myPlayerIds])];
   const idList = ids.join(",");
 
-  // "Your match" (the same rule `send_support_message` checks), inside the
-  // workspace being looked at: a team workspace offers that program's matches,
-  // a personal one the viewer's own unfiled ones — never the other
-  // workspace's, which would read as a personal match filed under the team.
   const mine = supabase
     .from("matches")
     .select(
-      "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, created_at",
+      "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score",
     )
     .or(
       `created_by.eq.${user.id},player1_id.in.(${idList}),player2_id.in.(${idList})`,
@@ -222,7 +220,9 @@ export async function getRecentMatchesForSupport(
   const { data, error } = await scopeToWorkspace(mine, workspace, user.id)
     // NULLs last, or an undated row would read as the newest match.
     .order("date", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false })
+    // `matches` has no `created_at`; the id breaks a same-day tie only so the
+    // order is stable between opens.
+    .order("id", { ascending: false })
     .limit(RECENT_MATCH_LIMIT);
   if (error) {
     throw new Error("Could not load your recent matches", { cause: error });
