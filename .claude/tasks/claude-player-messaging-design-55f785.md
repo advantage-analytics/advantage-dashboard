@@ -70,7 +70,7 @@ ready).
 
 ## T5 · Support data layer and server actions
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T4
 - **files:** src/lib/data/support-server.ts (new), src/lib/data/support-admin-server.ts (new), src/lib/data/support-view.ts (new, pure), src/app/dashboard/support-actions.ts (new), src/app/admin/messages/actions.ts (new), tests/support-view.spec.ts (new) — a guess

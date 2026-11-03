@@ -2,6 +2,10 @@ import {
   FIRST_MATCH_FEEDBACK_WORDS,
   type FirstMatchFeedbackRating,
 } from "@/lib/feedback/first-match-feedback";
+import {
+  topicLabel as supportTopicLabel,
+  type SupportTopic,
+} from "@/lib/data/support-view";
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
 
@@ -224,18 +228,12 @@ export function feedbackInternalEmail(
   };
 }
 
-/** `support_messages.topic`, as the CHECK constraint spells it. */
-export type SupportMessageTopic =
-  "match" | "upload" | "billing" | "team" | "idea" | "other";
-
-const TOPIC_LABEL: Record<SupportMessageTopic, string> = {
-  match: "A match",
-  upload: "An upload",
-  billing: "Billing",
-  team: "My team",
-  idea: "An idea",
-  other: "Something else",
-};
+/**
+ * `support_messages.topic`, as the CHECK constraint spells it. The type and
+ * its labels live in `@/lib/data/support-view` (`topicLabel()`), the one copy
+ * the in-app thread and this alert share.
+ */
+export type SupportMessageTopic = SupportTopic;
 
 export interface SupportMessageInternalInput {
   /** `INTERNAL_ALERTS_ADDRESS`, passed by the caller. */
@@ -281,7 +279,7 @@ export function supportMessageInternalEmail(
   const who =
     [playerName, playerEmail && `(${playerEmail})`].filter(Boolean).join(" ") ||
     "Unknown — account deleted";
-  const topicLabel = topic ? TOPIC_LABEL[topic] : null;
+  const topicLabel = supportTopicLabel(topic);
   const paragraphs = body
     .split(/\r?\n/)
     .map((line) => line.trim())

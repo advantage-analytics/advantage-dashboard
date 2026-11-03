@@ -32,3 +32,14 @@ is the runner's. Newest entries at the bottom.
 
 1. `playerFirstName` and `sentAt` are accepted but not rendered (the canvas has no greeting or timestamp) — add a "Hi {name}" line if wanted.
 2. The index.ts row says "WIRED once T5 lands" — correct once T5 commits.
+
+## T5 · Support data layer and server actions — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+**changed:** `support-view.ts` (pure helpers, shared topic/origin labels and types), `support-server.ts` (player thread, unread state, 5 recent matches — explicit columns, no staff ids), `support-admin-server.ts` (admin guard + service role: list, thread, nav count, markStaffRead), `support-actions.ts` (sendPlayerMessage, markPlayerThreadRead) and `admin/messages/actions.ts` (sendStaffMessage with the email copy under claimSend, stamped only after a successful send). Internal email now imports topic labels from support-view.ts. Not run against the live DB — specs cover the pure helpers.
+**follow-ups:**
+
+1. No `revalidatePath` after writes — T6/T7 must refresh or add it.
+2. `markStaffRead` is a loader, not a server action — T6 needs a small action wrapping it if called from the browser.
+3. `listSupportThreads` limits 200 by `created_at` before sorting by activity — order by last activity once threads exceed 200.
+4. `internal-activity-mail.ts` keeps its own `SUPPORT_TOPICS` list; import support-view's.
