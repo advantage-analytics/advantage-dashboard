@@ -12,3 +12,14 @@ is the runner's. Newest entries at the bottom.
 1. Drop `'admin'` from the origins a player may pass to `send_support_message` (keep it in the table check for service-role threads).
 2. Players can read staff `author_id`, `email_copy_sent_at`, `staff_read_at` on their rows — select explicit columns in T5's loader; column-level grants later if it matters.
 3. Migration header overstates the stamp trigger's grant (it is revoked from everyone, granted to no one) — fix the comment next time the file is touched.
+
+## T2 · Internal alerts accept kind `support_message` — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+**changed:** `support_message` is a fifth internal-event kind: `notifySupportMessage` (service role; player rows only; test-account and `claimSend` duplicate guards; match named "A vs. B") and `supportMessageInternalEmail` (full body, facts, "Reply in admin" → `/admin/messages?id=<thread>`), exported with a doc-table row; route doc comment lists all five kinds; spec cases for parse + render.
+**follow-ups:**
+
+1. Must be deployed to production before T3's trigger goes live (pg_net does not retry).
+2. Route comment names the T3 migration `support_messaging_triggers` — update it if T3 picks another name.
+3. Topic labels live only in the email template; share one source with the player UI in T5/T7.
+4. `templates/internal-activity.ts` header still says "the two FYIs" (stale since the feedback alert).

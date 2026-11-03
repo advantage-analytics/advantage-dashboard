@@ -223,3 +223,99 @@ export function feedbackInternalEmail(
     tags: { type: "feedback_internal", rating: String(rating) },
   };
 }
+
+/** `support_messages.topic`, as the CHECK constraint spells it. */
+export type SupportMessageTopic =
+  "match" | "upload" | "billing" | "team" | "idea" | "other";
+
+const TOPIC_LABEL: Record<SupportMessageTopic, string> = {
+  match: "A match",
+  upload: "An upload",
+  billing: "Billing",
+  team: "My team",
+  idea: "An idea",
+  other: "Something else",
+};
+
+export interface SupportMessageInternalInput {
+  /** `INTERNAL_ALERTS_ADDRESS`, passed by the caller. */
+  to: string;
+  /** `support_messages.id`. */
+  messageId: string;
+  /** The thread's `user_id` — the player who wrote it. */
+  userId: string;
+  playerName: string | null;
+  playerEmail: string | null;
+  /** Null when the player picked no topic (feedback-opened threads). */
+  topic: SupportMessageTopic | null;
+  /** "A vs. B" when the message names a match, else null. */
+  matchTitle: string | null;
+  /** The message in full. */
+  body: string;
+  /** Pre-built by the caller: `${emailOrigin()}/admin/messages?id=<thread_id>`. */
+  adminUrl: string;
+}
+
+/**
+ * A player wrote to Advantage from the in-app thread. Like the feedback
+ * alert, the player's own words are the point, so the message is the body in
+ * full — one paragraph per line, so a list or a pasted error keeps its shape.
+ * Answering happens in the admin console, not by replying to this mail.
+ */
+export function supportMessageInternalEmail(
+  input: SupportMessageInternalInput,
+): EmailMessage {
+  const {
+    to,
+    messageId,
+    userId,
+    playerName,
+    playerEmail,
+    topic,
+    matchTitle,
+    body,
+    adminUrl,
+  } = input;
+
+  const player = playerName ?? playerEmail ?? "A player";
+  const who =
+    [playerName, playerEmail && `(${playerEmail})`].filter(Boolean).join(" ") ||
+    "Unknown — account deleted";
+  const topicLabel = topic ? TOPIC_LABEL[topic] : null;
+  const paragraphs = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const content: EmailContent = {
+    preheader: `${player} sent a message${topicLabel ? ` about ${topicLabel.toLowerCase()}` : ""}.`,
+    eyebrow: "Player message",
+    heading: `Message from ${player}`,
+    body: [
+      [
+        { text: player, strong: true },
+        {
+          text: ` wrote${matchTitle ? ` about ${matchTitle}` : ""}:`,
+        },
+      ],
+      ...(paragraphs.length ? paragraphs : ["(Empty message.)"]),
+    ],
+    facts: [
+      { label: "Player", value: who },
+      ...(topicLabel ? [{ label: "Topic", value: topicLabel }] : []),
+      ...(matchTitle ? [{ label: "Match", value: matchTitle }] : []),
+      { label: "Account", value: userId },
+      { label: "Message id", value: messageId },
+    ],
+    cta: { label: "Reply in admin", url: adminUrl },
+    note: "Sent to the internal alerts inbox, once per message. Reply from the admin console — replying to this email does not reach the player.",
+  };
+
+  return {
+    to,
+    subject: `Message from ${player}${topicLabel ? `: ${topicLabel}` : ""}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "support_message_internal" },
+  };
+}

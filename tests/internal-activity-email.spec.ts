@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   feedbackInternalEmail,
   signupInternalEmail,
+  supportMessageInternalEmail,
   uploadInternalEmail,
   type UploadInternalInput,
 } from "@/lib/services/email";
@@ -20,6 +21,8 @@ import {
 const USER = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
 const MATCH = "0a1b2c3d-4e5f-4061-8273-8495a6b7c8d9";
 const FEEDBACK = "5b6c7d8e-9f00-4a1b-8c2d-3e4f5a6b7c8d";
+const MESSAGE = "7c8d9e0f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
+const THREAD = "8d9e0f1a-2b3c-4d4e-9f50-6a7b8c9d0e1f";
 
 function expectResendSafeTags(tags: Record<string, string> | undefined) {
   // Resend rejects anything outside ASCII letters, numbers, `_` and `-`.
@@ -164,12 +167,62 @@ test("feedback: two days or more reads in days", () => {
   expect(msg.text).toContain("Answered: 3 days after first reading it");
 });
 
-test("parseInternalEvent accepts the four kinds the triggers send", () => {
+test("support message: the body in full, facts, tags and admin link", () => {
+  const adminUrl = `https://app.example.test/admin/messages?id=${THREAD}`;
+  const msg = supportMessageInternalEmail({
+    to: "team@advantage-analytics.com",
+    messageId: MESSAGE,
+    userId: USER,
+    playerName: "Maya Chen",
+    playerEmail: "maya@stanford.edu",
+    topic: "match",
+    matchTitle: "Maya Chen vs. Lena Ortiz",
+    body: "The second set score is wrong.\nIt should read 6-4, not 6-3.",
+    adminUrl,
+  });
+
+  expect(msg.subject).toBe("Message from Maya Chen: A match");
+  expect(msg.tags).toEqual({ type: "support_message_internal" });
+  expectResendSafeTags(msg.tags);
+  for (const part of [msg.text, msg.html]) {
+    expect(part).toContain("The second set score is wrong.");
+    expect(part).toContain("It should read 6-4, not 6-3.");
+    expect(part).toContain(adminUrl);
+  }
+  expect(msg.text).toContain("Player: Maya Chen (maya@stanford.edu)");
+  expect(msg.text).toContain("Topic: A match");
+  expect(msg.text).toContain("Match: Maya Chen vs. Lena Ortiz");
+  expect(msg.text).toContain(`Message id: ${MESSAGE}`);
+  expect(msg.html).toContain(`<a href="${adminUrl}"`);
+});
+
+test("support message: no topic, no match, a deleted player still renders", () => {
+  const msg = supportMessageInternalEmail({
+    to: "team@advantage-analytics.com",
+    messageId: MESSAGE,
+    userId: USER,
+    playerName: null,
+    playerEmail: null,
+    topic: null,
+    matchTitle: null,
+    body: "Loving the serve charts.",
+    adminUrl: `https://app.example.test/admin/messages?id=${THREAD}`,
+  });
+
+  expect(msg.subject).toBe("Message from A player");
+  expect(msg.text).toContain("Loving the serve charts.");
+  expect(msg.text).toContain("Player: Unknown — account deleted");
+  expect(msg.text).not.toContain("Topic:");
+  expect(msg.text).not.toContain("Match:");
+});
+
+test("parseInternalEvent accepts the five kinds the triggers send", () => {
   for (const kind of [
     "signup",
     "video_upload",
     "swingvision_upload",
     "feedback",
+    "support_message",
   ]) {
     expect(parseInternalEvent({ kind, id: USER })).toEqual({ kind, id: USER });
   }
@@ -183,6 +236,7 @@ test("parseInternalEvent refuses anything else", () => {
     {},
     { kind: "signup" },
     { kind: "deleted", id: USER },
+    { kind: "support_messages", id: USER },
     { kind: "signup", id: "not-a-uuid" },
     { kind: "signup", id: `${USER}; drop table users` },
     { kind: ["signup"], id: USER },

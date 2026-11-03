@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Internal alerts accept kind `support_message`
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/services/notifications/internal-activity-mail.ts, src/lib/services/email/templates/internal-activity.ts, src/lib/services/email/index.ts, tests/internal-activity-email.spec.ts — a guess
 - **done when:**
