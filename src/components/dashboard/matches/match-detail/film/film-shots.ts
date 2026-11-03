@@ -275,9 +275,10 @@ function isServeRow(shotType: string): boolean {
  * Works from the point's FULL `shots` (`MatchPoint.shots`, already in
  * `shot_number` order), never the timed-only feed ({@link shotStops}): an
  * untimed serve still decides where the rally starts. Look a displayed shot
- * up by id. `shot_number` itself is never read — Advantage Intelligence
- * stores a faulted serve at 0 and older SwingVision Feed rows are 0 too — and
- * neither is `rally_length`, which is 0 when the source never recorded it.
+ * up by id. `shot_number` is read only to find the played second serve
+ * among the shots from the counted serve on (`countedShots`) — a let or fault
+ * played out before it sits at 0 and may carry a second serve of its own —
+ * and `rally_length` not at all: it is 0 when the source never recorded it.
  */
 export interface RallyNumbering {
   numbers: ReadonlyMap<string, number>;
@@ -302,7 +303,7 @@ export function rallyNumbering(
   // SwingVision stores both serves at shot_number 1 and the loader breaks
   // that tie by uuid, so "the last serve row" is the faulted one about half
   // the time. Stored order is only the fallback (one serve, or bare "Serve").
-  const secondServe = list.find((s) => {
+  const secondServe = countedShots(list, (s) => s.shotNumber).find((s) => {
     const type = s.shotType?.trim() ?? "";
     return isServeRow(type) && /second|2nd/i.test(type);
   });
@@ -353,12 +354,10 @@ export function isRallyOpener(
 export function pointReturnShotId(
   shots: readonly MatchShot[] | undefined,
 ): string | null {
-  const found = countedShots([...(shots ?? [])], (s) => s.shotNumber).find(
-    (s) => {
-      const type = s.shotType?.trim() ?? "";
-      return type !== "" && !isServeRow(type) && !isFeedShotType(type);
-    },
-  );
+  const found = countedShots(shots ?? [], (s) => s.shotNumber).find((s) => {
+    const type = s.shotType?.trim() ?? "";
+    return type !== "" && !isServeRow(type) && !isFeedShotType(type);
+  });
   return found?.id ?? null;
 }
 

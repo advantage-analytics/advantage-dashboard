@@ -416,3 +416,16 @@ test("two serves read 1, keep distinct names, and only the played one is darker"
     false,
   ]);
 });
+
+test("rally numbers: a second serve from a played-out let does not open the rally", () => {
+  // Moore v Baek point 29, hand-labelled: a fault and a second serve played
+  // out at shot_number 0, then the ace that counted at 1.
+  const replayed = [
+    shot("d0", 1, { shotType: "First Serve", shotNumber: 0 }),
+    shot("d1", 2, { shotType: "Second Serve", shotNumber: 0 }),
+    shot("d2", 3, { shotType: "Backhand", shotNumber: 0 }),
+    shot("d3", 4, { shotType: "First Serve", shotNumber: 1 }),
+  ];
+  expect(rallyNumbering(replayed)).toMatchObject({ count: 1, openerId: "d3" });
+  expect(pointReturnShotId(replayed)).toBeNull();
+});

@@ -25,9 +25,9 @@ type ShotLike = { shot_type: string | null; shot_number?: number | null };
  * numbering. Without `shotNumber` the list is returned as it is.
  */
 export function countedShots<T>(
-  shots: T[],
+  shots: readonly T[],
   shotNumber?: (shot: T) => number | null | undefined,
-): T[] {
+): readonly T[] {
   if (!shotNumber) return shots;
   const counted = shots.filter((s) => (shotNumber(s) ?? 0) >= 1);
   return counted.length > 0 ? counted : shots;
