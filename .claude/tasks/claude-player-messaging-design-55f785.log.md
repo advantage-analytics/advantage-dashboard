@@ -56,3 +56,14 @@ is the runner's. Newest entries at the bottom.
 4. `sendStaffMessage` doesn't return `created_at` / author name, so an appended reply uses the browser clock and "You" until reload.
 5. No offline or eyes-on spec for Admin › Messages yet.
 6. "Open the match" goes to `/admin/matches/<id>`; a Labels link needs a match→session lookup.
+
+## T7 · SupportThreadDialog, "Message Advantage" row, `?messages=open` — blocked
+
+**gate:** mechanical FAIL — `tests/design-drift.spec.ts` "lower-case middot segment: 3 (seed 2)": `src/components/dashboard/support/support-thread-dialog.tsx:389` renders "Show {n} earlier · from {day}" (segment after the middot must start with a capital — sentence case per segment). Everything else in the full suite passed (9,079). Completion review had returned `VERDICT: pass` (reviewed in parallel; void because the mechanical stage failed).
+**stash:** 0e34674d8111621c5f776b23fe1dd25adc4d7990 (`blocked: T7`)
+**changed (stashed, not committed):** SupportThreadDialog + SupportDialogMount (`?messages=open`), "Message Advantage" account-menu row, `loadSupportDialog()` action, mount in DashboardShell, offline spec 5/5.
+**follow-ups:**
+
+1. Fix is one word: "· From {day}" in the fold button, then re-gate. Same wording may be worth aligning in T6's admin drawer.
+2. `MenuSelect` descriptions can't render a mono score sub line; the canvas draws one.
+3. `MenuSelect` can't clear a chosen "About" value.
