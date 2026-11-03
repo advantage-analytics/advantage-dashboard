@@ -791,8 +791,8 @@ export function cameToNet(point: MatchPoint, isPlayer1: boolean): boolean {
  * the same classification the loader uses for `firstShot*`/`secondShot*`, so
  * a Feed row or two serve rows sharing shot 1 do not shift them, and the
  * return is looked for only from the counted serve on (`countedShots`): a
- * stroke of a played-out let or fault is not it. A row with no
- * type falls back to its shot number (1 = serve, 2 = return). Without shot
+ * stroke of a played-out let or fault is not it. A row with no type falls
+ * back to its shot number (1 = serve, 2 = return). Without shot
  * rows it reads `lastShotType` and the loader's `point.player`.
  */
 export function finalShotOf(
