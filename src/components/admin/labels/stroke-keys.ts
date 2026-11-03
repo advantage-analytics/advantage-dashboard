@@ -163,27 +163,44 @@ export function frameTimePatch(
   return { video_time: videoTime };
 }
 
-/** Whether a key is L, the let key (⇧L is the player's Loop). */
+/**
+ * Whether a key is L, the let key. Case alone does not say ⇧: Caps Lock
+ * sends "L" unshifted, so the console reads `event.shiftKey` for ⇧L, the
+ * player's Loop.
+ */
 export function isLetKey(key: string): boolean {
-  return key === "l";
+  return key === "l" || key === "L";
+}
+
+/**
+ * Whether the Serve result menu offers Let on `shot`: a serve, with lets
+ * replayed (`playOnLets` false) or already marked one (stored before the rule
+ * changed, so it can still be undone).
+ */
+export function serveOffersLet(
+  shot: LabelShot,
+  playOnLets: boolean | undefined,
+): boolean {
+  return (
+    isServeStroke(shot.stroke) && (playOnLets === false || isLetServe(shot))
+  );
 }
 
 /**
  * L on `shot`: a serve marked a let, or a let given back the result its
- * landing reads (`deriveShotResult`, the Result menu's calculated item).
- * Null on a rally stroke — a let is a serve's alone (edit.ts
- * `letResultError`) — and where the menu offers no Let: played on
- * (`playOnLets`), a serve not already a let.
+ * landing reads (`deriveShotResult`, the Result menu's calculated item; a
+ * serve's landing is a bounce, so no stroke after it meets it in the air).
+ * Null where the menu offers no Let (`serveOffersLet`) — a rally stroke, a
+ * serve played on. A let is a serve's alone (edit.ts `letResultError`).
  */
 export function letKeyPatch(
   shot: LabelShot,
   playOnLets: boolean,
 ): LabelShotPatch | null {
-  if (!isServeStroke(shot.stroke)) return null;
-  if (isLetServe(shot)) {
-    return { result: deriveShotResult(labelShotValues(shot)) };
-  }
-  return playOnLets ? null : { result: "let" };
+  if (!serveOffersLet(shot, playOnLets)) return null;
+  return {
+    result: isLetServe(shot) ? deriveShotResult(labelShotValues(shot)) : "let",
+  };
 }
 
 /** What the Forced | Unforced pair and E read off a point. */

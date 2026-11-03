@@ -3323,17 +3323,21 @@ export function LabelConsole({
     // point's; else the open point's first, selected first so the next key
     // lands on it too. A selection left behind in another point — the film
     // played or was clicked on into this one — never takes a key meant for
-    // the point on screen.
-    const keyShot = (): LabelShot | null => {
+    // the point on screen. `accept`, when given, turns down a stroke before
+    // it is selected, so a key with nothing to write moves nothing.
+    const keyShot = (
+      accept: (shot: LabelShot) => boolean = () => true,
+    ): LabelShot | null => {
       const selected =
         placement.shotId === null ? null : findShot(points, placement.shotId);
-      const live = selected && selected.status !== "deleted" ? selected : null;
+      const kept = selected && selected.status !== "deleted" ? selected : null;
+      const live = kept && accept(kept) ? kept : null;
       if (!expanded || unfoldedPointId !== expanded.id) return live;
-      if (live && expanded.shots.some((shot) => shot.id === live.id)) {
+      if (kept && expanded.shots.some((shot) => shot.id === kept.id)) {
         return live;
       }
       const first = liveShotsInOrder(expanded, drawsGhosts(marks))[0];
-      if (!first) return null;
+      if (!first || !accept(first)) return null;
       (document.activeElement as HTMLElement | null)?.blur?.();
       selectShot(first.id, undefined, { seek: false });
       return first;
@@ -3436,13 +3440,15 @@ export function LabelConsole({
     };
     // L on a serve marks it a let, and again gives it back the result its
     // landing reads (`letKeyPatch`), as the Serve result menu does: only
-    // where that menu offers Let. A rally stroke does not take the key.
+    // where that menu offers Let. A rally stroke does not take the key, and
+    // is never selected by it.
     letKey.current = () => {
       if (!operable || confirm) return false;
-      const shot = keyShot();
-      if (!shot) return false;
-      const patch = letKeyPatch(shot, session.playOnLets);
-      if (!patch) return false;
+      const patchFor = (shot: LabelShot) =>
+        letKeyPatch(shot, session.playOnLets);
+      const shot = keyShot((s) => patchFor(s) !== null);
+      const patch = shot && patchFor(shot);
+      if (!shot || !patch) return false;
       requestPatchShot(shot.id, patch);
       return true;
     };
@@ -3595,9 +3601,9 @@ export function LabelConsole({
       // A stroke key reaches the selected stroke from a focused cell too (a
       // cell is a button), and so do A / ⇧A (add a stroke after / before),
       // C (contact ↔ landing), X (flip side), H (hitter), T (time = frame), E
-      // (forced ↔ unforced), L (let), Delete / Backspace (delete the stroke) and R / ⇧R
-      // (ask to reset the stroke / point); a text field, a menu and a dialog
-      // keep all of them.
+      // (forced ↔ unforced), L (let), Delete / Backspace (delete the stroke)
+      // and R / ⇧R (ask to reset the stroke / point); a text field, a menu and
+      // a dialog keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
       const consoleKey = isStrokeKey(key)
         ? () => strokeKey.current(key)
@@ -3617,7 +3623,7 @@ export function LabelConsole({
                     ? () => errorKindKey.current()
                     : isUnforcedKey(key) && !event.shiftKey
                       ? () => unforcedKey.current()
-                      : isLetKey(key)
+                      : isLetKey(key) && !event.shiftKey
                         ? () => letKey.current()
                         : lower === "r"
                           ? event.shiftKey

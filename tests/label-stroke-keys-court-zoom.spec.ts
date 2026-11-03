@@ -349,9 +349,11 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     expect(source).toContain("? () => endKey.current()");
     // A shot key acts on the open point's stroke: a selection left in
     // another point gives way to the open point's first.
-    expect(source).toContain("const keyShot = (): LabelShot | null =>");
+    expect(source).toMatch(
+      /const keyShot = \(\s*accept: \(shot: LabelShot\) => boolean = \(\) => true,\s*\): LabelShot \| null =>/,
+    );
     expect(source).toContain(
-      "if (live && expanded.shots.some((shot) => shot.id === live.id))",
+      "if (kept && expanded.shots.some((shot) => shot.id === kept.id))",
     );
     expect(source).toContain(
       "if (expanded && owner.id !== expanded.id) return false;",
@@ -528,6 +530,10 @@ test.describe("E: forced or unforced, on the stroke that ended the point in an e
 });
 
 test.describe("L: a serve's let", () => {
+  const source = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
   const serve = (fields: Parameters<typeof labelShot>[2] = {}) =>
     labelShot("l-serve", "l-point", { stroke: "first_serve", ...fields });
   // Lets replayed: `playOnLets` false.
@@ -566,10 +572,30 @@ test.describe("L: a serve's let", () => {
     });
   });
 
-  test("plain L only: ⇧L is the player's Loop", () => {
+  test("L either case; ⇧ is read off the event, so Caps Lock keeps both keys", () => {
     expect(isLetKey("l")).toBe(true);
-    for (const key of ["L", "t", "ll"]) expect(isLetKey(key), key).toBe(false);
+    expect(isLetKey("L")).toBe(true);
+    for (const key of ["t", "ll"]) expect(isLetKey(key), key).toBe(false);
     expect(isStrokeKey("l")).toBe(false);
+    // The console takes L unshifted; the player loops on ⇧L alone.
+    expect(source).toMatch(
+      /: isLetKey\(key\) && !event\.shiftKey\s+\? \(\) => letKey\.current\(\)/,
+    );
+    const video = readFileSync(
+      "src/components/admin/labels/label-video.tsx",
+      "utf8",
+    );
+    expect(video).toContain('if (event.shiftKey !== (key === "l")) return;');
+  });
+
+  test("L on the console: guarded like E, and selects no stroke it will not mark", () => {
+    const body = source.slice(source.indexOf("    letKey.current = () => {"));
+    const fn = body.slice(0, body.indexOf("\n    };\n"));
+    expect(fn).toContain("if (!operable || confirm) return false;");
+    expect(fn).toContain("keyShot((s) => patchFor(s) !== null)");
+    expect(fn).toContain("requestPatchShot(shot.id, patch);");
+    // `keyShot` turns a stroke down before it selects it.
+    expect(source).toContain("if (!first || !accept(first)) return null;");
   });
 });
 
