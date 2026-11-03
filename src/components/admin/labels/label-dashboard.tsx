@@ -5,6 +5,12 @@ import { ArrowUpRight, Check, CircleAlert } from "lucide-react";
 import type { LabelUploadInfo } from "@/lib/data/label-overview-server";
 import { buildAppliedRows, expectedStats } from "@/lib/services/labels/apply";
 import {
+  allErrorsJudged,
+  isMarkableError,
+  unmarkableErrors,
+} from "@/lib/services/labels/ending-derived";
+import {
+  errorStops,
   flagGroups,
   openFlags,
   type FlagGroup,
@@ -27,7 +33,8 @@ import {
   labelSetScores,
   type LabelSetScore,
 } from "@/lib/services/labels/set-scores";
-import { PUBLISHED_PAST_TAILS } from "@/lib/services/labels/session-status";
+import { partialPublishWarnings } from "@/lib/services/labels/session-status";
+import { advButton } from "@/lib/ui/adv-button";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +78,10 @@ export interface LabelDashboardProps {
   videoEndsEarly: boolean | null;
   /** `completeWarnings(...)`: what "Mark complete" would list. */
   warnings: readonly string[];
+  /** Whether the console is asking for the errors yet (`errorMarkingReady`). */
+  errorsReady?: boolean;
+  /** Start marking errors, full screen. Absent: the check only reads. */
+  onMarkErrors?: () => void;
   /** The session is published; nothing is left to do but read. */
   complete: boolean;
   /** What the uploader entered; null when it could not be read. */
@@ -613,14 +624,10 @@ interface CheckItem {
   detail: string;
   /** Where to go to deal with it. */
   pointId?: string;
+  /** A way in other than a point: a quiet link, or the card's one button. */
+  link?: { label: string; onClick: () => void };
+  button?: { label: string; onClick: () => void };
 }
-
-/**
- * The endings `completeWarnings` gives a point a publish writes only partly,
- * or leaves out. None blocks a publish any more (2026-10-18); each stays an
- * open check.
- */
-const PUBLISHED_PAST: readonly string[] = Object.values(PUBLISHED_PAST_TAILS);
 
 /** The route to publishing, as the things that must be true first. */
 function publishChecks({
@@ -629,6 +636,8 @@ function publishChecks({
   warnings,
   videoEndsEarly,
   reading,
+  errorsReady = false,
+  onMarkErrors,
 }: WidgetProps): CheckItem[] {
   const { sets, entered, flagged } = reading;
   const { checked, total } = labelProgress(points);
@@ -648,11 +657,7 @@ function publishChecks({
     0,
   );
   // A point the publish writes only partly, or leaves out.
-  const partial = warnings.filter(
-    (warning) =>
-      !warning.startsWith("Set ") &&
-      PUBLISHED_PAST.some((tail) => warning.endsWith(tail)),
-  );
+  const partial = partialPublishWarnings(warnings);
   const plural = (n: number, one: string, many = `${one}s`) =>
     `${n} ${n === 1 ? one : many}`;
 
@@ -740,7 +745,66 @@ function publishChecks({
           title: "Every game finished",
           detail: "No game is short or runs over.",
         },
+    errorsCheck(points, errorsReady, onMarkErrors),
   ];
+}
+
+/**
+ * Every error marked forced or unforced. Open, never blocking: a publish with
+ * errors unmarked reports plain Errors. Until the rest is settled it waits, and
+ * says so, with a quiet way to start anyway; then it asks.
+ */
+export function errorsCheck(
+  points: readonly LabelPoint[],
+  ready: boolean,
+  onMarkErrors?: () => void,
+): CheckItem {
+  const title = "Every error marked";
+  const total = points.filter(isMarkableError);
+  const left = errorStops(points).length;
+  // No stroke to mark: nothing can ask about it, and it holds the split back.
+  const unmarkable = unmarkableErrors(points).length;
+  const heldBack =
+    unmarkable === 1
+      ? "1 error has no shots to mark, so this match shows Errors only."
+      : `${unmarkable} errors have no shots to mark, so this match shows Errors only.`;
+  if (total.length === 0) {
+    return unmarkable > 0
+      ? { state: "open", title, detail: heldBack }
+      : { state: "done", title, detail: "No error to mark." };
+  }
+  if (left === 0) {
+    const forced = total.filter((p) => p.errorKind === "forced").length;
+    const counts = `${forced} forced, ${total.length - forced} unforced.`;
+    return unmarkable > 0
+      ? { state: "open", title, detail: `${counts} ${heldBack}` }
+      : { state: "done", title, detail: counts };
+  }
+  if (!ready) {
+    return {
+      state: "open",
+      title,
+      detail: `${left} to mark. It asks once the score is settled.`,
+      link: onMarkErrors
+        ? { label: "Mark now", onClick: onMarkErrors }
+        : undefined,
+    };
+  }
+  const marked = total.length - left;
+  return {
+    state: "open",
+    title,
+    detail:
+      marked > 0
+        ? `${marked} of ${total.length} marked. Publish now and the match reports plain Errors, with your marks kept.`
+        : `Forced or unforced, ${left} to mark. Publish without them and the match reports plain Errors.`,
+    button: onMarkErrors
+      ? {
+          label: `Mark ${left} ${left === 1 ? "error" : "errors"}`,
+          onClick: onMarkErrors,
+        }
+      : undefined,
+  };
 }
 
 const CHECK_WORD: Record<CheckState, string> = {
@@ -811,7 +875,28 @@ function PublishCheck(props: WidgetProps) {
                     Open
                   </PointLink>
                 ) : null}
+                {check.link ? (
+                  <PointLink
+                    onClick={check.link.onClick}
+                    label={check.link.label}
+                  >
+                    {check.link.label}
+                  </PointLink>
+                ) : null}
               </span>
+              {check.button ? (
+                <button
+                  type="button"
+                  data-mark-errors=""
+                  onClick={check.button.onClick}
+                  className={cn(
+                    advButton("primary", "sm"),
+                    "mt-2.5 self-start",
+                  )}
+                >
+                  {check.button.label}
+                </button>
+              ) : null}
             </div>
           </li>
         ))}
@@ -961,8 +1046,10 @@ const pct = (part: number, whole: number) =>
 /**
  * The rows a publish would write, counted, head to head: each statistic a
  * pair of bars sharing one track, split in proportion, the larger in ink.
+ * Errors read as one row until every one is marked (`allErrorsJudged`), as the
+ * published report will: a Forced row of zero would read as a fact.
  */
-function Statistics({ reading, names }: WidgetProps) {
+function Statistics({ reading, names, points }: WidgetProps) {
   const { stats } = reading;
   if (!stats || stats.points === 0) {
     return (
@@ -972,14 +1059,25 @@ function Statistics({ reading, names }: WidgetProps) {
     );
   }
   const { p1, p2 } = stats;
+  const errorRows: [string, number, number][] = allErrorsJudged(points)
+    ? [
+        ["Unforced errors", p1.unforcedErrors, p2.unforcedErrors],
+        ["Forced errors", p1.forcedErrors, p2.forcedErrors],
+      ]
+    : [
+        [
+          "Errors",
+          p1.unforcedErrors + p1.forcedErrors,
+          p2.unforcedErrors + p2.forcedErrors,
+        ],
+      ];
   const rows: [string, number, number, string?][] = [
     ["Points won", p1.pointsWon, p2.pointsWon],
     ["Aces", p1.aces, p2.aces],
     ["Double faults", p1.doubleFaults, p2.doubleFaults],
     ["Service winners", p1.serviceWinners, p2.serviceWinners],
     ["Winners", p1.winners, p2.winners],
-    ["Unforced errors", p1.unforcedErrors, p2.unforcedErrors],
-    ["Forced errors", p1.forcedErrors, p2.forcedErrors],
+    ...errorRows,
     [
       "First serves in",
       pct(p1.firstServesIn, p1.firstServes),

@@ -170,7 +170,7 @@ export type ErrorKindPoint = Pick<
 /**
  * The stroke the Forced | Unforced pair sits on, and the one E answers on:
  * the last stroke the publish writes (a let aside), while the point will
- * publish as an error (`isMarkableError`, the Mark complete gate's reading).
+ * publish as an error (`isMarkableError`, the Mark complete warning's reading).
  * Null on any other point. Never read off a stored `errorKind`: a kind stays
  * stored when a later edit stops the point ending on an error, and then
  * nothing offers it.
@@ -188,6 +188,11 @@ export function nextErrorKind(current: LabelErrorKind | null): LabelErrorKind {
 /** Whether a key is E, the forced-or-unforced key. */
 export function isErrorKindKey(key: string): boolean {
   return key === "e" || key === "E";
+}
+
+/** Whether a key is U, which says unforced outright. */
+export function isUnforcedKey(key: string): boolean {
+  return key === "u" || key === "U";
 }
 
 /**

@@ -98,7 +98,7 @@ test.describe("the shortcut sheet", () => {
     expect(shot.items[at]).toEqual({
       keys: ["E"],
       action: "Forced or unforced error",
-      note: "On a missed last shot. Again to switch back",
+      note: "On a missed last shot. Again to switch back. While asked, forced and on to the next",
     });
     expect(shot.items[at - 1].action).toBe("Serve");
     // One row on the sheet uses E, alone or in a combo.

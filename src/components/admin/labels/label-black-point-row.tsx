@@ -61,6 +61,7 @@ import {
   withoutGhosts,
 } from "./label-black-format";
 import { MarkChip, PencilMark, pointRowMarks } from "./label-black-mark";
+import { LabelErrorChip } from "./label-error-marking";
 import type { SideNames } from "./label-format";
 import { PointMenu } from "./label-point-menu";
 import { isCombinedTombstone } from "@/lib/services/labels/point-combine";
@@ -170,6 +171,7 @@ export const BlackPointRow = memo(function BlackPointRow({
   score,
   edit,
   marks = null,
+  errorToMark = false,
   onToggle,
   children,
 }: {
@@ -182,6 +184,8 @@ export const BlackPointRow = memo(function BlackPointRow({
   edit: EditContext;
   /** The session's marks. Null draws no chip at all. */
   marks?: LabelMarks | null;
+  /** The rail is asking for this point's error (`errorStops`): its blue chip. */
+  errorToMark?: boolean;
   onToggle?: (pointId: string) => void;
   children?: React.ReactNode;
 }) {
@@ -277,6 +281,7 @@ export const BlackPointRow = memo(function BlackPointRow({
           data-row-tail=""
           className={cn("inline-flex items-center gap-2", slide)}
         >
+          {errorToMark ? <LabelErrorChip /> : null}
           {rowMarks?.flag ? <MarkChip {...rowMarks.flag} /> : null}
           {changed ? (
             <PencilMark
