@@ -27,17 +27,39 @@ export type LogLevel = "info" | "warn" | "error";
  * NEXT_PUBLIC_ vars are the only thing safe to import into a browser bundle,
  * and this one is imported by server-only files.
  *
- * Null under `next dev` unless NEXT_PUBLIC_POSTHOG_IN_DEV=true — see
- * isPostHogOffInDev.
+ * Null under `next dev`, and for a production build run outside Vercel,
+ * unless NEXT_PUBLIC_POSTHOG_IN_DEV=true — see isPostHogOffInDev and
+ * isLocalProductionServer.
  */
 export function getPostHogServerConfig(): {
   token: string;
   host: string;
 } | null {
-  if (isPostHogOffInDev) return null;
+  if (isPostHogOffInDev || isLocalProductionServer()) return null;
   const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
   const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
   return token && host ? { token, host } : null;
+}
+
+/**
+ * `next build && next start` on a laptop or in an agent sandbox runs with
+ * NODE_ENV=production, so isPostHogOffInDev does not catch it — yet it shares
+ * the production project, and its server errors carry no hostname for the
+ * localhost test-account filter to match. PostHog issue 01a19a80 was four of
+ * them: a throwaway `/zz-action-check` Server Action, thrown on purpose against
+ * a local build, filed as a high-severity production TypeError. Vercel sets
+ * VERCEL=1 at runtime on every deployment (production and previews), so only
+ * those report; NEXT_PUBLIC_POSTHOG_IN_DEV=true opts a local build back in.
+ * Server-only: browser errors carry a localhost $current_url the filter hides.
+ */
+export function isLocalProductionServer(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return (
+    env.NODE_ENV === "production" &&
+    !env.VERCEL &&
+    env.NEXT_PUBLIC_POSTHOG_IN_DEV !== "true"
+  );
 }
 
 export function isPostHogLoggingEnabled(): boolean {
