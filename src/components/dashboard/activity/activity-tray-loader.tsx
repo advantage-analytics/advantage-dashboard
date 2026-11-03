@@ -11,6 +11,8 @@ import {
   getPendingInvites,
 } from "@/lib/data/pending-invites-server";
 import { getSetupSteps } from "@/lib/data/setup-progress-server";
+import { getSupportUnread } from "@/lib/data/support-server";
+import { NO_SUPPORT, type SupportUnread } from "@/lib/data/support-view";
 import { ActivityTray } from "./activity-tray";
 
 /**
@@ -44,6 +46,13 @@ import { ActivityTray } from "./activity-tray";
  *
  * The fifth is the setup steps still open in this workspace — see
  * `getSetupSteps`. It answers `[]` on a failed read, like the rest.
+ *
+ * The sixth is the viewer's "Message Advantage" thread — its newest staff
+ * note and whether it is unread. Like the invitations it belongs to the
+ * person, not the workspace (one thread per player, RLS as the player), so it
+ * shows in whichever workspace is active. `getSupportUnread` throws on a
+ * failed read; here that answers "no thread", so a messaging outage costs the
+ * tray one row rather than the header.
  */
 export async function ActivityTrayLoader() {
   const workspace = await getWorkspaceContext();
@@ -60,7 +69,7 @@ export async function ActivityTrayLoader() {
       invites.map((invite) => invite.id),
     ),
   );
-  const [feed, invites, elsewhere, joins, approvedInviteIds, setup] =
+  const [feed, invites, elsewhere, joins, approvedInviteIds, setup, support] =
     await Promise.all([
       getActivityFeed(supabase, workspace.active),
       invitesPromise,
@@ -68,6 +77,7 @@ export async function ActivityTrayLoader() {
       getRecentJoins(supabase, workspace.active),
       approvedInviteIdsPromise,
       getSetupSteps(supabase, workspace.active, workspace.viewer),
+      getSupportUnread(supabase).catch((): SupportUnread => NO_SUPPORT),
     ]);
 
   return (
@@ -78,6 +88,7 @@ export async function ActivityTrayLoader() {
       elsewhere={elsewhere}
       joins={joins}
       setup={setup}
+      support={support}
     />
   );
 }

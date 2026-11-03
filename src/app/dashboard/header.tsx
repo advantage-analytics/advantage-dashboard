@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useHeaderStatus } from "@/components/dashboard/header-status";
 import { useHeaderSlot } from "@/components/dashboard/header-slot";
 import {
@@ -13,6 +13,7 @@ import {
   Timer,
   CircleHelp,
   LogOut,
+  MessageSquare,
 } from "lucide-react";
 import { SearchCommandPalette } from "@/components/dashboard/search/search-command-palette";
 import {
@@ -40,6 +41,7 @@ import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import { HeaderGreeting } from "@/components/dashboard/header-greeting";
 import { BetaHeaderMeter } from "@/components/dashboard/beta-header-meter";
 import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
+import { messagesHref } from "@/components/dashboard/support/support-dialog-mount";
 import { FloatMenuLabel } from "@/components/ui/float-menu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { RolePill } from "@/components/ui/role-pill";
@@ -153,6 +155,7 @@ export function Header({
   greeting: string;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const headerStatus = useHeaderStatus();
   const headerSlot = useHeaderSlot();
   const { active, available, viewer } = useWorkspace();
@@ -687,6 +690,30 @@ export function Header({
                   />
                   Help
                 </Link>
+                {/* Opens the dialog the shell mounts, by setting the param
+                    it reads — the same door a deep link and the activity
+                    tray use. Not a navigation, so no leave guard. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    router.replace(
+                      // Read at click time rather than through
+                      // `useSearchParams()`, which would want this whole
+                      // header under a Suspense boundary.
+                      messagesHref(pathname, window.location.search, true),
+                      { scroll: false },
+                    );
+                  }}
+                  className={MENU_ROW_CLASS}
+                >
+                  <MessageSquare
+                    className="size-[14px] text-[var(--ink-600)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                  Message Advantage
+                </button>
                 <button
                   onClick={() => {
                     setIsProfileOpen(false);

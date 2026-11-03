@@ -19,8 +19,9 @@ import { AdminSearch } from "@/components/admin/admin-search";
  * divider before the area's name, the ghost Search trigger that says the word
  * "Search", and the 26px account circle at the right edge.
  *
- * Five tabs and a More menu (Admin Console canvas, "updated" boards): Today ·
- * Matches · Teams · Requests · Labels · More. More holds the four surfaces an
+ * Six tabs and a More menu (Admin Console canvas, "updated" boards, plus the
+ * Player Messaging canvas's Messages tab): Today · Matches · Teams · Requests
+ * · Labels · Messages · More. More holds the four surfaces an
  * admin visits less often — Conferences, Pilots, Outreach, Ask — each with a
  * one-line description and its count. On one of those four pages the More
  * button carries that page's name and the active wash, so the header still
@@ -40,6 +41,7 @@ const TABS = [
   { href: "/admin/teams", label: "Teams", key: "teams" },
   { href: "/admin/requests", label: "Requests", key: "requests" },
   { href: "/admin/labels", label: "Labels", key: "labels" },
+  { href: "/admin/messages", label: "Messages", key: "messages" },
 ] as const;
 
 const MORE = [
@@ -54,7 +56,7 @@ type MoreKey = (typeof MORE)[number]["key"];
 
 /** What the header prints beside each destination, computed on the server. */
 export interface AdminNavCounts {
-  /** Counts on the five tabs; absent or 0 prints nothing. */
+  /** Counts on the six tabs; absent or 0 prints nothing. */
   tabs: Partial<Record<TabKey, number>>;
   /** Each More row's count and its one-line description. */
   more: Partial<Record<MoreKey, { count?: number; sub?: string }>>;

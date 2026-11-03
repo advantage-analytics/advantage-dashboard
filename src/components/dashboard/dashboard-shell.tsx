@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
@@ -18,6 +18,7 @@ import { WorkspaceSync } from "@/components/dashboard/workspace-sync";
 import { ProgramStatusSync } from "@/components/dashboard/program-status-sync";
 import { BetaWelcome } from "@/components/dashboard/beta-welcome-dialog";
 import { FirstMatchFeedback } from "@/components/dashboard/feedback/first-match-feedback";
+import { SupportDialogMount } from "@/components/dashboard/support/support-dialog-mount";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
   STORAGE_KEYS,
@@ -156,6 +157,14 @@ export function DashboardShell({
                             <FirstMatchFeedback />
                           </>
                         )}
+                      {/* "Message Advantage": everywhere, the wizard
+                        included — the player asked for it, so nothing here
+                        is an interruption. Open while `?messages=open` is
+                        in the URL. Suspense because it reads
+                        `useSearchParams()`. */}
+                      <Suspense fallback={null}>
+                        <SupportDialogMount />
+                      </Suspense>
                       <PageTransition>{children}</PageTransition>
                     </main>
                   </div>
