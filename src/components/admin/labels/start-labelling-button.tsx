@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { seedLabelSessionAction } from "@/app/admin/labels/actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 
 /**
  * Start (or continue) labelling a job: seed its session through the server
@@ -15,7 +16,7 @@ export function useStartLabelling(jobId: string) {
   const start = () => {
     setError(null);
     startTransition(async () => {
-      const result = await seedLabelSessionAction(jobId);
+      const result = await seedLabelSessionAction(jobId).catch(actionRejected);
       if ("error" in result) {
         setError(result.error);
         return;

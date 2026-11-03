@@ -17,11 +17,9 @@ import {
 } from "@/lib/services/labels/edit-session";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
+import { errorStops } from "@/lib/services/labels/flag-nav";
 import type { LabelSession } from "@/lib/services/labels/session";
-import {
-  completeWarnings,
-  unmarkedErrors,
-} from "@/lib/services/labels/session-status";
+import { completeWarnings } from "@/lib/services/labels/session-status";
 import {
   ANOTHER_SESSION_OPEN,
   completeLabelSession,
@@ -607,6 +605,41 @@ test.describe("completeWarnings", () => {
         shots: [],
       }),
     ).toEqual(["Point 10 reads an error by player 1, but player 1 won it"]);
+    // A server's ending against the serve: live points 133 and 31 read this
+    // way, and the confirm said nothing about them.
+    expect(
+      lines({
+        ending: "service_winner",
+        endedBy: "p1",
+        winner: "p2",
+        server: "p1",
+        shots: [],
+      }),
+    ).toEqual([
+      "Point 10 reads a service winner, but player 2 won it and player 1 served",
+    ]);
+    expect(
+      lines({
+        ending: "ace",
+        endedBy: "p1",
+        winner: "p1",
+        server: "p2",
+        shots: [],
+      }),
+    ).toEqual([
+      "Point 10 reads an ace, but player 1 won it and player 2 served",
+    ]);
+    expect(
+      lines({
+        ending: "double_fault",
+        endedBy: "p2",
+        winner: "p1",
+        server: "p1",
+        shots: [],
+      }),
+    ).toEqual([
+      "Point 10 reads a double fault, but player 1 served and won it",
+    ]);
     // An ending that fits its winner says nothing.
     expect(
       lines({ ending: "error", endedBy: "p2", winner: "p1", shots: [] }),
@@ -754,7 +787,7 @@ test.describe("completeWarnings", () => {
   test("the confirm's copy: warn, then allow", () => {
     expect(
       labelConfirmCopy(
-        { kind: "complete-session", warnings: [], blockers: [] },
+        { kind: "complete-session", warnings: [], unmarked: 0 },
         NAMES,
       ),
     ).toEqual({
@@ -770,7 +803,7 @@ test.describe("completeWarnings", () => {
         {
           kind: "complete-session",
           warnings: ["Game 1 unfinished (15–15)"],
-          blockers: [],
+          unmarked: 0,
         },
         NAMES,
       ),
@@ -781,32 +814,22 @@ test.describe("completeWarnings", () => {
     });
   });
 
-  test("errors not yet marked forced or unforced hold the publish, and the copy names them", () => {
-    const blocked = (blockers: number[]) =>
+  test("errors not yet marked never hold the publish: the copy says what it means, and offers to mark", () => {
+    const unmarked = (count: number) =>
       labelConfirmCopy(
-        { kind: "complete-session", warnings: [], blockers },
+        { kind: "complete-session", warnings: [], unmarked: count },
         NAMES,
       );
-    expect(blocked([31, 58, 140])).toEqual({
-      title: "Mark 3 errors before publishing",
+    expect(unmarked(3)).toEqual({
+      title: "Publish with 3 errors unmarked?",
       description:
-        "Every error needs forced or unforced before this match can be verified. They're points 31, 58 and 140.",
-      confirmLabel: "Publish",
+        "The athlete's match is rebuilt from these labels and shows Verified by Advantage, with plain Errors and no forced and unforced split. Any marks you made are kept, and Reopen lets you finish them and publish again.",
+      confirmLabel: "Publish anyway",
       pendingLabel: "Publishing…",
       tone: "primary",
-      blocked: { goToLabel: "Go to point 31", pointNumber: 31 },
+      alternativeLabel: "Mark errors",
     });
-    expect(blocked([31, 58])).toMatchObject({
-      title: "Mark 2 errors before publishing",
-      description:
-        "Every error needs forced or unforced before this match can be verified. They're points 31 and 58.",
-    });
-    expect(blocked([31])).toMatchObject({
-      title: "Mark 1 error before publishing",
-      description:
-        "Every error needs forced or unforced before this match can be verified. It's point 31.",
-      blocked: { goToLabel: "Go to point 31", pointNumber: 31 },
-    });
+    expect(unmarked(1).title).toBe("Publish with 1 error unmarked?");
   });
 
   test("Reopen asks first, and says Verified by Advantage comes off", () => {
@@ -819,7 +842,10 @@ test.describe("completeWarnings", () => {
 
 // ── Unmarked errors ────────────────────────────────────────────────────────
 
-test.describe("unmarkedErrors", () => {
+test.describe("unmarked errors", () => {
+  /** The rail's numbers of the errors still to mark (`errorStops`). */
+  const unmarkedErrors = (points: LabelSession["points"]) =>
+    errorStops(points).map((stop) => stop.pointNumber);
   let clock = 0;
   const shot = (pointId: string, fields: Parameters<typeof labelShot>[2]) => {
     clock += 1;
@@ -866,7 +892,7 @@ test.describe("unmarkedErrors", () => {
   test("none when every error is marked, and a stale kind on a winner counts nothing", () => {
     const points = [
       errorPoint("a", 0, { errorKind: "forced" }),
-      // Once an error, now a winner: its leftover kind neither blocks nor counts.
+      // Once an error, now a winner: its leftover kind neither warns nor counts.
       winnerPoint("b", 1, { errorKind: "unforced" }),
       winnerPoint("c", 2),
     ];
@@ -894,9 +920,9 @@ test.describe("unmarkedErrors", () => {
     expect(unmarkedErrors(points)).toEqual([31, 58, 140]);
   });
 
-  /** The gate, the tray's pair and E, read together off one point. */
+  /** The warning, the tray's pair and E, read together off one point. */
   const readings = (point: LabelSession["points"][number]) => ({
-    gate: unmarkedErrors([point]),
+    warned: unmarkedErrors([point]),
     tray: errorKindShotId(point),
     key: errorKindShotId(point)
       ? errorKindKeyPatch(point, errorKindShotId(point)!)
@@ -912,17 +938,17 @@ test.describe("unmarkedErrors", () => {
       bestOf: 3,
     });
 
-  test("a stored error whose last ball is in is offered, blocks until marked, and then counts", () => {
+  test("a stored error whose last ball is in is offered, warned about until marked, and then counts", () => {
     const point = winnerPoint("a", 0, { ending: "error", endedBy: "p2" });
     expect(readings(point)).toEqual({
-      gate: [1],
+      warned: [1],
       tray: lastLiveId(point),
       key: { error_kind: "forced" },
       judged: false,
     });
     const marked = { ...point, errorKind: "forced" as const };
     expect(readings(marked)).toMatchObject({
-      gate: [],
+      warned: [],
       tray: lastLiveId(point),
       key: { error_kind: "unforced" },
       judged: true,
@@ -930,14 +956,14 @@ test.describe("unmarkedErrors", () => {
     expect(built(marked).points[0].result_type).toBe("Forehand Forced Error");
   });
 
-  test("a stored winner whose last ball missed is neither offered nor blocked, and a stale kind on it counts nothing", () => {
+  test("a stored winner whose last ball missed is neither offered nor warned about, and a stale kind on it counts nothing", () => {
     const point = errorPoint("a", 0, {
       ending: "winner",
       endedBy: "p2",
       errorKind: "forced",
     });
     expect(readings(point)).toEqual({
-      gate: [],
+      warned: [],
       tray: null,
       key: null,
       judged: true,
@@ -947,7 +973,7 @@ test.describe("unmarkedErrors", () => {
     expect(row.errorKind).toBeNull();
   });
 
-  test("a stored error with no strokes does not dead-end: not offered, not blocked, publishes Unforced, keeps the match at Errors", () => {
+  test("a stored error with no strokes does not dead-end: not offered, not warned about, publishes Unforced, keeps the match at Errors", () => {
     const point = labelPoint("a", 0, {
       winner: "p1",
       ending: "error",
@@ -955,7 +981,7 @@ test.describe("unmarkedErrors", () => {
       shots: [],
     });
     expect(readings(point)).toEqual({
-      gate: [],
+      warned: [],
       tray: null,
       key: null,
       judged: false,
@@ -988,7 +1014,7 @@ test.describe("unmarkedErrors", () => {
       }),
     ];
     const miss = point.shots.at(-2)!.id;
-    expect(readings(point)).toMatchObject({ gate: [1], tray: miss });
+    expect(readings(point)).toMatchObject({ warned: [1], tray: miss });
     expect(built(point).points[0].result_type).toBe("Forehand Unforced Error");
   });
 });

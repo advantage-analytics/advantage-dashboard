@@ -17,7 +17,7 @@
 import { landingTakesContact } from "./volley-link";
 import {
   deriveEnding,
-  endingContradictsWinner,
+  storedEndingContradicted,
   winnerContradicted,
 } from "./ending-derived";
 import {
@@ -29,8 +29,8 @@ import {
 } from "./marks";
 import {
   lastCallQuestion,
-  MARK_LABEL,
   markHover,
+  markLabel,
   REVIEW_ITEM_QUESTION,
   type MarkNames,
 } from "./marks-copy";
@@ -255,7 +255,7 @@ export function stateHoverParts(
   sentence: string,
   pointAdded = false,
 ): MarkHoverParts {
-  const label = MARK_LABEL[mark.code];
+  const label = markLabel(mark);
   switch (state) {
     case "open":
       return { name: label, detail: markHover(mark, names) };
@@ -593,7 +593,8 @@ export function placementMissing(
       next === "overhead" ||
       (i <= serveAt && isMissedResult(shot.result));
     const landing = !noLanding && landingMissingOn(shot);
-    if (!landing && !contactMissingOn(shot)) continue;
+    const contact = contactMissingOn(shot);
+    if (!landing && !contact) continue;
     return {
       code: "placement_missing",
       tier: "hint",
@@ -606,6 +607,7 @@ export function placementMissing(
             : serveAt !== -1 && i === serveAt + 1
               ? "return"
               : "shot",
+        missing: contact && landing ? "both" : contact ? "contact" : "landing",
       },
     };
   }
@@ -706,6 +708,31 @@ export function endingStale(
       endedBy: derived.endedBy,
       winner: derived.winner,
     },
+  };
+}
+
+/**
+ * "Ending and winner disagree": the stored ending cannot be true of the winner
+ * (`storedEndingContradicted`) and "Different ending?" has nothing to say,
+ * because the strokes settle nothing or add up to that same ending. Nothing
+ * while `endingStale` is raised: that question, and its "Make it …", already
+ * cover the point. A grey hint with no fix to offer: the rows do not say which
+ * of the ending, the winner or the server is wrong.
+ */
+export function endingContradiction(
+  point: Pick<LabelPoint, "ending" | "endedBy" | "winner" | "server" | "shots">,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "ending_contradicts_winner" }> | null {
+  const { ending, endedBy, winner, server } = point;
+  if (ending === null || winner === null) return null;
+  if (!storedEndingContradicted(point) || endingStale(point, ghosts)) {
+    return null;
+  }
+  return {
+    code: "ending_contradicts_winner",
+    tier: "hint",
+    scope: "point",
+    params: { ending, endedBy, winner, server },
   };
 }
 
@@ -827,6 +854,7 @@ export function openHintMarks(
   const live: (LabelMark | null)[] = [
     pointEndedEarly(point, ghosts),
     endingStale(point, ghosts),
+    endingContradiction(point, ghosts),
     secondServeAsFirst(point, ghosts),
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
@@ -1017,6 +1045,7 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
       "ending_suspect_line",
       "winner_to_error_by_bounce",
       "ending_stale",
+      "ending_contradicts_winner",
       "last_landing_missing",
       "last_shot_unresolved",
       "result_type_unknown",
@@ -1203,7 +1232,9 @@ function reviewItemTone(
  * except "Different ending?" with the winner contradicted, which stays
  * `open`: the score, as `openFlags` has always read it. It also stays open
  * when the stored ending cannot be true of the winner
- * (`endingContradictsWinner`), in the grey tone since the score is right.
+ * (`storedEndingContradicted`), in the grey tone since the score is right, and
+ * so does "Ending and winner disagree", which asks the same where "Different
+ * ending?" has nothing to say. Only a Dismiss closes either.
  */
 export function reviewFlag(
   point: LabelPoint,
@@ -1216,10 +1247,12 @@ export function reviewFlag(
   const checked = point.checkedAt !== null;
   const contradicted = pointWinnerContradicted(point, marks);
   const answered = lastBallAnswered(point, drawsGhosts(marks));
-  const endingWrong = contradicted || endingContradictsWinner(point);
+  const endingWrong = contradicted || storedEndingContradicted(point);
   const hintState = (mark: LabelMark): MarkState => {
     if (checked) {
-      return endingWrong && mark.code === "ending_stale"
+      return endingWrong &&
+        (mark.code === "ending_stale" ||
+          mark.code === "ending_contradicts_winner")
         ? "open"
         : "checked-as-is";
     }

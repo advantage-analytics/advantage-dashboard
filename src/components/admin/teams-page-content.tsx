@@ -17,6 +17,7 @@ import { CreateTeamDialog } from "@/components/admin/create-team-dialog";
 import { loadMoreAdminTeams } from "@/components/admin/teams-actions";
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
+import { actionRejectedWith } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import type {
   AdminTeamRow,
@@ -152,6 +153,7 @@ export function TeamsPageContent({
     cursor: string | null;
   }>({ key: "", rows: [], cursor: null });
   const [loadingMore, startLoadingMore] = useTransition();
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
   const pageKey = `${view}|${sort}|${cut.division ?? ""}|${cut.conference ?? ""}|${cut.state ?? ""}|${serverCursor ?? ""}|${serverRows.length}`;
   const appended = extra.key === pageKey ? extra : null;
@@ -187,6 +189,7 @@ export function TeamsPageContent({
   const loadMore = () => {
     if (!cursor || loadingMore) return;
     const key = pageKey;
+    setLoadMoreError(null);
     startLoadingMore(async () => {
       const page = await loadMoreAdminTeams({
         view,
@@ -197,7 +200,13 @@ export function TeamsPageContent({
           conference: cut.conference ?? undefined,
           state: cut.state ?? undefined,
         },
-      });
+      }).catch(actionRejectedWith("Couldn't load more teams. Try again."));
+      // The rows already on screen are good, so this stays beside the button
+      // rather than taking the page down with a failed next page.
+      if ("ok" in page) {
+        setLoadMoreError(page.error);
+        return;
+      }
       setExtra((current) => {
         const base = current.key === key ? current.rows : [];
         return { key, rows: [...base, ...page.rows], cursor: page.nextCursor };
@@ -361,7 +370,12 @@ export function TeamsPageContent({
       )}
 
       {cursor && (
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-2">
+          {loadMoreError && (
+            <p role="alert" className="text-[12px] text-[var(--danger)]">
+              {loadMoreError}
+            </p>
+          )}
           <button
             type="button"
             className={advButton("outline", "sm")}

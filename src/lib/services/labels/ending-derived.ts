@@ -225,6 +225,29 @@ export function endingContradictsWinner(
 }
 
 /**
+ * Whether a stored ending cannot be true of who served and who won, whatever
+ * the strokes say: an ace or a service winner won by the receiver, or a double
+ * fault won by the server. The publish warns on these (`buildAppliedRows`) and
+ * writes them as they stand. Never true with no server or winner labelled.
+ */
+export function endingContradictsServer(
+  point: Pick<LabelPoint, "ending" | "server" | "winner">,
+): boolean {
+  const { ending, server, winner } = point;
+  if (server === null || winner === null) return false;
+  return ending === "ace" || ending === "service_winner"
+    ? winner !== server
+    : ending === "double_fault" && winner === server;
+}
+
+/** Either way a stored ending can be untrue of its point's winner. */
+export function storedEndingContradicted(
+  point: Pick<LabelPoint, "ending" | "endedBy" | "server" | "winner">,
+): boolean {
+  return endingContradictsWinner(point) || endingContradictsServer(point);
+}
+
+/**
  * The patch that brings a point's ending and ended-by to `now`, the winner
  * with them when `now` settles one the point does not hold (and
  * `settleWinner` is on); null when nothing differs.
@@ -318,17 +341,24 @@ export function markableErrorStroke<T extends ErrorPoint>(
  * Whether a point can be marked forced or unforced
  * (`label_points.error_kind`): it publishes as an error (`publishesAsError`)
  * and has a stroke to put the mark on. The one reading behind the Mark
- * complete gate (`unmarkedErrors`), the tray's Forced | Unforced pair and the
+ * complete warning and the errors the rail asks for (`errorStops`), the tray's Forced | Unforced pair and the
  * E key (`errorKindShotId`), whichever way the console draws ghosts.
  */
 export function isMarkableError(point: ErrorPoint): boolean {
   return publishesAsError(point) && markableErrorStroke(point) !== null;
 }
 
+/** An error still to mark forced or unforced: the rail's rule. */
+export function isUnmarkedError(
+  point: ErrorPoint & Pick<LabelPoint, "errorKind">,
+): boolean {
+  return point.errorKind == null && isMarkableError(point);
+}
+
 /**
  * Points that publish as an error with no stroke to mark. Each publishes as
- * unforced and keeps the match at Errors (`allErrorsJudged`), so it cannot
- * block Mark complete: `completeWarnings` says so instead.
+ * unforced and keeps the match at Errors (`allErrorsJudged`), and nothing can
+ * ask about it: `completeWarnings` says so instead.
  */
 export function unmarkableErrors<T extends ErrorPoint>(
   points: readonly T[],

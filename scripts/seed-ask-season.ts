@@ -1175,12 +1175,17 @@ function computeStats(
           isIn(serve),
       );
     });
+  // `public.net_attempt_shot` with no measured position, which is every shot
+  // here: a volley or an overhead counts, and a groundstroke cannot.
   const cameToNet = (p: PointRow) =>
-    (shotsByPoint.get(p.id) ?? []).some(
-      (shot) =>
-        shot.is_player1 === isP1 &&
-        (shot.shot_type === "Volley" || shot.shot_type === "Overhead"),
-    );
+    (shotsByPoint.get(p.id) ?? []).some((shot) => {
+      if (shot.is_player1 !== isP1) return false;
+      if (["First Serve", "Second Serve", "Feed"].includes(shot.shot_type)) {
+        return false;
+      }
+      const type = shot.shot_type.trim().toLowerCase();
+      return type.includes("volley") || type === "overhead";
+    });
   const volleyed = (p: PointRow) =>
     (shotsByPoint.get(p.id) ?? []).some(
       (shot) => shot.is_player1 === isP1 && shot.shot_type === "Volley",

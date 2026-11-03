@@ -2,6 +2,7 @@
 
 import { JoinPane } from "@/components/join/join-pane";
 import { ClaimActions, CLAIM_BUTTON } from "@/components/claim/claim-shell";
+import { useReportBoundaryError } from "@/lib/ui/report-boundary-error";
 
 /**
  * A shared match report that failed to load — a database or configuration
@@ -12,7 +13,14 @@ import { ClaimActions, CLAIM_BUTTON } from "@/components/claim/claim-shell";
  * No digest or support address here: the reader is a stranger to the app
  * and cannot act on either. The sharer can, from their own report.
  */
-export default function SharedMatchError({ reset }: { reset: () => void }) {
+export default function SharedMatchError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useReportBoundaryError(error);
   return (
     <JoinPane
       width={440}

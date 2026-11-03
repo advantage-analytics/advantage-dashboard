@@ -12,6 +12,7 @@ import {
   adminRemoveConferenceCrest,
   adminUploadConferenceCrest,
 } from "@/lib/services/programs/admin-conference-crest-actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/svg+xml";
 
@@ -93,9 +94,8 @@ export function ConferenceCrestControl({
       new File([baked], `crest.${ext}`, { type: baked.type }),
     );
     startTransition(async () => {
-      const result = await adminUploadConferenceCrest(formData).catch(
-        () => ({ ok: false, error: "Couldn't upload the crest." }) as const,
-      );
+      const result =
+        await adminUploadConferenceCrest(formData).catch(actionRejected);
       if (!result.ok) {
         onError(result.error);
         return;
@@ -113,9 +113,8 @@ export function ConferenceCrestControl({
       return;
     }
     startTransition(async () => {
-      const result = await adminRemoveConferenceCrest(conferenceId).catch(
-        () => ({ ok: false, error: "Couldn't remove the crest." }) as const,
-      );
+      const result =
+        await adminRemoveConferenceCrest(conferenceId).catch(actionRejected);
       if (!result.ok) onError(result.error);
       else onChanged?.();
     });

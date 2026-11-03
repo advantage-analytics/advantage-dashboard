@@ -13,6 +13,7 @@ import {
   type AdminSearchResult,
 } from "@/lib/data/admin-search-server";
 import type { AdminConferenceRow } from "@/lib/data/admin-conferences-view";
+import { actionRejected } from "@/lib/ui/action-rejected";
 
 /** The header search's own debounce. */
 const SEARCH_DEBOUNCE_MS = 180;
@@ -91,7 +92,9 @@ export function AddTeamPopover({
   const add = (team: AdminSearchResult, done?: () => void) => {
     start(async () => {
       setError(null);
-      const result = await addTeamToConference(team.id, conference.id);
+      const result = await addTeamToConference(team.id, conference.id).catch(
+        actionRejected,
+      );
       if (!result.ok) {
         setError(result.error);
         return;

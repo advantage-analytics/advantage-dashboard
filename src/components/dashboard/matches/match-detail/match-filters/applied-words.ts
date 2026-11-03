@@ -116,7 +116,11 @@ const PHRASE: {
         : "deep contact",
   returnResult: (option, value) =>
     RETURN_RESULT_PHRASE[value as ReturnResult] ?? lower(option),
-  resultOutcome: (_, value) => (value === "won" ? "points won" : "points lost"),
+  // Says who won rather than "points lost": Outcome reads from the viewer's
+  // side, so the opponent's own figure lands on Lost, and "Points lost" under
+  // "Total points won · Ellis" reads as the opposite of what was clicked.
+  resultOutcome: (_, value, names) =>
+    `points ${value === "won" ? names.you : names.opponent} won`,
   resultPlayer: (_, value, names) => `${playerName(value, names)}’s last shot`,
   resultShot: (option) => `ends on ${article(lower(option))}`,
   resultEnding: (_, value) =>

@@ -251,7 +251,21 @@ test.describe("lineHistoryFrom", () => {
       result(`m${i}`, r === "w", { entryId: "s3" }),
     );
     const [row] = lineHistoryFrom(results, entries);
-    expect(row.form).toEqual(["loss", "win", "win", "loss", "win"]);
+    expect(row.form.map((bar) => bar.result)).toEqual([
+      "loss",
+      "win",
+      "win",
+      "loss",
+      "win",
+    ]);
+    // Each bar is the match it draws, from this player's side, oldest left.
+    expect(row.form.map((bar) => bar.match.id)).toEqual([
+      "m4",
+      "m3",
+      "m2",
+      "m1",
+      "m0",
+    ]);
     expect(row).toMatchObject({ wins: 4, losses: 3, winPct: 57 });
   });
 

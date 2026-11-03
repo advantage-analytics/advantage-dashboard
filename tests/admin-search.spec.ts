@@ -213,6 +213,10 @@ test("⌘K opens it from the page, Esc closes, another field keeps ⌘K", async 
   await expect(field).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(field).toHaveCount(0);
+  // Radix hands focus back to the trigger in a timer after the panel unmounts.
+  // Moving on before it lands lets it take focus from the other field, and the
+  // ⌘K below then rightly opens the search from the trigger.
+  await expect(page.getByRole("button", { name: "Search" })).toBeFocused();
 
   await page.getByRole("textbox", { name: "Another field" }).focus();
   await page.keyboard.press("ControlOrMeta+k");

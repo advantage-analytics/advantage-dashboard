@@ -94,6 +94,11 @@ export interface EditContext {
    */
   onExitReview?: () => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
+  /**
+   * The stroke the rail is asking forced or unforced about
+   * (`LabelErrorQuestion`): its answers sit under it, so its tray drops the pair.
+   */
+  errorAskedShotId?: string | null;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   operations?: LabelRowOperations;
   /**

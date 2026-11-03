@@ -6,7 +6,7 @@
  * kept because the scorecard names every code by them.
  */
 
-import type { LabelMark, LabelMarkCode } from "./marks";
+import type { LabelMark, LabelMarkCode, PlacementGap } from "./marks";
 import type { LabelEnding, LabelSide } from "./session";
 
 /**
@@ -31,6 +31,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   serve_fault: "Serve fault?",
   shot_after_point_end: "Did the point end here?",
   ending_stale: "Different ending?",
+  ending_contradicts_winner: "Ending and winner disagree",
   second_serve_as_first: "Second serve?",
   last_landing_missing: "No landing on the last shot",
   last_shot_unresolved: "Ending can’t be read",
@@ -47,6 +48,24 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   segment_proposal_differs: "Game cut differs",
   geometry_discarded: "No position",
 };
+
+/**
+ * What one stroke is missing, where `MARK_LABEL`'s "No placement" is every such
+ * stroke at once. "Contact point", not "contact": "No contact" reads as a
+ * swing that missed the ball.
+ */
+const PLACEMENT_GAP_WORDS: Record<PlacementGap, string> = {
+  contact: "contact point",
+  landing: "landing",
+  both: "contact point or landing",
+};
+
+/** A mark's name: `MARK_LABEL`, except where the mark's own params refine it. */
+export function markLabel(mark: LabelMark): string {
+  return mark.code === "placement_missing"
+    ? `No ${PLACEMENT_GAP_WORDS[mark.params.missing]}`
+    : MARK_LABEL[mark.code];
+}
 
 /** A point score ("0-15") with an en dash ("0–15"). */
 const scoreText = (score: string) => score.replace(/\s*-\s*/g, "–");
@@ -83,6 +102,31 @@ export function ownedEndingPhrase(
   names: MarkNames,
 ): string {
   return endingPhrase(ending, endingOwner(ending, endedBy, winner), names);
+}
+
+/**
+ * A stored ending against the winner it cannot be true of, the one sentence
+ * the review hint and the Mark complete confirm share: "a winner by Quan, but
+ * Kim won it", "an ace, but Kim won it and Quan served", "a double fault, but
+ * Quan served and won it". A server's ending names no owner: a service winner
+ * reads as the winner's (`endingOwner`), which here is the thing in doubt.
+ */
+export function endingContradictionPhrase(
+  ending: LabelEnding,
+  endedBy: LabelSide | null,
+  winner: LabelSide,
+  server: LabelSide | null,
+  names: MarkNames,
+): string {
+  const won = names[winner];
+  if (ending === "double_fault") {
+    return `${ENDING_PHRASE[ending]}, but ${won} served and won it`;
+  }
+  if (ending === "ace" || ending === "service_winner") {
+    const served = server ? ` and ${names[server]} served` : "";
+    return `${ENDING_PHRASE[ending]}, but ${won} won it${served}`;
+  }
+  return `${endingPhrase(ending, endedBy, names)}, but ${won} won it`;
 }
 
 /** An ending as the start of a question: "Ace", "Double fault". */
@@ -145,7 +189,7 @@ export function hintLabel(mark: LabelMark, names?: MarkNames): string {
   if (mark.code === "last_call_overruled") {
     return lastCallQuestion(mark.params.vendorCall);
   }
-  const label = MARK_LABEL[mark.code];
+  const label = markLabel(mark);
   if (mark.code !== "shot_after_point_end") return label;
   const n = mark.params.after.length;
   return `${label} ${n} ${n === 1 ? "shot follows" : "shots follow"}`;
@@ -321,6 +365,10 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       const who = endingOwner(ending, endedBy, winner);
       return `The shots add up to ${endingPhrase(ending, who, names)}, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.`;
     }
+    case "ending_contradicts_winner": {
+      const { ending, endedBy, winner, server } = mark.params;
+      return `This point reads ${endingContradictionPhrase(ending, endedBy, winner, server, names)}. Check the clip and change whichever is wrong, or dismiss this if it stands.`;
+    }
     case "second_serve_as_first":
       return "Follows a faulted serve, so it is the second serve.";
     case "last_landing_missing":
@@ -335,15 +383,28 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
         : "The serve counts as in, but its landing is outside the service box. It publishes as in with no placement: place the bounce in the box to count where it went.";
     case "serve_after_serve_in":
       return "A let that was played, or two points in one rally.";
-    case "placement_missing":
-      switch (mark.params.stroke) {
+    case "placement_missing": {
+      const { stroke, missing } = mark.params;
+      const gap = PLACEMENT_GAP_WORDS[missing];
+      const fix = {
+        contact: "Place it, or dismiss this if the video doesn’t show it.",
+        landing:
+          "Place the bounce, or dismiss this if the video doesn’t show it.",
+        both: "Place them, or dismiss this if the video doesn’t show them.",
+      }[missing];
+      switch (stroke) {
         case "serve":
-          return "This serve has no landing, so serve placement can’t count it. Place the bounce, or dismiss this if the video doesn’t show it.";
+          return `This serve has no ${gap}, so serve placement can’t count it. ${fix}`;
         case "return":
-          return "This return is missing its position, so return placement can’t count it. Place it, or dismiss this if the video doesn’t show it.";
+          // A landing near the centre reads "Middle" with no contact
+          // (`directionZone`), so a missing contact only costs the direction.
+          return missing === "contact"
+            ? `This return has no ${gap}, so return placement can’t tell crosscourt from down the line. ${fix}`
+            : `This return has no ${gap}, so return placement can’t count it. ${fix}`;
         case "shot":
-          return "This shot is missing its position, so how the point opened or ended can’t be read in full. Place it, or dismiss this if the video doesn’t show it.";
+          return `This shot has no ${gap}, so how the point opened or ended can’t be read in full. ${fix}`;
       }
+    }
     case "phantom_strokes_dropped": {
       const count = mark.params.eventIds.length;
       if (count > 1) {

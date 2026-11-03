@@ -46,6 +46,10 @@ import {
   type OutreachSend,
   type OutreachTrancheResult,
 } from "@/lib/services/outreach/types";
+import {
+  actionRejectedMessage,
+  actionRejectedWith,
+} from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -327,7 +331,9 @@ export function OutreachPageContent({
     if (mode !== "recipients" || !selectedRecipientId || !previewKey) return;
     if (preview?.key === previewKey) return;
     startPreview(async () => {
-      const next = await previewOutreach(selectedRecipientId, emailNo);
+      const next = await previewOutreach(selectedRecipientId, emailNo).catch(
+        actionRejectedWith("Couldn't load the preview. Try again."),
+      );
       if (next.ok) {
         setPreview({ key: previewKey, subject: next.subject, html: next.html });
         setPreviewError(null);
@@ -380,7 +386,9 @@ export function OutreachPageContent({
     if (!editingSelected) return;
     const { id, ...edit } = editingSelected;
     startRow(async () => {
-      const outcome = await updateOutreachRecipient(id, edit);
+      const outcome = await updateOutreachRecipient(id, edit).catch(
+        actionRejectedMessage,
+      );
       setRowNotice(outcome);
       if (outcome.ok) {
         setEditing(null);
@@ -393,14 +401,18 @@ export function OutreachPageContent({
     if (!selected) return;
     startRow(async () => {
       setRowNotice(
-        await sendOutreachTest(selected.recipient.id, emailNo, testTo),
+        await sendOutreachTest(selected.recipient.id, emailNo, testTo).catch(
+          actionRejectedMessage,
+        ),
       );
     });
   }
 
   function cancelScheduled(sendId: string) {
     startRow(async () => {
-      const outcome = await cancelOutreachSend(sendId);
+      const outcome = await cancelOutreachSend(sendId).catch(
+        actionRejectedMessage,
+      );
       setRowNotice(outcome);
       if (outcome.ok) router.refresh();
     });
@@ -409,7 +421,10 @@ export function OutreachPageContent({
   function holdOne(held: boolean) {
     if (!selected) return;
     startRow(async () => {
-      const outcome = await setOutreachHeld([selected.recipient.id], held);
+      const outcome = await setOutreachHeld(
+        [selected.recipient.id],
+        held,
+      ).catch(actionRejectedMessage);
       setRowNotice(outcome);
       if (outcome.ok) router.refresh();
     });
@@ -427,7 +442,9 @@ export function OutreachPageContent({
   function bulkHold(held: boolean) {
     const ids = [...tickedIds];
     startBulk(async () => {
-      const outcome = await setOutreachHeld(ids, held);
+      const outcome = await setOutreachHeld(ids, held).catch(
+        actionRejectedMessage,
+      );
       setBulkNotice(outcome);
       if (outcome.ok) router.refresh();
     });
@@ -436,7 +453,9 @@ export function OutreachPageContent({
   function bulkRemove() {
     const ids = [...tickedIds];
     startBulk(async () => {
-      const outcome = await removeOutreachRecipients(ids);
+      const outcome = await removeOutreachRecipients(ids).catch(
+        actionRejectedMessage,
+      );
       setBulkNotice(outcome);
       setConfirmRemove(false);
       setTickedIds(new Set());
@@ -488,7 +507,13 @@ export function OutreachPageContent({
         limit: next.length,
         scheduledAt: when === "later" && at ? new Date(at).toISOString() : null,
         recipientIds: usingTicks ? next.map((row) => row.recipient.id) : null,
-      });
+      }).catch((error) => ({
+        ...actionRejectedMessage(error),
+        sent: 0,
+        scheduled: 0,
+        failed: [],
+        skipped: [],
+      }));
       setResult(outcome);
       setConfirming(false);
       if (usingTicks) setTickedIds(new Set());
@@ -509,7 +534,10 @@ export function OutreachPageContent({
   function submitImport(form: HTMLFormElement) {
     const data = new FormData(form);
     startImport(async () => {
-      const outcome = await importOutreachCsv(data);
+      const outcome = await importOutreachCsv(data).catch((error) => ({
+        ...actionRejectedMessage(error),
+        problems: [],
+      }));
       setImportNotice(outcome);
       if (outcome.ok) {
         form.reset();

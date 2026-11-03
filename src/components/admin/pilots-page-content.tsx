@@ -29,6 +29,7 @@ import {
 import { formatHoursShort, usageFraction } from "@/lib/data/usage-format";
 import { removeIndividualPilot } from "@/lib/services/programs/admin-pilot-actions";
 import { PILOT_INDIVIDUAL_MAX_PLAYERS } from "@/lib/services/splitstep/config";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -192,7 +193,9 @@ export function PilotsPageContent({
           if (!target) return;
           setRemoveError(null);
           startRemoving(async () => {
-            const result = await removeIndividualPilot(target.id);
+            const result = await removeIndividualPilot(target.id).catch(
+              actionRejected,
+            );
             if (!result.ok) {
               setRemoveError(result.error);
               return;

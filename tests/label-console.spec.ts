@@ -170,11 +170,11 @@ test("the overview is six cards, with the upload's inputs and a publish checklis
       html.indexOf("data-label-dashboard"),
     ),
   ).toContain("Dartmouth College · Women’s");
-  // The checklist: five things, each done, open or blocking, in words.
+  // The checklist: six things, each done, open or blocking, in words.
   const states = [...html.matchAll(/data-publish-check="([^"]*)"/g)].map(
     (m) => m[1],
   );
-  expect(states).toHaveLength(5);
+  expect(states).toHaveLength(6);
   for (const state of states) {
     expect(["done", "open", "blocking"]).toContain(state);
   }
@@ -998,8 +998,8 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(consoleSource).toContain(
       "onFindGap={operable ? railHandlers.findGap : undefined}",
     );
-    expect(consoleSource).toContain(
-      "jumpAfterOpen.current = (pointId) => findGap(pointId);",
+    expect(consoleSource).toMatch(
+      /jumpAfterOpen\.current = \(pointId\) => \{[\s\S]{0,160}findGap\(pointId\);/,
     );
     // Only those two: a corrected point stays put, never jumping on itself.
     expect(consoleSource.match(/arm: true/g)).toHaveLength(2);
@@ -1232,15 +1232,15 @@ test.describe("a flag jump lands on the point's review step", () => {
       consoleSource,
     )?.[1];
     expect(selector).toBeTruthy();
-    // Blurred in landOnStep, before anything is selected or armed — the one
-    // road both a flag jump and the auto-advance take.
+    // Blurred in landOnStep, before anything is selected or armed — the road
+    // both a flag jump and the auto-advance take — and where an error lands.
     expect(landSource).toContain(
       "if (active?.closest?.(JUMP_BLURS_SELECTOR)) active.blur();",
     );
     expect(landSource.indexOf("active.blur()")).toBeLessThan(
       landSource.indexOf("if (target?.slot) {"),
     );
-    expect(consoleSource.match(/active\.blur\(\)/g)).toHaveLength(1);
+    expect(consoleSource.match(/active\.blur\(\)/g)).toHaveLength(2);
     await page.setContent(`
       <input id="input" />
       <textarea id="textarea"></textarea>
@@ -1693,7 +1693,7 @@ test.describe("Undo applies a diff (undo-diff.ts), never a whole re-read", () =>
   });
 });
 
-test.describe("Mark complete with errors still unmarked (T12)", () => {
+test.describe("Mark complete with errors still unmarked", () => {
   type Props = Record<string, unknown>;
   const passThrough = (tagName: string) =>
     function PassThrough({
@@ -1781,60 +1781,42 @@ test.describe("Mark complete with errors still unmarked (T12)", () => {
 
   const WARNINGS = ["4 points of 188 not checked"];
 
-  test("blocked: Publish is disabled, Go to point comes before Close, the errors line leads the list", () => {
+  test("errors unmarked: Publish anyway stays enabled, Mark errors is the second answer", () => {
     const html = renderWith({
       kind: "complete-session",
       warnings: WARNINGS,
-      blockers: [31, 58, 140],
+      unmarked: 3,
     });
     expect(text(html.slice(html.indexOf("<h2"), html.indexOf("</h2>")))).toBe(
-      "Mark 3 errors before publishing",
-    );
-    expect(
-      text(html.slice(html.indexOf("data-description"), html.indexOf("</p>"))),
-    ).toContain(
-      "Every error needs forced or unforced before this match can be verified. They're points 31, 58 and 140.",
-    );
-    const list = html.slice(html.indexOf("data-complete-warnings"));
-    expect(
-      [...list.matchAll(/<li>([^<]*)<\/li>/g)].map(([, item]) => item),
-    ).toEqual([
-      "3 errors not marked forced or unforced",
-      "4 points of 188 not checked",
-    ]);
-    // The X, then the footer: the quiet blue text action, Close, Publish held.
-    expect(footer(html)).toEqual([
-      { label: "Go to point 31", disabled: false },
-      { label: "Close", disabled: false },
-      { label: "Publish", disabled: true },
-    ]);
-    const goTo = tagOf(html, "data-go-to-point");
-    expect(goTo).toContain('data-go-to-point="31"');
-    expect(goTo).toContain("text-[var(--blue)]");
-    expect(goTo).not.toContain("bg-[var(--blue)]");
-  });
-
-  test("not blocked: the dialog is today's — unchecked points a warning, Publish enabled", () => {
-    const html = renderWith({
-      kind: "complete-session",
-      warnings: WARNINGS,
-      blockers: [],
-    });
-    expect(text(html.slice(html.indexOf("<h2"), html.indexOf("</h2>")))).toBe(
-      "Mark complete and publish?",
+      "Publish with 3 errors unmarked?",
     );
     const list = html.slice(html.indexOf("data-complete-warnings"));
     expect(
       [...list.matchAll(/<li>([^<]*)<\/li>/g)].map(([, item]) => item),
     ).toEqual(["4 points of 188 not checked"]);
-    expect(html).not.toContain("data-go-to-point");
+    expect(footer(html)).toEqual([
+      { label: "Mark errors", disabled: false },
+      { label: "Cancel", disabled: false },
+      { label: "Publish anyway", disabled: false },
+    ]);
+  });
+
+  test("every error marked: the dialog is today's", () => {
+    const html = renderWith({
+      kind: "complete-session",
+      warnings: WARNINGS,
+      unmarked: 0,
+    });
+    expect(text(html.slice(html.indexOf("<h2"), html.indexOf("</h2>")))).toBe(
+      "Mark complete and publish?",
+    );
     expect(footer(html)).toEqual([
       { label: "Cancel", disabled: false },
       { label: "Publish", disabled: false },
     ]);
   });
 
-  test("blocked: the action publishes nothing, by key or click; Go to point closes and opens the point", () => {
+  test("errors unmarked: the action publishes, and Mark errors publishes nothing", () => {
     const seen: Props[] = [];
     const { LabelConfirmDialog } = createLoader({
       stubs: {
@@ -1848,40 +1830,28 @@ test.describe("Mark complete with errors still unmarked (T12)", () => {
     }).load("src/components/admin/labels/label-confirm-dialog.tsx") as {
       LabelConfirmDialog: React.ComponentType<Props>;
     };
-    const events: unknown[][] = [];
-    const draw = (blockers: number[]) => {
-      renderToStaticMarkup(
-        React.createElement(LabelConfirmDialog, {
-          confirm: { kind: "complete-session", warnings: WARNINGS, blockers },
-          names: { p1: "Lee", p2: "Vargas" },
-          onCancel: () => events.push(["cancel"]),
-          onConfirm: () => events.push(["confirm"]),
-          onGoToPoint: (n: number) => events.push(["go", n]),
-        }),
-      );
-      return seen.at(-1)!;
-    };
-
-    const blocked = draw([31, 58]);
-    expect(blocked).toMatchObject({
-      confirmDisabled: true,
-      cancelLabel: "Close",
-    });
-    // Enter on the dialog runs its action: held while disabled.
-    (blocked.onConfirm as () => void)();
-    expect(events).toEqual([]);
-    const goTo = blocked.footerLeft as React.ReactElement<{
+    const events: string[] = [];
+    renderToStaticMarkup(
+      React.createElement(LabelConfirmDialog, {
+        confirm: {
+          kind: "complete-session",
+          warnings: WARNINGS,
+          unmarked: 2,
+        },
+        names: { p1: "Lee", p2: "Vargas" },
+        onCancel: () => events.push("cancel"),
+        onConfirm: () => events.push("confirm"),
+        onAlternative: () => events.push("mark"),
+      }),
+    );
+    const dialog = seen.at(-1)!;
+    const mark = dialog.footerLeft as React.ReactElement<{
       onClick: () => void;
     }>;
-    goTo.props.onClick();
-    expect(events).toEqual([["cancel"], ["go", 31]]);
-
-    events.length = 0;
-    const open = draw([]);
-    expect(open).toMatchObject({ confirmDisabled: false });
-    expect(open.cancelLabel).toBeUndefined();
-    (open.onConfirm as () => void)();
-    expect(events).toEqual([["confirm"]]);
+    mark.props.onClick();
+    expect(events).toEqual(["mark"]);
+    (dialog.onConfirm as () => void)();
+    expect(events).toEqual(["mark", "confirm"]);
   });
 
   test("the shared confirm holds a disabled action: no onConfirm, by click or key", () => {

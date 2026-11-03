@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import { setProgramMemberRole } from "@/components/dashboard/settings/team-actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 import { capitalize } from "@/lib/utils";
 
@@ -78,7 +79,7 @@ export function RoleMenu({
             programId,
             userId,
             role: next,
-          });
+          }).catch(actionRejected);
           if (!result.ok) {
             onError(result.error);
             return;

@@ -50,8 +50,16 @@ export const LABEL_SHORTCUT_GROUPS: readonly LabelShortcutGroup[] = [
         action: "Leave full screen",
         note: "Hold it, in Chrome or Edge. Elsewhere, the exit button",
       },
-      { keys: ["]"], action: "Next score flag" },
-      { keys: ["["], action: "Previous score flag" },
+      {
+        keys: ["]"],
+        action: "Next score flag",
+        note: "With none open, the next error to mark",
+      },
+      {
+        keys: ["["],
+        action: "Previous score flag",
+        note: "With none open, the previous error to mark",
+      },
       { keys: ["'"], action: "Next data flag" },
       { keys: [";"], action: "Previous data flag" },
     ],
@@ -67,7 +75,12 @@ export const LABEL_SHORTCUT_GROUPS: readonly LabelShortcutGroup[] = [
       {
         keys: ["E"],
         action: "Forced or unforced error",
-        note: "On a missed last shot. Again to switch back",
+        note: "On a missed last shot. Again to switch back. While asked, forced and on to the next",
+      },
+      {
+        keys: ["U"],
+        action: "Unforced error",
+        note: "On a missed last shot. While asked, on to the next",
       },
       {
         keys: ["1", "2", "3", "4"],

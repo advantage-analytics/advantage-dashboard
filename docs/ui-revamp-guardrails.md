@@ -407,7 +407,7 @@ be. Doubles teams and existing users depend on it.
 
 > **A reviewed exception, added 2026-10-30: a service winner is not a winner.**
 > Product decision by the user, asked and answered for this change, including
-> its live write (`20261030000000_winners_exclude_service_winners.sql`).
+> its live write (`20261102033807_winners_exclude_service_winners.sql`).
 > `calculate_match_stats` leaves `'Service Winner'` out of `winners` and
 > `volley_winners`, and those two columns are recounted from `points` on every
 > existing `match_stats` row, SwingVision included. The measured effect is

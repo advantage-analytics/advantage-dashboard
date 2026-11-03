@@ -21,6 +21,10 @@ import {
   COLD_EMAILS,
   OUTREACH_MERGE_FIELDS,
 } from "@/lib/services/outreach/types";
+import {
+  actionRejectedMessage,
+  actionRejectedWith,
+} from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -74,7 +78,9 @@ export function OutreachTemplateEditor({
   useEffect(() => {
     if (draft?.emailNo === emailNo) return;
     startLoad(async () => {
-      const result = await loadOutreachTemplate(emailNo);
+      const result = await loadOutreachTemplate(emailNo).catch(
+        actionRejectedWith("Couldn't load this template. Try again."),
+      );
       if (result.ok) {
         setDraft({
           emailNo,
@@ -119,7 +125,7 @@ export function OutreachTemplateEditor({
       const result = await previewOutreach(recipientId, emailNo, {
         subject: source.subject,
         html: source.html,
-      });
+      }).catch(actionRejectedWith("Couldn't load the preview. Try again."));
       if (result.ok) {
         setPreview({
           key: `${emailNo}:${recipientId}`,
@@ -173,7 +179,7 @@ export function OutreachTemplateEditor({
         emailNo,
         current.subject,
         current.html,
-      );
+      ).catch((error) => ({ ...actionRejectedMessage(error), problems: [] }));
       setNotice({ emailNo, ...result });
       if (result.ok) {
         setDraft({
@@ -191,7 +197,9 @@ export function OutreachTemplateEditor({
 
   function startFromOriginal() {
     startSave(async () => {
-      const result = await loadOriginalOutreachTemplate(emailNo);
+      const result = await loadOriginalOutreachTemplate(emailNo).catch(
+        actionRejectedWith("Couldn't load the original. Try again."),
+      );
       if (result.ok) {
         edit({ subject: result.subject, html: result.html });
         setNotice({
@@ -209,7 +217,9 @@ export function OutreachTemplateEditor({
 
   function reset() {
     startSave(async () => {
-      const result = await resetOutreachTemplate(emailNo);
+      const result = await resetOutreachTemplate(emailNo).catch(
+        actionRejectedMessage,
+      );
       setConfirmReset(false);
       setNotice({ emailNo, ...result, problems: [] });
       if (result.ok) {

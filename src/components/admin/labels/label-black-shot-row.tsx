@@ -626,7 +626,11 @@ export function BlackShotRow({
   // Forced | Unforced: on the stroke that ended the point in an error alone.
   const onPatchPoint = edit.onPatchPoint;
   const errorKind: ShotTrayErrorKind | null =
-    trayActions && point && onPatchPoint && errorKindShotId(point) === shot.id
+    trayActions &&
+    point &&
+    onPatchPoint &&
+    errorKindShotId(point) === shot.id &&
+    edit.errorAskedShotId !== shot.id
       ? {
           kind: point.errorKind,
           pick: (kind) => {

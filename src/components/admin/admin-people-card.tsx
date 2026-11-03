@@ -32,6 +32,7 @@ import {
   adminSetProgramMemberRole,
   adminTransferProgramOwnership,
 } from "@/lib/services/programs/admin-team-actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { getInitials, shortDate } from "@/lib/data/match-utils";
 import type {
   AdminTeamInvite,
@@ -215,7 +216,7 @@ export function AdminPeopleCard({
     setNote(null);
     startRowAction(async () => {
       optimistic?.();
-      const result = await work();
+      const result = await work().catch(actionRejected);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -235,7 +236,7 @@ export function AdminPeopleCard({
         programId,
         email: address,
         role,
-      });
+      }).catch(actionRejected);
       if (!result.ok) {
         setError(result.error);
         return;

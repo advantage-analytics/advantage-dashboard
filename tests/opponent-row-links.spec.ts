@@ -4,7 +4,8 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { opponentFormBars } from "@/components/dashboard/opponents/opponent-form-links";
-import type { OpponentFormBar } from "@/components/dashboard/opponents/opponent-form-links";
+import { playerFormBar, type FormBar } from "@/lib/data/form-bar";
+import { UNKNOWN_OPPONENT_NAME } from "@/lib/data/personal-opponents";
 import { opponentRowControl } from "@/components/dashboard/opponents/opponents-table-layout";
 import type {
   PersonalOpponentForm,
@@ -63,7 +64,7 @@ const cells = createLoader({
   OpponentRecordCell: React.ComponentType<{
     wins: number;
     losses: number;
-    bars: readonly OpponentFormBar[];
+    bars: readonly FormBar[];
   }>;
 };
 
@@ -112,11 +113,11 @@ test.describe("opponentFormBars", () => {
 
   test("names the player only when the table can say who played", () => {
     const match = { ...recent("a", "2026-10-01"), rosterPlayerId: "p1" };
-    expect(opponentFormBars(["win"], [match])[0].match.player).toBeNull();
+    expect(opponentFormBars(["win"], [match])[0].match.person).toBeNull();
     expect(
       opponentFormBars(["win"], [match], (m) =>
         m.rosterPlayerId === "p1" ? "Daniel Reyes" : null,
-      )[0].match.player,
+      )[0].match.person,
     ).toBe("Daniel Reyes");
   });
 });
@@ -170,7 +171,7 @@ test.describe("the row's links", () => {
 });
 
 test.describe("the form bars", () => {
-  const record = (bars: readonly OpponentFormBar[]) =>
+  const record = (bars: readonly FormBar[]) =>
     renderToStaticMarkup(
       React.createElement(cells.OpponentRecordCell, {
         wins: 1,
@@ -224,6 +225,99 @@ test.describe("the form bars", () => {
     expect(barLinks(html)).toHaveLength(0);
     expect(html.match(/bg-\[var\(--ink-100\)\]/g)).toHaveLength(5);
     expect(html).toContain("No form yet");
+  });
+});
+
+test.describe("playerFormBar", () => {
+  const match = {
+    id: "m",
+    date: "2026-10-12",
+    score: { player1: [4, 3], player2: [6, 6] },
+    won: false,
+    event: " Regionals ",
+    opponent: "Daniel Reyes",
+  };
+
+  test("states the score from the player's own side, in either seat", () => {
+    const seatOne = playerFormBar({ ...match, isPlayer1: true });
+    const seatTwo = playerFormBar({ ...match, isPlayer1: false, won: true });
+    expect(seatOne.result).toBe("loss");
+    expect(seatOne.match.sets[0]).toMatchObject({ player1: 4, player2: 6 });
+    expect(seatTwo.result).toBe("win");
+    expect(seatTwo.match.sets[0]).toMatchObject({ player1: 6, player2: 4 });
+  });
+
+  test("names the opponent, and nobody when the match does not", () => {
+    const named = playerFormBar({ ...match, isPlayer1: true });
+    expect(named.match.person).toBe("vs Daniel Reyes");
+    expect(named.match.event).toBe("Regionals");
+    for (const opponent of [null, "  ", "Unknown", UNKNOWN_OPPONENT_NAME]) {
+      expect(
+        playerFormBar({ ...match, isPlayer1: true, opponent }).match.person,
+      ).toBeNull();
+    }
+  });
+});
+
+test.describe("FormStrip beyond Opponents", () => {
+  const strip = createLoader({
+    stubs: {
+      "next/link": { __esModule: true, default: LinkStub },
+      "@/components/ui/tooltip": {
+        Tooltip: passThrough,
+        TooltipContent: passThrough,
+        TooltipProvider: passThrough,
+        TooltipTrigger: passThrough,
+      },
+    },
+  }).load("src/components/dashboard/shared/form-strip.tsx") as {
+    FormStrip: React.ComponentType<{
+      bars: readonly FormBar[];
+      slots?: number;
+      empty?: React.ReactNode;
+      linked?: boolean;
+    }>;
+  };
+  const bars: FormBar[] = [
+    {
+      result: "win",
+      match: {
+        id: "m",
+        date: "2026-10-12",
+        sets: [{ player1: 6, player2: 4 }],
+        event: "Regionals",
+        person: "vs Daniel Reyes",
+      },
+    },
+  ];
+  const render = (props: {
+    bars: readonly FormBar[];
+    slots?: number;
+    linked?: boolean;
+    empty?: React.ReactNode;
+  }) => renderToStaticMarkup(React.createElement(strip.FormStrip, props));
+
+  test("the readout names who the row does not", () => {
+    const html = render({ bars });
+    expect(html).toContain("vs Daniel Reyes");
+    expect(html).toContain("Oct 12 · Regionals");
+  });
+
+  test("inside a row that is one link, a bar keeps its hover and no link", () => {
+    const html = render({ bars, linked: false });
+    expect(html).not.toContain("<a ");
+    expect(html).toContain("group/bar");
+    expect(html).toContain("vs Daniel Reyes");
+  });
+
+  test("only a bar takes the pointer, so a ghost fades nothing", () => {
+    const html = render({ bars, slots: 5 });
+    expect(html).toContain("group/form pointer-events-none");
+    expect(html.match(/pointer-events-auto/g)).toHaveLength(1);
+  });
+
+  test("no results and no slots draws the caller's empty", () => {
+    expect(render({ bars: [], empty: null })).toBe("");
   });
 });
 

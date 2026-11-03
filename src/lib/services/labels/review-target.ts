@@ -85,6 +85,7 @@ export function memberShotId(
  */
 const ENDING_ONLY: ReadonlySet<LabelMarkCode> = new Set([
   "ending_stale",
+  "ending_contradicts_winner",
   "result_type_unknown",
 ]);
 
@@ -182,6 +183,7 @@ function memberTarget(
     // An ending that reads wrong is still the last ball's to settle: the
     // court opens on its landing, as for the other end-of-point questions.
     case "ending_stale":
+    case "ending_contradicts_winner":
     case "result_type_unknown":
       return [last, "landing"];
     case "pick_winner":
