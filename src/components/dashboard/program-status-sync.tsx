@@ -4,16 +4,19 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { createClient } from "@/lib/supabase/client";
-import { watchProgramStatus } from "@/lib/workspace/program-status-watch";
+import {
+  holdsUploadFlow,
+  watchProgramStatus,
+} from "@/lib/workspace/program-status-watch";
 
 /**
  * Refreshes the dashboard when an admin decides this program's claim, so the
  * coach does not have to reload to see it. Runs only while the claim is pending;
  * once the refresh lands, `programStatus` has moved on and this stops.
  *
- * Holds off inside the upload wizard: a refresh there drops the file selection
- * (see `WorkspaceSync`), and SwingVision imports work during review. Leaving the
- * wizard changes the pathname, which checks again straight away.
+ * Holds off on the pages that mount the upload flow (`holdsUploadFlow`): a
+ * refresh there drops the file selection, and SwingVision imports work during
+ * review. Leaving one changes the pathname, which checks again straight away.
  */
 export function ProgramStatusSync() {
   const pathname = usePathname();
@@ -24,10 +27,10 @@ export function ProgramStatusSync() {
     active.kind === "team" && active.programStatus === "claim_pending"
       ? active.id
       : null;
-  const inWizard = pathname.startsWith("/dashboard/matches/new");
+  const inUploadFlow = holdsUploadFlow(pathname);
 
   useEffect(() => {
-    if (!pendingProgram || inWizard) return;
+    if (!pendingProgram || inUploadFlow) return;
     const supabase = createClient();
 
     return watchProgramStatus({
@@ -57,7 +60,7 @@ export function ProgramStatusSync() {
         },
       },
     });
-  }, [pendingProgram, inWizard, router]);
+  }, [pendingProgram, inUploadFlow, router]);
 
   return null;
 }

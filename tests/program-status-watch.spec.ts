@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   PROGRAM_STATUS_POLL_MS,
+  holdsUploadFlow,
   watchProgramStatus,
 } from "@/lib/workspace/program-status-watch";
 
@@ -10,7 +11,10 @@ import {
  * one direction, a coach reloads by hand after approval; wrong in the other, the
  * page refreshes under them on every tick or dropped request.
  */
-function setup(answers: (string | null | Error)[]) {
+function setup(
+  answers: (string | null | Error | "hang")[],
+  readTimeoutMs?: number,
+) {
   let hidden = false;
   let tick = () => {};
   let back = () => {};
@@ -24,9 +28,11 @@ function setup(answers: (string | null | Error)[]) {
     read: async () => {
       const answer = answers[Math.min(reads, answers.length - 1)];
       reads += 1;
+      if (answer === "hang") return new Promise<null>(() => {});
       if (answer instanceof Error) throw answer;
       return answer;
     },
+    readTimeoutMs,
     onDecided: () => {
       decided += 1;
     },
@@ -117,6 +123,39 @@ test("a hidden tab does not poll, and coming back checks", async () => {
   w.back();
   await w.settle();
   expect(w.state().decided).toBe(1);
+});
+
+test("a read that never settles times out, so later checks still run", async () => {
+  const w = setup(["hang", "active"], 20);
+  await w.settle();
+  w.tick();
+  await w.settle();
+  expect(w.state().reads).toBe(1);
+
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  w.tick();
+  await w.settle();
+  expect(w.state().reads).toBe(2);
+  expect(w.state().decided).toBe(1);
+});
+
+test("holds off on both pages that mount the upload flow, and nowhere else", () => {
+  for (const path of [
+    "/dashboard/matches/new",
+    "/dashboard/matches/new/anything",
+    "/dashboard/team/upload",
+  ]) {
+    expect(holdsUploadFlow(path)).toBe(true);
+  }
+  for (const path of [
+    "/dashboard",
+    "/dashboard/team",
+    "/dashboard/matches",
+    "/dashboard/matches/newer",
+    "/dashboard/team/uploads",
+  ]) {
+    expect(holdsUploadFlow(path)).toBe(false);
+  }
 });
 
 test("an answer arriving after cleanup is ignored", async () => {

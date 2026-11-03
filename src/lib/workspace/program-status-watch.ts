@@ -2,9 +2,9 @@
  * Notice a program's claim being decided while its coach is looking at it.
  *
  * `Workspace.programStatus` is read once, by the dashboard layout, and a soft
- * navigation never re-runs that layout. So an admin approving a claim changed
- * nothing on the coach's screen: "New match" stayed paused until they reloaded,
- * which is what a UGA coach had to do ten seconds after approval on a live demo.
+ * navigation never re-runs that layout. So an admin's decision changed nothing
+ * on an open dashboard until a reload: on a program with players or matches,
+ * "New match" stayed paused after approval.
  *
  * A poll and a focus check rather than a Realtime channel, because `programs`
  * is not in the `supabase_realtime` publication and this only runs for the few
@@ -13,6 +13,26 @@
  */
 
 export const PROGRAM_STATUS_POLL_MS = 30_000;
+
+/**
+ * How long one read may take before it counts as failed. supabase-js sets no
+ * timeout, and a fetch left hanging by a sleeping laptop would otherwise hold
+ * `reading` true and turn every later check away.
+ */
+export const PROGRAM_STATUS_READ_TIMEOUT_MS = 10_000;
+
+/**
+ * Routes where a refresh would cost the coach work: both mount the upload flow,
+ * whose file selection does not survive one (see `WorkspaceSync`), and
+ * SwingVision imports run on them during review. Leaving checks again.
+ */
+const UPLOAD_FLOW_ROUTES = ["/dashboard/matches/new", "/dashboard/team/upload"];
+
+export function holdsUploadFlow(pathname: string): boolean {
+  return UPLOAD_FLOW_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
+}
 
 /** The one browser surface this needs, so a test can stand in for it. */
 export interface WatchSurface {
@@ -32,11 +52,13 @@ export function watchProgramStatus({
   read,
   onDecided,
   surface,
+  readTimeoutMs = PROGRAM_STATUS_READ_TIMEOUT_MS,
 }: {
   current: string;
   read: () => Promise<string | null>;
   onDecided: () => void;
   surface: WatchSurface;
+  readTimeoutMs?: number;
 }): () => void {
   let stopped = false;
   let reading = false;
@@ -50,8 +72,14 @@ export function watchProgramStatus({
   const check = async () => {
     if (stopped || reading || surface.isHidden()) return;
     reading = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const status = await read();
+      const status = await Promise.race([
+        read(),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), readTimeoutMs);
+        }),
+      ]);
       if (!stopped && status !== null && status !== current) {
         stop();
         onDecided();
@@ -59,6 +87,7 @@ export function watchProgramStatus({
     } catch {
       // The next tick or focus asks again.
     } finally {
+      clearTimeout(timer);
       reading = false;
     }
   };
