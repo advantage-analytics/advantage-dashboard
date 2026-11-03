@@ -23,6 +23,7 @@ import {
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
 import { rotateServers, type GameServerPoint } from "./game-operations";
+import { pullBackSeedServeLandings } from "./serve-autofix";
 import { gameServeRepeats } from "./game-serve-order";
 import { gameKey } from "./score";
 import {
@@ -484,6 +485,10 @@ function matchTiebreakShape(
  * `match` — the record's `score` and `best_of` — lets the seed type the
  * deciding set the entered score spells as a match tiebreak
  * (`matchTiebreakShape`); without it every point is an ordinary game.
+ *
+ * Two autofixes run on the rows before they are returned, each written into
+ * the frozen `seed` too: settled serve repeats (`fixSettledServeRepeats`) and
+ * in serves' out landings pulled back into the box (serve-autofix.ts).
  */
 export function buildLabelSeed(
   transcript: Transcript,
@@ -591,7 +596,9 @@ export function buildLabelSeed(
     };
   });
 
-  return { points: fixSettledServeRepeats(points) };
+  return {
+    points: pullBackSeedServeLandings(fixSettledServeRepeats(points)),
+  };
 }
 
 /**
