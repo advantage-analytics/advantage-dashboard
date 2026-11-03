@@ -290,6 +290,9 @@ export function SupportThreadDialog({
               variant="pill"
               width="trigger"
               align="start"
+              // Five matches and five topics outgrow a laptop window under
+              // the dialog; cap it and scroll rather than run off-screen.
+              scroll
               className="w-full"
             />
           </div>

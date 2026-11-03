@@ -35,6 +35,7 @@ function RosterDialogStub(props: {
 function MenuSelectStub(props: {
   label: string;
   placeholder?: string;
+  scroll?: boolean;
   options: {
     value: string;
     label: string;
@@ -44,7 +45,11 @@ function MenuSelectStub(props: {
 }) {
   return React.createElement(
     "div",
-    { "data-menu": props.label, "data-placeholder": props.placeholder },
+    {
+      "data-menu": props.label,
+      "data-placeholder": props.placeholder,
+      "data-scroll": props.scroll ? "true" : "false",
+    },
     props.options.map((option) =>
       React.createElement(
         "div",
@@ -135,6 +140,9 @@ test.describe("SupportThreadDialog compose form", () => {
       "Goes straight to the people building Advantage. We answer here, and you&#x27;ll see it in Activity.",
     );
     expect(html).toContain('data-placeholder="Choose one"');
+    // Ten options under the dialog outgrow a laptop window: the menu must cap
+    // its height and scroll, not run off the bottom of the screen.
+    expect(html).toContain('data-scroll="true"');
     expect(optionsIn(html, "Something else")).toEqual(OTHER_LABELS);
     expect(optionsIn(html, "Your matches")).toEqual([
       "vs. Rafael Nadal",
