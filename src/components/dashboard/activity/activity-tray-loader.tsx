@@ -11,10 +11,8 @@ import {
   getPendingInvites,
 } from "@/lib/data/pending-invites-server";
 import { getSetupSteps } from "@/lib/data/setup-progress-server";
-import {
-  getSupportUnread,
-  type SupportUnread,
-} from "@/lib/data/support-server";
+import { getSupportUnread } from "@/lib/data/support-server";
+import { NO_SUPPORT, type SupportUnread } from "@/lib/data/support-view";
 import { ActivityTray } from "./activity-tray";
 
 /**
@@ -94,13 +92,6 @@ export async function ActivityTrayLoader() {
     />
   );
 }
-
-/** What a failed thread read answers: no thread, so no row and no dot. */
-const NO_SUPPORT: SupportUnread = {
-  hasThread: false,
-  unreadStaff: false,
-  latestStaff: null,
-};
 
 /**
  * The trigger, inert, at exactly the size the real one occupies.

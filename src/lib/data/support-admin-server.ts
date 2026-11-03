@@ -87,6 +87,11 @@ export async function listSupportThreads(): Promise<AdminSupportThreadRow[]> {
   const { data, error } = await db
     .from("support_threads")
     .select(THREAD_COLUMNS)
+    // Newest player message first, so a thread waiting on staff is never the
+    // one the cap cuts — an old thread with a fresh message would otherwise
+    // drop off while the nav still counted it. Re-sorted by last activity
+    // below.
+    .order("last_player_message_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
     .limit(MAX_ADMIN_SUPPORT_THREADS);
   if (error)

@@ -17,6 +17,8 @@ import type { AdminSupportThreadRow } from "@/lib/data/support-admin-server";
 import {
   STAFF_NAME_FALLBACK,
   SUPPORT_MESSAGE_MAX,
+  browserTimeZone,
+  dayHeading,
   foldOlderDays,
   topicLabel,
   type AdminSupportMessage,
@@ -323,25 +325,6 @@ function ThreadSkeleton() {
   );
 }
 
-function viewerZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {
-    return "UTC";
-  }
-}
-
-/** "Monday, Nov 3" in the viewer's zone — the key and the label of a day. */
-function dayHeading(at: string): string {
-  const date = new Date(at);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
-}
-
 function ThreadMessages({
   messages,
   playerFirst,
@@ -362,11 +345,12 @@ function ThreadMessages({
   const isClient = useIsClient();
   if (!isClient) return <ThreadSkeleton />;
 
-  const { earlier, recent } = foldOlderDays(messages, new Date(), viewerZone());
+  const zone = browserTimeZone();
+  const { earlier, recent } = foldOlderDays(messages, new Date(), zone);
   const visible = showEarlier ? messages : recent;
   const readMs = playerReadAt ? Date.parse(playerReadAt) : NaN;
 
-  const days = visible.map((message) => dayHeading(message.createdAt));
+  const days = visible.map((message) => dayHeading(message.createdAt, zone));
   return (
     <>
       {!showEarlier && earlier.length > 0 ? (
@@ -375,8 +359,8 @@ function ThreadMessages({
           onClick={onShowEarlier}
           className="cursor-pointer self-start text-[12px] text-[var(--ink-600)] transition-colors duration-200 hover:text-[var(--ink-900)]"
         >
-          Show {earlier.length} earlier · from{" "}
-          {dayHeading(earlier[0].createdAt)}
+          Show {earlier.length} earlier · From{" "}
+          {dayHeading(earlier[0].createdAt, zone)}
         </button>
       ) : null}
       {visible.map((message, i) => {

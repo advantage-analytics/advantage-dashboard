@@ -40,7 +40,7 @@ export function supportReplyEmail(input: SupportReplyInput): EmailMessage {
     body: [...paragraphs, `${admin} at Advantage`],
     cta: {
       label: "Reply in Advantage",
-      url: `${emailOrigin()}/dashboard?messages=open`,
+      url: `${emailOrigin()}/dashboard/messages`,
     },
     note: "You can also answer this email. It reaches the same people.",
     footer:

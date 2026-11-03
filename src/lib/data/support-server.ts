@@ -6,6 +6,8 @@ import { viewerSide } from "@/lib/data/viewer-side";
 import {
   STAFF_NAME_FALLBACK,
   hasUnreadStaff,
+  NO_SUPPORT,
+  type SupportUnread,
   isSupportOrigin,
   isSupportTopic,
   messagePreview,
@@ -102,19 +104,6 @@ export async function getSupportThread(
   };
 }
 
-export interface SupportUnread {
-  hasThread: boolean;
-  /** `last_staff_message_at > coalesce(player_read_at, '-infinity')`. */
-  unreadStaff: boolean;
-  /** The newest staff message, whether read or not; null when there is none. */
-  latestStaff: {
-    authorName: string;
-    preview: string;
-    createdAt: string;
-    matchId: string | null;
-  } | null;
-}
-
 /** What the shell's unread dot and reply toast need. */
 export async function getSupportUnread(
   supabase: SupabaseClient,
@@ -126,8 +115,7 @@ export async function getSupportUnread(
   if (error) {
     throw new Error("Could not load your messages", { cause: error });
   }
-  if (!thread)
-    return { hasThread: false, unreadStaff: false, latestStaff: null };
+  if (!thread) return NO_SUPPORT;
 
   const row = thread as {
     id: string;

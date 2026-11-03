@@ -165,6 +165,25 @@ test.describe("foldOlderDays", () => {
     expect(recent).toEqual([list[1]]);
   });
 
+  test("a quiet thread keeps its newest day visible", () => {
+    // Nothing today or yesterday: the reply someone came to read must not
+    // fold away with the rest.
+    const { earlier, recent } = foldOlderDays(messages, "2026-11-09");
+    expect(earlier).toEqual([messages[0], messages[1], messages[2]]);
+    expect(recent).toEqual([messages[3]]);
+  });
+
+  test("a quiet thread keeps every message of its newest day", () => {
+    const list = [
+      at("2026-10-20T09:00:00Z"),
+      at("2026-10-28T09:00:00Z"),
+      at("2026-10-28T17:00:00Z"),
+    ];
+    const { earlier, recent } = foldOlderDays(list, "2026-11-09");
+    expect(earlier).toEqual([list[0]]);
+    expect(recent).toEqual([list[1], list[2]]);
+  });
+
   test("an empty thread folds to two empty halves", () => {
     expect(foldOlderDays([], "2026-11-02")).toEqual({
       earlier: [],

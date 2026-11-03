@@ -8,6 +8,8 @@ import { DialogProblem } from "@/components/ui/dialog-problem";
 import type { SupportMatchOption } from "@/lib/data/support-server";
 import {
   STAFF_NAME_FALLBACK,
+  browserTimeZone,
+  dayHeading,
   foldOlderDays,
   type SupportMessage,
   type SupportThread,
@@ -316,26 +318,6 @@ function ThreadSkeleton() {
   );
 }
 
-function browserZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {
-    return "UTC";
-  }
-}
-
-/** "Monday, Nov 3" in `timeZone` — the key and the label of a day. */
-function dayHeading(at: string, timeZone: string): string {
-  const date = new Date(at);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-    timeZone,
-  });
-}
-
 function timeOf(at: string, timeZone: string): string {
   const date = new Date(at);
   if (Number.isNaN(date.getTime())) return "";
@@ -365,7 +347,7 @@ function ThreadMessages({
   now?: Date;
   timeZone?: string;
 }) {
-  const zone = timeZone ?? browserZone();
+  const zone = timeZone ?? browserTimeZone();
   const { earlier, recent } = foldOlderDays(messages, now ?? new Date(), zone);
   const visible = showEarlier ? messages : recent;
   const days = visible.map((message) => dayHeading(message.createdAt, zone));

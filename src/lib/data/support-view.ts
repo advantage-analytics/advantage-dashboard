@@ -83,6 +83,26 @@ export interface AdminSupportThread extends SupportThread {
   staffReadAt: string | null;
 }
 
+export interface SupportUnread {
+  hasThread: boolean;
+  /** `last_staff_message_at > coalesce(player_read_at, '-infinity')`. */
+  unreadStaff: boolean;
+  /** The newest staff message, whether read or not; null when there is none. */
+  latestStaff: {
+    authorName: string;
+    preview: string;
+    createdAt: string;
+    matchId: string | null;
+  } | null;
+}
+
+/** No thread: no note row, nothing counted. The loader's failure answer too. */
+export const NO_SUPPORT: SupportUnread = {
+  hasThread: false,
+  unreadStaff: false,
+  latestStaff: null,
+};
+
 export function isSupportTopic(value: unknown): value is SupportTopic {
   return (
     typeof value === "string" &&
@@ -231,6 +251,22 @@ export function foldOlderDays<T extends { createdAt: string }>(
     if (day !== null && day < yesterday) earlier.push(message);
     else recent.push(message);
   }
+  // A quiet thread would otherwise fold away whole, leaving only the button —
+  // and the reply someone opened the thread to read behind a click. The
+  // newest day always stays out.
+  if (recent.length === 0 && earlier.length > 0) {
+    const lastDayOf = (message: T) => {
+      const ms = momentMs(message.createdAt);
+      return ms === null ? null : zonedDayString(new Date(ms), timeZone);
+    };
+    const lastDay = lastDayOf(earlier[earlier.length - 1]);
+    while (
+      earlier.length > 0 &&
+      lastDayOf(earlier[earlier.length - 1]) === lastDay
+    ) {
+      recent.unshift(earlier.pop() as T);
+    }
+  }
   return { earlier, recent };
 }
 
@@ -259,4 +295,25 @@ export function sendErrorMessage(
     return "That message is too long. Keep it under 4,000 characters.";
   }
   return "Your message didn't send. Please try again.";
+}
+
+/** The viewer's IANA zone; "UTC" where the runtime cannot say. */
+export function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+/** "Monday, Nov 3" in `timeZone` — the key and the label of a day. */
+export function dayHeading(at: string, timeZone: string): string {
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    timeZone,
+  });
 }

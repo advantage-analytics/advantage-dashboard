@@ -26,11 +26,11 @@ for (const kind of ["html", "text"] as const) {
     expect(out).toContain("We fixed the score on your Tuesday match.");
     expect(out).toContain("Cj at Advantage");
     expect(out).toContain("Reply in Advantage");
-    expect(out).toContain("/dashboard?messages=open");
+    expect(out).toContain("/dashboard/messages");
   });
 }
 
 test("html links the button and splits lines into paragraphs", () => {
-  expect(msg.html).toMatch(/href="[^"]*\/dashboard\?messages=open"/);
+  expect(msg.html).toMatch(/href="[^"]*\/dashboard\/messages"/);
   expect(msg.html).toContain("Thanks for flagging this.</p>");
 });

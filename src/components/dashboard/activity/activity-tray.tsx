@@ -56,7 +56,7 @@ import type {
 // drag the server module into the browser bundle.
 import type { PendingInvite } from "@/lib/data/pending-invites-server";
 // Type-only for the same reason: `support-server.ts` is the server loader.
-import type { SupportUnread } from "@/lib/data/support-server";
+import { NO_SUPPORT, type SupportUnread } from "@/lib/data/support-view";
 import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
 import { cn } from "@/lib/utils";
 
@@ -127,13 +127,6 @@ function Lead({ children }: { children?: React.ReactNode }) {
     <span className="flex w-[14px] shrink-0 justify-center">{children}</span>
   );
 }
-
-/** No thread: no note row, nothing counted. The loader's failure answer too. */
-const NO_SUPPORT: SupportUnread = {
-  hasThread: false,
-  unreadStaff: false,
-  latestStaff: null,
-};
 
 const DOT = (
   <span

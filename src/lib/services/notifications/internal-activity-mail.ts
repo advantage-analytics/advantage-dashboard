@@ -6,8 +6,8 @@ import {
   supportMessageInternalEmail,
   uploadInternalEmail,
   INTERNAL_ALERTS_ADDRESS,
-  type SupportMessageTopic,
 } from "@/lib/services/email";
+import { isSupportTopic } from "@/lib/data/support-view";
 import { isUuid } from "@/lib/admin/validation";
 import { isFirstMatchFeedbackRating } from "@/lib/feedback/first-match-feedback";
 import { emailOrigin } from "@/lib/site-url";
@@ -267,15 +267,6 @@ async function notifyFeedback(
   );
 }
 
-const SUPPORT_TOPICS: readonly SupportMessageTopic[] = [
-  "match",
-  "upload",
-  "billing",
-  "team",
-  "idea",
-  "other",
-];
-
 /**
  * A player's message in their support thread (`support_messages`, written by
  * `send_support_message()` or a feedback note opening the thread). Shaped like
@@ -326,9 +317,7 @@ async function notifySupportMessage(
     return "duplicate";
   }
 
-  const topic = SUPPORT_TOPICS.includes(row.topic as SupportMessageTopic)
-    ? (row.topic as SupportMessageTopic)
-    : null;
+  const topic = isSupportTopic(row.topic) ? row.topic : null;
   return deliver(
     supportMessageInternalEmail({
       to: INTERNAL_ALERTS_ADDRESS,
