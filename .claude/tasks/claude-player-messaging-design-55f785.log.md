@@ -23,3 +23,12 @@ is the runner's. Newest entries at the bottom.
 2. Route comment names the T3 migration `support_messaging_triggers` — update it if T3 picks another name.
 3. Topic labels live only in the email template; share one source with the player UI in T5/T7.
 4. `templates/internal-activity.ts` header still says "the two FYIs" (stale since the feedback alert).
+
+## T4 · Player reply email: `support-reply.ts` — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+**changed:** New `supportReplyEmail()` (EmailContent through the shell: eyebrow "Message from Advantage", heading "{admin} replied", reply as paragraphs, sign-off "{admin} at Advantage", CTA "Reply in Advantage" → `/dashboard?messages=open`, replyTo `SUPPORT_ADDRESS`, tag `support_reply`), exported with a doc-table row naming `sendStaffMessage()`; offline spec 4/4.
+**follow-ups:**
+
+1. `playerFirstName` and `sentAt` are accepted but not rendered (the canvas has no greeting or timestamp) — add a "Hi {name}" line if wanted.
+2. The index.ts row says "WIRED once T5 lands" — correct once T5 commits.

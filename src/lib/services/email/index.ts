@@ -44,6 +44,7 @@
  * | Upload (internal)        | same route: a first-attempt `processing_jobs` row leaving `pending`/`uploading` (video), or a `match_files` insert (SwingVision), to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("upload_internal:<job_id \| match_id>")` — WIRED once Vault holds `cron_secret` |
  * | Feedback (internal)      | same route: a `product_feedback` insert (the first-match prompt's answer, `submit_product_feedback()`), with the note in full, to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("feedback_internal:<feedback_id>")` — WIRED once Vault holds `cron_secret` |
  * | Player message (internal) | same route: a `support_messages` insert with `author_role = 'player'` (the in-app "Message Advantage" thread, `send_support_message()`, or a feedback note opening one), with the message in full and a link to `/admin/messages?id=<thread_id>`, to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("support_message_internal:<message_id>")` — WIRED once the `support_messages` trigger is applied |
+ * | Player reply (staff)     | `sendStaffMessage()` (T5) — a staff reply in the in-app support thread, to the player only, never a receipt for their own message — WIRED once T5 lands |
  *
  * The claim and invite-request rows fire from
  * `services/programs/{admin-actions,claim-actions}.ts`. None of them can fail
@@ -217,3 +218,8 @@ export {
   type FirstUploadNudgeInput,
   type FirstUploadStep,
 } from "./templates/first-upload";
+
+export {
+  supportReplyEmail,
+  type SupportReplyInput,
+} from "./templates/support-reply";

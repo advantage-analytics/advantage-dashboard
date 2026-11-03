@@ -58,7 +58,7 @@ ready).
 
 ## T4 · Player reply email: `support-reply.ts`
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/services/email/templates/support-reply.ts (new), src/lib/services/email/index.ts, tests/support-reply-email.spec.ts (new) — a guess
 - **done when:**
