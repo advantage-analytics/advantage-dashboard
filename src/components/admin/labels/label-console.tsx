@@ -615,27 +615,6 @@ export function LabelConsole({
       return [{ pointId: s.pointId, afterShotId: s.afterShotId }];
     });
   }, [liveMarks, points]);
-  // The open counts the overview shows — flagged points, amber and grey —
-  // saved on the session whenever they change, so the Labels list reads the
-  // work left without building marks.
-  const openCounts = useMemo(() => {
-    if (!liveMarks) return null;
-    const open = openFlags(points, liveMarks);
-    // Each list's own count: a point in both (`openFlags`) is one in each, so
-    // the two are never a total of points.
-    const grey = open.filter((flag) => flag.data).length;
-    return { amber: open.length - grey, grey };
-  }, [points, liveMarks]);
-  const recordOpenCounts = operations?.recordOpenCounts;
-  const recordedCounts = useRef<string | null>(null);
-  useEffect(() => {
-    if (!openCounts || !recordOpenCounts) return;
-    const key = `${openCounts.amber}/${openCounts.grey}`;
-    if (recordedCounts.current === key) return;
-    recordedCounts.current = key;
-    // A cache: a failed save leaves the list a step behind, nothing more.
-    void recordOpenCounts(session.id, openCounts).catch(() => {});
-  }, [openCounts, recordOpenCounts, session.id]);
   // The deciding set the match record spells as a 10-point match tiebreak
   // (set-scores.ts) — never the labeller's own `final_score`, which is games
   // only. "Make it a match tiebreak" offers to fold it, and the shift and
@@ -3036,6 +3015,32 @@ export function LabelConsole({
     session.matchScore,
     slotJumpStops,
   ]);
+  // The header's two totals (label-flag-summary.tsx `count`), saved on the
+  // session whenever they change, so the Labels list reads the work left
+  // without building marks: amber is the amber flagged points and the score
+  // that doesn't add up — not the slots between rows, which the header's
+  // total leaves out too — grey the grey flagged points. A point in both
+  // lists (`openFlags`) is one in each.
+  const openCounts = useMemo(
+    () =>
+      liveMarks
+        ? {
+            amber: flagStops.score.length - slotJumpStops.length,
+            grey: flagStops.data.length,
+          }
+        : null,
+    [liveMarks, flagStops, slotJumpStops],
+  );
+  const recordOpenCounts = operations?.recordOpenCounts;
+  const recordedCounts = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openCounts || !recordOpenCounts) return;
+    const key = `${openCounts.amber}/${openCounts.grey}`;
+    if (recordedCounts.current === key) return;
+    recordedCounts.current = key;
+    // A cache: a failed save leaves the list a step behind, nothing more.
+    void recordOpenCounts(session.id, openCounts).catch(() => {});
+  }, [openCounts, recordOpenCounts, session.id]);
   // What Mark complete would list. Memoised: the console re-renders on every
   // film tick while it plays.
   const sessionWarnings = useMemo(
