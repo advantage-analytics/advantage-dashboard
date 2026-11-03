@@ -73,6 +73,7 @@ import {
 import { labelScores } from "@/lib/services/labels/score";
 import {
   drawsGhosts,
+  openHintMarks,
   type ReviewItemId,
 } from "@/lib/services/labels/marks-state";
 import {
@@ -3194,7 +3195,26 @@ export function LabelConsole({
     };
     toggleOpenPointCheck.current = () => {
       if (!operable || confirm || !expanded) return;
-      setChecked(expanded.id, expanded.checkedAt === null);
+      if (expanded.checkedAt !== null) {
+        setChecked(expanded.id, false);
+        return;
+      }
+      // ⌘ Enter takes the rows as true: an ending left behind by them
+      // ("Different ending?") becomes the one they derive, as its "Make it …"
+      // writes it, winner with it. A check alone would leave that question
+      // open where the winner disagrees (`reviewFlag`).
+      const stale = (marks ? openHintMarks(expanded, marks) : []).find(
+        (mark) => mark.code === "ending_stale",
+      );
+      if (stale?.code === "ending_stale") {
+        const { ending, endedBy, winner } = stale.params;
+        void patchPoint(expanded.id, {
+          ending,
+          ended_by: endedBy,
+          ...(winner !== null ? { winner } : {}),
+        });
+      }
+      setChecked(expanded.id, true);
     };
     stepToFlag.current = (direction, kind) => {
       if (confirm) return;

@@ -1593,8 +1593,24 @@ test.describe("Enter and ⌘ Enter", () => {
     expect(consoleSource).toMatch(
       /if \(chord\) \{\n(\s+\/\/[^\n]*\n)*\s+if \(event\.repeat\) return;[\s\S]{0,120}toggleOpenPointCheck\.current\(\);/,
     );
-    expect(consoleSource).toContain(
-      "setChecked(expanded.id, expanded.checkedAt === null);",
+    expect(consoleSource).toContain("setChecked(expanded.id, false);");
+    expect(consoleSource).toContain("setChecked(expanded.id, true);");
+  });
+
+  test("⌘ Enter takes the rows as true: a stale ending is rewritten before the check", () => {
+    const start = consoleSource.indexOf(
+      "toggleOpenPointCheck.current = () => {",
+    );
+    const body = consoleSource.slice(
+      start,
+      consoleSource.indexOf("stepToFlag.current =", start),
+    );
+    expect(body).toContain('(mark) => mark.code === "ending_stale"');
+    expect(body).toMatch(
+      /void patchPoint\(expanded\.id, \{\s+ending,\s+ended_by: endedBy,/,
+    );
+    expect(body.indexOf("void patchPoint(")).toBeLessThan(
+      body.indexOf("setChecked(expanded.id, true);"),
     );
   });
 });
