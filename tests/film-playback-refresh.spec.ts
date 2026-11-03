@@ -1826,16 +1826,32 @@ test("the report player never dims a frame it has not shown yet", async ({
   ).toBe(0);
 
   // Released, the first frame lands and the same seek in flight now dims.
-  // Continue the held ones before unrouting: `unroute` disposes of any
-  // request still parked on the handler.
+  // `readyState` is live and runs ahead of the queued media events: it reads
+  // 4 before the `loadedmetadata` task has even run, and that task is where
+  // `settle` starts its first-frame nudge, a REAL seek to 0.001. On a loaded
+  // runner the gap is wide, so a `seeking` sent on `readyState` alone lands
+  // before the nudge, and the nudge's `seeked` then clears it — no dim, ever.
+  // Wait for that `seeked` itself (counted by a listener that runs after
+  // React's own), not just the ready state. Continue the held ones before
+  // unrouting: `unroute` disposes of any request still parked on the handler.
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel) as HTMLVideoElement;
+    el.dataset.testSeeked = "0";
+    el.addEventListener("seeked", () => {
+      el.dataset.testSeeked = String(Number(el.dataset.testSeeked) + 1);
+    });
+  }, REPORT);
   for (const route of heldRoutes) await route.continue();
   await page.unroute("**/fixtures/**");
-  await page.waitForFunction(
-    (sel) =>
-      (document.querySelector(sel) as HTMLVideoElement | null)?.readyState! >=
-      2,
-    REPORT,
-  );
+  await page.waitForFunction((sel) => {
+    const el = document.querySelector(sel) as HTMLVideoElement | null;
+    return (
+      !!el &&
+      el.readyState >= 2 &&
+      !el.seeking &&
+      Number(el.dataset.testSeeked) >= 1
+    );
+  }, REPORT);
   await page.evaluate((sel) => {
     document.querySelector(sel)?.dispatchEvent(new Event("seeking"));
   }, REPORT);
