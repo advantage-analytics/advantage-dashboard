@@ -1,5 +1,9 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
-import { isFeedShotType, isServeShotType } from "@/lib/data/serve-return-shots";
+import {
+  countedShots,
+  isFeedShotType,
+  isServeShotType,
+} from "@/lib/data/serve-return-shots";
 
 import { shotDirection, type Hand } from "../match-filters/shot-geometry";
 import { normalizeServeSpin } from "../match-filters/spin";
@@ -340,17 +344,21 @@ export function isRallyOpener(
  * same bare `Serve` fallback as {@link isServeRow}, and narrowed to shots the
  * source typed: an untyped row may be the serve itself (a point whose every
  * shot is untyped exists live), so calling it the Return is a guess the
- * table would print as fact. `shots` in `shot_number` order, as
- * `MatchPoint.shots` already is. Null when the point has no such shot (an
- * ace, a double fault, or shots the source never typed).
+ * table would print as fact. Only shots from the serve that counted on
+ * (`countedShots`): a stroke of a played-out let or fault is not the return.
+ * `shots` in `shot_number` order, as `MatchPoint.shots` already is. Null when
+ * the point has no such shot (an ace, a double fault, or shots the source
+ * never typed).
  */
 export function pointReturnShotId(
   shots: readonly MatchShot[] | undefined,
 ): string | null {
-  const found = shots?.find((s) => {
-    const type = s.shotType?.trim() ?? "";
-    return type !== "" && !isServeRow(type) && !isFeedShotType(type);
-  });
+  const found = countedShots([...(shots ?? [])], (s) => s.shotNumber).find(
+    (s) => {
+      const type = s.shotType?.trim() ?? "";
+      return type !== "" && !isServeRow(type) && !isFeedShotType(type);
+    },
+  );
   return found?.id ?? null;
 }
 

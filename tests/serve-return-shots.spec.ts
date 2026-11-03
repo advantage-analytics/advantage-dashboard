@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { pickServeShot } from "@/lib/data/serve-return-shots";
+import {
+  pickRallyShots,
+  pickReturnShot,
+  pickServeShot,
+} from "@/lib/data/serve-return-shots";
 
 /**
  * `pickServeShot` picks the serve that was actually played by ROLE, not
@@ -31,5 +35,60 @@ test.describe("pickServeShot", () => {
     const feed = { shot_type: "Feed" };
     const forehand = { shot_type: "Forehand" };
     expect(pickServeShot([feed, forehand])).toBeUndefined();
+  });
+});
+
+/**
+ * Shot 0 holds every stroke before the serve that counted. On a hand-labelled
+ * point that can be a let or a fault the players played out, rally and all —
+ * live shapes from Moore v Baek point 29 (an ace) and Sage v Hunter point 25.
+ * None of it is the point's serve, return or rally: reading its backhand as
+ * the return drew a "backhand return" on an ace.
+ */
+test.describe("strokes before the counted serve", () => {
+  const row = (shot_number: number, shot_type: string) => ({
+    shot_number,
+    shot_type,
+  });
+
+  test("an ace after a played-out serve has no return and serves shot 1", () => {
+    const ace = row(1, "First Serve");
+    const shots = [
+      row(0, "First Serve"),
+      row(0, "Second Serve"),
+      row(0, "Backhand"),
+      row(0, "Forehand"),
+      ace,
+    ];
+    expect(pickServeShot(shots)).toBe(ace);
+    expect(pickReturnShot(shots)).toBeUndefined();
+    expect(
+      pickRallyShots(
+        shots,
+        (s) => s.shot_type,
+        (s) => s.shot_number,
+      ),
+    ).toEqual([]);
+  });
+
+  test("a replayed point returns the counted serve's return", () => {
+    const serve = row(1, "First Serve");
+    const ret = row(2, "Backhand");
+    const shots = [row(0, "First Serve"), row(0, "Backhand"), serve, ret];
+    expect(pickServeShot(shots)).toBe(serve);
+    expect(pickReturnShot(shots)).toBe(ret);
+  });
+
+  test("a faulted first serve still yields the second serve", () => {
+    const second = row(1, "Second Serve");
+    const ret = row(2, "Forehand");
+    const shots = [row(0, "First Serve"), second, ret, row(3, "Backhand")];
+    expect(pickServeShot(shots)).toBe(second);
+    expect(pickReturnShot(shots)).toBe(ret);
+  });
+
+  test("a point numbered only 0 keeps every shot", () => {
+    const forehand = row(0, "Forehand");
+    expect(pickReturnShot([row(0, "Feed"), forehand])).toBe(forehand);
   });
 });
