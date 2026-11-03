@@ -321,7 +321,9 @@ import { useBrowserFullscreen } from "./use-browser-fullscreen";
 import {
   errorKindKeyPatch,
   errorKindShotId,
+  isLetKey,
   isUnforcedKey,
+  letKeyPatch,
   frameTimePatch,
   hasEarlierServe,
   isErrorKindKey,
@@ -2930,6 +2932,7 @@ export function LabelConsole({
   const hitterKey = useRef<() => boolean>(() => false);
   const timeKey = useRef<() => boolean>(() => false);
   const errorKindKey = useRef<() => boolean>(() => false);
+  const letKey = useRef<() => boolean>(() => false);
   const resetShotKey = useRef<() => boolean>(() => false);
   const resetPointKey = useRef<() => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
@@ -3431,6 +3434,18 @@ export function LabelConsole({
       }
       return true;
     };
+    // L on a serve marks it a let, and again gives it back the result its
+    // landing reads (`letKeyPatch`), as the Serve result menu does: only
+    // where that menu offers Let. A rally stroke does not take the key.
+    letKey.current = () => {
+      if (!operable || confirm) return false;
+      const shot = keyShot();
+      if (!shot) return false;
+      const patch = letKeyPatch(shot, session.playOnLets);
+      if (!patch) return false;
+      requestPatchShot(shot.id, patch);
+      return true;
+    };
     strokeKey.current = (key) => {
       if (!operable || confirm) return false;
       const shot = keyShot();
@@ -3580,7 +3595,7 @@ export function LabelConsole({
       // A stroke key reaches the selected stroke from a focused cell too (a
       // cell is a button), and so do A / ⇧A (add a stroke after / before),
       // C (contact ↔ landing), X (flip side), H (hitter), T (time = frame), E
-      // (forced ↔ unforced), Delete / Backspace (delete the stroke) and R / ⇧R
+      // (forced ↔ unforced), L (let), Delete / Backspace (delete the stroke) and R / ⇧R
       // (ask to reset the stroke / point); a text field, a menu and a dialog
       // keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
@@ -3602,13 +3617,15 @@ export function LabelConsole({
                     ? () => errorKindKey.current()
                     : isUnforcedKey(key) && !event.shiftKey
                       ? () => unforcedKey.current()
-                      : lower === "r"
-                        ? event.shiftKey
-                          ? () => resetPointKey.current()
-                          : () => resetShotKey.current()
-                        : key === "Delete" || key === "Backspace"
-                          ? () => deleteShotKey.current()
-                          : null;
+                      : isLetKey(key)
+                        ? () => letKey.current()
+                        : lower === "r"
+                          ? event.shiftKey
+                            ? () => resetPointKey.current()
+                            : () => resetShotKey.current()
+                          : key === "Delete" || key === "Backspace"
+                            ? () => deleteShotKey.current()
+                            : null;
       if (
         consoleKey &&
         !event.metaKey &&

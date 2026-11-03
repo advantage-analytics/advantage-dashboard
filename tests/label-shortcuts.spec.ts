@@ -83,6 +83,7 @@ test.describe("the shortcut sheet", () => {
       "⌘ enter",
       "⌘ /",
       "D",
+      "⇧ L",
       "L",
       "M",
     ]) {
@@ -114,6 +115,8 @@ test.describe("the shortcut sheet", () => {
     expect(video).toContain(
       'if (key !== "d" && key !== "l" && key !== "m") return;',
     );
+    // Loop is ⇧L; plain L is the console's let.
+    expect(video).toContain('if (event.shiftKey !== (key === "l")) return;');
     expect(CONSOLE.match(/isErrorKindKey\(key\)/g)).toHaveLength(1);
     expect(CONSOLE).not.toMatch(/(lower|key) === "e"/i);
     expect(RAIL).not.toMatch(/key === "e"/i);

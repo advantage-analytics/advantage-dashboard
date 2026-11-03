@@ -1,4 +1,5 @@
 import {
+  labelShotValues,
   sameShotValue,
   type LabelPointPatch,
   type LabelShotPatch,
@@ -7,6 +8,7 @@ import {
   isMarkableError,
   markableErrorStroke,
 } from "@/lib/services/labels/ending-derived";
+import { deriveShotResult } from "@/lib/services/labels/shot-derived";
 import { spinRows } from "./label-format";
 import {
   LABEL_SPINS,
@@ -159,6 +161,29 @@ export function frameTimePatch(
   const videoTime = Math.round((fileTime + offset) * 1000) / 1000;
   if (sameShotValue("video_time", shot.videoTime, videoTime)) return null;
   return { video_time: videoTime };
+}
+
+/** Whether a key is L, the let key (⇧L is the player's Loop). */
+export function isLetKey(key: string): boolean {
+  return key === "l";
+}
+
+/**
+ * L on `shot`: a serve marked a let, or a let given back the result its
+ * landing reads (`deriveShotResult`, the Result menu's calculated item).
+ * Null on a rally stroke — a let is a serve's alone (edit.ts
+ * `letResultError`) — and where the menu offers no Let: played on
+ * (`playOnLets`), a serve not already a let.
+ */
+export function letKeyPatch(
+  shot: LabelShot,
+  playOnLets: boolean,
+): LabelShotPatch | null {
+  if (!isServeStroke(shot.stroke)) return null;
+  if (isLetServe(shot)) {
+    return { result: deriveShotResult(labelShotValues(shot)) };
+  }
+  return playOnLets ? null : { result: "let" };
 }
 
 /** What the Forced | Unforced pair and E read off a point. */

@@ -8,7 +8,9 @@ import {
   frameTimePatch,
   hasEarlierServe,
   isErrorKindKey,
+  isLetKey,
   isStrokeKey,
+  letKeyPatch,
   nextErrorKind,
   strokeKeyChange,
   withServeHitter,
@@ -522,6 +524,52 @@ test.describe("E: forced or unforced, on the stroke that ended the point in an e
     expect(fn).toContain("errorKindKeyPatch(");
     expect(fn).toContain("if (!patch) return false;");
     expect(fn).toContain("void patchPoint(owner.id, patch);");
+  });
+});
+
+test.describe("L: a serve's let", () => {
+  const serve = (fields: Parameters<typeof labelShot>[2] = {}) =>
+    labelShot("l-serve", "l-point", { stroke: "first_serve", ...fields });
+  // Lets replayed: `playOnLets` false.
+  const REPLAYED = false;
+
+  test("L marks a serve a let, and again gives back the landing's result", () => {
+    expect(letKeyPatch(serve(), REPLAYED)).toEqual({ result: "let" });
+    expect(letKeyPatch(serve({ result: "out" }), REPLAYED)).toEqual({
+      result: "let",
+    });
+    // Unplaced: the let goes back to no result.
+    expect(letKeyPatch(serve({ result: "let" }), REPLAYED)).toEqual({
+      result: null,
+    });
+    const placed = serve({
+      result: "let",
+      contactX: 0,
+      contactY: 0,
+      landingX: 0,
+      landingY: 2,
+    });
+    expect(letKeyPatch(placed, REPLAYED)).toEqual({ result: "net" });
+  });
+
+  test("a rally stroke, or a serve played on, takes no let", () => {
+    for (const stroke of ["forehand", "backhand_volley", null] as const) {
+      expect(
+        letKeyPatch(serve({ stroke }), REPLAYED),
+        String(stroke),
+      ).toBeNull();
+    }
+    expect(letKeyPatch(serve(), true)).toBeNull();
+    // A let stored before the rule changed can still be undone.
+    expect(letKeyPatch(serve({ result: "let" }), true)).toEqual({
+      result: null,
+    });
+  });
+
+  test("plain L only: ⇧L is the player's Loop", () => {
+    expect(isLetKey("l")).toBe(true);
+    for (const key of ["L", "t", "ll"]) expect(isLetKey(key), key).toBe(false);
+    expect(isStrokeKey("l")).toBe(false);
   });
 });
 
