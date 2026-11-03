@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Swap label services onto requireLabelActor
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T2
 - **files:** src/lib/services/labels/edit-session.ts, src/lib/services/labels/operations-session.ts (`gated`), every src/lib/services/labels/_-session.ts, add-missing-shots.ts, undo-session.ts, open-counts-session.ts, and the tests/label-_.spec.ts that inject `requireAdmin` — guesses

@@ -878,7 +878,23 @@ test.describe("seedLabelSession", () => {
   test("refuses without an admin session, before any client is built", async () => {
     let clients = 0;
     const result = await seedLabelSession(JOB_ID, {
-      requireAdmin: async () => null,
+      requireLabelActor: async () => null,
+      createAdminClient: () => {
+        clients += 1;
+        return fakeClient().supabase;
+      },
+    });
+    expect(result).toEqual({ error: "Administrator access is required." });
+    expect(clients).toBe(0);
+  });
+
+  test("refuses a labeller: only an admin opens a session", async () => {
+    let clients = 0;
+    const result = await seedLabelSession(JOB_ID, {
+      requireLabelActor: async () => ({
+        id: "labeller",
+        kind: "labeller" as const,
+      }),
       createAdminClient: () => {
         clients += 1;
         return fakeClient().supabase;
@@ -890,7 +906,7 @@ test.describe("seedLabelSession", () => {
 
   test("refuses a malformed job id", async () => {
     const result = await seedLabelSession("not-a-uuid", {
-      requireAdmin: async () => ({ id: ADMIN_ID }),
+      requireLabelActor: async () => ({ id: ADMIN_ID, kind: "admin" as const }),
       createAdminClient: () => fakeClient().supabase,
     });
     expect(result).toEqual({ error: "Invalid job id." });
@@ -899,7 +915,7 @@ test.describe("seedLabelSession", () => {
   test("names the admin as labeller", async () => {
     const fake = fakeClient();
     const result = await seedLabelSession(JOB_ID, {
-      requireAdmin: async () => ({ id: ADMIN_ID }),
+      requireLabelActor: async () => ({ id: ADMIN_ID, kind: "admin" as const }),
       createAdminClient: () => fake.supabase,
     });
     expect(result).toEqual({ sessionId: "new-session", existing: false });

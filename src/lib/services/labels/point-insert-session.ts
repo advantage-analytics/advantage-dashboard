@@ -21,6 +21,7 @@ import {
   readSessionGate,
   type LabelWriteDependencies,
 } from "./edit-session";
+import { targetId } from "./label-actor";
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
   planInsertedPoint,
@@ -148,5 +149,6 @@ export function insertLabelPoint(
     (supabase) =>
       writeLabelPointInsert({ supabase, sessionId, anchorPointId, position }),
     "add the point",
+    { sessionId: targetId(sessionId) },
   );
 }

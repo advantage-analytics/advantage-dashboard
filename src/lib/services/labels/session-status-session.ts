@@ -1,8 +1,11 @@
 /**
  * The console header's "Mark complete" and "Reopen": the one column pair a
  * session's lifecycle lives in, `label_sessions.status` and `completed_at`
- * (a CHECK holds them together). Admin-gated like edit-session.ts; not the
- * marks gate — a session labelled blind completes like any other.
+ * (a CHECK holds them together). Admin-only, unlike the row writes: a
+ * labeller hands a session over by submitting it (T4), never by publishing or
+ * reopening it, so both entry points refuse any actor whose `kind` is not
+ * `admin` (`requireAdminActor`) with `ADMIN_REQUIRED`. Not the marks gate — a
+ * session labelled blind completes like any other.
  *
  * Complete is the ordinary gate (`checkSessionOpen`), then a lease: ONE update
  * (`claim_label_publish_lease`) stamping `publishing_since` with the
@@ -39,14 +42,17 @@
 import { requestMatchInsights } from "@/lib/services/splitstep/request-insights";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
+  ADMIN_REQUIRED,
   checkSessionOpen,
   defaultLabelWriteDependencies,
   PUBLISH_LEASE_MS,
   PUBLISHING,
   racedMessage,
+  requireAdminActor,
   type LabelWriteDependencies,
 } from "./edit-session";
-import { gated, normaliseId, type LabelOpResult } from "./operations-session";
+import { targetId } from "./label-actor";
+import { normaliseId, type LabelOpResult } from "./operations-session";
 import type { LabelSession } from "./session";
 
 /** What a publish wrote, for the console's confirmation line. */
@@ -310,14 +316,38 @@ async function verifyMatchOf(
   return { matchId: row.match_id };
 }
 
+/**
+ * `gated` for the two admin-only writes: `requireAdminActor` in place of the
+ * actor gate, the same try/catch around the work.
+ */
+async function adminGated<T extends object>(
+  deps: LabelWriteDependencies,
+  sessionId: unknown,
+  work: (supabase: AdminClient, actorId: string) => Promise<LabelOpResult<T>>,
+  what: string,
+): Promise<LabelOpResult<T>> {
+  const actor = await requireAdminActor(deps, {
+    sessionId: targetId(sessionId),
+  });
+  if (!actor) return { error: ADMIN_REQUIRED };
+  try {
+    return await work(deps.createAdminClient(), actor.id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[labels:status] ${what} threw`, { message });
+    return { error: `Could not ${what}: ${message}` };
+  }
+}
+
 export function completeLabelSession(
   sessionId: unknown,
   deps: LabelWriteDependencies = defaultLabelWriteDependencies,
 ): Promise<LabelSessionStatusResult> {
-  return gated(
+  return adminGated(
     deps,
-    (supabase, actor) =>
-      writeLabelSessionComplete({ supabase, sessionId, actorId: actor.id }),
+    sessionId,
+    (supabase, actorId) =>
+      writeLabelSessionComplete({ supabase, sessionId, actorId }),
     "complete the session",
   );
 }
@@ -326,8 +356,9 @@ export function reopenLabelSession(
   sessionId: unknown,
   deps: LabelWriteDependencies = defaultLabelWriteDependencies,
 ): Promise<LabelSessionStatusResult> {
-  return gated(
+  return adminGated(
     deps,
+    sessionId,
     (supabase) => writeLabelSessionReopen({ supabase, sessionId }),
     "reopen the session",
   );

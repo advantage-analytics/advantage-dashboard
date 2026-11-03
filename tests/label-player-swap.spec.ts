@@ -797,13 +797,13 @@ test.describe("writeLabelPlayerSwitch", () => {
     let built = 0;
     expect(
       await switchLabelPointPlayers(POINT_ID, {
-        requireAdmin: async () => null,
+        requireLabelActor: async () => null,
         createAdminClient: () => {
           built += 1;
           return fakeClient({}).supabase;
         },
       }),
-    ).toEqual({ error: "Administrator access is required." });
+    ).toEqual({ error: "You don't have access to this session." });
     expect(built).toBe(0);
 
     const fake = fakeClient({
@@ -812,7 +812,10 @@ test.describe("writeLabelPlayerSwitch", () => {
     });
     expect(
       await switchLabelPointPlayers(POINT_ID, {
-        requireAdmin: async () => ({ id: "admin" }),
+        requireLabelActor: async () => ({
+          id: "admin",
+          kind: "admin" as const,
+        }),
         createAdminClient: () => fake.supabase,
       }),
     ).toMatchObject({ ok: true, winner: "p2" });

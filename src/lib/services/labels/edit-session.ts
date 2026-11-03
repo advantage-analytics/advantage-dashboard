@@ -2,10 +2,12 @@
  * The labelling console's autosave writes: one field (or one position pair) of
  * one `label_shots` or `label_points` row per call.
  *
- * The shape every `*-session.ts` write shares: re-check the admin session
- * (`requireAdmin`), run on the service-role client, refuse a session that is
- * not `labelling` (`checkSessionOpen`), and decide what to write with the same
- * pure rule the console ran for its optimistic update.
+ * The shape every `*-session.ts` write shares: resolve the rows to their
+ * session and check who is asking (`requireLabelActor` — an admin, or the
+ * labeller the session is assigned to), run on the service-role client,
+ * refuse a session that is not `labelling` (`checkSessionOpen`), and decide
+ * what to write with the same pure rule the console ran for its optimistic
+ * update.
  *
  * Here the patch is validated whole against edit.ts's allowlist before anything
  * is read, a tombstone is refused, and the patch is written together with the
@@ -27,8 +29,13 @@
 import { saveInOrder } from "./volley-link";
 import type { AdminClient } from "@/lib/supabase/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdmin } from "@/lib/services/programs/admin-guard";
+import type { LabelActor } from "@/lib/services/programs/admin-guard";
 import { UUID_RE } from "@/lib/admin/validation";
+import {
+  requireLabelActorFor,
+  targetId,
+  type LabelActorTarget,
+} from "./label-actor";
 import type { LabelPointStatus, LabelShot, LabelShotStatus } from "./session";
 import {
   LABEL_POINT_SEED_FIELDS,
@@ -90,21 +97,46 @@ export type LabelPointEditResult =
     }
   | { error: string };
 
-/** What every admin-gated label write needs; specs pass fakes. */
+/**
+ * What every gated label write needs; specs pass fakes. `requireLabelActor`
+ * decides who may write the rows the target names (label-actor.ts); the
+ * service-role client does the writing.
+ */
 export interface LabelWriteDependencies {
-  requireAdmin: () => Promise<{ id: string } | null>;
+  requireLabelActor: (target: LabelActorTarget) => Promise<LabelActor | null>;
   createAdminClient: () => AdminClient;
 }
 export const defaultLabelWriteDependencies: LabelWriteDependencies = {
-  requireAdmin,
+  requireLabelActor: requireLabelActorFor,
   createAdminClient,
 };
 const defaults = defaultLabelWriteDependencies;
 
+/** The refusal of the writes only an administrator may make (seed, publish, reopen). */
 export const ADMIN_REQUIRED = "Administrator access is required.";
+/**
+ * The gate's refusal everywhere else: signed out, not a labeller, or a
+ * session not assigned to them. Never asks a labeller to become an admin.
+ */
+export const ACTOR_REQUIRED = "You don't have access to this session.";
 /** The refusal every write gives a `complete` session. */
 export const FROZEN =
   "This session is complete, so its labels can no longer change.";
+/** The refusal every write gives a `submitted` session: with an admin for review. */
+export const SUBMITTED =
+  "This session has been submitted for review, so its labels can no longer change.";
+
+/**
+ * The gate for the writes only an administrator may make: the actor when
+ * they are one, else null. A labeller on their own session is still refused.
+ */
+export async function requireAdminActor(
+  deps: LabelWriteDependencies,
+  target: LabelActorTarget,
+): Promise<LabelActor | null> {
+  const actor = await deps.requireLabelActor(target);
+  return actor?.kind === "admin" ? actor : null;
+}
 /** The refusal while "Mark complete" is publishing the session. */
 export const PUBLISHING =
   "This session is being published. Wait for it to finish, then reload.";
@@ -139,7 +171,8 @@ const MAX_EDIT_ATTEMPTS = 3;
 
 /**
  * The session's gate, in one read: refuses anything but a `labelling` session
- * with an error sentence, else answers `ghosts` — whether the session draws
+ * with an error sentence (`SUBMITTED` for one with an admin, `FROZEN` for one
+ * published), else answers `ghosts` — whether the session draws
  * the site's removed strokes as ghosts (`marks_enabled`), the flag every
  * reading of a point's rows takes (ending-derived.ts). With `blind`, also
  * refuses a session whose `marks_enabled` is false, the gate the marks' own
@@ -163,6 +196,7 @@ export async function readSessionGate(
     }>();
   if (error) return { error: `Could not read the session: ${error.message}` };
   if (!data) return { error: "Session not found." };
+  if (data.status === "submitted") return { error: SUBMITTED };
   if (data.status !== "labelling") return { error: FROZEN };
   if (publishLeaseHeld(data.publishing_since)) return { error: PUBLISHING };
   const ghosts = data.marks_enabled === true;
@@ -546,8 +580,8 @@ export async function editLabelShot(
   patch: unknown,
   deps: LabelWriteDependencies = defaults,
 ): Promise<LabelShotEditResult> {
-  const actor = await deps.requireAdmin();
-  if (!actor) return { error: ADMIN_REQUIRED };
+  const actor = await deps.requireLabelActor({ shotId: targetId(shotId) });
+  if (!actor) return { error: ACTOR_REQUIRED };
   return writeLabelShotEdit({
     supabase: deps.createAdminClient(),
     shotId: typeof shotId === "string" ? shotId.toLowerCase() : shotId,
@@ -580,8 +614,8 @@ export async function editLabelPoint(
   patch: unknown,
   deps: LabelWriteDependencies = defaults,
 ): Promise<LabelPointEditResult> {
-  const actor = await deps.requireAdmin();
-  if (!actor) return { error: ADMIN_REQUIRED };
+  const actor = await deps.requireLabelActor({ pointId: targetId(pointId) });
+  if (!actor) return { error: ACTOR_REQUIRED };
   return writeLabelPointEdit({
     supabase: deps.createAdminClient(),
     pointId: typeof pointId === "string" ? pointId.toLowerCase() : pointId,

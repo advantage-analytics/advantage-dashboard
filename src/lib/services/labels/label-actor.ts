@@ -32,6 +32,28 @@ export type LabelActorTarget =
   | { pointIds: readonly string[] }
   | { shotIds: readonly string[] };
 
+/**
+ * A target naming no session, for the one write made before a session exists
+ * (seeding). An admin passes on `checkAdmin()` alone; anyone else resolves
+ * to no session and is refused.
+ */
+export const NO_SESSION: LabelActorTarget = { sessionId: "" };
+
+/**
+ * An id the service has not validated yet (`unknown`, straight from the
+ * server action) as a target field: a non-string becomes "", which the
+ * resolve refuses. The service's own validation still answers its sentence
+ * for an admin, who passes the gate with no resolve.
+ */
+export function targetId(id: unknown): string {
+  return typeof id === "string" ? id : "";
+}
+
+/** `targetId` over a list: a non-array is an empty one, which is refused. */
+export function targetIds(ids: unknown): string[] {
+  return Array.isArray(ids) ? ids.map(targetId) : [];
+}
+
 /** The distinct well-formed uuids of `ids`, or `null` when any is not one. */
 function uuidSet(ids: readonly unknown[]): string[] | null {
   const out = new Set<string>();

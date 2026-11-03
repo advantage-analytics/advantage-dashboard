@@ -1167,7 +1167,7 @@ test.describe("writeLabelPointCombine", () => {
   test("the entry point refuses without an admin, before a client is built", async () => {
     let built = 0;
     const result = await combineLabelPoints(UUID(2), "above", {
-      requireAdmin: async () => null,
+      requireLabelActor: async () => null,
       createAdminClient: () => {
         built += 1;
         return fakeClient({}).supabase;

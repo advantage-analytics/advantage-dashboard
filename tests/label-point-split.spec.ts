@@ -720,7 +720,7 @@ test.describe("writeLabelPointSplit", () => {
   test("the entry point refuses without an admin, before a client is built", async () => {
     let built = 0;
     const result = await splitLabelPoint(UUID(1), SHOT(2), {
-      requireAdmin: async () => null,
+      requireLabelActor: async () => null,
       createAdminClient: () => {
         built += 1;
         return fakeClient({}).supabase;

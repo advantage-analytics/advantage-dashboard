@@ -23,8 +23,10 @@ import {
 import {
   ADMIN_REQUIRED,
   defaultLabelWriteDependencies,
+  requireAdminActor,
   type LabelWriteDependencies,
 } from "./edit-session";
+import { NO_SESSION } from "./label-actor";
 import { buildLabelSeed } from "./seed";
 
 const LOG = "[labels:seed]";
@@ -220,15 +222,17 @@ async function writeSeedRows(
 }
 
 /**
- * The admin-gated entry point behind the `/admin/labels` server action. The
- * admin's id becomes the labeller. Runs on the service-role client because
- * `buildTranscriptForJob` reads the job and its results file through it.
+ * The admin-only entry point behind the `/admin/labels` server action: there
+ * is no session yet for a labeller to be assigned to (`NO_SESSION`), and only
+ * an admin may open one. The admin's id becomes the labeller. Runs on the
+ * service-role client because `buildTranscriptForJob` reads the job and its
+ * results file through it.
  */
 export async function seedLabelSession(
   jobId: unknown,
   deps: LabelWriteDependencies = defaultLabelWriteDependencies,
 ): Promise<SeedLabelSessionResult> {
-  const actor = await deps.requireAdmin();
+  const actor = await requireAdminActor(deps, NO_SESSION);
   if (!actor) return { error: ADMIN_REQUIRED };
   if (!isUuid(jobId)) {
     return { error: "Invalid job id." };

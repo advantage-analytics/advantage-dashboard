@@ -26,6 +26,7 @@ import {
   type LabelWriteDependencies,
 } from "./edit-session";
 import { endingColumns, plannedReconcile } from "./ending-session";
+import { targetId } from "./label-actor";
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
   planPointSplit,
@@ -305,5 +306,6 @@ export function splitLabelPoint(
     deps,
     (supabase) => writeLabelPointSplit({ supabase, pointId, shotId }),
     "split the point",
+    { pointId: targetId(pointId) },
   );
 }

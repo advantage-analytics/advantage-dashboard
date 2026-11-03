@@ -25,6 +25,7 @@ import {
   readPointShots,
   syncEndingAfterShotChange,
 } from "./ending-session";
+import { targetId } from "./label-actor";
 import {
   gated,
   normaliseId,
@@ -130,5 +131,6 @@ export function restoreLabelSiteRemoval(
     deps,
     (supabase) => writeLabelSiteRemovalRestore({ supabase, shotId }),
     "restore the shot",
+    { shotId: targetId(shotId) },
   );
 }

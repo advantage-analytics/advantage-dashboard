@@ -671,8 +671,10 @@ function fakeClient(rows: {
   });
 }
 
-const ADMIN = { requireAdmin: async () => ({ id: "admin" }) };
-const NOBODY = { requireAdmin: async () => null };
+const ADMIN = {
+  requireLabelActor: async () => ({ id: "admin", kind: "admin" as const }),
+};
+const NOBODY = { requireLabelActor: async () => null };
 
 const ROW_IDS = [
   "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
@@ -726,7 +728,9 @@ test.describe("the services", () => {
       setLabelGameType(SESSION_ID, GAME, "tiebreak", deps),
     ]);
     for (const result of results) {
-      expect(result).toEqual({ error: "Administrator access is required." });
+      expect(result).toEqual({
+        error: "You don't have access to this session.",
+      });
     }
     expect(built).toBe(0);
   });

@@ -22,3 +22,13 @@ is the runner's. Newest entries at the bottom.
 1. Batch targets use one `.in("id", ids)`; switch to `idChunks` if a batch can exceed ~100 ids.
 2. The labeller branch calls `getUser()` again because `checkAdmin`'s 403 carries no uid; widening it would save a call.
 3. A join could cut a labeller's check from three reads to two.
+
+## T3 · Swap label services onto requireLabelActor — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Every per-row/per-session label service now gates on `requireLabelActor(target)` with the row's real target (`gated(deps, work, what, target)`, actor passed to `work`). New `ACTOR_REQUIRED` and `SUBMITTED` sentences and `requireAdminActor`; `readSessionGate` answers `SUBMITTED` for submitted sessions. Seed, complete and reopen refuse any non-admin (`adminGated` in session-status-session.ts) with `ADMIN_REQUIRED`. `label-actor.ts` gains `NO_SESSION`, `targetId`, `targetIds`. 17 label specs converted to `requireLabelActor` fakes, none skipped; new refusal specs for seed/complete/reopen and the submitted/frozen gate.
+**follow-ups:**
+
+1. `src/lib/data/labels-server.ts` reads (`getLabelSession`, `readLabelPointsByIds`, …) still gate on `requireAdmin`; the labeller console (T6) must pass its own actor.
+2. `editLabelShots` gates each linked write separately (up to 4 round trips per click for a labeller); a single `{ shotIds }` gate would be cheaper.
+3. Labeller-facing UI may want to branch on `ACTOR_REQUIRED` vs `ADMIN_REQUIRED`.

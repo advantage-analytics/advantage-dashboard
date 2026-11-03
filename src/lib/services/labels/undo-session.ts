@@ -7,7 +7,8 @@
  * them as a diff (undo-diff.ts). An undone split or combine moves strokes
  * between two points; both owners are in the answer, so both come back.
  *
- * Same gate as every label write: `requireAdmin`, then the service role. The
+ * Same gate as every label write: `requireLabelActor` on the session (an
+ * admin, or the labeller it is assigned to), then the service role. The
  * function itself refuses a session that is not `labelling`.
  *
  * Redo (⌘⇧Z) is the same round trip through `redo_label_op` (migration
@@ -18,8 +19,10 @@
 
 import { isUuid } from "@/lib/admin/validation";
 import { readLabelPointsByIds } from "@/lib/data/labels-server";
-import { requireAdmin } from "@/lib/services/programs/admin-guard";
+import type { LabelActor } from "@/lib/services/programs/admin-guard";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
+import { ACTOR_REQUIRED } from "./edit-session";
+import { requireLabelActorFor, type LabelActorTarget } from "./label-actor";
 import type { LabelPoint } from "./session";
 
 export type LabelUndoResult =
@@ -55,7 +58,7 @@ interface UndoAnswer {
 }
 
 export interface UndoDependencies {
-  requireAdmin: () => Promise<{ id: string } | null>;
+  requireLabelActor: (target: LabelActorTarget) => Promise<LabelActor | null>;
   createAdminClient: () => AdminClient;
   /** The named points, each whole with its shots. */
   readPoints: (
@@ -66,7 +69,7 @@ export interface UndoDependencies {
 }
 
 const defaults: UndoDependencies = {
-  requireAdmin,
+  requireLabelActor: requireLabelActorFor,
   createAdminClient,
   readPoints: readLabelPointsByIds,
 };
@@ -116,8 +119,8 @@ async function rewind<A extends UndoAnswer | RedoAnswer>(
   | { answer: A; changed: LabelPoint[]; removedPointIds: string[] }
   | { error: string }
 > {
-  const viewer = await deps.requireAdmin();
-  if (!viewer) return { error: "Admin access required." };
+  const viewer = await deps.requireLabelActor({ sessionId });
+  if (!viewer) return { error: ACTOR_REQUIRED };
   if (!isUuid(sessionId)) return { error: "No such session." };
 
   const verb = fn === "undo_label_op" ? "undo" : "redo";
