@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Migration: labeller role, assignment, submitted status, beats, submissions
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<timestamp>_labeller_role.sql (new; guess)
 - **done when:**
