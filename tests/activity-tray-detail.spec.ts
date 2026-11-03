@@ -79,4 +79,12 @@ test.describe("trayDetail counts invitations and in-flight work", () => {
   test("joins alone are counted", () => {
     expect(trayDetail(0, 0, 0, 0, 1)).toBe("1 joined");
   });
+
+  // An unread note from Advantage staff leads, as its row leads the panel.
+  test("an unread staff note leads the sentence", () => {
+    expect(trayDetail(1, 1, 0, 0, 0, 1)).toBe(
+      "1 new message · 1 invitation · 1 in flight",
+    );
+    expect(trayDetail(0, 0, 0, 0, 0, 1)).toBe("1 new message");
+  });
 });

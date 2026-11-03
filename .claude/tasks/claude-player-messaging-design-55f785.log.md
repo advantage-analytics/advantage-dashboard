@@ -78,3 +78,13 @@ is the runner's. Newest entries at the bottom.
 2. `MenuSelect` descriptions can't render a mono score sub line; the canvas draws one.
 3. `MenuSelect` can't clear a chosen "About" value.
 4. Each send reloads the dialog's data a second time.
+
+## T8 · Activity tray row for a staff note — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+**changed:** Tray loader reads `getSupportUnread()` (not workspace-scoped; a failed read becomes "no thread"); `SupportNoteRow` above invitations with the invitation anatomy — wash, 6px blue dot only while unread, "Note from {name} at Advantage" ("Note from Advantage" for the fallback), one-line preview, "Read and reply" → `?messages=open` via `messagesHref`, "Open match" only when match-linked; an unread note counts toward the trigger dot and the tooltip ("1 new message · …" via `trayDetail`); doc comment gains a row-order list. Six new tray-row cases and one tray-detail case. widget-states: loading/empty/error ✓ (recorded).
+**follow-ups:**
+
+1. The design skill's chrome.md (Activity Tray) still says blue in the tray is only the trigger and invitation dots, and lists no staff-note row — update through DesignSync, not by hand.
+2. A read note stays in the tray while it is the newest staff message; decide whether read notes should age out.
+3. `NO_SUPPORT` is defined in both the loader and activity-tray.tsx.

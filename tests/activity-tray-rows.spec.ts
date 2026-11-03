@@ -41,6 +41,7 @@ const loader = createLoader({
     "next/navigation": {
       unstable_rethrow: () => {},
       usePathname: () => "/dashboard",
+      useRouter: () => ({ replace: () => {}, refresh: () => {} }),
     },
     "@/components/ui/popover": {
       Popover: passThrough,
@@ -90,6 +91,11 @@ const loader = createLoader({
       inviteSubtitle: () => "as a player",
     },
     "@/lib/workspace/actions": { setActiveWorkspace: async () => {} },
+    // The real `messagesHref` would drag in the dialog and its server actions;
+    // the row only calls it on click, which a static render never does.
+    "@/components/dashboard/support/support-dialog-mount": {
+      messagesHref: () => "/dashboard?messages=open",
+    },
   },
 });
 
@@ -110,7 +116,11 @@ function item(
   return { matchId, title, analysis, at: "2026-09-28T12:00:00Z" };
 }
 
-function render(items: ActivityItem[], setup: unknown[] = []) {
+function render(
+  items: ActivityItem[],
+  setup: unknown[] = [],
+  support?: unknown,
+) {
   return renderToStaticMarkup(
     React.createElement(ActivityTray, {
       feed: { items },
@@ -119,6 +129,7 @@ function render(items: ActivityItem[], setup: unknown[] = []) {
       elsewhere: [],
       joins: [],
       setup,
+      ...(support ? { support } : {}),
     }),
   );
 }
@@ -326,4 +337,101 @@ test("setup never lights the dot or enters the tooltip's count", () => {
 test("a finished setup renders no section at all", () => {
   const html = render([], [ROSTER_DONE, { ...MATCH_OPEN, done: true }]);
   expect(html).not.toContain("Getting set up");
+});
+
+const MATCH_NOTE_ID = "55555555-5555-4555-8555-555555555555";
+
+function note(
+  unreadStaff: boolean,
+  latest: {
+    authorName?: string;
+    preview?: string;
+    matchId?: string | null;
+  } = {},
+) {
+  return {
+    hasThread: true,
+    unreadStaff,
+    latestStaff: {
+      authorName: latest.authorName ?? "Cj",
+      preview: latest.preview ?? "Your serve numbers look off — checking now.",
+      createdAt: "2026-11-03T12:00:00Z",
+      matchId: latest.matchId === undefined ? MATCH_NOTE_ID : latest.matchId,
+    },
+  };
+}
+
+/** The note row's markup, from its opening div through its Read and reply. */
+function noteRow(html: string) {
+  const start = html.indexOf('data-row="support-note"');
+  expect(start).toBeGreaterThan(-1);
+  return html.slice(start, html.indexOf("</button>", start));
+}
+
+test("an unread staff note is a washed row with the blue dot, Read and reply and Open match", () => {
+  const html = render([], [], note(true));
+  const row = noteRow(html);
+  expect(row).toContain("bg-[var(--surface-subtle)]");
+  expect(row).toContain('Note from <b class="font-medium">Cj at Advantage</b>');
+  expect(row).toContain("Your serve numbers look off");
+  expect(row).toContain("mt-[5px] size-1.5 rounded-full bg-[var(--blue)]");
+  expect(html).toMatch(/<button[^>]*>Read and reply<\/button>/);
+  const open = links(html).find((l) => l.text === "Open match");
+  expect(open?.href).toBe(`/dashboard/matches/${MATCH_NOTE_ID}`);
+
+  // Counted: the trigger's solid dot and the tooltip's sentence.
+  expect(html).toContain('aria-label="Activity, 1 new message"');
+  expect(html).toContain("top-[3px] right-[3px]");
+  // The feed's empty line is about the feed, not this row: nothing to say
+  // "nothing" over while something here is waiting on the reader.
+  expect(html).toContain("Nothing running here.");
+});
+
+test("a read staff note keeps its row but loses both dots and the count", () => {
+  const html = render([], [], note(false));
+  const row = noteRow(html);
+  expect(row).toContain("Read and reply");
+  expect(row).not.toContain("bg-[var(--blue)]");
+  expect(html).toContain('aria-label="Activity, Nothing in flight"');
+  expect(html).not.toContain("top-[3px] right-[3px]");
+});
+
+test("a note with no match carries no Open match link", () => {
+  const html = render([], [], note(true, { matchId: null }));
+  expect(links(html).some((l) => l.text === "Open match")).toBe(false);
+  expect(html).toContain("Read and reply");
+});
+
+test("a note sent under the fallback name reads from Advantage, once", () => {
+  const html = render([], [], note(true, { authorName: "Advantage" }));
+  expect(html).toContain('Note from <b class="font-medium">Advantage</b>');
+  expect(html).not.toContain("Advantage at Advantage");
+});
+
+test("the note sits above invitations and leads the tooltip", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ActivityTray, {
+      feed: { items: [] },
+      invites: [
+        {
+          id: "invite-1",
+          programName: "UCSD Tennis",
+          role: "player",
+        },
+      ],
+      approvedInviteIds: [],
+      elsewhere: [],
+      joins: [],
+      support: note(true),
+    }),
+  );
+  expect(html.indexOf("Note from")).toBeGreaterThan(-1);
+  expect(html.indexOf("Note from")).toBeLessThan(html.indexOf("Invitation to"));
+  expect(html).toContain('aria-label="Activity, 1 new message · 1 invitation"');
+});
+
+test("no thread renders no note row", () => {
+  const html = render([]);
+  expect(html).not.toContain('data-row="support-note"');
+  expect(html).not.toContain("Read and reply");
 });

@@ -114,7 +114,7 @@ ready).
 
 ## T8 · Activity tray row for a staff note
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7
 - **files:** src/components/dashboard/activity/activity-tray.tsx, src/components/dashboard/activity/activity-tray-loader.tsx, src/lib/data/support-server.ts — a guess
