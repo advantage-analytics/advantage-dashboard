@@ -42,3 +42,13 @@ is the runner's. Newest entries at the bottom.
 1. Review diff: read the newest `label_submissions` row for a session and diff against current label rows.
 2. A status race after the snapshot insert leaves an orphan submission row; delete it or have the diff reader take the newest.
 3. Labels board could give submitted sessions their own "review" group instead of folding them into "doing".
+
+## T5 · /label area: layout, assigned-sessions list, 404 gate — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `requireLabelViewerOrNotFound()` in admin-guard.ts (login redirect with no session, `notFound()` unless `is_admin` or `is_labeller`, flags read service-role, fails closed). New `/label` layout with a minimal `LabelHeader` (wordmark, "Labels", Guide link, sign-out), `/label` page listing `listAssignedLabelSessions()` (viewer from the gate; no match, player, program or job fields) via `AssignedSessionsList`, placeholder `/label/[sessionId]` and `/label/guide`. `labels-server.ts` exports `countLabelPointProgress` and `readOpenCounts` for reuse. MAP.md regenerated. New `tests/label-routes.spec.ts` (8 tests).
+**follow-ups:**
+
+1. Show open-flag counts (`openCounts`) on the list rows.
+2. The label area imports `AdminPage` for its column; consider a neutral shared wrapper.
+3. Assignment dates use `shortDate()` (UTC).

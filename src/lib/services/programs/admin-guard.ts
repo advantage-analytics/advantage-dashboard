@@ -186,3 +186,66 @@ export async function requireLabelActor(
 
   return { id: user.id, kind: "labeller" };
 }
+
+// ── The /label area: admin or any labeller ─────────────────────────────────
+
+/** What `requireLabelViewerOrNotFound` needs; specs pass fakes. */
+export interface LabelViewerDependencies {
+  createClient: LabelActorDependencies["createClient"];
+  createAdminClient: () => AdminClient;
+  loginRedirectPath: (fallback: string) => Promise<string>;
+  redirect: (path: string) => never;
+  notFound: () => never;
+}
+export const defaultLabelViewerDependencies: LabelViewerDependencies = {
+  createClient,
+  createAdminClient,
+  loginRedirectPath,
+  redirect,
+  notFound,
+};
+
+/**
+ * The `/label` area's gate — `requireAdminOrNotFound`'s twin for the
+ * labeller's own pages, written once and re-run by every loader beneath
+ * `label/layout.tsx` for the same reason the admin one is: Next.js does not
+ * promise the layout ran first.
+ *
+ * No session goes to login with `?next=` set to the page asked for; signed in
+ * but neither an admin nor a labeller is `notFound()`, never a 403, so the
+ * route's existence is not confirmed to someone probing it. Both flags are
+ * read service-role from the caller's own row, keyed by the id
+ * `auth.getUser()` verified: `is_labeller` has no client grant, and nothing a
+ * client sends can name a different user.
+ *
+ * Unlike `requireLabelActor`, this asks nothing about a session — it decides
+ * who may see the area at all. Which sessions they then see is the loader's
+ * business (`listAssignedLabelSessions`), and every write still goes through
+ * `requireLabelActor`.
+ *
+ * `cache()`d: the layout and the page each call it once per request.
+ */
+export const requireLabelViewerOrNotFound = cache(
+  async (
+    deps: LabelViewerDependencies = defaultLabelViewerDependencies,
+  ): Promise<LabelActor> => {
+    const supabase = await deps.createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return deps.redirect(await deps.loginRedirectPath("/label"));
+
+    const { data, error } = await deps
+      .createAdminClient()
+      .from("users")
+      .select("is_admin, is_labeller")
+      .eq("id", user.id)
+      .maybeSingle<{ is_admin: boolean | null; is_labeller: boolean | null }>();
+
+    // A failed read is treated as no flags: the gate fails closed.
+    if (error || !data) return deps.notFound();
+    if (data.is_admin === true) return { id: user.id, kind: "admin" };
+    if (data.is_labeller === true) return { id: user.id, kind: "labeller" };
+    return deps.notFound();
+  },
+);

@@ -73,7 +73,7 @@ ready).
 
 ## T5 · /label area: layout, assigned-sessions list, 404 gate
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/app/label/layout.tsx (new), src/app/label/page.tsx (new), src/lib/data/label-assignments-server.ts (new), MAP.md (regenerated), tests/label-routes.spec.ts (new) — guesses

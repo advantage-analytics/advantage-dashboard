@@ -126,7 +126,7 @@ interface DbSession {
 }
 
 /** `open_counts` as the list reads it; anything malformed reads as none. */
-function readOpenCounts(value: unknown): FlagCounts | null {
+export function readOpenCounts(value: unknown): FlagCounts | null {
   if (!value || typeof value !== "object") return null;
   const { amber, grey } = value as Record<string, unknown>;
   return typeof amber === "number" && typeof grey === "number"
@@ -277,7 +277,7 @@ async function countPointsByMatch(
  * is the subset with `checked_at` set. One query grouped in memory, walked by
  * `readAllPages` in case a session runs long.
  */
-async function countLabelPointProgress(
+export async function countLabelPointProgress(
   db: AdminClient,
   sessionIds: string[],
 ): Promise<Map<string, { checked: number; total: number }>> {
