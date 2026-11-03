@@ -19,7 +19,7 @@ ready).
 
 ## T1 · support_threads / support_messages: tables, RLS, send and mark-read RPCs
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<live-version>_support_messaging.sql (new), tests/support-messaging-rls.spec.ts (new) — a guess
 - **done when:**
