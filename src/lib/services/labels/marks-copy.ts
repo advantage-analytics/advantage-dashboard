@@ -60,9 +60,11 @@ const PLACEMENT_GAP_WORDS: Record<PlacementGap, string> = {
   both: "contact point or landing",
 };
 
-/** "No contact point": what the stroke's flag asks for. */
-export function placementGapLabel(missing: PlacementGap): string {
-  return `No ${PLACEMENT_GAP_WORDS[missing]}`;
+/** A mark's name: `MARK_LABEL`, except where the mark's own params refine it. */
+export function markLabel(mark: LabelMark): string {
+  return mark.code === "placement_missing"
+    ? `No ${PLACEMENT_GAP_WORDS[mark.params.missing]}`
+    : MARK_LABEL[mark.code];
 }
 
 /** A point score ("0-15") with an en dash ("0–15"). */
@@ -187,10 +189,7 @@ export function hintLabel(mark: LabelMark, names?: MarkNames): string {
   if (mark.code === "last_call_overruled") {
     return lastCallQuestion(mark.params.vendorCall);
   }
-  if (mark.code === "placement_missing") {
-    return placementGapLabel(mark.params.missing);
-  }
-  const label = MARK_LABEL[mark.code];
+  const label = markLabel(mark);
   if (mark.code !== "shot_after_point_end") return label;
   const n = mark.params.after.length;
   return `${label} ${n} ${n === 1 ? "shot follows" : "shots follow"}`;

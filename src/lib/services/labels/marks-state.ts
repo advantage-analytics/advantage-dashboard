@@ -29,9 +29,8 @@ import {
 } from "./marks";
 import {
   lastCallQuestion,
-  MARK_LABEL,
   markHover,
-  placementGapLabel,
+  markLabel,
   REVIEW_ITEM_QUESTION,
   type MarkNames,
 } from "./marks-copy";
@@ -256,10 +255,7 @@ export function stateHoverParts(
   sentence: string,
   pointAdded = false,
 ): MarkHoverParts {
-  const label =
-    mark.code === "placement_missing"
-      ? placementGapLabel(mark.params.missing)
-      : MARK_LABEL[mark.code];
+  const label = markLabel(mark);
   switch (state) {
     case "open":
       return { name: label, detail: markHover(mark, names) };
