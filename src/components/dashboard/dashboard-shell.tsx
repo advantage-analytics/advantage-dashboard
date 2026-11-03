@@ -15,6 +15,7 @@ import { LeaveGuardProvider } from "@/components/dashboard/leave-guard-context";
 import { HeaderStatusProvider } from "@/components/dashboard/header-status";
 import { HeaderSlotProvider } from "@/components/dashboard/header-slot";
 import { WorkspaceSync } from "@/components/dashboard/workspace-sync";
+import { ProgramStatusSync } from "@/components/dashboard/program-status-sync";
 import { BetaWelcome } from "@/components/dashboard/beta-welcome-dialog";
 import { FirstMatchFeedback } from "@/components/dashboard/feedback/first-match-feedback";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
@@ -127,6 +128,7 @@ export function DashboardShell({
                 {/* Keeps this chrome on the workspace the cookie names — see
                   WorkspaceSync for why a navigation can leave it behind. */}
                 <WorkspaceSync />
+                <ProgramStatusSync />
                 <div className="flex h-dvh w-full overflow-hidden bg-white">
                   <AppSidebar />
                   {/* The gutter is reserved even when nothing overflows: with

@@ -218,11 +218,14 @@ async function transition(
   // A rejection hands the program back so the right person can claim it, and
   // takes the membership with it — otherwise a rejected claimant keeps an owner
   // row on a program the directory shows as unclaimed.
+  //
+  // Membership first. The claimant's open dashboard watches `programs.status`
+  // (`ProgramStatusSync`) and refreshes the moment it reads "unclaimed"; with
+  // the status written first, a refresh landing between the two writes still
+  // found the membership and left the coach inside a program they had lost.
+  // The delete's own trigger already hands back a program with no members
+  // left, so the update below only matters when other members remain.
   if (programStatus === "unclaimed") {
-    await db
-      .from("programs")
-      .update({ status: "unclaimed", owner_user_id: null, claimed_at: null })
-      .eq("id", claim.program_id);
     if (claim.claimant_user_id) {
       await db
         .from("program_members")
@@ -230,6 +233,10 @@ async function transition(
         .eq("program_id", claim.program_id)
         .eq("user_id", claim.claimant_user_id);
     }
+    await db
+      .from("programs")
+      .update({ status: "unclaimed", owner_user_id: null, claimed_at: null })
+      .eq("id", claim.program_id);
   } else {
     await db
       .from("programs")

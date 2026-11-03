@@ -395,6 +395,18 @@ async function startClaimSignedIn(
     };
   }
 
+  // Exactly one live link per account per program. "Use a different address"
+  // writes a second slot, and the first address's link would otherwise stay
+  // live for a day: open it later in this session and the claim settles on the
+  // address the coach abandoned. After the send, so a failed send keeps the
+  // only link they have. Scoped to this account's rows, like everything here.
+  await db
+    .from("pending_claims")
+    .delete()
+    .eq("claimant_user_id", user.id)
+    .eq("program_key", pending.programKey)
+    .neq("email", pending.email);
+
   // The same opportunistic sweep the signed-out path runs.
   await db
     .from("pending_claims")
