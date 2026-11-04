@@ -730,6 +730,16 @@ function FilmRoom({
     playerRef.current?.seekTo(stop.start);
   }, []);
 
+  /** The card's "Go to the first point": the applied cut's first stop, seeked
+   * the way a list click seeks — not a step, whose cushion skips a point
+   * that starts within half a second of the playhead. */
+  const goToFirstPoint = useCallback(() => {
+    const first = walkStops[0];
+    if (!first) return;
+    followPlayback();
+    playerRef.current?.seekTo(first.start);
+  }, [walkStops, followPlayback]);
+
   /** The transport's own step, handed to anything else that walks points. */
   const handleStep = useCallback(
     (direction: -1 | 1) => {
@@ -1206,6 +1216,7 @@ function FilmRoom({
             // The link is to the dashboard report, which a share-page or
             // sample reader cannot open.
             canCopyLink={!readOnly}
+            onGoToFirst={walkStops.length > 0 ? goToFirstPoint : undefined}
             tags={cardTags}
             notes={cardNotes}
           />
