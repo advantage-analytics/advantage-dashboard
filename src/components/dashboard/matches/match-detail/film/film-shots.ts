@@ -1,5 +1,9 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
-import { isFeedShotType, isServeShotType } from "@/lib/data/serve-return-shots";
+import {
+  countedShots,
+  isFeedShotType,
+  isServeShotType,
+} from "@/lib/data/serve-return-shots";
 
 import { shotDirection, type Hand } from "../match-filters/shot-geometry";
 import { normalizeServeSpin } from "../match-filters/spin";
@@ -271,9 +275,10 @@ function isServeRow(shotType: string): boolean {
  * Works from the point's FULL `shots` (`MatchPoint.shots`, already in
  * `shot_number` order), never the timed-only feed ({@link shotStops}): an
  * untimed serve still decides where the rally starts. Look a displayed shot
- * up by id. `shot_number` itself is never read — Advantage Intelligence
- * stores a faulted serve at 0 and older SwingVision Feed rows are 0 too — and
- * neither is `rally_length`, which is 0 when the source never recorded it.
+ * up by id. `shot_number` is read only to find the played second serve
+ * among the shots from the counted serve on (`countedShots`) — a let or fault
+ * played out before it sits at 0 and may carry a second serve of its own —
+ * and `rally_length` not at all: it is 0 when the source never recorded it.
  */
 export interface RallyNumbering {
   numbers: ReadonlyMap<string, number>;
@@ -298,7 +303,7 @@ export function rallyNumbering(
   // SwingVision stores both serves at shot_number 1 and the loader breaks
   // that tie by uuid, so "the last serve row" is the faulted one about half
   // the time. Stored order is only the fallback (one serve, or bare "Serve").
-  const secondServe = list.find((s) => {
+  const secondServe = countedShots(list, (s) => s.shotNumber).find((s) => {
     const type = s.shotType?.trim() ?? "";
     return isServeRow(type) && /second|2nd/i.test(type);
   });
@@ -340,14 +345,16 @@ export function isRallyOpener(
  * same bare `Serve` fallback as {@link isServeRow}, and narrowed to shots the
  * source typed: an untyped row may be the serve itself (a point whose every
  * shot is untyped exists live), so calling it the Return is a guess the
- * table would print as fact. `shots` in `shot_number` order, as
- * `MatchPoint.shots` already is. Null when the point has no such shot (an
- * ace, a double fault, or shots the source never typed).
+ * table would print as fact. Only shots from the serve that counted on
+ * (`countedShots`): a stroke of a played-out let or fault is not the return.
+ * `shots` in `shot_number` order, as `MatchPoint.shots` already is. Null when
+ * the point has no such shot (an ace, a double fault, or shots the source
+ * never typed).
  */
 export function pointReturnShotId(
   shots: readonly MatchShot[] | undefined,
 ): string | null {
-  const found = shots?.find((s) => {
+  const found = countedShots(shots ?? [], (s) => s.shotNumber).find((s) => {
     const type = s.shotType?.trim() ?? "";
     return type !== "" && !isServeRow(type) && !isFeedShotType(type);
   });
@@ -432,7 +439,7 @@ export function shotRowCells(
 // row 9 — so a long rally still finishes arriving inside 200ms. `order` is
 // the row's place in the LIST, not its rally number, which two serves share.
 // Used as the mount-driven `animationDelay` for `film-shot-row-in`
-// (`film-this-point.tsx`, `point-list.tsx`); its cap and reduced-motion
+// (`point-list.tsx`); its cap and reduced-motion
 // opt-out live in globals.css.
 export function shotRowRevealDelay(order: number): number {
   return Math.min(order - 1, 8) * 25;

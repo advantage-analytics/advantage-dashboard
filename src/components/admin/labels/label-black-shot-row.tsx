@@ -95,7 +95,7 @@ import {
   type EditContext,
   type LabelRowOperations,
 } from "./label-row-parts";
-import { errorKindShotId } from "./stroke-keys";
+import { errorKindShotId, serveOffersLet } from "./stroke-keys";
 
 /**
  * The rail's strokes: the open point's shots in a recessed well, each edited in
@@ -1727,7 +1727,7 @@ export function shotResultMenu(
   });
   // Played on, a serve's let is not offered — but a let already stored
   // (marked before the rule changed) keeps its row, so it can be undone.
-  if (serve && (playOnLets === false || shot.result === "let")) {
+  if (serveOffersLet(shot, playOnLets)) {
     options.push({
       value: "let",
       label: RESULT_LABEL.let,

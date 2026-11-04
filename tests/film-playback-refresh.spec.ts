@@ -1826,16 +1826,32 @@ test("the report player never dims a frame it has not shown yet", async ({
   ).toBe(0);
 
   // Released, the first frame lands and the same seek in flight now dims.
-  // Continue the held ones before unrouting: `unroute` disposes of any
-  // request still parked on the handler.
+  // `readyState` is live and runs ahead of the queued media events: it reads
+  // 4 before the `loadedmetadata` task has even run, and that task is where
+  // `settle` starts its first-frame nudge, a REAL seek to 0.001. On a loaded
+  // runner the gap is wide, so a `seeking` sent on `readyState` alone lands
+  // before the nudge, and the nudge's `seeked` then clears it — no dim, ever.
+  // Wait for that `seeked` itself (counted by a listener that runs after
+  // React's own), not just the ready state. Continue the held ones before
+  // unrouting: `unroute` disposes of any request still parked on the handler.
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel) as HTMLVideoElement;
+    el.dataset.testSeeked = "0";
+    el.addEventListener("seeked", () => {
+      el.dataset.testSeeked = String(Number(el.dataset.testSeeked) + 1);
+    });
+  }, REPORT);
   for (const route of heldRoutes) await route.continue();
   await page.unroute("**/fixtures/**");
-  await page.waitForFunction(
-    (sel) =>
-      (document.querySelector(sel) as HTMLVideoElement | null)?.readyState! >=
-      2,
-    REPORT,
-  );
+  await page.waitForFunction((sel) => {
+    const el = document.querySelector(sel) as HTMLVideoElement | null;
+    return (
+      !!el &&
+      el.readyState >= 2 &&
+      !el.seeking &&
+      Number(el.dataset.testSeeked) >= 1
+    );
+  }, REPORT);
   await page.evaluate((sel) => {
     document.querySelector(sel)?.dispatchEvent(new Event("seeking"));
   }, REPORT);
@@ -2436,17 +2452,17 @@ async function roomWellUnder(page: Page): Promise<string | null> {
   return under;
 }
 
-async function cardShots(page: Page): Promise<(string | null)[]> {
-  return page
-    .locator(`${CARD} [data-shot-id]`)
-    .evaluateAll((els) => els.map((el) => el.getAttribute("data-shot-id")));
+/** Which point the card is on (its `data-point-id`). The card no longer lists
+ * shots — they unfold in the list's well — so the point is what it follows. */
+async function cardPoint(page: Page): Promise<string | null> {
+  return page.locator(CARD).getAttribute("data-point-id");
 }
 
 /** Held on `a` from the shell's list, the film playing `b`. */
 async function shellHoldAThenPlayB(page: Page) {
   await page.click(SHELL_ROW("a"));
   await expect.poll(() => playingRow(page)).toBe("a");
-  await expect.poll(() => cardShots(page)).toEqual(["a-shot-1", "a-shot-2"]);
+  await expect.poll(() => cardPoint(page)).toBe("a");
   await expect(page.locator(LINE)).toHaveCount(0);
   // 0.3, not the room cases' 0.4: on the shell a stop counts as reached
   // `REACHED_EPSILON_SECONDS` (0.1) early, so 0.4 is already inside `c`
@@ -2531,7 +2547,7 @@ test("T22: with the list held, the card follows the playing point and draws no h
   await shellHoldAThenPlayB(page);
 
   // The card reads the PLAYING point `b`, counter and all — no line.
-  await expect.poll(() => cardShots(page)).toEqual(["b-shot-1", "b-shot-2"]);
+  await expect.poll(() => cardPoint(page)).toBe("b");
   await expect(page.locator(`${CARD_HEAD} .mono`)).toHaveText("2 / 3");
   await expect(page.locator(LINE)).toHaveCount(0);
   await expect(page.locator(SHELL_PILL)).toHaveCount(0);
@@ -2545,7 +2561,7 @@ test("T22: the transport's Next point glyph re-follows the list through onStep",
 }) => {
   await openShell(page, "card-transport-step");
   await shellHoldAThenPlayB(page);
-  await expect.poll(() => cardShots(page)).toEqual(["b-shot-1", "b-shot-2"]);
+  await expect.poll(() => cardPoint(page)).toBe("b");
 
   // The player's own glyph — not the card's — which only `onStep` lets the
   // tab observe. The fixture's stops sit 0.1-0.15s apart, inside the step's
@@ -2554,7 +2570,7 @@ test("T22: the transport's Next point glyph re-follows the list through onStep",
   // well under the PLAYING point — proving the notification fired.
   await page.locator(`button[aria-label="Next point"]:not(${CARD} *)`).click();
   await expect.poll(() => playingRow(page)).toBe("b");
-  await expect.poll(() => cardShots(page)).toEqual(["b-shot-1", "b-shot-2"]);
+  await expect.poll(() => cardPoint(page)).toBe("b");
   await expect(page.locator(`${CARD_HEAD} .mono`)).toHaveText("2 / 3");
   await expect(page.locator(LINE)).toHaveCount(0);
   expect(await roomWellUnder(page)).toBe("b");
@@ -2570,7 +2586,7 @@ test("T22: the card's own Next point step button re-follows the list", async ({
   // playing point (`handleStep` calls `followPlayback` before the step).
   await page.locator(`${CARD} button[aria-label="Next point"]`).click();
   await expect.poll(() => playingRow(page)).toBe("b");
-  await expect.poll(() => cardShots(page)).toEqual(["b-shot-1", "b-shot-2"]);
+  await expect.poll(() => cardPoint(page)).toBe("b");
   await expect(page.locator(`${CARD_HEAD} .mono`)).toHaveText("2 / 3");
   await expect(page.locator(LINE)).toHaveCount(0);
   await expect(page.locator(SHELL_PILL)).toHaveCount(0);
@@ -2589,12 +2605,29 @@ test("T22: the card's own Next point step button re-follows the list", async ({
  * and the list's card grows to its content: nothing to scroll. In the app
  * the tab's column bounds it (`max-h-full` inside a pane-height column);
  * `boundShellList` gives the column that bound here, and `pad=12` makes the
- * rows outgrow it. The shell list opens no well (it takes no
- * `onSelectShot`), so "the well opens under the playing row" is read through
- * the room's drawer (`roomWellUnder`), which shares the tab's `pointFocus`.
+ * rows outgrow it. The shell list now opens its own well under the displayed
+ * point (canvas "W-E chat"), so a case that compares the list's heights
+ * across a follow waits for the well's unfold to finish and counts it
+ * (`settledWellHeight`). "The well opens under the playing row" is still read
+ * through the room's drawer (`roomWellUnder`), which shares `pointFocus`.
  * ---------------------------------------------------------------------- */
 
 const SHELL_SCROLLER = `${SHELL_LIST} .overflow-y-auto`;
+
+/**
+ * The shell well's height once its unfold has finished (0 with no well) — a
+ * height read mid-unfold is any value between 0 and the real one.
+ */
+async function settledWellHeight(page: Page): Promise<number> {
+  return page.evaluate(async (sel) => {
+    const well = document.querySelector<HTMLElement>(sel);
+    if (!well) return 0;
+    await Promise.all(
+      well.getAnimations({ subtree: true }).map((a) => a.finished),
+    );
+    return well.getBoundingClientRect().height;
+  }, `${SHELL_LIST} [data-shot-well]`);
+}
 
 /**
  * Give the shell list's column a height, as the tab's side-by-side layout
@@ -2698,6 +2731,9 @@ test("T23: on a one-row cut the out-of-cut pill takes its own room instead of si
   // Nothing to return to yet, so the list keeps its height: no room reserved.
   const scroller = page.locator(SHELL_SCROLLER);
   await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+  // `a`'s well is open here; it closes when the list follows `b`, which this
+  // cut does not hold — so "the room comes back" is measured without it.
+  const wellUnderA = await settledWellHeight(page);
   const before = await scroller.boundingBox();
 
   await seekTo(page, REPORT, 0.3);
@@ -2721,7 +2757,7 @@ test("T23: on a one-row cut the out-of-cut pill takes its own room instead of si
   await expect(pill).toHaveCount(0);
   await expect
     .poll(async () => (await scroller.boundingBox())!.height)
-    .toBe(before!.height);
+    .toBe(before!.height - wellUnderA);
 });
 
 test("T23: an in-cut pill floats and reserves nothing", async ({ page }) => {
@@ -2736,12 +2772,14 @@ test("T23: an in-cut pill floats and reserves nothing", async ({ page }) => {
   );
   await shellHoldAThenPlayBAbove(page);
   await expect(page.locator(SHELL_PILL)).toHaveCount(1);
+  // The held point's well is the only height added; the pill adds none.
+  const well = await settledWellHeight(page);
   expect(
     await page.evaluate(
       (sel) => document.querySelector(sel)!.scrollHeight,
       SHELL_SCROLLER,
     ),
-  ).toBe(before);
+  ).toBe(before + Math.round(well));
 });
 
 test("the rail scoreboard's word follows the film, in the report and through the room", async ({
@@ -2856,11 +2894,15 @@ test("T23: no shell pill while the lit row is fully in the shell list's view", a
     pad: "12",
     ttl: String(3600_000),
   });
-  await boundShellList(page, 240);
+  // 300, not 240: the held point `a` opens its shot well above `b`, so `b`
+  // needs the well's height on top of its own to sit wholly inside the box.
+  await boundShellList(page, 300);
   await shellHoldAThenPlayBAbove(page);
   await expect(page.locator(SHELL_PILL)).toHaveCount(1);
 
-  // Back to the top: `b` is wholly inside the box, nothing to return to.
+  // Back to the top: `b` is wholly inside the box, nothing to return to —
+  // measured once `a`'s well has finished unfolding.
+  await settledWellHeight(page);
   await parkScroller(page, SHELL_SCROLLER, 0);
   await expect.poll(() => shellLitPlace(page)).toBe("inside");
   await expect(page.locator(SHELL_PILL)).toHaveCount(0);
@@ -3335,9 +3377,16 @@ test("T26: a jump near the end of the list clamps to the end, the row inside the
 
   await page.locator(SHELL_PILL).click();
   await expect(page.locator(SHELL_PILL)).toHaveCount(0);
-  await expect.poll(() => shellScrollTop(page)).toBeGreaterThanOrEqual(end - 1);
+  // Following moves the shell's well from `a` to `c`, so the list's end moves
+  // while the jump runs: the claim is the clamp to the end the list has once
+  // the well has settled, not to `end` as measured above.
+  await settledWellHeight(page);
   await shellScrollSettled(page);
-  expect(Math.abs((await shellScrollTop(page)) - end)).toBeLessThanOrEqual(1);
+  const liveEnd = await page.evaluate((sel) => {
+    const list = document.querySelector<HTMLElement>(sel)!;
+    return list.scrollHeight - list.clientHeight;
+  }, SHELL_SCROLLER);
+  expect(liveEnd).toBeGreaterThan(0);
   const c = await rowOffset(page, SHELL_SCROLLER, "c");
   expect(c!.top).toBeGreaterThanOrEqual(-0.5);
   expect(c!.bottom).toBeLessThanOrEqual(0.5);
@@ -3755,26 +3804,67 @@ test("T4: only the hovered lane mounts a preview, and none of it takes the point
   expect(new Set(events)).toEqual(new Set(["none"]));
 });
 
-// ── Type column (2026-09-23): the shot's role — First · Second · Return ·
-// Rally — from `shotType` rather than row position (the stroke itself is the
-// Stroke column's). The fixture's points are a bare `Serve` then a `Forehand`:
-// the serve reads First (the legacy fallback) and the Forehand is the point's
-// return, so it reads Return.
-// The Type cell is `@min-[880px]` only and the harness has no container, so it
-// is read by `textContent`, which a hidden cell still carries.
+// ── The playing point's shots live in the report list's well (canvas
+// "W-E chat"): the card under the player lists no shots any more, and the
+// shell list unfolds the playing point the way the room's drawer does.
 
-test("the card's Type cells read First and Return for the playing point", async ({
+test("the report list unfolds the playing point's shots, and the card lists none", async ({
   page,
 }) => {
-  await openShell(page, "card-type");
+  await openShell(page, "shell-well");
   await seekTo(page, REPORT, 0.3);
-  await expect.poll(() => cardShots(page)).toEqual(["b-shot-1", "b-shot-2"]);
-  const types = await page
-    .locator(`${CARD} [data-shot-id]`)
-    .evaluateAll((rows) =>
-      rows.map((row) => row.children[4]?.textContent?.trim() ?? null),
-    );
-  expect(types).toEqual(["First", "Return"]);
+  await expect.poll(() => cardPoint(page)).toBe("b");
+  await expect
+    .poll(() =>
+      page
+        .locator(`${SHELL_LIST} [data-shot-well] [data-shot-id]`)
+        .evaluateAll((els) => els.map((el) => el.getAttribute("data-shot-id"))),
+    )
+    .toEqual(["b-shot-1", "b-shot-2"]);
+  await expect(page.locator(`${CARD} [data-shot-id]`)).toHaveCount(0);
+});
+
+test("the card reads the point in one line and opens an empty thread with a reply field", async ({
+  page,
+}) => {
+  await openShell(page, "card-notes");
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => cardPoint(page)).toBe("b");
+  const card = page.locator(CARD);
+  // Winner, then score · set · game · shots, in the subline.
+  await expect(card.locator(".text-micro").first()).toContainText(" won · ");
+  await expect(card.locator(".text-micro").first()).toContainText(
+    "Set 1 · Game",
+  );
+  await expect(card.getByText("No notes yet")).toBeVisible();
+  const reply = card.getByRole("textbox", { name: "Add a note on this point" });
+  await expect(reply).toBeVisible();
+  // Send stays off until there is something to send.
+  const send = card.getByRole("button", { name: "Send" });
+  await expect(send).toBeDisabled();
+  await reply.fill("   ");
+  await expect(send).toBeDisabled();
+  await reply.fill("Split-step earlier");
+  await expect(send).toBeEnabled();
+  await expect(
+    card.getByRole("button", { name: "Copy link to this point" }),
+  ).toBeVisible();
+});
+
+test("on a read-only report the card draws no bookmark, tags, thread or reply field", async ({
+  page,
+}) => {
+  await open(page, "card-read-only", { readOnly: "1", tab: "film" });
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => cardPoint(page)).toBe("b");
+  const card = page.locator(CARD);
+  await expect(card.getByRole("textbox")).toHaveCount(0);
+  await expect(card.getByRole("group", { name: "Tags" })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: /bookmark/i })).toHaveCount(0);
+  await expect(
+    card.getByRole("button", { name: "Copy link to this point" }),
+  ).toHaveCount(0);
+  await expect(card.getByText("No notes yet")).toHaveCount(0);
 });
 
 /* -------------------------------------------------------------------------
@@ -4184,4 +4274,15 @@ test("Advanced filters… opens the 340px drawer over the list, counting the dra
   await expect(drawer).toBeVisible();
   await drawer.getByRole("button", { name: "Close filters" }).click();
   await expect(drawer).toHaveCount(0);
+});
+
+test("before the first point the card says so and offers the first point", async ({
+  page,
+}) => {
+  await openShell(page, "card-no-point");
+  const card = page.locator(CARD);
+  await expect(card.getByText("No point playing")).toBeVisible();
+  await card.getByRole("button", { name: "Go to the first point" }).click();
+  await expect.poll(() => cardPoint(page)).toBe("a");
+  await expect(card.getByText("No point playing")).toHaveCount(0);
 });

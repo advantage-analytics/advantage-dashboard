@@ -14,6 +14,7 @@
  * `lastLandingMissing`, `serveAfterServeIn`).
  */
 
+import type { LabelPointPatch } from "./edit";
 import { landingTakesContact } from "./volley-link";
 import {
   deriveEnding,
@@ -871,6 +872,44 @@ export function openHintMarks(
     const key = strokeHintKey(mark) ?? hintDismissKey(mark.code);
     return !point.dismissed.includes(key);
   });
+}
+
+/**
+ * "Different ending?"'s fix: the ending and ended-by the strokes derive, and
+ * the winner with them where the strokes settle one. What its "Make it …"
+ * writes, and what a check writes first (`acceptAsIs`).
+ */
+export function staleEndingPatch(
+  params: Extract<LabelMark, { code: "ending_stale" }>["params"],
+): LabelPointPatch {
+  const { ending, endedBy, winner } = params;
+  return {
+    ending,
+    ended_by: endedBy,
+    ...(winner !== null ? { winner } : {}),
+  };
+}
+
+/**
+ * What a check writes before it, so the point is taken as the rows hold it.
+ * A checked point leaves two hints open (`reviewFlag`): "Different ending?"
+ * with the winner contradicted, which takes the strokes' ending
+ * (`staleEndingPatch`), and "Ending and winner disagree", which the rows
+ * cannot fix and so is dismissed. Null patch and no keys with neither open.
+ */
+export function acceptAsIs(
+  point: LabelPoint,
+  marks: LabelMarks,
+): { patch: LabelPointPatch | null; dismiss: string[] } {
+  let patch: LabelPointPatch | null = null;
+  const dismiss: string[] = [];
+  for (const mark of openHintMarks(point, marks)) {
+    if (mark.code === "ending_stale") patch = staleEndingPatch(mark.params);
+    if (mark.code === "ending_contradicts_winner") {
+      dismiss.push(hintDismissKey(mark.code));
+    }
+  }
+  return { patch, dismiss };
 }
 
 /**

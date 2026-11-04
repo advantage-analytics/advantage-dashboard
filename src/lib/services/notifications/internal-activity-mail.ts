@@ -3,9 +3,11 @@ import {
   feedbackInternalEmail,
   sendEmail,
   signupInternalEmail,
+  supportMessageInternalEmail,
   uploadInternalEmail,
   INTERNAL_ALERTS_ADDRESS,
 } from "@/lib/services/email";
+import { isSupportTopic } from "@/lib/data/support-view";
 import { isUuid } from "@/lib/admin/validation";
 import { isFirstMatchFeedbackRating } from "@/lib/feedback/first-match-feedback";
 import { emailOrigin } from "@/lib/site-url";
@@ -13,11 +15,12 @@ import { describeContext } from "./analysis-mail";
 import { claimSend } from "./should-notify";
 
 /**
- * New signups, new uploads and first-match feedback answers, mailed to the
- * internal alerts inbox.
+ * New signups, new uploads, first-match feedback answers and player messages,
+ * mailed to the internal alerts inbox.
  *
  * Postgres decides WHEN (the `internal_activity_alerts` migration's triggers,
- * and `internal_alert_feedback`'s, post `{ kind, id }` to
+ * `internal_alert_feedback`'s and the `support_messages` one, post
+ * `{ kind, id }` to
  * `/api/webhooks/internal-events`); this file decides WHAT. It never trusts
  * more than the id: every fact in the email is read
  * back from the row with the service role, so a forged or replayed body can
@@ -32,11 +35,18 @@ import { claimSend } from "./should-notify";
 const LOG = "[notifications:internal-activity]";
 
 export type InternalEventKind =
-  "signup" | "video_upload" | "swingvision_upload" | "feedback";
+  | "signup"
+  | "video_upload"
+  | "swingvision_upload"
+  | "feedback"
+  | "support_message";
 
 export interface InternalEvent {
   kind: InternalEventKind;
-  /** `users.id`, `processing_jobs.id`, `match_files.id` or `product_feedback.id`, by kind. */
+  /**
+   * `users.id`, `processing_jobs.id`, `match_files.id`, `product_feedback.id`
+   * or `support_messages.id`, by kind.
+   */
   id: string;
 }
 
@@ -48,6 +58,7 @@ const KINDS: readonly InternalEventKind[] = [
   "video_upload",
   "swingvision_upload",
   "feedback",
+  "support_message",
 ];
 
 /** The trigger's body, or null for anything else. Pure, so tested offline. */
@@ -97,6 +108,8 @@ export async function notifyInternalEvent(
         return await notifySignup(supabase, event.id);
       case "feedback":
         return await notifyFeedback(supabase, event.id);
+      case "support_message":
+        return await notifySupportMessage(supabase, event.id);
       default:
         return await notifyUpload(supabase, event);
     }
@@ -251,6 +264,77 @@ async function notifyFeedback(
       adminUrl: `${emailOrigin()}/admin`,
     }),
     { kind: "feedback", id: feedbackId },
+  );
+}
+
+/**
+ * A player's message in their support thread (`support_messages`, written by
+ * `send_support_message()` or a feedback note opening the thread). Shaped like
+ * `notifyFeedback`: only the id is trusted, the row, its thread's player and
+ * any match it names are read back with the service role. A staff reply or an
+ * event row answers `not_found` — the trigger posts player rows only, so one
+ * of those arriving here is a forged or mistaken body, not an alert.
+ */
+async function notifySupportMessage(
+  supabase: SupabaseClient,
+  messageId: string,
+): Promise<InternalEventOutcome> {
+  const { data: row } = await supabase
+    .from("support_messages")
+    .select("thread_id, author_role, body, topic, match_id")
+    .eq("id", messageId)
+    .maybeSingle();
+  if (!row || row.author_role !== "player") return "not_found";
+
+  const threadId = row.thread_id as string;
+  const { data: thread } = await supabase
+    .from("support_threads")
+    .select("user_id")
+    .eq("id", threadId)
+    .maybeSingle();
+  if (!thread) return "not_found";
+
+  const userId = thread.user_id as string;
+  const matchId = (row.match_id as string | null) ?? null;
+  const [{ data: player }, { data: match }] = await Promise.all([
+    supabase
+      .from("users")
+      .select("email, first_name, last_name")
+      .eq("id", userId)
+      .maybeSingle(),
+    matchId
+      ? supabase
+          .from("matches")
+          .select("player1_name, player2_name")
+          .eq("id", matchId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const playerEmail = (player?.email as string | null)?.trim() || null;
+  if (isTestAccountEmail(playerEmail)) return "test_account";
+
+  if (!(await claimSend(`support_message_internal:${messageId}`))) {
+    return "duplicate";
+  }
+
+  const topic = isSupportTopic(row.topic) ? row.topic : null;
+  return deliver(
+    supportMessageInternalEmail({
+      to: INTERNAL_ALERTS_ADDRESS,
+      messageId,
+      userId,
+      playerName: fullName(player),
+      playerEmail,
+      topic,
+      matchTitle: matchId
+        ? match
+          ? `${match.player1_name} vs. ${match.player2_name}`
+          : `Match ${matchId}`
+        : null,
+      body: (row.body as string | null) ?? "",
+      adminUrl: `${emailOrigin()}/admin/messages?id=${threadId}`,
+    }),
+    { kind: "support_message", id: messageId },
   );
 }
 

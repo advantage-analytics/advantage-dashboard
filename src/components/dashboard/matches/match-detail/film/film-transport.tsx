@@ -130,6 +130,11 @@ export interface FilmTransportProps {
   onToggleSkipDeadTime: () => void;
   onCycleRate: () => void;
   onToggleLoop: () => void;
+  /**
+   * The key Loop's tooltip names. Default L, the room's; the labelling
+   * console's player loops on ⇧L, since its L marks a let.
+   */
+  loopShortcut?: string;
   onToggleMute: () => void;
   onToggleCourt: () => void;
   onExit: () => void;
@@ -395,7 +400,7 @@ export function FilmTransport(p: FilmTransportProps) {
 
         <Glyph
           label={p.looping ? "Loop this point — on" : "Loop this point — off"}
-          shortcut="L"
+          shortcut={p.loopShortcut ?? "L"}
           pressed={p.looping}
           onClick={p.onToggleLoop}
         >

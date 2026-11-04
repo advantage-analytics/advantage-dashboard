@@ -11,6 +11,7 @@ import {
   type RawSplitStepStroke,
 } from "@/lib/services/splitstep/derivation";
 import { isServeStroke, type MatchScore } from "@/lib/services/labels/session";
+import { deriveShotResult } from "@/lib/services/labels/shot-derived";
 import {
   buildLabelSeed,
   endedBy,
@@ -165,6 +166,7 @@ test.describe("buildLabelSeed", () => {
       analysis.rallies.flatMap((r) => r.strokes.map((s) => [s.eventId, s])),
     );
     let keptBounces = 0;
+    let pulledBackServes = 0;
     for (const point of seed.points) {
       for (const shot of point.shots) {
         const derived = derivedById.get(shot.event_id);
@@ -176,8 +178,37 @@ test.describe("buildLabelSeed", () => {
         expect(shot.contact_x).toBe(derived.contact_x);
         expect(shot.contact_y).toBe(derived.contact_y);
         if (derived.landing_x !== null && derived.landing_y !== null) {
-          expect(shot.landing_x).toBe(derived.landing_x);
-          expect(shot.landing_y).toBe(derived.landing_y);
+          const pulledBack =
+            shot.landing_x !== derived.landing_x ||
+            shot.landing_y !== derived.landing_y;
+          if (pulledBack) {
+            // The seed's serve autofix (serve-autofix.ts): an in serve whose
+            // derived bounce read out now lands in, in the frozen seed too.
+            pulledBackServes += 1;
+            expect(isServeStroke(shot.stroke)).toBe(true);
+            expect(shot.result).toBe("in");
+            const ends = {
+              stroke: shot.stroke,
+              contact_x: shot.contact_x,
+              contact_y: shot.contact_y,
+            };
+            expect(
+              deriveShotResult({
+                ...ends,
+                landing_x: derived.landing_x,
+                landing_y: derived.landing_y,
+              }),
+            ).toBe("out");
+            expect(
+              deriveShotResult({
+                ...ends,
+                landing_x: shot.landing_x,
+                landing_y: shot.landing_y,
+              }),
+            ).toBe("in");
+            expect(shot.seed.landing_x).toBe(shot.landing_x);
+            expect(shot.seed.landing_y).toBe(shot.landing_y);
+          }
         } else {
           // The transcript's cut is for stats; the seed keeps the bounce.
           const stroke = strokeById.get(shot.event_id)!;
@@ -196,6 +227,7 @@ test.describe("buildLabelSeed", () => {
     }
     // The fixture has balls the transcript's cut dropped; the seed kept them.
     expect(keptBounces).toBeGreaterThan(0);
+    expect(pulledBackServes).toBeGreaterThan(0);
   });
 
   test("every row freezes its own values as its seed", () => {

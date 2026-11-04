@@ -8,6 +8,7 @@ import {
 } from "@/lib/data/admin-pilots-server";
 import { countAskForNav } from "@/lib/data/ask-admin-server";
 import { countLabelsForNav } from "@/lib/data/label-overview-server";
+import { countMessagesForNav } from "@/lib/data/support-admin-server";
 import { outreachNavSub } from "@/lib/data/outreach-admin-server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -60,7 +61,8 @@ async function settle<T>(
  * Today carries no count (the board shows none, and its loader is the
  * heaviest in the console). Matches, Teams and Labels count rows new since
  * this admin last looked; Requests counts what is waiting on a decision;
- * Pilots counts pilots at 90%+ of their cap; Ask counts new thumbs-down.
+ * Messages counts threads waiting on staff (the player wrote last); Pilots
+ * counts pilots at 90%+ of their cap; Ask counts new thumbs-down.
  */
 export async function loadAdminNav(adminId: string): Promise<AdminNavCounts> {
   const [
@@ -68,6 +70,7 @@ export async function loadAdminNav(adminId: string): Promise<AdminNavCounts> {
     matches,
     teams,
     labels,
+    messages,
     pilots,
     ask,
     pilotsSub,
@@ -78,6 +81,7 @@ export async function loadAdminNav(adminId: string): Promise<AdminNavCounts> {
     settle(countNewMatchesForNav(adminId), "matches"),
     settle(countNewTeamsForNav(adminId), "teams"),
     settle(countLabelsForNav(adminId), "labels"),
+    settle(countMessagesForNav(), "messages"),
     settle(countPilotsForNav(adminId), "pilots"),
     settle(countAskForNav(adminId), "ask"),
     settle(pilotsNavSub(), "pilots sub"),
@@ -86,7 +90,7 @@ export async function loadAdminNav(adminId: string): Promise<AdminNavCounts> {
   ]);
 
   return {
-    tabs: { requests, matches, teams, labels },
+    tabs: { requests, matches, teams, labels, messages },
     more: {
       conferences: { sub: conferencesSub ?? undefined },
       pilots: { count: pilots, sub: pilotsSub ?? undefined },

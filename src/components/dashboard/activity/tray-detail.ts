@@ -7,9 +7,14 @@
  * only place a sighted hover and a screen reader can disagree, which is why it
  * is one pure function rather than two format calls at the two call sites.
  *
- * Invitations lead. They are the only row in the tray that asks the reader to
- * decide something; in-flight work resolves on its own whether or not anybody
- * looks. A person who has both wants to read the one with a button first.
+ * An unread note from Advantage staff leads. It sits above the invitations in
+ * the panel and is the newest thing addressed to the reader by name; there is
+ * one thread per player, so it only ever counts to one. A note already read
+ * keeps its row but leaves this sentence, as it leaves the trigger's dot.
+ *
+ * Invitations come next. They are the only other row in the tray that asks
+ * the reader to decide something; in-flight work resolves on its own whether
+ * or not anybody looks. A person who has both wants to read the one with a button first.
  *
  * Failures come next. They used to be receipts, unmarked and uncounted; now
  * each failed row is a link to its recovery ("Add video", or "Open" onto the
@@ -35,8 +40,17 @@ export function trayDetail(
   elsewhereCount = 0,
   failedCount = 0,
   joinedCount = 0,
+  unreadMessageCount = 0,
 ): string {
   const parts: string[] = [];
+
+  if (unreadMessageCount > 0) {
+    parts.push(
+      unreadMessageCount === 1
+        ? "1 new message"
+        : `${unreadMessageCount} new messages`,
+    );
+  }
 
   if (inviteCount > 0) {
     parts.push(

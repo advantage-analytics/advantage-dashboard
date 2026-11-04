@@ -33,6 +33,7 @@ import {
   secondServeAsFirst,
   serveAfterServeIn,
   serveInLandingOut,
+  staleEndingPatch,
   stateHoverParts,
   strokeHintKey,
   type MarkState,
@@ -417,16 +418,10 @@ function hintActions(
   switch (mark.code) {
     case "ending_stale": {
       if (!onPatchPoint) return [];
-      const { ending, endedBy, winner } = mark.params;
       return [
         {
-          label: staleEndingAction(ending),
-          run: () =>
-            onPatchPoint(point.id, {
-              ending,
-              ended_by: endedBy,
-              ...(winner !== null ? { winner } : {}),
-            }),
+          label: staleEndingAction(mark.params.ending),
+          run: () => onPatchPoint(point.id, staleEndingPatch(mark.params)),
         },
       ];
     }

@@ -907,6 +907,12 @@ export function MatchesPageContent({
       const isDraft = drafts.some((d) => d.id === selectedId);
       params.set(isDraft ? "draft" : "match", selectedId);
     }
+    // `?messages=open` is the shell's support dialog, not this page's state:
+    // rebuilding the query without it would close the dialog under the user.
+    const messages = new URLSearchParams(window.location.search).get(
+      "messages",
+    );
+    if (messages) params.set("messages", messages);
     const query = params.toString();
     window.history.replaceState(
       null,

@@ -435,7 +435,13 @@ export function VisualizationsPanePending({
 
 /* ── Pane: Video ───────────────────────────────────────────────────────── */
 
-/** `film-tab.tsx`'s room: player + current-point card beside the 320px point list. */
+/**
+ * `film-tab.tsx`'s room: the player, the "This point" card under it and the
+ * 320px point list beside them — each drawn on the shipped geometry
+ * (`film-point-card.tsx`, `point-list-tone.ts`), so the page does not jump
+ * when the chunk lands. What is already known renders for real: the card's
+ * eyebrow, its icon row's outlines and the list's "All points" header.
+ */
 export function FilmPanePending() {
   return (
     <PendingRegion
@@ -446,48 +452,81 @@ export function FilmPanePending() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
         <FilmFramePending />
         <section
-          aria-label="Current point"
-          className="surface-card flex flex-col"
-          style={{ padding: "10px 8px 8px" }}
+          aria-label="This point"
+          className="surface-card flex min-h-0 flex-1 flex-col"
+          style={{ padding: "10px 20px 14px" }}
         >
-          <div className="flex items-center gap-2.5 pt-0.5 pr-[5px] pb-2.5 pl-3">
-            <span className="eyebrow">Current point</span>
+          {/* Icon row: eyebrow, bookmark · link · stepper. */}
+          <div className="flex h-7 items-center gap-2">
+            <span className="eyebrow">This point</span>
             <div className="flex-1" />
-            <PendingBar className="h-2.5 w-14" />
+            <PendingBar className="size-4 rounded-[4px]" />
+            <PendingBar className="size-4 rounded-[4px]" />
+            <PendingBar className="ml-2 h-2.5 w-14" />
           </div>
-          <div className="flex flex-col gap-1 px-3 pb-2">
-            {[0, 1, 2].map((row) => (
-              <div key={row} className="flex h-7 items-center gap-3">
-                <PendingBar className="w-6" />
-                <PendingBar className="w-24" />
-                <PendingBar className="w-20" />
-                <div className="flex-1" />
-                <PendingBar className="w-10" />
+          {/* Summary: the winner's 30px mark, the outcome and its line. */}
+          <div className="mt-2.5 flex items-center gap-3">
+            <PendingBar className="size-[30px] rounded-[var(--radius-button)]" />
+            <div className="flex flex-col gap-1.5">
+              <PendingBar className="h-3 w-28" />
+              <PendingBar className="h-2.5 w-56" />
+            </div>
+          </div>
+          {/* A tag pill. */}
+          <PendingBar className="mt-3 h-[26px] w-16 rounded-full" />
+          {/* The thread, under its hairline. */}
+          <div className="mt-4 flex flex-1 flex-col gap-3 border-t border-[var(--border-hairline)] pt-3">
+            <div className="flex gap-2.5">
+              <PendingBar className="size-6 rounded-full" />
+              <div className="flex flex-1 flex-col gap-1.5 pt-0.5">
+                <PendingBar className="h-2.5 w-24" />
+                <PendingBar className="h-2.5 w-3/4" />
               </div>
-            ))}
+            </div>
           </div>
+          {/* The reply field. */}
+          <PendingBar className="mt-3 h-10 w-full rounded-[var(--radius-element)]" />
         </section>
       </div>
       {/* The list column is out of flow beside the player, exactly as
           `film-tab.tsx` draws it, so it takes the row's height and never
-          adds to it. */}
+          adds to it. Full-bleed rows on 14px sides, as the list draws them. */}
       <div className="relative flex min-h-0 w-full shrink-0 flex-col @min-[720px]:w-[320px] @min-[720px]:self-stretch">
         <section
           aria-label="Point list"
           className="surface-card flex min-h-0 flex-1 flex-col overflow-hidden @min-[720px]:absolute @min-[720px]:inset-0"
         >
-          <div className="flex h-7 items-center gap-2 border-b border-[var(--border-hairline)] px-3">
-            <PendingBar className="h-2.5 w-16" />
+          <div className="flex items-center gap-2 px-2.5 pt-[11px] pb-2 shadow-[inset_0_-1px_0_var(--border-hairline)]">
+            <span className="flex h-[26px] items-center px-2 text-[12px] font-medium text-[var(--ink-900)]">
+              All points
+            </span>
             <div className="flex-1" />
             <PendingBar className="h-2.5 w-12" />
           </div>
-          <div className="flex flex-col px-3 py-1">
+          <div className="flex items-center px-[14px] pt-[13px] pb-[5px]">
+            <PendingBar className="h-2 w-24" />
+            <div className="flex-1" />
+            <PendingBar className="h-2 w-20" />
+          </div>
+          <div className="flex flex-col">
             {[0, 1, 2, 3, 4, 5, 6, 7].map((row) => (
-              <div key={row} className="flex h-9 items-center gap-3">
-                <PendingBar className="w-6" />
-                <PendingBar className={row % 3 === 0 ? "w-32" : "w-24"} />
+              <div
+                key={row}
+                className="flex min-h-[52px] items-center gap-3 px-[14px] py-1.5"
+              >
+                <span className="flex w-[34px] shrink-0 justify-center">
+                  <PendingBar className="size-[30px] rounded-[var(--radius-button)]" />
+                </span>
+                <div className="flex flex-col gap-1.5">
+                  <PendingBar
+                    className={row % 3 === 0 ? "h-3 w-28" : "h-3 w-24"}
+                  />
+                  <PendingBar
+                    className={row % 2 === 0 ? "h-2.5 w-32" : "h-2.5 w-20"}
+                  />
+                </div>
                 <div className="flex-1" />
-                <PendingBar className="w-8" />
+                <PendingBar className="h-2.5 w-9" />
               </div>
             ))}
           </div>

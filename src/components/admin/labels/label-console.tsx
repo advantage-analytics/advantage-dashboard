@@ -72,6 +72,7 @@ import {
 } from "@/lib/services/labels/volley-link";
 import { labelScores } from "@/lib/services/labels/score";
 import {
+  acceptAsIs,
   drawsGhosts,
   type ReviewItemId,
 } from "@/lib/services/labels/marks-state";
@@ -325,7 +326,9 @@ import { useBrowserFullscreen } from "./use-browser-fullscreen";
 import {
   errorKindKeyPatch,
   errorKindShotId,
+  isLetKey,
   isUnforcedKey,
+  letKeyPatch,
   frameTimePatch,
   hasEarlierServe,
   isErrorKindKey,
@@ -630,27 +633,6 @@ export function LabelConsole({
       return [{ pointId: s.pointId, afterShotId: s.afterShotId }];
     });
   }, [liveMarks, points]);
-  // The open counts the overview shows — flagged points, amber and grey —
-  // saved on the session whenever they change, so the Labels list reads the
-  // work left without building marks.
-  const openCounts = useMemo(() => {
-    if (!liveMarks) return null;
-    const open = openFlags(points, liveMarks);
-    // Each list's own count: a point in both (`openFlags`) is one in each, so
-    // the two are never a total of points.
-    const grey = open.filter((flag) => flag.data).length;
-    return { amber: open.length - grey, grey };
-  }, [points, liveMarks]);
-  const recordOpenCounts = operations?.recordOpenCounts;
-  const recordedCounts = useRef<string | null>(null);
-  useEffect(() => {
-    if (!openCounts || !recordOpenCounts) return;
-    const key = `${openCounts.amber}/${openCounts.grey}`;
-    if (recordedCounts.current === key) return;
-    recordedCounts.current = key;
-    // A cache: a failed save leaves the list a step behind, nothing more.
-    void recordOpenCounts(session.id, openCounts).catch(() => {});
-  }, [openCounts, recordOpenCounts, session.id]);
   // Minutes worked for the Labels list: a beat a minute while someone works.
   useWorkBeat(session.id, operations?.recordWorkBeat);
   // The deciding set the match record spells as a 10-point match tiebreak
@@ -2722,7 +2704,23 @@ export function LabelConsole({
     );
   }
 
-  function setChecked(pointId: string, value: boolean) {
+  /**
+   * Check or uncheck a point — ⌘ Enter, the row's tick and "Looks right" all
+   * come here. A check takes the rows as true: the open questions a check
+   * alone leaves standing are answered first (`acceptAsIs`), the strokes'
+   * ending saved before the tick, and no tick if that save fails.
+   */
+  async function setChecked(pointId: string, value: boolean) {
+    const point = points.find((p) => p.id === pointId);
+    if (value && point && marks) {
+      const { patch, dismiss } = acceptAsIs(point, marks);
+      for (const key of dismiss) dismissSuggestion(pointId, key);
+      if (patch && !(await patchPoint(pointId, patch))) return;
+    }
+    writeChecked(pointId, value);
+  }
+
+  function writeChecked(pointId: string, value: boolean) {
     const before = points.find((p) => p.id === pointId);
     if (!before || !operations || before.status === "deleted") return;
     setFoldedPointId(value && pointId === currentPointId ? pointId : null);
@@ -2992,6 +2990,7 @@ export function LabelConsole({
   const hitterKey = useRef<() => boolean>(() => false);
   const timeKey = useRef<() => boolean>(() => false);
   const errorKindKey = useRef<() => boolean>(() => false);
+  const letKey = useRef<() => boolean>(() => false);
   const resetShotKey = useRef<() => boolean>(() => false);
   const resetPointKey = useRef<() => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
@@ -3077,6 +3076,32 @@ export function LabelConsole({
     session.matchScore,
     slotJumpStops,
   ]);
+  // The header's two totals (label-flag-summary.tsx `count`), saved on the
+  // session whenever they change, so the Labels list reads the work left
+  // without building marks: amber is the amber flagged points and the score
+  // that doesn't add up — not the slots between rows, which the header's
+  // total leaves out too — grey the grey flagged points. A point in both
+  // lists (`openFlags`) is one in each.
+  const openCounts = useMemo(
+    () =>
+      liveMarks
+        ? {
+            amber: flagStops.score.length - slotJumpStops.length,
+            grey: flagStops.data.length,
+          }
+        : null,
+    [liveMarks, flagStops, slotJumpStops],
+  );
+  const recordOpenCounts = operations?.recordOpenCounts;
+  const recordedCounts = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openCounts || !recordOpenCounts) return;
+    const key = `${openCounts.amber}/${openCounts.grey}`;
+    if (recordedCounts.current === key) return;
+    recordedCounts.current = key;
+    // A cache: a failed save leaves the list a step behind, nothing more.
+    void recordOpenCounts(session.id, openCounts).catch(() => {});
+  }, [openCounts, recordOpenCounts, session.id]);
   // What Mark complete would list. Memoised: the console re-renders on every
   // film tick while it plays.
   const sessionWarnings = useMemo(
@@ -3230,7 +3255,7 @@ export function LabelConsole({
     };
     toggleOpenPointCheck.current = () => {
       if (!operable || confirm || !expanded) return;
-      setChecked(expanded.id, expanded.checkedAt === null);
+      void setChecked(expanded.id, expanded.checkedAt === null);
     };
     stepToFlag.current = (direction, kind) => {
       if (confirm) return;
@@ -3356,17 +3381,21 @@ export function LabelConsole({
     // point's; else the open point's first, selected first so the next key
     // lands on it too. A selection left behind in another point — the film
     // played or was clicked on into this one — never takes a key meant for
-    // the point on screen.
-    const keyShot = (): LabelShot | null => {
+    // the point on screen. `accept`, when given, turns down a stroke before
+    // it is selected, so a key with nothing to write moves nothing.
+    const keyShot = (
+      accept: (shot: LabelShot) => boolean = () => true,
+    ): LabelShot | null => {
       const selected =
         placement.shotId === null ? null : findShot(points, placement.shotId);
-      const live = selected && selected.status !== "deleted" ? selected : null;
+      const kept = selected && selected.status !== "deleted" ? selected : null;
+      const live = kept && accept(kept) ? kept : null;
       if (!expanded || unfoldedPointId !== expanded.id) return live;
-      if (live && expanded.shots.some((shot) => shot.id === live.id)) {
+      if (kept && expanded.shots.some((shot) => shot.id === kept.id)) {
         return live;
       }
       const first = liveShotsInOrder(expanded, drawsGhosts(marks))[0];
-      if (!first) return null;
+      if (!first || !accept(first)) return null;
       (document.activeElement as HTMLElement | null)?.blur?.();
       selectShot(first.id, undefined, { seek: false });
       return first;
@@ -3465,6 +3494,20 @@ export function LabelConsole({
       if (owner.errorKind !== "unforced") {
         void patchPoint(owner.id, { error_kind: "unforced" });
       }
+      return true;
+    };
+    // L on a serve marks it a let, and again gives it back the result its
+    // landing reads (`letKeyPatch`), as the Serve result menu does: only
+    // where that menu offers Let. A rally stroke does not take the key, and
+    // is never selected by it.
+    letKey.current = () => {
+      if (!operable || confirm) return false;
+      const patchFor = (shot: LabelShot) =>
+        letKeyPatch(shot, session.playOnLets);
+      const shot = keyShot((s) => patchFor(s) !== null);
+      const patch = shot && patchFor(shot);
+      if (!shot || !patch) return false;
+      requestPatchShot(shot.id, patch);
       return true;
     };
     strokeKey.current = (key) => {
@@ -3616,9 +3659,9 @@ export function LabelConsole({
       // A stroke key reaches the selected stroke from a focused cell too (a
       // cell is a button), and so do A / ⇧A (add a stroke after / before),
       // C (contact ↔ landing), X (flip side), H (hitter), T (time = frame), E
-      // (forced ↔ unforced), Delete / Backspace (delete the stroke) and R / ⇧R
-      // (ask to reset the stroke / point); a text field, a menu and a dialog
-      // keep all of them.
+      // (forced ↔ unforced), L (let), Delete / Backspace (delete the stroke)
+      // and R / ⇧R (ask to reset the stroke / point); a text field, a menu and
+      // a dialog keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
       const consoleKey = isStrokeKey(key)
         ? () => strokeKey.current(key)
@@ -3638,13 +3681,15 @@ export function LabelConsole({
                     ? () => errorKindKey.current()
                     : isUnforcedKey(key) && !event.shiftKey
                       ? () => unforcedKey.current()
-                      : lower === "r"
-                        ? event.shiftKey
-                          ? () => resetPointKey.current()
-                          : () => resetShotKey.current()
-                        : key === "Delete" || key === "Backspace"
-                          ? () => deleteShotKey.current()
-                          : null;
+                      : isLetKey(key) && !event.shiftKey
+                        ? () => letKey.current()
+                        : lower === "r"
+                          ? event.shiftKey
+                            ? () => resetPointKey.current()
+                            : () => resetShotKey.current()
+                          : key === "Delete" || key === "Backspace"
+                            ? () => deleteShotKey.current()
+                            : null;
       if (
         consoleKey &&
         !event.metaKey &&

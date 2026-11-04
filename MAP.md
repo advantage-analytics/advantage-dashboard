@@ -30,6 +30,7 @@ markers is hand-written — edit it as things move.
 | `/admin/labels` | [`src/app/admin/labels/page.tsx`](src/app/admin/labels/page.tsx) |
 | `/admin/matches/[matchId]` | [`src/app/admin/matches/[matchId]/page.tsx`](src/app/admin/matches/[matchId]/page.tsx) |
 | `/admin/matches` | [`src/app/admin/matches/page.tsx`](src/app/admin/matches/page.tsx) |
+| `/admin/messages` | [`src/app/admin/messages/page.tsx`](src/app/admin/messages/page.tsx) |
 | `/admin/outreach` | [`src/app/admin/outreach/page.tsx`](src/app/admin/outreach/page.tsx) |
 | `/admin` | [`src/app/admin/page.tsx`](src/app/admin/page.tsx) |
 | `/admin/pilots` | [`src/app/admin/pilots/page.tsx`](src/app/admin/pilots/page.tsx) |
@@ -65,6 +66,7 @@ markers is hand-written — edit it as things move.
 | `/dashboard/matches` | [`src/app/dashboard/matches/(list)/page.tsx`](src/app/dashboard/matches/(list)/page.tsx) |
 | `/dashboard/matches/new` | [`src/app/dashboard/matches/new/page.tsx`](src/app/dashboard/matches/new/page.tsx) |
 | `/dashboard/matches/sample` | [`src/app/dashboard/matches/sample/page.tsx`](src/app/dashboard/matches/sample/page.tsx) |
+| `/dashboard/messages` | [`src/app/dashboard/messages/page.tsx`](src/app/dashboard/messages/page.tsx) |
 | `/dashboard/opponents` | [`src/app/dashboard/opponents/page.tsx`](src/app/dashboard/opponents/page.tsx) |
 | `/dashboard/settings/account` | [`src/app/dashboard/settings/account/page.tsx`](src/app/dashboard/settings/account/page.tsx) |
 | `/dashboard/settings/connections` | [`src/app/dashboard/settings/connections/page.tsx`](src/app/dashboard/settings/connections/page.tsx) |
