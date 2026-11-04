@@ -22,6 +22,7 @@ import {
 } from "@/lib/services/programs/admin-guard";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { ACTOR_REQUIRED } from "./edit-session";
+import { targetId } from "./label-actor";
 import { beatMinute } from "./work-beats";
 
 const LOG = "[labels:work-beat]";
@@ -47,7 +48,7 @@ export async function recordLabelWorkBeat(
   deps: WorkBeatDependencies = defaults,
 ): Promise<LabelWorkBeatResult> {
   try {
-    const id = typeof sessionId === "string" ? sessionId : "";
+    const id = targetId(sessionId);
     const actor = await deps.requireLabelActor(id);
     if (!actor) return { error: ACTOR_REQUIRED };
     if (!isUuid(id)) return { error: "No such session." };
