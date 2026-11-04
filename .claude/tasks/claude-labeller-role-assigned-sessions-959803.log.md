@@ -82,3 +82,13 @@ is the runner's. Newest entries at the bottom.
 1. The flaky test in the first gate run is unidentified; watch for it at `/pr-check`.
 2. `labels-board.tsx` header `min-w-[1120px]` is now below the grid's width; raise to ~1250px.
 3. Confirm live that the service-role upsert on `label_work_beats` with `ignoreDuplicates` works.
+
+## T9 · Labeller guides at /label/guide — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `src/lib/labels/guide-content.ts` (`GUIDE_VERSION` "2026-11-03", `HOW_TO_SECTIONS` with the nine required headings, `CLEANING_STANDARD_SECTIONS` with the six rules verbatim plus a working order) and `src/components/label/label-guide.tsx` (in-page nav, two sections, Keys generated from `LABEL_SHORTCUT_GROUPS`). `/label/guide` renders it behind the layout's gate. New `tests/label-guide.spec.ts` (8 tests).
+**follow-ups:**
+
+1. Guide text was written from the code; read it against the live console before sending it to the vendor (speed control, full-screen exit, dragging a game band, Submit only outside full screen).
+2. The console still offers Delete point and C (contact/landing) although the standard says not to delete rallies or move coordinates; consider hiding them for labellers.
+3. Bump `GUIDE_VERSION` whenever the wording changes.

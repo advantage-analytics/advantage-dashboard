@@ -131,7 +131,7 @@ ready).
 
 ## T9 · Labeller guides at /label/guide
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** src/app/label/guide/page.tsx (new), src/lib/labels/guide-content.ts (new), tests/label-guide.spec.ts (new) — guesses
