@@ -53,16 +53,34 @@ test.describe("shouldBeat", () => {
     ).toBe(false);
   });
 
-  test("a playing film counts as working with no key pressed", () => {
-    // A full watch-through: minutes of film and nothing pressed.
-    const watching = { ...base, lastInputAt: NOW - 600_000, playing: true };
+  test("a playing film counts as working with no key pressed, for a while", () => {
+    // A watch-through: minutes of film and nothing pressed.
+    const watching = { ...base, lastInputAt: NOW - 540_000, playing: true };
     expect(shouldBeat(watching)).toBe(true);
-    expect(shouldBeat({ ...watching, lastInputAt: null })).toBe(true);
+    expect(shouldBeat({ ...watching, lastInputAt: NOW - 600_000 })).toBe(true);
     // Still not on a hidden tab, and still at most once an interval.
     expect(shouldBeat({ ...watching, visible: false })).toBe(false);
     expect(shouldBeat({ ...watching, lastBeatAt: NOW - 30_000 })).toBe(false);
     // Paused and idle is idle.
     expect(shouldBeat({ ...watching, playing: false })).toBe(false);
+  });
+
+  test("a film left looping with nobody there stops counting", () => {
+    const abandoned = { ...base, playing: true };
+    expect(shouldBeat({ ...abandoned, lastInputAt: NOW - 600_001 })).toBe(
+      false,
+    );
+    expect(shouldBeat({ ...abandoned, lastInputAt: NOW - 3_600_000 })).toBe(
+      false,
+    );
+    // Nothing ever pressed: a film that started on its own is not work.
+    expect(shouldBeat({ ...abandoned, lastInputAt: null })).toBe(false);
+    expect(
+      shouldBeat(
+        { ...abandoned, lastInputAt: NOW - 120_000 },
+        { watchAfter: 60_000 },
+      ),
+    ).toBe(false);
   });
 
   test("never sooner than interval after the last beat", () => {
@@ -276,29 +294,39 @@ test.describe("recordLabelWorkBeat", () => {
   });
 });
 
-test("listLabelJobs counts only the worker's beats as minutesWorked, in one read", async () => {
+test("listLabelJobs counts every labeller's beats and no reviewer's, in one read", async () => {
   const JOB_A = "55555555-5555-4555-8555-555555555551";
   const JOB_B = "55555555-5555-4555-8555-555555555552";
+  const JOB_C = "55555555-5555-4555-8555-555555555553";
+  const JOB_D = "55555555-5555-4555-8555-555555555554";
   const SESSION_B = "66666666-6666-4666-8666-666666666666";
+  const SESSION_C = "66666666-6666-4666-8666-666666666667";
+  const SESSION_D = "66666666-6666-4666-8666-666666666668";
   const MATCH = "77777777-7777-4777-8777-777777777777";
-  const session = (id: string, job: string) => ({
+  const session = (id: string, job: string, assignee: string | null) => ({
     id,
     job_id: job,
     status: "labelling",
     started_at: "2026-11-01T00:00:00Z",
     open_counts: null,
-    assigned_at: "2026-11-01T00:00:00Z",
+    assigned_at: assignee ? "2026-11-01T00:00:00Z" : null,
     submitted_at: null,
+    // An admin started every session.
     labeller: ADMIN_ID,
-    assignee: { id: OTHER_ID, email: null, first_name: null, last_name: null },
+    assignee: assignee
+      ? { id: assignee, email: null, first_name: null, last_name: null }
+      : null,
   });
+  const vendor = { is_admin: false };
+  const admin = { is_admin: true };
   const fake = fakeLabelClient((call) => {
     if (call.table === "processing_jobs") {
       return {
-        data: [
-          { id: JOB_A, match_id: MATCH, completed_at: null },
-          { id: JOB_B, match_id: MATCH, completed_at: null },
-        ],
+        data: [JOB_A, JOB_B, JOB_C, JOB_D].map((id) => ({
+          id,
+          match_id: MATCH,
+          completed_at: null,
+        })),
         error: null,
       };
     }
@@ -307,21 +335,35 @@ test("listLabelJobs counts only the worker's beats as minutesWorked, in one read
     if (call.table === "label_points") return { data: [], error: null };
     if (call.table === "label_sessions") {
       return {
-        data: [session(SESSION_ID, JOB_A), session(SESSION_B, JOB_B)],
+        data: [
+          session(SESSION_ID, JOB_A, OTHER_ID),
+          session(SESSION_B, JOB_B, OTHER_ID),
+          session(SESSION_C, JOB_C, OTHER_ID),
+          session(SESSION_D, JOB_D, null),
+        ],
         error: null,
       };
     }
     if (call.table === "label_work_beats") {
-      // On A: three minutes from the assigned labeller and two from the
-      // admin reviewing it, one of them in a minute the labeller also
-      // worked. Only the labeller's three count. None on B.
       return {
         data: [
-          { session_id: SESSION_ID, user_id: OTHER_ID },
-          { session_id: SESSION_ID, user_id: OTHER_ID },
-          { session_id: SESSION_ID, user_id: OTHER_ID },
-          { session_id: SESSION_ID, user_id: ADMIN_ID },
-          { session_id: SESSION_ID, user_id: ADMIN_ID },
+          // A: three minutes from the labeller, two from the admin
+          // reviewing it. Only the labeller's three count.
+          { session_id: SESSION_ID, user_id: OTHER_ID, user: vendor },
+          { session_id: SESSION_ID, user_id: OTHER_ID, user: vendor },
+          { session_id: SESSION_ID, user_id: OTHER_ID, user: vendor },
+          { session_id: SESSION_ID, user_id: ADMIN_ID, user: admin },
+          { session_id: SESSION_ID, user_id: ADMIN_ID, user: admin },
+          // B: nothing.
+          // C: reassigned — two minutes from the first labeller, one from
+          // the one it is assigned to now. Both people's time counts.
+          { session_id: SESSION_C, user_id: LABELLER_ID, user: vendor },
+          { session_id: SESSION_C, user_id: LABELLER_ID, user: vendor },
+          { session_id: SESSION_C, user_id: OTHER_ID, user: vendor },
+          // D: an admin labelling it themselves, no labeller involved:
+          // their own minutes are the work.
+          { session_id: SESSION_D, user_id: ADMIN_ID, user: admin },
+          { session_id: SESSION_D, user_id: ADMIN_ID, user: admin },
         ],
         error: null,
       };
@@ -338,11 +380,15 @@ test("listLabelJobs counts only the worker's beats as minutesWorked, in one read
   const byJob = new Map(result.rows.map((row) => [row.jobId, row]));
   expect(byJob.get(JOB_A)?.session?.minutesWorked).toBe(3);
   expect(byJob.get(JOB_B)?.session?.minutesWorked).toBe(0);
+  expect(byJob.get(JOB_C)?.session?.minutesWorked).toBe(3);
+  expect(byJob.get(JOB_D)?.session?.minutesWorked).toBe(2);
 
   const beatReads = fake.calls.filter((c) => c.table === "label_work_beats");
   expect(beatReads).toHaveLength(1);
-  expect(beatReads[0].columns).toBe("session_id, user_id");
+  expect(beatReads[0].columns).toBe(
+    "session_id, user_id, user:users(is_admin)",
+  );
   expect(beatReads[0].in?.session_id).toEqual(
-    expect.arrayContaining([SESSION_ID, SESSION_B]),
+    expect.arrayContaining([SESSION_ID, SESSION_B, SESSION_C, SESSION_D]),
   );
 });

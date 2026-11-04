@@ -6,7 +6,8 @@
  * (session, user, minute), so minutes worked is the row count.
  *
  * Working means all three: the tab is in front, a key or pointer went down
- * recently (a console left open on a paused video is not work), and a minute
+ * recently — within 150 s, or 10 min while the film plays (a console left
+ * open on a paused video, or a film looping unattended, is not work) — and a minute
  * has passed since the last beat so one minute is never posted twice from the
  * same tab. The database dedupes the rest (two tabs, a tick on the boundary).
  */
@@ -23,7 +24,9 @@ export interface WorkBeatState {
   /**
    * The film is playing. Watching is work — the cleaning standard asks for a
    * full watch-through, much of it with no key pressed — so a playing video
-   * counts as activity on its own. Absent: false.
+   * stretches the idle window from `idleAfter` to `watchAfter`. Not for ever:
+   * Loop (L) replays a point until it is turned off, and a film looping on a
+   * tab nobody is at is not work. Absent: false.
    */
   playing?: boolean;
 }
@@ -33,22 +36,29 @@ export interface WorkBeatOptions {
   interval?: number;
   /** How long after the last input the labeller still counts as working. */
   idleAfter?: number;
+  /**
+   * How long after the last input a playing film still counts as working:
+   * long enough for a game's worth of watching with nothing pressed, short
+   * enough that a film left looping stops being minutes.
+   */
+  watchAfter?: number;
 }
 
 export const WORK_BEAT_INTERVAL = 60_000;
-export const WORK_BEAT_IDLE_AFTER = 150_000;
+const WORK_BEAT_IDLE_AFTER = 150_000;
+const WORK_BEAT_WATCH_AFTER = 600_000;
 
 export function shouldBeat(
   { now, visible, lastInputAt, lastBeatAt, playing = false }: WorkBeatState,
   {
     interval = WORK_BEAT_INTERVAL,
     idleAfter = WORK_BEAT_IDLE_AFTER,
+    watchAfter = WORK_BEAT_WATCH_AFTER,
   }: WorkBeatOptions = {},
 ): boolean {
-  if (!visible) return false;
-  const active =
-    playing || (lastInputAt !== null && now - lastInputAt <= idleAfter);
-  if (!active) return false;
+  if (!visible || lastInputAt === null) return false;
+  const since = now - lastInputAt;
+  if (since > (playing ? watchAfter : idleAfter)) return false;
   if (lastBeatAt !== null && now - lastBeatAt < interval) return false;
   return true;
 }

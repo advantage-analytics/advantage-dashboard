@@ -255,7 +255,7 @@ export async function listLabelJobs(
       db,
       sessions.map((session) => ({
         id: session.id,
-        workerId: sessionWorker(session),
+        labellerId: session.labeller,
       })),
     ),
   ]);
@@ -355,47 +355,57 @@ export async function countLabelPointProgress(
 }
 
 /**
- * Whose minutes a session's "Worked" figure counts: the labeller it is
- * assigned to, else whoever labelled it (`labeller`). An admin who opens the
- * session to review it also posts beats, and those are their time, not the
- * labeller's — counting them would inflate exactly the number a vendor is
- * judged by.
- */
-function sessionWorker(
-  session: Pick<DbSession, "labeller" | "assignee">,
-): string | null {
-  return session.assignee?.id ?? session.labeller;
-}
-
-/**
- * Minutes worked per session: its `label_work_beats` rows from that
- * session's worker (`sessionWorker`), counted. PostgREST has no GROUP BY, so
- * it is one read of `session_id, user_id` for the listed sessions, counted in
- * memory and walked by `readAllPages` — a beat is at most one row per person
- * per minute, ~60 an hour a session. A session with no worker counts nothing.
+ * Minutes worked per session: the labelling work on it, as beat rows
+ * counted. The vendor's labour is every non-admin's beats on the session —
+ * all of them, so a session reassigned from one labeller to another keeps
+ * both people's time. An admin who opens the session to review it also posts
+ * beats; those are their time, not the vendor's, and never count — except on
+ * a session no labeller has touched, where the admin who labelled it
+ * (`labellerId`) is the one doing the work and their beats are the figure.
+ *
+ * PostgREST has no GROUP BY, so it is one read of `session_id, user_id` and
+ * each beat's `users.is_admin` (one foreign key, so the embed needs no hint)
+ * for the listed sessions, counted in memory and walked by `readAllPages` —
+ * a beat is at most one row per person per minute, ~60 an hour a session.
  */
 export async function countLabelWorkMinutes(
   db: AdminClient,
-  sessions: readonly { id: string; workerId: string | null }[],
+  sessions: readonly { id: string; labellerId: string | null }[],
 ): Promise<Map<string, number>> {
   const minutes = new Map<string, number>();
   if (sessions.length === 0) return minutes;
-  const workerBySession = new Map(sessions.map((s) => [s.id, s.workerId]));
+  const labellerBySession = new Map(sessions.map((s) => [s.id, s.labellerId]));
 
-  const rows = await readAllPages<{ session_id: string; user_id: string }>(
+  type BeatRow = {
+    session_id: string;
+    user_id: string;
+    /** Many-to-one through `user_id`: one row or none. */
+    user: { is_admin: boolean | null } | null;
+  };
+  const rows = await readAllPages<BeatRow>(
     db
       .from("label_work_beats")
-      .select("session_id, user_id")
-      .in("session_id", [...workerBySession.keys()])
+      .select("session_id, user_id, user:users(is_admin)")
+      .in("session_id", [...labellerBySession.keys()])
       .order("session_id")
       .order("user_id")
-      .order("minute"),
+      .order("minute")
+      .returns<BeatRow[]>(),
     "Could not read label work minutes",
   );
+  const vendor = new Map<string, number>();
+  const ownLabeller = new Map<string, number>();
+  const bump = (into: Map<string, number>, id: string) =>
+    into.set(id, (into.get(id) ?? 0) + 1);
   for (const row of rows) {
-    const worker = workerBySession.get(row.session_id);
-    if (!worker || row.user_id !== worker) continue;
-    minutes.set(row.session_id, (minutes.get(row.session_id) ?? 0) + 1);
+    if (row.user?.is_admin !== true) bump(vendor, row.session_id);
+    else if (row.user_id === labellerBySession.get(row.session_id)) {
+      bump(ownLabeller, row.session_id);
+    }
+  }
+  for (const id of labellerBySession.keys()) {
+    const count = vendor.get(id) ?? ownLabeller.get(id) ?? 0;
+    if (count > 0) minutes.set(id, count);
   }
   return minutes;
 }
