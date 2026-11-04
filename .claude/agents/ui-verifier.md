@@ -49,6 +49,15 @@ prefixing it with `team:` — `team:/dashboard/opponents`, or with clicks
 `team:/dashboard/matches/new::Add their team`; `report.json` records
 `workspace: "team" | "personal"` for each page.
 
+Paths under `/label`, and any path prefixed `labeller:`
+(`labeller:/label/guide`), are captured signed in as the separate labeller
+account instead, recorded as `workspace: "labeller"`. Pass
+`labeller:/label/[sessionId]` as-is: the harness fills `[sessionId]` with the
+seeded labeller session; if the report's `note` says it was left unfilled,
+take an id from the `/label` page's `links` like any other detail page. Exit 2
+with "EYES_ON_LABELLER credentials unset" is the same `unverifiable` as the
+verifier's own.
+
 `$OUT` is a scratch directory the orchestrator names. The script starts (or
 attaches to) a local dev server, signs in as the verifier account, and writes
 one full-page PNG per path plus `report.json` — final URL, HTTP status,

@@ -326,13 +326,19 @@ or memory sees what is there. Do not hand it any of those. Hand it exactly:
    to) a dev server, signs in as the `EYES_ON_*` account from `.env.local`,
    dismisses the beta welcome dialog, selects the `EYES_ON_TEAM_WORKSPACE`
    program for `/dashboard/team` paths and for any path prefixed `team:`
-   (e.g. `team:/dashboard/opponents`, which keeps its URL), and writes the PNGs and
-   `report.json` the agent reads. It never prints the credentials, and
+   (e.g. `team:/dashboard/opponents`, which keeps its URL), signs in as the
+   separate `EYES_ON_LABELLER_*` account for `/label` paths and for any path
+   prefixed `labeller:` (e.g. `labeller:/label/guide`), filling a
+   `[sessionId]` segment from `EYES_ON_LABELLER_SESSION_ID` (the session
+   `scripts/eyes-on/seed-labeller-session.ts` seeds), and writes the PNGs and
+   `report.json` the agent reads. Pass a `routes:` line's `team:` or
+   `labeller:` prefix through unchanged. It never prints the credentials, and
    neither do you.
 
 **Credentials unset** — the harness exits 2 and the agent's verdict is
 `unverifiable`. That is an explicit skip, named in stage 4 as
-`ui-verifier: EYES_ON credentials unset`, and by the rule in "Do not" below a
+`ui-verifier: EYES_ON credentials unset` (or `EYES_ON_LABELLER credentials
+unset`, when a labeller path was asked for without that account), and by the rule in "Do not" below a
 skipped stage makes the branch **`not-ready`**. Say so plainly; a UI branch
 nobody has looked at is not ready. `.env.example` documents the one-time
 account setup.

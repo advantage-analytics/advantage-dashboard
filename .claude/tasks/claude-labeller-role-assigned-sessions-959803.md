@@ -145,7 +145,7 @@ ready).
 
 ## T10 · Eyes-on labeller verifier: harness prefix and seed script
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** scripts/eyes-on/path-spec.mjs, scripts/eyes-on/capture.mjs, scripts/eyes-on/seed-labeller-session.ts (new), .env.example, tests/eyes-on-path-spec.spec.ts (new or existing) — guesses

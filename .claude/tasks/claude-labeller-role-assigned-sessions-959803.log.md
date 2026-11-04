@@ -92,3 +92,12 @@ is the runner's. Newest entries at the bottom.
 1. Guide text was written from the code; read it against the live console before sending it to the vendor (speed control, full-screen exit, dragging a game band, Submit only outside full screen).
 2. The console still offers Delete point and C (contact/landing) although the standard says not to delete rallies or move coordinates; consider hiding them for labellers.
 3. Bump `GUIDE_VERSION` whenever the wording changes.
+
+## T10 · Eyes-on labeller verifier: harness prefix and seed script — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `parsePathSpec` accepts `labeller:` (and treats `/label…` as labeller), plus `fillSessionId`. `capture.mjs` signs in a second account from `EYES_ON_LABELLER_EMAIL`/`_PASSWORD` into `storage-state-labeller.json`, exits 2 with "EYES_ON_LABELLER credentials unset", fills `[sessionId]` from `EYES_ON_LABELLER_SESSION_ID`; verifier paths unchanged. New `seed-labeller-session.ts` (dry-run default, `--write`, `--cleanup`): sets `is_labeller`, seeds an "Eyes-on seed · labeller" match, one assigned labelling session with no job (5 points, 13 shots), refuses Cj vs Suhail ids, non-seed matches, admin or verifier labeller accounts. `.env.example`, pr-check Stage 3b and `ui-verifier.md` document the prefix. Path-spec spec extended (14 tests). No live writes made.
+**follow-ups:**
+
+1. The seeded session has no job, so the labeller console shows no video on eyes-on.
+2. Cleanup leaves `is_labeller` set on the test account.
