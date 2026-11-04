@@ -137,8 +137,9 @@ function loadEnv() {
 const env = loadEnv();
 // Each account is required only for the paths that use it. A run with no
 // labeller path checks the verifier exactly as it always has.
-const wantsVerifier = paths.some((spec) => !parsePathSpec(spec).labeller);
-const wantsLabeller = paths.some((spec) => parsePathSpec(spec).labeller);
+const pathSpecs = paths.map((spec) => parsePathSpec(spec));
+const wantsVerifier = pathSpecs.some((p) => !p.labeller);
+const wantsLabeller = pathSpecs.some((p) => p.labeller);
 if (wantsVerifier && (!env.email || !env.password)) {
   console.error(
     "capture: EYES_ON credentials unset — set EYES_ON_EMAIL and EYES_ON_PASSWORD in .env.local (see .env.example)",

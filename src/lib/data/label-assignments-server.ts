@@ -11,9 +11,11 @@
  * naming whose match it is.
  */
 
-import { requireLabelViewerOrNotFound } from "@/lib/services/programs/admin-guard";
+import {
+  requireLabelViewerOrNotFound,
+  type LabelActor,
+} from "@/lib/services/programs/admin-guard";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
-import type { LabelActor } from "@/lib/services/programs/admin-guard";
 import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import {
   countLabelPointProgress,
@@ -36,7 +38,7 @@ export interface AssignedLabelSession {
   openCounts: FlagCounts | null;
 }
 
-export interface LabelAssignmentsDependencies {
+interface LabelAssignmentsDependencies {
   /** The viewer, from the server-side session (the `/label` gate). */
   requireViewer: () => Promise<LabelActor>;
   createAdminClient: () => AdminClient;

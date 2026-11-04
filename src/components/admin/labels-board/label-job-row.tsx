@@ -346,7 +346,7 @@ function StartRow({
  * Minutes of active work on the session (its `label_work_beats`), "N min";
  * none recorded reads as the dash.
  */
-export function MinutesWorked({ minutes }: { minutes: number }) {
+function MinutesWorked({ minutes }: { minutes: number }) {
   if (!minutes) {
     return (
       <span

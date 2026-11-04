@@ -183,7 +183,7 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
 ];
 
 /** The six rules, verbatim: the review holds a submitted match to these. */
-export const CLEANING_STANDARD_RULES = [
+const CLEANING_STANDARD_RULES = [
   "Structure and amber flags first, then grey, then forced/unforced error marks.",
   "Watch the whole match: a clean flag count does not mean a correct match — a hitter swap raises no flag.",
   "Never delete a rally. If you are unsure, it is a point.",

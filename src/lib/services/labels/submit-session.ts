@@ -47,7 +47,7 @@ export type LabelSubmitResult = LabelOpResult<{
  * shots, as the console reads them. The session's own fields (score, hands,
  * scoring) are not labels and stay on `label_sessions`.
  */
-export interface LabelSubmissionRows {
+interface LabelSubmissionRows {
   points: LabelSession["points"];
 }
 
@@ -55,7 +55,7 @@ export interface LabelSubmissionRows {
  * The read the snapshot is taken from, injectable so the writer is tested
  * without a database. Null when there is no such session.
  */
-export type LabelSubmitRowsReader = (
+type LabelSubmitRowsReader = (
   supabase: AdminClient,
   sessionId: string,
 ) => Promise<{ session: LabelSession } | null>;

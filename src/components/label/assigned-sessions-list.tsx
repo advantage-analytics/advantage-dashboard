@@ -19,11 +19,9 @@ import { cn } from "@/lib/utils";
 const GRID =
   "grid grid-cols-[minmax(180px,1fr)_160px_120px_13px] items-center gap-x-4";
 
-export const ASSIGNED_EMPTY = "No matches are assigned to you yet.";
+const ASSIGNED_EMPTY = "No matches are assigned to you yet.";
 
-export function sessionStatusLabel(
-  status: AssignedLabelSession["status"],
-): string {
+function sessionStatusLabel(status: AssignedLabelSession["status"]): string {
   return status === "submitted" ? "Submitted" : "In progress";
 }
 
