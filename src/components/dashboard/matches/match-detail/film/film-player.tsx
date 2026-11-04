@@ -67,8 +67,9 @@ import {
  * The control bar is the fullscreen room's (`film-transport.tsx`) minus what
  * only makes sense over a screenful — the title, the point position, exit:
  * the set-by-set track, then the control row — play, previous and next
- * point, the clock — and on the right Save point (filled once saved), skip
- * dead time, speed, loop, sound and fullscreen, in the room's order. The
+ * point, the clock — and on the right Save point (filled once saved; the
+ * film tab leaves it off, since its point card owns the bookmark), skip dead
+ * time, speed, loop, sound and fullscreen, in the room's order. The
  * same glyphs at the tab's scale: 13px on a 32px row 14px apart, where the
  * room draws 15px on 40px 18px apart — a 353px frame has no room for the
  * room's bar. Every glyph is Lucide at 1.6, and every toggle reads its state the same

@@ -304,7 +304,9 @@ function CopyPointLink({
     }
   };
   return (
-    <ChromeTooltip label={copied ? "Link copied" : "Copy link to this point"}>
+    // The link opens the dashboard report, so it works for people in this
+    // workspace only — the tooltip says so rather than implying a public link.
+    <ChromeTooltip label={copied ? "Link copied" : "Copy link for your team"}>
       <button
         type="button"
         aria-label="Copy link to this point"
@@ -632,6 +634,9 @@ function Composer({ onSend }: { onSend: (body: string) => Promise<boolean> }) {
     >
       <input
         id={COMPOSER_ID}
+        // The bordered form is the field and draws the ring; without this the
+        // global field ring draws a second one inside it.
+        data-focus-ring="none"
         value={draft}
         maxLength={NOTE_MAX_LENGTH}
         onChange={(e) => setDraft(e.target.value)}

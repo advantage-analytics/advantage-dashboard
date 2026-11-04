@@ -881,7 +881,6 @@ function FilmRoom({
       onRemove: (tag) => void pointNotes.removeTag(activePointId, tag),
     };
   }, [annotate, activePointId, forActive, pointNotes]);
-  const toggleSavedActiveOrNone = readOnly ? undefined : toggleSavedActive;
 
   /**
    * The room's keys, on the page while this view is open: ← → step to the
@@ -1198,7 +1197,10 @@ function FilmRoom({
             onPlayRejected={handlePlayRejected}
             onFirstPlay={recordFirstPlay}
             onRetry={retry}
-            onToggleSaved={toggleSavedActiveOrNone}
+            // No Save glyph on the tab's bar: the point card under the player
+            // owns the bookmark and each list row shows it, so a third copy
+            // here was noise. S still saves (the key handler above), and the
+            // room's own transport keeps its glyph.
             onEnterFullscreen={enterRoom}
             // Every point step — the transport's two glyphs, the arrow keys
             // above, the card's stepper — runs the player's own `step`, which

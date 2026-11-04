@@ -129,17 +129,20 @@ export const ROW_TONE = {
  * Dark is the room's drawer: a recessed `rgba(0,0,0,0.28)` strip under the
  * row, and the playing shot is the lightest row in it. Light is the report
  * column (canvas "Folded list v2"): the open point and its shots are ONE
- * full-bleed band — `wrap` puts the row and the well on the same
- * `--surface-subtle` wash between hairlines, a hairline separates the shots
- * from the row, the opponent's mark turns white so it does not vanish into the
- * wash, and the playing shot is the one white row, the light mirror of the
- * room's lit row.
+ * full-bleed band — `wrap` puts the row on the `--surface-subtle` wash
+ * between hairlines, and the opponent's mark turns white so it does not vanish
+ * into it. The well under the row is the room's recess in light (review board
+ * "Review 2026-11-04", option A): one step darker than its row and pressed in
+ * from the top, so the shots read as inside the point rather than as more
+ * rows. The playing shot is the one white row, the light mirror of the room's
+ * lit row. No bottom padding: the band ends on the last shot, as the room's
+ * well does.
  */
 export const WELL_TONE = {
   light: {
     wrap: "bg-[var(--surface-subtle)] shadow-[inset_0_1px_0_rgba(0,0,0,0.06),inset_0_-1px_0_rgba(0,0,0,0.06)] [&_[data-mark=opp]>span]:bg-[var(--surface-card)] [&_[data-mark=opp]>span]:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]",
     inner:
-      "flex min-h-0 flex-col overflow-hidden pt-0.5 pb-1.5 shadow-[inset_0_1px_0_rgba(0,0,0,0.05)]",
+      "flex min-h-0 flex-col overflow-hidden bg-[rgba(0,0,0,0.04)] shadow-[inset_0_1px_0_rgba(0,0,0,0.07),inset_0_2px_3px_-1px_rgba(0,0,0,0.06)]",
     rowPad: "px-[14px]",
     lit: "bg-[var(--surface-card)] shadow-[inset_0_1px_0_rgba(0,0,0,0.04),inset_0_-1px_0_rgba(0,0,0,0.04)]",
     rest: "hover:bg-[rgba(0,0,0,0.03)]",
