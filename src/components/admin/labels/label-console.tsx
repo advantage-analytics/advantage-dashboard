@@ -72,6 +72,7 @@ import {
 } from "@/lib/services/labels/volley-link";
 import { labelScores } from "@/lib/services/labels/score";
 import {
+  acceptAsIs,
   drawsGhosts,
   type ReviewItemId,
 } from "@/lib/services/labels/marks-state";
@@ -2680,7 +2681,23 @@ export function LabelConsole({
     );
   }
 
-  function setChecked(pointId: string, value: boolean) {
+  /**
+   * Check or uncheck a point — ⌘ Enter, the row's tick and "Looks right" all
+   * come here. A check takes the rows as true: the open questions a check
+   * alone leaves standing are answered first (`acceptAsIs`), the strokes'
+   * ending saved before the tick, and no tick if that save fails.
+   */
+  async function setChecked(pointId: string, value: boolean) {
+    const point = points.find((p) => p.id === pointId);
+    if (value && point && marks) {
+      const { patch, dismiss } = acceptAsIs(point, marks);
+      for (const key of dismiss) dismissSuggestion(pointId, key);
+      if (patch && !(await patchPoint(pointId, patch))) return;
+    }
+    writeChecked(pointId, value);
+  }
+
+  function writeChecked(pointId: string, value: boolean) {
     const before = points.find((p) => p.id === pointId);
     if (!before || !operations || before.status === "deleted") return;
     setFoldedPointId(value && pointId === currentPointId ? pointId : null);
@@ -3197,7 +3214,7 @@ export function LabelConsole({
     };
     toggleOpenPointCheck.current = () => {
       if (!operable || confirm || !expanded) return;
-      setChecked(expanded.id, expanded.checkedAt === null);
+      void setChecked(expanded.id, expanded.checkedAt === null);
     };
     stepToFlag.current = (direction, kind) => {
       if (confirm) return;

@@ -1594,8 +1594,28 @@ test.describe("Enter and ⌘ Enter", () => {
       /if \(chord\) \{\n(\s+\/\/[^\n]*\n)*\s+if \(event\.repeat\) return;[\s\S]{0,120}toggleOpenPointCheck\.current\(\);/,
     );
     expect(consoleSource).toContain(
-      "setChecked(expanded.id, expanded.checkedAt === null);",
+      "void setChecked(expanded.id, expanded.checkedAt === null);",
     );
+  });
+
+  test("every check takes the rows as true first, and no tick when that save fails", () => {
+    const start = consoleSource.indexOf(
+      "async function setChecked(pointId: string, value: boolean) {",
+    );
+    expect(start).toBeGreaterThan(-1);
+    const body = consoleSource.slice(
+      start,
+      consoleSource.indexOf("function writeChecked(", start),
+    );
+    expect(body).toContain("acceptAsIs(point, marks)");
+    expect(body).toContain(
+      "if (patch && !(await patchPoint(pointId, patch))) return;",
+    );
+    expect(body.indexOf("await patchPoint(")).toBeLessThan(
+      body.indexOf("writeChecked(pointId, value);"),
+    );
+    // The tick and "Looks right" reach the same path.
+    expect(consoleSource).toContain("onSetChecked: setChecked,");
   });
 });
 
