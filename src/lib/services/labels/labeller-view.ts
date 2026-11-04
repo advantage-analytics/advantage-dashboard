@@ -6,10 +6,11 @@
  * it. So the session the page passes to the client carries no player names,
  * no match or job id and no derivation version — stripped here, server-side,
  * because hiding them in the markup alone would still ship them in the RSC
- * payload. The two sides are "Near player" (p1) and "Far player" (p2), fixed
- * for the session as the console's court fallback is (`hitterHalf`'s
- * `"near"`): a changeover does not flip the words. "Player 1" / "Player 2" is
- * the alternative if that reads as confusing.
+ * payload. The two sides are "Near" (p1) and "Far" (p2) — one word, like the
+ * surnames an admin sees, so the rail's hitter cells don't clip — fixed for
+ * the session as the console's court fallback is (`hitterHalf`'s `"near"`):
+ * a changeover does not flip the words. "Player 1" / "Player 2" is the
+ * alternative if that reads as confusing.
  */
 
 import { homeShotSuggestions, type LabelMarks } from "./marks";
@@ -21,9 +22,31 @@ import type { LabelSession, LabelSide } from "./session";
 
 /** The labeller's words for each side, in every place the console prints one. */
 export const LABELLER_SIDE_NAMES: Record<LabelSide, string> = {
-  p1: "Near player",
-  p2: "Far player",
+  p1: "Near",
+  p2: "Far",
 };
+
+/**
+ * The overview checklist's sentences, said to a labeller. A labeller never
+ * publishes — they submit, and an admin publishes — so every "publish" in
+ * `completeWarnings` and the dashboard's checks reads as what submitting
+ * hands over instead. Ordered: the longer phrases go first.
+ */
+const LABELLER_WORDING: readonly (readonly [RegExp, string])[] = [
+  [/\bwill publish\b/g, "will go in"],
+  [/\bpublishes\b/g, "goes in"],
+  [/\ba publish\b/g, "submitting"],
+  [/\bPublish\b/g, "Submit"],
+  [/\bpublishing\b/g, "submitting"],
+];
+
+/** `text` with a publisher's words swapped for a labeller's (`LABELLER_WORDING`). */
+export function labellerWording(text: string): string {
+  return LABELLER_WORDING.reduce(
+    (out, [from, to]) => out.replace(from, to),
+    text,
+  );
+}
 
 /**
  * `session` with every identifying field replaced: the player names become

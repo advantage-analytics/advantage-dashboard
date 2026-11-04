@@ -12,6 +12,7 @@ import {
 import {
   firstAmberStop,
   labellerSession,
+  labellerWording,
 } from "@/lib/services/labels/labeller-view";
 import type { LabelSession } from "@/lib/services/labels/session";
 import { text } from "./fixtures/html-probe";
@@ -92,7 +93,7 @@ const NAMES = ["Jordan Lee", "Elena Vargas", "Lee", "Vargas"];
 
 test.describe("viewerKind=labeller", () => {
   for (const mode of ["overview", "black"] as const) {
-    test(`no player, program, admin link or derivation; Near and Far player; Submit for review (${mode})`, () => {
+    test(`no player, program, admin link or derivation; Near and Far; Submit for review (${mode})`, () => {
       const html = render(
         consoleProps({
           viewerKind: "labeller",
@@ -116,12 +117,14 @@ test.describe("viewerKind=labeller", () => {
     });
   }
 
-  test("the rail and the tray say Near player and Far player", () => {
+  test("the rail and the tray say Near and Far, one word so the hitter cells don't clip", () => {
     const html = render(
       consoleProps({ viewerKind: "labeller", initialLayoutMode: "black" }),
     );
-    expect(html).toContain("Near player");
-    expect(html).toContain("Far player");
+    expect(html).toMatch(/>Near</);
+    expect(html).toMatch(/>Far</);
+    expect(html).not.toContain("Near player");
+    expect(html).not.toContain("Far player");
   });
 
   test("the session the page passes carries no identifying field", () => {
@@ -319,5 +322,48 @@ test.describe("the point the labeller page opens on", () => {
       }),
     );
     expect(plain).toContain('data-shots-for="q-2"');
+  });
+});
+
+test.describe("the overview checklist said to a labeller", () => {
+  test("labellerWording swaps every publish for what submitting hands over", () => {
+    expect(
+      labellerWording(
+        "Point 4's strokes say Far won — it publishes with the labelled winner",
+      ),
+    ).toBe(
+      "Point 4's strokes say Far won — it goes in with the labelled winner",
+    );
+    expect(
+      labellerWording(
+        "Point 9 isn't on the video and will publish as score only",
+      ),
+    ).toBe("Point 9 isn't on the video and will go in as score only");
+    expect(labellerWording("No point is missing what a publish needs.")).toBe(
+      "No point is missing what submitting needs.",
+    );
+    expect(
+      labellerWording(
+        "3 of 5 marked. Publish now and the match reports plain Errors, with your marks kept.",
+      ),
+    ).toBe(
+      "3 of 5 marked. Submit now and the match reports plain Errors, with your marks kept.",
+    );
+    expect(labellerWording("Blocks publishing")).toBe("Blocks submitting");
+  });
+
+  test("the labeller's overview says Before you submit and never publish", () => {
+    const html = render(
+      consoleProps({ viewerKind: "labeller", initialLayoutMode: "overview" }),
+    );
+    expect(html).toContain("Before you submit");
+    expect(html).not.toContain("Before you publish");
+    // Visible words only: `data-publish-check` is an attribute name.
+    expect(text(html)).not.toMatch(/publish/i);
+  });
+
+  test("the admin's overview still says Before you publish", () => {
+    const html = render(consoleProps({ initialLayoutMode: "overview" }));
+    expect(html).toContain("Before you publish");
   });
 });

@@ -65,8 +65,9 @@ import {
  * markup alone would still ship them. `upload` is null for the same reason
  * (it names the program and the uploader). The signed video URL is expected.
  *
- * Opens on the first amber stop (`firstAmberStop`), else the console's own
- * default. The page does not scroll: as on the admin page, the rail is the one
+ * Opens on the work itself — the rail and the film (`"black"`), not the
+ * overview an admin starts from — at the first amber stop
+ * (`firstAmberStop`), else the console's own default. The page does not scroll: as on the admin page, the rail is the one
  * thing that does.
  */
 export const dynamic = "force-dynamic";
@@ -108,7 +109,7 @@ export default async function LabelSessionPage({
       <LabelConsole
         session={session}
         viewerKind="labeller"
-        initialLayoutMode="overview"
+        initialLayoutMode="black"
         upload={null}
         video={video}
         marks={marks}

@@ -43,7 +43,7 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
     heading: "Video controls",
     blocks: [
       p(
-        "Open a match from your list, then press Open labelling. The video sits beside the rail of points. The full screen button at the top of the rail gives both the whole screen.",
+        "Open a match from your list. It opens on the video beside the rail of points, at the first amber flag. The full screen button at the top of the rail gives both the whole screen.",
       ),
       list(
         "Play or pause with the play button or the space bar.",
@@ -53,7 +53,9 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
         "Skip dead time (D) jumps over the time between points.",
         "Mute (M) turns the sound off and on.",
       ),
-      p("To leave full screen, use the exit button at the top of the rail."),
+      p(
+        "The exit button at the top of the rail leaves full screen, and from the rail it goes to the match overview: the checklist of what is left before you submit.",
+      ),
     ],
   },
   {
@@ -125,7 +127,7 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
     heading: "Players at the wrong end",
     blocks: [
       p(
-        "The two players are called Near player and Far player for the whole match. The names do not swap when the players change ends.",
+        "The two players are called Near and Far for the whole match. The names do not swap when the players change ends.",
       ),
       p(
         "Players change ends after the first game, then every two games, and every six points in a tiebreak. When a game’s shots sit at the wrong end, an amber slot appears above the first of those points: Players at the wrong end.",
@@ -171,7 +173,7 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
     heading: "Submit for review",
     blocks: [
       p(
-        "When the match meets the cleaning standard, leave full screen and press Submit for review at the top of the page. The button waits until every change has saved.",
+        "When the match meets the cleaning standard, use the exit button at the top of the rail to reach the match overview, and press Submit for review at the top of the page. The button waits until every change has saved.",
       ),
       p(
         "The match goes to an Advantage reviewer as it stands, and you can no longer edit it. Your list shows it as Submitted. If the reviewer sends it back, it reopens for you to finish.",

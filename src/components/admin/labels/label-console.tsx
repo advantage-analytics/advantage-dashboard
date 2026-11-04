@@ -551,7 +551,7 @@ export function LabelConsole({
   headerAction?: ReactNode;
   /**
    * Who is looking. `"labeller"` (`/label/[sessionId]`) shows no player,
-   * program or derivation, names the sides "Near player" / "Far player", and
+   * program or derivation, names the sides "Near" / "Far", and
    * swaps Mark complete and Reopen for "Submit for review".
    */
   viewerKind?: "admin" | "labeller";
@@ -4391,6 +4391,7 @@ export function LabelConsole({
           adScoring={adScoring}
           startScore={startScore}
           names={names}
+          audience={viewerKind}
           finalScore={sessionFields.finalScore}
           matchScore={session.matchScore}
           videoEndsEarly={sessionFields.videoEndsEarly}
