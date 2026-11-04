@@ -136,6 +136,14 @@ export async function seedLabelSessionForJob(params: {
   }
 }
 
+/**
+ * The session that holds the job: one still labelling, or one a labeller
+ * has submitted and an admin has yet to publish or reopen. Both count, as
+ * they do for `label_sessions_one_open_per_job` — a lookup on `labelling`
+ * alone would miss a submitted session and seed into that index's refusal.
+ */
+const OPEN_STATUSES = ["labelling", "submitted"] as const;
+
 async function findOpenSession(
   supabase: AdminClient,
   jobId: string,
@@ -144,7 +152,7 @@ async function findOpenSession(
     .from("label_sessions")
     .select("id")
     .eq("job_id", jobId)
-    .eq("status", "labelling")
+    .in("status", OPEN_STATUSES)
     .maybeSingle<{ id: string }>();
   if (error) {
     return { error: `Could not look up open sessions: ${error.message}` };

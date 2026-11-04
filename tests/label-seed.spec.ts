@@ -661,6 +661,7 @@ function fakeClient({
   const reads: string[] = [];
   let downloads = 0;
   let sessionLookups = 0;
+  const lookups: Record<string, unknown>[] = [];
 
   const client = {
     from(table: string) {
@@ -683,6 +684,7 @@ function fakeClient({
             };
           }
           if (table === "label_sessions") {
+            lookups.push({ ...state.filters });
             sessionLookups += 1;
             const id = sessionLookups === 1 ? openSessionId : raceSessionId;
             return { data: id ? { id } : null, error: null };
@@ -734,6 +736,10 @@ function fakeClient({
           state.filters[column] = value;
           return builder;
         },
+        in: (column: string, values: unknown) => {
+          state.filters[column] = values;
+          return builder;
+        },
         not: () => builder,
         order: () => builder,
         limit: () => builder,
@@ -762,6 +768,7 @@ function fakeClient({
   return {
     writes,
     reads,
+    lookups,
     downloads: () => downloads,
     supabase: client as unknown as AdminClient,
   };
@@ -849,6 +856,17 @@ test.describe("seedLabelSessionForJob", () => {
     expect(result).toEqual({ sessionId: "open-session", existing: true });
     expect(fake.writes).toEqual([]);
     expect(fake.downloads()).toBe(0);
+  });
+
+  test("a submitted session holds the job too: it is returned, never seeded past", async () => {
+    const fake = fakeClient({ openSessionId: "submitted-session" });
+    const result = await seedWith(fake);
+    expect(result).toEqual({ sessionId: "submitted-session", existing: true });
+    expect(fake.writes).toEqual([]);
+    // The lookup asks for both statuses label_sessions_one_open_per_job
+    // counts, so a submitted session is found rather than tripping the index.
+    const lookup = fake.lookups.find((l) => l.job_id === JOB_ID);
+    expect(lookup?.status).toEqual(["labelling", "submitted"]);
   });
 
   test("losing the insert race returns the winner's session", async () => {
