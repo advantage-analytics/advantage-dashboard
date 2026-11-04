@@ -78,8 +78,8 @@ function render(
       "@/components/dashboard/matches/match-detail/film/point-list": {
         PointList: marker("PointList"),
       },
-      "@/components/dashboard/matches/match-detail/film/film-this-point": {
-        FilmThisPoint: marker("FilmThisPoint"),
+      "@/components/dashboard/matches/match-detail/film/film-point-card": {
+        FilmPointCard: marker("FilmPointCard"),
       },
       "@/components/dashboard/matches/match-detail/film/film-filter-strip": {
         FilmFilterStrip: marker("FilmFilterStrip"),

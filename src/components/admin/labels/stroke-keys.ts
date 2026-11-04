@@ -1,4 +1,5 @@
 import {
+  labelShotValues,
   sameShotValue,
   type LabelPointPatch,
   type LabelShotPatch,
@@ -7,6 +8,7 @@ import {
   isMarkableError,
   markableErrorStroke,
 } from "@/lib/services/labels/ending-derived";
+import { deriveShotResult } from "@/lib/services/labels/shot-derived";
 import { spinRows } from "./label-format";
 import {
   LABEL_SPINS,
@@ -159,6 +161,46 @@ export function frameTimePatch(
   const videoTime = Math.round((fileTime + offset) * 1000) / 1000;
   if (sameShotValue("video_time", shot.videoTime, videoTime)) return null;
   return { video_time: videoTime };
+}
+
+/**
+ * Whether a key is L, the let key. Case alone does not say ⇧: Caps Lock
+ * sends "L" unshifted, so the console reads `event.shiftKey` for ⇧L, the
+ * player's Loop.
+ */
+export function isLetKey(key: string): boolean {
+  return key === "l" || key === "L";
+}
+
+/**
+ * Whether the Serve result menu offers Let on `shot`: a serve, with lets
+ * replayed (`playOnLets` false) or already marked one (stored before the rule
+ * changed, so it can still be undone).
+ */
+export function serveOffersLet(
+  shot: LabelShot,
+  playOnLets: boolean | undefined,
+): boolean {
+  return (
+    isServeStroke(shot.stroke) && (playOnLets === false || isLetServe(shot))
+  );
+}
+
+/**
+ * L on `shot`: a serve marked a let, or a let given back the result its
+ * landing reads (`deriveShotResult`, the Result menu's calculated item; a
+ * serve's landing is a bounce, so no stroke after it meets it in the air).
+ * Null where the menu offers no Let (`serveOffersLet`) — a rally stroke, a
+ * serve played on. A let is a serve's alone (edit.ts `letResultError`).
+ */
+export function letKeyPatch(
+  shot: LabelShot,
+  playOnLets: boolean,
+): LabelShotPatch | null {
+  if (!serveOffersLet(shot, playOnLets)) return null;
+  return {
+    result: isLetServe(shot) ? deriveShotResult(labelShotValues(shot)) : "let",
+  };
 }
 
 /** What the Forced | Unforced pair and E read off a point. */

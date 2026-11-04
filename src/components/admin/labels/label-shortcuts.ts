@@ -4,7 +4,7 @@
  * keys under the court went on 2026-10-26; the sheet replaced it.
  *
  * The handlers live in label-console.tsx (shot keys, ↑ ↓, enter, esc, the
- * flag walks, ⌘Z, ⌘⇧Z, ⌘ enter, ⌘ /) and label-video.tsx (D, L, M). Key legends
+ * flag walks, ⌘Z, ⌘⇧Z, ⌘ enter, ⌘ /) and label-video.tsx (D, ⇧L, M). Key legends
  * follow the DS `Kbd` conventions: word keys lowercase, letters uppercase,
  * arrows as glyphs, each key of a combo its own chip.
  */
@@ -30,7 +30,7 @@ export const LABEL_SHORTCUT_GROUPS: readonly LabelShortcutGroup[] = [
       { keys: ["←"], action: "Previous point" },
       { keys: ["→"], action: "Next point" },
       { keys: ["D"], action: "Skip dead time" },
-      { keys: ["L"], action: "Loop the point" },
+      { keys: ["⇧", "L"], action: "Loop the point" },
       { keys: ["M"], action: "Mute" },
     ],
   },
@@ -95,6 +95,7 @@ export const LABEL_SHORTCUT_GROUPS: readonly LabelShortcutGroup[] = [
         note: "To the other player. A serve may ask about the rest of the point",
       },
       { keys: ["T"], action: "Time to this frame" },
+      { keys: ["L"], action: "Let", note: "On a serve. Again to undo" },
     ],
   },
   {

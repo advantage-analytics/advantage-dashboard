@@ -118,6 +118,7 @@ test("shots: the wall is six tiles; the focused view is a court beside a stats c
 test("film: a 16:9 frame in the skeleton token, never the player's dark ground", () => {
   const html = render("film");
   expect(html).toContain("aspect-video");
-  expect(html).toContain("Current point");
+  expect(html).toContain("This point");
+  expect(html).toContain("All points");
   expect(html).not.toContain("1A1A1C");
 });

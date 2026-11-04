@@ -778,7 +778,12 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
           ref={frameRef}
           // `@container`: the touch spacing on the control row below steps
           // with the frame's own width, which the tab's list beside it sets.
-          className="@container relative aspect-video w-full overflow-hidden rounded-[14px] bg-[#1A1A1C]"
+          // `isolate` + `translateZ(0)`: its own compositing layer, so WebKit
+          // clips a PLAYING <video> to the 14px corners instead of painting
+          // its square ones over them. The `after:` hairline is the cards'
+          // edge (`--border-card`'s weight) drawn inside the frame, over the
+          // film, so the corners read as crisply as the cards beside it.
+          className="@container relative isolate aspect-video w-full [transform:translateZ(0)] overflow-hidden rounded-[14px] bg-[#1A1A1C] after:pointer-events-none after:absolute after:inset-0 after:z-10 after:rounded-[14px] after:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)] after:content-['']"
         >
           <video
             // The reload key. A `src` swap on a live element can keep serving

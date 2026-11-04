@@ -846,8 +846,8 @@
 }
 
 /* Shot rows arriving when a point opens — `ShotWellRow` in the room's drawer
-   (point-list.tsx) and `ShotRow` in "This point" (film-this-point.tsx). One
-   keyframe for both, because it is one event on one tab: the rally you are
+   and in the report column's list (both point-list.tsx). One keyframe for
+   both, because it is one event on one tab: the rally you are
    watching becoming readable.
 
    4px, not the viz family's 8px: these rows are 34–40px tall and sit shoulder

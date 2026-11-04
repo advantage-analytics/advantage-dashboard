@@ -439,7 +439,7 @@ export function shotRowCells(
 // row 9 — so a long rally still finishes arriving inside 200ms. `order` is
 // the row's place in the LIST, not its rally number, which two serves share.
 // Used as the mount-driven `animationDelay` for `film-shot-row-in`
-// (`film-this-point.tsx`, `point-list.tsx`); its cap and reduced-motion
+// (`point-list.tsx`); its cap and reduced-motion
 // opt-out live in globals.css.
 export function shotRowRevealDelay(order: number): number {
   return Math.min(order - 1, 8) * 25;

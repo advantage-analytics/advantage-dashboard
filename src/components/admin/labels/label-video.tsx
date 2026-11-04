@@ -351,9 +351,10 @@ export const LabelVideoPlayer = forwardRef<
     checkReady();
   }, [settle, checkReady]);
 
-  // D, L and M — the keys the transport's tooltips name. Space and ← / → are
-  // the console's (it owns the handle); these three are the player's own
-  // state. On the console's terms: never from inside a control or an editor.
+  // D, ⇧L and M — the keys the transport's tooltips name. Space and ← / →
+  // are the console's (it owns the handle); these three are the player's own
+  // state. Loop takes ⇧ because plain L is the console's let. On the
+  // console's terms: never from inside a control or an editor.
   useEffect(() => {
     if (!video) return;
     function onKeyDown(event: KeyboardEvent) {
@@ -361,12 +362,12 @@ export const LabelVideoPlayer = forwardRef<
         event.defaultPrevented ||
         event.metaKey ||
         event.ctrlKey ||
-        event.altKey ||
-        event.shiftKey
+        event.altKey
       ) {
         return;
       }
       const key = event.key.toLowerCase();
+      if (event.shiftKey !== (key === "l")) return;
       if (key !== "d" && key !== "l" && key !== "m") return;
       const target = event.target as Element | null;
       if (target?.closest?.(KEY_OWNER_SELECTOR)) return;
@@ -638,6 +639,7 @@ export const LabelVideoPlayer = forwardRef<
           onToggleSkipDeadTime={toggleSkipDeadTime}
           onCycleRate={cycleRate}
           onToggleLoop={toggleLoop}
+          loopShortcut="⇧L"
           onToggleMute={toggleMute}
           onToggleCourt={noop}
           onExit={noop}
