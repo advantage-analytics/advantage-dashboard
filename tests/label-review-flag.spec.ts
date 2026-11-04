@@ -20,6 +20,7 @@ import {
   reviewStep,
 } from "@/lib/services/labels/review-step";
 import {
+  acceptAsIs,
   REVIEW_ITEMS,
   reviewChip,
   reviewFlag,
@@ -1159,5 +1160,64 @@ test.describe("reviewItemTarget", () => {
       at(null, null),
     );
     expect(target(null)).toEqual(at(null, null));
+  });
+});
+
+test.describe("acceptAsIs: a check takes the rows as true", () => {
+  const openCodes = (p: LabelPoint) =>
+    reviewFlag(p, marksOf({}), [p])
+      ?.items.flatMap((item) => item.members)
+      .filter((member) => member.state === "open")
+      .map((member) => member.mark.code) ?? [];
+
+  test("a stale ending takes the strokes' ending and winner, and the check then closes the flag", () => {
+    // The live shape: no ending stored, the last ball in by p1, yet p2 won.
+    const p = point({
+      winner: "p2",
+      ending: null,
+      endedBy: "p2",
+      shots: [forehand({ result: "in", landingX: 0, landingY: 20 })],
+    });
+    const { patch, dismiss } = acceptAsIs(p, marksOf({}));
+    expect(patch).toEqual({ ending: "winner", ended_by: "p1", winner: "p1" });
+    expect(dismiss).toEqual([]);
+    const accepted = {
+      ...p,
+      ending: patch!.ending!,
+      endedBy: patch!.ended_by!,
+      winner: patch!.winner!,
+      checkedAt: CHECKED_AT,
+    };
+    expect(openCodes(accepted)).toEqual([]);
+    // A check alone leaves it standing — the bug this answers.
+    expect(openCodes({ ...p, checkedAt: CHECKED_AT })).toContain(
+      "ending_stale",
+    );
+  });
+
+  test("an ending the rows cannot fix is dismissed, and the check then closes the flag", () => {
+    const p = point({
+      server: "p1",
+      winner: "p2",
+      ending: "winner",
+      endedBy: "p1",
+      shots: [],
+    });
+    const { patch, dismiss } = acceptAsIs(p, marksOf({}));
+    expect(patch).toBeNull();
+    expect(dismiss).toEqual(["hint:ending_contradicts_winner"]);
+    expect(
+      openCodes({ ...p, dismissed: dismiss, checkedAt: CHECKED_AT }),
+    ).toEqual([]);
+  });
+
+  test("a point whose ending fits writes nothing before its check", () => {
+    const p = point({
+      winner: "p1",
+      ending: "winner",
+      endedBy: "p1",
+      shots: [forehand({ result: "in", landingX: 0, landingY: 20 })],
+    });
+    expect(acceptAsIs(p, marksOf({}))).toEqual({ patch: null, dismiss: [] });
   });
 });

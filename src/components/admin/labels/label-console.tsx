@@ -72,8 +72,8 @@ import {
 } from "@/lib/services/labels/volley-link";
 import { labelScores } from "@/lib/services/labels/score";
 import {
+  acceptAsIs,
   drawsGhosts,
-  openHintMarks,
   type ReviewItemId,
 } from "@/lib/services/labels/marks-state";
 import {
@@ -2679,7 +2679,23 @@ export function LabelConsole({
     );
   }
 
-  function setChecked(pointId: string, value: boolean) {
+  /**
+   * Check or uncheck a point — ⌘ Enter, the row's tick and "Looks right" all
+   * come here. A check takes the rows as true: the open questions a check
+   * alone leaves standing are answered first (`acceptAsIs`), the strokes'
+   * ending saved before the tick, and no tick if that save fails.
+   */
+  async function setChecked(pointId: string, value: boolean) {
+    const point = points.find((p) => p.id === pointId);
+    if (value && point && marks) {
+      const { patch, dismiss } = acceptAsIs(point, marks);
+      for (const key of dismiss) dismissSuggestion(pointId, key);
+      if (patch && !(await patchPoint(pointId, patch))) return;
+    }
+    writeChecked(pointId, value);
+  }
+
+  function writeChecked(pointId: string, value: boolean) {
     const before = points.find((p) => p.id === pointId);
     if (!before || !operations || before.status === "deleted") return;
     setFoldedPointId(value && pointId === currentPointId ? pointId : null);
@@ -3195,26 +3211,7 @@ export function LabelConsole({
     };
     toggleOpenPointCheck.current = () => {
       if (!operable || confirm || !expanded) return;
-      if (expanded.checkedAt !== null) {
-        setChecked(expanded.id, false);
-        return;
-      }
-      // ⌘ Enter takes the rows as true: an ending left behind by them
-      // ("Different ending?") becomes the one they derive, as its "Make it …"
-      // writes it, winner with it. A check alone would leave that question
-      // open where the winner disagrees (`reviewFlag`).
-      const stale = (marks ? openHintMarks(expanded, marks) : []).find(
-        (mark) => mark.code === "ending_stale",
-      );
-      if (stale?.code === "ending_stale") {
-        const { ending, endedBy, winner } = stale.params;
-        void patchPoint(expanded.id, {
-          ending,
-          ended_by: endedBy,
-          ...(winner !== null ? { winner } : {}),
-        });
-      }
-      setChecked(expanded.id, true);
+      void setChecked(expanded.id, expanded.checkedAt === null);
     };
     stepToFlag.current = (direction, kind) => {
       if (confirm) return;
