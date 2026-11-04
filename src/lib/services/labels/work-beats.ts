@@ -20,6 +20,12 @@ export interface WorkBeatState {
   lastInputAt: number | null;
   /** When this tab last posted a beat; null before the first. */
   lastBeatAt: number | null;
+  /**
+   * The film is playing. Watching is work — the cleaning standard asks for a
+   * full watch-through, much of it with no key pressed — so a playing video
+   * counts as activity on its own. Absent: false.
+   */
+  playing?: boolean;
 }
 
 export interface WorkBeatOptions {
@@ -33,14 +39,16 @@ export const WORK_BEAT_INTERVAL = 60_000;
 export const WORK_BEAT_IDLE_AFTER = 150_000;
 
 export function shouldBeat(
-  { now, visible, lastInputAt, lastBeatAt }: WorkBeatState,
+  { now, visible, lastInputAt, lastBeatAt, playing = false }: WorkBeatState,
   {
     interval = WORK_BEAT_INTERVAL,
     idleAfter = WORK_BEAT_IDLE_AFTER,
   }: WorkBeatOptions = {},
 ): boolean {
   if (!visible) return false;
-  if (lastInputAt === null || now - lastInputAt > idleAfter) return false;
+  const active =
+    playing || (lastInputAt !== null && now - lastInputAt <= idleAfter);
+  if (!active) return false;
   if (lastBeatAt !== null && now - lastBeatAt < interval) return false;
   return true;
 }

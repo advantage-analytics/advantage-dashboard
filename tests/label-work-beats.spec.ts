@@ -53,6 +53,18 @@ test.describe("shouldBeat", () => {
     ).toBe(false);
   });
 
+  test("a playing film counts as working with no key pressed", () => {
+    // A full watch-through: minutes of film and nothing pressed.
+    const watching = { ...base, lastInputAt: NOW - 600_000, playing: true };
+    expect(shouldBeat(watching)).toBe(true);
+    expect(shouldBeat({ ...watching, lastInputAt: null })).toBe(true);
+    // Still not on a hidden tab, and still at most once an interval.
+    expect(shouldBeat({ ...watching, visible: false })).toBe(false);
+    expect(shouldBeat({ ...watching, lastBeatAt: NOW - 30_000 })).toBe(false);
+    // Paused and idle is idle.
+    expect(shouldBeat({ ...watching, playing: false })).toBe(false);
+  });
+
   test("never sooner than interval after the last beat", () => {
     expect(shouldBeat({ ...base, lastBeatAt: NOW - 59_999 })).toBe(false);
     expect(shouldBeat({ ...base, lastBeatAt: NOW - 60_000 })).toBe(true);
@@ -264,7 +276,7 @@ test.describe("recordLabelWorkBeat", () => {
   });
 });
 
-test("listLabelJobs counts each session's beats as minutesWorked in one read", async () => {
+test("listLabelJobs counts only the worker's beats as minutesWorked, in one read", async () => {
   const JOB_A = "55555555-5555-4555-8555-555555555551";
   const JOB_B = "55555555-5555-4555-8555-555555555552";
   const SESSION_B = "66666666-6666-4666-8666-666666666666";
@@ -275,9 +287,10 @@ test("listLabelJobs counts each session's beats as minutesWorked in one read", a
     status: "labelling",
     started_at: "2026-11-01T00:00:00Z",
     open_counts: null,
-    assigned_at: null,
+    assigned_at: "2026-11-01T00:00:00Z",
     submitted_at: null,
-    assignee: null,
+    labeller: ADMIN_ID,
+    assignee: { id: OTHER_ID, email: null, first_name: null, last_name: null },
   });
   const fake = fakeLabelClient((call) => {
     if (call.table === "processing_jobs") {
@@ -299,12 +312,16 @@ test("listLabelJobs counts each session's beats as minutesWorked in one read", a
       };
     }
     if (call.table === "label_work_beats") {
-      // Three minutes on A (two people), none on B.
+      // On A: three minutes from the assigned labeller and two from the
+      // admin reviewing it, one of them in a minute the labeller also
+      // worked. Only the labeller's three count. None on B.
       return {
         data: [
-          { session_id: SESSION_ID },
-          { session_id: SESSION_ID },
-          { session_id: SESSION_ID },
+          { session_id: SESSION_ID, user_id: OTHER_ID },
+          { session_id: SESSION_ID, user_id: OTHER_ID },
+          { session_id: SESSION_ID, user_id: OTHER_ID },
+          { session_id: SESSION_ID, user_id: ADMIN_ID },
+          { session_id: SESSION_ID, user_id: ADMIN_ID },
         ],
         error: null,
       };
@@ -324,7 +341,7 @@ test("listLabelJobs counts each session's beats as minutesWorked in one read", a
 
   const beatReads = fake.calls.filter((c) => c.table === "label_work_beats");
   expect(beatReads).toHaveLength(1);
-  expect(beatReads[0].columns).toBe("session_id");
+  expect(beatReads[0].columns).toBe("session_id, user_id");
   expect(beatReads[0].in?.session_id).toEqual(
     expect.arrayContaining([SESSION_ID, SESSION_B]),
   );

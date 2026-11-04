@@ -14,6 +14,13 @@ import {
  */
 const BEAT_GAP = WORK_BEAT_INTERVAL - 5_000;
 
+/** The console's film is playing: any video on the page, not paused or ended. */
+function filmPlaying(): boolean {
+  return Array.from(document.querySelectorAll("video")).some(
+    (video) => !video.paused && !video.ended,
+  );
+}
+
 /**
  * The console's active-time heartbeat: once a tick (every minute), post one
  * beat for `sessionId` when `shouldBeat` (work-beats.ts) says the labeller is
@@ -43,7 +50,13 @@ export function useWorkBeat(
     const tick = () => {
       const now = Date.now();
       const visible = document.visibilityState === "visible";
-      const state = { now, visible, lastInputAt, lastBeatAt };
+      const state = {
+        now,
+        visible,
+        lastInputAt,
+        lastBeatAt,
+        playing: filmPlaying(),
+      };
       if (!shouldBeat(state, { interval: BEAT_GAP })) return;
       const send = latest.current;
       if (!send) return;

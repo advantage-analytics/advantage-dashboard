@@ -137,6 +137,8 @@ interface DbSession {
   open_counts: unknown;
   assigned_at: string | null;
   submitted_at: string | null;
+  /** Who started the session, or the labeller who submitted it. */
+  labeller: string | null;
   /** Embedded `users` row through `assigned_to` (many-to-one: one or none). */
   assignee: {
     id: string;
@@ -209,7 +211,7 @@ export async function listLabelJobs(
       // the column: `labeller` also points at `users`), so the names cost no
       // extra round trip.
       .select(
-        "id, job_id, status, started_at, open_counts, assigned_at, submitted_at, assignee:users!assigned_to(id, email, first_name, last_name)",
+        "id, job_id, status, started_at, open_counts, assigned_at, submitted_at, labeller, assignee:users!assigned_to(id, email, first_name, last_name)",
       )
       .in("job_id", jobIds)
       .order("started_at", { ascending: false })
@@ -245,10 +247,17 @@ export async function listLabelJobs(
     }
   }
 
-  const sessionIds = [...sessionByJob.values()].map((session) => session.id);
+  const sessions = [...sessionByJob.values()];
+  const sessionIds = sessions.map((session) => session.id);
   const [progressBySession, minutesBySession] = await Promise.all([
     countLabelPointProgress(db, sessionIds),
-    countLabelWorkMinutes(db, sessionIds),
+    countLabelWorkMinutes(
+      db,
+      sessions.map((session) => ({
+        id: session.id,
+        workerId: sessionWorker(session),
+      })),
+    ),
   ]);
 
   const rows: LabelJobRow[] = jobRows.map((job) => {
@@ -346,29 +355,46 @@ export async function countLabelPointProgress(
 }
 
 /**
- * Minutes worked per session in `sessionIds`: its `label_work_beats` rows,
- * counted. PostgREST has no GROUP BY, so it is one read of `session_id` for
- * the listed sessions, counted in memory and walked by `readAllPages` — a
- * beat is at most one row per labeller per minute, ~60 an hour a session.
+ * Whose minutes a session's "Worked" figure counts: the labeller it is
+ * assigned to, else whoever labelled it (`labeller`). An admin who opens the
+ * session to review it also posts beats, and those are their time, not the
+ * labeller's — counting them would inflate exactly the number a vendor is
+ * judged by.
+ */
+function sessionWorker(
+  session: Pick<DbSession, "labeller" | "assignee">,
+): string | null {
+  return session.assignee?.id ?? session.labeller;
+}
+
+/**
+ * Minutes worked per session: its `label_work_beats` rows from that
+ * session's worker (`sessionWorker`), counted. PostgREST has no GROUP BY, so
+ * it is one read of `session_id, user_id` for the listed sessions, counted in
+ * memory and walked by `readAllPages` — a beat is at most one row per person
+ * per minute, ~60 an hour a session. A session with no worker counts nothing.
  */
 export async function countLabelWorkMinutes(
   db: AdminClient,
-  sessionIds: string[],
+  sessions: readonly { id: string; workerId: string | null }[],
 ): Promise<Map<string, number>> {
   const minutes = new Map<string, number>();
-  if (sessionIds.length === 0) return minutes;
+  if (sessions.length === 0) return minutes;
+  const workerBySession = new Map(sessions.map((s) => [s.id, s.workerId]));
 
-  const rows = await readAllPages<{ session_id: string }>(
+  const rows = await readAllPages<{ session_id: string; user_id: string }>(
     db
       .from("label_work_beats")
-      .select("session_id")
-      .in("session_id", sessionIds)
+      .select("session_id, user_id")
+      .in("session_id", [...workerBySession.keys()])
       .order("session_id")
       .order("user_id")
       .order("minute"),
     "Could not read label work minutes",
   );
   for (const row of rows) {
+    const worker = workerBySession.get(row.session_id);
+    if (!worker || row.user_id !== worker) continue;
     minutes.set(row.session_id, (minutes.get(row.session_id) ?? 0) + 1);
   }
   return minutes;
