@@ -2878,11 +2878,15 @@ test("T23: no shell pill while the lit row is fully in the shell list's view", a
     pad: "12",
     ttl: String(3600_000),
   });
-  await boundShellList(page, 240);
+  // 300, not 240: the held point `a` opens its shot well above `b`, so `b`
+  // needs the well's height on top of its own to sit wholly inside the box.
+  await boundShellList(page, 300);
   await shellHoldAThenPlayBAbove(page);
   await expect(page.locator(SHELL_PILL)).toHaveCount(1);
 
-  // Back to the top: `b` is wholly inside the box, nothing to return to.
+  // Back to the top: `b` is wholly inside the box, nothing to return to —
+  // measured once `a`'s well has finished unfolding.
+  await settledWellHeight(page);
   await parkScroller(page, SHELL_SCROLLER, 0);
   await expect.poll(() => shellLitPlace(page)).toBe("inside");
   await expect(page.locator(SHELL_PILL)).toHaveCount(0);
