@@ -61,8 +61,12 @@ export interface AskColumn {
    * court positions (`ask.shots` contact/landing, `ask.matches.has_coords`)
    * are for a player's own Claude to draw and bin; the in-app planner has no
    * court visual to answer with and would invent its own depth thresholds
-   * against the settled measures. `renderAskSchemaBlock()` lists them only
-   * when asked for the MCP, and `focus.ts` never ranks them.
+   * against the settled measures. The running score (`ask.points`
+   * point_score, game_score, set_score) and `ask.matches` is_verified /
+   * errors_judged are for lining a hand-kept chart up against a match; the
+   * planner answers from the counters and has no use for a per-point score
+   * string it could misread. `renderAskSchemaBlock()` lists them only when
+   * asked for the MCP, and `focus.ts` never ranks them.
    */
   mcpOnly?: true;
 }
@@ -911,21 +915,21 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "point_score",
         type: "text",
         meaning:
-          "The point score before this point was played, the viewer first: 30-40 is the viewer on 30 and the opponent on 40; AD is advantage, 0-0 opens every game, and a tiebreak counts in plain numbers (3-2). Null when the source never read point scores or the server is unknown.",
+          "The point score before this point was played, the viewer first: 30-40 is the viewer on 30 and the opponent on 40; AD is advantage, 0-0 opens every game, and a tiebreak counts in plain numbers (3-2). Video matches only: null on every SwingVision point, and null when the source never read point scores or the server is unknown. Unless ask.matches.is_verified is true it is the video analysis's running reading, which can stall or drift; ask.matches.score_text is the entered result.",
         mcpOnly: true,
       },
       {
         name: "game_score",
         type: "text",
         meaning:
-          "Games in the current set before this point, the viewer first, e.g. 4-5; null when not recorded.",
+          "Games in the current set before this point, the viewer first, e.g. 4-5. Null where point_score is null for the same reasons, and when not recorded; unless ask.matches.is_verified is true it is the video analysis's running count, which can drift from ask.matches.score_text.",
         mcpOnly: true,
       },
       {
         name: "set_score",
         type: "text",
         meaning:
-          "Sets each side had won before this point, the viewer first, e.g. 1-0; null when not recorded.",
+          "Sets each side had won before this point, the viewer first, e.g. 1-0. Null where point_score is null for the same reasons, and when not recorded.",
         mcpOnly: true,
       },
     ],
