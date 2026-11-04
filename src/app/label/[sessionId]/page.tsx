@@ -21,6 +21,7 @@ import {
   moveLabelPointsAction,
   pullLabelGamePointsAction,
   recordLabelOpenCountsAction,
+  recordLabelWorkBeatAction,
   redoLabelOpAction,
   removeLabelShotsAfterAction,
   resetLabelPointAction,
@@ -147,6 +148,7 @@ export default async function LabelSessionPage({
           redo: redoLabelOpAction,
           addMissingShots: addMissingShotsAction,
           recordOpenCounts: recordLabelOpenCountsAction,
+          recordWorkBeat: recordLabelWorkBeatAction,
         }}
         headerAction={
           <Link

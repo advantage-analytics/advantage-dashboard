@@ -312,6 +312,8 @@ import type {
   LabelOpenCounts,
   LabelOpenCountsResult,
 } from "@/lib/services/labels/open-counts-session";
+import type { LabelWorkBeatResult } from "@/lib/services/labels/work-beats-session";
+import { useWorkBeat } from "./use-work-beat";
 import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
 import { INITIAL_SAVE_STATUS, saveStatusReducer } from "./save-status";
 import {
@@ -649,6 +651,8 @@ export function LabelConsole({
     // A cache: a failed save leaves the list a step behind, nothing more.
     void recordOpenCounts(session.id, openCounts).catch(() => {});
   }, [openCounts, recordOpenCounts, session.id]);
+  // Minutes worked for the Labels list: a beat a minute while someone works.
+  useWorkBeat(session.id, operations?.recordWorkBeat);
   // The deciding set the match record spells as a 10-point match tiebreak
   // (set-scores.ts) — never the labeller's own `final_score`, which is games
   // only. "Make it a match tiebreak" offers to fold it, and the shift and
@@ -4631,6 +4635,12 @@ export interface LabelConsoleOperations {
     sessionId: string,
     counts: LabelOpenCounts,
   ) => Promise<LabelOpenCountsResult>;
+  /**
+   * One minute of active work on the session (work-beats-session.ts), posted
+   * by the heartbeat (use-work-beat.ts) at most once a minute. Absent: no
+   * time is recorded.
+   */
+  recordWorkBeat?: (sessionId: string) => Promise<LabelWorkBeatResult>;
 }
 
 function defaultPoint(points: readonly LabelPoint[]): LabelPoint | null {

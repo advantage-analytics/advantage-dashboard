@@ -116,6 +116,10 @@ import {
   type LabelOpenCounts,
   type LabelOpenCountsResult,
 } from "@/lib/services/labels/open-counts-session";
+import {
+  recordLabelWorkBeat,
+  type LabelWorkBeatResult,
+} from "@/lib/services/labels/work-beats-session";
 import { withLabelOp } from "@/lib/supabase/op-context";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
@@ -564,4 +568,16 @@ export async function recordLabelOpenCountsAction(
   counts: LabelOpenCounts,
 ): Promise<LabelOpenCountsResult> {
   return recordLabelOpenCounts(sessionId, counts);
+}
+
+/**
+ * The console's active-time heartbeat (use-work-beat.ts): one row in
+ * `label_work_beats` for the caller, this session and the current minute —
+ * the server's minute, never the client's. A second beat in the same minute
+ * is ignored. Not a step to undo: outside `withLabelOp`.
+ */
+export async function recordLabelWorkBeatAction(
+  sessionId: string,
+): Promise<LabelWorkBeatResult> {
+  return recordLabelWorkBeat(sessionId);
 }

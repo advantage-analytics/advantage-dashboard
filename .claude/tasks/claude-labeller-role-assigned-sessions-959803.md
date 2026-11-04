@@ -117,7 +117,7 @@ ready).
 
 ## T8 · Active-time heartbeat and minutes worked
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T7
 - **files:** src/lib/services/labels/work-beats.ts (new, pure), src/lib/services/labels/work-beats-session.ts (new), src/components/admin/labels/use-work-beat.ts (new), src/components/admin/labels/label-console.tsx, src/app/admin/labels/actions.ts, src/app/label/actions.ts, src/lib/data/labels-server.ts, src/components/admin/labels-board/label-job-row.tsx, tests/label-work-beats.spec.ts (new) — guesses

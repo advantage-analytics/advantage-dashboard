@@ -233,6 +233,7 @@ test.describe("the Labels list's session fields", () => {
       if (call.table === "matches") return { data: [], error: null };
       if (call.table === "points") return { data: null, error: null };
       if (call.table === "label_points") return { data: [], error: null };
+      if (call.table === "label_work_beats") return { data: [], error: null };
       if (call.table === "label_sessions") {
         return {
           data: [

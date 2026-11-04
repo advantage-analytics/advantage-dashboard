@@ -84,6 +84,11 @@ export interface LabelJobRow {
     assignedAt: string | null;
     /** When the labeller submitted; set exactly while `status` is submitted. */
     submittedAt: string | null;
+    /**
+     * Minutes of active work on the session, everyone's: the count of its
+     * `label_work_beats` rows (one per user per minute, work-beats-session.ts).
+     */
+    minutesWorked: number;
   } | null;
 }
 
@@ -241,7 +246,10 @@ export async function listLabelJobs(
   }
 
   const sessionIds = [...sessionByJob.values()].map((session) => session.id);
-  const progressBySession = await countLabelPointProgress(db, sessionIds);
+  const [progressBySession, minutesBySession] = await Promise.all([
+    countLabelPointProgress(db, sessionIds),
+    countLabelWorkMinutes(db, sessionIds),
+  ]);
 
   const rows: LabelJobRow[] = jobRows.map((job) => {
     const match = matchById.get(job.match_id);
@@ -275,6 +283,7 @@ export async function listLabelJobs(
               : null,
             assignedAt: session.assigned_at ?? null,
             submittedAt: session.submitted_at ?? null,
+            minutesWorked: minutesBySession.get(session.id) ?? 0,
           }
         : null,
     };
@@ -334,6 +343,35 @@ export async function countLabelPointProgress(
     progress.set(row.session_id, entry);
   }
   return progress;
+}
+
+/**
+ * Minutes worked per session in `sessionIds`: its `label_work_beats` rows,
+ * counted. PostgREST has no GROUP BY, so it is one read of `session_id` for
+ * the listed sessions, counted in memory and walked by `readAllPages` — a
+ * beat is at most one row per labeller per minute, ~60 an hour a session.
+ */
+export async function countLabelWorkMinutes(
+  db: AdminClient,
+  sessionIds: string[],
+): Promise<Map<string, number>> {
+  const minutes = new Map<string, number>();
+  if (sessionIds.length === 0) return minutes;
+
+  const rows = await readAllPages<{ session_id: string }>(
+    db
+      .from("label_work_beats")
+      .select("session_id")
+      .in("session_id", sessionIds)
+      .order("session_id")
+      .order("user_id")
+      .order("minute"),
+    "Could not read label work minutes",
+  );
+  for (const row of rows) {
+    minutes.set(row.session_id, (minutes.get(row.session_id) ?? 0) + 1);
+  }
+  return minutes;
 }
 
 /* -------------------------------------------------------------------------

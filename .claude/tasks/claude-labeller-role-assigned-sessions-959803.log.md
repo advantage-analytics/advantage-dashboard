@@ -72,3 +72,13 @@ is the runner's. Newest entries at the bottom.
 
 1. `labels-server.ts` imports `labellerName` from a service file; consider moving it to a shared helper.
 2. Not yet seen in a browser; `/pr-check` eyes-on covers `/admin/labels`.
+
+## T8 · Active-time heartbeat and minutes worked — done
+
+**gate:** mechanical — first run GATE FAIL (9137 passed vs 9138 on the re-run; one test did not pass and its output was not kept), re-run on the unchanged tree GATE PASS · completion VERDICT: pass
+**changed:** Pure `work-beats.ts` (`shouldBeat`, `beatMinute`), `work-beats-session.ts` (`recordLabelWorkBeat`: gated on `requireLabelActor`, server-computed UTC minute, upsert with `ignoreDuplicates`, 23505 treated as ok, never throws), `use-work-beat.ts` hook (visibility + keydown/pointerdown, 60 s tick, 55 s gap allowance for timer jitter) mounted by `LabelConsole` when `operations.recordWorkBeat` is passed; both console pages pass it and both actions files export `recordLabelWorkBeatAction`. `listLabelJobs` adds `minutesWorked` (one paged read counted in JS); Labels rows gain a "Worked" column ("N min", "—" for 0). New `tests/label-work-beats.spec.ts`.
+**follow-ups:**
+
+1. The flaky test in the first gate run is unidentified; watch for it at `/pr-check`.
+2. `labels-board.tsx` header `min-w-[1120px]` is now below the grid's width; raise to ~1250px.
+3. Confirm live that the service-role upsert on `label_work_beats` with `ignoreDuplicates` works.

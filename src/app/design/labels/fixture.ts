@@ -296,6 +296,7 @@ const open = (id: string, checked: number, total: number) => ({
   assignedTo: null,
   assignedAt: null,
   submittedAt: null,
+  minutesWorked: 0,
 });
 const done = (id: string, total: number) => ({
   id,
@@ -306,6 +307,7 @@ const done = (id: string, total: number) => ({
   assignedTo: null,
   assignedAt: null,
   submittedAt: null,
+  minutesWorked: 0,
 });
 
 export const JOBS: LabelJobRow[] = [

@@ -36,6 +36,7 @@ import {
   undoLabelOpAction,
   addMissingShotsAction,
   recordLabelOpenCountsAction,
+  recordLabelWorkBeatAction,
   updateLabelPoint,
   updateLabelSessionFieldsAction,
   updateLabelShot,
@@ -146,6 +147,7 @@ export default async function AdminLabelSessionPage({
           redo: redoLabelOpAction,
           addMissingShots: addMissingShotsAction,
           recordOpenCounts: recordLabelOpenCountsAction,
+          recordWorkBeat: recordLabelWorkBeatAction,
         }}
         headerAction={
           <Link

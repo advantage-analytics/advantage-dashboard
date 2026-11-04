@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * One row of the Labels list (LabelsFlat, "Labels B"): Match · Workspace ·
- * Analyzed · Points · Flags · Status · Assigned · chevron. A match is a
+ * Analyzed · Points · Flags · Status · Assigned · Worked · chevron. A match is a
  * record row, so the whole row is the way in and carries the chevron the
  * table laws give a row that navigates; a match nobody has started seeds its
  * session on the click.
@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
 
 /** The grid the header and every row share. */
 export const LABEL_GRID =
-  "grid grid-cols-[minmax(260px,1fr)_170px_96px_56px_88px_170px_150px_13px] items-center gap-x-4";
+  "grid grid-cols-[minmax(260px,1fr)_170px_96px_56px_88px_170px_150px_64px_13px] items-center gap-x-4";
 
 export const LABEL_COLUMNS = [
   "Match",
@@ -49,6 +49,7 @@ export const LABEL_COLUMNS = [
   "Flags",
   "Status",
   "Assigned",
+  "Worked",
 ] as const;
 
 export function LabelJobListRow({
@@ -116,6 +117,7 @@ export function LabelJobListRow({
       {/* Assigned: the Assign menu is laid over this cell (see the overlay
           below), outside the link. */}
       <span aria-hidden="true" />
+      <MinutesWorked minutes={job.session?.minutesWorked ?? 0} />
       <RowChevron />
     </>
   );
@@ -337,6 +339,31 @@ function StartRow({
         </p>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Minutes of active work on the session (its `label_work_beats`), "N min";
+ * none recorded reads as the dash.
+ */
+export function MinutesWorked({ minutes }: { minutes: number }) {
+  if (!minutes) {
+    return (
+      <span
+        aria-label="No time recorded"
+        className="text-[12px] text-[var(--ink-400)]"
+      >
+        —
+      </span>
+    );
+  }
+  return (
+    <span
+      data-labels-minutes=""
+      className="tabular text-[13px] whitespace-nowrap text-[var(--ink-700)]"
+    >
+      {minutes} min
+    </span>
   );
 }
 
