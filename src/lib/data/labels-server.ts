@@ -54,6 +54,7 @@ import {
 } from "@/lib/services/labels/marks";
 import { cachedTranscriptForJob } from "@/lib/services/labels/transcript-cache";
 import { idChunks } from "@/lib/services/labels/chunks";
+import { labellerName } from "@/lib/services/labels/assign-session";
 
 /** One completed job an admin could start or continue labelling. */
 export interface LabelJobRow {
@@ -77,6 +78,12 @@ export interface LabelJobRow {
      * null until the session is opened with marks.
      */
     openCounts: FlagCounts | null;
+    /** The labeller it is assigned to (`assigned_to`); null when unassigned. */
+    assignedTo: { id: string; name: string } | null;
+    /** When `assigned_to` was last set. */
+    assignedAt: string | null;
+    /** When the labeller submitted; set exactly while `status` is submitted. */
+    submittedAt: string | null;
   } | null;
 }
 
@@ -123,6 +130,15 @@ interface DbSession {
   status: "labelling" | "submitted" | "complete";
   started_at: string;
   open_counts: unknown;
+  assigned_at: string | null;
+  submitted_at: string | null;
+  /** Embedded `users` row through `assigned_to` (many-to-one: one or none). */
+  assignee: {
+    id: string;
+    email: string | null;
+    first_name: string | null;
+    last_name: string | null;
+  } | null;
 }
 
 /** `open_counts` as the list reads it; anything malformed reads as none. */
@@ -184,7 +200,12 @@ export async function listLabelJobs(
       .returns<DbMatch[]>(),
     db
       .from("label_sessions")
-      .select("id, job_id, status, started_at, open_counts")
+      // The assignee rides along as an embed on `assigned_to` (the hint names
+      // the column: `labeller` also points at `users`), so the names cost no
+      // extra round trip.
+      .select(
+        "id, job_id, status, started_at, open_counts, assigned_at, submitted_at, assignee:users!assigned_to(id, email, first_name, last_name)",
+      )
       .in("job_id", jobIds)
       .order("started_at", { ascending: false })
       .returns<DbSession[]>(),
@@ -242,6 +263,18 @@ export async function listLabelJobs(
             checked: progress?.checked ?? 0,
             total: progress?.total ?? 0,
             openCounts: readOpenCounts(session.open_counts),
+            assignedTo: session.assignee
+              ? {
+                  id: session.assignee.id,
+                  name: labellerName(
+                    session.assignee.first_name,
+                    session.assignee.last_name,
+                    session.assignee.email,
+                  ),
+                }
+              : null,
+            assignedAt: session.assigned_at ?? null,
+            submittedAt: session.submitted_at ?? null,
           }
         : null,
     };

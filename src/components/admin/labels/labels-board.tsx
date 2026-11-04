@@ -23,6 +23,7 @@ import type {
   LabelReviewRequest,
 } from "@/lib/data/label-overview-server";
 import type { LabelJobRow } from "@/lib/data/labels-server";
+import type { Labeller } from "@/lib/services/labels/assign-session";
 import {
   jobState,
   PERSONAL_KEY,
@@ -44,6 +45,8 @@ import { cn } from "@/lib/utils";
  * - View pills with counts, then a Program menu; both narrow both tables.
  * - A row navigates to the label console, so it carries the chevron; a row
  *   new since the admin last looked carries the New dot until it is opened.
+ * - A row with a session carries the Assign menu: which labeller it is
+ *   handed to (`assignLabelSessionAction`).
  *
  * The page owns the heading and lede (`app/admin/labels/page.tsx`); this
  * component starts at the filter row.
@@ -79,6 +82,7 @@ export function LabelsBoard({
   flagCounts = {},
   reviews = {},
   freshJobIds = [],
+  labellers = [],
 }: {
   /** Newest first, as `listLabelJobs` orders them. */
   rows: readonly LabelJobRow[];
@@ -90,6 +94,8 @@ export function LabelsBoard({
   reviews?: Readonly<Record<string, LabelReviewRequest | undefined>>;
   /** Jobs that are New since this admin last looked (`lookAtSurface`). */
   freshJobIds?: readonly string[];
+  /** Who a session can be assigned to (`listLabellers`). */
+  labellers?: readonly Labeller[];
 }) {
   const [view, setView] = useState<View>("all");
   const [program, setProgram] = useState<string>("all");
@@ -162,7 +168,7 @@ export function LabelsBoard({
 
   const table = (jobs: readonly LabelJobRow[], emptyText: string) => (
     <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[960px] px-6 pt-0.5 pb-1.5">
+      <div className="min-w-[1120px] px-6 pt-0.5 pb-1.5">
         <div
           className={cn(
             LABEL_GRID,
@@ -187,6 +193,7 @@ export function LabelsBoard({
               openFlags={openOf(job, flagCounts)}
               fresh={fresh.has(job.jobId)}
               onOpen={() => open(job.jobId)}
+              labellers={labellers}
             />
           ))
         )}

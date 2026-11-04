@@ -103,7 +103,7 @@ ready).
 
 ## T7 · Admin assignment control and submitted indicator
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/lib/services/labels/assign-session.ts (new), src/app/admin/labels/actions.ts, src/lib/data/labels-server.ts, src/components/admin/labels-board/label-job-row.tsx, src/components/admin/labels/labels-board.tsx, tests/label-assign.spec.ts (new) — guesses

@@ -63,3 +63,12 @@ is the runner's. Newest entries at the bottom.
 2. Mark complete on a submitted session hides "Mark errors"; reconsider for the admin review flow.
 3. `firstAmberStop` leaves out the "Players at the wrong end" slot.
 4. Signed video URL path may carry the match id; harmless for the trial (own match) but worth checking for third-party matches.
+
+## T7 · Admin assignment control and submitted indicator — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `assign-session.ts`: `assignLabelSession` (requireAdmin; refuses missing/non-labeller users and complete sessions; service-role write of `assigned_to`/`assigned_at`, nulls on unassign; race-safe on `status <> complete`) and `listLabellers`. `assignLabelSessionAction`/`listLabellersAction` exported. `LabelJobRow.session` gains `assignedTo`, `assignedAt`, `submittedAt`, read in the same select (`users!assigned_to`; live FK `label_sessions_assigned_to_fkey` confirmed). `jobStatusText` gives "Submitted for review". Labels rows gain an "Assigned" column with an `AssignMenu` (FloatMenu pill, outside the row link). `/admin/labels` loads labellers once server-side. New `tests/label-assign.spec.ts`.
+**follow-ups:**
+
+1. `labels-server.ts` imports `labellerName` from a service file; consider moving it to a shared helper.
+2. Not yet seen in a browser; `/pr-check` eyes-on covers `/admin/labels`.

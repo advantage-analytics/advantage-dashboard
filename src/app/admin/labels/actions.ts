@@ -108,6 +108,12 @@ import {
   type LabelOpenCounts,
   type LabelOpenCountsResult,
 } from "@/lib/services/labels/open-counts-session";
+import {
+  assignLabelSession,
+  listLabellers,
+  type LabelAssignResult,
+  type ListLabellersResult,
+} from "@/lib/services/labels/assign-session";
 import { withLabelOp } from "@/lib/supabase/op-context";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
@@ -592,4 +598,25 @@ export async function recordLabelOpenCountsAction(
   counts: LabelOpenCounts,
 ): Promise<LabelOpenCountsResult> {
   return recordLabelOpenCounts(sessionId, counts);
+}
+
+/**
+ * The Labels list's "Assign": hand a session to a labeller (`userId`), or
+ * take it back with null. Admin only (`requireAdmin`, never the label-actor
+ * gate); refused on a complete session and for anyone who is not a labeller.
+ * Not a labelling step, so outside `withLabelOp`.
+ */
+export async function assignLabelSessionAction(
+  sessionId: string,
+  userId: string | null,
+): Promise<LabelAssignResult> {
+  return assignLabelSession(sessionId, userId);
+}
+
+/**
+ * Every labeller, `{ id, name, email }`, for the Assign menu. Admin only:
+ * it reads other users' names and emails service-role.
+ */
+export async function listLabellersAction(): Promise<ListLabellersResult> {
+  return listLabellers();
 }
