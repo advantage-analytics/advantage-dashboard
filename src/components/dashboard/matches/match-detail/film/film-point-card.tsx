@@ -101,6 +101,7 @@ export const FilmPointCard = memo(function FilmPointCard({
   onStep,
   onToggleSaved,
   canCopyLink = false,
+  onGoToFirst,
   tags,
   notes,
 }: {
@@ -115,6 +116,8 @@ export const FilmPointCard = memo(function FilmPointCard({
   onToggleSaved?: () => void;
   /** A link into the dashboard report; off on read-only reports. */
   canCopyLink?: boolean;
+  /** Seek to the applied cut's first point; absent when the cut holds none. */
+  onGoToFirst?: () => void;
   tags?: PointTagsControl;
   notes?: NotesThread;
 }) {
@@ -173,9 +176,7 @@ export const FilmPointCard = memo(function FilmPointCard({
       </div>
 
       {!point ? (
-        <p className="text-micro py-3">
-          Press play, or pick a point — it lands here with its notes.
-        </p>
+        <NoPointYet onStart={onGoToFirst} />
       ) : (
         <>
           <PointSummary point={point} />
@@ -187,6 +188,70 @@ export const FilmPointCard = memo(function FilmPointCard({
     </section>
   );
 });
+
+/**
+ * Before the film reaches a point (the opening seconds, or a seek into dead
+ * time): the card's own anatomy, empty — the winner's 30px mark slot as a
+ * dashed outline, a title naming the state and one line saying what lands
+ * here — plus the one way to make it appear (empty-and-loading.md, honest
+ * zero). No action when the cut holds no point to start from.
+ */
+function NoPointYet({ onStart }: { onStart?: () => void }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="mt-2.5 flex shrink-0 items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="size-[30px] shrink-0 rounded-[var(--radius-button)] border border-dashed border-[var(--border-field)]"
+        />
+        <span className="flex min-w-0 flex-col gap-px">
+          <span className="text-[13px] font-medium text-[var(--ink-900)]">
+            No point playing
+          </span>
+          <span className="text-micro">
+            Its result, tags and notes show here once a point plays.
+          </span>
+        </span>
+      </div>
+      {onStart && (
+        <button
+          type="button"
+          onClick={onStart}
+          className="mt-3 w-fit cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        >
+          Go to the first point
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A point with no notes: centred in the thread's own space, a statement and
+ * one line on what a note is for, and the one way to add one — which puts
+ * the caret in the reply field below rather than opening a second composer.
+ */
+function EmptyThread() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-1.5 px-6 py-4 text-center">
+      <span className="text-[13px] text-[var(--ink-900)]">No notes yet</span>
+      <span className="max-w-[40ch] text-[11px] leading-[1.55] text-[var(--ink-500)]">
+        Write down what you saw on this point — it stays with the point for when
+        you watch it again.
+      </span>
+      <button
+        type="button"
+        onClick={() => document.getElementById(COMPOSER_ID)?.focus()}
+        className="mt-[3px] w-fit cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+      >
+        Add the first note
+      </button>
+    </div>
+  );
+}
+
+/** The reply field's id, so the empty thread's action can put the caret in it. */
+const COMPOSER_ID = "film-point-note-input";
 
 function StepButton({
   direction,
@@ -455,7 +520,7 @@ function Thread({ notes }: { notes: NotesThread }) {
           </button>
         </p>
       ) : notes.notes.length === 0 ? (
-        <p className="text-micro py-1">No notes on this point yet.</p>
+        <EmptyThread />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto">
           {hidden > 0 && (
@@ -566,6 +631,7 @@ function Composer({ onSend }: { onSend: (body: string) => Promise<boolean> }) {
       className="mt-3 flex h-10 shrink-0 items-center gap-2 rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] pr-1.5 pl-3 transition-[border-color,box-shadow] duration-200 focus-within:border-[var(--field-ring)] focus-within:shadow-[var(--focus-ring-field)]"
     >
       <input
+        id={COMPOSER_ID}
         value={draft}
         maxLength={NOTE_MAX_LENGTH}
         onChange={(e) => setDraft(e.target.value)}

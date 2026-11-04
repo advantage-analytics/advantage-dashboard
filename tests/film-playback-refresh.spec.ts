@@ -3836,7 +3836,7 @@ test("the card reads the point in one line and opens an empty thread with a repl
   await expect(card.locator(".text-micro").first()).toContainText(
     "Set 1 · Game",
   );
-  await expect(card.getByText("No notes on this point yet.")).toBeVisible();
+  await expect(card.getByText("No notes yet")).toBeVisible();
   const reply = card.getByRole("textbox", { name: "Add a note on this point" });
   await expect(reply).toBeVisible();
   // Send stays off until there is something to send.
@@ -3864,7 +3864,7 @@ test("on a read-only report the card draws no bookmark, tags, thread or reply fi
   await expect(
     card.getByRole("button", { name: "Copy link to this point" }),
   ).toHaveCount(0);
-  await expect(card.getByText("No notes on this point yet.")).toHaveCount(0);
+  await expect(card.getByText("No notes yet")).toHaveCount(0);
 });
 
 /* -------------------------------------------------------------------------
@@ -4274,4 +4274,15 @@ test("Advanced filters… opens the 340px drawer over the list, counting the dra
   await expect(drawer).toBeVisible();
   await drawer.getByRole("button", { name: "Close filters" }).click();
   await expect(drawer).toHaveCount(0);
+});
+
+test("before the first point the card says so and offers the first point", async ({
+  page,
+}) => {
+  await openShell(page, "card-no-point");
+  const card = page.locator(CARD);
+  await expect(card.getByText("No point playing")).toBeVisible();
+  await card.getByRole("button", { name: "Go to the first point" }).click();
+  await expect.poll(() => cardPoint(page)).toBe("a");
+  await expect(card.getByText("No point playing")).toHaveCount(0);
 });
