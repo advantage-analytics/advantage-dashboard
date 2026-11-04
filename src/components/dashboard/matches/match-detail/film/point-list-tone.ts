@@ -111,3 +111,40 @@ export const ROW_TONE = {
     restingInk: "rgba(255,255,255,0.75)",
   },
 } satisfies Record<FilmListTone, Record<string, unknown>>;
+
+/**
+ * The playing point's shot well, per tone.
+ *
+ * Dark is the room's drawer: a recessed `rgba(0,0,0,0.28)` strip under the
+ * row, and the playing shot is the lightest row in it. Light is the report
+ * column (canvas "W-E chat"): the open point and its shots are ONE surface —
+ * `wrap` puts the row and the well on the same `--surface-subtle` card, a
+ * hairline separates the shots from the row, and the playing shot is the one
+ * white row, the light mirror of the room's lit row.
+ */
+export const WELL_TONE = {
+  light: {
+    wrap: "overflow-hidden rounded-[var(--radius-element)] bg-[var(--surface-subtle)]",
+    inner:
+      "flex min-h-0 flex-col overflow-hidden pb-1 shadow-[inset_0_1px_0_rgba(0,0,0,0.05)]",
+    rowPad: "px-3",
+    lit: "bg-[var(--surface-card)] shadow-[inset_0_1px_0_rgba(0,0,0,0.04),inset_0_-1px_0_rgba(0,0,0,0.04)]",
+    rest: "hover:bg-[rgba(0,0,0,0.03)]",
+    order: "var(--ink-500)",
+    muted: "var(--ink-700)",
+    stroke: "var(--ink-700)",
+    strokeLit: "var(--ink-900)",
+  },
+  dark: {
+    wrap: null,
+    inner:
+      "flex min-h-0 flex-col overflow-hidden bg-[rgba(0,0,0,0.28)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]",
+    rowPad: "px-[14px]",
+    lit: "bg-[rgba(255,255,255,0.12)]",
+    rest: "hover:bg-[rgba(255,255,255,0.05)]",
+    order: "rgba(255,255,255,0.35)",
+    muted: "rgba(255,255,255,0.5)",
+    stroke: "rgba(255,255,255,0.72)",
+    strokeLit: "#FFFFFF",
+  },
+} satisfies Record<FilmListTone, Record<string, unknown>>;

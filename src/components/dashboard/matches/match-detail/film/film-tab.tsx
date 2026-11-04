@@ -38,7 +38,12 @@ import {
   stepShot,
   type ShotStop,
 } from "./film-shots";
-import { FilmThisPoint } from "./film-this-point";
+import {
+  FilmPointCard,
+  type NotesThread,
+  type PointTagsControl,
+} from "./film-point-card";
+import { usePointNotes } from "./use-point-notes";
 import {
   activeStopAt,
   displayedPointId as displayedPointOf,
@@ -718,14 +723,8 @@ function FilmRoom({
   usePublishFilmHead(filmHead);
   // The card always shows the PLAYING point (T22 reverts T20's hold): like the
   // scoreboard, court and transport counter beside it, it follows the film.
-  // Only the shell list and the room drawer keep follow-or-hold.
-  const pointShots = useMemo(
-    () =>
-      activePoint
-        ? allShotStops.filter((s) => s.point.id === activePoint.id)
-        : [],
-    [allShotStops, activePoint],
-  );
+  // Only the shell list and the room drawer keep follow-or-hold — and the
+  // list's well is where this point's shots now live.
 
   const handleSelectShot = useCallback((stop: ShotStop) => {
     playerRef.current?.seekTo(stop.start);
@@ -837,6 +836,41 @@ function FilmRoom({
   const toggleSavedActive = useCallback(() => {
     if (activePointId) void handleToggleSaved(activePointId);
   }, [activePointId, handleToggleSaved]);
+
+  // Notes and tags for the card under the player. Never on a read-only
+  // report (share page, sample): nothing is loaded and the card draws neither.
+  const pointIds = useMemo(() => points.map((p) => p.id), [points]);
+  const pointNotes = usePointNotes({
+    supabase,
+    matchId: match.id,
+    pointIds,
+    enabled: !readOnly,
+  });
+  const annotate = !readOnly && pointNotes.inWorkspace;
+  const forActive = activePointId ? pointNotes.forPoint(activePointId) : null;
+  const cardNotes = useMemo<NotesThread | undefined>(() => {
+    if (!annotate || !activePointId || !forActive) return undefined;
+    return {
+      status: pointNotes.status,
+      notes: forActive.notes,
+      authors: pointNotes.authors,
+      viewerId: pointNotes.viewerId,
+      onSend: (body) => pointNotes.send(activePointId, body),
+      onDelete: (noteId) => void pointNotes.remove(noteId),
+      onRetry: pointNotes.retry,
+    };
+  }, [annotate, activePointId, forActive, pointNotes]);
+  const cardTags = useMemo<PointTagsControl | undefined>(() => {
+    if (!annotate || !activePointId || !forActive || !pointNotes.canTag)
+      return undefined;
+    return {
+      vocabulary: pointNotes.vocabulary,
+      applied: forActive.tags,
+      onAdd: (tag) => void pointNotes.addTag(activePointId, tag),
+      onCreate: (name) => void pointNotes.createAndAdd(activePointId, name),
+      onRemove: (tag) => void pointNotes.removeTag(activePointId, tag),
+    };
+  }, [annotate, activePointId, forActive, pointNotes]);
   const toggleSavedActiveOrNone = readOnly ? undefined : toggleSavedActive;
 
   /**
@@ -1161,15 +1195,19 @@ function FilmRoom({
             // calls this first: stepping re-follows the film.
             onStep={followPlayback}
           />
-          <FilmThisPoint
+          <FilmPointCard
             point={activePoint}
-            shots={pointShots}
             position={position}
-            activeShotId={activeShot?.stop.shot.id ?? null}
-            onSelectShot={handleSelectShot}
+            matchId={match.id}
             // The same step the transport takes, so the widget's stepper walks
             // the applied cut rather than opening a second stepping path.
             onStep={handleStep}
+            onToggleSaved={readOnly ? undefined : toggleSavedActive}
+            // The link is to the dashboard report, which a share-page or
+            // sample reader cannot open.
+            canCopyLink={!readOnly}
+            tags={cardTags}
+            notes={cardNotes}
           />
         </div>
 
@@ -1192,6 +1230,12 @@ function FilmRoom({
               activeEnd={active?.stop.end ?? 0}
               onSelect={handleSelect}
               onToggleSaved={toggleSaved}
+              // The playing point unfolds its shots in place, as the room's
+              // drawer does — the shot table no longer lives in a card under
+              // the player (canvas "W-E chat").
+              shotStops={allShotStops}
+              activeShotId={activeShot?.stop.shot.id ?? null}
+              onSelectShot={handleSelectShot}
               // Only this column gets the door; the room's own drawer renders
               // the same component without it.
               onOpenInRoom={openPointInRoom}

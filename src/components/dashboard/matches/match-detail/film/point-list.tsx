@@ -71,7 +71,12 @@ import {
   type FilmListFilters,
 } from "./film-list-filters";
 import { useFollowScroll } from "./use-follow-scroll";
-import { LIST_TONE, ROW_TONE, type FilmListTone } from "./point-list-tone";
+import {
+  LIST_TONE,
+  ROW_TONE,
+  WELL_TONE,
+  type FilmListTone,
+} from "./point-list-tone";
 
 // The keep-in-view and hold-intent constants moved with their effects into
 // `use-follow-scroll.ts`; re-exported so the specs that read them here still do.
@@ -141,8 +146,10 @@ export {
  * only that point's, so stepping to the next point refolds the last one. It is
  * not a second list and not a tab: the well is a sibling of the row inside the
  * point's own fragment, so it inherits the row's 14px side padding and runs
- * edge to edge under it. Without those props nothing changes, which is how the
- * in-report column (`film-tab.tsx`) keeps the list it has always had.
+ * edge to edge under it. Without those props there is no well. Both tones
+ * draw one: the room's is a recessed dark strip, the report column's
+ * (canvas "W-E chat", `WELL_TONE.light`) puts the row and its shots on one
+ * `--surface-subtle` card.
  *
  * ── Follow the film, or hold the point you are reading ──────────────────────
  *
@@ -638,13 +645,23 @@ export const PointList = memo(function PointList({
                     {group.points.map((point) => {
                       const isYou = point.wonByPlayer1 === youIsPlayer1;
                       const isActive = point.id === activePointId;
+                      const isOpen = point.id === displayedPointId && wellOpen;
+                      // Light: the open point is one card — the row and its
+                      // shots share a wrapper and its wash. Dark keeps the bare
+                      // fragment below.
+                      const openWrap = isOpen ? WELL_TONE[tone].wrap : null;
+                      const Group = openWrap ? "div" : Fragment;
                       return (
                         // A fragment, not a wrapper: the well is the row's
                         // SIBLING in the game's own column, so it spans the
                         // drawer edge to edge under the row rather than being
-                        // boxed beside it. With no well the DOM is the row alone,
-                        // exactly as the report column has always drawn it.
-                        <Fragment key={point.id}>
+                        // boxed beside it. With no well the DOM is the row alone.
+                        <Group
+                          key={point.id}
+                          {...(openWrap
+                            ? { className: openWrap, "data-open-point": "" }
+                            : {})}
+                        >
                           <PointRow
                             point={point}
                             title={pointResultLabel(point, labelContext)}
@@ -673,7 +690,7 @@ export const PointList = memo(function PointList({
                             The lit shot inside it is the playing shot, which
                             is in this well only when the displayed point is
                             the playing point. */}
-                          {point.id === displayedPointId && wellOpen && (
+                          {isOpen && (
                             <ShotWell
                               stops={wellStops}
                               activeShotId={activeShotId}
@@ -681,9 +698,10 @@ export const PointList = memo(function PointList({
                               youLastName={youLastName}
                               oppLastName={oppLastName}
                               onSelectShot={selectShot}
+                              tone={tone}
                             />
                           )}
-                        </Fragment>
+                        </Group>
                       );
                     })}
                   </div>
@@ -1150,11 +1168,12 @@ export const PointRow = memo(function PointRow({
 /**
  * The well under the playing row (H2 frame R3).
  *
- * Recessed rather than raised: `rgba(0,0,0,0.28)` behind inset hairlines top
- * and bottom, full-bleed on the row's own 14px side padding, so the shots read
- * as sitting UNDER the point rather than beside it. It is asked for only by the
- * room, where the scope is dark, so there is no light treatment here — a second
- * one would be a treatment nothing mounts.
+ * Dark (the room): recessed rather than raised — `rgba(0,0,0,0.28)` behind
+ * inset hairlines top and bottom, full-bleed on the row's own 14px side
+ * padding, so the shots read as sitting UNDER the point rather than beside it.
+ * Light (the report column): the row's own wash continues under it and a
+ * hairline divides the shots from the row; the playing shot is the white row.
+ * The paints are `WELL_TONE`'s.
  *
  * Columns are the phase-1 shot feed narrowed to `# · player · stroke ·
  * placement · result`, and the strings are `shotRowCells`' — the same builder
@@ -1173,6 +1192,7 @@ function ShotWell({
   youLastName,
   oppLastName,
   onSelectShot,
+  tone,
 }: {
   stops: ShotStop[];
   activeShotId: string | null;
@@ -1180,6 +1200,7 @@ function ShotWell({
   youLastName: string;
   oppLastName: string;
   onSelectShot: (stop: ShotStop) => void;
+  tone: FilmListTone;
 }) {
   // The well is one point's timed shots; its numbers come from that point's
   // FULL shot list, so both serves read 1 and the return 2 even when a serve
@@ -1197,7 +1218,7 @@ function ShotWell({
     // the well slide down with the track instead of jumping when it mounts;
     // the rows' own stagger plays inside the clip from the same instant.
     <div data-shot-well className="film-shot-well-open">
-      <div className="flex min-h-0 flex-col overflow-hidden bg-[rgba(0,0,0,0.28)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]">
+      <div className={WELL_TONE[tone].inner}>
         {stops.map((stop, i) => (
           <ShotWellRow
             key={stop.shot.id}
@@ -1210,6 +1231,7 @@ function ShotWell({
             }
             isLit={stop.shot.id === activeShotId}
             onSelect={onSelectShot}
+            tone={tone}
           />
         ))}
       </div>
@@ -1241,7 +1263,9 @@ const ShotWellRow = memo(function ShotWellRow({
   playerName,
   isLit,
   onSelect,
+  tone,
 }: {
+  tone: FilmListTone;
   stop: ShotStop;
   /** Place in the well, 1-based — the reveal stagger only. */
   order: number;
@@ -1254,6 +1278,7 @@ const ShotWellRow = memo(function ShotWellRow({
   onSelect: (stop: ShotStop) => void;
 }) {
   const cells = shotRowCells(stop.shot, rallyNumber, playerName, null, hand);
+  const w = WELL_TONE[tone];
 
   return (
     <button
@@ -1268,42 +1293,32 @@ const ShotWellRow = memo(function ShotWellRow({
       // above and replays nothing.
       style={{ animationDelay: `${shotRowRevealDelay(order)}ms` }}
       className={cn(
-        "film-shot-row-in grid h-[34px] w-full shrink-0 cursor-pointer items-center gap-x-2 px-[14px] text-left transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        "film-shot-row-in grid h-[34px] w-full shrink-0 cursor-pointer items-center gap-x-2 text-left transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        w.rowPad,
         SHOT_COLUMNS,
-        isLit
-          ? "bg-[rgba(255,255,255,0.12)]"
-          : "hover:bg-[rgba(255,255,255,0.05)]",
+        isLit ? w.lit : w.rest,
       )}
     >
-      <span
-        className="mono tabular text-[10px]"
-        style={{ color: "rgba(255,255,255,0.35)" }}
-      >
+      <span className="mono tabular text-[10px]" style={{ color: w.order }}>
         {cells.order}
       </span>
-      <span
-        className="truncate text-[11px]"
-        style={{ color: "rgba(255,255,255,0.5)" }}
-      >
+      <span className="truncate text-[11px]" style={{ color: w.muted }}>
         {cells.player}
       </span>
-      {/* The one cell that carries the lit state: full white while it plays,
-          72% white the rest of the time. */}
+      {/* The one cell that carries the lit state: the strongest ink while it
+          plays, a step quieter the rest of the time. */}
       <span
         className="truncate text-[11px] font-medium"
-        style={{ color: isLit ? "#FFFFFF" : "rgba(255,255,255,0.72)" }}
+        style={{ color: isLit ? w.strokeLit : w.stroke }}
       >
         {cells.stroke}
       </span>
-      <span
-        className="truncate text-[11px]"
-        style={{ color: "rgba(255,255,255,0.5)" }}
-      >
+      <span className="truncate text-[11px]" style={{ color: w.muted }}>
         {cells.placement}
       </span>
       <span
         className="truncate text-right text-[11px]"
-        style={{ color: "rgba(255,255,255,0.5)" }}
+        style={{ color: w.muted }}
       >
         {cells.result}
       </span>

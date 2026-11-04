@@ -40,6 +40,7 @@ export const LIVE_DB_SPECS = [
   "personal-home-scope.spec.ts",
   "pilot-terms-rls.spec.ts",
   "point-bookmarks-db.spec.ts",
+  "point-notes-rls.spec.ts",
   "program-member-avatars.spec.ts",
   "program-owner-name-live.spec.ts",
   "rls-workspace-isolation.spec.ts",
