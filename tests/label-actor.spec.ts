@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   requireLabelActor,
+  requireLabelReader,
   type AdminCheck,
   type LabelActorDependencies,
 } from "@/lib/services/programs/admin-guard";
@@ -94,6 +95,90 @@ const session = (status: string, assignedTo: string | null): Row => ({
 const users = (isLabeller: boolean): Row[] => [
   { id: LABELLER, is_labeller: isLabeller },
 ];
+
+test.describe("requireLabelReader", () => {
+  /** The reader's answer for a non-admin signed in as `uid`. */
+  async function readerFor(options: {
+    status: string;
+    assignedTo: string | null;
+    isLabeller?: boolean;
+    uid?: string;
+  }) {
+    const d = deps({
+      admin: { ok: false, status: 403 },
+      uid: options.uid ?? LABELLER,
+      tables: {
+        users: users(options.isLabeller ?? true),
+        label_sessions: [session(options.status, options.assignedTo)],
+      },
+    });
+    return requireLabelReader(SESSION_A, d.deps);
+  }
+
+  test("an admin reads any session without reading it", async () => {
+    const d = deps({
+      admin: { ok: true, id: ADMIN },
+      tables: { label_sessions: [session("complete", null)] },
+    });
+    expect(await requireLabelReader(SESSION_A, d.deps)).toEqual({
+      id: ADMIN,
+      kind: "admin",
+    });
+    expect(d.reads).toEqual([]);
+  });
+
+  test("the assigned labeller reads a labelling session", async () => {
+    expect(
+      await readerFor({ status: "labelling", assignedTo: LABELLER }),
+    ).toEqual({ id: LABELLER, kind: "labeller" });
+  });
+
+  test("the assigned labeller reads their submitted session, which the actor gate refuses", async () => {
+    expect(
+      await readerFor({ status: "submitted", assignedTo: LABELLER }),
+    ).toEqual({ id: LABELLER, kind: "labeller" });
+    const d = deps({
+      admin: { ok: false, status: 403 },
+      uid: LABELLER,
+      tables: {
+        users: users(true),
+        label_sessions: [session("submitted", LABELLER)],
+      },
+    });
+    expect(await requireLabelActor(SESSION_A, d.deps)).toBeNull();
+  });
+
+  test("an unassigned or someone else's session is refused", async () => {
+    expect(await readerFor({ status: "labelling", assignedTo: null })).toBe(
+      null,
+    );
+    expect(await readerFor({ status: "submitted", assignedTo: OTHER })).toBe(
+      null,
+    );
+  });
+
+  test("a complete session is refused, even to its labeller", async () => {
+    expect(
+      await readerFor({ status: "complete", assignedTo: LABELLER }),
+    ).toBeNull();
+  });
+
+  test("an assigned user without is_labeller is refused", async () => {
+    expect(
+      await readerFor({
+        status: "labelling",
+        assignedTo: LABELLER,
+        isLabeller: false,
+      }),
+    ).toBeNull();
+  });
+
+  test("signed out is refused before any read", async () => {
+    const d = deps({ admin: { ok: false, status: 401 } });
+    expect(await requireLabelReader(SESSION_A, d.deps)).toBeNull();
+    expect(d.adminClients()).toBe(0);
+  });
+});
 
 test.describe("requireLabelActor", () => {
   test("an admin passes on an unassigned session without reading it", async () => {

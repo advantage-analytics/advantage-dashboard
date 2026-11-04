@@ -88,7 +88,7 @@ ready).
 
 ## T6 · Labeller console view at /label/[sessionId]
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3, T4, T5
 - **files:** src/app/label/[sessionId]/page.tsx (new), src/app/label/actions.ts (new), src/components/admin/labels/label-console.tsx, tests/label-console-labeller.spec.ts (new) — guesses

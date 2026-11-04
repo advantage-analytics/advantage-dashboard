@@ -52,3 +52,14 @@ is the runner's. Newest entries at the bottom.
 1. Show open-flag counts (`openCounts`) on the list rows.
 2. The label area imports `AdminPage` for its column; consider a neutral shared wrapper.
 3. Assignment dates use `shortDate()` (UTC).
+
+## T6 · Labeller console view at /label/[sessionId] — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `LabelConsole` gains `viewerKind` ("admin" default): the labeller header drops avatars, names, program and derivation, sides read "Near player"/"Far player", and Mark complete/Reopen are replaced by "Submit for review" (confirm, disabled while saves are pending) or "Submitted — waiting for review". The admin header shows "· Submitted for review" with Reopen and Mark complete on a submitted session (admin markup unchanged for labelling, pinned byte for byte). `/label/[sessionId]` gates on a new `requireLabelReader` (admin, or assigned labeller on labelling or submitted; writes still go through `requireLabelActor`), strips player names, match id, job id and derivation server-side (`labellerSession`), and opens on `firstAmberStop`. `src/app/label/actions.ts` twins the admin console actions minus seed/complete/reopen plus submit. New `labeller-view.ts`, `label-confirm.ts` submit/reopen-from-submitted kinds, `tests/label-console-labeller.spec.ts` (10) and `requireLabelReader` cases in `label-actor.spec.ts`.
+**follow-ups:**
+
+1. `src/app/label/actions.ts` and `src/app/admin/labels/actions.ts` must be kept in step by hand.
+2. Mark complete on a submitted session hides "Mark errors"; reconsider for the admin review flow.
+3. `firstAmberStop` leaves out the "Players at the wrong end" slot.
+4. Signed video URL path may carry the match id; harmless for the trial (own match) but worth checking for third-party matches.

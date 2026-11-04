@@ -340,7 +340,7 @@ export type MarksJoin = (
   points: readonly MarkablePoint[],
   options?: { hidden?: boolean },
 ) => LabelMarks;
-const sessionDefaults: SessionDependencies = {
+export const sessionDefaults: SessionDependencies = {
   ...defaults,
   loadVideo: loadJobVideo,
   buildMarks: buildJobMarks,

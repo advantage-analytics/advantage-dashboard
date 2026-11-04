@@ -153,6 +153,19 @@ export async function requireLabelActor(
   sessionId: string,
   deps: LabelActorDependencies = defaultLabelActorDependencies,
 ): Promise<LabelActor | null> {
+  return adminOrAssignedLabeller(sessionId, deps, ["labelling"]);
+}
+
+/**
+ * The shared half of `requireLabelActor` and `requireLabelReader`: an admin
+ * on `checkAdmin()` alone, else a labeller the session is assigned to whose
+ * status is one of `statuses`. Every refusal is `null`.
+ */
+async function adminOrAssignedLabeller(
+  sessionId: string,
+  deps: LabelActorDependencies,
+  statuses: readonly string[],
+): Promise<LabelActor | null> {
   const check = await deps.checkAdmin();
   if (check.ok) return { id: check.id, kind: "admin" };
   // No session at all: nothing to look up a labeller for.
@@ -182,9 +195,29 @@ export async function requireLabelActor(
   if (labeller.data?.is_labeller !== true) return null;
   if (!session.data) return null;
   if (session.data.assigned_to !== user.id) return null;
-  if (session.data.status !== "labelling") return null;
+  if (!statuses.includes(session.data.status)) return null;
 
   return { id: user.id, kind: "labeller" };
+}
+
+/**
+ * The labeller's console page's READ gate — `requireLabelActor`'s twin for
+ * looking, not writing. Same answers, one difference: a labeller may also
+ * open their own session once it is `submitted`, read-only, to see what they
+ * handed in. Admin on any session; otherwise `is_labeller` AND
+ * `assigned_to = uid` AND status `labelling` or `submitted`. A `complete`
+ * session, someone else's, or a non-labeller is `null` — the page answers
+ * `notFound()`.
+ *
+ * Only ever a page gate. Every write still goes through `requireLabelActor`
+ * (T3), which refuses a submitted session, so what this admits beyond it can
+ * be looked at and nothing more.
+ */
+export async function requireLabelReader(
+  sessionId: string,
+  deps: LabelActorDependencies = defaultLabelActorDependencies,
+): Promise<LabelActor | null> {
+  return adminOrAssignedLabeller(sessionId, deps, ["labelling", "submitted"]);
 }
 
 // ── The /label area: admin or any labeller ─────────────────────────────────
