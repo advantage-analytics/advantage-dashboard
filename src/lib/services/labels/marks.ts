@@ -50,6 +50,17 @@ import {
   type LabelSide,
 } from "./session";
 
+/**
+ * "Game cut differs" on more than this share of the match's points, and on at
+ * least `SEGMENT_SYSTEMIC_MIN` of them, is most likely the entered score being
+ * wrong rather than those points. Its marks are kept — the labeller fixed 89%
+ * of such points on the 19 complete sessions (2026-11-05) — but carry
+ * `systemic`, so they draw grey rather than flooding the match amber
+ * (marks-state.ts `reviewItemTone`).
+ */
+export const SEGMENT_SYSTEMIC_SHARE = 1 / 3;
+export const SEGMENT_SYSTEMIC_MIN = 10;
+
 /** How loudly a mark is drawn (see the file comment). */
 export type LabelMarkTier = "count" | "hint" | "hidden";
 export type LabelMarkScope = "point" | "shot";
@@ -130,7 +141,8 @@ export const LABEL_ONLY_FLAGS = {
  *   the highest of any mark. It sits on "Check the ending" 89% of the time,
  *   so it adds few amber points; it is already the same item-4 question.
  * - The match-wide "Game cut differs" is no longer hidden: those points were
- *   fixed 89% of the time, 44 of them with no other visible mark.
+ *   fixed 89% of the time, 44 of them with no other visible mark. It is
+ *   marked `systemic` and drawn grey instead (`SEGMENT_SYSTEMIC_SHARE`).
  * - `reserve_after_in` is a hint: 57% fixed, 22% winner — the base rate.
  * - `net_hit_contradicts_height` is hidden on every stroke: 51% fixed.
  * - `winner_to_error_by_bounce` is hidden: it never fired without
@@ -295,6 +307,11 @@ export interface LabelMarkParams {
     proposedGame: number | null;
     proposedServer: LabelSide | null;
     mergedWith: number | null;
+    /**
+     * The mark is on most of the match (`SEGMENT_SYSTEMIC_SHARE`): the entered
+     * score is the likelier mistake, so its item reads grey.
+     */
+    systemic: boolean;
   };
   out_ball_rally_continued: { nextHitter: LabelSide | null };
   geometry_discarded: NoParams;
@@ -491,6 +508,8 @@ function pointMarks(
               ? labelSideOf(proposed.server === "player1")
               : null,
             mergedWith: proposed?.mergedWith ?? null,
+            // Settled once every point is read, below.
+            systemic: false,
           }),
         );
         break;
@@ -810,6 +829,25 @@ export function buildLabelMarks(
   // rally's suggestions were filed under the earlier one: file each under
   // the point that holds its stroke now.
   marks.suggestions = homeShotSuggestions(marks.suggestions, points);
+
+  // "Game cut differs" on most of the match is most likely the entered score
+  // the re-cut was fitted to being wrong. The marks stay — those points were
+  // still fixed most of the time — but say so, and read grey.
+  const recut = Object.values(marks.points).filter((list) =>
+    list.some((m) => m.code === POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS),
+  ).length;
+  if (
+    recut >= SEGMENT_SYSTEMIC_MIN &&
+    recut > transcript.points.length * SEGMENT_SYSTEMIC_SHARE
+  ) {
+    for (const [pointId, list] of Object.entries(marks.points)) {
+      marks.points[pointId] = list.map((m) =>
+        m.code === POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS
+          ? { ...m, params: { ...m.params, systemic: true } }
+          : m,
+      );
+    }
+  }
 
   return marks;
 }

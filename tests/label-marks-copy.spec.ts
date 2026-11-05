@@ -83,6 +83,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
     proposedGame: 4,
     proposedServer: "p2",
     mergedWith: null,
+    systemic: false,
   },
   out_ball_rally_continued: { nextHitter: "p1" },
   geometry_discarded: {},

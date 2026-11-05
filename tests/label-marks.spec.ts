@@ -929,6 +929,49 @@ test.describe("the labels-only flags", () => {
   });
 });
 
+test.describe("Game cut differs on most of the match", () => {
+  const rallies = Array.from({ length: 12 }, (_, i) =>
+    rallyOf(i + 1, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+    ]),
+  );
+  const segmentCodes = (marks: LabelMarks) =>
+    Object.values(marks.points).flatMap((list) =>
+      list.flatMap((m) =>
+        m.code === "segment_proposal_differs"
+          ? [{ tier: m.tier, systemic: m.params.systemic }]
+          : [],
+      ),
+    );
+  const flagged = (n: number) =>
+    rallies.map((_, i) =>
+      i < n ? { flags: [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS] } : {},
+    );
+
+  test("is kept, counted and marked systemic", () => {
+    const marks = marksFor(
+      rallies,
+      rallies.map(() => "A"),
+      flagged(10),
+    );
+    expect(segmentCodes(marks)).toEqual(
+      Array.from({ length: 10 }, () => ({ tier: "count", systemic: true })),
+    );
+  });
+
+  test("on a few points it is an ordinary amber mark", () => {
+    const marks = marksFor(
+      rallies,
+      rallies.map(() => "A"),
+      flagged(3),
+    );
+    expect(segmentCodes(marks)).toEqual(
+      Array.from({ length: 3 }, () => ({ tier: "count", systemic: false })),
+    );
+  });
+});
+
 test.describe("the three tiers", () => {
   test("thirteen codes can change the score, and only they are counted", () => {
     const counted = Object.entries(LABEL_MARK_META)

@@ -85,6 +85,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
     proposedGame: 4,
     proposedServer: "p2",
     mergedWith: null,
+    systemic: false,
   },
   out_ball_rally_continued: { nextHitter: "p1" },
   geometry_discarded: {},
@@ -461,6 +462,28 @@ test.describe("tone", () => {
     const flag = reviewFlag(contradicted, marksOf({}), [contradicted]);
     expect(codes(flag, 4)).toEqual(["ending_stale"]);
     expect(tone(flag, 4)).toBe("score");
+  });
+
+  test("item 6 is grey for a match-wide Game cut differs", () => {
+    const systemic = {
+      ...sample("segment_proposal_differs"),
+      params: { ...SAMPLES.segment_proposal_differs, systemic: true },
+    } as LabelMark;
+    expect(tone(flagOf([systemic]), 6)).toBe("data");
+    // A tiebreak off 6–6 beside it still makes the item amber.
+    expect(
+      tone(flagOf([systemic, sample("tiebreak_score_off_six_all")]), 6),
+    ).toBe("score");
+  });
+
+  test("Serve replayed, a hint, settles once its point is edited", () => {
+    const untouched = flagOf([sample("reserve_after_in")]);
+    expect(untouched?.items.find((i) => i.id === 2)?.state).toBe("open");
+    const edited = flagOf(
+      [sample("reserve_after_in")],
+      point({ status: "edited" }),
+    );
+    expect(edited?.items.find((i) => i.id === 2)?.state).toBe("settled");
   });
 
   test("item 6 is grey for the serve-side marks alone", () => {
