@@ -14,10 +14,7 @@
  */
 
 import type { createAdminClient } from "@/lib/supabase/admin";
-import {
-  mergeDerivationQuality,
-  readDerivationQuality,
-} from "./derivation-quality";
+import { mergeDerivationQuality } from "./derivation-quality";
 import { readReprocessParent } from "./reprocess";
 import { persistTranscript } from "./persist-transcript";
 import {
@@ -166,27 +163,34 @@ export async function deriveAndPublish(params: {
     ) {
       // Refusals are decided before the delete (see persistTranscript), so
       // the rows the job published are still there; so is its clean status.
+      //
+      // A reprocess child becomes the match's newest completed job, and the
+      // readers take two facts about the published rows from that job: its
+      // `derivation_version` (no version reads as "processed", Stats pending —
+      // resolveAnalysisStatus) and the labelled `fold` apply-session.ts wrote
+      // on the parent. The rows did not change, so both come across from the
+      // parent — the version in the same write as `completed`, so no reader
+      // (the realtime hook included) ever sees the child completed without it.
+      const inherited =
+        lineage.reprocess && lineage.parentId
+          ? await readParentPublication(supabase, lineage.parentId)
+          : null;
       await supabase
         .from("processing_jobs")
-        .update({ status: "completed" })
+        .update({
+          status: "completed",
+          ...(inherited?.derivationVersion
+            ? { derivation_version: inherited.derivationVersion }
+            : {}),
+        })
         .eq("id", jobId);
-      // A reprocess child becomes the match's newest completed job, and the
-      // report reads the labelled `fold` from that job (apply-session.ts
-      // wrote it on the parent). Carry it across so the rows it describes —
-      // which did not change — keep describing themselves the same way.
-      if (lineage.reprocess && lineage.parentId) {
-        const parentQuality = await readDerivationQuality(
+      if (inherited && "fold" in inherited.quality) {
+        await mergeDerivationQuality(
           supabase,
-          lineage.parentId,
-        ).catch(() => ({}) as Record<string, unknown>);
-        if ("fold" in parentQuality) {
-          await mergeDerivationQuality(
-            supabase,
-            jobId,
-            { fold: parentQuality.fold },
-            LOG,
-          );
-        }
+          jobId,
+          { fold: inherited.quality.fold },
+          LOG,
+        );
       }
       console.warn(`${LOG} rebuild refused; published rows kept`, {
         jobId,
@@ -384,4 +388,42 @@ export async function deriveAndPublish(params: {
     await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
     return { ok: false, reason };
   }
+}
+
+/**
+ * What a reprocess child inherits from the completed parent whose rows it
+ * kept: the version those rows were derived under and the parent's
+ * `derivation_quality`. A failed read inherits nothing — the child is still
+ * kept `completed`, and logs say why its report reads "Stats pending".
+ */
+async function readParentPublication(
+  supabase: ReturnType<typeof createAdminClient>,
+  parentId: string,
+): Promise<{
+  derivationVersion: string | null;
+  quality: Record<string, unknown>;
+}> {
+  const { data, error } = await supabase
+    .from("processing_jobs")
+    .select("derivation_version, derivation_quality")
+    .eq("id", parentId)
+    .maybeSingle<{
+      derivation_version: string | null;
+      derivation_quality: Record<string, unknown> | null;
+    }>();
+  if (error || !data) {
+    console.error(`${LOG} could not read the reprocess parent`, {
+      parentId,
+      error: error?.message ?? "no row",
+    });
+    return { derivationVersion: null, quality: {} };
+  }
+  const quality = data.derivation_quality;
+  return {
+    derivationVersion: data.derivation_version,
+    quality:
+      quality && typeof quality === "object" && !Array.isArray(quality)
+        ? quality
+        : {},
+  };
 }

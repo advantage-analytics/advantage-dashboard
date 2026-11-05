@@ -23,6 +23,11 @@ import {
 } from "@/lib/services/splitstep/reprocess";
 import type { ResubmitResult } from "@/lib/services/splitstep/resubmit-job";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
+import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
+import {
+  liveAnalysisPatch,
+  withLiveAnalysis,
+} from "@/hooks/use-live-match-analysis";
 
 /**
  * The admin reprocess path, offline: no Supabase, no vendor, no mail.
@@ -252,6 +257,7 @@ function reprocessWorld(opts: {
       match_id: "match",
       status: "completed",
       resubmitted_from_job_id: null,
+      derivation_version: "v-parent",
       derivation_quality: { grade: "B", fold: LABELS_FOLD },
     },
   };
@@ -325,6 +331,26 @@ test.describe("a reprocess child's completion over a hand-labelled match", () =>
     ).toBe('["hand_labelled"]');
     expect(world.jobs.child.status).toBe("completed");
     expect(world.jobs.parent.status).toBe("completed");
+    // Without the version a completed job reads "processed" (Stats pending),
+    // and the child is now the match's newest job — so it inherits the
+    // version its kept rows were derived under, in the same write.
+    expect(world.jobs.child.derivation_version).toBe("v-parent");
+    expect(
+      resolveAnalysisStatus(
+        world.jobs.child.status as string,
+        world.jobs.child.derivation_version as string,
+      ),
+    ).toBe("completed");
+    const completedWrite = world.calls.find(
+      (c) =>
+        c.table === "processing_jobs" &&
+        c.op === "update" &&
+        (c.payload as Row).status === "completed",
+    );
+    expect(completedWrite?.payload).toEqual({
+      status: "completed",
+      derivation_version: "v-parent",
+    });
     // The labels' fold follows the newest completed job; grading's keys stay.
     expect(world.jobs.child.derivation_quality).toEqual({
       grade: "A",
@@ -664,5 +690,62 @@ test.describe("normalizeStroke — ball_ prefix fallback", () => {
       heightAtNetM: null,
       angVelMagRpm: 1500,
     });
+  });
+});
+
+// ── The realtime hook ──────────────────────────────────────────────────────
+
+test.describe("withLiveAnalysis and a reprocess child", () => {
+  const shown = {
+    status: "completed" as const,
+    progressPercent: 100,
+    jobId: "parent",
+    attemptsUsed: 1,
+  };
+  const childRow = (
+    status: string,
+    derivation_version: string | null = null,
+  ) => ({
+    id: "child",
+    match_id: "match",
+    status,
+    derivation_version,
+    created_at: "2026-11-05T00:00:00Z",
+    updated_at: "2026-11-05T00:00:00Z",
+    resubmitted_from_job_id: "parent",
+    video_object_key: "v",
+    results_object_key: null,
+    error_message: null,
+    error_code: null,
+    error_category: null,
+    error_step: null,
+    upload_progress_percent: null,
+    external_job_id: "ext",
+  });
+
+  test("a finished report is not replaced by the reprocess child's progress or failure", () => {
+    for (const status of [
+      "submitting",
+      "queued",
+      "processing",
+      "deriving",
+      "failed",
+    ]) {
+      const patch = liveAnalysisPatch(childRow(status));
+      expect(withLiveAnalysis(shown, patch)).toBe(shown);
+    }
+  });
+
+  test("the child completing with its inherited version does merge", () => {
+    const patch = liveAnalysisPatch(childRow("completed", "v-parent"));
+    expect(withLiveAnalysis(shown, patch)).toMatchObject({
+      status: "completed",
+    });
+  });
+
+  test("an ordinary retry of a failed analysis still updates live", () => {
+    const failed = { ...shown, status: "failed" as const };
+    const patch = liveAnalysisPatch(childRow("queued"));
+    expect(withLiveAnalysis(failed, patch).status).toBe("queued");
   });
 });

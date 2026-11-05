@@ -109,6 +109,11 @@ function parseBody(
   return { ok: true, targets, force: body.force === true };
 }
 
+/** A refused resolve, in the shape `resolveParent` answers. */
+function unresolved(matchId: string | null, error: string, code: string) {
+  return { ok: false as const, matchId, error, code };
+}
+
 /** The parent a target names: a job id directly, a match by its newest completed job. */
 async function resolveParent(
   supabase: SupabaseClient,
@@ -124,20 +129,10 @@ async function resolveParent(
       .eq("id", target.jobId)
       .maybeSingle();
     if (error) {
-      return {
-        ok: false,
-        matchId: null,
-        error: error.message,
-        code: "read_failed",
-      };
+      return unresolved(null, error.message, "read_failed");
     }
     if (!data) {
-      return {
-        ok: false,
-        matchId: null,
-        error: "Job not found.",
-        code: "not_found",
-      };
+      return unresolved(null, "Job not found.", "not_found");
     }
     const row = data as { id: string; match_id: string };
     return { ok: true, matchId: row.match_id, jobId: row.id };
@@ -155,20 +150,14 @@ async function resolveParent(
     .limit(1)
     .maybeSingle();
   if (error) {
-    return {
-      ok: false,
-      matchId: target.matchId,
-      error: error.message,
-      code: "read_failed",
-    };
+    return unresolved(target.matchId, error.message, "read_failed");
   }
   if (!data) {
-    return {
-      ok: false,
-      matchId: target.matchId,
-      error: "This match has no completed analysis to reprocess.",
-      code: "not_completed",
-    };
+    return unresolved(
+      target.matchId,
+      "This match has no completed analysis to reprocess.",
+      "not_completed",
+    );
   }
   return {
     ok: true,

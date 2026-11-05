@@ -534,10 +534,6 @@ export async function resubmitJob(params: {
     };
   }
 
-  // A cancelled row — the athlete withdrew it from the vendor's queue before
-  // it ran — spends no attempt, so cancel → "Send for analysis again" cycles
-  // never use up the retries meant for vendor failures. `chainAttempts()`
-  // counts the same way, so the "retry" / "wait_or_ask" copy agrees.
   // A chain that holds a completed job has already been analysed; the only
   // way on from there is an admin reprocess. This is what stops a failed
   // reprocess child from being auto-retried (on the athlete's quota) by the
@@ -550,6 +546,10 @@ export async function resubmitJob(params: {
     };
   }
 
+  // A cancelled row — the athlete withdrew it from the vendor's queue before
+  // it ran — spends no attempt, so cancel → "Send for analysis again" cycles
+  // never use up the retries meant for vendor failures. `chainAttempts()`
+  // counts the same way, so the "retry" / "wait_or_ask" copy agrees.
   const attemptsSpent = chain.filter((j) => countsAsAttempt(j.status)).length;
   if (reprocess) {
     console.log(`${LOG} reprocess — attempt ceiling not applied`, {
@@ -855,8 +855,7 @@ export async function resubmitJob(params: {
   //
   //    A reprocess reserves nothing: vendor reprocessing is not billable, so
   //    no `processing_usage` row is written for the child — and so none is
-  //    released if it fails below (`spent` stays false).
-  const spent = !reprocess;
+  //    released if it fails below (`!reprocess` guards the release).
   let reserved: Awaited<ReturnType<typeof reserveForChild>>;
   if (reprocess) {
     console.log(`${LOG} reprocess — quota bypassed, nothing reserved`, {
@@ -1036,7 +1035,7 @@ export async function resubmitJob(params: {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`${LOG} resubmission failed`, { childId, message });
 
-    if (spent) await io.releaseQuota(childId);
+    if (!reprocess) await io.releaseQuota(childId);
     try {
       await io.markUrlRetired(childId);
     } catch {
