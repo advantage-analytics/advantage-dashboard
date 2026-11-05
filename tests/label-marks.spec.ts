@@ -174,11 +174,9 @@ test.describe("buildLabelMarks on the clean fixture", () => {
               side(point.shots[i + 1].is_player1),
             );
           }
+          // Hidden on every stroke since 2026-11-05 (marks.ts).
           if (m.code === "net_hit_contradicts_height") {
-            // A hint only where it bears on the ending: the last stroke.
-            expect(m.tier).toBe(
-              i === point.shots.length - 1 ? "hint" : "hidden",
-            );
+            expect(m.tier).toBe("hidden");
           }
           if (m.code === "geometry_discarded") expect(m.tier).toBe("hidden");
         }
@@ -931,6 +929,49 @@ test.describe("the labels-only flags", () => {
   });
 });
 
+test.describe("Game cut differs on most of the match", () => {
+  const rallies = Array.from({ length: 12 }, (_, i) =>
+    rallyOf(i + 1, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+    ]),
+  );
+  const segmentCodes = (marks: LabelMarks) =>
+    Object.values(marks.points).flatMap((list) =>
+      list.flatMap((m) =>
+        m.code === "segment_proposal_differs"
+          ? [{ tier: m.tier, systemic: m.params.systemic }]
+          : [],
+      ),
+    );
+  const flagged = (n: number) =>
+    rallies.map((_, i) =>
+      i < n ? { flags: [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS] } : {},
+    );
+
+  test("is kept, counted and marked systemic", () => {
+    const marks = marksFor(
+      rallies,
+      rallies.map(() => "A"),
+      flagged(10),
+    );
+    expect(segmentCodes(marks)).toEqual(
+      Array.from({ length: 10 }, () => ({ tier: "count", systemic: true })),
+    );
+  });
+
+  test("on a few points it is an ordinary amber mark", () => {
+    const marks = marksFor(
+      rallies,
+      rallies.map(() => "A"),
+      flagged(3),
+    );
+    expect(segmentCodes(marks)).toEqual(
+      Array.from({ length: 3 }, () => ({ tier: "count", systemic: false })),
+    );
+  });
+});
+
 test.describe("the three tiers", () => {
   test("thirteen codes can change the score, and only they are counted", () => {
     const counted = Object.entries(LABEL_MARK_META)
@@ -941,7 +982,7 @@ test.describe("the three tiers", () => {
       "last_call_overruled",
       "last_shot_unresolved",
       "pick_winner",
-      "reserve_after_in",
+      "result_type_unknown",
       "same_player_consecutive",
       "score_side_mismatch",
       "second_serve_called_out",
@@ -951,8 +992,8 @@ test.describe("the three tiers", () => {
       "winner_disputed",
       "winner_guessed",
     ]);
-    // “Net or out?” is a hint on the point's last stroke only.
-    expect(netHitTier(true)).toBe("hint");
+    // “Net or out?” is hidden wherever it sits (2026-11-05).
+    expect(netHitTier(true)).toBe("hidden");
     expect(netHitTier(false)).toBe("hidden");
   });
 
@@ -1010,7 +1051,7 @@ test.describe("the three tiers", () => {
     expect(shownMarks.serveSides).toEqual(cleanMarks.serveSides);
   });
 
-  test("“Net or out?” is a hint on the point's last stroke only", () => {
+  test("“Net or out?” is hidden on every stroke, the last one too", () => {
     const rally = rallyOf(1, [
       ["A", "serve"],
       ["B", "groundstroke"],
@@ -1026,23 +1067,10 @@ test.describe("the three tiers", () => {
     ];
     const [first, , last] = rally.strokes.map((s) => `s${s.eventId}`);
 
-    // On the last stroke: a hint, on that shot.
-    const onLast = marksFor([rally], ["A"], netHit([2]));
-    expect(onLast.shots).toEqual({
-      [last]: [
-        {
-          code: "net_hit_contradicts_height",
-          tier: "hint",
-          scope: "shot",
-          params: {},
-        },
-      ],
-    });
-
-    // Mid-rally: nothing at all in what the console is handed…
-    const mid = marksFor([rally], ["A"], netHit([0, 2]));
-    expect(Object.keys(mid.shots)).toEqual([last]);
-    // …and hidden in the full reading.
+    // Nothing at all in what the console is handed, last stroke or not…
+    const shown = marksFor([rally], ["A"], netHit([0, 2]));
+    expect(shown.shots).toEqual({});
+    // …and hidden in the full reading, on the stroke it was raised on.
     const full = buildLabelMarks(
       transcriptOf([rally], ["A"], netHit([0, 2])),
       [rally],
@@ -1050,6 +1078,6 @@ test.describe("the three tiers", () => {
       { hidden: true },
     );
     expect(full.shots[first].map((m) => m.tier)).toEqual(["hidden"]);
-    expect(full.shots[last].map((m) => m.tier)).toEqual(["hint"]);
+    expect(full.shots[last].map((m) => m.tier)).toEqual(["hidden"]);
   });
 });

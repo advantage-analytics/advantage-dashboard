@@ -72,6 +72,9 @@ async function plan(db: AdminClient, sessionId: string): Promise<Move[]> {
   return moves;
 }
 
+/** How close a stored landing must be to the one read to count as unchanged. */
+const SAME_LANDING_M = 1e-6;
+
 /** Move each stroke's landing from one end of `move` to the other. */
 async function write(
   db: AdminClient,
@@ -91,8 +94,13 @@ async function write(
       })
       .eq("id", move.shotId)
       .eq("status", "kept")
-      .eq("landing_x", from.x)
-      .eq("landing_y", from.y)
+      // A window, not `eq`: a double such as 4.775 does not round-trip
+      // through the filter exactly, and an exact match then skipped strokes
+      // nobody had touched (2026-11-05).
+      .gte("landing_x", from.x - SAME_LANDING_M)
+      .lte("landing_x", from.x + SAME_LANDING_M)
+      .gte("landing_y", from.y - SAME_LANDING_M)
+      .lte("landing_y", from.y + SAME_LANDING_M)
       .select("id");
     if (error) throw new Error(`${move.shotId}: ${error.message}`);
     if (data?.length) written += 1;
