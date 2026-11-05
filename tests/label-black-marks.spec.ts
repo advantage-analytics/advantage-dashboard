@@ -240,12 +240,10 @@ const HIDDEN_ON_SHOT: LabelMark[] = [
   mark("out_ball_rally_continued", { nextHitter: "p2" }),
   mark("geometry_discarded", {}),
 ];
-const EVERY_HINT: LabelMark[] = [
-  mark("ending_suspect_line", {}),
-  mark("winner_to_error_by_bounce", { loser: "p1" }),
-  mark("result_type_unknown", {}),
-];
-const NET_HIT = mark("net_hit_contradicts_height", {});
+// The one vendor-ball hint left visible since 2026-11-05 ("Winner or error?"
+// and "Net or out?" hidden, "Ending unknown" counted; marks.ts).
+const EVERY_HINT: LabelMark[] = [mark("ending_suspect_line", {})];
+const CLOSE_LINE = mark("ending_suspect_line", {});
 
 test.describe("the chip on the point row", () => {
   test("open: its words, and the hover with the fixture's names", () => {
@@ -339,9 +337,9 @@ test.describe("a closed row draws only what can change the score", () => {
     expect(grey.tag).toContain("bg-white/[0.10]");
     expect(grey.tag).not.toContain("rail-amber");
     expect(greyOnly).not.toContain("data-point-hint");
-    // "Net or out?" alone is a demoted flag: no chip on the closed row, while
-    // the open point still asks it.
-    const netOnly = marksOf(point, [], { [shot.id]: [NET_HIT] });
+    // "Close to the line" alone is a demoted flag: no chip on the closed row,
+    // while the open point still asks it.
+    const netOnly = marksOf(point, [CLOSE_LINE]);
     expect(renderRow(point, netOnly)).not.toContain("data-mark-chip");
     // The open point still asks it: the court panel's item 4.
     const asked = review(point, netOnly)!;
@@ -351,7 +349,7 @@ test.describe("a closed row draws only what can change the score", () => {
     // Beside a counted mark on the same item, the hints are that one question.
     const withCount = renderRow(
       point,
-      marksOf(point, [DISPUTED, ...EVERY_HINT], { [shot.id]: [NET_HIT] }),
+      marksOf(point, [DISPUTED, ...EVERY_HINT]),
     );
     const [chip, ...rest] = chips(withCount);
     expect(rest).toHaveLength(0);
@@ -372,9 +370,9 @@ test.describe("a closed row draws only what can change the score", () => {
       renderRow(checked, marksOf(checked, [mark("last_landing_missing", {})])),
     ).not.toContain("data-mark-chip");
     // A flag that would be demoted: none either.
-    expect(
-      renderRow(checked, marksOf(checked, [], { [shot.id]: [NET_HIT] })),
-    ).not.toContain("data-mark-chip");
+    expect(renderRow(checked, marksOf(checked, [CLOSE_LINE]))).not.toContain(
+      "data-mark-chip",
+    );
     // A counted mark settled by a change keeps the quiet outline, no words.
     const settled = { ...checked, status: "edited" as const };
     const [quiet, ...rest] = chips(
@@ -446,9 +444,6 @@ test.describe("the open point's current review item", () => {
     const marks = marksOf(
       point,
       [mark("ending_suspect_line", {}), mark("serve_fault", {})], // serve_fault is hidden
-      {
-        [shot.id]: [NET_HIT],
-      },
     );
     const html = renderWell(point, marks);
     expect(html).not.toContain("data-point-hints");
@@ -471,9 +466,7 @@ test.describe("the open point's current review item", () => {
   test("Dismiss stores every member's key, one call a key; Looks right is the check tick's write", async () => {
     const point = fixturePoint();
     const shot = point.shots[0];
-    const marks = marksOf(point, [DISPUTED, mark("ending_suspect_line", {})], {
-      [shot.id]: [NET_HIT],
-    });
+    const marks = marksOf(point, [DISPUTED, mark("ending_suspect_line", {})]);
     const item = review(point, marks)!;
     const calls: unknown[][] = [];
     const dismiss = item.answers.find((a) => a.kind === "dismiss")!;
@@ -482,7 +475,6 @@ test.describe("the open point's current review item", () => {
     expect(calls).toEqual([
       ["dismiss", point.id, "hint:winner_disputed"],
       ["dismiss", point.id, "hint:ending_suspect_line"],
-      ["dismiss", point.id, "hint:net_hit_contradicts_height"],
     ]);
 
     calls.length = 0;
@@ -531,9 +523,7 @@ test.describe("a session with no marks", () => {
   test("the same rows carry nothing: no chip, no review item, and the pencil as before", () => {
     const point = fixturePoint();
     const shot = point.shots[0];
-    const marks = marksOf(point, [DISPUTED, mark("serve_fault", {})], {
-      [shot.id]: [NET_HIT],
-    });
+    const marks = marksOf(point, [DISPUTED, mark("serve_fault", {})]);
     expect(renderRow(point, marks)).toContain("data-mark-chip");
     expect(review(point, marks)).not.toBeNull();
 
@@ -830,9 +820,13 @@ test.describe("the hints read off the rows, with their answers", () => {
       ),
     ).toContain("last_call_overruled");
 
-    // "Net or out?" on that last ball is one question too many beside it —
-    // and comes back once the answer is given.
-    const netOrOut = mark("net_hit_contradicts_height", {});
+    // "Net or out?" on that last ball, were it a hint (hidden since
+    // 2026-11-05), is one question too many beside it — and comes back once
+    // the answer is given.
+    const netOrOut = {
+      ...mark("net_hit_contradicts_height", {}),
+      tier: "hint",
+    } as LabelMark;
     const both = (p: LabelPoint) =>
       pointHints(p, marksOf(p, [call], { [ace.id]: [netOrOut] }), NAMES, edit)
         .map((h) => h.code)

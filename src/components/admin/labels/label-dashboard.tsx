@@ -34,6 +34,7 @@ import {
   type LabelSetScore,
 } from "@/lib/services/labels/set-scores";
 import { partialPublishWarnings } from "@/lib/services/labels/session-status";
+import { labellerWording } from "@/lib/services/labels/labeller-view";
 import { advButton } from "@/lib/ui/adv-button";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { cn } from "@/lib/utils";
@@ -72,6 +73,11 @@ export interface LabelDashboardProps {
   /** Where the video starts in the match; null or absent: at the beginning. */
   startScore?: LabelStartScore | null;
   names: Record<LabelSide, string>;
+  /**
+   * Who reads it. A labeller submits and never publishes, so the checklist
+   * is "Before you submit" and its sentences say so (`labellerWording`).
+   */
+  audience?: "admin" | "labeller";
   finalScore: readonly (readonly number[])[] | null;
   matchScore: MatchScore | null;
   /** The video stops before the match does: the sets are not held to the record. */
@@ -813,8 +819,17 @@ const CHECK_WORD: Record<CheckState, string> = {
   blocking: "Blocks publishing",
 };
 
+/** `CHECK_WORD` said to a labeller. */
+const LABELLER_CHECK_WORD: Record<CheckState, string> = {
+  ...CHECK_WORD,
+  blocking: "Blocks submitting",
+};
+
 function PublishCheck(props: WidgetProps) {
-  const { complete, onOpen } = props;
+  const { complete, onOpen, audience = "admin" } = props;
+  const labeller = audience === "labeller";
+  const say = labeller ? labellerWording : (text: string) => text;
+  const checkWord = labeller ? LABELLER_CHECK_WORD : CHECK_WORD;
   if (complete) {
     return (
       <Card title="Published">
@@ -827,7 +842,7 @@ function PublishCheck(props: WidgetProps) {
   }
   const checks = publishChecks(props);
   return (
-    <Card title="Before you publish">
+    <Card title={labeller ? "Before you submit" : "Before you publish"}>
       <ul className="flex flex-col">
         {checks.map((check) => (
           <li
@@ -837,7 +852,7 @@ function PublishCheck(props: WidgetProps) {
           >
             <span
               role="img"
-              aria-label={CHECK_WORD[check.state]}
+              aria-label={checkWord[check.state]}
               className={cn(
                 "mt-px grid size-4 place-items-center rounded-full",
                 check.state === "done" &&
@@ -866,7 +881,7 @@ function PublishCheck(props: WidgetProps) {
                 {check.title}
               </span>
               <span className="text-body-sm" style={INK[600]}>
-                {check.detail}{" "}
+                {say(check.detail)}{" "}
                 {check.pointId ? (
                   <PointLink
                     onClick={() => onOpen(check.pointId)}

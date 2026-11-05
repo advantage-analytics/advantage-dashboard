@@ -25,6 +25,8 @@ import {
   resolveAnalysisStatus,
 } from "./match-analysis";
 import { formatClock } from "@/components/dashboard/matches/new-match-wizard/utils";
+// Pure and type-only on supabase-js, so safe in the client graph this loader is in.
+import { hideInFlightReprocess } from "@/lib/services/splitstep/reprocess";
 
 interface JobRow {
   id: string;
@@ -140,7 +142,12 @@ export async function loadMatchAnalysis(
     else rowsByMatch.set(row.match_id, [row]);
   }
 
-  for (const [matchId, rows] of rowsByMatch) {
+  for (const [matchId, allRows] of rowsByMatch) {
+    // An admin reprocess child that has not completed is not the athlete's
+    // analysis: their report stays as it was until the new one is finished,
+    // and a reprocess that fails never reads as "analysis failed"
+    // (splitstep/reprocess.ts).
+    const rows = hideInFlightReprocess(allRows);
     // First mappable row wins: the query is newest-first, so a resubmitted
     // match shows its current attempt rather than a stale one. A row the UI
     // has no word for is warned about and skipped, falling through to the

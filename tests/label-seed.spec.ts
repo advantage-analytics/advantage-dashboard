@@ -693,6 +693,7 @@ function fakeClient({
   const reads: string[] = [];
   let downloads = 0;
   let sessionLookups = 0;
+  const lookups: Record<string, unknown>[] = [];
 
   const client = {
     from(table: string) {
@@ -715,6 +716,7 @@ function fakeClient({
             };
           }
           if (table === "label_sessions") {
+            lookups.push({ ...state.filters });
             sessionLookups += 1;
             const id = sessionLookups === 1 ? openSessionId : raceSessionId;
             return { data: id ? { id } : null, error: null };
@@ -766,6 +768,10 @@ function fakeClient({
           state.filters[column] = value;
           return builder;
         },
+        in: (column: string, values: unknown) => {
+          state.filters[column] = values;
+          return builder;
+        },
         not: () => builder,
         order: () => builder,
         limit: () => builder,
@@ -794,6 +800,7 @@ function fakeClient({
   return {
     writes,
     reads,
+    lookups,
     downloads: () => downloads,
     supabase: client as unknown as AdminClient,
   };
@@ -883,6 +890,17 @@ test.describe("seedLabelSessionForJob", () => {
     expect(fake.downloads()).toBe(0);
   });
 
+  test("a submitted session holds the job too: it is returned, never seeded past", async () => {
+    const fake = fakeClient({ openSessionId: "submitted-session" });
+    const result = await seedWith(fake);
+    expect(result).toEqual({ sessionId: "submitted-session", existing: true });
+    expect(fake.writes).toEqual([]);
+    // The lookup asks for both statuses label_sessions_one_open_per_job
+    // counts, so a submitted session is found rather than tripping the index.
+    const lookup = fake.lookups.find((l) => l.job_id === JOB_ID);
+    expect(lookup?.status).toEqual(["labelling", "submitted"]);
+  });
+
   test("losing the insert race returns the winner's session", async () => {
     const fake = fakeClient({ raceSessionId: "raced-session" });
     const result = await seedWith(fake);
@@ -910,7 +928,23 @@ test.describe("seedLabelSession", () => {
   test("refuses without an admin session, before any client is built", async () => {
     let clients = 0;
     const result = await seedLabelSession(JOB_ID, {
-      requireAdmin: async () => null,
+      requireLabelActor: async () => null,
+      createAdminClient: () => {
+        clients += 1;
+        return fakeClient().supabase;
+      },
+    });
+    expect(result).toEqual({ error: "Administrator access is required." });
+    expect(clients).toBe(0);
+  });
+
+  test("refuses a labeller: only an admin opens a session", async () => {
+    let clients = 0;
+    const result = await seedLabelSession(JOB_ID, {
+      requireLabelActor: async () => ({
+        id: "labeller",
+        kind: "labeller" as const,
+      }),
       createAdminClient: () => {
         clients += 1;
         return fakeClient().supabase;
@@ -922,7 +956,7 @@ test.describe("seedLabelSession", () => {
 
   test("refuses a malformed job id", async () => {
     const result = await seedLabelSession("not-a-uuid", {
-      requireAdmin: async () => ({ id: ADMIN_ID }),
+      requireLabelActor: async () => ({ id: ADMIN_ID, kind: "admin" as const }),
       createAdminClient: () => fakeClient().supabase,
     });
     expect(result).toEqual({ error: "Invalid job id." });
@@ -931,7 +965,7 @@ test.describe("seedLabelSession", () => {
   test("names the admin as labeller", async () => {
     const fake = fakeClient();
     const result = await seedLabelSession(JOB_ID, {
-      requireAdmin: async () => ({ id: ADMIN_ID }),
+      requireLabelActor: async () => ({ id: ADMIN_ID, kind: "admin" as const }),
       createAdminClient: () => fake.supabase,
     });
     expect(result).toEqual({ sessionId: "new-session", existing: false });

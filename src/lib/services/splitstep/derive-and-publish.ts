@@ -14,7 +14,8 @@
  */
 
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { mergeDerivationQuality } from "./derivation-quality";
+import { mergeDerivationQuality, qualityObject } from "./derivation-quality";
+import { readReprocessParent } from "./reprocess";
 import { persistTranscript } from "./persist-transcript";
 import {
   insightsWaitMs,
@@ -114,12 +115,19 @@ export async function deriveAndPublish(params: {
     supabase,
     jobId,
     deadline,
-    rebuild = false,
+    rebuild: rebuildRequested = false,
     allowOverwriteLabels = false,
     onArrival,
   } = params;
 
   try {
+    // An admin reprocess child (reprocess.ts) is derived as a rebuild: the
+    // match is already published, so the player mapping stays pinned to its
+    // rows, a refusal — hand labels above all — keeps the job `completed`,
+    // and Ask's first answer is not asked twice.
+    const lineage = await readReprocessParent(supabase, jobId);
+    const rebuild = rebuildRequested || lineage.reprocess;
+
     // Never off `cancelled`. The user withdrew the job while it was queued
     // (POST /api/splitstep/jobs/[jobId]/cancel) and was told nothing would be
     // analysed; a late completion — or a hand re-run — must not resurrect it.
@@ -155,12 +163,38 @@ export async function deriveAndPublish(params: {
     ) {
       // Refusals are decided before the delete (see persistTranscript), so
       // the rows the job published are still there; so is its clean status.
+      //
+      // A reprocess child becomes the match's newest completed job, and the
+      // readers take two facts about the published rows from that job: its
+      // `derivation_version` (no version reads as "processed", Stats pending —
+      // resolveAnalysisStatus) and the labelled `fold` apply-session.ts wrote
+      // on the parent. The rows did not change, so both come across from the
+      // parent — the version in the same write as `completed`, so no reader
+      // (the realtime hook included) ever sees the child completed without it.
+      const inherited =
+        lineage.reprocess && lineage.parentId
+          ? await readParentPublication(supabase, lineage.parentId)
+          : null;
       await supabase
         .from("processing_jobs")
-        .update({ status: "completed" })
+        .update({
+          status: "completed",
+          ...(inherited?.derivationVersion
+            ? { derivation_version: inherited.derivationVersion }
+            : {}),
+        })
         .eq("id", jobId);
+      if (inherited && "fold" in inherited.quality) {
+        await mergeDerivationQuality(
+          supabase,
+          jobId,
+          { fold: inherited.quality.fold },
+          LOG,
+        );
+      }
       console.warn(`${LOG} rebuild refused; published rows kept`, {
         jobId,
+        reprocess: lineage.reprocess,
         reason: written.reason,
       });
       return { ok: false, reason: written.reason, kept: true };
@@ -354,4 +388,38 @@ export async function deriveAndPublish(params: {
     await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
     return { ok: false, reason };
   }
+}
+
+/**
+ * What a reprocess child inherits from the completed parent whose rows it
+ * kept: the version those rows were derived under and the parent's
+ * `derivation_quality`. A failed read inherits nothing — the child is still
+ * kept `completed`, and logs say why its report reads "Stats pending".
+ */
+async function readParentPublication(
+  supabase: ReturnType<typeof createAdminClient>,
+  parentId: string,
+): Promise<{
+  derivationVersion: string | null;
+  quality: Record<string, unknown>;
+}> {
+  const { data, error } = await supabase
+    .from("processing_jobs")
+    .select("derivation_version, derivation_quality")
+    .eq("id", parentId)
+    .maybeSingle<{
+      derivation_version: string | null;
+      derivation_quality: Record<string, unknown> | null;
+    }>();
+  if (error || !data) {
+    console.error(`${LOG} could not read the reprocess parent`, {
+      parentId,
+      error: error?.message ?? "no row",
+    });
+    return { derivationVersion: null, quality: {} };
+  }
+  return {
+    derivationVersion: data.derivation_version,
+    quality: qualityObject(data.derivation_quality),
+  };
 }

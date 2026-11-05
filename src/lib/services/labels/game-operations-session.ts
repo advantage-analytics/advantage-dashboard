@@ -38,6 +38,7 @@ import {
   type PlannedGameWrites,
 } from "./game-operations";
 import { isLabelGame, type LabelGame } from "./operations";
+import { targetId } from "./label-actor";
 import {
   gated,
   normaliseId,
@@ -354,6 +355,7 @@ export function setLabelGameServer(
     deps,
     (supabase) => writeLabelGameServer({ supabase, sessionId, game, server }),
     "set the game's server",
+    { sessionId: targetId(sessionId) },
   );
 }
 
@@ -367,5 +369,6 @@ export function setLabelGameType(
     deps,
     (supabase) => writeLabelGameType({ supabase, sessionId, game, type }),
     "set the game's type",
+    { sessionId: targetId(sessionId) },
   );
 }

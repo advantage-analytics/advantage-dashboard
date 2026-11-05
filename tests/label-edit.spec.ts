@@ -23,11 +23,16 @@ import {
   type LabelShotValues,
 } from "@/lib/services/labels/edit";
 import {
+  ACTOR_REQUIRED,
+  FROZEN,
+  SUBMITTED,
   editLabelPoint,
   editLabelShot,
+  readSessionGate,
   writeLabelPointEdit,
   writeLabelShotEdit,
 } from "@/lib/services/labels/edit-session";
+import type { LabelActorTarget } from "@/lib/services/labels/label-actor";
 import type { AdminClient } from "@/lib/supabase/admin";
 import { POINT_1_SHOTS, labelPoint } from "./fixtures/label-session";
 
@@ -818,20 +823,20 @@ const updates = (fake: ReturnType<typeof fakeClient>) =>
   fake.calls.filter((c) => c.op === "update");
 
 test.describe("updateLabelShot (editLabelShot)", () => {
-  test("returns an error and touches nothing when requireAdmin() is null", async () => {
+  test("returns an error and touches nothing when requireLabelActor() is null", async () => {
     let built = false;
     const result = await editLabelShot(
       SHOT_ID,
       { result: "out" },
       {
-        requireAdmin: async () => null,
+        requireLabelActor: async () => null,
         createAdminClient: () => {
           built = true;
           return fakeClient({}).supabase;
         },
       },
     );
-    expect(result).toEqual({ error: "Administrator access is required." });
+    expect(result).toEqual({ error: "You don't have access to this session." });
     expect(built).toBe(false);
   });
 
@@ -841,7 +846,10 @@ test.describe("updateLabelShot (editLabelShot)", () => {
       SHOT_ID,
       { result: "out", status: "kept" },
       {
-        requireAdmin: async () => ({ id: "admin" }),
+        requireLabelActor: async () => ({
+          id: "admin",
+          kind: "admin" as const,
+        }),
         createAdminClient: () => fake.supabase,
       },
     );
@@ -1107,16 +1115,16 @@ test.describe("status against the stored seed, on the server", () => {
 });
 
 test.describe("updateLabelPoint (editLabelPoint)", () => {
-  test("returns an error when requireAdmin() is null", async () => {
+  test("returns an error when requireLabelActor() is null", async () => {
     const result = await editLabelPoint(
       POINT_ID,
       { winner: "p2" },
       {
-        requireAdmin: async () => null,
+        requireLabelActor: async () => null,
         createAdminClient: () => fakeClient({}).supabase,
       },
     );
-    expect(result).toEqual({ error: "Administrator access is required." });
+    expect(result).toEqual({ error: "You don't have access to this session." });
   });
 
   test("rejects any other key before reading or writing", async () => {
@@ -1125,7 +1133,10 @@ test.describe("updateLabelPoint (editLabelPoint)", () => {
       POINT_ID,
       { winner: "p2", checked_at: "2026-09-28T00:00:00Z" },
       {
-        requireAdmin: async () => ({ id: "admin" }),
+        requireLabelActor: async () => ({
+          id: "admin",
+          kind: "admin" as const,
+        }),
         createAdminClient: () => fake.supabase,
       },
     );
@@ -1825,5 +1836,62 @@ test.describe("a winner pick lets the ending follow the rows", () => {
       ]);
       expect(byHand.calls.some((c) => c.table === "label_shots")).toBe(false);
     }
+  });
+});
+
+// ── The gate's sentences and who the entry points ask about ────────────────
+
+test.describe("readSessionGate", () => {
+  test("a submitted session is refused with its own sentence, a complete one as frozen", async () => {
+    const submitted = await readSessionGate(
+      fakeClient({ sessionStatus: "submitted" }).supabase,
+      SESSION_ID,
+    );
+    expect(submitted).toEqual({ error: SUBMITTED });
+    expect(SUBMITTED).not.toBe(FROZEN);
+
+    const complete = await readSessionGate(
+      fakeClient({ sessionStatus: "complete" }).supabase,
+      SESSION_ID,
+    );
+    expect(complete).toEqual({ error: FROZEN });
+
+    const open = await readSessionGate(
+      fakeClient({ sessionStatus: "labelling" }).supabase,
+      SESSION_ID,
+    );
+    expect(open).toEqual({ ghosts: false });
+  });
+});
+
+test.describe("the edit entry points' gate", () => {
+  test("each names its own row as the target, and a labeller the gate admits writes", async () => {
+    const targets: LabelActorTarget[] = [];
+    const fake = fakeClient({ shot: shotRow() });
+    const deps = {
+      requireLabelActor: async (target: LabelActorTarget) => {
+        targets.push(target);
+        return { id: "labeller", kind: "labeller" as const };
+      },
+      createAdminClient: () => fake.supabase,
+    };
+    const shot = await editLabelShot(SHOT_ID, { result: "out" }, deps);
+    expect(shot).toMatchObject({ ok: true });
+    const point = await editLabelPoint(POINT_ID, { winner: "p1" }, deps);
+    expect(point).toMatchObject({ ok: true });
+    expect(targets).toEqual([{ shotId: SHOT_ID }, { pointId: POINT_ID }]);
+  });
+
+  test("the refusal does not ask a labeller to become an administrator", async () => {
+    const result = await editLabelShot(
+      SHOT_ID,
+      { result: "out" },
+      {
+        requireLabelActor: async () => null,
+        createAdminClient: () => fakeClient({}).supabase,
+      },
+    );
+    expect(result).toEqual({ error: ACTOR_REQUIRED });
+    expect(ACTOR_REQUIRED).not.toMatch(/admin/i);
   });
 });

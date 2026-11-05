@@ -21,8 +21,10 @@
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import { UUID_RE } from "@/lib/admin/validation";
+import type { LabelActor } from "@/lib/services/programs/admin-guard";
+import { targetId, targetIds, type LabelActorTarget } from "./label-actor";
 import {
-  ADMIN_REQUIRED,
+  ACTOR_REQUIRED,
   defaultLabelWriteDependencies,
   racedMessage,
   readSessionGate,
@@ -141,17 +143,19 @@ function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** The gate every entry point shares: admin first, then the work. */
+/**
+ * The gate every entry point shares: who may write the rows `target` names
+ * (`requireLabelActor`: an admin, or the labeller the session is assigned
+ * to), then the work, handed the actor with its `kind`.
+ */
 export async function gated<T extends object>(
   deps: LabelWriteDependencies,
-  work: (
-    supabase: AdminClient,
-    actor: { id: string },
-  ) => Promise<LabelOpResult<T>>,
+  work: (supabase: AdminClient, actor: LabelActor) => Promise<LabelOpResult<T>>,
   what: string,
+  target: LabelActorTarget,
 ): Promise<LabelOpResult<T>> {
-  const actor = await deps.requireAdmin();
-  if (!actor) return { error: ADMIN_REQUIRED };
+  const actor = await deps.requireLabelActor(target);
+  if (!actor) return { error: ACTOR_REQUIRED };
   try {
     return await work(deps.createAdminClient(), actor);
   } catch (err) {
@@ -944,7 +948,7 @@ export async function writeLabelPointChecked(params: {
     : { ok: true, checkedAt: plan.write.checked_at };
 }
 
-// ── The admin-gated entry points behind the server actions ─────────────────
+// ── The gated entry points behind the server actions ───────────────────────
 
 const defaults = defaultLabelWriteDependencies;
 
@@ -957,6 +961,7 @@ export function deleteLabelShot(
     deps,
     (supabase) => writeLabelShotDelete({ supabase, shotId, reason }),
     "delete the shot",
+    { shotId: targetId(shotId) },
   );
 }
 
@@ -968,6 +973,7 @@ export function restoreLabelShot(
     deps,
     (supabase) => writeLabelShotRestore({ supabase, shotId }),
     "restore the shot",
+    { shotId: targetId(shotId) },
   );
 }
 
@@ -979,6 +985,7 @@ export function removeLabelShotsAfter(
     deps,
     (supabase) => writeLabelShotsRemoveAfter({ supabase, shotId }),
     "remove the shots after it",
+    { shotId: targetId(shotId) },
   );
 }
 
@@ -990,6 +997,7 @@ export function restoreLabelShots(
     deps,
     (supabase) => writeLabelShotsRestore({ supabase, shotIds }),
     "restore the shots",
+    { shotIds: targetIds(shotIds) },
   );
 }
 
@@ -1005,6 +1013,7 @@ export function addLabelShot(
     (supabase) =>
       writeLabelShotAdd({ supabase, pointId, afterShotId, filmTime, shotId }),
     "add the shot",
+    { pointId: targetId(pointId) },
   );
 }
 
@@ -1016,6 +1025,7 @@ export function deleteLabelPoint(
     deps,
     (supabase) => writeLabelPointDelete({ supabase, pointId }),
     "delete the point",
+    { pointId: targetId(pointId) },
   );
 }
 
@@ -1027,6 +1037,7 @@ export function restoreLabelPoint(
     deps,
     (supabase) => writeLabelPointRestore({ supabase, pointId }),
     "restore the point",
+    { pointId: targetId(pointId) },
   );
 }
 
@@ -1040,6 +1051,7 @@ export function moveLabelPoint(
     deps,
     (supabase) => writeLabelPointMove({ supabase, pointId, to, switchServer }),
     "move the point",
+    { pointId: targetId(pointId) },
   );
 }
 
@@ -1056,6 +1068,7 @@ export function moveLabelPoints(
     (supabase) =>
       writeLabelPointsMove({ supabase, pointIds, to, switchServer, lock }),
     "move the points",
+    { pointIds: targetIds(pointIds) },
   );
 }
 
@@ -1067,6 +1080,7 @@ export function markLabelPointChecked(
     deps,
     (supabase) => writeLabelPointChecked({ supabase, pointId, checked: true }),
     "mark the point checked",
+    { pointId: targetId(pointId) },
   );
 }
 
@@ -1078,5 +1092,6 @@ export function unmarkLabelPointChecked(
     deps,
     (supabase) => writeLabelPointChecked({ supabase, pointId, checked: false }),
     "clear the check",
+    { pointId: targetId(pointId) },
   );
 }

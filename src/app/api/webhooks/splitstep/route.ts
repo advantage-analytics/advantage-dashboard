@@ -18,9 +18,14 @@
  * player mapping and shot numbering are precisely the subtleties that drift
  * between two copies — each of which misattributes an entire match when it does.
  *
- * What DOES still need building is reprocessing: when DERIVATION_VERSION bumps,
+ * What DOES still need building is re-deriving: when DERIVATION_VERSION bumps,
  * every stored match must be rebuilt and no webhook will fire for those jobs
  * again. That wants a paged cron route calling the same deriveAndPublish().
+ *
+ * Vendor REPROCESSING — resending a completed job for a newer model's output
+ * — is built: POST /api/admin/splitstep/reprocess makes a child job
+ * (resubmit-job.ts, `reprocess: true`), and its deliveries come through here
+ * like any other job's. What differs downstream is in splitstep/reprocess.ts.
  *
  * A completion carries FOUR urls, all short-lived (7-day) SAS:
  *   • `strokes_url` — the stroke-by-stroke results JSON, downloaded and written

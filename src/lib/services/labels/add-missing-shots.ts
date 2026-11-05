@@ -12,8 +12,10 @@
 
 import { isUuid } from "@/lib/admin/validation";
 import { readLabelSessionRows } from "@/lib/data/labels-server";
-import { requireAdmin } from "@/lib/services/programs/admin-guard";
+import type { LabelActor } from "@/lib/services/programs/admin-guard";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
+import { ACTOR_REQUIRED } from "./edit-session";
+import { requireLabelActorFor, type LabelActorTarget } from "./label-actor";
 import { addLabelShot, type LabelAddShotResult } from "./operations-session";
 import type { LabelPoint } from "./session";
 
@@ -27,7 +29,7 @@ export type LabelAddMissingShotsResult =
   | { error: string };
 
 export interface AddMissingShotsDependencies {
-  requireAdmin: () => Promise<{ id: string } | null>;
+  requireLabelActor: (target: LabelActorTarget) => Promise<LabelActor | null>;
   addShot: (
     pointId: string,
     afterShotId: string,
@@ -40,7 +42,7 @@ export interface AddMissingShotsDependencies {
 }
 
 const defaults: AddMissingShotsDependencies = {
-  requireAdmin,
+  requireLabelActor: requireLabelActorFor,
   addShot: (pointId, afterShotId) => addLabelShot(pointId, afterShotId),
   createAdminClient,
   readPoints: async (db, sessionId) =>
@@ -55,8 +57,8 @@ export async function addMissingShots(
   adds: readonly MissingShotAdd[],
   deps: AddMissingShotsDependencies = defaults,
 ): Promise<LabelAddMissingShotsResult> {
-  const viewer = await deps.requireAdmin();
-  if (!viewer) return { error: "Admin access required." };
+  const viewer = await deps.requireLabelActor({ sessionId });
+  if (!viewer) return { error: ACTOR_REQUIRED };
   if (!isUuid(sessionId)) return { error: "No such session." };
   if (!Array.isArray(adds) || adds.length > MAX_MISSING_SHOT_ADDS) {
     return { error: "Too many shots to add at once." };

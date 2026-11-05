@@ -913,10 +913,21 @@ export function acceptAsIs(
 }
 
 /**
- * The derivation's hints about how the vendor's last ball ended: "Close to
- * the line", "Winner or error?", "Net or out?" and "Ending unknown". They
- * describe the ball as the vendor sent it, so once the labeller has answered
- * that ball (`lastBallAnswered`) they settle, as a counted mark settles on
+ * Hints that settle on any edit to their point, as a counted mark does
+ * (`markState`), rather than only on a check or a Dismiss. "Serve replayed"
+ * was counted until 2026-11-05; its answer is a combine or a removal, which
+ * the point's status records.
+ */
+const HINTS_SETTLED_BY_EDIT: ReadonlySet<LabelMarkCode> = new Set([
+  "reserve_after_in",
+]);
+
+/**
+ * The derivation's hint about how the vendor's last ball ended: "Close to
+ * the line" ("Winner or error?" and "Net or out?" were hidden and "Ending
+ * unknown" counted on 2026-11-05, marks.ts `LABEL_MARK_META`). It
+ * describes the ball as the vendor sent it, so once the labeller has answered
+ * that ball (`lastBallAnswered`) it settles, as a counted mark settles on
  * any edit. The row-read hints under the same question ("Different
  * ending?", "No landing on the last shot") are not here: they are read off
  * the rows as they stand, so while they are drawn they are still true.
@@ -929,9 +940,6 @@ export function acceptAsIs(
  */
 const LAST_BALL_HINT_CODES: ReadonlySet<LabelMarkCode> = new Set([
   "ending_suspect_line",
-  "winner_to_error_by_bounce",
-  "net_hit_contradicts_height",
-  "result_type_unknown",
 ]);
 
 /**
@@ -1080,9 +1088,7 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
     codes: [
       "last_call_overruled",
       "winner_disputed",
-      "net_hit_contradicts_height",
       "ending_suspect_line",
-      "winner_to_error_by_bounce",
       "ending_stale",
       "ending_contradicts_winner",
       "last_landing_missing",
@@ -1144,8 +1150,8 @@ export interface ReviewItem {
  *
  * `demoted` marks the grey flag the design note leaves off the row and out of
  * the counts — one whose only open item is item 4 and whose open members
- * there are exactly {`net_hit_contradicts_height`}, {`ending_suspect_line`}
- * or {`ending_suspect_line`, `winner_to_error_by_bounce`}. On the 8 complete
+ * are exactly {`ending_suspect_line`} (the other two sets it once listed
+ * lost their members to `hidden` on 2026-11-05). On the 8 complete
  * sessions those were 99 of 907 points, changed on 36–46% against a 52%
  * base. It is a boolean rather than a null so the open point can still draw
  * the evidence lines.
@@ -1185,9 +1191,7 @@ function memberDismissKey(mark: LabelMark): string | undefined {
 
 /** The open item-4 member sets a grey flag is demoted for. */
 const DEMOTED_SIGNATURES: readonly (readonly LabelMarkCode[])[] = [
-  ["net_hit_contradicts_height"],
   ["ending_suspect_line"],
-  ["ending_suspect_line", "winner_to_error_by_bounce"],
 ];
 
 /**
@@ -1215,10 +1219,14 @@ function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
 /**
  * An item's tone from its members. Item 1 is `markTone`'s call (a missing
  * stroke near the end of the rally decides who hit the last ball); item 2 is
- * amber only for a serve replayed after one in; item 3 only for a double
+ * never amber ("Serve replayed" moved the winner on 22% of its points, the
+ * base rate, 2026-11-05); item 3 only for a double
  * fault in question or a point stopping on a faulted first serve; item 4
  * when a counted mark sits under it or the point's winner is the player its
- * strokes say lost; items 5 and 6 are always the score, item 7 never. Like the
+ * strokes say lost; item 5 is always the score; item 6 only for "Game cut
+ * differs" (unless it is on most of the match, `systemic`) or "Tiebreak
+ * score, not 6–6" (the serve-side marks under it are data,
+ * `DATA_MARK_CODES`); item 7 never. Like the
  * flag (`foldReviewItems`), an item speaks for its open members while any is
  * open, and for all of them once none is: a settled "Check the ending" does
  * not keep the grey hints still open beside it amber.
@@ -1242,7 +1250,7 @@ function reviewItemTone(
         ? "score"
         : "data";
     case 2:
-      return has("reserve_after_in") ? "score" : "data";
+      return "data";
     case 3:
       return has("second_serve_called_out", "first_serve_fault_alone")
         ? "score"
@@ -1253,8 +1261,17 @@ function reviewItemTone(
         ? "score"
         : "data";
     case 5:
-    case 6:
       return "score";
+    case 6:
+      // A match-wide "Game cut differs" (`systemic`) is the entered score
+      // more than the point, so it reads grey like the serve-side marks.
+      return members.some(
+        ({ mark }) =>
+          mark.code === "tiebreak_score_off_six_all" ||
+          (mark.code === "segment_proposal_differs" && !mark.params.systemic),
+      )
+        ? "score"
+        : "data";
     case 7:
       return "data";
   }
@@ -1266,8 +1283,8 @@ function reviewItemTone(
  * `count` marks via `pointRowMarkList` with `markStates` (`points` lets
  * "Same side twice" read settled by an added point), then the hints and the
  * live row-read marks via `openHintMarks` — so a dismissed hint is not a
- * member, and "Net or out?" is dropped while "Was the last ball in?" still
- * has its answer. On a checked point a hint member reads `checked-as-is`,
+ * member (and "Net or out?", were it shown, is dropped while "Was the last
+ * ball in?" still has its answer). On a checked point a hint member reads `checked-as-is`,
  * except "Different ending?" with the winner contradicted, which stays
  * `open`: the score, as `openFlags` has always read it. It also stays open
  * when the stored ending cannot be true of the winner
@@ -1294,6 +1311,12 @@ export function reviewFlag(
           mark.code === "ending_contradicts_winner")
         ? "open"
         : "checked-as-is";
+    }
+    // "Serve replayed" asks about the point's strokes, not the last ball: like
+    // the counted mark it was until 2026-11-05, any edit to the point answers
+    // it (combining the replayed serve, or removing it).
+    if (HINTS_SETTLED_BY_EDIT.has(mark.code) && pointChanged(point)) {
+      return "settled";
     }
     return answered && LAST_BALL_HINT_CODES.has(mark.code) ? "settled" : "open";
   };

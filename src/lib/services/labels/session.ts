@@ -361,7 +361,7 @@ export interface LabelSession {
   /** Null once the job row is gone; the labels outlive it. */
   jobId: string | null;
   matchId: string;
-  status: "labelling" | "complete";
+  status: "labelling" | "submitted" | "complete";
   derivationVersion: string;
   /** `matches.player1_name` — the p1 side every label row means. */
   player1Name: string;

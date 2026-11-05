@@ -759,19 +759,22 @@ test.describe("writeLabelSuggestionDismiss", () => {
   test("the entry point refuses without an admin, before a client is built", async () => {
     let built = 0;
     const result = await dismissLabelSuggestion(POINT_ID, KEY, {
-      requireAdmin: async () => null,
+      requireLabelActor: async () => null,
       createAdminClient: () => {
         built += 1;
         return fakeClient({}).supabase;
       },
     });
-    expect(result).toEqual({ error: "Administrator access is required." });
+    expect(result).toEqual({ error: "You don't have access to this session." });
     expect(built).toBe(0);
 
     const fake = fakeClient({ point: POINT_ROW });
     expect(
       await dismissLabelSuggestion(POINT_ID.toUpperCase(), KEY, {
-        requireAdmin: async () => ({ id: "admin" }),
+        requireLabelActor: async () => ({
+          id: "admin",
+          kind: "admin" as const,
+        }),
         createAdminClient: () => fake.supabase,
       }),
     ).toMatchObject({ ok: true });

@@ -16,7 +16,7 @@ function deps(refuse: ReadonlySet<string> = new Set()) {
   return {
     added,
     deps: {
-      requireAdmin: async () => ({ id: "admin" }),
+      requireLabelActor: async () => ({ id: "admin", kind: "admin" as const }),
       createAdminClient: () => ({}) as AdminClient,
       readPoints: async () =>
         [{ id: P1, shots: [{ id: S1 }, { id: S2 }] }] as never,
@@ -34,9 +34,9 @@ test("refused without an admin, and for a bad session id", async () => {
   expect(
     await addMissingShots(SESSION, [{ pointId: P1, afterShotId: S1 }], {
       ...d,
-      requireAdmin: async () => null,
+      requireLabelActor: async () => null,
     }),
-  ).toEqual({ error: "Admin access required." });
+  ).toEqual({ error: "You don't have access to this session." });
   expect(await addMissingShots("nope", [], d)).toEqual({
     error: "No such session.",
   });

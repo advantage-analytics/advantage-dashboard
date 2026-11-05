@@ -31,6 +31,7 @@ import {
   readShotsOfPoints,
   syncEndingAfterShotChange,
 } from "./ending-session";
+import { targetId } from "./label-actor";
 import {
   gated,
   normaliseId,
@@ -397,6 +398,7 @@ export function resetLabelShot(
     deps,
     (supabase) => writeLabelShotReset({ supabase, shotId }),
     "reset the shot",
+    { shotId: targetId(shotId) },
   );
 }
 
@@ -409,5 +411,6 @@ export function resetLabelPointWhole(
     deps,
     (supabase) => writeLabelPointWholeReset({ supabase, pointId, sessionId }),
     "reset the point",
+    { pointId: targetId(pointId) },
   );
 }

@@ -21,6 +21,7 @@ import {
   type RecoveryClass,
 } from "@/lib/data/match-analysis";
 import { claimSend, getNotificationPrefs } from "./should-notify";
+import { readReprocessParent } from "@/lib/services/splitstep/reprocess";
 
 const LOG = "[notifications:analysis]";
 
@@ -106,6 +107,17 @@ export async function notifyAnalysisOutcome(params: {
 
     // A retained match whose uploader deleted their account has nobody to tell.
     if (!uploaderId || !matchId) return;
+
+    // An admin reprocess (splitstep/reprocess.ts) is invisible to the
+    // athlete: their report was already "ready", and a reprocess that fails
+    // leaves it standing. The internal failure copy above still went out.
+    if ((await readReprocessParent(supabase, jobId)).reprocess) {
+      console.log(`${LOG} reprocess job — athlete not mailed`, {
+        jobId,
+        outcome,
+      });
+      return;
+    }
 
     // Which recovery class the athlete-facing copy should use — decided the
     // same way the matches list and match page decide it (classifyFailure()),

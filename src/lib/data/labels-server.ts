@@ -54,6 +54,7 @@ import {
 } from "@/lib/services/labels/marks";
 import { cachedTranscriptForJob } from "@/lib/services/labels/transcript-cache";
 import { idChunks } from "@/lib/services/labels/chunks";
+import { labellerName } from "@/lib/services/labels/assign-session";
 
 /** One completed job an admin could start or continue labelling. */
 export interface LabelJobRow {
@@ -67,7 +68,7 @@ export interface LabelJobRow {
   /** Null when nobody has started a session for this job yet. */
   session: {
     id: string;
-    status: "labelling" | "complete";
+    status: "labelling" | "submitted" | "complete";
     /** `label_points` with `checked_at` set, excluding tombstones. */
     checked: number;
     /** `label_points` excluding tombstones — the denominator "N of M". */
@@ -77,6 +78,17 @@ export interface LabelJobRow {
      * null until the session is opened with marks.
      */
     openCounts: FlagCounts | null;
+    /** The labeller it is assigned to (`assigned_to`); null when unassigned. */
+    assignedTo: { id: string; name: string } | null;
+    /** When `assigned_to` was last set. */
+    assignedAt: string | null;
+    /** When the labeller submitted; set exactly while `status` is submitted. */
+    submittedAt: string | null;
+    /**
+     * Minutes of active work on the session, everyone's: the count of its
+     * `label_work_beats` rows (one per user per minute, work-beats-session.ts).
+     */
+    minutesWorked: number;
   } | null;
 }
 
@@ -120,13 +132,24 @@ interface DbMatch {
 interface DbSession {
   id: string;
   job_id: string;
-  status: "labelling" | "complete";
+  status: "labelling" | "submitted" | "complete";
   started_at: string;
   open_counts: unknown;
+  assigned_at: string | null;
+  submitted_at: string | null;
+  /** Who started the session, or the labeller who submitted it. */
+  labeller: string | null;
+  /** Embedded `users` row through `assigned_to` (many-to-one: one or none). */
+  assignee: {
+    id: string;
+    email: string | null;
+    first_name: string | null;
+    last_name: string | null;
+  } | null;
 }
 
 /** `open_counts` as the list reads it; anything malformed reads as none. */
-function readOpenCounts(value: unknown): FlagCounts | null {
+export function readOpenCounts(value: unknown): FlagCounts | null {
   if (!value || typeof value !== "object") return null;
   const { amber, grey } = value as Record<string, unknown>;
   return typeof amber === "number" && typeof grey === "number"
@@ -184,7 +207,12 @@ export async function listLabelJobs(
       .returns<DbMatch[]>(),
     db
       .from("label_sessions")
-      .select("id, job_id, status, started_at, open_counts")
+      // The assignee rides along as an embed on `assigned_to` (the hint names
+      // the column: `labeller` also points at `users`), so the names cost no
+      // extra round trip.
+      .select(
+        "id, job_id, status, started_at, open_counts, assigned_at, submitted_at, labeller, assignee:users!assigned_to(id, email, first_name, last_name)",
+      )
       .in("job_id", jobIds)
       .order("started_at", { ascending: false })
       .returns<DbSession[]>(),
@@ -219,8 +247,18 @@ export async function listLabelJobs(
     }
   }
 
-  const sessionIds = [...sessionByJob.values()].map((session) => session.id);
-  const progressBySession = await countLabelPointProgress(db, sessionIds);
+  const sessions = [...sessionByJob.values()];
+  const sessionIds = sessions.map((session) => session.id);
+  const [progressBySession, minutesBySession] = await Promise.all([
+    countLabelPointProgress(db, sessionIds),
+    countLabelWorkMinutes(
+      db,
+      sessions.map((session) => ({
+        id: session.id,
+        labellerId: session.labeller,
+      })),
+    ),
+  ]);
 
   const rows: LabelJobRow[] = jobRows.map((job) => {
     const match = matchById.get(job.match_id);
@@ -242,6 +280,19 @@ export async function listLabelJobs(
             checked: progress?.checked ?? 0,
             total: progress?.total ?? 0,
             openCounts: readOpenCounts(session.open_counts),
+            assignedTo: session.assignee
+              ? {
+                  id: session.assignee.id,
+                  name: labellerName(
+                    session.assignee.first_name,
+                    session.assignee.last_name,
+                    session.assignee.email,
+                  ),
+                }
+              : null,
+            assignedAt: session.assigned_at ?? null,
+            submittedAt: session.submitted_at ?? null,
+            minutesWorked: minutesBySession.get(session.id) ?? 0,
           }
         : null,
     };
@@ -277,7 +328,7 @@ async function countPointsByMatch(
  * is the subset with `checked_at` set. One query grouped in memory, walked by
  * `readAllPages` in case a session runs long.
  */
-async function countLabelPointProgress(
+export async function countLabelPointProgress(
   db: AdminClient,
   sessionIds: string[],
 ): Promise<Map<string, { checked: number; total: number }>> {
@@ -301,6 +352,62 @@ async function countLabelPointProgress(
     progress.set(row.session_id, entry);
   }
   return progress;
+}
+
+/**
+ * Minutes worked per session: the labelling work on it, as beat rows
+ * counted. The vendor's labour is every non-admin's beats on the session —
+ * all of them, so a session reassigned from one labeller to another keeps
+ * both people's time. An admin who opens the session to review it also posts
+ * beats; those are their time, not the vendor's, and never count — except on
+ * a session no labeller has touched, where the admin who labelled it
+ * (`labellerId`) is the one doing the work and their beats are the figure.
+ *
+ * PostgREST has no GROUP BY, so it is one read of `session_id, user_id` and
+ * each beat's `users.is_admin` (one foreign key, so the embed needs no hint)
+ * for the listed sessions, counted in memory and walked by `readAllPages` —
+ * a beat is at most one row per person per minute, ~60 an hour a session.
+ */
+export async function countLabelWorkMinutes(
+  db: AdminClient,
+  sessions: readonly { id: string; labellerId: string | null }[],
+): Promise<Map<string, number>> {
+  const minutes = new Map<string, number>();
+  if (sessions.length === 0) return minutes;
+  const labellerBySession = new Map(sessions.map((s) => [s.id, s.labellerId]));
+
+  type BeatRow = {
+    session_id: string;
+    user_id: string;
+    /** Many-to-one through `user_id`: one row or none. */
+    user: { is_admin: boolean | null } | null;
+  };
+  const rows = await readAllPages<BeatRow>(
+    db
+      .from("label_work_beats")
+      .select("session_id, user_id, user:users(is_admin)")
+      .in("session_id", [...labellerBySession.keys()])
+      .order("session_id")
+      .order("user_id")
+      .order("minute")
+      .returns<BeatRow[]>(),
+    "Could not read label work minutes",
+  );
+  const vendor = new Map<string, number>();
+  const ownLabeller = new Map<string, number>();
+  const bump = (into: Map<string, number>, id: string) =>
+    into.set(id, (into.get(id) ?? 0) + 1);
+  for (const row of rows) {
+    if (row.user?.is_admin !== true) bump(vendor, row.session_id);
+    else if (row.user_id === labellerBySession.get(row.session_id)) {
+      bump(ownLabeller, row.session_id);
+    }
+  }
+  for (const id of labellerBySession.keys()) {
+    const count = vendor.get(id) ?? ownLabeller.get(id) ?? 0;
+    if (count > 0) minutes.set(id, count);
+  }
+  return minutes;
 }
 
 /* -------------------------------------------------------------------------
@@ -340,7 +447,7 @@ export type MarksJoin = (
   points: readonly MarkablePoint[],
   options?: { hidden?: boolean },
 ) => LabelMarks;
-const sessionDefaults: SessionDependencies = {
+export const sessionDefaults: SessionDependencies = {
   ...defaults,
   loadVideo: loadJobVideo,
   buildMarks: buildJobMarks,
@@ -351,7 +458,7 @@ interface DbSessionRow {
   /** Null once the job row is gone (the key is ON DELETE SET NULL). */
   job_id: string | null;
   match_id: string;
-  status: "labelling" | "complete";
+  status: "labelling" | "submitted" | "complete";
   derivation_version: string;
   /** Null until the labeller sets it — then the job's value stands in. */
   ad_scoring: boolean | null;

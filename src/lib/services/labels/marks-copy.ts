@@ -421,14 +421,19 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     case "score_frozen":
       return "The vendor’s score stopped updating. The game and server come from where the serve was hit. The score is left blank.";
     case "segment_proposal_differs": {
-      const { proposedGame, proposedServer, mergedWith } = mark.params;
+      const { proposedGame, proposedServer, mergedWith, systemic } =
+        mark.params;
+      // On most of the match the entered score is the likelier mistake.
+      const tail = systemic
+        ? " It differs on most of the match, so check the entered score first."
+        : "";
       if (mergedWith !== null) {
-        return "Re-cutting the games from the score would join this rally to the one beside it. Nothing was changed.";
+        return `Re-cutting the games from the score would join this rally to the one beside it. Nothing was changed.${tail}`;
       }
       if (proposedGame === null || proposedServer === null) {
-        return "Re-cutting the games from the score puts this point somewhere else. Nothing was changed.";
+        return `Re-cutting the games from the score puts this point somewhere else. Nothing was changed.${tail}`;
       }
-      return `Re-cutting the games from the score puts this point in game ${proposedGame}, served by ${names[proposedServer]}. Nothing was changed.`;
+      return `Re-cutting the games from the score puts this point in game ${proposedGame}, served by ${names[proposedServer]}. Nothing was changed.${tail}`;
     }
     case "geometry_discarded":
       return "The vendor placed this shot outside the court enclosure, so its position was dropped.";

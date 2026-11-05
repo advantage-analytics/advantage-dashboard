@@ -28,11 +28,17 @@ function fakeDb(error: { message: string } | null = null) {
 
 test("refused without an admin, for a bad id and for counts that are not whole", async () => {
   const { db, writes } = fakeDb();
-  const deps = { requireAdmin: async () => null, createAdminClient: () => db };
+  const deps = {
+    requireLabelActor: async () => null,
+    createAdminClient: () => db,
+  };
   expect(
     await recordLabelOpenCounts(SESSION, { amber: 1, grey: 2 }, deps),
-  ).toEqual({ error: "Admin access required." });
-  const admin = { ...deps, requireAdmin: async () => ({ id: "a" }) };
+  ).toEqual({ error: "You don't have access to this session." });
+  const admin = {
+    ...deps,
+    requireLabelActor: async () => ({ id: "a", kind: "admin" as const }),
+  };
   expect(
     await recordLabelOpenCounts("nope", { amber: 1, grey: 2 }, admin),
   ).toEqual({ error: "No such session." });
@@ -50,7 +56,10 @@ test("writes the two counts and when, on that session alone", async () => {
   const result = await recordLabelOpenCounts(
     SESSION,
     { amber: 78, grey: 100 },
-    { requireAdmin: async () => ({ id: "a" }), createAdminClient: () => db },
+    {
+      requireLabelActor: async () => ({ id: "a", kind: "admin" as const }),
+      createAdminClient: () => db,
+    },
   );
   expect(result).toEqual({ ok: true });
   expect(writes).toHaveLength(1);
