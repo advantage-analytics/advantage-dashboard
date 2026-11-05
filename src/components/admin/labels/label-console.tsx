@@ -82,6 +82,7 @@ import {
   type ReplayWindow,
   stepKeyOf,
 } from "@/lib/services/labels/review-flow";
+import { openMissingShot } from "@/lib/services/labels/review-target";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
   greyJumpFirstItem,
@@ -2253,8 +2254,12 @@ export function LabelConsole({
   ) {
     const point = points.find((p) => p.id === pointId);
     if (!point || !operations) return;
+    const slot = liveMarks && openMissingShot(point, liveMarks);
     const afterShotId =
-      requestedAfterShotId ?? suggestedAddSlot(point, liveMarks);
+      requestedAfterShotId ??
+      (slot && !("error" in planAddedShot(point, slot.afterShotId))
+        ? slot.afterShotId
+        : null);
     // A draft point cannot take a stroke until its own insert lands.
     if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
     // Read only for a stroke added first in a rally with no times of its own.
@@ -4820,29 +4825,6 @@ function replaceShot(
   change: (shot: LabelShot) => LabelShot,
 ): LabelPoint[] {
   return updateShot(points, shotId, false, change);
-}
-
-/**
- * Where an add that names no place goes: after the stroke the point's first
- * open "Missing shot?" slot follows, when that add would write; null (the end
- * of the rally) when there is none.
- */
-function suggestedAddSlot(
-  point: LabelPoint,
-  marks: LabelMarks | null,
-): string | null {
-  if (!marks) return null;
-  for (const s of marks.suggestions) {
-    if (
-      s.kind === "missing_shot" &&
-      s.pointId === point.id &&
-      suggestionState(s, point) === "open" &&
-      !("error" in planAddedShot(point, s.afterShotId))
-    ) {
-      return s.afterShotId;
-    }
-  }
-  return null;
 }
 
 /** `points` with `shot` added to its point, in video order. */

@@ -32,7 +32,10 @@ export interface LabelRowOperations {
   onRestorePoint: (pointId: string) => void;
   onMovePoint: (pointId: string, to: LabelGame) => void;
   onSetChecked: (pointId: string, checked: boolean) => void;
-  /** After `afterShotId`, or at the end of the rally when null. */
+  /**
+   * After `afterShotId`. Null names no place: the point's open "Missing
+   * shot?" slot when it has one, the end of the rally otherwise.
+   */
   onAddShot: (pointId: string, afterShotId: string | null) => void;
   onAskResetShot: (
     shotId: string,
