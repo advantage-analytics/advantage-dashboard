@@ -520,8 +520,13 @@ test.describe("the console reads them live", () => {
     ).toMatch(
       /At 0–15 the serve should come from the ad side\. This one came from the deuce side\./,
     );
-    // Two flags on one point: one point to review.
-    expect(html).toContain('aria-label="1 point to review"');
+    // Two flags on one point: one point, and grey — the serve-side marks are
+    // data since 2026-11-05 (marks.ts `DATA_MARK_CODES`). It joins the
+    // fixture's grey point 2, and no amber total is drawn.
+    expect(html).toContain(
+      'aria-label="2 data points: wrong data that rarely moves the score"',
+    );
+    expect(html).not.toContain("to review");
     expect(
       markSummary(
         unchecked.points,

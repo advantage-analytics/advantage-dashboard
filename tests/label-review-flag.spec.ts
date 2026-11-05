@@ -17,6 +17,7 @@ import { REVIEW_ITEM_QUESTION } from "@/lib/services/labels/marks-copy";
 import { openFlags } from "@/lib/services/labels/flag-nav";
 import {
   greyJumpFirstItem,
+  openReviewItems,
   reviewStep,
 } from "@/lib/services/labels/review-step";
 import {
@@ -85,6 +86,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
     proposedGame: 4,
     proposedServer: "p2",
     mergedWith: null,
+    systemic: false,
   },
   out_ball_rally_continued: { nextHitter: "p1" },
   geometry_discarded: {},
@@ -208,8 +210,9 @@ test.describe("a placement gap beside an amber question", () => {
     expect(asked.item.id).toBe(7);
     expect(asked.target.shotId).toBe("a");
     expect(asked.then).toBe("Then: pick the winner");
-    // Any other way in keeps the usual order.
-    expect(reviewStep(gapped, amber, [gapped], names, true)!.item.id).toBe(5);
+    // Any other way in goes down the rally: the gap is on the first stroke,
+    // the winner question on the last.
+    expect(reviewStep(gapped, amber, [gapped], names, true)!.item.id).toBe(7);
     // With the gap answered, the amber question is next.
     const placed = {
       ...gapped,
@@ -235,6 +238,34 @@ test.describe("a placement gap beside an amber question", () => {
     expect(
       reviewStep(edited, amber, [edited], names, true, [5, 7], first)!.item.id,
     ).toBe(7);
+  });
+
+  test("an amber question on an earlier stroke stays ahead of the gap", () => {
+    const names = { p1: "Ann", p2: "Bea" };
+    const placed = { landingX: 2, landingY: 20 };
+    // The game and serve order question is on the first stroke, the gap on
+    // the second.
+    const middle = wonOnForehand({
+      shots: [
+        forehand({ id: "a", eventId: 8, videoTime: 1, ...placed }),
+        forehand({ id: "b", eventId: 9, videoTime: 2 }),
+        forehand({ id: "c", eventId: 10, videoTime: 3, ...placed }),
+      ],
+    });
+    const order = marksOf({ [POINT]: [sample("tiebreak_score_off_six_all")] });
+    expect(
+      openReviewItems(middle, order, [middle]).map((item) => [
+        item.id,
+        item.tone,
+      ]),
+    ).toEqual([
+      [6, "score"],
+      [7, "data"],
+    ]);
+    // The grey jump keeps the rally's order: the gap comes second.
+    expect(greyJumpFirstItem(middle, order, [middle])).toBeUndefined();
+    const asked = reviewStep(middle, order, [middle], names, true)!;
+    expect([asked.item.id, asked.target.shotId]).toEqual([6, "a"]);
   });
 
   test("a point only in the grey list keeps its order", () => {
@@ -273,9 +304,7 @@ test.describe("the item table", () => {
       [
         "last_call_overruled",
         "winner_disputed",
-        "net_hit_contradicts_height",
         "ending_suspect_line",
-        "winner_to_error_by_bounce",
         "ending_stale",
         "ending_contradicts_winner",
         "last_landing_missing",
@@ -356,10 +385,10 @@ test.describe("the flag", () => {
 
   test("a dismissed hint is not a member; a live row read is", () => {
     const dismissed = flagOf(
-      [sample("ending_suspect_line"), sample("winner_to_error_by_bounce")],
+      [sample("ending_suspect_line"), sample("result_type_unknown")],
       point({ dismissed: [hintDismissKey("ending_suspect_line")] }),
     );
-    expect(codes(dismissed, 4)).toEqual(["winner_to_error_by_bounce"]);
+    expect(codes(dismissed, 4)).toEqual(["result_type_unknown"]);
     // The last stroke has no landing placed: read off the rows, not stored.
     const unplaced = wonOnForehand({ shots: [forehand()] });
     const flag = reviewFlag(unplaced, marksOf({}), [unplaced]);
@@ -367,12 +396,10 @@ test.describe("the flag", () => {
     expect(flag?.items[0].members[0].state).toBe("open");
   });
 
-  test('"Net or out?" is dropped while "Was the last ball in?" has its answer', () => {
+  test('a hidden "Net or out?" is never a member, with or without "Was the last ball in?"', () => {
     const p = wonOnForehand();
     const netHit = { s1: [sample("net_hit_contradicts_height")] };
-    expect(codes(reviewFlag(p, marksOf({}, netHit), [p]), 4)).toEqual([
-      "net_hit_contradicts_height",
-    ]);
+    expect(reviewFlag(p, marksOf({}, netHit), [p])).toBeNull();
     const answered = marksOf(
       { [POINT]: [sample("last_call_overruled")] },
       netHit,
@@ -429,7 +456,7 @@ test.describe("tone", () => {
     );
   });
 
-  test("item 2 is amber only for a serve replayed after one in", () => {
+  test("item 2 is never amber, a serve replayed after one in included", () => {
     expect(tone(flagOf([sample("serve_after_serve_in")]), 2)).toBe("data");
     expect(tone(flagOf([sample("shot_after_point_end")]), 2)).toBe("data");
     expect(
@@ -437,7 +464,7 @@ test.describe("tone", () => {
         flagOf([sample("serve_after_serve_in"), sample("reserve_after_in")]),
         2,
       ),
-    ).toBe("score");
+    ).toBe("data");
   });
 
   test("item 3 is amber only for a double fault in question or a fault alone", () => {
@@ -465,6 +492,42 @@ test.describe("tone", () => {
     const flag = reviewFlag(contradicted, marksOf({}), [contradicted]);
     expect(codes(flag, 4)).toEqual(["ending_stale"]);
     expect(tone(flag, 4)).toBe("score");
+  });
+
+  test("item 6 is grey for a match-wide Game cut differs", () => {
+    const systemic = {
+      ...sample("segment_proposal_differs"),
+      params: { ...SAMPLES.segment_proposal_differs, systemic: true },
+    } as LabelMark;
+    expect(tone(flagOf([systemic]), 6)).toBe("data");
+    // A tiebreak off 6–6 beside it still makes the item amber.
+    expect(
+      tone(flagOf([systemic, sample("tiebreak_score_off_six_all")]), 6),
+    ).toBe("score");
+  });
+
+  test("Serve replayed, a hint, settles once its point is edited", () => {
+    const untouched = flagOf([sample("reserve_after_in")]);
+    expect(untouched?.items.find((i) => i.id === 2)?.state).toBe("open");
+    const edited = flagOf(
+      [sample("reserve_after_in")],
+      point({ status: "edited" }),
+    );
+    expect(edited?.items.find((i) => i.id === 2)?.state).toBe("settled");
+  });
+
+  test("item 6 is grey for the serve-side marks alone", () => {
+    expect(tone(flagOf([sample("score_side_mismatch")]), 6)).toBe("data");
+    expect(tone(flagOf([sample("service_court_repeat")]), 6)).toBe("data");
+    expect(
+      tone(
+        flagOf([
+          sample("service_court_repeat"),
+          sample("segment_proposal_differs"),
+        ]),
+        6,
+      ),
+    ).toBe("score");
   });
 
   test("items 5 and 6 are the score", () => {
@@ -558,11 +621,11 @@ test.describe("state", () => {
     expect(settled?.state).toBe("settled");
   });
 
-  test("answering the last ball settles the vendor-ball hints, not the row-read ones", () => {
+  test("answering the last ball settles the vendor-ball marks, not the row-read ones", () => {
+    // "Close to the line" settles as a hint on the answer; "Ending unknown",
+    // counted, settles on the edit as every counted mark does.
     const vendorHints = [
       sample("ending_suspect_line"),
-      sample("net_hit_contradicts_height"),
-      sample("winner_to_error_by_bounce"),
       sample("result_type_unknown"),
     ];
     const statesOf = (p: LabelPoint) =>
@@ -573,7 +636,7 @@ test.describe("state", () => {
     const untouched = statesOf(wonOnForehand());
     expect(untouched?.state).toBe("open");
 
-    // The last ball's call edited: the four settle and the question closes.
+    // The last ball's call edited: both settle and the question closes.
     const edited = wonOnForehand({
       winner: "p2",
       ending: "error",
@@ -591,7 +654,7 @@ test.describe("state", () => {
       item?.members
         .filter((m) => vendorHints.some((h) => h.code === m.mark.code))
         .map((m) => m.state),
-    ).toEqual(["settled", "settled", "settled", "settled"]);
+    ).toEqual(["settled", "settled"]);
 
     // A dead-ball tail cut after the last ball answers it too.
     const tail = wonOnForehand({
@@ -795,12 +858,8 @@ test.describe("demoted", () => {
   const hints = (...list: LabelMarkCode[]) =>
     flagOf(list.map((code) => sample(code)));
 
-  test("a grey flag open on item 4 alone with one of three signatures", () => {
-    for (const signature of [
-      ["net_hit_contradicts_height"],
-      ["ending_suspect_line"],
-      ["ending_suspect_line", "winner_to_error_by_bounce"],
-    ] as LabelMarkCode[][]) {
+  test("a grey flag open on item 4 alone with the one signature", () => {
+    for (const signature of [["ending_suspect_line"]] as LabelMarkCode[][]) {
       const flag = hints(...signature);
       expect(flag?.tone, signature.join("+")).toBe("data");
       expect(flag?.state, signature.join("+")).toBe("open");
@@ -809,20 +868,15 @@ test.describe("demoted", () => {
   });
 
   test("its neighbours are kept", () => {
-    // "Winner or error?" alone is grey, and stays on the row.
-    const alone = hints("winner_to_error_by_bounce");
-    expect(alone?.tone).toBe("data");
-    expect(alone?.demoted).toBe(false);
-
-    // "Net or out?" with the last landing unplaced.
+    // "Close to the line" with the last landing unplaced.
     const unplaced = wonOnForehand({ shots: [forehand()] });
     const withLanding = reviewFlag(
       unplaced,
-      marksOf({}, { s1: [sample("net_hit_contradicts_height")] }),
+      marksOf({ [POINT]: [sample("ending_suspect_line")] }),
       [unplaced],
     );
     expect(codes(withLanding, 4)).toEqual([
-      "net_hit_contradicts_height",
+      "ending_suspect_line",
       "last_landing_missing",
     ]);
     expect(withLanding?.tone).toBe("data");
@@ -832,10 +886,7 @@ test.describe("demoted", () => {
     expect(hints("ending_suspect_line", "ending_stale")?.demoted).toBe(false);
 
     // Any other item open keeps it, grey or not.
-    const twoItems = hints(
-      "net_hit_contradicts_height",
-      "same_player_consecutive",
-    );
+    const twoItems = hints("ending_suspect_line", "same_player_consecutive");
     expect(twoItems?.tone).toBe("data");
     expect(twoItems?.demoted).toBe(false);
 

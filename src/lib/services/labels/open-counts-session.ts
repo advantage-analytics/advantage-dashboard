@@ -6,8 +6,10 @@
  */
 
 import { isUuid } from "@/lib/admin/validation";
-import { requireAdmin } from "@/lib/services/programs/admin-guard";
+import type { LabelActor } from "@/lib/services/programs/admin-guard";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
+import { ACTOR_REQUIRED } from "./edit-session";
+import { requireLabelActorFor, type LabelActorTarget } from "./label-actor";
 import type { FlagCounts } from "./job-groups";
 
 export type LabelOpenCounts = FlagCounts;
@@ -15,11 +17,14 @@ export type LabelOpenCounts = FlagCounts;
 export type LabelOpenCountsResult = { ok: true } | { error: string };
 
 export interface OpenCountsDependencies {
-  requireAdmin: () => Promise<{ id: string } | null>;
+  requireLabelActor: (target: LabelActorTarget) => Promise<LabelActor | null>;
   createAdminClient: () => AdminClient;
 }
 
-const defaults: OpenCountsDependencies = { requireAdmin, createAdminClient };
+const defaults: OpenCountsDependencies = {
+  requireLabelActor: requireLabelActorFor,
+  createAdminClient,
+};
 
 const count = (n: unknown): n is number =>
   typeof n === "number" && Number.isInteger(n) && n >= 0 && n < 100_000;
@@ -29,8 +34,8 @@ export async function recordLabelOpenCounts(
   counts: LabelOpenCounts,
   deps: OpenCountsDependencies = defaults,
 ): Promise<LabelOpenCountsResult> {
-  const viewer = await deps.requireAdmin();
-  if (!viewer) return { error: "Admin access required." };
+  const viewer = await deps.requireLabelActor({ sessionId });
+  if (!viewer) return { error: ACTOR_REQUIRED };
   if (!isUuid(sessionId)) return { error: "No such session." };
   if (!count(counts?.amber) || !count(counts?.grey)) {
     return { error: "Counts must be whole numbers." };

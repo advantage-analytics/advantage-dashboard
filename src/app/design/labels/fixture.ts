@@ -136,15 +136,15 @@ const mark = (code: string, tier: "count" | "hint", params: object = {}) =>
 /** The marks dealt out along the match, by the point's place in it. */
 const DEALT: [number, LabelMark][] = [
   [3, mark("winner_disputed", "count")],
-  [9, mark("reserve_after_in", "count")],
+  [9, mark("reserve_after_in", "hint")],
   [14, mark("winner_disputed", "count")],
   [14, mark("ending_suspect_line", "hint")],
   [21, mark("second_serve_called_out", "count")],
   [27, mark("winner_guessed", "count")],
   [33, mark("ending_suspect_line", "hint")],
   [38, mark("winner_disputed", "count")],
-  [44, mark("result_type_unknown", "hint")],
-  [51, mark("winner_to_error_by_bounce", "hint", { loser: "p2" })],
+  [44, mark("result_type_unknown", "count")],
+  [51, mark("ending_suspect_line", "hint")],
   [58, mark("winner_disputed", "count")],
   [63, mark("second_serve_called_out", "count")],
   [70, mark("ending_suspect_line", "hint")],
@@ -293,6 +293,10 @@ const open = (id: string, checked: number, total: number) => ({
   checked,
   total,
   openCounts: { amber: Math.max(0, 12 - checked), grey: 3 },
+  assignedTo: null,
+  assignedAt: null,
+  submittedAt: null,
+  minutesWorked: 0,
 });
 const done = (id: string, total: number) => ({
   id,
@@ -300,6 +304,10 @@ const done = (id: string, total: number) => ({
   checked: total,
   total,
   openCounts: { amber: 0, grey: 0 },
+  assignedTo: null,
+  assignedAt: null,
+  submittedAt: null,
+  minutesWorked: 0,
 });
 
 export const JOBS: LabelJobRow[] = [

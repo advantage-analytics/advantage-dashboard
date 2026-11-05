@@ -52,8 +52,11 @@ import {
 
 /**
  * "Game cut differs" on more than this share of the match's points, and on at
- * least `SEGMENT_SYSTEMIC_MIN` of them, is the entered score being wrong
- * rather than those points: its chips are not drawn (`buildLabelMarks`).
+ * least `SEGMENT_SYSTEMIC_MIN` of them, is most likely the entered score being
+ * wrong rather than those points. Its marks are kept — the labeller fixed 89%
+ * of such points on the 19 complete sessions (2026-11-05) — but carry
+ * `systemic`, so they draw grey rather than flooding the match amber
+ * (marks-state.ts `reviewItemTone`).
  */
 export const SEGMENT_SYSTEMIC_SHARE = 1 / 3;
 export const SEGMENT_SYSTEMIC_MIN = 10;
@@ -101,8 +104,8 @@ export const LABEL_ONLY_FLAGS = {
  * place a tier is decided. A code in a transcript's `flags[]` that is not a key
  * here produces nothing.
  *
- * `net_hit_contradicts_height` is a `hint` only on the point's last stroke and
- * `hidden` before it (`netHitTier`). `phantom_strokes_dropped` is hidden as a
+ * `net_hit_contradicts_height` takes its tier here only on the point's last
+ * stroke and is `hidden` before it (`netHitTier`). `phantom_strokes_dropped` is hidden as a
  * chip only: the struck-through removed stroke is still drawn.
  * `same_player_consecutive` is counted AND keeps its missing-stroke slot; the
  * slot's "Dismiss" settles the chip (marks-state.ts `markState`).
@@ -128,14 +131,27 @@ export const LABEL_ONLY_FLAGS = {
  * `second_serve_called_out` is counted — 5 of its 6 points changed, and two
  * of the three points changed with no chip at all were double faults that
  * carried only this hint. `segment_proposal_differs` stays counted, but not
- * when it is on most of the match (`SEGMENT_SYSTEMIC_SHARE`): there it fired
- * on 122 points because the entered score was wrong (6–4 for a 6–0), which is
- * one thing to fix, not 122 points to check — see `buildLabelMarks`.
+ * when it is on most of the match: there it fired on 122 points because the
+ * entered score was wrong (6–4 for a 6–0). (Undone 2026-11-05, below.)
+ *
+ * Retiered 2026-11-05 on the 19 complete analyst sessions (2,372 points;
+ * "fixed" = winner, ending, server or game changed, or the point deleted or
+ * combined; base 53%, winner changed 29%):
+ * - `result_type_unknown` is counted: 87% fixed, the winner moved on 57% —
+ *   the highest of any mark. It sits on "Check the ending" 89% of the time,
+ *   so it adds few amber points; it is already the same item-4 question.
+ * - The match-wide "Game cut differs" is no longer hidden: those points were
+ *   fixed 89% of the time, 44 of them with no other visible mark. It is
+ *   marked `systemic` and drawn grey instead (`SEGMENT_SYSTEMIC_SHARE`).
+ * - `reserve_after_in` is a hint: 57% fixed, 22% winner — the base rate.
+ * - `net_hit_contradicts_height` is hidden on every stroke: 51% fixed.
+ * - `winner_to_error_by_bounce` is hidden: it never fired without
+ *   `ending_suspect_line` and caught no fix that mark did not.
  */
 export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_DISPUTED]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.PICK_WINNER]: { tier: "count", scope: "point" },
-  [POINT_FLAGS.RESERVE_AFTER_IN]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.RESERVE_AFTER_IN]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.TIEBREAK_SCORE_OFF_SIX_ALL]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SCORE_SIDE_MISMATCH]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SERVICE_COURT_REPEAT]: { tier: "count", scope: "point" },
@@ -149,7 +165,7 @@ export const LABEL_MARK_META = {
   [LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS]: { tier: "count", scope: "point" },
   [POINT_FLAGS.ENDING_SUSPECT_LINE]: { tier: "hint", scope: "point" },
-  [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hint", scope: "point" },
+  [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hidden", scope: "point" },
   [LABEL_ONLY_FLAGS.SHOT_AFTER_POINT_END]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.ENDING_STALE]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.ENDING_CONTRADICTS_WINNER]: {
@@ -162,8 +178,8 @@ export const LABEL_MARK_META = {
   [LABEL_ONLY_FLAGS.SERVE_IN_LANDING_OUT]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.PLACEMENT_MISSING]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "count", scope: "point" },
-  [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
-  [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
+  [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "count", scope: "point" },
+  [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hidden", scope: "shot" },
   [POINT_FLAGS.PHANTOM_STROKES_DROPPED]: { tier: "hidden", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hidden", scope: "point" },
   [POINT_FLAGS.SCORE_FROZEN]: { tier: "hidden", scope: "point" },
@@ -187,9 +203,16 @@ export type LabelMarkCode = keyof typeof LABEL_MARK_META;
  * the winner on 28% of "Missing shot?" points — the rate of any point, about
  * one in five — while changing something on all 40. Every other counted mark
  * moved the winner on a third to more than half of its points.
+ *
+ * 2026-11-05, on the 19 complete sessions: "Wrong side for the score" and
+ * "Same side twice" join them. On the 78 points where they were the only
+ * amber mark, the labeller changed the winner on 12. They stay counted, so
+ * the point is still flagged and "Add point" still offered, but grey.
  */
 export const DATA_MARK_CODES: ReadonlySet<LabelMarkCode> = new Set([
   POINT_FLAGS.SAME_PLAYER_CONSECUTIVE,
+  POINT_FLAGS.SCORE_SIDE_MISMATCH,
+  POINT_FLAGS.SERVICE_COURT_REPEAT,
 ]);
 
 /** Whether a mark is about the data, not the score (`DATA_MARK_CODES`). */
@@ -284,6 +307,11 @@ export interface LabelMarkParams {
     proposedGame: number | null;
     proposedServer: LabelSide | null;
     mergedWith: number | null;
+    /**
+     * The mark is on most of the match (`SEGMENT_SYSTEMIC_SHARE`): the entered
+     * score is the likelier mistake, so its item reads grey.
+     */
+    systemic: boolean;
   };
   out_ball_rally_continued: { nextHitter: LabelSide | null };
   geometry_discarded: NoParams;
@@ -480,6 +508,8 @@ function pointMarks(
               ? labelSideOf(proposed.server === "player1")
               : null,
             mergedWith: proposed?.mergedWith ?? null,
+            // Settled once every point is read, below.
+            systemic: false,
           }),
         );
         break;
@@ -800,12 +830,9 @@ export function buildLabelMarks(
   // the point that holds its stroke now.
   marks.suggestions = homeShotSuggestions(marks.suggestions, points);
 
-  // "Game cut differs" on most of the match is not a question about each
-  // point: the entered score the re-cut was fitted to is wrong, and the
-  // session's own stops say so (the set that does not add up, flag-nav.ts;
-  // the set break the clock shows, set-break.ts). The chips go, so the points
-  // that do need a look are not lost among them; the scorecard still reads
-  // them, as hidden marks.
+  // "Game cut differs" on most of the match is most likely the entered score
+  // the re-cut was fitted to being wrong. The marks stay — those points were
+  // still fixed most of the time — but say so, and read grey.
   const recut = Object.values(marks.points).filter((list) =>
     list.some((m) => m.code === POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS),
   ).length;
@@ -814,15 +841,11 @@ export function buildLabelMarks(
     recut > transcript.points.length * SEGMENT_SYSTEMIC_SHARE
   ) {
     for (const [pointId, list] of Object.entries(marks.points)) {
-      const kept = list.flatMap((m): LabelMark[] =>
-        m.code !== POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS
-          ? [m]
-          : hidden
-            ? [{ ...m, tier: "hidden" } as LabelMark]
-            : [],
+      marks.points[pointId] = list.map((m) =>
+        m.code === POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS
+          ? { ...m, params: { ...m.params, systemic: true } }
+          : m,
       );
-      if (kept.length === 0) delete marks.points[pointId];
-      else marks.points[pointId] = kept;
     }
   }
 

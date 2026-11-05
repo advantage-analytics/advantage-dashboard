@@ -25,6 +25,7 @@ import {
   type MatchAnalysis,
   type RecoveryFacts,
   jobRecoveryFacts,
+  isAnalysisReady,
   jobTimingFields,
   pipelinePercent,
   stoppedUploadPercent,
@@ -318,6 +319,19 @@ export function withLiveAnalysis<
     Pick<MatchAnalysis, "jobId" | "attemptsUsed">,
 >(analysis: T, patch: LiveAnalysisPatch | undefined): T {
   if (!patch) return analysis;
+  // A resubmission of a match already showing a finished analysis is an
+  // admin reprocess (splitstep/reprocess.ts — an ordinary retry only follows
+  // a failed or cancelled job). The athlete's report stands until the new
+  // one is finished, so its queued/processing/failed rows are not merged —
+  // the same rule the server loaders apply with `hideInFlightReprocess`.
+  if (
+    patch.recoveryBasis?.resubmitted &&
+    patch.recoveryBasis.jobId !== analysis.jobId &&
+    isAnalysisReady(analysis.status) &&
+    !isAnalysisReady(patch.status)
+  ) {
+    return analysis;
+  }
   const { recoveryBasis, ...fields } = patch;
   if (!recoveryBasis) return { ...analysis, ...fields };
 

@@ -185,10 +185,13 @@ export function normalizeStroke(
     opponentX: opponent.x,
     opponentY: opponent.y,
 
-    speedKmh: num(raw.speed_kmh),
-    spinType: str(raw.spin_type),
-    initialHeightM: num(raw.initial_height_m),
-    heightAtNetM: num(raw.height_at_net_m),
+    // `ball_`-prefixed first: the vendor's announced rename. The old name
+    // stays as the fallback so files from before it keep parsing.
+    speedKmh: num(raw.ball_speed_kmh ?? raw.speed_kmh),
+    spinType: str(raw.ball_spin_type ?? raw.spin_type),
+    initialHeightM: num(raw.ball_initial_height_m ?? raw.initial_height_m),
+    heightAtNetM: num(raw.ball_height_at_net_m ?? raw.height_at_net_m),
+    angVelMagRpm: num(raw.ball_ang_vel_mag_rpm ?? raw.ang_vel_mag_rpm),
     netHit: raw.net_hit === true,
 
     bounceX: bounce.x,

@@ -16,6 +16,7 @@ import {
   updateIfUnchanged,
   type LabelWriteDependencies,
 } from "./edit-session";
+import { targetId } from "./label-actor";
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import type { LabelPointStatus } from "./session";
 import { planDismiss } from "./suggestions";
@@ -88,5 +89,6 @@ export function dismissLabelSuggestion(
     deps,
     (supabase) => writeLabelSuggestionDismiss({ supabase, pointId, key }),
     "dismiss the suggestion",
+    { pointId: targetId(pointId) },
   );
 }

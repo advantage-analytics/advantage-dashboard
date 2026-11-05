@@ -110,7 +110,17 @@ export type LabelConfirm =
        */
       unmarked: number;
     }
-  | { kind: "reopen-session" };
+  | {
+      kind: "reopen-session";
+      /**
+       * Reopening a submitted session hands it back to its labeller: nothing
+       * was published, so nothing loses Verified by Advantage. Absent: from
+       * complete.
+       */
+      from?: "submitted";
+    }
+  /** The labeller's "Submit for review" (submit-session.ts). */
+  | { kind: "submit-session" };
 
 /** "2 edited shots", "1 shot you added" — a count and what it counts. */
 function shotCount(n: number, what: string): string {
@@ -333,7 +343,26 @@ export function labelConfirmCopy(
         pendingLabel: "Publishing…",
         tone: "primary",
       };
+    case "submit-session":
+      return {
+        title: "Submit for review?",
+        description:
+          "The match goes to an Advantage reviewer as it stands, and you can no longer edit it. If they send it back, it reopens here for you to finish.",
+        confirmLabel: "Submit",
+        pendingLabel: "Submitting…",
+        tone: "primary",
+      };
     case "reopen-session":
+      if (confirm.from === "submitted") {
+        return {
+          title: "Reopen for labelling?",
+          description:
+            "The labeller can edit this match again and submit it once more. Nothing was published, so the athlete's match is unchanged.",
+          confirmLabel: "Reopen",
+          pendingLabel: "Reopening…",
+          tone: "primary",
+        };
+      }
       return {
         title: "Reopen and remove Verified by Advantage?",
         description:

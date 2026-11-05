@@ -81,6 +81,22 @@
  *      same exemption the live guards grant service-role processing
  *      (`if not v_is_client then return new`), for the same reason.
  *
+ * ── Reprocess (admin only) ───────────────────────────────────────────────────
+ * `reprocess: true` is the one way a COMPLETED parent gets a child: an admin
+ * resending the same blob for the vendor's newer model output. Reached only
+ * from POST /api/admin/splitstep/reprocess (an admin session or CRON_SECRET);
+ * the athlete's route never passes it. It reuses every step below except the
+ * ones that exist to protect a person's spend or decision, each skipped by
+ * name and logged:
+ *   • `classifyFailure()` — nothing failed;
+ *   • the attempt ceiling — it counts vendor failures, not admin resends;
+ *   • the upload contract — no session, and the match was already admitted;
+ *   • `reserveForChild()` / `releaseQuota()` — vendor reprocessing is not
+ *     billable, so no `processing_usage` row is written or released;
+ *   • the adopted-failure auto-retry — a reprocess that fails stays failed.
+ * The duplicate, blob and metadata checks run unchanged. What a reprocess
+ * child changes downstream is listed in `reprocess.ts`.
+ *
  * ── The vendor POST fragment ─────────────────────────────────────────────────
  * Steps mint → POST → parse id → record queued mirror api/splitstep/jobs
  * steps 7–8. Change one and change the other; they are annotated on both
@@ -328,11 +344,35 @@ export async function resubmitJob(params: {
    * refused as undecided, never passed.
    */
   session?: SupabaseClient;
+  /**
+   * Admin reprocess of a COMPLETED parent — see the header. Never set by the
+   * athlete's route, never together with `auto`. Skips quota entirely.
+   */
+  reprocess?: boolean;
+  /** Who asked for a reprocess, for the log: an admin's id, or `"cron"`. */
+  requestedBy?: string;
   /** Test seams — see `ResubmitIo`. Production omits this. */
   io?: Partial<ResubmitIo>;
 }): Promise<ResubmitResult> {
-  const { supabase, jobId, auto, workspace, session } = params;
+  const {
+    supabase,
+    jobId,
+    auto,
+    workspace,
+    session,
+    reprocess = false,
+    requestedBy,
+  } = params;
   const io: ResubmitIo = { ...defaultIo(supabase, session), ...params.io };
+
+  if (reprocess && auto) {
+    // Nothing automatic may resend a finished analysis.
+    return {
+      ok: false,
+      reason: "not_failed",
+      message: "A reprocess is only ever started by an admin.",
+    };
+  }
 
   const config = io.deploymentConfig();
   if (!config.ok) {
@@ -377,7 +417,15 @@ export async function resubmitJob(params: {
   }
   const parent: ParentJob = { ...raw, created_by: raw.created_by };
 
-  if (!RESUBMITTABLE_STATUSES.has(parent.status)) {
+  if (reprocess) {
+    if (parent.status !== "completed") {
+      return {
+        ok: false,
+        reason: "not_failed",
+        message: `Only a completed analysis can be reprocessed; this one is ${parent.status}.`,
+      };
+    }
+  } else if (!RESUBMITTABLE_STATUSES.has(parent.status)) {
     return {
       ok: false,
       reason: "not_failed",
@@ -405,18 +453,20 @@ export async function resubmitJob(params: {
   //
   // A cancelled parent did not fail, so there is nothing to classify: it is
   // treated as "retry" and meets the same video, chain and duplicate checks.
-  const recoveryClass = cancelled
-    ? "retry"
-    : classifyFailure({
-        dbStatus: parent.status,
-        errorCode: parent.error_code,
-        errorCategory: parent.error_category,
-        errorStep: parent.error_step,
-        hasVideo: parent.video_object_key !== null,
-        hasResults: false,
-        attemptsUsed: 0,
-        stalledSubmit: false,
-      });
+  // Neither did a completed one being reprocessed.
+  const recoveryClass =
+    cancelled || reprocess
+      ? "retry"
+      : classifyFailure({
+          dbStatus: parent.status,
+          errorCode: parent.error_code,
+          errorCategory: parent.error_category,
+          errorStep: parent.error_step,
+          hasVideo: parent.video_object_key !== null,
+          hasResults: false,
+          attemptsUsed: 0,
+          stalledSubmit: false,
+        });
 
   if (recoveryClass === "fix_recording") {
     // The vendor rejected the file itself — a frame-rate, resolution, or
@@ -484,12 +534,29 @@ export async function resubmitJob(params: {
     };
   }
 
+  // A chain that holds a completed job has already been analysed; the only
+  // way on from there is an admin reprocess. This is what stops a failed
+  // reprocess child from being auto-retried (on the athlete's quota) by the
+  // webhook or the reconciler, or "retried" by the athlete's own button.
+  if (!reprocess && chain.some((j) => j.status === "completed")) {
+    return {
+      ok: false,
+      reason: "not_failed",
+      message: "This match already has a completed analysis.",
+    };
+  }
+
   // A cancelled row — the athlete withdrew it from the vendor's queue before
   // it ran — spends no attempt, so cancel → "Send for analysis again" cycles
   // never use up the retries meant for vendor failures. `chainAttempts()`
   // counts the same way, so the "retry" / "wait_or_ask" copy agrees.
   const attemptsSpent = chain.filter((j) => countsAsAttempt(j.status)).length;
-  if (attemptsSpent >= MAX_TOTAL_ATTEMPTS) {
+  if (reprocess) {
+    console.log(`${LOG} reprocess — attempt ceiling not applied`, {
+      parentId: parent.id,
+      attemptsSpent,
+    });
+  } else if (attemptsSpent >= MAX_TOTAL_ATTEMPTS) {
     return {
       ok: false,
       reason: "attempt_ceiling",
@@ -686,7 +753,9 @@ export async function resubmitJob(params: {
   //     whether a match may be recorded here at all, the layer under it — and
   //     it is asked first for the reason the submit route gives: a reservation
   //     refused on eligibility would only have to be handed straight back.
-  if (!auto) {
+  //     A reprocess skips it too: an admin is resending a match that was
+  //     admitted and analysed already, and there is no session to ask with.
+  if (!auto && !reprocess) {
     const roster =
       workspace?.kind === "team"
         ? await io.loadRoster(workspace.id, parent.created_by)
@@ -783,31 +852,46 @@ export async function resubmitJob(params: {
   //    but the child row is already live, and an `uploaded` orphan would
   //    trip `processing_jobs_one_live_per_match` on every later retry. So it
   //    gets the same cleanup as a refusal, and a "try again" answer.
+  //
+  //    A reprocess reserves nothing: vendor reprocessing is not billable, so
+  //    no `processing_usage` row is written for the child — and so none is
+  //    released if it fails below (`!reprocess` guards the release).
   let reserved: Awaited<ReturnType<typeof reserveForChild>>;
-  try {
-    reserved = await reserveForChild({
-      supabase,
-      io,
-      auto,
-      workspace,
-      parent,
+  if (reprocess) {
+    console.log(`${LOG} reprocess — quota bypassed, nothing reserved`, {
+      parentId: parent.id,
       childId,
-      programId: match.program_id,
+      matchId: parent.match_id,
+      requestedBy: requestedBy ?? null,
       seconds: billableSeconds,
     });
-  } catch (err) {
-    console.error(`${LOG} quota reservation failed`, {
-      jobId: parent.id,
-      childId,
-      code: (err as { code?: unknown } | null)?.code ?? null,
-      message: err instanceof Error ? err.message : String(err),
-    });
-    await supabase.from("processing_jobs").delete().eq("id", childId);
-    return {
-      ok: false,
-      reason: "quota_unavailable",
-      message: "Could not reserve analysis time. Try again.",
-    };
+    reserved = { ok: true };
+  } else {
+    try {
+      reserved = await reserveForChild({
+        supabase,
+        io,
+        auto,
+        workspace,
+        parent,
+        childId,
+        programId: match.program_id,
+        seconds: billableSeconds,
+      });
+    } catch (err) {
+      console.error(`${LOG} quota reservation failed`, {
+        jobId: parent.id,
+        childId,
+        code: (err as { code?: unknown } | null)?.code ?? null,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      await supabase.from("processing_jobs").delete().eq("id", childId);
+      return {
+        ok: false,
+        reason: "quota_unavailable",
+        message: "Could not reserve analysis time. Try again.",
+      };
+    }
   }
 
   if (!reserved.ok) {
@@ -893,6 +977,7 @@ export async function resubmitJob(params: {
       childId,
       externalJobId,
       auto,
+      reprocess,
       billableSeconds,
     });
 
@@ -910,7 +995,10 @@ export async function resubmitJob(params: {
       // safe because every guard (chain length, one-auto-per-chain, blob
       // existence) re-checks fresh state against `childId` as the new parent,
       // not against any assumption carried over from this call.
+      // Never for a reprocess: it spent nothing, and nothing automatic may
+      // resend a finished analysis (the chain check would refuse it anyway).
       if (
+        !reprocess &&
         adoption.jobStatus === "failed" &&
         isDownloadFailure(adoption.errorCode, adoption.errorStep)
       ) {
@@ -947,7 +1035,7 @@ export async function resubmitJob(params: {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`${LOG} resubmission failed`, { childId, message });
 
-    await io.releaseQuota(childId);
+    if (!reprocess) await io.releaseQuota(childId);
     try {
       await io.markUrlRetired(childId);
     } catch {

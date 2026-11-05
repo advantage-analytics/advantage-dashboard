@@ -133,7 +133,7 @@ test.describe("openFlags", () => {
     expect(openFlags(rows, marksOf({ x: ["ending_suspect_line"] }))).toEqual(
       [],
     );
-    const grey = openFlags(rows, marksOf({ y: ["winner_to_error_by_bounce"] }));
+    const grey = openFlags(rows, marksOf({ y: ["reserve_after_in"] }));
     expect(grey).toHaveLength(1);
     expect(grey[0]).toMatchObject({ pointId: "y", pointNumber: 2, data: true });
   });

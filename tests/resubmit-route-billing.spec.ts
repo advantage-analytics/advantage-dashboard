@@ -31,7 +31,11 @@ interface Scenario {
 }
 
 function loadRoute(scenario: Scenario) {
-  const calls: { workspace: { id: string } }[] = [];
+  const calls: {
+    workspace: { id: string };
+    auto?: boolean;
+    reprocess?: boolean;
+  }[] = [];
   const logged: { message: string; detail: unknown }[] = [];
   const reads: string[] = [];
 
@@ -78,7 +82,11 @@ function loadRoute(scenario: Scenario) {
         },
       },
       "@/lib/services/splitstep/resubmit-job": {
-        resubmitJob: async (args: { workspace: { id: string } }) => {
+        resubmitJob: async (args: {
+          workspace: { id: string };
+          auto?: boolean;
+          reprocess?: boolean;
+        }) => {
           calls.push(args);
           return { ok: true, jobId: JOB, externalJobId: "ext-1" };
         },
@@ -171,5 +179,20 @@ test.describe("resubmit route billing", () => {
     expect(res.status).toBe(200);
     expect(calls).toHaveLength(1);
     expect(calls[0].workspace.id).toBe(PROGRAM);
+  });
+
+  test("the athlete's retry never asks for a reprocess, so a completed parent stays refused", async () => {
+    // resubmitJob refuses a completed parent unless `reprocess` is set
+    // (resubmit-authorization.spec.ts › reprocess); this route must never set it.
+    const { post, calls } = loadRoute({
+      match: { data: { program_id: PROGRAM }, error: null },
+      available: [PERSONAL, TEAM],
+    });
+
+    await post();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].auto).toBe(false);
+    expect(calls[0].reprocess).toBeUndefined();
   });
 });

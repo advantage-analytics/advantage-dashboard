@@ -532,13 +532,33 @@ test("both entry points refuse without an admin, before a client is built", asyn
   for (const entry of [completeLabelSession, reopenLabelSession]) {
     let built = 0;
     const result = await entry(SESSION_ID, {
-      requireAdmin: async () => null,
+      requireLabelActor: async () => null,
       createAdminClient: () => {
         built += 1;
         return fakeClient({}).supabase;
       },
     });
     expect(result).toEqual({ error: "Administrator access is required." });
+    expect(built).toBe(0);
+  }
+});
+
+test("both entry points refuse a labeller, even one the gate admits to the session", async () => {
+  for (const entry of [completeLabelSession, reopenLabelSession]) {
+    let built = 0;
+    const asked: unknown[] = [];
+    const result = await entry(SESSION_ID, {
+      requireLabelActor: async (target) => {
+        asked.push(target);
+        return { id: "labeller", kind: "labeller" as const };
+      },
+      createAdminClient: () => {
+        built += 1;
+        return fakeClient({}).supabase;
+      },
+    });
+    expect(result).toEqual({ error: "Administrator access is required." });
+    expect(asked).toEqual([{ sessionId: SESSION_ID }]);
     expect(built).toBe(0);
   }
 });

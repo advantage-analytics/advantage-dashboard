@@ -20,6 +20,7 @@ import { openFlags, stepFlag } from "./flag-nav";
 import type { LabelMarks } from "./marks";
 import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import {
+  drawsGhosts,
   lastCallAnswer,
   PLACEMENT_ITEM,
   pointRowMarkList,
@@ -189,9 +190,7 @@ export function reviewItemThenLabel(item: ReviewItem): string {
         !has(
           "last_call_overruled",
           "winner_disputed",
-          "net_hit_contradicts_height",
           "ending_suspect_line",
-          "winner_to_error_by_bounce",
           "ending_stale",
           "ending_contradicts_winner",
           "result_type_unknown",
@@ -259,12 +258,36 @@ function reopenSettled(item: ReviewItem): ReviewItem | null {
 }
 
 /**
- * The point's open items in the order the column asks them: id order
- * (`reviewFlag`, a demoted flag's too — the open point still asks it), except
- * that an item 2 open only on "Did the point end here?" is asked after item
- * 4 when that is open: the strokes after the point's end are the follow-up
- * to how it ended, not a question before it. `keep` names the items the
- * console's queue still has to ask, which an edit elsewhere on the point
+ * Where an item sits in the rally: the index of the live stroke its step lands
+ * on (`reviewStepTarget`, the add-shot slot's stroke when it names none), after
+ * the last stroke when it lands on none.
+ */
+function rallyPosition(
+  point: LabelPoint,
+  marks: LabelMarks,
+): (item: ReviewItem) => number {
+  const ghosts = drawsGhosts(marks);
+  const order = new Map(
+    liveShotsInOrder(point, ghosts).map((shot, i) => [shot.id, i]),
+  );
+  return (item) => {
+    const target = reviewStepTarget(item, point, marks, ghosts);
+    const shotId = target.shotId ?? target.slot?.afterShotId ?? null;
+    return (shotId === null ? undefined : order.get(shotId)) ?? order.size;
+  };
+}
+
+/**
+ * The point's open items in the order the column asks them: down the rally,
+ * by the stroke each one lands on (`reviewStepTarget`), amber and grey alike,
+ * so answering never sends the film back to a stroke already passed. Items on
+ * the same stroke, or with none, keep id order (`reviewFlag`, a demoted
+ * flag's too — the open point still asks it). Until 2026-11-05 it was id
+ * order alone, and "Shot placement" on an early stroke came after the last
+ * ball's questions. An item 2 open only on "Did the point end here?" is asked
+ * after item 4 when that is open: the strokes after the point's end are the
+ * follow-up to how it ended, not a question before it. `keep` names the items
+ * the console's queue still has to ask, which an edit elsewhere on the point
  * may have settled (`reopenSettled`). `first`, while open, is asked before the
  * rest: a jump from the grey list (`greyJumpFirstItem`).
  */
@@ -277,11 +300,17 @@ export function openReviewItems(
 ): ReviewItem[] {
   const flag = reviewFlag(point, marks, points);
   if (!flag) return [];
-  const open = flag.items.flatMap((item) => {
-    if (item.state === "open") return [item];
-    const reopened = keep?.includes(item.id) ? reopenSettled(item) : null;
-    return reopened ? [reopened] : [];
-  });
+  const at = rallyPosition(point, marks);
+  const open = flag.items
+    .flatMap((item) => {
+      if (item.state === "open") return [item];
+      const reopened = keep?.includes(item.id) ? reopenSettled(item) : null;
+      return reopened ? [reopened] : [];
+    })
+    .map((item) => ({ item, at: at(item) }))
+    // Stable: a tie keeps id order.
+    .sort((a, b) => a.at - b.at)
+    .map(({ item }) => item);
   const ending = open.find((item) => item.id === 4);
   const followUp = open.find(isFollowUp);
   let asked = open;
@@ -300,10 +329,12 @@ export function openReviewItems(
 
 /**
  * What a jump from the grey list asks first: "Shot placement" where an amber
- * question would otherwise come before it, or the labeller lands on that
- * question from a list that said nothing about it. That is a point in both lists
- * (`openFlags`), or one whose settled amber question the console's queue (`keep`)
- * still asks. Undefined elsewhere: the usual order.
+ * question on the same stroke would otherwise come before it, or the labeller
+ * lands on that question from a list that said nothing about it. That is a
+ * point in both lists (`openFlags`), or one whose settled amber question the
+ * console's queue (`keep`) still asks. Never ahead of an amber question on an
+ * earlier stroke: answering the gap would send the film back to it, so the
+ * jump keeps the rally's order there. Undefined elsewhere: the usual order.
  */
 export function greyJumpFirstItem(
   point: LabelPoint,
@@ -312,10 +343,15 @@ export function greyJumpFirstItem(
   keep?: readonly ReviewItemId[],
 ): ReviewItemId | undefined {
   const asked = openReviewItems(point, marks, points, keep);
-  return asked.some((item) => item.id === PLACEMENT_ITEM) &&
-    asked.some((item) => item.tone === "score")
-    ? PLACEMENT_ITEM
-    : undefined;
+  const placement = asked.find((item) => item.id === PLACEMENT_ITEM);
+  if (!placement || !asked.some((item) => item.tone === "score")) {
+    return undefined;
+  }
+  const at = rallyPosition(point, marks);
+  const gap = at(placement);
+  return asked.some((item) => item.tone === "score" && at(item) < gap)
+    ? undefined
+    : PLACEMENT_ITEM;
 }
 
 // ── The step ────────────────────────────────────────────────────────────────

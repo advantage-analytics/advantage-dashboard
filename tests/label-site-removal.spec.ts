@@ -381,19 +381,22 @@ test.describe("writeLabelSiteRemovalRestore", () => {
   test("the entry point refuses without an admin, before a client is built", async () => {
     let built = 0;
     const result = await restoreLabelSiteRemoval(SHOT_ID, {
-      requireAdmin: async () => null,
+      requireLabelActor: async () => null,
       createAdminClient: () => {
         built += 1;
         return fakeClient({}).supabase;
       },
     });
-    expect(result).toEqual({ error: "Administrator access is required." });
+    expect(result).toEqual({ error: "You don't have access to this session." });
     expect(built).toBe(0);
 
     const fake = fakeClient({ shot: GHOST_ROW });
     expect(
       await restoreLabelSiteRemoval(SHOT_ID.toUpperCase(), {
-        requireAdmin: async () => ({ id: "admin" }),
+        requireLabelActor: async () => ({
+          id: "admin",
+          kind: "admin" as const,
+        }),
         createAdminClient: () => fake.supabase,
       }),
     ).toMatchObject({ ok: true });

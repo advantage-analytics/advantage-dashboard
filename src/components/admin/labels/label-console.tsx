@@ -82,6 +82,7 @@ import {
   type ReplayWindow,
   stepKeyOf,
 } from "@/lib/services/labels/review-flow";
+import { openMissingShot } from "@/lib/services/labels/review-target";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
   greyJumpFirstItem,
@@ -201,6 +202,7 @@ import {
   errorMarkingReady,
 } from "@/lib/services/labels/session-status";
 import type { LabelSessionStatusResult } from "@/lib/services/labels/session-status-session";
+import type { LabelSubmitResult } from "@/lib/services/labels/submit-session";
 import { advButton } from "@/lib/ui/adv-button";
 import { applySiteRemovalRestore } from "@/lib/services/labels/site-removal";
 import type { LabelSiteRemovalRestoreResult } from "@/lib/services/labels/site-removal-session";
@@ -265,6 +267,7 @@ import {
   type LabelLayoutMode,
 } from "./label-layout";
 import { sideNames } from "./label-format";
+import { LABELLER_SIDE_NAMES } from "@/lib/services/labels/labeller-view";
 import {
   currentPointOf,
   nowPlayingOf,
@@ -311,6 +314,8 @@ import type {
   LabelOpenCounts,
   LabelOpenCountsResult,
 } from "@/lib/services/labels/open-counts-session";
+import type { LabelWorkBeatResult } from "@/lib/services/labels/work-beats-session";
+import { useWorkBeat } from "./use-work-beat";
 import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
 import { INITIAL_SAVE_STATUS, saveStatusReducer } from "./save-status";
 import {
@@ -503,6 +508,7 @@ export function LabelConsole({
   initialReviewMode = false,
   headerAction,
   upload = null,
+  viewerKind = "admin",
 }: {
   session: LabelSession;
   video: LabelVideo | null;
@@ -547,10 +553,20 @@ export function LabelConsole({
   initialReviewMode?: boolean;
   /** The header's trailing link, rendered by the page. */
   headerAction?: ReactNode;
+  /**
+   * Who is looking. `"labeller"` (`/label/[sessionId]`) shows no player,
+   * program or derivation, names the sides "Near" / "Far", and
+   * swaps Mark complete and Reopen for "Submit for review".
+   */
+  viewerKind?: "admin" | "labeller";
 }) {
+  const labeller = viewerKind === "labeller";
   const names = useMemo(
-    () => sideNames(session.player1Name, session.player2Name),
-    [session.player1Name, session.player2Name],
+    () =>
+      labeller
+        ? LABELLER_SIDE_NAMES
+        : sideNames(session.player1Name, session.player2Name),
+    [labeller, session.player1Name, session.player2Name],
   );
   // Client state, so "Mark complete" and "Reopen" flip the console read-only
   // or editable without a reload.
@@ -618,6 +634,8 @@ export function LabelConsole({
       return [{ pointId: s.pointId, afterShotId: s.afterShotId }];
     });
   }, [liveMarks, points]);
+  // Minutes worked for the Labels list: a beat a minute while someone works.
+  useWorkBeat(session.id, operations?.recordWorkBeat);
   // The deciding set the match record spells as a 10-point match tiebreak
   // (set-scores.ts) — never the labeller's own `final_score`, which is games
   // only. "Make it a match tiebreak" offers to fold it, and the shift and
@@ -2011,15 +2029,21 @@ export function LabelConsole({
   }
 
   /**
-   * "Mark complete" (after its confirm) and "Reopen": `label_sessions.status`
-   * alone. Not optimistic — the console flips read-only or editable once the
-   * server has said so.
+   * "Mark complete" (after its confirm), "Reopen" and the labeller's "Submit
+   * for review": `label_sessions.status` alone. Not optimistic — the console
+   * flips read-only or editable once the server has said so.
    */
   async function setSessionStatus(next: LabelSession["status"]) {
-    const write =
+    const write:
+      | ((
+          sessionId: string,
+        ) => Promise<{ status: LabelSession["status"] } | { error: string }>)
+      | undefined =
       next === "complete"
         ? operations?.completeSession
-        : operations?.reopenSession;
+        : next === "submitted"
+          ? operations?.submitSession
+          : operations?.reopenSession;
     if (!write || statusSaving) return;
     setStatusSaving(true);
     dispatchSave({ type: "start" });
@@ -2029,7 +2053,7 @@ export function LabelConsole({
       dispatchSave({ type: "failure", message: result.error });
       return;
     }
-    if (result.status === "complete") setPlacement(NO_PLACEMENT);
+    if (result.status !== "labelling") setPlacement(NO_PLACEMENT);
     setStatus(result.status);
     dispatchSave({ type: "success", at: Date.now() });
   }
@@ -2820,10 +2844,28 @@ export function LabelConsole({
       case "reopen-session":
         void setSessionStatus("labelling");
         return;
+      case "submit-session":
+        // An edit made while the confirm was open would be refused.
+        if (saveStatus.pending > 0) {
+          return refuse("Wait for your changes to save, then submit it.");
+        }
+        void setSessionStatus("submitted");
+        return;
     }
   }
 
   const operable = editable && operations !== undefined;
+
+  /** A confirm's second way out ("Mark errors", "Only this shot"). */
+  function confirmAlternative(question: LabelConfirm) {
+    setConfirm(null);
+    if (question.kind === "complete-session") startMarkingErrors();
+    if (question.kind === "serve-hitter") {
+      void patchShot(question.shotId, {
+        hitter: question.follow.hitter,
+      });
+    }
+  }
 
   // The rail's rows are memoised, so every callback they receive keeps one
   // identity for the console's life (`useLatestHandlers`) and runs whatever
@@ -3268,7 +3310,19 @@ export function LabelConsole({
         )
           ? placement.shotId
           : null;
-      addShot(expanded.id, selected);
+      // With nothing selected, A fills the point's open "Missing shot?" slot
+      // (most missing strokes are a return, not the last ball); the well's
+      // "Add shot" button still adds at the end of the rally.
+      const slot =
+        selected === null && liveMarks
+          ? openMissingShot(expanded, liveMarks)
+          : null;
+      const afterShotId =
+        selected ??
+        (slot && !("error" in planAddedShot(expanded, slot.afterShotId))
+          ? slot.afterShotId
+          : null);
+      addShot(expanded.id, afterShotId);
       return true;
     };
     addShotBeforeKey.current = () => {
@@ -3922,10 +3976,8 @@ export function LabelConsole({
       ? reviewQueue.keep
       : undefined;
   // Only while the jump's review lasts: a row click or a click away leaves it.
-  const asksFirst =
-    reviewMode && askFirst?.pointId === expanded?.id
-      ? askFirst?.item
-      : undefined;
+  const fromGreyJump =
+    reviewMode && askFirst !== null && askFirst.pointId === expanded?.id;
   const step = useMemo(
     () =>
       expanded && liveMarks
@@ -3936,10 +3988,15 @@ export function LabelConsole({
             names,
             drawsGhosts(liveMarks),
             keep,
-            asksFirst,
+            // Read again at every step, not kept from the landing: answering
+            // one gap moves "Shot placement" on to the next, which may sit
+            // past an amber question it must not jump ahead of.
+            fromGreyJump
+              ? greyJumpFirstItem(expanded, liveMarks, points, keep)
+              : undefined,
           )
         : null,
-    [expanded, liveMarks, points, names, keep, asksFirst],
+    [expanded, liveMarks, points, names, keep, fromGreyJump],
   );
   const stepKey = expanded ? stepKeyOf(expanded.id, step) : "";
   // "n of m": the count the point's review opened with, latched in render.
@@ -4111,8 +4168,8 @@ export function LabelConsole({
       tone={fullScreen ? "dark" : "light"}
       showSession={fullScreen}
       scores={scores}
-      player1Name={session.player1Name}
-      player2Name={session.player2Name}
+      player1Name={labeller ? LABELLER_SIDE_NAMES.p1 : session.player1Name}
+      player2Name={labeller ? LABELLER_SIDE_NAMES.p2 : session.player2Name}
       checked={checked}
       total={total}
       saveStatus={saveStatus}
@@ -4228,47 +4285,65 @@ export function LabelConsole({
           data-console-header=""
           className="flex shrink-0 items-end justify-between gap-8"
         >
-          <div className="flex min-w-0 items-center gap-4">
-            {/* Both players, player 1 in front: the pair is the match. */}
-            <span className="flex shrink-0">
-              <PersonAvatar
-                initials={getInitials(session.player1Name)}
-                className="relative size-10 text-[12px]"
-              />
-              <PersonAvatar
-                initials={getInitials(session.player2Name)}
-                className="-ml-2.5 size-10 text-[12px] shadow-[0_0_0_2px_var(--surface-card)]"
-              />
-            </span>
+          {labeller ? (
+            // No players, program or derivation: a labeller labels the
+            // rally, never the people in it (labeller-view.ts).
             <div className="flex min-w-0 flex-col gap-1.5">
-              <h1 className="text-display truncate">
-                {session.player1Name} vs {session.player2Name}
-              </h1>
+              <h1 className="text-display truncate">Label match</h1>
               <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--ink-600)]">
-                {upload?.program ? (
-                  <>
-                    <ProgramCrest
-                      name={upload.program}
-                      crestUrl={upload.programCrestUrl}
-                      size={26}
-                    />
-                    <span>{upload.program}</span>
-                    <span aria-hidden="true">·</span>
-                  </>
-                ) : null}
                 <span className="tabular">
                   {checked} of {total} points checked
                 </span>
-                {status === "complete" ? (
-                  <span data-session-complete="">· Complete</span>
-                ) : null}
-                <span aria-hidden="true">·</span>
-                <span className="mono text-[11px] text-[var(--ink-500)]">
-                  derivation {session.derivationVersion}
-                </span>
               </p>
             </div>
-          </div>
+          ) : (
+            <div className="flex min-w-0 items-center gap-4">
+              {/* Both players, player 1 in front: the pair is the match. */}
+              <span className="flex shrink-0">
+                <PersonAvatar
+                  initials={getInitials(session.player1Name)}
+                  className="relative size-10 text-[12px]"
+                />
+                <PersonAvatar
+                  initials={getInitials(session.player2Name)}
+                  className="-ml-2.5 size-10 text-[12px] shadow-[0_0_0_2px_var(--surface-card)]"
+                />
+              </span>
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <h1 className="text-display truncate">
+                  {session.player1Name} vs {session.player2Name}
+                </h1>
+                <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--ink-600)]">
+                  {upload?.program ? (
+                    <>
+                      <ProgramCrest
+                        name={upload.program}
+                        crestUrl={upload.programCrestUrl}
+                        size={26}
+                      />
+                      <span>{upload.program}</span>
+                      <span aria-hidden="true">·</span>
+                    </>
+                  ) : null}
+                  <span className="tabular">
+                    {checked} of {total} points checked
+                  </span>
+                  {status === "complete" ? (
+                    <span data-session-complete="">· Complete</span>
+                  ) : null}
+                  {status === "submitted" ? (
+                    <span data-session-submitted="">
+                      · Submitted for review
+                    </span>
+                  ) : null}
+                  <span aria-hidden="true">·</span>
+                  <span className="mono text-[11px] text-[var(--ink-500)]">
+                    derivation {session.derivationVersion}
+                  </span>
+                </p>
+              </div>
+            </div>
+          )}
           <div className="flex shrink-0 items-center gap-5">
             <LabelSaveStatus status={saveStatus} />
             {operable && operations?.undo && !overview ? (
@@ -4297,7 +4372,31 @@ export function LabelConsole({
                 Redo
               </button>
             ) : null}
-            {operable && operations?.completeSession ? (
+            {labeller ? (
+              status === "submitted" ? (
+                <span
+                  data-submitted-waiting=""
+                  className="text-[13px] text-[var(--ink-600)]"
+                >
+                  Submitted — waiting for review
+                </span>
+              ) : operable && operations?.submitSession ? (
+                <button
+                  type="button"
+                  data-submit-review=""
+                  className={advButton("outline", "sm")}
+                  // Every edit must have landed first: one still in flight
+                  // would be refused once the session is submitted.
+                  disabled={saveStatus.pending > 0 || statusSaving}
+                  onClick={() => setConfirm({ kind: "submit-session" })}
+                >
+                  Submit for review
+                </button>
+              ) : null
+            ) : null}
+            {!labeller &&
+            (operable || status === "submitted") &&
+            operations?.completeSession ? (
               <button
                 type="button"
                 data-mark-complete=""
@@ -4311,13 +4410,21 @@ export function LabelConsole({
                 Mark complete
               </button>
             ) : null}
-            {status === "complete" && operations?.reopenSession ? (
+            {!labeller &&
+            (status === "complete" || status === "submitted") &&
+            operations?.reopenSession ? (
               <button
                 type="button"
                 data-reopen-session=""
                 className={advButton("outline", "sm")}
                 disabled={statusSaving}
-                onClick={() => setConfirm({ kind: "reopen-session" })}
+                onClick={() =>
+                  setConfirm(
+                    status === "submitted"
+                      ? { kind: "reopen-session", from: "submitted" }
+                      : { kind: "reopen-session" },
+                  )
+                }
               >
                 Reopen
               </button>
@@ -4328,7 +4435,7 @@ export function LabelConsole({
               className={advButton("primary", "sm")}
               onClick={() => chooseLayout("black")}
             >
-              {status === "complete" ? "Open full screen" : "Open labelling"}
+              {status === "labelling" ? "Open labelling" : "Open full screen"}
             </button>
             {headerAction}
           </div>
@@ -4345,6 +4452,7 @@ export function LabelConsole({
           adScoring={adScoring}
           startScore={startScore}
           names={names}
+          audience={viewerKind}
           finalScore={sessionFields.finalScore}
           matchScore={session.matchScore}
           videoEndsEarly={sessionFields.videoEndsEarly}
@@ -4382,22 +4490,21 @@ export function LabelConsole({
           onOpenChange={setShortcutsOpen}
         />
       ) : null}
-      {/* A complete session is not operable, but its Reopen still asks. */}
-      {operable || confirm?.kind === "reopen-session" ? (
+      {/* A complete or submitted session is not operable, but its Reopen
+          still asks — and a submitted one's Mark complete. */}
+      {operable ||
+      confirm?.kind === "reopen-session" ||
+      (status === "submitted" && confirm?.kind === "complete-session") ? (
         <LabelConfirmDialog
           confirm={confirm}
           names={names}
           onCancel={() => setConfirm(null)}
           onConfirm={confirmed}
-          onAlternative={(question) => {
-            setConfirm(null);
-            if (question.kind === "complete-session") startMarkingErrors();
-            if (question.kind === "serve-hitter") {
-              void patchShot(question.shotId, {
-                hitter: question.follow.hitter,
-              });
-            }
-          }}
+          // A submitted session takes no edits, so Mark complete's "Mark
+          // errors" has nowhere to go: Reopen is the way back to them.
+          onAlternative={
+            status === "submitted" ? undefined : confirmAlternative
+          }
         />
       ) : null}
     </div>
@@ -4554,8 +4661,16 @@ export interface LabelConsoleOperations {
   ) => Promise<LabelSessionFieldsResult>;
   /** `label_sessions.status` to `complete`. Absent: no "Mark complete". */
   completeSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
-  /** A complete session back to `labelling`. Absent: no "Reopen". */
+  /**
+   * A complete or submitted session back to `labelling`. Absent: no
+   * "Reopen".
+   */
   reopenSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
+  /**
+   * The labeller's "Submit for review": `label_sessions.status` to
+   * `submitted` (submit-session.ts). Shown only to `viewerKind="labeller"`.
+   */
+  submitSession?: (sessionId: string) => Promise<LabelSubmitResult>;
   /**
    * Rewind the session's newest action, whatever it was, and answer the rows
    * it touched as a diff (undo-session.ts). Absent: no "Undo".
@@ -4582,6 +4697,12 @@ export interface LabelConsoleOperations {
     sessionId: string,
     counts: LabelOpenCounts,
   ) => Promise<LabelOpenCountsResult>;
+  /**
+   * One minute of active work on the session (work-beats-session.ts), posted
+   * by the heartbeat (use-work-beat.ts) at most once a minute. Absent: no
+   * time is recorded.
+   */
+  recordWorkBeat?: (sessionId: string) => Promise<LabelWorkBeatResult>;
 }
 
 function defaultPoint(points: readonly LabelPoint[]): LabelPoint | null {

@@ -45,9 +45,15 @@ export async function readDerivationQuality(
     .eq("id", jobId)
     .single<{ derivation_quality: Record<string, unknown> | null }>();
   if (error) throw new Error(error.message);
-  const existing = data?.derivation_quality;
-  return existing && typeof existing === "object" && !Array.isArray(existing)
-    ? existing
+  return qualityObject(data?.derivation_quality);
+}
+
+/** A `derivation_quality` column value as an object — `{}` when it holds none. */
+export function qualityObject(
+  value: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value
     : {};
 }
 
