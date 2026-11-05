@@ -17,6 +17,7 @@ import { REVIEW_ITEM_QUESTION } from "@/lib/services/labels/marks-copy";
 import { openFlags } from "@/lib/services/labels/flag-nav";
 import {
   greyJumpFirstItem,
+  openReviewItems,
   reviewStep,
 } from "@/lib/services/labels/review-step";
 import {
@@ -236,6 +237,33 @@ test.describe("a placement gap beside an amber question", () => {
     expect(
       reviewStep(edited, amber, [edited], names, true, [5, 7], first)!.item.id,
     ).toBe(7);
+  });
+
+  test("an amber question on an earlier stroke stays ahead of the gap", () => {
+    const names = { p1: "Ann", p2: "Bea" };
+    const placed = { landingX: 2, landingY: 20 };
+    // The serve order question is on the first stroke, the gap on the second.
+    const middle = wonOnForehand({
+      shots: [
+        forehand({ id: "a", eventId: 8, videoTime: 1, ...placed }),
+        forehand({ id: "b", eventId: 9, videoTime: 2 }),
+        forehand({ id: "c", eventId: 10, videoTime: 3, ...placed }),
+      ],
+    });
+    const order = marksOf({ [POINT]: [sample("score_side_mismatch")] });
+    expect(
+      openReviewItems(middle, order, [middle]).map((item) => [
+        item.id,
+        item.tone,
+      ]),
+    ).toEqual([
+      [6, "score"],
+      [7, "data"],
+    ]);
+    // The grey jump keeps the rally's order: the gap comes second.
+    expect(greyJumpFirstItem(middle, order, [middle])).toBeUndefined();
+    const asked = reviewStep(middle, order, [middle], names, true)!;
+    expect([asked.item.id, asked.target.shotId]).toEqual([6, "a"]);
   });
 
   test("a point only in the grey list keeps its order", () => {

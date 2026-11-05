@@ -260,6 +260,26 @@ function reopenSettled(item: ReviewItem): ReviewItem | null {
 }
 
 /**
+ * Where an item sits in the rally: the index of the live stroke its step lands
+ * on (`reviewStepTarget`, the add-shot slot's stroke when it names none), after
+ * the last stroke when it lands on none.
+ */
+function rallyPosition(
+  point: LabelPoint,
+  marks: LabelMarks,
+): (item: ReviewItem) => number {
+  const ghosts = drawsGhosts(marks);
+  const order = new Map(
+    liveShotsInOrder(point, ghosts).map((shot, i) => [shot.id, i]),
+  );
+  return (item) => {
+    const target = reviewStepTarget(item, point, marks, ghosts);
+    const shotId = target.shotId ?? target.slot?.afterShotId ?? null;
+    return (shotId === null ? undefined : order.get(shotId)) ?? order.size;
+  };
+}
+
+/**
  * The point's open items in the order the column asks them: down the rally,
  * by the stroke each one lands on (`reviewStepTarget`), amber and grey alike,
  * so answering never sends the film back to a stroke already passed. Items on
@@ -282,15 +302,7 @@ export function openReviewItems(
 ): ReviewItem[] {
   const flag = reviewFlag(point, marks, points);
   if (!flag) return [];
-  const ghosts = drawsGhosts(marks);
-  const order = new Map(
-    liveShotsInOrder(point, ghosts).map((shot, i) => [shot.id, i]),
-  );
-  const at = (item: ReviewItem) => {
-    const target = reviewStepTarget(item, point, marks, ghosts);
-    const shotId = target.shotId ?? target.slot?.afterShotId ?? null;
-    return (shotId === null ? undefined : order.get(shotId)) ?? order.size;
-  };
+  const at = rallyPosition(point, marks);
   const open = flag.items
     .flatMap((item) => {
       if (item.state === "open") return [item];
@@ -319,10 +331,12 @@ export function openReviewItems(
 
 /**
  * What a jump from the grey list asks first: "Shot placement" where an amber
- * question would otherwise come before it, or the labeller lands on that
- * question from a list that said nothing about it. That is a point in both lists
- * (`openFlags`), or one whose settled amber question the console's queue (`keep`)
- * still asks. Undefined elsewhere: the usual order.
+ * question on the same stroke would otherwise come before it, or the labeller
+ * lands on that question from a list that said nothing about it. That is a
+ * point in both lists (`openFlags`), or one whose settled amber question the
+ * console's queue (`keep`) still asks. Never ahead of an amber question on an
+ * earlier stroke: answering the gap would send the film back to it, so the
+ * jump keeps the rally's order there. Undefined elsewhere: the usual order.
  */
 export function greyJumpFirstItem(
   point: LabelPoint,
@@ -331,10 +345,15 @@ export function greyJumpFirstItem(
   keep?: readonly ReviewItemId[],
 ): ReviewItemId | undefined {
   const asked = openReviewItems(point, marks, points, keep);
-  return asked.some((item) => item.id === PLACEMENT_ITEM) &&
-    asked.some((item) => item.tone === "score")
-    ? PLACEMENT_ITEM
-    : undefined;
+  const placement = asked.find((item) => item.id === PLACEMENT_ITEM);
+  if (!placement || !asked.some((item) => item.tone === "score")) {
+    return undefined;
+  }
+  const at = rallyPosition(point, marks);
+  const gap = at(placement);
+  return asked.some((item) => item.tone === "score" && at(item) < gap)
+    ? undefined
+    : PLACEMENT_ITEM;
 }
 
 // ── The step ────────────────────────────────────────────────────────────────
