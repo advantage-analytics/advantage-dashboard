@@ -14,7 +14,7 @@
  */
 
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { mergeDerivationQuality } from "./derivation-quality";
+import { mergeDerivationQuality, qualityObject } from "./derivation-quality";
 import { readReprocessParent } from "./reprocess";
 import { persistTranscript } from "./persist-transcript";
 import {
@@ -418,12 +418,8 @@ async function readParentPublication(
     });
     return { derivationVersion: null, quality: {} };
   }
-  const quality = data.derivation_quality;
   return {
     derivationVersion: data.derivation_version,
-    quality:
-      quality && typeof quality === "object" && !Array.isArray(quality)
-        ? quality
-        : {},
+    quality: qualityObject(data.derivation_quality),
   };
 }
