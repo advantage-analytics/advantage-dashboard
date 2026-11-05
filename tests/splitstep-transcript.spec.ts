@@ -2096,6 +2096,8 @@ test.describe("segmentation proposal (review-only)", () => {
       proposedGame: 1,
       proposedServer: "p1",
       mergedWith: null,
+      // One point of a short match: not the match-wide case.
+      systemic: false,
     });
     expect(marks.points.p1 ?? []).not.toContainEqual(
       expect.objectContaining({ code: POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS }),
