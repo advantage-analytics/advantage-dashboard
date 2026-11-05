@@ -10,7 +10,6 @@ import {
   useState,
 } from "react";
 import {
-  Bookmark,
   Maximize,
   Pause,
   Play,
@@ -53,7 +52,6 @@ import type {
   AttachmentResumeIntent,
 } from "./use-attachment-playback";
 import { useSeekSettling } from "./use-seek-settling";
-import { useFilmReadOnly } from "./film-read-only";
 import { useSkipDead } from "./use-skip-dead";
 import {
   endOfCutSettle,
@@ -67,15 +65,15 @@ import {
  * The control bar is the fullscreen room's (`film-transport.tsx`) minus what
  * only makes sense over a screenful — the title, the point position, exit:
  * the set-by-set track, then the control row — play, previous and next
- * point, the clock — and on the right Save point (filled once saved; the
- * film tab leaves it off, since its point card owns the bookmark), skip dead
- * time, speed, loop, sound and fullscreen, in the room's order. The
+ * point, the clock — and on the right skip dead time, speed, loop, sound and
+ * fullscreen, in the room's order. No Save glyph: the point card under the
+ * player owns the bookmark and each list row shows it (S still saves). The
  * same glyphs at the tab's scale: 13px on a 32px row 14px apart, where the
  * room draws 15px on 40px 18px apart — a 353px frame has no room for the
  * room's bar. Every glyph is Lucide at 1.6, and every toggle reads its state the same
  * way — the plain glyph when on, Lucide's slashed variant when off
  * (`TimerOff`, `VolumeOff`, and `RepeatOff` in `film-glyphs.tsx` for the one
- * the library lacks). Save fills once the point is saved; nothing else is filled.
+ * the library lacks).
  *
  * ── Called the match video, deliberately ────────────────────────────────────
  * The file is the athlete's own upload, cut to the window they selected (or,
@@ -193,8 +191,6 @@ interface FilmPlayerProps {
   stops: FilmStop[];
   /** Every timed point, for the set-by-set track and loop. */
   allStops: FilmStop[];
-  /** Whether the playing point is bookmarked; null when no point is playing. */
-  saved: boolean | null;
   /** Fires on `timeupdate`/`seeked`; drives the point list's playing row. */
   onTimeChange: (seconds: number) => void;
   /** The playhead, for the hook's anchor. Suppressed while `background`. */
@@ -214,12 +210,6 @@ interface FilmPlayerProps {
   onFirstPlay?: (generation: number) => void;
   /** The terminal state's button, where the hook says one could help. */
   onRetry: () => void;
-  /**
-   * Bookmark or un-bookmark the playing point. Absent on a read-only report
-   * (the share page, the sample), where the Save glyph is not drawn at all —
-   * never a disabled one offering a write the page has no row for.
-   */
-  onToggleSaved?: () => void;
   /** The fullscreen glyph. Entered by user action only, never automatically. */
   onEnterFullscreen: () => void;
   /**
@@ -321,7 +311,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       background,
       stops,
       allStops,
-      saved,
       onTimeChange,
       onPlaybackTime,
       onPlaybackPlaying,
@@ -329,7 +318,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       onPlayRejected,
       onFirstPlay,
       onRetry,
-      onToggleSaved,
       onSkipDeadToggled,
       onEnterFullscreen,
       onStep,
@@ -339,8 +327,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
   ) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const frameRef = useRef<HTMLDivElement>(null);
-    // A shared link's reader has no bookmarks to keep (`film-read-only.ts`).
-    const readOnly = useFilmReadOnly();
     /** The generation whose first `play` has already been reported. */
     const firstPlayRef = useRef<number | null>(null);
 
@@ -951,22 +937,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               </span>
 
               <div className="flex-1" />
-
-              {!readOnly && onToggleSaved && (
-                <Glyph
-                  label={saved ? "Saved — remove bookmark" : "Save point"}
-                  shortcut="S"
-                  pressed={saved === true}
-                  disabled={saved === null}
-                  onClick={onToggleSaved}
-                >
-                  <Bookmark
-                    {...ICON}
-                    aria-hidden="true"
-                    fill={saved ? "currentColor" : "none"}
-                  />
-                </Glyph>
-              )}
 
               <Glyph
                 label={

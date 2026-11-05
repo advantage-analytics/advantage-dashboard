@@ -147,9 +147,9 @@ export {
  * not a second list and not a tab: the well is a sibling of the row inside the
  * point's own fragment, so it inherits the row's 14px side padding and runs
  * edge to edge under it. Without those props there is no well. Both tones
- * draw one: the room's is a recessed dark strip, the report column's
- * (canvas "W-E chat", `WELL_TONE.light`) puts the row and its shots on one
- * `--surface-subtle` card.
+ * draw one, recessed: the room's is a dark strip, the report column's
+ * (`WELL_TONE.light`) a strip one step darker than the row's
+ * `--surface-subtle` wash.
  *
  * ── Follow the film, or hold the point you are reading ──────────────────────
  *

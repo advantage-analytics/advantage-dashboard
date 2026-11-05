@@ -288,6 +288,10 @@ function CopyPointLink({
   pointId: string;
 }) {
   const [copied, setCopied] = useState(false);
+  // The link opens the dashboard report, so only people who can already see
+  // this match follow it. In a team that is the program; in a personal
+  // workspace there is no team to name.
+  const isTeam = useOptionalWorkspace()?.active?.kind === "team";
   const copy = async () => {
     const url = new URL(
       `/dashboard/matches/${matchId}`,
@@ -304,9 +308,15 @@ function CopyPointLink({
     }
   };
   return (
-    // The link opens the dashboard report, so it works for people in this
-    // workspace only — the tooltip says so rather than implying a public link.
-    <ChromeTooltip label={copied ? "Link copied" : "Copy link for your team"}>
+    <ChromeTooltip
+      label={
+        copied
+          ? "Link copied"
+          : isTeam
+            ? "Copy link for your team"
+            : "Copy link to this point"
+      }
+    >
       <button
         type="button"
         aria-label="Copy link to this point"

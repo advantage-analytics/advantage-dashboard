@@ -1188,7 +1188,6 @@ function FilmRoom({
             background={roomOpen}
             stops={walkStops}
             allStops={stops}
-            saved={activePoint ? activePoint.saved : null}
             onSkipDeadToggled={markSkipDeadAnswered}
             onTimeChange={setCurrentTime}
             onPlaybackTime={reportTime}
@@ -1197,10 +1196,6 @@ function FilmRoom({
             onPlayRejected={handlePlayRejected}
             onFirstPlay={recordFirstPlay}
             onRetry={retry}
-            // No Save glyph on the tab's bar: the point card under the player
-            // owns the bookmark and each list row shows it, so a third copy
-            // here was noise. S still saves (the key handler above), and the
-            // room's own transport keeps its glyph.
             onEnterFullscreen={enterRoom}
             // Every point step — the transport's two glyphs, the arrow keys
             // above, the card's stepper — runs the player's own `step`, which
