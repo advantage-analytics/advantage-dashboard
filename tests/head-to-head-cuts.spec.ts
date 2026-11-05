@@ -864,6 +864,7 @@ test.describe("error rows follow the match's split", () => {
     expect(outcomesFor(false).map((o) => [o.label, o.legendLabel])).toEqual([
       ["Winners", undefined],
       ["Aces", undefined],
+      ["Service winners", undefined],
       ["Errors", "Errors"],
       ["Double faults", undefined],
     ]);
@@ -876,6 +877,7 @@ test.describe("error rows follow the match's split", () => {
     const tally = outcomeTally(MATCH, true, false, false);
     expect(tally.unforcedErrors).toBe(2);
     expect(tally.doubleFaults).toBe(1);
+    expect(tally.forcedErrors).toBe(0);
     expect(ids(outcomeCut("unforcedErrors", "you", false)).sort()).toEqual([
       "fe-you",
       "ue-you",
@@ -886,7 +888,9 @@ test.describe("error rows follow the match's split", () => {
     expect(outcomesFor(true).map((o) => [o.label, o.legendLabel])).toEqual([
       ["Winners", undefined],
       ["Aces", undefined],
+      ["Service winners", undefined],
       ["Unforced errors", "Unforced"],
+      ["Forced errors", "Forced"],
       ["Double faults", undefined],
     ]);
     expect(outcomeCut("unforcedErrors", "you", true)).toEqual({
@@ -897,5 +901,13 @@ test.describe("error rows follow the match's split", () => {
     const tally = outcomeTally(MATCH, true, false, true);
     expect(tally.unforcedErrors).toBe(1);
     expect(tally.doubleFaults).toBe(1);
+    // Judged, the forced error has its own segment.
+    expect(tally.forcedErrors).toBe(1);
+    expect(outcomeCut("forcedErrors", "you", true)).toEqual({
+      resultEnding: ["error"],
+      ending: "forced-error",
+      resultPlayer: "you",
+    });
+    expect(ids(outcomeCut("forcedErrors", "you", true))).toEqual(["fe-you"]);
   });
 });
