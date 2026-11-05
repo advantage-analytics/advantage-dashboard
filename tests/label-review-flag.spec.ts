@@ -243,7 +243,8 @@ test.describe("a placement gap beside an amber question", () => {
   test("an amber question on an earlier stroke stays ahead of the gap", () => {
     const names = { p1: "Ann", p2: "Bea" };
     const placed = { landingX: 2, landingY: 20 };
-    // The serve order question is on the first stroke, the gap on the second.
+    // The game and serve order question is on the first stroke, the gap on
+    // the second.
     const middle = wonOnForehand({
       shots: [
         forehand({ id: "a", eventId: 8, videoTime: 1, ...placed }),
@@ -251,7 +252,7 @@ test.describe("a placement gap beside an amber question", () => {
         forehand({ id: "c", eventId: 10, videoTime: 3, ...placed }),
       ],
     });
-    const order = marksOf({ [POINT]: [sample("score_side_mismatch")] });
+    const order = marksOf({ [POINT]: [sample("tiebreak_score_off_six_all")] });
     expect(
       openReviewItems(middle, order, [middle]).map((item) => [
         item.id,

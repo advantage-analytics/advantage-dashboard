@@ -216,16 +216,10 @@ test.describe("a grey jump across two gaps", () => {
   const unplaced = { landingX: null, landingY: null };
 
   test("placement first lets go once the next gap sits past an amber question", () => {
-    // Gaps on strokes 1 and 3; the serve order question, amber, on stroke 1.
+    // Gaps on strokes 1 and 3; the game and serve order question, amber, on stroke 1.
     const p = rally({}, ["a", unplaced], ["c", unplaced]);
     const sides = {
-      [POINT]: [
-        mark("score_side_mismatch", {
-          score: "0-15",
-          expected: "ad",
-          actual: "deuce",
-        }),
-      ],
+      [POINT]: [mark("tiebreak_score_off_six_all", {})],
     };
     const both = marksOf(sides, {
       a: [placement("a", "serve")],
