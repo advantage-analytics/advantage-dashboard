@@ -193,10 +193,10 @@ const OUTCOME_BASE_CUT: Record<OutcomeKey, FilmCut> = {
 
 /**
  * The film cut behind one segment of one side's bar. Aces and service
- * winners are the SERVER's (Serve › Player); the rest are Result › Hit by, the point of view
- * Ending reads — whoever hit the winner or made the error, the server for a
- * double fault. That is exactly the line `head-to-head-card.tsx`'s `sideCut`
- * draws for the same four rows, so this delegates to it rather than
+ * winners are the SERVER's (Serve › Player); the rest are Result › Hit by,
+ * the point of view Ending reads — whoever hit the winner or made the error,
+ * the server for a double fault. That is the line `head-to-head-card.tsx`'s
+ * `sideCut` draws for the same rows, so this delegates to it rather than
  * re-deriving it here. `you`/`opp` are relative, resolved through the filter
  * context's `youIsPlayer1` inside the film tab (guardrails §4); nothing here
  * reads player order.
