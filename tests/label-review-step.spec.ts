@@ -172,6 +172,43 @@ test.describe("n of m and the order", () => {
   });
 });
 
+test.describe("down the rally", () => {
+  const placement = (shotId: string) =>
+    mark("placement_missing", { shotId, stroke: "shot", missing: "landing" });
+
+  test("a grey gap on an early stroke is asked before the last ball's amber question", () => {
+    const p = rally({}, ["b", { landingX: null, landingY: null }]);
+    const marks = marksOf(
+      {
+        [POINT]: [
+          mark("winner_disputed", {
+            scoreWinner: "p2",
+            lastStrokeWinner: "p1",
+          }),
+        ],
+      },
+      { b: [placement("b")] },
+    );
+    expect(openReviewItems(p, marks, [p]).map((item) => item.id)).toEqual([
+      7, 4,
+    ]);
+    expect(step(p, marks)?.target.shotId).toBe("b");
+  });
+
+  test("items on the same stroke keep id order", () => {
+    const p = rally();
+    const marks = marksOf({
+      [POINT]: [
+        mark("winner_disputed", { scoreWinner: "p2", lastStrokeWinner: "p1" }),
+        mark("winner_guessed", {}),
+      ],
+    });
+    expect(openReviewItems(p, marks, [p]).map((item) => item.id)).toEqual([
+      4, 5,
+    ]);
+  });
+});
+
 test.describe("the console's queue (keep)", () => {
   test("an item an edit settled is asked again while the queue keeps it", () => {
     // An edit anywhere on the point settles its counted marks.

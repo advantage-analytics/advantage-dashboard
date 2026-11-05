@@ -208,8 +208,9 @@ test.describe("a placement gap beside an amber question", () => {
     expect(asked.item.id).toBe(7);
     expect(asked.target.shotId).toBe("a");
     expect(asked.then).toBe("Then: pick the winner");
-    // Any other way in keeps the usual order.
-    expect(reviewStep(gapped, amber, [gapped], names, true)!.item.id).toBe(5);
+    // Any other way in goes down the rally: the gap is on the first stroke,
+    // the winner question on the last.
+    expect(reviewStep(gapped, amber, [gapped], names, true)!.item.id).toBe(7);
     // With the gap answered, the amber question is next.
     const placed = {
       ...gapped,

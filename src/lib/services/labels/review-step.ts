@@ -20,6 +20,7 @@ import { openFlags, stepFlag } from "./flag-nav";
 import type { LabelMarks } from "./marks";
 import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import {
+  drawsGhosts,
   lastCallAnswer,
   PLACEMENT_ITEM,
   pointRowMarkList,
@@ -259,12 +260,16 @@ function reopenSettled(item: ReviewItem): ReviewItem | null {
 }
 
 /**
- * The point's open items in the order the column asks them: id order
- * (`reviewFlag`, a demoted flag's too — the open point still asks it), except
- * that an item 2 open only on "Did the point end here?" is asked after item
- * 4 when that is open: the strokes after the point's end are the follow-up
- * to how it ended, not a question before it. `keep` names the items the
- * console's queue still has to ask, which an edit elsewhere on the point
+ * The point's open items in the order the column asks them: down the rally,
+ * by the stroke each one lands on (`reviewStepTarget`), amber and grey alike,
+ * so answering never sends the film back to a stroke already passed. Items on
+ * the same stroke, or with none, keep id order (`reviewFlag`, a demoted
+ * flag's too — the open point still asks it). Until 2026-11-05 it was id
+ * order alone, and "Shot placement" on an early stroke came after the last
+ * ball's questions. An item 2 open only on "Did the point end here?" is asked
+ * after item 4 when that is open: the strokes after the point's end are the
+ * follow-up to how it ended, not a question before it. `keep` names the items
+ * the console's queue still has to ask, which an edit elsewhere on the point
  * may have settled (`reopenSettled`). `first`, while open, is asked before the
  * rest: a jump from the grey list (`greyJumpFirstItem`).
  */
@@ -277,11 +282,25 @@ export function openReviewItems(
 ): ReviewItem[] {
   const flag = reviewFlag(point, marks, points);
   if (!flag) return [];
-  const open = flag.items.flatMap((item) => {
-    if (item.state === "open") return [item];
-    const reopened = keep?.includes(item.id) ? reopenSettled(item) : null;
-    return reopened ? [reopened] : [];
-  });
+  const ghosts = drawsGhosts(marks);
+  const order = new Map(
+    liveShotsInOrder(point, ghosts).map((shot, i) => [shot.id, i]),
+  );
+  const at = (item: ReviewItem) => {
+    const target = reviewStepTarget(item, point, marks, ghosts);
+    const shotId = target.shotId ?? target.slot?.afterShotId ?? null;
+    return (shotId === null ? undefined : order.get(shotId)) ?? order.size;
+  };
+  const open = flag.items
+    .flatMap((item) => {
+      if (item.state === "open") return [item];
+      const reopened = keep?.includes(item.id) ? reopenSettled(item) : null;
+      return reopened ? [reopened] : [];
+    })
+    .map((item) => ({ item, at: at(item) }))
+    // Stable: a tie keeps id order.
+    .sort((a, b) => a.at - b.at)
+    .map(({ item }) => item);
   const ending = open.find((item) => item.id === 4);
   const followUp = open.find(isFollowUp);
   let asked = open;
