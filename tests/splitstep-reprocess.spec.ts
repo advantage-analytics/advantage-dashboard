@@ -59,6 +59,7 @@ interface Call {
   columns?: string;
   eqs: Record<string, unknown>;
   neqs: Record<string, unknown>;
+  ins?: Record<string, readonly unknown[]>;
   payload?: unknown;
   contains?: unknown;
 }
@@ -110,7 +111,10 @@ function fakeDb(resolve: (call: Call, mode: "many" | "one") => Answer) {
           call.neqs[col] = value;
           return b;
         },
-        in: () => b,
+        in(col: string, values: readonly unknown[]) {
+          call.ins = { ...call.ins, [col]: values };
+          return b;
+        },
         not: () => b,
         order: () => b,
         limit: () => b,
@@ -448,14 +452,20 @@ test.describe("notifyAnalysisOutcome for a reprocess job", () => {
 const M1 = "19b3cdf6-691f-44e5-b519-c79887bacdce";
 const M2 = "f59c2c4e-9aa6-4a87-989d-d1f0b2aa6f1a";
 const M3 = "0bd6a4e5-0000-4000-8000-000000000003";
+const M4 = "0bd6a4e5-0000-4000-8000-000000000004";
 const J1 = "aaaaaaaa-0000-4000-8000-000000000001";
 
 function handlerWorld(opts: { auth?: ReprocessAuth } = {}) {
   const completed: Record<string, string> = {
     [M1]: "job-m1",
     [M2]: "job-m2",
+    [M4]: "job-m4",
   };
-  const labelling = new Set([M2]);
+  // Each match's open label session, by status.
+  const sessionStatus: Record<string, string> = {
+    [M2]: "labelling",
+    [M4]: "submitted",
+  };
   const db = fakeDb((call, mode) => {
     if (call.table === "processing_jobs") {
       if (call.eqs.id === J1) return { data: { id: J1, match_id: M1 } };
@@ -466,13 +476,9 @@ function handlerWorld(opts: { auth?: ReprocessAuth } = {}) {
     }
     if (call.table === "label_sessions") {
       expect(mode).toBe("many");
-      return {
-        data:
-          call.eqs.status === "labelling" &&
-          labelling.has(call.eqs.match_id as string)
-            ? [{ id: "s" }]
-            : [],
-      };
+      const status = sessionStatus[call.eqs.match_id as string];
+      const asked = call.ins?.status ?? [];
+      return { data: status && asked.includes(status) ? [{ id: "s" }] : [] };
     }
     throw new Error(`unexpected table ${call.table}`);
   });
@@ -541,6 +547,22 @@ test.describe("POST /api/admin/splitstep/reprocess (handler)", () => {
       code: "labelling_in_progress",
     });
     expect(w.sent.map((s) => s.jobId)).toEqual(["job-m1"]);
+  });
+
+  test("a session submitted for review is refused too, until force", async () => {
+    // A labeller handed it in and no admin has published it: as unprotected
+    // as one still labelling.
+    const w = handlerWorld();
+    const res = await w.post({ matchIds: [M4] });
+    const { results } = res.body as { results: Row[] };
+    expect(results[0]).toMatchObject({
+      matchId: M4,
+      parentJobId: "job-m4",
+      code: "labelling_in_progress",
+    });
+    expect(w.sent).toEqual([]);
+    await w.post({ matchIds: [M4], force: true });
+    expect(w.sent.map((s) => s.jobId)).toEqual(["job-m4"]);
   });
 
   test("force sends it anyway", async () => {
