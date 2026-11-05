@@ -13,7 +13,7 @@
  * labeller can tell the guide they read from the one in front of them.
  */
 
-export const GUIDE_VERSION = "2026-11-03";
+export const GUIDE_VERSION = "2026-11-04";
 
 export type GuideBlock =
   | { kind: "paragraph"; text: string }
@@ -49,7 +49,7 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
         "Play or pause with the play button or the space bar.",
         "Previous and Next move one point at a time. ← and → do the same.",
         "The speed control slows the video down or speeds it up.",
-        "Loop (L) replays the current point until you turn it off.",
+        "Loop (⇧L) replays the current point until you turn it off. Plain L is not Loop: on a serve it marks a let.",
         "Skip dead time (D) jumps over the time between points.",
         "Mute (M) turns the sound off and on.",
       ),

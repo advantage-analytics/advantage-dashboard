@@ -115,6 +115,38 @@ test.describe("LabelGuide", () => {
     }
   });
 
+  test("every key the prose names in brackets is that action's shortcut", () => {
+    // The prose is hand-written and the Keys table is generated, so a rebind
+    // ("Loop (L)" after Loop moved to ⇧L and L became a let) would otherwise
+    // leave the guide telling a vendor to press the wrong key.
+    const prose = HOW_TO_SECTIONS.flatMap((section) =>
+      section.blocks.flatMap((block) =>
+        block.kind === "paragraph"
+          ? [block.text]
+          : block.kind === "list"
+            ? [...block.items]
+            : [],
+      ),
+    );
+    const shortcuts = LABEL_SHORTCUT_GROUPS.flatMap((group) => group.items);
+    const named = prose.flatMap((text) =>
+      [...text.matchAll(/(\p{L}[\p{L} ]*?) \(([⇧⌘]*\p{Lu})\)/gu)].map((m) => ({
+        name: m[1].split(" ").at(-1)!,
+        key: m[2],
+        text,
+      })),
+    );
+    expect(named.map((n) => n.key)).toEqual(
+      expect.arrayContaining(["⇧L", "D", "M"]),
+    );
+    for (const { key, text } of named) {
+      const shortcut = shortcuts.find((item) => item.keys.join("") === key);
+      expect(shortcut, `"${text}" names ${key}`).toBeDefined();
+    }
+    const loop = shortcuts.find((item) => /^Loop/.test(item.action))!;
+    expect(prose.join(" ")).toContain(`Loop (${loop.keys.join("")})`);
+  });
+
   test("links nowhere under /admin", () => {
     expect(markup).not.toMatch(/href="[^"]*\/admin/);
     expect(markup).not.toContain("/admin");
