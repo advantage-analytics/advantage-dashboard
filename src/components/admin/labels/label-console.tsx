@@ -82,6 +82,7 @@ import {
   type ReplayWindow,
   stepKeyOf,
 } from "@/lib/services/labels/review-flow";
+import { openMissingShot } from "@/lib/services/labels/review-target";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
   greyJumpFirstItem,
@@ -3309,7 +3310,19 @@ export function LabelConsole({
         )
           ? placement.shotId
           : null;
-      addShot(expanded.id, selected);
+      // With nothing selected, A fills the point's open "Missing shot?" slot
+      // (most missing strokes are a return, not the last ball); the well's
+      // "Add shot" button still adds at the end of the rally.
+      const slot =
+        selected === null && liveMarks
+          ? openMissingShot(expanded, liveMarks)
+          : null;
+      const afterShotId =
+        selected ??
+        (slot && !("error" in planAddedShot(expanded, slot.afterShotId))
+          ? slot.afterShotId
+          : null);
+      addShot(expanded.id, afterShotId);
       return true;
     };
     addShotBeforeKey.current = () => {

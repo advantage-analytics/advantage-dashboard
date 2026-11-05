@@ -436,8 +436,9 @@ export function BlackShotsWell({
           <button
             type="button"
             data-add-shot=""
+            // No `aria-keyshortcuts`: this adds at the end of the rally,
+            // while A with nothing selected fills the open "Missing shot?" slot.
             onClick={() => operations.onAddShot(point.id, null)}
-            aria-keyshortcuts="A"
             style={addArrival.style}
             // The row's own tracks, so the plus sits under the numbers and
             // the words under the times, at any rail width.
