@@ -1017,9 +1017,13 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(findGapSource).toMatch(
       /landOnStep\(\s*point,\s*reviewStep\(\s*point,\s*liveMarks,\s*points,\s*names,\s*drawsGhosts\(liveMarks\),\s*queued,\s*first,\s*\),\s*\)/,
     );
-    // The grey jump's order lasts only as long as the review it opened.
+    // The grey jump's order lasts only as long as the review it opened, and
+    // is read again at every step, not kept from the landing.
     expect(consoleSource).toMatch(
-      /const asksFirst =\s*reviewMode && askFirst\?\.pointId === expanded\?\.id/,
+      /const fromGreyJump =\s*reviewMode && askFirst !== null && askFirst\.pointId === expanded\?\.id/,
+    );
+    expect(consoleSource).toMatch(
+      /fromGreyJump\s*\?\s*greyJumpFirstItem\(expanded, liveMarks, points, keep\)/,
     );
     // With no step the point opens as before, at its first stroke.
     expect(findGapSource).toContain("seekToPointStart(point);");
