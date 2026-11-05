@@ -3824,6 +3824,45 @@ test("the report list unfolds the playing point's shots, and the card lists none
   await expect(page.locator(`${CARD} [data-shot-id]`)).toHaveCount(0);
 });
 
+test("the tab's player bar draws no Save glyph; the card owns the bookmark and S still saves", async ({
+  page,
+}) => {
+  await openShell(page, "card-notes");
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => cardPoint(page)).toBe("b");
+  // One bookmark on the card; none on the bar under the video.
+  await expect(
+    page.locator(`${CARD} button[aria-label="Bookmark this point"]`),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save point" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Saved — remove bookmark" }),
+  ).toHaveCount(0);
+  // The key still reaches the write the glyph used to make.
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("s");
+  await expect(
+    page.locator(`${CARD} button[aria-label="Remove bookmark"]`),
+  ).toBeVisible();
+});
+
+test("the room's own transport keeps its Save glyph on a writable report", async ({
+  page,
+}) => {
+  await openShell(page, "card-notes");
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => cardPoint(page)).toBe("b");
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  // The tab's bar dropped its copy; the room's is the only on-screen save
+  // control while the card is covered.
+  await expect(
+    page.locator('[data-film-chrome] button[aria-label="Save point"]'),
+  ).toBeVisible();
+});
+
 test("the card reads the point in one line and opens an empty thread with a reply field", async ({
   page,
 }) => {

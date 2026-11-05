@@ -61,8 +61,12 @@ export interface AskColumn {
    * court positions (`ask.shots` contact/landing, `ask.matches.has_coords`)
    * are for a player's own Claude to draw and bin; the in-app planner has no
    * court visual to answer with and would invent its own depth thresholds
-   * against the settled measures. `renderAskSchemaBlock()` lists them only
-   * when asked for the MCP, and `focus.ts` never ranks them.
+   * against the settled measures. The running score (`ask.points`
+   * point_score, game_score, set_score) and `ask.matches` is_verified /
+   * errors_judged are for lining a hand-kept chart up against a match; the
+   * planner answers from the counters and has no use for a per-point score
+   * string it could misread. `renderAskSchemaBlock()` lists them only when
+   * asked for the MCP, and `focus.ts` never ranks them.
    */
   mcpOnly?: true;
 }
@@ -310,6 +314,20 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         type: "boolean",
         meaning:
           "True when computed statistics exist for this match (serve, return, rally counters).",
+      },
+      {
+        name: "is_verified",
+        type: "boolean",
+        meaning:
+          "True when Advantage checked every point of this match against the video (Verified by Advantage): its servers, winners and point endings were checked by hand rather than read by the video analysis alone. False for every other match.",
+        mcpOnly: true,
+      },
+      {
+        name: "errors_judged",
+        type: "boolean",
+        meaning:
+          "True when each error in this match was judged forced or unforced: every SwingVision match, and a video match Advantage verified with its errors judged. When false, ask.points.result_type reads Unforced Error for every error and ask.match_stats.unforced_errors counts every error, so call them errors, not unforced errors.",
+        mcpOnly: true,
       },
       {
         name: "player_name",
@@ -885,13 +903,34 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "result_type",
         type: "text",
         meaning:
-          "How the point ended, as text: Ace, Double Fault, Service Winner, Forehand Winner, Backhand Winner, Volley Winner, Overhead Winner, Forehand Unforced Error, Backhand Unforced Error, Forehand Forced Error, Backhand Forced Error, and the like; the stroke named is the one that ended the point, by whoever hit it; null when unknown.",
+          "How the point ended, as text: Ace, Double Fault, Service Winner, Forehand Winner, Backhand Winner, Volley Winner, Overhead Winner, Forehand Unforced Error, Backhand Unforced Error, Forehand Forced Error, Backhand Forced Error, and the like; the stroke named is the one that ended the point, by whoever hit it; null when unknown. Forced Error appears only on matches whose errors were judged (SwingVision, and video matches Advantage verified with errors judged); on every other match each error reads Unforced Error, whether or not it was forced.",
       },
       {
         name: "court",
         type: "text",
         meaning:
           "The service court the point was played from: Deuce or Ad. From the point score (0-0, 15-15, 30-0 are Deuce; 15-0, 30-15 are Ad), or the point's place in its game when there is no score — the Video filter's Side.",
+      },
+      {
+        name: "point_score",
+        type: "text",
+        meaning:
+          "The point score before this point was played, the viewer first: 30-40 is the viewer on 30 and the opponent on 40; AD is advantage, 0-0 opens every game, and a tiebreak counts in plain numbers (3-2). Video matches only: null on every SwingVision point, and null when the source never read point scores or the server is unknown. Unless ask.matches.is_verified is true it is the video analysis's running reading, which can stall or drift; ask.matches.score_text is the entered result.",
+        mcpOnly: true,
+      },
+      {
+        name: "game_score",
+        type: "text",
+        meaning:
+          "Games in the current set before this point, the viewer first, e.g. 4-5. Null where point_score is null for the same reasons, and when not recorded; unless ask.matches.is_verified is true it is the video analysis's running count, which can drift from ask.matches.score_text.",
+        mcpOnly: true,
+      },
+      {
+        name: "set_score",
+        type: "text",
+        meaning:
+          "Sets each side had won before this point, the viewer first, e.g. 1-0. Null where point_score is null for the same reasons, and when not recorded.",
+        mcpOnly: true,
       },
     ],
   },

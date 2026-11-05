@@ -288,6 +288,10 @@ function CopyPointLink({
   pointId: string;
 }) {
   const [copied, setCopied] = useState(false);
+  // The link opens the dashboard report, so only people who can already see
+  // this match follow it. In a team that is the program; in a personal
+  // workspace there is no team to name.
+  const isTeam = useOptionalWorkspace()?.active?.kind === "team";
   const copy = async () => {
     const url = new URL(
       `/dashboard/matches/${matchId}`,
@@ -304,7 +308,15 @@ function CopyPointLink({
     }
   };
   return (
-    <ChromeTooltip label={copied ? "Link copied" : "Copy link to this point"}>
+    <ChromeTooltip
+      label={
+        copied
+          ? "Link copied"
+          : isTeam
+            ? "Copy link for your team"
+            : "Copy link to this point"
+      }
+    >
       <button
         type="button"
         aria-label="Copy link to this point"
@@ -632,6 +644,9 @@ function Composer({ onSend }: { onSend: (body: string) => Promise<boolean> }) {
     >
       <input
         id={COMPOSER_ID}
+        // The bordered form is the field and draws the ring; without this the
+        // global field ring draws a second one inside it.
+        data-focus-ring="none"
         value={draft}
         maxLength={NOTE_MAX_LENGTH}
         onChange={(e) => setDraft(e.target.value)}

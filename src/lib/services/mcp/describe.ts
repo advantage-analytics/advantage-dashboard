@@ -16,10 +16,11 @@ export const MCP_QUERY_ROW_CAP = 200;
 /**
  * What `describe_views` answers: the five `ask` views as the plan prompt
  * lists them — the same renderer, so a column the prompt hides
- * (`video_time`, the seat ids) is hidden here too, while the `mcpOnly` court
- * positions are listed here alone — how to read and bin those positions, the
- * percentage definitions, and the rules `run_query` holds a query to. Written
- * for a model reading it as a tool result: plain text, one section per heading.
+ * (`video_time`, the seat ids) is hidden here too, while the `mcpOnly` columns
+ * (the court positions, the running score, verification) are listed here
+ * alone — how to read and bin those positions, the percentage definitions, and
+ * the rules `run_query` holds a query to. Written for a model reading it as a
+ * tool result: plain text, one section per heading.
  */
 export function describeAskViews(mode: AskScope["kind"] = "personal"): string {
   const team = mode === "team";

@@ -881,7 +881,6 @@ function FilmRoom({
       onRemove: (tag) => void pointNotes.removeTag(activePointId, tag),
     };
   }, [annotate, activePointId, forActive, pointNotes]);
-  const toggleSavedActiveOrNone = readOnly ? undefined : toggleSavedActive;
 
   /**
    * The room's keys, on the page while this view is open: ← → step to the
@@ -1189,7 +1188,6 @@ function FilmRoom({
             background={roomOpen}
             stops={walkStops}
             allStops={stops}
-            saved={activePoint ? activePoint.saved : null}
             onSkipDeadToggled={markSkipDeadAnswered}
             onTimeChange={setCurrentTime}
             onPlaybackTime={reportTime}
@@ -1198,7 +1196,6 @@ function FilmRoom({
             onPlayRejected={handlePlayRejected}
             onFirstPlay={recordFirstPlay}
             onRetry={retry}
-            onToggleSaved={toggleSavedActiveOrNone}
             onEnterFullscreen={enterRoom}
             // Every point step — the transport's two glyphs, the arrow keys
             // above, the card's stepper — runs the player's own `step`, which

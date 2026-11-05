@@ -147,9 +147,9 @@ export {
  * not a second list and not a tab: the well is a sibling of the row inside the
  * point's own fragment, so it inherits the row's 14px side padding and runs
  * edge to edge under it. Without those props there is no well. Both tones
- * draw one: the room's is a recessed dark strip, the report column's
- * (canvas "W-E chat", `WELL_TONE.light`) puts the row and its shots on one
- * `--surface-subtle` card.
+ * draw one, recessed: the room's is a dark strip, the report column's
+ * (`WELL_TONE.light`) a strip one step darker than the row's
+ * `--surface-subtle` wash.
  *
  * ── Follow the film, or hold the point you are reading ──────────────────────
  *
@@ -1171,8 +1171,8 @@ export const PointRow = memo(function PointRow({
  * Dark (the room): recessed rather than raised — `rgba(0,0,0,0.28)` behind
  * inset hairlines top and bottom, full-bleed on the row's own 14px side
  * padding, so the shots read as sitting UNDER the point rather than beside it.
- * Light (the report column): the row's own wash continues under it and a
- * hairline divides the shots from the row; the playing shot is the white row.
+ * Light (the report column): the same recess one step darker than the row's
+ * wash, pressed in from the top; the playing shot is the white row.
  * The paints are `WELL_TONE`'s.
  *
  * Columns are the phase-1 shot feed narrowed to `# · player · stroke ·
