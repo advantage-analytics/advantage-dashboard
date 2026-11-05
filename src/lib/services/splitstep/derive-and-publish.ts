@@ -14,7 +14,11 @@
  */
 
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { mergeDerivationQuality } from "./derivation-quality";
+import {
+  mergeDerivationQuality,
+  readDerivationQuality,
+} from "./derivation-quality";
+import { readReprocessParent } from "./reprocess";
 import { persistTranscript } from "./persist-transcript";
 import {
   insightsWaitMs,
@@ -114,12 +118,19 @@ export async function deriveAndPublish(params: {
     supabase,
     jobId,
     deadline,
-    rebuild = false,
+    rebuild: rebuildRequested = false,
     allowOverwriteLabels = false,
     onArrival,
   } = params;
 
   try {
+    // An admin reprocess child (reprocess.ts) is derived as a rebuild: the
+    // match is already published, so the player mapping stays pinned to its
+    // rows, a refusal — hand labels above all — keeps the job `completed`,
+    // and Ask's first answer is not asked twice.
+    const lineage = await readReprocessParent(supabase, jobId);
+    const rebuild = rebuildRequested || lineage.reprocess;
+
     // Never off `cancelled`. The user withdrew the job while it was queued
     // (POST /api/splitstep/jobs/[jobId]/cancel) and was told nothing would be
     // analysed; a late completion — or a hand re-run — must not resurrect it.
@@ -159,8 +170,27 @@ export async function deriveAndPublish(params: {
         .from("processing_jobs")
         .update({ status: "completed" })
         .eq("id", jobId);
+      // A reprocess child becomes the match's newest completed job, and the
+      // report reads the labelled `fold` from that job (apply-session.ts
+      // wrote it on the parent). Carry it across so the rows it describes —
+      // which did not change — keep describing themselves the same way.
+      if (lineage.reprocess && lineage.parentId) {
+        const parentQuality = await readDerivationQuality(
+          supabase,
+          lineage.parentId,
+        ).catch(() => ({}) as Record<string, unknown>);
+        if ("fold" in parentQuality) {
+          await mergeDerivationQuality(
+            supabase,
+            jobId,
+            { fold: parentQuality.fold },
+            LOG,
+          );
+        }
+      }
       console.warn(`${LOG} rebuild refused; published rows kept`, {
         jobId,
+        reprocess: lineage.reprocess,
         reason: written.reason,
       });
       return { ok: false, reason: written.reason, kept: true };
