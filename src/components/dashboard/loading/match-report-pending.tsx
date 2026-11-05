@@ -317,7 +317,8 @@ export function StatisticsPanePending() {
               <PendingBar className="h-2.5 w-24" />
             </div>
           </ChartCardPending>
-          {/* Two name rows over a 10px track, then the four-entry legend. */}
+          {/* Two name rows over a 10px track, then the legend — up to six
+              entries (a judged match), wrapping as the loaded legend does. */}
           <ChartCardPending
             eyebrow="How points ended"
             padding="16px 20px 14px"
@@ -333,11 +334,12 @@ export function StatisticsPanePending() {
                 <PendingBar className="h-2.5 rounded-[var(--radius-cell)]" />
               </div>
             ))}
-            <div className="flex h-[17px] items-center gap-3.5 pt-0.5">
-              <PendingBar className="h-2.5 w-14" />
-              <PendingBar className="h-2.5 w-10" />
-              <PendingBar className="h-2.5 w-16" />
-              <PendingBar className="h-2.5 w-20" />
+            <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 pt-0.5">
+              {["w-14", "w-10", "w-24", "w-16", "w-12", "w-20"].map((w) => (
+                <div key={w} className="flex h-[17px] items-center">
+                  <PendingBar className={`h-2.5 ${w}`} />
+                </div>
+              ))}
             </div>
           </ChartCardPending>
         </div>

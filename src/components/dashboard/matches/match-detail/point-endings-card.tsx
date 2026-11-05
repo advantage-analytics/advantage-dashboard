@@ -30,31 +30,38 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * The Statistics tab's "How points ended" card (artboard 46a, lines 550–556).
  *
  * One 100% stacked bar per player over that player's OWN decisive shots:
- * winners, aces, unforced errors, double faults. The bars are not compared
+ * winners, aces, service winners, unforced errors, forced errors, double
+ * faults. Between them the two bars hold every point whose result type says
+ * how it ended, so on a fully labelled match they add up to the match's
+ * points (product decision, 2026-11-05). The bars are not compared
  * against each other by length — each is its own composition — so the hover
  * carries the cross-reference count instead.
  *
  * The viewer's bar is first (`useMatchSides()`, guardrails §4), never
  * player1's.
  *
- * BUCKETING follows `calculate_match_stats`, which reads all four of these
- * exclusively off the free-text `points.result_type`:
- *   aces           `result_type = 'Ace'`
- *   double faults  `result_type = 'Double Fault'`
- *   winners        `result_type LIKE '%Winner%'` less 'Service Winner'
- *                  (`countsAsWinner`), as the published card counts them
- *   unforced errs  `result_type LIKE '%Unforced Error%'`
+ * BUCKETING follows `calculate_match_stats`, which reads these exclusively
+ * off the free-text `points.result_type`:
+ *   aces             `result_type = 'Ace'`
+ *   service winners  `result_type = 'Service Winner'` that is not an ace
+ *   double faults    `result_type = 'Double Fault'`
+ *   winners          `result_type LIKE '%Winner%'` less 'Service Winner'
+ *                    (`countsAsWinner`), as the published card counts them
+ *   unforced errs    `result_type LIKE '%Unforced Error%'`
+ *   forced errs      `result_type LIKE '%Forced Error%'`, not unforced
  * UNTIL THE ERRORS ARE JUDGED (`MatchFilterContext.errorSplitJudged`, read
- * off the filter context) the third segment is every error instead — forced
- * and unforced, any `result_type` ending in "error" — and reads "Errors"
- * (`outcomesFor`), since its "unforced" figure would be every error anyway.
- * Aces and double faults belong to the server structurally. Winners are
- * credited by `winnerHitBy` and unforced errors by `errorMadeBy`: the rules
- * the Result filters a segment opens read.
+ * off the filter context) there is no forced segment: the errors segment is
+ * every error — forced and unforced, any `result_type` ending in "error" —
+ * and reads "Errors" (`outcomesFor`), since nobody has called them either way.
+ * Aces, service winners and double faults belong to the server structurally.
+ * Winners are credited by `winnerHitBy` and errors by `errorMadeBy`: the
+ * rules the Result filters a segment opens read.
  *
- * A SERVICE WINNER IS NONE OF THE FOUR, unless a derived match reads it as an
- * ace: product decision (2026-10-30), it does not count as a winner. So that
- * point is on neither player's bar.
+ * A SERVICE WINNER IS ITS OWN SEGMENT, not a winner (product decision,
+ * 2026-10-30, as the head-to-head Winners row counts them) — unless a derived
+ * match reads it as an ace, below. It and the forced errors wear the fill of
+ * the segment they sit beside, hatched (`hatch`): the viz ramp has four steps
+ * per side, and six solid shades would not tell apart.
  *
  * ACES ON A DERIVED MATCH. The derivation never emits 'Ace' (see
  * `services/splitstep/derivation/result-type.ts`): every unreturned serve is
@@ -78,7 +85,13 @@ import { surnameLabels } from "@/lib/data/match-utils";
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
 
-export type OutcomeKey = "winners" | "aces" | "unforcedErrors" | "doubleFaults";
+export type OutcomeKey =
+  | "winners"
+  | "aces"
+  | "serviceWinners"
+  | "unforcedErrors"
+  | "forcedErrors"
+  | "doubleFaults";
 
 interface OutcomeMeta {
   key: OutcomeKey;
@@ -91,7 +104,15 @@ interface OutcomeMeta {
   opp: string;
 }
 
-/** The judged split: the third segment is the unforced errors alone. */
+/**
+ * A segment's fill as diagonal stripes of `color` over a lighter wash of
+ * itself — the related-segment mark. Solid where the segment stands alone.
+ */
+function hatch(color: string): string {
+  return `repeating-linear-gradient(135deg, ${color} 0 2px, color-mix(in srgb, ${color} 40%, transparent) 2px 4px)`;
+}
+
+/** The judged split: unforced and forced errors are two segments. */
 const OUTCOMES: OutcomeMeta[] = [
   {
     key: "winners",
@@ -101,11 +122,24 @@ const OUTCOMES: OutcomeMeta[] = [
   },
   { key: "aces", label: "Aces", you: "var(--viz-you)", opp: "var(--viz-opp)" },
   {
+    key: "serviceWinners",
+    label: "Service winners",
+    you: hatch("var(--viz-you)"),
+    opp: hatch("var(--viz-opp)"),
+  },
+  {
     key: "unforcedErrors",
     label: "Unforced errors",
     legendLabel: "Unforced",
     you: "var(--viz-you-mid)",
     opp: "var(--viz-opp-mid)",
+  },
+  {
+    key: "forcedErrors",
+    label: "Forced errors",
+    legendLabel: "Forced",
+    you: hatch("var(--viz-you-mid)"),
+    opp: hatch("var(--viz-opp-mid)"),
   },
   {
     key: "doubleFaults",
@@ -116,8 +150,9 @@ const OUTCOMES: OutcomeMeta[] = [
 ];
 
 /**
- * The unjudged match's third segment: every error, forced and unforced. Same
- * key and fills, only the words change — the bar still has four segments.
+ * The unjudged match's errors segment: every error, forced and unforced. Same
+ * key and fills as the unforced segment, only the words change; the forced
+ * segment is dropped, since this one already holds its points.
  */
 const ERRORS_OUTCOME: OutcomeMeta = {
   key: "unforcedErrors",
@@ -131,7 +166,9 @@ const ERRORS_OUTCOME: OutcomeMeta = {
 export function outcomesFor(errorSplitJudged: boolean): OutcomeMeta[] {
   return errorSplitJudged
     ? OUTCOMES
-    : OUTCOMES.map((o) => (o.key === "unforcedErrors" ? ERRORS_OUTCOME : o));
+    : OUTCOMES.filter((o) => o.key !== "forcedErrors").map((o) =>
+        o.key === "unforcedErrors" ? ERRORS_OUTCOME : o,
+      );
 }
 
 /** The errors segment's base cut while the split is not judged: every error. */
@@ -148,13 +185,15 @@ const ERRORS_BASE_CUT: FilmCut = { resultEnding: ["error"], ending: "error" };
 const OUTCOME_BASE_CUT: Record<OutcomeKey, FilmCut> = {
   winners: { resultEnding: ["winner"], ending: "winner" },
   unforcedErrors: { resultEnding: ["error"], ending: "unforced-error" },
+  forcedErrors: { resultEnding: ["error"], ending: "forced-error" },
   doubleFaults: { resultEnding: ["error"], resultShot: ["Serve"] },
   aces: { serveResult: ["ace"] },
+  serviceWinners: { serveResult: ["service-winner"] },
 };
 
 /**
- * The film cut behind one segment of one side's bar. Aces are the SERVER's
- * (Serve › Player); the other three are Result › Hit by, the point of view
+ * The film cut behind one segment of one side's bar. Aces and service
+ * winners are the SERVER's (Serve › Player); the rest are Result › Hit by, the point of view
  * Ending reads — whoever hit the winner or made the error, the server for a
  * double fault. That is exactly the line `head-to-head-card.tsx`'s `sideCut`
  * draws for the same four rows, so this delegates to it rather than
@@ -172,14 +211,21 @@ export function outcomeCut(
       ? ERRORS_BASE_CUT
       : OUTCOME_BASE_CUT[key],
     side,
-    key === "aces" ? "server" : "player",
+    key === "aces" || key === "serviceWinners" ? "server" : "player",
   );
 }
 
 type Tally = Record<OutcomeKey, number>;
 
 function emptyTally(): Tally {
-  return { winners: 0, aces: 0, unforcedErrors: 0, doubleFaults: 0 };
+  return {
+    winners: 0,
+    aces: 0,
+    serviceWinners: 0,
+    unforcedErrors: 0,
+    forcedErrors: 0,
+    doubleFaults: 0,
+  };
 }
 
 /**
@@ -187,7 +233,9 @@ function emptyTally(): Tally {
  * counted in two segments would make the bar's own total disagree with the
  * counts in its segment hovers. With `errorSplitJudged` false the errors
  * bucket takes every error (a `result_type` ending in "error"), forced ones
- * included; a double fault is caught earlier in the chain either way.
+ * included, and `forcedErrors` stays 0; a double fault is caught earlier in
+ * the chain either way. A service winner is tested after the ace, so on a
+ * derived match an unreturned serve stays an ace (`serveResultOf`'s order).
  */
 export function outcomeTally(
   points: MatchPoint[],
@@ -203,6 +251,8 @@ export function outcomeTally(
 
     if (isDerived ? isUnreturnedServe(p) : result === "ace") {
       if (iServed) t.aces += 1;
+    } else if (result === "service winner") {
+      if (iServed) t.serviceWinners += 1;
     } else if (result === "double fault") {
       if (iServed) t.doubleFaults += 1;
     } else if (countsAsWinner(p)) {
@@ -213,6 +263,12 @@ export function outcomeTally(
         : result.trim().endsWith("error")
     ) {
       if (errorMadeBy(p) === isPlayer1) t.unforcedErrors += 1;
+    } else if (
+      errorSplitJudged &&
+      result.includes("forced error") &&
+      !result.includes("unforced error")
+    ) {
+      if (errorMadeBy(p) === isPlayer1) t.forcedErrors += 1;
     }
   }
 

@@ -75,6 +75,8 @@ test.describe("point-endings cuts", () => {
     "unforcedErrors",
     "doubleFaults",
     "aces",
+    "serviceWinners",
+    "forcedErrors",
   ];
 
   test("the viewer's row", () => {
@@ -99,6 +101,15 @@ test.describe("point-endings cuts", () => {
     expect(outcomeCut("aces", "you")).toEqual({
       serveResult: ["ace"],
       server: "you",
+    });
+    expect(outcomeCut("serviceWinners", "you")).toEqual({
+      serveResult: ["service-winner"],
+      server: "you",
+    });
+    expect(outcomeCut("forcedErrors", "you")).toEqual({
+      resultEnding: ["error"],
+      ending: "forced-error",
+      resultPlayer: "you",
     });
   });
 
@@ -127,14 +138,16 @@ test.describe("point-endings cuts", () => {
   });
 
   test("agrees with the head-to-head card's cut for the same statistic", () => {
-    const LABEL: Record<OutcomeKey, string> = {
+    // Service winners have no head-to-head row; forced errors' row is
+    // compared in head-to-head-cuts.spec.ts, where the judged rows are built.
+    const LABEL: Partial<Record<OutcomeKey, string>> = {
       winners: "Winners",
       unforcedErrors: "Unforced errors",
       doubleFaults: "Double faults",
       aces: "Aces",
     };
     const rows = H2H_GROUPS.flatMap((g) => g.configs);
-    for (const key of KEYS) {
+    for (const key of KEYS.filter((k) => LABEL[k])) {
       const row = rows.find((r) => r.label === LABEL[key])!;
       for (const side of ["you", "opp"] as const)
         expect(outcomeCut(key, side), `${key} (${side})`).toEqual(
