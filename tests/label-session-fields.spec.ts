@@ -512,14 +512,14 @@ test.describe("writeLabelSessionFields", () => {
       SESSION_ID,
       { video_ends_early: true },
       {
-        requireAdmin: async () => null,
+        requireLabelActor: async () => null,
         createAdminClient: () => {
           built += 1;
           return fakeClient({}).supabase;
         },
       },
     );
-    expect(result).toEqual({ error: "Administrator access is required." });
+    expect(result).toEqual({ error: "You don't have access to this session." });
     expect(built).toBe(0);
 
     const fake = fakeClient({});
@@ -528,7 +528,10 @@ test.describe("writeLabelSessionFields", () => {
         SESSION_ID.toUpperCase(),
         { video_ends_early: true },
         {
-          requireAdmin: async () => ({ id: "admin" }),
+          requireLabelActor: async () => ({
+            id: "admin",
+            kind: "admin" as const,
+          }),
           createAdminClient: () => fake.supabase,
         },
       ),

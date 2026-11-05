@@ -641,17 +641,17 @@ test.describe("resetLabelShot / resetLabelPointWhole", () => {
   test("refuse without an admin, before a client is built", async () => {
     let built = 0;
     const deps = {
-      requireAdmin: async () => null,
+      requireLabelActor: async () => null,
       createAdminClient: () => {
         built += 1;
         return fakeClient({}).supabase;
       },
     };
     expect(await resetLabelShot(SHOT_ID, deps)).toEqual({
-      error: "Administrator access is required.",
+      error: "You don't have access to this session.",
     });
     expect(await resetLabelPointWhole(POINT_ID, SESSION_ID, deps)).toEqual({
-      error: "Administrator access is required.",
+      error: "You don't have access to this session.",
     });
     expect(built).toBe(0);
   });
@@ -659,7 +659,7 @@ test.describe("resetLabelShot / resetLabelPointWhole", () => {
   test("a shot reset writes its seed and kept, compare-and-set, and unchecks its point", async () => {
     const fake = fakeClient({ shot: shotRow() });
     const result = await resetLabelShot(SHOT_ID.toUpperCase(), {
-      requireAdmin: async () => ({ id: "admin" }),
+      requireLabelActor: async () => ({ id: "admin", kind: "admin" as const }),
       createAdminClient: () => fake.supabase,
     });
     expect(result).toEqual({ ok: true, status: "kept" });

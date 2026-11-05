@@ -89,6 +89,10 @@ import {
   type LabelSessionStatusResult,
 } from "@/lib/services/labels/session-status-session";
 import {
+  submitLabelSession,
+  type LabelSubmitResult,
+} from "@/lib/services/labels/submit-session";
+import {
   redoLabelOp,
   undoLabelOp,
   type LabelRedoResult,
@@ -104,6 +108,16 @@ import {
   type LabelOpenCounts,
   type LabelOpenCountsResult,
 } from "@/lib/services/labels/open-counts-session";
+import {
+  recordLabelWorkBeat,
+  type LabelWorkBeatResult,
+} from "@/lib/services/labels/work-beats-session";
+import {
+  assignLabelSession,
+  listLabellers,
+  type LabelAssignResult,
+  type ListLabellersResult,
+} from "@/lib/services/labels/assign-session";
 import { withLabelOp } from "@/lib/supabase/op-context";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
@@ -506,10 +520,23 @@ export async function updateLabelSessionFieldsAction(
 }
 
 /**
+ * The console header's "Submit for review" (submit-session.ts): the one
+ * status write a labeller may make. A snapshot of the session's rows goes to
+ * `label_submissions`, then `label_sessions.status` to `submitted`; nothing is
+ * published. Refused on a session that is not labelling. Outside
+ * `withLabelOp`, like Mark complete: a status move is not a step to undo.
+ */
+export async function submitLabelSessionAction(
+  sessionId: string,
+): Promise<LabelSubmitResult> {
+  return submitLabelSession(sessionId);
+}
+
+/**
  * The console header's "Mark complete": publishes the labels to the match
  * (apply-session.ts, the replaced version backed up), then `label_sessions.status`
- * to `complete`. Refused on a session that is not labelling, and left open
- * when the publish refuses.
+ * to `complete`. Refused on a session that is not labelling or submitted, and
+ * left as it was when the publish refuses. Admin only.
  */
 export async function completeLabelSessionAction(
   sessionId: string,
@@ -518,8 +545,9 @@ export async function completeLabelSessionAction(
 }
 
 /**
- * The console header's "Reopen": a complete session back to `labelling`.
- * Refused while another session of the same match is open.
+ * The console header's "Reopen": a complete or submitted session back to
+ * `labelling`. From complete, refused while another session of the same
+ * match is open. Admin only.
  */
 export async function reopenLabelSessionAction(
   sessionId: string,
@@ -574,4 +602,37 @@ export async function recordLabelOpenCountsAction(
   counts: LabelOpenCounts,
 ): Promise<LabelOpenCountsResult> {
   return recordLabelOpenCounts(sessionId, counts);
+}
+
+/**
+ * The Labels list's "Assign": hand a session to a labeller (`userId`), or
+ * take it back with null. Admin only (`requireAdmin`, never the label-actor
+ * gate); refused on a complete session and for anyone who is not a labeller.
+ * Not a labelling step, so outside `withLabelOp`.
+ */
+export async function assignLabelSessionAction(
+  sessionId: string,
+  userId: string | null,
+): Promise<LabelAssignResult> {
+  return assignLabelSession(sessionId, userId);
+}
+
+/**
+ * Every labeller, `{ id, name, email }`, for the Assign menu. Admin only:
+ * it reads other users' names and emails service-role.
+ */
+export async function listLabellersAction(): Promise<ListLabellersResult> {
+  return listLabellers();
+}
+
+/**
+ * The console's active-time heartbeat (use-work-beat.ts): one row in
+ * `label_work_beats` for the caller, this session and the current minute —
+ * the server's minute, never the client's. A second beat in the same minute
+ * is ignored. Not a step to undo: outside `withLabelOp`.
+ */
+export async function recordLabelWorkBeatAction(
+  sessionId: string,
+): Promise<LabelWorkBeatResult> {
+  return recordLabelWorkBeat(sessionId);
 }

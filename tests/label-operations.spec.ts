@@ -33,13 +33,17 @@ import {
   switchedHitter,
 } from "@/lib/services/labels/operations";
 import { endingPatchForShotChange } from "@/lib/services/labels/ending-derived";
+import type { LabelActorTarget } from "@/lib/services/labels/label-actor";
 import {
   addLabelShot,
   deleteLabelPoint,
   deleteLabelShot,
+  gated,
   markLabelPointChecked,
   moveLabelPoint,
+  moveLabelPoints,
   removeLabelShotsAfter,
+  restoreLabelPoint,
   restoreLabelShot,
   restoreLabelShots,
   unmarkLabelPointChecked,
@@ -907,8 +911,10 @@ function fakeClient(rows: {
   });
 }
 
-const ADMIN = { requireAdmin: async () => ({ id: "admin" }) };
-const NOBODY = { requireAdmin: async () => null };
+const ADMIN = {
+  requireLabelActor: async () => ({ id: "admin", kind: "admin" as const }),
+};
+const NOBODY = { requireLabelActor: async () => null };
 
 test.describe("the services", () => {
   test("every entry point refuses without an admin, before a client is built", async () => {
@@ -932,7 +938,9 @@ test.describe("the services", () => {
       unmarkLabelPointChecked(POINT_ID, deps),
     ]);
     for (const result of results) {
-      expect(result).toEqual({ error: "Administrator access is required." });
+      expect(result).toEqual({
+        error: "You don't have access to this session.",
+      });
     }
     expect(built).toBe(0);
   });
@@ -2001,4 +2009,86 @@ test("a game's place is its row order: a started game's number is a key", () => 
   expect([1, 2, 5, 3, 6, 4].map(place)).toEqual([1, 2, 3, 4, 5, 6]);
   // A game with no live row comes after every game that has one.
   expect(place(7)).toBe(7);
+});
+
+// ── Who the gate is asked about ────────────────────────────────────────────
+
+test.describe("gated", () => {
+  test("hands the target to requireLabelActor and the actor, kind included, to the work", async () => {
+    const seen: LabelActorTarget[] = [];
+    const deps = {
+      requireLabelActor: async (target: LabelActorTarget) => {
+        seen.push(target);
+        return { id: "lab", kind: "labeller" as const };
+      },
+      createAdminClient: () => fakeClient({}).supabase,
+    };
+    const result = await gated(
+      deps,
+      async (_supabase, actor) => ({ ok: true as const, actor }),
+      "test",
+      { pointId: POINT_ID },
+    );
+    expect(result).toEqual({
+      ok: true,
+      actor: { id: "lab", kind: "labeller" },
+    });
+    expect(seen).toEqual([{ pointId: POINT_ID }]);
+  });
+
+  test("every entry point names the row it writes, never the session it was told", async () => {
+    const seen: LabelActorTarget[] = [];
+    let built = 0;
+    const deps = {
+      requireLabelActor: async (target: LabelActorTarget) => {
+        seen.push(target);
+        return null;
+      },
+      createAdminClient: () => {
+        built += 1;
+        return fakeClient({}).supabase;
+      },
+    };
+    await deleteLabelShot(SHOT_ID, "other", deps);
+    await restoreLabelShot(SHOT_ID, deps);
+    await removeLabelShotsAfter(SHOT_ID, deps);
+    await restoreLabelShots([SHOT_ID, SHOT_ID.replace(/a/g, "b")], deps);
+    await addLabelShot(POINT_ID, null, null, null, deps);
+    await deleteLabelPoint(POINT_ID, deps);
+    await restoreLabelPoint(POINT_ID, deps);
+    await moveLabelPoint(
+      POINT_ID,
+      { setNumber: 1, gameNumber: 2 },
+      false,
+      deps,
+    );
+    await moveLabelPoints(
+      [POINT_ID],
+      { setNumber: 1, gameNumber: 2 },
+      false,
+      undefined,
+      deps,
+    );
+    await markLabelPointChecked(POINT_ID, deps);
+    await unmarkLabelPointChecked(POINT_ID, deps);
+    // An id that is not a string reaches the gate as "", which it refuses.
+    await deleteLabelShot(42, "other", deps);
+    await restoreLabelShots("not-a-list", deps);
+    expect(seen).toEqual([
+      { shotId: SHOT_ID },
+      { shotId: SHOT_ID },
+      { shotId: SHOT_ID },
+      { shotIds: [SHOT_ID, SHOT_ID.replace(/a/g, "b")] },
+      { pointId: POINT_ID },
+      { pointId: POINT_ID },
+      { pointId: POINT_ID },
+      { pointId: POINT_ID },
+      { pointIds: [POINT_ID] },
+      { pointId: POINT_ID },
+      { pointId: POINT_ID },
+      { shotId: "" },
+      { shotIds: [] },
+    ]);
+    expect(built).toBe(0);
+  });
 });

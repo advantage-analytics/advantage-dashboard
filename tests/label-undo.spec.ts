@@ -46,7 +46,7 @@ function fakeDb(answer: {
 test("refused without an admin, before a client is built; a bad id reads nothing", async () => {
   let built = 0;
   const deps = {
-    requireAdmin: async () => null,
+    requireLabelActor: async () => null,
     createAdminClient: () => {
       built += 1;
       return {} as AdminClient;
@@ -54,12 +54,12 @@ test("refused without an admin, before a client is built; a bad id reads nothing
     readPoints: async () => [],
   };
   expect(await undoLabelOp(SESSION, deps)).toEqual({
-    error: "Admin access required.",
+    error: "You don't have access to this session.",
   });
   expect(
     await undoLabelOp("nope", {
       ...deps,
-      requireAdmin: async () => ({ id: "a" }),
+      requireLabelActor: async () => ({ id: "a", kind: "admin" as const }),
     }),
   ).toEqual({ error: "No such session." });
   expect(built).toBe(0);
@@ -80,7 +80,7 @@ test("one RPC, then only the touched points read back, as a diff", async () => {
   const changed = [{ id: "p1" }, { id: "p2" }] as never;
   const asked: unknown[] = [];
   const result = await undoLabelOp(SESSION, {
-    requireAdmin: async () => ({ id: "admin" }),
+    requireLabelActor: async () => ({ id: "admin", kind: "admin" as const }),
     createAdminClient: () => db,
     readPoints: async (_db, sessionId, pointIds) => {
       asked.push([sessionId, pointIds]);
@@ -116,7 +116,7 @@ test("redo: one RPC to redo_label_op, the touched points read back the same way"
   });
   const changed = [{ id: "p1" }, { id: "p2" }] as never;
   const result = await redoLabelOp(SESSION, {
-    requireAdmin: async () => ({ id: "admin" }),
+    requireLabelActor: async () => ({ id: "admin", kind: "admin" as const }),
     createAdminClient: () => db,
     readPoints: async () => changed,
   });
@@ -130,7 +130,7 @@ test("redo: one RPC to redo_label_op, the touched points read back the same way"
   });
   // The undo's count of what is left to redo comes through.
   const undone = await undoLabelOp(SESSION, {
-    requireAdmin: async () => ({ id: "admin" }),
+    requireLabelActor: async () => ({ id: "admin", kind: "admin" as const }),
     createAdminClient: () =>
       fakeDb({ data: { undone: "Edit", remaining: 0, redoable: 2 } }).db,
     readPoints: async () => [],
@@ -141,17 +141,20 @@ test("redo: one RPC to redo_label_op, the touched points read back the same way"
 test("redo refuses and reports like undo", async () => {
   expect(
     await redoLabelOp(SESSION, {
-      requireAdmin: async () => null,
+      requireLabelActor: async () => null,
       createAdminClient: () => ({}) as AdminClient,
       readPoints: async () => [],
     }),
-  ).toEqual({ error: "Admin access required." });
+  ).toEqual({ error: "You don't have access to this session." });
   const log = console.error;
   console.error = () => {};
   try {
     expect(
       await redoLabelOp(SESSION, {
-        requireAdmin: async () => ({ id: "admin" }),
+        requireLabelActor: async () => ({
+          id: "admin",
+          kind: "admin" as const,
+        }),
         createAdminClient: () =>
           fakeDb({ error: { code: "42883", message: "nope" } }).db,
         readPoints: async () => [],
@@ -252,7 +255,7 @@ test("the fake client is asked for exactly the listed ids, each point whole with
     return undefined;
   });
   const result = await undoLabelOp(SESSION, {
-    requireAdmin: async () => ({ id: "admin" }),
+    requireLabelActor: async () => ({ id: "admin", kind: "admin" as const }),
     createAdminClient: () => supabase,
     readPoints: readLabelPointsByIds,
   });
@@ -282,7 +285,7 @@ test("a read-back that fails is reported, not thrown: the rewind is committed", 
   console.error = () => {};
   try {
     const result = await undoLabelOp(SESSION, {
-      requireAdmin: async () => ({ id: "admin" }),
+      requireLabelActor: async () => ({ id: "admin", kind: "admin" as const }),
       createAdminClient: () =>
         fakeDb({ data: { undone: "Edit", remaining: 0, points: ["p1"] } }).db,
       readPoints: async () => {
@@ -300,7 +303,7 @@ test("a read-back that fails is reported, not thrown: the rewind is committed", 
 test("the function's own refusal is shown; any other failure is not", async () => {
   const run = (error: { code: string; message: string }) =>
     undoLabelOp(SESSION, {
-      requireAdmin: async () => ({ id: "admin" }),
+      requireLabelActor: async () => ({ id: "admin", kind: "admin" as const }),
       createAdminClient: () => fakeDb({ error }).db,
       readPoints: async () => [],
     });
@@ -416,7 +419,7 @@ function journaledPoint(initial: LabelPointRow) {
     },
   } as unknown as AdminClient;
   const deps = {
-    requireAdmin: async () => ({ id: "admin" }),
+    requireLabelActor: async () => ({ id: "admin", kind: "admin" as const }),
     createAdminClient: () => client,
     // The read-back maps through rows.ts, as `readLabelPointsByIds` does.
     readPoints: async () => [toLabelPoint(row)],

@@ -6,7 +6,8 @@
  *
  * A job is in one of three states, read off its session:
  * - `todo`: nobody has started a session. Needs labelling.
- * - `doing`: a session is open.
+ * - `doing`: a session is open — being labelled, or submitted by its
+ *   labeller and waiting on an admin's review (its pill says so).
  * - `done`: its session is complete, which is also when its labels were
  *   published to the match.
  */
@@ -52,7 +53,7 @@ export interface GroupableJob {
   player1Name: string;
   player2Name: string;
   completedAt: string | null;
-  session: { status: "labelling" | "complete" } | null;
+  session: { status: "labelling" | "submitted" | "complete" } | null;
 }
 
 /** What grouping reads of a match's owner. A `LabelJobOwner` satisfies it. */
@@ -70,6 +71,24 @@ export const jobState = (job: GroupableJob): LabelJobState =>
     : job.session.status === "complete"
       ? "done"
       : "doing";
+
+/**
+ * The Status pill's words: "Needs labelling", "In progress · N of M",
+ * "Submitted for review" (still the `doing` group — nothing is published until
+ * an admin's Mark complete) or "Labelled".
+ */
+export function jobStatusText(job: {
+  session: {
+    status: "labelling" | "submitted" | "complete";
+    checked?: number;
+    total?: number;
+  } | null;
+}): string {
+  if (job.session === null) return "Needs labelling";
+  if (job.session.status === "complete") return "Labelled";
+  if (job.session.status === "submitted") return "Submitted for review";
+  return `In progress · ${job.session.checked ?? 0} of ${job.session.total ?? 0}`;
+}
 
 /** How many jobs of a group are in each state. */
 export type StateCounts = Record<LabelJobState, number>;

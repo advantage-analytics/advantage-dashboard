@@ -529,19 +529,22 @@ test.describe("writeLabelPointInsert", () => {
   test("the entry point refuses without an admin, before a client is built", async () => {
     let built = 0;
     const result = await insertLabelPoint(SESSION_ID, UUID(2), "before", {
-      requireAdmin: async () => null,
+      requireLabelActor: async () => null,
       createAdminClient: () => {
         built += 1;
         return fakeClient({}).supabase;
       },
     });
-    expect(result).toEqual({ error: "Administrator access is required." });
+    expect(result).toEqual({ error: "You don't have access to this session." });
     expect(built).toBe(0);
 
     const fake = fakeClient({ points: UUID_ROWS });
     expect(
       await insertLabelPoint(SESSION_ID.toUpperCase(), UUID(2), "before", {
-        requireAdmin: async () => ({ id: "admin" }),
+        requireLabelActor: async () => ({
+          id: "admin",
+          kind: "admin" as const,
+        }),
         createAdminClient: () => fake.supabase,
       }),
     ).toMatchObject({ ok: true });

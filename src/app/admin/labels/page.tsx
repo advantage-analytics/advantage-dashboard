@@ -7,6 +7,7 @@ import {
   labelJobSeenKey,
 } from "@/lib/data/label-overview-server";
 import { listLabelJobs } from "@/lib/data/labels-server";
+import { listLabellers } from "@/lib/services/labels/assign-session";
 import { isFresh, lookAtSurface } from "@/lib/admin/seen-server";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 
@@ -30,12 +31,15 @@ const LEDE =
 
 export default async function AdminLabelsPage() {
   const admin = await requireAdminOrNotFound();
-  const [result, seen, reviews] = await Promise.all([
+  const [result, seen, reviews, labellers] = await Promise.all([
     listLabelJobs(),
     lookAtSurface(admin.id, "labels"),
     // Allowed to fail: the list then has no Requested reviews section, and
     // every report is still on the Requests page.
     getLabelReviewRequests().catch(() => new Map()),
+    // Never throws; a failed read leaves the Assign menu with "Unassigned"
+    // only, and each row still shows who it is assigned to.
+    listLabellers(),
   ]);
   const matchIds = result.ok ? result.rows.map((row) => row.matchId) : [];
   const [owners, flags] = await Promise.all([
@@ -71,6 +75,7 @@ export default async function AdminLabelsPage() {
           flagCounts={Object.fromEntries(flags)}
           reviews={Object.fromEntries(reviews)}
           freshJobIds={freshJobIds}
+          labellers={"ok" in labellers ? labellers.labellers : []}
         />
       ) : (
         <p className="text-body-sm">{result.message}</p>

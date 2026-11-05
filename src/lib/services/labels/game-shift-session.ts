@@ -43,6 +43,7 @@ import {
   type ShiftPoint,
 } from "./game-shift";
 import { idChunks } from "./chunks";
+import { targetId } from "./label-actor";
 import {
   gated,
   normaliseId,
@@ -427,6 +428,7 @@ export function shiftLabelGameOverflow(
     deps,
     (supabase) => writeLabelGameShift({ supabase, sessionId, fromPointId }),
     "move the points to the next game",
+    { sessionId: targetId(sessionId) },
   );
 }
 
@@ -439,6 +441,7 @@ export function pullLabelGamePoints(
     deps,
     (supabase) => writeLabelGamePull({ supabase, sessionId, gameKey }),
     "pull the points into the game",
+    { sessionId: targetId(sessionId) },
   );
 }
 
@@ -451,6 +454,7 @@ export function foldLabelTiebreak(
     deps,
     (supabase) => writeLabelTiebreakFold({ supabase, sessionId, setNumber }),
     "make the tiebreak",
+    { sessionId: targetId(sessionId) },
   );
 }
 
@@ -463,5 +467,6 @@ export function splitLabelGame(
     deps,
     (supabase) => writeLabelGameSplit({ supabase, sessionId, atPointId }),
     "start the new game",
+    { sessionId: targetId(sessionId) },
   );
 }

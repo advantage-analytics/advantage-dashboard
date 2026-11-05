@@ -19,6 +19,7 @@ import {
   racedMessage,
   type LabelWriteDependencies,
 } from "./edit-session";
+import { targetId } from "./label-actor";
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
   parseLabelSessionPatch,
@@ -80,5 +81,6 @@ export function updateLabelSessionFields(
     deps,
     (supabase) => writeLabelSessionFields({ supabase, sessionId, patch }),
     "save the score",
+    { sessionId: targetId(sessionId) },
   );
 }

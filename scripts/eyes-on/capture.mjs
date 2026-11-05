@@ -18,6 +18,14 @@
 // A path under /dashboard/team runs in the team workspace automatically; prefix
 // any other path with "team:" to run it there too: "team:/dashboard/opponents".
 //
+// A path under /label signs in as the LABELLER account instead (EYES_ON_LABELLER_*
+// below), in its own browser context and storage-state file; prefix any other
+// path with "labeller:" to open it as that account too: "labeller:/dashboard".
+// A "[sessionId]" segment in a labeller path is replaced with
+// EYES_ON_LABELLER_SESSION_ID, so "labeller:/label/[sessionId]" opens the
+// session scripts/eyes-on/seed-labeller-session.ts seeded. Paths without the
+// prefix outside /label are untouched by any of this.
+//
 // Environment (loaded from the checkout's .env.local via scripts/lib/env.ts —
 // never pass the values on a command line, and never print them):
 //   EYES_ON_EMAIL / EYES_ON_PASSWORD   the verifier account. Unset → exit 2.
@@ -27,6 +35,11 @@
 //                                      belongs to; selected (by cookie) for
 //                                      every /dashboard/team path, so team
 //                                      routes do not bounce to personal Home.
+//   EYES_ON_LABELLER_EMAIL /           the labeller account (an is_labeller
+//   EYES_ON_LABELLER_PASSWORD          test user). Needed only when a labeller
+//                                      path is asked for; unset then → exit 2.
+//   EYES_ON_LABELLER_SESSION_ID        optional. Fills "[sessionId]" in
+//                                      labeller paths.
 //
 // Dev server: without EYES_ON_BASE_URL the script starts `next dev` on a free
 // port and stops it on exit. Next 16 allows one dev server per checkout; if it
@@ -34,7 +47,8 @@
 // left alone either way — it may belong to the user's own server.
 //
 // Exit codes: 0 captured (findings live in report.json, not the exit code),
-// 2 credentials unset, 3 sign-in failed, 1 anything else.
+// 2 credentials unset (EYES_ON for verifier paths, EYES_ON_LABELLER for labeller
+// paths), 3 sign-in failed, 1 anything else.
 
 import { chromium } from "@playwright/test";
 import { spawn } from "node:child_process";
@@ -44,7 +58,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadEnvLocal } from "../lib/env.ts";
-import { parsePathSpec } from "./path-spec.mjs";
+import { fillSessionId, parsePathSpec } from "./path-spec.mjs";
 
 /** The checkout this script lives in — .env.local and `next dev` both
  * belong to it, whatever directory the caller happened to be in. */
@@ -61,7 +75,7 @@ const DEV_SERVER_GRACE_MS = 3_000;
 function usage(msg) {
   if (msg) console.error(`capture: ${msg}`);
   console.error(
-    "usage: node scripts/eyes-on/capture.mjs --out <dir> <path> [<path> …]\n  <path> = [team:]/route[::<click>…]  (team: runs it in the team workspace)",
+    "usage: node scripts/eyes-on/capture.mjs --out <dir> <path> [<path> …]\n  <path> = [team:|labeller:]/route[::<click>…]  (team: runs it in the team workspace;\n           labeller: — implied under /label — signs in as the labeller account)",
   );
   process.exit(1);
 }
@@ -77,10 +91,12 @@ for (let i = 0; i < argv.length; i++) {
   } else if (a.startsWith("--out=")) {
     out = a.slice("--out=".length);
   } else if (parsePathSpec(a)) {
-    // "[team:]<path>::<click>::<click>" — see the header.
+    // "[team:|labeller:]<path>::<click>::<click>" — see the header.
     paths.push(a);
   } else {
-    usage(`unknown argument: ${a} (paths start with "/" or "team:/")`);
+    usage(
+      `unknown argument: ${a} (paths start with "/", "team:/" or "labeller:/")`,
+    );
   }
 }
 // The header's rule, enforced where it can be: a click whose name reads as an
@@ -112,13 +128,27 @@ function loadEnv() {
     password: get("EYES_ON_PASSWORD"),
     baseUrl: get("EYES_ON_BASE_URL"),
     teamWorkspace: get("EYES_ON_TEAM_WORKSPACE"),
+    labellerEmail: get("EYES_ON_LABELLER_EMAIL"),
+    labellerPassword: get("EYES_ON_LABELLER_PASSWORD"),
+    labellerSessionId: get("EYES_ON_LABELLER_SESSION_ID"),
   };
 }
 
 const env = loadEnv();
-if (!env.email || !env.password) {
+// Each account is required only for the paths that use it. A run with no
+// labeller path checks the verifier exactly as it always has.
+const pathSpecs = paths.map((spec) => parsePathSpec(spec));
+const wantsVerifier = pathSpecs.some((p) => !p.labeller);
+const wantsLabeller = pathSpecs.some((p) => p.labeller);
+if (wantsVerifier && (!env.email || !env.password)) {
   console.error(
     "capture: EYES_ON credentials unset — set EYES_ON_EMAIL and EYES_ON_PASSWORD in .env.local (see .env.example)",
+  );
+  process.exit(2);
+}
+if (wantsLabeller && (!env.labellerEmail || !env.labellerPassword)) {
+  console.error(
+    "capture: EYES_ON_LABELLER credentials unset — set EYES_ON_LABELLER_EMAIL and EYES_ON_LABELLER_PASSWORD in .env.local (see .env.example)",
   );
   process.exit(2);
 }
@@ -241,19 +271,19 @@ const slugOf = (p) =>
  * So: wait for the page to settle, fill, and check the values survived,
  * refilling if a late hydration wiped them.
  */
-async function fillSignIn(page) {
+async function fillSignIn(page, creds) {
   await page
     .waitForLoadState("networkidle", { timeout: SETTLE_TIMEOUT })
     .catch(() => {});
   for (let attempt = 1; attempt <= 3; attempt++) {
-    await page.fill("#login-email", env.email);
-    await page.fill("#login-password", env.password);
+    await page.fill("#login-email", creds.email);
+    await page.fill("#login-password", creds.password);
     await page.waitForTimeout(300);
     const [email, password] = await Promise.all([
       page.inputValue("#login-email"),
       page.inputValue("#login-password"),
     ]);
-    if (email === env.email && password === env.password) return;
+    if (email === creds.email && password === creds.password) return;
     await page.waitForTimeout(500 * attempt);
   }
   // Fall through and submit anyway: the sign-in failure path screenshots
@@ -343,36 +373,15 @@ async function main() {
   }
 
   const browser = await chromium.launch();
-  const statePath = join(out, "storage-state.json");
-  const context = await browser.newContext({
-    viewport: VIEWPORT,
-    ...(existsSync(statePath) ? { storageState: statePath } : {}),
-  });
-  // Without the pin the sidebar rail starts collapsed and every frame reads
-  // narrower than the design. The beta welcome dialog covers every page until
-  // dismissed; its legacy "seen" key is honoured and migrated per user
-  // (src/components/dashboard/beta-welcome-dialog.tsx), so setting it here
-  // is the same as the account having closed it once.
-  await context.addInitScript(() => {
-    try {
-      localStorage.setItem("sidebar:pinned", "1");
-      localStorage.setItem("adv:beta-welcome-seen", "1");
-    } catch {
-      /* private mode */
-    }
-  });
 
-  const hadStoredState = existsSync(statePath);
   const report = {
     baseUrl,
     capturedAt: new Date().toISOString(),
     viewport: VIEWPORT,
-    signIn: hadStoredState ? "reused storage state" : "fresh",
+    signIn: wantsVerifier ? "fresh" : "not needed (labeller paths only)",
     pages: [],
   };
 
-  // ── sign in ──
-  const page = await context.newPage();
   const attachCollectors = (p, bucket) => {
     p.on("console", (m) => {
       if (m.type() === "error")
@@ -401,43 +410,117 @@ async function main() {
   const writeReport = () =>
     writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
-  const signInBucket = { consoleErrors: [], failedRequests: [] };
-  attachCollectors(page, signInBucket);
-  await page.goto(`${baseUrl}/dashboard`, {
-    waitUntil: "domcontentloaded",
-    timeout: NAV_TIMEOUT,
-  });
-  if (/\/login(\?|$)/.test(page.url())) {
-    await fillSignIn(page);
-    await page.click('button[type="submit"]');
-    try {
-      await page.waitForURL(/\/dashboard/, { timeout: NAV_TIMEOUT });
-    } catch {
-      const shot = join(out, "sign-in-failed.png");
-      await page.screenshot({ path: shot, fullPage: true }).catch(() => {});
-      report.signIn = "failed";
-      report.signInErrors = signInBucket;
-      writeReport();
-      console.error(
-        `capture: sign-in did not reach /dashboard (landed on ${page.url()}); see ${shot}`,
-      );
-      await browser.close();
-      process.exit(3);
+  /**
+   * One browser context per account, each with its own storage-state file,
+   * signed in once. The verifier lands on /dashboard as it always has; the
+   * labeller is sent to /label, whose gate bounces to `/login?next=/label`,
+   * so a successful sign-in lands back on /label.
+   *
+   * `reportKey` names the report field the outcome is written to
+   * (`signIn` for the verifier, as before; `labellerSignIn` otherwise).
+   */
+  async function openAccount({
+    reportKey,
+    creds,
+    stateFile,
+    startPath,
+    landed,
+    failedShot,
+    who,
+  }) {
+    const statePath = join(out, stateFile);
+    const context = await browser.newContext({
+      viewport: VIEWPORT,
+      ...(existsSync(statePath) ? { storageState: statePath } : {}),
+    });
+    // Without the pin the sidebar rail starts collapsed and every frame reads
+    // narrower than the design. The beta welcome dialog covers every page until
+    // dismissed; its legacy "seen" key is honoured and migrated per user
+    // (src/components/dashboard/beta-welcome-dialog.tsx), so setting it here
+    // is the same as the account having closed it once.
+    await context.addInitScript(() => {
+      try {
+        localStorage.setItem("sidebar:pinned", "1");
+        localStorage.setItem("adv:beta-welcome-seen", "1");
+      } catch {
+        /* private mode */
+      }
+    });
+
+    const hadStoredState = existsSync(statePath);
+    report[reportKey] = hadStoredState ? "reused storage state" : "fresh";
+
+    // ── sign in ──
+    const page = await context.newPage();
+    const signInBucket = { consoleErrors: [], failedRequests: [] };
+    attachCollectors(page, signInBucket);
+    await page.goto(`${baseUrl}${startPath}`, {
+      waitUntil: "domcontentloaded",
+      timeout: NAV_TIMEOUT,
+    });
+    if (/\/login(\?|$)/.test(page.url())) {
+      await fillSignIn(page, creds);
+      await page.click('button[type="submit"]');
+      try {
+        await page.waitForURL(landed, { timeout: NAV_TIMEOUT });
+      } catch {
+        const shot = join(out, failedShot);
+        await page.screenshot({ path: shot, fullPage: true }).catch(() => {});
+        report[reportKey] = "failed";
+        report[`${reportKey}Errors`] = signInBucket;
+        writeReport();
+        console.error(
+          `capture: ${who} did not reach ${startPath} (landed on ${page.url()}); see ${shot}`,
+        );
+        await browser.close();
+        process.exit(3);
+      }
+      await context.storageState({ path: statePath });
+      report[reportKey] = hadStoredState
+        ? "reused state expired; signed in again"
+        : "signed in";
+    } else if (!hadStoredState) {
+      report[reportKey] = "already signed in (no login page shown)";
     }
-    await context.storageState({ path: statePath });
-    report.signIn = hadStoredState
-      ? "reused state expired; signed in again"
-      : "signed in";
-  } else if (!hadStoredState) {
-    report.signIn = "already signed in (no login page shown)";
+    return context;
   }
+
+  const verifierContext = wantsVerifier
+    ? await openAccount({
+        reportKey: "signIn",
+        creds: { email: env.email, password: env.password },
+        stateFile: "storage-state.json",
+        startPath: "/dashboard",
+        landed: /\/dashboard/,
+        failedShot: "sign-in-failed.png",
+        who: "sign-in",
+      })
+    : null;
+  const labellerContext = wantsLabeller
+    ? await openAccount({
+        reportKey: "labellerSignIn",
+        creds: { email: env.labellerEmail, password: env.labellerPassword },
+        stateFile: "storage-state-labeller.json",
+        startPath: "/label",
+        // Matched on the pathname: `/login?next=%2Flabel` must not count.
+        landed: (url) =>
+          url.pathname === "/label" || url.pathname.startsWith("/label/"),
+        failedShot: "labeller-sign-in-failed.png",
+        who: "labeller sign-in",
+      })
+    : null;
 
   // ── pages ──
   for (const spec of paths) {
-    const { team: wantTeam, path, clicks } = parsePathSpec(spec);
+    const parsed = parsePathSpec(spec);
+    const { team: wantTeam, labeller, clicks } = parsed;
+    const path = labeller
+      ? fillSessionId(parsed.path, env.labellerSessionId)
+      : parsed.path;
+    const context = labeller ? labellerContext : verifierContext;
     const entry = {
       path,
-      workspace: wantTeam ? "team" : "personal",
+      workspace: labeller ? "labeller" : wantTeam ? "team" : "personal",
       clicks,
       finalUrl: "",
       status: null,
@@ -461,6 +544,10 @@ async function main() {
       entry.note =
         "EYES_ON_TEAM_WORKSPACE unset; captured in personal workspace";
     }
+    if (labeller && path.includes("[sessionId]")) {
+      entry.note =
+        "EYES_ON_LABELLER_SESSION_ID unset; [sessionId] left as-is (run scripts/eyes-on/seed-labeller-session.ts)";
+    }
     const p = await context.newPage();
     attachCollectors(p, entry);
     const inFlight = trackRequests(p);
@@ -474,13 +561,18 @@ async function main() {
       entry.finalUrl = p.url().replace(baseUrl, "");
       entry.title = await p.title();
       if (/^\/login/.test(entry.finalUrl)) entry.note = "bounced to /login";
+      else if (labeller && entry.status === 404 && !entry.note)
+        entry.note =
+          "404 as the labeller (account not is_labeller, or the session is not assigned to it?)";
       else if (
         path.startsWith("/dashboard/team") &&
         !entry.finalUrl.startsWith("/dashboard/team")
       )
         entry.note = `bounced to ${entry.finalUrl} (workspace not applied?)`;
       else if (/^\/onboarding/.test(entry.finalUrl))
-        entry.note = "bounced to /onboarding (verifier account not onboarded)";
+        entry.note = labeller
+          ? "bounced to /onboarding (labeller account not onboarded)"
+          : "bounced to /onboarding (verifier account not onboarded)";
       // Same-origin links, so the agent can find a detail page's id without
       // guessing. Deduplicated, capped.
       entry.links = await p

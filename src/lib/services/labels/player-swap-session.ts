@@ -20,6 +20,7 @@ import {
   type LabelWriteDependencies,
 } from "./edit-session";
 import { readShotsOfPoints } from "./ending-session";
+import { targetId, targetIds } from "./label-actor";
 import {
   gated,
   normaliseId,
@@ -98,6 +99,7 @@ export function switchLabelPointPlayers(
     deps,
     (supabase) => writeLabelPlayerSwitch({ supabase, pointId }),
     "switch the point's players",
+    { pointId: targetId(pointId) },
   );
 }
 
@@ -175,5 +177,6 @@ export function switchLabelPointsPlayers(
     deps,
     (supabase) => writeLabelPlayersSwitch({ supabase, pointIds }),
     "switch the players",
+    { pointIds: targetIds(pointIds) },
   );
 }

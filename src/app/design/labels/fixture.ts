@@ -293,6 +293,10 @@ const open = (id: string, checked: number, total: number) => ({
   checked,
   total,
   openCounts: { amber: Math.max(0, 12 - checked), grey: 3 },
+  assignedTo: null,
+  assignedAt: null,
+  submittedAt: null,
+  minutesWorked: 0,
 });
 const done = (id: string, total: number) => ({
   id,
@@ -300,6 +304,10 @@ const done = (id: string, total: number) => ({
   checked: total,
   total,
   openCounts: { amber: 0, grey: 0 },
+  assignedTo: null,
+  assignedAt: null,
+  submittedAt: null,
+  minutesWorked: 0,
 });
 
 export const JOBS: LabelJobRow[] = [

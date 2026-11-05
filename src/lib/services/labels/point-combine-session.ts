@@ -30,6 +30,7 @@ import {
   reconcileEnding,
 } from "./ending-session";
 import { planShotDelete } from "./operations";
+import { targetId } from "./label-actor";
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
   CLEARED_REASON,
@@ -255,5 +256,6 @@ export function combineLabelPoints(
     deps,
     (supabase) => writeLabelPointCombine({ supabase, pointId, direction }),
     "combine the points",
+    { pointId: targetId(pointId) },
   );
 }

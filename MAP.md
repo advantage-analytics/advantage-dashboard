@@ -106,6 +106,9 @@ markers is hand-written — edit it as things move.
 | `/design/upload-progress` | [`src/app/design/upload-progress/page.tsx`](src/app/design/upload-progress/page.tsx) |
 | `/invitations/[inviteId]` | [`src/app/invitations/[inviteId]/page.tsx`](src/app/invitations/[inviteId]/page.tsx) |
 | `/join/[token]` | [`src/app/join/[token]/page.tsx`](src/app/join/[token]/page.tsx) |
+| `/label/[sessionId]` | [`src/app/label/[sessionId]/page.tsx`](src/app/label/[sessionId]/page.tsx) |
+| `/label/guide` | [`src/app/label/guide/page.tsx`](src/app/label/guide/page.tsx) |
+| `/label` | [`src/app/label/page.tsx`](src/app/label/page.tsx) |
 | `/m/[token]` | [`src/app/m/[token]/page.tsx`](src/app/m/[token]/page.tsx) |
 | `/onboarding` | [`src/app/onboarding/page.tsx`](src/app/onboarding/page.tsx) |
 | `/` | [`src/app/page.tsx`](src/app/page.tsx) |
