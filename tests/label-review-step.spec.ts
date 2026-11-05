@@ -25,6 +25,7 @@ import {
   LANDING_EXPLANATION,
   REVIEW_STEP_QUESTION,
   endingWriteFor,
+  greyJumpFirstItem,
   nextReviewStop,
   openReviewItems,
   reviewStep,
@@ -169,6 +170,87 @@ test.describe("n of m and the order", () => {
     expect(openReviewItems(alone, marksOf(), [alone]).map((i) => i.id)).toEqual(
       [2],
     );
+  });
+});
+
+test.describe("down the rally", () => {
+  const placement = (shotId: string) =>
+    mark("placement_missing", { shotId, stroke: "shot", missing: "landing" });
+
+  test("a grey gap on an early stroke is asked before the last ball's amber question", () => {
+    const p = rally({}, ["b", { landingX: null, landingY: null }]);
+    const marks = marksOf(
+      {
+        [POINT]: [
+          mark("winner_disputed", {
+            scoreWinner: "p2",
+            lastStrokeWinner: "p1",
+          }),
+        ],
+      },
+      { b: [placement("b")] },
+    );
+    expect(openReviewItems(p, marks, [p]).map((item) => item.id)).toEqual([
+      7, 4,
+    ]);
+    expect(step(p, marks)?.target.shotId).toBe("b");
+  });
+
+  test("items on the same stroke keep id order", () => {
+    const p = rally();
+    const marks = marksOf({
+      [POINT]: [
+        mark("winner_disputed", { scoreWinner: "p2", lastStrokeWinner: "p1" }),
+        mark("winner_guessed", {}),
+      ],
+    });
+    expect(openReviewItems(p, marks, [p]).map((item) => item.id)).toEqual([
+      4, 5,
+    ]);
+  });
+});
+
+test.describe("a grey jump across two gaps", () => {
+  const placement = (shotId: string, kind: "serve" | "shot") =>
+    mark("placement_missing", { shotId, stroke: kind, missing: "landing" });
+  const unplaced = { landingX: null, landingY: null };
+
+  test("placement first lets go once the next gap sits past an amber question", () => {
+    // Gaps on strokes 1 and 3; the game and serve order question, amber, on stroke 1.
+    const p = rally({}, ["a", unplaced], ["c", unplaced]);
+    const sides = {
+      [POINT]: [mark("tiebreak_score_off_six_all", {})],
+    };
+    const both = marksOf(sides, {
+      a: [placement("a", "serve")],
+      c: [placement("c", "shot")],
+    });
+    const order = (point: LabelPoint, marks: LabelMarks) =>
+      openReviewItems(point, marks, [point]).map((item) => [
+        item.id,
+        reviewStep(point, marks, [point], NAMES, true, undefined, item.id)
+          ?.target.shotId,
+      ]);
+    // Same stroke: id order, but the grey jump may ask its gap first.
+    expect(order(p, both)).toEqual([
+      [6, "a"],
+      [7, "a"],
+    ]);
+    expect(greyJumpFirstItem(p, both, [p])).toBe(7);
+    // Stroke 1 placed: "Shot placement" moves on to stroke 3. Kept first, it
+    // would go to stroke 3 and then back to stroke 1 for the amber question.
+    const placed: LabelPoint = {
+      ...p,
+      shots: p.shots.map((shot) =>
+        shot.id === "a" ? { ...shot, landingX: -2, landingY: 17 } : shot,
+      ),
+    };
+    const next = marksOf(sides, { c: [placement("c", "shot")] });
+    expect(order(placed, next)).toEqual([
+      [6, "a"],
+      [7, "c"],
+    ]);
+    expect(greyJumpFirstItem(placed, next, [placed])).toBeUndefined();
   });
 });
 

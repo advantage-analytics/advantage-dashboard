@@ -3976,10 +3976,8 @@ export function LabelConsole({
       ? reviewQueue.keep
       : undefined;
   // Only while the jump's review lasts: a row click or a click away leaves it.
-  const asksFirst =
-    reviewMode && askFirst?.pointId === expanded?.id
-      ? askFirst?.item
-      : undefined;
+  const fromGreyJump =
+    reviewMode && askFirst !== null && askFirst.pointId === expanded?.id;
   const step = useMemo(
     () =>
       expanded && liveMarks
@@ -3990,10 +3988,15 @@ export function LabelConsole({
             names,
             drawsGhosts(liveMarks),
             keep,
-            asksFirst,
+            // Read again at every step, not kept from the landing: answering
+            // one gap moves "Shot placement" on to the next, which may sit
+            // past an amber question it must not jump ahead of.
+            fromGreyJump
+              ? greyJumpFirstItem(expanded, liveMarks, points, keep)
+              : undefined,
           )
         : null,
-    [expanded, liveMarks, points, names, keep, asksFirst],
+    [expanded, liveMarks, points, names, keep, fromGreyJump],
   );
   const stepKey = expanded ? stepKeyOf(expanded.id, step) : "";
   // "n of m": the count the point's review opened with, latched in render.

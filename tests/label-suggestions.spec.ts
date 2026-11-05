@@ -477,7 +477,8 @@ test.describe("a point with several open slots", () => {
       ),
     ).toBe("checked-as-is");
 
-    // The review flag asks it: item 1, at the first open slot.
+    // The review flag asks it: item 1, at the first open slot. Asked first
+    // here, since the rally's order puts the serve's question ahead of it.
     const marks: LabelMarks = {
       points: { [point.id]: [mark] },
       shots: {},
@@ -490,6 +491,8 @@ test.describe("a point with several open slots", () => {
       [point],
       { p1: "Lee", p2: "Vargas" },
       true,
+      undefined,
+      1,
     );
     expect(s?.item.id).toBe(1);
     expect(s?.target.slot).toEqual({
