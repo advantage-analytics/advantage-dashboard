@@ -1213,7 +1213,9 @@ function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
  * base rate, 2026-11-05); item 3 only for a double
  * fault in question or a point stopping on a faulted first serve; item 4
  * when a counted mark sits under it or the point's winner is the player its
- * strokes say lost; items 5 and 6 are always the score, item 7 never. Like the
+ * strokes say lost; item 5 is always the score; item 6 only for "Game cut
+ * differs" or "Tiebreak score, not 6–6" (the serve-side marks under it are
+ * data, `DATA_MARK_CODES`); item 7 never. Like the
  * flag (`foldReviewItems`), an item speaks for its open members while any is
  * open, and for all of them once none is: a settled "Check the ending" does
  * not keep the grey hints still open beside it amber.
@@ -1248,8 +1250,11 @@ function reviewItemTone(
         ? "score"
         : "data";
     case 5:
-    case 6:
       return "score";
+    case 6:
+      return has("segment_proposal_differs", "tiebreak_score_off_six_all")
+        ? "score"
+        : "data";
     case 7:
       return "data";
   }

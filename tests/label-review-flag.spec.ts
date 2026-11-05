@@ -463,6 +463,20 @@ test.describe("tone", () => {
     expect(tone(flag, 4)).toBe("score");
   });
 
+  test("item 6 is grey for the serve-side marks alone", () => {
+    expect(tone(flagOf([sample("score_side_mismatch")]), 6)).toBe("data");
+    expect(tone(flagOf([sample("service_court_repeat")]), 6)).toBe("data");
+    expect(
+      tone(
+        flagOf([
+          sample("service_court_repeat"),
+          sample("segment_proposal_differs"),
+        ]),
+        6,
+      ),
+    ).toBe("score");
+  });
+
   test("items 5 and 6 are the score", () => {
     expect(tone(flagOf([sample("winner_guessed")]), 5)).toBe("score");
     expect(tone(flagOf([sample("pick_winner")]), 5)).toBe("score");

@@ -191,9 +191,16 @@ export type LabelMarkCode = keyof typeof LABEL_MARK_META;
  * the winner on 28% of "Missing shot?" points — the rate of any point, about
  * one in five — while changing something on all 40. Every other counted mark
  * moved the winner on a third to more than half of its points.
+ *
+ * 2026-11-05, on the 19 complete sessions: "Wrong side for the score" and
+ * "Same side twice" join them. On the 78 points where they were the only
+ * amber mark, the labeller changed the winner on 12. They stay counted, so
+ * the point is still flagged and "Add point" still offered, but grey.
  */
 export const DATA_MARK_CODES: ReadonlySet<LabelMarkCode> = new Set([
   POINT_FLAGS.SAME_PLAYER_CONSECUTIVE,
+  POINT_FLAGS.SCORE_SIDE_MISMATCH,
+  POINT_FLAGS.SERVICE_COURT_REPEAT,
 ]);
 
 /** Whether a mark is about the data, not the score (`DATA_MARK_CODES`). */
