@@ -15,9 +15,10 @@
  * is judged on that header alone — a wrong secret never falls through to the
  * cookie.
  *
- * A match with a label session still `labelling` is refused unless `force`:
- * its labeller is mid-way and has published nothing, so nothing would protect
- * the rows a reprocess re-derives. A `complete` session is fine — its points
+ * A match with a label session still `labelling` — or `submitted`, a
+ * labeller's work handed in and awaiting an admin's review — is refused
+ * unless `force`: either way nothing is published yet, so nothing would
+ * protect the rows a reprocess re-derives. A `complete` session is fine — its points
  * carry `hand_labelled`, and `persistTranscript` will not overwrite them.
  *
  * Items run one after another, not in parallel: each is a vendor POST, and
@@ -166,7 +167,11 @@ async function resolveParent(
   };
 }
 
-/** Is a label session for this match still being labelled? */
+/**
+ * Is a label session for this match still open — being labelled, or
+ * submitted and waiting for review? The same two statuses that hold a job
+ * open (`label_sessions_one_open_per_job`).
+ */
 async function labellingInProgress(
   supabase: SupabaseClient,
   matchId: string,
@@ -175,7 +180,7 @@ async function labellingInProgress(
     .from("label_sessions")
     .select("id")
     .eq("match_id", matchId)
-    .eq("status", "labelling")
+    .in("status", ["labelling", "submitted"])
     .limit(1);
   if (error) return { ok: false, error: error.message };
   return { ok: true, labelling: (data ?? []).length > 0 };
