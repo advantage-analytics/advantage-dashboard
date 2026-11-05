@@ -101,7 +101,11 @@ export const LABEL_SHORTCUT_GROUPS: readonly LabelShortcutGroup[] = [
   {
     label: "Edit",
     items: [
-      { keys: ["A"], action: "Add shot after" },
+      {
+        keys: ["A"],
+        action: "Add shot after",
+        note: "With no shot selected, fills the Missing shot? gap",
+      },
       { keys: ["⇧", "A"], action: "Add shot before" },
       { keys: ["R"], action: "Reset shot" },
       { keys: ["⇧", "R"], action: "Reset point" },

@@ -327,8 +327,24 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     expect(video).toContain("return videoRef.current?.currentTime ?? null;");
   });
 
-  test("A adds after the selected live stroke, else after the point's last; C flips the court's end", () => {
-    expect(source).toContain("addShot(expanded.id, selected);");
+  test("A adds after the selected live stroke, else in the open Missing shot slot, else after the point's last; C flips the court's end", () => {
+    // Nothing selected: the point's open "Missing shot?" slot when its add
+    // would write, the end of the rally (null) otherwise.
+    expect(source).toContain(
+      "selected === null && liveMarks\n          ? openMissingShot(expanded, liveMarks)",
+    );
+    expect(source).toMatch(
+      /selected \?\?\n\s+\(slot && !\("error" in planAddedShot\(expanded, slot\.afterShotId\)\)\n\s+\? slot\.afterShotId\n\s+: null\);/,
+    );
+    expect(source).toContain("addShot(expanded.id, afterShotId);");
+    // The well's own "Add shot" button still names no place: the end.
+    const well = readFileSync(
+      "src/components/admin/labels/label-black-shot-row.tsx",
+      "utf8",
+    );
+    expect(well).toContain(
+      "onClick={() => operations.onAddShot(point.id, null)}",
+    );
     expect(source).toMatch(
       /shot\.id === placement\.shotId && shot\.status !== "deleted",\n\s+\)\n\s+\? placement\.shotId\n\s+: null;/,
     );
