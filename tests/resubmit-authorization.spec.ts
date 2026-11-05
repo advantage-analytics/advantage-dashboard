@@ -960,6 +960,132 @@ test("three failed attempts still hit the ceiling", async () => {
   expectRefused(h, await manual(h), "attempt_ceiling");
 });
 
+// ── Admin reprocess of a COMPLETED parent ─────────────────────────────────
+
+test.describe("reprocess", () => {
+  /** As POST /api/admin/splitstep/reprocess calls it: no session, no workspace. */
+  function reprocess(h: Harness, overrides: { auto?: boolean } = {}) {
+    return resubmitJob({
+      supabase: h.db.asClient(),
+      jobId: "j-parent",
+      auto: overrides.auto ?? false,
+      reprocess: true,
+      requestedBy: "u-admin",
+      io: h.io,
+    });
+  }
+  const completed = () => harness({ job: parentJob({ status: "completed" }) });
+
+  test("a completed parent is refused on the athlete's manual path", async () => {
+    const h = completed();
+    expectRefused(h, await manual(h), "not_failed");
+  });
+
+  test("a completed parent is refused on the automatic path", async () => {
+    const h = completed();
+    expectRefused(h, await auto(h), "not_failed");
+  });
+
+  test("reprocess mode sends a completed parent — and reserves nothing", async () => {
+    const h = completed();
+    const r = await reprocess(h);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    // The quota seams were never touched: no processing_usage row, no release.
+    expect(h.reserved).toEqual([]);
+    expect(h.released).toEqual([]);
+    // No session, so no roster read; the blob was still checked.
+    expect(h.rosterReads).toEqual([]);
+    expect(h.blobChecks).toEqual([VIDEO_KEY]);
+
+    // The same child-row mechanics as a retry.
+    expect(h.db.inserts).toHaveLength(1);
+    const child = h.db.inserts[0].row;
+    expect(child.resubmitted_from_job_id).toBe("j-parent");
+    expect(child.auto_resubmitted).toBe(false);
+    expect(r.jobId).toBe(child.id);
+    expect(h.sent).toHaveLength(1);
+    expect(h.sent[0].VideoUrl).toBe(VENDOR_URL);
+    expect(h.db.row("processing_jobs", child.id)?.status).toBe("queued");
+    expect(h.db.row("processing_jobs", "j-parent")?.status).toBe("completed");
+  });
+
+  test("reprocess together with auto is refused — nothing automatic resends a finished analysis", async () => {
+    const h = completed();
+    expectRefused(h, await reprocess(h, { auto: true }), "not_failed");
+  });
+
+  test("reprocess mode refuses a parent that is not completed", async () => {
+    for (const status of [
+      "failed",
+      "cancelled",
+      "queued",
+      "derivation_failed",
+    ]) {
+      const h = harness({ job: parentJob({ status }) });
+      expectRefused(h, await reprocess(h), "not_failed");
+    }
+  });
+
+  test("a vendor refusal fails the child and releases nothing — nothing was reserved", async () => {
+    const h = harness({
+      job: parentJob({ status: "completed" }),
+      vendor: { ok: false, status: 500, text: "boom" },
+    });
+    const r = await reprocess(h);
+    expect(r.ok).toBe(false);
+    expect(h.reserved).toEqual([]);
+    expect(h.released).toEqual([]);
+    const child = h.db.inserts[0].row;
+    expect(h.db.row("processing_jobs", child.id)?.status).toBe("failed");
+    expect(h.db.row("processing_jobs", "j-parent")?.status).toBe("completed");
+  });
+
+  test("the attempt ceiling does not apply to an admin reprocess", async () => {
+    const h = withChain(
+      harness({
+        job: parentJob({ status: "completed", resubmitted_from_job_id: "j-b" }),
+      }),
+      [
+        { id: "j-a", status: "failed", resubmitted_from_job_id: null },
+        { id: "j-b", status: "failed", resubmitted_from_job_id: "j-a" },
+      ],
+    );
+    expect((await reprocess(h)).ok).toBe(true);
+    expect(h.reserved).toEqual([]);
+  });
+
+  test("an analysis already running for the match is still a duplicate", async () => {
+    const h = withChain(completed(), [
+      { id: "j-live", status: "queued", resubmitted_from_job_id: "j-parent" },
+    ]);
+    expectRefused(h, await reprocess(h), "in_flight_duplicate");
+  });
+
+  test("a FAILED reprocess child is never retried on anyone's quota", async () => {
+    // j-done (completed) ← j-parent (failed, the reprocess child).
+    const failedChild = () =>
+      withChain(
+        harness({
+          job: parentJob({
+            status: "failed",
+            error_code: "INTERNAL_ERROR",
+            error_step: "downloading_video",
+            resubmitted_from_job_id: "j-done",
+          }),
+        }),
+        [{ id: "j-done", status: "completed", resubmitted_from_job_id: null }],
+      );
+    // The webhook's / reconciler's download-failure auto-retry.
+    const a = failedChild();
+    expectRefused(a, await auto(a), "not_failed");
+    // The athlete's "Retry analysis".
+    const m = failedChild();
+    expectRefused(m, await manual(m), "not_failed");
+  });
+});
+
 // ── Which ad scoring a retry sends ────────────────────────────────────────
 
 test.describe("a retry's ad scoring", () => {

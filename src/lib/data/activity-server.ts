@@ -33,6 +33,7 @@ import {
 } from "./match-analysis";
 import { shortName } from "./match-utils";
 import { scopeToWorkspace } from "@/lib/workspace/scope";
+import { hideInFlightReprocess } from "@/lib/services/splitstep/reprocess";
 import {
   isProgramStaff,
   PROGRAM_ROLE_LABEL,
@@ -141,7 +142,7 @@ export async function getElsewhereWork(
         supabase
           .from("processing_jobs")
           .select(
-            "match_id, status, derivation_version, created_at, matches!inner(program_id)",
+            "id, match_id, status, derivation_version, created_at, resubmitted_from_job_id, matches!inner(program_id)",
           )
           .order("created_at", { ascending: false }),
         workspace,
@@ -165,10 +166,17 @@ export async function getElsewhereWork(
       // the feed's own dedupe, for the same reason.
       const seen = new Set<string>();
       let count = 0;
-      for (const row of (data ?? []) as Pick<
-        JobRow,
-        "match_id" | "status" | "derivation_version"
-      >[]) {
+      // An admin reprocess still running is not the viewer's work.
+      for (const row of hideInFlightReprocess(
+        (data ?? []) as Pick<
+          JobRow,
+          | "id"
+          | "match_id"
+          | "status"
+          | "derivation_version"
+          | "resubmitted_from_job_id"
+        >[],
+      )) {
         if (seen.has(row.match_id)) continue;
         seen.add(row.match_id);
         const status = resolveAnalysisStatus(
@@ -260,7 +268,11 @@ export async function getActivityFeed(
     return { items: [] };
   }
 
-  const rows = (data ?? []) as unknown as JobRow[];
+  // An admin reprocess child that has not completed is not the athlete's
+  // work (splitstep/reprocess.ts): the match's completed job stands in the
+  // tray instead. Judged inside the fetched window, so a parent past row 50
+  // would let a reprocess show — a cosmetic miss, never a wrong report.
+  const rows = hideInFlightReprocess((data ?? []) as unknown as JobRow[]);
 
   // Every fetched row per match, so the current attempt's resubmission chain
   // can be counted without a second query — `loadMatchAnalysis`'s grouping.

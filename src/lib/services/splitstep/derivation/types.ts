@@ -70,6 +70,17 @@ export interface RawSplitStepStroke {
 
   in: boolean;
   line_confidence: number;
+
+  /**
+   * The vendor's announced rename (November 2026): the ball measurements
+   * gain a `ball_` prefix. Optional until every file carries them; parse.ts
+   * reads `ball_x ?? x` so a file with either spelling parses the same.
+   */
+  ball_speed_kmh?: number;
+  ball_ang_vel_mag_rpm?: number;
+  ball_spin_type?: string;
+  ball_initial_height_m?: number;
+  ball_height_at_net_m?: number;
 }
 
 /** The three stroke categories the vendor emits. Nothing finer exists. */
@@ -126,6 +137,8 @@ export interface SplitStepStroke {
   spinType: string | null;
   initialHeightM: number | null;
   heightAtNetM: number | null;
+  /** Ball spin magnitude. Nothing derives from it yet; optional so fixtures need not carry it. */
+  angVelMagRpm?: number | null;
   netHit: boolean;
 
   bounceX: number | null;
