@@ -2234,20 +2234,27 @@ export function LabelConsole({
   }
 
   /**
-   * A stroke added after `afterShotId` (or at the end), drawn and selected for
+   * A stroke added after `afterShotId`, drawn and selected for
    * placement at once: the console makes its id and the add writes the row
    * under it, so it is edited straight away and each edit waits for the row
    * (`addsInFlight`). `follow` is what a review answer knows of it beyond the
    * add's plan (a second serve, by the server): written once it has saved,
    * those fields the add did not already give it.
+   *
+   * `null` names no place (the well's "Add shot", A with nothing selected):
+   * the point's open "Missing shot?" slot takes it when it has one — most
+   * missing strokes are a return, not the rally's last ball — and the end of
+   * the rally otherwise.
    */
   function addShot(
     pointId: string,
-    afterShotId: string | null,
+    requestedAfterShotId: string | null,
     follow?: LabelShotPatch,
   ) {
     const point = points.find((p) => p.id === pointId);
     if (!point || !operations) return;
+    const afterShotId =
+      requestedAfterShotId ?? suggestedAddSlot(point, liveMarks);
     // A draft point cannot take a stroke until its own insert lands.
     if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
     // Read only for a stroke added first in a rally with no times of its own.
@@ -4813,6 +4820,29 @@ function replaceShot(
   change: (shot: LabelShot) => LabelShot,
 ): LabelPoint[] {
   return updateShot(points, shotId, false, change);
+}
+
+/**
+ * Where an add that names no place goes: after the stroke the point's first
+ * open "Missing shot?" slot follows, when that add would write; null (the end
+ * of the rally) when there is none.
+ */
+function suggestedAddSlot(
+  point: LabelPoint,
+  marks: LabelMarks | null,
+): string | null {
+  if (!marks) return null;
+  for (const s of marks.suggestions) {
+    if (
+      s.kind === "missing_shot" &&
+      s.pointId === point.id &&
+      suggestionState(s, point) === "open" &&
+      !("error" in planAddedShot(point, s.afterShotId))
+    ) {
+      return s.afterShotId;
+    }
+  }
+  return null;
 }
 
 /** `points` with `shot` added to its point, in video order. */
