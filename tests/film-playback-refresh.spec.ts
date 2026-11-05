@@ -3846,6 +3846,23 @@ test("the tab's player bar draws no Save glyph; the card owns the bookmark and S
   ).toBeVisible();
 });
 
+test("the room's own transport keeps its Save glyph on a writable report", async ({
+  page,
+}) => {
+  await openShell(page, "card-notes");
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => cardPoint(page)).toBe("b");
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  // The tab's bar dropped its copy; the room's is the only on-screen save
+  // control while the card is covered.
+  await expect(
+    page.locator('[data-film-chrome] button[aria-label="Save point"]'),
+  ).toBeVisible();
+});
+
 test("the card reads the point in one line and opens an empty thread with a reply field", async ({
   page,
 }) => {

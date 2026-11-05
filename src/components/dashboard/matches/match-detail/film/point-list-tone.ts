@@ -146,7 +146,8 @@ export const WELL_TONE = {
     rowPad: "px-[14px]",
     lit: "bg-[var(--surface-card)] shadow-[inset_0_1px_0_rgba(0,0,0,0.04),inset_0_-1px_0_rgba(0,0,0,0.04)]",
     rest: "hover:bg-[rgba(0,0,0,0.03)]",
-    order: "var(--ink-500)",
+    // `--ink-600`, not 500: on the recessed wash (~#EBEBEB) 500 read 2.97:1.
+    order: "var(--ink-600)",
     muted: "var(--ink-700)",
     stroke: "var(--ink-700)",
     strokeLit: "var(--ink-900)",
