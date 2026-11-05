@@ -767,8 +767,12 @@ test.describe("the tiers on a point", () => {
     expect(markSummary([deleted], marks)).toEqual({ open: 0, openPoints: 0 });
   });
 
-  test("“Net or out?” joins the line only from the point's last live stroke", () => {
-    const netHit = sample("net_hit_contradicts_height");
+  test("“Net or out?”, were it a hint, joins the line only from the point's last live stroke", () => {
+    // Hidden since 2026-11-05; the last-stroke rule stays for a re-promotion.
+    const netHit = {
+      ...sample("net_hit_contradicts_height"),
+      tier: "hint",
+    } as LabelMark;
     const hintsOf = (shots: ListShot[], on: string) =>
       codes(
         pointRowMarkList(listPoint(shots), marksOf([], { [on]: [netHit] }))
@@ -806,15 +810,22 @@ test.describe("the tiers on a point", () => {
       listPoint([listShot("s1")]),
       marksOf(
         [
-          sample("result_type_unknown"),
+          sample("reserve_after_in"),
           sample("ending_suspect_line"),
-          sample("result_type_unknown"),
+          sample("reserve_after_in"),
         ],
-        { s1: [sample("net_hit_contradicts_height")] },
+        {
+          s1: [
+            {
+              ...sample("net_hit_contradicts_height"),
+              tier: "hint",
+            } as LabelMark,
+          ],
+        },
       ),
     );
     expect(codes(list.hints)).toEqual([
-      "result_type_unknown",
+      "reserve_after_in",
       "ending_suspect_line",
       "net_hit_contradicts_height",
     ]);

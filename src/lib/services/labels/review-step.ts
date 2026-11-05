@@ -189,9 +189,7 @@ export function reviewItemThenLabel(item: ReviewItem): string {
         !has(
           "last_call_overruled",
           "winner_disputed",
-          "net_hit_contradicts_height",
           "ending_suspect_line",
-          "winner_to_error_by_bounce",
           "ending_stale",
           "ending_contradicts_winner",
           "result_type_unknown",
