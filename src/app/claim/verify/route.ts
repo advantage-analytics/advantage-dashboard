@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { trackServer } from "@/lib/analytics-server";
 import {
   completeClaim,
   completeClaimWithToken,
@@ -89,6 +90,19 @@ export async function GET(request: Request) {
 
   // A code, never the copy — see `ClaimFailure`. The screen owns the wording.
   if (!result.ok) redirect(`/claim/verify/failed?reason=${result.reason}`);
+
+  // `program_claim_completed`, for the claimant. A token link opened signed
+  // out signs in during the claim, so the id is read again when needed; a
+  // re-opened link for a program already theirs is not a second completion.
+  if (result.programId && !result.alreadyOwned) {
+    const claimant =
+      user ?? (await (await createClient()).auth.getUser()).data.user;
+    if (claimant) {
+      trackServer(claimant.id, "program_claim_completed", {
+        program_id: result.programId,
+      });
+    }
+  }
 
   const params = new URLSearchParams({
     school: result.schoolName,

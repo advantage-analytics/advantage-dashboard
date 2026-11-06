@@ -1,6 +1,7 @@
 import posthog from "posthog-js";
 import { isPostHogOffInDev } from "@/lib/posthog-client";
 import { dropUnfixableNoise } from "@/lib/posthog-noise";
+import { rememberLandingUtms } from "@/lib/analytics";
 
 const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const apiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -53,3 +54,6 @@ if (isPostHogOffInDev) {
     ],
   });
 }
+
+// Attribution for sign-up's $set_once UTM properties — see analytics.ts.
+rememberLandingUtms();

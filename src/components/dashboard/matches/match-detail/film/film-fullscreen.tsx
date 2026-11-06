@@ -206,7 +206,8 @@ export interface FilmFullscreenProps {
    * The first `play` event of each loaded source (`generation`) in this room
    * — a view of the video (SwingVision Add video T8). See `film-player.tsx`.
    */
-  onFirstPlay?: (generation: number) => void;
+  /** `positionSec`: where the play began, for analytics (`video_played`). */
+  onFirstPlay?: (generation: number, positionSec: number) => void;
   onRetry: () => void;
   /**
    * The film clock `stops` were built from — passed in rather than rebuilt
@@ -1782,14 +1783,17 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               // was throwing the viewer out of the room on an ordinary rapid
               // pause/play. The three exits that remain are Esc, the
               // transport's minimize control, and "Back to the report".
-              onPlay={() => {
+              onPlay={(event) => {
                 setPlaying(true);
                 playingRef.current = true;
                 landingRef.current.playing = true;
                 p.onPlaybackPlaying(true);
                 if (firstPlayRef.current !== p.generation) {
                   firstPlayRef.current = p.generation;
-                  p.onFirstPlay?.(p.generation);
+                  p.onFirstPlay?.(
+                    p.generation,
+                    event.currentTarget.currentTime,
+                  );
                 }
               }}
               onPause={() => {

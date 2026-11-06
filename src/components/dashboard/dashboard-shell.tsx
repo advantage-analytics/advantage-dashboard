@@ -4,6 +4,7 @@ import { Suspense, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
+import { noteDashboardPath } from "@/lib/analytics";
 import { Header } from "@/app/dashboard/header";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { MobileGate } from "@/components/dashboard/mobile-gate";
@@ -57,25 +58,80 @@ export function DashboardShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { viewer, active } = useWorkspace();
+  const { viewer, active, available } = useWorkspace();
 
   // The layout only renders with an authenticated workspace context. Identifying
   // here persists the Supabase UUID across dashboard page loads and attributes
   // automatic exception capture and future events to the signed-in person.
   // The id only: an email would be a second copy of personal data in PostHog,
-  // and the id resolves to it in Supabase whenever it is needed.
+  // and the id resolves to it in Supabase whenever it is needed. The person
+  // properties are ids and enums for the same reason; `is_internal` is decided
+  // on the server (`isInternalAccount`) so no address list ships to the client.
+  //
+  // `program` is the active team workspace, else the viewer's first program,
+  // so a player browsing their personal workspace still counts toward it.
+  const program =
+    active.kind === "team"
+      ? active
+      : (available.find((workspace) => workspace.kind === "team") ?? null);
+  const analyticsRole = viewer.isInternal
+    ? "admin"
+    : available.some(
+          (workspace) =>
+            workspace.kind === "team" && workspace.role !== "player",
+        )
+      ? "coach"
+      : "player";
+  const programId = program?.id ?? null;
+  const programName = program?.name ?? null;
+  const programDivision = program?.division ?? null;
+  const programTeam = program?.team ?? null;
   useEffect(() => {
-    if (isPostHogConfigured && posthog.get_distinct_id() !== viewer.id) {
-      posthog.identify(viewer.id);
+    if (!isPostHogConfigured) return;
+    const personProperties = {
+      role: analyticsRole,
+      program_id: programId,
+      program_name: programName,
+      plan: viewer.plan,
+      is_internal: viewer.isInternal === true,
+    };
+    if (posthog.get_distinct_id() !== viewer.id) {
+      posthog.identify(viewer.id, personProperties);
+    } else {
+      posthog.setPersonProperties(personProperties);
     }
-  }, [viewer.id]);
+  }, [
+    viewer.id,
+    viewer.plan,
+    viewer.isInternal,
+    analyticsRole,
+    programId,
+    programName,
+  ]);
+
+  // Group analytics: every event that follows is tied to the viewer's program.
+  // Needs PostHog's group-analytics add-on to be queryable; without it the
+  // calls are harmless and the workspace super properties below still carry
+  // the same breakdown. A viewer with no program has their groups cleared.
+  useEffect(() => {
+    if (!isPostHogConfigured) return;
+    if (!programId) {
+      posthog.resetGroups();
+      return;
+    }
+    posthog.group("program", programId, {
+      name: programName,
+      division: programDivision,
+      gender: programTeam,
+    });
+  }, [programId, programName, programDivision, programTeam]);
 
   // Stamp the active workspace on every event that follows, so any insight can
   // be broken down by team — "which programs uploaded video this month" — and
-  // personal use told apart from team use. Super properties rather than
-  // posthog.group(): group analytics is a paid PostHog add-on and this project
-  // is on the free plan. Re-registered on every switch; logout's
-  // posthog.reset() clears them.
+  // personal use told apart from team use. Kept beside the `program` group
+  // above because it works on the free plan and distinguishes the personal
+  // workspace, which the group does not. Re-registered on every switch;
+  // logout's posthog.reset() clears them.
   useEffect(() => {
     if (!isPostHogConfigured) return;
     posthog.register({
@@ -101,6 +157,11 @@ export function DashboardShell({
    * `/dashboard/upload`, which no route has ever matched, so the guard never
    * held and storage was cleared everywhere.
    */
+  // For `match_viewed`'s source — see `matchViewSource()`.
+  useEffect(() => {
+    noteDashboardPath(pathname);
+  }, [pathname]);
+
   useEffect(() => {
     if (!pathname.startsWith("/dashboard/matches/new")) {
       // "Save draft" in the wizard's footer sets this flag, and it is the one
