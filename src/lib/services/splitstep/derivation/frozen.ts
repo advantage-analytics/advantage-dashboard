@@ -178,8 +178,13 @@ export function stalledScoreStream(
   let stalledPoints = 0;
   let previous: string | null = null;
   let run = 0;
+  // A tiebreak is one game reading for its whole length: 6-6 in a set, or
+  // 0-0 games at a level set score (1-1) for a match tiebreak. Held that
+  // long by an honest stream, so such a run never counts as stalled.
   const closeRun = () => {
-    if (run > STALLED_RUN_POINTS) stalledPoints += run;
+    if (run > STALLED_RUN_POINTS && !isTiebreakReading(previous)) {
+      stalledPoints += run;
+    }
   };
   for (const { set_score, game_score } of readings) {
     const reading: string | null =
@@ -198,4 +203,15 @@ export function stalledScoreStream(
   return stalledPoints * 2 >= readings.length
     ? { points: readings.length, gameChanges, stalledPoints }
     : null;
+}
+
+/** A `set|game` reading that is a tiebreak's (see `stalledScoreStream`). */
+function isTiebreakReading(reading: string | null): boolean {
+  if (reading === null) return false;
+  const [set, game] = reading.split("|");
+  const sides = (score: string) => score.split("-").map((p) => p.trim());
+  const [g1, g2] = sides(game ?? "");
+  if (g1 === "6" && g2 === "6") return true;
+  const [s1, s2] = sides(set ?? "");
+  return g1 === "0" && g2 === "0" && s1 === s2 && s1 !== "0" && s1 !== "";
 }

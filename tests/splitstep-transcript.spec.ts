@@ -2368,6 +2368,33 @@ test.describe("stalledScoreStream", () => {
     ).toBeNull();
   });
 
+  test("a long tiebreak or match tiebreak is one honest reading, not a stall", () => {
+    const set = (set_score: string, game_score: string, n: number) =>
+      Array.from({ length: n }, () => ({ set_score, game_score }));
+    // 12 points of games, then a 16-point set tiebreak at 6-6.
+    expect(
+      stalledScoreStream([
+        ...Array.from({ length: 12 }, (_, i) => ({
+          set_score: "0-0",
+          game_score: `${Math.floor(i / 4) + 4}-5`,
+        })),
+        ...set("0-0", "6-6", 16),
+      ]),
+    ).toBeNull();
+    // 12 points of games, then an 18-point match tiebreak at one set all.
+    expect(
+      stalledScoreStream([
+        ...Array.from({ length: 12 }, (_, i) => ({
+          set_score: "1-1",
+          game_score: `${Math.floor(i / 4)}-0`,
+        })),
+        ...set("1-1", "0-0", 18),
+      ]),
+    ).toBeNull();
+    // A frozen 0-0 at no sets each is still a stall.
+    expect(stalledScoreStream(set("0-0", "0-0", 30))).not.toBeNull();
+  });
+
   test("null readings repeat the one before; a short match is never judged", () => {
     expect(
       stalledScoreStream(readings(["0-0", ...Array(20).fill(null), "1-0"])),
