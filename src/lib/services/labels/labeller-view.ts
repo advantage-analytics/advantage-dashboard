@@ -6,11 +6,11 @@
  * it. So the session the page passes to the client carries no player names,
  * no match or job id and no derivation version — stripped here, server-side,
  * because hiding them in the markup alone would still ship them in the RSC
- * payload. The two sides are "Near" (p1) and "Far" (p2) — one word, like the
- * surnames an admin sees, so the rail's hitter cells don't clip — fixed for
- * the session as the console's court fallback is (`hitterHalf`'s `"near"`):
- * a changeover does not flip the words. "Player 1" / "Player 2" is the
- * alternative if that reads as confusing.
+ * payload. The two sides are "Player 1" (p1) and "Player 2" (p2), fixed for
+ * the session. Not "Near" / "Far": p1 is whoever the upload named first, not
+ * whoever starts at the camera end, so on a match where p1 starts far (Emon v
+ * Roger, Nov 2026) those words named the wrong player on every row. No
+ * labels claim an end any more; the film shows which end each player is at.
  */
 
 import { homeShotSuggestions, type LabelMarks } from "./marks";
@@ -22,8 +22,8 @@ import type { LabelSession, LabelSide } from "./session";
 
 /** The labeller's words for each side, in every place the console prints one. */
 export const LABELLER_SIDE_NAMES: Record<LabelSide, string> = {
-  p1: "Near",
-  p2: "Far",
+  p1: "Player 1",
+  p2: "Player 2",
 };
 
 /**

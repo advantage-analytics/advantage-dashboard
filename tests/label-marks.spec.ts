@@ -712,6 +712,47 @@ test.describe("the labels-only flags", () => {
     ).toEqual([{ vendorCall: "in", eventId: calledIn.strokes[1].eventId }]);
   });
 
+  test("last_shot_untracked: the point's last stroke has no ball off it (new ball model only)", () => {
+    const untracked = rallyOf(1, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+      ["A", "groundstroke"],
+    ]);
+    untracked.strokes[2].ballUntracked = true;
+    // Mid-rally it says nothing: only the stroke the point ends on is asked.
+    const midRally = rallyOf(2, [
+      ["B", "serve"],
+      ["A", "groundstroke"],
+      ["B", "groundstroke"],
+    ]);
+    midRally.strokes[1].ballUntracked = true;
+    // An old-model file never sets it.
+    const oldFile = rallyOf(3, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+    ]);
+    // A serve the point ends on is never asked: deleting it is no fix.
+    const ace = rallyOf(4, [["B", "serve"]]);
+    ace.strokes[0].ballUntracked = true;
+    const marks = allMarksFor(
+      [untracked, midRally, oldFile, ace],
+      ["A", "B", "A", "B"],
+    );
+    const of = (id: string) =>
+      (marks.points[id] ?? []).filter((m) => m.code === "last_shot_untracked");
+    expect(of("p1")).toEqual([
+      {
+        code: "last_shot_untracked",
+        tier: "count",
+        scope: "point",
+        params: { eventId: untracked.strokes[2].eventId },
+      },
+    ]);
+    expect(of("p2")).toEqual([]);
+    expect(of("p3")).toEqual([]);
+    expect(of("p4")).toEqual([]);
+  });
+
   test("serve_fault: one serve called out, one or two strokes after it", () => {
     const oneBack = rallyOf(1, [
       ["A", "serve", false],
@@ -981,6 +1022,7 @@ test.describe("the three tiers", () => {
       "first_serve_fault_alone",
       "last_call_overruled",
       "last_shot_unresolved",
+      "last_shot_untracked",
       "net_by_trajectory",
       "pick_winner",
       "result_type_unknown",

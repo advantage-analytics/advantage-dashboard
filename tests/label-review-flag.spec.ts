@@ -52,6 +52,7 @@ function mark<C extends LabelMarkCode>(
 const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   winner_disputed: { scoreWinner: "p2", lastStrokeWinner: "p1" },
   last_call_overruled: { vendorCall: "out", eventId: 7 },
+  last_shot_untracked: { eventId: 7 },
   net_by_trajectory: {},
   winner_to_error_by_bounce: { loser: "p1" },
   ending_suspect_line: {},
@@ -295,7 +296,12 @@ test.describe("the item table", () => {
     }
     expect(REVIEW_ITEMS.map((item) => [...item.codes])).toEqual([
       ["same_player_consecutive"],
-      ["shot_after_point_end", "serve_after_serve_in", "reserve_after_in"],
+      [
+        "shot_after_point_end",
+        "last_shot_untracked",
+        "serve_after_serve_in",
+        "reserve_after_in",
+      ],
       [
         "second_serve_as_first",
         "first_serve_fault_alone",

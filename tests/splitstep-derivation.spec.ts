@@ -190,6 +190,27 @@ test.describe("parse layer", () => {
     expect(shifted[0].videoTime).toBeGreaterThan(offset);
   });
 
+  // The November 2026 ball model adds `ball_fit_ok` and `bounce_source`.
+  test("a stroke with no ball fitted or detected off it reads ballUntracked", () => {
+    const rows = (clean as Record<string, unknown>[])
+      .slice(0, 4)
+      .map((row, i) =>
+        i === 0
+          ? { ...row, ball_fit_ok: false, bounce_source: "None" }
+          : i === 1
+            ? { ...row, ball_fit_ok: false, bounce_source: "detector" }
+            : i === 2
+              ? { ...row, ball_fit_ok: true, bounce_source: "fit" }
+              : row,
+      );
+    const flags = parseStrokes(rows).strokes.map((s) => s.ballUntracked);
+    // Only no fit AND no bounce source; an old-model row never has the key.
+    expect(flags).toEqual([true, undefined, undefined, undefined]);
+    expect(parseStrokes(clean).strokes.some((s) => "ballUntracked" in s)).toBe(
+      false,
+    );
+  });
+
   test("rejects a payload that is not an array", () => {
     expect(() => parseStrokes({ strokes: [] })).toThrow(/must be a JSON array/);
   });

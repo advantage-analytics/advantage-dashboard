@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/labels/marks";
 import {
   firstAmberStop,
+  LABELLER_SIDE_NAMES,
   labellerSession,
   labellerWording,
 } from "@/lib/services/labels/labeller-view";
@@ -93,7 +94,7 @@ const NAMES = ["Jordan Lee", "Elena Vargas", "Lee", "Vargas"];
 
 test.describe("viewerKind=labeller", () => {
   for (const mode of ["overview", "black"] as const) {
-    test(`no player, program, admin link or derivation; Near and Far; Submit for review (${mode})`, () => {
+    test(`no player, program, admin link or derivation; Player 1 and Player 2; Submit for review (${mode})`, () => {
       const html = render(
         consoleProps({
           viewerKind: "labeller",
@@ -117,14 +118,59 @@ test.describe("viewerKind=labeller", () => {
     });
   }
 
-  test("the rail and the tray say Near and Far, one word so the hitter cells don't clip", () => {
+  test("the rail and the tray say Player 1 and Player 2, never an end of the court", () => {
     const html = render(
       consoleProps({ viewerKind: "labeller", initialLayoutMode: "black" }),
     );
-    expect(html).toMatch(/>Near</);
-    expect(html).toMatch(/>Far</);
-    expect(html).not.toContain("Near player");
-    expect(html).not.toContain("Far player");
+    expect(html).toMatch(/>Player 1</);
+    expect(html).toMatch(/>Player 2</);
+    expect(html).not.toMatch(/>Near</);
+    expect(html).not.toMatch(/>Far</);
+  });
+
+  test("a labeller can still switch a stroke's hitter, between Player 1 and Player 2", () => {
+    const session = labellerSession(labelSessionFixture());
+    const point = session.points.find((p) => p.shots.length > 0)!;
+    const html = render(
+      consoleProps({
+        viewerKind: "labeller",
+        initialLayoutMode: "black",
+        session,
+        initialExpandedPointId: point.id,
+      }),
+    );
+    // Every stroke's hitter cell is there, editable, and names a side by
+    // number — never a surname cut from "Player 1" (sideNames would give "1").
+    const cells = [...html.matchAll(/data-cell="Shot \d+ player"/g)];
+    expect(cells.length).toBeGreaterThan(0);
+    for (const cell of cells) {
+      // The cell's own `<span>`, matched to its close — never the page after
+      // it, where a winner mark's "Player 1" would answer for a broken cell.
+      const start = html.lastIndexOf("<span", cell.index!);
+      const tags = /<span\b|<\/span>/g;
+      tags.lastIndex = start;
+      let depth = 0;
+      let end = -1;
+      for (let m = tags.exec(html); m; m = tags.exec(html)) {
+        depth += m[0] === "</span>" ? -1 : 1;
+        if (depth === 0) {
+          end = m.index + m[0].length;
+          break;
+        }
+      }
+      expect(end, cell[0]).toBeGreaterThan(start);
+      const own = html.slice(start, end);
+      expect(own).toMatch(/>Player [12]</);
+      expect(own).toContain('tabindex="0"');
+    }
+    // The menu the cell opens offers exactly the two numbered sides.
+    const { sideOptions } = createLoader().load(
+      "src/components/admin/labels/label-format.ts",
+    ) as typeof import("@/components/admin/labels/label-format");
+    expect(sideOptions(LABELLER_SIDE_NAMES).map((o) => o.label)).toEqual([
+      "Player 1",
+      "Player 2",
+    ]);
   });
 
   test("the session the page passes carries no identifying field", () => {
@@ -329,10 +375,10 @@ test.describe("the overview checklist said to a labeller", () => {
   test("labellerWording swaps every publish for what submitting hands over", () => {
     expect(
       labellerWording(
-        "Point 4's strokes say Far won — it publishes with the labelled winner",
+        "Point 4's strokes say Player 2 won — it publishes with the labelled winner",
       ),
     ).toBe(
-      "Point 4's strokes say Far won — it goes in with the labelled winner",
+      "Point 4's strokes say Player 2 won — it goes in with the labelled winner",
     );
     expect(
       labellerWording(
