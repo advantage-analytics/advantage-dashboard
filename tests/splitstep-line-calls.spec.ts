@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   lineCallsFor,
+  netByTrajectory,
   singlesMargin,
   type SplitStepStroke,
 } from "@/lib/services/splitstep/derivation";
@@ -131,5 +132,88 @@ test.describe("lineCallsFor", () => {
 
   test("anything but an array is refused, as for the strokes file", () => {
     expect(() => lineCallsFor([s], { rows: [] })).toThrow();
+  });
+});
+
+test.describe("pastBounce and net_by_trajectory", () => {
+  // A flight from y -11 crossing the net plane at `netZ`, bouncing at frame
+  // 110 near y +6, and either stopping there (old model) or running on.
+  const flight = (netZ: number, runOn: boolean) => {
+    const rows = [
+      row(100, 0, -11, 1),
+      row(105, 0, -0.5, netZ),
+      row(106, 0, 0.5, netZ),
+      row(110, 0, 6, 0),
+    ];
+    if (runOn) rows.push(row(115, 0, 9, 0.6), row(125, 0, 13, 0.8));
+    return rows;
+  };
+  const last = stroke({
+    trimmedFrame: 100,
+    bounceFrame: 110,
+    bounceX: 0,
+    bounceY: 6,
+  });
+  const serve = stroke({ playerLabel: "B", strokeType: "serve", eventId: 9 });
+  const rally = {
+    rallyId: 1,
+    strokes: [serve, last],
+    server: "B",
+    serves: [serve],
+  };
+
+  test("reads true only when the file's flights run past the bounce", () => {
+    expect(lineCallsFor([last], flight(0.5, true)).get(last)?.pastBounce).toBe(
+      true,
+    );
+    expect(
+      lineCallsFor([last], flight(0.5, false)).get(last)?.pastBounce,
+    ).toBeUndefined();
+  });
+
+  test("a low crossing on a run-on file, no net call, bounce past the net", () => {
+    expect(
+      netByTrajectory(rally, lineCallsFor([last], flight(0.5, true))),
+    ).toBe(true);
+    // Old-model file: the same low crossing says nothing.
+    expect(
+      netByTrajectory(rally, lineCallsFor([last], flight(0.5, false))),
+    ).toBe(false);
+    // Cleared the tape by enough.
+    expect(
+      netByTrajectory(rally, lineCallsFor([last], flight(1.2, true))),
+    ).toBe(false);
+    // The vendor already called it net.
+    const called = { ...last, netHit: true };
+    expect(
+      netByTrajectory(
+        { ...rally, strokes: [serve, called] },
+        lineCallsFor([called], flight(0.5, true)),
+      ),
+    ).toBe(false);
+    // A bounce on the hitter's own side already reads as net.
+    const ownSide = { ...last, bounceY: -3 };
+    expect(
+      netByTrajectory(
+        { ...rally, strokes: [serve, ownSide] },
+        lineCallsFor([ownSide], flight(0.5, true)),
+      ),
+    ).toBe(false);
+  });
+
+  test("a serve the point ends on is never asked", () => {
+    const ace = stroke({
+      strokeType: "serve",
+      trimmedFrame: 100,
+      bounceFrame: 110,
+      bounceX: 0,
+      bounceY: 6,
+    });
+    expect(
+      netByTrajectory(
+        { rallyId: 1, strokes: [ace], server: "A", serves: [ace] },
+        lineCallsFor([ace], flight(0.5, true)),
+      ),
+    ).toBe(false);
   });
 });

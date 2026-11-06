@@ -130,7 +130,28 @@ export const POINT_FLAGS = {
    * (or a stroke the vendor missed) before the ball.
    */
   LAST_CALL_CONTRADICTS_WINNER: "last_call_contradicts_winner",
+  /**
+   * Review-only. The point ends on a rally stroke whose flight crossed the net
+   * plane lower than `TRAJECTORY_NET_M`, on a file whose flights run past the
+   * bounce (line-calls.ts `pastBounce`, the November 2026 ball model), while
+   * the vendor did not call it net and its bounce is past the net — so
+   * nothing in the pre-fill reads it as a net ball. Nothing is rewritten.
+   * Measured 2026-11-06 on the final labels of 10 reprocessed matches (1,082
+   * last strokes, the console's pre-fill wrong on 26%): 17 fires, the
+   * pre-fill wrong on 12 (71%), 11 of them really net. The same rule on those
+   * matches' old files: 40 fires, 28%, which is why it waits for `pastBounce`.
+   * Serves are left out (1 of 3 on the new files).
+   */
+  NET_BY_TRAJECTORY: "net_by_trajectory",
 } as const;
+
+/**
+ * How high over the net plane a flight may cross and still read as a net
+ * ball for `net_by_trajectory`. The net is 0.914 m at the centre: a crossing
+ * this low clipped it or came close. 0.95 m caught one more net ball and
+ * added seven fires at 52%; 1.1 m, 49% on 35.
+ */
+export const TRAJECTORY_NET_M = 0.8;
 
 /** How close to a line the ball before a winner must land to be suspect. */
 const ENDING_SUSPECT_MARGIN_M = 1;
@@ -324,7 +345,26 @@ export function flagPoint(params: {
 
   if (!resultType) flags.push(POINT_FLAGS.RESULT_TYPE_UNKNOWN);
 
+  if (lineCalls && netByTrajectory(rally, lineCalls)) {
+    flags.push(POINT_FLAGS.NET_BY_TRAJECTORY);
+  }
+
   return flags;
+}
+
+/** `NET_BY_TRAJECTORY`'s test on the stroke the rally ends on. */
+export function netByTrajectory(
+  rally: SplitStepRally,
+  lineCalls: LineCalls,
+): boolean {
+  const last = rally.strokes[rally.strokes.length - 1];
+  if (!last || last.strokeType === "serve" || last.netHit) return false;
+  const call = lineCalls.get(last);
+  if (!call?.pastBounce || call.netClearance === null) return false;
+  if (call.netClearance >= TRAJECTORY_NET_M) return false;
+  // A bounce on the hitter's own side already reads as net in the console.
+  if (last.bounceY === null || last.playerY === null) return false;
+  return Math.sign(last.bounceY) !== Math.sign(last.playerY);
 }
 
 function scoreParts(score: string | null): [string, string] | null {

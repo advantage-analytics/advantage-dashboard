@@ -973,7 +973,7 @@ test.describe("Game cut differs on most of the match", () => {
 });
 
 test.describe("the three tiers", () => {
-  test("thirteen codes can change the score, and only they are counted", () => {
+  test("fourteen codes can change the score, and only they are counted", () => {
     const counted = Object.entries(LABEL_MARK_META)
       .filter(([, meta]) => meta.tier === "count")
       .map(([code]) => code);
@@ -981,6 +981,7 @@ test.describe("the three tiers", () => {
       "first_serve_fault_alone",
       "last_call_overruled",
       "last_shot_unresolved",
+      "net_by_trajectory",
       "pick_winner",
       "result_type_unknown",
       "same_player_consecutive",

@@ -1087,6 +1087,7 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
     question: REVIEW_ITEM_QUESTION[4],
     codes: [
       "last_call_overruled",
+      "net_by_trajectory",
       "winner_disputed",
       "ending_suspect_line",
       "ending_stale",

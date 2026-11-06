@@ -147,6 +147,14 @@ export const LABEL_ONLY_FLAGS = {
  * - `net_hit_contradicts_height` is hidden on every stroke: 51% fixed.
  * - `winner_to_error_by_bounce` is hidden: it never fired without
  *   `ending_suspect_line` and caught no fix that mark did not.
+ *
+ * 2026-11-06: `net_by_trajectory` is new and counted ("Into the net?"). It
+ * only fires on a file from the November 2026 ball model, whose flights run
+ * past the bounce (flags.ts). On 10 reprocessed matches it fired 17 times
+ * and the pre-fill's last-ball result was wrong on 12 (71%; base 26%). It
+ * sits beside "Was the last ball in?", which asks when the vendor's own call
+ * disagrees; this one asks when the vendor and the landing both missed a net
+ * ball the flight shows.
  */
 export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_DISPUTED]: { tier: "count", scope: "point" },
@@ -163,6 +171,7 @@ export const LABEL_MARK_META = {
   },
   [POINT_FLAGS.WINNER_GUESSED]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.NET_BY_TRAJECTORY]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS]: { tier: "count", scope: "point" },
   [POINT_FLAGS.ENDING_SUSPECT_LINE]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hidden", scope: "point" },
@@ -252,6 +261,7 @@ export interface LabelMarkParams {
    * which stroke that ball was — the answer is written to that stroke only.
    */
   last_call_overruled: { vendorCall: "in" | "out" | "net"; eventId: number };
+  net_by_trajectory: NoParams;
   shot_after_point_end: {
     /** The last live stroke that lands out or in the net. */
     shotId: string;
@@ -492,6 +502,7 @@ function pointMarks(
         break;
       }
       case POINT_FLAGS.ENDING_SUSPECT_LINE:
+      case POINT_FLAGS.NET_BY_TRAJECTORY:
       case POINT_FLAGS.SECOND_SERVE_CALLED_OUT:
       case POINT_FLAGS.RESERVE_AFTER_IN:
       case POINT_FLAGS.TIEBREAK_SCORE_OFF_SIX_ALL:
