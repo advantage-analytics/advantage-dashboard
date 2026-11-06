@@ -93,7 +93,7 @@ const NAMES = ["Jordan Lee", "Elena Vargas", "Lee", "Vargas"];
 
 test.describe("viewerKind=labeller", () => {
   for (const mode of ["overview", "black"] as const) {
-    test(`no player, program, admin link or derivation; Near and Far; Submit for review (${mode})`, () => {
+    test(`no player, program, admin link or derivation; Player 1 and Player 2; Submit for review (${mode})`, () => {
       const html = render(
         consoleProps({
           viewerKind: "labeller",
@@ -117,14 +117,14 @@ test.describe("viewerKind=labeller", () => {
     });
   }
 
-  test("the rail and the tray say Near and Far, one word so the hitter cells don't clip", () => {
+  test("the rail and the tray say Player 1 and Player 2, never an end of the court", () => {
     const html = render(
       consoleProps({ viewerKind: "labeller", initialLayoutMode: "black" }),
     );
-    expect(html).toMatch(/>Near</);
-    expect(html).toMatch(/>Far</);
-    expect(html).not.toContain("Near player");
-    expect(html).not.toContain("Far player");
+    expect(html).toMatch(/>Player 1</);
+    expect(html).toMatch(/>Player 2</);
+    expect(html).not.toMatch(/>Near</);
+    expect(html).not.toMatch(/>Far</);
   });
 
   test("the session the page passes carries no identifying field", () => {
@@ -329,10 +329,10 @@ test.describe("the overview checklist said to a labeller", () => {
   test("labellerWording swaps every publish for what submitting hands over", () => {
     expect(
       labellerWording(
-        "Point 4's strokes say Far won — it publishes with the labelled winner",
+        "Point 4's strokes say Player 2 won — it publishes with the labelled winner",
       ),
     ).toBe(
-      "Point 4's strokes say Far won — it goes in with the labelled winner",
+      "Point 4's strokes say Player 2 won — it goes in with the labelled winner",
     );
     expect(
       labellerWording(
