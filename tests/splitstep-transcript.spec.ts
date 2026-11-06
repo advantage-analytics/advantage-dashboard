@@ -24,6 +24,8 @@ import {
   scoreIsSelfMirroring,
   shotNumber,
   shotResult,
+  stalledScoreStream,
+  STALLED_MIN_POINTS,
   collapsedTailStart,
   frozenGameStarts,
   frozenStretches,
@@ -2335,5 +2337,43 @@ test.describe("segmentation proposal (review-only)", () => {
       ]),
     );
     expect(proposalDifferingRallies(proposed, rows).size).toBe(0);
+  });
+});
+
+test.describe("stalledScoreStream", () => {
+  const readings = (games: Array<string | null>) =>
+    games.map((game_score) => ({ set_score: "0-0", game_score }));
+
+  test("a stream whose game score never moves is stalled", () => {
+    expect(stalledScoreStream(readings(Array(38).fill("0-0")))).toEqual({
+      points: 38,
+      gameChanges: 0,
+      stalledPoints: 38,
+    });
+  });
+
+  test("a stream that changes game about every six points is not", () => {
+    const games = Array.from(
+      { length: 60 },
+      (_, i) => `${Math.floor(i / 6)}-0`,
+    );
+    expect(stalledScoreStream(readings(games))).toBeNull();
+  });
+
+  test("a short clip of two long deuce games is not a stall", () => {
+    expect(
+      stalledScoreStream(
+        readings([...Array(6).fill("0-0"), ...Array(10).fill("0-1")]),
+      ),
+    ).toBeNull();
+  });
+
+  test("null readings repeat the one before; a short match is never judged", () => {
+    expect(
+      stalledScoreStream(readings(["0-0", ...Array(20).fill(null), "1-0"])),
+    ).toEqual({ points: 22, gameChanges: 1, stalledPoints: 21 });
+    expect(
+      stalledScoreStream(readings(Array(STALLED_MIN_POINTS - 1).fill("0-0"))),
+    ).toBeNull();
   });
 });

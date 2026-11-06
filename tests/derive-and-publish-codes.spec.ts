@@ -347,6 +347,39 @@ test.describe("deriveAndPublish unreconciled fold", () => {
     expect(fake.updates.some((u) => "derivation_quality" in u)).toBe(false);
   });
 
+  test("a score stream that never moved is recorded, and the match still publishes", async () => {
+    const frozen = Array.from({ length: 20 }, () => ({
+      set_score: "0-0",
+      game_score: "0-0",
+    }));
+    const { deriveAndPublish } = load(async () => ({
+      ok: true,
+      matchId: MATCH,
+      pointsWritten: 20,
+      shotsWritten: 40,
+      transcript: { ...transcript(true), points: frozen },
+    }));
+    const fake = fakeSupabase({ derivationQuality: { grade: "pass" } });
+
+    const result = await deriveAndPublish({
+      supabase: fake.client,
+      jobId: JOB,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(fake.updates.find((u) => "derivation_quality" in u)).toEqual({
+      derivation_quality: {
+        grade: "pass",
+        scoreStream: {
+          stalled: true,
+          points: 20,
+          gameChanges: 0,
+          stalledPoints: 20,
+        },
+      },
+    });
+  });
+
   test("a failed merge does not fail the derivation", async () => {
     const { deriveAndPublish } = load(written(false));
     const fake = fakeSupabase({ qualityReadError: "timeout" });

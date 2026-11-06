@@ -219,8 +219,12 @@ export {
   FROZEN_MIN_RALLIES,
   frozenStretches,
   frozenGameStarts,
+  stalledScoreStream,
+  STALLED_MIN_POINTS,
+  STALLED_RUN_POINTS,
   withServer,
   type FrozenStretch,
+  type ScoreStreamStall,
 } from "./frozen";
 
 export {
