@@ -2401,6 +2401,13 @@ test.describe("tiebreak game cut", () => {
     expect(gamesOf("6-6", GAME, TWO_GAMES)).toBe(2);
   });
 
+  test("a point stream stalled at 6-6 0-0 is cut as it is off 6-6, not as a tiebreak", () => {
+    const STALLED = servers.map(() => "0-0");
+    const [first, second] = ralliesAt("6-6", STALLED);
+    expect(rallyGameKey(first, second)).toContain(first.server);
+    expect(gamesOf("6-6", STALLED)).toBe(gamesOf("5-5", STALLED));
+  });
+
   test("rallyGameKey: a 0-0 opener at 6-6 joins the rally after it", () => {
     const [opener, second] = ralliesAt("6-6", TIEBREAK);
     expect(rallyGameKey(opener, second)).toBe(rallyGameKey(second));

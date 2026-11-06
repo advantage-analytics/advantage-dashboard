@@ -175,7 +175,9 @@ function orderlessScore(score: string | null): string {
  * tiebreak and leave the server out; 15/30/40/AD are a game played at 6-6 (a
  * set with no tiebreak, or a score the stream left there) and keep it. "0-0"
  * opens either, so it takes the key of `next` — the rally after it — when
- * that one is at the same set and game score.
+ * that one is at the same set and game score. A "0-0" with no such rally after
+ * it (the point stream stalled at 6-6 0-0) proves nothing about a tiebreak, so
+ * it keeps the server, as every game did before.
  */
 export function rallyGameKey(
   rally: SplitStepRally,
@@ -183,21 +185,22 @@ export function rallyGameKey(
 ): string {
   const first = rally.strokes[0];
   const game = `${orderlessScore(first?.predSetScore ?? null)}|${first?.predGameScore}`;
-  if (orderlessScore(first?.predGameScore ?? null) !== "6-6") {
-    return `${game}|${rally.server}`;
-  }
+  const withServer = `${game}|${rally.server}`;
+  if (orderlessScore(first?.predGameScore ?? null) !== "6-6") return withServer;
   const point = scoreParts(first?.predPointScore ?? null);
-  if (!point) return `${game}|${rally.server}`;
+  if (!point) return withServer;
   if (point.every((p) => p === "0")) {
     const after = next?.strokes[0];
+    const afterPoint = scoreParts(after?.predPointScore ?? null);
     const sameGame =
       after !== undefined &&
       after.predSetScore === first?.predSetScore &&
       after.predGameScore === first?.predGameScore &&
-      !(scoreParts(after.predPointScore)?.every((p) => p === "0") ?? true);
-    return sameGame ? rallyGameKey(next as SplitStepRally) : game;
+      afterPoint !== null &&
+      !afterPoint.every((p) => p === "0");
+    return sameGame ? rallyGameKey(next as SplitStepRally) : withServer;
   }
-  return point.every((p) => p in LADDER) ? `${game}|${rally.server}` : game;
+  return point.every((p) => p in LADDER) ? withServer : game;
 }
 
 /** Physically impossible serve landings, beyond a wide or long fault. */
