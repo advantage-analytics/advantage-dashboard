@@ -52,7 +52,7 @@ function mark<C extends LabelMarkCode>(
 const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   winner_disputed: { scoreWinner: "p2", lastStrokeWinner: "p1" },
   last_call_overruled: { vendorCall: "out", eventId: 7 },
-  last_shot_untracked: {},
+  last_shot_untracked: { eventId: 7 },
   winner_to_error_by_bounce: { loser: "p1" },
   ending_suspect_line: {},
   second_serve_called_out: {},

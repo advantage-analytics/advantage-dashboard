@@ -19,6 +19,7 @@ import {
   reconcile,
   pressureFor,
   proposalDifferingRallies,
+  rallyGameKey,
   resolvePointWinners,
   resolveWinner,
   scoreIsSelfMirroring,
@@ -60,27 +61,16 @@ const load = (n: string) =>
 const clean = load("clean-match.json");
 const degraded = load("degraded-match.json");
 
-/** Orderless set key plus a game key, matching what transcript.ts builds. */
+/** Orderless set key plus the game key transcript.ts builds (`rallyGameKey`). */
 function keysFor(rallies: SplitStepRally[]) {
   const key = new Map<number, { set: string; game: string }>();
   for (const r of rallies) {
-    const f = r.strokes[0];
-    const set = (f?.predSetScore ?? "")
+    const set = (r.strokes[0]?.predSetScore ?? "")
       .split("-")
       .map((s) => s.trim())
       .sort()
       .join("-");
-    // At 6-6 the server stays out of the key: one tiebreak is one game.
-    const tiebreak =
-      (f?.predGameScore ?? "")
-        .split("-")
-        .map((g) => g.trim())
-        .sort()
-        .join("-") === "6-6";
-    key.set(r.rallyId, {
-      set,
-      game: `${set}|${f?.predGameScore}${tiebreak ? "" : `|${r.server}`}`,
-    });
+    key.set(r.rallyId, { set, game: rallyGameKey(r) });
   }
   return key;
 }
@@ -2352,8 +2342,11 @@ test.describe("tiebreak game cut", () => {
   // The server changes every two points of a tiebreak while the game score
   // stays 6-6; keyed on the server, one tiebreak became five or six games.
   const servers = ["A", "B", "B", "A", "A", "B", "B", "A"];
-  const ralliesAt = (gameScore: string) =>
-    servers.map((server, i) => {
+  // A tiebreak counts in plain numbers; a game in 0/15/30/40.
+  const TIEBREAK = servers.map((_, i) => `${i}-0`);
+  const GAME = ["0-0", "15-0", "30-0", "40-0", "0-0", "15-0", "30-0", "40-0"];
+  const ralliesAt = (gameScore: string, points: string[], by = servers) =>
+    by.map((server, i) => {
       const other = server === "A" ? "B" : "A";
       const strokes = [
         stroke({
@@ -2362,7 +2355,7 @@ test.describe("tiebreak game cut", () => {
           playerLabel: server,
           strokeType: "serve",
           predGameScore: gameScore,
-          predPointScore: `${i}-0`,
+          predPointScore: points[i],
           videoTime: i * 30,
           trimmedFrame: i * 900,
           playerY: -12,
@@ -2372,7 +2365,7 @@ test.describe("tiebreak game cut", () => {
           rallyId: i + 1,
           playerLabel: other,
           predGameScore: gameScore,
-          predPointScore: `${i}-0`,
+          predPointScore: points[i],
           videoTime: i * 30 + 2,
           trimmedFrame: i * 900 + 60,
           playerY: 12,
@@ -2380,9 +2373,9 @@ test.describe("tiebreak game cut", () => {
       ];
       return { ...rally(strokes), rallyId: i + 1 };
     });
-  const gamesOf = (gameScore: string) => {
+  const gamesOf = (gameScore: string, points = TIEBREAK, by = servers) => {
     const t = buildTranscript({
-      rallies: ralliesAt(gameScore),
+      rallies: ralliesAt(gameScore, points, by),
       labels: ["A", "B"],
       score: null,
       initialTopIsPlayer1: null,
@@ -2398,5 +2391,22 @@ test.describe("tiebreak game cut", () => {
 
   test("off 6-6 a change of server still opens a game the score missed", () => {
     expect(gamesOf("5-5")).toBe(5);
+  });
+
+  // Two games at 6-6 in a set with no tiebreak, the score stuck at 6-6: the
+  // change of server between them is the only cut there is.
+  const TWO_GAMES = ["A", "A", "A", "A", "B", "B", "B", "B"];
+
+  test("games scored 15/30/40 at 6-6 (no tiebreak) still split at the change of server", () => {
+    expect(gamesOf("6-6", GAME, TWO_GAMES)).toBe(2);
+  });
+
+  test("rallyGameKey: a 0-0 opener at 6-6 joins the rally after it", () => {
+    const [opener, second] = ralliesAt("6-6", TIEBREAK);
+    expect(rallyGameKey(opener, second)).toBe(rallyGameKey(second));
+    expect(rallyGameKey(second)).not.toContain(second.server);
+    const [gameOpener, gameSecond] = ralliesAt("6-6", GAME, TWO_GAMES);
+    expect(rallyGameKey(gameOpener, gameSecond)).toBe(rallyGameKey(gameSecond));
+    expect(rallyGameKey(gameSecond)).toContain(gameSecond.server);
   });
 });

@@ -327,7 +327,8 @@ export function flagPoint(params: {
   return flags;
 }
 
-function scoreParts(score: string | null): [string, string] | null {
+/** The two sides of a score string, upper-cased, or null when unreadable. */
+export function scoreParts(score: string | null): [string, string] | null {
   const parts = (score ?? "").split("-").map((p) => p.trim().toUpperCase());
   return parts.length === 2 && parts.every((p) => p !== "")
     ? [parts[0], parts[1]]

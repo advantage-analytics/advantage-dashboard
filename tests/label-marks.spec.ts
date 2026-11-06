@@ -731,7 +731,13 @@ test.describe("the labels-only flags", () => {
       ["A", "serve"],
       ["B", "groundstroke"],
     ]);
-    const marks = allMarksFor([untracked, midRally, oldFile], ["A", "B", "A"]);
+    // A serve the point ends on is never asked: deleting it is no fix.
+    const ace = rallyOf(4, [["B", "serve"]]);
+    ace.strokes[0].ballUntracked = true;
+    const marks = allMarksFor(
+      [untracked, midRally, oldFile, ace],
+      ["A", "B", "A", "B"],
+    );
     const of = (id: string) =>
       (marks.points[id] ?? []).filter((m) => m.code === "last_shot_untracked");
     expect(of("p1")).toEqual([
@@ -739,11 +745,12 @@ test.describe("the labels-only flags", () => {
         code: "last_shot_untracked",
         tier: "count",
         scope: "point",
-        params: {},
+        params: { eventId: untracked.strokes[2].eventId },
       },
     ]);
     expect(of("p2")).toEqual([]);
     expect(of("p3")).toEqual([]);
+    expect(of("p4")).toEqual([]);
   });
 
   test("serve_fault: one serve called out, one or two strokes after it", () => {
