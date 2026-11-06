@@ -42,6 +42,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   pick_winner: "Pick the winner",
   last_call_overruled: "Was the last ball in?",
   last_shot_untracked: "Was the last shot real?",
+  net_by_trajectory: "Into the net?",
   phantom_strokes_dropped: "1 shot removed",
   out_ball_rally_continued: "Out call ignored",
   winner_guessed: "Winner guessed",
@@ -361,6 +362,8 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     }
     case "last_shot_untracked":
       return "No ball was tracked off the last shot. Most often it isn’t a shot at all, just a swing at a dead ball: delete it, and the point ends on the shot before.";
+    case "net_by_trajectory":
+      return "The ball crossed the net barely above the tape, but nothing calls it a net ball. Watch the net: if the ball hit it and stayed on this side, change the result to net.";
     case "pick_winner":
       return "The score, the last shot and the next serve don’t agree on who won. Watch the clip and choose.";
     case "ending_stale": {

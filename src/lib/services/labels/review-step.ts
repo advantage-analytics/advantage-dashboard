@@ -191,6 +191,7 @@ export function reviewItemThenLabel(item: ReviewItem): string {
       return has("last_landing_missing", "last_shot_unresolved") &&
         !has(
           "last_call_overruled",
+          "net_by_trajectory",
           "winner_disputed",
           "ending_suspect_line",
           "ending_stale",

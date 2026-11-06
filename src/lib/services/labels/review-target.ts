@@ -176,6 +176,7 @@ function memberTarget(
     }
     case "last_landing_missing":
     case "last_shot_unresolved":
+    case "net_by_trajectory":
     case "net_hit_contradicts_height":
     case "winner_disputed":
       return [last, "landing"];

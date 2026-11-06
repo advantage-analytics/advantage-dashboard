@@ -187,8 +187,14 @@
  * `game_number`s in tiebreak sets move on rebuild. It also reads that model's
  * `ball_fit_ok` and `bounce_source` into `ballUntracked` (parse.ts) for the
  * label console's "Was the last shot real?" mark; no published row reads that.
+ * 0.8.11 (2026-11-06) adds the review-only point flag `net_by_trajectory`
+ * (flags.ts): the point ends on a rally ball whose flight crossed the net
+ * plane under 0.8 m, on a file whose flights run past the bounce (the
+ * November 2026 ball model, line-calls.ts `pastBounce`), with no net call and
+ * a bounce past the net. No result, winner, game or score moves; only
+ * `points.flags` gains the code, and only on new-model files.
  */
-export const DERIVATION_VERSION = "0.8.10-unreconciled";
+export const DERIVATION_VERSION = "0.8.11-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -317,6 +323,7 @@ export {
 export {
   flagPoint,
   flagStroke,
+  netByTrajectory,
   netHitContradictsHeight,
   pointsPlayed,
   POINT_FLAGS,

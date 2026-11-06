@@ -1023,6 +1023,7 @@ test.describe("the three tiers", () => {
       "last_call_overruled",
       "last_shot_unresolved",
       "last_shot_untracked",
+      "net_by_trajectory",
       "pick_winner",
       "result_type_unknown",
       "same_player_consecutive",
