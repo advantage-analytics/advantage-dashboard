@@ -28,9 +28,11 @@ import {
   serveCourtSide,
   SHOT_FLAGS,
   proposedPointsOf,
+  stalledScoreStream,
   type DerivedPoint,
   type DerivedShot,
   type ProposedPoint,
+  type ScoreStreamStall,
   type SplitStepRally,
   type SplitStepStroke,
   type Transcript,
@@ -403,6 +405,12 @@ export interface LabelMarks {
   suggestions: LabelSuggestion[];
   /** Label point id → the side its opening serve was hit from, when known. */
   serveSides: Record<string, LabelServeSide>;
+  /**
+   * The vendor's score stream hardly moved over the match (frozen.ts
+   * `stalledScoreStream`): its games, servers and winners were read from the
+   * serve and the last shot instead. Absent when it followed the match.
+   */
+  scoreStalled?: ScoreStreamStall;
 }
 
 /** What `buildLabelMarks` reads off a session's rows. */
@@ -804,6 +812,9 @@ export function buildLabelMarks(
     suggestions: [],
     serveSides: {},
   };
+  // Set only on a stalled stream, so an ordinary match's marks are unchanged.
+  const stall = stalledScoreStream(transcript.points);
+  if (stall) marks.scoreStalled = stall;
   const push = (
     into: Record<string, LabelMark[]>,
     id: string,

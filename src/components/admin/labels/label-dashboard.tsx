@@ -752,6 +752,29 @@ function publishChecks({
           detail: "No game is short or runs over.",
         },
     errorsCheck(points, errorsReady, onMarkErrors),
+    ...scoreStreamCheck(marks),
+  ];
+}
+
+/**
+ * The vendor's score stream hardly moved over the match (marks.ts
+ * `scoreStalled`). Open, never blocking, and only on such a match: the games,
+ * servers and winners were read from the serve and the last shot, so every
+ * game needs checking, not only the marked points.
+ */
+function scoreStreamCheck(marks: WidgetProps["marks"]): CheckItem[] {
+  const stall = marks?.scoreStalled;
+  if (!stall) return [];
+  const changes =
+    stall.gameChanges === 0
+      ? "never changed"
+      : `changed ${stall.gameChanges === 1 ? "once" : `${stall.gameChanges} times`}`;
+  return [
+    {
+      state: "open",
+      title: "Score read off the video",
+      detail: `The vendor’s game score ${changes} over ${stall.points} points, so the games, servers and winners here come from the serve and the last shot. Check every game, not only the marked points.`,
+    },
   ];
 }
 

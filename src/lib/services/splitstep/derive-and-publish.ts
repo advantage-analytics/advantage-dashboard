@@ -24,7 +24,7 @@ import {
 } from "./request-insights";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
 import type { AskArrivalAnswer } from "@/lib/services/ask/arrival";
-import type { Transcript } from "./derivation";
+import { stalledScoreStream, type Transcript } from "./derivation";
 
 const LOG = "[splitstep:derive]";
 
@@ -359,6 +359,15 @@ export async function deriveAndPublish(params: {
     // the previous run's proposal describing rows that were just rebuilt.
     const proposal = written.transcript.segmentation;
     if (proposal !== undefined) quality.segmentation = proposal;
+    // A score stream that barely moved over the match: published all the
+    // same (games from the serve, winners from the last shot), logged at warn
+    // so it is greppable, and recorded so a reader can tell. Written only when
+    // it stalled: the stall is the file's, and a job's file never changes.
+    const stall = stalledScoreStream(written.transcript.points);
+    if (stall) {
+      console.warn(`${LOG} score stream stalled`, { jobId, matchId, ...stall });
+      quality.scoreStream = { stalled: true, ...stall };
+    }
     if (Object.keys(quality).length > 0) {
       await mergeDerivationQuality(supabase, jobId, quality, LOG);
     }

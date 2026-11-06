@@ -1124,3 +1124,26 @@ test.describe("the three tiers", () => {
     expect(full.shots[last].map((m) => m.tier)).toEqual(["hidden"]);
   });
 });
+
+test.describe("scoreStalled", () => {
+  test("a stream that follows the match says nothing", () => {
+    expect(shownMarks.scoreStalled).toBeUndefined();
+  });
+
+  test("a whole-match frozen game score is named for the publish checks", () => {
+    const frozen = {
+      ...clean.transcript,
+      points: clean.transcript.points.map((p) => ({
+        ...p,
+        set_score: "0-0",
+        game_score: "0-0",
+      })),
+    };
+    const marks = buildLabelMarks(frozen, clean.analysis.rallies, cleanPoints);
+    expect(marks.scoreStalled).toEqual({
+      points: clean.transcript.points.length,
+      gameChanges: 0,
+      stalledPoints: clean.transcript.points.length,
+    });
+  });
+});
