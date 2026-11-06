@@ -70,7 +70,17 @@ function keysFor(rallies: SplitStepRally[]) {
       .map((s) => s.trim())
       .sort()
       .join("-");
-    key.set(r.rallyId, { set, game: `${set}|${f?.predGameScore}|${r.server}` });
+    // At 6-6 the server stays out of the key: one tiebreak is one game.
+    const tiebreak =
+      (f?.predGameScore ?? "")
+        .split("-")
+        .map((g) => g.trim())
+        .sort()
+        .join("-") === "6-6";
+    key.set(r.rallyId, {
+      set,
+      game: `${set}|${f?.predGameScore}${tiebreak ? "" : `|${r.server}`}`,
+    });
   }
   return key;
 }
@@ -2335,5 +2345,58 @@ test.describe("segmentation proposal (review-only)", () => {
       ]),
     );
     expect(proposalDifferingRallies(proposed, rows).size).toBe(0);
+  });
+});
+
+test.describe("tiebreak game cut", () => {
+  // The server changes every two points of a tiebreak while the game score
+  // stays 6-6; keyed on the server, one tiebreak became five or six games.
+  const servers = ["A", "B", "B", "A", "A", "B", "B", "A"];
+  const ralliesAt = (gameScore: string) =>
+    servers.map((server, i) => {
+      const other = server === "A" ? "B" : "A";
+      const strokes = [
+        stroke({
+          eventId: i * 2,
+          rallyId: i + 1,
+          playerLabel: server,
+          strokeType: "serve",
+          predGameScore: gameScore,
+          predPointScore: `${i}-0`,
+          videoTime: i * 30,
+          trimmedFrame: i * 900,
+          playerY: -12,
+        }),
+        stroke({
+          eventId: i * 2 + 1,
+          rallyId: i + 1,
+          playerLabel: other,
+          predGameScore: gameScore,
+          predPointScore: `${i}-0`,
+          videoTime: i * 30 + 2,
+          trimmedFrame: i * 900 + 60,
+          playerY: 12,
+        }),
+      ];
+      return { ...rally(strokes), rallyId: i + 1 };
+    });
+  const gamesOf = (gameScore: string) => {
+    const t = buildTranscript({
+      rallies: ralliesAt(gameScore),
+      labels: ["A", "B"],
+      score: null,
+      initialTopIsPlayer1: null,
+    });
+    expect(t.ok).toBe(true);
+    return new Set(t.points.map((p) => `${p.set_number}|${p.game_number}`))
+      .size;
+  };
+
+  test("a 6-6 tiebreak whose server changes every two points is one game", () => {
+    expect(gamesOf("6-6")).toBe(1);
+  });
+
+  test("off 6-6 a change of server still opens a game the score missed", () => {
+    expect(gamesOf("5-5")).toBe(5);
   });
 });

@@ -49,6 +49,7 @@ function mark<C extends LabelMarkCode>(
 const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   winner_disputed: { scoreWinner: "p2", lastStrokeWinner: "p1" },
   last_call_overruled: { vendorCall: "net", eventId: 7 },
+  last_shot_untracked: {},
   winner_to_error_by_bounce: { loser: "p1" },
   ending_suspect_line: {},
   second_serve_called_out: {},
@@ -148,6 +149,7 @@ test.describe("mark copy", () => {
       placement_missing: "No placement",
       pick_winner: "Pick the winner",
       last_call_overruled: "Was the last ball in?",
+      last_shot_untracked: "Was the last shot real?",
       phantom_strokes_dropped: "1 shot removed",
       out_ball_rally_continued: "Out call ignored",
       winner_guessed: "Winner guessed",

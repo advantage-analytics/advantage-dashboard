@@ -41,6 +41,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   placement_missing: "No placement",
   pick_winner: "Pick the winner",
   last_call_overruled: "Was the last ball in?",
+  last_shot_untracked: "Was the last shot real?",
   phantom_strokes_dropped: "1 shot removed",
   out_ball_rally_continued: "Out call ignored",
   winner_guessed: "Winner guessed",
@@ -358,6 +359,8 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       const call = mark.params.vendorCall === "net" ? "in the net" : "out";
       return `The last ball is in by its landing, but the vendor called it ${call}. Watch the bounce: if it was ${call}, change the result.`;
     }
+    case "last_shot_untracked":
+      return "No ball was tracked off the last shot. Most often it isn’t a shot at all, just a swing at a dead ball: delete it, and the point ends on the shot before.";
     case "pick_winner":
       return "The score, the last shot and the next serve don’t agree on who won. Watch the clip and choose.";
     case "ending_stale": {

@@ -712,6 +712,40 @@ test.describe("the labels-only flags", () => {
     ).toEqual([{ vendorCall: "in", eventId: calledIn.strokes[1].eventId }]);
   });
 
+  test("last_shot_untracked: the point's last stroke has no ball off it (new ball model only)", () => {
+    const untracked = rallyOf(1, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+      ["A", "groundstroke"],
+    ]);
+    untracked.strokes[2].ballUntracked = true;
+    // Mid-rally it says nothing: only the stroke the point ends on is asked.
+    const midRally = rallyOf(2, [
+      ["B", "serve"],
+      ["A", "groundstroke"],
+      ["B", "groundstroke"],
+    ]);
+    midRally.strokes[1].ballUntracked = true;
+    // An old-model file never sets it.
+    const oldFile = rallyOf(3, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+    ]);
+    const marks = allMarksFor([untracked, midRally, oldFile], ["A", "B", "A"]);
+    const of = (id: string) =>
+      (marks.points[id] ?? []).filter((m) => m.code === "last_shot_untracked");
+    expect(of("p1")).toEqual([
+      {
+        code: "last_shot_untracked",
+        tier: "count",
+        scope: "point",
+        params: {},
+      },
+    ]);
+    expect(of("p2")).toEqual([]);
+    expect(of("p3")).toEqual([]);
+  });
+
   test("serve_fault: one serve called out, one or two strokes after it", () => {
     const oneBack = rallyOf(1, [
       ["A", "serve", false],
@@ -973,7 +1007,7 @@ test.describe("Game cut differs on most of the match", () => {
 });
 
 test.describe("the three tiers", () => {
-  test("thirteen codes can change the score, and only they are counted", () => {
+  test("fourteen codes can change the score, and only they are counted", () => {
     const counted = Object.entries(LABEL_MARK_META)
       .filter(([, meta]) => meta.tier === "count")
       .map(([code]) => code);
@@ -981,6 +1015,7 @@ test.describe("the three tiers", () => {
       "first_serve_fault_alone",
       "last_call_overruled",
       "last_shot_unresolved",
+      "last_shot_untracked",
       "pick_winner",
       "result_type_unknown",
       "same_player_consecutive",

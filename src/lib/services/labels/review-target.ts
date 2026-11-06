@@ -96,7 +96,8 @@ const ENDING_ONLY: ReadonlySet<LabelMarkCode> = new Set([
  * - 1 "Same side twice": the stroke before the first open missing-shot slot,
  *   no end — its Add shot row is under it.
  * - 2: "Did the point end here?" and "Serve after a serve in play" at their
- *   stroke, a serve replayed after one in at the first stroke; no end.
+ *   stroke, "Was the last shot real?" at the last stroke, a serve replayed
+ *   after one in at the first stroke; no end.
  * - 3: "Serve in, landing outside the box" at its serve, on the landing;
  *   "Second serve?" at its serve, no end; "Fault, no second serve" at the last
  *   stroke and a second serve called out at the last second serve, on the
@@ -177,6 +178,8 @@ function memberTarget(
     case "net_hit_contradicts_height":
     case "winner_disputed":
       return [last, "landing"];
+    case "last_shot_untracked":
+      return [last, null];
     case "ending_suspect_line":
     case "winner_to_error_by_bounce":
       return [live.at(-2)?.id ?? null, "landing"];

@@ -496,9 +496,14 @@ export function buildTranscript(options: BuildOptions): Transcript {
     // set on the raw string splits every game into its own set — set one
     // survives only because "0-0" happens to be symmetric. Sort the pair.
     setKeyOf.set(rally.rallyId, orderlessScore(first?.predSetScore ?? null));
+    // The server is in the key so a game score the stream failed to move
+    // still splits at the change of server. At 6-6 that is a tiebreak, where
+    // the server changes every two points inside one game, so it stays out:
+    // keyed on it, every tiebreak was cut into five or six games.
+    const tiebreak = orderlessScore(first?.predGameScore ?? null) === "6-6";
     gameKeyOf.set(
       rally.rallyId,
-      `${orderlessScore(first?.predSetScore ?? null)}|${first?.predGameScore}|${rally.server}`,
+      `${orderlessScore(first?.predSetScore ?? null)}|${first?.predGameScore}${tiebreak ? "" : `|${rally.server}`}`,
     );
   }
 

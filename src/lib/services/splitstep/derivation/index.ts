@@ -171,8 +171,19 @@
  * in the net and credited a false winner. Those points gain
  * `result_type_unknown` and seed with no ending. Winners, games, scores and
  * `shots.result` do not move; winners and errors in `match_stats` can.
+ * 0.8.10 (2026-11-06) keeps a tiebreak one game: at a 6-6 game score the
+ * game key leaves out the server (transcript.ts), which changes every two
+ * points inside a tiebreak and had cut each one into five or six games. On
+ * the 21 complete label sessions false game starts drop 164 → 137 with the
+ * same 287 of 402 labelled starts found; on the 6 matches reprocessed with
+ * the November 2026 ball model, 48 → 31 with the same 104 of 130. Point
+ * counts do not move; one winner did, on session e8465845's match, to agree
+ * with its labels. Published `game_number`s in tiebreak sets move on
+ * rebuild. It also reads that model's `ball_fit_ok` and
+ * `bounce_source` into `ballUntracked` (parse.ts) for the label console's
+ * "Was the last shot real?" mark; no published row reads that.
  */
-export const DERIVATION_VERSION = "0.8.9-unreconciled";
+export const DERIVATION_VERSION = "0.8.10-unreconciled";
 
 export type {
   RawSplitStepStroke,

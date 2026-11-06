@@ -1070,7 +1070,12 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
   {
     id: 2,
     question: REVIEW_ITEM_QUESTION[2],
-    codes: ["shot_after_point_end", "serve_after_serve_in", "reserve_after_in"],
+    codes: [
+      "shot_after_point_end",
+      "last_shot_untracked",
+      "serve_after_serve_in",
+      "reserve_after_in",
+    ],
   },
   {
     id: 3,
