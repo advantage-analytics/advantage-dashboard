@@ -23,7 +23,11 @@
  */
 
 import { BASELINE_M, SINGLES_HALF_WIDTH_M } from "./court";
-import { flightSamples, groupTrajectories } from "./trajectory";
+import {
+  flightSamples,
+  groupTrajectories,
+  type TrajectoryFlight,
+} from "./trajectory";
 import type { SplitStepStroke } from "./types";
 
 export interface LineCall {
@@ -31,6 +35,15 @@ export interface LineCall {
   margin: number | null;
   /** Ball height (m) where the flight crosses the net plane; null if never. */
   netClearance: number | null;
+  /**
+   * Whether this file's flights run on past their bounce, as the vendor's
+   * November 2026 ball model draws them, rather than stopping at it. The same
+   * for every stroke of a file. Only then does `netClearance` read as a net
+   * call (flags.ts `NET_BY_TRAJECTORY`): measured on 10 labelled matches, a
+   * low crossing named a net ball the pre-fill missed 71% of the time on the
+   * new files and 28% on the same matches' old ones. Absent means false.
+   */
+  pastBounce?: boolean;
   /** Where `margin` came from; null when neither source had a bounce. */
   source: "trajectory" | "strokes" | null;
 }
@@ -62,6 +75,8 @@ export function lineCallsFor(
       ? new Map()
       : groupTrajectories(rawTrajectories, frames);
 
+  const pastBounce = flightsRunPastBounce(flights.values());
+
   const calls = new Map<SplitStepStroke, LineCall>();
   for (const stroke of strokes) {
     const flight = flights.get(stroke.trimmedFrame);
@@ -84,10 +99,35 @@ export function lineCallsFor(
     calls.set(stroke, {
       margin: margin === null ? null : round2(margin),
       netClearance: netCrossingHeight(samples),
+      // Set only when true, so an old-model file's calls are unchanged.
+      ...(pastBounce ? { pastBounce } : {}),
       source,
     });
   }
   return calls;
+}
+
+/** Frames past its bounce a flight must reach to count as running on. */
+const PAST_BOUNCE_FRAMES = 10;
+
+/**
+ * Whether most of a file's flights that bounce carry samples at least
+ * `PAST_BOUNCE_FRAMES` past it. Old-model files stop at the bounce (under 3%
+ * of flights go on); the November 2026 model runs on to the next contact or
+ * about 26 frames on.
+ */
+function flightsRunPastBounce(flights: Iterable<TrajectoryFlight>): boolean {
+  let bounced = 0;
+  let runOn = 0;
+  for (const flight of flights) {
+    if (flight.bounceFrame === null) continue;
+    bounced += 1;
+    const last = flightSamples(flight).at(-1);
+    if (last && last.frame >= flight.bounceFrame + PAST_BOUNCE_FRAMES) {
+      runOn += 1;
+    }
+  }
+  return bounced > 0 && runOn * 2 > bounced;
 }
 
 /** Height where consecutive samples change side of the net, interpolated. */
