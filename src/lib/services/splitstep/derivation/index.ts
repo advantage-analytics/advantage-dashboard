@@ -171,8 +171,24 @@
  * in the net and credited a false winner. Those points gain
  * `result_type_unknown` and seed with no ending. Winners, games, scores and
  * `shots.result` do not move; winners and errors in `match_stats` can.
+ * 0.8.10 (2026-11-06) keeps a tiebreak one game (transcript.ts
+ * `rallyGameKey`). The game key carries the server, which changes every two
+ * points inside a tiebreak, so each one was cut into five or six games. At a
+ * 6-6 game score the server now stays out while the point score reads as a
+ * tiebreak (plain numbers; a 0-0 opener follows the rally after it) and stays
+ * in for a game scored 15/30/40/AD. On the 21 complete label sessions false
+ * game starts drop 164 → 137 with the same 287 of 402 labelled starts found;
+ * on the 11 matches reprocessed with the November 2026 ball model, 57 → 40
+ * with the same 156 of 201. Point counts do not move; one winner did, on
+ * session e8465845's match, to agree with its labels. The segmenter's
+ * proposal is unchanged (339 / 160 starts found, same extras); its
+ * `segment_proposal_differs` marks drop 496 → 472 and 224 → 210, the
+ * published games now agreeing with it inside tiebreaks. Published
+ * `game_number`s in tiebreak sets move on rebuild. It also reads that model's
+ * `ball_fit_ok` and `bounce_source` into `ballUntracked` (parse.ts) for the
+ * label console's "Was the last shot real?" mark; no published row reads that.
  */
-export const DERIVATION_VERSION = "0.8.9-unreconciled";
+export const DERIVATION_VERSION = "0.8.10-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -335,6 +351,7 @@ export {
   proposalDifferingRallies,
   type ProposalComparableRow,
   proposedPointsOf,
+  rallyGameKey,
   type ProposedPoint,
   type Transcript,
   type DerivedPoint,

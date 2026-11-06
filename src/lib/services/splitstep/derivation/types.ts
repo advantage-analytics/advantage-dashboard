@@ -81,6 +81,14 @@ export interface RawSplitStepStroke {
   ball_spin_type?: string;
   ball_initial_height_m?: number;
   ball_height_at_net_m?: number;
+
+  /**
+   * The November 2026 ball model's fit columns. Absent from older files.
+   * `ball_fit_ok` false with no `bounce_source` means the ball was neither
+   * fitted nor detected off this stroke.
+   */
+  ball_fit_ok?: boolean;
+  bounce_source?: string;
 }
 
 /** The three stroke categories the vendor emits. Nothing finer exists. */
@@ -155,6 +163,13 @@ export interface SplitStepStroke {
    */
   in: boolean;
   lineConfidence: number | null;
+
+  /**
+   * True when the file carries the November 2026 ball-fit columns and says no
+   * ball was tracked off this stroke: `ball_fit_ok` false and no
+   * `bounce_source`. Absent otherwise, and always on older files.
+   */
+  ballUntracked?: boolean;
 }
 
 /** Strokes of one point, in play order, as segmented by the vendor. */

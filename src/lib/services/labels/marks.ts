@@ -97,6 +97,12 @@ export const LABEL_ONLY_FLAGS = {
    * said in: the call that decides the point was overruled by geometry alone.
    */
   LAST_CALL_OVERRULED: "last_call_overruled",
+  /**
+   * The point's last stroke has no ball off it at all: the November 2026
+   * ball model neither fitted nor detected one (`ballUntracked`). Older files
+   * never say, so it never fires on them.
+   */
+  LAST_SHOT_UNTRACKED: "last_shot_untracked",
 } as const;
 
 /**
@@ -147,6 +153,19 @@ export const LABEL_ONLY_FLAGS = {
  * - `net_hit_contradicts_height` is hidden on every stroke: 51% fixed.
  * - `winner_to_error_by_bounce` is hidden: it never fired without
  *   `ending_suspect_line` and caught no fix that mark did not.
+ *
+ * 2026-11-06, on the 11 labelled matches reprocessed with the vendor's new
+ * ball model (1,147 points, each pre-filled from the new file with current
+ * code and compared with its final labels; base: fixed 56%, winner changed
+ * 26%): `last_shot_untracked` is new and counted. It fired on 49 points; 92%
+ * were fixed and the winner moved on 47%. A serve the point ends on is never
+ * asked (deleting it is no fix). 22 of the 49 are on one match (5dbf53c4); on
+ * the other ten it fired 27 times, 25 fixed, the winner moved on 7 — the
+ * base rate, so outside that match it is mostly a stroke to delete. It cannot
+ * fire on an old-model file: 0 fires over the 21 old-model sessions.
+ * Measured on the same data and left as they are: `serve_fault` (63% fixed on
+ * the new file, 59% on the 21 old-model sessions, against 56% / 55% — barely
+ * above base) and `ending_suspect_line` (80% / 73%, above base).
  */
 export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_DISPUTED]: { tier: "count", scope: "point" },
@@ -163,6 +182,7 @@ export const LABEL_MARK_META = {
   },
   [POINT_FLAGS.WINNER_GUESSED]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED]: { tier: "count", scope: "point" },
+  [LABEL_ONLY_FLAGS.LAST_SHOT_UNTRACKED]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS]: { tier: "count", scope: "point" },
   [POINT_FLAGS.ENDING_SUSPECT_LINE]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hidden", scope: "point" },
@@ -252,6 +272,8 @@ export interface LabelMarkParams {
    * which stroke that ball was — the answer is written to that stroke only.
    */
   last_call_overruled: { vendorCall: "in" | "out" | "net"; eventId: number };
+  /** The vendor stroke the point ends on, whose ball was not tracked. */
+  last_shot_untracked: { eventId: number };
   shot_after_point_end: {
     /** The last live stroke that lands out or in the net. */
     shotId: string;
@@ -545,6 +567,12 @@ function pointMarks(
   const called = last
     ? rally?.strokes.find((stroke) => stroke.eventId === last.event_id)
     : undefined;
+  // A serve is never asked: deleting the point's only serve is no fix.
+  if (called?.ballUntracked && called.strokeType !== "serve") {
+    marks.push(
+      mark(LABEL_ONLY_FLAGS.LAST_SHOT_UNTRACKED, { eventId: called.eventId }),
+    );
+  }
   if (last && called) {
     const vendorCall = called.netHit ? "net" : called.in ? "in" : "out";
     const seededIn = last.result === "In";
