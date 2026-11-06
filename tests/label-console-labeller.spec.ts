@@ -144,8 +144,22 @@ test.describe("viewerKind=labeller", () => {
     const cells = [...html.matchAll(/data-cell="Shot \d+ player"/g)];
     expect(cells.length).toBeGreaterThan(0);
     for (const cell of cells) {
-      const at = cell.index!;
-      const own = html.slice(at, html.indexOf("data-cell=", at + 10));
+      // The cell's own `<span>`, matched to its close — never the page after
+      // it, where a winner mark's "Player 1" would answer for a broken cell.
+      const start = html.lastIndexOf("<span", cell.index!);
+      const tags = /<span\b|<\/span>/g;
+      tags.lastIndex = start;
+      let depth = 0;
+      let end = -1;
+      for (let m = tags.exec(html); m; m = tags.exec(html)) {
+        depth += m[0] === "</span>" ? -1 : 1;
+        if (depth === 0) {
+          end = m.index + m[0].length;
+          break;
+        }
+      }
+      expect(end, cell[0]).toBeGreaterThan(start);
+      const own = html.slice(start, end);
       expect(own).toMatch(/>Player [12]</);
       expect(own).toContain('tabindex="0"');
     }
