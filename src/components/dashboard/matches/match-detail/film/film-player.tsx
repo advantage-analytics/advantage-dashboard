@@ -205,9 +205,9 @@ interface FilmPlayerProps {
    * The first `play` event of each loaded source (`generation`) on this
    * surface — what counts as a view of the video (SwingVision Add video T8).
    * Never on render, never on a credential mint: only a `play` the element
-   * actually fired. Suppressed while `background`.
+   * actually fired. Suppressed while `background`. `positionSec` is where the
+   * play began, for analytics (`video_played`).
    */
-  /** `positionSec`: where the play began, for analytics (`video_played`). */
   onFirstPlay?: (generation: number, positionSec: number) => void;
   /** The terminal state's button, where the hook says one could help. */
   onRetry: () => void;

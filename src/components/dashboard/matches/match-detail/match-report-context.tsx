@@ -64,11 +64,8 @@ export interface MatchReportActions {
    * shell player starts on the first point the list admits. The film tab
    * consumes it once (`film-cut-context.tsx`, `landFilmCut`).
    * A no-op without a playable video — there is no Video view to open, and
-   * `/m/[token]` has one only when its link carries the video.
-   */
-  /**
-   * `section` names the card the click came from, for analytics only
-   * (`stat_clicked`) — it changes nothing on screen.
+   * `/m/[token]` has one only when its link carries the video. `section`
+   * names the card the click came from, for analytics only (`stat_clicked`).
    */
   watchCut(cut: FilmCut, label: string, section?: string): void;
   collapseInsight(): void;
@@ -286,7 +283,7 @@ export function MatchReportProvider({
     if (viewSourceRef.current?.matchId !== matchId) {
       viewSourceRef.current = {
         matchId,
-        source: readOnly ? "share_link" : matchViewSource(),
+        source: readOnly ? "share_link" : matchViewSource(pathname),
       };
     }
     track("match_viewed", {
@@ -294,7 +291,7 @@ export function MatchReportProvider({
       tab: view,
       source: viewSourceRef.current.source,
     });
-  }, [matchId, view, readOnly, sample]);
+  }, [matchId, view, readOnly, sample, pathname]);
 
   // Collapse is only this visit's state; every visit opens expanded.
   const [insight, setInsight] = useState<InsightStatus>("expanded");

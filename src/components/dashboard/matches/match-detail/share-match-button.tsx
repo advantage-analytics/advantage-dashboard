@@ -1,6 +1,6 @@
 "use client";
 
-import { track } from "@/lib/analytics";
+import { track, type ShareMethod } from "@/lib/analytics";
 import {
   useEffect,
   useOptimistic,
@@ -461,10 +461,13 @@ export function SharePopoverPanel({
   // it off is anyone's who may share the match, so a ticked box stays live.
   const videoRowLive = canShareVideo || link?.includesVideo === true;
 
+  const trackShare = (method: ShareMethod) =>
+    track("match_shared", { match_id: match.id, method });
+
   async function nativeShare() {
     try {
       await navigator.share({ title: shareTitle, url });
-      track("match_shared", { match_id: match.id, method: "native_share" });
+      trackShare("native_share");
       onClose();
     } catch {
       // user cancelled — keep popover open
@@ -583,21 +586,14 @@ export function SharePopoverPanel({
           )}
         </div>
         <div className="px-2.5 pt-2 pb-2.5">
-          <UrlRow
-            url={url}
-            onCopied={() =>
-              track("match_shared", { match_id: match.id, method: "copy_link" })
-            }
-          />
+          <UrlRow url={url} onCopied={() => trackShare("copy_link")} />
         </div>
         {/* The other ways out are menu rows, not a second set of buttons:
             Copy is the popover's one button. */}
         <div className="-mt-1 flex flex-col pb-0.5">
           <a
             href={buildMailtoHref(match, url)}
-            onClick={() =>
-              track("match_shared", { match_id: match.id, method: "email" })
-            }
+            onClick={() => trackShare("email")}
             className={cn(
               SCOPE_ROW,
               ROW_HOVER,
@@ -639,12 +635,7 @@ export function SharePopoverPanel({
       <>
         <SectionLabel>Team link</SectionLabel>
         <div className="px-2.5 pt-1.5 pb-2.5">
-          <UrlRow
-            url={team.teamUrl}
-            onCopied={() =>
-              track("match_shared", { match_id: match.id, method: "copy_link" })
-            }
-          />
+          <UrlRow url={team.teamUrl} onCopied={() => trackShare("copy_link")} />
         </div>
       </>
     );

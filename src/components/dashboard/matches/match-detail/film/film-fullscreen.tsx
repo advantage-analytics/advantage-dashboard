@@ -204,9 +204,9 @@ export interface FilmFullscreenProps {
   onPlayRejected: () => void;
   /**
    * The first `play` event of each loaded source (`generation`) in this room
-   * — a view of the video (SwingVision Add video T8). See `film-player.tsx`.
+   * — a view of the video (SwingVision Add video T8). See `film-player.tsx`
+   * (`positionSec` is for analytics).
    */
-  /** `positionSec`: where the play began, for analytics (`video_played`). */
   onFirstPlay?: (generation: number, positionSec: number) => void;
   onRetry: () => void;
   /**

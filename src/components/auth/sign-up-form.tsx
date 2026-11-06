@@ -105,7 +105,13 @@ export function SignUpForm({
           },
         });
       if (signUpError) throw signUpError;
-      setSignupAttribution(signUpData.user?.id ?? null);
+      // An address that already has an account comes back as a placeholder
+      // user with no identities and an id that is not the account's: never
+      // identify with it.
+      const newUser = signUpData.user;
+      setSignupAttribution(
+        newUser && (newUser.identities?.length ?? 0) > 0 ? newUser.id : null,
+      );
       router.push(authHref("/sign-up-success", destination));
     } catch (err: unknown) {
       setError(toAuthError(err));

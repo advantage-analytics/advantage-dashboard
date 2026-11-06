@@ -151,17 +151,17 @@ export function DashboardShell({
     active.team,
   ]);
 
+  // For `match_viewed`'s source — see `matchViewSource()`.
+  useEffect(() => {
+    noteDashboardPath(pathname);
+  }, [pathname]);
+
   /**
    * Clear upload data when leaving the upload flow, so returning to the wizard
    * starts clean. The path is the wizard's own route — this used to name
    * `/dashboard/upload`, which no route has ever matched, so the guard never
    * held and storage was cleared everywhere.
    */
-  // For `match_viewed`'s source — see `matchViewSource()`.
-  useEffect(() => {
-    noteDashboardPath(pathname);
-  }, [pathname]);
-
   useEffect(() => {
     if (!pathname.startsWith("/dashboard/matches/new")) {
       // "Save draft" in the wizard's footer sets this flag, and it is the one

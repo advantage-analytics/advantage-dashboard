@@ -194,10 +194,14 @@ export function UploadMatchFlow({
         | { matchId?: string; removedMatchId?: string; error?: string }
         | undefined;
       const error = detail?.error || "The upload stopped before it completed.";
-      // Only the failures outside the transfer: a transfer's own `"failed"`
-      // event was already counted in handleVideoUpload.
+      // The failures outside the transfer — a rollback, or a job insert or
+      // import that failed after the row was written. A transfer's own
+      // `"failed"` was counted in handleVideoUpload first, and
+      // trackUploadFailed sends one failure per match.
       if (detail?.removedMatchId === match.matchId) {
         trackUploadFailed("match_rollback", error, match.matchId);
+      } else if (detail?.matchId === match.matchId) {
+        trackUploadFailed("after_create", error, match.matchId);
       }
       // The row was rolled back. Only this match's rollback counts: after an
       // in-place "Upload another", an earlier run's late one names its own.

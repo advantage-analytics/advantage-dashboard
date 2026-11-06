@@ -59,11 +59,19 @@ export function trackUploadCompleted(matchId: string): void {
   });
 }
 
+// Matches whose failure has been sent, so the window event that follows a
+// transfer's own `"failed"` (UploadMatchFlow) does not count it twice.
+const failedMatches = new Set<string>();
+
 export function trackUploadFailed(
   step: string,
   error: unknown,
   matchId?: string,
 ): void {
+  if (matchId) {
+    if (failedMatches.has(matchId)) return;
+    failedMatches.add(matchId);
+  }
   const transfer = matchId ? transfers.get(matchId) : undefined;
   if (matchId) transfers.delete(matchId);
   const bytes = transfer ? transfer.bytes : selectedVideoBytes;

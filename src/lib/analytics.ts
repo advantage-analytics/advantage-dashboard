@@ -99,24 +99,32 @@ export function safeErrorMessage(error: unknown): string {
 // -- Navigation ------------------------------------------------------------
 
 let lastDashboardPath: string | null = null;
+let previousDashboardPath: string | null = null;
 
 /**
- * Remember the dashboard path just left. Called by `DashboardShell` on every
- * path change; its effect runs after the page's own, so a page reading
- * `matchViewSource()` on arrival still sees where the visitor came from.
+ * Remember each dashboard path visited. Called by `DashboardShell` on every
+ * path change. Two are kept because the order is not fixed: a route with a
+ * `loading.tsx` commits the new path (and the shell notes it) before the page
+ * mounts, while one without lets the page's effect run first.
  */
 export function noteDashboardPath(pathname: string): void {
+  if (pathname === lastDashboardPath) return;
+  previousDashboardPath = lastDashboardPath;
   lastDashboardPath = pathname;
 }
 
 /**
- * Where a match report was opened from: the matches list, any other dashboard
- * page, or null for a direct load (a bookmark, a pasted link, a refresh).
- * The share page answers `share_link` itself.
+ * Where the page at `currentPath` was opened from: the matches list, any
+ * other dashboard page, or null for a direct load (a bookmark, a pasted
+ * link, a refresh). The share page answers `share_link` itself.
  */
-export function matchViewSource(): MatchViewSource | null {
-  if (lastDashboardPath == null) return null;
-  return /^\/dashboard\/(team\/)?matches\/?$/.test(lastDashboardPath)
+export function matchViewSource(currentPath: string): MatchViewSource | null {
+  const origin =
+    lastDashboardPath === currentPath
+      ? previousDashboardPath
+      : lastDashboardPath;
+  if (origin == null) return null;
+  return /^\/dashboard\/(team\/)?matches\/?$/.test(origin)
     ? "list"
     : "dashboard";
 }
@@ -125,6 +133,17 @@ export function matchViewSource(): MatchViewSource | null {
 
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign"] as const;
 const UTM_STORAGE_KEY = "adv_first_utm";
+
+/** The UTM parameters on the current URL, each cut to 100 characters. */
+function utmsFromLocation(): Record<string, string> {
+  const params = new URLSearchParams(window.location.search);
+  const found: Record<string, string> = {};
+  for (const key of UTM_KEYS) {
+    const value = params.get(key);
+    if (value) found[key] = value.slice(0, 100);
+  }
+  return found;
+}
 
 /**
  * Keep the first landing's UTM parameters for this browser session, so a
@@ -135,12 +154,7 @@ export function rememberLandingUtms(): void {
   if (typeof window === "undefined") return;
   try {
     if (sessionStorage.getItem(UTM_STORAGE_KEY)) return;
-    const params = new URLSearchParams(window.location.search);
-    const found: Record<string, string> = {};
-    for (const key of UTM_KEYS) {
-      const value = params.get(key);
-      if (value) found[key] = value.slice(0, 100);
-    }
+    const found = utmsFromLocation();
     if (Object.keys(found).length > 0) {
       sessionStorage.setItem(UTM_STORAGE_KEY, JSON.stringify(found));
     }
@@ -160,11 +174,7 @@ export function setSignupAttribution(userId: string | null): void {
   if (!isPostHogConfigured || typeof window === "undefined") return;
   let utms: Record<string, string> = {};
   try {
-    const params = new URLSearchParams(window.location.search);
-    for (const key of UTM_KEYS) {
-      const value = params.get(key);
-      if (value) utms[key] = value.slice(0, 100);
-    }
+    utms = utmsFromLocation();
     if (Object.keys(utms).length === 0) {
       utms = JSON.parse(sessionStorage.getItem(UTM_STORAGE_KEY) ?? "{}");
     }
