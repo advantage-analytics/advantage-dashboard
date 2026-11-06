@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/labels/marks";
 import {
   firstAmberStop,
+  LABELLER_SIDE_NAMES,
   labellerSession,
   labellerWording,
 } from "@/lib/services/labels/labeller-view";
@@ -125,6 +126,37 @@ test.describe("viewerKind=labeller", () => {
     expect(html).toMatch(/>Player 2</);
     expect(html).not.toMatch(/>Near</);
     expect(html).not.toMatch(/>Far</);
+  });
+
+  test("a labeller can still switch a stroke's hitter, between Player 1 and Player 2", () => {
+    const session = labellerSession(labelSessionFixture());
+    const point = session.points.find((p) => p.shots.length > 0)!;
+    const html = render(
+      consoleProps({
+        viewerKind: "labeller",
+        initialLayoutMode: "black",
+        session,
+        initialExpandedPointId: point.id,
+      }),
+    );
+    // Every stroke's hitter cell is there, editable, and names a side by
+    // number — never a surname cut from "Player 1" (sideNames would give "1").
+    const cells = [...html.matchAll(/data-cell="Shot \d+ player"/g)];
+    expect(cells.length).toBeGreaterThan(0);
+    for (const cell of cells) {
+      const at = cell.index!;
+      const own = html.slice(at, html.indexOf("data-cell=", at + 10));
+      expect(own).toMatch(/>Player [12]</);
+      expect(own).toContain('tabindex="0"');
+    }
+    // The menu the cell opens offers exactly the two numbered sides.
+    const { sideOptions } = createLoader().load(
+      "src/components/admin/labels/label-format.ts",
+    ) as typeof import("@/components/admin/labels/label-format");
+    expect(sideOptions(LABELLER_SIDE_NAMES).map((o) => o.label)).toEqual([
+      "Player 1",
+      "Player 2",
+    ]);
   });
 
   test("the session the page passes carries no identifying field", () => {
