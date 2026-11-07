@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { flushServerAnalytics, trackServer } from "@/lib/analytics-server";
+import { hashToken } from "./tokens";
 import { validatePassword } from "@/lib/auth/error-messages";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
 import {
@@ -260,6 +262,77 @@ async function activate(programId: string): Promise<void> {
   revalidatePath("/dashboard", "layout");
 }
 
+/**
+ * `invite_accepted`, for the person who just joined. `inviter_role` is the
+ * inviter's role in this program as it stands now — read off
+ * `program_members`, since the invite row keeps only who sent it. Null when
+ * the inviter is unknown or has left. Never throws. The two reads run in
+ * `after()`, off the response path, so the redirect into the team never
+ * waits on an analytics-only lookup.
+ */
+function trackInviteAccepted(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  programId: string,
+  inviter:
+    | { kind: "token"; token: string }
+    | { kind: "invite_id"; inviteId: string }
+    | { kind: "join_link"; token: string },
+): void {
+  after(() => recordInviteAccepted(admin, userId, programId, inviter));
+}
+
+async function recordInviteAccepted(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  programId: string,
+  inviter: Parameters<typeof trackInviteAccepted>[3],
+): Promise<void> {
+  try {
+    const source =
+      inviter.kind === "join_link"
+        ? await admin
+            .from("program_join_links")
+            .select("created_by")
+            .eq("token", inviter.token)
+            .maybeSingle()
+        : inviter.kind === "token"
+          ? await admin
+              .from("program_invites")
+              .select("invited_by")
+              .eq("token_hash", hashToken(inviter.token.trim()))
+              .maybeSingle()
+          : await admin
+              .from("program_invites")
+              .select("invited_by")
+              .eq("id", inviter.inviteId)
+              .maybeSingle();
+    const row = source.data as {
+      invited_by?: string | null;
+      created_by?: string | null;
+    } | null;
+    const inviterId = row?.invited_by ?? row?.created_by ?? null;
+    let inviterRole: string | null = null;
+    if (inviterId) {
+      const { data: member } = await admin
+        .from("program_members")
+        .select("role")
+        .eq("program_id", programId)
+        .eq("user_id", inviterId)
+        .maybeSingle();
+      inviterRole = (member?.role as string | undefined) ?? null;
+    }
+    trackServer(userId, "invite_accepted", {
+      inviter_role: inviterRole,
+      program_id: programId,
+    });
+    // Already inside `after()`: flush here rather than queue another one.
+    await flushServerAnalytics();
+  } catch {
+    // Analytics only.
+  }
+}
+
 /** Where every successful accept ends: inside the program, on the team page. */
 async function finishJoin(programId: string): Promise<never> {
   await activate(programId);
@@ -500,6 +573,10 @@ export async function acceptInvite(
     const admin = createAdminClient();
     // Before `finishJoin`, which redirects by throwing.
     await adoptMembershipAndNotify(admin, user.id, outcome.programId);
+    trackInviteAccepted(admin, user.id, outcome.programId, {
+      kind: "token",
+      token,
+    });
   }
   return finishJoin(outcome.programId);
 }
@@ -541,6 +618,10 @@ export async function acceptPendingInvite(
   if (user?.id) {
     const admin = createAdminClient();
     await adoptMembershipAndNotify(admin, user.id, outcome.programId);
+    trackInviteAccepted(admin, user.id, outcome.programId, {
+      kind: "invite_id",
+      inviteId,
+    });
   }
   return finishJoin(outcome.programId);
 }
@@ -654,6 +735,10 @@ export async function createAccountAndAccept(
   // the whole point.
   if (created?.user?.id) {
     await adoptMembershipAndNotify(admin, created.user.id, outcome.programId);
+    trackInviteAccepted(admin, created.user.id, outcome.programId, {
+      kind: "token",
+      token,
+    });
   }
   return finishJoin(outcome.programId);
 }
@@ -687,6 +772,10 @@ async function finishJoinLink(
     const admin = createAdminClient();
     // Before `finishJoin`, which redirects by throwing.
     await adoptMembershipAndNotify(admin, userId, outcome.programId);
+    trackInviteAccepted(admin, userId, outcome.programId, {
+      kind: "join_link",
+      token,
+    });
   }
   return finishJoin(outcome.programId);
 }

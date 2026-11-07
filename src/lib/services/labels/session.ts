@@ -362,6 +362,15 @@ export interface LabelSession {
   jobId: string | null;
   matchId: string;
   status: "labelling" | "submitted" | "complete";
+  /**
+   * `analyst` for real work, `practice` for a test copy graded against an
+   * analyst session (practice-session.ts). A practice copy is never
+   * published: the server refuses it at every publish door. Absent reads as
+   * `analyst` (sessions built before the column, test fixtures).
+   */
+  kind?: "analyst" | "practice";
+  /** Practice only: the one set the copy covers, or null for the match. */
+  practiceSetNumber?: number | null;
   derivationVersion: string;
   /** `matches.player1_name` — the p1 side every label row means. */
   player1Name: string;

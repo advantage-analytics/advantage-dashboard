@@ -170,6 +170,24 @@ const BUSY = "This row changed while it was saving. Try again.";
 const MAX_EDIT_ATTEMPTS = 3;
 
 /**
+ * A practice copy (practice-session.ts) is a paid test: it is submitted and
+ * graded, never published. Said wherever a publish is refused for it.
+ */
+export const PRACTICE_NEVER_PUBLISHED =
+  "This is a practice session. Practice sessions are graded, never published.";
+
+export interface SessionGateOptions {
+  blind?: string;
+  allowSubmitted?: boolean;
+  /**
+   * The gate a publish takes (Mark complete): refuses a practice session with
+   * `PRACTICE_NEVER_PUBLISHED`. The database refuses it too — the publish
+   * lease skips practice rows and a CHECK keeps them from `complete`.
+   */
+  forPublish?: boolean;
+}
+
+/**
  * The session's gate, in one read: refuses anything but a `labelling` session
  * with an error sentence (`SUBMITTED` for one with an admin, `FROZEN` for one
  * published), else answers `ghosts` — whether the session draws
@@ -189,19 +207,24 @@ export async function readSessionGate(
   {
     blind,
     allowSubmitted = false,
-  }: { blind?: string; allowSubmitted?: boolean } = {},
+    forPublish = false,
+  }: SessionGateOptions = {},
 ): Promise<{ ghosts: boolean } | { error: string }> {
   const { data, error } = await supabase
     .from("label_sessions")
-    .select("status, marks_enabled, publishing_since")
+    .select("status, marks_enabled, publishing_since, kind")
     .eq("id", sessionId)
     .maybeSingle<{
       status: string;
       marks_enabled?: boolean | null;
       publishing_since?: string | null;
+      kind?: string | null;
     }>();
   if (error) return { error: `Could not read the session: ${error.message}` };
   if (!data) return { error: "Session not found." };
+  if (forPublish && data.kind === "practice") {
+    return { error: PRACTICE_NEVER_PUBLISHED };
+  }
   if (data.status === "submitted") {
     if (!allowSubmitted) return { error: SUBMITTED };
   } else if (data.status !== "labelling") {
@@ -217,7 +240,7 @@ export async function readSessionGate(
 export async function checkSessionOpen(
   supabase: AdminClient,
   sessionId: string,
-  options: { blind?: string; allowSubmitted?: boolean } = {},
+  options: SessionGateOptions = {},
 ): Promise<string | null> {
   const gate = await readSessionGate(supabase, sessionId, options);
   return "error" in gate ? gate.error : null;

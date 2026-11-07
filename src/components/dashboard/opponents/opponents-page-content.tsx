@@ -1,5 +1,6 @@
 "use client";
 
+import { trackOpponentCutChange } from "./opponents-analytics";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Brain } from "lucide-react";
@@ -124,6 +125,7 @@ export function OpponentsPageContent({
     ) {
       close(null);
     }
+    trackOpponentCutChange("opponents_personal", cut, next);
     setCut(next);
   };
 

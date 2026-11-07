@@ -23,8 +23,9 @@ import {
   waitForInsights,
 } from "./request-insights";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
+import { trackServer } from "@/lib/analytics-server";
 import type { AskArrivalAnswer } from "@/lib/services/ask/arrival";
-import type { Transcript } from "./derivation";
+import { stalledScoreStream, type Transcript } from "./derivation";
 
 const LOG = "[splitstep:derive]";
 
@@ -327,6 +328,10 @@ export async function deriveAndPublish(params: {
     const ask = await arrival;
     await notifyAnalysisOutcome({ supabase, jobId, outcome: "ready", ask });
 
+    // `analysis_ready`, attributed to the uploader. Not on a rebuild: that
+    // republishes a match whose analysis was already ready once.
+    if (!rebuild) await trackAnalysisReady(supabase, jobId, matchId);
+
     // `unreconciled` is reachable now (ACCEPT_UNRECONCILED_FOLD): the fold did
     // not reproduce the entered score and the rows were written anyway, with
     // player1 named by `player1Source`. Logged at warn so it is greppable.
@@ -359,6 +364,15 @@ export async function deriveAndPublish(params: {
     // the previous run's proposal describing rows that were just rebuilt.
     const proposal = written.transcript.segmentation;
     if (proposal !== undefined) quality.segmentation = proposal;
+    // A score stream that barely moved over the match: published all the
+    // same (games from the serve, winners from the last shot), logged at warn
+    // so it is greppable, and recorded so a reader can tell. Written only when
+    // it stalled: the stall is the file's, and a job's file never changes.
+    const stall = stalledScoreStream(written.transcript.points);
+    if (stall) {
+      console.warn(`${LOG} score stream stalled`, { jobId, matchId, ...stall });
+      quality.scoreStream = { stalled: true, ...stall };
+    }
     if (Object.keys(quality).length > 0) {
       await mergeDerivationQuality(supabase, jobId, quality, LOG);
     }
@@ -422,4 +436,34 @@ async function readParentPublication(
     derivationVersion: data.derivation_version,
     quality: qualityObject(data.derivation_quality),
   };
+}
+
+/**
+ * Capture `analysis_ready` for a job just published. The duration runs from
+ * the hand-off to the vendor (`submitted_at`), falling back to the job row's
+ * creation, to now. Never throws — a failed read sends nothing.
+ */
+async function trackAnalysisReady(
+  supabase: ReturnType<typeof createAdminClient>,
+  jobId: string,
+  matchId: string,
+): Promise<void> {
+  try {
+    const { data } = await supabase
+      .from("processing_jobs")
+      .select("created_by, created_at, submitted_at")
+      .eq("id", jobId)
+      .maybeSingle();
+    if (!data?.created_by) return;
+    const started = Date.parse(data.submitted_at ?? data.created_at ?? "");
+    trackServer(data.created_by, "analysis_ready", {
+      match_id: matchId,
+      job_id: jobId,
+      processing_duration_sec: Number.isFinite(started)
+        ? Math.max(0, Math.round((Date.now() - started) / 1000))
+        : null,
+    });
+  } catch {
+    // Analytics only.
+  }
 }

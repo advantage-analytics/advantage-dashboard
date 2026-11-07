@@ -73,6 +73,11 @@ test.beforeAll(async () => {
         resolve: {
           extensions: [".tsx", ".ts", ".jsx", ".js"],
           alias: {
+            // `track()` (src/lib/analytics.ts) reads this; the real one reads
+            // `process.env`, which a plain bundle has no object for.
+            "@/lib/posthog-client$": resolve(
+              "tests/fixtures/posthog-client-off-mock.ts",
+            ),
             "next/navigation": resolve(
               "tests/fixtures/viz-navigation-browser-mock.ts",
             ),

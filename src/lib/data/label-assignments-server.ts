@@ -36,6 +36,8 @@ export interface AssignedLabelSession {
   total: number;
   /** The console's last open-flag count, or null before it has counted. */
   openCounts: FlagCounts | null;
+  /** A practice copy (a paid test): the list says "Practice set", nothing more. */
+  practice?: boolean;
 }
 
 interface LabelAssignmentsDependencies {
@@ -60,6 +62,7 @@ interface DbAssignedSession {
   assigned_at: string | null;
   submitted_at: string | null;
   open_counts: unknown;
+  kind: string | null;
 }
 
 /**
@@ -75,7 +78,7 @@ export async function listAssignedLabelSessions(
 
   const { data, error } = await db
     .from("label_sessions")
-    .select("id, status, assigned_at, submitted_at, open_counts")
+    .select("id, status, assigned_at, submitted_at, open_counts, kind")
     .eq("assigned_to", viewer.id)
     .in("status", ["labelling", "submitted"])
     .order("assigned_at", { ascending: false, nullsFirst: false })
@@ -101,6 +104,7 @@ export async function listAssignedLabelSessions(
       checked: counts?.checked ?? 0,
       total: counts?.total ?? 0,
       openCounts: readOpenCounts(session.open_counts),
+      practice: session.kind === "practice",
     };
   });
 }

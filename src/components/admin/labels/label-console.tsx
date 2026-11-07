@@ -555,7 +555,7 @@ export function LabelConsole({
   headerAction?: ReactNode;
   /**
    * Who is looking. `"labeller"` (`/label/[sessionId]`) shows no player,
-   * program or derivation, names the sides "Near" / "Far", and
+   * program or derivation, names the sides "Player 1" / "Player 2", and
    * swaps Mark complete and Reopen for "Submit for review".
    */
   viewerKind?: "admin" | "labeller";

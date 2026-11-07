@@ -772,6 +772,10 @@ function fakeClient({
           state.filters[column] = values;
           return builder;
         },
+        neq: (column: string, value: unknown) => {
+          state.filters[`not.${column}`] = value;
+          return builder;
+        },
         not: () => builder,
         order: () => builder,
         limit: () => builder,
@@ -899,6 +903,8 @@ test.describe("seedLabelSessionForJob", () => {
     // counts, so a submitted session is found rather than tripping the index.
     const lookup = fake.lookups.find((l) => l.job_id === JOB_ID);
     expect(lookup?.status).toEqual(["labelling", "submitted"]);
+    // Practice copies hold the job too, many at once; the lookup skips them.
+    expect(lookup?.["not.kind"]).toBe("practice");
   });
 
   test("losing the insert race returns the winner's session", async () => {

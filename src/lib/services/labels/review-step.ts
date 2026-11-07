@@ -180,7 +180,9 @@ export function reviewItemThenLabel(item: ReviewItem): string {
     case 2:
       return has("shot_after_point_end")
         ? "split or remove the shots after"
-        : "check for two points in one";
+        : has("last_shot_untracked")
+          ? "check the last shot"
+          : "check for two points in one";
     case 3:
       return has("first_serve_fault_alone")
         ? "say how the serve ended"
@@ -189,6 +191,7 @@ export function reviewItemThenLabel(item: ReviewItem): string {
       return has("last_landing_missing", "last_shot_unresolved") &&
         !has(
           "last_call_overruled",
+          "net_by_trajectory",
           "winner_disputed",
           "ending_suspect_line",
           "ending_stale",

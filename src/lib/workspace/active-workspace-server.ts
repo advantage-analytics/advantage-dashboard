@@ -157,7 +157,7 @@ async function listProgramWorkspaces(
     supabase
       .from("program_members")
       .select(
-        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, time_zone, crest_path)",
+        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, time_zone, crest_path, division)",
       )
       .eq("user_id", userId)
       .order("joined_at"),
@@ -189,6 +189,7 @@ async function listProgramWorkspaces(
           pilot_eligible: boolean;
           time_zone: string;
           crest_path: string | null;
+          division: string | null;
         }
       | undefined;
     if (!program) return [];
@@ -206,6 +207,8 @@ async function listProgramWorkspaces(
         // the value set, so the cast is a naming ceremony rather than a guess.
         // The quota tier hangs off this — see `quotaTierFor()`.
         orgType: program.org_type as ProgramOrgType,
+        // Raw `programs.division` — analytics groups only (dashboard-shell).
+        division: program.division,
         // NOT NULL with default false. The admin-granted half of the quota
         // tier: a custom org on the program pool — see `quotaTierFor()`.
         pilotEligible: program.pilot_eligible === true,
@@ -260,6 +263,22 @@ async function listProgramWorkspaces(
       },
     ];
   });
+}
+
+/**
+ * Whether PostHog should mark this person `is_internal` — every admin, plus
+ * any address listed in the server-only `POSTHOG_INTERNAL_EMAILS`
+ * (comma-separated). Decided here, on the server, so the list never ships in
+ * a client bundle and the email itself never reaches PostHog: only the
+ * boolean does.
+ */
+function isInternalAccount(isAdmin: boolean, email: string | undefined) {
+  if (isAdmin) return true;
+  const list = (process.env.POSTHOG_INTERNAL_EMAILS ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  return Boolean(email) && list.includes(email!.toLowerCase());
 }
 
 function toViewer(
@@ -367,13 +386,16 @@ export const getWorkspaceContext = cache(
       avatarPath,
     );
 
-    const viewer = toViewer(
-      user.id,
-      user.email ?? "",
-      row,
-      avatarUrl,
-      user.last_sign_in_at ?? null,
-    );
+    const viewer = {
+      ...toViewer(
+        user.id,
+        user.email ?? "",
+        row,
+        avatarUrl,
+        user.last_sign_in_at ?? null,
+      ),
+      isInternal: isInternalAccount(row?.is_admin === true, user.email),
+    };
 
     const available = [
       personalWorkspace(

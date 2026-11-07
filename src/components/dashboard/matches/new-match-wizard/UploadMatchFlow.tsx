@@ -55,8 +55,13 @@ import {
   askReturnHref,
   type WizardReturnTarget,
 } from "@/lib/matches/new-match-visit";
-import posthog from "posthog-js";
-import { isPostHogConfigured } from "@/lib/posthog-client";
+import {
+  trackMatchCreated,
+  trackTransferStarted,
+  trackUploadCompleted,
+  trackUploadFailed,
+  trackUploadStarted,
+} from "./upload-analytics";
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
@@ -130,7 +135,7 @@ export function UploadMatchFlow({
   const createdRef = useRef<CreatedMatch | null>(null);
   const handleCreated = useCallback((match: CreatedMatch) => {
     createdRef.current = match;
-    if (isPostHogConfigured) posthog.capture("match_created");
+    trackMatchCreated(match.matchId);
     setCreated(match);
   }, []);
   /**
@@ -153,8 +158,20 @@ export function UploadMatchFlow({
   );
 
   const handleVideoUpload = useCallback((event: VideoUploadEvent) => {
+    if (event.kind === "started") trackTransferStarted(event.matchId);
+    else if (event.kind === "done") trackUploadCompleted(event.matchId);
+    else if (event.kind === "failed")
+      trackUploadFailed("transfer", event.error, event.matchId);
+    else if (event.kind === "submit_failed")
+      trackUploadFailed("vendor_submit", event.error, event.matchId);
     setUploads((prev) => applyVideoUploadEvent(prev, event));
   }, []);
+
+  // One `upload_started` per wizard run — the first visit and each
+  // "Upload another", which bumps `runId`.
+  useEffect(() => {
+    trackUploadStarted(initialProvider ?? null);
+  }, [runId, initialProvider]);
 
   // A tab that closed mid-upload leaves its trimmed copy in this origin's
   // private storage. Clear stale ones whenever the wizard opens.
@@ -176,6 +193,15 @@ export function UploadMatchFlow({
         | { matchId?: string; removedMatchId?: string; error?: string }
         | undefined;
       const error = detail?.error || "The upload stopped before it completed.";
+      // The failures outside the transfer — a rollback, or a job insert or
+      // import that failed after the row was written. A transfer's own
+      // `"failed"` was counted in handleVideoUpload first, and
+      // trackUploadFailed sends one failure per match.
+      if (detail?.removedMatchId === match.matchId) {
+        trackUploadFailed("match_rollback", error, match.matchId);
+      } else if (detail?.matchId === match.matchId) {
+        trackUploadFailed("after_create", error, match.matchId);
+      }
       // The row was rolled back. Only this match's rollback counts: after an
       // in-place "Upload another", an earlier run's late one names its own.
       if (detail?.removedMatchId) {

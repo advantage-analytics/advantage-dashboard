@@ -443,7 +443,9 @@ async function labelDrafts(db: AdminClient): Promise<Draft[]> {
     .in(
       "job_id",
       jobRows.map((job) => job.id),
-    );
+    )
+    // A practice copy is a test, not the job's labelling.
+    .neq("kind", "practice");
   if (sessionsError) {
     console.error(
       "[admin today] could not read label sessions",

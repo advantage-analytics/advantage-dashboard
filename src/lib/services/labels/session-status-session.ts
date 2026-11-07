@@ -144,6 +144,7 @@ export async function writeLabelSessionComplete(params: {
   // only through `adminGated`, so the admin's review is what lets it through.
   const refused = await checkSessionOpen(supabase, sessionId, {
     allowSubmitted: true,
+    forPublish: true,
   });
   if (refused) return { error: refused };
 
