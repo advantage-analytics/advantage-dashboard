@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AdminPage } from "@/components/admin/admin-page";
 import { LabelsBoard } from "@/components/admin/labels/labels-board";
 import {
@@ -60,7 +61,15 @@ export default async function AdminLabelsPage() {
   return (
     <AdminPage className="gap-6">
       <div>
-        <h1 className="text-display">Labels</h1>
+        <div className="flex items-baseline justify-between gap-4">
+          <h1 className="text-display">Labels</h1>
+          <Link
+            href="/admin/labels/pay"
+            className="text-[13px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          >
+            Pay report
+          </Link>
+        </div>
         <p className="text-body-sm mt-[9px]">
           {freshJobIds.length > 0
             ? `${freshJobIds.length} new since you last looked. ${LEDE}`

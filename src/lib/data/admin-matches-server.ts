@@ -262,6 +262,8 @@ async function labelSessions(
   const best = new Map<string, (typeof rows)[number]>();
   const rank = (kind: string | null) => (kind === "analyst" ? 1 : 0);
   for (const row of rows) {
+    // A practice copy is never the match's session ("Open in Labels").
+    if (row.kind === "practice") continue;
     const held = best.get(row.match_id);
     if (
       !held ||
