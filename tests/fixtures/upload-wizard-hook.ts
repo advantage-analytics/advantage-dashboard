@@ -310,6 +310,11 @@ export function uploadWizardHarness(
   const dependencies: Record<string, unknown> = {
     react,
     "./admin-mode": { useAdminWizardMode: () => options.admin ?? null },
+    // Analytics only: the hook calls these and ignores what they return.
+    "./upload-analytics": {
+      trackVideoSelected: () => {},
+      trackVideoRejected: () => {},
+    },
     "@/lib/utils": { capitalize: (value: string) => value },
     "next/navigation": { useRouter: () => ({ refresh() {} }) },
     "@/lib/supabase/client": { createClient: () => supabase },

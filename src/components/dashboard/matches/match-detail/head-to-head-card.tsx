@@ -1475,6 +1475,7 @@ export function HeadToHeadCard() {
                 actions.watchCut(
                   sideCut(row.cut!, side, row.sideBy, row.sideWon),
                   `${row.label} · ${name}`,
+                  "head_to_head",
                 );
               const target: FigureTarget =
                 footer?.kind === "watch"
@@ -1568,7 +1569,11 @@ export function HeadToHeadCard() {
                     aria-label={`${row.label}, both players. ${watchLabel(rowFooter.count, noun)}`}
                     data-focus-ring="none"
                     {...handlersFor(row.label, "row", () =>
-                      actions.watchCut(row.cut!, rowCutLabel(row)),
+                      actions.watchCut(
+                        row.cut!,
+                        rowCutLabel(row),
+                        "head_to_head",
+                      ),
                     )}
                     className={cn(
                       "flex min-w-0 flex-1 cursor-pointer items-center self-stretch border-0 bg-transparent p-0 pr-3 text-left text-[12px] transition-colors",

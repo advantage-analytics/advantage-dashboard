@@ -447,6 +447,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                       actions.watchCut(
                         outcomeCut(o.key, row.id, errorSplitJudged),
                         `${o.label} · ${row.name}`,
+                        "point_endings",
                       )
                   : undefined;
 

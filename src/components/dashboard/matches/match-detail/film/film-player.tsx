@@ -205,9 +205,10 @@ interface FilmPlayerProps {
    * The first `play` event of each loaded source (`generation`) on this
    * surface — what counts as a view of the video (SwingVision Add video T8).
    * Never on render, never on a credential mint: only a `play` the element
-   * actually fired. Suppressed while `background`.
+   * actually fired. Suppressed while `background`. `positionSec` is where the
+   * play began, for analytics (`video_played`).
    */
-  onFirstPlay?: (generation: number) => void;
+  onFirstPlay?: (generation: number, positionSec: number) => void;
   /** The terminal state's button, where the hook says one could help. */
   onRetry: () => void;
   /** The fullscreen glyph. Entered by user action only, never automatically. */
@@ -789,13 +790,13 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             )}
             onLoadedData={settling.onLoadedData}
             onClick={togglePlay}
-            onPlay={() => {
+            onPlay={(event) => {
               setPlaying(true);
               landingRef.current.playing = true;
               if (!background) onPlaybackPlaying(true);
               if (!background && firstPlayRef.current !== generation) {
                 firstPlayRef.current = generation;
-                onFirstPlay?.(generation);
+                onFirstPlay?.(generation, event.currentTarget.currentTime);
               }
             }}
             onPause={() => {
