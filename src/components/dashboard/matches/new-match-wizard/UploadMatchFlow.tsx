@@ -162,9 +162,8 @@ export function UploadMatchFlow({
     else if (event.kind === "done") trackUploadCompleted(event.matchId);
     else if (event.kind === "failed")
       trackUploadFailed("transfer", event.error, event.matchId);
-    else if (event.kind === "submit_failed") {
+    else if (event.kind === "submit_failed")
       trackUploadFailed("vendor_submit", event.error, event.matchId);
-    }
     setUploads((prev) => applyVideoUploadEvent(prev, event));
   }, []);
 

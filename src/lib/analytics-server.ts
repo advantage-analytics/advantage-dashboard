@@ -42,3 +42,16 @@ export function trackServer<E extends keyof ServerAnalyticsEvents>(
     });
   }
 }
+
+/**
+ * Send whatever is queued now. For code already running inside `after()`,
+ * where `trackServer`'s own deferred flush would queue a second callback.
+ * Never throws.
+ */
+export async function flushServerAnalytics(): Promise<void> {
+  try {
+    await getPostHogServerClient()?.flush();
+  } catch {
+    // Analytics only.
+  }
+}

@@ -76,7 +76,10 @@ export function toMb(bytes: number): number {
   return Math.round((bytes / (1024 * 1024)) * 100) / 100;
 }
 
-/** Whole seconds since a `performance.now()` / `Date.now()` mark. */
+/**
+ * Whole seconds since a `Date.now()` mark. Epoch milliseconds only: a
+ * `performance.now()` mark would be measured against the wrong clock.
+ */
 export function secondsSince(startMs: number, nowMs = Date.now()): number {
   return Math.max(0, Math.round((nowMs - startMs) / 1000));
 }
