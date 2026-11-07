@@ -181,6 +181,8 @@ export async function getLabelUploadInfo(
     .from("label_sessions")
     .select("match_id, job_id")
     .eq("id", sessionId)
+    // A player's self review shares the table; the console never opens one.
+    .eq("kind", "analyst")
     .maybeSingle<{ match_id: string; job_id: string | null }>();
   if (!session) return null;
 
