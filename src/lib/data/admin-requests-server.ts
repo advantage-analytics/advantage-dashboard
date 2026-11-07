@@ -349,7 +349,9 @@ interface RawMatchEmbed {
   player2_name: string | null;
   verified: boolean;
   programs: RawProgramEmbed | RawProgramEmbed[] | null;
-  label_sessions: { id: string; status: string; created_at: string }[] | null;
+  label_sessions:
+    | { id: string; status: string; created_at: string; kind: string | null }[]
+    | null;
 }
 
 interface RawRequestRow {
@@ -384,7 +386,7 @@ const REQUESTS_SELECT = `
   status,
   created_at,
   programs(${PROGRAM_EMBED}),
-  matches(id, player1_name, player2_name, verified, programs!matches_program_id_fkey(${PROGRAM_EMBED}), label_sessions(id, status, created_at))
+  matches(id, player1_name, player2_name, verified, programs!matches_program_id_fkey(${PROGRAM_EMBED}), label_sessions(id, status, created_at, kind))
 `;
 
 function matchOf(
@@ -446,12 +448,15 @@ function toRequestRow(
           // The newest complete session — the one that published (and
           // verified) what the player is reporting — else the newest.
           labelSessionId:
-            [...(match.label_sessions ?? [])].sort(
-              (a, b) =>
-                Number(b.status === "complete") -
-                  Number(a.status === "complete") ||
-                b.created_at.localeCompare(a.created_at),
-            )[0]?.id ?? null,
+            // Never a practice copy: it publishes nothing.
+            (match.label_sessions ?? [])
+              .filter((s) => s.kind !== "practice")
+              .sort(
+                (a, b) =>
+                  Number(b.status === "complete") -
+                    Number(a.status === "complete") ||
+                  b.created_at.localeCompare(a.created_at),
+              )[0]?.id ?? null,
           pointLabel: request.point_label,
         }
       : null,

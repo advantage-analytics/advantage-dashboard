@@ -118,6 +118,12 @@ import {
   type LabelAssignResult,
   type ListLabellersResult,
 } from "@/lib/services/labels/assign-session";
+import {
+  createPracticeCopies,
+  deletePracticeCopy,
+  type CreatePracticeCopiesResult,
+} from "@/lib/services/labels/practice-session";
+import { revalidatePath } from "next/cache";
 import { withLabelOp } from "@/lib/supabase/op-context";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
@@ -635,4 +641,27 @@ export async function recordLabelWorkBeatAction(
   sessionId: string,
 ): Promise<LabelWorkBeatResult> {
   return recordLabelWorkBeat(sessionId);
+}
+
+/** Practice copies of a completed analyst session, one per labeller. Admin-only. */
+export async function createPracticeCopiesAction(input: {
+  sourceSessionId: string;
+  setNumber: number | null;
+  labellerIds: string[];
+}): Promise<CreatePracticeCopiesResult> {
+  const result = await createPracticeCopies(input);
+  if ("ok" in result)
+    revalidatePath(`/admin/labels/${input.sourceSessionId}/practice`);
+  return result;
+}
+
+/** Delete one practice copy (never anything else). Admin-only. */
+export async function deletePracticeCopyAction(
+  sessionId: string,
+  sourceSessionId: string,
+): Promise<{ ok: true } | { error: string }> {
+  const result = await deletePracticeCopy(sessionId);
+  if ("ok" in result)
+    revalidatePath(`/admin/labels/${sourceSessionId}/practice`);
+  return result;
 }
