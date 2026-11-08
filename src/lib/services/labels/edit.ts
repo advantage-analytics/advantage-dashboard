@@ -830,3 +830,19 @@ export function applyLabelPointPatch(
   if ("error_kind" in patch) next.errorKind = patch.error_kind ?? null;
   return next;
 }
+
+/** Why a labeller's shot write carrying `tags` is refused. */
+export const SHOT_KINDS_ADMIN_ONLY = "Shot kinds are set by an admin.";
+
+/**
+ * The refusal for a shot patch a labeller may not send, or null. Shot kinds
+ * (`tags`) are the report stats' answer key and an admin's alone: their
+ * console never offers them, and this keeps a hand-made request to the
+ * labeller's actions (`src/app/label/actions.ts`) from writing them anyway.
+ * The admin's actions do not call it.
+ */
+export function labellerShotPatchError(patch: unknown): string | null {
+  return patch !== null && typeof patch === "object" && "tags" in patch
+    ? SHOT_KINDS_ADMIN_ONLY
+    : null;
+}

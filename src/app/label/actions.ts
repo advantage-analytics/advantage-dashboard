@@ -120,19 +120,24 @@ import {
   recordLabelWorkBeat,
   type LabelWorkBeatResult,
 } from "@/lib/services/labels/work-beats-session";
+import { labellerShotPatchError } from "@/lib/services/labels/edit";
 import { withLabelOp } from "@/lib/supabase/op-context";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
 
 /**
- * Autosave one edit to a label shot — `hitter`, `stroke`, `result`, a
- * `contact_*` or `landing_*` pair, `video_time` or `unclear`, and nothing
- * else. Returns the status the shot now has, or why nothing was written.
+ * Autosave one edit to a label shot — `hitter`, `stroke`, `result`, `spin`,
+ * a `contact_*` or `landing_*` pair, `video_time` or `unclear`, and nothing
+ * else: shot kinds (`tags`) are an admin's, refused here before anything is
+ * read (`labellerShotPatchError`). Returns the status the shot now has, or
+ * why nothing was written.
  */
 export async function updateLabelShot(
   shotId: string,
   patch: Record<string, unknown>,
 ): Promise<LabelShotEditResult> {
+  const refused = labellerShotPatchError(patch);
+  if (refused) return { error: refused };
   return withLabelOp("Edit shot", () => editLabelShot(shotId, patch));
 }
 
@@ -143,6 +148,11 @@ export async function updateLabelShot(
 export async function updateLabelShots(
   writes: { shotId: string; patch: Record<string, unknown> }[],
 ): Promise<LabelShotEditResult[]> {
+  // One refused write refuses them all: the batch is one undo step.
+  const refused = writes
+    .map((write) => labellerShotPatchError(write.patch))
+    .find((error) => error !== null);
+  if (refused) return writes.map(() => ({ error: refused }));
   return withLabelOp("Edit shot", () => editLabelShots(writes));
 }
 

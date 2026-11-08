@@ -175,8 +175,6 @@ export const SHOT_TRACKS_NARROW =
 /** On a cell that leaves with the placement and kind tracks. */
 const NARROW_HIDDEN = "@max-[640px]/shots:hidden";
 
-// `text-[11px] leading-[14px]`: every cell's own line box is the size of its
-// text, so a value centres on the row instead of hanging from a 16px strut.
 /**
  * `SHOT_TRACKS` without the kind track: the well a labeller sees, practice
  * copies included (`EditContext.shotKinds` off) — the tracks it had before
@@ -185,6 +183,8 @@ const NARROW_HIDDEN = "@max-[640px]/shots:hidden";
 export const SHOT_TRACKS_NO_KIND =
   "grid-cols-[22px_minmax(56px,0.3fr)_minmax(32px,0.55fr)_minmax(48px,0.8fr)_minmax(26px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
 
+// `text-[11px] leading-[14px]`: every cell's own line box is the size of its
+// text, so a value centres on the row instead of hanging from a 16px strut.
 const ROW_BOX = `relative grid ${SHOT_TRACKS_NARROW} items-center gap-x-2 h-[34px] px-[14px] text-[11px] leading-[14px]`;
 
 /** A well row's grid: with the kind track where shot kinds are on. */

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -11,6 +14,8 @@ import {
   tagKeyPatch,
 } from "@/components/admin/labels/stroke-keys";
 import {
+  SHOT_KINDS_ADMIN_ONLY,
+  labellerShotPatchError,
   applyLabelShotPatch,
   labelShotStatusAfterPatch,
   parseLabelShotPatch,
@@ -321,6 +326,42 @@ test.describe("a labeller's view (shot kinds are admin-only)", () => {
     // Everything else is the same list.
     expect(labeller).toEqual(
       admin.filter((k) => !["G", "K", "J", "P"].includes(k)),
+    );
+  });
+});
+
+test.describe("the labeller's actions refuse shot kinds", () => {
+  const read = (file: string) =>
+    readFileSync(path.resolve(__dirname, "..", file), "utf8");
+
+  test("a patch carrying tags is refused; anything else passes", () => {
+    expect(labellerShotPatchError({ tags: ["lob"] })).toBe(
+      SHOT_KINDS_ADMIN_ONLY,
+    );
+    // Even an empty list: clearing kinds is an admin's too.
+    expect(labellerShotPatchError({ tags: [] })).toBe(SHOT_KINDS_ADMIN_ONLY);
+    expect(labellerShotPatchError({ stroke: "forehand", tags: ["lob"] })).toBe(
+      SHOT_KINDS_ADMIN_ONLY,
+    );
+    expect(labellerShotPatchError({ stroke: "forehand" })).toBeNull();
+    expect(labellerShotPatchError({ unclear: ["landing_x"] })).toBeNull();
+    expect(labellerShotPatchError(null)).toBeNull();
+  });
+
+  test("both labeller shot writes check before writing; the admin's do not", () => {
+    const labeller = read("src/app/label/actions.ts");
+    for (const name of ["updateLabelShot", "updateLabelShots"]) {
+      const start = labeller.indexOf(`export async function ${name}(`);
+      expect(start, name).toBeGreaterThan(-1);
+      const body = labeller.slice(start, labeller.indexOf("\n}\n", start));
+      const check = body.indexOf("labellerShotPatchError(");
+      expect(check, `${name} checks`).toBeGreaterThan(-1);
+      expect(check, `${name} checks before writing`).toBeLessThan(
+        body.indexOf("withLabelOp("),
+      );
+    }
+    expect(read("src/app/admin/labels/actions.ts")).not.toContain(
+      "labellerShotPatchError",
     );
   });
 });
