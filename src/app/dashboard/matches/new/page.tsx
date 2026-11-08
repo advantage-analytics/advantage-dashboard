@@ -211,13 +211,12 @@ export default async function NewMatchPage({
   // ask For at all — in a personal one the uploader IS the player, so a
   // `?player=` has nowhere to land.
   // Independent of each other, so they overlap too.
-  const subjectId = player || draft?.subject?.playerId || null;
   const [initialSubject, firstUpload] = await Promise.all([
-    // A link's `?player=` outranks the draft's saved answer: it is the newer
-    // choice. Both are looked up, never trusted — a draft's player may have
-    // been archived or removed since it was saved.
-    workspace?.active.kind === "team" && subjectId
-      ? rosterSubjectFor(workspace.active.id, subjectId)
+    // A link's `?player=` outranks the draft's saved answer, and a miss on
+    // either falls through to the next — see `resolveRosterSubject()`. All of
+    // them are looked up, never trusted.
+    workspace?.active.kind === "team"
+      ? rosterSubjectFor(workspace.active.id, { linkPlayerId: player, draft })
       : null,
     workspace ? viewerHasNoMatches(workspace.viewer.id) : false,
   ]);

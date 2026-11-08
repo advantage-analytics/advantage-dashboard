@@ -129,10 +129,10 @@ export default async function TeamUploadPage({
     if (loadedDraft) {
       if (draftBelongsToWorkspace(loadedDraft.programId, active)) {
         // The draft's For answer, re-checked against this roster — see
-        // `MatchDraft.subject`. A miss resumes on the picker.
-        const initialSubject = loadedDraft.subject
-          ? await rosterSubjectFor(active.id, loadedDraft.subject.playerId)
-          : null;
+        // `resolveRosterSubject()`. A miss resumes on the picker.
+        const initialSubject = await rosterSubjectFor(active.id, {
+          draft: loadedDraft,
+        });
         return (
           <UploadMatchFlow
             draft={loadedDraft}

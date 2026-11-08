@@ -1,30 +1,30 @@
 import type { RosterSubject } from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
+import type { MatchDraft } from "@/components/dashboard/matches/new-match-wizard/types";
 import { getRosterPlayerOptions } from "@/lib/data/roster-server";
+import { resolveRosterSubject } from "@/lib/wizard/roster-subject";
 
 /**
- * Who a `?player=` link — or a resumed draft's saved For answer — names, or null for an id that names nobody here.
+ * Who the For field opens on — a `?player=` link, a resumed draft's saved
+ * player, or an older draft's saved name — or null when nobody on the active
+ * program's roster is named, and the picker asks. The ranking is
+ * `resolveRosterSubject()`.
  *
- * The id arrives from a URL and is untrusted, so this is a lookup and not a
- * translation: `program_roster_full` returns nothing to a non-member, which
- * makes another program's id resolve to null rather than to a stranger.
+ * Every input is untrusted (a URL, or a payload the viewer wrote), so this is
+ * a lookup and not a translation: `program_roster_full` returns nothing to a
+ * non-member, which makes another program's id resolve to null rather than to
+ * a stranger. Players only: `rosterPlayerOptions` drops staff seats, and the
+ * For field must offer nobody its own picker would not.
  *
- * Both id eras are accepted. The roster's own links send a
- * `program_players.id`, but a claimed player's older links carry their login
- * id, and `RosterPlayerOption` keeps both columns — matching on only one is
- * the exact defect that made the previous shortcut a no-op. Players only:
- * `rosterPlayerOptions` drops staff seats, and the For field must offer nobody
- * its own picker would not.
+ * Skips the roster read entirely when there is nothing to look up.
  */
 export async function rosterSubjectFor(
   programId: string,
-  id: string,
+  input: {
+    linkPlayerId?: string | null;
+    draft?: Pick<MatchDraft, "subject" | "formData" | "preset"> | null;
+  },
 ): Promise<RosterSubject | null> {
-  const onRoster = (await getRosterPlayerOptions(programId)).find(
-    (row) => row.playerId === id || row.userId === id,
-  );
-  // Their `playerId`, never the id as typed — the login era resolves to the
-  // profile id, which is what `matches.player1_id` wants.
-  return onRoster
-    ? { kind: "roster", playerId: onRoster.playerId, name: onRoster.name }
-    : null;
+  const { linkPlayerId, draft } = input;
+  if (!linkPlayerId && !draft) return null;
+  return resolveRosterSubject(await getRosterPlayerOptions(programId), input);
 }
