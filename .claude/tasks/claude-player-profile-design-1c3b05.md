@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Fold a player's analyzed matches into season Head to head rows
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** `src/lib/data/player-season.ts` (new, pure), `tests/player-season.spec.ts` (new) — guess
 - **done when:**

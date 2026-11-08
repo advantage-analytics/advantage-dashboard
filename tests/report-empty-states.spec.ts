@@ -66,6 +66,11 @@ const REAL = new Set([
   // The Net game card's classifiers and its hatch fill: pure, loaded for real.
   "@/components/dashboard/matches/match-detail/match-filters/net-game",
   "@/components/dashboard/matches/match-detail/chart-fills",
+  // The head-to-head rows and the Point endings tally — the cards' own
+  // calculators, pure so the player profile's season fold can run them on
+  // the server; a marker here would hand the cards `NaN` totals.
+  "@/components/dashboard/matches/match-detail/head-to-head-rows",
+  "@/components/dashboard/matches/match-detail/point-endings-tally",
 ]);
 
 function render(

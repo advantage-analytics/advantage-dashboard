@@ -1,0 +1,536 @@
+import type { MatchPoint } from "@/lib/data/match-points-server";
+import { compareMatchDays } from "@/lib/data/match-day";
+import {
+  buildStatRows,
+  h2hGroups,
+  rateTally,
+  rowLeader,
+  statDisplay,
+  tallySide,
+  withLobAvailability,
+  withPointRows,
+  type DerivedSide,
+  type H2HRowConfig,
+  type H2HStats,
+} from "@/components/dashboard/matches/match-detail/head-to-head-rows";
+import {
+  netGameTally,
+  type NetEnding,
+  type NetEntry,
+  type NetGameTally,
+} from "@/components/dashboard/matches/match-detail/match-filters/net-game";
+import {
+  rallyLengthBandOf,
+  type RallyLengthBand,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
+import {
+  emptyOutcomeTally,
+  outcomeTally,
+  type OutcomeKey,
+  type OutcomeTally,
+} from "@/components/dashboard/matches/match-detail/point-endings-tally";
+
+/**
+ * A player's season, folded from the match reports of their analyzed matches
+ * — the team player profile's Statistics tab (design Q, the `CohesiveQ`
+ * board): a season Head to head table on the left and, on the right, the
+ * Performance tracker, How points ended, Rally length and Net game cards.
+ *
+ * NOTHING HERE DERIVES A STATISTIC. Each match is run through the match
+ * report's own calculators exactly as `HeadToHeadCard` runs them —
+ * `h2hGroups` → `withLobAvailability` → `buildStatRows` → `tallySide` →
+ * `withPointRows`, then `outcomeTally`, `netGameTally` and
+ * `rallyLengthBandOf` for the cards — with THAT match's own `isPlayer1`,
+ * `isDerived` and lob keys, and the fold only adds up what comes back. A
+ * season figure that disagrees with the sum of its match reports is a bug
+ * here, never a second opinion.
+ *
+ * Sides (guardrails §4): the player may sit in either seat from one match to
+ * the next. Every match is tallied with its own `isPlayer1`; nothing flips
+ * points to a common seat. "You" is the player whose profile this is, "opp"
+ * is whoever they played that day — so the Opponents column is many people.
+ *
+ * Counts and rates fold differently. A COUNT row (aces, winners, net point
+ * attempts…) is the per-match average, printed to one decimal ("4.2"). A RATE
+ * row is POOLED — the made and the attempts are summed over the matches and
+ * divided once — not a mean of percentages, which would weigh a 30-point
+ * retirement the same as a 120-point three-setter. The made/attempts are read
+ * from the same places the report's tooltip reads them: the published
+ * `fractions[fractionKey]` for a SwingVision figure, `rateTally()` over
+ * `tallySide` for a row counted from the points, and `key`/`ofKey` for Total
+ * points won — which the canvas prints as a share of all points ("52%"), not
+ * as "74.5 points a match", so it folds as a rate.
+ *
+ * A match with nothing to say on a row — a null published figure (a derived
+ * match's suppressed `aces`), a fraction with no attempts (no break points
+ * faced), a rate with no attempts (never came to the net) — is left out of
+ * that row for that side; `SeasonValue.matches` says how many were in. With
+ * none, the value is `null` and the display `""`, the card's own contract for
+ * "no data", which it draws as "—".
+ *
+ * Row set: one "Errors" row unless EVERY analyzed match has its errors judged
+ * forced/unforced (`seasonErrorSplitJudged`), then "Unforced errors" and
+ * "Forced errors" — a judged match folded into an unjudged season contributes
+ * its unforced + forced to Errors, as the report's own Errors row does. The
+ * Aces row follows each match's own config: unreturned serves on an Advantage
+ * Intelligence match, the published count otherwise. Lob points and Passed
+ * the net player fold only over matches with lob keys; with none at all the
+ * rows carry the report's `NO_LOB_DATA_NOTE` / `NO_PASS_DATA_NOTE`.
+ */
+
+/* ── Inputs ─────────────────────────────────────────────────────────────── */
+
+/** One analyzed match, as the Head to head fold reads it. */
+export interface SeasonMatchStats {
+  /** Every point of the match, as `getMatchPointsFromSupabase` returns them. */
+  points: MatchPoint[];
+  /**
+   * Which seat the PLAYER sat in for this match. Each match keeps its own;
+   * never normalised to a common seat (guardrails §4).
+   */
+  isPlayer1: boolean;
+  /** An Advantage Intelligence match: aces are its unreturned serves. */
+  isDerived: boolean;
+  /** Its errors are judged forced/unforced (`lib/data/error-split.ts`). */
+  errorSplitJudged: boolean;
+  /**
+   * The ball-paths file's lobs (`lobShotKeys`), or `null` when the match has
+   * no file — unknown, never "no lobs".
+   */
+  lobKeys: ReadonlySet<number> | null;
+  /** The player's published statistics for this match. */
+  youStats: H2HStats;
+  /** The opponent's. */
+  oppStats: H2HStats;
+}
+
+/** One analyzed match with the identity the right-column cards name. */
+export interface SeasonMatch extends SeasonMatchStats {
+  matchId: string;
+  /**
+   * The match's calendar day — `matches.date` as stored, or `matchDay()`'s
+   * `YYYY-MM-DD`. Compared with `compareMatchDays`, never parsed here.
+   */
+  date: string | null;
+  /** The opponent's name, as the match names them. */
+  opponent: string;
+}
+
+/* ── Head to head rows ───────────────────────────────────────────────────── */
+
+export type SeasonRowKind = "count" | "rate";
+
+/** One side's season figure for one row. */
+export interface SeasonValue {
+  /** The number the two sides are compared on; `null` when there is none. */
+  value: number | null;
+  /** `"4.2"` for a count, `"57%"` for a rate, `""` for no data. */
+  display: string;
+  /** `"21 in 5 matches"` for a count, `"40/70"` for a pooled rate. */
+  detail?: string;
+  /** How many analyzed matches had a figure for this side on this row. */
+  matches: number;
+}
+
+export interface SeasonRow {
+  label: string;
+  kind: SeasonRowKind;
+  /** The LOWER number is the better one — double faults, errors. */
+  lowerIsBetter?: boolean;
+  /** Why the row is a dash for the whole season (no ball flight data). */
+  note?: string;
+  you: SeasonValue;
+  opp: SeasonValue;
+  leader: "you" | "opp" | null;
+}
+
+export interface SeasonGroup {
+  title: string;
+  rows: SeasonRow[];
+}
+
+/**
+ * Whether the season's Points group splits its errors: only when every
+ * analyzed match has judged its own. No matches is unjudged — nothing has
+ * called anything forced or unforced yet — so the empty table shows "Errors".
+ */
+export function seasonErrorSplitJudged(
+  matches: readonly Pick<SeasonMatchStats, "errorSplitJudged">[],
+): boolean {
+  return matches.length > 0 && matches.every((m) => m.errorSplitJudged);
+}
+
+/**
+ * Whether every analyzed match knows its lobs — what the season Net game card
+ * needs before it can draw a Lobbed segment (otherwise a lob over the net
+ * player in a file-less match is counted among the passes).
+ */
+export function seasonHasLobs(
+  matches: readonly Pick<SeasonMatchStats, "lobKeys">[],
+): boolean {
+  return matches.length > 0 && matches.every((m) => m.lobKeys !== null);
+}
+
+/**
+ * How a row folds. A percentage, a fraction-derived figure, or a count read
+ * "of" a total (Total points won) is a rate; everything else is a count.
+ */
+export function seasonRowKind(
+  config: Pick<H2HRowConfig, "isPercentage" | "fromFraction" | "ofKey">,
+): SeasonRowKind {
+  return config.isPercentage || config.fromFraction || config.ofKey
+    ? "rate"
+    : "count";
+}
+
+interface Pool {
+  /** Counts: the per-match figures added up. */
+  sum: number;
+  /** Rates: the made and attempts added up. */
+  made: number;
+  attempts: number;
+  /** Matches that contributed. */
+  n: number;
+}
+
+const emptyPool = (): Pool => ({ sum: 0, made: 0, attempts: 0, n: 0 });
+
+const finite = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+/**
+ * The made/attempts behind one side's rate row for one match, read where the
+ * report's own tooltip reads them, or `null` when that match has none: the
+ * tally behind a row counted from the points (`rateTally`, `null` for a lob
+ * or pass row without lob keys), `key` of `ofKey` for Total points won, else
+ * the published fraction.
+ */
+function rowFraction(
+  config: H2HRowConfig,
+  stats: H2HStats,
+  derived: DerivedSide,
+): { made: number; attempts: number } | null {
+  if (config.fromPoints) {
+    const tally = rateTally(config, derived);
+    return tally ? { made: tally.won, attempts: tally.total } : null;
+  }
+  if (config.ofKey && config.key) {
+    const made = stats[config.key];
+    const attempts = stats[config.ofKey];
+    return finite(made) && finite(attempts) ? { made, attempts } : null;
+  }
+  if (config.fractionKey) return stats.fractions[config.fractionKey] ?? null;
+  return null;
+}
+
+function addFraction(
+  pool: Pool,
+  fraction: { made: number; attempts: number } | null,
+): void {
+  if (!fraction || !(fraction.attempts > 0)) return;
+  pool.made += fraction.made;
+  pool.attempts += fraction.attempts;
+  pool.n += 1;
+}
+
+function addCount(pool: Pool, value: number | null): void {
+  if (!finite(value)) return;
+  pool.sum += value;
+  pool.n += 1;
+}
+
+const NO_VALUE: SeasonValue = { value: null, display: "", matches: 0 };
+
+function matchesWord(n: number): string {
+  return n === 1 ? "match" : "matches";
+}
+
+function finishCount(pool: Pool): SeasonValue {
+  if (pool.n === 0) return NO_VALUE;
+  const value = pool.sum / pool.n;
+  return {
+    value,
+    display: value.toFixed(1),
+    detail: `${pool.sum} in ${pool.n} ${matchesWord(pool.n)}`,
+    matches: pool.n,
+  };
+}
+
+function finishRate(pool: Pool): SeasonValue {
+  if (pool.attempts === 0) return NO_VALUE;
+  const value = (pool.made / pool.attempts) * 100;
+  return {
+    value,
+    display: statDisplay(value, true),
+    detail: `${pool.made}/${pool.attempts}`,
+    matches: pool.n,
+  };
+}
+
+/**
+ * The season Head to head groups: every row of the report's table
+ * (`h2hGroups`), for the player and for their opponents, folded over
+ * `matches` as the module comment describes. With no matches every row is
+ * still there, both values `null`.
+ */
+export function foldSeasonRows(
+  matches: readonly SeasonMatchStats[],
+): SeasonGroup[] {
+  const judged = seasonErrorSplitJudged(matches);
+  const anyLobs = matches.some((m) => m.lobKeys !== null);
+
+  // The season's row shape — titles, labels, kinds, notes. The derived and the
+  // SwingVision row sets differ only in how Aces is counted, never in a label,
+  // so either names the rows; the per-match pass below picks the right one.
+  const shape = withLobAvailability(h2hGroups(false, judged), anyLobs);
+  const pools = shape.map((group) =>
+    group.configs.map(() => ({ you: emptyPool(), opp: emptyPool() })),
+  );
+
+  for (const m of matches) {
+    const groups = withLobAvailability(
+      h2hGroups(m.isDerived, judged),
+      m.lobKeys !== null,
+    );
+    // Each side with its own seat for THIS match, never a normalised one.
+    const youDerived = tallySide(m.points, m.isPlayer1, m.lobKeys);
+    const oppDerived = tallySide(m.points, !m.isPlayer1, m.lobKeys);
+
+    groups.forEach((group, gi) => {
+      const published = buildStatRows(group.configs, m.youStats, m.oppStats);
+      const rows = withPointRows(
+        group.configs,
+        published,
+        youDerived,
+        oppDerived,
+      );
+
+      group.configs.forEach((config, ri) => {
+        const slot = shape[gi]?.configs[ri];
+        if (!slot || slot.label !== config.label) {
+          // The two row sets have drifted apart; summing by position would
+          // put one statistic's figures under another's label with nothing
+          // on screen to say so.
+          throw new Error(
+            `player-season: row "${config.label}" has no season slot (${slot?.label ?? "none"} at ${gi}/${ri})`,
+          );
+        }
+        const pool = pools[gi][ri];
+        if (seasonRowKind(config) === "rate") {
+          addFraction(pool.you, rowFraction(config, m.youStats, youDerived));
+          addFraction(pool.opp, rowFraction(config, m.oppStats, oppDerived));
+        } else {
+          addCount(pool.you, rows[ri].you.value);
+          addCount(pool.opp, rows[ri].opp.value);
+        }
+      });
+    });
+  }
+
+  return shape.map((group, gi) => ({
+    title: group.title,
+    rows: group.configs.map((config, ri) => {
+      const kind = seasonRowKind(config);
+      const finish = kind === "rate" ? finishRate : finishCount;
+      const you = finish(pools[gi][ri].you);
+      const opp = finish(pools[gi][ri].opp);
+      return {
+        label: config.label,
+        kind,
+        lowerIsBetter: config.lowerIsBetter,
+        note: config.note,
+        you,
+        opp,
+        leader: rowLeader(config, you.value, opp.value),
+      };
+    }),
+  }));
+}
+
+/* ── The right column's tallies ─────────────────────────────────────────── */
+
+/**
+ * One analyzed match for the Performance tracker: the points the player won
+ * of the points played, counted from the points themselves (`tallySide`'s
+ * `allPoints`), as the report's point-level cards count them.
+ */
+export interface SeasonPerMatch {
+  matchId: string;
+  date: string | null;
+  opponent: string;
+  youWon: number;
+  total: number;
+}
+
+/** Oldest first (`compareMatchDays`); a match with no readable date sorts last. */
+export function seasonPerMatch(
+  matches: readonly SeasonMatch[],
+): SeasonPerMatch[] {
+  return matches
+    .map((m) => {
+      const { allPoints } = tallySide(m.points, m.isPlayer1, null);
+      return {
+        matchId: m.matchId,
+        date: m.date,
+        opponent: m.opponent,
+        youWon: allPoints.won,
+        total: allPoints.total,
+      };
+    })
+    .sort((a, b) => compareMatchDays(a.date, b.date));
+}
+
+/** How points ended over the season — the summed `outcomeTally` per side. */
+export interface SeasonOutcomes {
+  you: OutcomeTally;
+  opp: OutcomeTally;
+  /**
+   * The split the tallies were taken with (`seasonErrorSplitJudged`): when
+   * false `unforcedErrors` holds every error and `forcedErrors` is 0, exactly
+   * as the report's unjudged "Errors" segment.
+   */
+  errorSplitJudged: boolean;
+}
+
+function addOutcomes(sum: OutcomeTally, part: OutcomeTally): void {
+  for (const key of Object.keys(part) as OutcomeKey[]) sum[key] += part[key];
+}
+
+export function seasonOutcomes(
+  matches: readonly SeasonMatchStats[],
+): SeasonOutcomes {
+  const judged = seasonErrorSplitJudged(matches);
+  const you = emptyOutcomeTally();
+  const opp = emptyOutcomeTally();
+  for (const m of matches) {
+    addOutcomes(you, outcomeTally(m.points, m.isPlayer1, m.isDerived, judged));
+    addOutcomes(opp, outcomeTally(m.points, !m.isPlayer1, m.isDerived, judged));
+  }
+  return { you, opp, errorSplitJudged: judged };
+}
+
+/** The net game over the season — the summed `netGameTally` per side. */
+export interface SeasonNetGame {
+  you: NetGameTally;
+  opp: NetGameTally;
+  /**
+   * Every analyzed match knew its lobs (`seasonHasLobs`). When false, the
+   * card draws Passed as "Passed or lobbed", as the report does without a
+   * ball-paths file.
+   */
+  hasLobs: boolean;
+}
+
+function addNetGame(sum: NetGameTally, part: NetGameTally): void {
+  sum.total += part.total;
+  for (const key of Object.keys(part.endings) as NetEnding[]) {
+    sum.endings[key] += part.endings[key];
+  }
+  for (const key of Object.keys(part.entries) as NetEntry[]) {
+    sum.entries[key] += part.entries[key];
+  }
+}
+
+export function seasonNetGame(
+  matches: readonly SeasonMatchStats[],
+): SeasonNetGame {
+  // The zeroed shape is the calculator's own, over no points.
+  const you = netGameTally([], true, null);
+  const opp = netGameTally([], true, null);
+  for (const m of matches) {
+    addNetGame(you, netGameTally(m.points, m.isPlayer1, m.lobKeys));
+    addNetGame(opp, netGameTally(m.points, !m.isPlayer1, m.lobKeys));
+  }
+  return { you, opp, hasLobs: seasonHasLobs(matches) };
+}
+
+/** One of the Rally length card's three bands, summed over the season. */
+export interface SeasonRallyBand {
+  key: RallyLengthBand;
+  /** Points in the band. */
+  count: number;
+  /** Of them, the points the player won; the opponents won the rest. */
+  youWon: number;
+  oppWon: number;
+}
+
+export interface SeasonRallyBands {
+  /** Short, medium, long — the card's order. */
+  bands: SeasonRallyBand[];
+  /** Points in any band: the ones with a shot count recorded. */
+  total: number;
+  /** Their shot counts added up. */
+  shotSum: number;
+  /** `shotSum / total` — the card's "N shots average"; `null` with no banded point. */
+  avgShots: number | null;
+}
+
+const RALLY_BANDS: RallyLengthBand[] = ["short", "medium", "long"];
+
+/**
+ * The Rally length card's bands over the season: `tallySide`'s per-band
+ * won/total summed per match (the card's own `count` and `youWon`, with
+ * `oppWon` the remainder, as it draws them), plus the shot counts behind its
+ * average — every point `rallyLengthBandOf` places in a band, exactly the
+ * points the card averages over (a `rallyLength` of 0 is "none recorded" and
+ * is left out).
+ */
+export function seasonRallyBands(
+  matches: readonly SeasonMatchStats[],
+): SeasonRallyBands {
+  const counters: Record<RallyLengthBand, { count: number; youWon: number }> = {
+    short: { count: 0, youWon: 0 },
+    medium: { count: 0, youWon: 0 },
+    long: { count: 0, youWon: 0 },
+  };
+  let shotSum = 0;
+
+  for (const m of matches) {
+    const d = tallySide(m.points, m.isPlayer1, null);
+    const bands = {
+      short: d.shortRally,
+      medium: d.mediumRally,
+      long: d.longRally,
+    };
+    for (const key of RALLY_BANDS) {
+      counters[key].count += bands[key].total;
+      counters[key].youWon += bands[key].won;
+    }
+    for (const p of m.points) {
+      if (rallyLengthBandOf(p.rallyLength)) shotSum += p.rallyLength;
+    }
+  }
+
+  const bands = RALLY_BANDS.map<SeasonRallyBand>((key) => ({
+    key,
+    count: counters[key].count,
+    youWon: counters[key].youWon,
+    oppWon: counters[key].count - counters[key].youWon,
+  }));
+  const total = bands.reduce((sum, band) => sum + band.count, 0);
+  return {
+    bands,
+    total,
+    shotSum,
+    avgShots: total > 0 ? shotSum / total : null,
+  };
+}
+
+/** Everything the profile's right column draws, folded once. */
+export interface SeasonTallies {
+  perMatch: SeasonPerMatch[];
+  outcomes: SeasonOutcomes;
+  netGame: SeasonNetGame;
+  rallyBands: SeasonRallyBands;
+}
+
+export function foldSeasonTallies(
+  matches: readonly SeasonMatch[],
+): SeasonTallies {
+  return {
+    perMatch: seasonPerMatch(matches),
+    outcomes: seasonOutcomes(matches),
+    netGame: seasonNetGame(matches),
+    rallyBands: seasonRallyBands(matches),
+  };
+}
