@@ -521,7 +521,12 @@ test.describe("personal options carry no player", () => {
 
 // ── Entry points ────────────────────────────────────────────────────────────
 
-import { askEntryHref, askTagsFromQuery } from "@/lib/services/ask/entry";
+import {
+  ASK_ENTRY_QUESTION_MAX,
+  askEntryHref,
+  askQuestionFromQuery,
+  askTagsFromQuery,
+} from "@/lib/services/ask/entry";
 import { askAboutOpponentHref } from "@/components/dashboard/opponents/opponent-drawer-shared";
 import type { AskTagOptions } from "@/lib/data/ask-tags";
 import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
@@ -605,5 +610,41 @@ test.describe("the Ask entry points (`entry.ts`)", () => {
     expect(askTagsFromQuery({ match: ["m1", "m1"] }, OPTIONS, TEAM)).toEqual(
       [],
     );
+  });
+
+  test("a question rides along as `q`, trimmed, and reads back the same", () => {
+    const href = askEntryHref(
+      PERSONAL_ASK_SCOPE,
+      { kind: "match", id: "m1" },
+      { question: '  Why does my report say "You won the net"?  ' },
+    );
+    expect(href).toBe(
+      "/dashboard/ask?match=m1&q=" +
+        encodeURIComponent('Why does my report say "You won the net"?'),
+    );
+    const params = Object.fromEntries(new URL(href!, "http://x").searchParams);
+    expect(askQuestionFromQuery(params)).toBe(
+      'Why does my report say "You won the net"?',
+    );
+    // A blank question adds nothing.
+    expect(
+      askEntryHref(
+        PERSONAL_ASK_SCOPE,
+        { kind: "match", id: "m1" },
+        {
+          question: "   ",
+        },
+      ),
+    ).toBe("/dashboard/ask?match=m1");
+  });
+
+  test("`q` is capped on a word, and nothing reads as no question", () => {
+    const long = "word ".repeat(200);
+    const read = askQuestionFromQuery({ q: long });
+    expect(read.length).toBeLessThanOrEqual(ASK_ENTRY_QUESTION_MAX);
+    expect(read.endsWith("word…")).toBe(true);
+    expect(askQuestionFromQuery({})).toBe("");
+    expect(askQuestionFromQuery({ q: "" })).toBe("");
+    expect(askQuestionFromQuery({ q: ["a", "b"] })).toBe("");
   });
 });
