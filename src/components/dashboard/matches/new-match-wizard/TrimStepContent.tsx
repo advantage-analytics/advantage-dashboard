@@ -739,7 +739,10 @@ function TrimStepContentImpl({
   // reach the trim. A text field keeps its own undo, and an open dialog
   // (Start over, Add hours) owns the keyboard: moving the cuts behind a modal
   // would hand Continue a window nobody saw change. Dialogs trap focus, so the
-  // target is inside one whenever one is open.
+  // target is inside one whenever one is open. Judged from the target only —
+  // never a document-wide `[aria-modal]` query: `MobileGate` is an
+  // `aria-modal` alertdialog mounted on every dashboard page and merely
+  // hidden at desktop widths, so such a query would switch ⌘Z off for good.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const action = trimHistoryKey(e);
@@ -747,8 +750,7 @@ function TrimStepContentImpl({
       if (
         (e.target as HTMLElement | null)?.closest?.(
           '[role="dialog"], [role="alertdialog"]',
-        ) ||
-        document.querySelector('[aria-modal="true"]')
+        )
       ) {
         return;
       }
