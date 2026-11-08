@@ -147,7 +147,7 @@ ready).
 
 ## T11 · Season Advantage Intelligence claim
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1, T7
 - **files:** `src/app/api/player-insight/route.ts` (new), `player-profile/profile-insight-card.tsx` (new), `src/lib/data/player-season.ts`, `openapi/advantage-api.yaml`, `tests/player-insight-prompt.spec.ts` — guess

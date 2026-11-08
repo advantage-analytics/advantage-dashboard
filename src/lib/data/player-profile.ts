@@ -828,3 +828,21 @@ export function seasonKpis(
   // renders them in its own order, so this is the order the strip reads in.
   return tiles;
 }
+
+/* ── Naming ──────────────────────────────────────────────────────────────── */
+
+/**
+ * How a roster row names a player: `display_name`, else the email's local
+ * part, else "Unnamed player"; `firstName` is its first word. One rule for
+ * the profile (`getPlayerProfile`) and the season claim's route
+ * (`/api/player-insight`), so the sentence on the insight card calls the
+ * player what the rail does.
+ */
+export function rosterPlayerName(row: {
+  display_name: string | null;
+  email: string | null;
+}): { name: string; firstName: string } {
+  const name =
+    row.display_name?.trim() || row.email?.split("@")[0] || "Unnamed player";
+  return { name, firstName: name.split(/\s+/)[0] ?? name };
+}

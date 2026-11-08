@@ -1,4 +1,6 @@
+import type { SeasonEvidence } from "@/lib/data/player-insight";
 import type { SeasonGroup, SeasonTallies } from "@/lib/data/player-season";
+import { ProfileInsightCard } from "@/components/dashboard/team/player-profile/profile-insight-card";
 import { ProfileInsightEmpty } from "@/components/dashboard/team/player-profile/profile-insight-empty";
 import { SeasonHeadToHeadCard } from "@/components/dashboard/team/player-profile/season-head-to-head-card";
 import { SeasonNetGameCard } from "@/components/dashboard/team/player-profile/season-net-game-card";
@@ -15,6 +17,14 @@ import { SeasonRallyLengthCard } from "@/components/dashboard/team/player-profil
  * 720px of pane (the `@container` on `MatchReportPane`) the two columns split
  * 1:1, `flex-1 min-w-0` each; under it they stack, head to head first.
  *
+ * ── The insight slot ────────────────────────────────────────────────────────
+ * With analyzed matches it is `ProfileInsightCard`: the season claim streams
+ * in from `/api/player-insight` over an evidence line the page composed from
+ * the same fold (`buildSeasonEvidence`), so every figure on the card is the
+ * server's. With none it is `ProfileInsightEmpty`, saying so — the card is
+ * never asked for a player with nothing analyzed, because there is nothing
+ * for a claim to be about.
+ *
  * ── No analyzed matches ─────────────────────────────────────────────────────
  * Unlike the report, which withholds its row for a match with no points, this
  * view always draws every card. A season is the player's whole record, and
@@ -23,21 +33,23 @@ import { SeasonRallyLengthCard } from "@/components/dashboard/team/player-profil
  * nothing analysed yet as for one with a season, and no card pops in when
  * their first match is.
  *
- * The insight slot is `ProfileInsightEmpty` for now: there is no season
- * summary to show yet, and the slot says so rather than collapsing.
- *
  * No hooks and no directive, so the page's Server Component renders it
  * directly; the cards it composes are the client modules. Takes the season's
  * folded figures, never `PlayerSeason.perMatch` — a season's points are
  * megabytes and must not reach the client payload.
  */
 export function ProfileStatisticsView({
+  playerId,
   playerName,
   firstName,
   analyzed,
   groups,
   tallies,
+  evidence,
+  insightSignature,
 }: {
+  /** The roster's own id (`profile.playerId`) — what the insight route resolves. */
+  playerId: string;
   /** The player's full name; the cards show their surname. */
   playerName: string;
   /** Their given name, for the insight slot's sentence. */
@@ -48,10 +60,26 @@ export function ProfileStatisticsView({
   groups: SeasonGroup[];
   /** `PlayerSeason.tallies` — the chart column's figures. */
   tallies: SeasonTallies;
+  /** `buildSeasonEvidence(season)` — the card's figures; `null` with nothing analyzed. */
+  evidence: SeasonEvidence | null;
+  /** `seasonInsightSignature(season)` — keys the card's session cache. */
+  insightSignature: string;
 }) {
   return (
     <>
-      <ProfileInsightEmpty firstName={firstName} />
+      {analyzed > 0 && evidence ? (
+        // Keyed on the signature: a season that changes under the card
+        // remounts it, so its cache lookup and stream start over cleanly.
+        <ProfileInsightCard
+          key={`${playerId}:${insightSignature}`}
+          playerId={playerId}
+          firstName={firstName}
+          evidence={evidence.parts}
+          signature={insightSignature}
+        />
+      ) : (
+        <ProfileInsightEmpty firstName={firstName} />
+      )}
 
       {/* `statistics-view.tsx`'s row, class for class. The row stretches and
           the chart column hands its slack to Rally length; `*:shrink-0` so

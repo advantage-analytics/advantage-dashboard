@@ -106,3 +106,15 @@ is the runner's. Newest entries at the bottom.
 1. The rail skeleton always draws the record row and the New match bar and never the hand/backhand line or state pill, so the rail shifts slightly for some players and viewers.
 2. The Net game skeleton is the populated card's shape; an empty season draws a shorter card.
 3. The Visualizations pane has no skeleton yet (T9, paused).
+
+## T11 · Season Advantage Intelligence claim — done
+
+**gate:** mechanical PASS · completion PASS
+
+**changed:** New `POST /api/player-insight` (cookie auth, team workspace, roster player via `getPlayerMatchSides`, 401/404/400/204/500 through `errorResponse`, no service role, no ball-paths read; one-sentence ≤8-word claim, no digits, streamed via `getLLMStream` + `textStreamResponse`). Pure `src/lib/data/player-insight.ts` (`buildSeasonEvidence`, `seasonInsightSignature`, `buildPlayerInsightPrompt`). New `player-profile/profile-insight-card.tsx` (report anatomy, server-composed evidence line, sessionStorage cache per player + season signature, settles to `ProfileInsightEmpty reason="unavailable"`); the Statistics view mounts it when analyzed > 0. `ProfileInsightEmpty` gains `reason` (fixes T7's wording). `rosterPlayerName` extracted (pure refactor). OpenAPI entry added; `npm run api:lint` clean. MAP.md and docs/llm-setup.md updated. Specs: `player-insight-prompt`, `profile-insight-card`.
+
+**follow-ups:**
+
+1. First real run: check the third-person claim voice on a live season and whether zero-valued count rows in the prompt read as signal.
+2. Insight routes have no rate limiting (docs/llm-setup.md §10).
+3. Lob rows are absent from the prompt (no ball-paths read in the route).

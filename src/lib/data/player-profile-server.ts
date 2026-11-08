@@ -47,6 +47,7 @@ import {
   type ProfileResult,
   type ProfileStatRow,
   profileFormBar,
+  rosterPlayerName,
 } from "@/lib/data/player-profile";
 import type { FormBar } from "@/lib/data/form-bar";
 import type { MemberRole } from "@/lib/data/team-settings-server";
@@ -583,15 +584,14 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
       }
     : null;
 
-  const name =
-    row.display_name?.trim() || row.email?.split("@")[0] || "Unnamed player";
+  const { name, firstName } = rosterPlayerName(row);
 
   return {
     playerId: row.player_id,
     profileId: row.profile_id,
     userId: row.user_id,
     name,
-    firstName: name.split(/\s+/)[0] ?? name,
+    firstName,
     email: row.email,
     role: row.role as MemberRole,
     classYear: row.class_year,

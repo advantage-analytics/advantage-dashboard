@@ -11,6 +11,10 @@ import {
   getPlayerSeason,
   seasonOpponentCount,
 } from "@/lib/data/player-season-server";
+import {
+  buildSeasonEvidence,
+  seasonInsightSignature,
+} from "@/lib/data/player-insight";
 import { getRosterData } from "@/lib/data/team-roster-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 // The report frame's parts by their named exports: this is a Server
@@ -239,6 +243,7 @@ export default async function PlayerProfilePage({
               <ProfileStatisticsBody
                 programId={active.id}
                 playerId={playerId}
+                rosterPlayerId={profile.playerId}
                 playerName={profile.name}
                 firstName={profile.firstName}
               />
@@ -271,15 +276,23 @@ async function AnalyzedCount({
  * The Statistics tab's body: the season, awaited here and nowhere above, then
  * `ProfileStatisticsView` inside the tab's panel. Null season is an id that
  * names nobody, which the page has already 404ed on.
+ *
+ * The insight card's evidence line and cache signature are composed here,
+ * on the server, from the season fold (`player-insight.ts`): the figures the
+ * card shows under the streamed claim are the same objects the Head to head
+ * table draws, never the model's. `rosterPlayerId` is the roster's own id,
+ * which is what `/api/player-insight` resolves.
  */
 async function ProfileStatisticsBody({
   programId,
   playerId,
+  rosterPlayerId,
   playerName,
   firstName,
 }: {
   programId: string;
   playerId: string;
+  rosterPlayerId: string;
   playerName: string;
   firstName: string;
 }) {
@@ -288,11 +301,14 @@ async function ProfileStatisticsBody({
   return (
     <ProfileViewWhen view="statistics">
       <ProfileStatisticsView
+        playerId={rosterPlayerId}
         playerName={playerName}
         firstName={firstName}
         analyzed={season.analyzed}
         groups={season.groups}
         tallies={season.tallies}
+        evidence={buildSeasonEvidence(season)}
+        insightSignature={seasonInsightSignature(season)}
       />
     </ProfileViewWhen>
   );

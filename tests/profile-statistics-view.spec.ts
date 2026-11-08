@@ -78,20 +78,27 @@ function render(): string {
   });
   const { ProfileStatisticsView } = loader.load(VIEW) as {
     ProfileStatisticsView: React.ComponentType<{
+      playerId: string;
       playerName: string;
       firstName: string;
       analyzed: number;
       groups: ReturnType<typeof foldSeasonRows>;
       tallies: ReturnType<typeof foldSeasonTallies>;
+      evidence: null;
+      insightSignature: string;
     }>;
   };
   return renderToStaticMarkup(
     React.createElement(ProfileStatisticsView, {
+      playerId: "p-maya",
       playerName: "Maya Chen",
       firstName: "Maya",
       analyzed: 0,
       groups: foldSeasonRows([]),
       tallies: foldSeasonTallies([]),
+      // Nothing analyzed: no evidence line, so the slot is the empty state.
+      evidence: null,
+      insightSignature: "",
     }),
   );
 }
