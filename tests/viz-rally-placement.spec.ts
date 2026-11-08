@@ -45,7 +45,10 @@ test("rally placement counts each role-resolved landing for either player at bot
         ]
       : [
           [1.4, 3, false, "lost"],
-          [-0.8, 2, true, "miss"],
+          // Netted with its landing recorded past the net: drawn where its
+          // path from the contact (lateral 1, ~12.1 m short of the net)
+          // meets the net, not at the landing's -0.8.
+          [1 - 1.8 * (12.1 / 14.1), 2, true, "miss"],
           [-3, 9, false, "lost"],
         ];
     for (let i = 0; i < 6; i++) {

@@ -135,6 +135,11 @@ export interface FilmTransportProps {
    * console's player loops on ⇧L, since its L marks a let.
    */
   loopShortcut?: string;
+  /**
+   * The key Skip dead time's tooltip names. Default D, the room's; the
+   * labelling console's player takes ⇧D, since its D marks a drop shot.
+   */
+  skipDeadShortcut?: string;
   onToggleMute: () => void;
   onToggleCourt: () => void;
   onExit: () => void;
@@ -365,7 +370,7 @@ export function FilmTransport(p: FilmTransportProps) {
           label={
             p.skippingDeadTime ? "Skip dead time — on" : "Skip dead time — off"
           }
-          shortcut="D"
+          shortcut={p.skipDeadShortcut ?? "D"}
           pressed={p.skippingDeadTime}
           onClick={p.onToggleSkipDeadTime}
         >

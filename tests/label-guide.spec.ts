@@ -114,7 +114,8 @@ test.describe("LabelGuide", () => {
       expect(rendered).toContain(key);
     }
     // The shot kinds are an admin's keys: never in a labeller's guide.
-    for (const key of ["G", "K", "J", "P"]) {
+    // (L stays: it is a labeller's let as well as an admin's lob.)
+    for (const key of ["G", "D", "P"]) {
       expect(rendered).not.toContain(key);
     }
     for (const group of LABEL_SHORTCUT_GROUPS) {
@@ -144,7 +145,7 @@ test.describe("LabelGuide", () => {
       })),
     );
     expect(named.map((n) => n.key)).toEqual(
-      expect.arrayContaining(["⇧L", "D", "M"]),
+      expect.arrayContaining(["⇧L", "⇧D", "M"]),
     );
     for (const { key, text } of named) {
       const shortcut = shortcuts.find((item) => item.keys.join("") === key);
