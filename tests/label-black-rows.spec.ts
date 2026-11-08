@@ -1387,7 +1387,7 @@ test.describe("the black shots well", () => {
         ),
       ),
     ).toBe(
-      "Split point here Add shot after Reset shot Delete shot Kind Approach G Lob K Drop shot J Passing P",
+      "Split point here Add shot after Reset shot Delete shot Kind Approach G Lob L Drop shot D Passing P",
     );
     // No In · Out · Net toggle: the call is the Result cell's menu now.
     expect(edited).not.toContain("data-shot-call");
@@ -1650,7 +1650,7 @@ test.describe("the black shots well", () => {
     expect(
       text(row.slice(row.lastIndexOf("<div", row.indexOf("data-shot-tray")))),
     ).toBe(
-      "Split point here Add shot after Reset shot Forced Unforced E Delete shot Kind Approach G Lob K Drop shot J Passing P",
+      "Split point here Add shot after Reset shot Forced Unforced E Delete shot Kind Approach G Lob L Drop shot D Passing P",
     );
     // Two real buttons, neither pressed while unmarked, both naming E.
     for (const [kind, label] of [

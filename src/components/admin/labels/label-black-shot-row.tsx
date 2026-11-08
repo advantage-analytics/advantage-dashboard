@@ -1659,8 +1659,8 @@ export const SHOT_TAG_LABEL: Record<LabelShotTag, string> = {
 };
 export const SHOT_TAG_KEY: Record<LabelShotTag, string> = {
   approach: "G",
-  lob: "K",
-  drop_shot: "J",
+  lob: "L",
+  drop_shot: "D",
   passing: "P",
 };
 

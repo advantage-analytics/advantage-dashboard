@@ -8,7 +8,10 @@ import {
   isMarkableError,
   markableErrorStroke,
 } from "@/lib/services/labels/ending-derived";
-import { deriveShotResult } from "@/lib/services/labels/shot-derived";
+import {
+  deriveShotResult,
+  effectiveShotResult,
+} from "@/lib/services/labels/shot-derived";
 import { spinRows } from "./label-format";
 import {
   LABEL_SPINS,
@@ -252,11 +255,16 @@ export function errorKindKeyPatch(
   return { error_kind: nextErrorKind(point.errorKind) };
 }
 
-/** The tag each key toggles: G approach, K lob, J drop shot, P passing. */
+/**
+ * The tag each key toggles: G approach, L lob, D drop shot, P passing. L is
+ * the let key first: on a serve it marks a let, and only on a rally stroke
+ * does it reach here (the console's `letKey`). D's old binding, Skip dead
+ * time, moved to ⇧D (label-video.tsx).
+ */
 const TAG_OF_KEY: Record<string, LabelShotTag> = {
   g: "approach",
-  k: "lob",
-  j: "drop_shot",
+  l: "lob",
+  d: "drop_shot",
   p: "passing",
 };
 
@@ -276,4 +284,24 @@ export function tagKeyPatch(
 ): LabelShotPatch | null {
   if (shot.stroke === null || isServeStroke(shot.stroke)) return null;
   return { tags: toggledShotTags(shot.tags, tag) };
+}
+
+/** Whether a key is N, the net key. */
+export function isNetKey(key: string): boolean {
+  return key === "n" || key === "N";
+}
+
+/**
+ * N on `shot`: the call made Net, as the Result menu's Net item writes it, or
+ * — on a stroke already called Net — the result its landing reads given back
+ * (`deriveShotResult`, the menu's first item; none when nothing is placed).
+ * Null on a stroke with no type yet, which has no Result menu, and on one
+ * whose landing itself reads Net, where there is nothing to take back. Any
+ * stroke takes it, a serve included: a labeller's key as much as an admin's.
+ */
+export function netKeyPatch(shot: LabelShot): LabelShotPatch | null {
+  if (shot.stroke === null) return null;
+  if (effectiveShotResult(shot) !== "net") return { result: "net" };
+  const derived = deriveShotResult(labelShotValues(shot));
+  return derived === "net" ? null : { result: derived };
 }

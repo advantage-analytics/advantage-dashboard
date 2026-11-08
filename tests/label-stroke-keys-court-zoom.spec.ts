@@ -9,8 +9,10 @@ import {
   hasEarlierServe,
   isErrorKindKey,
   isLetKey,
+  isNetKey,
   isStrokeKey,
   letKeyPatch,
+  netKeyPatch,
   nextErrorKind,
   strokeKeyChange,
   withServeHitter,
@@ -588,6 +590,34 @@ test.describe("L: a serve's let", () => {
     });
   });
 
+  test("N calls a stroke Net, and again gives back the landing's result", () => {
+    const rally = (fields: Parameters<typeof labelShot>[2] = {}) =>
+      labelShot("n-shot", "l-point", { stroke: "forehand", ...fields });
+    expect(netKeyPatch(rally())).toEqual({ result: "net" });
+    expect(netKeyPatch(rally({ result: "out" }))).toEqual({ result: "net" });
+    // A serve takes it too, a let included.
+    expect(netKeyPatch(serve())).toEqual({ result: "net" });
+    expect(netKeyPatch(serve({ result: "let" }))).toEqual({ result: "net" });
+    // Unplaced: Net goes back to no result.
+    expect(netKeyPatch(rally({ result: "net" }))).toEqual({ result: null });
+    // A landing that itself reads Net has nothing to take back.
+    const inTheNet = { contactX: 0, contactY: 0, landingX: 0, landingY: 2 };
+    expect(netKeyPatch(rally(inTheNet))).toBeNull();
+    // An untyped stroke has no Result menu, so no key.
+    expect(netKeyPatch(rally({ stroke: null }))).toBeNull();
+    expect(isNetKey("n")).toBe(true);
+    expect(isNetKey("N")).toBe(true);
+    expect(isStrokeKey("n")).toBe(false);
+    // Unshifted, and not gated to an admin as the shot kinds are.
+    expect(source).toMatch(
+      /: isNetKey\(key\) && !event\.shiftKey\s+\? \(\) => netKey\.current\(\)/,
+    );
+    const body = source.slice(source.indexOf("    netKey.current = () => {"));
+    const fn = body.slice(0, body.indexOf("\n    };\n"));
+    expect(fn).toContain("if (!operable || confirm) return false;");
+    expect(fn).not.toContain("labeller");
+  });
+
   test("L either case; ⇧ is read off the event, so Caps Lock keeps both keys", () => {
     expect(isLetKey("l")).toBe(true);
     expect(isLetKey("L")).toBe(true);
@@ -601,7 +631,9 @@ test.describe("L: a serve's let", () => {
       "src/components/admin/labels/label-video.tsx",
       "utf8",
     );
-    expect(video).toContain('if (event.shiftKey !== (key === "l")) return;');
+    expect(video).toContain(
+      'if (event.shiftKey !== (key === "l" || key === "d")) return;',
+    );
   });
 
   test("L on the console: guarded like E, and selects no stroke it will not mark", () => {
