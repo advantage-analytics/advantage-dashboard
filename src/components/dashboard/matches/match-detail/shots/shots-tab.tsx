@@ -1,13 +1,13 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useMounted } from "@/lib/ui/use-mounted";
 import {
   VizWall,
   type WallCollection,
 } from "@/components/dashboard/matches/match-detail/shots/viz-wall";
-import { VizFocused } from "@/components/dashboard/matches/match-detail/shots/viz-focused";
+import { VizLightbox } from "@/components/dashboard/matches/match-detail/shots/viz-lightbox";
+import type { PlayerFilter } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   useVizState,
   VizStateProvider,
@@ -21,89 +21,28 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
 
 /**
- * The Visualizations tab's panel. `?cut=` absent (or unrecognised) renders
- * the wall of default cuts (`VizWall`, P1a/P1b); a recognised `cut` renders
- * the focused court view (`VizFocused`, Task 5) — the wall's tiles and the
- * toolbar's cut/chart menus are the only way in.
+ * The Visualizations tab's panel: the wall (`VizWall`, four court-first
+ * cards, one player at a time) always, and over it the lightbox
+ * (`VizLightbox`) whenever `?cut=` names a cut — a wall card, a saved view or
+ * a pasted link opens it, and closing drops `cut` again. The wall never
+ * unmounts, so closing lands exactly where the reader left it.
  *
  * Attribution (guardrails §4): "you" is resolved exactly once, by
- * `useMatchSides()` — `VizWall` and `VizFocused` each call it directly and
- * pass the resolved side's own `isPlayer1` down to `computeViz`. Nothing
- * below this reads player1/player2 off the match.
+ * `useMatchSides()` — `VizWall` and the lightbox's `useVizView` each call it
+ * and pass the resolved side's own `isPlayer1` down to `computeViz`.
  *
- * `savedViews`/`workspaceRole`/`workspaceKind`/`workspaceName` (Task 8/9)
- * come from `useMatchReport().meta` — loaded once in `page.tsx` and threaded
- * through `MatchReportProvider` rather than fetched here.
+ * `VizStateProvider` is mounted ONCE here, around the wall and the
+ * lightbox, so every descendant's `useVizState()` reads the SAME store.
+ * `ShotsTabBody` reads it, inside the provider.
  *
- * `SavedViewsBand` (Task 9, including Part B's Manage mode) is built ONCE
- * here and handed to both surfaces through their existing `savedViewsBand`
- * slot — one band, two mount points, so the wall and the focused view can
- * never draw a different list, count, or Manage-mode state. Manage mode
- * itself is entirely the band's own client state (never a prop from here);
- * it withholds "Manage views" whenever nothing in the list is manageable.
- * F4: only one of the two ever actually renders it at a time (only one of
- * `VizWall`/`VizFocused` mounts per `state.cut`), so `variant` is set here
- * from that same `state.cut` — `"wall"` renders the pre-existing saved-only
- * grid, `"focused"` the Views grid — a wrapping grid reached by scrolling
- * the page, not a scrolling row (defaults, saved, Create view).
- *
- * Saving is on for everyone, including players — except on a read-only
- * report (the share page, the sample match), where `shotsWriteAccess(meta)`
- * turns every saved-view and band writer off: no "Create view" tile, no
- * "Save this view…", no Manage mode, no band editor. `VizFocused` owns its
- * own Save dialog and takes only that one flag plus the workspace facts the
- * dialog's "Share with team" row depends on. Reading is untouched.
- *
- * The public share page (`meta.readOnly`) draws the same courts with nothing
- * that writes or belongs to a workspace: no Saved collection, no "Create
- * view", no Save dialog — the default cuts, their filters and the fullscreen
- * viewer only.
- *
- * `VizStateProvider` (`viz-state-context.tsx`) is mounted ONCE here, around
- * the whole wall/focused tree, so every descendant's `useVizState()` reads
- * the SAME store — a click in the filters popover and a click in the
- * applied strip a moment later both land, instead of the second racing the
- * first's still-pending navigation. `ShotsTab` itself needs `state.cut` to
- * choose wall vs. focused, so it's split into this outer component (mounts
- * the provider) and `ShotsTabBody` (reads it) — `useVizState()` must run
- * inside the provider it belongs to, never above it.
+ * The public share page and the sample match (`meta.readOnly`) draw the same
+ * courts with nothing that writes: no Saved collection, no "Save as view".
  */
-
-/**
- * Phase 2A: the fullscreen court viewer. Client-only (`ssr: false`) — it is a
- * `createPortal` onto `document.body` that measures its own stage before it
- * can place the court, so there is nothing meaningful for the server to
- * render, and keeping it out of the initial bundle keeps the tab's own
- * first paint unchanged for everyone who never opens it.
- *
- * Fix round 2 — this must NEVER be rendered during SSR or the hydration
- * render, which is what `useMounted()` below is for. `next/dynamic(...,
- * {ssr:false})` expands to `<Suspense fallback={null}><BailoutToCSR>
- * <Lazy/></BailoutToCSR></Suspense>`, and `BailoutToCSR` THROWS on the server
- * (`node_modules/next/dist/shared/lib/lazy-dynamic/dynamic-bailout-to-csr.js`).
- * The throw is caught by its own Suspense boundary, so the server HTML ends up
- * carrying a bailed-out boundary — `<!--$?-->` plus a `<template>` — that the
- * client tree does not reproduce at that position. A hard load of
- * `?tab=shots&cut=…&fullscreen=1` therefore hydrated with a mismatch and React
- * re-rendered the whole match report on the client.
- */
-const VizFullscreen = dynamic(
-  () =>
-    import("@/components/dashboard/matches/match-detail/shots/viz-fullscreen").then(
-      (m) => m.VizFullscreen,
-    ),
-  { ssr: false },
-);
-
 export function ShotsTab() {
   return (
-    // `VizBandsProvider` (Phase 2B) sits INSIDE the state provider and
-    // around both surfaces: the optimistic band override has to be visible
-    // to the focused court's stats card and to the fullscreen viewer's
-    // overlay at once, since a preset pick must move the band rects and the
-    // percentages printed on them in the same frame. Mounted here rather
-    // than in the viewer because the viewer unmounts on Esc and the override
-    // (and its pending save) must outlive that.
+    // `VizBandsProvider` sits inside the state provider and around both
+    // surfaces: a band preset picked in the lightbox moves the bands and the
+    // percentages printed on them in the same frame.
     <VizStateProvider>
       <VizBandsProvider>
         <ShotsTabBody />
@@ -121,90 +60,62 @@ function ShotsTabBody() {
   const mounted = useMounted();
   const { canSaveViews } = shotsWriteAccess(meta);
 
-  // Keep the gallery selection across the wall/focused mount switch. A saved
-  // view must return to a visible saved tile for the court morph and keyboard
-  // focus target; a default view returns to Default. Drafting keeps the
-  // collection that opened the create tile.
+  // The wall's own player. While the lightbox is open `state.filters.player`
+  // belongs to the opened card (and its You | Opponent switch), so the wall
+  // keeps the player it showed when the card opened, and closing goes back
+  // to it.
+  const [wallPlayer, setWallPlayer] = useState<PlayerFilter>(
+    state.cut === null ? state.filters.player : "you",
+  );
+  if (state.cut === null && state.filters.player !== wallPlayer) {
+    setWallPlayer(state.filters.player);
+  }
+
+  // A saved view opens over the Saved collection, a default card over
+  // Default, so closing returns to the collection that opened it.
   useEffect(() => {
     if (state.cut !== null && !state.draft) {
-      // The URL-owned focused identity changes the collection that must be
-      // visible when the wall remounts; there is no wall child to update then.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setWallCollection(state.viewId ? "saved" : "default");
     }
   }, [state.cut, state.draft, state.viewId]);
 
-  // ONE gated value. Anything that ever needs to know "is the viewer up" while
-  // RENDERING — an `inert`/`aria-hidden`/class toggle on the court behind it,
-  // say — must read this and not `state.fullscreen`, or it reintroduces the
-  // same server/client divergence one attribute at a time.
-  const viewerOpen =
-    mounted &&
-    state.fullscreen === true &&
-    state.cut !== null &&
-    state.draft !== true;
-
-  // Before the wall/focused branch, so no URL can reach an empty court.
+  // Before anything else, so no URL can reach an empty court.
   if (points.length === 0) return <VizEmpty />;
 
-  const savedViewsBand = (
-    <SavedViewsBand
-      views={meta.savedViews}
-      workspaceRole={meta.workspaceRole}
-      workspaceKind={meta.workspaceKind}
-      canSaveViews={canSaveViews}
-      variant={state.cut === null ? "wall" : "focused"}
-      readOnly={meta.readOnly}
-    />
-  );
+  // The lightbox is a client-only portal: never part of the server HTML or
+  // the hydration render, so a hard load of `?cut=…` hydrates the wall and
+  // then opens over it.
+  const lightboxOpen = mounted && state.cut !== null;
 
   return (
     <>
-      {/* Final review #2: everything behind the viewer goes `inert` while it
-          is up. The portal is a plain `role="region"` with no focus trap, so
-          without this, Tab past the last zoom button walked the toolbar, the
-          court, the stats card and the whole saved-views grid — all covered,
-          all operable — and a screen reader read the entire document. React
-          19 takes `inert` as a boolean prop; `undefined` (not `false`) is
-          what removes the attribute.
-
-          It MUST be `viewerOpen` and not `state.fullscreen`: the gated value
-          is false during SSR and hydration, so the attribute can never be
-          part of the server HTML and absent from the first client render. */}
-      <div inert={viewerOpen || undefined}>
-        {state.cut === null ? (
-          <VizWall
-            // A read-only report has no Saved collection to switch to: its only
-            // item would be "Create view", a writer.
-            savedViewsBand={meta.readOnly ? undefined : savedViewsBand}
-            collection={wallCollection}
-            onCollectionChange={setWallCollection}
-          />
-        ) : (
-          <VizFocused
-            savedViews={meta.savedViews}
-            savedViewsBand={savedViewsBand}
-            canSaveViews={canSaveViews}
-            workspaceKind={meta.workspaceKind}
-            workspaceName={meta.workspaceName}
-            hasPlayableVideo={meta.hasPlayableVideo}
-            onWatchPoint={actions.watchPoint}
-            readOnly={meta.readOnly}
-          />
-        )}
-      </div>
-      {/* The focused view stays mounted UNDERNEATH the viewer — leaving is a
-          state change (the `fullscreen` key dropped), not a remount, so the
-          court behind is already exactly where it was.
-
-          RULING (fix round 1): never while drafting. `?draft=1` is G4's
-          "Create view" prompt, where the focused court deliberately draws NO
-          dots until something has been chosen; a viewer opened over it plotted
-          the whole unfiltered cut, so the same URL showed a blank court and a
-          full one at once. The door itself is hidden in draft mode, but
-          `&fullscreen=1` can arrive straight off a pasted URL, so the guard
-          belongs here rather than only on the button. */}
-      {viewerOpen && <VizFullscreen />}
+      <VizWall
+        // A read-only report has no Saved collection to switch to: its only
+        // item would be "Create view", a writer.
+        savedViewsBand={
+          meta.readOnly ? undefined : (
+            <SavedViewsBand
+              views={meta.savedViews}
+              workspaceRole={meta.workspaceRole}
+              workspaceKind={meta.workspaceKind}
+              canSaveViews={canSaveViews}
+              readOnly={meta.readOnly}
+            />
+          )
+        }
+        collection={wallCollection}
+        onCollectionChange={setWallCollection}
+        player={wallPlayer}
+      />
+      {lightboxOpen && (
+        <VizLightbox
+          wallPlayer={wallPlayer}
+          onWatchPoints={(ids) => {
+            if (ids[0]) actions.watchPoint(ids[0]);
+          }}
+        />
+      )}
     </>
   );
 }

@@ -179,3 +179,32 @@ export function wallSegmentReadout(
         : `Average ${summary.averagePct}% across all ${summary.count}`,
   };
 }
+
+/**
+ * The lightbox header's count clause, after "Serve placement · You · ":
+ * "27 of 31 in, 17 of those 27 won" — the card's own count, then the points
+ * won among them. The errors card says its count alone ("14 total"); a cut
+ * with no wall card (return contact, rally position) counts its Depth rows,
+ * which hold every mark: "40 returns, 22 won".
+ */
+export function lightboxCountLine(
+  cut: Cut,
+  result: Pick<VizResult, "count" | "noun">,
+  stats: VizStats,
+  depthRows: BandRow[],
+): string {
+  if (
+    cut === "serve" ||
+    cut === "returnPlacement" ||
+    cut === "rallyPlacement" ||
+    cut === "errors"
+  ) {
+    const summary = wallSummaryFor(cut, result, stats, depthRows);
+    if (summary.share) return summary.countLabel;
+    const won = summary.segments.reduce((n, s) => n + s.won, 0);
+    return `${summary.countLabel}, ${won} of those ${summary.count} won`;
+  }
+  const rows = groupRows(stats, "depth");
+  const won = rows.reduce((n, r) => n + r.won, 0);
+  return `${result.count} ${result.noun}, ${won} won`;
+}

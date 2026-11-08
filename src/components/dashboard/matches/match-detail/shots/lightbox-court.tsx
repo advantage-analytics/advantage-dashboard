@@ -150,7 +150,7 @@ function highlightedZoneKeys(filters: VizFilters): Set<ZoneKey> {
   return keys;
 }
 
-export function VizFullscreenCourt({
+export function LightboxCourt({
   cut,
   chart,
   dots,

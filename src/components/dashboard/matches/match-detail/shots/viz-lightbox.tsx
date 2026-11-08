@@ -1,0 +1,764 @@
+"use client";
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
+
+import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { advButton } from "@/lib/ui/adv-button";
+import { contactBandRows, depthBandRows } from "@/lib/data/viz-bands";
+import { isTextEntry } from "@/lib/ui/is-text-entry";
+import { cn } from "@/lib/utils";
+
+import { AppliedStrip } from "./applied-strip";
+import {
+  bandEditorDirty,
+  bandEditorPayload,
+  bandEditorPreview,
+  initBandEditor,
+  refitBandEditor,
+  resetBandEditor,
+  type BandEditorState,
+} from "./band-editor-state";
+import { ChartMenu } from "./chart-menu";
+import { APRON_FILL, HEAT_APRON_FILL } from "./court-art";
+import { CutMenu } from "./cut-menu";
+import { defaultCutsFor } from "./default-cuts";
+import { FiltersPopover } from "./filters-popover";
+import { HeatRampLegend, LegendMark } from "./legend-mark";
+import { LifecycleChip } from "./lifecycle-chip";
+import { LightboxCourt } from "./lightbox-court";
+import { isPlayable, pointsBehind } from "./lightbox-points";
+import { KEY_PAN_PX, zoomPercentLabel } from "./pan-zoom";
+import { SaveViewDialog } from "./save-view-dialog";
+import { shotsWriteAccess } from "./shots-write-access";
+import { StatsCard } from "./stats-card";
+import { usePanZoom } from "./use-pan-zoom";
+import { useVizState } from "./use-viz-state";
+import { useVizView } from "./use-viz-view";
+import { useVizBands } from "./viz-bands-context";
+import {
+  VizBandsEditorBanner,
+  VizBandsEditorHandles,
+  VizBandsEditorSlab,
+  editorContext,
+} from "./viz-bands-editor";
+import type { VizBandsOverlayProps } from "./viz-bands-overlay";
+import { bandKindFor } from "./cut-kinds";
+import { CUT_LABEL, legendItemsFor } from "./viz-labels";
+import { isMarkRovingKey } from "./viz-mark-roving";
+import {
+  EMPTY_VIZ_FILTERS,
+  errorsJudgedIn,
+  type PlayerFilter,
+} from "./viz-model";
+import { clearedFilters, courtFor } from "./viz-url";
+import { lightboxCountLine } from "./wall-summary";
+import { useMatchFilters } from "../match-filters/provider";
+
+/**
+ * The opened card (canvas "Final flow" / "Flow states" S03–S17): a Dialog v3
+ * lightbox over the wall, replacing both the focused page and the fullscreen
+ * viewer. `shots-tab.tsx` mounts it whenever `state.cut` is set, so
+ * `?cut=…` opens it over the wall and dropping `cut` closes it.
+ *
+ * Geometry (Dialog v3, `reference/chrome.md`): scrim `rgba(13,13,13,.4)`,
+ * 14px radius, the dropdown shadow, 24/24/20 padding, a 28px close. On a
+ * 1512×982 screen it is 1212px wide, 96px from the top, with an 800px court
+ * column beside a 340px right column.
+ *
+ * Every figure comes from `useVizView()` — one `computeViz`, one
+ * `computeVizStats`, one resolved subject (guardrails §4) — and the footer's
+ * N is `pointsBehind()` over the same marks the court draws.
+ */
+
+/** Opens the Video tab on the points the lightbox shows. */
+export type WatchPoints = (pointIds: string[], label: string) => void;
+
+export function VizLightbox({
+  wallPlayer,
+  onWatchPoints,
+}: {
+  /** The wall's own You | Opponent, which closing restores — a player
+   *  switched inside the lightbox does not leak onto the wall. */
+  wallPlayer: PlayerFilter;
+  onWatchPoints?: WatchPoints;
+}) {
+  const { state, setState } = useVizState();
+  const { meta } = useMatchReport();
+  const { context: matchCtx } = useMatchFilters();
+  const {
+    cut,
+    result,
+    stats,
+    subjectName,
+    you,
+    opp,
+    points,
+    hasFilters,
+    isDraft,
+    bands,
+    bandZones: savedBandZones,
+    unit,
+  } = useVizView();
+  const { receipt, canEdit, applyBands } = useVizBands();
+  const { canSaveViews } = shotsWriteAccess(meta);
+
+  // The stage lives inside Radix's portal, which mounts a commit after this
+  // component, so a plain ref is still empty when `usePanZoom` first
+  // measures. The element goes through state instead, and the ref object it
+  // hands the hook changes identity once the stage exists — the hook keys its
+  // measuring effects on that identity.
+  const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null);
+  const stageRef = useMemo(() => ({ current: stageEl }), [stageEl]);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const saveAnchorRef = useRef<HTMLButtonElement>(null);
+  const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+
+  /* ── Marks: hover, keyboard focus, selection ──────────────────────────── */
+
+  const [activeMarkId, setActiveMarkId] = useState<string | null>(null);
+  const [focusedMarkId, setFocusedMarkId] = useState<string | null>(null);
+  const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
+  const [rovingMarkId, setRovingMarkId] = useState<string | null>(null);
+  const readoutLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+    },
+    [],
+  );
+
+  const activateMark = useCallback((id: string, keyboard: boolean) => {
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+    setActiveMarkId(id);
+    if (keyboard) setFocusedMarkId(id);
+  }, []);
+  const deactivateMark = useCallback((id: string) => {
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+    readoutLeaveTimer.current = setTimeout(() => {
+      setActiveMarkId((prev) => (prev === id ? null : prev));
+      setFocusedMarkId((prev) => (prev === id ? null : prev));
+    }, 220);
+  }, []);
+  const roveMark = useCallback((id: string) => setRovingMarkId(id), []);
+  const dropActiveMark = useCallback(() => {
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+    setActiveMarkId(null);
+    setFocusedMarkId(null);
+  }, []);
+  const holdReadout = useCallback(() => {
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+  }, []);
+  const releaseReadout = useCallback(() => {
+    setActiveMarkId(null);
+    setFocusedMarkId(null);
+  }, []);
+  const selectMark = useCallback((id: string) => {
+    setActiveMarkId(null);
+    setSelectedMarkId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const visibleSelectedMarkId =
+    selectedMarkId !== null &&
+    result?.dots.some((dot) => dot.id === selectedMarkId)
+      ? selectedMarkId
+      : null;
+
+  /* ── Band editor (moved from the fullscreen viewer) ───────────────────── */
+
+  const [editor, setEditor] = useState<BandEditorState | null>(null);
+  const activeEditor =
+    editor !== null &&
+    canEdit &&
+    cut !== null &&
+    bandKindFor(cut) === editor.kind
+      ? editor
+      : null;
+  const editing = activeEditor !== null;
+  // An editor that is no longer active is dropped outright, so it cannot
+  // spring back if `canEdit` or the cut flip back.
+  if (editor !== null && activeEditor === null) setEditor(null);
+
+  const [saving, setSaving] = useState(false);
+  const editSessionRef = useRef(0);
+
+  const updateEditor = useCallback(
+    (fn: (prev: BandEditorState) => BandEditorState) => {
+      setEditor((prev) => (prev === null ? prev : fn(prev)));
+    },
+    [],
+  );
+  const exitEdit = useCallback(() => setEditor(null), []);
+
+  // The stage needs a real cut; `shots-tab.tsx` only mounts this with one.
+  const pz = usePanZoom(cut ?? "serve", stageRef, dropActiveMark, editing);
+
+  // A resize re-fits the court while the editor is open: re-fit the draft to
+  // the new zoom during render, the way a stale editor is dropped above.
+  const [editorZ, setEditorZ] = useState<number | null>(null);
+  if (activeEditor !== null && editorZ !== pz.t.z) {
+    setEditorZ(pz.t.z);
+    setEditor(refitBandEditor(activeEditor, editorContext(unit, pz.t.z)));
+  }
+
+  const enterEdit = useCallback(() => {
+    if (!canEdit || cut === null) return;
+    const kind = bandKindFor(cut);
+    if (kind === null) return;
+    dropActiveMark();
+    editSessionRef.current += 1;
+    setSaving(false);
+    setEditorZ(pz.t.z);
+    setEditor(initBandEditor(kind, bands, editorContext(unit, pz.t.z)));
+  }, [canEdit, cut, bands, unit, pz.t.z, dropActiveMark]);
+
+  function saveEdit() {
+    if (activeEditor === null || saving) return;
+    if (!bandEditorDirty(activeEditor, bands)) return;
+    const session = editSessionRef.current;
+    setSaving(true);
+    void applyBands(bandEditorPayload(activeEditor, bands)).then((outcome) => {
+      if (session !== editSessionRef.current) return;
+      setSaving(false);
+      if (outcome === "saved") exitEdit();
+    });
+  }
+
+  const bandOverlay = useMemo<VizBandsOverlayProps | null>(() => {
+    if (activeEditor !== null) {
+      const preview = bandEditorPreview(activeEditor);
+      const kind = activeEditor.kind;
+      return {
+        kind,
+        dividersFt:
+          kind === "depth"
+            ? [activeEditor.draft[0], activeEditor.draft[1]]
+            : [...preview.contactDividersFt],
+        rows:
+          kind === "depth"
+            ? depthBandRows(preview, unit)
+            : contactBandRows(preview, unit),
+        statRows: null,
+        editing: true,
+      };
+    }
+    return savedBandZones;
+  }, [unit, savedBandZones, activeEditor]);
+
+  /* ── Close ────────────────────────────────────────────────────────────── */
+
+  // Back to the wall: no cut, no filters, the wall's own player. The wall
+  // never unmounted, so its scroll is where it was.
+  function close() {
+    setState({
+      cut: null,
+      chart: "scatter",
+      filters: { ...EMPTY_VIZ_FILTERS, player: wallPlayer },
+      viewId: null,
+    });
+  }
+
+  // Focus goes back to whatever opened the lightbox — the card, a saved
+  // view's tile — when it is still on the page.
+  const openerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (document.activeElement instanceof HTMLElement)
+      openerRef.current = document.activeElement;
+  }, []);
+
+  /* ── Keyboard: zoom and pan, inside the dialog only ───────────────────── */
+
+  const { zoomIn, zoomOut, fit, nudge } = pz;
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (isTextEntry(e.target)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (editing) return;
+    if (
+      isMarkRovingKey(e.key) &&
+      e.target instanceof Element &&
+      e.target.closest("[data-viz-mark]") !== null
+    )
+      return;
+    // Only while the court has the keyboard — a menu row's arrows are its own.
+    if (
+      !(e.target instanceof Element) ||
+      e.target.closest("[data-court-stage]") === null
+    )
+      return;
+    const keys: Record<string, () => void> = {
+      "+": zoomIn,
+      "=": zoomIn,
+      "-": zoomOut,
+      "0": fit,
+      ArrowLeft: () => nudge(KEY_PAN_PX, 0),
+      ArrowRight: () => nudge(-KEY_PAN_PX, 0),
+      ArrowUp: () => nudge(0, KEY_PAN_PX),
+      ArrowDown: () => nudge(0, -KEY_PAN_PX),
+    };
+    const run = keys[e.key];
+    if (run) {
+      e.preventDefault();
+      run();
+    }
+  }
+
+  if (cut === null || result === null || stats === null) return null;
+
+  /* ── Words ────────────────────────────────────────────────────────────── */
+
+  const savedView =
+    state.viewId !== null
+      ? (meta.savedViews.find((v) => v.id === state.viewId) ?? null)
+      : null;
+  const defaultCut = defaultCutsFor(errorsJudgedIn(matchCtx)).find(
+    (c) => c.cut === cut,
+  );
+  const title = isDraft
+    ? "New view"
+    : (savedView?.name ?? defaultCut?.name ?? CUT_LABEL[cut]);
+  const subjectWord = state.filters.player === "you" ? "You" : "Opponent";
+  const subtitle = isDraft
+    ? "Pick a chart and filters, then save it as a view."
+    : `${CUT_LABEL[cut]} · ${subjectWord} · ${lightboxCountLine(
+        cut,
+        result,
+        stats,
+        depthBandRows(bands, unit),
+      )}`;
+
+  const matched = isDraft ? [] : pointsBehind(cut, result.dots, points);
+  const playable = matched.filter(isPlayable);
+  const legend = legendItemsFor(cut, state.chart);
+  const heat = state.chart === "heat";
+
+  function choosePlayer(player: PlayerFilter) {
+    setState((prev) => ({
+      ...prev,
+      filters: courtFor(prev, player),
+      viewId: null,
+    }));
+  }
+
+  function clearFilters() {
+    setState((prev) => clearedFilters(prev));
+  }
+
+  return (
+    <DialogPrimitive.Root
+      open
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
+    >
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(13,13,13,0.4)] data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none" />
+        <DialogPrimitive.Content
+          aria-describedby="viz-lightbox-subtitle"
+          onKeyDown={onKeyDown}
+          onEscapeKeyDown={(e) => {
+            // Esc steps back one layer at a time: the band editor, then a
+            // selected point, then the lightbox itself.
+            if (editing) {
+              e.preventDefault();
+              exitEdit();
+            } else if (visibleSelectedMarkId !== null) {
+              e.preventDefault();
+              setSelectedMarkId(null);
+            }
+          }}
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            titleRef.current?.focus();
+          }}
+          onCloseAutoFocus={(e) => {
+            const opener = openerRef.current;
+            if (opener?.isConnected) {
+              e.preventDefault();
+              opener.focus({ preventScroll: true });
+            }
+          }}
+          className="fixed top-[clamp(16px,10dvh,96px)] left-1/2 z-50 flex h-[min(880px,calc(100dvh-clamp(16px,10dvh,96px)-32px))] w-[min(1212px,calc(100vw-32px))] -translate-x-1/2 flex-col rounded-[14px] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none"
+        >
+          <TooltipProvider>
+            {/* The bands receipt's live region, mounted for the lightbox's
+                whole life and only ever written to. */}
+            <div role="status" className="sr-only">
+              {receipt?.message ?? ""}
+            </div>
+
+            {/* ── Header ─────────────────────────────────────────────── */}
+            <div className="flex items-start gap-2.5 px-6 pt-6 pb-5">
+              <div className="flex min-w-0 flex-col gap-1">
+                <DialogPrimitive.Title
+                  ref={titleRef}
+                  tabIndex={-1}
+                  className="m-0 truncate text-[16px] leading-[1.4] font-medium text-[var(--ink-900)] outline-none"
+                >
+                  {title}
+                </DialogPrimitive.Title>
+                <p
+                  id="viz-lightbox-subtitle"
+                  className="m-0 text-[12px] text-[var(--ink-600)]"
+                >
+                  {subtitle}
+                </p>
+              </div>
+              <span className="flex-1" />
+              <DialogPrimitive.Close
+                aria-label="Close"
+                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
+              >
+                <X className="size-3.5" strokeWidth={1.5} aria-hidden />
+              </DialogPrimitive.Close>
+            </div>
+
+            {/* ── Body ───────────────────────────────────────────────── */}
+            <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 md:flex-row md:overflow-visible">
+              {/* Court column */}
+              <div className="flex min-h-0 min-w-0 flex-col gap-3 md:max-w-[800px] md:flex-1">
+                <div className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
+                  <div
+                    className="flex gap-1.5"
+                    role="group"
+                    aria-label="Player"
+                  >
+                    {(["you", "opponent"] as const).map((value) => (
+                      <LifecycleChip
+                        key={value}
+                        pressed={state.filters.player === value}
+                        onClick={() => choosePlayer(value)}
+                      >
+                        {value === "you" ? "You" : "Opponent"}
+                      </LifecycleChip>
+                    ))}
+                  </div>
+                  {isDraft && (
+                    <CutMenu
+                      savedViews={meta.savedViews}
+                      triggerRef={cutMenuTriggerRef}
+                    />
+                  )}
+                  <ChartMenu
+                    showBands={!isDraft}
+                    onEditBands={meta.readOnly ? undefined : enterEdit}
+                  />
+                  <FiltersPopover
+                    count={result.count}
+                    total={result.total}
+                    noun={result.noun}
+                    youName={you.name}
+                    opponentName={opp.name}
+                  />
+                  {receipt !== null && (
+                    <span
+                      aria-hidden="true"
+                      className="ml-auto truncate text-[11px] text-[var(--ink-600)]"
+                    >
+                      {receipt.message}
+                    </span>
+                  )}
+                </div>
+
+                {hasFilters && !isDraft && <AppliedStrip />}
+
+                <div
+                  ref={setStageEl}
+                  data-court-stage=""
+                  className={cn(
+                    "relative min-h-[360px] flex-1 overflow-hidden rounded-[10px] select-none",
+                    editing
+                      ? "cursor-default"
+                      : "cursor-grab active:cursor-grabbing",
+                  )}
+                  style={{
+                    touchAction: "none",
+                    background: heat ? HEAT_APRON_FILL : APRON_FILL,
+                  }}
+                  onPointerDown={pz.onPointerDown}
+                  onPointerMove={pz.onPointerMove}
+                  onPointerUp={pz.onPointerUp}
+                  onPointerCancel={pz.onPointerUp}
+                  onClick={(event) => {
+                    const target = event.target;
+                    if (
+                      target instanceof Element &&
+                      event.currentTarget.contains(target) &&
+                      target.closest(
+                        "[data-viz-mark],[data-viz-readout],[data-chrome]",
+                      ) === null
+                    ) {
+                      dropActiveMark();
+                    }
+                  }}
+                >
+                  <LightboxCourt
+                    cut={cut}
+                    chart={state.chart}
+                    dots={isDraft ? [] : result.dots}
+                    zoneStats={isDraft ? null : result.zoneStats}
+                    filters={state.filters}
+                    subjectName={subjectName}
+                    unit={unit}
+                    bands={isDraft ? null : bandOverlay}
+                    transform={pz.t}
+                    stage={pz.stage}
+                    panning={pz.panning}
+                    activeId={activeMarkId ?? visibleSelectedMarkId}
+                    focusedId={focusedMarkId}
+                    selectedId={visibleSelectedMarkId}
+                    rovingId={rovingMarkId}
+                    onActivate={activateMark}
+                    onDeactivate={deactivateMark}
+                    onRove={roveMark}
+                    onSelect={selectMark}
+                    onReadoutEnter={holdReadout}
+                    onReadoutLeave={releaseReadout}
+                    editing={editing}
+                    editorLayer={
+                      activeEditor !== null ? (
+                        <VizBandsEditorHandles
+                          state={activeEditor}
+                          z={pz.t.z}
+                          unit={unit}
+                          update={updateEditor}
+                        />
+                      ) : null
+                    }
+                  />
+
+                  {isDraft ? (
+                    <StageCard>
+                      <p className="text-[13px] font-medium text-[var(--ink-900)]">
+                        Pick what to plot
+                      </p>
+                      <p className="text-micro max-w-[240px] text-[var(--ink-600)]">
+                        {meta.readOnly
+                          ? "Choose a view, a chart and filters."
+                          : "Choose a view, a chart and filters — then save it."}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => cutMenuTriggerRef.current?.click()}
+                        className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                      >
+                        Choose a view
+                      </button>
+                    </StageCard>
+                  ) : (
+                    result.count === 0 && (
+                      <StageCard>
+                        <p className="text-[12px] text-[var(--ink-600)]">
+                          {hasFilters
+                            ? `No ${result.noun} match these filters`
+                            : `No ${result.noun} recorded for ${subjectName} yet`}
+                        </p>
+                        {hasFilters && !editing && (
+                          <button
+                            type="button"
+                            onClick={clearFilters}
+                            className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </StageCard>
+                    )
+                  )}
+
+                  {activeEditor !== null && (
+                    <VizBandsEditorBanner kind={activeEditor.kind} />
+                  )}
+
+                  {activeEditor !== null ? (
+                    <div
+                      data-chrome=""
+                      className="absolute right-3 bottom-3 left-3 h-12 overflow-hidden rounded-[12px] backdrop-blur-[8px]"
+                      style={{ background: "rgba(13,13,13,0.72)" }}
+                    >
+                      <VizBandsEditorSlab
+                        state={activeEditor}
+                        current={bands}
+                        saving={saving}
+                        unit={unit}
+                        onReset={() => updateEditor(resetBandEditor)}
+                        onCancel={exitEdit}
+                        onSave={saveEdit}
+                      />
+                    </div>
+                  ) : (
+                    !isDraft && (
+                      <ZoomControls
+                        zoomLabel={zoomPercentLabel(pz.t.z)}
+                        onZoomIn={pz.zoomIn}
+                        onZoomOut={pz.zoomOut}
+                        onFit={pz.fit}
+                      />
+                    )
+                  )}
+                </div>
+
+                {!isDraft && (
+                  <div
+                    role="group"
+                    aria-label="Legend"
+                    className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
+                  >
+                    {legend.map((item) =>
+                      item.glyph === "ramp" ? (
+                        <HeatRampLegend key={item.key} />
+                      ) : (
+                        <span key={item.key} className="px-1">
+                          <LegendMark item={item} />
+                        </span>
+                      ),
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Right column */}
+              <div className="flex min-h-0 w-full shrink-0 flex-col md:ml-auto md:w-[340px]">
+                <div className="flex min-h-7 items-center gap-1.5 border-b border-[var(--border-hairline)] pb-3">
+                  <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                    Statistics
+                  </span>
+                </div>
+                {!isDraft && (
+                  <div className="min-h-0 flex-1 overflow-y-auto pt-4">
+                    <StatsCard stats={stats} cut={cut} />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Footer ─────────────────────────────────────────────── */}
+            <div className="mt-5 flex items-center gap-2.5 border-t border-[var(--border-hairline)] px-6 pt-4 pb-5">
+              {canSaveViews && !isDraft && (
+                <button
+                  ref={saveAnchorRef}
+                  type="button"
+                  onClick={() => setSaveDialogOpen(true)}
+                  className="cursor-pointer text-[12px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
+                >
+                  Save as view
+                </button>
+              )}
+              <span className="flex-1" />
+              {meta.hasPlayableVideo && onWatchPoints && !isDraft && (
+                <button
+                  type="button"
+                  disabled={playable.length === 0}
+                  onClick={() =>
+                    onWatchPoints(
+                      playable.map((p) => p.id),
+                      title,
+                    )
+                  }
+                  className={advButton("primary", "sm")}
+                >
+                  {playable.length === 0
+                    ? "Watch points"
+                    : `Watch these ${playable.length} ${playable.length === 1 ? "point" : "points"}`}
+                </button>
+              )}
+            </div>
+
+            {canSaveViews && (
+              <SaveViewDialog
+                open={saveDialogOpen}
+                onOpenChange={setSaveDialogOpen}
+                anchorRef={saveAnchorRef}
+                cut={cut}
+                chart={state.chart}
+                filters={state.filters}
+                savedViews={meta.savedViews}
+                workspaceKind={meta.workspaceKind}
+                workspaceName={meta.workspaceName}
+                side="top"
+                onSaved={(view) =>
+                  setState((prev) => ({ ...prev, viewId: view.id }))
+                }
+              />
+            )}
+          </TooltipProvider>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}
+
+/** A centred card over the court — the draft prompt and the honest zero. */
+function StageCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
+      <div
+        data-chrome=""
+        className="pointer-events-auto flex flex-col items-center gap-2 rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] px-5 py-4 text-center shadow-[var(--shadow-card-emphasis)]"
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** + / − / Fit, bottom-right of the court, with the zoom readout. */
+function ZoomControls({
+  zoomLabel,
+  onZoomIn,
+  onZoomOut,
+  onFit,
+}: {
+  zoomLabel: string;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onFit: () => void;
+}) {
+  const button =
+    "flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[11px] font-medium text-[var(--ink-700)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area";
+  return (
+    <div
+      data-chrome=""
+      role="group"
+      aria-label="Zoom"
+      className="absolute right-3 bottom-3 flex items-center gap-0.5 rounded-[10px] bg-[var(--surface-card)] p-0.5 shadow-[var(--shadow-card)]"
+    >
+      <button
+        type="button"
+        aria-label="Zoom out"
+        onClick={onZoomOut}
+        className={button}
+      >
+        −
+      </button>
+      <span className="mono tabular w-[38px] text-center text-[11px] text-[var(--ink-600)]">
+        {zoomLabel}
+      </span>
+      <button
+        type="button"
+        aria-label="Zoom in"
+        onClick={onZoomIn}
+        className={button}
+      >
+        +
+      </button>
+      <button
+        type="button"
+        aria-label="Fit the court"
+        onClick={onFit}
+        className={cn(button, "w-auto px-2")}
+      >
+        Fit
+      </button>
+    </div>
+  );
+}

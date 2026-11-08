@@ -523,12 +523,8 @@ const passthrough = ({ children }: { children: React.ReactNode }) => children;
 
 test.describe("ShotsTab", () => {
   const file = DETAIL + "shots/shots-tab.tsx";
-  const stubs = (cut: string | null) => ({
-    "next/dynamic": {
-      __esModule: true,
-      default: () => marker("VizFullscreen"),
-    },
-    "@/lib/ui/use-mounted": { useMounted: () => false },
+  const stubs = (cut: string | null, mounted = false) => ({
+    "@/lib/ui/use-mounted": { useMounted: () => mounted },
     "@/components/dashboard/matches/match-detail/match-report-context": {
       useMatchReport: () => ({
         meta: {
@@ -541,7 +537,14 @@ test.describe("ShotsTab", () => {
       }),
     },
     "@/components/dashboard/matches/match-detail/shots/viz-state-context": {
-      useVizState: () => ({ state: { cut, fullscreen: false, draft: false } }),
+      useVizState: () => ({
+        state: {
+          cut,
+          draft: false,
+          viewId: null,
+          filters: { player: "you" },
+        },
+      }),
       VizStateProvider: passthrough,
     },
     "@/components/dashboard/matches/match-detail/shots/viz-bands-context": {
@@ -552,7 +555,7 @@ test.describe("ShotsTab", () => {
   test("no points with a ?cut= link: the view-level empty, never an empty court", () => {
     const html = render(file, "ShotsTab", [], stubs("serve"));
     expect(html).toContain('data-component="VizEmpty"');
-    expect(html).not.toContain('data-component="VizFocused"');
+    expect(html).not.toContain('data-component="VizLightbox"');
     expect(html).not.toContain('data-component="VizWall"');
   });
 
@@ -561,12 +564,16 @@ test.describe("ShotsTab", () => {
     expect(html).toContain('data-component="VizEmpty"');
   });
 
-  test("with points the wall and the focused court draw as before", () => {
+  test("with points the wall draws, and a ?cut= opens the lightbox over it once mounted", () => {
     expect(render(file, "ShotsTab", [point()], stubs(null))).toContain(
       'data-component="VizWall"',
     );
-    expect(render(file, "ShotsTab", [point()], stubs("serve"))).toContain(
-      'data-component="VizFocused"',
-    );
+    // Never in the server HTML: the lightbox is a client-only portal.
+    const server = render(file, "ShotsTab", [point()], stubs("serve"));
+    expect(server).toContain('data-component="VizWall"');
+    expect(server).not.toContain('data-component="VizLightbox"');
+    const client = render(file, "ShotsTab", [point()], stubs("serve", true));
+    expect(client).toContain('data-component="VizWall"');
+    expect(client).toContain('data-component="VizLightbox"');
   });
 });

@@ -8,12 +8,7 @@ import type { Cut, VizDot } from "./viz-model";
 import type { VizState } from "./viz-url";
 import { viewIdentityKey } from "./viz-url";
 import { useVizState } from "./use-viz-state";
-import { usePrefersReducedMotion } from "./use-reduced-motion";
-import {
-  VIZ_COURT_TRANSITION_NAME,
-  VIZ_FOCUSED_COURT_MORPH_TARGET,
-  courtTileDomId,
-} from "./viz-court-transition";
+import { courtTileDomId } from "./viz-court-transition";
 import {
   wallSegmentReadout,
   type WallSegment,
@@ -72,21 +67,17 @@ export function WallCard({
   href: string;
   navigateState: VizState;
 }) {
-  const { runCourtMorph, morphTargetKey } = useVizState();
-  const reducedMotion = usePrefersReducedMotion();
+  const { setState } = useVizState();
   const ownKey = viewIdentityKey(navigateState);
   const domId = ownKey !== null ? courtTileDomId(ownKey) : undefined;
-  const isMorphTarget = domId !== undefined && domId === morphTargetKey;
 
+  // A plain click opens the lightbox over the wall through the store (no
+  // navigation, so the wall keeps its scroll); a modified click is left to
+  // the link, so a card still opens in a new tab.
   function handleClick(e: MouseEvent<HTMLAnchorElement>): void {
     if (!isPlainLeftClick(e)) return;
     e.preventDefault();
-    runCourtMorph({
-      sourceEl: e.currentTarget,
-      next: navigateState,
-      targetKey: VIZ_FOCUSED_COURT_MORPH_TARGET,
-      reducedMotion,
-    });
+    setState(navigateState);
   }
 
   return (
@@ -96,11 +87,6 @@ export function WallCard({
       onClick={handleClick}
       aria-label={`${name}, ${playerName}: ${summary.countLabel}`}
       className={CARD_CLASS}
-      style={{
-        viewTransitionName: isMorphTarget
-          ? VIZ_COURT_TRANSITION_NAME
-          : undefined,
-      }}
     >
       <div
         data-viz-court-art="true"

@@ -43,6 +43,13 @@ test.beforeAll(async () => {
         resolve: {
           extensions: [".tsx", ".ts", ".jsx", ".js"],
           alias: {
+            // The chart menu's band rows read the bands context, whose
+            // server action a plain bundle cannot load.
+            "@/lib/posthog-client$": resolve(
+              "tests/fixtures/posthog-client-off-mock.ts",
+            ),
+            "@/app/dashboard/matches/(detail)/[matchId]/viz-bands-actions":
+              resolve("tests/fixtures/viz-fullscreen-actions-browser-mock.ts"),
             "@": resolve("src"),
             "next/navigation": resolve(
               "tests/fixtures/viz-navigation-browser-mock.ts",

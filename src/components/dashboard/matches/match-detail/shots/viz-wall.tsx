@@ -5,6 +5,7 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { WallCard } from "./wall-card";
+import { LifecycleChip } from "./lifecycle-chip";
 import { LegendMark } from "./legend-mark";
 import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
 import { buildDefaultTiles } from "./default-tiles";
@@ -36,6 +37,7 @@ export function VizWall({
   savedViewsBand,
   collection: requestedCollection,
   onCollectionChange,
+  player,
 }: {
   /**
    * The Saved collection's content. Absent (a read-only report with no saved
@@ -45,10 +47,13 @@ export function VizWall({
   savedViewsBand?: ReactNode;
   collection: WallCollection;
   onCollectionChange: (collection: WallCollection) => void;
+  /** Which player's four cards — the wall's own, kept by `shots-tab.tsx`
+   *  while the lightbox owns `state.filters`. */
+  player: PlayerFilter;
 }) {
   const points = useVizPoints(useMatchData());
   const { you, opp } = useMatchSides();
-  const { state, setState, hrefFor } = useVizState();
+  const { setState, hrefFor } = useVizState();
   // The errors card's name, filter and error reading follow whether this
   // match's errors are judged (`defaultCutsFor`, `errorKindOf`).
   const { context: matchCtx } = useMatchFilters();
@@ -60,7 +65,6 @@ export function VizWall({
 
   const hasSaved = savedViewsBand != null;
   const collection: WallCollection = hasSaved ? requestedCollection : "default";
-  const player: PlayerFilter = state.filters.player;
 
   // Keyed on `points`/`you.isPlayer1`/the names/`hrefFor` — `opp.isPlayer1`
   // is always `you.isPlayer1`'s inverse, so it carries no information the
@@ -107,13 +111,13 @@ export function VizWall({
         {hasSaved && (
           <div className="flex gap-2" role="group" aria-label="View">
             {(["default", "saved"] as const).map((value) => (
-              <WallChip
+              <LifecycleChip
                 key={value}
                 pressed={collection === value}
                 onClick={() => onCollectionChange(value)}
               >
                 {value === "default" ? "Default" : "Saved"}
-              </WallChip>
+              </LifecycleChip>
             ))}
           </div>
         )}
@@ -128,13 +132,13 @@ export function VizWall({
             )}
             <div className="flex gap-2" role="group" aria-label="Player">
               {(["you", "opponent"] as const).map((value) => (
-                <WallChip
+                <LifecycleChip
                   key={value}
                   pressed={player === value}
                   onClick={() => choosePlayer(value)}
                 >
                   {value === "you" ? "You" : "Opponent"}
-                </WallChip>
+                </LifecycleChip>
               ))}
             </div>
             <div className="flex-1" />
@@ -178,37 +182,6 @@ export function VizWall({
       ) : null}
       {hasSaved && <div hidden={collection !== "saved"}>{savedViewsBand}</div>}
     </div>
-  );
-}
-
-/** The wall's lifecycle-chip switch (`Default | Saved`, `You | Opponent`):
- *  26px, hairline at rest, `--border-medium` + subtle wash when pressed. */
-function WallChip({
-  pressed,
-  onClick,
-  children,
-}: {
-  pressed: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={`flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] px-[11px] text-[12px] transition-colors duration-200 motion-reduce:transition-none ${
-        pressed ? "" : "hover:bg-[var(--surface-subtle)]"
-      }`}
-      style={{
-        border: `1px solid var(${pressed ? "--border-medium" : "--border-hairline"})`,
-        background: pressed ? "var(--surface-subtle)" : undefined,
-        color: pressed ? "var(--ink-900)" : "var(--ink-600)",
-        fontWeight: pressed ? 500 : 400,
-      }}
-    >
-      {children}
-    </button>
   );
 }
 
