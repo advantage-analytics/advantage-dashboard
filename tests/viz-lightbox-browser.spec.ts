@@ -150,3 +150,39 @@ test("zooming shows the level and frees Fit; lines are 1.3× and scale with the 
     .getAttribute("stroke-width");
   expect(Number(width)).toBeCloseTo(1.6 * 1.3, 5);
 });
+
+test("the Points column lists the points behind the marks, headed by game; a row and its mark light together", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "Points" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  const list = dialog.getByRole("list", { name: "Points" });
+  const rows = list.locator("[data-point-id]");
+  const n = await rows.count();
+  expect(n).toBeGreaterThan(0);
+  await expect(
+    dialog.getByLabel(new RegExp(`^${n} of \\d+ points$`)),
+  ).toBeVisible();
+  await expect(list).toContainText(/Set \d+ · Game \d+/);
+  // A row selects its mark; the row takes the wash, with no progress rule.
+  const row = rows.first();
+  const id = await row.getAttribute("data-point-id");
+  await row.click();
+  await expect(row).toHaveAttribute("data-playing", "true");
+  await expect(row.locator(".h-0\\.5")).toHaveCount(0);
+  const selected = dialog.locator('[data-viz-mark][aria-pressed="true"]');
+  await expect(selected).toHaveCount(1);
+  // …and selecting a mark lights its row.
+  await page.keyboard.press("Escape");
+  await expect(selected).toHaveCount(0);
+  await expect(row).not.toHaveAttribute("data-playing", "true");
+  expect(id).toBeTruthy();
+  await page.screenshot({ path: test.info().outputPath("points.png") });
+  await dialog.getByRole("button", { name: "Statistics" }).click();
+  await expect(list).toHaveCount(0);
+});

@@ -37,7 +37,9 @@ import { FiltersPopover } from "./filters-popover";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
 import { LightboxCourt } from "./lightbox-court";
-import { isPlayable, pointsBehind } from "./lightbox-points";
+import { isPlayable, markIsPoint, pointsBehind } from "./lightbox-points";
+import { LightboxPointList } from "./lightbox-point-list";
+import type { MatchPoint } from "@/lib/data/match-points-server";
 import { KEY_PAN_PX } from "./pan-zoom";
 import { viewerInitialTransform } from "./court-geometry";
 import { SaveViewDialog } from "./save-view-dialog";
@@ -59,6 +61,7 @@ import { CUT_LABEL, legendItemsFor } from "./viz-labels";
 import { isMarkRovingKey } from "./viz-mark-roving";
 import {
   EMPTY_VIZ_FILTERS,
+  computeViz,
   errorsJudgedIn,
   type PlayerFilter,
 } from "./viz-model";
@@ -102,6 +105,7 @@ export function VizLightbox({
     result,
     stats,
     subjectName,
+    subjectIsPlayer1,
     you,
     opp,
     points,
@@ -170,11 +174,50 @@ export function VizLightbox({
     setSelectedMarkId((prev) => (prev === id ? null : id));
   }, []);
 
+  /** The right column: the points behind the marks, or their statistics. */
+  const [pane, setPane] = useState<"points" | "stats">("points");
+
   const visibleSelectedMarkId =
     selectedMarkId !== null &&
     result?.dots.some((dot) => dot.id === selectedMarkId)
       ? selectedMarkId
       : null;
+
+  // A row selects its point's mark on the court (the first mark that stands
+  // for that point), so the row and the mark light together.
+  const dots = result?.dots;
+  const selectPoint = useCallback(
+    (point: MatchPoint) => {
+      if (!dots || cut === null) return;
+      const dot = dots.find(
+        (d) => d.meta?.pointId === point.id && markIsPoint(cut, d),
+      );
+      if (!dot) return;
+      setActiveMarkId(null);
+      setSelectedMarkId((prev) => (prev === dot.id ? null : dot.id));
+    },
+    [dots, cut],
+  );
+  const selectedPointId =
+    visibleSelectedMarkId !== null
+      ? (dots?.find((d) => d.id === visibleSelectedMarkId)?.meta?.pointId ??
+        null)
+      : null;
+
+  // The list's denominator: the points behind this card with every filter
+  // cleared but the player — "12 / 52".
+  const allPointsBehind = useMemo(() => {
+    if (cut === null) return [];
+    const all = computeViz(
+      points,
+      cut,
+      { ...EMPTY_VIZ_FILTERS, player: state.filters.player },
+      subjectIsPlayer1,
+      "scatter",
+      matchCtx,
+    );
+    return pointsBehind(cut, all.dots, points);
+  }, [points, cut, state.filters.player, subjectIsPlayer1, matchCtx]);
 
   /* ── Band editor (moved from the fullscreen viewer) ───────────────────── */
 
@@ -464,7 +507,7 @@ export function VizLightbox({
             {/* ── Body ───────────────────────────────────────────────── */}
             <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 md:flex-row md:overflow-visible">
               {/* Court column */}
-              <div className="flex min-h-0 min-w-0 flex-col gap-3 md:max-w-[800px] md:flex-1">
+              <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
                 <div className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
                   <div
                     className="flex gap-1.5"
@@ -514,7 +557,7 @@ export function VizLightbox({
                   ref={setStageEl}
                   data-court-stage=""
                   className={cn(
-                    "relative min-h-[360px] flex-1 overflow-hidden rounded-[10px] select-none",
+                    "relative h-[420px] shrink-0 overflow-hidden rounded-[10px] select-none md:h-auto md:min-h-[360px] md:flex-1 md:shrink",
                     editing
                       ? "cursor-default"
                       : "cursor-grab active:cursor-grabbing",
@@ -668,17 +711,56 @@ export function VizLightbox({
               </div>
 
               {/* Right column */}
-              <div className="flex min-h-0 w-full shrink-0 flex-col md:ml-auto md:w-[340px]">
+              <div className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]">
                 <div className="flex min-h-7 items-center gap-1.5 border-b border-[var(--border-hairline)] pb-3">
-                  <span className="text-[12px] font-medium text-[var(--ink-900)]">
-                    Statistics
-                  </span>
-                </div>
-                {!isDraft && (
-                  <div className="min-h-0 flex-1 overflow-y-auto pt-4">
-                    <StatsCard stats={stats} cut={cut} />
+                  <div
+                    className="flex gap-1.5"
+                    role="group"
+                    aria-label="Right panel"
+                  >
+                    <LifecycleChip
+                      pressed={pane === "points"}
+                      onClick={() => setPane("points")}
+                    >
+                      Points
+                    </LifecycleChip>
+                    <LifecycleChip
+                      pressed={pane === "stats"}
+                      onClick={() => setPane("stats")}
+                    >
+                      Statistics
+                    </LifecycleChip>
                   </div>
-                )}
+                  <span className="flex-1" />
+                  {pane === "points" && !isDraft && (
+                    <span
+                      className="mono tabular text-[10px] text-[var(--ink-400)]"
+                      aria-label={`${matched.length} of ${allPointsBehind.length} points`}
+                    >
+                      {matched.length}{" "}
+                      <span className="text-[var(--ink-300)]">/</span>{" "}
+                      {allPointsBehind.length}
+                    </span>
+                  )}
+                </div>
+                {!isDraft &&
+                  (pane === "points" ? (
+                    <LightboxPointList
+                      points={matched}
+                      allPoints={points}
+                      selectedPointId={selectedPointId}
+                      onSelectPoint={selectPoint}
+                      emptyLine={
+                        cut === "serve" && result.count > 0
+                          ? `${result.count} ${result.noun} went out. A fault isn't a point, so there is no clip; the court shows where they landed.`
+                          : `No ${result.noun} match these filters.`
+                      }
+                    />
+                  ) : (
+                    <div className="pt-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
+                      <StatsCard stats={stats} cut={cut} />
+                    </div>
+                  ))}
               </div>
             </div>
 
