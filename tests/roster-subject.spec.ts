@@ -104,6 +104,16 @@ test.describe("resolveRosterSubject", () => {
     ).toBeNull();
   });
 
+  test("a new draft saved with no answer is never resolved by name", () => {
+    // `null` is "asked, not answered"; the name may be an export's account
+    // holder. Only a row that predates the field (`undefined`) is guessed.
+    expect(
+      resolveRosterSubject(ROSTER, {
+        draft: draft({ subject: null, playerName: "Avery Zzseed" }),
+      }),
+    ).toBeNull();
+  });
+
   test("a saved id that misses never falls back to the name", () => {
     // The player left; someone else carrying the name must not stand in.
     expect(

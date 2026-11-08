@@ -221,6 +221,16 @@ const START_OVER_FIELDS = [
   "initialTopPlayerIsPlayer1",
 ] as const satisfies readonly (keyof MatchFormData)[];
 
+/** {@link START_OVER_FIELDS} at their defaults, arrays copied, never shared. */
+function startOverDefaults(): Partial<MatchFormData> {
+  const reset: Record<string, unknown> = {};
+  for (const field of START_OVER_FIELDS) {
+    const value = DEFAULT_FORM_DATA[field];
+    reset[field] = Array.isArray(value) ? [...value] : value;
+  }
+  return reset as Partial<MatchFormData>;
+}
+
 /**
  * What a PinnedLineBar line swap returns to `DEFAULT_FORM_DATA` — the answers
  * given about line A's PEOPLE, which the new line's seed does not rewrite.
@@ -1755,18 +1765,34 @@ export function useUploadMatchWizard({
           ? (draft.provider as ProviderId)
           : DEFAULT_PROVIDER_ID;
       setSelectedProvider(draftProvider);
+      // Is the seeded player the one this draft's answers were given for?
+      // Its own saved id, or — for a row older than that field — its saved
+      // name. A `?player=` link naming someone else is a DIFFERENT player,
+      // and everything `START_OVER_FIELDS` lists was answered for the first
+      // one: their score order, their opponent, their style (which "use for
+      // future matches" would write to the wrong roster profile). Those go,
+      // exactly as Start over clears them, and so does the attached line —
+      // it is the first player's slot.
+      const seeded = matchSubjectRef.current;
+      const otherPlayer =
+        seeded?.kind === "roster" &&
+        (draft.subject
+          ? draft.subject.playerId !== seeded.playerId
+          : typeof draft.formData?.playerName !== "string" ||
+            draft.formData.playerName.trim() !== seeded.name);
       setFormData({
         ...getDefaultFormData(formatDefaults),
         // A row saved before the video check stopped being stored still
         // carries it — see `VIDEO_CHECK_FIELDS`.
         ...withoutVideoCheck(draft.formData),
+        ...(otherPlayer ? startOverDefaults() : {}),
         // A seeded For answer names the player, never the draft's saved text:
         // the roster may have renamed them, or a `?player=` link may name
         // someone else. A name that disagrees with the bound id is the
         // mismatch §3.1 exists to prevent (see the localStorage branch below).
         ...(seededPlayerName ? { playerName: seededPlayerName } : {}),
       });
-      if (draft.attachedLine) {
+      if (draft.attachedLine && !otherPlayer) {
         attachedLineRef.current = draft.attachedLine;
         setAttachedLine(draft.attachedLine);
       }
@@ -1775,11 +1801,17 @@ export function useUploadMatchWizard({
         setProgressKind(kind);
         // The file never survives a draft, so resume lands where it is picked
         // again — never past it, whatever step the draft recorded. The
-        // who-played answer survives only when the page re-checked it against
-        // the roster and seeded it as `initialSubject`; without it a team
-        // draft lands one step earlier, on the picker: see `draftResumeStep`.
+        // who-played answer survives only when the page found the draft's OWN
+        // saved player on the roster and seeded it as `initialSubject`; a
+        // guess or a link pre-fills the picker, and the draft lands one step
+        // earlier, on it: see `draftResumeStep`.
+        const seeded = matchSubjectRef.current;
         setStep(
-          draftResumeStep(askWhoPlayed, matchSubjectRef.current !== null),
+          draftResumeStep(
+            askWhoPlayed,
+            seeded?.kind === "roster" &&
+              seeded.playerId === draft.subject?.playerId,
+          ),
         );
       }
       return;
@@ -2861,17 +2893,7 @@ export function useUploadMatchWizard({
     attachedLineRef.current = null;
     detachSnapshot.current = null;
     setAttachedLine(null);
-    setFormData((prev) => {
-      const next = { ...prev };
-      for (const field of START_OVER_FIELDS) {
-        // Arrays are copied so the default's own arrays are never shared.
-        const value = DEFAULT_FORM_DATA[field];
-        (next as Record<string, unknown>)[field] = Array.isArray(value)
-          ? [...value]
-          : value;
-      }
-      return next;
-    });
+    setFormData((prev) => ({ ...prev, ...startOverDefaults() }));
     setStep(firstStep);
   }, [applyMatchSubject, resetIdentityAnswer, firstStep]);
 

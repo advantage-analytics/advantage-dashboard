@@ -18,13 +18,17 @@ import type { MatchDraft } from "@/components/dashboard/matches/new-match-wizard
  *    player is still on the roster.
  * 2. **The draft's saved id** (`MatchDraft.subject`).
  * 3. **An older draft's saved name**, for rows written before the id was
- *    stored. Taken only when exactly ONE roster player carries that name,
+ *    stored (`subject` absent, not `null`). Taken only when exactly ONE roster player carries that name,
  *    character for character: two players sharing it is exactly the case
  *    where guessing hands every statistic to the wrong one
  *    (`docs/ui-revamp-guardrails.md` §3.1). Never for a draft that DID store
  *    an id — that id was the answer, and its miss means the player left, not
  *    that someone with the same name should stand in. Never for a preset
  *    draft, whose line names its own player.
+ *
+ * Only (2) is the draft's own answer. (1) and (3) PRE-FILL the For field and
+ * the wizard still opens on the step that asks it — see `draftResumeStep()`:
+ * a guess is shown, never acted on unseen.
  *
  * Ids are matched in both eras, as the roster's own links send them: a
  * `program_players.id`, or a claimed player's older login id. The result is
@@ -51,8 +55,14 @@ export function resolveRosterSubject(
   const hit = byId(linkPlayerId) ?? byId(draft?.subject?.playerId);
   if (hit) return toSubject(hit);
 
-  if (draft && !draft.subject && !draft.preset) {
-    const name = draft.formData?.playerName?.trim();
+  // `undefined`, not `null`: a row written since the field exists stores
+  // `null` for "no answer yet", and its saved name may be a parsed export's
+  // account holder rather than anyone the person picked.
+  if (draft && draft.subject === undefined && !draft.preset) {
+    // The payload is JSON the viewer wrote; a non-string here is a stale or
+    // hand-edited row, and must not take the page down.
+    const saved: unknown = draft.formData?.playerName;
+    const name = typeof saved === "string" ? saved.trim() : "";
     if (name) {
       const named = roster.filter((row) => row.name === name);
       if (named.length === 1) return toSubject(named[0]);
