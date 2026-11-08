@@ -505,7 +505,65 @@ export function VizLightbox({
     }
   }
 
+  // Esc must reach the lightbox's own step whenever nothing is genuinely
+  // open above it. Radix hands Esc to its TOPMOST layer, and a menu or
+  // popover that has just closed (the Filters panel, the chart menu) stays
+  // mounted — still topmost — through its ~150ms exit animation; an Esc in
+  // that window (Esc to close the panel, Esc again to close the lightbox) was
+  // swallowed by the closing layer and the lightbox stayed open. This
+  // capture listener, on the document like Radix's own, runs the step itself
+  // unless an OPEN menu, popover or tooltip is up (those keep the key, and
+  // their own handlers decide). It stands down once the dialog's own handler
+  // has acted (`defaultPrevented`), so a lone dialog is unchanged.
+  const escapeRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    escapeRef.current = () => {
+      if (!escapeStep()) close();
+    };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const openAbove = document.querySelector(
+        '[data-radix-popper-content-wrapper] [data-state="open"], [data-radix-popper-content-wrapper] [data-state="delayed-open"], [data-radix-popper-content-wrapper] [data-state="instant-open"]',
+      );
+      if (openAbove) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      escapeRef.current();
+    };
+    document.addEventListener("keydown", onKey, { capture: true });
+    return () =>
+      document.removeEventListener("keydown", onKey, { capture: true });
+  }, []);
+
   if (cut === null || result === null || stats === null) return null;
+
+  /* ── Esc ──────────────────────────────────────────────────────────────── */
+
+  // Esc steps back one layer at a time: the band editor, then a selected
+  // point, then the lightbox itself. Returns whether it stepped back short of
+  // closing.
+  function escapeStep(): boolean {
+    if (editing) {
+      exitEdit();
+      return true;
+    }
+    if (visibleSelectedMarkId !== null) {
+      setSelectedMarkId(null);
+      return true;
+    }
+    return false;
+  }
+
+  // The same step from an open icon tooltip. The tooltip is the topmost
+  // layer then, so Radix gives it the key and the dialog never hears it; a
+  // reader whose pointer rests on Close or a zoom button (where it lands when
+  // the applied strip goes and the column shifts up) would otherwise need
+  // two presses to close.
+  function escapeFromTooltip() {
+    if (!escapeStep()) close();
+  }
 
   /* ── Words ────────────────────────────────────────────────────────────── */
 
@@ -660,15 +718,7 @@ export function VizLightbox({
           aria-describedby="viz-lightbox-subtitle"
           onKeyDown={onKeyDown}
           onEscapeKeyDown={(e) => {
-            // Esc steps back one layer at a time: the band editor, then a
-            // selected point, then the lightbox itself.
-            if (editing) {
-              e.preventDefault();
-              exitEdit();
-            } else if (visibleSelectedMarkId !== null) {
-              e.preventDefault();
-              setSelectedMarkId(null);
-            }
+            if (escapeStep()) e.preventDefault();
           }}
           onOpenAutoFocus={(e) => {
             e.preventDefault();
@@ -708,7 +758,12 @@ export function VizLightbox({
                 </p>
               </div>
               <span className="flex-1" />
-              <ChromeTooltip label="Close" shortcut="Esc" align="end">
+              <ChromeTooltip
+                label="Close"
+                shortcut="Esc"
+                align="end"
+                onEscapeKeyDown={escapeFromTooltip}
+              >
                 <DialogPrimitive.Close
                   aria-label="Close"
                   className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
@@ -917,6 +972,7 @@ export function VizLightbox({
                         onZoomIn={pz.zoomIn}
                         onZoomOut={pz.zoomOut}
                         onFit={pz.fit}
+                        onEscape={escapeFromTooltip}
                       />
                     )
                   )}
@@ -1109,12 +1165,15 @@ function ZoomControls({
   onZoomIn,
   onZoomOut,
   onFit,
+  onEscape,
 }: {
   relative: number;
   atFit: boolean;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFit: () => void;
+  /** The lightbox's Esc step, for when a zoom button's tooltip holds Esc. */
+  onEscape: () => void;
 }) {
   const button =
     "flex size-7 cursor-pointer items-center justify-center rounded-[8px] text-[var(--ink-700)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40 touch:hit-area";
@@ -1126,7 +1185,12 @@ function ZoomControls({
         aria-label="Zoom"
         className="absolute right-3 bottom-3 flex items-center gap-0.5 rounded-[10px] bg-[var(--surface-card)] p-[3px] shadow-[var(--shadow-dropdown)]"
       >
-        <ChromeTooltip label="Zoom in" shortcut="+" side="top">
+        <ChromeTooltip
+          label="Zoom in"
+          shortcut="+"
+          side="top"
+          onEscapeKeyDown={onEscape}
+        >
           <button
             type="button"
             aria-label="Zoom in"
@@ -1136,7 +1200,12 @@ function ZoomControls({
             <Plus className="size-3.5" strokeWidth={1.5} aria-hidden />
           </button>
         </ChromeTooltip>
-        <ChromeTooltip label="Zoom out" shortcut="−" side="top">
+        <ChromeTooltip
+          label="Zoom out"
+          shortcut="−"
+          side="top"
+          onEscapeKeyDown={onEscape}
+        >
           <button
             type="button"
             aria-label="Zoom out"
@@ -1150,7 +1219,12 @@ function ZoomControls({
           aria-hidden="true"
           className="mx-0.5 h-4 w-px bg-[var(--border-medium)]"
         />
-        <ChromeTooltip label="Fit the court" shortcut="0" side="top">
+        <ChromeTooltip
+          label="Fit the court"
+          shortcut="0"
+          side="top"
+          onEscapeKeyDown={onEscape}
+        >
           <button
             type="button"
             aria-label="Fit the court"

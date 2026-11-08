@@ -400,9 +400,9 @@ test("1 · a filter edit or a player switch keeps the lightbox mounted: popover,
   await expect(strip).toHaveCount(0);
   await expect(page).not.toHaveURL(/deuce/);
   await expect(page).toHaveURL(/ball=first/);
-  // The same lightbox, so its focus return still goes to the card that
-  // opened it (Esc closing is the first test's).
-  await dialog.getByRole("button", { name: "Close" }).click();
+  // The same lightbox, so Esc closes it and focus returns to the card that
+  // opened it.
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(card).toBeFocused();
 });
@@ -529,4 +529,48 @@ test("6 · an edited saved view closes back onto the Saved collection", async ({
   await expect(
     page.getByRole("button", { name: "Saved", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Esc closes the lightbox in one press even while an icon's tooltip is open", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog");
+  for (const name of ["Zoom in", "Close"]) {
+    await expect(dialog).toBeVisible();
+    // The pointer resting on an icon button: its tooltip is the top layer.
+    await dialog.getByRole("button", { name }).hover();
+    await expect(page.getByRole("tooltip")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await page.goto(`${origin}/?tab=shots&cut=serve`);
+  }
+  // With a point selected, the first Esc still only lets go of the point.
+  await dialog.locator("[data-viz-mark]").first().focus();
+  await page.keyboard.press("Enter");
+  await dialog.getByRole("button", { name: "Zoom in" }).hover();
+  await expect(page.getByRole("tooltip")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.locator('[data-viz-mark][aria-pressed="true"]'),
+  ).toHaveCount(0);
+});
+
+test("Esc, Esc closes the Filters panel and then the lightbox, even while the panel is still fading out", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "Serve placement" });
+  await dialog.getByRole("button", { name: "Filters" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Filter the court" }),
+  ).toBeVisible();
+  // Back to back: the second press lands inside the panel's exit animation.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page).not.toHaveURL(/cut=/);
 });

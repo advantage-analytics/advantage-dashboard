@@ -38,6 +38,7 @@ export function ChromeTooltip({
   sideOffset = 6,
   hidden = false,
   wrap = false,
+  onEscapeKeyDown,
   children,
 }: {
   label: string;
@@ -60,6 +61,14 @@ export function ChromeTooltip({
    * itself is the sentence — the whole of a text the row had to cut.
    */
   wrap?: boolean;
+  /**
+   * Esc while this tooltip is open. An open tooltip is the topmost dismissable
+   * layer, so Radix gives it Esc and the dialog under it never hears the key:
+   * a dialog whose icon buttons carry tooltips passes its own Esc step here,
+   * so Esc still closes the dialog when the pointer happens to rest on one.
+   * The tooltip closes as well, as it always has.
+   */
+  onEscapeKeyDown?: (event: KeyboardEvent) => void;
   children: React.ReactNode;
 }) {
   const lines = (typeof detail === "string" ? [detail] : (detail ?? [])).filter(
@@ -84,6 +93,7 @@ export function ChromeTooltip({
         sideOffset={sideOffset}
         showArrow={false}
         hidden={hidden}
+        onEscapeKeyDown={onEscapeKeyDown}
         className={SURFACE}
       >
         <span
