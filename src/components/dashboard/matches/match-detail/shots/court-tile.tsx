@@ -154,7 +154,6 @@ export function CourtTile({
   ariaDescribedBy,
   current = false,
   navigateState,
-  actionSlot,
 }: {
   playerName: string;
   name: string;
@@ -208,28 +207,13 @@ export function CourtTile({
    */
   current?: boolean;
   /**
-   * F5: this tile's OWN `VizState` — the same one `href` was built from.
-   * Supplying it does two things: it makes a plain left-click morph
-   * straight into the focused view (via `runCourtMorph`) instead of a plain
-   * navigation, and it gives the tile a stable `id`
-   * (`courtTileDomId(viewIdentityKey(navigateState))`) and a
-   * `view-transition-name` for whenever it's the RETURN morph's
-   * destination (`runCourtMorph`'s `targetKey` matching this tile's own
-   * key). Omit it for a tile that isn't a real navigation target —
-   * `manageable-saved-view-tile.tsx`'s `as="static"` tiles never pass it
-   * at all, so they get neither the `id`/`view-transition-name` nor the
-   * click interception; they're a `<div>`, not a `<Link>`, in the first
-   * place.
+   * This tile's OWN `VizState` — the same one `href` was built from. A
+   * plain left-click sets it through the store (the lightbox opens over the
+   * wall); it also gives the tile a stable `id`
+   * (`courtTileDomId(viewIdentityKey(navigateState))`). Omit it for a tile
+   * that isn't a navigation target (Manage mode's `as="static"` tiles).
    */
   navigateState?: VizState;
-  /**
-   * Task 5's fullscreen-door glyph (`TileFullscreenGlyph`, above) — a
-   * SIBLING of the anchor/static `<div>`, never its child. Omitted in
-   * Manage mode (`manageable-saved-view-tile.tsx` never passes it) and on
-   * the dashed "Create view" tile (`saved-views-band.tsx`'s `NewViewTile`
-   * doesn't render a `CourtTile` at all).
-   */
-  actionSlot?: ReactNode;
 }) {
   const { setState } = useVizState();
 
@@ -343,7 +327,6 @@ export function CourtTile({
         >
           {body}
         </div>
-        {actionSlot}
       </div>
     );
   }
@@ -360,7 +343,6 @@ export function CourtTile({
       >
         {body}
       </Link>
-      {actionSlot}
     </div>
   );
 }

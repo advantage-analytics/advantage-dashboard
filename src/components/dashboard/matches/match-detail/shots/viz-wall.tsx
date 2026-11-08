@@ -7,7 +7,7 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { WallCard } from "./wall-card";
 import { LifecycleChip } from "./lifecycle-chip";
 import { LegendMark } from "./legend-mark";
-import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
+import { useVizState } from "./use-viz-state";
 import { buildDefaultTiles } from "./default-tiles";
 import { useMatchFilters } from "../match-filters/provider";
 import { useVizBands } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
@@ -59,10 +59,6 @@ export function VizWall({
   const { context: matchCtx } = useMatchFilters();
   const { bands, unit } = useVizBands();
 
-  // F5: mirrors `viz-focused.tsx`'s identical fallback — see
-  // `useExternalSwapFadeIn`'s doc comment.
-  const fallbackFadeIn = useExternalSwapFadeIn();
-
   const hasSaved = savedViewsBand != null;
   const collection: WallCollection = hasSaved ? requestedCollection : "default";
 
@@ -100,13 +96,7 @@ export function VizWall({
   }
 
   return (
-    <div
-      className={
-        fallbackFadeIn
-          ? "viz-crossfade-in @container flex flex-col gap-[18px]"
-          : "@container flex flex-col gap-[18px]"
-      }
-    >
+    <div className="@container flex flex-col gap-[18px]">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {hasSaved && (
           <div className="flex gap-2" role="group" aria-label="View">

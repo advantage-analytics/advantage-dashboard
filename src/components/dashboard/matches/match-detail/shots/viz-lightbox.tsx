@@ -1019,7 +1019,7 @@ function StageCard({ children }: { children: ReactNode }) {
 
 /**
  * + / − / Fit, bottom-right of the court (canvas S11), and — only while the
- * court is zoomed or panned — the level, bottom-left: "180% · drag to move
+ * court is zoomed or panned — the level, bottom-left: "180% · Drag to move
  * around". Fit is spent at the fitted court.
  */
 function ZoomControls({
@@ -1086,7 +1086,7 @@ function ZoomControls({
           data-chrome=""
           className="pointer-events-none absolute bottom-3 left-3 inline-flex h-[26px] items-center rounded-[8px] bg-[var(--surface-card)] px-2.5 text-[11px] text-[var(--ink-700)] tabular-nums shadow-[var(--shadow-dropdown)]"
         >
-          {Math.round(relative * 100)}% · drag to move around
+          {Math.round(relative * 100)}% · Drag to move around
         </span>
       )}
     </>

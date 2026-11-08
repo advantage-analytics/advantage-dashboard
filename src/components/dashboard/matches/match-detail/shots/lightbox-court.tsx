@@ -53,9 +53,9 @@ import {
 import type { DistanceUnit } from "@/lib/format/distance";
 
 /**
- * The fullscreen viewer's court (Phase 2A, Task 4; f4b-report P2b/P2c) — one
+ * The lightbox's court (once the fullscreen viewer's, Phase 2A) — one
  * upright, full-length court drawn from `VIEWER_COURT`, inside a pan/zoom
- * layer the shell (`viz-fullscreen.tsx`) drives through `use-pan-zoom.ts`.
+ * layer the lightbox (`viz-lightbox.tsx`) drives through `use-pan-zoom.ts`.
  *
  * It is NOT `court-art.tsx`: that component draws the two in-shell frames
  * (the cropped serve half, the rotated landscape return frame), each with its

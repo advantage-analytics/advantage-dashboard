@@ -132,16 +132,16 @@ test("zooming shows the level and frees Fit; lines are 1.3× and scale with the 
   const dialog = page.getByRole("dialog");
   const fit = dialog.getByRole("button", { name: "Fit the court" });
   await expect(fit).toBeDisabled();
-  await expect(dialog.getByText(/drag to move around/)).toHaveCount(0);
+  await expect(dialog.getByText(/Drag to move around/)).toHaveCount(0);
   await dialog.getByRole("button", { name: "Zoom in" }).click();
-  await expect(dialog.getByText(/^\d+% · drag to move around$/)).toBeVisible();
+  await expect(dialog.getByText(/^\d+% · Drag to move around$/)).toBeVisible();
   await expect(fit).toBeEnabled();
   await page.waitForTimeout(300);
   await page.screenshot({
     path: test.info().outputPath("lightbox-zoomed.png"),
   });
   await fit.click();
-  await expect(dialog.getByText(/drag to move around/)).toHaveCount(0);
+  await expect(dialog.getByText(/Drag to move around/)).toHaveCount(0);
   const line = dialog.locator("[data-court] svg g[stroke] line").first();
   await expect(line).not.toHaveAttribute("vector-effect", /.*/);
   const width = await dialog
