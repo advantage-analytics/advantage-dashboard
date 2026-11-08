@@ -27,3 +27,15 @@ is the runner's. Newest entries at the bottom.
 2. List `lib/data/player-season-server.ts` in `client-bundle-boundary.spec.ts`'s `SERVER_ONLY`.
 3. T9 can take `PlayerSeason.perMatch` directly (it carries each match's side, flags, lob keys and points).
 4. T12 must keep `readPlayerMatchSides`/`getPlayerMatchSides`.
+
+## T3 · Profile frame: report rail, two tabs, links, header slot — done
+
+**gate:** mechanical PASS · completion PASS
+
+**changed:** The roster profile page now renders the match report's frame: new `profile-rail.tsx` (player block, Statistics/Visualizations tabs, "N matches ›"/"N opponents ›" links, full-width New match in the rail footer), `profile-frame.tsx` (`useProfileView`, `ProfileViewSwitcher`, `ProfileTitle`), pure `profile-view.ts` (`?tab=`, default statistics) with `tests/profile-view.spec.ts` and `tests/profile-rail.spec.ts`. `MatchReportRail` takes an optional `label`. `ProfileActions` keeps Ask + ⋯ only. The matches link filters by the player's NAME (`?player=<name>`), since the Matches page's `?player=` compares names, not ids. The pane shows the title row only until T7/T9.
+
+**follow-ups:**
+
+1. Every profile render now runs `getPlayerSeason` just for the rail counts; fine once T7/T9 use it, heavier than before until then.
+2. Add an id-keyed player filter to the Matches page, or keep the name link.
+3. Eyes-on check of `/dashboard/team/roster/[playerId]` and `?tab=visualizations` at `/pr-check`.

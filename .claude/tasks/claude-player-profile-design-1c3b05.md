@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Profile frame: report rail, two tabs, links, header slot
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** `src/app/dashboard/team/roster/[playerId]/page.tsx`, `src/components/dashboard/team/player-profile/profile-frame.tsx`, `profile-rail.tsx`, `profile-view.ts` (new), `profile-actions.tsx`, `src/components/dashboard/matches/match-detail/match-report.tsx`, `tests/profile-view.spec.ts` — guess
 - **routes:** `/dashboard/team/roster/[playerId]`, `/dashboard/team/roster/[playerId]?tab=visualizations`
