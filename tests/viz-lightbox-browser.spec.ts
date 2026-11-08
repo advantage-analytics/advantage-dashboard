@@ -186,3 +186,74 @@ test("the Points column lists the points behind the marks, headed by game; a row
   await dialog.getByRole("button", { name: "Statistics" }).click();
   await expect(list).toHaveCount(0);
 });
+
+test("the legend filters by outcome, one key at a time, and the strip says so", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog");
+  const legend = dialog.getByRole("group", { name: "Filter by outcome" });
+  const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
+  const all = await marks.count();
+  const won = legend.getByRole("button", { name: /^Won/ });
+  const wonCount = Number((await won.textContent())!.replace(/\D/g, ""));
+  await won.click();
+  await expect(won).toHaveAttribute("aria-pressed", "true");
+  await expect(marks).toHaveCount(wonCount);
+  await expect(legend.getByRole("button", { name: /^Lost/ })).toHaveClass(
+    /opacity-35/,
+  );
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await expect(strip).toContainText("Won");
+  await expect(strip).toContainText(/\d+ of \d+ points?/);
+  await expect(
+    strip.getByRole("button", { name: "Clear filter" }),
+  ).toBeVisible();
+  // The Filters trigger wears the engaged wash while any cut is on.
+  const filtersButton = dialog.getByRole("button", { name: "Filters" });
+  await expect(filtersButton).toHaveCSS(
+    "background-color",
+    "rgb(245, 245, 245)",
+  );
+  // Choosing it again clears it.
+  await won.click();
+  await expect(marks).toHaveCount(all);
+  await expect(strip).toHaveCount(0);
+  // Out alone on serves: no points to play, Watch disabled.
+  await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watch`);
+  const out = dialog.getByRole("button", { name: /^Out/ });
+  if (await out.isEnabled()) {
+    await out.click();
+    await expect(dialog).toContainText("No points to play");
+    await expect(
+      dialog.getByRole("button", { name: "Watch points" }),
+    ).toBeDisabled();
+  }
+});
+
+test("the Filters panel is the Matches panel over the cut's own keys, and Clear filter returns to the card", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&ball=first`);
+  const dialog = page.getByRole("dialog");
+  // The card's own filter (first serves) is not "applied".
+  await expect(dialog.locator("[data-viz-filter-strip]")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Filters" }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText("Serve");
+  await expect(panel).toContainText("Court");
+  await expect(panel).toContainText("Zone");
+  await panel.getByRole("radio", { name: "Deuce" }).click();
+  await expect(page).toHaveURL(/vcourt=deuce|court=deuce/);
+  await page.screenshot({ path: test.info().outputPath("filters.png") });
+  await page.keyboard.press("Escape");
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await expect(strip).toContainText("Deuce");
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(strip).toHaveCount(0);
+  await expect(page).toHaveURL(/ball=first/);
+  await expect(page).not.toHaveURL(/deuce/);
+});

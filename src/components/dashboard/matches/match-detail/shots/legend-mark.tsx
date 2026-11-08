@@ -16,7 +16,14 @@ const LEGEND_STAR_OUTER_R = 4.2;
  * stroke instead of the court's 0.4px black hairline — these encode STROKE,
  * not an outcome colour, so they shouldn't look like a fourth outcome dot.
  */
-export function LegendMark({ item }: { item: LegendItem }) {
+export function LegendMark({
+  item,
+  glyphOnly = false,
+}: {
+  item: LegendItem;
+  /** Just the glyph — a caller that sets its own label beside it. */
+  glyphOnly?: boolean;
+}) {
   const fill = item.outline ? "none" : item.color;
   const stroke = item.outline ? item.color : "#000";
   const strokeWidth = item.outline ? 1 : 0.4;
@@ -64,9 +71,11 @@ export function LegendMark({ item }: { item: LegendItem }) {
           />
         )}
       </svg>
-      <span className="text-micro" style={{ color: "var(--ink-500)" }}>
-        {item.label}
-      </span>
+      {!glyphOnly && (
+        <span className="text-micro" style={{ color: "var(--ink-500)" }}>
+          {item.label}
+        </span>
+      )}
     </span>
   );
 }

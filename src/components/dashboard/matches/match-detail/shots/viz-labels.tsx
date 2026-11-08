@@ -295,6 +295,7 @@ export function VizMenuTrigger({
   label,
   meta,
   open,
+  engaged = false,
   haspopup = "menu",
   tone = "light",
   className,
@@ -307,6 +308,9 @@ export function VizMenuTrigger({
    *  comment. Never truncates; the label gives up width first. */
   meta?: React.ReactNode;
   open: boolean;
+  /** A choice away from the default is applied: the trigger keeps the
+   *  open wash (the Matches toolbar's engaged grammar). */
+  engaged?: boolean;
   haspopup?: "menu" | "dialog";
   /**
    * Phase 2A: the dark fullscreen-viewer chrome (f4b-report P2d — 28px
@@ -338,29 +342,36 @@ export function VizMenuTrigger({
       aria-expanded={open}
       className={cn(
         "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 px-2 text-[12px] font-medium transition-colors duration-200",
-        dark ? "text-white" : "text-[var(--ink-700)]",
         dark
-          ? open
-            ? "bg-white/[0.18]"
-            : "bg-white/10"
-          : open
-            ? "bg-[var(--surface-muted)]"
-            : "bg-[var(--surface-subtle)]",
-        !open &&
-          (dark ? "hover:bg-white/[0.18]" : "hover:bg-[var(--surface-muted)]"),
+          ? cn(
+              "text-white",
+              open ? "bg-white/[0.18]" : "bg-white/10 hover:bg-white/[0.18]",
+            )
+          : // The Matches toolbar's trigger grammar (DS Data Table rule 6):
+            // no fill at rest, the subtle wash on hover, and the wash plus
+            // ink-900 while open or engaged.
+            open || engaged
+            ? "bg-[var(--surface-subtle)] text-[var(--ink-900)]"
+            : "text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
         className,
       )}
       style={{ borderRadius: "var(--radius-element)" }}
     >
       <Icon
-        className={cn("size-[13px] shrink-0", dark && "text-white/70")}
+        className={cn(
+          "size-[13px] shrink-0",
+          dark ? "text-white/70" : "text-[var(--ink-400)]",
+        )}
         strokeWidth={1.5}
         aria-hidden="true"
       />
       <span className="truncate">{label}</span>
       {meta}
       <Chevron
-        className={cn("size-3 shrink-0", dark && "text-white/70")}
+        className={cn(
+          "size-3 shrink-0",
+          dark ? "text-white/70" : "text-[var(--ink-400)]",
+        )}
         strokeWidth={1.5}
         aria-hidden="true"
       />

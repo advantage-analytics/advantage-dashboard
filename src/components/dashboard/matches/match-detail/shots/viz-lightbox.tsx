@@ -19,7 +19,6 @@ import { contactBandRows, depthBandRows } from "@/lib/data/viz-bands";
 import { isTextEntry } from "@/lib/ui/is-text-entry";
 import { cn } from "@/lib/utils";
 
-import { AppliedStrip } from "./applied-strip";
 import {
   bandEditorDirty,
   bandEditorPayload,
@@ -33,11 +32,22 @@ import { ChartMenu } from "./chart-menu";
 import { APRON_FILL, HEAT_APRON_FILL } from "./court-art";
 import { CutMenu } from "./cut-menu";
 import { defaultCutsFor } from "./default-cuts";
-import { FiltersPopover } from "./filters-popover";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
 import { LightboxCourt } from "./lightbox-court";
-import { isPlayable, markIsPoint, pointsBehind } from "./lightbox-points";
+import {
+  dotMatchesPick,
+  isPlayable,
+  legendCounts,
+  markIsPoint,
+  pointsBehind,
+  type LegendPick,
+} from "./lightbox-points";
+import {
+  LegendFilter,
+  LightboxFilterPanel,
+  LightboxFilterStrip,
+} from "./lightbox-filters";
 import { LightboxPointList } from "./lightbox-point-list";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { KEY_PAN_PX } from "./pan-zoom";
@@ -63,9 +73,17 @@ import {
   EMPTY_VIZ_FILTERS,
   computeViz,
   errorsJudgedIn,
+  filterKeysFor,
   type PlayerFilter,
+  type VizFilters,
 } from "./viz-model";
-import { clearedFilters, courtFor } from "./viz-url";
+import {
+  activeFilterEntries,
+  courtFor,
+  sameFilterValue,
+  type VizState,
+} from "./viz-url";
+import { useErrorSplitJudged } from "../match-filters/provider";
 import { lightboxCountLine } from "./wall-summary";
 import { useMatchFilters } from "../match-filters/provider";
 
@@ -176,16 +194,58 @@ export function VizLightbox({
 
   /** The right column: the points behind the marks, or their statistics. */
   const [pane, setPane] = useState<"points" | "stats">("points");
+  /** The legend's one choice (Won · Lost · Out · Ace), local to this card. */
+  const [legendPick, setLegendPick] = useState<LegendPick | null>(null);
+  const errorSplitJudged = useErrorSplitJudged();
+
+  // What "Clear filter" returns to: the card as it opened — a saved view's
+  // own filters, a wall card's cut filters ("First serves" is first serves),
+  // or nothing — for the player on court now.
+  const baseline = useMemo<VizFilters>(() => {
+    const saved =
+      state.viewId !== null
+        ? meta.savedViews.find((v) => v.id === state.viewId)
+        : undefined;
+    const card =
+      state.cut !== null
+        ? defaultCutsFor(errorsJudgedIn(matchCtx)).find(
+            (c) => c.cut === state.cut,
+          )
+        : undefined;
+    const base: VizFilters = saved
+      ? saved.filters
+      : { ...EMPTY_VIZ_FILTERS, ...(card?.filters ?? {}) };
+    return { ...base, player: state.filters.player };
+  }, [
+    state.viewId,
+    state.cut,
+    state.filters.player,
+    meta.savedViews,
+    matchCtx,
+  ]);
 
   const visibleSelectedMarkId =
     selectedMarkId !== null &&
-    result?.dots.some((dot) => dot.id === selectedMarkId)
+    (legendPick === null
+      ? result?.dots
+      : result?.dots.filter((d) => dotMatchesPick(d, legendPick))
+    )?.some((dot) => dot.id === selectedMarkId)
       ? selectedMarkId
       : null;
 
+  // The marks on court: the result's, narrowed by the legend's pick.
+  const dots = useMemo(
+    () =>
+      result === null
+        ? undefined
+        : legendPick === null
+          ? result.dots
+          : result.dots.filter((d) => dotMatchesPick(d, legendPick)),
+    [result, legendPick],
+  );
+
   // A row selects its point's mark on the court (the first mark that stands
   // for that point), so the row and the mark light together.
-  const dots = result?.dots;
   const selectPoint = useCallback(
     (point: MatchPoint) => {
       if (!dots || cut === null) return;
@@ -204,20 +264,20 @@ export function VizLightbox({
         null)
       : null;
 
-  // The list's denominator: the points behind this card with every filter
-  // cleared but the player — "12 / 52".
+  // The list's denominator: the points behind the card as it opened (its
+  // baseline filters, this player) — "12 / 52".
   const allPointsBehind = useMemo(() => {
     if (cut === null) return [];
     const all = computeViz(
       points,
       cut,
-      { ...EMPTY_VIZ_FILTERS, player: state.filters.player },
+      baseline,
       subjectIsPlayer1,
       "scatter",
       matchCtx,
     );
     return pointsBehind(cut, all.dots, points);
-  }, [points, cut, state.filters.player, subjectIsPlayer1, matchCtx]);
+  }, [points, cut, baseline, subjectIsPlayer1, matchCtx]);
 
   /* ── Band editor (moved from the fullscreen viewer) ───────────────────── */
 
@@ -416,7 +476,8 @@ export function VizLightbox({
       Math.abs(pz.t.px - fitT.px) < 0.5 &&
       Math.abs(pz.t.py - fitT.py) < 0.5);
 
-  const matched = isDraft ? [] : pointsBehind(cut, result.dots, points);
+  const shownDots = dots ?? result.dots;
+  const matched = isDraft ? [] : pointsBehind(cut, shownDots, points);
   const playable = matched.filter(isPlayable);
   const legend = legendItemsFor(cut, state.chart);
   const heat = state.chart === "heat";
@@ -429,9 +490,37 @@ export function VizLightbox({
     }));
   }
 
+  // Back to the card as it opened, legend and all.
   function clearFilters() {
-    setState((prev) => clearedFilters(prev));
+    setLegendPick(null);
+    setState((prev) => ({ ...prev, filters: baseline, viewId: prev.viewId }));
   }
+
+  function setFilters(next: VizFilters) {
+    setState((prev) => ({ ...prev, filters: next, viewId: null }));
+  }
+
+  // The panel's own keys away from the baseline.
+  const panelActive = filterKeysFor(cut).some(
+    (key) => key !== "player" && !sameFilterValue(key, state.filters, baseline),
+  );
+  // The strip's sentence: what is applied beyond the card's own filters,
+  // then the legend's pick.
+  const names = { you: you.shortName, opponent: opp.shortName };
+  const baselineState: VizState = { ...state, filters: baseline };
+  const baselineLabels = new Set(
+    activeFilterEntries(baselineState, names, { errorSplitJudged }).map(
+      (e) => e.label,
+    ),
+  );
+  const phrases = activeFilterEntries(state, names, { errorSplitJudged })
+    .filter((e) => e.key !== "player" && !baselineLabels.has(e.label))
+    .map((e) => e.label);
+  if (legendPick !== null)
+    phrases.push(
+      { won: "Won", lost: "Lost", out: "Out", ace: "Aces" }[legendPick],
+    );
+  const anyCut = panelActive || legendPick !== null;
 
   return (
     <DialogPrimitive.Root
@@ -534,13 +623,20 @@ export function VizLightbox({
                     showBands={!isDraft}
                     onEditBands={meta.readOnly ? undefined : enterEdit}
                   />
-                  <FiltersPopover
-                    count={result.count}
-                    total={result.total}
-                    noun={result.noun}
-                    youName={you.name}
-                    opponentName={opp.name}
-                  />
+                  {!isDraft && (
+                    <LightboxFilterPanel
+                      cut={cut}
+                      filters={state.filters}
+                      setFilters={setFilters}
+                      onClear={clearFilters}
+                      hasActive={panelActive}
+                      engaged={anyCut}
+                      result={result}
+                      points={points}
+                      subjectIsPlayer1={subjectIsPlayer1}
+                      matchCtx={matchCtx}
+                    />
+                  )}
                   {receipt !== null && (
                     <span
                       aria-hidden="true"
@@ -551,7 +647,15 @@ export function VizLightbox({
                   )}
                 </div>
 
-                {hasFilters && !isDraft && <AppliedStrip />}
+                {!isDraft && (
+                  <LightboxFilterStrip
+                    phrases={phrases}
+                    shown={matched.length}
+                    total={allPointsBehind.length}
+                    statOnly={false}
+                    onClear={clearFilters}
+                  />
+                )}
 
                 <div
                   ref={setStageEl}
@@ -586,7 +690,7 @@ export function VizLightbox({
                   <LightboxCourt
                     cut={cut}
                     chart={state.chart}
-                    dots={isDraft ? [] : result.dots}
+                    dots={isDraft ? [] : shownDots}
                     zoneStats={isDraft ? null : result.zoneStats}
                     filters={state.filters}
                     subjectName={subjectName}
@@ -691,23 +795,34 @@ export function VizLightbox({
                   )}
                 </div>
 
-                {!isDraft && (
-                  <div
-                    role="group"
-                    aria-label="Legend"
-                    className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
-                  >
-                    {legend.map((item) =>
-                      item.glyph === "ramp" ? (
-                        <HeatRampLegend key={item.key} />
-                      ) : (
-                        <span key={item.key} className="px-1">
-                          <LegendMark item={item} />
-                        </span>
-                      ),
-                    )}
-                  </div>
-                )}
+                {!isDraft &&
+                  (state.chart === "scatter" ? (
+                    <LegendFilter
+                      items={legend}
+                      counts={legendCounts(result.dots)}
+                      pick={legendPick}
+                      onPick={(next) => {
+                        setLegendPick(next);
+                        setSelectedMarkId(null);
+                      }}
+                    />
+                  ) : (
+                    <div
+                      role="group"
+                      aria-label="Legend"
+                      className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
+                    >
+                      {legend.map((item) =>
+                        item.glyph === "ramp" ? (
+                          <HeatRampLegend key={item.key} />
+                        ) : (
+                          <span key={item.key} className="px-1">
+                            <LegendMark item={item} />
+                          </span>
+                        ),
+                      )}
+                    </div>
+                  ))}
               </div>
 
               {/* Right column */}
@@ -751,8 +866,8 @@ export function VizLightbox({
                       selectedPointId={selectedPointId}
                       onSelectPoint={selectPoint}
                       emptyLine={
-                        cut === "serve" && result.count > 0
-                          ? `${result.count} ${result.noun} went out. A fault isn't a point, so there is no clip; the court shows where they landed.`
+                        cut === "serve" && shownDots.length > 0
+                          ? `${shownDots.length} ${shownDots.length === 1 ? "serve" : "serves"} went out. A fault isn't a point, so there is no clip; the court shows where they landed.`
                           : `No ${result.noun} match these filters.`
                       }
                     />
