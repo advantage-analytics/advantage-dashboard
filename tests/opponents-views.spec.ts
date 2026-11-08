@@ -12,6 +12,7 @@ import {
   describeOpponentFilters,
   emptyOpponentCut,
   hasOpponentFilters,
+  initialOpponentCut,
   matchesBackhandFilter,
   matchesFacedByFilter,
   matchesHandFilter,
@@ -583,6 +584,46 @@ test.describe("the team page's Program and Faced-by facets", () => {
         choices,
       ),
     ).toBe("Faced by Ada Okafor or Cy Abara");
+  });
+
+  test("?facedBy= with an id the checklist does not offer lands on the resting cut", () => {
+    const choices = opponentFacedByChoices(TEAM);
+    expect(initialOpponentCut({ facedBy: "p-nobody" }, choices)).toBe(
+      RESTING_OPPONENT_CUT,
+    );
+    expect(initialOpponentCut({}, choices)).toBe(RESTING_OPPONENT_CUT);
+    expect(initialOpponentCut({ facedBy: [] }, choices)).toBe(
+      RESTING_OPPONENT_CUT,
+    );
+  });
+
+  test("?facedBy= twice ticks both players, dropping unknown and repeated ids", () => {
+    const choices = opponentFacedByChoices(TEAM);
+    const cut = initialOpponentCut(
+      { facedBy: ["p-cy", "p-nobody", "p-ada", "p-cy"] },
+      choices,
+    );
+    expect(cut).toEqual({
+      ...RESTING_OPPONENT_CUT,
+      filters: { ...NO_OPPONENT_FILTERS, facedBy: ["p-cy", "p-ada"] },
+    });
+    expect(names(applyOpponentCut(TEAM, cut).visible).sort()).toEqual([
+      "Ana Castillo",
+      "Cara Ellis",
+      "Dina Frost",
+    ]);
+  });
+
+  test("?facedBy= with a known id is a filter, and the strip names the player", () => {
+    const choices = opponentFacedByChoices(TEAM);
+    const cut = initialOpponentCut({ facedBy: "p-bea" }, choices);
+    expect(cut.filters.facedBy).toEqual(["p-bea"]);
+    expect(hasOpponentFilters(cut.filters)).toBe(true);
+    expect(cut.view).toBe(RESTING_OPPONENT_CUT.view);
+    expect(cut.sort).toBe(RESTING_OPPONENT_CUT.sort);
+    expect(describeOpponentFilters(cut.filters, { facedBy: choices })).toBe(
+      "Faced by Bea Lindqvist",
+    );
   });
 
   test("an empty team cut says a filter emptied it and clears it", () => {

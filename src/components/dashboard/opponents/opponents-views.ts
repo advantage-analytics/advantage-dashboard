@@ -448,6 +448,33 @@ export const RESTING_OPPONENT_CUT: OpponentCut = {
   sort: DEFAULT_OPPONENT_SORT,
 };
 
+/**
+ * The cut a page lands on, from its URL: `?facedBy=<playerId>` (once or
+ * repeated) ticks those roster players in the Faced-by checklist, the way a
+ * player profile's "N opponents" link opens the page already cut to them.
+ *
+ * Only an id the checklist offers survives — `facedByChoices` is
+ * `opponentFacedByChoices` over the rows the loader sent, so a stale link, a
+ * player who has met nobody yet or a hand-typed id never ticks a box the panel
+ * cannot show (and could not untick). With none left this is the resting cut,
+ * so a bad link lands on the plain page rather than an empty filter.
+ */
+export function initialOpponentCut(
+  params: { facedBy?: string | readonly string[] | null },
+  facedByChoices: readonly OpponentFacetChoice[],
+): OpponentCut {
+  const raw = params.facedBy;
+  const requested =
+    raw == null ? [] : typeof raw === "string" ? [raw] : [...raw];
+  const offered = new Set(facedByChoices.map((choice) => choice.value));
+  const facedBy = [...new Set(requested)].filter((id) => offered.has(id));
+  if (facedBy.length === 0) return RESTING_OPPONENT_CUT;
+  return {
+    ...RESTING_OPPONENT_CUT,
+    filters: { ...NO_OPPONENT_FILTERS, facedBy },
+  };
+}
+
 type CutFields = ViewFields & FilterFields & SortFields;
 
 /**

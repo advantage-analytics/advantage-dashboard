@@ -109,7 +109,7 @@ ready).
 
 ## T8 · Opponents page reads `?facedBy=` into the Faced-by filter
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** `src/app/dashboard/opponents/page.tsx`, `team-opponents-page-content.tsx`, `opponents-views.ts`, `tests/opponents-views.spec.ts` — guess
 - **routes:** `/dashboard/opponents?facedBy=<playerId>`

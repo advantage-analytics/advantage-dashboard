@@ -84,3 +84,13 @@ is the runner's. Newest entries at the bottom.
 
 1. `StatisticsPanePending` still lays out a fixed 416px chart column with three charts; the report now splits 1:1 with four charts, so loading-to-loaded shifts on both the report and the profile (T10 territory; also touches the match report).
 2. "One is written once a match of theirs is analysed" is untrue once matches are analysed and no season summary exists; reword with T11.
+
+## T8 · Opponents page reads `?facedBy=` into the Faced-by filter — done
+
+**gate:** mechanical PASS · completion PASS
+
+**changed:** Pure `initialOpponentCut(params, facedByChoices)` in `opponents-views.ts` (one or many ids, unknown and repeated dropped, else the resting cut). The team branch of `/dashboard/opponents` reads `?facedBy=` and `TeamOpponentsPageContent` seeds its cut from it (`initialFacedBy`); personal ignores it. Three new specs in `tests/opponents-views.spec.ts`. The profile rail's link already uses the same id space, unchanged.
+
+**follow-ups:**
+
+1. The cut is not written back to the URL: unticking the player leaves `?facedBy=` in the address bar, and a changed param on a mounted page is not followed.
