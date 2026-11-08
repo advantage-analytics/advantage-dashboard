@@ -328,6 +328,8 @@ import {
   errorKindKeyPatch,
   errorKindShotId,
   isLetKey,
+  isNetKey,
+  netKeyPatch,
   shotTagForKey,
   tagKeyPatch,
   isUnforcedKey,
@@ -2996,6 +2998,7 @@ export function LabelConsole({
   const errorKindKey = useRef<() => boolean>(() => false);
   const letKey = useRef<() => boolean>(() => false);
   const tagKey = useRef<(key: string) => boolean>(() => false);
+  const netKey = useRef<() => boolean>(() => false);
   const resetShotKey = useRef<() => boolean>(() => false);
   const resetPointKey = useRef<() => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
@@ -3515,20 +3518,34 @@ export function LabelConsole({
     };
     // L on a serve marks it a let, and again gives it back the result its
     // landing reads (`letKeyPatch`), as the Serve result menu does: only
-    // where that menu offers Let. A rally stroke does not take the key, and
+    // where that menu offers Let. On a rally stroke L is an admin's Lob
+    // (`tagKeyPatch`); a labeller's rally stroke does not take the key, and
     // is never selected by it.
     letKey.current = () => {
       if (!operable || confirm) return false;
       const patchFor = (shot: LabelShot) =>
-        letKeyPatch(shot, session.playOnLets);
+        letKeyPatch(shot, session.playOnLets) ??
+        (labeller ? null : tagKeyPatch(shot, "lob"));
       const shot = keyShot((s) => patchFor(s) !== null);
       const patch = shot && patchFor(shot);
       if (!shot || !patch) return false;
       requestPatchShot(shot.id, patch);
       return true;
     };
-    // G / K / J / P toggle the selected rally stroke's kind (`tagKeyPatch`):
-    // approach, lob, drop shot, passing. A serve takes none of them.
+    // N calls the selected stroke Net, and again gives it back the result its
+    // landing reads (`netKeyPatch`), as the Result menu does. Every stroke
+    // with a type takes it, and a labeller's console too.
+    netKey.current = () => {
+      if (!operable || confirm) return false;
+      const shot = keyShot((s) => netKeyPatch(s) !== null);
+      const patch = shot && netKeyPatch(shot);
+      if (!shot || !patch) return false;
+      requestPatchShot(shot.id, patch);
+      return true;
+    };
+    // G / D / P toggle the selected rally stroke's kind (`tagKeyPatch`):
+    // approach, drop shot, passing — and L, lob, through `letKey` above. A
+    // serve takes none of them.
     tagKey.current = (key) => {
       // Shot kinds are the stats' answer key: an admin's alone.
       if (labeller || !operable || confirm) return false;
@@ -3689,7 +3706,8 @@ export function LabelConsole({
       // A stroke key reaches the selected stroke from a focused cell too (a
       // cell is a button), and so do A / ⇧A (add a stroke after / before),
       // C (contact ↔ landing), X (flip side), H (hitter), T (time = frame), E
-      // (forced ↔ unforced), L (let), Delete / Backspace (delete the stroke)
+      // (forced ↔ unforced), L (let or lob), N (net), D / G / P (shot kinds),
+      // Delete / Backspace (delete the stroke)
       // and R / ⇧R (ask to reset the stroke / point); a text field, a menu and
       // a dialog keep all of them.
       const lower = key.length === 1 ? key.toLowerCase() : key;
@@ -3713,15 +3731,17 @@ export function LabelConsole({
                       ? () => unforcedKey.current()
                       : isLetKey(key) && !event.shiftKey
                         ? () => letKey.current()
-                        : shotTagForKey(key) && !event.shiftKey
-                          ? () => tagKey.current(key)
-                          : lower === "r"
-                            ? event.shiftKey
-                              ? () => resetPointKey.current()
-                              : () => resetShotKey.current()
-                            : key === "Delete" || key === "Backspace"
-                              ? () => deleteShotKey.current()
-                              : null;
+                        : isNetKey(key) && !event.shiftKey
+                          ? () => netKey.current()
+                          : shotTagForKey(key) && !event.shiftKey
+                            ? () => tagKey.current(key)
+                            : lower === "r"
+                              ? event.shiftKey
+                                ? () => resetPointKey.current()
+                                : () => resetShotKey.current()
+                              : key === "Delete" || key === "Backspace"
+                                ? () => deleteShotKey.current()
+                                : null;
       if (
         consoleKey &&
         !event.metaKey &&

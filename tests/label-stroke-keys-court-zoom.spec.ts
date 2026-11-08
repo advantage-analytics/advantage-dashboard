@@ -9,13 +9,16 @@ import {
   hasEarlierServe,
   isErrorKindKey,
   isLetKey,
+  isNetKey,
   isStrokeKey,
   letKeyPatch,
+  netKeyPatch,
   nextErrorKind,
   strokeKeyChange,
   withServeHitter,
 } from "@/components/admin/labels/stroke-keys";
 import { spinOptions } from "@/components/admin/labels/label-format";
+import { effectiveShotResult } from "@/lib/services/labels/shot-derived";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import { labelPoint, labelShot } from "./fixtures/label-session";
 import {
@@ -588,6 +591,68 @@ test.describe("L: a serve's let", () => {
     });
   });
 
+  test("N calls a stroke Net, and again gives back the landing's result", () => {
+    const rally = (fields: Parameters<typeof labelShot>[2] = {}) =>
+      labelShot("n-shot", "l-point", { stroke: "forehand", ...fields });
+    expect(netKeyPatch(rally())).toEqual({ result: "net" });
+    expect(netKeyPatch(rally({ result: "out" }))).toEqual({ result: "net" });
+    // A serve takes it too, a let included.
+    expect(netKeyPatch(serve())).toEqual({ result: "net" });
+    expect(netKeyPatch(serve({ result: "let" }))).toEqual({ result: "net" });
+    // Unplaced: Net goes back to no result.
+    expect(netKeyPatch(rally({ result: "net" }))).toEqual({ result: null });
+    // A landing that itself reads Net has nothing to take back.
+    const inTheNet = { contactX: 0, contactY: 0, landingX: 0, landingY: 2 };
+    expect(netKeyPatch(rally(inTheNet))).toBeNull();
+    // An untyped stroke has no Result menu, so no key.
+    expect(netKeyPatch(rally({ stroke: null }))).toBeNull();
+    // A vendor stroke: once the labeller's call differs from the seed's it
+    // stands, so N flips Out → Net and back.
+    const placedLong = { contactX: 1, contactY: 2, landingX: 1, landingY: 26 };
+    const seed = {
+      stroke: "forehand" as const,
+      hitter: "p1" as const,
+      result: "out" as const,
+      spin: null,
+      contact_x: 1,
+      contact_y: 2,
+      landing_x: 1,
+      landing_y: 26,
+      video_time: 10,
+    };
+    expect(netKeyPatch(rally({ ...placedLong, result: "out", seed }))).toEqual({
+      result: "net",
+    });
+    expect(
+      netKeyPatch(
+        rally({ ...placedLong, result: "net", seed, status: "edited" }),
+      ),
+    ).toEqual({ result: "out" });
+    // Known limit, shared with the Result menu's Net item: the vendor seeded
+    // Net on a landing that reads Out. Writing "net" matches the seed, so it
+    // still reads as the vendor's call and the landing keeps winning — N
+    // writes it, and the shot still shows Out. Making it stick needs a stored
+    // "the labeller set this call" flag (labellerCall, shot-derived.ts).
+    const seededNet = rally({
+      ...placedLong,
+      result: "net",
+      seed: { ...seed, result: "net" },
+    });
+    expect(netKeyPatch(seededNet)).toEqual({ result: "net" });
+    expect(effectiveShotResult({ ...seededNet, status: "edited" })).toBe("out");
+    expect(isNetKey("n")).toBe(true);
+    expect(isNetKey("N")).toBe(true);
+    expect(isStrokeKey("n")).toBe(false);
+    // Unshifted, and not gated to an admin as the shot kinds are.
+    expect(source).toMatch(
+      /: isNetKey\(key\) && !event\.shiftKey\s+\? \(\) => netKey\.current\(\)/,
+    );
+    const body = source.slice(source.indexOf("    netKey.current = () => {"));
+    const fn = body.slice(0, body.indexOf("\n    };\n"));
+    expect(fn).toContain("if (!operable || confirm) return false;");
+    expect(fn).not.toContain("labeller");
+  });
+
   test("L either case; ⇧ is read off the event, so Caps Lock keeps both keys", () => {
     expect(isLetKey("l")).toBe(true);
     expect(isLetKey("L")).toBe(true);
@@ -601,7 +666,9 @@ test.describe("L: a serve's let", () => {
       "src/components/admin/labels/label-video.tsx",
       "utf8",
     );
-    expect(video).toContain('if (event.shiftKey !== (key === "l")) return;');
+    expect(video).toContain(
+      'if (event.shiftKey !== (key === "l" || key === "d")) return;',
+    );
   });
 
   test("L on the console: guarded like E, and selects no stroke it will not mark", () => {

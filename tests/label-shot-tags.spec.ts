@@ -145,12 +145,12 @@ test.describe("the stored row", () => {
 });
 
 test.describe("the keys", () => {
-  test("G approach, K lob, J drop shot, P passing; either case", () => {
+  test("G approach, L lob, D drop shot, P passing; either case", () => {
     expect(shotTagForKey("g")).toBe("approach");
-    expect(shotTagForKey("K")).toBe("lob");
-    expect(shotTagForKey("j")).toBe("drop_shot");
+    expect(shotTagForKey("L")).toBe("lob");
+    expect(shotTagForKey("d")).toBe("drop_shot");
     expect(shotTagForKey("P")).toBe("passing");
-    for (const key of ["l", "e", "Enter", "1", "gg"]) {
+    for (const key of ["k", "j", "n", "e", "Enter", "1", "gg"]) {
       expect(shotTagForKey(key), key).toBeNull();
     }
   });
@@ -239,7 +239,7 @@ test.describe("the shots well", () => {
       'aria-label="Shot 2 kind"',
     );
     expect(text(strip.slice(strip.indexOf(">") + 1))).toContain(
-      "Kind Approach G Lob K Drop shot J Passing P",
+      "Kind Approach G Lob L Drop shot D Passing P",
     );
     for (const [kind, pressed] of [
       ["approach", true],
@@ -314,19 +314,23 @@ test.describe("a labeller's view (shot kinds are admin-only)", () => {
     expect(html).toContain(SHOT_TRACKS);
   });
 
-  test("the sheet: G / K / J / P for an admin, never for a labeller", () => {
-    const keysOf = (groups: typeof LABEL_SHORTCUT_GROUPS) =>
-      groups.flatMap((g) => g.items.map((i) => i.keys.join("")));
-    const admin = keysOf(shortcutGroupsFor("admin"));
-    const labeller = keysOf(shortcutGroupsFor("labeller"));
-    for (const key of ["G", "K", "J", "P"]) {
-      expect(admin).toContain(key);
-      expect(labeller).not.toContain(key);
+  test("the sheet: the kinds' G / L / D / P for an admin, never for a labeller", () => {
+    const rowsOf = (groups: typeof LABEL_SHORTCUT_GROUPS) =>
+      groups.flatMap((g) =>
+        g.items.map((i) => `${i.keys.join("")} ${i.action}`),
+      );
+    const admin = rowsOf(shortcutGroupsFor("admin"));
+    const labeller = rowsOf(shortcutGroupsFor("labeller"));
+    const kinds = ["G Approach", "L Lob", "D Drop shot", "P Passing shot"];
+    for (const row of kinds) {
+      expect(admin).toContain(row);
+      expect(labeller).not.toContain(row);
     }
+    // L is a labeller's let all the same; D alone is not theirs at all.
+    expect(labeller).toContain("L Let");
+    expect(labeller).toContain("⇧D Skip dead time");
     // Everything else is the same list.
-    expect(labeller).toEqual(
-      admin.filter((k) => !["G", "K", "J", "P"].includes(k)),
-    );
+    expect(labeller).toEqual(admin.filter((r) => !kinds.includes(r)));
   });
 });
 
