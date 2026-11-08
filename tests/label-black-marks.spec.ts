@@ -681,7 +681,9 @@ test.describe("the hints read off the rows, with their answers", () => {
     const calls: unknown[][] = [];
     await runReviewAnswer(out, placed.id, recorder(calls));
     // A lone serve out settles no ending by itself: the shot write alone.
-    expect(calls).toEqual([["shot", ace.id, { result: "out" }]]);
+    expect(calls).toEqual([
+      ["shot", ace.id, { result: "out", result_called: true }],
+    ]);
   });
 
   test("the answers are the point patch and the shot patch, through the console's two writes", () => {
@@ -758,7 +760,9 @@ test.describe("the hints read off the rows, with their answers", () => {
       ).map((h) => h.code),
     ).not.toContain("last_call_overruled");
     hint.actions[0].run();
-    expect(patched).toEqual([["shot", ace.id, { result: "out" }]]);
+    expect(patched).toEqual([
+      ["shot", ace.id, { result: "out", result_called: true }],
+    ]);
 
     // A net call reads as one.
     const net = mark("last_call_overruled", {
