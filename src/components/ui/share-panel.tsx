@@ -124,12 +124,20 @@ export function AccessOption({
 }
 
 /** The link to hand out, in a grey pill, with Copy beside it. */
-export function UrlRow({ url }: { url: string }) {
+export function UrlRow({
+  url,
+  onCopied,
+}: {
+  url: string;
+  /** Called once the copy succeeded — analytics only. */
+  onCopied?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function copyToClipboard() {
     try {
       await navigator.clipboard.writeText(url);
+      onCopied?.();
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {

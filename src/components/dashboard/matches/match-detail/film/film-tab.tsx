@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
@@ -515,8 +516,21 @@ function FilmRoom({
    */
   const viewedGenerationRef = useRef<number | null>(null);
   const passthrough = playback.passthrough;
+  const analyticsGenerationRef = useRef<number | null>(null);
   const recordFirstPlay = useCallback(
-    (played: number) => {
+    (played: number, positionSec: number) => {
+      // Analytics counts shared-link plays too; only the sample (read-only
+      // but not a shared link) is a demo, not a play anyone chose.
+      if (
+        (!readOnly || sharedLink) &&
+        analyticsGenerationRef.current !== played
+      ) {
+        analyticsGenerationRef.current = played;
+        track("video_played", {
+          match_id: match.id,
+          position_sec: Math.round(positionSec),
+        });
+      }
       // A reader on a shared link reports nothing: the route would refuse
       // them, and watching through a link does not restart the retention
       // clock.
@@ -525,7 +539,7 @@ function FilmRoom({
       viewedGenerationRef.current = played;
       recordMatchVideoView(match.id);
     },
-    [passthrough, match.id, readOnly],
+    [passthrough, match.id, readOnly, sharedLink],
   );
 
   /**

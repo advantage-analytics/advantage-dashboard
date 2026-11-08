@@ -1,5 +1,6 @@
 "use client";
 
+import { trackOpponentCutChange } from "./opponents-analytics";
 import { useMemo, useState } from "react";
 import { Brain } from "lucide-react";
 import { useRowSelection } from "@/components/dashboard/schedule/use-row-selection";
@@ -129,6 +130,7 @@ export function TeamOpponentsPageContent({
     ) {
       close(null);
     }
+    trackOpponentCutChange("opponents_team", cut, next);
     setCut(next);
   };
 

@@ -4,11 +4,14 @@ import {
   createContext,
   use,
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { matchViewSource, track, type MatchViewSource } from "@/lib/analytics";
 import {
   ALL_REPORT_VIEWS,
   parseReportView,
@@ -61,9 +64,10 @@ export interface MatchReportActions {
    * shell player starts on the first point the list admits. The film tab
    * consumes it once (`film-cut-context.tsx`, `landFilmCut`).
    * A no-op without a playable video — there is no Video view to open, and
-   * `/m/[token]` has one only when its link carries the video.
+   * `/m/[token]` has one only when its link carries the video. `section`
+   * names the card the click came from, for analytics only (`stat_clicked`).
    */
-  watchCut(cut: FilmCut, label: string): void;
+  watchCut(cut: FilmCut, label: string, section?: string): void;
   collapseInsight(): void;
   expandInsight(): void;
 }
@@ -266,6 +270,29 @@ export function MatchReportProvider({
   // Anything that is not a known view reads as the default, never an error.
   const view = parseReportView(searchParams.get("tab"), defaultView, views);
 
+  // One `match_viewed` per match and tab shown. The sample match is a demo,
+  // not a report anyone chose to open, so it is left out. The source is read
+  // once per match, on arrival: a later tab switch must not report the
+  // report itself as where the visit came from.
+  const viewSourceRef = useRef<{
+    matchId: string;
+    source: MatchViewSource | null;
+  } | null>(null);
+  useEffect(() => {
+    if (sample) return;
+    if (viewSourceRef.current?.matchId !== matchId) {
+      viewSourceRef.current = {
+        matchId,
+        source: readOnly ? "share_link" : matchViewSource(pathname),
+      };
+    }
+    track("match_viewed", {
+      match_id: matchId,
+      tab: view,
+      source: viewSourceRef.current.source,
+    });
+  }, [matchId, view, readOnly, sample, pathname]);
+
   // Collapse is only this visit's state; every visit opens expanded.
   const [insight, setInsight] = useState<InsightStatus>("expanded");
   // The "watch this cut" intent, between `watchCut` and the film tab taking
@@ -297,8 +324,15 @@ export function MatchReportProvider({
         query.delete("fullscreen");
         window.history.pushState(null, "", `${pathname}?${query.toString()}`);
       },
-      watchCut(cut, label) {
+      watchCut(cut, label, section) {
         if (!hasPlayableVideo) return;
+        // The statistic's own words only: every label is "<stat> · <player>"
+        // and the player's name stays out of PostHog.
+        track("stat_clicked", {
+          match_id: matchId,
+          stat_name: label.split(" · ")[0],
+          section: section ?? "unknown",
+        });
         setPendingCut({ cut, label });
         const query = new URLSearchParams(window.location.search);
         query.set("tab", "film");
@@ -312,7 +346,7 @@ export function MatchReportProvider({
         setInsight("expanded");
       },
     }),
-    [view, searchParams, pathname, defaultView, hasPlayableVideo],
+    [view, searchParams, pathname, defaultView, hasPlayableVideo, matchId],
   );
 
   const meta = useMemo<MatchReportMeta>(

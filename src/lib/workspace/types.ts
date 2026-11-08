@@ -124,6 +124,12 @@ export interface Workspace {
    */
   orgType: ProgramOrgType | null;
   /**
+   * Raw `programs.division` ('d1', 'naia', …) for a team workspace; null or
+   * absent for personal and for an org without one. Read only by analytics
+   * (the PostHog `program` group) — display goes through `divisionLabel()`.
+   */
+  division?: string | null;
+  /**
    * IANA zone the program's calendar arithmetic runs in — `programs.time_zone`,
    * NOT NULL with default `'UTC'`. "Personal" for a personal workspace reads as
    * the server's, which is the only answer available there.
@@ -348,6 +354,12 @@ export interface Viewer {
   avatarUrl: string | null;
   /** `users.plan` — 'free' | 'pro'. The paid entitlement, and only that. */
   plan: string;
+  /**
+   * An admin or an address in `POSTHOG_INTERNAL_EMAILS`, resolved on the
+   * server — PostHog's `is_internal` person property, so insights can filter
+   * the team's own use out. Absent reads as false.
+   */
+  isInternal?: boolean;
   /**
    * `users.role` — the self-described persona (player/coach/parent/academy).
    * Written by onboarding only and shown nowhere in Settings; it gates nothing (team

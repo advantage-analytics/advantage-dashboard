@@ -26,9 +26,11 @@ function sessionStatusLabel(status: AssignedLabelSession["status"]): string {
 }
 
 function assignedLabel(session: AssignedLabelSession): string {
-  return session.assignedAt
+  const assigned = session.assignedAt
     ? `Assigned ${shortDate(session.assignedAt)}`
     : "Assigned";
+  // A practice copy says only that: no set number, nothing about the match.
+  return session.practice ? `Practice set · ${assigned}` : assigned;
 }
 
 export function AssignedSessionsList({
