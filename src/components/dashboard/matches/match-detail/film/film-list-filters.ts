@@ -111,7 +111,7 @@ export const INERT_FILM_LIST_FILTERS: FilmListFilters = Object.freeze({
 export function filmListPoints(
   sharedPoints: MatchPoint[],
   local: FilmLocalFilters,
-  ctx: Pick<MatchFilterContext, "youIsPlayer1">,
+  ctx: Pick<MatchFilterContext, "youIsPlayer1" | "lobKeys">,
 ): MatchPoint[] {
   const extras = local.remainder?.extras ?? null;
   const set = hasPointSet(local) ? new Set(local.pointSet) : null;

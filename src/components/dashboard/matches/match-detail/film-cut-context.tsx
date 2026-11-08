@@ -14,6 +14,14 @@ import {
   type MatchFilters,
   type PlayerSide,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import {
+  hitADropShot,
+  hitALob,
+  netEndingOf,
+  netEntryOf,
+  type NetEnding,
+  type NetEntry,
+} from "@/components/dashboard/matches/match-detail/match-filters/net-game";
 
 /**
  * A "watch this cut" intent on its way from the report into the Video tab
@@ -102,6 +110,32 @@ export interface FilmCutExtras {
    * Not a shared filter, so the Filters drawer has no pill for it.
    */
   netBy?: PlayerSide | "either" | null;
+  /**
+   * Only net points the `netBy` side came in on this way (`netEntryOf`):
+   * read with `netBy`, which names the side; under "either" a point passes
+   * when either player's entry is this one. Without `netBy` it narrows
+   * nothing. Film only, like `netBy`.
+   */
+  netEntry?: NetEntry | null;
+  /**
+   * Only net points of the `netBy` side that ended this way, from that side's
+   * view (`netEndingOf`), read with `netBy` exactly as `netEntry` is. Lobbed
+   * needs the context's `lobKeys`: with no ball-paths file it admits nothing,
+   * and "passed" keeps its lob-blind meaning.
+   */
+  netEnding?: NetEnding | null;
+  /**
+   * Only points where this side struck at least one lob (`hitALob`, over the
+   * context's `lobKeys`); "either" is either player. With no ball-paths file
+   * nothing passes — the head-to-head Lob row offers no cut then.
+   */
+  lobBy?: PlayerSide | "either" | null;
+  /**
+   * Only points where this side struck at least one drop shot
+   * (`hitADropShot`); "either" is either player. Read from the shots alone,
+   * so unlike `lobBy` it needs no ball-paths file.
+   */
+  dropBy?: PlayerSide | "either" | null;
 }
 
 /** A statistic's cut: the shared vocabulary plus the Film-only extras. */
@@ -112,6 +146,10 @@ export const FILM_CUT_EXTRA_KEYS: readonly (keyof FilmCutExtras)[] = [
   "ending",
   "serveIn",
   "netBy",
+  "netEntry",
+  "netEnding",
+  "lobBy",
+  "dropBy",
 ];
 
 /**
@@ -205,17 +243,43 @@ export function matchesFilmCutEnding(
 export function matchesFilmCutExtras(
   point: MatchPoint,
   cut: FilmCut,
-  ctx: Pick<MatchFilterContext, "youIsPlayer1">,
+  ctx: Pick<MatchFilterContext, "youIsPlayer1" | "lobKeys">,
 ): boolean {
   const ending = cut.ending ?? null;
   if (ending !== null && !matchesFilmCutEnding(point, ending)) return false;
   if (cut.serveIn && point.firstShotResult !== "In") return false;
+  const lobKeys = ctx.lobKeys ?? null;
+  const seats = (side: PlayerSide | "either"): boolean[] =>
+    side === "either"
+      ? [true, false]
+      : [side === "you" ? ctx.youIsPlayer1 : !ctx.youIsPlayer1];
   const netBy = cut.netBy ?? null;
-  if (netBy === "either") {
-    if (!cameToNet(point, true) && !cameToNet(point, false)) return false;
-  } else if (netBy !== null) {
-    const isPlayer1 = netBy === "you" ? ctx.youIsPlayer1 : !ctx.youIsPlayer1;
-    if (!cameToNet(point, isPlayer1)) return false;
+  if (netBy !== null) {
+    const netEntry = cut.netEntry ?? null;
+    const netEnding = cut.netEnding ?? null;
+    // One seat has to pass all three at once: under "either" a point where
+    // one player came in by approach and the OTHER was passed is neither.
+    const passes = seats(netBy).some(
+      (isPlayer1) =>
+        cameToNet(point, isPlayer1) &&
+        (netEntry === null || netEntryOf(point, isPlayer1) === netEntry) &&
+        (netEnding === null ||
+          netEndingOf(point, isPlayer1, lobKeys) === netEnding),
+    );
+    if (!passes) return false;
+  }
+  const lobBy = cut.lobBy ?? null;
+  if (lobBy !== null) {
+    if (!lobKeys) return false;
+    if (!seats(lobBy).some((isPlayer1) => hitALob(point, isPlayer1, lobKeys)))
+      return false;
+  }
+  const dropBy = cut.dropBy ?? null;
+  if (
+    dropBy !== null &&
+    !seats(dropBy).some((isPlayer1) => hitADropShot(point, isPlayer1))
+  ) {
+    return false;
   }
   return true;
 }
@@ -266,6 +330,10 @@ export function applyFilmCut(
  *   server's, an ace the server's).
  * - `net`: the side came to the net (`netBy`), so under `won` it still narrows
  *   to the points that side came in on.
+ * - `netAgainst`: the OTHER side came to the net (`netBy` is the opponent) —
+ *   a side's passing shots are the opponent's net points it passed.
+ * - `lob`: the side struck a lob in the point (`lobBy`).
+ * - `drop`: the side struck a drop shot in the point (`dropBy`).
  *
  * `won` adds Result › Outcome, which is always read from the VIEWER's side:
  * "Won" for you, "Lost" for the opponent — the opponent's 26 of 100 are the
@@ -280,7 +348,8 @@ export function applyFilmCut(
  * player order. Shared by `head-to-head-card.tsx` and `point-endings-card.tsx`
  * — both compose a `FilmCut` this same way.
  */
-export type CutSide = "server" | "returner" | "player" | "net";
+export type CutSide =
+  "server" | "returner" | "player" | "net" | "netAgainst" | "lob" | "drop";
 
 function playerSide(side: "you" | "opp"): PlayerSide {
   return side === "you" ? "you" : "opponent";
@@ -300,11 +369,17 @@ export function sideCut(
   const attributed: FilmCut =
     by === "net"
       ? { ...cut, netBy: who }
-      : by === "player"
-        ? won
-          ? cut
-          : { ...cut, resultPlayer: who }
-        : { ...cut, server: by === "returner" ? otherSide(side) : who };
+      : by === "netAgainst"
+        ? { ...cut, netBy: otherSide(side) }
+        : by === "lob"
+          ? { ...cut, lobBy: who }
+          : by === "drop"
+            ? { ...cut, dropBy: who }
+            : by === "player"
+              ? won
+                ? cut
+                : { ...cut, resultPlayer: who }
+              : { ...cut, server: by === "returner" ? otherSide(side) : who };
   return won
     ? { ...attributed, resultOutcome: [side === "you" ? "won" : "lost"] }
     : attributed;

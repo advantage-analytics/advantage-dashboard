@@ -185,6 +185,17 @@ function renderStatistics(): string {
       [DETAIL_ID + "point-endings-card"]: {
         PointEndingsCard: marker("PointEndingsCard"),
       },
+      [DETAIL_ID + "net-game-card"]: {
+        NetGameCard: marker("NetGameCard"),
+      },
+      // The lob-keys fetch is the cards' concern, not the view's: a pass-through.
+      [DETAIL_ID + "statistics-lob-keys"]: {
+        StatisticsLobKeysProvider: ({
+          children,
+        }: {
+          children: React.ReactNode;
+        }) => children,
+      },
       [DETAIL_ID + "statistics-empty"]: {
         StatisticsEmpty: marker("StatisticsEmpty"),
       },
@@ -218,6 +229,7 @@ test.describe("StatisticsView has no filters", () => {
       "PerformanceTrackerChart",
       "RallyLengthCard",
       "PointEndingsCard",
+      "NetGameCard",
     ])
       expect(html).toContain(`data-component="${part}"`);
   });

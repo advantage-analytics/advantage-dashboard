@@ -14,6 +14,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
+import { hatch } from "@/components/dashboard/matches/match-detail/chart-fills";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
 import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
@@ -102,14 +103,6 @@ interface OutcomeMeta {
   you: string;
   /** Fill for the opponent's bar. */
   opp: string;
-}
-
-/**
- * A segment's fill as diagonal stripes of `color` over a lighter wash of
- * itself — the related-segment mark. Solid where the segment stands alone.
- */
-function hatch(color: string): string {
-  return `repeating-linear-gradient(135deg, ${color} 0 2px, color-mix(in srgb, ${color} 40%, transparent) 2px 4px)`;
 }
 
 /** The judged split: unforced and forced errors are two segments. */
