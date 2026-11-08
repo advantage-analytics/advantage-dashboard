@@ -35,8 +35,14 @@ import {
   type LabelShotStatus,
 } from "./session";
 
-/** The columns a shot reset writes: its seed, and `kept`. */
-export type ShotResetWrite = LabelShotSeedValues & { status: "kept" };
+/**
+ * The columns a shot reset writes: its seed, `kept`, and the call handed back
+ * to the vendor (`result_called` false).
+ */
+export type ShotResetWrite = LabelShotSeedValues & {
+  status: "kept";
+  result_called: false;
+};
 
 /** The columns a point reset writes: its seed (less the game type), and `unchanged`. */
 export type PointResetWrite = Omit<LabelPointSeedValues, "game_type"> & {
@@ -75,7 +81,10 @@ export function planShotReset(current: {
   // leaving a let on a stroke that is not a serve.
   const letError = letResultError(current.seed);
   if (letError) return { error: letError };
-  return { ok: true, write: { ...current.seed, status: "kept" } };
+  return {
+    ok: true,
+    write: { ...current.seed, status: "kept", result_called: false },
+  };
 }
 
 /**
@@ -199,6 +208,7 @@ export function applyShotReset(shot: LabelShot): LabelShot {
     hitter: write.hitter,
     stroke: write.stroke,
     result: write.result,
+    resultCalled: write.result_called,
     spin: write.spin,
     contactX: write.contact_x,
     contactY: write.contact_y,

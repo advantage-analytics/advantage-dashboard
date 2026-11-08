@@ -608,6 +608,11 @@ test.describe("a landing filled from the next air stroke", () => {
       landing_x: 0,
       landing_y: 30,
     });
+    // The flag `positionPatch` sends with its result goes with it: the stored
+    // call is kept, and so is whether it is the labeller's.
+    expect(
+      playedOnPatch({ ...patch, result_called: false }, shot("a", BACK), deep),
+    ).toEqual({ landing_x: 0, landing_y: 30 });
     // Met inside the court, so a long click is the labeller saying it missed.
     expect(playedOnPatch(patch, shot("a", BACK), volley())).toBe(patch);
     // A click on the hitter's own side says net; the contact does not.

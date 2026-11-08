@@ -2295,6 +2295,7 @@ export function LabelConsole({
       hitter: plan.write.hitter,
       stroke: null,
       result: null,
+      resultCalled: false,
       spin: null,
       contactX: null,
       contactY: null,

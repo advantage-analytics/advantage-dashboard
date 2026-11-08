@@ -402,8 +402,16 @@ test("a net ball sits on its own path, where contact → landing meets the net",
     toCourtPercent(3, NET + 0.3, true),
   );
 
+  // Struck closer to the net than the drawn inset: the dot stays at the
+  // contact's x rather than running off the card along the line behind it.
+  const volley = [shot("v1", true, [0, NET - 0.05], [4, NET + 0.05], "Net")];
+  expect(bounceOf(at(11, volley), "v1")).toMatchObject(
+    toCourtPercent(0, y, true),
+  );
+
   // Same answers after an end change.
   expect(drawn(at(11, mirrored(diag)))).toEqual(drawn(at(11, diag)));
+  expect(drawn(at(11, mirrored(volley)))).toEqual(drawn(at(11, volley)));
 });
 
 test("match mode plots bounces only, with no fade", () => {

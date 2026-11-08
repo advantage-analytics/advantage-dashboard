@@ -458,14 +458,22 @@ test.describe("targets", () => {
     // In makes it an ace, won by the server: the serve's result and the
     // ending the strokes then derive. Out settles nothing beyond the serve.
     expect(answer(s!.answers, "in").writes).toEqual([
-      { write: "shot", shotId: "a", patch: { result: "in" } },
+      {
+        write: "shot",
+        shotId: "a",
+        patch: { result: "in", result_called: true },
+      },
       {
         write: "point",
         patch: { ending: "ace", ended_by: "p1", winner: "p1" },
       },
     ]);
     expect(answer(s!.answers, "out").writes).toEqual([
-      { write: "shot", shotId: "a", patch: { result: "out" } },
+      {
+        write: "shot",
+        shotId: "a",
+        patch: { result: "out", result_called: true },
+      },
     ]);
     expect(answer(s!.answers, "add-second-serve").writes).toEqual([
       {
@@ -521,7 +529,7 @@ test.describe("end-of-point answers", () => {
       expect(a.writes[0]).toEqual({
         write: "shot",
         shotId: "d",
-        patch: { result },
+        patch: { result, result_called: true },
       });
       expect(a.writes[1]).toEqual(
         expected ? { write: "point", patch: expected } : undefined,
@@ -592,7 +600,11 @@ test.describe("end-of-point answers", () => {
       "Bounced on Bravo’s side, 3.1 m short of the net",
     );
     expect(short.writes).toEqual([
-      { write: "shot", shotId: "d", patch: { result: "net" } },
+      {
+        write: "shot",
+        shotId: "d",
+        patch: { result: "net", result_called: true },
+      },
       {
         write: "point",
         patch: { ending: "error", ended_by: "p2", winner: "p1" },
@@ -648,7 +660,11 @@ test.describe("the follow-up", () => {
       { write: "split", shotId: "d" },
     ]);
     expect(answer(s!.answers, "remove-after").writes).toEqual([
-      { write: "shot", shotId: "c", patch: { result: "out" } },
+      {
+        write: "shot",
+        shotId: "c",
+        patch: { result: "out", result_called: true },
+      },
     ]);
     // Stored out already: only the strokes after are left to go.
     const storedOut = rally({}, ["c", { landingY: 25, result: "out" }]);

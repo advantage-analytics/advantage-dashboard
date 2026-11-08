@@ -852,7 +852,9 @@ export function BlackShotRow({
               value={result}
               options={resultMenu.options}
               initialOpen={resultMenuOpen}
-              onChange={(value) => patch(shotResultPatch(value))}
+              onChange={(value) =>
+                patch(shotResultPatch(value, resultMenu.derived))
+              }
             />
           ) : (
             <span className="min-w-0 truncate">
@@ -1794,7 +1796,7 @@ export const RESULT_LET =
 export const RESULT_UNPLACED = "Its landing is not placed yet";
 /**
  * The No result item's value: a `MenuOption<string>` value cannot be null,
- * so `shotResultPatch` maps this back to `{ result: null }`.
+ * so `shotResultPatch` maps this back to a null result.
  */
 export const RESULT_NONE = "none";
 
@@ -1882,13 +1884,28 @@ export function strokeChangePatch(
       ...labelShotValues(shot),
       stroke: stroke ?? null,
     }),
+    result_called: false,
   };
 }
 
-/** What picking a Result menu item writes: No result's sentinel is null. */
-export function shotResultPatch(value: string | null): LabelShotPatch {
-  if (value === RESULT_NONE) return { result: null };
-  return { result: value as LabelShotResult | null };
+/**
+ * What picking a Result menu item writes: No result's sentinel is null. Any
+ * call other than `derived` (the menu's first item, what the landing reads)
+ * is the labeller's override and is flagged so (`result_called`): it then
+ * outranks the landing even where it equals the vendor's seeded call. The
+ * first item and No result hand the call back to the ends.
+ */
+export function shotResultPatch(
+  value: string | null,
+  derived: LabelShotResult | null = null,
+): LabelShotPatch {
+  if (value === RESULT_NONE || value === null) {
+    return { result: null, result_called: false };
+  }
+  return {
+    result: value as LabelShotResult,
+    result_called: value !== derived,
+  };
 }
 
 /**

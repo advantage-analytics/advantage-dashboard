@@ -200,7 +200,9 @@ export function playedOnPatch(
     landing_y: ends.contact.y,
   });
   if (metReads !== patch.result) return patch;
-  const { result: _result, ...rest } = patch;
+  // The stored call stays, so whose call it is stays too: `positionPatch`'s
+  // `result_called: false` belongs to the result it no longer writes.
+  const { result: _result, result_called: _called, ...rest } = patch;
   return rest;
 }
 
