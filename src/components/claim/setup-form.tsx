@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics";
 import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -175,6 +176,7 @@ export function SetupForm({
         setError(result.error);
         return;
       }
+      track("program_claim_started", { program_id: result.programId });
       // Nothing has been claimed yet — only a link sent. The claim itself is
       // created when that link is opened, which is what keeps this action from
       // being able to park an open claim on every program in the directory.

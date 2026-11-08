@@ -5,6 +5,7 @@ import {
   signupInternalEmail,
   supportMessageInternalEmail,
   uploadInternalEmail,
+  vendorDeletionUnrecordedEmail,
   INTERNAL_ALERTS_ADDRESS,
 } from "@/lib/services/email";
 import { isSupportTopic } from "@/lib/data/support-view";
@@ -39,13 +40,15 @@ export type InternalEventKind =
   | "video_upload"
   | "swingvision_upload"
   | "feedback"
-  | "support_message";
+  | "support_message"
+  | "vendor_deletion_unrecorded";
 
 export interface InternalEvent {
   kind: InternalEventKind;
   /**
    * `users.id`, `processing_jobs.id`, `match_files.id`, `product_feedback.id`
-   * or `support_messages.id`, by kind.
+   * `support_messages.id`, or the deleted `matches.id` for
+   * `vendor_deletion_unrecorded`, by kind.
    */
   id: string;
 }
@@ -59,6 +62,7 @@ const KINDS: readonly InternalEventKind[] = [
   "swingvision_upload",
   "feedback",
   "support_message",
+  "vendor_deletion_unrecorded",
 ];
 
 /** The trigger's body, or null for anything else. Pure, so tested offline. */
@@ -110,6 +114,8 @@ export async function notifyInternalEvent(
         return await notifyFeedback(supabase, event.id);
       case "support_message":
         return await notifySupportMessage(supabase, event.id);
+      case "vendor_deletion_unrecorded":
+        return await notifyVendorDeletionUnrecorded(supabase, event.id);
       default:
         return await notifyUpload(supabase, event);
     }
@@ -335,6 +341,38 @@ async function notifySupportMessage(
       adminUrl: `${emailOrigin()}/admin/messages?id=${threadId}`,
     }),
     { kind: "support_message", id: messageId },
+  );
+}
+
+/**
+ * A real event arrives after the delete committed (pg_net sends only then),
+ * so the match is gone and the id is the whole fact. A match that still
+ * exists means the body did not come from the trigger: refuse it, or the
+ * inbox would ask SplitStep to delete a live match's video.
+ */
+async function notifyVendorDeletionUnrecorded(
+  supabase: SupabaseClient,
+  matchId: string,
+): Promise<InternalEventOutcome> {
+  const { data: live, error } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("id", matchId)
+    .maybeSingle();
+  if (error) {
+    console.error(`${LOG} could not check the match`, {
+      matchId,
+      error: error.message,
+    });
+    return "failed";
+  }
+  if (live) return "not_found";
+  if (!(await claimSend(`vendor_deletion_unrecorded:${matchId}`))) {
+    return "duplicate";
+  }
+  return deliver(
+    vendorDeletionUnrecordedEmail({ to: INTERNAL_ALERTS_ADDRESS, matchId }),
+    { kind: "vendor_deletion_unrecorded", id: matchId },
   );
 }
 

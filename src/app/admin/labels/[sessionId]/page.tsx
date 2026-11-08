@@ -4,6 +4,7 @@ import { AdminPage } from "@/components/admin/admin-page";
 import { LabelConsole } from "@/components/admin/labels/label-console";
 import { getLabelUploadInfo } from "@/lib/data/label-overview-server";
 import { getLabelSession } from "@/lib/data/labels-server";
+import { readPracticeSourceId } from "@/lib/data/practice-server";
 import {
   addLabelShotAction,
   combineLabelPointsAction,
@@ -150,14 +151,39 @@ export default async function AdminLabelSessionPage({
           recordWorkBeat: recordLabelWorkBeatAction,
         }}
         headerAction={
-          <Link
-            href="/admin/labels"
-            className="shrink-0 text-[13px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-          >
-            Back to Labels
-          </Link>
+          <span className="flex shrink-0 items-center gap-4">
+            {/* A finished analyst session can be an answer key for practice
+                copies; a practice copy links back to its key's grades. */}
+            {session.kind === "practice" ? (
+              <PracticeKeyLink sessionId={session.id} />
+            ) : session.status === "complete" ? (
+              <Link
+                href={`/admin/labels/${session.id}/practice`}
+                className={HEADER_LINK}
+              >
+                Practice copies
+              </Link>
+            ) : null}
+            <Link href="/admin/labels" className={HEADER_LINK}>
+              Back to Labels
+            </Link>
+          </span>
         }
       />
     </AdminPage>
+  );
+}
+
+const HEADER_LINK =
+  "text-[13px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]";
+
+/** "Practice grades": a practice copy's way to its key's practice page. */
+async function PracticeKeyLink({ sessionId }: { sessionId: string }) {
+  const sourceId = await readPracticeSourceId(sessionId);
+  if (!sourceId) return null;
+  return (
+    <Link href={`/admin/labels/${sourceId}/practice`} className={HEADER_LINK}>
+      Practice grades
+    </Link>
   );
 }

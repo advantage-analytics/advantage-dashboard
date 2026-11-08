@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
@@ -73,6 +74,7 @@ import {
 } from "./use-attachment-playback";
 import { FilmReadOnlyContext, useFilmReadOnly } from "./film-read-only";
 import { recordMatchVideoView } from "./record-video-view";
+import { useFilmFilterContext } from "./use-film-filter-context";
 import {
   filmDraftCount,
   filmListPoints,
@@ -280,10 +282,12 @@ function FilmRoom({
     setFilters: setShared,
     clearFilters,
     filteredPoints: sharedPoints,
-    context: filterContext,
     filmRemainder: remainder,
     setFilmRemainder,
   } = useMatchFilters();
+  // The shared context plus the match's lob shots, for a landed Net game or
+  // Lob cut (`useFilmFilterContext`).
+  const filterContext = useFilmFilterContext();
   const [savedOnly, setSavedOnly] = useState<boolean>(
     // Never on a shared link: its reader has no bookmarks, so a pasted
     // `?saved` would open on "You haven't saved a point yet".
@@ -512,8 +516,21 @@ function FilmRoom({
    */
   const viewedGenerationRef = useRef<number | null>(null);
   const passthrough = playback.passthrough;
+  const analyticsGenerationRef = useRef<number | null>(null);
   const recordFirstPlay = useCallback(
-    (played: number) => {
+    (played: number, positionSec: number) => {
+      // Analytics counts shared-link plays too; only the sample (read-only
+      // but not a shared link) is a demo, not a play anyone chose.
+      if (
+        (!readOnly || sharedLink) &&
+        analyticsGenerationRef.current !== played
+      ) {
+        analyticsGenerationRef.current = played;
+        track("video_played", {
+          match_id: match.id,
+          position_sec: Math.round(positionSec),
+        });
+      }
       // A reader on a shared link reports nothing: the route would refuse
       // them, and watching through a link does not restart the retention
       // clock.
@@ -522,7 +539,7 @@ function FilmRoom({
       viewedGenerationRef.current = played;
       recordMatchVideoView(match.id);
     },
-    [passthrough, match.id, readOnly],
+    [passthrough, match.id, readOnly, sharedLink],
   );
 
   /**

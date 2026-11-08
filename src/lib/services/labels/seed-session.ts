@@ -153,6 +153,9 @@ async function findOpenSession(
     .select("id")
     .eq("job_id", jobId)
     .in("status", OPEN_STATUSES)
+    // Practice copies (practice-session.ts) hold the job too, many at once,
+    // and are never the job's session.
+    .neq("kind", "practice")
     .maybeSingle<{ id: string }>();
   if (error) {
     return { error: `Could not look up open sessions: ${error.message}` };
@@ -168,8 +171,11 @@ function chunks<T>(rows: T[]): T[][] {
   return out;
 }
 
-/** Points first, so every shot can carry its `label_point_id`. */
-async function writeSeedRows(
+/**
+ * Points first, so every shot can carry its `label_point_id`. Shared with
+ * practice copies (practice-session.ts), which seed from the same build.
+ */
+export async function writeSeedRows(
   supabase: AdminClient,
   sessionId: string,
   seed: ReturnType<typeof buildLabelSeed>,

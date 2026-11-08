@@ -26,7 +26,10 @@ import {
   liveShotsInOrder,
   type LabelErrorKind,
   type LabelPoint,
+  LABEL_SHOT_TAGS,
+  toggledShotTags,
   type LabelShot,
+  type LabelShotTag,
   type LabelSide,
 } from "@/lib/services/labels/session";
 import {
@@ -106,7 +109,7 @@ import { errorKindShotId, serveOffersLet } from "./stroke-keys";
 
 /**
  * The well's one set of tracks: number · time · player · stroke · spin · hit at
- * · landed at · placement · result. Every row kind (stroke, ghost, suggestion,
+ * · landed at · placement · kind · result. Every row kind (stroke, ghost, suggestion,
  * Add shot) is laid on `SHOT_TRACKS`, so columns line up by construction and
  * ghost or suggestion text spans tracks.
  *
@@ -124,6 +127,12 @@ export const SHOT_TAIL_PX = 33;
 /** What the result track adds around the tail: the cell's 3px gap and 2px. */
 export const SHOT_TAIL_AIR_PX = 5;
 
+/**
+ * The kind track's floor (`label_shots.tags`): "Approach" whole at 11px. It
+ * leaves with placement on a narrow well, so the narrowest rail is unchanged.
+ */
+export const SHOT_KIND_FLOOR_PX = 44;
+
 /** Each track's floor, left to right; the positions and the number are fixed. */
 // The time's floor holds a match past the hour whole: "1:02:03.4" is nine
 // 6px mono figures.
@@ -136,38 +145,52 @@ export const SHOT_FLOORS_PX = [
   88,
   88,
   30,
+  SHOT_KIND_FLOOR_PX,
   SHOT_TAIL_PX + SHOT_TAIL_AIR_PX,
 ] as const;
-/** The 8 gaps between 9 tracks, at `gap-x-2`. */
-export const SHOT_GAPS_PX = 8 * 8;
+/** The 9 gaps between 10 tracks, at `gap-x-2`. */
+export const SHOT_GAPS_PX = 9 * 8;
 /** `px-[14px]`, both sides. */
 export const SHOT_PADDING_PX = 2 * 14;
 
 // A literal: Tailwind only emits a class it can read whole in the source, so
 // the two numbers (`SHOT_TAIL_PX`, `SHOT_TAIL_AIR_PX`) are written out here.
 export const SHOT_TRACKS =
-  "grid-cols-[22px_minmax(56px,0.3fr)_minmax(32px,0.55fr)_minmax(48px,0.8fr)_minmax(26px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
+  "grid-cols-[22px_minmax(56px,0.3fr)_minmax(32px,0.55fr)_minmax(48px,0.8fr)_minmax(26px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(44px,0.6fr)_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
 
 /**
- * Below this well width the placement track goes: placement is derived from the
+ * Below this well width the placement and kind tracks go: placement is derived from the
  * landing and not editable (the court panel still shows it), and dropping its
  * 30px floor + 8px gap lets the player, stroke and result words stop truncating
  * at the rail's narrow end.
  */
 export const SHOT_PLACEMENT_MIN_RAIL_PX = 640;
 
-// `SHOT_TRACKS` without the placement track, under a well (`@container/shots`)
+// `SHOT_TRACKS` without the placement and kind tracks, under a well (`@container/shots`)
 // narrower than `SHOT_PLACEMENT_MIN_RAIL_PX`. Written out whole for the same
 // reason as `SHOT_TRACKS`: Tailwind cannot see a class assembled at runtime.
 export const SHOT_TRACKS_NARROW =
   "@max-[640px]/shots:grid-cols-[22px_minmax(56px,0.3fr)_minmax(32px,0.55fr)_minmax(48px,0.8fr)_minmax(26px,0.5fr)_88px_88px_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
 
-/** On a cell that leaves with the placement track. */
+/** On a cell that leaves with the placement and kind tracks. */
 const NARROW_HIDDEN = "@max-[640px]/shots:hidden";
+
+/**
+ * `SHOT_TRACKS` without the kind track: the well a labeller sees, practice
+ * copies included (`EditContext.shotKinds` off) — the tracks it had before
+ * kinds existed. Written out whole for the reason above.
+ */
+export const SHOT_TRACKS_NO_KIND =
+  "grid-cols-[22px_minmax(56px,0.3fr)_minmax(32px,0.55fr)_minmax(48px,0.8fr)_minmax(26px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
 
 // `text-[11px] leading-[14px]`: every cell's own line box is the size of its
 // text, so a value centres on the row instead of hanging from a 16px strut.
-const ROW_GRID = `relative grid ${SHOT_TRACKS} ${SHOT_TRACKS_NARROW} items-center gap-x-2 h-[34px] px-[14px] text-[11px] leading-[14px]`;
+const ROW_BOX = `relative grid ${SHOT_TRACKS_NARROW} items-center gap-x-2 h-[34px] px-[14px] text-[11px] leading-[14px]`;
+
+/** A well row's grid: with the kind track where shot kinds are on. */
+function rowGrid(edit: Pick<EditContext, "shotKinds">): string {
+  return `${edit.shotKinds ? SHOT_TRACKS : SHOT_TRACKS_NO_KIND} ${ROW_BOX}`;
+}
 
 const WELL_STYLE = {
   "--shot-tail": `${SHOT_TAIL_PX}px`,
@@ -443,7 +466,7 @@ export function BlackShotsWell({
             // The row's own tracks, so the plus sits under the numbers and
             // the words under the times, at any rail width.
             className={cn(
-              ROW_GRID,
+              rowGrid(edit),
               addArrival.className,
               "w-full cursor-pointer text-left text-[11px] font-medium text-white/70 transition-colors duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
             )}
@@ -664,7 +687,7 @@ export function BlackShotRow({
         onFocus={focusRow}
         style={arrival.style}
         className={cn(
-          ROW_GRID,
+          rowGrid(edit),
           arrival.className,
           "group/row @container transition-colors duration-200",
           lit
@@ -795,6 +818,20 @@ export function BlackShotRow({
             <Dash label="No placement" />
           </span>
         )}
+        {edit.shotKinds ? (
+          <span
+            data-shot-kind=""
+            className={cn("min-w-0 truncate text-[11px]", NARROW_HIDDEN, words)}
+          >
+            {/* A serve takes no kind (the strip and keys refuse it), so its
+              cell stays empty rather than drawing a dash that reads as a gap. */}
+            {shot.tags.length > 0 ? (
+              shot.tags.map((tag) => SHOT_TAG_LABEL[tag]).join(" · ")
+            ) : isServeStroke(shot.stroke) ? null : (
+              <Dash label="No kind" />
+            )}
+          </span>
+        ) : null}
         {/* The word, then a fixed right-aligned slot for the pencil: the word
           truncates before the pencil is touched. The gap between them is
           3px; at 4 the pencil's last pixel was clipped. Any typed stroke's
@@ -849,7 +886,22 @@ export function BlackShotRow({
         </span>
       </div>
       {trayActions ? (
-        <ShotTray number={number} actions={trayActions} errorKind={errorKind} />
+        <>
+          <ShotTray
+            number={number}
+            actions={trayActions}
+            errorKind={errorKind}
+          />
+          {edit.shotKinds &&
+          shot.stroke !== null &&
+          !isServeStroke(shot.stroke) ? (
+            <ShotKindStrip
+              number={number}
+              tags={shot.tags}
+              toggle={(tag) => patch({ tags: toggledShotTags(shot.tags, tag) })}
+            />
+          ) : null}
+        </>
       ) : null}
     </>
   );
@@ -958,7 +1010,8 @@ export function BlackDeletedShot({
 const GHOST_TAIL = "col-[8/-1] @max-[640px]/shots:col-[7/-1]";
 
 /** The ghost tail at its narrowest: Restore whole, plus the gap. */
-export const GHOST_TAIL_MIN_PX = SHOT_FLOORS_PX[7] + 8 + SHOT_FLOORS_PX[8];
+export const GHOST_TAIL_MIN_PX =
+  SHOT_FLOORS_PX[7] + 8 + SHOT_FLOORS_PX[8] + 8 + SHOT_FLOORS_PX[9];
 
 /**
  * The affordance on an editable cell's text while it is text: a cursor, and
@@ -1036,7 +1089,7 @@ export function BlackGhostShot({
           data-row="ghost-shot-row"
           data-shot-ghost-row={shot.id}
           style={arrival.style}
-          className={cn(ROW_GRID, arrival.className, "bg-white/[0.03]")}
+          className={cn(rowGrid(edit), arrival.className, "bg-white/[0.03]")}
         >
           <span
             aria-hidden="true"
@@ -1123,7 +1176,7 @@ function openShotSuggestions(
 /**
  * A suggested stroke: two strokes in a row by one player, so the other's is
  * probably missing between them. A dashed amber row on the stroke row's tracks
- * (`ROW_GRID`); the sentence is what truncates. Its time and player are what
+ * (`rowGrid`); the sentence is what truncates. Its time and player are what
  * "Add shot" will write (`planAddedShot`); when that rule refuses there is no
  * row.
  */
@@ -1160,7 +1213,7 @@ function BlackSuggestedShot({
       data-slot-armed={armed ? "" : undefined}
       style={arrival.style}
       className={cn(
-        ROW_GRID,
+        rowGrid(edit),
         arrival.className,
         "cursor-default rounded-lg bg-[var(--rail-amber-wash-faint)] outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)]",
         armed ? "outline-solid" : "outline-dashed",
@@ -1593,6 +1646,78 @@ function ShotTray({
           </BlackTextAction>
         </Fragment>
       ))}
+    </div>
+  );
+}
+
+/** Each shot kind's word, and the key that toggles it on the selected stroke. */
+export const SHOT_TAG_LABEL: Record<LabelShotTag, string> = {
+  approach: "Approach",
+  lob: "Lob",
+  drop_shot: "Drop shot",
+  passing: "Passing",
+};
+export const SHOT_TAG_KEY: Record<LabelShotTag, string> = {
+  approach: "G",
+  lob: "K",
+  drop_shot: "J",
+  passing: "P",
+};
+
+/**
+ * The selected rally stroke's kinds, on a second 32px strip under the tray
+ * (the tray's one line is full at the default rail): "Kind", then the four
+ * toggles on the Forced | Unforced pair's segmented ground, each with its key.
+ * Several may be pressed — a lob can pass the net player. Not on a serve.
+ * The words are the stored list (`label_shots.tags`); a toggle never moves
+ * the stroke's kept / edited status (edit.ts).
+ */
+function ShotKindStrip({
+  number,
+  tags,
+  toggle,
+}: {
+  number: number;
+  tags: readonly LabelShotTag[];
+  toggle: (tag: LabelShotTag) => void;
+}) {
+  return (
+    <div
+      data-shot-kind-strip=""
+      role="group"
+      aria-label={`Shot ${number} kind`}
+      onClick={(event) => event.stopPropagation()}
+      className="flex h-[32px] min-w-0 flex-nowrap items-center gap-3 bg-white/[0.12] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
+    >
+      <span className="shrink-0 text-white/55">Kind</span>
+      <span className="inline-flex min-w-0 items-center gap-0.5 overflow-hidden rounded-[var(--radius-button)] bg-white/[0.08] p-0.5">
+        {LABEL_SHOT_TAGS.map((tag) => (
+          <BlackTextAction
+            key={tag}
+            ink="plain"
+            small
+            pressed={tags.includes(tag)}
+            data-shot-tag={tag}
+            aria-pressed={tags.includes(tag)}
+            aria-keyshortcuts={SHOT_TAG_KEY[tag]}
+            aria-label={`Shot ${number}: ${SHOT_TAG_LABEL[tag]}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              toggle(tag);
+            }}
+          >
+            {SHOT_TAG_LABEL[tag]}
+            <Kbd
+              size="sm"
+              variant="flat"
+              mono
+              className="ml-1.5 bg-white/[0.08] text-white/60 shadow-none"
+            >
+              {SHOT_TAG_KEY[tag]}
+            </Kbd>
+          </BlackTextAction>
+        ))}
+      </span>
     </div>
   );
 }

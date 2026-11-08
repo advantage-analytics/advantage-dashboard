@@ -4,7 +4,10 @@ import path from "node:path";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { LABEL_SHORTCUT_GROUPS } from "@/components/admin/labels/label-shortcuts";
+import { shortcutGroupsFor } from "@/components/admin/labels/label-shortcuts";
+
+/** The guide is the labeller's: their sheet, without the admin-only keys. */
+const LABEL_SHORTCUT_GROUPS = shortcutGroupsFor("labeller");
 import {
   CLEANING_STANDARD_SECTIONS,
   GUIDE_VERSION,
@@ -109,6 +112,10 @@ test.describe("LabelGuide", () => {
     expect(rendered).toEqual(expected);
     for (const key of ["]", "[", "'", ";", "⌘Z", "⌘⇧Z"]) {
       expect(rendered).toContain(key);
+    }
+    // The shot kinds are an admin's keys: never in a labeller's guide.
+    for (const key of ["G", "K", "J", "P"]) {
+      expect(rendered).not.toContain(key);
     }
     for (const group of LABEL_SHORTCUT_GROUPS) {
       expect(keys).toContain(`data-guide-shortcut-group="${group.label}"`);

@@ -138,13 +138,16 @@ test("the form renders no term prose of its own", () => {
   }
 });
 
-test("the team terms say junior team video never trains models; the college ones don't need to", () => {
+test("both flows disclose that the video analysis provider trains on match video, junior teams' included", () => {
   const sentence =
-    "Video from high school and junior teams is never used to train models.";
-  const team = pilotTermsCopy({ flow: "team", accountType: "individual" });
-  const college = pilotTermsCopy({ flow: "college", accountType: "program" });
+    "Our video analysis provider uses match video, including video from high school and junior teams, to improve its analysis models.";
   const textOf = (copy: PilotTermsCopy) =>
     copy.terms.map((t) => t.segments.map((s) => s.text).join("")).join("\n");
-  expect(textOf(team)).toContain(sentence);
-  expect(textOf(college)).not.toContain(sentence);
+  for (const copy of [
+    pilotTermsCopy({ flow: "team", accountType: "individual" }),
+    pilotTermsCopy({ flow: "college", accountType: "program" }),
+  ]) {
+    expect(textOf(copy)).toContain(sentence);
+    expect(textOf(copy)).not.toContain("never used to train");
+  }
 });

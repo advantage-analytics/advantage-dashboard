@@ -27,6 +27,10 @@ import { requestOrigin } from "@/lib/request-origin";
 
 export type ActionOutcome = { ok: true } | { ok: false; error: string };
 
+/** `startClaim`'s answer: the program's id rides along for analytics only. */
+export type StartClaimOutcome =
+  { ok: true; programId: string } | { ok: false; error: string };
+
 /**
  * Where a half-finished claim lives between submitting the form and clicking
  * the emailed link.
@@ -121,7 +125,7 @@ export async function startClaim(input: {
   fullName: string;
   role: string;
   email: string;
-}): Promise<ActionOutcome> {
+}): Promise<StartClaimOutcome> {
   const fullName = input.fullName.trim();
   const email = input.email.trim().toLowerCase();
 
@@ -134,7 +138,7 @@ export async function startClaim(input: {
   const db = createAdminClient();
   const { data: program } = await db
     .from("programs")
-    .select("status, school_name, team")
+    .select("id, status, school_name, team")
     .eq("program_key", input.programKey)
     .maybeSingle();
 
@@ -161,7 +165,7 @@ export async function startClaim(input: {
   } = await supabase.auth.getUser();
 
   if (user) {
-    return startClaimSignedIn(
+    const outcome = await startClaimSignedIn(
       db,
       user,
       { programKey: input.programKey, fullName, role: input.role, email },
@@ -170,6 +174,7 @@ export async function startClaim(input: {
         program.team as string | null,
       ),
     );
+    return outcome.ok ? { ok: true, programId: program.id as string } : outcome;
   }
 
   const { error } = await sendClaimOtp(supabase, email);
@@ -239,7 +244,7 @@ export async function startClaim(input: {
     .delete()
     .lt("expires_at", new Date().toISOString());
 
-  return { ok: true };
+  return { ok: true, programId: program.id as string };
 }
 
 /**

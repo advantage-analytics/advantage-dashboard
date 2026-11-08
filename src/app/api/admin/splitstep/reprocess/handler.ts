@@ -181,6 +181,8 @@ async function labellingInProgress(
     .select("id")
     .eq("match_id", matchId)
     .in("status", ["labelling", "submitted"])
+    // Practice copies pin their own results file; a reprocess leaves them be.
+    .neq("kind", "practice")
     .limit(1);
   if (error) return { ok: false, error: error.message };
   return { ok: true, labelling: (data ?? []).length > 0 };

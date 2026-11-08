@@ -105,6 +105,41 @@ export const SERVE_SPINS = [
   "topspin",
 ] as const satisfies readonly LabelSpin[];
 
+/**
+ * `label_shots.tags`, the CHECK vocabulary: what kind of shot a stroke was,
+ * beyond its stroke and spin. A list (a lob can also pass the net player),
+ * and not a value field: the vendor never reads one, so a tag never moves a
+ * shot's `kept` / `edited` status (edit.ts) and is not in its seed.
+ */
+export const LABEL_SHOT_TAGS = [
+  "approach",
+  "lob",
+  "drop_shot",
+  "passing",
+] as const;
+export type LabelShotTag = (typeof LABEL_SHOT_TAGS)[number];
+
+export function isLabelShotTag(value: unknown): value is LabelShotTag {
+  return (
+    typeof value === "string" &&
+    (LABEL_SHOT_TAGS as readonly string[]).includes(value)
+  );
+}
+
+/** The known tags in `list`, deduplicated, in {@link LABEL_SHOT_TAGS} order. */
+export function orderedShotTags(list: readonly unknown[]): LabelShotTag[] {
+  return LABEL_SHOT_TAGS.filter((tag) => list.includes(tag));
+}
+
+/** `tags` with `tag` added, or taken away when it is there, in vocabulary order. */
+export function toggledShotTags(
+  tags: readonly LabelShotTag[],
+  tag: LabelShotTag,
+): LabelShotTag[] {
+  const on = tags.includes(tag);
+  return LABEL_SHOT_TAGS.filter((t) => (t === tag ? !on : tags.includes(t)));
+}
+
 export function isLabelSpin(value: unknown): value is LabelSpin {
   return (
     typeof value === "string" &&
@@ -230,6 +265,11 @@ export interface LabelShot {
    * scoring, and a landing named here is not asked for again.
    */
   unclear: string[];
+  /**
+   * The labeller's shot kinds (`label_shots.tags`), in
+   * {@link LABEL_SHOT_TAGS} order; empty for none. Not a value field.
+   */
+  tags: LabelShotTag[];
   /**
    * Set when the site removed this vendor stroke before the transcript was
    * built ({@link LabelSiteRemoval}); null for a stroke the derivation kept
@@ -362,6 +402,15 @@ export interface LabelSession {
   jobId: string | null;
   matchId: string;
   status: "labelling" | "submitted" | "complete";
+  /**
+   * `analyst` for real work, `practice` for a test copy graded against an
+   * analyst session (practice-session.ts). A practice copy is never
+   * published: the server refuses it at every publish door. Absent reads as
+   * `analyst` (sessions built before the column, test fixtures).
+   */
+  kind?: "analyst" | "practice";
+  /** Practice only: the one set the copy covers, or null for the match. */
+  practiceSetNumber?: number | null;
   derivationVersion: string;
   /** `matches.player1_name` — the p1 side every label row means. */
   player1Name: string;

@@ -50,6 +50,7 @@ import {
   type AppliedPointRow,
 } from "./apply";
 import { chunksOf } from "./chunks";
+import { PRACTICE_NEVER_PUBLISHED } from "./edit-session";
 import { labelScores } from "./score";
 import {
   enteredScore,
@@ -148,6 +149,13 @@ export function labelFold(
   plan: Pick<ReturnType<typeof planApply>, "mismatch">,
 ) {
   return { reconciled: plan.mismatch === null, source: "labels" as const };
+}
+
+/** The refusal for publishing a practice copy, or null for any other session. Pure. */
+export function refusePracticePublish(session: {
+  kind?: "analyst" | "practice";
+}): string | null {
+  return session.kind === "practice" ? PRACTICE_NEVER_PUBLISHED : null;
 }
 
 /** The rows a publish writes, and the checks it refuses on. Pure. */
@@ -532,6 +540,12 @@ export async function publishPlanned(params: {
   const { db, context, plan, acceptScore } = params;
   const { session } = context;
   const matchId = session.matchId;
+
+  // Practice copies never reach a match (practice-session.ts). Mark complete
+  // and scripts/label-apply.ts both come through here, so this refuses for
+  // both, besides the Mark complete gate and the database's own guards.
+  const practice = refusePracticePublish(session);
+  if (practice) return { ok: false, error: practice };
 
   if (plan.mismatch && !acceptScore) {
     return {

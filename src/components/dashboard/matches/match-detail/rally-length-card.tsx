@@ -218,7 +218,12 @@ export function RallyLengthCard() {
             // attribute below is `undefined` otherwise, so the read-only
             // markup is unchanged. Focus is `focus.css`'s ring.
             const watch = watchable
-              ? () => actions.watchCut(RALLY_BAND_CUTS[band.key], band.title)
+              ? () =>
+                  actions.watchCut(
+                    RALLY_BAND_CUTS[band.key],
+                    band.title,
+                    "rally_length",
+                  )
               : undefined;
 
             return (

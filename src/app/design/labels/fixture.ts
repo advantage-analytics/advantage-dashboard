@@ -124,6 +124,7 @@ function shot(
     landingY,
     videoTime,
     unclear: [],
+    tags: [],
     siteRemoval: null,
     siteRemovalRestoredAt: null,
     seed: null,

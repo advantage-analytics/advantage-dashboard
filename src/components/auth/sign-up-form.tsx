@@ -21,6 +21,7 @@ import {
 } from "@/lib/auth/error-messages";
 import { authHref, safeNext } from "@/lib/auth/safe-next";
 import { readFormFields } from "@/lib/auth/form-fields";
+import { setSignupAttribution } from "@/lib/analytics";
 
 /**
  * @param next Where the confirmation mail should land — `/sign-up` reads it
@@ -85,24 +86,32 @@ export function SignUpForm({
     const supabase = createClient();
 
     try {
-      const { error: signUpError } = await supabase.auth.signUp({
-        email: fields.email,
-        password: fields.password,
-        options: {
-          // The destination rides in the confirmation link, so the click that
-          // activates the account is the one that returns to a join link.
-          emailRedirectTo: `${window.location.origin}/confirm?next=${encodeURIComponent(destination)}`,
-          // The versions the consent sentence linked to. There is no session
-          // to insert a row with until the address is confirmed, so
-          // `handle_new_user` records them as the account is created — and
-          // only if they are still the current ones.
-          data: {
-            legal_terms_version: LEGAL_VERSIONS.terms,
-            legal_privacy_version: LEGAL_VERSIONS.privacy,
+      const { data: signUpData, error: signUpError } =
+        await supabase.auth.signUp({
+          email: fields.email,
+          password: fields.password,
+          options: {
+            // The destination rides in the confirmation link, so the click that
+            // activates the account is the one that returns to a join link.
+            emailRedirectTo: `${window.location.origin}/confirm?next=${encodeURIComponent(destination)}`,
+            // The versions the consent sentence linked to. There is no session
+            // to insert a row with until the address is confirmed, so
+            // `handle_new_user` records them as the account is created — and
+            // only if they are still the current ones.
+            data: {
+              legal_terms_version: LEGAL_VERSIONS.terms,
+              legal_privacy_version: LEGAL_VERSIONS.privacy,
+            },
           },
-        },
-      });
+        });
       if (signUpError) throw signUpError;
+      // An address that already has an account comes back as a placeholder
+      // user with no identities and an id that is not the account's: never
+      // identify with it.
+      const newUser = signUpData.user;
+      setSignupAttribution(
+        newUser && (newUser.identities?.length ?? 0) > 0 ? newUser.id : null,
+      );
       router.push(authHref("/sign-up-success", destination));
     } catch (err: unknown) {
       setError(toAuthError(err));

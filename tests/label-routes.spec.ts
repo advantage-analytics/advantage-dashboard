@@ -189,6 +189,7 @@ test.describe("listAssignedLabelSessions", () => {
         checked: 12,
         total: 87,
         openCounts: { amber: 2, grey: 1 },
+        practice: false,
       },
       {
         id: SESSION_B,
@@ -198,6 +199,7 @@ test.describe("listAssignedLabelSessions", () => {
         checked: 0,
         total: 0,
         openCounts: null,
+        practice: false,
       },
     ]);
   });
@@ -262,6 +264,12 @@ test.describe("AssignedSessionsList", () => {
     expect(html).toContain("12 of 87");
     expect(html).not.toContain("No matches are assigned to you yet.");
     expect(html).not.toContain("/admin");
+  });
+
+  test("a practice copy reads 'Practice set' and nothing about the match", () => {
+    const html = render([{ ...SESSIONS[0], practice: true }]);
+    expect(html).toContain("Practice set · Assigned Nov 2");
+    expect(html).not.toMatch(/Set \d/);
   });
 
   test("shows the empty state with no sessions", () => {

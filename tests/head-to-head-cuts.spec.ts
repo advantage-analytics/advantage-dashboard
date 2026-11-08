@@ -52,6 +52,10 @@ const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 const EXPECTED_CUTS: Record<string, FilmCut> = {
   "Net point attempts": { netBy: "either" },
   "Net points won": { netBy: "either" },
+  "Approach points won": { netBy: "either", netEntry: "approach" },
+  "Passed the net player": { netBy: "either", netEnding: "passed" },
+  "Lob points won": { lobBy: "either" },
+  "Drop shot points won": { dropBy: "either" },
   Aces: { serveResult: ["ace"] },
   "Double faults": { resultEnding: ["error"], resultShot: ["Serve"] },
   "First serve in": { serveType: ["first"], serveIn: true },
@@ -76,6 +80,15 @@ const EXPECTED_CUTS: Record<string, FilmCut> = {
 const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
   "Net point attempts": { netBy: "you" },
   "Net points won": { netBy: "you", resultOutcome: ["won"] },
+  "Approach points won": {
+    netBy: "you",
+    netEntry: "approach",
+    resultOutcome: ["won"],
+  },
+  // Your passing shots are the OPPONENT's net points that ended passed.
+  "Passed the net player": { netBy: "opponent", netEnding: "passed" },
+  "Lob points won": { lobBy: "you", resultOutcome: ["won"] },
+  "Drop shot points won": { dropBy: "you", resultOutcome: ["won"] },
   // An ace is the server's: Serve › Player, never Hit by.
   Aces: { serveResult: ["ace"], server: "you" },
   "Double faults": {
@@ -751,7 +764,15 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
       ...MATCH_FILTER_KEYS,
       ...FILM_CUT_EXTRA_KEYS,
     ]);
-    expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending", "serveIn", "netBy"]);
+    expect(FILM_CUT_EXTRA_KEYS).toEqual([
+      "ending",
+      "serveIn",
+      "netBy",
+      "netEntry",
+      "netEnding",
+      "lobBy",
+      "dropBy",
+    ]);
     for (const row of DERIVED_ROWS) {
       if (!row.cut) continue;
       for (const key of Object.keys(row.cut)) {

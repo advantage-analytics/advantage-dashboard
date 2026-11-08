@@ -177,6 +177,7 @@ export function LabelBlackRail({
   canRedo = false,
   tone = "dark",
   showSession = true,
+  shotKinds = false,
   onExit,
   onFullScreen,
   scrollerRef,
@@ -258,6 +259,8 @@ export function LabelBlackRail({
   tone?: RailTone;
   /** Title, checked count and save line. False where the page shows them. */
   showSession?: boolean;
+  /** Shot kinds in the well (`EditContext.shotKinds`): admins only. */
+  shotKinds?: boolean;
   /** Leave the full-screen view. Absent, there is no exit button. */
   onExit?: () => void;
   onFullScreen?: () => void;
@@ -484,6 +487,7 @@ export function LabelBlackRail({
       playOnLets,
       tone,
       fileOffset,
+      shotKinds,
     }),
     [
       editable,
@@ -509,6 +513,7 @@ export function LabelBlackRail({
       playOnLets,
       tone,
       fileOffset,
+      shotKinds,
     ],
   );
   const bandBefore = useMemo(

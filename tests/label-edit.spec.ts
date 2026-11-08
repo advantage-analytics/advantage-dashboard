@@ -65,6 +65,7 @@ test.describe("the allowlists", () => {
         "result",
         "spin",
         "stroke",
+        "tags",
         "unclear",
         "video_time",
       ].sort(),

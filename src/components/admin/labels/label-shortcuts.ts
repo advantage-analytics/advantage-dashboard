@@ -15,6 +15,11 @@ export interface LabelShortcut {
   action: string;
   /** A second line, where the action alone would not say it. */
   note?: string;
+  /**
+   * An admin's key only: the console ignores it for a labeller, and their
+   * sheet and guide leave it out (`shortcutGroupsFor`). The shot kinds.
+   */
+  adminOnly?: boolean;
 }
 
 export interface LabelShortcutGroup {
@@ -96,6 +101,30 @@ export const LABEL_SHORTCUT_GROUPS: readonly LabelShortcutGroup[] = [
       },
       { keys: ["T"], action: "Time to this frame" },
       { keys: ["L"], action: "Let", note: "On a serve. Again to undo" },
+      {
+        keys: ["G"],
+        action: "Approach",
+        note: "On a rally shot. Again to undo",
+        adminOnly: true,
+      },
+      {
+        keys: ["K"],
+        action: "Lob",
+        note: "On a rally shot. Again to undo",
+        adminOnly: true,
+      },
+      {
+        keys: ["J"],
+        action: "Drop shot",
+        note: "On a rally shot. Again to undo",
+        adminOnly: true,
+      },
+      {
+        keys: ["P"],
+        action: "Passing shot",
+        note: "On a rally shot. Again to undo",
+        adminOnly: true,
+      },
     ],
   },
   {
@@ -131,4 +160,19 @@ export function isShortcutSheetKey(event: {
   if (event.altKey) return false;
   if (event.key === "/") return event.metaKey || event.ctrlKey;
   return event.key === "?" && !event.metaKey && !event.ctrlKey;
+}
+
+/**
+ * The sheet as `audience` sees it: a labeller's leaves out the admin-only
+ * keys (the shot kinds), so their console, practice copies included, and
+ * their guide read as they did before kinds existed.
+ */
+export function shortcutGroupsFor(
+  audience: "admin" | "labeller",
+): readonly LabelShortcutGroup[] {
+  if (audience === "admin") return LABEL_SHORTCUT_GROUPS;
+  return LABEL_SHORTCUT_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.adminOnly),
+  }));
 }

@@ -12,12 +12,14 @@ import { deriveShotResult } from "@/lib/services/labels/shot-derived";
 import { spinRows } from "./label-format";
 import {
   LABEL_SPINS,
+  toggledShotTags,
   isLetServe,
   isServeStroke,
   liveShotsInOrder,
   type LabelErrorKind,
   type LabelPoint,
   type LabelShot,
+  type LabelShotTag,
   type LabelStroke,
 } from "@/lib/services/labels/session";
 
@@ -248,4 +250,30 @@ export function errorKindKeyPatch(
 ): LabelPointPatch | null {
   if (errorKindShotId(point) !== shotId) return null;
   return { error_kind: nextErrorKind(point.errorKind) };
+}
+
+/** The tag each key toggles: G approach, K lob, J drop shot, P passing. */
+const TAG_OF_KEY: Record<string, LabelShotTag> = {
+  g: "approach",
+  k: "lob",
+  j: "drop_shot",
+  p: "passing",
+};
+
+/** The shot kind a key toggles (`label_shots.tags`), or null. */
+export function shotTagForKey(key: string): LabelShotTag | null {
+  return key.length === 1 ? (TAG_OF_KEY[key.toLowerCase()] ?? null) : null;
+}
+
+/**
+ * The tags `shot` holds after its key: `tag` added, or taken away when it is
+ * there. Null on a serve or an untyped stroke, which the Kind strip does not
+ * offer either.
+ */
+export function tagKeyPatch(
+  shot: Pick<LabelShot, "stroke" | "tags">,
+  tag: LabelShotTag,
+): LabelShotPatch | null {
+  if (shot.stroke === null || isServeStroke(shot.stroke)) return null;
+  return { tags: toggledShotTags(shot.tags, tag) };
 }

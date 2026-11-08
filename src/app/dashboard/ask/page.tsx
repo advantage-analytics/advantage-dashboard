@@ -11,7 +11,10 @@ import {
 } from "@/lib/data/ask-server";
 import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
 import { askStarters } from "@/lib/services/ask/starters";
-import { askTagsFromQuery } from "@/lib/services/ask/entry";
+import {
+  askQuestionFromQuery,
+  askTagsFromQuery,
+} from "@/lib/services/ask/entry";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 export const metadata = { title: "Ask" };
@@ -102,6 +105,9 @@ async function AskContent({ searchParams }: AskRouteProps) {
       // or an opponent's drawer. Checked against the menu's own options, so
       // an id that names nothing taggable is simply not a tag.
       initialTags={askTagsFromQuery(params, tagOptions, PERSONAL_ASK_SCOPE)}
+      // `?q=`: a question to put in the composer ("Why this" on a report),
+      // never sent by arriving.
+      initialQuestion={askQuestionFromQuery(params)}
     />
   );
 }

@@ -27,7 +27,9 @@ markers is hand-written — edit it as things move.
 | `/admin/ask` | [`src/app/admin/ask/page.tsx`](src/app/admin/ask/page.tsx) |
 | `/admin/conferences` | [`src/app/admin/conferences/page.tsx`](src/app/admin/conferences/page.tsx) |
 | `/admin/labels/[sessionId]` | [`src/app/admin/labels/[sessionId]/page.tsx`](src/app/admin/labels/[sessionId]/page.tsx) |
+| `/admin/labels/[sessionId]/practice` | [`src/app/admin/labels/[sessionId]/practice/page.tsx`](src/app/admin/labels/[sessionId]/practice/page.tsx) |
 | `/admin/labels` | [`src/app/admin/labels/page.tsx`](src/app/admin/labels/page.tsx) |
+| `/admin/labels/pay` | [`src/app/admin/labels/pay/page.tsx`](src/app/admin/labels/pay/page.tsx) |
 | `/admin/matches/[matchId]` | [`src/app/admin/matches/[matchId]/page.tsx`](src/app/admin/matches/[matchId]/page.tsx) |
 | `/admin/matches` | [`src/app/admin/matches/page.tsx`](src/app/admin/matches/page.tsx) |
 | `/admin/messages` | [`src/app/admin/messages/page.tsx`](src/app/admin/messages/page.tsx) |

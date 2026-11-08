@@ -71,6 +71,13 @@ export interface LabelRowOperations {
  */
 export interface EditContext {
   editable: boolean;
+  /**
+   * Shot kinds (`label_shots.tags`): the Kind track, the Kind strip and the
+   * G / K / J / P keys. On for an admin only — the tags are the stats' answer
+   * key — so a labeller's well, practice copies included, keeps the tracks
+   * it had before kinds existed. Absent is off.
+   */
+  shotKinds?: boolean;
   names: SideNames;
   selectedShotId: string | null;
   /**

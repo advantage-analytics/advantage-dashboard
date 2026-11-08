@@ -16,6 +16,8 @@
  * taken from that text.
  */
 
+import { clipText } from "@/lib/data/player-profile";
+
 export interface SplitInsight {
   /** The first sentence — the card's large claim line. */
   claim: string;
@@ -73,4 +75,41 @@ export function splitInsight(summary: string): SplitInsight {
   const claim = summary.slice(0, boundary.index + 1);
   const evidence = summary.slice(boundary.index + boundary[0].length);
   return { claim, evidence: evidence.length > 0 ? evidence : null };
+}
+
+/**
+ * The question "Why this" puts in Ask's composer: the claim, quoted as the
+ * report wrote it, so Ask checks that statement against the points instead
+ * of guessing what "this" means. Ask never reads the summary itself (it is a
+ * different model answering from the data), so the claim has to travel in
+ * the question. A closing period is dropped inside the quotes; `?` and `!`
+ * are kept, and the claim's own double quotes turn single.
+ *
+ * The wording was picked against live answers on 2026-11-07. "Why does my
+ * report say …? Show me the points behind it." got the claim echoed back
+ * with one figure; asking which stats support it and which contradict it
+ * got the opponent's side and the counterweights (errors beside winners).
+ * The points themselves are Ask's own "Show me these points" under the
+ * answer, so the question does not ask for them.
+ */
+export function whyThisQuestion(claim: string): string {
+  return `My report says "${quoteClaim(claim)}". Which stats from this match support that, and do any contradict it?`;
+}
+
+/**
+ * The longest claim the question quotes. With the framing around it the
+ * question stays inside `ASK_ENTRY_QUESTION_MAX` (300), so a long claim is
+ * cut here, on a word, and the link never cuts the question's own ending.
+ */
+const WHY_THIS_CLAIM_MAX = 190;
+
+function quoteClaim(claim: string): string {
+  // The claim's own double quotes become single ones, so the question's
+  // quotes are the only pair and it is plain where the claim ends.
+  const flat = claim
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\.$/, "")
+    .replace(/["“”]/g, "'");
+  return clipText(flat, WHY_THIS_CLAIM_MAX);
 }

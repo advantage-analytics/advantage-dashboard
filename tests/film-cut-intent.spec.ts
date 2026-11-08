@@ -129,7 +129,15 @@ test("a cut's MatchFilters half is laid over the empty filters", () => {
   expect(filmCutExtras({ ending: "winner" })).toEqual({ ending: "winner" });
   expect(filmCutExtras({ scoreType: ["breakpoint"], ending: null })).toBeNull();
   // The ending and the landed-serve bound.
-  expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending", "serveIn", "netBy"]);
+  expect(FILM_CUT_EXTRA_KEYS).toEqual([
+    "ending",
+    "serveIn",
+    "netBy",
+    "netEntry",
+    "netEnding",
+    "lobBy",
+    "dropBy",
+  ]);
 });
 
 test("the Film list is applyMatchFilters(shared) AND the remainder's extras AND saved", () => {

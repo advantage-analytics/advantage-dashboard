@@ -7,11 +7,9 @@ import {
   serializeMatchFilters,
   type MatchFilters,
 } from "../match-filters/model";
-import {
-  useFiltersPanelData,
-  useMatchFilters,
-} from "../match-filters/provider";
+import { useFiltersPanelData } from "../match-filters/provider";
 import { filmDraftCount, type FilmListFilters } from "./film-list-filters";
+import { useFilmFilterContext } from "./use-film-filter-context";
 import type { FilmListTone } from "./point-list";
 
 /**
@@ -50,7 +48,7 @@ export function FilmAdvancedPanel({
   onClose,
   tone = "light",
 }: FilmAdvancedPanelProps) {
-  const { context } = useMatchFilters();
+  const context = useFilmFilterContext();
   const { points, availability, youName, oppName, total } =
     useFiltersPanelData();
   const { shared, setShared, remainder, savedOnly } = filmFilters;

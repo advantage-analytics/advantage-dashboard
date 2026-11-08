@@ -23,7 +23,7 @@ import {
   directionZone,
   serveCourtSide,
 } from "./court";
-import { flagPoint, flagStroke, POINT_FLAGS } from "./flags";
+import { flagPoint, flagStroke, POINT_FLAGS, scoreParts } from "./flags";
 import {
   ACCEPT_UNRECONCILED_FOLD,
   reconcile,
@@ -41,6 +41,7 @@ import {
   type ResultType,
 } from "./result-type";
 import {
+  LADDER,
   lastStrokeWinner,
   resolvePointWinners,
   type PointWinner,
@@ -160,6 +161,46 @@ function orderlessScore(score: string | null): string {
   const parts = score.split("-").map((p) => p.trim());
   if (parts.length !== 2) return score;
   return [...parts].sort().join("-");
+}
+
+/**
+ * The key that puts a rally in a game, before the frozen, collapsed-tail and
+ * leading-rally corrections in `buildTranscript`: the set score, the game
+ * score and the server. The server is there so a game score the stream failed
+ * to move still splits at the change of server.
+ *
+ * A tiebreak is the exception: the server changes every two points inside
+ * one game, so keyed on it every tiebreak was cut into five or six games. At
+ * a 6-6 game score the point score decides. Plain numbers ("3-1") are a
+ * tiebreak and leave the server out; 15/30/40/AD are a game played at 6-6 (a
+ * set with no tiebreak, or a score the stream left there) and keep it. "0-0"
+ * opens either, so it takes the key of `next` — the rally after it — when
+ * that one is at the same set and game score. A "0-0" with no such rally after
+ * it (the point stream stalled at 6-6 0-0) proves nothing about a tiebreak, so
+ * it keeps the server, as every game did before.
+ */
+export function rallyGameKey(
+  rally: SplitStepRally,
+  next?: SplitStepRally,
+): string {
+  const first = rally.strokes[0];
+  const game = `${orderlessScore(first?.predSetScore ?? null)}|${first?.predGameScore}`;
+  const withServer = `${game}|${rally.server}`;
+  if (orderlessScore(first?.predGameScore ?? null) !== "6-6") return withServer;
+  const point = scoreParts(first?.predPointScore ?? null);
+  if (!point) return withServer;
+  if (point.every((p) => p === "0")) {
+    const after = next?.strokes[0];
+    const afterPoint = scoreParts(after?.predPointScore ?? null);
+    const sameGame =
+      after !== undefined &&
+      after.predSetScore === first?.predSetScore &&
+      after.predGameScore === first?.predGameScore &&
+      afterPoint !== null &&
+      !afterPoint.every((p) => p === "0");
+    return sameGame ? rallyGameKey(next as SplitStepRally) : withServer;
+  }
+  return point.every((p) => p in LADDER) ? withServer : game;
 }
 
 /** Physically impossible serve landings, beyond a wide or long fault. */
@@ -489,18 +530,15 @@ export function buildTranscript(options: BuildOptions): Transcript {
 
   const gameKeyOf = new Map<number, string>();
   const setKeyOf = new Map<number, string>();
-  for (const rally of streamRallies) {
+  streamRallies.forEach((rally, i) => {
     const first = rally.strokes[0];
     // Both score strings are server-relative, so "1-0" and "0-1" are the SAME
     // state seen from opposite ends and the string flips every game. Keying a
     // set on the raw string splits every game into its own set — set one
     // survives only because "0-0" happens to be symmetric. Sort the pair.
     setKeyOf.set(rally.rallyId, orderlessScore(first?.predSetScore ?? null));
-    gameKeyOf.set(
-      rally.rallyId,
-      `${orderlessScore(first?.predSetScore ?? null)}|${first?.predGameScore}|${rally.server}`,
-    );
-  }
+    gameKeyOf.set(rally.rallyId, rallyGameKey(rally, streamRallies[i + 1]));
+  });
 
   // Winners are read off the stream as the vendor labelled it: its score
   // strings are relative to ITS server, so absolutizing them against a

@@ -126,3 +126,92 @@ export function withServer(
     serves: strokes.filter((s) => s.strokeType === "serve"),
   };
 }
+
+/** Fewest points a stream must have before `stalledScoreStream` judges it. */
+export const STALLED_MIN_POINTS = 10;
+
+/**
+ * Most points one game reading can plausibly last. A game is four points at
+ * the least and a long deuce game rarely passes a dozen; across the 21
+ * complete label sessions and the 12 reprocessed matches (2026-11-06) the
+ * longest honest run was 24 points, on a match of 149.
+ */
+export const STALLED_RUN_POINTS = 14;
+
+/** A match whose score stream barely moved: what the warning says. */
+export interface ScoreStreamStall {
+  points: number;
+  /** Times the set-and-game reading changed from one point to the next. */
+  gameChanges: number;
+  /** Points inside a reading held longer than `STALLED_RUN_POINTS`. */
+  stalledPoints: number;
+}
+
+/**
+ * Whether the vendor's game score stood still over most of the match: at
+ * least half its points sit inside one set-and-game reading held for more
+ * than `STALLED_RUN_POINTS` points. Read from each point's set and game
+ * reading in order (`points.set_score` / `game_score`); a reading left null —
+ * a frozen stretch's, or the sentinel — repeats the one before it.
+ *
+ * Measured over the same 33 files: it names Yen Yen's new-model file
+ * (da20720e, every one of 38 readings 0-0) and 3558742b's (one game held for
+ * 15 of 17 points), and no other. A short clip of two long deuce games
+ * (79d71fd5, 16 points) is not a stall, which a changes-per-point rate read
+ * as one.
+ *
+ * Never a refusal: the derivation still builds every point (games from the
+ * serve, winners from the last shot, above), and this only says how little of
+ * it the score stream could vouch for. `score_frozen` marks the points of a
+ * frozen stretch one by one; this is the match-level reading beside it, and
+ * it also catches a game score stuck while the point score moves, which
+ * `frozenStretches` (whole readings identical) does not.
+ */
+export function stalledScoreStream(
+  readings: ReadonlyArray<{
+    set_score: string | null;
+    game_score: string | null;
+  }>,
+): ScoreStreamStall | null {
+  if (readings.length < STALLED_MIN_POINTS) return null;
+  let gameChanges = 0;
+  let stalledPoints = 0;
+  let previous: string | null = null;
+  let run = 0;
+  // A tiebreak is one game reading for its whole length: 6-6 in a set, or
+  // 0-0 games at a level set score (1-1) for a match tiebreak. Held that
+  // long by an honest stream, so such a run never counts as stalled.
+  const closeRun = () => {
+    if (run > STALLED_RUN_POINTS && !isTiebreakReading(previous)) {
+      stalledPoints += run;
+    }
+  };
+  for (const { set_score, game_score } of readings) {
+    const reading: string | null =
+      set_score === null || game_score === null
+        ? previous
+        : `${set_score}|${game_score}`;
+    if (previous !== null && reading !== previous) {
+      gameChanges += 1;
+      closeRun();
+      run = 0;
+    }
+    run += 1;
+    previous = reading;
+  }
+  closeRun();
+  return stalledPoints * 2 >= readings.length
+    ? { points: readings.length, gameChanges, stalledPoints }
+    : null;
+}
+
+/** A `set|game` reading that is a tiebreak's (see `stalledScoreStream`). */
+function isTiebreakReading(reading: string | null): boolean {
+  if (reading === null) return false;
+  const [set, game] = reading.split("|");
+  const sides = (score: string) => score.split("-").map((p) => p.trim());
+  const [g1, g2] = sides(game ?? "");
+  if (g1 === "6" && g2 === "6") return true;
+  const [s1, s2] = sides(set ?? "");
+  return g1 === "0" && g2 === "0" && s1 === s2 && s1 !== "0" && s1 !== "";
+}

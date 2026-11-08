@@ -10,6 +10,7 @@
  * - Match creation
  */
 
+import { trackVideoRejected, trackVideoSelected } from "./upload-analytics";
 import { useAdminWizardMode } from "./admin-mode";
 import {
   canSaveRosterStyle,
@@ -2591,10 +2592,16 @@ export function useUploadMatchWizard({
 
         if (!result.success) {
           setUploadError(result.error || "This video can't be analyzed.");
+          trackVideoRejected(
+            "video_validation",
+            result.error || "refused",
+            file,
+          );
           return;
         }
 
         const summary = result.details?.video ?? null;
+        trackVideoSelected(file, summary?.durationSeconds ?? null);
 
         setVideoProbe(summary);
         setVideoWarnings(result.warnings ?? []);
@@ -2653,6 +2660,7 @@ export function useUploadMatchWizard({
         });
       } catch (err) {
         if (generation !== fileGenerationRef.current) return;
+        trackVideoRejected("video_read", err, file);
         // Lead-first, like the validator's refusals: the strip sets the first
         // sentence as its lead, and a bare exception message ("The operation
         // was aborted.") would otherwise be the whole notice.

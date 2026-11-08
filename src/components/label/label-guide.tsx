@@ -1,5 +1,5 @@
 import { Kbd } from "@/components/ui/kbd";
-import { LABEL_SHORTCUT_GROUPS } from "@/components/admin/labels/label-shortcuts";
+import { shortcutGroupsFor } from "@/components/admin/labels/label-shortcuts";
 import {
   CLEANING_STANDARD_SECTIONS,
   GUIDE_PARTS,
@@ -29,7 +29,7 @@ const linkClass =
 function Shortcuts() {
   return (
     <div className="grid grid-cols-1 gap-x-7 gap-y-5 sm:grid-cols-2">
-      {LABEL_SHORTCUT_GROUPS.map((group) => (
+      {shortcutGroupsFor("labeller").map((group) => (
         <div
           key={group.label}
           data-guide-shortcut-group={group.label}

@@ -214,6 +214,8 @@ export async function listLabelJobs(
         "id, job_id, status, started_at, open_counts, assigned_at, submitted_at, labeller, assignee:users!assigned_to(id, email, first_name, last_name)",
       )
       .in("job_id", jobIds)
+      // Practice copies are graded on their own page, never the job's session.
+      .neq("kind", "practice")
       .order("started_at", { ascending: false })
       .returns<DbSession[]>(),
     countPointsByMatch(db, matchIds),
@@ -460,6 +462,10 @@ interface DbSessionRow {
   match_id: string;
   status: "labelling" | "submitted" | "complete";
   derivation_version: string;
+  /** `analyst`, or a `practice` copy (never published). */
+  kind?: "analyst" | "practice";
+  /** Practice only: the one set the copy covers, or null. */
+  practice_set_number?: number | null;
   /** Null until the labeller sets it — then the job's value stands in. */
   ad_scoring: boolean | null;
   /** False on the ground-truth session; marks are never computed for it. */
@@ -541,36 +547,40 @@ export async function readLabelSessionRows<T = undefined>(
   const { data: session, error: sessionError } = await db
     .from("label_sessions")
     .select(
-      "id, job_id, match_id, status, derivation_version, ad_scoring, marks_enabled, final_score, video_ends_early, start_score",
+      "id, job_id, match_id, status, derivation_version, kind, practice_set_number, ad_scoring, marks_enabled, final_score, video_ends_early, start_score",
     )
     .eq("id", sessionId)
-    // A player's self review lives in the same table (`kind = 'self'`, no
-    // vendor file behind it); the console never opens one.
-    .eq("kind", "analyst")
-    .maybeSingle<DbSessionRow>();
+    .maybeSingle<Omit<DbSessionRow, "kind"> & { kind?: string | null }>();
   if (sessionError) {
     throw new Error(`Could not read label session: ${sessionError.message}`);
   }
-  if (!session) return null;
+  // A player's self review lives in the same table (`kind = 'self'`, no
+  // vendor file behind it); the console never opens one. A practice copy
+  // opens like an analyst session and is refused at publish.
+  if (!session || session.kind === "self") return null;
+  const row: DbSessionRow = {
+    ...session,
+    kind: session.kind === "practice" ? "practice" : "analyst",
+  };
 
   const [extra, matchResult, jobResult, pointRows, shotRows] =
     await Promise.all([
-      beside?.(session) as Promise<T>,
+      beside?.(row) as Promise<T>,
       db
         .from("matches")
         .select(
           "id, player1_name, player2_name, score, format, player_hand, opponent_hand, player1_id, player2_id, opponent_player_id",
         )
-        .eq("id", session.match_id)
+        .eq("id", row.match_id)
         .maybeSingle<DbMatch>(),
       // The job's scoring is only the fallback for a session that has not
       // set its own; a session whose job is gone has nothing to fall back to.
-      readJobAdScoring(db, session),
+      readJobAdScoring(db, row),
       readAllPages<LabelPointRow>(
         db
           .from("label_points")
           .select(LABEL_POINT_COLUMNS)
-          .eq("session_id", session.id)
+          .eq("session_id", row.id)
           .order("point_index")
           .order("id"),
         "Could not read label points",
@@ -579,7 +589,7 @@ export async function readLabelSessionRows<T = undefined>(
         db
           .from("label_shots")
           .select(LABEL_SHOT_COLUMNS)
-          .eq("session_id", session.id)
+          .eq("session_id", row.id)
           .order("id"),
         "Could not read label shots",
       ),
@@ -593,7 +603,7 @@ export async function readLabelSessionRows<T = undefined>(
 
   const match = matchResult.data ?? null;
   const built = buildLabelSession(
-    session,
+    row,
     match,
     pointRows,
     shotRows,
@@ -896,6 +906,8 @@ export function buildLabelSession(
     jobId: session.job_id,
     matchId: session.match_id,
     status: session.status,
+    kind: session.kind ?? "analyst",
+    practiceSetNumber: session.practice_set_number ?? null,
     derivationVersion: session.derivation_version,
     player1Name: match?.player1_name ?? "Player 1",
     player2Name: match?.player2_name ?? "Player 2",

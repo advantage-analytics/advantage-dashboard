@@ -24,6 +24,7 @@ import type {
   LabelSpin,
   LabelStroke,
 } from "./session";
+import { orderedShotTags } from "./session";
 
 export interface LabelPointRow {
   id: string;
@@ -100,6 +101,8 @@ export interface LabelShotRow {
   video_time: number | null;
   /** Absent from a read that did not ask for it; read as `[]`. */
   unclear?: string[] | null;
+  /** Absent from a read that did not ask for it; read as `[]`. */
+  tags?: string[] | null;
   site_removal: LabelSiteRemoval | null;
   site_removal_restored_at: string | null;
   /** jsonb, parsed by `parseLabelShotSeed` before anything trusts it. */
@@ -107,7 +110,7 @@ export interface LabelShotRow {
 }
 
 export const LABEL_SHOT_COLUMNS =
-  "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, spin, contact_x, contact_y, landing_x, landing_y, video_time, unclear, site_removal, site_removal_restored_at, seed";
+  "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, spin, contact_x, contact_y, landing_x, landing_y, video_time, unclear, tags, site_removal, site_removal_restored_at, seed";
 
 export function toLabelShot(row: LabelShotRow): LabelShot {
   return {
@@ -128,6 +131,7 @@ export function toLabelShot(row: LabelShotRow): LabelShot {
     landingY: row.landing_y,
     videoTime: row.video_time,
     unclear: row.unclear ?? [],
+    tags: orderedShotTags(row.tags ?? []),
     siteRemoval: row.site_removal ?? null,
     siteRemovalRestoredAt: row.site_removal_restored_at ?? null,
     seed: parseLabelShotSeed(row.seed ?? null),
