@@ -25,6 +25,16 @@ test.describe("netPathX: where a net ball's path meets the net", () => {
     expect(netPathX(2, 23, -2, 1)).toBeCloseTo(2 - 4 * t);
   });
 
+  test("never leaves the contact → landing segment", () => {
+    // Struck 0.05 m short of the net, landing 0.05 m past it, read 0.3 m
+    // short of the net: unclamped, t = -2.5 and x = -10.
+    expect(netPathX(0, NET - 0.05, 4, NET + 0.05, NET - 0.3)).toBeCloseTo(0);
+    // The same from the far end.
+    expect(netPathX(0, NET + 0.05, 4, NET - 0.05, NET + 0.3)).toBeCloseTo(0);
+    // A read past the landing stops at the landing.
+    expect(netPathX(0, 1, 4, NET + 1, NET + 5)).toBeCloseTo(4);
+  });
+
   test("a straight shot keeps its x", () => {
     expect(netPathX(1.5, 0.5, 1.5, 20)).toBeCloseTo(1.5);
   });
