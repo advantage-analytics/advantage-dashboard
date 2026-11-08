@@ -16,6 +16,7 @@
  * | Email                    | Trigger                                        |
  * |--------------------------|------------------------------------------------|
  * | Program invite           | `inviteMember()` — WIRED                        |
+ * | Vendor deletion request  | `/api/cron/vendor-deletion-requests` (daily) — matches users deleted, to `SPLITSTEP_DELETION_EMAIL` (cc alerts inbox), or to `INTERNAL_ALERTS_ADDRESS` until it is set — WIRED |
  * | Analysis ready           | `deriveAndPublish()` sets `completed` · pref `notifyAnalysisReady` — WIRED |
  * | Analysis failed          | final `failed` (webhook, poll) / `derivation_failed` · pref `notifyAnalysisFailed` — WIRED |
  * | Analysis failed (internal) | `notifyAnalysisOutcome({ outcome: "failed" })`, same final failures as above, to `INTERNAL_ALERTS_ADDRESS` only — no pref, `claimSend("analysis_failed_internal:<job_id>")` — WIRED |
@@ -223,3 +224,7 @@ export {
   supportReplyEmail,
   type SupportReplyInput,
 } from "./templates/support-reply";
+export {
+  vendorDeletionEmail,
+  type VendorDeletionEmailInput,
+} from "./templates/vendor-deletion";

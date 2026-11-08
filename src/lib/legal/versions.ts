@@ -21,9 +21,9 @@ import { GUARDIAN_TERMS_URL, PRIVACY_URL, TERMS_URL } from "@/lib/constants";
  * screen and an offline spec can all read it.
  */
 export const LEGAL_VERSIONS = {
-  terms: "2.0",
-  privacy: "1.4",
-  guardian: "1.1",
+  terms: "2.1",
+  privacy: "1.5",
+  guardian: "1.2",
 } as const;
 
 export type LegalDocument = keyof typeof LEGAL_VERSIONS;
@@ -129,7 +129,7 @@ export function legalUpdateCopy({
     },
     {
       tone: "ink",
-      text: "Our video analysis provider may use video of adult players to improve its models. Video from junior accounts, players under 18, and high school or junior teams is never used to train models.",
+      text: "Our video analysis provider uses match video it receives, including video of players under 18 and of high school and junior teams, to improve its analysis models. People on its team may check a match against its video. Neither of us uses facial recognition or tries to identify players.",
     },
     {
       tone: "ink",

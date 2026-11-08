@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 
@@ -28,10 +28,16 @@ import {
 const MIGRATIONS = resolve(__dirname, "..", "supabase", "migrations");
 
 test("LEGAL_VERSIONS matches current_legal_version() in SQL", () => {
-  const sql = readFileSync(
-    resolve(MIGRATIONS, "20261026061004_legal_acceptances.sql"),
-    "utf8",
-  );
+  const newest = readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()
+    .reverse()
+    .find((f) =>
+      readFileSync(resolve(MIGRATIONS, f), "utf8").includes(
+        "function public.current_legal_version(",
+      ),
+    );
+  const sql = readFileSync(resolve(MIGRATIONS, newest!), "utf8");
   for (const [document, version] of Object.entries(LEGAL_VERSIONS)) {
     expect(sql).toContain(`when '${document}' then '${version}'`);
   }
