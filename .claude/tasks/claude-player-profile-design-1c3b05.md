@@ -60,7 +60,7 @@ ready).
 
 ## T4 · Season Head to head card
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** `src/components/dashboard/matches/match-detail/head-to-head-card.tsx`, `head-to-head-table.tsx` (new, extracted), `src/components/dashboard/team/player-profile/season-head-to-head-card.tsx` (new), `tests/season-head-to-head.spec.ts` — guess

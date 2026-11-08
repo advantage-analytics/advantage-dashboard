@@ -1,16 +1,10 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { CirclePlay } from "lucide-react";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
@@ -28,6 +22,16 @@ import {
   type H2HRow,
   type H2HValue,
 } from "@/components/dashboard/matches/match-detail/head-to-head-rows";
+import {
+  EASE,
+  HeadToHeadTable,
+  LABEL_SLOT,
+  RowLabel,
+  STRETCHED,
+  type FigureTarget,
+  type RowInteraction,
+  type TargetHandlers,
+} from "@/components/dashboard/matches/match-detail/head-to-head-table";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { useStatisticsLobKeys } from "@/components/dashboard/matches/match-detail/statistics-lob-keys";
 import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
@@ -49,6 +53,12 @@ import { cn } from "@/lib/utils";
  * number belongs in — the row builder (`head-to-head-rows.ts`) takes `you` and
  * `opp` statistics as arguments precisely so the orientation is decided once,
  * at the call site that holds `sides`.
+ *
+ * The drawing — card, column header, groups, rows, the leader's emphasis and
+ * the em dash — is `HeadToHeadTable` (`head-to-head-table.tsx`), shared with
+ * the team player profile's season card. What stays here is the match's own:
+ * the rows' data, and per row the readouts (`figureReadout`, `rowReadout`)
+ * and the click-throughs into Video, handed to the table as `interaction`.
  */
 
 // The rows as data — configuration, published values, leader rule and the
@@ -89,40 +99,7 @@ export type {
 export type { CutSide };
 export { sideCut };
 
-/* ── Rendering ──────────────────────────────────────────────────────────── */
-
-/**
- * Both value columns and both name cells; the artboard's 64 px, right-aligned.
- * The width is `--h2h-col`, set on the section by `columnWidth()` so a long
- * surname widens the columns together and every row stays aligned under it.
- */
-const COLUMN =
-  "flex w-[var(--h2h-col,64px)] shrink-0 items-center justify-end gap-1.5";
-
-/**
- * The header's name cells sit right-aligned side by side, so a short surname
- * beside a long one ran its last letter into the next column's marker
- * ("Quan■ Goodm…"). Each name cell keeps this much clear space on its left.
- */
-const NAME_GUTTER = 10;
-
-/**
- * 64 px fits a surname of about five characters at 12px beside the legend
- * marker. A longer one gets 8.2px a character (Inter 12px medium sets
- * "Goodman" at 55.6px; 7 a character clipped it), plus 14px for the marker
- * and its gap and the gutter,
- * capped so the statistic label keeps its space; `truncate` backstops anything
- * beyond.
- */
-function columnWidth(youName: string, oppName: string): number {
-  const longest = Math.max(youName.length, oppName.length);
-  return Math.min(
-    140,
-    Math.max(64, Math.ceil(longest * 8.2) + 14 + NAME_GUTTER),
-  );
-}
-
-const EASE = "duration-200 ease-[var(--ease-primary)]";
+/* ── Readouts ───────────────────────────────────────────────────────────── */
 
 /**
  * What the cursor (or keyboard focus) is on. The label is the "both players"
@@ -420,136 +397,6 @@ function Readout({
   );
 }
 
-/**
- * Hover, focus and tap wiring for one target — keyboard and finger get what
- * the mouse gets. `onClick` carries the target's click-through, so a finger's
- * first tap can select instead of opening Video.
- */
-interface TargetHandlers {
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-  onFocus: () => void;
-  onBlur: () => void;
-  onPointerDown: (e: React.PointerEvent) => void;
-  onClick: () => void;
-}
-
-/**
- * One figure's target: its click (absent when there is nothing to open), its
- * screen-reader sentence and its hover wiring.
- */
-interface FigureTarget {
-  onClick?: () => void;
-  label: string;
-  handlers: TargetHandlers;
-}
-
-/**
- * The figure's box, and its wash. On a target it is the button itself, so the
- * hit area is exactly the grey wash — no wider than the number. The -mr
- * cancels the pr so the digits stay on the column's right edge, aligned with
- * every figure that has no box.
- */
-const FIGURE = `tabular -mr-1.5 rounded-[var(--radius-cell)] px-1.5 py-0.5 text-[13px] transition-colors ${EASE}`;
-
-/**
- * The label target's stretched box: its `::after` covers the whole row, so the
- * hit area is exactly the row's wash. The ring moves onto it (with
- * `data-focus-ring="none"` on the element) so focus draws the same box.
- */
-const STRETCHED =
-  "after:absolute after:inset-0 after:rounded-[var(--radius-element)] after:content-[''] focus-visible:after:[box-shadow:var(--focus-ring)]";
-
-function ValueCell({
-  value,
-  emphasised,
-  note,
-  washed,
-  target,
-  readout,
-}: {
-  value: H2HValue;
-  emphasised: boolean;
-  note?: string;
-  /** The cursor or focus is on this figure. */
-  washed: boolean;
-  /**
-   * The figure as a hover target. Every figure with a readout is one, video
-   * or not; it clicks through only when its cut has points to open in Video.
-   * The em-dash cell below ignores it — it keeps its own "No data" tooltip.
-   */
-  target?: FigureTarget;
-  readout?: ReactNode;
-}) {
-  if (value.display) {
-    const style: React.CSSProperties = {
-      fontWeight: emphasised ? 500 : 400,
-      color: emphasised ? "var(--ink-900)" : "var(--ink-500)",
-      backgroundColor: washed ? "var(--surface-subtle)" : "transparent",
-    };
-    if (target) {
-      // One element for every figure, so a figure with nothing to open is
-      // the same hit area, wash and focus ring as one that plays. With no
-      // click it is a button with nothing to do — `aria-disabled` says so and
-      // keeps it reachable by Tab, which `disabled` would not. `relative z-[1]`
-      // lifts it over the row's stretched target. Focus is `focus.css`'s
-      // ring — nothing written here.
-      return (
-        <span className={COLUMN}>
-          <button
-            type="button"
-            aria-disabled={target.onClick ? undefined : true}
-            aria-label={target.label}
-            {...target.handlers}
-            className={cn(
-              FIGURE,
-              "relative z-[1] border-0",
-              target.onClick ? "cursor-pointer" : "cursor-default",
-            )}
-            style={style}
-          >
-            {value.display}
-            {readout}
-          </button>
-        </span>
-      );
-    }
-    return (
-      <span className={COLUMN}>
-        <span className={FIGURE} style={style}>
-          {value.display}
-        </span>
-      </span>
-    );
-  }
-
-  // The card's missing-data convention (match-statistics-card.tsx): an italic
-  // em dash that says why on hover, never a zero. Lifted over the row's
-  // stretched target so its tooltip still gets the hover.
-  return (
-    <span className={COLUMN}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span
-            tabIndex={0}
-            aria-label="No data recorded for this stat"
-            className="tabular relative z-[1] cursor-help text-[13px] font-light text-[var(--color-text-muted)] italic"
-          >
-            —
-          </span>
-        </TooltipTrigger>
-        <TooltipContent
-          side="top"
-          sideOffset={6}
-          className="px-2.5 py-1.5 text-[11px] leading-[14px]"
-        >
-          {note ?? "No data"}
-        </TooltipContent>
-      </Tooltip>
-    </span>
-  );
-}
-
 /** How many points each of a row's three targets opens. */
 interface RowCounts {
   both: number;
@@ -675,251 +522,163 @@ export function HeadToHeadCard() {
     onClick: () => fingerTap.click(watch, () => setHover(null)),
   });
 
-  return (
-    <section
-      ref={cardRef}
-      aria-labelledby="head-to-head-heading"
-      data-tour="head-to-head"
-      className="surface-card flex flex-col"
-      style={
-        {
-          padding: "18px 20px 14px",
-          "--h2h-col": `${columnWidth(youName, oppName)}px`,
-        } as CSSProperties
+  /**
+   * One row's readouts and click-throughs, for the table to lay over its
+   * static row. Every figure with something to say hovers the same way; only
+   * a cut with points behind it on a match with a playable video clicks
+   * through.
+   */
+  const interaction = (row: H2HRow): RowInteraction => {
+    const rowCounts = row.cut ? counts.get(row.label) : undefined;
+    const noun = row.noun ?? "points";
+    const names = { you: youName, opp: oppName };
+    const hasVideo = meta.hasPlayableVideo;
+    const noVideoLine = !hasVideo && !meta.readOnly;
+
+    // One figure's readout and target.
+    const cell = (side: "you" | "opp") => {
+      const name = names[side];
+      const content = figureReadout(row, side, name, {
+        hasVideo,
+        noVideoLine,
+        count: rowCounts?.[side] ?? 0,
+      });
+      if (!hasReadout(content)) {
+        return { content: null, target: undefined };
       }
-    >
-      <div className="flex items-baseline gap-3 pb-[14px]">
-        <span id="head-to-head-heading" className="eyebrow">
-          Head to head
-        </span>
-        <div className="flex-1" />
-        <span
-          className="text-micro tabular whitespace-nowrap"
-          style={{ color: "var(--ink-400)" }}
-        >
-          Whole match · {points.length} points
-        </span>
-      </div>
-
-      {/* Column header — you first, always. `sides` decides, never player
-          order (guardrails §4). Names are surnames: at 64px a full
-          `shortName` overruns the column the way `surnameLabels()` does not;
-          `truncate` on top is the backstop for a longer one-word surname. */}
-      <div className="flex items-center border-b border-[var(--border-hairline)] pb-[11px]">
-        <span aria-hidden="true" className="min-w-0 flex-1" />
-        <span className={COLUMN} style={{ paddingLeft: NAME_GUTTER }}>
-          {/* The player's chart colour on the report's one legend marker,
-              so a column reads with every chart key on the page. */}
-          <LegendMark color="var(--viz-you)" />
-          <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
-            {youName}
-          </span>
-        </span>
-        <span className={COLUMN} style={{ paddingLeft: NAME_GUTTER }}>
-          <LegendMark color="var(--viz-opp)" />
-          <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-600)]">
-            {oppName}
-          </span>
-        </span>
-      </div>
-
-      {sections.map((section) => (
-        <div key={section.title} className="flex flex-col">
-          <div className="flex items-baseline pt-3 pb-0.5">
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              {section.title}
-            </span>
-          </div>
-
-          {section.rows.map((row) => {
-            const rowCounts = row.cut ? counts.get(row.label) : undefined;
-            const noun = row.noun ?? "points";
-            const names = { you: youName, opp: oppName };
-            const hasVideo = meta.hasPlayableVideo;
-            const noVideoLine = !hasVideo && !meta.readOnly;
-
-            // One figure's readout and target. Every figure with something
-            // to say hovers the same way; only a cut with points behind it on
-            // a match with a playable video clicks through.
-            const cell = (side: "you" | "opp") => {
-              const name = names[side];
-              const content = figureReadout(row, side, name, {
-                hasVideo,
-                noVideoLine,
-                count: rowCounts?.[side] ?? 0,
-              });
-              if (!hasReadout(content)) {
-                return { content: null, target: undefined };
-              }
-              const figure = `${row.label}, ${name}: ${figureWords(row, side)}`;
-              const { footer } = content;
-              const watch = () =>
-                actions.watchCut(
-                  sideCut(row.cut!, side, row.sideBy, row.sideWon),
-                  `${row.label} · ${name}`,
-                  "head_to_head",
-                );
-              const target: FigureTarget =
-                footer?.kind === "watch"
-                  ? {
-                      onClick: watch,
-                      label: `${figure}. ${watchLabel(footer.count, noun)}`,
-                      handlers: handlersFor(row.label, side, watch),
-                    }
-                  : {
-                      label: [figure, tailWords(content)]
-                        .filter(Boolean)
-                        .join(". "),
-                      handlers: handlersFor(row.label, side),
-                    };
-              return { content, target };
+      const figure = `${row.label}, ${name}: ${figureWords(row, side)}`;
+      const { footer } = content;
+      const watch = () =>
+        actions.watchCut(
+          sideCut(row.cut!, side, row.sideBy, row.sideWon),
+          `${row.label} · ${name}`,
+          "head_to_head",
+        );
+      const target: FigureTarget =
+        footer?.kind === "watch"
+          ? {
+              onClick: watch,
+              label: `${figure}. ${watchLabel(footer.count, noun)}`,
+              handlers: handlersFor(row.label, side, watch),
+            }
+          : {
+              label: [figure, tailWords(content)].filter(Boolean).join(". "),
+              handlers: handlersFor(row.label, side),
             };
-            const you = cell("you");
-            const opp = cell("opp");
+      return { content, target };
+    };
+    const you = cell("you");
+    const opp = cell("opp");
 
-            const rowContent = rowReadout(row, youName, oppName, {
-              hasVideo,
-              noVideoLine,
-              count: rowCounts?.both ?? 0,
-            });
-            const rowHasReadout = hasReadout(rowContent);
-            const rowFooter = rowContent.footer;
-            const rowWatchable = rowFooter?.kind === "watch";
+    const rowContent = rowReadout(row, youName, oppName, {
+      hasVideo,
+      noVideoLine,
+      count: rowCounts?.both ?? 0,
+    });
+    const rowHasReadout = hasReadout(rowContent);
+    const rowFooter = rowContent.footer;
+    const rowWatchable = rowFooter?.kind === "watch";
 
-            const active = hover?.row === row.label ? hover.zone : null;
-            // One hover at a time: the label (and any part of the row that
-            // is not a figure) washes the row; a figure washes itself alone.
-            // A row with nothing to say does not wash.
-            const rowLit = active === "row" && rowHasReadout;
-            const readout = (
-              <Readout
-                open={active === "row"}
-                align="start"
-                content={rowContent}
-              />
-            );
-            // The label's target is stretched over the whole row by its
-            // `::after`, so the hit area is exactly the row's wash; the figures
-            // sit above it (`z-[1]`) with their own. The target itself stays
-            // unpositioned so the `::after` resolves against the row, and the
-            // readout anchors to the label text instead. The ring moves onto
-            // the `::after` too, so focus draws the same box the wash does.
-            const label = (
-              <span className="relative flex min-w-0 items-center gap-1.5">
-                <span className="min-w-0 truncate">{row.label}</span>
-                {rowWatchable && (
-                  <CirclePlay
-                    aria-hidden="true"
-                    strokeWidth={1.5}
-                    className={cn(
-                      "h-3 w-3 shrink-0 text-[var(--ink-900)] transition-[opacity,transform] motion-reduce:transform-none",
-                      EASE,
-                      rowLit
-                        ? "translate-x-0 opacity-100"
-                        : "-translate-x-1 opacity-0",
-                    )}
-                  />
-                )}
-                {readout}
-              </span>
-            );
+    const active = hover?.row === row.label ? hover.zone : null;
+    // One hover at a time: the label (and any part of the row that is not a
+    // figure) washes the row; a figure washes itself alone. A row with
+    // nothing to say does not wash.
+    const rowLit = active === "row" && rowHasReadout;
+    const readout = (
+      <Readout open={active === "row"} align="start" content={rowContent} />
+    );
+    // The label's target is stretched over the whole row by its `::after`,
+    // so the hit area is exactly the row's wash; the figures sit above it
+    // (`z-[1]`) with their own. The target itself stays unpositioned so the
+    // `::after` resolves against the row, and the readout anchors to the
+    // label text instead (`RowLabel`). The ring moves onto the `::after` too,
+    // so focus draws the same box the wash does.
+    const label = (
+      <RowLabel label={row.label}>
+        {rowWatchable && (
+          <CirclePlay
+            aria-hidden="true"
+            strokeWidth={1.5}
+            className={cn(
+              "h-3 w-3 shrink-0 text-[var(--ink-900)] transition-[opacity,transform] motion-reduce:transform-none",
+              EASE,
+              rowLit ? "translate-x-0 opacity-100" : "-translate-x-1 opacity-0",
+            )}
+          />
+        )}
+        {readout}
+      </RowLabel>
+    );
 
-            return (
-              <div
-                key={row.label}
-                className={cn(
-                  "relative -mx-2 flex min-h-[30px] items-center rounded-[var(--radius-element)] px-2 transition-colors",
-                  EASE,
-                  rowLit && "bg-[var(--surface-muted)]",
-                )}
-                onMouseEnter={() =>
-                  setHover((current) =>
-                    current?.row === row.label
-                      ? current
-                      : { row: row.label, zone: "row" },
-                  )
-                }
-                onMouseLeave={() =>
-                  setHover((current) =>
-                    current?.row === row.label ? null : current,
-                  )
-                }
-              >
-                {rowWatchable ? (
-                  <button
-                    type="button"
-                    aria-label={`${row.label}, both players. ${watchLabel(rowFooter.count, noun)}`}
-                    data-focus-ring="none"
-                    {...handlersFor(row.label, "row", () =>
-                      actions.watchCut(
-                        row.cut!,
-                        rowCutLabel(row),
-                        "head_to_head",
-                      ),
-                    )}
-                    className={cn(
-                      "flex min-w-0 flex-1 cursor-pointer items-center self-stretch border-0 bg-transparent p-0 pr-3 text-left text-[12px] transition-colors",
-                      EASE,
-                      STRETCHED,
-                      rowLit
-                        ? "text-[var(--ink-900)]"
-                        : "text-[var(--ink-600)]",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ) : (
-                  <span
-                    // Focusable only when it has something to say, so a
-                    // keyboard gets the same readout a hover does.
-                    {...(rowHasReadout && {
-                      tabIndex: 0,
-                      role: "note",
-                      "aria-label": `${row.label}. ${readoutWords(rowContent)}`,
-                      "data-focus-ring": "none",
-                      ...handlersFor(row.label, "row"),
-                    })}
-                    className={cn(
-                      "flex min-w-0 flex-1 items-center self-stretch pr-3 text-[12px] text-[var(--ink-600)]",
-                      rowHasReadout && STRETCHED,
-                    )}
-                  >
-                    {label}
-                  </span>
-                )}
-                <ValueCell
-                  value={row.you}
-                  emphasised={row.leader === "you"}
-                  note={row.note}
-                  washed={active === "you" && Boolean(you.target)}
-                  target={you.target}
-                  readout={
-                    <Readout
-                      open={active === "you"}
-                      align="end"
-                      content={you.content}
-                    />
-                  }
-                />
-                <ValueCell
-                  value={row.opp}
-                  emphasised={row.leader === "opp"}
-                  note={row.note}
-                  washed={active === "opp" && Boolean(opp.target)}
-                  target={opp.target}
-                  readout={
-                    <Readout
-                      open={active === "opp"}
-                      align="end"
-                      content={opp.content}
-                    />
-                  }
-                />
-              </div>
-            );
+    return {
+      lit: rowLit,
+      onMouseEnter: () =>
+        setHover((current) =>
+          current?.row === row.label
+            ? current
+            : { row: row.label, zone: "row" },
+        ),
+      onMouseLeave: () =>
+        setHover((current) => (current?.row === row.label ? null : current)),
+      label: rowWatchable ? (
+        <button
+          type="button"
+          aria-label={`${row.label}, both players. ${watchLabel(rowFooter.count, noun)}`}
+          data-focus-ring="none"
+          {...handlersFor(row.label, "row", () =>
+            actions.watchCut(row.cut!, rowCutLabel(row), "head_to_head"),
+          )}
+          className={cn(
+            "flex min-w-0 flex-1 cursor-pointer items-center self-stretch border-0 bg-transparent p-0 pr-3 text-left text-[12px] transition-colors",
+            EASE,
+            STRETCHED,
+            rowLit ? "text-[var(--ink-900)]" : "text-[var(--ink-600)]",
+          )}
+        >
+          {label}
+        </button>
+      ) : (
+        <span
+          // Focusable only when it has something to say, so a keyboard gets
+          // the same readout a hover does.
+          {...(rowHasReadout && {
+            tabIndex: 0,
+            role: "note",
+            "aria-label": `${row.label}. ${readoutWords(rowContent)}`,
+            "data-focus-ring": "none",
+            ...handlersFor(row.label, "row"),
           })}
-        </div>
-      ))}
-    </section>
+          className={cn(LABEL_SLOT, rowHasReadout && STRETCHED)}
+        >
+          {label}
+        </span>
+      ),
+      you: {
+        washed: active === "you",
+        target: you.target,
+        readout: (
+          <Readout open={active === "you"} align="end" content={you.content} />
+        ),
+      },
+      opp: {
+        washed: active === "opp",
+        target: opp.target,
+        readout: (
+          <Readout open={active === "opp"} align="end" content={opp.content} />
+        ),
+      },
+    };
+  };
+
+  return (
+    <HeadToHeadTable
+      sectionRef={cardRef}
+      tour="head-to-head"
+      groups={sections}
+      youName={youName}
+      oppName={oppName}
+      caption={`Whole match · ${points.length} points`}
+      interaction={interaction}
+    />
   );
 }

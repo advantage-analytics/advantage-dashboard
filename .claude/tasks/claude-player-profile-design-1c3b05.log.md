@@ -39,3 +39,14 @@ is the runner's. Newest entries at the bottom.
 1. Every profile render now runs `getPlayerSeason` just for the rail counts; fine once T7/T9 use it, heavier than before until then.
 2. Add an id-keyed player filter to the Matches page, or keep the name link.
 3. Eyes-on check of `/dashboard/team/roster/[playerId]` and `?tab=visualizations` at `/pr-check`.
+
+## T4 · Season Head to head card — done
+
+**gate:** mechanical PASS · completion PASS
+
+**changed:** The Head to head card's drawing is extracted into a presentational `match-detail/head-to-head-table.tsx` (`HeadToHeadTable`, optional `interaction` for cuts/readouts); `HeadToHeadCard` renders it with identical HTML (checked in four configurations; existing specs unchanged). New `player-profile/season-head-to-head-card.tsx` (`SeasonHeadToHeadCard({ playerName, analyzed, groups })`): eyebrow "Head to head", "Per match · N analyzed", columns surname / "Opponents", no cuts or Watch. `tests/season-head-to-head.spec.ts` (5 tests). Column head uses `surname()`, not `surnameLabels()`.
+
+**follow-ups:**
+
+1. Season Lob/Passed dash tooltips reuse T1's "…for this match" notes; a season wording is a one-line change in `player-season.ts`.
+2. T5/T6 can reuse the optional-`interaction` pattern for their body splits.
