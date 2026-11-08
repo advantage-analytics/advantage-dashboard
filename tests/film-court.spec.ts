@@ -372,6 +372,40 @@ test("a net ball sits on the hitter's side, decided by contactY", () => {
   expect(drawn(at(11, mirrored(yours)))).toEqual(drawn(at(11, yours)));
 });
 
+test("a net ball sits on its own path, where contact → landing meets the net", () => {
+  // You, at the bottom, hit cross-court from the left: struck at x = -3,
+  // recorded landing far right on the far side. Its path meets the drawn
+  // depth (0.3 m short of the net) well right of where it was struck, and
+  // well left of the landing's own x.
+  const contact: [number, number] = [-3, 1];
+  const landing: [number, number] = [4, NET + 6];
+  const y = NET - 0.3;
+  const x = -3 + ((y - 1) / (NET + 6 - 1)) * (4 - -3);
+  const diag = [shot("d1", true, contact, landing, "Net")];
+  expect(bounceOf(at(11, diag), "d1")).toMatchObject(
+    toCourtPercent(x, y, true),
+  );
+
+  // A straight ball keeps its x all the way up.
+  const straight = [shot("s1", true, [2, 1], [2, NET + 4], "Net")];
+  expect(bounceOf(at(11, straight), "s1")).toMatchObject(
+    toCourtPercent(2, y, true),
+  );
+
+  // No measured contact: the landing's x, as before (the opponent's earlier
+  // ball fixes the point's orientation).
+  const blind = [
+    shot("r0", true, [0, 0], [0, 20]),
+    shot("b1", false, null, [3, NET - 2], "Net"),
+  ];
+  expect(bounceOf(at(12, blind), "b1")).toMatchObject(
+    toCourtPercent(3, NET + 0.3, true),
+  );
+
+  // Same answers after an end change.
+  expect(drawn(at(11, mirrored(diag)))).toEqual(drawn(at(11, diag)));
+});
+
 test("match mode plots bounces only, with no fade", () => {
   const points = [
     pt({ id: "p1", shots: RALLY }),
