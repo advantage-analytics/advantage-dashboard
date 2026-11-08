@@ -532,7 +532,8 @@ export default function HelpCenterPage() {
                     Cropping or zooming — the court lines have to stay in frame
                   </FeatureRow>
                   <FeatureRow included={false}>
-                    Highlight reels — patterns live in the full run of points
+                    Highlight reels or SwingVision video exports — patterns live
+                    in the full run of points
                   </FeatureRow>
                 </div>
                 <p className={proseClass}>

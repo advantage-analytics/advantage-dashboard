@@ -216,13 +216,14 @@ test("support message: no topic, no match, a deleted player still renders", () =
   expect(msg.text).not.toContain("Match:");
 });
 
-test("parseInternalEvent accepts the five kinds the triggers send", () => {
+test("parseInternalEvent accepts the six kinds the triggers send", () => {
   for (const kind of [
     "signup",
     "video_upload",
     "swingvision_upload",
     "feedback",
     "support_message",
+    "vendor_deletion_unrecorded",
   ]) {
     expect(parseInternalEvent({ kind, id: USER })).toEqual({ kind, id: USER });
   }
