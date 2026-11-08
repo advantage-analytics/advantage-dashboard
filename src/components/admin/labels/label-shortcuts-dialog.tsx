@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
-import { LABEL_SHORTCUT_GROUPS } from "./label-shortcuts";
+import { shortcutGroupsFor } from "./label-shortcuts";
 
 /**
  * The label console's shortcut sheet: every key it reads, in four groups
@@ -26,9 +26,12 @@ import { LABEL_SHORTCUT_GROUPS } from "./label-shortcuts";
  */
 export function LabelShortcutsDialog({
   open,
+  audience = "admin",
   onOpenChange,
 }: {
   open: boolean;
+  /** A labeller's sheet leaves out the admin-only keys (the shot kinds). */
+  audience?: "admin" | "labeller";
   onOpenChange: (open: boolean) => void;
 }) {
   return (
@@ -66,7 +69,7 @@ export function LabelShortcutsDialog({
             </DialogClose>
           </div>
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-x-7 gap-y-5 overflow-y-auto sm:grid-cols-2">
-            {LABEL_SHORTCUT_GROUPS.map((group) => (
+            {shortcutGroupsFor(audience).map((group) => (
               <div
                 key={group.label}
                 data-shortcut-group={group.label}

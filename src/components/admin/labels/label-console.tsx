@@ -3530,7 +3530,8 @@ export function LabelConsole({
     // G / K / J / P toggle the selected rally stroke's kind (`tagKeyPatch`):
     // approach, lob, drop shot, passing. A serve takes none of them.
     tagKey.current = (key) => {
-      if (!operable || confirm) return false;
+      // Shot kinds are the stats' answer key: an admin's alone.
+      if (labeller || !operable || confirm) return false;
       const tag = shotTagForKey(key);
       if (!tag) return false;
       const shot = keyShot((s) => tagKeyPatch(s, tag) !== null);
@@ -4183,6 +4184,7 @@ export function LabelConsole({
         : null;
   const rail = (
     <LabelBlackRail
+      shotKinds={!labeller}
       tone={fullScreen ? "dark" : "light"}
       showSession={fullScreen}
       scores={scores}
@@ -4504,6 +4506,7 @@ export function LabelConsole({
 
       {fullScreen ? (
         <LabelShortcutsDialog
+          audience={viewerKind}
           open={shortcutsOpen}
           onOpenChange={setShortcutsOpen}
         />

@@ -15,13 +15,9 @@
  *     split off that isn't one.
  *
  * Each matched pair is then compared field by field: server, winner, ending,
- * ended by, error kind, the last stroke (the last live stroke's family:
- * serve, forehand, backhand, volley, overhead) and the shot kinds (every tag
- * on the point's live strokes, sorted: `label_shots.tags`). A field the key
- * never set is not graded: error kind on a key nobody judged, and shot kinds
- * on a key with no tag anywhere — a key labelled before kinds existed.
- * Shot kinds are compared per point, not per stroke, because a copy's
- * strokes need not line up one for one with the key's.
+ * ended by, error kind and the last stroke (the last live stroke's family:
+ * serve, forehand, backhand, volley, overhead). A field the key never set
+ * (error kind on a key nobody judged) is not graded.
  *
  * Every miss is split in two by what the AI pre-fill said, read off the
  * copy's own `seed`:
@@ -29,8 +25,8 @@
  *     was never deleted / never added), and the key changed it;
  *   - **new error** — the applicant changed something the AI had right, or
  *     changed a wrong value to another wrong one.
- * Fields with no seed (error kind, last stroke, shot kinds) count a miss left
- * empty as missed and a wrong value entered as new.
+ * Fields with no seed (error kind, last stroke) count a miss left empty as
+ * missed and a wrong value entered as new.
  *
  * `fixesNeeded` is every place the copy's pre-fill disagreed with the key,
  * and `fixesMade` the ones the applicant got right — "caught N of M".
@@ -55,12 +51,8 @@ export interface GradePoint {
     ending?: string | null;
     ended_by?: Side | null;
   } | null;
-  /** Live strokes in video order: their film time, stroke and shot kinds. */
-  shots: {
-    videoTime: number | null;
-    stroke: string | null;
-    tags?: readonly string[];
-  }[];
+  /** Live strokes in video order: their film time and stroke. */
+  shots: { videoTime: number | null; stroke: string | null }[];
   /** The last live stroke's family as the pre-fill had it; null if unknown. */
   seedLastStroke?: string | null;
 }
@@ -72,7 +64,6 @@ export const GRADED_FIELDS = [
   "endedBy",
   "errorKind",
   "lastStroke",
-  "shotKinds",
 ] as const;
 export type GradedField = (typeof GRADED_FIELDS)[number];
 
@@ -84,7 +75,6 @@ export const FIELD_LABELS: Record<GradedField | "boundary", string> = {
   endedBy: "Ended by",
   errorKind: "Error kind",
   lastStroke: "Last stroke",
-  shotKinds: "Shot kinds",
 };
 
 /** How far apart (seconds) two points' first strokes may be and still be one point. */
@@ -164,15 +154,6 @@ function lastStroke(point: GradePoint): string | null {
   return last ? strokeFamily(last.stroke) : null;
 }
 
-/**
- * Every shot kind on the point's live strokes, sorted and joined ("approach,
- * passing"), or null for none. A kind on two strokes is listed twice.
- */
-export function pointShotKinds(point: GradePoint): string | null {
-  const kinds = point.shots.flatMap((shot) => shot.tags ?? []).sort();
-  return kinds.length > 0 ? kinds.join(", ") : null;
-}
-
 function fieldValue(point: GradePoint, field: GradedField): string | null {
   switch (field) {
     case "server":
@@ -187,8 +168,6 @@ function fieldValue(point: GradePoint, field: GradedField): string | null {
       return point.errorKind;
     case "lastStroke":
       return lastStroke(point);
-    case "shotKinds":
-      return pointShotKinds(point);
   }
 }
 
@@ -198,7 +177,7 @@ function seedValue(
   field: GradedField,
 ): string | null | undefined {
   if (field === "lastStroke") return point.seedLastStroke;
-  if (field === "errorKind" || field === "shotKinds") return null; // never seeded
+  if (field === "errorKind") return null; // never seeded
   if (!point.seed) return undefined;
   const key = field === "endedBy" ? "ended_by" : field;
   return (point.seed as Record<string, string | null | undefined>)[key];
@@ -274,10 +253,6 @@ export function gradePractice(
   let fixesNeeded = 0;
   let fixesMade = 0;
 
-  // A key with no shot kind anywhere was labelled before kinds existed (or
-  // its labeller tagged nothing): its points say nothing about kinds.
-  const keyTagged = keyLive.some((p) => pointShotKinds(p) !== null);
-
   const { pairs, keyOnly, copyOnly } = pairPoints(keyLive, copyLive);
   const removedPairs = pairPoints(keyOnly, copyRemoved);
   const droppedByApplicant = new Set(removedPairs.pairs.map(([k]) => k.id));
@@ -341,7 +316,6 @@ export function gradePractice(
       const expected = fieldValue(kp, field);
       // A key that never judged errors grades no error kind.
       if (field === "errorKind" && expected === null) continue;
-      if (field === "shotKinds" && !keyTagged) continue;
       const got = fieldValue(cp, field);
       const ai = seedValue(cp, field);
       const tally = byField[field];

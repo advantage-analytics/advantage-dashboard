@@ -66,7 +66,6 @@ interface DbGradeShot {
   status: string;
   status_before_delete: string | null;
   site_removal: string | null;
-  tags: string[] | null;
   seed: { stroke?: string | null; video_time?: number | null } | null;
 }
 
@@ -91,7 +90,7 @@ export async function readGradePoints(
       db
         .from("label_shots")
         .select(
-          "label_point_id, video_time, stroke, status, status_before_delete, site_removal, tags, seed",
+          "label_point_id, video_time, stroke, status, status_before_delete, site_removal, seed",
         )
         .eq("session_id", sessionId)
         .order("id"),
@@ -147,7 +146,6 @@ export async function readGradePoints(
       shots: ownShots.map((s) => ({
         videoTime: s.video_time,
         stroke: s.stroke,
-        tags: s.tags ?? [],
       })),
       seedLastStroke:
         point.status === "added"

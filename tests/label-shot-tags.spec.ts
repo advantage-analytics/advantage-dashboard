@@ -3,6 +3,10 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+  LABEL_SHORTCUT_GROUPS,
+  shortcutGroupsFor,
+} from "@/components/admin/labels/label-shortcuts";
+import {
   shotTagForKey,
   tagKeyPatch,
 } from "@/components/admin/labels/stroke-keys";
@@ -169,7 +173,11 @@ test.describe("the keys", () => {
 test.describe("the shots well", () => {
   const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
 
-  function render(selectedShotId: string, patches: unknown[] = []): string {
+  function render(
+    selectedShotId: string,
+    patches: unknown[] = [],
+    shotKinds = true,
+  ): string {
     const { BlackShotsWell } = createLoader().load(WELL) as {
       BlackShotsWell: (props: {
         point: LabelPoint;
@@ -199,6 +207,7 @@ test.describe("the shots well", () => {
         point,
         edit: {
           ...editContext({}, labelSessionFixture()),
+          shotKinds,
           selectedShotId,
           onPatchShot: (_id: string, patch: unknown) => patches.push(patch),
         },
@@ -241,5 +250,77 @@ test.describe("the shots well", () => {
 
   test("a serve has no strip", () => {
     expect(render("t-serve")).not.toContain("data-shot-kind-strip");
+  });
+});
+
+test.describe("a labeller's view (shot kinds are admin-only)", () => {
+  const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
+  const { BlackShotsWell, SHOT_TRACKS, SHOT_TRACKS_NO_KIND } =
+    createLoader().load(WELL) as {
+      BlackShotsWell: (props: {
+        point: LabelPoint;
+        edit: Record<string, unknown>;
+      }) => React.ReactElement;
+      SHOT_TRACKS: string;
+      SHOT_TRACKS_NO_KIND: string;
+    };
+
+  function render(shotKinds: boolean | undefined): string {
+    const point = labelPoint("p", 0, {
+      id: "p-labeller",
+      vendorRallyIds: [],
+      shots: [
+        labelShot("l-serve", "p", { stroke: "first_serve", videoTime: 10 }),
+        labelShot("l-rally", "p", {
+          hitter: "p2",
+          stroke: "backhand",
+          result: "in",
+          videoTime: 11,
+          tags: ["lob"],
+        }),
+      ],
+    });
+    const edit: Record<string, unknown> = {
+      ...editContext({}, labelSessionFixture()),
+      selectedShotId: "l-rally",
+    };
+    if (shotKinds === undefined) delete edit.shotKinds;
+    else edit.shotKinds = shotKinds;
+    return renderToStaticMarkup(
+      React.createElement(BlackShotsWell, { point, edit }),
+    );
+  }
+
+  test("no Kind track, cell or strip, with the tracks from before kinds", () => {
+    for (const html of [render(false), render(undefined)]) {
+      expect(html).not.toContain("data-shot-kind");
+      expect(html).not.toContain("data-shot-kind-strip");
+      expect(html).toContain(SHOT_TRACKS_NO_KIND);
+      expect(html).not.toContain(SHOT_TRACKS);
+      // A stored tag stays in the data; a labeller just never sees it.
+      expect(html).not.toContain("Lob");
+    }
+  });
+
+  test("an admin's well has them", () => {
+    const html = render(true);
+    expect(html).toContain("data-shot-kind");
+    expect(html).toContain("data-shot-kind-strip");
+    expect(html).toContain(SHOT_TRACKS);
+  });
+
+  test("the sheet: G / K / J / P for an admin, never for a labeller", () => {
+    const keysOf = (groups: typeof LABEL_SHORTCUT_GROUPS) =>
+      groups.flatMap((g) => g.items.map((i) => i.keys.join("")));
+    const admin = keysOf(shortcutGroupsFor("admin"));
+    const labeller = keysOf(shortcutGroupsFor("labeller"));
+    for (const key of ["G", "K", "J", "P"]) {
+      expect(admin).toContain(key);
+      expect(labeller).not.toContain(key);
+    }
+    // Everything else is the same list.
+    expect(labeller).toEqual(
+      admin.filter((k) => !["G", "K", "J", "P"].includes(k)),
+    );
   });
 });

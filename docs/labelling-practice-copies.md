@@ -14,8 +14,6 @@ match.
    either player.
 3. **Judge forced/unforced errors on the set** in the key. Until you do, error
    kind is not graded. The create form shows how many calls the set has.
-   Likewise **tag shot kinds** (G approach, K lob, J drop shot, P passing) on
-   the set if you want them graded; a key with no tags skips that field.
 4. **Give each applicant an account with the labeller role** (`users.is_labeller`).
    They then see `/label` and nothing else.
 
@@ -52,11 +50,8 @@ breakdown and every miss with its film time.
 | **Active time**  | Minutes of real work from the console's work heartbeat (visible tab + input, or film playing). Admin time is never counted.                 |
 
 **Graded fields:** point boundaries, server, winner, ending, ended by, error
-kind (only where your key judged it), last stroke (the family of the last
-live stroke: serve, forehand, backhand, volley or overhead), and shot kinds
-(approach, lob, drop shot, passing — every tag on the point, compared per
-point, not per stroke). Shot kinds are graded only when your key has at least
-one tag, so tag the key's set before creating copies if you want them scored.
+kind (only where your key judged it), and last stroke (the family of the last
+live stroke: serve, forehand, backhand, volley or overhead).
 
 **How points are matched:** by film time, not by id. Each key point is paired
 with the copy point whose first stroke is nearest, within 2.5 s. Lets and "not

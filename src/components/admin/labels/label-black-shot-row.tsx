@@ -177,7 +177,20 @@ const NARROW_HIDDEN = "@max-[640px]/shots:hidden";
 
 // `text-[11px] leading-[14px]`: every cell's own line box is the size of its
 // text, so a value centres on the row instead of hanging from a 16px strut.
-const ROW_GRID = `relative grid ${SHOT_TRACKS} ${SHOT_TRACKS_NARROW} items-center gap-x-2 h-[34px] px-[14px] text-[11px] leading-[14px]`;
+/**
+ * `SHOT_TRACKS` without the kind track: the well a labeller sees, practice
+ * copies included (`EditContext.shotKinds` off) — the tracks it had before
+ * kinds existed. Written out whole for the reason above.
+ */
+export const SHOT_TRACKS_NO_KIND =
+  "grid-cols-[22px_minmax(56px,0.3fr)_minmax(32px,0.55fr)_minmax(48px,0.8fr)_minmax(26px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
+
+const ROW_BOX = `relative grid ${SHOT_TRACKS_NARROW} items-center gap-x-2 h-[34px] px-[14px] text-[11px] leading-[14px]`;
+
+/** A well row's grid: with the kind track where shot kinds are on. */
+function rowGrid(edit: Pick<EditContext, "shotKinds">): string {
+  return `${edit.shotKinds ? SHOT_TRACKS : SHOT_TRACKS_NO_KIND} ${ROW_BOX}`;
+}
 
 const WELL_STYLE = {
   "--shot-tail": `${SHOT_TAIL_PX}px`,
@@ -453,7 +466,7 @@ export function BlackShotsWell({
             // The row's own tracks, so the plus sits under the numbers and
             // the words under the times, at any rail width.
             className={cn(
-              ROW_GRID,
+              rowGrid(edit),
               addArrival.className,
               "w-full cursor-pointer text-left text-[11px] font-medium text-white/70 transition-colors duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
             )}
@@ -674,7 +687,7 @@ export function BlackShotRow({
         onFocus={focusRow}
         style={arrival.style}
         className={cn(
-          ROW_GRID,
+          rowGrid(edit),
           arrival.className,
           "group/row @container transition-colors duration-200",
           lit
@@ -805,18 +818,20 @@ export function BlackShotRow({
             <Dash label="No placement" />
           </span>
         )}
-        <span
-          data-shot-kind=""
-          className={cn("min-w-0 truncate text-[11px]", NARROW_HIDDEN, words)}
-        >
-          {/* A serve takes no kind (the strip and keys refuse it), so its
-            cell stays empty rather than drawing a dash that reads as a gap. */}
-          {shot.tags.length > 0 ? (
-            shot.tags.map((tag) => SHOT_TAG_LABEL[tag]).join(" · ")
-          ) : isServeStroke(shot.stroke) ? null : (
-            <Dash label="No kind" />
-          )}
-        </span>
+        {edit.shotKinds ? (
+          <span
+            data-shot-kind=""
+            className={cn("min-w-0 truncate text-[11px]", NARROW_HIDDEN, words)}
+          >
+            {/* A serve takes no kind (the strip and keys refuse it), so its
+              cell stays empty rather than drawing a dash that reads as a gap. */}
+            {shot.tags.length > 0 ? (
+              shot.tags.map((tag) => SHOT_TAG_LABEL[tag]).join(" · ")
+            ) : isServeStroke(shot.stroke) ? null : (
+              <Dash label="No kind" />
+            )}
+          </span>
+        ) : null}
         {/* The word, then a fixed right-aligned slot for the pencil: the word
           truncates before the pencil is touched. The gap between them is
           3px; at 4 the pencil's last pixel was clipped. Any typed stroke's
@@ -877,7 +892,9 @@ export function BlackShotRow({
             actions={trayActions}
             errorKind={errorKind}
           />
-          {shot.stroke !== null && !isServeStroke(shot.stroke) ? (
+          {edit.shotKinds &&
+          shot.stroke !== null &&
+          !isServeStroke(shot.stroke) ? (
             <ShotKindStrip
               number={number}
               tags={shot.tags}
@@ -1072,7 +1089,7 @@ export function BlackGhostShot({
           data-row="ghost-shot-row"
           data-shot-ghost-row={shot.id}
           style={arrival.style}
-          className={cn(ROW_GRID, arrival.className, "bg-white/[0.03]")}
+          className={cn(rowGrid(edit), arrival.className, "bg-white/[0.03]")}
         >
           <span
             aria-hidden="true"
@@ -1159,7 +1176,7 @@ function openShotSuggestions(
 /**
  * A suggested stroke: two strokes in a row by one player, so the other's is
  * probably missing between them. A dashed amber row on the stroke row's tracks
- * (`ROW_GRID`); the sentence is what truncates. Its time and player are what
+ * (`rowGrid`); the sentence is what truncates. Its time and player are what
  * "Add shot" will write (`planAddedShot`); when that rule refuses there is no
  * row.
  */
@@ -1196,7 +1213,7 @@ function BlackSuggestedShot({
       data-slot-armed={armed ? "" : undefined}
       style={arrival.style}
       className={cn(
-        ROW_GRID,
+        rowGrid(edit),
         arrival.className,
         "cursor-default rounded-lg bg-[var(--rail-amber-wash-faint)] outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)]",
         armed ? "outline-solid" : "outline-dashed",
