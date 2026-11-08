@@ -28,14 +28,16 @@ import {
 
 /**
  * What `effectiveShotResult` reads of a stroke; absent columns read as unset.
- * `seed` lets it tell the labeller's own call from the vendor's: without it
- * every stored call reads as the seed's.
+ * `resultCalled` says outright that the stored call is the labeller's; without
+ * it, `seed` lets it tell the labeller's own call from the vendor's, and
+ * without either every stored call reads as the seed's.
  */
 export type ResultReadableShot = Partial<
   Pick<
     LabelShot,
     | "stroke"
     | "result"
+    | "resultCalled"
     | "contactX"
     | "contactY"
     | "landingX"
@@ -271,8 +273,11 @@ export function effectiveShotResult(
 
 /**
  * Whether the stored call is one the labeller set rather than the seed's:
- * on an added stroke, any call; on a vendor stroke, one that is not the
- * seeded call. `positionPatch` writes the call the ends derive, so a stored
+ * one flagged `resultCalled` (the Result menu's overrides, a review answer,
+ * N, L — even a call that equals the seed's, such as Net picked on a stroke
+ * the vendor called Net but whose landing reads in); on an added stroke, any
+ * call; on a vendor stroke, one that is not the seeded call. The last rule
+ * is the fallback for rows written before the flag existed. `positionPatch` writes the call the ends derive, so a stored
  * call that disagrees with placed ends and with the seed got there by the
  * tray's call toggle or a review answer — the labeller saying the ball, not
  * the bounce, decides. A call still as seeded is the vendor's and the ends
@@ -283,6 +288,7 @@ export function effectiveShotResult(
  * compare, so its ends win.
  */
 function labellerCall(shot: ResultReadableShot): boolean {
+  if (shot.resultCalled === true) return true;
   if (shot.status === "added") return true;
   // A kept row holds its seed by definition; only an edit can carry a call.
   if (shot.status !== "edited") return false;
@@ -306,8 +312,9 @@ export function shotPlacement(shot: ShotGeometry): ShotPlacement | null {
 /**
  * The patch a position sends, typed or clicked on the court (`nextPlacement`):
  * the two coordinates of that end and the result the row's values derive once
- * they are in, in one write. With an end missing `deriveShotResult` answers
- * null, the patch carries no `result` key and the row keeps its stored value.
+ * they are in, in one write, with `result_called` cleared: the ends now say
+ * the call. With an end missing `deriveShotResult` answers null, the patch
+ * carries no `result` key and the row keeps its stored value (and flag).
  * A stored `"let"` is kept the same way: a let is the labeller's override, not
  * something the coordinates can say, so moving an end never overwrites it —
  * picking the calculated item in the result menu is the one way back to the
@@ -329,5 +336,6 @@ export function positionPatch(
     return placed;
   }
   const result = deriveShotResult({ ...shot, ...placed });
-  return result === null ? placed : { ...placed, result };
+  // The ends now say the call, so it stops being the labeller's own.
+  return result === null ? placed : { ...placed, result, result_called: false };
 }

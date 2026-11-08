@@ -19,6 +19,7 @@ import {
 } from "@/components/admin/labels/stroke-keys";
 import { spinOptions } from "@/components/admin/labels/label-format";
 import { effectiveShotResult } from "@/lib/services/labels/shot-derived";
+import { applyLabelShotPatch } from "@/lib/services/labels/edit";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import { labelPoint, labelShot } from "./fixtures/label-session";
 import {
@@ -559,13 +560,19 @@ test.describe("L: a serve's let", () => {
   const REPLAYED = false;
 
   test("L marks a serve a let, and again gives back the landing's result", () => {
-    expect(letKeyPatch(serve(), REPLAYED)).toEqual({ result: "let" });
+    // A let is the labeller's call; the landing's reading given back is not.
+    expect(letKeyPatch(serve(), REPLAYED)).toEqual({
+      result: "let",
+      result_called: true,
+    });
     expect(letKeyPatch(serve({ result: "out" }), REPLAYED)).toEqual({
       result: "let",
+      result_called: true,
     });
     // Unplaced: the let goes back to no result.
     expect(letKeyPatch(serve({ result: "let" }), REPLAYED)).toEqual({
       result: null,
+      result_called: false,
     });
     const placed = serve({
       result: "let",
@@ -574,7 +581,10 @@ test.describe("L: a serve's let", () => {
       landingX: 0,
       landingY: 2,
     });
-    expect(letKeyPatch(placed, REPLAYED)).toEqual({ result: "net" });
+    expect(letKeyPatch(placed, REPLAYED)).toEqual({
+      result: "net",
+      result_called: false,
+    });
   });
 
   test("a rally stroke, or a serve played on, takes no let", () => {
@@ -588,19 +598,25 @@ test.describe("L: a serve's let", () => {
     // A let stored before the rule changed can still be undone.
     expect(letKeyPatch(serve({ result: "let" }), true)).toEqual({
       result: null,
+      result_called: false,
     });
   });
 
   test("N calls a stroke Net, and again gives back the landing's result", () => {
     const rally = (fields: Parameters<typeof labelShot>[2] = {}) =>
       labelShot("n-shot", "l-point", { stroke: "forehand", ...fields });
-    expect(netKeyPatch(rally())).toEqual({ result: "net" });
-    expect(netKeyPatch(rally({ result: "out" }))).toEqual({ result: "net" });
+    // Net is written as the labeller's call; the reading given back is not.
+    const NET = { result: "net", result_called: true };
+    expect(netKeyPatch(rally())).toEqual(NET);
+    expect(netKeyPatch(rally({ result: "out" }))).toEqual(NET);
     // A serve takes it too, a let included.
-    expect(netKeyPatch(serve())).toEqual({ result: "net" });
-    expect(netKeyPatch(serve({ result: "let" }))).toEqual({ result: "net" });
+    expect(netKeyPatch(serve())).toEqual(NET);
+    expect(netKeyPatch(serve({ result: "let" }))).toEqual(NET);
     // Unplaced: Net goes back to no result.
-    expect(netKeyPatch(rally({ result: "net" }))).toEqual({ result: null });
+    expect(netKeyPatch(rally({ result: "net" }))).toEqual({
+      result: null,
+      result_called: false,
+    });
     // A landing that itself reads Net has nothing to take back.
     const inTheNet = { contactX: 0, contactY: 0, landingX: 0, landingY: 2 };
     expect(netKeyPatch(rally(inTheNet))).toBeNull();
@@ -620,26 +636,31 @@ test.describe("L: a serve's let", () => {
       landing_y: 26,
       video_time: 10,
     };
-    expect(netKeyPatch(rally({ ...placedLong, result: "out", seed }))).toEqual({
-      result: "net",
-    });
+    expect(netKeyPatch(rally({ ...placedLong, result: "out", seed }))).toEqual(
+      NET,
+    );
     expect(
       netKeyPatch(
         rally({ ...placedLong, result: "net", seed, status: "edited" }),
       ),
-    ).toEqual({ result: "out" });
-    // Known limit, shared with the Result menu's Net item: the vendor seeded
-    // Net on a landing that reads Out. Writing "net" matches the seed, so it
-    // still reads as the vendor's call and the landing keeps winning — N
-    // writes it, and the shot still shows Out. Making it stick needs a stored
-    // "the labeller set this call" flag (labellerCall, shot-derived.ts).
+    ).toEqual({ result: "out", result_called: false });
+    // The vendor seeded Net on a landing that reads Out: the landing wins
+    // until the labeller calls it. N writes Net flagged as their call
+    // (`result_called`), so it sticks although it equals the seed, and N again hands the call back to the landing.
     const seededNet = rally({
       ...placedLong,
       result: "net",
       seed: { ...seed, result: "net" },
     });
-    expect(netKeyPatch(seededNet)).toEqual({ result: "net" });
-    expect(effectiveShotResult({ ...seededNet, status: "edited" })).toBe("out");
+    expect(effectiveShotResult(seededNet)).toBe("out");
+    const called = netKeyPatch(seededNet);
+    expect(called).toEqual(NET);
+    const afterN = applyLabelShotPatch(seededNet, called!);
+    expect(afterN.resultCalled).toBe(true);
+    expect(effectiveShotResult(afterN)).toBe("net");
+    const back = netKeyPatch(afterN);
+    expect(back).toEqual({ result: "out", result_called: false });
+    expect(effectiveShotResult(applyLabelShotPatch(afterN, back!))).toBe("out");
     expect(isNetKey("n")).toBe(true);
     expect(isNetKey("N")).toBe(true);
     expect(isStrokeKey("n")).toBe(false);
@@ -1168,6 +1189,7 @@ test.describe("a short ball: a landing on the hitter's own side is allowed", () 
       landing_x: 0.4,
       landing_y: 11.2,
       result: "net",
+      result_called: false,
     });
   });
 

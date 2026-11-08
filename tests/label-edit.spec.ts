@@ -63,6 +63,7 @@ test.describe("the allowlists", () => {
         "landing_x",
         "landing_y",
         "result",
+        "result_called",
         "spin",
         "stroke",
         "tags",

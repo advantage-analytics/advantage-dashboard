@@ -203,9 +203,10 @@ export function letKeyPatch(
   playOnLets: boolean,
 ): LabelShotPatch | null {
   if (!serveOffersLet(shot, playOnLets)) return null;
-  return {
-    result: isLetServe(shot) ? deriveShotResult(labelShotValues(shot)) : "let",
-  };
+  // A let is the labeller's call; the landing's reading given back is not.
+  return isLetServe(shot)
+    ? { result: deriveShotResult(labelShotValues(shot)), result_called: false }
+    : { result: "let", result_called: true };
 }
 
 /** What the Forced | Unforced pair and E read off a point. */
@@ -299,14 +300,15 @@ export function isNetKey(key: string): boolean {
  * whose landing itself reads Net, where there is nothing to take back. Any
  * stroke takes it, a serve included: a labeller's key as much as an admin's.
  *
- * Like the Result menu's Net item, it cannot outrank a landing on a vendor
- * stroke the seed already called Net: "net" then matches the seed, so it
- * still reads as the vendor's call (`effectiveShotResult`) and the landing
- * wins.
+ * Net is written as the labeller's call (`result_called`), so it outranks the
+ * landing even on a vendor stroke the seed already called Net; the reading
+ * given back is not, so the landing decides again.
  */
 export function netKeyPatch(shot: LabelShot): LabelShotPatch | null {
   if (shot.stroke === null) return null;
-  if (effectiveShotResult(shot) !== "net") return { result: "net" };
+  if (effectiveShotResult(shot) !== "net") {
+    return { result: "net", result_called: true };
+  }
   const derived = deriveShotResult(labelShotValues(shot));
-  return derived === "net" ? null : { result: derived };
+  return derived === "net" ? null : { result: derived, result_called: false };
 }

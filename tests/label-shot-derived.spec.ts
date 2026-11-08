@@ -173,13 +173,32 @@ test.describe("positionPatch", () => {
         x: -2,
         y: 16,
       }),
-    ).toEqual({ landing_x: -2, landing_y: 16, result: "in" });
+    ).toEqual({
+      landing_x: -2,
+      landing_y: 16,
+      result: "in",
+      result_called: false,
+    });
     expect(
       positionPatch(rally({ x: 1, y: 18 }, { result: "in" }), "landing", {
         x: 1,
         y: 25,
       }),
-    ).toEqual({ landing_x: 1, landing_y: 25, result: "out" });
+    ).toEqual({
+      landing_x: 1,
+      landing_y: 25,
+      result: "out",
+      result_called: false,
+    });
+  });
+
+  test("a moved end hands the call back to the ends: the labeller's flag clears", () => {
+    expect(
+      positionPatch(rally({ x: 1, y: 18 }, { result: "net" }), "landing", {
+        x: 1,
+        y: 18,
+      }).result_called,
+    ).toBe(false);
   });
 
   test("a stored let is left alone: coordinates only, no result key", () => {
@@ -190,6 +209,7 @@ test.describe("positionPatch", () => {
     );
     expect(patch).toEqual({ landing_x: -2, landing_y: 16 });
     expect("result" in patch).toBe(false);
+    expect("result_called" in patch).toBe(false);
     expect(
       positionPatch(serve({ x: -2, y: 16 }, { result: "let" }), "contact", {
         x: 0.5,
@@ -204,7 +224,12 @@ test.describe("positionPatch", () => {
         x: 1,
         y: 25,
       }),
-    ).toEqual({ landing_x: 1, landing_y: 25, result: "out" });
+    ).toEqual({
+      landing_x: 1,
+      landing_y: 25,
+      result: "out",
+      result_called: false,
+    });
   });
 
   test("a cleared end carries no result either way", () => {
@@ -276,6 +301,60 @@ test.describe("effectiveShotResult", () => {
         ...placedLong,
         seed: null,
         status: "added",
+      }),
+    ).toBe("in");
+  });
+
+  test("a flagged call outranks the ends even when it equals the seed's", () => {
+    // The vendor seeded Net, but the landing reads Out.
+    const seed = {
+      stroke: "forehand" as const,
+      hitter: "p1" as const,
+      result: "net" as const,
+      spin: null,
+      contact_x: 1,
+      contact_y: 2,
+      landing_x: 1,
+      landing_y: 26,
+      video_time: 10,
+    };
+    const seededNet = {
+      stroke: "forehand" as const,
+      result: "net" as const,
+      ...placedLong,
+      seed,
+    };
+    // Unflagged, kept or edited: the seed's call, and the landing wins.
+    expect(effectiveShotResult(seededNet)).toBe("out");
+    expect(effectiveShotResult({ ...seededNet, status: "kept" })).toBe("out");
+    expect(effectiveShotResult({ ...seededNet, status: "edited" })).toBe("out");
+    expect(
+      effectiveShotResult({
+        ...seededNet,
+        status: "kept",
+        resultCalled: false,
+      }),
+    ).toBe("out");
+    // Flagged the labeller's: Net stands, kept or edited.
+    for (const status of ["kept", "edited"] as const) {
+      expect(
+        effectiveShotResult({ ...seededNet, status, resultCalled: true }),
+        status,
+      ).toBe("net");
+    }
+    // The flag needs a call to stand on: with none, the ends read.
+    expect(
+      effectiveShotResult({ ...seededNet, result: null, resultCalled: true }),
+    ).toBe("out");
+    // A flagged In on a long landing, with no seed at all, stands too.
+    expect(
+      effectiveShotResult({
+        stroke: "forehand",
+        result: "in",
+        ...placedLong,
+        seed: null,
+        status: "edited",
+        resultCalled: true,
       }),
     ).toBe("in");
   });

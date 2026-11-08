@@ -127,11 +127,15 @@ export const LABEL_SHOT_VALUE_FIELDS = [
 ] as const;
 export type LabelShotValueField = (typeof LABEL_SHOT_VALUE_FIELDS)[number];
 
-/** Every key `updateLabelShot` accepts: the values, plus `unclear`. */
+/**
+ * Every key `updateLabelShot` accepts: the values, plus `unclear`, `tags`
+ * and `result_called`.
+ */
 export const LABEL_SHOT_EDIT_FIELDS = [
   ...LABEL_SHOT_VALUE_FIELDS,
   "unclear",
   "tags",
+  "result_called",
 ] as const;
 
 /** A shot's editable values, keyed by column — the same keys as its seed. */
@@ -150,6 +154,13 @@ export type LabelShotPatch = Partial<LabelShotValues> & {
    * status.
    */
   tags?: LabelShotTag[];
+  /**
+   * Whether the `result` is the labeller's own call (session.ts
+   * `LabelShot.resultCalled`). Sent by the writers that choose a call or
+   * write the ends' call; a patch without it leaves the stored flag alone.
+   * Not a value: it never moves the status.
+   */
+  result_called?: boolean;
 };
 
 // ── Points ──────────────────────────────────────────────────────────────────
@@ -370,6 +381,13 @@ export function parseLabelShotPatch(
     patch.tags = orderedShotTags(list);
   }
 
+  if ("result_called" in input) {
+    if (typeof input.result_called !== "boolean") {
+      return { error: "result_called must be true or false." };
+    }
+    patch.result_called = input.result_called;
+  }
+
   const letError = letResultError(patch);
   if (letError) return { error: letError };
 
@@ -518,7 +536,7 @@ export type LabelPointState = LabelPointFields & {
  * only with today's derivation code rather than the session's pinned
  * `derivation_version`.
  *
- * `unclear` and `tags` never move the status. The server's write (edit-session.ts) and
+ * `unclear`, `tags` and `result_called` never move the status. The server's write (edit-session.ts) and
  * the console's optimistic apply ({@link applyLabelShotPatch}) both call this.
  */
 export function labelShotStatusAfterPatch(
@@ -811,6 +829,8 @@ export function applyLabelShotPatch(
   if ("landing_y" in patch) next.landingY = patch.landing_y ?? null;
   if ("video_time" in patch) next.videoTime = patch.video_time ?? null;
   if ("tags" in patch) next.tags = patch.tags ?? [];
+  if ("result_called" in patch)
+    next.resultCalled = patch.result_called ?? false;
   return next;
 }
 

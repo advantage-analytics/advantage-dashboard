@@ -1502,11 +1502,28 @@ test.describe("the black shots well", () => {
 
   test("an override from the Result menu writes the call alone: the landing stays", () => {
     const { shotResultPatch } = createLoader().load(WELL) as {
-      shotResultPatch: (value: string | null) => unknown;
+      shotResultPatch: (
+        value: string | null,
+        derived?: string | null,
+      ) => unknown;
     };
+    // An override is flagged the labeller's call, so it outranks the landing
+    // even where it equals the vendor's seed.
     for (const value of ["out", "in", "net"]) {
-      expect(shotResultPatch(value)).toEqual({ result: value });
+      expect(shotResultPatch(value, null)).toEqual({
+        result: value,
+        result_called: true,
+      });
     }
+    // The menu's first item, what the landing reads, hands the call back.
+    expect(shotResultPatch("in", "in")).toEqual({
+      result: "in",
+      result_called: false,
+    });
+    expect(shotResultPatch("net", "in")).toEqual({
+      result: "net",
+      result_called: true,
+    });
     // Read-only: a selected row has no tray, and its result no trigger.
     const frozen = renderWell({ selectedShotId: "w-return" }, false);
     expect(frozen).not.toContain("data-shot-call");
@@ -2045,7 +2062,10 @@ test.describe("a serve's result menu, where lets are replayed", () => {
         shot: LabelShot,
         playOnLets: boolean | undefined,
       ) => { derived: string | null; options: MenuOption[] } | null;
-      shotResultPatch: (value: string | null) => unknown;
+      shotResultPatch: (
+        value: string | null,
+        derived?: string | null,
+      ) => unknown;
       strokeChangePatch: (shot: LabelShot, stroke: string | null) => unknown;
       RESULT_LANDED: string;
       RESULT_LET: string;
@@ -2161,7 +2181,10 @@ test.describe("a serve's result menu, where lets are replayed", () => {
   test("picking No result writes a null result", () => {
     const { shotResultPatch, RESULT_NONE } = row();
     expect(RESULT_NONE).not.toBe("let");
-    expect(shotResultPatch(RESULT_NONE)).toEqual({ result: null });
+    expect(shotResultPatch(RESULT_NONE)).toEqual({
+      result: null,
+      result_called: false,
+    });
   });
 
   test("the trigger says which of No result and Let is stored", () => {
@@ -2215,6 +2238,7 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     expect(strokeChangePatch(letFault, "forehand")).toEqual({
       stroke: "forehand",
       result: "net",
+      result_called: false,
     });
     // Still a serve: the let stays.
     expect(strokeChangePatch(letFault, "second_serve")).toEqual({
@@ -2225,6 +2249,7 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     expect(strokeChangePatch(bareLet, "forehand")).toEqual({
       stroke: "forehand",
       result: null,
+      result_called: false,
     });
     // Not a let: the stroke alone, as before.
     expect(strokeChangePatch(shotOf("w-fault"), "forehand")).toEqual({
@@ -2319,10 +2344,14 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     onChange("let");
     onChange("net");
     expect(patches).toEqual([
-      ["w-fault", { result: "let" }],
-      ["w-fault", { result: "net" }],
+      ["w-fault", { result: "let", result_called: true }],
+      // Net is the calculated item here: the call goes back to the landing.
+      ["w-fault", { result: "net", result_called: false }],
     ]);
-    expect(row().shotResultPatch("let")).toEqual({ result: "let" });
+    expect(row().shotResultPatch("let")).toEqual({
+      result: "let",
+      result_called: true,
+    });
   });
 
   test("a let reads in the same ink as any other result, with the pencil", () => {
