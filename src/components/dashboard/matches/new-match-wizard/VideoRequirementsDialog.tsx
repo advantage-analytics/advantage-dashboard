@@ -51,7 +51,7 @@ const YOURS_TO_CHECK: readonly Requirement[] = [
   {
     icon: Timer,
     lead: "Uncut, start to finish",
-    rest: " — keep the time between points and don't use a highlights edit.",
+    rest: " — keep the time between points. Don't use a highlights edit or a video exported from SwingVision, which cut out the time between points.",
   },
   {
     icon: Video,

@@ -178,7 +178,7 @@ const RECORDING_ICONS: Record<RecordingSource, typeof User> = {
 const GUARDIAN_ACKNOWLEDGMENTS: readonly string[] = [
   "You're their parent or legal guardian, and you consent to Advantage analyzing match video of them.",
   "You'll manage what's uploaded and who it's shared with. When they're ready, or turn 18, contact us and we'll hand the account over with you.",
-  "Video of a minor is never used to train models or shown outside the people you share it with.",
+  "Our video analysis provider uses match video, including video of minors, to improve its analysis models. It is never used to identify a player, and never shown outside the people you share it with.",
 ];
 
 /**
