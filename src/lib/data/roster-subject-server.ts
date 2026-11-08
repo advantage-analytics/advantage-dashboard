@@ -1,7 +1,9 @@
 import type { RosterSubject } from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
-import type { MatchDraft } from "@/components/dashboard/matches/new-match-wizard/types";
 import { getRosterPlayerOptions } from "@/lib/data/roster-server";
-import { resolveRosterSubject } from "@/lib/wizard/roster-subject";
+import {
+  resolveRosterSubject,
+  type RosterSubjectInput,
+} from "@/lib/wizard/roster-subject";
 
 /**
  * Who the For field opens on — a `?player=` link, a resumed draft's saved
@@ -19,10 +21,7 @@ import { resolveRosterSubject } from "@/lib/wizard/roster-subject";
  */
 export async function rosterSubjectFor(
   programId: string,
-  input: {
-    linkPlayerId?: string | null;
-    draft?: Pick<MatchDraft, "subject" | "formData" | "preset"> | null;
-  },
+  input: RosterSubjectInput,
 ): Promise<RosterSubject | null> {
   const { linkPlayerId, draft } = input;
   if (!linkPlayerId && !draft) return null;

@@ -2,6 +2,12 @@ import type { RosterPlayerOption } from "@/lib/data/roster-shared";
 import type { RosterSubject } from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import type { MatchDraft } from "@/components/dashboard/matches/new-match-wizard/types";
 
+/** What can name a player: a link's `?player=` id and/or a resumed draft. */
+export interface RosterSubjectInput {
+  linkPlayerId?: string | null;
+  draft?: Pick<MatchDraft, "subject" | "formData" | "preset"> | null;
+}
+
 /**
  * Who the wizard's For field opens on in a team workspace — a `?player=` link,
  * a resumed draft's saved player, or an older draft's saved name — resolved
@@ -36,10 +42,7 @@ import type { MatchDraft } from "@/components/dashboard/matches/new-match-wizard
  */
 export function resolveRosterSubject(
   roster: readonly RosterPlayerOption[],
-  input: {
-    linkPlayerId?: string | null;
-    draft?: Pick<MatchDraft, "subject" | "formData" | "preset"> | null;
-  },
+  input: RosterSubjectInput,
 ): RosterSubject | null {
   const toSubject = (row: RosterPlayerOption): RosterSubject => ({
     kind: "roster",

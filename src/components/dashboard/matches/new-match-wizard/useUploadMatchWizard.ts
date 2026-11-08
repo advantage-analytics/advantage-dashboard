@@ -1805,7 +1805,6 @@ export function useUploadMatchWizard({
         // saved player on the roster and seeded it as `initialSubject`; a
         // guess or a link pre-fills the picker, and the draft lands one step
         // earlier, on it: see `draftResumeStep`.
-        const seeded = matchSubjectRef.current;
         setStep(
           draftResumeStep(
             askWhoPlayed,
