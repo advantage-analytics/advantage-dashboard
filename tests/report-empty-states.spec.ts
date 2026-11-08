@@ -71,6 +71,13 @@ const REAL = new Set([
   // the server; a marker here would hand the cards `NaN` totals.
   "@/components/dashboard/matches/match-detail/head-to-head-rows",
   "@/components/dashboard/matches/match-detail/point-endings-tally",
+  // The How points ended card's drawing (T5): the body the report's card
+  // and the player profile's season card share. Loaded for real so the
+  // card's own anatomy — names, dashes, sentence — is what is checked.
+  "@/components/dashboard/matches/match-detail/point-endings-body",
+  // The momentum plot's frame, shared by the report's and the season's
+  // tracker: pure constants and path builders.
+  "@/components/dashboard/matches/match-detail/momentum-plot",
 ]);
 
 function render(

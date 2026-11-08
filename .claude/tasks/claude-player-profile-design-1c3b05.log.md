@@ -50,3 +50,15 @@ is the runner's. Newest entries at the bottom.
 
 1. Season Lob/Passed dash tooltips reuse T1's "…for this match" notes; a season wording is a one-line change in `player-season.ts`.
 2. T5/T6 can reuse the optional-`interaction` pattern for their body splits.
+
+## T5 · Season Performance tracker and How points ended — done
+
+**gate:** mechanical PASS · completion PASS
+
+**changed:** How points ended split into a presentational `match-detail/point-endings-body.tsx` (`PointEndingsBody`, optional `watch` callback) behind the report's data-reading `PointEndingsCard`; the report tracker's plot frame and path builders moved to `match-detail/momentum-plot.ts`. Report output compared identical across 22 cases. New `player-profile/season-point-endings-card.tsx` and `season-performance-tracker.tsx` (one sample per analyzed match, won-point differential, readout "Won N of M points" + opponent + day, sr-only list), both with honest zero states. `tests/season-tracker-endings.spec.ts` (12 tests); `report-empty-states.spec.ts` allowlists the two new modules.
+
+**follow-ups:**
+
+1. The body's empty-state legend is opt-in (`emptyLegend`); decide whether the report's own empty card should show its legend too.
+2. The report tracker has no per-point screen-reader list like the season tracker's; parity is a later task.
+3. Eyes-on of the season tracker's marks and readout once T7 places it.

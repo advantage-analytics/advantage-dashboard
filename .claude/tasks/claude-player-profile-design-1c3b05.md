@@ -72,7 +72,7 @@ ready).
 
 ## T5 · Season Performance tracker and How points ended
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** `performance-tracker-chart.tsx`, `point-endings-card.tsx` (both under `match-detail/`), `player-profile/season-performance-tracker.tsx`, `player-profile/season-point-endings-card.tsx` (new), `tests/season-tracker-endings.spec.ts` — guess
