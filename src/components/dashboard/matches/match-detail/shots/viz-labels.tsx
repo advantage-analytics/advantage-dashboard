@@ -9,14 +9,10 @@ import { ACE_STAR_FILL } from "./court-art";
 import { cn } from "@/lib/utils";
 
 /**
- * Shared vocabulary for the toolbar's two menus (`cut-menu.tsx`,
- * `chart-menu.tsx`) and anything that needs to name a cut or chart in text
- * (`viz-focused.tsx`'s eyebrow). Pulled out of `viz-toolbar.tsx` so those menus
- * — which `viz-toolbar.tsx` renders — don't import back from it: `viz-toolbar`
- * imported `CutMenu`/`ChartMenu` while `cut-menu`/`chart-menu` imported
- * `CUT_LABEL`/`CHART_LABEL`/`VizMenuTrigger` from `viz-toolbar`, a circular
- * import that happened to resolve at build time but was one refactor away from
- * not. This file has no dependents inside the cycle, so it breaks it cleanly.
+ * Shared vocabulary for the cut and chart menus (`cut-menu.tsx`,
+ * `chart-menu.tsx`) and anything that needs to name a cut or chart in text.
+ * Kept apart from the menus so they and the code that hosts them can all
+ * import it without a circular import.
  */
 
 export const CUT_LABEL: Record<Cut, string> = {
@@ -285,7 +281,7 @@ export function loadedViewLabel(
  *
  * `haspopup` defaults to `"menu"` (the `cut-menu`/`chart-menu` shape); pass
  * `"dialog"` for a trigger that opens a `role="dialog"` panel instead —
- * `filters-popover.tsx`'s Filters trigger opens a form, not a `role="menu"`
+ * `lightbox-filters.tsx`'s Filters trigger opens a form, not a `role="menu"`
  * list, and `aria-haspopup` needs to say so. It is applied AFTER
  * `...buttonProps` (which the prop type excludes it from anyway) so nothing
  * can shadow it back to the hardcoded default.
@@ -324,7 +320,7 @@ export function VizMenuTrigger({
    * React 19 ref-as-prop — `save-view-dialog.tsx` anchors under this exact
    * button (`cut-menu.tsx` forwards its own `triggerRef` here) rather than
    * hand-rolling a second position. Unused by `chart-menu.tsx`/
-   * `filters-popover.tsx`, which have nothing anchoring to them.
+   * `lightbox-filters.tsx`, which have nothing anchoring to them.
    */
   ref?: React.Ref<HTMLButtonElement>;
 } & Omit<

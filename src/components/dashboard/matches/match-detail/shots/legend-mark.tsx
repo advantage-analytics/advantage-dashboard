@@ -1,5 +1,3 @@
-"use client";
-
 import { starPoints, trianglePointsFor } from "./court-geometry";
 import type { LegendItem } from "./viz-labels";
 

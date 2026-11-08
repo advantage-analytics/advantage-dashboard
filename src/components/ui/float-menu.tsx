@@ -10,8 +10,8 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Phase 2A: the dark scope the fullscreen court viewer draws its chrome on
- * (`viz-fullscreen.tsx`, not built by this file). `tone` lives on `FloatMenu`
+ * The dark scope — the film room's menus (`film/film-dark-menu.tsx`) and
+ * the label console's black view, not built by this file. `tone` lives on `FloatMenu`
  * itself and is threaded to every row/label/divider/note it renders via
  * context, rather than a `tone` prop repeated on each of those — a menu's
  * rows never mix tones, so there is nothing for a per-row prop to express
