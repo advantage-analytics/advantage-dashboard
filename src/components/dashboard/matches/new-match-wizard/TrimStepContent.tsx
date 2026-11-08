@@ -736,11 +736,22 @@ function TrimStepContentImpl({
 
   // On `window`, unlike the step's other keys: after a click on the rail
   // focus may sit on the page body, outside this subtree, and ⌘Z must still
-  // reach the trim. A text field keeps its own undo.
+  // reach the trim. A text field keeps its own undo, and an open dialog
+  // (Start over, Add hours) owns the keyboard: moving the cuts behind a modal
+  // would hand Continue a window nobody saw change. Dialogs trap focus, so the
+  // target is inside one whenever one is open.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const action = trimHistoryKey(e);
       if (!action || e.defaultPrevented || isFormControl(e.target)) return;
+      if (
+        (e.target as HTMLElement | null)?.closest?.(
+          '[role="dialog"], [role="alertdialog"]',
+        ) ||
+        document.querySelector('[aria-modal="true"]')
+      ) {
+        return;
+      }
       if (stepHistory(action)) e.preventDefault();
     };
     window.addEventListener("keydown", onKeyDown);
@@ -1538,6 +1549,13 @@ function TrimStepContentImpl({
           <Kbd size="sm">{mac ? "⌘" : "ctrl"}</Kbd>
           <Kbd size="sm">Z</Kbd>
           <span>undo</span>
+          <span aria-hidden="true" className="text-[var(--ink-300)]">
+            ·
+          </span>
+          <Kbd size="sm">shift</Kbd>
+          <Kbd size="sm">{mac ? "⌘" : "ctrl"}</Kbd>
+          <Kbd size="sm">Z</Kbd>
+          <span>redo</span>
         </p>
 
         {tooShort ? (
