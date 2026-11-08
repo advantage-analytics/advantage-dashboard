@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Season loader for the profile
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** `src/lib/data/player-season-server.ts` (new), `src/lib/data/player-profile-server.ts`, `tests/player-season-loader.spec.ts` (new) — guess

@@ -1,4 +1,5 @@
 import { cache } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { formatMatchDayShort } from "@/lib/data/match-day";
 import {
@@ -82,6 +83,14 @@ import {
  * Every figure comes from THIS player's side: `isPlayer1` per match picks the
  * `match_stats` row, the opponent's name, the insight paragraph and — for the
  * serve map — which points they served. `docs/ui-revamp-guardrails.md`.
+ *
+ * ── One read, two loaders ───────────────────────────────────────────────────
+ * The roster RPC, the matches read and the seat decision are
+ * `readPlayerMatchSides`, shared with the season loader
+ * (`player-season-server.ts`) through the `cache()`d `getPlayerMatchSides`.
+ * The two loaders therefore fold the same matches from the same seats — a
+ * match the record counts is a match the season may fold — and a page that
+ * renders both pays for one roster RPC and one matches read.
  */
 
 export interface ProfileMatchRow {
@@ -163,7 +172,8 @@ export interface ProfileListSource {
   isPlayer1: boolean;
 }
 
-interface DbRosterFullRow {
+/** One row of `program_roster_full`, as the profile reads it. */
+export interface DbRosterFullRow {
   player_id: string;
   profile_id: string | null;
   user_id: string | null;
@@ -178,7 +188,11 @@ interface DbRosterFullRow {
   backhand?: string | null;
 }
 
-interface DbMatchRow {
+/**
+ * A match row as this player's surfaces read it — the profile here and the
+ * season fold in `player-season-server.ts`.
+ */
+export interface DbPlayerMatchRow {
   id: string;
   player1_id: string | null;
   player2_id: string | null;
@@ -196,9 +210,13 @@ interface DbMatchRow {
   court_type: string | null;
   verified: boolean | null;
   verified_at: string | null;
+  /** When Advantage judged its errors forced/unforced (`errorSplitJudged`). */
+  errors_judged_at: string | null;
   duration: number | null;
   source_provider: string | null;
   created_by: string | null;
+  /** The opponent's stored id — the Opponents page's key when it is set. */
+  opponent_player_id: string | null;
 }
 
 interface DbEntryRow {
@@ -313,12 +331,39 @@ export async function serveMapFor(
   };
 }
 
-export const getPlayerProfile = cache(async function getPlayerProfile(
+/** One of this player's matches, and the seat they sat in for it. */
+export interface PlayerMatchSide {
+  match: DbPlayerMatchRow;
+  /**
+   * Which seat is this player's. Picks their statistics row, their
+   * opponent's name and their half of the insight; the season fold tallies
+   * every match with it, never a normalised seat (guardrails §4).
+   */
+  isPlayer1: boolean;
+}
+
+/** Who this is and what they have played — what every profile surface starts from. */
+export interface PlayerMatchSides {
+  /** Their `program_roster_full` row, the identity source. */
+  roster: DbRosterFullRow;
+  /** Every match of theirs the program recorded, newest first, undated last. */
+  own: PlayerMatchSide[];
+}
+
+/**
+ * The roster row and the matches of one player, through `supabase` (RLS as
+ * the viewer), each match with the seat this player sat in — the "two id
+ * eras" and "whose side" rules above. `null` for an id that names nobody on
+ * this roster.
+ *
+ * Takes the client so a spec can hand in a fake and watch what is asked;
+ * `getPlayerMatchSides` is the request-time wrapper the loaders call.
+ */
+export async function readPlayerMatchSides(
+  supabase: SupabaseClient,
   programId: string,
   playerId: string,
-): Promise<PlayerProfile | null> {
-  const supabase = await createClient();
-
+): Promise<PlayerMatchSides | null> {
   // The roster is the identity source, and the one place that knows how to
   // name somebody who has no login. Its rows also carry both of a claimed
   // player's ids, which is what `canonicalRosterIds` folds.
@@ -349,7 +394,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
   const { data: matchRows } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, event_entry_id, round, result, match_type, court_type, verified, verified_at, duration, source_provider, created_by",
+      "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, event_entry_id, round, result, match_type, court_type, verified, verified_at, errors_judged_at, duration, source_provider, created_by, opponent_player_id",
     )
     .eq("program_id", programId)
     .or(
@@ -359,7 +404,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
     // most recent thing this player did.
     .order("date", { ascending: false, nullsFirst: false });
 
-  const matches = (matchRows ?? []) as DbMatchRow[];
+  const matches = (matchRows ?? []) as DbPlayerMatchRow[];
 
   // Which side of each match is this player. The query already guarantees one
   // of the two ids is theirs; this decides which, and that answer picks their
@@ -368,6 +413,32 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
     const isPlayer1 = sideOf(match, canonical, playerId);
     return isPlayer1 === null ? [] : [{ match, isPlayer1 }];
   });
+
+  return { roster: row, own };
+}
+
+/**
+ * `readPlayerMatchSides` on the request's cookie client, `cache()`d on
+ * (program, player) so the profile and the season share one roster RPC and
+ * one matches read per request.
+ */
+export const getPlayerMatchSides = cache(async function getPlayerMatchSides(
+  programId: string,
+  playerId: string,
+): Promise<PlayerMatchSides | null> {
+  const supabase = await createClient();
+  return readPlayerMatchSides(supabase, programId, playerId);
+});
+
+export const getPlayerProfile = cache(async function getPlayerProfile(
+  programId: string,
+  playerId: string,
+): Promise<PlayerProfile | null> {
+  const sides = await getPlayerMatchSides(programId, playerId);
+  if (!sides) return null;
+  const { roster: row, own } = sides;
+
+  const supabase = await createClient();
 
   const statsPromise = (async () => {
     if (own.length === 0) return new Map<string, ProfileStatRow>();
