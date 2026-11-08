@@ -463,6 +463,59 @@ test.describe("grading a copy against the key", () => {
     });
   });
 
+  test("shot kinds: not graded on a key with no tags", () => {
+    const key = [gp("k1", 10), gp("k2", 30)];
+    const copy = [
+      gp("c1", 10, {
+        shots: [
+          { videoTime: 10, stroke: "first_serve" },
+          { videoTime: 11, stroke: "forehand", tags: ["lob"] },
+        ],
+      }),
+      gp("c2", 30),
+    ];
+    const grade = gradePractice(key, copy);
+    expect(grade.byField.shotKinds.checked).toBe(0);
+    expect(grade.accuracy).toBe(100);
+  });
+
+  test("shot kinds: per point, sorted; empty is missed, wrong is new", () => {
+    const tagged = (at: number, ...tags: string[][]) => ({
+      shots: [
+        { videoTime: at, stroke: "first_serve" },
+        ...tags.map((t, i) => ({
+          videoTime: at + 1 + i,
+          stroke: "forehand",
+          tags: t,
+        })),
+      ],
+    });
+    const key = [
+      gp("k1", 10, tagged(10, ["approach"], ["passing", "lob"])),
+      gp("k2", 30, tagged(30, ["lob"])),
+      gp("k3", 50),
+    ];
+    const copy = [
+      // Same kinds on different strokes: still right, per point.
+      gp("c1", 10, tagged(10, ["lob", "passing"], ["approach"])),
+      // Left untagged: a missed fix.
+      gp("c2", 30),
+      // Tagged where the key has none: a new error.
+      gp("c3", 50, tagged(50, ["drop_shot"])),
+    ];
+    const grade = gradePractice(key, copy);
+    expect(grade.byField.shotKinds).toMatchObject({
+      checked: 3,
+      correct: 1,
+      missedFixes: 1,
+      newErrors: 1,
+    });
+    const miss = grade.misses.find(
+      (m) => m.field === "shotKinds" && m.kind === "missed_fix",
+    );
+    expect(miss).toMatchObject({ expected: "lob", got: null });
+  });
+
   test("points pair by nearest first stroke within tolerance, each once", () => {
     const { pairs, keyOnly, copyOnly } = pairPoints(
       [gp("k1", 10), gp("k2", 12)],

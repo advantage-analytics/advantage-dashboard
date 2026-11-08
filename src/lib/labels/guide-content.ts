@@ -13,7 +13,7 @@
  * labeller can tell the guide they read from the one in front of them.
  */
 
-export const GUIDE_VERSION = "2026-11-04";
+export const GUIDE_VERSION = "2026-11-07";
 
 export type GuideBlock =
   | { kind: "paragraph"; text: string }
@@ -89,6 +89,24 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
         "Every key the console reads. In the console, ⌘ / or ? shows the same list. Shot keys act on the selected shot. On Windows and Linux, use Ctrl instead of ⌘.",
       ),
       { kind: "shortcuts" },
+    ],
+  },
+  {
+    id: "shot-kinds",
+    heading: "Shot kinds",
+    blocks: [
+      p(
+        "Some rally shots are also a kind of shot. Select the shot and press its key, or use the Kind strip under it. The Kind column shows what you chose. Kinds never change the score or the flags, and a serve takes none.",
+      ),
+      list(
+        "Approach (G): a shot the player hits while moving forward from behind the service line to come to the net. Tag the shot they come in on, not the volley after it.",
+        "Lob (K): a ball hit high and deep, well over the reach of a player at the net or near the service line.",
+        "Drop shot (J): a soft, short ball, usually with backspin, hit from the back of the court so it lands close to the net.",
+        "Passing (P): a shot hit past an opponent who is at the net, beside them rather than over them. Tag it whether it wins the point or not.",
+      ),
+      p(
+        "One shot can be two kinds: a lob over a player at the net is Lob and Passing. Press a key again to take its kind off. When you are not sure, leave the shot untagged.",
+      ),
     ],
   },
   {
@@ -207,7 +225,7 @@ export const CLEANING_STANDARD_SECTIONS: readonly GuideSection[] = [
         "Clear the amber stops with ] until none are left.",
         "Clear the grey flags with '.",
         "Mark each error forced or unforced.",
-        "Watch the match through once more, checking each point with ⌘ Enter.",
+        "Watch the match through once more, checking each point with ⌘ Enter and tagging shot kinds as you go.",
         "Submit for review.",
       ),
     ],

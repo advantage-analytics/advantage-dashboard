@@ -42,6 +42,7 @@ const HOW_TO_HEADINGS = [
   "Video controls",
   "The rail",
   "Keys",
+  "Shot kinds",
   "Combine and split points",
   "Game boundaries",
   "Players at the wrong end",
@@ -77,7 +78,7 @@ test.describe("LabelGuide", () => {
     expect(markup).toContain(`Guide v${GUIDE_VERSION}`);
   });
 
-  test("How-to has the nine headings, in order", () => {
+  test("How-to has the ten headings, in order", () => {
     expect(HOW_TO_SECTIONS.map((s) => s.heading)).toEqual(HOW_TO_HEADINGS);
     expect(h3s(part("how-to"))).toEqual(HOW_TO_HEADINGS);
   });
