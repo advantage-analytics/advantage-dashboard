@@ -14,6 +14,11 @@
 -- once a day and stamps `sent_at`. Video retired by the one-year retention
 -- sweep is not a user request, so it is not recorded.
 --
+-- If recording fails, the trigger lets the delete through and mails the
+-- internal alerts inbox through `internal_alerts_private.post_event`
+-- (20261023075659_internal_activity_alerts.sql), so the request can be made
+-- by hand.
+--
 -- Access: service role only. No user reads or writes these rows.
 
 create table public.vendor_deletion_requests (
@@ -68,10 +73,16 @@ begin
     on conflict (vendor, vendor_job_id) do nothing;
   exception
     when others then
-      -- A failed record must never block the user's deletion. The warning is
-      -- the trail for doing it by hand.
+      -- A failed record must never block the user's deletion. Instead the
+      -- internal alerts inbox is mailed the match id to forward by hand
+      -- (`vendor_deletion_unrecorded` in internal-activity-mail.ts).
+      -- `post_event` never raises, and pg_net sends only if the delete
+      -- commits.
       raise warning 'record_vendor_deletion_requests failed for match %: %',
         old.id, sqlerrm;
+      perform internal_alerts_private.post_event(
+        'vendor_deletion_unrecorded', old.id
+      );
   end;
   return old;
 end;

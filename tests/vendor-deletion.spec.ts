@@ -111,3 +111,16 @@ test("a same-day batch with more rows gets a different idempotency key", async (
   });
   expect(one.idempotencyKey).not.toBe(two.idempotencyKey);
 });
+
+test("the unrecorded-deletion alert names the MatchID to forward by hand", async () => {
+  const { vendorDeletionUnrecordedEmail } =
+    await import("@/lib/services/email");
+  const msg = vendorDeletionUnrecordedEmail({
+    to: "alerts@x.com",
+    matchId: "11111111-1111-4111-8111-111111111111",
+  });
+  expect(msg.to).toBe("alerts@x.com");
+  expect(msg.subject).toContain("11111111-1111-4111-8111-111111111111");
+  expect(msg.text).toContain("MatchID");
+  expect(msg.text).toContain("11111111-1111-4111-8111-111111111111");
+});

@@ -226,5 +226,7 @@ export {
 } from "./templates/support-reply";
 export {
   vendorDeletionEmail,
+  vendorDeletionUnrecordedEmail,
   type VendorDeletionEmailInput,
+  type VendorDeletionUnrecordedEmailInput,
 } from "./templates/vendor-deletion";

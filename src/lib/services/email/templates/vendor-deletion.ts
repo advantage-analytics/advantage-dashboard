@@ -51,3 +51,38 @@ export function vendorDeletionEmail(
       .slice(0, 32)}`,
   };
 }
+
+export interface VendorDeletionUnrecordedEmailInput {
+  /** `INTERNAL_ALERTS_ADDRESS`, passed by the caller. */
+  to: string;
+  matchId: string;
+}
+
+/**
+ * Internal alert: a match was deleted but the trigger could not record its
+ * SplitStep deletion request, so the daily request will not include it.
+ * SplitStep knows the match by this id as its `MatchID` (for an admin-console
+ * submission it may instead hold the operation id, which the logs name).
+ */
+export function vendorDeletionUnrecordedEmail(
+  input: VendorDeletionUnrecordedEmailInput,
+): EmailMessage {
+  const { to, matchId } = input;
+  const content: EmailContent = {
+    preheader: "A deleted match's SplitStep deletion request was not recorded.",
+    eyebrow: "Action needed",
+    heading: "Ask SplitStep to delete this match's video",
+    body: [
+      "A match was deleted, but its deletion request to SplitStep could not be recorded, so the daily request will not include it. Ask SplitStep to delete the video for this MatchID by hand.",
+    ],
+    facts: [{ label: "MatchID", value: matchId }],
+    note: "Sent to the internal alerts inbox, once per match. The database warning names the reason.",
+  };
+  return {
+    to,
+    subject: `Action needed: SplitStep deletion not recorded (${matchId})`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "vendor_deletion_unrecorded" },
+  };
+}
