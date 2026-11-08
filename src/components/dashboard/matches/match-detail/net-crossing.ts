@@ -18,8 +18,7 @@
  * a statistic, a filter or the published data.
  */
 
-/** The net, in the database frame's y (metres). */
-export const NET_CROSSING_NET_Y_M = 23.77 / 2;
+import { REAL_NET_Y } from "@/lib/data/serve-zones";
 
 const finite = (v: number | null | undefined): v is number =>
   v != null && Number.isFinite(v);
@@ -29,13 +28,18 @@ const finite = (v: number | null | undefined): v is number =>
  * the net itself; a caller drawing just onto the hitter's side passes that y,
  * so the dot sits exactly on the line. Null when either end is unmeasured or
  * the line never reaches the net.
+ *
+ * The answer never leaves the contact → landing segment: an `atY` behind the
+ * contact (a ball struck closer to the net than the caller's inset) reads the
+ * contact's own x, never a point extrapolated past it — with a landing just
+ * over the net that extrapolation could run metres sideways off the court.
  */
 export function netPathX(
   contactX: number | null | undefined,
   contactY: number | null | undefined,
   landingX: number | null | undefined,
   landingY: number | null | undefined,
-  atY: number = NET_CROSSING_NET_Y_M,
+  atY: number = REAL_NET_Y,
 ): number | null {
   if (
     !finite(contactX) ||
@@ -45,12 +49,12 @@ export function netPathX(
     !finite(atY)
   )
     return null;
-  const fromContact = contactY - NET_CROSSING_NET_Y_M;
-  const fromLanding = landingY - NET_CROSSING_NET_Y_M;
+  const fromContact = contactY - REAL_NET_Y;
+  const fromLanding = landingY - REAL_NET_Y;
   // Struck on the net line: no side to cross from.
   if (fromContact === 0) return null;
   // Landing on the hitter's own side: the line never reaches the net.
   if (Math.sign(fromLanding) === Math.sign(fromContact)) return null;
-  const t = (atY - contactY) / (landingY - contactY);
+  const t = Math.min(1, Math.max(0, (atY - contactY) / (landingY - contactY)));
   return contactX + t * (landingX - contactX);
 }
