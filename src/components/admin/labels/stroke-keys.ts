@@ -298,6 +298,11 @@ export function isNetKey(key: string): boolean {
  * Null on a stroke with no type yet, which has no Result menu, and on one
  * whose landing itself reads Net, where there is nothing to take back. Any
  * stroke takes it, a serve included: a labeller's key as much as an admin's.
+ *
+ * Like the Result menu's Net item, it cannot outrank a landing on a vendor
+ * stroke the seed already called Net: "net" then matches the seed, so it
+ * still reads as the vendor's call (`effectiveShotResult`) and the landing
+ * wins.
  */
 export function netKeyPatch(shot: LabelShot): LabelShotPatch | null {
   if (shot.stroke === null) return null;

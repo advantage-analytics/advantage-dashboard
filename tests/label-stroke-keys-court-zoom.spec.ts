@@ -18,6 +18,7 @@ import {
   withServeHitter,
 } from "@/components/admin/labels/stroke-keys";
 import { spinOptions } from "@/components/admin/labels/label-format";
+import { effectiveShotResult } from "@/lib/services/labels/shot-derived";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import { labelPoint, labelShot } from "./fixtures/label-session";
 import {
@@ -605,6 +606,40 @@ test.describe("L: a serve's let", () => {
     expect(netKeyPatch(rally(inTheNet))).toBeNull();
     // An untyped stroke has no Result menu, so no key.
     expect(netKeyPatch(rally({ stroke: null }))).toBeNull();
+    // A vendor stroke: once the labeller's call differs from the seed's it
+    // stands, so N flips Out → Net and back.
+    const placedLong = { contactX: 1, contactY: 2, landingX: 1, landingY: 26 };
+    const seed = {
+      stroke: "forehand" as const,
+      hitter: "p1" as const,
+      result: "out" as const,
+      spin: null,
+      contact_x: 1,
+      contact_y: 2,
+      landing_x: 1,
+      landing_y: 26,
+      video_time: 10,
+    };
+    expect(netKeyPatch(rally({ ...placedLong, result: "out", seed }))).toEqual({
+      result: "net",
+    });
+    expect(
+      netKeyPatch(
+        rally({ ...placedLong, result: "net", seed, status: "edited" }),
+      ),
+    ).toEqual({ result: "out" });
+    // Known limit, shared with the Result menu's Net item: the vendor seeded
+    // Net on a landing that reads Out. Writing "net" matches the seed, so it
+    // still reads as the vendor's call and the landing keeps winning — N
+    // writes it, and the shot still shows Out. Making it stick needs a stored
+    // "the labeller set this call" flag (labellerCall, shot-derived.ts).
+    const seededNet = rally({
+      ...placedLong,
+      result: "net",
+      seed: { ...seed, result: "net" },
+    });
+    expect(netKeyPatch(seededNet)).toEqual({ result: "net" });
+    expect(effectiveShotResult({ ...seededNet, status: "edited" })).toBe("out");
     expect(isNetKey("n")).toBe(true);
     expect(isNetKey("N")).toBe(true);
     expect(isStrokeKey("n")).toBe(false);
