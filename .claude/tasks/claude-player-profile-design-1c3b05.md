@@ -135,7 +135,7 @@ ready).
 
 ## T10 · Loading skeletons for the profile
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7
 - **files:** `src/components/dashboard/loading/player-profile-pending.tsx`, `src/app/dashboard/team/roster/[playerId]/loading.tsx` (new), `tests/player-profile-pending.spec.ts` — guess

@@ -94,3 +94,15 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The cut is not written back to the URL: unticking the player leaves `?facedBy=` in the address bar, and a changed param on a mounted page is not followed.
+
+## T10 · Loading skeletons for the profile — done
+
+**gate:** mechanical PASS · completion PASS
+
+**changed:** New `loading/player-profile-pending.tsx` (`PlayerProfileSkeleton`, `ProfileStatisticsPanePending`, `AnalyzedCountPending`); the route's `loading.tsx` (which still drew the retired layout) now renders it, and `page.tsx` uses `ProfileStatisticsPanePending` as the Statistics Suspense fallback. `match-report-pending.tsx` exports its Statistics parts and the report's own pane skeleton now matches the live 1:1, four-chart layout (Net game added, Head to head 7/4/9 rows); its spec passes unchanged. `tests/player-profile-pending.spec.ts`.
+
+**follow-ups:**
+
+1. The rail skeleton always draws the record row and the New match bar and never the hand/backhand line or state pill, so the rail shifts slightly for some players and viewers.
+2. The Net game skeleton is the populated card's shape; an empty season draws a shorter card.
+3. The Visualizations pane has no skeleton yet (T9, paused).

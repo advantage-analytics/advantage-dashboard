@@ -32,8 +32,10 @@ import {
 } from "@/components/dashboard/team/player-profile/profile-frame";
 import { ProfileActions } from "@/components/dashboard/team/player-profile/profile-actions";
 import { ProfileStatisticsView } from "@/components/dashboard/team/player-profile/profile-statistics-view";
-import { StatisticsPanePending } from "@/components/dashboard/loading/match-report-pending";
-import { PendingBar } from "@/components/dashboard/loading/pending";
+import {
+  AnalyzedCountPending,
+  ProfileStatisticsPanePending,
+} from "@/components/dashboard/loading/player-profile-pending";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { askEntryHref } from "@/lib/services/ask/entry";
 
@@ -65,7 +67,8 @@ import { askEntryHref } from "@/lib/services/ask/entry";
  * opponents" is `seasonOpponentCount` over the same rows the season would
  * count them from. Two things do need the season, and each streams inside
  * its own `<Suspense>`: the facts line's "N analyzed" (a bar until it lands)
- * and the Statistics tab's body (`StatisticsPanePending` until it lands).
+ * and the Statistics tab's body (`ProfileStatisticsPanePending` until it
+ * lands — `player-profile-pending.tsx`, the same parts `loading.tsx` draws).
  * Visualizations draws no body yet; it arrives in its own task.
  *
  * ── Why the numbers match the roster's ──────────────────────────────────────
@@ -229,7 +232,7 @@ export default async function PlayerProfilePage({
             <Suspense
               fallback={
                 <ProfileViewWhen view="statistics">
-                  <StatisticsPanePending />
+                  <ProfileStatisticsPanePending />
                 </ProfileViewWhen>
               }
             >
@@ -262,20 +265,6 @@ async function AnalyzedCount({
   const season = await getPlayerSeason(programId, playerId).catch(() => null);
   if (!season) return null;
   return <span>· {season.analyzed} analyzed</span>;
-}
-
-/** The facts line's clause while the season loads: the separator and one bar. */
-function AnalyzedCountPending() {
-  return (
-    <span
-      role="status"
-      aria-label="Loading analyzed count"
-      className="flex items-center gap-1"
-    >
-      <span aria-hidden="true">·</span>
-      <PendingBar className="h-2.5 w-16" />
-    </span>
-  );
 }
 
 /**
