@@ -6,7 +6,11 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, ChevronDown, ChevronUp } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
-import { splitInsight } from "@/components/dashboard/matches/match-detail/insight-text";
+import {
+  splitInsight,
+  whyThisQuestion,
+} from "@/components/dashboard/matches/match-detail/insight-text";
+import { useMatchAskHref } from "@/components/dashboard/matches/match-detail/use-match-ask-href";
 import { InsightMark } from "@/components/dashboard/matches/match-detail/insight-mark";
 
 /**
@@ -253,13 +257,13 @@ function InsightExpanded({
           stays `pretty`. */}
       <p className="text-body [text-wrap:balance]" style={CLAIM_STYLE}>
         {claim}
-        {!evidence && <WhyThisSuffix readOnly={meta.readOnly} />}
+        {!evidence && <WhyThisSuffix claim={claim} />}
       </p>
 
       {evidence && (
         <p className="text-[11px] leading-[1.6] [text-wrap:pretty] text-[var(--ink-700)]">
           {evidence}
-          <WhyThisSuffix readOnly={meta.readOnly} />
+          <WhyThisSuffix claim={claim} />
         </p>
       )}
 
@@ -342,38 +346,35 @@ function InsightCollapsed({
 }
 
 /**
- * `WhyThisLink`, space-led so it trails inline text, or nothing at all —
- * `/dashboard/ask` is behind sign-in, and the public share page
- * (`meta.readOnly`) has no door there.
+ * "Why this", space-led so it trails inline text, or nothing at all when the
+ * report offers no way into Ask (`useMatchAskHref`: the public share page and
+ * the sample match, which have no door there, and a match read from the
+ * other workspace, where Ask would drop the tag).
+ *
+ * It opens Ask with this match tagged and a question about `claim` in the
+ * composer (`whyThisQuestion`). Nothing is sent: the player presses send, so
+ * the click spends no question. A blue word rests on `--blue` and hovers to
+ * `--blue-hover` (foundations › Text Colors). It is a text link, so it gets
+ * no tooltip.
  */
-function WhyThisSuffix({ readOnly }: { readOnly: boolean }) {
-  if (readOnly) return null;
+function WhyThisSuffix({ claim }: { claim: string }) {
+  const href = useMatchAskHref(whyThisQuestion(claim));
+  if (!href) return null;
   return (
     <>
       {" "}
-      <WhyThisLink />
+      <Link
+        href={href}
+        data-ask-about="why-this"
+        className="text-[11px] font-medium tracking-normal whitespace-nowrap text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
+      >
+        Why this
+        <ArrowUpRight
+          className="ml-[3px] inline-block size-3 align-[-1px]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+      </Link>
     </>
-  );
-}
-
-/**
- * The inline link at the end of the evidence, or the claim when a summary is
- * one sentence. `/dashboard/ask` is the retired rail card's destination. A
- * blue word rests on `--blue` and hovers to `--blue-hover`
- * (foundations › Text Colors). It is a text link, so it gets no tooltip.
- */
-function WhyThisLink() {
-  return (
-    <Link
-      href="/dashboard/ask"
-      className="text-[11px] font-medium tracking-normal whitespace-nowrap text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
-    >
-      Why this
-      <ArrowUpRight
-        className="ml-[3px] inline-block size-3 align-[-1px]"
-        strokeWidth={1.5}
-        aria-hidden="true"
-      />
-    </Link>
   );
 }

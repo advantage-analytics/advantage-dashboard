@@ -8,7 +8,10 @@ import {
   getAskStarterOptions,
   getAskTagOptions,
 } from "@/lib/data/ask-server";
-import { askTagsFromQuery } from "@/lib/services/ask/entry";
+import {
+  askQuestionFromQuery,
+  askTagsFromQuery,
+} from "@/lib/services/ask/entry";
 import type { AskScope } from "@/lib/services/ask/scope";
 import { askStarters } from "@/lib/services/ask/starters";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -101,6 +104,9 @@ async function TeamAskContent({ searchParams }: TeamAskRouteProps) {
       // page, a profile or an opponent's drawer, checked against the menu's
       // own options.
       initialTags={askTagsFromQuery(params, tagOptions, scope)}
+      // `?q=`: a question to put in the composer ("Why this" on a report),
+      // never sent by arriving.
+      initialQuestion={askQuestionFromQuery(params)}
     />
   );
 }
