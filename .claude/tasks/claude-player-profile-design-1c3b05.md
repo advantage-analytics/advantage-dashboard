@@ -119,19 +119,19 @@ ready).
   - [ ] The filter strip's existing "Faced by …" description renders for a seeded cut with no change to its wording
   - [ ] Specs pin the helper: unknown id → resting cut; two ids → both; a known id → `hasOpponentFilters` true
 
-## T9 · Visualizations tab: the season viz wall
+## T9 · Visualizations tab: the season wall on the redesigned cards
 
-- **status:** todo
+- **status:** later
 - **model:** fable
 - **needs:** T2, T3
 - **files:** `src/lib/data/player-season-viz.ts` (new, pure), `player-profile/profile-visualizations-view.tsx` (new), `src/lib/data/player-season-server.ts`, `tests/player-season-viz.spec.ts` — guess
 - **routes:** `/dashboard/team/roster/[playerId]?tab=visualizations`
 - **done when:**
-  - [ ] A pure `buildSeasonTiles(perMatch, sides, savedViews)` runs `vizPoints` + `computeViz` per match with that match's `isPlayer1`, `MatchFilterContext` and the T1 errors-judged rule, and merges `dots`/`total` per tile key — the player's five default cuts then the opponents' five (`defaultCutsFor` order), plus one tile per workspace saved view
-  - [ ] Tiles are computed on the server in the loader (no season points reach the client); the client wall renders `CourtTile as="static"` with `playerName`, `name`, `pills`, `tileCountLabel`, no `href`, no fullscreen glyph, on `VIZ_TILE_GRID_CLASS`
-  - [ ] A Default/Saved switch with `viz-wall.tsx`'s pill markup; Saved lists the workspace's `getSavedViews` tiles read-only (no Create view, no Manage); the switch is absent when there are no saved views
-  - [ ] Zero drawable points renders `viz-wall.tsx`'s `EmptyWall` sentence adapted to the season; a spec asserts merged totals equal the per-match sums and the ten-tile order
-- **notes:** Confirm `computeViz`/`viz-model.ts` import nothing client-only before calling it server-side; if it does, move the pure part.
+  - [ ] A pure `buildSeasonCards(perMatch, side)` merges, per card of the redesign's four default cuts (First serves, Returns, Rally shots, Unforced errors — `default-cuts.ts` after the redesign), each analyzed match's dots, count and split-bar `StatRow`s, computed per match with that match's own `isPlayer1` and errors-judged rule; a spec asserts every merged count and split-bar segment equals the sum of the per-match parts
+  - [ ] Cards are merged on the server (no season points reach the client) for both sides; the tab renders the redesign's wall components with its `You | Opponent` switch (one player at a time) and `Default | Saved` strip, in the same 2×2 card grid and footer anatomy as the match report's wall
+  - [ ] Clicking a card opens the redesign's lightbox read-only: court, legend filter, Filters panel and the Statistics column over the season's merged dots; no "Watch these N points" and no "Save as view" (they act on one match's points); `?cut=` handling follows the redesign's
+  - [ ] Zero analyzed matches renders the redesign's empty wall with a season sentence (no `0`/`0%`); a rendered-markup spec covers it
+- **notes:** Paused until the Visualizations redesign (plan `docs/plans/2026-11-08-visualizations-redesign-build.md`, phases 1–6) is committed on `claude/zealous-kalam-f1a398` or merged into `splitstep-integration`; merge it into this branch only with the author's OK, then set this task to `todo`. Build on the redesign's components and tile builder; do not edit `match-detail/shots/` beyond a season-aware prop the redesign session agrees to — note any such need for that session first. Read-only lightbox decided by the author 2026-11-08.
 
 ## T10 · Loading skeletons for the profile
 
