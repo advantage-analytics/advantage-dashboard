@@ -10,6 +10,7 @@ import {
   computeVizStats,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
+  lightboxCountLine,
   wallSegmentReadout,
   wallSummaryFor,
 } from "@/components/dashboard/matches/match-detail/shots/wall-summary";
@@ -98,8 +99,13 @@ test("every card's split bar sums to its count, and its count to computeViz/comp
         result.count - (result.serveOutOrNetCount ?? 0),
       );
     } else if (tile.cut === "errors") {
-      expect(summary.count).toBe(result.count);
-      expect(summary.countLabel).toBe(`${result.count} total`);
+      // The label counts what the bar draws.
+      expect(summary.countLabel).toBe(`${summary.count} total`);
+      expect(summary.count).toBe(
+        stats.groups
+          .find((g) => g.key === "miss")!
+          .rows.reduce((n, r) => n + r.count, 0),
+      );
     } else {
       // The Statistics rows' own denominator.
       const group = stats.groups.find((g) =>
@@ -222,4 +228,70 @@ test("the wall's player is URL-backed and is the only key the wall keeps", () =>
       filters: EMPTY_VIZ_FILTERS,
     }),
   ).toBe("tab=shots");
+});
+
+const statsOf = (
+  key: string,
+  rows: { key: string; count: number; won: number; share?: boolean }[],
+) => ({
+  title: "",
+  subtitle: "",
+  sentence: null,
+  total: rows.reduce((n, r) => n + r.count, 0),
+  groups: [
+    {
+      key,
+      label: null,
+      rows: rows.map((r) => ({
+        ...r,
+        label: r.key,
+        winPct: r.count === 0 ? null : Math.round((100 * r.won) / r.count),
+      })),
+    },
+  ],
+});
+
+test("the errors card's 'N total' is the sum of its own segments, whatever the result count says", () => {
+  const summary = wallSummaryFor(
+    "errors",
+    // A result count that disagrees with the drawn rows can't leak into the label.
+    { count: 9 },
+    statsOf("miss", [
+      { key: "net", count: 3, won: 0, share: true },
+      { key: "long", count: 2, won: 0, share: true },
+      { key: "in", count: 1, won: 0, share: true },
+    ]),
+    [],
+  );
+  expect(summary.countLabel).toBe("6 total");
+  expect(summary.segments.reduce((n, s) => n + s.count, 0)).toBe(6);
+});
+
+test("the lightbox count line drops the won clause when nothing landed in", () => {
+  const nothingIn = statsOf("direction", [
+    { key: "crosscourt", count: 0, won: 0 },
+    { key: "middle", count: 0, won: 0 },
+    { key: "dtl", count: 0, won: 0 },
+  ]);
+  expect(
+    lightboxCountLine(
+      "returnPlacement",
+      { count: 4, noun: "returns" },
+      nothingIn,
+      [],
+    ),
+  ).toBe("0 of 4 in");
+  const someIn = statsOf("direction", [
+    { key: "crosscourt", count: 2, won: 1 },
+    { key: "middle", count: 1, won: 1 },
+    { key: "dtl", count: 0, won: 0 },
+  ]);
+  expect(
+    lightboxCountLine(
+      "returnPlacement",
+      { count: 4, noun: "returns" },
+      someIn,
+      [],
+    ),
+  ).toBe("3 of 4 in, 2 of those 3 won");
 });

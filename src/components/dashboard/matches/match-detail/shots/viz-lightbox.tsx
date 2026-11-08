@@ -37,7 +37,7 @@ import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
 import { LightboxCourt, type CourtOutline } from "./lightbox-court";
 import { LightboxStats } from "./lightbox-stats";
-import { statPickDotIds, type StatPick } from "./stat-cut";
+import { serveRowDotIds, statPickDotIds, type StatPick } from "./stat-cut";
 import {
   dotMatchesPick,
   isPlayable,
@@ -200,7 +200,19 @@ export function VizLightbox({
   /** The right column: the points behind the marks, or their statistics. */
   const [pane, setPane] = useState<"points" | "stats">("points");
   /** The legend's one choice (Won · Lost · Out · Ace), local to this card. */
-  const [legendPick, setLegendPick] = useState<LegendPick | null>(null);
+  // Stamped with the cut it was picked on: a chart-menu cut switch
+  // (Placement → Contact) lets go of it, so it can never empty a court whose
+  // marks it does not describe. A You | Opponent switch keeps it (canvas S08).
+  const [legendState, setLegendState] = useState<{
+    cut: string | null;
+    pick: LegendPick;
+  } | null>(null);
+  const legendPick =
+    legendState !== null && legendState.cut === state.cut
+      ? legendState.pick
+      : null;
+  const setLegendPick = (pick: LegendPick | null) =>
+    setLegendState(pick === null ? null : { cut: state.cut, pick });
   /** A Statistics row chosen (court and Points keep its marks) or hovered
    *  (court outlines it). Stamped with the court it was picked on, so a
    *  player or cut switch lets go of it. */
@@ -230,21 +242,48 @@ export function VizLightbox({
   );
 
   // A Statistics row's marks, by the stats' own rules (`stat-cut.ts`).
-  const rowIds = useCallback(
-    (pick: StatPick | null): Set<string> | null =>
-      pick === null || result === null || cut === null
-        ? null
-        : statPickDotIds(
+  // The serve rows' marks, all six at once, while Statistics is open on the
+  // serve cut — so hovering across its rows reads a set rather than running
+  // a zone's `computeViz` per hover. Rebuilt when the filters change.
+  const serveRows = useMemo(
+    () =>
+      pane === "stats" && cut === "serve"
+        ? serveRowDotIds(
             points,
-            cut,
             state.filters,
             subjectIsPlayer1,
             matchCtx,
-            result.dots,
-            pick,
             bands,
-          ),
-    [points, cut, state.filters, subjectIsPlayer1, matchCtx, result, bands],
+          )
+        : null,
+    [pane, cut, points, state.filters, subjectIsPlayer1, matchCtx, bands],
+  );
+  const rowIds = useCallback(
+    (pick: StatPick | null): Set<string> | null => {
+      if (pick === null || result === null || cut === null) return null;
+      const cached = serveRows?.get(pick.row);
+      if (cached) return cached;
+      return statPickDotIds(
+        points,
+        cut,
+        state.filters,
+        subjectIsPlayer1,
+        matchCtx,
+        result.dots,
+        pick,
+        bands,
+      );
+    },
+    [
+      serveRows,
+      points,
+      cut,
+      state.filters,
+      subjectIsPlayer1,
+      matchCtx,
+      result,
+      bands,
+    ],
   );
   const pickIds = useMemo(
     () => rowIds(activeStatPick),

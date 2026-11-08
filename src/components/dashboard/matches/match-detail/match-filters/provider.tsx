@@ -251,6 +251,17 @@ export function useMatchFilters(): MatchFiltersValue {
 }
 
 /**
+ * The provider's "back to the whole match", or a no-op outside one. Unlike
+ * `useMatchFilters()` it builds no fallback (which needs the match's data),
+ * so `MatchReportProvider` can read it wherever it is mounted — its
+ * `watchPointSet` clears the shared filters through this.
+ */
+export function useClearMatchFilters(): () => void {
+  const provided = use(MatchFiltersContext);
+  return provided ? provided.clearFilters : noop;
+}
+
+/**
  * Whether this match's errors are judged (`MatchFilterContext.errorSplitJudged`)
  * — the one flag the Shots tab's errors cut, Error type options and link
  * parsing read. Unlike `useMatchFilters()` it needs no `MatchDataProvider`:

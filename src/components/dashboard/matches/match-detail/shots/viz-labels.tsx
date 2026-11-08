@@ -59,7 +59,9 @@ const WON_ITEM: LegendItem = {
   key: "won",
   glyph: "circle",
   color: "var(--viz-good)",
-  label: "Point won",
+  // Won / Lost / Out — the lightbox legend's own words (its filter keys,
+  // `LEGEND_PICKS`), so the wall and every legend in the tab read alike.
+  label: "Won",
 };
 const LOST_ITEM: LegendItem = {
   key: "lost",
@@ -71,7 +73,7 @@ const MISS_ITEM: LegendItem = {
   key: "miss",
   glyph: "circle",
   color: "var(--ink-300)",
-  label: "Miss",
+  label: "Out",
 };
 const OUTCOME_ITEMS: LegendItem[] = [WON_ITEM, LOST_ITEM, MISS_ITEM];
 const ERROR_ITEM: LegendItem = { ...LOST_ITEM, key: "error", label: "Error" };

@@ -72,3 +72,43 @@ export function statPickDotIds(
       .map((d) => d.id),
   );
 }
+
+/** The serve cut's six Statistics rows, as `computeVizStats` keys them. */
+export const SERVE_ROW_KEYS = [
+  "deuce-t",
+  "deuce-body",
+  "deuce-wide",
+  "ad-t",
+  "ad-body",
+  "ad-wide",
+] as const;
+
+/**
+ * Every serve row's marks at once — `statPickDotIds` for each of the six
+ * rows, so a caller that hovers across them (the lightbox's Statistics
+ * column) runs each zone's `computeViz` once per filter state rather than
+ * once per hover. Identical sets, row by row.
+ */
+export function serveRowDotIds(
+  points: MatchPoint[],
+  filters: VizFilters,
+  subjectIsPlayer1: boolean,
+  matchCtx: MatchFilterContext | undefined,
+  bands: BandSettings,
+): Map<string, Set<string>> {
+  return new Map(
+    SERVE_ROW_KEYS.map((row) => [
+      row,
+      statPickDotIds(
+        points,
+        "serve",
+        filters,
+        subjectIsPlayer1,
+        matchCtx,
+        [],
+        { group: row.split("-")[0], row, label: row },
+        bands,
+      ),
+    ]),
+  );
+}

@@ -12,6 +12,8 @@ import {
 } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { pointSetQuery } from "@/lib/match-video/point-set";
+import { useClearMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import { MATCH_FILTERS_PARAM } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { matchViewSource, track, type MatchViewSource } from "@/lib/analytics";
 import {
   ALL_REPORT_VIEWS,
@@ -309,6 +311,11 @@ export function MatchReportProvider({
   const [pendingCut, setPendingCut] = useState<FilmCutIntent | null>(null);
   const clearPendingCut = useCallback(() => setPendingCut(null), []);
 
+  // `watchPointSet` clears the shared filters: the Video list must show
+  // exactly the points it hands over, not those points AND whatever `?f=`
+  // still holds.
+  const clearFilters = useClearMatchFilters();
+
   const actions = useMemo<MatchReportActions>(
     () => ({
       selectView(next) {
@@ -334,6 +341,11 @@ export function MatchReportProvider({
       },
       watchPointSet(pointNumbers, label) {
         if (!hasPlayableVideo || pointNumbers.length === 0) return;
+        // The set IS the cut: the shared layer goes for this hand-off, the
+        // way a statistic's `watchCut` writes its own. Cleared in state AND
+        // in the pushed URL, so the provider's mirror has nothing to put
+        // back; Back returns to the entry that still carries `?f=`.
+        clearFilters();
         const query = new URLSearchParams(
           pointSetQuery(
             window.location.search.replace(/^\?/, ""),
@@ -342,6 +354,7 @@ export function MatchReportProvider({
           ),
         );
         query.set("tab", "film");
+        query.delete(MATCH_FILTERS_PARAM);
         query.delete("point");
         query.delete("fullscreen");
         window.history.pushState(null, "", `${pathname}?${query.toString()}`);
@@ -368,7 +381,15 @@ export function MatchReportProvider({
         setInsight("expanded");
       },
     }),
-    [view, searchParams, pathname, defaultView, hasPlayableVideo, matchId],
+    [
+      view,
+      searchParams,
+      pathname,
+      defaultView,
+      hasPlayableVideo,
+      matchId,
+      clearFilters,
+    ],
   );
 
   const meta = useMemo<MatchReportMeta>(

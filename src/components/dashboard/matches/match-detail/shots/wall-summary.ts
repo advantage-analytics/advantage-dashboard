@@ -133,7 +133,10 @@ export function wallSummaryFor(
   const won = segments.reduce((n, s) => n + s.won, 0);
 
   let countLabel: string;
-  if (cut === "errors") countLabel = `${total} total`;
+  // The errors card counts what its bar draws: every Miss row's errors
+  // (Net, Long, Wide, and Landed in when any read in), so "N total" and the
+  // segments can never disagree.
+  if (cut === "errors") countLabel = `${count} total`;
   else if (count === total) countLabel = `${count} in`;
   else countLabel = `${count} of ${total} in`;
 
@@ -183,7 +186,7 @@ export function wallSegmentReadout(
 /**
  * The lightbox header's count clause, after "Serve placement · You · ":
  * "27 of 31 in, 17 of those 27 won" — the card's own count, then the points
- * won among them. The errors card says its count alone ("14 total"); a cut
+ * won among them ("0 of 4 in" alone when nothing landed in). The errors card says its count alone ("14 total"); a cut
  * with no wall card (return contact, rally position) counts its Depth rows,
  * which hold every mark: "40 returns, 22 won".
  */
@@ -201,6 +204,8 @@ export function lightboxCountLine(
   ) {
     const summary = wallSummaryFor(cut, result, stats, depthRows);
     if (summary.share) return summary.countLabel;
+    // Nothing landed in: no "0 of those 0 won" to say.
+    if (summary.count === 0) return summary.countLabel;
     const won = summary.segments.reduce((n, s) => n + s.won, 0);
     return `${summary.countLabel}, ${won} of those ${summary.count} won`;
   }

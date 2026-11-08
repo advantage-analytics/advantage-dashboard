@@ -4,18 +4,23 @@
  * points". Pure; it only reads `VizDot`s `computeViz` already produced.
  *
  * A mark is a shot, not a point: a return card can draw two marks for one
- * point, and a serve that went out is a fault, not a point — the rally
+ * point, and a FIRST serve that went out is a fault, not a point — the rally
  * carries on with the second serve (canvas S07: "A fault isn't a point, so
- * there is no clip"). So the list is the distinct `meta.pointId`s of the
- * marks, in match order, leaving out serve marks that missed.
+ * there is no clip"). A missed SECOND serve is a double fault, which ends
+ * the point, so it is one. The list is the distinct `meta.pointId`s of the
+ * marks, in match order, leaving out first-serve marks that missed.
  */
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
-import type { Cut, VizDot } from "./viz-model";
+import { isFirstServeShotType, type Cut, type VizDot } from "./viz-model";
 
-/** The mark stands for a point you could play: it is not a missed serve. */
+/**
+ * The mark stands for a point you could play: anything but a missed first
+ * serve. A missed second serve is a double fault, and that is a point.
+ */
 export function markIsPoint(cut: Cut, dot: VizDot): boolean {
-  return !(cut === "serve" && dot.outcome === "miss");
+  if (cut !== "serve" || dot.outcome !== "miss") return true;
+  return !isFirstServeShotType(dot.meta?.shotType);
 }
 
 /**

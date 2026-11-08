@@ -296,3 +296,46 @@ test("Statistics: rows over 4px bars with the average tick; hover outlines a zon
   await expect(marks).toHaveCount(all);
   await expect(strip).toHaveCount(0);
 });
+
+test("Watch hands the Video tab exactly its set: the shared ?f= filters do not ride along", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watch&f=sp.y`);
+  await page.getByRole("button", { name: /^Watch these/ }).click();
+  await expect(page).toHaveURL(/tab=film/);
+  const url = new URL(page.url());
+  expect(url.searchParams.get("pn")).toMatch(/^\d+$/);
+  expect(url.searchParams.has("f")).toBe(false);
+});
+
+test("the legend's pick survives a You / Opponent switch but not a cut change", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog");
+  const legend = dialog.getByRole("group", { name: "Filter by outcome" });
+  await legend.getByRole("button", { name: /^Won/ }).click();
+  await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  // A different cut under the same card (the chart menu's Placement →
+  // Contact does this; a Back/Forward entry does too) lets go of it.
+  await page.evaluate(() => {
+    window.history.pushState(null, "", "/?tab=shots&cut=rallyPlacement");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await expect(dialog).toContainText("Rally placement");
+  await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
+  await expect(marks).toHaveCount(6);
+});

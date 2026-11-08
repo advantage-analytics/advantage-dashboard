@@ -5,7 +5,11 @@ import {
   computeVizStats,
   type Cut,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
-import { statPickDotIds } from "@/components/dashboard/matches/match-detail/shots/stat-cut";
+import {
+  SERVE_ROW_KEYS,
+  serveRowDotIds,
+  statPickDotIds,
+} from "@/components/dashboard/matches/match-detail/shots/stat-cut";
 import { DEFAULT_BANDS, type BandSettings } from "@/lib/data/viz-bands";
 import { ASYMMETRIC_SERVES } from "./fixtures/viz-serve-points";
 import { RALLY_POINTS } from "./fixtures/viz-rally-points";
@@ -60,4 +64,37 @@ test("a Statistics row's filter keeps exactly the marks the row counted", () => 
           }
       }
   expect(checked).toBeGreaterThan(10);
+});
+
+test("the serve rows precomputed for hovering are the row filter's own marks, row by row", () => {
+  for (const isPlayer1 of [true, false])
+    for (const filters of [
+      { ...EMPTY_VIZ_FILTERS },
+      { ...EMPTY_VIZ_FILTERS, ball: ["first" as const] },
+    ]) {
+      const result = computeViz(POINTS, "serve", filters, isPlayer1);
+      const all = serveRowDotIds(
+        POINTS,
+        filters,
+        isPlayer1,
+        undefined,
+        DEFAULT_BANDS,
+      );
+      expect([...all.keys()]).toEqual([...SERVE_ROW_KEYS]);
+      for (const row of SERVE_ROW_KEYS)
+        expect([...all.get(row)!].sort()).toEqual(
+          [
+            ...statPickDotIds(
+              POINTS,
+              "serve",
+              filters,
+              isPlayer1,
+              undefined,
+              result.dots,
+              { group: row.split("-")[0], row, label: row },
+              DEFAULT_BANDS,
+            ),
+          ].sort(),
+        );
+    }
 });
