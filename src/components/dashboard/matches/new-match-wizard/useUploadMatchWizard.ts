@@ -1531,6 +1531,9 @@ export function useUploadMatchWizard({
         fileName: uploadedFile?.name ?? null,
         preset: preset ?? null,
         attachedLine,
+        // Only a roster answer is worth keeping: "myself" is the uploader and
+        // a personal workspace never asks. Re-checked on resume.
+        subject: matchSubject?.kind === "roster" ? matchSubject : null,
       });
       if (!saved) {
         // Every reason `saveMatchDraft` returns null — no workspace context,
@@ -1558,6 +1561,7 @@ export function useUploadMatchWizard({
     uploadedFile,
     preset,
     attachedLine,
+    matchSubject,
   ]);
 
   // Load data from localStorage when modal opens
@@ -1756,6 +1760,11 @@ export function useUploadMatchWizard({
         // A row saved before the video check stopped being stored still
         // carries it — see `VIDEO_CHECK_FIELDS`.
         ...withoutVideoCheck(draft.formData),
+        // A seeded For answer names the player, never the draft's saved text:
+        // the roster may have renamed them, or a `?player=` link may name
+        // someone else. A name that disagrees with the bound id is the
+        // mismatch §3.1 exists to prevent (see the localStorage branch below).
+        ...(seededPlayerName ? { playerName: seededPlayerName } : {}),
       });
       if (draft.attachedLine) {
         attachedLineRef.current = draft.attachedLine;
@@ -1765,10 +1774,13 @@ export function useUploadMatchWizard({
         const kind = getProviderKind(draftProvider);
         setProgressKind(kind);
         // The file never survives a draft, so resume lands where it is picked
-        // again — never past it, whatever step the draft recorded. Nor does
-        // the who-played answer, so a team draft lands one step earlier, on
-        // the picker: see `draftResumeStep`.
-        setStep(draftResumeStep(askWhoPlayed));
+        // again — never past it, whatever step the draft recorded. The
+        // who-played answer survives only when the page re-checked it against
+        // the roster and seeded it as `initialSubject`; without it a team
+        // draft lands one step earlier, on the picker: see `draftResumeStep`.
+        setStep(
+          draftResumeStep(askWhoPlayed, matchSubjectRef.current !== null),
+        );
       }
       return;
     }

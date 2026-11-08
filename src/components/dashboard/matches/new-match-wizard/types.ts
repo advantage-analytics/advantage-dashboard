@@ -742,6 +742,18 @@ export interface MatchDraft {
   fileName: string | null;
   preset: EventPreset | null;
   attachedLine: LineOffer | null;
+  /**
+   * Who the match is for, in a team workspace — the For answer from step one.
+   *
+   * Optional because rows saved before it was stored (and connector drafts)
+   * carry none. A HINT, never a fact: the page re-checks it against the
+   * active program's roster before seeding it (`rosterSubjectFor` in
+   * `matches/new/page.tsx`), exactly as it checks a `?player=` link, so an
+   * archived or removed player resumes onto the picker instead of onto a
+   * stranger's `player1_id`. `RosterSubject`'s shape, spelt out here because
+   * `subject-eligibility.ts` imports this file.
+   */
+  subject?: { kind: "roster"; playerId: string; name: string } | null;
   updatedAt: string;
 }
 

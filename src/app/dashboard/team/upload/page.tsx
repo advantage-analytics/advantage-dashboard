@@ -10,6 +10,7 @@ import {
   programNamesFor,
 } from "@/lib/data/schedule-server";
 import { loadMatchDraft } from "@/lib/wizard/actions";
+import { rosterSubjectFor } from "@/lib/data/roster-subject-server";
 import {
   draftBelongsToWorkspace,
   draftWorkspaceRefusal,
@@ -126,9 +127,20 @@ export default async function TeamUploadPage({
   if (draftId) {
     const loadedDraft = await loadMatchDraft(draftId);
     if (loadedDraft) {
-      return draftBelongsToWorkspace(loadedDraft.programId, active) ? (
-        <UploadMatchFlow draft={loadedDraft} />
-      ) : (
+      if (draftBelongsToWorkspace(loadedDraft.programId, active)) {
+        // The draft's For answer, re-checked against this roster — see
+        // `MatchDraft.subject`. A miss resumes on the picker.
+        const initialSubject = loadedDraft.subject
+          ? await rosterSubjectFor(active.id, loadedDraft.subject.playerId)
+          : null;
+        return (
+          <UploadMatchFlow
+            draft={loadedDraft}
+            initialSubject={initialSubject}
+          />
+        );
+      }
+      return (
         <UploadMatchFlow
           draftRefusal={draftWorkspaceRefusal(
             workspace.available.find((option) =>

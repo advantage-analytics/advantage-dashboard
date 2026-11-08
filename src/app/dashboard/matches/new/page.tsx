@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard/UploadMatchFlow";
 import { AttachmentWizardRoute } from "@/components/dashboard/matches/match-video-attachment/AttachmentWizardRoute";
-import type { RosterSubject } from "@/components/dashboard/matches/new-match-wizard/useUploadMatchWizard";
 import {
   draftBelongsToWorkspace,
   draftWorkspaceRefusal,
@@ -10,7 +9,7 @@ import { loadMatchDraft } from "@/lib/wizard/actions";
 import { redirect } from "next/navigation";
 import { getAddVideoTarget } from "@/lib/data/add-video-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { getRosterPlayerOptions } from "@/lib/data/roster-server";
+import { rosterSubjectFor } from "@/lib/data/roster-subject-server";
 import { isProviderSupported, type ProviderId } from "@/lib/services/upload";
 import { isMatchVideoMode } from "@/lib/match-video/types";
 import { providerForRecordingSource } from "@/app/onboarding/answers";
@@ -56,34 +55,6 @@ export async function generateMetadata({
       align: "Adjust match video",
     }[visit.mode],
   };
-}
-
-/**
- * Who a `?player=` link names, or null for an id that names nobody here.
- *
- * The id arrives from a URL and is untrusted, so this is a lookup and not a
- * translation: `program_roster_full` returns nothing to a non-member, which
- * makes another program's id resolve to null rather than to a stranger.
- *
- * Both id eras are accepted. The roster's own links send a
- * `program_players.id`, but a claimed player's older links carry their login
- * id, and `RosterPlayerOption` keeps both columns — matching on only one is
- * the exact defect that made the previous shortcut a no-op. Players only:
- * `rosterPlayerOptions` drops staff seats, and the For field must offer nobody
- * its own picker would not.
- */
-async function rosterSubjectFor(
-  programId: string,
-  id: string,
-): Promise<RosterSubject | null> {
-  const onRoster = (await getRosterPlayerOptions(programId)).find(
-    (row) => row.playerId === id || row.userId === id,
-  );
-  // Their `playerId`, never the id as typed — the login era resolves to the
-  // profile id, which is what `matches.player1_id` wants.
-  return onRoster
-    ? { kind: "roster", playerId: onRoster.playerId, name: onRoster.name }
-    : null;
 }
 
 /**
@@ -240,9 +211,13 @@ export default async function NewMatchPage({
   // ask For at all — in a personal one the uploader IS the player, so a
   // `?player=` has nowhere to land.
   // Independent of each other, so they overlap too.
+  const subjectId = player || draft?.subject?.playerId || null;
   const [initialSubject, firstUpload] = await Promise.all([
-    player && workspace?.active.kind === "team"
-      ? rosterSubjectFor(workspace.active.id, player)
+    // A link's `?player=` outranks the draft's saved answer: it is the newer
+    // choice. Both are looked up, never trusted — a draft's player may have
+    // been archived or removed since it was saved.
+    workspace?.active.kind === "team" && subjectId
+      ? rosterSubjectFor(workspace.active.id, subjectId)
       : null,
     workspace ? viewerHasNoMatches(workspace.viewer.id) : false,
   ]);

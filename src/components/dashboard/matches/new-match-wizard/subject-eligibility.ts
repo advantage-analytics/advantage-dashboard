@@ -316,19 +316,23 @@ export function identityAthleteFor(input: {
 
 /**
  * Where a resumed draft (no preset) lands, given whether this wizard asks
- * who played.
+ * who played and whether the draft's saved answer to it survived.
  *
- * The file never survives a draft, so a personal draft resumes on the file
- * step. A draft that has to ask who played — a team workspace — resumes on
- * the provider step: the who-played answer is not persisted (durable draft
- * persistence is deliberately out of scope), so the subject is missing, and
- * a flow that opened past the step that asks it would either create a match
- * for nobody or fall back to the uploader. The draft itself stays whole — the
+ * The file never survives a draft, so a draft resumes on the file step. A
+ * draft that has to ask who played — a team workspace — lands there only when
+ * its saved player was re-checked against the roster and seeded
+ * (`MatchDraft.subject`). Without one — an older row, a player since archived
+ * or removed — it resumes on the provider step, because a flow that opened
+ * past the step that asks it would either create a match for nobody or fall
+ * back to the uploader. The draft itself stays whole either way — the
  * provider, the form and any attached line are all seeded; only the step
- * returns to selection.
+ * differs.
  */
-export function draftResumeStep(asksWhoPlayed: boolean): Step {
-  return asksWhoPlayed ? "provider" : "file";
+export function draftResumeStep(
+  asksWhoPlayed: boolean,
+  hasSubject = false,
+): Step {
+  return asksWhoPlayed && !hasSubject ? "provider" : "file";
 }
 
 /**
