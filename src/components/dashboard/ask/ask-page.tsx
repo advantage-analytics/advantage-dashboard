@@ -168,6 +168,12 @@ export interface AskPageProps {
    * once, for a page opened with no conversation. None when omitted.
    */
   initialTags?: AskTag[];
+  /**
+   * Text the route read off `?q=` (`askQuestionFromQuery`), put in the
+   * composer with `initialTags` on a page opened with no conversation. Never
+   * sent: the player presses send. "" when omitted.
+   */
+  initialQuestion?: string;
 }
 
 export function AskPage(props: AskPageProps) {
@@ -243,6 +249,7 @@ function AskThread({
   conversation,
   sentMatchId = null,
   initialTags = [],
+  initialQuestion = "",
 }: AskPageProps) {
   const router = useRouter();
   const basePath = askBasePath(scope);
@@ -257,9 +264,10 @@ function AskThread({
     conversationId: conversation?.id ?? null,
     messages: conversation?.messages ?? [],
     programId: askScopeProgramId(scope),
-    // The tags the page arrived with (`entry.ts`), onto an empty page only.
-    ...(initialTags.length > 0
-      ? { initialDraft: { text: "", tags: initialTags } }
+    // The tags and question the page arrived with (`entry.ts`), onto an
+    // empty page only.
+    ...(initialTags.length > 0 || initialQuestion !== ""
+      ? { initialDraft: { text: initialQuestion, tags: initialTags } }
       : {}),
   });
 

@@ -850,8 +850,8 @@ export function useAskStream(initial: {
   /** The team page's program; null or absent on the personal page. */
   programId?: string | null;
   /**
-   * What the composer starts with — the tags an entry link arrived with
-   * (`?match=`, `entry.ts`). Read once, when the thread is seeded, and only
+   * What the composer starts with — the tags and question an entry link
+   * arrived with (`?match=`, `?q=`, `entry.ts`). Never sent. Read once, when the thread is seeded, and only
    * onto an empty page: an open conversation is about what it is about.
    */
   initialDraft?: AskQuestion;

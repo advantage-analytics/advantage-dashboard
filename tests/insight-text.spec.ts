@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { splitInsight } from "@/components/dashboard/matches/match-detail/insight-text";
+import {
+  splitInsight,
+  whyThisQuestion,
+} from "@/components/dashboard/matches/match-detail/insight-text";
+import { ASK_ENTRY_QUESTION_MAX } from "@/lib/services/ask/entry";
 
 /**
  * The insight card's claim/evidence split (F2). Pure and offline: nothing
@@ -56,5 +60,26 @@ test.describe("splitInsight", () => {
     const summary =
       "Reid mixed serve placement, e.g. the wide slice, to break rhythm.";
     expect(splitInsight(summary)).toEqual({ claim: summary, evidence: null });
+  });
+});
+
+test.describe("whyThisQuestion", () => {
+  test("quotes the claim, dropping its closing period", () => {
+    expect(whyThisQuestion(F2_CLAIM)).toBe(
+      'My report says "The serve, not the rally, decided the second set". Which stats from this match support that, and do any contradict it?',
+    );
+  });
+
+  test("keeps a question or exclamation mark inside the quotes", () => {
+    expect(whyThisQuestion(" What a comeback! ")).toBe(
+      'My report says "What a comeback!". Which stats from this match support that, and do any contradict it?',
+    );
+  });
+
+  test("a long claim is cut, never the question's ending", () => {
+    const question = whyThisQuestion("word ".repeat(80));
+    expect(question.length).toBeLessThanOrEqual(ASK_ENTRY_QUESTION_MAX);
+    expect(question).toContain('word…". Which stats');
+    expect(question.endsWith("do any contradict it?")).toBe(true);
   });
 });

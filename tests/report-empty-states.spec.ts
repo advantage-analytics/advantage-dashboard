@@ -286,9 +286,20 @@ test.describe("StatisticsView — stats_unavailable", () => {
 
 test.describe("MatchReportInsight", () => {
   const file = DETAIL + "report-insight-card.tsx";
-  const stubs = (summary: string | null) => ({
+  /** `next/link` as an anchor that keeps its href, so the link can be read. */
+  function LinkStub(props: { href: string; children?: React.ReactNode }) {
+    return React.createElement(
+      "a",
+      { "data-component": "Link", href: props.href },
+      props.children,
+    );
+  }
+  const stubs = (
+    summary: string | null,
+    askHref: (question?: string) => string | null = () => null,
+  ) => ({
     "next/image": { __esModule: true, default: () => null },
-    "next/link": { __esModule: true, default: marker("Link") },
+    "next/link": { __esModule: true, default: LinkStub },
     "@/components/dashboard/matches/match-detail/match-report-context": {
       useMatchReport: () => ({
         state: { insight: "expanded" },
@@ -298,6 +309,10 @@ test.describe("MatchReportInsight", () => {
     },
     "@/components/dashboard/matches/match-detail/insight-text": {
       splitInsight: (text: string) => ({ claim: text, evidence: null }),
+      whyThisQuestion: (claim: string) => `Q:${claim}`,
+    },
+    "@/components/dashboard/matches/match-detail/use-match-ask-href": {
+      useMatchAskHref: askHref,
     },
   });
 
@@ -322,6 +337,34 @@ test.describe("MatchReportInsight", () => {
     );
     expect(html).not.toContain('data-testid="insight-empty"');
     expect(html).toContain("You won the net.");
+  });
+
+  test('"Why this" asks about the claim, with the match tagged', () => {
+    const asked: (string | undefined)[] = [];
+    const html = render(
+      file,
+      "MatchReportInsight",
+      [],
+      stubs("You won the net.", (question) => {
+        asked.push(question);
+        return "/dashboard/ask?match=m1&q=x";
+      }),
+    );
+    expect(asked).toContain("Q:You won the net.");
+    expect(html).toContain('href="/dashboard/ask?match=m1&amp;q=x"');
+    expect(html).toContain("Why this");
+  });
+
+  test('no way into Ask (read-only, other workspace): no "Why this"', () => {
+    const html = render(
+      file,
+      "MatchReportInsight",
+      [],
+      stubs("You won the net."),
+    );
+    expect(html).toContain("You won the net.");
+    expect(html).not.toContain("Why this");
+    expect(html).not.toContain('data-component="Link"');
   });
 });
 
