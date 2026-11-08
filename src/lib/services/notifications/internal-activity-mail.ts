@@ -115,7 +115,7 @@ export async function notifyInternalEvent(
       case "support_message":
         return await notifySupportMessage(supabase, event.id);
       case "vendor_deletion_unrecorded":
-        return await notifyVendorDeletionUnrecorded(event.id);
+        return await notifyVendorDeletionUnrecorded(supabase, event.id);
       default:
         return await notifyUpload(supabase, event);
     }
@@ -345,13 +345,28 @@ async function notifySupportMessage(
 }
 
 /**
- * The match is already deleted when this arrives, so there is no row to read
- * back: the id is the whole fact. A forged body can at most mail the inbox
- * one id once, which `claimSend` holds to.
+ * A real event arrives after the delete committed (pg_net sends only then),
+ * so the match is gone and the id is the whole fact. A match that still
+ * exists means the body did not come from the trigger: refuse it, or the
+ * inbox would ask SplitStep to delete a live match's video.
  */
 async function notifyVendorDeletionUnrecorded(
+  supabase: SupabaseClient,
   matchId: string,
 ): Promise<InternalEventOutcome> {
+  const { data: live, error } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("id", matchId)
+    .maybeSingle();
+  if (error) {
+    console.error(`${LOG} could not check the match`, {
+      matchId,
+      error: error.message,
+    });
+    return "failed";
+  }
+  if (live) return "not_found";
   if (!(await claimSend(`vendor_deletion_unrecorded:${matchId}`))) {
     return "duplicate";
   }

@@ -124,3 +124,21 @@ test("the unrecorded-deletion alert names the MatchID to forward by hand", async
   expect(msg.text).toContain("MatchID");
   expect(msg.text).toContain("11111111-1111-4111-8111-111111111111");
 });
+
+test("an unrecorded-deletion alert for a match that still exists is refused", async () => {
+  const { notifyInternalEvent } =
+    await import("@/lib/services/notifications/internal-activity-mail");
+  const id = "11111111-1111-4111-8111-111111111111";
+  const q = {
+    select: () => q,
+    eq: () => q,
+    maybeSingle: async () => ({ data: { id }, error: null }),
+  };
+  const supabase = { from: () => q } as unknown as SupabaseClient;
+  expect(
+    await notifyInternalEvent(supabase, {
+      kind: "vendor_deletion_unrecorded",
+      id,
+    }),
+  ).toBe("not_found");
+});

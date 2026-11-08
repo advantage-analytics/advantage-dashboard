@@ -76,13 +76,21 @@ begin
       -- A failed record must never block the user's deletion. Instead the
       -- internal alerts inbox is mailed the match id to forward by hand
       -- (`vendor_deletion_unrecorded` in internal-activity-mail.ts).
-      -- `post_event` never raises, and pg_net sends only if the delete
-      -- commits.
+      -- pg_net sends only if the delete commits. The call has its own block:
+      -- post_event catches errors in its body, not in calling it (a missing
+      -- function or schema privilege), and an error raised in this handler
+      -- would abort the delete.
       raise warning 'record_vendor_deletion_requests failed for match %: %',
         old.id, sqlerrm;
-      perform internal_alerts_private.post_event(
-        'vendor_deletion_unrecorded', old.id
-      );
+      begin
+        perform internal_alerts_private.post_event(
+          'vendor_deletion_unrecorded', old.id
+        );
+      exception
+        when others then
+          raise warning 'vendor_deletion_unrecorded alert for match % not queued: %',
+            old.id, sqlerrm;
+      end;
   end;
   return old;
 end;
