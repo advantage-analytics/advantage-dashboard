@@ -525,7 +525,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
   );
 }
 
-function SegmentTooltip({
+export function SegmentTooltip({
   open,
   label,
   detail,

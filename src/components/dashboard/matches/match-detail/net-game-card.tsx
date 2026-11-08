@@ -11,7 +11,7 @@ import {
   watchableSegmentProps,
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
-import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import { SegmentTooltip } from "@/components/dashboard/matches/match-detail/point-endings-card";
 import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { hatch } from "@/components/dashboard/matches/match-detail/chart-fills";
 import { useStatisticsLobKeys } from "@/components/dashboard/matches/match-detail/statistics-lob-keys";
@@ -22,7 +22,6 @@ import {
   type NetGameTally,
 } from "@/components/dashboard/matches/match-detail/match-filters/net-game";
 import { EmptyMark } from "@/components/ui/empty-mark";
-import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
 import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import { surnameLabels } from "@/lib/data/match-utils";
 
@@ -453,38 +452,5 @@ export function NetGameCard() {
 
       {legend}
     </section>
-  );
-}
-
-function SegmentTooltip({
-  open,
-  label,
-  detail,
-  align,
-  watchable,
-}: {
-  open: boolean;
-  label: string;
-  detail: string;
-  align: "start" | "center" | "end";
-  /** The segment opens its points in the Video tab. */
-  watchable: boolean;
-}) {
-  const coarse = useCoarsePointer();
-  return (
-    <ChartTooltip
-      open={open}
-      align={align}
-      offset={6}
-      className="gap-0.5 px-2.5 py-2"
-    >
-      <span className="text-[12px] font-medium text-white">{label}</span>
-      <span className="tabular text-[11px] text-white/[0.64]">{detail}</span>
-      {watchable && (
-        <span className="text-[10px] text-white/[0.64]">
-          {coarse ? "Tap again to watch in Video" : "Click to watch in Video"}
-        </span>
-      )}
-    </ChartTooltip>
   );
 }

@@ -45,7 +45,7 @@ export const DRAWN_IN_DEPTH_M = 3.2;
  */
 export const LOB_APEX_M = 5.0;
 
-const isServeOrFeed = (shot: MatchShot) =>
+const isServeOrFeed = (shot: Pick<MatchShot, "shotType">) =>
   isServeShotType(shot.shotType) || isFeedShotType(shot.shotType);
 
 /**
@@ -173,9 +173,7 @@ export function isLobShot(
   shot: Pick<MatchShot, "shotType" | "videoTime">,
   lobKeys: ReadonlySet<number>,
 ): boolean {
-  if (isServeShotType(shot.shotType) || isFeedShotType(shot.shotType)) {
-    return false;
-  }
+  if (isServeOrFeed(shot)) return false;
   const type = (shot.shotType ?? "").toLowerCase();
   if (
     type.includes("volley") ||

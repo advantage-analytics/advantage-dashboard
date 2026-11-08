@@ -551,13 +551,15 @@ export function withLobAvailability(
   if (hasLobs) return groups;
   return groups.map((group) => ({
     title: group.title,
-    configs: group.configs.map((config) =>
-      config.fromPoints === "lobPointsWon"
-        ? { ...config, cut: undefined, note: NO_LOB_DATA_NOTE }
-        : config.fromPoints === "passingShotsWon"
-          ? { ...config, cut: undefined, note: NO_PASS_DATA_NOTE }
-          : config,
-    ),
+    configs: group.configs.map((config) => {
+      const note =
+        config.fromPoints === "lobPointsWon"
+          ? NO_LOB_DATA_NOTE
+          : config.fromPoints === "passingShotsWon"
+            ? NO_PASS_DATA_NOTE
+            : null;
+      return note ? { ...config, cut: undefined, note } : config;
+    }),
   }));
 }
 
