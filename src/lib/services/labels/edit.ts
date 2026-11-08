@@ -536,8 +536,9 @@ export type LabelPointState = LabelPointFields & {
  * only with today's derivation code rather than the session's pinned
  * `derivation_version`.
  *
- * `unclear`, `tags` and `result_called` never move the status. The server's write (edit-session.ts) and
- * the console's optimistic apply ({@link applyLabelShotPatch}) both call this.
+ * `unclear`, `tags` and `result_called` never move the status. The server's
+ * write (edit-session.ts) and the console's optimistic apply
+ * ({@link applyLabelShotPatch}) both call this.
  */
 export function labelShotStatusAfterPatch(
   current: LabelShotState,

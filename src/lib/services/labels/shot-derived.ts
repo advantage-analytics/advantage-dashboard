@@ -277,7 +277,8 @@ export function effectiveShotResult(
  * N, L — even a call that equals the seed's, such as Net picked on a stroke
  * the vendor called Net but whose landing reads in); on an added stroke, any
  * call; on a vendor stroke, one that is not the seeded call. The last rule
- * is the fallback for rows written before the flag existed. `positionPatch` writes the call the ends derive, so a stored
+ * is the fallback for rows written before the flag existed. `positionPatch`
+ * writes the call the ends derive, so a stored
  * call that disagrees with placed ends and with the seed got there by the
  * tray's call toggle or a review answer — the labeller saying the ball, not
  * the bounce, decides. A call still as seeded is the vendor's and the ends
