@@ -483,6 +483,15 @@ export interface MatchFilterContext {
    * from the row each.
    */
   errorSplitJudged?: boolean;
+  /**
+   * The match's lob shots, keyed by contact time (`lobShotKeys` in
+   * `net-game.ts`, off the ball-paths file). Absent or `null` when the match
+   * has no ball-paths file, or it has not loaded yet: a Film cut's
+   * `netEnding: "lobbed"` and `lobBy` then admit nothing, and "passed" keeps
+   * its lob-blind meaning. Only the Video tab and the Statistics cards that
+   * fetch the file set it; `buildFilterContext` never does.
+   */
+  lobKeys?: ReadonlySet<number> | null;
 }
 
 /** A video-derived (Advantage Intelligence) match, off the match row. */
@@ -769,20 +778,32 @@ export const NET_OVERHEAD_DEPTH_M = 8;
  * `net_points_*` figures. Change one and you must change the other.
  */
 export function cameToNet(point: MatchPoint, isPlayer1: boolean): boolean {
-  return (point.shots ?? []).some((shot) => {
-    if (shot.isPlayer1 !== isPlayer1) return false;
-    if (isServeShotType(shot.shotType) || isFeedShotType(shot.shotType)) {
-      return false;
-    }
-    const type = lower(shot.shotType);
-    const depth =
-      shot.contactY === null ? null : Math.abs(shot.contactY - NET_Y_M);
-    if (type.includes("volley")) return true;
-    if (type === "overhead") {
-      return depth === null || depth <= NET_OVERHEAD_DEPTH_M;
-    }
-    return shot.shotNumber >= 3 && depth !== null && depth <= NET_ZONE_DEPTH_M;
-  });
+  return (point.shots ?? []).some(
+    (shot) => shot.isPlayer1 === isPlayer1 && isNetShot(shot),
+  );
+}
+
+/**
+ * `cameToNet`'s per-shot test, whoever struck it: a volley, an overhead from
+ * up the court, or any other rally shot (shot 3 on) from inside the service
+ * line. Never a serve or a feed. Shared with `netEntryOf`
+ * (`net-game.ts`), whose "first shot at the net" must be the shot that made
+ * `cameToNet` true.
+ */
+export function isNetShot(
+  shot: Pick<MatchShot, "shotType" | "contactY" | "shotNumber">,
+): boolean {
+  if (isServeShotType(shot.shotType) || isFeedShotType(shot.shotType)) {
+    return false;
+  }
+  const type = lower(shot.shotType);
+  const depth =
+    shot.contactY === null ? null : Math.abs(shot.contactY - NET_Y_M);
+  if (type.includes("volley")) return true;
+  if (type === "overhead") {
+    return depth === null || depth <= NET_OVERHEAD_DEPTH_M;
+  }
+  return shot.shotNumber >= 3 && depth !== null && depth <= NET_ZONE_DEPTH_M;
 }
 
 /**

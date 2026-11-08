@@ -60,14 +60,14 @@ function byLabel(rows: H2HRow[], label: string): H2HRow {
 const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 
 test.describe("the row configuration", () => {
-  test("is sixteen rows in three groups of seven, four and five", () => {
+  test("is twenty rows in three groups of seven, four and nine", () => {
     expect(H2H_GROUPS.map((group) => group.title)).toEqual([
       "Serve",
       "Return",
       "Points",
     ]);
-    expect(H2H_GROUPS.map((group) => group.configs.length)).toEqual([7, 4, 5]);
-    expect(ALL_ROWS).toHaveLength(16);
+    expect(H2H_GROUPS.map((group) => group.configs.length)).toEqual([7, 4, 9]);
+    expect(ALL_ROWS).toHaveLength(20);
   });
 
   test("every label is sentence case", () => {
@@ -694,6 +694,9 @@ test.describe("the banner a label click lands", () => {
       "Break points converted",
       "Return winners",
       "Net points",
+      "Approach points",
+      "Lob points",
+      "Drop shot points",
       "Total points",
     ]);
   });
@@ -721,6 +724,10 @@ test.describe("errors until the split is judged", () => {
       expect(configs.map((c) => c.label)).toEqual([
         "Net point attempts",
         "Net points won",
+        "Approach points won",
+        "Passed the net player",
+        "Lob points won",
+        "Drop shot points won",
         "Winners",
         "Errors",
         "Total points won",
@@ -737,6 +744,10 @@ test.describe("errors until the split is judged", () => {
       expect(configs.map((c) => c.label)).toEqual([
         "Net point attempts",
         "Net points won",
+        "Approach points won",
+        "Passed the net player",
+        "Lob points won",
+        "Drop shot points won",
         "Winners",
         "Unforced errors",
         "Forced errors",

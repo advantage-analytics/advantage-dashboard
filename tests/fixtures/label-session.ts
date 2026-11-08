@@ -51,6 +51,7 @@ export function labelShot(
     landingY: null,
     videoTime: null,
     unclear: [],
+    tags: [],
     siteRemoval: null,
     siteRemovalRestoredAt: null,
     seed: null,
@@ -338,6 +339,8 @@ export function editContext(
 ) {
   return {
     editable: true,
+    // An admin's well: shot kinds on. A labeller's leaves them off.
+    shotKinds: true,
     names: { p1: "Lee", p2: "Vargas" },
     selectedShotId: null,
     onPatchPoint: noop,

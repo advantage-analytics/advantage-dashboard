@@ -28,7 +28,14 @@ import {
   rallyLengthBandOf,
   winnerHitBy,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import {
+  hitADropShot,
+  hitALob,
+  netEndingOf,
+  netEntryOf,
+} from "@/components/dashboard/matches/match-detail/match-filters/net-game";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import { useStatisticsLobKeys } from "@/components/dashboard/matches/match-detail/statistics-lob-keys";
 import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
@@ -153,9 +160,21 @@ export interface H2HRowConfig {
    *   match publishes no aces at all (see `DERIVED_SERVE_ROWS`).
    * - `netAttempts`, `netPointsWon` — counted with `cameToNet`, the predicate
    *   the rows' cut opens, so a figure and its "Watch all N" cannot disagree.
+   * - `approachPointsWon`, `passingShotsWon` — counted with `netEntryOf` /
+   *   `netEndingOf` (`match-filters/net-game.ts`), the predicates behind the
+   *   cuts' `netEntry` / `netEnding`.
+   * - `lobPointsWon` — counted with `hitALob` over the ball-paths file's lobs;
+   *   no file, no figure and no cut (`withLobAvailability`).
    */
   fromPoints?:
-    "returnWinners" | "unreturnedServes" | "netAttempts" | "netPointsWon";
+    | "returnWinners"
+    | "unreturnedServes"
+    | "netAttempts"
+    | "netPointsWon"
+    | "approachPointsWon"
+    | "passingShotsWon"
+    | "lobPointsWon"
+    | "dropShotPointsWon";
 }
 
 export const SERVE_ROWS: H2HRowConfig[] = [
@@ -303,6 +322,60 @@ export const POINT_ROWS: H2HRowConfig[] = [
     sideBy: "net",
     sideWon: true,
     noun: "net points",
+    verb: "won",
+  },
+  {
+    // Of the net points that side came in on by approaching (`netEntryOf`),
+    // the share it won. A cell's cut is `{ netBy: side, netEntry }` won.
+    label: "Approach points won",
+    fromPoints: "approachPointsWon",
+    isPercentage: true,
+    cut: { netBy: "either", netEntry: "approach" },
+    sideBy: "net",
+    sideWon: true,
+    noun: "approach points",
+    verb: "won",
+  },
+  {
+    // A side's passes are the OPPONENT's net points that ended "passed"
+    // (`netEndingOf`), as a share of ALL the opponent's net points — not of
+    // the points a pass was tried on, which nothing measures — so the label
+    // says what it counts. The cell's cut names the other side at the net
+    // (`netAgainst`). Needs the ball-paths file, or a lob would count as a
+    // pass (`withLobAvailability`).
+    label: "Passed the net player",
+    fromPoints: "passingShotsWon",
+    isPercentage: true,
+    cut: { netBy: "either", netEnding: "passed" },
+    sideBy: "netAgainst",
+    noun: "opponent net points",
+    verb: "passed",
+  },
+  {
+    // The points in which that side struck at least one lob (`hitALob`), and
+    // the share it won. Needs the ball-paths file: without it the row is a
+    // dash with no cut (`withLobAvailability`).
+    label: "Lob points won",
+    fromPoints: "lobPointsWon",
+    isPercentage: true,
+    cut: { lobBy: "either" },
+    sideBy: "lob",
+    sideWon: true,
+    noun: "lob points",
+    verb: "won",
+  },
+  {
+    // The points in which that side struck at least one drop shot
+    // (`hitADropShot`), and the share it won. Read from the shots alone, so
+    // it needs no ball-paths file; a match with no spin recorded simply has
+    // no drop shots, and the rate is a dash.
+    label: "Drop shot points won",
+    fromPoints: "dropShotPointsWon",
+    isPercentage: true,
+    cut: { dropBy: "either" },
+    sideBy: "drop",
+    sideWon: true,
+    noun: "drop shot points",
     verb: "won",
   },
   {
@@ -457,6 +530,38 @@ const GROUPS_BY_KIND = {
   derived: h2hGroups(true, false),
   derivedJudged: h2hGroups(true, true),
 };
+
+/** Why the Lob row is a dash on a match with no ball-paths file. */
+export const NO_LOB_DATA_NOTE = "No ball flight data for this match";
+/** Why the Passed row is a dash then: a lob cannot be told from a pass. */
+export const NO_PASS_DATA_NOTE =
+  "No ball flight data, so a lob can't be told from a pass";
+
+/**
+ * The groups with the Lob points and Passed rows set to what the match can
+ * say: as
+ * configured when the ball-paths file's lobs are known, otherwise with no cut
+ * and a note — the dash it draws then says why, and nothing offers to open
+ * points no predicate can find. Every other row passes through untouched.
+ */
+export function withLobAvailability(
+  groups: { title: string; configs: H2HRowConfig[] }[],
+  hasLobs: boolean,
+): { title: string; configs: H2HRowConfig[] }[] {
+  if (hasLobs) return groups;
+  return groups.map((group) => ({
+    title: group.title,
+    configs: group.configs.map((config) => {
+      const note =
+        config.fromPoints === "lobPointsWon"
+          ? NO_LOB_DATA_NOTE
+          : config.fromPoints === "passingShotsWon"
+            ? NO_PASS_DATA_NOTE
+            : null;
+      return note ? { ...config, cut: undefined, note } : config;
+    }),
+  }));
+}
 
 function groupsFor(isDerived: boolean, errorSplitJudged: boolean) {
   if (isDerived)
@@ -642,6 +747,21 @@ interface DerivedSide {
   unreturnedServes: number;
   /** Points this side came to the net (`cameToNet`); `won` = won them. */
   netPoints: Tally;
+  /** Net points this side came in on by approaching (`netEntryOf`). */
+  approachPoints: Tally;
+  /**
+   * The OPPONENT's net points this side passed (`netEndingOf` "passed" for
+   * the opponent) — `won` — of every opponent net point — `total`. `null`
+   * without lob keys: a lob would count as a pass.
+   */
+  passes: Tally | null;
+  /**
+   * Points this side struck a lob in (`hitALob`); `won` = won them. `null`
+   * without lob keys: unknown, not none.
+   */
+  lobPoints: Tally | null;
+  /** Points this side struck a drop shot in (`hitADropShot`); `won` = won them. */
+  dropPoints: Tally;
   /** Whether the points carry this side's shots, so a net zero is measured. */
   shotsRecorded: boolean;
 }
@@ -653,6 +773,7 @@ function emptyTally(): Tally {
 export function tallySide(
   points: MatchPoint[],
   isPlayer1: boolean,
+  lobKeys: ReadonlySet<number> | null = null,
 ): DerivedSide {
   const d: DerivedSide = {
     aces: 0,
@@ -671,6 +792,10 @@ export function tallySide(
     returnsRecorded: 0,
     unreturnedServes: 0,
     netPoints: emptyTally(),
+    approachPoints: emptyTally(),
+    passes: lobKeys ? emptyTally() : null,
+    lobPoints: lobKeys ? emptyTally() : null,
+    dropPoints: emptyTally(),
     shotsRecorded: false,
   };
   for (const p of points) {
@@ -687,6 +812,22 @@ export function tallySide(
     if (cameToNet(p, isPlayer1)) {
       d.netPoints.total += 1;
       if (iWon) d.netPoints.won += 1;
+      if (netEntryOf(p, isPlayer1) === "approach") {
+        d.approachPoints.total += 1;
+        if (iWon) d.approachPoints.won += 1;
+      }
+    }
+    if (d.passes && cameToNet(p, !isPlayer1)) {
+      d.passes.total += 1;
+      if (netEndingOf(p, !isPlayer1, lobKeys) === "passed") d.passes.won += 1;
+    }
+    if (d.lobPoints && lobKeys && hitALob(p, isPlayer1, lobKeys)) {
+      d.lobPoints.total += 1;
+      if (iWon) d.lobPoints.won += 1;
+    }
+    if (hitADropShot(p, isPlayer1)) {
+      d.dropPoints.total += 1;
+      if (iWon) d.dropPoints.won += 1;
     }
 
     if (iServed) {
@@ -756,6 +897,10 @@ export function tallySide(
  * - Net attempts: likewise only where the side's shots were recorded.
  * - Net points won: a rate needs an attempt. Coming in and losing every one is
  *   a measured 0%; never coming in is no rate at all.
+ * - Approach points won, Passing shots won, Lob points won, Drop shot points
+ *   won: likewise rates, over approaches, the opponent's net points, lob
+ *   points and drop shot points; the lob rate also needs the ball-paths file
+ *   (`lobPoints` null without it).
  */
 function derivedValue(config: H2HRowConfig, d: DerivedSide): number | null {
   switch (config.fromPoints) {
@@ -766,9 +911,37 @@ function derivedValue(config: H2HRowConfig, d: DerivedSide): number | null {
     case "netAttempts":
       return d.shotsRecorded ? d.netPoints.total : null;
     case "netPointsWon":
-      return d.netPoints.total > 0
-        ? (d.netPoints.won / d.netPoints.total) * 100
-        : null;
+      return rate(d.netPoints);
+    case "approachPointsWon":
+      return rate(d.approachPoints);
+    case "passingShotsWon":
+      return d.passes ? rate(d.passes) : null;
+    case "lobPointsWon":
+      return d.lobPoints ? rate(d.lobPoints) : null;
+    case "dropShotPointsWon":
+      return rate(d.dropPoints);
+    default:
+      return null;
+  }
+}
+
+function rate(t: Tally): number | null {
+  return t.total > 0 ? (t.won / t.total) * 100 : null;
+}
+
+/** The tally behind a rate row — its tooltip's "won of total". */
+function rateTally(config: H2HRowConfig, d: DerivedSide): Tally | null {
+  switch (config.fromPoints) {
+    case "netPointsWon":
+      return d.netPoints;
+    case "approachPointsWon":
+      return d.approachPoints;
+    case "passingShotsWon":
+      return d.passes;
+    case "lobPointsWon":
+      return d.lobPoints;
+    case "dropShotPointsWon":
+      return d.dropPoints;
     default:
       return null;
   }
@@ -779,13 +952,11 @@ const NO_VALUE: H2HValue = { value: null, display: "" };
 function derivedSideValue(config: H2HRowConfig, d: DerivedSide): H2HValue {
   const value = derivedValue(config, d);
   if (value === null) return NO_VALUE;
+  const tally = rateTally(config, d);
   return {
     value,
     display: statDisplay(value, config.isPercentage),
-    detail:
-      config.fromPoints === "netPointsWon"
-        ? `${d.netPoints.won}/${d.netPoints.total}`
-        : undefined,
+    detail: tally ? `${tally.won}/${tally.total}` : undefined,
   };
 }
 
@@ -1295,7 +1466,15 @@ export function HeadToHeadCard() {
   // filters: it is what the Video tab resolves a cut with, so the counts
   // below say what the tab will list. The card itself is always the whole
   // match — the match filters live on the Video tab alone.
-  const { context } = useMatchFilters();
+  const { context: sharedContext } = useMatchFilters();
+  // The ball-paths file's lobs (`StatisticsLobKeysProvider`), laid into the
+  // context the counts below run on, so the Lob row's "Watch all N" and the
+  // Video tab it lands in read the same lobs.
+  const lobKeys = useStatisticsLobKeys();
+  const context = useMemo(
+    () => (lobKeys ? { ...sharedContext, lobKeys } : sharedContext),
+    [sharedContext, lobKeys],
+  );
   const [hover, setHover] = useState<HoverTarget | null>(null);
   // Touch: a tap selects a target and its readout stays until a tap lands
   // outside the card; a second tap on it opens its cut in Video.
@@ -1318,14 +1497,18 @@ export function HeadToHeadCard() {
   // then Unforced + Forced (`withErrorSplit`) — read off the filter context,
   // never re-derived here.
   const errorSplitJudged = context.errorSplitJudged === true;
-  const groups = groupsFor(isDerived, errorSplitJudged);
+  const groups = useMemo(
+    () =>
+      withLobAvailability(groupsFor(isDerived, errorSplitJudged), !!lobKeys),
+    [isDerived, errorSplitJudged, lobKeys],
+  );
 
   const sections = useMemo(() => {
     if (!youStats || !oppStats) return [];
     // Tallied whole-match too: the statistics only the points carry (return
     // winners) have no published figure to fall back on.
-    const youDerived = tallySide(points, youIsPlayer1);
-    const oppDerived = tallySide(points, !youIsPlayer1);
+    const youDerived = tallySide(points, youIsPlayer1, lobKeys);
+    const oppDerived = tallySide(points, !youIsPlayer1, lobKeys);
 
     return groups.map((group) => {
       const published = buildStatRows(group.configs, youStats, oppStats);
@@ -1334,7 +1517,7 @@ export function HeadToHeadCard() {
         rows: withPointRows(group.configs, published, youDerived, oppDerived),
       };
     });
-  }, [groups, youStats, oppStats, youIsPlayer1, points]);
+  }, [groups, youStats, oppStats, youIsPlayer1, points, lobKeys]);
 
   // The exact points each target opens, counted with the Video tab's own
   // predicate — `applyFilmCut` over EVERY point of the match, the same whole

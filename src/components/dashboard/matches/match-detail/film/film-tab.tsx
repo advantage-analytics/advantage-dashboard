@@ -74,6 +74,7 @@ import {
 } from "./use-attachment-playback";
 import { FilmReadOnlyContext, useFilmReadOnly } from "./film-read-only";
 import { recordMatchVideoView } from "./record-video-view";
+import { useFilmFilterContext } from "./use-film-filter-context";
 import {
   filmDraftCount,
   filmListPoints,
@@ -281,10 +282,12 @@ function FilmRoom({
     setFilters: setShared,
     clearFilters,
     filteredPoints: sharedPoints,
-    context: filterContext,
     filmRemainder: remainder,
     setFilmRemainder,
   } = useMatchFilters();
+  // The shared context plus the match's lob shots, for a landed Net game or
+  // Lob cut (`useFilmFilterContext`).
+  const filterContext = useFilmFilterContext();
   const [savedOnly, setSavedOnly] = useState<boolean>(
     // Never on a shared link: its reader has no bookmarks, so a pasted
     // `?saved` would open on "You haven't saved a point yet".

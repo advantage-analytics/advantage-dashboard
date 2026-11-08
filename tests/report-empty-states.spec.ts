@@ -63,6 +63,9 @@ const REAL = new Set([
   // The Shots tab's points, with a derived match's aces named — pure over
   // the stubbed `useMatchData`, so it loads for real.
   "@/components/dashboard/matches/match-detail/shots/use-viz-points",
+  // The Net game card's classifiers and its hatch fill: pure, loaded for real.
+  "@/components/dashboard/matches/match-detail/match-filters/net-game",
+  "@/components/dashboard/matches/match-detail/chart-fills",
 ]);
 
 function render(
@@ -160,6 +163,15 @@ test.describe("StatisticsView", () => {
     "@/components/dashboard/matches/match-detail/match-report": {
       MatchReport: { Insight: marker("Insight") },
     },
+    // The view's lob-keys fetch wraps the widgets row: a pass-through here,
+    // so the markers inside it still render.
+    "@/components/dashboard/matches/match-detail/statistics-lob-keys": {
+      StatisticsLobKeysProvider: ({
+        children,
+      }: {
+        children: React.ReactNode;
+      }) => children,
+    },
   });
 
   test("no points: one region-level empty, no notice, no cards, no insight", () => {
@@ -227,6 +239,7 @@ test.describe("StatisticsView", () => {
     const html = render(file, "StatisticsView", [point()], stubs(true));
     expect(html).toContain('data-component="HeadToHeadCard"');
     expect(html).toContain('data-component="PointEndingsCard"');
+    expect(html).toContain('data-component="NetGameCard"');
     expect(html).not.toContain('data-component="StatisticsEmpty"');
   });
 });
@@ -417,6 +430,78 @@ test.describe("card anatomy empties (points exist, the measure does not)", () =>
       { isDerived: false },
     );
     expect(html).not.toContain('data-testid="point-endings-empty"');
+  });
+
+  test("net game: nobody at the net — both names, a dash per total, one sentence", () => {
+    const html = render(
+      DETAIL + "net-game-card.tsx",
+      "NetGameCard",
+      [point()],
+      {
+        "@/components/dashboard/matches/match-detail/statistics-lob-keys": {
+          useStatisticsLobKeys: () => null,
+        },
+      },
+    );
+    expect(html).toContain('data-testid="net-game-empty"');
+    expect(html).toContain("Net game");
+    expect(html).toContain("Alex Rivera");
+    expect(html).toContain("Sam Okafor");
+    expect(html.match(/>—</g)?.length).toBe(2);
+    expect(html).toContain("Neither player came to the net in this match.");
+    // No ball-paths file: Lobbed is left out of the legend.
+    expect(html).not.toContain("Lobbed");
+    expect(html).not.toContain("animate-pulse");
+  });
+
+  test("net game: a volley draws the real card", () => {
+    const html = render(
+      DETAIL + "net-game-card.tsx",
+      "NetGameCard",
+      [
+        point({
+          resultType: "Volley Winner",
+          player: "player1",
+          shots: [
+            {
+              id: "v",
+              shotNumber: 3,
+              isPlayer1: true,
+              shotType: "Volley",
+              spinType: null,
+              speedMph: null,
+              zone: null,
+              result: "In",
+              videoTime: 1,
+              bounceVideoTime: null,
+              contactX: 0,
+              contactY: 9,
+              landingX: 0,
+              landingY: 20,
+            },
+          ],
+        }),
+      ],
+      {
+        "@/components/dashboard/matches/match-detail/statistics-lob-keys": {
+          useStatisticsLobKeys: () => null,
+        },
+      },
+    );
+    expect(html).not.toContain('data-testid="net-game-empty"');
+    expect(html).toContain('data-testid="net-game-card"');
+    // The fixture's server is player 1, whose first shot after the serve
+    // is the volley.
+    expect(html).toContain("Came in by · Serve and volley 1");
+  });
+
+  test("net game: no points at all draws nothing", () => {
+    const html = render(DETAIL + "net-game-card.tsx", "NetGameCard", [], {
+      "@/components/dashboard/matches/match-detail/statistics-lob-keys": {
+        useStatisticsLobKeys: () => null,
+      },
+    });
+    expect(html).toBe("");
   });
 
   test("performance tracker: one point is the midline and a sentence, not a flat trend", () => {

@@ -547,10 +547,14 @@ test.describe("a ghost in the black well", () => {
       SHOT_FLOORS_PX: readonly number[];
       GHOST_TAIL_MIN_PX: number;
     };
-    expect(GHOST_TAIL_MIN_PX).toBe(76);
-    expect(GHOST_TAIL_MIN_PX).toBe(SHOT_FLOORS_PX[7] + 8 + SHOT_FLOORS_PX[8]);
-    expect(SHOT_FLOORS_PX.reduce((sum, px) => sum + px, 0) + 8 * 8 + 28).toBe(
-      520,
+    // Placement, kind and result, with their two gaps.
+    expect(GHOST_TAIL_MIN_PX).toBe(128);
+    expect(GHOST_TAIL_MIN_PX).toBe(
+      SHOT_FLOORS_PX[7] + 8 + SHOT_FLOORS_PX[8] + 8 + SHOT_FLOORS_PX[9],
+    );
+    // Wide tracks from 640px; under it placement and kind leave.
+    expect(SHOT_FLOORS_PX.reduce((sum, px) => sum + px, 0) + 9 * 8 + 28).toBe(
+      572,
     );
     // The reason's words give before Restore does.
     const reason = tag(row, "data-ghost-reason");
@@ -562,7 +566,7 @@ test.describe("a ghost in the black well", () => {
     expect(reason).toContain("@max-[640px]/shots:col-[7/-1]");
     expect(tag(row, 'data-xy="landed"')).toContain("@max-[640px]/shots:hidden");
     expect(tag(row, 'data-xy="hit"')).not.toContain("/shots:hidden");
-    expect(SHOT_FLOORS_PX[6] + 8 + SHOT_FLOORS_PX[8]).toBeGreaterThan(
+    expect(SHOT_FLOORS_PX[6] + 8 + SHOT_FLOORS_PX[9]).toBeGreaterThan(
       GHOST_TAIL_MIN_PX,
     );
     expect(tag(row, "data-restore-site-removal")).toContain("shrink-0");

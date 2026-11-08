@@ -14,8 +14,11 @@
 
 import {
   isLabelGameType,
+  isLabelShotTag,
   isServeStroke,
+  LABEL_SHOT_TAGS,
   LABEL_SPINS,
+  orderedShotTags,
   type LabelEnding,
   type LabelErrorKind,
   type LabelPoint,
@@ -26,6 +29,7 @@ import {
   type LabelShotResult,
   type LabelShotSeedValues,
   type LabelShotStatus,
+  type LabelShotTag,
   type LabelSide,
   type LabelStroke,
 } from "./session";
@@ -127,6 +131,7 @@ export type LabelShotValueField = (typeof LABEL_SHOT_VALUE_FIELDS)[number];
 export const LABEL_SHOT_EDIT_FIELDS = [
   ...LABEL_SHOT_VALUE_FIELDS,
   "unclear",
+  "tags",
 ] as const;
 
 /** A shot's editable values, keyed by column — the same keys as its seed. */
@@ -139,6 +144,12 @@ export type LabelShotPatch = Partial<LabelShotValues> & {
    * one whole.
    */
   unclear?: LabelShotValueField[];
+  /**
+   * The shot's kinds (session.ts `LABEL_SHOT_TAGS`); the list replaces the
+   * stored one whole. Like `unclear`, never a value: it does not move the
+   * status.
+   */
+  tags?: LabelShotTag[];
 };
 
 // ── Points ──────────────────────────────────────────────────────────────────
@@ -349,6 +360,16 @@ export function parseLabelShotPatch(
     patch.unclear = [...new Set(list as LabelShotValueField[])];
   }
 
+  if ("tags" in input) {
+    const list = input.tags;
+    if (!Array.isArray(list) || !list.every(isLabelShotTag)) {
+      return {
+        error: `Tags must list shot kinds: ${LABEL_SHOT_TAGS.join(", ")}.`,
+      };
+    }
+    patch.tags = orderedShotTags(list);
+  }
+
   const letError = letResultError(patch);
   if (letError) return { error: letError };
 
@@ -497,7 +518,7 @@ export type LabelPointState = LabelPointFields & {
  * only with today's derivation code rather than the session's pinned
  * `derivation_version`.
  *
- * `unclear` never moves the status. The server's write (edit-session.ts) and
+ * `unclear` and `tags` never move the status. The server's write (edit-session.ts) and
  * the console's optimistic apply ({@link applyLabelShotPatch}) both call this.
  */
 export function labelShotStatusAfterPatch(
@@ -789,6 +810,7 @@ export function applyLabelShotPatch(
   if ("landing_x" in patch) next.landingX = patch.landing_x ?? null;
   if ("landing_y" in patch) next.landingY = patch.landing_y ?? null;
   if ("video_time" in patch) next.videoTime = patch.video_time ?? null;
+  if ("tags" in patch) next.tags = patch.tags ?? [];
   return next;
 }
 
@@ -807,4 +829,20 @@ export function applyLabelPointPatch(
   if ("serve_side" in patch) next.serveSide = patch.serve_side ?? null;
   if ("error_kind" in patch) next.errorKind = patch.error_kind ?? null;
   return next;
+}
+
+/** Why a labeller's shot write carrying `tags` is refused. */
+export const SHOT_KINDS_ADMIN_ONLY = "Shot kinds are set by an admin.";
+
+/**
+ * The refusal for a shot patch a labeller may not send, or null. Shot kinds
+ * (`tags`) are the report stats' answer key and an admin's alone: their
+ * console never offers them, and this keeps a hand-made request to the
+ * labeller's actions (`src/app/label/actions.ts`) from writing them anyway.
+ * The admin's actions do not call it.
+ */
+export function labellerShotPatchError(patch: unknown): string | null {
+  return patch !== null && typeof patch === "object" && "tags" in patch
+    ? SHOT_KINDS_ADMIN_ONLY
+    : null;
 }
