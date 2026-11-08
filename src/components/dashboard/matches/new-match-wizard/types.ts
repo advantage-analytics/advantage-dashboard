@@ -9,6 +9,8 @@ import type { Discipline, EventSite, MatchEnding } from "@/lib/schedule/types";
 import type { Workspace } from "@/lib/workspace/types";
 import type { RetiredSide, StopReason } from "./score-state";
 import type { StyleSaveChoice } from "./style-save-offer";
+// Type-only, so the two files importing each other costs nothing at runtime.
+import type { RosterSubject } from "./subject-eligibility";
 
 /** Wizard step identifiers */
 /**
@@ -742,6 +744,16 @@ export interface MatchDraft {
   fileName: string | null;
   preset: EventPreset | null;
   attachedLine: LineOffer | null;
+  /**
+   * Who the match is for, in a team workspace — the For answer from step one.
+   *
+   * Optional because rows saved before it was stored (and connector drafts)
+   * carry none. A HINT, never a fact: both upload pages re-check it against
+   * the active program's roster before seeding it (`resolveRosterSubject()`),
+   * exactly as they check a `?player=` link, so an archived or removed player
+   * resumes onto the picker instead of onto a stranger's `player1_id`.
+   */
+  subject?: RosterSubject | null;
   updatedAt: string;
 }
 
