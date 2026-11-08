@@ -110,6 +110,9 @@ function ShotsTabBody() {
       />
       {lightboxOpen && (
         <VizLightbox
+          // A different saved view (Back/Forward between two) is a different
+          // card: its own baseline, its own legend and Statistics picks.
+          key={state.viewId ?? "card"}
           wallPlayer={wallPlayer}
           onWatchPoints={(ids) => {
             if (ids[0]) actions.watchPoint(ids[0]);

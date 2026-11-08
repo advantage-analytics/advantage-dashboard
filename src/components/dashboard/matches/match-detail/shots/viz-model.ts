@@ -2015,6 +2015,80 @@ export function computeVizStats(
 }
 
 /**
+ * How one error missed — the errors cut's Miss rows, one rule for the rows
+ * (`errorStats`) and the lightbox's row filter (`statRowKeyOf`).
+ */
+function errorMissKey(dot: VizDot): "net" | "long" | "wide" | "in" {
+  if (dot.atNet) return "net";
+  if (isServeShotType(dot.meta?.shotType ?? null)) {
+    // A double fault's serve missed the SERVICE BOX, not the court: past
+    // the service line is long, anything else out (a sideline, the wrong
+    // box) is wide. Never "landed in" — a fault is out by definition, and
+    // SwingVision imputes many fault landings onto the line itself.
+    return dot.depthM > SERVE_BOX_DEPTH_M + IN_COURT_EPS ? "long" : "wide";
+  }
+  if (dot.depthM > REAL_NET_Y + IN_COURT_EPS) return "long";
+  if (Math.abs(dot.lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS)
+    return "wide";
+  if (dot.meta?.result === "Out") {
+    // The tracker's call is the authority (as `rallyLandingMetrics`'s): an
+    // Out whose landing reads just inside — imputed onto a line — is out
+    // over whichever line it sits nearer.
+    const toBaseline = REAL_NET_Y - dot.depthM;
+    const toSideline = REAL_SINGLES_HALF_M - Math.abs(dot.lateralM);
+    return toBaseline <= toSideline ? "long" : "wide";
+  }
+  return "in";
+}
+
+/**
+ * Which row of `groupKey` one drawn mark counts toward, by the SAME rules
+ * `computeVizStats` buckets with — the lightbox's Statistics row filter
+ * keeps exactly the marks a row counted (pinned per row in
+ * `tests/stat-row-filter.spec.ts`). `null` when the mark is in none of the
+ * group's rows (an out/net return under Direction, say). Serve rows are not
+ * here: they are the Zone and Court filters' own points.
+ *
+ * `point` is the mark's source point (`meta.pointId`), needed only for a
+ * return's Direction (the side it was served to).
+ */
+export function statRowKeyOf(
+  cut: Cut,
+  groupKey: string,
+  dot: VizDot,
+  point: MatchPoint | undefined,
+  bands: BandSettings,
+): string | null {
+  if (cut === "errors") {
+    if (groupKey === "miss") return errorMissKey(dot);
+    if (groupKey === "stroke")
+      return (dot.meta?.stroke ?? "Other").toLowerCase();
+    return null;
+  }
+  if (cut === "returnPlacement" || cut === "rallyPlacement") {
+    if (!isPlacementRow(dot)) return null;
+    if (groupKey === "direction" && cut === "returnPlacement")
+      return directionKey(dot.lateralM, getPointSide(point?.pointScore));
+    if (groupKey === "depth") {
+      const rows = depthBandRows(bands, "ft");
+      if (rows.length === 0) return null;
+      return rows[makeDepthBucketer(bands)(dot.depthM)].key;
+    }
+    return null;
+  }
+  if (cut === "returnContact" || cut === "rallyPosition") {
+    if (groupKey === "depth") {
+      const rows = contactBandRows(bands, "ft");
+      return rows[makeContactBucketer(bands)(dot.depthM)].key;
+    }
+    if (groupKey === "stroke")
+      return dot.shape === "triangle" ? "backhand" : "forehand";
+    return null;
+  }
+  return null;
+}
+
+/**
  * The errors cut's two groups, each row a SHARE of the errors drawn
  * (`StatRow.share`): how the ball missed — into the net, long (past the
  * baseline), wide (past a sideline) — and the stroke that missed it. A ball
@@ -2040,26 +2114,11 @@ function errorStats(result: VizResult): StatGroup[] {
   let inCourt = 0;
   const strokes = new Map<string, number>();
   for (const dot of result.dots) {
-    if (dot.atNet) net++;
-    else if (isServeShotType(dot.meta?.shotType ?? null)) {
-      // A double fault's serve missed the SERVICE BOX, not the court: past
-      // the service line is long, anything else out (a sideline, the wrong
-      // box) is wide. Never "landed in" — a fault is out by definition, and
-      // SwingVision imputes many fault landings onto the line itself.
-      if (dot.depthM > SERVE_BOX_DEPTH_M + IN_COURT_EPS) long++;
-      else wide++;
-    } else if (dot.depthM > REAL_NET_Y + IN_COURT_EPS) long++;
-    else if (Math.abs(dot.lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS)
-      wide++;
-    else if (dot.meta?.result === "Out") {
-      // The tracker's call is the authority (as `rallyLandingMetrics`'s):
-      // an Out whose landing reads just inside — imputed onto a line — is
-      // out over whichever line it sits nearer.
-      const toBaseline = REAL_NET_Y - dot.depthM;
-      const toSideline = REAL_SINGLES_HALF_M - Math.abs(dot.lateralM);
-      if (toBaseline <= toSideline) long++;
-      else wide++;
-    } else inCourt++;
+    const miss = errorMissKey(dot);
+    if (miss === "net") net++;
+    else if (miss === "long") long++;
+    else if (miss === "wide") wide++;
+    else inCourt++;
     const stroke = dot.meta?.stroke ?? "Other";
     strokes.set(stroke, (strokes.get(stroke) ?? 0) + 1);
   }

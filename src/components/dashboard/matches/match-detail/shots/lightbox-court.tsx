@@ -27,6 +27,7 @@ import {
   trianglePointsFor,
   viewerArtPoint,
   viewerHeatFilterRegion,
+  viewerBandEdges,
   zoneCellX,
   zoneOpacity,
 } from "./court-geometry";
@@ -87,6 +88,16 @@ import type { DistanceUnit } from "@/lib/format/distance";
  * - the marks' own coordinates are viewBox units and do NOT depend on `z` or
  *   on the pan, which is what lets `MarkLayer` be `memo`'d away from both.
  */
+
+/** A Statistics row's place on the court: a serve zone, or a band. */
+export type CourtOutline =
+  | { kind: "zone"; key: ZoneKey }
+  | {
+      kind: "band";
+      band: "depth" | "contact";
+      dividersFt: number[];
+      index: number;
+    };
 
 /* ── Type scale inside the art ───────────────────────────────────────────── */
 // These are SVG `font-size` ATTRIBUTES in viewBox units, not CSS `text-[Npx]`
@@ -185,6 +196,8 @@ export function LightboxCourt({
   onRove,
   onSelect,
   whereFor,
+  focusIds = null,
+  outline = null,
   onReadoutEnter,
   onReadoutLeave,
   editing = false,
@@ -231,6 +244,10 @@ export function LightboxCourt({
   /** "Set 2 · Game 5 · You serving" for a point id — the readout's last
    *  line, read off the point by the lightbox. */
   whereFor?: (pointId: string) => string | null;
+  /** A hovered Statistics row's marks: the rest sit back at 40%. */
+  focusIds?: ReadonlySet<string> | null;
+  /** The hovered or chosen Statistics row's zone, outlined dashed white. */
+  outline?: CourtOutline | null;
   onReadoutEnter?: () => void;
   onReadoutLeave?: () => void;
   /**
@@ -434,6 +451,7 @@ export function LightboxCourt({
           )}
 
           <CourtLines />
+          {outline !== null && <OutlineRect outline={outline} />}
           {chart === "zones" && cut !== "serve" && bands === null && (
             <text
               x={VIEWER_COURT.centreX}
@@ -483,6 +501,7 @@ export function LightboxCourt({
                 focusedId={focusedId}
                 selectedId={selectedId}
                 rovingId={rovingId}
+                focusIds={focusIds}
                 interactive={!editing}
                 onActivate={onActivate}
                 onDeactivate={onDeactivate}
@@ -549,6 +568,42 @@ export function LightboxCourt({
           </div>
         )}
     </>
+  );
+}
+
+/** The dashed white outline of a Statistics row's zone or band. */
+function OutlineRect({ outline }: { outline: CourtOutline }) {
+  let x: number;
+  let y: number;
+  let w: number;
+  let h: number;
+  if (outline.kind === "zone") {
+    const cell = zoneCellX(ZONES.findIndex((z) => z.key === outline.key));
+    x = cell.x1;
+    w = cell.x2 - cell.x1;
+    y = VIEWER_COURT.farServiceY;
+    h = VIEWER_COURT.netY - VIEWER_COURT.farServiceY;
+  } else {
+    const edges = viewerBandEdges(outline.band, outline.dividersFt);
+    x = VIEWER_COURT.singlesLeft;
+    w = VIEWER_COURT.singlesRight - VIEWER_COURT.singlesLeft;
+    y = edges[outline.index];
+    h = edges[outline.index + 1] - edges[outline.index];
+  }
+  return (
+    <rect
+      data-viz-outline=""
+      x={x}
+      y={y}
+      width={w}
+      height={Math.max(0, h)}
+      fill="none"
+      stroke={LINE_COLOR}
+      strokeWidth={1.5}
+      strokeDasharray="4 3"
+      vectorEffect="non-scaling-stroke"
+      pointerEvents="none"
+    />
   );
 }
 
@@ -679,6 +734,7 @@ const MarkLayer = memo(function MarkLayer({
   focusedId,
   selectedId,
   rovingId,
+  focusIds,
   interactive,
   onActivate,
   onDeactivate,
@@ -687,6 +743,7 @@ const MarkLayer = memo(function MarkLayer({
 }: {
   cut: Cut;
   dots: VizDot[];
+  focusIds: ReadonlySet<string> | null;
   subjectName: string;
   /** The viewer's Units preference — the announced label's speed follows it,
    *  same as the visible readout. */
@@ -776,7 +833,10 @@ const MarkLayer = memo(function MarkLayer({
       {placed.map(({ dot, x, y, fill, label }, index) => {
         const isSelected = dot.id === selectedId;
         const isFocused = dot.id === focusedId;
-        const dimmed = selectedId !== null && !isSelected;
+        const dimmed =
+          selectedId !== null
+            ? !isSelected
+            : focusIds !== null && !focusIds.has(dot.id);
         return (
           <g
             key={dot.id}

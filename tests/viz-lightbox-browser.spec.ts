@@ -257,3 +257,37 @@ test("the Filters panel is the Matches panel over the cut's own keys, and Clear 
   await expect(page).toHaveURL(/ball=first/);
   await expect(page).not.toHaveURL(/deuce/);
 });
+
+test("Statistics: rows over 4px bars with the average tick; hover outlines a zone, a click keeps only its marks", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Statistics" }).click();
+  await expect(dialog.getByText(/^Average \d+%$/).first()).toBeVisible();
+  const row = dialog
+    .getByRole("button", { name: /% of \d+ points won$/ })
+    .first();
+  const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
+  const all = await marks.count();
+  await row.hover();
+  await expect(dialog.locator("[data-viz-outline]")).toHaveCount(1);
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: test.info().outputPath("stats-hover.png") });
+  const label = (await row.getAttribute("aria-label"))!;
+  const count = Number(/of (\d+) points won$/.exec(label)![1]);
+  await row.click();
+  await expect(row).toHaveAttribute("aria-pressed", "true");
+  await expect(marks).toHaveCount(count);
+  expect(count).toBeLessThan(all);
+  // You stay in Statistics; the strip names the row.
+  await expect(
+    dialog.getByRole("button", { name: "Statistics" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await expect(strip).toContainText(label.split(":")[0]);
+  await strip.getByRole("button", { name: "Back to all points" }).click();
+  await expect(marks).toHaveCount(all);
+  await expect(strip).toHaveCount(0);
+});

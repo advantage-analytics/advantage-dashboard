@@ -34,7 +34,9 @@ import { CutMenu } from "./cut-menu";
 import { defaultCutsFor } from "./default-cuts";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
-import { LightboxCourt } from "./lightbox-court";
+import { LightboxCourt, type CourtOutline } from "./lightbox-court";
+import { LightboxStats } from "./lightbox-stats";
+import { statPickDotIds, type StatPick } from "./stat-cut";
 import {
   dotMatchesPick,
   isPlayable,
@@ -50,11 +52,11 @@ import {
 } from "./lightbox-filters";
 import { LightboxPointList } from "./lightbox-point-list";
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { ZoneKey } from "@/lib/data/serve-zones";
 import { KEY_PAN_PX } from "./pan-zoom";
 import { viewerInitialTransform } from "./court-geometry";
 import { SaveViewDialog } from "./save-view-dialog";
 import { shotsWriteAccess } from "./shots-write-access";
-import { StatsCard } from "./stats-card";
 import { usePanZoom } from "./use-pan-zoom";
 import { useVizState } from "./use-viz-state";
 import { useVizView } from "./use-viz-view";
@@ -79,6 +81,7 @@ import {
 } from "./viz-model";
 import {
   activeFilterEntries,
+  carryFilters,
   courtFor,
   sameFilterValue,
   type VizState,
@@ -196,53 +199,76 @@ export function VizLightbox({
   const [pane, setPane] = useState<"points" | "stats">("points");
   /** The legend's one choice (Won · Lost · Out · Ace), local to this card. */
   const [legendPick, setLegendPick] = useState<LegendPick | null>(null);
+  /** A Statistics row chosen (court and Points keep its marks) or hovered
+   *  (court outlines it). Stamped with the court it was picked on, so a
+   *  player or cut switch lets go of it. */
+  const [statPick, setStatPick] = useState<{
+    stamp: string;
+    pick: StatPick;
+  } | null>(null);
+  const [statHover, setStatHover] = useState<StatPick | null>(null);
+  const courtStamp = `${state.cut}:${state.filters.player}`;
+  const activeStatPick =
+    statPick !== null && statPick.stamp === courtStamp ? statPick.pick : null;
   const errorSplitJudged = useErrorSplitJudged();
 
-  // What "Clear filter" returns to: the card as it opened — a saved view's
-  // own filters, a wall card's cut filters ("First serves" is first serves),
-  // or nothing — for the player on court now.
-  const baseline = useMemo<VizFilters>(() => {
-    const saved =
-      state.viewId !== null
-        ? meta.savedViews.find((v) => v.id === state.viewId)
-        : undefined;
-    const card =
-      state.cut !== null
-        ? defaultCutsFor(errorsJudgedIn(matchCtx)).find(
-            (c) => c.cut === state.cut,
-          )
-        : undefined;
-    const base: VizFilters = saved
-      ? saved.filters
-      : { ...EMPTY_VIZ_FILTERS, ...(card?.filters ?? {}) };
-    return { ...base, player: state.filters.player };
-  }, [
-    state.viewId,
-    state.cut,
-    state.filters.player,
-    meta.savedViews,
-    matchCtx,
-  ]);
+  // What "Clear filter" returns to: the card as it opened — a wall card's
+  // own cut filters ("First serves" is first serves), a saved view's, or a
+  // link's — carried to the cut and player on court now.
+  const [openedFilters] = useState<VizFilters>(() => state.filters);
+  const baseline = useMemo<VizFilters>(
+    () =>
+      state.cut === null
+        ? openedFilters
+        : {
+            ...carryFilters(openedFilters, state.cut),
+            player: state.filters.player,
+          },
+    [openedFilters, state.cut, state.filters.player],
+  );
 
-  const visibleSelectedMarkId =
-    selectedMarkId !== null &&
-    (legendPick === null
-      ? result?.dots
-      : result?.dots.filter((d) => dotMatchesPick(d, legendPick))
-    )?.some((dot) => dot.id === selectedMarkId)
-      ? selectedMarkId
-      : null;
+  // A Statistics row's marks, by the stats' own rules (`stat-cut.ts`).
+  const rowIds = useCallback(
+    (pick: StatPick | null): Set<string> | null =>
+      pick === null || result === null || cut === null
+        ? null
+        : statPickDotIds(
+            points,
+            cut,
+            state.filters,
+            subjectIsPlayer1,
+            matchCtx,
+            result.dots,
+            pick,
+            bands,
+          ),
+    [points, cut, state.filters, subjectIsPlayer1, matchCtx, result, bands],
+  );
+  const pickIds = useMemo(
+    () => rowIds(activeStatPick),
+    [rowIds, activeStatPick],
+  );
+  const hoverIds = useMemo(() => rowIds(statHover), [rowIds, statHover]);
 
-  // The marks on court: the result's, narrowed by the legend's pick.
+  // The marks on court: the result's, narrowed by the legend's pick and a
+  // chosen Statistics row.
   const dots = useMemo(
     () =>
       result === null
         ? undefined
-        : legendPick === null
-          ? result.dots
-          : result.dots.filter((d) => dotMatchesPick(d, legendPick)),
-    [result, legendPick],
+        : result.dots.filter(
+            (d) =>
+              (legendPick === null || dotMatchesPick(d, legendPick)) &&
+              (pickIds === null || pickIds.has(d.id)),
+          ),
+    [result, legendPick, pickIds],
   );
+
+  const visibleSelectedMarkId =
+    selectedMarkId !== null &&
+    (dots ?? []).some((dot) => dot.id === selectedMarkId)
+      ? selectedMarkId
+      : null;
 
   // A row selects its point's mark on the court (the first mark that stands
   // for that point), so the row and the mark light together.
@@ -493,6 +519,7 @@ export function VizLightbox({
   // Back to the card as it opened, legend and all.
   function clearFilters() {
     setLegendPick(null);
+    setStatPick(null);
     setState((prev) => ({ ...prev, filters: baseline, viewId: prev.viewId }));
   }
 
@@ -520,7 +547,35 @@ export function VizLightbox({
     phrases.push(
       { won: "Won", lost: "Lost", out: "Out", ace: "Aces" }[legendPick],
     );
-  const anyCut = panelActive || legendPick !== null;
+  if (activeStatPick !== null) phrases.push(activeStatPick.label);
+  const anyCut = panelActive || legendPick !== null || activeStatPick !== null;
+  const statOnly =
+    activeStatPick !== null && !panelActive && legendPick === null;
+
+  // The court's outline: the hovered row, else the chosen one — a serve
+  // zone, or a depth or contact band; other rows (Direction, Stroke, Miss)
+  // have no single place on court and only fade the rest.
+  const outlinePick = statHover ?? activeStatPick;
+  let outline: CourtOutline | null = null;
+  if (outlinePick !== null) {
+    if (cut === "serve") {
+      outline = {
+        kind: "zone",
+        key: outlinePick.row as ZoneKey,
+      };
+    } else if (
+      outlinePick.group === "depth" &&
+      savedBandZones !== null &&
+      savedBandZones.rows.some((r) => r.key === outlinePick.row)
+    ) {
+      outline = {
+        kind: "band",
+        band: savedBandZones.kind,
+        dividersFt: savedBandZones.dividersFt,
+        index: savedBandZones.rows.findIndex((r) => r.key === outlinePick.row),
+      };
+    }
+  }
 
   return (
     <DialogPrimitive.Root
@@ -652,7 +707,7 @@ export function VizLightbox({
                     phrases={phrases}
                     shown={matched.length}
                     total={allPointsBehind.length}
-                    statOnly={false}
+                    statOnly={statOnly}
                     onClear={clearFilters}
                   />
                 )}
@@ -708,6 +763,8 @@ export function VizLightbox({
                     onRove={roveMark}
                     onSelect={selectMark}
                     whereFor={whereFor}
+                    focusIds={statHover !== null ? hoverIds : null}
+                    outline={outline}
                     onReadoutEnter={holdReadout}
                     onReadoutLeave={releaseReadout}
                     editing={editing}
@@ -872,8 +929,19 @@ export function VizLightbox({
                       }
                     />
                   ) : (
-                    <div className="pt-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
-                      <StatsCard stats={stats} cut={cut} />
+                    <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
+                      <LightboxStats
+                        stats={stats}
+                        cut={cut}
+                        pick={activeStatPick}
+                        onPick={(pick) => {
+                          setSelectedMarkId(null);
+                          setStatPick(
+                            pick === null ? null : { stamp: courtStamp, pick },
+                          );
+                        }}
+                        onHover={setStatHover}
+                      />
                     </div>
                   ))}
               </div>
