@@ -296,27 +296,6 @@ export function StatisticsPanePending() {
               <PendingBar className="h-2.5 w-20" />
             </div>
           </ChartCardPending>
-          {/* The 96px band, its three labels, then the legend row. */}
-          <ChartCardPending
-            eyebrow="Rally length"
-            padding="16px 20px 14px"
-            gap="gap-3"
-          >
-            <div className="flex flex-col gap-2">
-              <PendingBar className="h-24 rounded-[var(--radius-cell)]" />
-              <div className="flex h-[17px] items-center gap-3">
-                <PendingBar className="h-2.5 w-16" />
-                <PendingBar className="h-2.5 w-16" />
-                <PendingBar className="h-2.5 w-16" />
-              </div>
-            </div>
-            <div className="flex h-[15px] items-center gap-3.5">
-              <PendingBar className="h-2.5 w-20" />
-              <PendingBar className="h-2.5 w-20" />
-              <div className="flex-1" />
-              <PendingBar className="h-2.5 w-24" />
-            </div>
-          </ChartCardPending>
           {/* Two name rows over a 10px track, then the legend — up to six
               entries (a judged match), wrapping as the loaded legend does. */}
           <ChartCardPending
@@ -340,6 +319,27 @@ export function StatisticsPanePending() {
                   <PendingBar className={`h-2.5 ${w}`} />
                 </div>
               ))}
+            </div>
+          </ChartCardPending>
+          {/* The 96px band, its three labels, then the legend row. */}
+          <ChartCardPending
+            eyebrow="Rally length"
+            padding="16px 20px 14px"
+            gap="gap-3"
+          >
+            <div className="flex flex-col gap-2">
+              <PendingBar className="h-24 rounded-[var(--radius-cell)]" />
+              <div className="flex h-[17px] items-center gap-3">
+                <PendingBar className="h-2.5 w-16" />
+                <PendingBar className="h-2.5 w-16" />
+                <PendingBar className="h-2.5 w-16" />
+              </div>
+            </div>
+            <div className="flex h-[15px] items-center gap-3.5">
+              <PendingBar className="h-2.5 w-20" />
+              <PendingBar className="h-2.5 w-20" />
+              <div className="flex-1" />
+              <PendingBar className="h-2.5 w-24" />
             </div>
           </ChartCardPending>
         </div>
