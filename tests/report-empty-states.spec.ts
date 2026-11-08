@@ -524,6 +524,11 @@ const passthrough = ({ children }: { children: React.ReactNode }) => children;
 test.describe("ShotsTab", () => {
   const file = DETAIL + "shots/shots-tab.tsx";
   const stubs = (cut: string | null, mounted = false) => ({
+    // The lightbox is `next/dynamic`-loaded; the stub stands in for it.
+    "next/dynamic": {
+      __esModule: true,
+      default: () => marker("VizLightbox"),
+    },
     "@/lib/ui/use-mounted": { useMounted: () => mounted },
     "@/components/dashboard/matches/match-detail/match-report-context": {
       useMatchReport: () => ({

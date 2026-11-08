@@ -295,3 +295,25 @@ test("the lightbox count line drops the won clause when nothing landed in", () =
     ),
   ).toBe("3 of 4 in, 2 of those 3 won");
 });
+
+test("the Opponent cards are the other seat's own: marks and counts from the opposite isPlayer1", () => {
+  // "You" is player 2 here, so the Opponent cards must read player 1.
+  const sides = {
+    you: { name: "P2", isPlayer1: false },
+    opp: { name: "P1", isPlayer1: true },
+  };
+  const tiles = buildDefaultTiles(POINTS, sides, href, undefined, BANDS);
+  let compared = 0;
+  for (const tile of tiles) {
+    const seatIsP1 = tile.subject === "you" ? false : true;
+    const own = computeViz(POINTS, tile.cut, tile.state.filters, seatIsP1);
+    const other = computeViz(POINTS, tile.cut, tile.state.filters, !seatIsP1);
+    expect(tile.dots.map((d) => d.id)).toEqual(own.dots.map((d) => d.id));
+    expect(tile.total).toBe(own.total);
+    expect(tile.summary!.total).toBe(own.count);
+    if (tile.subject === "opponent" && own.count !== other.count) compared++;
+    expect(tile.playerName).toBe(tile.subject === "you" ? "P2" : "P1");
+  }
+  // The fixture's two seats differ, so the check had something to tell apart.
+  expect(compared).toBeGreaterThan(0);
+});

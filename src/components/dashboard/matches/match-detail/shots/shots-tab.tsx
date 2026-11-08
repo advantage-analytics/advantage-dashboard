@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { useState } from "react";
 import { useMounted } from "@/lib/ui/use-mounted";
 import {
   VizWall,
   type WallCollection,
 } from "@/components/dashboard/matches/match-detail/shots/viz-wall";
-import { VizLightbox } from "@/components/dashboard/matches/match-detail/shots/viz-lightbox";
 import type { PlayerFilter } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   useVizState,
@@ -38,6 +38,20 @@ import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/
  * The public share page and the sample match (`meta.readOnly`) draw the same
  * courts with nothing that writes: no Saved collection, no "Save as view".
  */
+/**
+ * The lightbox, loaded only when a card opens: Radix Dialog, the pan/zoom
+ * court, the filters and the point list stay out of the tab's first chunk
+ * (the fullscreen viewer it replaced was split the same way). Client-only
+ * either way — it is never in the server HTML (see `lightboxOpen` below).
+ */
+const VizLightbox = dynamic(
+  () =>
+    import("@/components/dashboard/matches/match-detail/shots/viz-lightbox").then(
+      (m) => m.VizLightbox,
+    ),
+  { ssr: false },
+);
+
 export function ShotsTab() {
   return (
     // `VizBandsProvider` sits inside the state provider and around both
@@ -53,8 +67,12 @@ export function ShotsTab() {
 
 function ShotsTabBody() {
   const { state } = useVizState();
-  const [wallCollection, setWallCollection] =
-    useState<WallCollection>("default");
+  // A hard load of a saved view's link opens over Saved, like a click.
+  const [wallCollection, setWallCollection] = useState<WallCollection>(
+    state.cut !== null && state.viewId !== null && !state.draft
+      ? "saved"
+      : "default",
+  );
   const { meta, actions } = useMatchReport();
   const points = useVizPoints(useMatchData());
   const mounted = useMounted();
@@ -71,14 +89,21 @@ function ShotsTabBody() {
     setWallPlayer(state.filters.player);
   }
 
-  // A saved view opens over the Saved collection, a default card over
-  // Default, so closing returns to the collection that opened it.
-  useEffect(() => {
-    if (state.cut !== null && !state.draft) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+  // One lightbox per OPENING — keyed on that, never on the live `viewId`:
+  // editing a filter, switching You | Opponent or saving a view all rewrite
+  // `viewId`, and a remount there would close the Filters popover, drop the
+  // legend and Statistics picks, the pane and the zoom, and lose the focus
+  // return. The collection the card opened from is fixed at the same moment
+  // (a saved view over Saved, a default card over Default), so closing an
+  // edited saved view still lands on Saved. A render-phase update on the
+  // closed → open edge; no effect.
+  const isOpen = state.cut !== null;
+  const [opening, setOpening] = useState({ count: 0, open: isOpen });
+  if (opening.open !== isOpen) {
+    setOpening({ count: opening.count + (isOpen ? 1 : 0), open: isOpen });
+    if (isOpen && !state.draft)
       setWallCollection(state.viewId ? "saved" : "default");
-    }
-  }, [state.cut, state.draft, state.viewId]);
+  }
 
   // Before anything else, so no URL can reach an empty court.
   if (points.length === 0) return <VizEmpty />;
@@ -110,9 +135,7 @@ function ShotsTabBody() {
       />
       {lightboxOpen && (
         <VizLightbox
-          // A different saved view (Back/Forward between two) is a different
-          // card: its own baseline, its own legend and Statistics picks.
-          key={state.viewId ?? "card"}
+          key={opening.count}
           wallPlayer={wallPlayer}
           onWatchPoints={actions.watchPointSet}
         />

@@ -34,7 +34,9 @@ export async function startStyledHarness(entry: string): Promise<{
         mode: "development",
         devtool: false,
         entry: resolve(entry),
-        output: { path: outputPath, filename: "bundle.js" },
+        // `publicPath` so a `next/dynamic` chunk (the lightbox) loads from
+        // this server too; every emitted file is served below.
+        output: { path: outputPath, filename: "bundle.js", publicPath: "/" },
         module: {
           rules: [
             {
@@ -75,6 +77,19 @@ export async function startStyledHarness(entry: string): Promise<{
   ).css;
   const server: Server = createServer((request, response) => {
     const path = request.url ?? "/";
+    // A lazily-loaded chunk webpack emitted beside the bundle.
+    const chunk = /^\/([\w.-]+\.js)(\?.*)?$/.exec(path);
+    if (chunk && chunk[1] !== "bundle.js") {
+      try {
+        const body = readFileSync(join(outputPath, chunk[1]));
+        response.setHeader("content-type", "text/javascript; charset=utf-8");
+        response.end(body);
+      } catch {
+        response.statusCode = 404;
+        response.end();
+      }
+      return;
+    }
     response.setHeader(
       "content-type",
       path.startsWith("/bundle.js")

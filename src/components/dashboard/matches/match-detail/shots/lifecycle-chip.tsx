@@ -1,5 +1,3 @@
-"use client";
-
 import type { ReactNode } from "react";
 
 /** The tab's lifecycle-chip switch — the wall's `Default | Saved` and

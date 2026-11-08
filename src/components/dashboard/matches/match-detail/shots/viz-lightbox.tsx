@@ -80,13 +80,7 @@ import {
   type PlayerFilter,
   type VizFilters,
 } from "./viz-model";
-import {
-  activeFilterEntries,
-  carryFilters,
-  courtFor,
-  sameFilterValue,
-  type VizState,
-} from "./viz-url";
+import { activeFilterEntries, courtFor, sameFilterValue } from "./viz-url";
 import { useErrorSplitJudged } from "../match-filters/provider";
 import { lightboxCountLine } from "./wall-summary";
 import { useMatchFilters } from "../match-filters/provider";
@@ -211,43 +205,37 @@ export function VizLightbox({
    * (Placement → Contact) lets go of it, so it can never empty a court whose
    * marks it does not describe. A You | Opponent switch keeps it (canvas S08).
    */
+  const legendStamp = `${state.cut}:${state.chart}`;
   const [legendState, setLegendState] = useState<{
-    cut: string | null;
+    stamp: string;
     pick: LegendPick;
   } | null>(null);
-  const legendPick =
-    legendState !== null && legendState.cut === state.cut
-      ? legendState.pick
-      : null;
   const setLegendPick = (pick: LegendPick | null) =>
-    setLegendState(pick === null ? null : { cut: state.cut, pick });
+    setLegendState(pick === null ? null : { stamp: legendStamp, pick });
   /** A Statistics row chosen (court and Points keep its marks) or hovered
-   *  (court outlines it). Stamped with the court it was picked on, so a
-   *  player or cut switch lets go of it. */
+   *  (court outlines it). Stamped with the court it was picked on. */
   const [statPick, setStatPick] = useState<{
     stamp: string;
     pick: StatPick;
   } | null>(null);
   const [statHover, setStatHover] = useState<StatPick | null>(null);
   const courtStamp = `${state.cut}:${state.filters.player}`;
+  // A pick whose stamp no longer matches is DROPPED, not just hidden, so
+  // switching back never brings it back: the legend's on a cut change or a
+  // chart change (Heat and Zones draw no marks to filter; You | Opponent
+  // keeps it, canvas S08), a Statistics row's on a cut or player change
+  // (the rows are another court's). Render-phase updates, as the band
+  // editor's stale draft is dropped below; no effect.
+  if (legendState !== null && legendState.stamp !== legendStamp)
+    setLegendState(null);
+  if (statPick !== null && statPick.stamp !== courtStamp) setStatPick(null);
+  const legendPick =
+    legendState !== null && legendState.stamp === legendStamp
+      ? legendState.pick
+      : null;
   const activeStatPick =
     statPick !== null && statPick.stamp === courtStamp ? statPick.pick : null;
   const errorSplitJudged = useErrorSplitJudged();
-
-  // What "Clear filter" returns to: the card as it opened — a wall card's
-  // own cut filters ("First serves" is first serves), a saved view's, or a
-  // link's — carried to the cut and player on court now.
-  const [openedFilters] = useState<VizFilters>(() => state.filters);
-  const baseline = useMemo<VizFilters>(
-    () =>
-      state.cut === null
-        ? openedFilters
-        : {
-            ...carryFilters(openedFilters, state.cut),
-            player: state.filters.player,
-          },
-    [openedFilters, state.cut, state.filters.player],
-  );
 
   // A Statistics row's marks, by the stats' own rules (`stat-cut.ts`).
   // The serve rows' marks, all six at once, while Statistics is open on the
@@ -339,20 +327,22 @@ export function VizLightbox({
         null)
       : null;
 
-  // The list's denominator: the points behind the card as it opened (its
-  // baseline filters, this player) — "12 / 52".
+  // The list's denominator: the widest set any filter here can reach — the
+  // cut's points for this player with every filter off ("12 / 52", where
+  // 52 is every serve point). Nothing a reader loosens can pass it.
+  const playerOnCourt = state.filters.player;
   const allPointsBehind = useMemo(() => {
     if (cut === null) return [];
     const all = computeViz(
       points,
       cut,
-      baseline,
+      { ...EMPTY_VIZ_FILTERS, player: playerOnCourt },
       subjectIsPlayer1,
       "scatter",
       matchCtx,
     );
     return pointsBehind(cut, all.dots, points);
-  }, [points, cut, baseline, subjectIsPlayer1, matchCtx]);
+  }, [points, cut, playerOnCourt, subjectIsPlayer1, matchCtx]);
 
   /* ── Band editor (moved from the fullscreen viewer) ───────────────────── */
 
@@ -526,9 +516,29 @@ export function VizLightbox({
   const defaultCut = defaultCutsFor(errorsJudgedIn(matchCtx)).find(
     (c) => c.cut === cut,
   );
+  // The wall card's own filters, as `VizFilters` — "First serves" is first
+  // serves. While the court still holds them the card's name is the title
+  // and they are not repeated in the strip; loosen one (Serve: Any) and the
+  // title falls back to the cut's own name, so title, strip and Watch label
+  // always describe the live filters.
+  const cardFilters: VizFilters | null = defaultCut
+    ? {
+        ...EMPTY_VIZ_FILTERS,
+        ...defaultCut.filters,
+        player: state.filters.player,
+      }
+    : null;
+  const cardKeys = defaultCut
+    ? (Object.keys(defaultCut.filters) as (keyof VizFilters)[])
+    : [];
+  const onCard =
+    cardFilters !== null &&
+    savedView === null &&
+    cardKeys.every((key) => sameFilterValue(key, state.filters, cardFilters));
   const title = isDraft
     ? "New view"
-    : (savedView?.name ?? defaultCut?.name ?? CUT_LABEL[cut]);
+    : (savedView?.name ??
+      (onCard && defaultCut ? defaultCut.name : CUT_LABEL[cut]));
   const subjectWord = state.filters.player === "you" ? "You" : "Opponent";
   const subtitle = isDraft
     ? "Pick a chart and filters, then save it as a view."
@@ -571,32 +581,37 @@ export function VizLightbox({
     }));
   }
 
-  // Back to the card as it opened, legend and all.
+  // What "Clear filter" leaves: the card's own filters while the title
+  // still names the card, otherwise nothing but the player — exactly the
+  // filters the strip names are removed.
+  const clearTarget: VizFilters =
+    onCard && cardFilters !== null
+      ? cardFilters
+      : { ...EMPTY_VIZ_FILTERS, player: state.filters.player };
+
   function clearFilters() {
     setLegendPick(null);
     setStatPick(null);
-    setState((prev) => ({ ...prev, filters: baseline, viewId: prev.viewId }));
+    setState((prev) => ({ ...prev, filters: clearTarget, viewId: null }));
   }
 
   function setFilters(next: VizFilters) {
     setState((prev) => ({ ...prev, filters: next, viewId: null }));
   }
 
-  // The panel's own keys away from the baseline.
+  // Any filter the court is under beyond what "Clear filter" leaves —
+  // including the advanced (`match`), Result, Rally and Game groups a saved
+  // view or a `?f=` link can carry, which the panel does not edit.
   const panelActive = filterKeysFor(cut).some(
-    (key) => key !== "player" && !sameFilterValue(key, state.filters, baseline),
+    (key) =>
+      key !== "player" && !sameFilterValue(key, state.filters, clearTarget),
   );
-  // The strip's sentence: what is applied beyond the card's own filters,
-  // then the legend's pick.
+  // The strip's sentence: EVERY applied filter the title does not already
+  // say (all of them on a saved view or a loosened card), then the legend's
+  // pick and a Statistics row — so nothing narrows the court unseen.
   const names = { you: you.shortName, opponent: opp.shortName };
-  const baselineState: VizState = { ...state, filters: baseline };
-  const baselineLabels = new Set(
-    activeFilterEntries(baselineState, names, { errorSplitJudged }).map(
-      (e) => e.label,
-    ),
-  );
   const phrases = activeFilterEntries(state, names, { errorSplitJudged })
-    .filter((e) => e.key !== "player" && !baselineLabels.has(e.label))
+    .filter((e) => e.key !== "player" && !(onCard && cardKeys.includes(e.key)))
     .map((e) => e.label);
   if (legendPick !== null)
     phrases.push(
