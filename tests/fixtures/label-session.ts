@@ -51,6 +51,7 @@ export function labelShot(
     landingY: null,
     videoTime: null,
     unclear: [],
+    tags: [],
     siteRemoval: null,
     siteRemovalRestoredAt: null,
     seed: null,

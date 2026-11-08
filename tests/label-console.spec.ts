@@ -227,16 +227,16 @@ test("an expanded point folds its shots out in video order", () => {
   expect(ids).toEqual(["s-serve", "s-return", "s-added"]);
   const panelText = text(panel);
   // Number · time · player's name · stroke · spin · hit at · landed at ·
-  // placement · result.
+  // placement · kind · result.
   expect(panelText).toContain(
-    "1 41:12.0 Lee First serve Flat -0.80 -0.32 0.60 17.79 T In 2 ",
+    "1 41:12.0 Lee First serve Flat -0.80 -0.32 0.60 17.79 T — No kind In 2 ",
   );
   expect(panelText).toContain(
-    "2 41:13.1 Vargas Backhand Topspin 1.80 24.49 -2.10 3.49 Crosscourt In",
+    "2 41:13.1 Vargas Backhand Topspin 1.80 24.49 -2.10 3.49 Crosscourt — No kind In",
   );
   // The added stroke has no spin yet: an em dash, named.
   expect(panelText).toContain(
-    "3 41:14.4 Lee Forehand — Not set -2.30 -1.02 4.20 24.90 Crosscourt Out",
+    "3 41:14.4 Lee Forehand — Not set -2.30 -1.02 4.20 24.90 Crosscourt — No kind Out",
   );
   expect(panelText.indexOf("Deleted shot")).toBeLessThan(
     panelText.indexOf("41:14.4"),

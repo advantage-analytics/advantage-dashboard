@@ -96,6 +96,22 @@ export const LABEL_SHORTCUT_GROUPS: readonly LabelShortcutGroup[] = [
       },
       { keys: ["T"], action: "Time to this frame" },
       { keys: ["L"], action: "Let", note: "On a serve. Again to undo" },
+      {
+        keys: ["G"],
+        action: "Approach",
+        note: "On a rally shot. Again to undo",
+      },
+      { keys: ["K"], action: "Lob", note: "On a rally shot. Again to undo" },
+      {
+        keys: ["J"],
+        action: "Drop shot",
+        note: "On a rally shot. Again to undo",
+      },
+      {
+        keys: ["P"],
+        action: "Passing shot",
+        note: "On a rally shot. Again to undo",
+      },
     ],
   },
   {

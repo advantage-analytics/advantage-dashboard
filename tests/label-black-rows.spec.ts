@@ -823,19 +823,30 @@ test.describe("the black shots well", () => {
       };
     expect(open).toContain(SHOT_TRACKS);
     const tracks = shotTracks(SHOT_TRACKS, SHOT_FLOORS_PX);
-    expect(tracks).toHaveLength(9);
+    expect(tracks).toHaveLength(10);
     expect(tracks.map((t) => t.min)).toEqual([...SHOT_FLOORS_PX]);
     // number · hit · landed never give: the numbers being checked.
     expect(tracks[0]).toEqual({ min: 22, fr: 0 });
     expect(tracks[5]).toEqual({ min: 88, fr: 0 });
     expect(tracks[6]).toEqual({ min: 88, fr: 0 });
-    // The floors, the gaps and the padding are the rail's narrowest exactly:
-    // nothing passes its edge at 520.
+    // The kind track (`label_shots.tags`) sits between placement and result.
+    expect(tracks[8].min).toBe(44);
+    // The wide tracks are only drawn from 640px: their floors, gaps and
+    // padding fit there. Under it placement and kind leave, and the rest
+    // still fit the rail's narrowest: nothing passes its edge at 520.
     expect(
       tracks.reduce((sum, t) => sum + t.min, 0) +
         SHOT_GAPS_PX +
         SHOT_PADDING_PX,
-    ).toBe(RAIL_MIN_PX);
+    ).toBeLessThanOrEqual(640);
+    expect(
+      tracks
+        .filter((_, i) => i !== 7 && i !== 8)
+        .reduce((sum, t) => sum + t.min, 0) +
+        SHOT_GAPS_PX -
+        2 * 8 +
+        SHOT_PADDING_PX,
+    ).toBeLessThanOrEqual(RAIL_MIN_PX);
 
     // The time's floor holds an hour-long match's time whole: nine 6px mono
     // figures.
@@ -844,7 +855,7 @@ test.describe("the black shots well", () => {
     // Number · time to the tenth · player · stroke · spin · … · placement ·
     // result. (The positions are read on their own, below.)
     expect(text(row)).toBe(
-      "3 15:58.9 Lee Forehand Backspin 1.76 23.34 0.77 3.90 Middle In",
+      "3 15:58.9 Lee Forehand Backspin 1.76 23.34 0.77 3.90 Middle — No kind In",
     );
     // Edited, with a seed: the pencil closes the row, and is its Reset.
     const result = row.slice(row.indexOf("data-result-menu"));
@@ -890,13 +901,15 @@ test.describe("the black shots well", () => {
     // Under the breakpoint: the same tracks less placement, written whole.
     expect(SHOT_TRACKS_NARROW.startsWith(`${variant}grid-cols-[`)).toBe(true);
     const wide = shotTracks(SHOT_TRACKS, SHOT_FLOORS_PX);
-    const narrowFloors = SHOT_FLOORS_PX.filter((_, i) => i !== 7);
+    const narrowFloors = SHOT_FLOORS_PX.filter((_, i) => i !== 7 && i !== 8);
     const narrow = shotTracks(SHOT_TRACKS_NARROW, narrowFloors);
     expect(narrow).toHaveLength(8);
-    expect(narrow).toEqual(wide.filter((_, i) => i !== 7));
+    expect(narrow).toEqual(wide.filter((_, i) => i !== 7 && i !== 8));
     const inner = (spec: string) => /grid-cols-\[(.+)\]$/.exec(spec)![1];
     expect(inner(SHOT_TRACKS_NARROW)).toBe(
-      inner(SHOT_TRACKS).replace("_minmax(30px,0.8fr)", ""),
+      inner(SHOT_TRACKS)
+        .replace("_minmax(30px,0.8fr)", "")
+        .replace("_minmax(44px,0.6fr)", ""),
     );
 
     // Every stroke row carries both; its placement cell leaves.
@@ -1373,7 +1386,9 @@ test.describe("the black shots well", () => {
           edited.lastIndexOf("<div", edited.indexOf("data-shot-tray")),
         ),
       ),
-    ).toBe("Split point here Add shot after Reset shot Delete shot");
+    ).toBe(
+      "Split point here Add shot after Reset shot Delete shot Kind Approach G Lob K Drop shot J Passing P",
+    );
     // No In · Out · Net toggle: the call is the Result cell's menu now.
     expect(edited).not.toContain("data-shot-call");
 
@@ -1635,7 +1650,7 @@ test.describe("the black shots well", () => {
     expect(
       text(row.slice(row.lastIndexOf("<div", row.indexOf("data-shot-tray")))),
     ).toBe(
-      "Split point here Add shot after Reset shot Forced Unforced E Delete shot",
+      "Split point here Add shot after Reset shot Forced Unforced E Delete shot Kind Approach G Lob K Drop shot J Passing P",
     );
     // Two real buttons, neither pressed while unmarked, both naming E.
     for (const [kind, label] of [
