@@ -99,6 +99,11 @@ function loadPage() {
     "@/lib/wizard/actions": {
       loadMatchDraft: async () => null,
     },
+    // A resumed draft's saved player, re-checked against the roster. No
+    // draft resumes in this spec, so it is never reached.
+    "@/lib/data/roster-subject-server": {
+      rosterSubjectFor: async () => null,
+    },
     "@/components/dashboard/matches/new-match-wizard/subject-eligibility": {
       draftBelongsToWorkspace: () => true,
       draftWorkspaceRefusal: () => "",
