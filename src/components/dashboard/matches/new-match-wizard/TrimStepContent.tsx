@@ -71,6 +71,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
@@ -99,7 +100,20 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { isFormControl } from "./useWizardKeys";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
 import { FieldCaption } from "./FieldCaption";
+import {
+  EMPTY_TRIM_HISTORY,
+  recordTrim,
+  redoTrim,
+  trimHistoryKey,
+  undoTrim,
+  type TrimHistory,
+  type TrimWindow,
+} from "./trim-history";
+import { readIsMac } from "@/components/dashboard/ask/ask-shortcut";
 import { effectiveFps } from "@/lib/services/upload/validators/splitstep-validator";
+
+/** The platform never changes under a page, so its store never notifies. */
+const subscribeNever = () => () => {};
 
 /** The two camera answers, by their FormData field. */
 export type CameraAnswer = "fixedCamera" | "initialTopPlayerIsPlayer1";
@@ -412,7 +426,7 @@ function TrimStepContentImpl({
   initialTopPlayerIsPlayer1,
   topPlayerAnswerStale = false,
   firstUpload = false,
-  onTrimChange,
+  onTrimChange: onTrimChangeProp,
   onAnswer,
 }: TrimStepContentProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -444,6 +458,41 @@ function TrimStepContentImpl({
   const start = live?.start ?? committedStart;
   const end = live?.end ?? committedEnd;
   const selectedDuration = Math.max(0, end - start);
+
+  /**
+   * ⌘Z / ⌘⇧Z over the committed window (`trim-history.ts`).
+   *
+   * `committedRef` is the window as last committed, written synchronously by
+   * every commit so two changes inside one render still record the right
+   * "from"; the effect re-syncs it when the form changes on its own. History
+   * belongs to one recording, so a new file starts it empty.
+   */
+  const committedRef = useRef<TrimWindow>({
+    start: committedStart,
+    end: committedEnd,
+  });
+  useEffect(() => {
+    committedRef.current = { start: committedStart, end: committedEnd };
+  }, [committedStart, committedEnd]);
+  const historyRef = useRef<TrimHistory>(EMPTY_TRIM_HISTORY);
+  useEffect(() => {
+    historyRef.current = EMPTY_TRIM_HISTORY;
+  }, [videoFile]);
+  /** Every committed cut change goes through here, and so is undoable. */
+  const onTrimChange = useCallback(
+    (nextStart: number, nextEnd: number) => {
+      const next = { start: nextStart, end: nextEnd };
+      historyRef.current = recordTrim(
+        historyRef.current,
+        committedRef.current,
+        next,
+      );
+      committedRef.current = next;
+      onTrimChangeProp(nextStart, nextEnd);
+    },
+    [onTrimChangeProp],
+  );
+  const mac = useSyncExternalStore(subscribeNever, readIsMac, () => true);
   const tooShort = duration > 0 && selectedDuration < minTrimSeconds;
 
   /**
@@ -656,6 +705,47 @@ function TrimStepContentImpl({
     },
     [start, end, clampCut, onTrimChange, seekLatest],
   );
+
+  /**
+   * Undo or redo one committed change. Straight to the prop, not through
+   * `onTrimChange`, so stepping through history records none of its own. The
+   * video follows the cut that moved, as a nudge does. Refused mid-drag: the
+   * gesture's release would overwrite whatever this restored.
+   */
+  const stepHistory = useCallback(
+    (direction: "undo" | "redo"): boolean => {
+      if (draggingRef.current) return false;
+      const step = (direction === "undo" ? undoTrim : redoTrim)(
+        historyRef.current,
+        committedRef.current,
+      );
+      if (!step) return false;
+      const previous = committedRef.current;
+      historyRef.current = step.history;
+      committedRef.current = step.window;
+      onTrimChangeProp(step.window.start, step.window.end);
+      seekLatest(
+        step.window.start !== previous.start
+          ? step.window.start
+          : step.window.end,
+      );
+      return true;
+    },
+    [onTrimChangeProp, seekLatest],
+  );
+
+  // On `window`, unlike the step's other keys: after a click on the rail
+  // focus may sit on the page body, outside this subtree, and ⌘Z must still
+  // reach the trim. A text field keeps its own undo.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const action = trimHistoryKey(e);
+      if (!action || e.defaultPrevented || isFormControl(e.target)) return;
+      if (stepHistory(action)) e.preventDefault();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [stepHistory]);
 
   // The drag itself. The pointer's position lands in a ref; one frame later
   // the rail redraws from it and the video is asked for that frame. Nothing
@@ -1442,6 +1532,12 @@ function TrimStepContentImpl({
           <Kbd size="sm">I</Kbd>
           <Kbd size="sm">O</Kbd>
           <span>set cuts</span>
+          <span aria-hidden="true" className="text-[var(--ink-300)]">
+            ·
+          </span>
+          <Kbd size="sm">{mac ? "⌘" : "ctrl"}</Kbd>
+          <Kbd size="sm">Z</Kbd>
+          <span>undo</span>
         </p>
 
         {tooShort ? (
