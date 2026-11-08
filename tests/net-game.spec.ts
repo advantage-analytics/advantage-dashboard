@@ -16,8 +16,10 @@ import {
   DROP_SHOT_FROM_M,
   hitADropShot,
   isDropShot,
+  hasLobKey,
   isLobShot,
   LOB_APEX_M,
+  lobKeyOf,
   lobShotKeys,
   netEndingOf,
   netEntryOf,
@@ -356,6 +358,34 @@ test.describe("lobs", () => {
     expect(isLobShot({ shotType: "Forehand", videoTime: 31 }, LOBS)).toBe(
       false,
     );
+  });
+});
+
+test.describe("lob keys after the database", () => {
+  test("a contact time read back from a float4 column still finds its lob", () => {
+    // shots.video_time is a float4: late in a long match a time comes back
+    // off by up to ~0.25 ms, enough to move its millisecond key a step.
+    let missedExact = 0;
+    let missedTolerant = 0;
+    for (let i = 0; i < 5000; i += 1) {
+      const contact = 3600 + i * 0.7213;
+      const keys = new Set([lobKeyOf(contact)]);
+      const stored = Math.fround(contact);
+      if (!keys.has(lobKeyOf(stored))) missedExact += 1;
+      if (!hasLobKey(keys, stored)) missedTolerant += 1;
+    }
+    // The exact key is what failed; the tolerant lookup never does.
+    expect(missedExact).toBeGreaterThan(0);
+    expect(missedTolerant).toBe(0);
+  });
+
+  test("a neighbouring stroke is never mistaken for the lob", () => {
+    const keys = new Set([lobKeyOf(1200.5)]);
+    expect(hasLobKey(keys, 1200.5)).toBe(true);
+    expect(hasLobKey(keys, 1200.8)).toBe(false);
+    expect(
+      isLobShot({ shotType: "Backhand", videoTime: Math.fround(1200.5) }, keys),
+    ).toBe(true);
   });
 });
 

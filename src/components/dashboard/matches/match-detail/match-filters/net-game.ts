@@ -106,20 +106,7 @@ export function netEntryOf(
       break;
     }
   }
-  let fed: MatchShot | undefined;
-  for (let i = anchor - 1; i >= 0; i -= 1) {
-    if (shots[i].isPlayer1 !== isPlayer1) {
-      fed = shots[i];
-      break;
-    }
-  }
-  if (
-    fed &&
-    fed.landingY !== null &&
-    Math.abs(fed.landingY - NET_Y_M) <= DRAWN_IN_DEPTH_M
-  ) {
-    return "drawn-in";
-  }
+  if (landedShort(opponentBefore(anchor))) return "drawn-in";
   return "approach";
 }
 
@@ -130,6 +117,22 @@ export function netEntryOf(
  */
 export function lobKeyOf(time: number): number {
   return Math.round(time * 1000) / 1000;
+}
+
+/**
+ * Whether `lobKeys` holds the stroke struck at `time` (a `shots.video_time`).
+ * The column is a float4, so a contact time comes back up to ~0.25 ms off the
+ * ball-paths file's float64 one late in a two-hour match, and its millisecond
+ * key can land one step either side: checked on 20,000 random times, an exact
+ * key missed 7.6% of strokes. Strokes are hundreds of milliseconds apart, so
+ * a neighbouring key can never be a different stroke.
+ */
+export function hasLobKey(lobKeys: ReadonlySet<number>, time: number): boolean {
+  return (
+    lobKeys.has(lobKeyOf(time)) ||
+    lobKeys.has(lobKeyOf(time - 0.001)) ||
+    lobKeys.has(lobKeyOf(time + 0.001))
+  );
 }
 
 const finite = (value: unknown): value is number =>
@@ -181,7 +184,7 @@ export function isLobShot(
   ) {
     return false;
   }
-  return shot.videoTime !== null && lobKeys.has(lobKeyOf(shot.videoTime));
+  return shot.videoTime !== null && hasLobKey(lobKeys, shot.videoTime);
 }
 
 /**

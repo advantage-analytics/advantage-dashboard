@@ -122,9 +122,11 @@ export function StatisticsView() {
       {/* F1, revised 2026-11-06: from 720px of pane (the `@container` on
           `MatchReport.Pane`) the head-to-head and the chart column split the
           row 1:1 — `flex-1 min-w-0` each — rather than the chart column's
-          old fixed 416px, which the fourth chart (Net game) outgrew. Under
-          720px the row stacks: head-to-head first, the charts under it, both
-          full width.
+          old fixed 416px, which the fourth chart (Net game) outgrew. Kept
+          over design board 2b's fixed 360px head-to-head by choice
+          (2026-11-07). Charts in reading order: who led, how the rallies
+          ran, the net game, how points ended. Under 720px the row stacks:
+          head-to-head first, the charts under it, both full width.
 
           Side by side, the two columns end on one line. The row stretches
           (flex's default), and the chart column hands its slack to Rally
@@ -147,9 +149,9 @@ export function StatisticsView() {
               never gives it up — a card squeezed below its content clips. */}
             <div className="flex min-w-0 flex-1 flex-col gap-4 *:shrink-0">
               <PerformanceTrackerChart />
-              <PointEndingsCard isDerived={meta.isDerived} />
               <RallyLengthCard />
               <NetGameCard />
+              <PointEndingsCard isDerived={meta.isDerived} />
             </div>
           </div>
         </StatisticsLobKeysProvider>

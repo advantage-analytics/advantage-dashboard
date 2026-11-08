@@ -161,9 +161,8 @@ export function NetGameCard() {
 
   if (points.length === 0) return null;
 
-  const endings = ENDINGS.filter((e) =>
-    netEndingsFor(!!lobKeys).includes(e.key),
-  );
+  const shown = netEndingsFor(!!lobKeys);
+  const endings = ENDINGS.filter((e) => shown.includes(e.key));
   const empty = youTally.total === 0 && oppTally.total === 0;
 
   const header = (
