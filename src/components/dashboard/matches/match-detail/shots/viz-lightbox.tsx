@@ -114,11 +114,17 @@ export type WatchPoints = (pointNumbers: number[], label: string) => void;
 export function VizLightbox({
   wallPlayer,
   onWatchPoints,
+  allowSaveView = true,
 }: {
   /** The wall's own You | Opponent, which closing restores — a player
    *  switched inside the lightbox does not leak onto the wall. */
   wallPlayer: PlayerFilter;
+  /** "Watch these N points". Omitted, there is no Watch button — a
+   *  read-only host (the team player profile's season view) leaves it out. */
   onWatchPoints?: WatchPoints;
+  /** "Save as view". `false` leaves it out whatever the viewer may write;
+   *  `true` (default) still needs `shotsWriteAccess(meta).canSaveViews`. */
+  allowSaveView?: boolean;
 }) {
   const { state, setState } = useVizState();
   const { meta } = useMatchReport();
@@ -139,7 +145,7 @@ export function VizLightbox({
     unit,
   } = useVizView();
   const { receipt, canEdit, applyBands } = useVizBands();
-  const { canSaveViews } = shotsWriteAccess(meta);
+  const canSaveViews = allowSaveView && shotsWriteAccess(meta).canSaveViews;
 
   // The stage lives inside Radix's portal, which mounts a commit after this
   // component, so a plain ref is still empty when `usePanZoom` first
@@ -545,6 +551,9 @@ export function VizLightbox({
 
   const shownDots = dots ?? result.dots;
   const matched = isDraft ? [] : pointsBehind(cut, shownDots, points);
+  const showFooter =
+    !isDraft &&
+    (canSaveViews || (meta.hasPlayableVideo && onWatchPoints !== undefined));
   // The points to watch: the matched ones with a clip, as many as one Video
   // tab point set holds (`MAX_POINT_SET`), so the button never promises more
   // than the list will show.
@@ -992,40 +1001,47 @@ export function VizLightbox({
             </div>
 
             {/* ── Footer ─────────────────────────────────────────────── */}
-            <div className="mt-5 flex items-center gap-2.5 border-t border-[var(--border-hairline)] px-6 pt-4 pb-5">
-              {canSaveViews && !isDraft && (
-                <button
-                  ref={saveAnchorRef}
-                  type="button"
-                  onClick={() => setSaveDialogOpen(true)}
-                  className="cursor-pointer text-[12px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
-                >
-                  Save as view
-                </button>
-              )}
-              <span className="flex-1" />
-              {meta.hasPlayableVideo && onWatchPoints && !isDraft && (
-                <button
-                  type="button"
-                  disabled={playable.length === 0}
-                  onClick={() =>
-                    onWatchPoints(
-                      playable.map((p) => p.pointNumber),
-                      // The Video tab's strip names the set in the lightbox's
-                      // own words: the card, then the strip's sentence.
-                      [title, ...phrases]
-                        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-                        .join(" · "),
-                    )
-                  }
-                  className={advButton("primary", "sm")}
-                >
-                  {playable.length === 0
-                    ? "Watch points"
-                    : `Watch these ${playable.length} ${playable.length === 1 ? "point" : "points"}`}
-                </button>
-              )}
-            </div>
+            {/* Only when it has an action: a read-only host (no Watch, no
+                Save as view) gets the body's own bottom padding instead of an
+                empty bar. */}
+            {showFooter ? (
+              <div className="mt-5 flex items-center gap-2.5 border-t border-[var(--border-hairline)] px-6 pt-4 pb-5">
+                {canSaveViews && !isDraft && (
+                  <button
+                    ref={saveAnchorRef}
+                    type="button"
+                    onClick={() => setSaveDialogOpen(true)}
+                    className="cursor-pointer text-[12px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
+                  >
+                    Save as view
+                  </button>
+                )}
+                <span className="flex-1" />
+                {meta.hasPlayableVideo && onWatchPoints && !isDraft && (
+                  <button
+                    type="button"
+                    disabled={playable.length === 0}
+                    onClick={() =>
+                      onWatchPoints(
+                        playable.map((p) => p.pointNumber),
+                        // The Video tab's strip names the set in the lightbox's
+                        // own words: the card, then the strip's sentence.
+                        [title, ...phrases]
+                          .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+                          .join(" · "),
+                      )
+                    }
+                    className={advButton("primary", "sm")}
+                  >
+                    {playable.length === 0
+                      ? "Watch points"
+                      : `Watch these ${playable.length} ${playable.length === 1 ? "point" : "points"}`}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div aria-hidden="true" className="h-6 shrink-0" />
+            )}
 
             {canSaveViews && (
               <SaveViewDialog

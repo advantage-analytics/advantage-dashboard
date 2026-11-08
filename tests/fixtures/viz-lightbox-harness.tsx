@@ -47,6 +47,8 @@ createRoot(document.getElementById("root")!).render(
       bandSettings={DEFAULT_BANDS}
       canEditBands={false}
       unit="m"
+      // `?readonly=1`: the public share page's report — nothing that writes.
+      readOnly={window.location.search.includes("readonly=1")}
     >
       <main className="mx-auto max-w-[1200px] p-6">
         <ShotsTab />

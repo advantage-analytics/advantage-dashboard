@@ -339,3 +339,21 @@ test("the legend's pick survives a You / Opponent switch but not a cut change", 
   const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
   await expect(marks).toHaveCount(6);
 });
+
+test("a read-only host leaves out Save as view and, without video, Watch — and draws no empty footer", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve&readonly=1`);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Save as view" }),
+  ).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: /^Watch/ })).toHaveCount(0);
+  // The court and both columns still work.
+  await expect(
+    dialog.locator("[data-court-stage] [data-viz-mark]").first(),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Statistics" }).click();
+  await expect(dialog.getByText(/^Average \d+%$/).first()).toBeVisible();
+});
