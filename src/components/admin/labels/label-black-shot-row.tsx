@@ -809,9 +809,11 @@ export function BlackShotRow({
           data-shot-kind=""
           className={cn("min-w-0 truncate text-[11px]", NARROW_HIDDEN, words)}
         >
+          {/* A serve takes no kind (the strip and keys refuse it), so its
+            cell stays empty rather than drawing a dash that reads as a gap. */}
           {shot.tags.length > 0 ? (
             shot.tags.map((tag) => SHOT_TAG_LABEL[tag]).join(" · ")
-          ) : (
+          ) : isServeStroke(shot.stroke) ? null : (
             <Dash label="No kind" />
           )}
         </span>

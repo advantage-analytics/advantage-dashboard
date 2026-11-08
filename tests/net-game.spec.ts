@@ -4,8 +4,11 @@ import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import type { BallPathsFile } from "@/lib/services/splitstep/derivation/ball-paths";
 
 import {
+  NO_LOB_DATA_NOTE,
+  NO_PASS_DATA_NOTE,
   POINT_ROWS,
   sideCut,
+  withLobAvailability,
   tallySide,
   withPointRows,
 } from "@/components/dashboard/matches/match-detail/head-to-head-card";
@@ -25,7 +28,11 @@ import {
   netEntryOf,
   netGameTally,
 } from "@/components/dashboard/matches/match-detail/match-filters/net-game";
-import { cameInByLine } from "@/components/dashboard/matches/match-detail/net-game-card";
+import {
+  cameInByLine,
+  netEndingsFor,
+  PASSED_OR_LOBBED,
+} from "@/components/dashboard/matches/match-detail/net-game-card";
 
 /**
  * The net game classifiers (`match-filters/net-game.ts`) and the three
@@ -421,7 +428,7 @@ test.describe("the Net game card's tally", () => {
 
 test.describe("head-to-head net rows", () => {
   const configs = POINT_ROWS.filter((c) =>
-    ["Approach points won", "Passing shots won", "Lob points won"].includes(
+    ["Approach points won", "Passed the net player", "Lob points won"].includes(
       c.label,
     ),
   );
@@ -442,15 +449,12 @@ test.describe("head-to-head net rows", () => {
   });
 
   test("passing shots won: the opponent passed 1 of your 5 net points", () => {
-    const r = row(LOBS, "Passing shots won");
+    const r = row(LOBS, "Passed the net player");
     expect(r.opp).toMatchObject({ display: "20%", detail: "1/5" });
     // The opponent never came in, so you have nobody to pass.
     expect(r.you.display).toBe("");
-    // Without lobs the lob is a pass too.
-    expect(row(null, "Passing shots won").opp).toMatchObject({
-      display: "40%",
-      detail: "2/5",
-    });
+    // Without lobs a lob would read as a pass, so the row is a dash.
+    expect(row(null, "Passed the net player").opp.display).toBe("");
   });
 
   test("lob points won: a rate with lob keys, a dash without", () => {
@@ -470,8 +474,8 @@ test.describe("head-to-head net rows", () => {
       return sideCut(c.cut!, side, c.sideBy, c.sideWon);
     };
     expect(ids(cell("Approach points won", "you"))).toEqual(["opp-error"]);
-    expect(ids(cell("Passing shots won", "opp"))).toEqual(["passed"]);
-    expect(ids(cell("Passing shots won", "opp"), CTX)).toEqual([
+    expect(ids(cell("Passed the net player", "opp"))).toEqual(["passed"]);
+    expect(ids(cell("Passed the net player", "opp"), CTX)).toEqual([
       "passed",
       "lobbed",
     ]);
@@ -559,5 +563,36 @@ test.describe("drop shots", () => {
       "opp-drop",
     ]);
     expect(ids(config.cut!)).toEqual(["you-drop", "opp-drop"]);
+  });
+});
+
+test.describe("without ball flight data", () => {
+  const groups = [{ title: "Points", configs: POINT_ROWS }];
+  const byLabel = (hasLobs: boolean, label: string) =>
+    withLobAvailability(groups, hasLobs)[0].configs.find(
+      (c) => c.label === label,
+    )!;
+
+  test("the Lob and Passed rows lose their cut and say why", () => {
+    expect(byLabel(false, "Lob points won")).toMatchObject({
+      cut: undefined,
+      note: NO_LOB_DATA_NOTE,
+    });
+    expect(byLabel(false, "Passed the net player")).toMatchObject({
+      cut: undefined,
+      note: NO_PASS_DATA_NOTE,
+    });
+    // Every other row, and both rows with lobs known, pass through untouched.
+    expect(byLabel(false, "Approach points won").note).toBeUndefined();
+    expect(byLabel(true, "Passed the net player").cut).toEqual({
+      netBy: "either",
+      netEnding: "passed",
+    });
+  });
+
+  test("the Net game card drops Lobbed and names Passed for what it holds", () => {
+    expect(netEndingsFor(false)).not.toContain("lobbed");
+    expect(netEndingsFor(true)).toContain("lobbed");
+    expect(PASSED_OR_LOBBED).toBe("Passed or lobbed");
   });
 });

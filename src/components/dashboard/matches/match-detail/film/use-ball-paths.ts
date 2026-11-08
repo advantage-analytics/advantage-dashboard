@@ -42,11 +42,19 @@ const NO_PATHS: readonly FilmBallPath[] = [];
  * room each ask for the same file, so a view switch or opening the room finds
  * it here instead of downloading it again. Only a parsed file is kept — a
  * failure is asked again next mount, as it always was.
+ *
+ * It lives `BALL_PATHS_CACHE_MS`: long enough for a session's view switches,
+ * short enough that a match re-analysed while the tab stays open, or a tab
+ * someone else signs in to, gets a fresh file on its next mount.
  */
-let lastFile: { matchId: string; file: BallPathsFile } | null = null;
+export const BALL_PATHS_CACHE_MS = 5 * 60 * 1000;
+
+let lastFile: { matchId: string; file: BallPathsFile; at: number } | null =
+  null;
 
 function cachedFile(matchId: string): BallPathsFile | null {
-  return lastFile?.matchId === matchId ? lastFile.file : null;
+  if (!lastFile || lastFile.matchId !== matchId) return null;
+  return Date.now() - lastFile.at > BALL_PATHS_CACHE_MS ? null : lastFile.file;
 }
 
 /**
@@ -62,10 +70,15 @@ export function useBallPathsFile({
   matchId: string;
   enabled: boolean;
 }): BallPathsFile | null {
+  // A file still cached when this mount starts is held for the mount's
+  // life, so it cannot expire under a view that already drew it.
   const [loaded, setLoaded] = useState<{
     matchId: string;
     file: BallPathsFile;
-  } | null>(null);
+  } | null>(() => {
+    const file = cachedFile(matchId);
+    return file ? { matchId, file } : null;
+  });
   /** The match id already asked for, so `enabled` can flap for free. */
   const requested = useRef<string | null>(null);
 
@@ -91,7 +104,7 @@ export function useBallPathsFile({
         }
         const file = parseBallPathsFile(await response.json());
         settled = true;
-        if (file) lastFile = { matchId, file };
+        if (file) lastFile = { matchId, file, at: Date.now() };
         // `live` is checked after the awaits, so nothing is set on an unmounted
         // component even though the abort usually gets there first.
         if (!file || !live) return;

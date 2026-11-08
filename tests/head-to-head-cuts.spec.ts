@@ -53,7 +53,7 @@ const EXPECTED_CUTS: Record<string, FilmCut> = {
   "Net point attempts": { netBy: "either" },
   "Net points won": { netBy: "either" },
   "Approach points won": { netBy: "either", netEntry: "approach" },
-  "Passing shots won": { netBy: "either", netEnding: "passed" },
+  "Passed the net player": { netBy: "either", netEnding: "passed" },
   "Lob points won": { lobBy: "either" },
   "Drop shot points won": { dropBy: "either" },
   Aces: { serveResult: ["ace"] },
@@ -86,7 +86,7 @@ const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
     resultOutcome: ["won"],
   },
   // Your passing shots are the OPPONENT's net points that ended passed.
-  "Passing shots won": { netBy: "opponent", netEnding: "passed" },
+  "Passed the net player": { netBy: "opponent", netEnding: "passed" },
   "Lob points won": { lobBy: "you", resultOutcome: ["won"] },
   "Drop shot points won": { dropBy: "you", resultOutcome: ["won"] },
   // An ace is the server's: Serve › Player, never Hit by.

@@ -338,14 +338,18 @@ export const POINT_ROWS: H2HRowConfig[] = [
   },
   {
     // A side's passes are the OPPONENT's net points that ended "passed"
-    // (`netEndingOf`), as a share of the opponent's net points — so the cell's
-    // cut names the other side at the net (`netAgainst`).
-    label: "Passing shots won",
+    // (`netEndingOf`), as a share of ALL the opponent's net points — not of
+    // the points a pass was tried on, which nothing measures — so the label
+    // says what it counts. The cell's cut names the other side at the net
+    // (`netAgainst`). Needs the ball-paths file, or a lob would count as a
+    // pass (`withLobAvailability`).
+    label: "Passed the net player",
     fromPoints: "passingShotsWon",
     isPercentage: true,
     cut: { netBy: "either", netEnding: "passed" },
     sideBy: "netAgainst",
-    noun: "passing shots",
+    noun: "opponent net points",
+    verb: "passed",
   },
   {
     // The points in which that side struck at least one lob (`hitALob`), and
@@ -529,9 +533,13 @@ const GROUPS_BY_KIND = {
 
 /** Why the Lob row is a dash on a match with no ball-paths file. */
 export const NO_LOB_DATA_NOTE = "No ball flight data for this match";
+/** Why the Passed row is a dash then: a lob cannot be told from a pass. */
+export const NO_PASS_DATA_NOTE =
+  "No ball flight data, so a lob can't be told from a pass";
 
 /**
- * The groups with the Lob points row set to what the match can say: as
+ * The groups with the Lob points and Passed rows set to what the match can
+ * say: as
  * configured when the ball-paths file's lobs are known, otherwise with no cut
  * and a note — the dash it draws then says why, and nothing offers to open
  * points no predicate can find. Every other row passes through untouched.
@@ -546,7 +554,9 @@ export function withLobAvailability(
     configs: group.configs.map((config) =>
       config.fromPoints === "lobPointsWon"
         ? { ...config, cut: undefined, note: NO_LOB_DATA_NOTE }
-        : config,
+        : config.fromPoints === "passingShotsWon"
+          ? { ...config, cut: undefined, note: NO_PASS_DATA_NOTE }
+          : config,
     ),
   }));
 }
@@ -739,9 +749,10 @@ interface DerivedSide {
   approachPoints: Tally;
   /**
    * The OPPONENT's net points this side passed (`netEndingOf` "passed" for
-   * the opponent) — `won` — of every opponent net point — `total`.
+   * the opponent) — `won` — of every opponent net point — `total`. `null`
+   * without lob keys: a lob would count as a pass.
    */
-  passes: Tally;
+  passes: Tally | null;
   /**
    * Points this side struck a lob in (`hitALob`); `won` = won them. `null`
    * without lob keys: unknown, not none.
@@ -780,7 +791,7 @@ export function tallySide(
     unreturnedServes: 0,
     netPoints: emptyTally(),
     approachPoints: emptyTally(),
-    passes: emptyTally(),
+    passes: lobKeys ? emptyTally() : null,
     lobPoints: lobKeys ? emptyTally() : null,
     dropPoints: emptyTally(),
     shotsRecorded: false,
@@ -804,7 +815,7 @@ export function tallySide(
         if (iWon) d.approachPoints.won += 1;
       }
     }
-    if (cameToNet(p, !isPlayer1)) {
+    if (d.passes && cameToNet(p, !isPlayer1)) {
       d.passes.total += 1;
       if (netEndingOf(p, !isPlayer1, lobKeys) === "passed") d.passes.won += 1;
     }
@@ -902,7 +913,7 @@ function derivedValue(config: H2HRowConfig, d: DerivedSide): number | null {
     case "approachPointsWon":
       return rate(d.approachPoints);
     case "passingShotsWon":
-      return rate(d.passes);
+      return d.passes ? rate(d.passes) : null;
     case "lobPointsWon":
       return d.lobPoints ? rate(d.lobPoints) : null;
     case "dropShotPointsWon":

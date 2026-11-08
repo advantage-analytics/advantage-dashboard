@@ -229,7 +229,7 @@ test("an expanded point folds its shots out in video order", () => {
   // Number · time · player's name · stroke · spin · hit at · landed at ·
   // placement · kind · result.
   expect(panelText).toContain(
-    "1 41:12.0 Lee First serve Flat -0.80 -0.32 0.60 17.79 T — No kind In 2 ",
+    "1 41:12.0 Lee First serve Flat -0.80 -0.32 0.60 17.79 T In 2 ",
   );
   expect(panelText).toContain(
     "2 41:13.1 Vargas Backhand Topspin 1.80 24.49 -2.10 3.49 Crosscourt — No kind In",

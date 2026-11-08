@@ -116,6 +116,13 @@ const ENTRIES: SegmentMeta<NetEntry>[] = [
   { key: "drawn-in", label: "Drawn in", you: YOU_5, opp: OPP_5 },
 ];
 
+/**
+ * "Passed" when lobs are known; without them a lob over the net player is
+ * counted there too, so the segment says so rather than claiming every one
+ * was a pass.
+ */
+export const PASSED_OR_LOBBED = "Passed or lobbed";
+
 /** The endings the card draws: Lobbed only when lobs are known. */
 export function netEndingsFor(hasLobs: boolean): NetEnding[] {
   return ENDINGS.map((e) => e.key).filter((k) => hasLobs || k !== "lobbed");
@@ -162,7 +169,9 @@ export function NetGameCard() {
   if (points.length === 0) return null;
 
   const shown = netEndingsFor(!!lobKeys);
-  const endings = ENDINGS.filter((e) => shown.includes(e.key));
+  const endings = ENDINGS.filter((e) => shown.includes(e.key)).map((e) =>
+    !lobKeys && e.key === "passed" ? { ...e, label: PASSED_OR_LOBBED } : e,
+  );
   const empty = youTally.total === 0 && oppTally.total === 0;
 
   const header = (

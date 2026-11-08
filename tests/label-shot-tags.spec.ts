@@ -210,9 +210,9 @@ test.describe("the shots well", () => {
     const html = render("t-approach");
     const cells = [...html.matchAll(/data-shot-kind=""[^>]*>(.*?)<\/span>/g)];
     expect(cells).toHaveLength(2);
-    // The serve's cell is the console's dash, named for a screen reader.
-    expect(html.match(/No kind/g)).toHaveLength(1);
-    expect(html.indexOf("No kind")).toBeLessThan(html.indexOf("t-approach"));
+    // A serve takes no kind: its cell is empty, not a dash.
+    expect(text(cells[0][1])).toBe("");
+    expect(html).not.toContain("No kind");
     expect(cells[1][1]).toBe("Approach · Passing");
     // It leaves with placement on a narrow well.
     expect(tag(html, "data-shot-kind")).toContain("@max-[640px]/shots:hidden");
