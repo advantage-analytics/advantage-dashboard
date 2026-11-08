@@ -205,10 +205,12 @@ export function VizLightbox({
 
   /** The right column: the points behind the marks, or their statistics. */
   const [pane, setPane] = useState<"points" | "stats">("points");
-  /** The legend's one choice (Won · Lost · Out · Ace), local to this card. */
-  // Stamped with the cut it was picked on: a chart-menu cut switch
-  // (Placement → Contact) lets go of it, so it can never empty a court whose
-  // marks it does not describe. A You | Opponent switch keeps it (canvas S08).
+  /**
+   * The legend's one choice (Won · Lost · Out · Ace), local to this card.
+   * Stamped with the cut it was picked on: a chart-menu cut switch
+   * (Placement → Contact) lets go of it, so it can never empty a court whose
+   * marks it does not describe. A You | Opponent switch keeps it (canvas S08).
+   */
   const [legendState, setLegendState] = useState<{
     cut: string | null;
     pick: LegendPick;
