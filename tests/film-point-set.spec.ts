@@ -32,6 +32,7 @@ import {
   matchFilmPointsHref,
   MAX_POINT_SET,
   parsePointSet,
+  parsePointSetLabel,
   pointSetQuery,
   serializePointSet,
 } from "@/lib/match-video/point-set";
@@ -74,6 +75,19 @@ test.describe("the URL contract", () => {
       "tab=film&f=sp.y",
     );
     expect(pointSetQuery("tab=film&pn=3", [])).toBe("tab=film");
+  });
+
+  test("a set's words (`pnl`) travel beside it and go when the set changes", () => {
+    expect(pointSetQuery("tab=film", [3, 7], "First serves · Deuce T")).toBe(
+      "tab=film&pn=3%2C7&pnl=First+serves+%C2%B7+Deuce+T",
+    );
+    // A set written without words drops an older set's.
+    expect(pointSetQuery("tab=film&pn=3&pnl=Old", [4])).toBe("tab=film&pn=4");
+    expect(pointSetQuery("tab=film&pn=3&pnl=Old", null)).toBe("tab=film");
+    // Words without a set are never written.
+    expect(pointSetQuery("tab=film", null, "Words")).toBe("tab=film");
+    expect(parsePointSetLabel("  ")).toBeNull();
+    expect(parsePointSetLabel("x".repeat(500))).toHaveLength(120);
   });
 
   test("the film link: tab, then the filters, then the points", () => {
@@ -166,6 +180,14 @@ test.describe("the list's fourth layer", () => {
         names,
       ),
     ).toBe("Second serve · 2 chosen points · Saved");
+    // Named by its sender (the Visualizations lightbox), the set reads in
+    // those words instead.
+    expect(
+      filmListSentence(
+        { ...base, pointSet: [3, 7], pointSetLabel: "First serves · Deuce T" },
+        names,
+      ),
+    ).toBe("First serves · Deuce T");
   });
 
   test("the strip's action is 'Clear filter' while a set is in force, even over a landed cut", () => {

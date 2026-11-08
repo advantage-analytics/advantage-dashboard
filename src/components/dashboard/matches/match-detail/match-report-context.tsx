@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { pointSetQuery } from "@/lib/match-video/point-set";
 import { matchViewSource, track, type MatchViewSource } from "@/lib/analytics";
 import {
   ALL_REPORT_VIEWS,
@@ -68,6 +69,13 @@ export interface MatchReportActions {
    * names the card the click came from, for analytics only (`stat_clicked`).
    */
   watchCut(cut: FilmCut, label: string, section?: string): void;
+  /**
+   * Open the Video view on a set of points by number — the Video tab's
+   * point-set layer (`?pn=`, `lib/match-video/point-set.ts`), named in its
+   * strip by `label` (`?pnl=`). The Visualizations lightbox's "Watch these N
+   * points". A no-op without a playable video, as `watchCut` is.
+   */
+  watchPointSet(pointNumbers: readonly number[], label: string): void;
   collapseInsight(): void;
   expandInsight(): void;
 }
@@ -321,6 +329,20 @@ export function MatchReportProvider({
         const query = new URLSearchParams(window.location.search);
         query.set("tab", "film");
         query.set("point", pointId);
+        query.delete("fullscreen");
+        window.history.pushState(null, "", `${pathname}?${query.toString()}`);
+      },
+      watchPointSet(pointNumbers, label) {
+        if (!hasPlayableVideo || pointNumbers.length === 0) return;
+        const query = new URLSearchParams(
+          pointSetQuery(
+            window.location.search.replace(/^\?/, ""),
+            pointNumbers,
+            label,
+          ),
+        );
+        query.set("tab", "film");
+        query.delete("point");
         query.delete("fullscreen");
         window.history.pushState(null, "", `${pathname}?${query.toString()}`);
       },

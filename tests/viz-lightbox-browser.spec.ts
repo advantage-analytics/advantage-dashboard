@@ -71,7 +71,12 @@ test("Watch these N points follows the marks and needs a playable video", async 
   const watch = page.getByRole("button", { name: "Watch these 1 point" });
   await expect(watch).toBeEnabled();
   await watch.click();
-  await expect(page).toHaveURL(/tab=film.*point=p1-high-0-0/);
+  // The Video tab's point set: the matched points by number, named in the
+  // lightbox's words.
+  await expect(page).toHaveURL(/tab=film/);
+  const url = new URL(page.url());
+  expect(url.searchParams.get("pn")).toMatch(/^\d+$/);
+  expect(url.searchParams.get("pnl")).toBe("First serves");
 });
 
 test("a mark's readout appears on hover and stays inside the court", async ({

@@ -15,6 +15,7 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { advButton } from "@/lib/ui/adv-button";
+import { MAX_POINT_SET } from "@/lib/match-video/point-set";
 import { contactBandRows, depthBandRows } from "@/lib/data/viz-bands";
 import { isTextEntry } from "@/lib/ui/is-text-entry";
 import { cn } from "@/lib/utils";
@@ -106,8 +107,9 @@ import { useMatchFilters } from "../match-filters/provider";
  * N is `pointsBehind()` over the same marks the court draws.
  */
 
-/** Opens the Video tab on the points the lightbox shows. */
-export type WatchPoints = (pointIds: string[], label: string) => void;
+/** Opens the Video tab on the points the lightbox shows, by point number,
+ *  named by `label` in its strip. */
+export type WatchPoints = (pointNumbers: number[], label: string) => void;
 
 export function VizLightbox({
   wallPlayer,
@@ -504,7 +506,10 @@ export function VizLightbox({
 
   const shownDots = dots ?? result.dots;
   const matched = isDraft ? [] : pointsBehind(cut, shownDots, points);
-  const playable = matched.filter(isPlayable);
+  // The points to watch: the matched ones with a clip, as many as one Video
+  // tab point set holds (`MAX_POINT_SET`), so the button never promises more
+  // than the list will show.
+  const playable = matched.filter(isPlayable).slice(0, MAX_POINT_SET);
   const legend = legendItemsFor(cut, state.chart);
   const heat = state.chart === "heat";
 
@@ -966,8 +971,12 @@ export function VizLightbox({
                   disabled={playable.length === 0}
                   onClick={() =>
                     onWatchPoints(
-                      playable.map((p) => p.id),
-                      title,
+                      playable.map((p) => p.pointNumber),
+                      // The Video tab's strip names the set in the lightbox's
+                      // own words: the card, then the strip's sentence.
+                      [title, ...phrases]
+                        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+                        .join(" · "),
                     )
                   }
                   className={advButton("primary", "sm")}
