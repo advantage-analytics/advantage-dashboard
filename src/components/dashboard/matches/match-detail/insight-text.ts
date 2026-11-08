@@ -16,6 +16,8 @@
  * taken from that text.
  */
 
+import { clipText } from "@/lib/data/player-profile";
+
 export interface SplitInsight {
   /** The first sentence — the card's large claim line. */
   claim: string;
@@ -81,7 +83,7 @@ export function splitInsight(summary: string): SplitInsight {
  * of guessing what "this" means. Ask never reads the summary itself (it is a
  * different model answering from the data), so the claim has to travel in
  * the question. A closing period is dropped inside the quotes; `?` and `!`
- * are kept.
+ * are kept, and the claim's own double quotes turn single.
  *
  * The wording was picked against live answers on 2026-11-07. "Why does my
  * report say …? Show me the points behind it." got the claim echoed back
@@ -102,9 +104,12 @@ export function whyThisQuestion(claim: string): string {
 const WHY_THIS_CLAIM_MAX = 190;
 
 function quoteClaim(claim: string): string {
-  const flat = claim.replace(/\s+/g, " ").trim().replace(/\.$/, "");
-  if (flat.length <= WHY_THIS_CLAIM_MAX) return flat;
-  const head = flat.slice(0, WHY_THIS_CLAIM_MAX - 1);
-  const cut = head.lastIndexOf(" ");
-  return `${(cut > WHY_THIS_CLAIM_MAX / 2 ? head.slice(0, cut) : head).replace(/[\s,;:—-]+$/, "")}…`;
+  // The claim's own double quotes become single ones, so the question's
+  // quotes are the only pair and it is plain where the claim ends.
+  const flat = claim
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\.$/, "")
+    .replace(/["“”]/g, "'");
+  return clipText(flat, WHY_THIS_CLAIM_MAX);
 }

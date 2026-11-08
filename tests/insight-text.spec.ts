@@ -82,4 +82,10 @@ test.describe("whyThisQuestion", () => {
     expect(question).toContain('word…". Which stats');
     expect(question.endsWith("do any contradict it?")).toBe(true);
   });
+
+  test("the claim's own double quotes turn single, so one pair remains", () => {
+    expect(whyThisQuestion('You called it "the best serve day".')).toBe(
+      `My report says "You called it 'the best serve day'". Which stats from this match support that, and do any contradict it?`,
+    );
+  });
 });

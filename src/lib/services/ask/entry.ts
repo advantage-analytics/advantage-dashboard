@@ -25,6 +25,7 @@
 
 import type { AskTagOptions } from "@/lib/data/ask-tags";
 import { askOpponentKey } from "@/lib/data/ask-tags";
+import { clipText } from "@/lib/data/player-profile";
 import { askBasePath, type AskScope } from "@/lib/services/ask/scope";
 import type { AskSavedTag } from "@/lib/services/ask/tags";
 
@@ -43,13 +44,9 @@ export const ASK_ENTRY_PARAMS = {
  */
 export const ASK_ENTRY_QUESTION_MAX = 300;
 
-/** `text` trimmed, its runs of whitespace collapsed, and capped on a word. */
+/** `text` with its runs of whitespace collapsed, capped on a word. */
 function clipQuestion(text: string): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  if (flat.length <= ASK_ENTRY_QUESTION_MAX) return flat;
-  const head = flat.slice(0, ASK_ENTRY_QUESTION_MAX - 1);
-  const cut = head.lastIndexOf(" ");
-  return `${cut > ASK_ENTRY_QUESTION_MAX / 2 ? head.slice(0, cut) : head}…`;
+  return clipText(text.replace(/\s+/g, " "), ASK_ENTRY_QUESTION_MAX);
 }
 
 export type AskEntry =
