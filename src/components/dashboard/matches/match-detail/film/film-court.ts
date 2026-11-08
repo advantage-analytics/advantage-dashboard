@@ -1,5 +1,6 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 
+import { netPathX } from "../net-crossing";
 import { rallyNumbering } from "./film-shots";
 import { REACHED_EPSILON_SECONDS } from "./film-timeline";
 
@@ -45,6 +46,9 @@ import { REACHED_EPSILON_SECONDS } from "./film-timeline";
  *     (all 75 sat on the hitter's side); Advantage Intelligence recorded 19 of
  *     49 on the FAR side of the net and left 19 null. So a net ball is placed
  *     on the hitter's side, and the hitter's side comes from `contactY`.
+ *     Sideways it sits on its own path — where the contact → landing line
+ *     meets the net (`netPathX`) — or at the landing's x when that line never
+ *     reaches the net (an imputed landing on the hitter's side).
  *
  * ── Orientation ─────────────────────────────────────────────────────────────
  *
@@ -318,7 +322,13 @@ function bouncePosition(
   const y = hitterLow
     ? Math.min(shot.landingY, NET_Y_M - NET_INSET_M)
     : Math.max(shot.landingY, NET_Y_M + NET_INSET_M);
-  return { x: shot.landingX, y };
+  // Sideways, follow the ball's own path: where the contact → landing line
+  // reaches the drawn spot. A landing already on the hitter's side, or an
+  // unmeasured contact, has no crossing and keeps the landing's x.
+  const x =
+    netPathX(shot.contactX, shot.contactY, shot.landingX, shot.landingY, y) ??
+    shot.landingX;
+  return { x, y };
 }
 
 /** What every mark of one shot carries besides its own position. */

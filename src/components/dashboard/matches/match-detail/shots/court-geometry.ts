@@ -821,8 +821,9 @@ const SERVE_NET_GUTTER_INSET_M = 0.3;
  * DEPTH axis takes — always the same spot regardless of the ball's own
  * (unusable, hitter's-side) landing. Exactly one of `cx`/`cy` is set (the
  * axis this frame's net sits on); the caller keeps the OTHER axis from that
- * same dot's normal projection (`projectServeMetricDot`/`projectReturnDot`,
- * which already reads the dot's true lateral position correctly) —
+ * same dot's normal projection (`projectServeMetricDot`/`projectReturnDot`
+ * of the dot's `lateralM` — for a net dot, where its own contact → landing
+ * path meets the net, set by `viz-model.ts`'s `netDotLateralM`) —
  * `court-art.tsx` does exactly that merge.
  */
 export function netGutterFor(cut: Cut): {
