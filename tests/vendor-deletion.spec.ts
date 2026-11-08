@@ -93,3 +93,21 @@ test("nothing pending sends nothing", async () => {
   expect(result.outcome).toBe("nothing_pending");
   expect(sent).toHaveLength(0);
 });
+
+test("a same-day batch with more rows gets a different idempotency key", async () => {
+  const { vendorDeletionEmail } = await import("@/lib/services/email");
+  const one = vendorDeletionEmail({
+    to: "a@x.com",
+    day: "2026-11-07",
+    requests: [{ vendorMatchId: "m1", vendorJobId: "j1" }],
+  });
+  const two = vendorDeletionEmail({
+    to: "a@x.com",
+    day: "2026-11-07",
+    requests: [
+      { vendorMatchId: "m1", vendorJobId: "j1" },
+      { vendorMatchId: "m2", vendorJobId: "j2" },
+    ],
+  });
+  expect(one.idempotencyKey).not.toBe(two.idempotencyKey);
+});

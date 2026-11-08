@@ -20,11 +20,14 @@ create table public.vendor_deletion_requests (
   id              uuid primary key default gen_random_uuid(),
   vendor          text not null default 'splitstep'
                   check (vendor in ('splitstep')),
-  -- What SplitStep knows the match by: the job body's `MatchID` is
-  -- `matches.id`, and its job id is `processing_jobs.external_job_id`.
+  -- What SplitStep knows the match by: the `MatchID` the job body sent
+  -- (`processing_jobs.vendor_request`; usually `matches.id`, but an admin
+  -- submission may have sent its operation id), and its own job id
+  -- (`processing_jobs.external_job_id`).
   vendor_match_id text not null,
   vendor_job_id   text not null,
-  -- A live-DB spec account (`@example.com`, RFC 2606). Recorded, never mailed.
+  -- The match belonged to a live-DB spec account (`@example.com`, RFC 2606).
+  -- Recorded, never mailed.
   is_test         boolean not null default false,
   requested_at    timestamptz not null default now(),
   sent_at         timestamptz,
@@ -53,11 +56,13 @@ begin
   begin
     insert into public.vendor_deletion_requests
       (vendor_match_id, vendor_job_id, is_test)
-    select old.id::text,
+    select coalesce(nullif(j.vendor_request ->> 'MatchID', ''), old.id::text),
            j.external_job_id,
            coalesce(u.email ~* '@example\.(com|org|net)$', false)
     from public.processing_jobs j
-    left join public.users u on u.id = j.created_by
+    -- The match's owner, not the job's uploader: a real user's team match
+    -- uploaded by a test account is still owed.
+    left join public.users u on u.id = old.created_by
     where j.match_id = old.id
       and j.external_job_id is not null
     on conflict (vendor, vendor_job_id) do nothing;

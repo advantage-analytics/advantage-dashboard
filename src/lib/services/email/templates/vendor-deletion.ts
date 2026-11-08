@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
 
@@ -41,6 +43,11 @@ export function vendorDeletionEmail(
     html: renderEmail(content),
     text: renderText(content),
     tags: { type: "vendor_deletion_request" },
-    idempotencyKey: `vendor-deletion:${day}:${requests[0]?.vendorJobId ?? "none"}`,
+    // Keyed on the whole batch, not just its first row: a same-day re-run
+    // that holds more rows must send, not replay the earlier response.
+    idempotencyKey: `vendor-deletion:${day}:${createHash("sha256")
+      .update(requests.map((r) => r.vendorJobId).join(","))
+      .digest("hex")
+      .slice(0, 32)}`,
   };
 }
