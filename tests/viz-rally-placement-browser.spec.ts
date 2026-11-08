@@ -178,7 +178,7 @@ test("fullscreen marks can be selected by pointer and keyboard", async ({
   const beneath = fullscreenMark("low-p1-deep");
   await top.click();
   await expect(top).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("fullscreen")).toContainText("won the point");
+  await expect(page.getByTestId("fullscreen")).toContainText("Point won");
   await top.click();
   await expect(beneath).toHaveAttribute("aria-pressed", "true");
   await beneath.press("Enter");

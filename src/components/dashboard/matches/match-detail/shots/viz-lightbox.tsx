@@ -9,10 +9,11 @@ import {
   type ReactNode,
 } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
+import { Maximize, Minus, Plus, X } from "lucide-react";
 
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { advButton } from "@/lib/ui/adv-button";
 import { contactBandRows, depthBandRows } from "@/lib/data/viz-bands";
 import { isTextEntry } from "@/lib/ui/is-text-entry";
@@ -37,7 +38,8 @@ import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
 import { LightboxCourt } from "./lightbox-court";
 import { isPlayable, pointsBehind } from "./lightbox-points";
-import { KEY_PAN_PX, zoomPercentLabel } from "./pan-zoom";
+import { KEY_PAN_PX } from "./pan-zoom";
+import { viewerInitialTransform } from "./court-geometry";
 import { SaveViewDialog } from "./save-view-dialog";
 import { shotsWriteAccess } from "./shots-write-access";
 import { StatsCard } from "./stats-card";
@@ -203,6 +205,29 @@ export function VizLightbox({
   // The stage needs a real cut; `shots-tab.tsx` only mounts this with one.
   const pz = usePanZoom(cut ?? "serve", stageRef, dropActiveMark, editing);
 
+  // The readout's last line, read off the point the way the Video tab's
+  // point list prints its game headers: set, game, and who served.
+  const pointById = useMemo(
+    () => new Map(points.map((p) => [p.id, p])),
+    [points],
+  );
+  const youIsPlayer1 = you.isPlayer1;
+  const whereFor = useCallback(
+    (pointId: string): string | null => {
+      const point = pointById.get(pointId);
+      if (!point) return null;
+      const parts: string[] = [];
+      if (point.setNumber > 0) parts.push(`Set ${point.setNumber}`);
+      if (point.gameNumber > 0) parts.push(`Game ${point.gameNumber}`);
+      if (typeof point.serverIsPlayer1 === "boolean")
+        parts.push(
+          `${point.serverIsPlayer1 === youIsPlayer1 ? "You" : "Opponent"} serving`,
+        );
+      return parts.length > 0 ? parts.join(" · ") : null;
+    },
+    [pointById, youIsPlayer1],
+  );
+
   // A resize re-fits the court while the editor is open: re-fit the draft to
   // the new zoom during render, the way a stale editor is dropped above.
   const [editorZ, setEditorZ] = useState<number | null>(null);
@@ -336,6 +361,18 @@ export function VizLightbox({
         depthBandRows(bands, unit),
       )}`;
 
+  // Zoom is shown against the fitted court: "180%" is 1.8× the fit.
+  const fitT =
+    pz.stage.w > 0 && pz.stage.h > 0
+      ? viewerInitialTransform(cut, pz.stage)
+      : null;
+  const zoomRelative = fitT ? pz.t.z / fitT.z : 1;
+  const atFit =
+    fitT === null ||
+    (Math.abs(zoomRelative - 1) < 0.005 &&
+      Math.abs(pz.t.px - fitT.px) < 0.5 &&
+      Math.abs(pz.t.py - fitT.py) < 0.5);
+
   const matched = isDraft ? [] : pointsBehind(cut, result.dots, points);
   const playable = matched.filter(isPlayable);
   const legend = legendItemsFor(cut, state.chart);
@@ -414,12 +451,14 @@ export function VizLightbox({
                 </p>
               </div>
               <span className="flex-1" />
-              <DialogPrimitive.Close
-                aria-label="Close"
-                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
-              >
-                <X className="size-3.5" strokeWidth={1.5} aria-hidden />
-              </DialogPrimitive.Close>
+              <ChromeTooltip label="Close" shortcut="Esc" align="end">
+                <DialogPrimitive.Close
+                  aria-label="Close"
+                  className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
+                >
+                  <X className="size-3.5" strokeWidth={1.5} aria-hidden />
+                </DialogPrimitive.Close>
+              </ChromeTooltip>
             </div>
 
             {/* ── Body ───────────────────────────────────────────────── */}
@@ -521,6 +560,7 @@ export function VizLightbox({
                     onDeactivate={deactivateMark}
                     onRove={roveMark}
                     onSelect={selectMark}
+                    whereFor={whereFor}
                     onReadoutEnter={holdReadout}
                     onReadoutLeave={releaseReadout}
                     editing={editing}
@@ -598,7 +638,8 @@ export function VizLightbox({
                   ) : (
                     !isDraft && (
                       <ZoomControls
-                        zoomLabel={zoomPercentLabel(pz.t.z)}
+                        relative={zoomRelative}
+                        atFit={atFit}
                         onZoomIn={pz.zoomIn}
                         onZoomOut={pz.zoomOut}
                         onFit={pz.fit}
@@ -711,54 +752,78 @@ function StageCard({ children }: { children: ReactNode }) {
   );
 }
 
-/** + / − / Fit, bottom-right of the court, with the zoom readout. */
+/**
+ * + / − / Fit, bottom-right of the court (canvas S11), and — only while the
+ * court is zoomed or panned — the level, bottom-left: "180% · drag to move
+ * around". Fit is spent at the fitted court.
+ */
 function ZoomControls({
-  zoomLabel,
+  relative,
+  atFit,
   onZoomIn,
   onZoomOut,
   onFit,
 }: {
-  zoomLabel: string;
+  relative: number;
+  atFit: boolean;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFit: () => void;
 }) {
   const button =
-    "flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[11px] font-medium text-[var(--ink-700)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area";
+    "flex size-7 cursor-pointer items-center justify-center rounded-[8px] text-[var(--ink-700)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40 touch:hit-area";
   return (
-    <div
-      data-chrome=""
-      role="group"
-      aria-label="Zoom"
-      className="absolute right-3 bottom-3 flex items-center gap-0.5 rounded-[10px] bg-[var(--surface-card)] p-0.5 shadow-[var(--shadow-card)]"
-    >
-      <button
-        type="button"
-        aria-label="Zoom out"
-        onClick={onZoomOut}
-        className={button}
+    <>
+      <div
+        data-chrome=""
+        role="group"
+        aria-label="Zoom"
+        className="absolute right-3 bottom-3 flex items-center gap-0.5 rounded-[10px] bg-[var(--surface-card)] p-[3px] shadow-[var(--shadow-dropdown)]"
       >
-        −
-      </button>
-      <span className="mono tabular w-[38px] text-center text-[11px] text-[var(--ink-600)]">
-        {zoomLabel}
-      </span>
-      <button
-        type="button"
-        aria-label="Zoom in"
-        onClick={onZoomIn}
-        className={button}
-      >
-        +
-      </button>
-      <button
-        type="button"
-        aria-label="Fit the court"
-        onClick={onFit}
-        className={cn(button, "w-auto px-2")}
-      >
-        Fit
-      </button>
-    </div>
+        <ChromeTooltip label="Zoom in" shortcut="+" side="top">
+          <button
+            type="button"
+            aria-label="Zoom in"
+            onClick={onZoomIn}
+            className={button}
+          >
+            <Plus className="size-3.5" strokeWidth={1.5} aria-hidden />
+          </button>
+        </ChromeTooltip>
+        <ChromeTooltip label="Zoom out" shortcut="−" side="top">
+          <button
+            type="button"
+            aria-label="Zoom out"
+            onClick={onZoomOut}
+            className={button}
+          >
+            <Minus className="size-3.5" strokeWidth={1.5} aria-hidden />
+          </button>
+        </ChromeTooltip>
+        <span
+          aria-hidden="true"
+          className="mx-0.5 h-4 w-px bg-[var(--border-medium)]"
+        />
+        <ChromeTooltip label="Fit the court" shortcut="0" side="top">
+          <button
+            type="button"
+            aria-label="Fit the court"
+            onClick={onFit}
+            disabled={atFit}
+            className={button}
+          >
+            <Maximize className="size-3.5" strokeWidth={1.5} aria-hidden />
+          </button>
+        </ChromeTooltip>
+      </div>
+      {!atFit && (
+        <span
+          data-chrome=""
+          className="pointer-events-none absolute bottom-3 left-3 inline-flex h-[26px] items-center rounded-[8px] bg-[var(--surface-card)] px-2.5 text-[11px] text-[var(--ink-700)] tabular-nums shadow-[var(--shadow-dropdown)]"
+        >
+          {Math.round(relative * 100)}% · drag to move around
+        </span>
+      )}
+    </>
   );
 }

@@ -107,12 +107,6 @@ function Harness() {
           onDeactivate={() => {}}
           onRove={() => {}}
           onSelect={setSelectedId}
-          watchPointId={
-            result.dots.find((dot) => dot.id === selectedId)?.meta?.pointId ??
-            null
-          }
-          canWatchPoint={() => true}
-          onWatchPoint={() => {}}
         />
       </section>
     </>

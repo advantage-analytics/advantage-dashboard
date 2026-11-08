@@ -140,6 +140,65 @@ export function buildReadout(
   return { title, lines, monoLine };
 }
 
+/**
+ * The lightbox's mark readout (canvas S04/S05): a header of the legend word
+ * and the point score, the shot, then where in the match it was. `where` is
+ * the caller's — the lightbox reads set, game and server off the point
+ * itself, the way the Video tab's point list prints them — so this stays a
+ * pure function of the dot. Every part is omitted when its field is missing.
+ */
+export interface MarkReadout {
+  /** "Ace" / "Point won" / "Point lost" / "Out" / "Error". */
+  title: string;
+  /** The point score ("30-15"), or `null` when none was stored. */
+  score: string | null;
+  /** The shot, its call and its speed when measured; `null` when none. */
+  shot: string | null;
+  /** "Set 2 · Game 5 · You serving", or `null`. */
+  where: string | null;
+}
+
+export function buildMarkReadout(
+  meta: VizDotMeta,
+  outcome: "won" | "lost" | "miss",
+  cut: Cut,
+  unit: DistanceUnit,
+  where: string | null,
+): MarkReadout {
+  const title = meta.isAce
+    ? "Ace"
+    : cut === "errors"
+      ? "Error"
+      : outcome === "miss"
+        ? "Out"
+        : outcome === "won"
+          ? "Point won"
+          : "Point lost";
+  const shot = shotPhrase(meta.shotType, cut);
+  const call = resultPhrase(meta.result);
+  const shotLine = meta.isAce
+    ? shot
+    : shot !== null && call !== null
+      ? `${shot}, ${lowerFirst(call)}`
+      : (shot ?? call);
+  const speed =
+    meta.speedMph !== null &&
+    Number.isFinite(meta.speedMph) &&
+    meta.speedMph > 0
+      ? formatSpeed(unit, meta.speedMph)
+      : null;
+  const score = (meta.pointScore ?? "").trim();
+  return {
+    title,
+    score: score === "" ? null : pointScoreLabel(score),
+    shot:
+      [shotLine, speed]
+        .filter((part) => part !== null && part !== "")
+        .join(" · ") || null,
+    where,
+  };
+}
+
 /** A serve zone's readout: the same sentence the zone's `aria-label` reads. */
 export function buildZoneReadout(
   zone: ZoneKey,
@@ -180,6 +239,9 @@ export interface ReadoutPlacement {
 export function placeReadout(
   anchor: { x: number; y: number },
   stage: { w: number; h: number },
+  /** Px between the anchor and the card — the lightbox passes the selection
+   *  ring's own radius plus 8, so the card clears the ring. */
+  gap: number = READOUT_GAP,
 ): ReadoutPlacement {
   const width = Math.min(
     READOUT_WIDTH,
@@ -193,10 +255,10 @@ export function placeReadout(
     READOUT_MARGIN,
     Math.min(anchor.y, stage.h - READOUT_MARGIN),
   );
-  const below = y - READOUT_GAP - READOUT_MAX_HEIGHT < READOUT_MARGIN;
+  const below = y - gap - READOUT_MAX_HEIGHT < READOUT_MARGIN;
   return {
     left,
-    top: y + (below ? READOUT_GAP : -READOUT_GAP),
+    top: y + (below ? gap : -gap),
     width,
     below,
   };
