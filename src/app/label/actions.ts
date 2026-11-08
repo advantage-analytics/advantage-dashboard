@@ -127,7 +127,8 @@ import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
 
 /**
  * Autosave one edit to a label shot — `hitter`, `stroke`, `result`, `spin`,
- * a `contact_*` or `landing_*` pair, `video_time` or `unclear`, and nothing
+ * a `contact_*` or `landing_*` pair, `video_time`, `unclear` or
+ * `result_called` (whether the result is the labeller's own call), and nothing
  * else: shot kinds (`tags`) are an admin's, refused here before anything is
  * read (`labellerShotPatchError`). Returns the status the shot now has, or
  * why nothing was written.

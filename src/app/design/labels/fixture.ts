@@ -117,6 +117,7 @@ function shot(
     hitter,
     stroke,
     result,
+    resultCalled: false,
     spin: null,
     contactX: 2,
     contactY: near ? 1 : 22.7,

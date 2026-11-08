@@ -72,7 +72,7 @@ test.describe("planShotReset", () => {
     const plan = planShotReset({ status: "edited", seed: SHOT_SEED });
     expect(plan).toEqual({
       ok: true,
-      write: { ...SHOT_SEED, status: "kept" },
+      write: { ...SHOT_SEED, status: "kept", result_called: false },
     });
     // Spin is one of the columns a reset writes, seeded value and null alike.
     if ("error" in plan) throw new Error(plan.error);
@@ -125,7 +125,7 @@ test.describe("planShotReset: a let only on a serve", () => {
     };
     expect(planShotReset({ status: "edited", seed })).toEqual({
       ok: true,
-      write: { ...seed, status: "kept" },
+      write: { ...seed, status: "kept", result_called: false },
     });
   });
 });
@@ -672,7 +672,7 @@ test.describe("resetLabelShot / resetLabelPointWhole", () => {
       {
         table: "label_shots",
         op: "update",
-        values: { ...SHOT_SEED, status: "kept" },
+        values: { ...SHOT_SEED, status: "kept", result_called: false },
         filters: { id: SHOT_ID, status: "edited" },
       },
       // A reset point is asked again: its check goes.
@@ -720,7 +720,7 @@ test.describe("resetLabelShot / resetLabelPointWhole", () => {
         .filter((c) => c.op === "update")
         .map((c) => [c.table, c.values]),
     ).toEqual([
-      ["label_shots", { ...SHOT_SEED, status: "kept" }],
+      ["label_shots", { ...SHOT_SEED, status: "kept", result_called: false }],
       ["label_points", { checked_at: null }],
       [
         "label_points",

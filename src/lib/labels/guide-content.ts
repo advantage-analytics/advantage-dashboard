@@ -50,7 +50,7 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
         "Previous and Next move one point at a time. ← and → do the same.",
         "The speed control slows the video down or speeds it up.",
         "Loop (⇧L) replays the current point until you turn it off. Plain L is not Loop: on a serve it marks a let.",
-        "Skip dead time (D) jumps over the time between points.",
+        "Skip dead time (⇧D) jumps over the time between points.",
         "Mute (M) turns the sound off and on.",
       ),
       p(

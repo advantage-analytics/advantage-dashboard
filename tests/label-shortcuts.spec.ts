@@ -66,7 +66,7 @@ test.describe("the shortcut sheet", () => {
     }
   });
 
-  test("the console's own keys are on it too: the flag walks, ⌘Z, ⌘ enter, esc and the player's D L M", () => {
+  test("the console's own keys are on it too: the flag walks, ⌘Z, ⌘ enter, esc and the player's ⇧D ⇧L M", () => {
     for (const keys of [
       "space",
       "←",
@@ -82,7 +82,7 @@ test.describe("the shortcut sheet", () => {
       "⌘ Z",
       "⌘ enter",
       "⌘ /",
-      "D",
+      "⇧ D",
       "⇧ L",
       "L",
       "M",
@@ -105,7 +105,7 @@ test.describe("the shortcut sheet", () => {
     // One row on the sheet uses E, alone or in a combo.
     expect(rows.filter((row) => row.keys.includes("E"))).toHaveLength(1);
     // No handler but the console's E reads the key: not a stroke key, not the
-    // player's D L M, and the console's dispatcher names it once.
+    // player's ⇧D ⇧L M, and the console's dispatcher names it once.
     expect(isStrokeKey("e")).toBe(false);
     expect(isStrokeKey("E")).toBe(false);
     const video = readFileSync(
@@ -115,8 +115,10 @@ test.describe("the shortcut sheet", () => {
     expect(video).toContain(
       'if (key !== "d" && key !== "l" && key !== "m") return;',
     );
-    // Loop is ⇧L; plain L is the console's let.
-    expect(video).toContain('if (event.shiftKey !== (key === "l")) return;');
+    // Loop is ⇧L and Skip dead time ⇧D; plain L and D are the console's.
+    expect(video).toContain(
+      'if (event.shiftKey !== (key === "l" || key === "d")) return;',
+    );
     expect(CONSOLE.match(/isErrorKindKey\(key\)/g)).toHaveLength(1);
     expect(CONSOLE).not.toMatch(/(lower|key) === "e"/i);
     expect(RAIL).not.toMatch(/key === "e"/i);

@@ -10,6 +10,7 @@
 
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import { readPointScore } from "../film/film-score";
+import { netPathX } from "../net-crossing";
 import {
   countedShots,
   isFeedShotType,
@@ -195,7 +196,9 @@ export interface VizDotMeta {
  *
  * `atNet` is a POSITION fact, not a style one — "this ball
  * never crossed the net, so its real (hitter's-own-side) coordinates aren't
- * where it should be drawn; draw it at the net line instead" — deliberately
+ * where it should be drawn; draw it at the net line instead" — its
+ * `lateralM` then being where its contact → landing path meets the net
+ * (`netDotLateralM`) when that is known — deliberately
  * separate from `shape`/`outcome`. A netted ball draws with the SAME shape
  * and colour an ordinary miss of that cut already has (a grey circle on
  * serve; the cut's own forehand-circle/backhand-triangle on the two return
@@ -604,6 +607,29 @@ function contactMetrics(
   };
 }
 
+/**
+ * A net dot's DRAWN lateral, in the same "from behind the hitter" frame
+ * `classifyServePlacement`/`rallyLandingMetrics` use: where the shot's own
+ * contact → landing line meets the net (`netPathX`), mirrored at the high-y
+ * end exactly as those functions mirror the landing. `fallback` (the
+ * landing's own lateral) when the line never reaches the net — an imputed
+ * landing on the hitter's side, or no contact point.
+ *
+ * Drawing only: set on the dot after every verdict, filter and zone count
+ * has read the landing's own lateral, so no statistic moves.
+ */
+function netDotLateralM(
+  contactX: number | null | undefined,
+  contactY: number | null | undefined,
+  landingX: number | null | undefined,
+  landingY: number | null | undefined,
+  fallback: number,
+): number {
+  const x = netPathX(contactX, contactY, landingX, landingY);
+  if (x == null || contactY == null) return fallback;
+  return contactY > REAL_NET_Y ? -x : x;
+}
+
 export function pointToReturnDots(
   p: MatchPoint,
   subjectIsPlayer1: boolean,
@@ -664,7 +690,16 @@ export function pointToReturnDots(
       id: p.id,
       variant: "landing",
       shape,
-      lateralM: placement.lateralM,
+      lateralM:
+        placement.kind === "net"
+          ? netDotLateralM(
+              p.secondShotContactX,
+              p.secondShotContactY,
+              p.secondShotLandingX,
+              p.secondShotLandingY,
+              placement.lateralM,
+            )
+          : placement.lateralM,
       depthM: placement.depthPastNetM,
       atNet: placement.kind === "net",
     });
@@ -1078,7 +1113,16 @@ function rallyLandingMetrics(shot: MatchShot) {
     shot.result === "Out" ||
     Math.abs(lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS ||
     depthM > REAL_NET_Y + IN_COURT_EPS;
-  return { lateralM, depthM, atNet, miss };
+  // After `miss` has read the landing's own lateral: a net ball is drawn on
+  // its path at the net (`netDotLateralM`), which is position only.
+  return {
+    lateralM: atNet
+      ? netDotLateralM(shot.contactX, contactY, landingX, landingY, lateralM)
+      : lateralM,
+    depthM,
+    atNet,
+    miss,
+  };
 }
 
 /**
@@ -1372,7 +1416,18 @@ export function computeViz(
 
       dots.push({
         id: p.id,
-        lateralM: metrics.lateralM,
+        // A net serve is drawn on its own path at the net; zone stats and
+        // the side filters above read `metrics.lateralM`, untouched.
+        lateralM:
+          metrics.kind === "net" && serveShot
+            ? netDotLateralM(
+                serveShot.contactX,
+                serveShot.contactY,
+                serveShot.landingX,
+                serveShot.landingY,
+                metrics.lateralM,
+              )
+            : metrics.lateralM,
         depthM: metrics.depthPastNetM,
         // "in" reads the point's own result (won/lost/ace/doubleFault, same
         // classification `serve-zones.ts` uses); "out"/"net" always miss.
