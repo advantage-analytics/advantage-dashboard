@@ -62,3 +62,14 @@ is the runner's. Newest entries at the bottom.
 1. The body's empty-state legend is opt-in (`emptyLegend`); decide whether the report's own empty card should show its legend too.
 2. The report tracker has no per-point screen-reader list like the season tracker's; parity is a later task.
 3. Eyes-on of the season tracker's marks and readout once T7 places it.
+
+## T6 · Season Rally length and Net game — done
+
+**gate:** mechanical PASS · completion PASS
+
+**changed:** Rally length and Net game split into data-reading wrappers and presentational bodies (`match-detail/rally-length-body.tsx`, `net-game-body.tsx`, optional `watch`); the band loop moved to pure `match-detail/rally-length-bands.ts` and `seasonRallyBands` now sums it. Report output compared identical across 48 configurations. New `player-profile/season-rally-length-card.tsx` and `season-net-game-card.tsx` (Lobbed only when every match knew its lobs, not clickable, honest zero states). `tests/season-rally-net.spec.ts`; `report-empty-states.spec.ts` allowlists the three new modules.
+
+**follow-ups:**
+
+1. T7 places the cards: `analyzed`, `tallies.rallyBands`, `tallies.netGame`.
+2. Check the season wording ("of the season" readout, the two empty sentences) against the design.

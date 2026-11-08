@@ -20,9 +20,11 @@ import {
   type NetGameTally,
 } from "@/components/dashboard/matches/match-detail/match-filters/net-game";
 import {
-  rallyLengthBandOf,
-  type RallyLengthBand,
-} from "@/components/dashboard/matches/match-detail/match-filters/model";
+  rallyBandTally,
+  sumRallyBandTallies,
+  type RallyBandCount,
+  type RallyBandTally,
+} from "@/components/dashboard/matches/match-detail/rally-length-bands";
 import {
   emptyOutcomeTally,
   outcomeTally,
@@ -445,75 +447,28 @@ export function seasonNetGame(
 }
 
 /** One of the Rally length card's three bands, summed over the season. */
-export interface SeasonRallyBand {
-  key: RallyLengthBand;
-  /** Points in the band. */
-  count: number;
-  /** Of them, the points the player won; the opponents won the rest. */
-  youWon: number;
-  oppWon: number;
-}
-
-export interface SeasonRallyBands {
-  /** Short, medium, long — the card's order. */
-  bands: SeasonRallyBand[];
-  /** Points in any band: the ones with a shot count recorded. */
-  total: number;
-  /** Their shot counts added up. */
-  shotSum: number;
-  /** `shotSum / total` — the card's "N shots average"; `null` with no banded point. */
-  avgShots: number | null;
-}
-
-const RALLY_BANDS: RallyLengthBand[] = ["short", "medium", "long"];
+export type SeasonRallyBand = RallyBandCount;
 
 /**
- * The Rally length card's bands over the season: `tallySide`'s per-band
- * won/total summed per match (the card's own `count` and `youWon`, with
- * `oppWon` the remainder, as it draws them), plus the shot counts behind its
- * average — every point `rallyLengthBandOf` places in a band, exactly the
- * points the card averages over (a `rallyLength` of 0 is "none recorded" and
- * is left out).
+ * The season's bands — `bands` (short, medium, long), `total` (points in any
+ * band: the ones with a shot count recorded), `shotSum` and `avgShots` (the
+ * card's "N shots average", `null` with no banded point).
+ */
+export type SeasonRallyBands = RallyBandTally;
+
+/**
+ * The Rally length card's bands over the season: the card's own tally
+ * (`rallyBandTally`, `rally-length-bands.ts`) run per match with that match's
+ * seat, then added band by band, average included — every point
+ * `rallyLengthBandOf` places in a band, exactly the points the card averages
+ * over (a `rallyLength` of 0 is "none recorded" and is left out).
  */
 export function seasonRallyBands(
   matches: readonly SeasonMatchStats[],
 ): SeasonRallyBands {
-  const counters: Record<RallyLengthBand, { count: number; youWon: number }> = {
-    short: { count: 0, youWon: 0 },
-    medium: { count: 0, youWon: 0 },
-    long: { count: 0, youWon: 0 },
-  };
-  let shotSum = 0;
-
-  for (const m of matches) {
-    const d = tallySide(m.points, m.isPlayer1, null);
-    const bands = {
-      short: d.shortRally,
-      medium: d.mediumRally,
-      long: d.longRally,
-    };
-    for (const key of RALLY_BANDS) {
-      counters[key].count += bands[key].total;
-      counters[key].youWon += bands[key].won;
-    }
-    for (const p of m.points) {
-      if (rallyLengthBandOf(p.rallyLength)) shotSum += p.rallyLength;
-    }
-  }
-
-  const bands = RALLY_BANDS.map<SeasonRallyBand>((key) => ({
-    key,
-    count: counters[key].count,
-    youWon: counters[key].youWon,
-    oppWon: counters[key].count - counters[key].youWon,
-  }));
-  const total = bands.reduce((sum, band) => sum + band.count, 0);
-  return {
-    bands,
-    total,
-    shotSum,
-    avgShots: total > 0 ? shotSum / total : null,
-  };
+  return sumRallyBandTallies(
+    matches.map((m) => rallyBandTally(m.points, m.isPlayer1)),
+  );
 }
 
 /** Everything the profile's right column draws, folded once. */

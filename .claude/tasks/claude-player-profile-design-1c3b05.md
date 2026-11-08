@@ -84,7 +84,7 @@ ready).
 
 ## T6 · Season Rally length and Net game
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** `rally-length-card.tsx`, `net-game-card.tsx` (under `match-detail/`), `player-profile/season-rally-length-card.tsx`, `player-profile/season-net-game-card.tsx` (new), `tests/season-rally-net.spec.ts` — guess
