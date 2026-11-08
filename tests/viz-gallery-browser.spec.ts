@@ -103,7 +103,22 @@ test("default and saved gallery navigation omits only the selected identity", as
     "aria-pressed",
     "true",
   );
-  await expect(page.getByRole("list", { name: "Default views" })).toBeVisible();
+  const defaults = page.getByRole("list", { name: "Default views" });
+  await expect(defaults).toBeVisible();
+  // One player at a time (the fixture only holds serves, so one card each);
+  // the switch is URL-backed.
+  await expect(defaults.getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "You" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: "Opponent" }).click();
+  await expect(page).toHaveURL(/player=opponent/);
+  await expect(
+    defaults.locator('a[href*="cut=serve"][href*="player=opponent"]'),
+  ).toHaveCount(1);
+  await page.getByRole("button", { name: "You" }).click();
+  await expect(page).not.toHaveURL(/player=opponent/);
   await expect(page.getByRole("link", { name: /Saved serve/ })).toHaveCount(0);
   await page.getByRole("button", { name: "Saved", exact: true }).click();
   await expect(
@@ -126,9 +141,9 @@ test("default and saved gallery navigation omits only the selected identity", as
   await expect(page.getByTestId("focused")).toBeVisible();
   await expect(defaultServe).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Saved serve/ })).toBeVisible();
-  await expect(gallery.getByRole("listitem")).toHaveCount(12);
+  await expect(gallery.getByRole("listitem")).toHaveCount(10);
   await page.getByRole("button", { name: "Filter set" }).click();
-  await expect(gallery.getByRole("listitem")).toHaveCount(12);
+  await expect(gallery.getByRole("listitem")).toHaveCount(10);
   await page.getByRole("link", { name: /Saved serve/ }).click();
   await expect(page.getByTestId("focused")).toContainText("saved-serve");
   await page.getByRole("button", { name: "Back to wall" }).click();
@@ -155,7 +170,7 @@ test("default and saved gallery navigation omits only the selected identity", as
   await page.getByRole("link", { name: /Saved serve/ }).click();
   await expect(page.getByTestId("focused")).toContainText("saved-serve");
   await page
-    .getByRole("button", { name: "Open First serves, every zone fullscreen" })
+    .getByRole("button", { name: "Open First serves fullscreen" })
     .first()
     .click();
   await expect(page.getByTestId("fullscreen")).toBeVisible();

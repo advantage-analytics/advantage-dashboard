@@ -159,6 +159,16 @@ export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
 }
 
 /**
+ * The wall's one legend, above the four cards (canvas "Legend — as shipped",
+ * `cut="all"`): every glyph the four default courts can draw — the outcome
+ * trio and the ace star from the serve card, the two stroke shapes from the
+ * return, rally and errors cards.
+ */
+export function wallLegendItems(): LegendItem[] {
+  return [...OUTCOME_ITEMS, ACE_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
+}
+
+/**
  * Design handoff P1a/P1c/P1f: tile filter pills, applied-filter tokens and
  * Filters-popover pills are full pills (`--radius-pill`). Buttons stay
  * `rounded-[6px]`.

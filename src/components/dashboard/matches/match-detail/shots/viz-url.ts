@@ -522,7 +522,13 @@ export function parseVizState(
   // serialize or be saved — `carryFilters` is otherwise only ever applied
   // when switching cuts client-side, but garbage/hand-crafted params must be
   // held to the same rule.
-  const carried = cut === null ? rawFilters : carryFilters(rawFilters, cut);
+  // The wall keeps one filter: which player's four cards it shows
+  // (`?player=opponent`, the wall's You | Opponent switch). Every other key
+  // belongs to an opened card and parses away here.
+  const carried =
+    cut === null
+      ? { ...EMPTY_VIZ_FILTERS, player: rawFilters.player }
+      : carryFilters(rawFilters, cut);
   const filters =
     match === undefined
       ? carried
@@ -571,8 +577,10 @@ export function vizStateQuery(
     next.delete(key);
   }
 
-  // If cut is null, we're done (the wall)
+  // The wall: only its You | Opponent switch serializes.
   if (state.cut === null) {
+    if (state.filters.player !== "you")
+      next.set("player", state.filters.player);
     return next.toString();
   }
 
