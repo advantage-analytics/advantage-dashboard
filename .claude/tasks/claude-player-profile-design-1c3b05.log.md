@@ -73,3 +73,14 @@ is the runner's. Newest entries at the bottom.
 
 1. T7 places the cards: `analyzed`, `tallies.rallyBands`, `tallies.netGame`.
 2. Check the season wording ("of the season" readout, the two empty sentences) against the design.
+
+## T7 · Statistics tab view and the no-analyzed-matches state — done
+
+**gate:** mechanical PASS · completion PASS
+
+**changed:** New `player-profile/profile-statistics-view.tsx` (insight slot, then the report's 1:1 row: Head to head left; Performance tracker → How points ended → Rally length → Net game right) and `profile-insight-empty.tsx` (season InsightEmpty copy, role=status). `profile-frame.tsx` gains `ProfileViewWhen` to gate on `?tab=`. The page no longer awaits `getPlayerSeason` up front: rail counts come from `profile.matchesPlayed` and `seasonOpponentCount(sides.own)`; the facts line's "N analyzed" and the pane body each sit in their own Suspense, the body inside WidgetBoundary with `StatisticsPanePending`. `tests/profile-statistics-view.spec.ts` (5 tests).
+
+**follow-ups:**
+
+1. `StatisticsPanePending` still lays out a fixed 416px chart column with three charts; the report now splits 1:1 with four charts, so loading-to-loaded shifts on both the report and the profile (T10 territory; also touches the match report).
+2. "One is written once a match of theirs is analysed" is untrue once matches are analysed and no season summary exists; reword with T11.

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { ScatterChart, Table2, type LucideIcon } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { viewRowClass } from "@/components/dashboard/matches/match-detail/report-view-switcher";
@@ -108,5 +109,32 @@ export function ProfileTitle() {
     >
       {profileViewLabel(view)}
     </h1>
+  );
+}
+
+/**
+ * Renders its children only while `view` is the active one — the profile's
+ * `MatchReportWhen`, read from `?tab=` like the switcher and the title, and
+ * with its panel classes (`flex-1` without `min-h-0`, so a long view grows
+ * the panel and the pane's bottom padding lands under the last card). An
+ * inactive view unmounts rather than hides, so a chart's hover state never
+ * outlives the switch away from it.
+ *
+ * The switch is client-side (native history, no server render), so the page
+ * renders every view's content once and this decides which one shows.
+ */
+export function ProfileViewWhen({
+  view,
+  children,
+}: {
+  view: ProfileView;
+  children: ReactNode;
+}) {
+  const active = useProfileView();
+  if (active !== view) return null;
+  return (
+    <div role="tabpanel" className="flex flex-1 flex-col gap-4">
+      {children}
+    </div>
   );
 }

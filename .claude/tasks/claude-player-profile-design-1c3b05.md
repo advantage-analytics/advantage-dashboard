@@ -96,7 +96,7 @@ ready).
 
 ## T7 · Statistics tab view and the no-analyzed-matches state
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T3, T4, T5, T6
 - **files:** `player-profile/profile-statistics-view.tsx`, `player-profile/profile-insight-empty.tsx` (new), `src/app/dashboard/team/roster/[playerId]/page.tsx`, `tests/profile-statistics-view.spec.ts` — guess

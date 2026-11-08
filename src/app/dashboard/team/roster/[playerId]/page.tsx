@@ -1,9 +1,16 @@
+import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
-import { getPlayerProfile } from "@/lib/data/player-profile-server";
-import { getPlayerSeason } from "@/lib/data/player-season-server";
+import {
+  getPlayerMatchSides,
+  getPlayerProfile,
+} from "@/lib/data/player-profile-server";
+import {
+  getPlayerSeason,
+  seasonOpponentCount,
+} from "@/lib/data/player-season-server";
 import { getRosterData } from "@/lib/data/team-roster-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 // The report frame's parts by their named exports: this is a Server
@@ -19,8 +26,15 @@ import {
 } from "@/components/dashboard/matches/match-detail/report-title-row";
 import { ProfileHeaderSlot } from "@/components/dashboard/team/player-profile/profile-header-slot";
 import { ProfileRail } from "@/components/dashboard/team/player-profile/profile-rail";
-import { ProfileTitle } from "@/components/dashboard/team/player-profile/profile-frame";
+import {
+  ProfileTitle,
+  ProfileViewWhen,
+} from "@/components/dashboard/team/player-profile/profile-frame";
 import { ProfileActions } from "@/components/dashboard/team/player-profile/profile-actions";
+import { ProfileStatisticsView } from "@/components/dashboard/team/player-profile/profile-statistics-view";
+import { StatisticsPanePending } from "@/components/dashboard/loading/match-report-pending";
+import { PendingBar } from "@/components/dashboard/loading/pending";
+import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { askEntryHref } from "@/lib/services/ask/entry";
 
 /**
@@ -40,8 +54,19 @@ import { askEntryHref } from "@/lib/services/ask/entry";
  * The frame is the match report's (design Q, 2026-11): a 300px rail — who
  * they are, Statistics · Visualizations, links to their matches and
  * opponents, New match at the foot — and a scrolling pane whose title row
- * names the active view (`?tab=`, `profile-view.ts`). Each view's content
- * arrives in its own task; until then the pane is the title row alone.
+ * names the active view (`?tab=`, `profile-view.ts`), then the view's body.
+ *
+ * ── What waits for the season ───────────────────────────────────────────────
+ * `getPlayerSeason` is the heavy read — every analyzed match's points, stats
+ * rows and lob file — so nothing above the pane body awaits it. The rail and
+ * the title row render from `getPlayerProfile` and `getPlayerMatchSides`,
+ * which the profile read has already made (both `cache()`d, so the match
+ * sides cost nothing more): "N matches" is the profile's count and "N
+ * opponents" is `seasonOpponentCount` over the same rows the season would
+ * count them from. Two things do need the season, and each streams inside
+ * its own `<Suspense>`: the facts line's "N analyzed" (a bar until it lands)
+ * and the Statistics tab's body (`StatisticsPanePending` until it lands).
+ * Visualizations draws no body yet; it arrives in its own task.
  *
  * ── Why the numbers match the roster's ──────────────────────────────────────
  * `getPlayerProfile` folds both of a claimed player's ids the way
@@ -75,15 +100,15 @@ export default async function PlayerProfilePage({
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
 
-  const [profile, roster, myPlayerIds, season] = await Promise.all([
+  const [profile, roster, myPlayerIds, sides] = await Promise.all([
     getPlayerProfile(active.id, playerId),
     getRosterData(active.id),
     getMyPlayerIds(),
-    // `cache()`d, and the Statistics and Visualizations views read the same
-    // call; here it gives the rail its opponents count and the facts line
-    // its analyzed count. Null only for an id that names nobody here, which
-    // the profile read 404s on below.
-    getPlayerSeason(active.id, playerId),
+    // The rows `getPlayerProfile` itself reads (`cache()`d, one roster RPC
+    // and one matches read per request) — what the rail's opponents count is
+    // taken from without waiting for the season. Null exactly when the
+    // profile is.
+    getPlayerMatchSides(active.id, playerId),
   ]);
 
   // The loader returns null for an id that names nobody on this roster. It
@@ -121,10 +146,11 @@ export default async function PlayerProfilePage({
     ? `/dashboard/matches/new?player=${profile.playerId}`
     : null;
 
-  // The same count either way: `getPlayerSeason` and `getPlayerProfile`
-  // fold the one list of this player's matches.
-  const matchesPlayed = season?.matchesPlayed ?? profile.matchesPlayed;
-  const analyzed = season?.analyzed ?? 0;
+  // `getPlayerSeason` folds the same list, so its `matchesPlayed` and
+  // `opponentsCount` are these two numbers; reading them here keeps the rail
+  // off the season's critical path.
+  const matchesPlayed = profile.matchesPlayed;
+  const opponentsCount = sides ? seasonOpponentCount(sides.own) : 0;
 
   return (
     // The match detail layout's box: a fixed height from the viewport, so
@@ -153,7 +179,7 @@ export default async function PlayerProfilePage({
                   ?.avatarUrl ?? null)
           }
           matchesCount={matchesPlayed}
-          opponentsCount={season?.opponentsCount ?? 0}
+          opponentsCount={opponentsCount}
           newMatchHref={newMatchHref}
         />
 
@@ -164,11 +190,15 @@ export default async function PlayerProfilePage({
               {/* `.text-micro` is unlayered and paints ink-500, so the
                   report facts line's ink-700 goes inline. */}
               <p
-                className="text-micro tabular mt-[9px] min-h-[18px]"
+                className="text-micro tabular mt-[9px] flex min-h-[18px] items-center gap-1"
                 style={{ color: "var(--ink-700)" }}
               >
-                {matchesPlayed} {matchesPlayed === 1 ? "match" : "matches"} ·{" "}
-                {analyzed} analyzed
+                <span>
+                  {matchesPlayed} {matchesPlayed === 1 ? "match" : "matches"}
+                </span>
+                <Suspense fallback={<AnalyzedCountPending />}>
+                  <AnalyzedCount programId={active.id} playerId={playerId} />
+                </Suspense>
               </p>
             </div>
             <MatchReportTitleActions>
@@ -190,8 +220,91 @@ export default async function PlayerProfilePage({
               />
             </MatchReportTitleActions>
           </MatchReportTitleRow>
+
+          {/* The pane body: the one place the season is awaited for the
+              cards. `WidgetBoundary` outside the `Suspense`, so a season read
+              that throws (it fails closed — `player-season-server.ts`) draws
+              the retry in the body while the rail and title stay. */}
+          <WidgetBoundary label="Statistics">
+            <Suspense
+              fallback={
+                <ProfileViewWhen view="statistics">
+                  <StatisticsPanePending />
+                </ProfileViewWhen>
+              }
+            >
+              <ProfileStatisticsBody
+                programId={active.id}
+                playerId={playerId}
+                playerName={profile.name}
+                firstName={profile.firstName}
+              />
+            </Suspense>
+          </WidgetBoundary>
         </MatchReportPane>
       </MatchReportFrame>
     </div>
+  );
+}
+
+/**
+ * The facts line's "· N analyzed", once the season has landed. A season read
+ * that fails is the body's to report (its retry); here it drops the clause
+ * rather than print a count nobody measured.
+ */
+async function AnalyzedCount({
+  programId,
+  playerId,
+}: {
+  programId: string;
+  playerId: string;
+}) {
+  const season = await getPlayerSeason(programId, playerId).catch(() => null);
+  if (!season) return null;
+  return <span>· {season.analyzed} analyzed</span>;
+}
+
+/** The facts line's clause while the season loads: the separator and one bar. */
+function AnalyzedCountPending() {
+  return (
+    <span
+      role="status"
+      aria-label="Loading analyzed count"
+      className="flex items-center gap-1"
+    >
+      <span aria-hidden="true">·</span>
+      <PendingBar className="h-2.5 w-16" />
+    </span>
+  );
+}
+
+/**
+ * The Statistics tab's body: the season, awaited here and nowhere above, then
+ * `ProfileStatisticsView` inside the tab's panel. Null season is an id that
+ * names nobody, which the page has already 404ed on.
+ */
+async function ProfileStatisticsBody({
+  programId,
+  playerId,
+  playerName,
+  firstName,
+}: {
+  programId: string;
+  playerId: string;
+  playerName: string;
+  firstName: string;
+}) {
+  const season = await getPlayerSeason(programId, playerId);
+  if (!season) return null;
+  return (
+    <ProfileViewWhen view="statistics">
+      <ProfileStatisticsView
+        playerName={playerName}
+        firstName={firstName}
+        analyzed={season.analyzed}
+        groups={season.groups}
+        tallies={season.tallies}
+      />
+    </ProfileViewWhen>
   );
 }
