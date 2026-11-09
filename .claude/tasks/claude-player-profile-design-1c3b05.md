@@ -121,17 +121,17 @@ ready).
 
 ## T9 · Visualizations tab: the season wall on the redesigned cards
 
-- **status:** todo
+- **status:** later
 - **model:** fable
 - **needs:** T2, T3
 - **files:** `src/lib/data/player-season-viz.ts` (new, pure), `player-profile/profile-visualizations-view.tsx` (new), `src/lib/data/player-season-server.ts`, `src/app/dashboard/team/roster/[playerId]/page.tsx`, `tests/player-season-viz.spec.ts` — guess
 - **routes:** `/dashboard/team/roster/[playerId]?tab=visualizations`
 - **done when:**
   - [ ] A pure `buildSeasonCards(perMatch, side)` merges, per card of the redesign's four default cuts (`shots/default-cuts.ts` + `default-tiles.ts` `buildDefaultTiles`), each analyzed match's dots and its `wall-summary.ts` counts and split-bar segments, computed per match with that match's own `isPlayer1` and errors-judged rule; a spec asserts every merged count and split-bar segment equals the sum of the per-match parts
-  - [ ] The Visualizations tab renders the redesign's `wall-card.tsx` cards with the wall's `You | Opponent` switch (one player at a time) and `Default | Saved` strip, in the same grid as `viz-wall.tsx`; the cards' dots and summaries are computed on the server
-  - [ ] Clicking a card opens `viz-lightbox.tsx` over the season: the season's points are sent to the client for the lightbox only (author's decision, 2026-11-09), fed through the existing data context the lightbox reads (no fork of `shots/` logic; `?cut=` / `?vfrom=` follow `viz-url.ts`); the footer is omitted (`onWatchPoints` absent, `allowSaveView={false}`)
+  - [ ] The Visualizations tab renders the redesign's `wall-card.tsx` cards with the wall's `You | Opponent` switch (one player at a time) and `Default | Saved` strip, in the same grid as `viz-wall.tsx`; dots, summaries and the lightbox's statistics rows are computed on the server, and no season points reach the client
+  - [ ] Clicking a card opens the split, data-in lightbox shell read-only — court, legend filter, Filters panel and Statistics column, fed the server-computed season dots and rows; no "Watch these N points" and no "Save as view"; `?cut=` follows `viz-url.ts`
   - [ ] The Visualizations pane sits in its own Suspense with a skeleton in the redesign wall's shape, and zero analyzed matches renders the redesign's empty wall with a season sentence (no `0`/`0%`); a rendered-markup spec covers the empty case
-- **notes:** PR #684 is merged into `splitstep-integration` and into this branch (63584eba4). The lightbox reads `useVizView()` (MatchDataProvider points → computeViz/computeVizStats), `useMatchReport().meta` and `useVizState()`; provide those for a season (e.g. a season data provider whose points are the season's analyzed points, each carrying its own match's side) rather than forking the lightbox — if a shared `shots/` component needs a small season-aware prop, keep it minimal and keep `tests/viz-*`/`wall-summary` specs passing. Read-only lightbox decided by the author 2026-11-08; season points to the client decided 2026-11-09.
+- **notes:** Waits on the lightbox split: the shared `viz-lightbox.tsx` is being split into a data-in shell on its own branch and PR (author's decision 2026-11-09, "Split lightbox first"; built by the Visualizations build session). Set this task to `todo` once that PR is merged into `splitstep-integration` and merged into this branch. PR #684 (redesign) is already merged here. Read-only lightbox decided 2026-11-08.
 
 ## T10 · Loading skeletons for the profile
 
