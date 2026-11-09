@@ -121,17 +121,17 @@ ready).
 
 ## T9 · Visualizations tab: the season wall on the redesigned cards
 
-- **status:** later
+- **status:** todo
 - **model:** fable
 - **needs:** T2, T3
-- **files:** `src/lib/data/player-season-viz.ts` (new, pure), `player-profile/profile-visualizations-view.tsx` (new), `src/lib/data/player-season-server.ts`, `src/app/dashboard/team/roster/[playerId]/page.tsx`, `tests/player-season-viz.spec.ts` — guess
+- **files:** `src/lib/data/player-season-viz.ts` (new, pure), `player-profile/profile-visualizations-view.tsx` (new), `player-profile/season-viz-lightbox.tsx` (new, "use client"), `src/lib/data/player-season-server.ts`, `src/app/dashboard/team/roster/[playerId]/page.tsx`, `tests/player-season-viz.spec.ts` — guess
 - **routes:** `/dashboard/team/roster/[playerId]?tab=visualizations`
 - **done when:**
-  - [ ] A pure `buildSeasonCards(perMatch, side)` merges, per card of the redesign's four default cuts (`shots/default-cuts.ts` + `default-tiles.ts` `buildDefaultTiles`), each analyzed match's dots and its `wall-summary.ts` counts and split-bar segments, computed per match with that match's own `isPlayer1` and errors-judged rule; a spec asserts every merged count and split-bar segment equals the sum of the per-match parts
-  - [ ] The Visualizations tab renders the redesign's `wall-card.tsx` cards with the wall's `You | Opponent` switch (one player at a time) and `Default | Saved` strip, in the same grid as `viz-wall.tsx`; dots, summaries and the lightbox's statistics rows are computed on the server, and no season points reach the client
-  - [ ] Clicking a card opens the split, data-in lightbox shell read-only — court, legend filter, Filters panel and Statistics column, fed the server-computed season dots and rows; no "Watch these N points" and no "Save as view"; `?cut=` follows `viz-url.ts`
-  - [ ] The Visualizations pane sits in its own Suspense with a skeleton in the redesign wall's shape, and zero analyzed matches renders the redesign's empty wall with a season sentence (no `0`/`0%`); a rendered-markup spec covers the empty case
-- **notes:** Waits on the lightbox split: the shared `viz-lightbox.tsx` is being split into a data-in shell on its own branch and PR (author's decision 2026-11-09, "Split lightbox first"; built by the Visualizations build session). Set this task to `todo` once that PR is merged into `splitstep-integration` and merged into this branch. PR #684 (redesign) is already merged here. Read-only lightbox decided 2026-11-08.
+  - [ ] A pure `buildSeasonCards(perMatch, side)` merges, per card of the redesign's default cuts (`shots/default-cuts.ts` + `default-tiles.ts` `buildDefaultTiles`), each analyzed match's dots and its `wall-summary.ts` counts and split-bar segments, computed per match with that match's own `isPlayer1` and errors-judged rule; a spec asserts every merged count and split-bar segment equals the sum of the per-match parts
+  - [ ] The Visualizations tab renders the redesign's `wall-card.tsx` cards with the wall's `You | Opponent` switch and `Default | Saved` strip, in the same grid as `viz-wall.tsx`; dots, summaries, the lightbox's `VizResult`/`VizStats`, its per-pick stat-row dot ids and the Filters panel's option counts are computed on the server, and no `MatchPoint[]` (season points) is passed to any client component
+  - [ ] Clicking a card opens `VizLightboxShell` (`shots/viz-lightbox-shell.tsx`) through a small "use client" container: court, legend filter, Filters panel and Statistics column, with `pointList`, `footer`, `bandEditor` and `draft` omitted; a Filters change round-trips through the URL (`viz-url.ts` params, `?cut=` included) so the server recomputes — the container never re-derives from points
+  - [ ] The Visualizations pane sits in its own Suspense + `WidgetBoundary` with a skeleton in the redesign wall's shape, and zero analyzed matches renders the redesign's empty wall with a season sentence (no `0`/`0%`); a rendered-markup spec covers the empty case and asserts the lightbox container's props carry no points array
+- **notes:** Lightbox split merged (#689) and merged here 2026-11-09 (081f8c10c). Read-only lightbox decided 2026-11-08; season points stay server-side (author confirmed "Split lightbox first", 2026-11-09). PR #684 (redesign) is already merged here.
 
 ## T10 · Loading skeletons for the profile
 
