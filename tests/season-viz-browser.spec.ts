@@ -242,6 +242,53 @@ test("a filter ticked inside the card keeps the court (optimistic); the card clo
   expect(errors).toEqual([]);
 });
 
+test("two options ticked against the option order still land: the store's click order and the server's sorted echo are the same court", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=600`);
+  const wall = page.getByRole("list", { name: "Default views" });
+  await wall.getByRole("link", { name: /^First serves, Avery Kim/ }).click();
+  const serve = page.getByRole("dialog", { name: "First serves" });
+  await expect(serve).toBeVisible({ timeout: 8_000 });
+  const all = await marks(serve).count();
+  expect(all).toBeGreaterThan(0);
+
+  // Wide before T: the store holds [wide, t], the server echoes [t, wide].
+  await serve.getByRole("button", { name: "Filters" }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  await expect(panel).toBeVisible();
+  const wide = panel.getByRole("checkbox", { name: /^Wide\b/ });
+  const zoneT = panel.getByRole("checkbox", { name: /^T\b/ });
+  await wide.click();
+  await expect(wide).toBeChecked();
+  await zoneT.click();
+  await expect(zoneT).toBeChecked();
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+
+  // The server's answer for both lands as this card's court: never stuck
+  // pending, the strip names both, and the URL carries them in option order.
+  await expect
+    .poll(() => new URL(page.url()).searchParams.getAll("zone").sort(), {
+      timeout: 8_000,
+    })
+    .toEqual(["t", "wide"]);
+  await expect(serve.locator("[data-viz-filter-strip]")).toContainText("T", {
+    timeout: 8_000,
+  });
+  await expect(serve.locator("[data-viz-filter-strip]")).toContainText("Wide");
+  await expect(shellPending(page, "Serve placement")).toHaveCount(0);
+  await expect(page.locator("[data-court-stage]")).toHaveCount(1);
+  await expect
+    .poll(() => marks(serve).count(), { timeout: 8_000 })
+    .toBeGreaterThan(0);
+
+  expect(errors).toEqual([]);
+});
+
 test("the wall reads busy until the server's cards are the chip's — after a chip click, and after closing a card whose player was switched inside it — and keeps the last cards for its player meanwhile", async ({
   page,
 }) => {

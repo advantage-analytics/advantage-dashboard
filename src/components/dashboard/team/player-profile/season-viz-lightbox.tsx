@@ -18,12 +18,10 @@ import {
   type PlayerFilter,
   type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
-import {
-  courtFor,
-  vizStateQuery,
-} from "@/components/dashboard/matches/match-detail/shots/viz-url";
+import { courtFor } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import type { StatPick } from "@/components/dashboard/matches/match-detail/shots/stat-cut";
 import {
+  courtSignature,
   cutNoun,
   optionCountKey,
   statPickKey,
@@ -125,15 +123,6 @@ function loadShell(): Promise<{ default: ShellModule["VizLightboxShell"] }> {
   return shellChunk;
 }
 
-const EMPTY_PARAMS = new URLSearchParams();
-
-/** One court, as a string: the cut, chart and filters a `VizState` names,
- *  serialised as the URL would carry them (`vizStateQuery`), so the store's
- *  filters and the server's echo of them compare as the URL compares. */
-function courtSignature(cut: Cut, chart: Chart, filters: VizFilters): string {
-  return vizStateQuery(EMPTY_PARAMS, { cut, chart, filters, viewId: null });
-}
-
 const noDots = (): Set<string> | null => null;
 
 /**
@@ -180,6 +169,7 @@ export function SeasonVizLightbox({
   data,
   wallPlayer,
   analyzed,
+  errorSplitJudged,
 }: {
   /** The server's answer for the URL it last rendered; `null` on the wall
    *  and until the first answer for an opened card lands. */
@@ -190,6 +180,9 @@ export function SeasonVizLightbox({
   /** Analyzed matches, the season's size. `0`: nothing can open, whatever
    *  the URL says. */
   analyzed: number;
+  /** The season's Error-type rule, as the server parses the URL with it —
+   *  the court signatures are canonicalised by it (`courtSignature`). */
+  errorSplitJudged: boolean;
 }) {
   const { state, setState } = useVizState();
   const mounted = useMounted();
@@ -216,7 +209,7 @@ export function SeasonVizLightbox({
   const asked =
     state.cut === null
       ? null
-      : courtSignature(state.cut, state.chart, state.filters);
+      : courtSignature(state.cut, state.chart, state.filters, errorSplitJudged);
   const [opening, setOpening] = useState(() => ({
     open: isOpen,
     shellReady: shellLoaded,
@@ -252,7 +245,9 @@ export function SeasonVizLightbox({
   // court while it is on its way (see "Two clocks").
   const court: SeasonLightboxData =
     data !== null &&
-    opening.asked.has(courtSignature(data.cut, data.chart, data.filters))
+    opening.asked.has(
+      courtSignature(data.cut, data.chart, data.filters, errorSplitJudged),
+    )
       ? data
       : emptyCourt(cut, state.chart, state.filters, data);
   const pending = court !== data;

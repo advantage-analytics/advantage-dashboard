@@ -10,6 +10,7 @@ import {
   SEASON_CUT_LABEL,
   buildSeasonCards,
   buildSeasonLightbox,
+  courtSignature,
   filterOptionPatches,
   mergeVizResults,
   mergeVizStats,
@@ -1121,9 +1122,61 @@ test.describe("the Visualizations view, rendered", () => {
     // remembered, and the answer must echo one of them.
     const source = readFileSync(CONTAINER, "utf8");
     expect(source).toMatch(
-      /opening\.asked\.has\(courtSignature\(data\.cut, data\.chart, data\.filters\)\)/,
+      /opening\.asked\.has\(\s*courtSignature\(data\.cut, data\.chart, data\.filters, errorSplitJudged\)/,
     );
     expect(source).toMatch(/asked: new Set\(\[\.\.\.opening\.asked, asked\]\)/);
+  });
+
+  test("a court signature is canonical: options ticked against the option order, and the Error type under the season's rule, sign as the server's echo does", () => {
+    const base = parseVizState(new URLSearchParams("cut=errors"), {
+      errorSplitJudged: true,
+    }).filters;
+    // The store appends in click order; the server's echo comes through
+    // parseVizState, sorted into option order.
+    const clicked = {
+      ...base,
+      error: ["unforced", "doubleFault", "forced"],
+    } as VizFilters;
+    const echoed = parseVizState(
+      new URLSearchParams(
+        "cut=errors&verr=unforced&verr=doubleFault&verr=forced",
+      ),
+      { errorSplitJudged: true },
+    ).filters;
+    expect(echoed.error).not.toEqual(clicked.error);
+    expect(courtSignature("errors", "scatter", clicked, true)).toBe(
+      courtSignature("errors", "scatter", echoed, true),
+    );
+
+    const rally = { ...base, rally: ["long", "short"] } as VizFilters;
+    const rallyEcho = { ...base, rally: ["short", "long"] } as VizFilters;
+    expect(courtSignature("rallyPlacement", "scatter", rally, true)).toBe(
+      courtSignature("rallyPlacement", "scatter", rallyEcho, true),
+    );
+
+    const serve = { ...base, ball: ["second", "first"] } as VizFilters;
+    const serveEcho = { ...base, ball: ["first", "second"] } as VizFilters;
+    expect(courtSignature("serve", "scatter", serve, true)).toBe(
+      courtSignature("serve", "scatter", serveEcho, true),
+    );
+
+    // Unjudged season: a lone Unforced collapses to the all-errors pair on
+    // both sides, as the server parses it.
+    const lone = { ...base, error: ["unforced"] } as VizFilters;
+    const pair = { ...base, error: ["unforced", "forced"] } as VizFilters;
+    expect(courtSignature("errors", "scatter", lone, false)).toBe(
+      courtSignature("errors", "scatter", pair, false),
+    );
+
+    // Different courts still differ.
+    expect(courtSignature("serve", "scatter", serve, true)).not.toBe(
+      courtSignature(
+        "serve",
+        "scatter",
+        { ...base, ball: ["first"] } as VizFilters,
+        true,
+      ),
+    );
   });
 
   test("a season with nothing analyzed opens nothing: a ?cut= in a stale link draws neither frame", async () => {

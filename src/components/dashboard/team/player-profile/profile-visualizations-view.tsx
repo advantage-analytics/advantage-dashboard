@@ -88,6 +88,7 @@ export function ProfileVisualizationsView({
         side={side}
         cards={cards}
         lightbox={lightbox}
+        errorSplitJudged={errorSplitJudged}
       />
     </VizStateProvider>
   );
@@ -106,6 +107,7 @@ function SeasonVizBody({
   side,
   cards,
   lightbox,
+  errorSplitJudged,
 }: {
   playerName: string;
   firstName: string;
@@ -113,6 +115,7 @@ function SeasonVizBody({
   side: PlayerFilter;
   cards: SeasonCard[];
   lightbox: SeasonLightboxData | null;
+  errorSplitJudged: boolean;
 }) {
   const { state } = useVizState();
 
@@ -159,6 +162,7 @@ function SeasonVizBody({
         data={lightbox}
         wallPlayer={player}
         analyzed={analyzed}
+        errorSplitJudged={errorSplitJudged}
       />
     </>
   );

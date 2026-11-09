@@ -34,6 +34,7 @@ import {
   errorOptionsFor,
   parseVizState,
   sameFilterValue,
+  vizStateQuery,
   type VizState,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import {
@@ -664,4 +665,31 @@ export function buildSeasonLightbox(
     statRowDotIds,
     optionCounts,
   };
+}
+
+const EMPTY_PARAMS = new URLSearchParams();
+
+/** One court, as a string: the cut, chart and filters a `VizState` names,
+ *  in canonical form. The store keeps a checklist in click order (ticking
+ *  appends), while the server's echo comes through `parseVizState`, which
+ *  dedupes and sorts every checklist into option order and collapses the
+ *  Error type by the season's rule — so both sides are written to the URL
+ *  and read back through that same parser, with the same rule, before they
+ *  are compared. Ticking Forced before Double faults is the same court. */
+export function courtSignature(
+  cut: Cut,
+  chart: Chart,
+  filters: VizFilters,
+  errorSplitJudged: boolean,
+): string {
+  const query = vizStateQuery(EMPTY_PARAMS, {
+    cut,
+    chart,
+    filters,
+    viewId: null,
+  });
+  const canonical = parseVizState(new URLSearchParams(query), {
+    errorSplitJudged,
+  });
+  return vizStateQuery(EMPTY_PARAMS, { ...canonical, viewId: null });
 }
