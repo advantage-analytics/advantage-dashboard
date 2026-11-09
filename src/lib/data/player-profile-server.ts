@@ -392,7 +392,7 @@ export async function readPlayerMatchSides(
   // a filter PostgREST accepts.
   const ownIds = idsResolvingTo(canonical, playerId);
 
-  const { data: matchRows } = await supabase
+  const { data: matchRows, error: matchesError } = await supabase
     .from("matches")
     .select(
       "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, event_entry_id, round, result, match_type, court_type, verified, verified_at, errors_judged_at, duration, source_provider, created_by, opponent_player_id",
@@ -405,6 +405,13 @@ export async function readPlayerMatchSides(
     // most recent thing this player did.
     .order("date", { ascending: false, nullsFirst: false });
 
+  // A failed read is not "no matches": reading it as one put "0 matches" on
+  // every profile when this select once named a column the table lacks.
+  if (matchesError) {
+    throw new Error(
+      `Could not read this player's matches: ${matchesError.message}`,
+    );
+  }
   const matches = (matchRows ?? []) as DbPlayerMatchRow[];
 
   // Which side of each match is this player. The query already guarantees one

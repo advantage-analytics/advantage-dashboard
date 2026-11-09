@@ -915,6 +915,18 @@ test("a points read that fails throws rather than folding a season short", async
   }
 });
 
+test("a matches read that fails throws, never reads as no matches", async () => {
+  const { client } = fakeClient(
+    fullTables({ matches: new Error("bad column") }),
+    {
+      program_roster_full: ROSTER,
+    },
+  );
+  await expect(readPlayerMatchSides(client, PROGRAM, "p-ada")).rejects.toThrow(
+    /this player's matches/,
+  );
+});
+
 test("a stats read that fails throws", async () => {
   const { client, sides } = await adaSides(
     fullTables({ match_stats_with_percentages: new Error("timeout") }),
