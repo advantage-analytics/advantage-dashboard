@@ -368,9 +368,15 @@ export async function readPlayerMatchSides(
   // The roster is the identity source, and the one place that knows how to
   // name somebody who has no login. Its rows also carry both of a claimed
   // player's ids, which is what `canonicalRosterIds` folds.
-  const { data: rosterRows } = await supabase.rpc("program_roster_full", {
-    p_program_id: programId,
-  });
+  const { data: rosterRows, error: rosterError } = await supabase.rpc(
+    "program_roster_full",
+    { p_program_id: programId },
+  );
+  // A failed read is not "not on the roster": as one, every profile would
+  // 404 and the insight route would answer player_not_found.
+  if (rosterError) {
+    throw new Error(`Could not read the roster: ${rosterError.message}`);
+  }
   const roster = (rosterRows ?? []) as DbRosterFullRow[];
   const row = roster.find((r) => r.player_id === playerId);
 

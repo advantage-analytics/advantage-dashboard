@@ -140,7 +140,14 @@ function fakeClient(
     },
     rpc(name: string) {
       log.push(`rpc:${name}`);
-      return Promise.resolve({ data: rpcs[name] ?? null, error: null });
+      const answer = rpcs[name];
+      if (answer instanceof Error) {
+        return Promise.resolve({
+          data: null,
+          error: { message: answer.message },
+        });
+      }
+      return Promise.resolve({ data: answer ?? null, error: null });
     },
   } as unknown as SupabaseClient;
   return { client, log };
@@ -913,6 +920,15 @@ test("a points read that fails throws rather than folding a season short", async
   } finally {
     console.error = original;
   }
+});
+
+test("a roster read that fails throws, never reads as not on the roster", async () => {
+  const { client } = fakeClient(fullTables(), {
+    program_roster_full: new Error("rpc down"),
+  });
+  await expect(readPlayerMatchSides(client, PROGRAM, "p-ada")).rejects.toThrow(
+    /the roster/,
+  );
 });
 
 test("a matches read that fails throws, never reads as no matches", async () => {

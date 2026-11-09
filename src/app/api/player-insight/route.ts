@@ -140,7 +140,15 @@ export async function POST(request: Request): Promise<Response> {
 
   // The roster, as the viewer, for the WORKSPACE's program — the id the
   // cookie resolved to, never one from the body.
-  const sides = await getPlayerMatchSides(active.id, parsed.value.playerId);
+  // Inside a try: the roster and matches reads fail closed (they throw), and
+  // a throw answers through `errorResponse` like every other refusal here.
+  let sides: Awaited<ReturnType<typeof getPlayerMatchSides>>;
+  try {
+    sides = await getPlayerMatchSides(active.id, parsed.value.playerId);
+  } catch (err) {
+    console.error("[player-insight] could not read the player's matches", err);
+    return errorResponse(transportError("internal_error", "matches_read"));
+  }
   if (!sides) {
     return errorResponse(
       refusal(
