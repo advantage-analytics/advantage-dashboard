@@ -20,7 +20,9 @@ import { playedSets } from "@/lib/ui/score-format";
 
 const BAR_SLOT = "flex h-7 w-[5.5px] items-center justify-center";
 
-const BAR_HIT = `group/bar pointer-events-auto touch:pointer-events-none ${BAR_SLOT}`;
+const BAR_HIT_BASE = `group/bar pointer-events-auto ${BAR_SLOT}`;
+
+const BAR_HIT = `${BAR_HIT_BASE} touch:pointer-events-none`;
 
 /**
  * `touchTaps`: on touch the slot spreads to 14px — touch-only spacing, never a
@@ -28,7 +30,7 @@ const BAR_HIT = `group/bar pointer-events-auto touch:pointer-events-none ${BAR_S
  * 44px tall, so a finger can pick one match out of five.
  */
 const TOUCH_SLOT = "touch:w-[14px]";
-const BAR_HIT_TOUCH = `group/bar pointer-events-auto relative ${BAR_SLOT} ${TOUCH_SLOT} touch:after:absolute touch:after:inset-x-0 touch:after:-inset-y-2 touch:after:content-['']`;
+const BAR_HIT_TOUCH = `${BAR_HIT_BASE} relative ${TOUCH_SLOT} touch:after:absolute touch:after:inset-x-0 touch:after:-inset-y-2 touch:after:content-['']`;
 
 const BAR = `${FORM_TICK} h-3 transition-[opacity,height] duration-[var(--duration-hover)] group-hover/bar:h-4 group-hover/bar:!opacity-100 group-hover/form:opacity-40`;
 

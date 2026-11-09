@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { FormStrip } from "@/components/dashboard/shared/form-strip";
-import { STRETCHED } from "@/components/dashboard/matches/match-detail/head-to-head-table";
+import { STRETCHED } from "@/lib/ui/stretched-link";
 import {
   DayZeroShape,
   GHOST_OPACITY,
