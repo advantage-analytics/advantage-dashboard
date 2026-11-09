@@ -63,26 +63,32 @@ const VIEW_ICONS: Record<ProfileView, LucideIcon> = {
 
 /**
  * `ProfilePlayerBlock`'s geometry: the 40px avatar beside the name (20px
- * line), the facts line (18px) and the record row (the form strip's 28px
- * slot).
+ * line) and facts line (18px), then the Record row (the form strip's 28px
+ * slot) under a 16px gap, its value on the name's edge. Plays is
+ * conditional, so it is not drawn.
  */
 function PlayerBlockPending() {
   return (
     <div className="px-3">
       <div
-        className="flex items-start gap-3 border-b border-[var(--border-hairline)]"
+        className="flex flex-col gap-4 border-b border-[var(--border-hairline)]"
         style={{ padding: "18px 13px 20px" }}
       >
-        <PendingBar className="size-10 shrink-0 rounded-full" />
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex h-5 items-center">
-            <PendingBar className="h-3 w-32" />
+        <div className="flex items-center gap-3">
+          <PendingBar className="size-10 shrink-0 rounded-full" />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <div className="flex h-5 items-center">
+              <PendingBar className="h-3 w-32" />
+            </div>
+            <div className="flex h-[18px] items-center">
+              <PendingBar className="h-2.5 w-24" />
+            </div>
           </div>
-          <div className="flex h-[18px] items-center">
-            <PendingBar className="h-2.5 w-24" />
-          </div>
+        </div>
+        <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center">
+          <PendingBar className="h-2.5 w-10" />
           <div className="flex h-7 items-center gap-2">
-            <PendingBar className="h-2.5 w-10" />
+            <PendingBar className="h-2.5 w-8" />
             <PendingBar className="h-3 w-16" />
           </div>
         </div>
@@ -122,18 +128,18 @@ function SwitcherPending({ active }: { active: ProfileView }) {
   );
 }
 
-/** The two quiet links' 13px lines ("12 matches ›", "9 opponents ›"). */
+/** The two quiet links on one 13px line ("12 matches ›  9 opponents ›"). */
 function RailLinksPending() {
   return (
     <PendingRegion
       label="player links"
-      innerClassName="flex flex-col items-start gap-2.5 px-[25px] pt-4"
+      innerClassName="flex flex-wrap items-center gap-x-5 gap-y-2 px-6 pt-5"
     >
       <div className="flex h-[19.5px] items-center">
-        <PendingBar className="h-2.5 w-20" />
+        <PendingBar className="h-2.5 w-16" />
       </div>
       <div className="flex h-[19.5px] items-center">
-        <PendingBar className="h-2.5 w-24" />
+        <PendingBar className="h-2.5 w-20" />
       </div>
     </PendingRegion>
   );
