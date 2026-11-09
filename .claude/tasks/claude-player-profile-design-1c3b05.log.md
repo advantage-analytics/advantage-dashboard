@@ -130,3 +130,12 @@ is the runner's. Newest entries at the bottom.
 3. Saved views over a season (the Saved side now points to the match report).
 4. A per-mark "vs Opponent · date" readout would need a dotId→match lookup on the client.
 5. Move `CUT_LABEL` to a plain module so `SEASON_CUT_LABEL` stops mirroring it.
+
+## T12 · Retire the old profile pieces — done
+
+**gate:** mechanical GATE PASS (third run; first two failed on `schedule-availability.spec.ts` still listing the deleted `line-history-card.tsx`, then on the design-drift off-scale seed, both fixed) · completion VERDICT: pass
+**changed:** Deleted `ProfileIdentity`, `LastMatchCard`, `ServePlacementCard`, `MatchHistoryCard`, `LineHistoryCard` (nothing imported it) and their two specs. `PlayerProfile` drops `serve`, `lastMatch`, `kpis`, `hasStats`, `listSource`; `serveMapFor` and `getPlayerMatchList` removed, along with the match_stats, insights and serve-shots reads that only fed them. Design-drift off-scale seed 4 → 3; stale references fixed in the schedule spec allowlist, trace-route SKILL.md, schedule README, home-serve-data.ts and the loader docblock.
+**follow-ups:**
+
+1. `PlayerProfile.lines` (and `lineHistoryFrom`) now has no reader; retire it if Schedule stays coming-soon.
+2. Check whether the loader's `stats: null` result field is still needed.

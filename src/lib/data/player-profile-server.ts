@@ -1,62 +1,26 @@
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { formatMatchDayShort } from "@/lib/data/match-day";
-import {
-  buildScoreString,
-  getInitials,
-  matchOutcome,
-  scoreWinner,
-  shortName,
-  type MatchScore,
-} from "@/lib/data/match-utils";
-import { statKey } from "@/lib/data/aggregate";
+import { matchOutcome, type MatchScore } from "@/lib/data/match-utils";
 import {
   canonicalRosterIds,
   idsResolvingTo,
   sideOf,
 } from "@/lib/data/roster-ids";
-import { pickServeShot } from "@/lib/data/serve-return-shots";
 import {
-  computeZoneStats,
-  pointToServeDot,
-  type ServeDot,
-  type ZoneKey,
-  type ZoneStats,
-} from "@/lib/data/serve-zones";
-import {
-  fetchServeShotsForMatches,
-  type ServeShotRow,
-} from "@/lib/data/serve-shots-by-match";
-import {
-  chipsFrom,
   dualRecordFrom,
   lineHistoryFrom,
-  resolveLine,
-  resolveSchool,
   seasonStrip,
-  statRowsByKey,
   RECENT_WINDOW,
-  STAT_COLUMNS,
-  type DbStatRow,
   type LineRow,
-  type ProfileChip,
   type ProfileEntry,
   type ProfileEvent,
-  type ProfileKpi,
   type ProfileResult,
-  type ProfileStatRow,
   profileFormBar,
   rosterPlayerName,
 } from "@/lib/data/player-profile";
 import type { FormBar } from "@/lib/data/form-bar";
 import type { MemberRole } from "@/lib/data/team-settings-server";
-import { enrichMatches } from "@/lib/data/matches-page-server";
-import {
-  fromPlayerSide,
-  type DbMatch,
-  type DisplayMatch,
-} from "@/lib/data/matches-list-types";
 
 /**
  * One player, everything the program knows about them — Platform Audit
@@ -82,8 +46,8 @@ import {
  *
  * ── Whose side ──────────────────────────────────────────────────────────────
  * Every figure comes from THIS player's side: `isPlayer1` per match picks the
- * `match_stats` row, the opponent's name, the insight paragraph and — for the
- * serve map — which points they served. `docs/ui-revamp-guardrails.md`.
+ * result and the opponent's name, and the season loader folds each match from
+ * that same seat. `docs/ui-revamp-guardrails.md`.
  *
  * ── One read, two loaders ───────────────────────────────────────────────────
  * The roster RPC, the matches read and the seat decision are
@@ -93,32 +57,6 @@ import {
  * match the record counts is a match the season may fold — and a page that
  * renders both pays for one roster RPC and one matches read.
  */
-
-export interface ProfileMatchRow {
-  id: string;
-  /** "Apr 12", or "" for an undated row. */
-  date: string;
-  opponent: string;
-  school: string | null;
-  /** Initials of the school, for the 26px square. */
-  schoolAbbr: string | null;
-  /** "S3", or null when the match was not played on a line. */
-  line: string | null;
-  won: boolean | null;
-  /** From this player's perspective, "6-4, 3-6, 6-2"; "" when unscored. */
-  score: string;
-}
-
-export type { ProfileChip } from "@/lib/data/player-profile";
-
-export interface ProfileLastMatch extends ProfileMatchRow {
-  /** The opponent's initial, for the 32px square. */
-  opponentInitial: string;
-  /** Advantage Intelligence's paragraph for this player's side, when written. */
-  insight: { summary: string } | null;
-  /** Empty when the match has no stats row on this side. */
-  chips: ProfileChip[];
-}
 
 export interface PlayerProfile {
   playerId: string;
@@ -141,36 +79,7 @@ export interface PlayerProfile {
   duals: { wins: number; losses: number };
   /** Oldest first, at most five. Unscored matches are left out. */
   form: FormBar[];
-  kpis: ProfileKpi[];
-  /** Any stats row on this player's side — what turns the empty strip real. */
-  hasStats: boolean;
-  lastMatch: ProfileLastMatch | null;
-  /**
-   * Every match, newest first, as the raw rows the Matches list is built
-   * from — with which side this player was on. Server-only: `getPlayerMatchList`
-   * turns it into the list's own rows.
-   */
-  listSource: ProfileListSource[];
   lines: LineRow[];
-  serve: {
-    zoneStats: Record<ZoneKey, ZoneStats> | null;
-    /** How many matches the map was read from. */
-    matchCount: number;
-    /** How many serves it plots. */
-    serves: number;
-    /**
-     * The shots read failed. The map is zeroed so the rest of the profile
-     * still renders; this is what lets the card say "couldn't load" rather
-     * than "no report yet".
-     */
-    unavailable: boolean;
-  };
-}
-
-/** A match row in the shape `enrichMatches` reads, and this player's side of it. */
-export interface ProfileListSource {
-  row: DbMatch & { player2_id: string | null; created_by: string | null };
-  isPlayer1: boolean;
 }
 
 /** One row of `program_roster_full`, as the profile reads it. */
@@ -234,102 +143,6 @@ interface DbEventRow {
   kind: string;
   name: string;
   starts_on: string | null;
-}
-
-interface DbInsights {
-  player1?: { summary?: string };
-  player2?: { summary?: string };
-}
-
-/**
- * How many matches the serve map reads. A season's serve rows are a few
- * thousand; ten matches is the recent shape of a player's serve, and it
- * bounds the read the way Home's "last 4" does.
- */
-const SERVE_MAP_MATCHES = 10;
-
-/**
- * The serve map for a set of matches, from this player's service points.
- *
- * The filter is per match: `server_is_player1` must equal whether THIS player
- * was player one IN THAT MATCH. Home can read `serverIsPlayer1` bare because
- * the viewer is always player one of their own uploads; here the player may
- * be either side, and reading the wrong one would plot their opponents'
- * serves under their name.
- *
- * Read through `fetchServeShotsForMatches`, paged fail-closed — a season's
- * serve rows across ten matches sit well past PostgREST's 1000-row cap, so a
- * single request would silently plot a partial map while still reporting
- * `matchCount` as if every match's serves had been read. Mirrors
- * `loadHomeServes` in `home-serve-data.ts`.
- */
-export async function serveMapFor(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  /** This player's matches, newest first, and which side of each they were. */
-  sides: readonly { id: string; isPlayer1: boolean }[],
-): Promise<PlayerProfile["serve"]> {
-  const recent = sides.slice(0, SERVE_MAP_MATCHES);
-  if (recent.length === 0)
-    return { zoneStats: null, matchCount: 0, serves: 0, unavailable: false };
-
-  const sideByMatch = new Map(recent.map((r) => [r.id, r.isPlayer1]));
-
-  let shotsError: string | null = null;
-  const shots = await fetchServeShotsForMatches(
-    supabase,
-    [...sideByMatch.keys()],
-    (msg) => {
-      shotsError = msg;
-    },
-  );
-
-  if (!shots) {
-    console.error("Failed to fetch serve map shots:", shotsError);
-    return { zoneStats: null, matchCount: 0, serves: 0, unavailable: true };
-  }
-
-  const shotsByPoint = new Map<string, ServeShotRow[]>();
-  for (const shot of shots) {
-    if (!shot.points) continue;
-    const list = shotsByPoint.get(shot.point_id);
-    if (list) list.push(shot);
-    else shotsByPoint.set(shot.point_id, [shot]);
-  }
-
-  const dots: ServeDot[] = [];
-  for (const pointShots of shotsByPoint.values()) {
-    const point = pointShots[0].points;
-    if (!point) continue;
-    const isPlayer1 = sideByMatch.get(point.match_id);
-    if (isPlayer1 === undefined || point.server_is_player1 !== isPlayer1)
-      continue;
-
-    const serve = pickServeShot(pointShots);
-    const dot = pointToServeDot({
-      id: point.id,
-      serverIsPlayer1: point.server_is_player1,
-      firstShotLandingX: serve?.landing_x ?? null,
-      firstShotLandingY: serve?.landing_y ?? null,
-      firstShotContactY: serve?.contact_y ?? null,
-      firstShotZone: serve?.zone ?? null,
-      firstShotSpin: serve?.spin_type ?? null,
-      firstShotType: serve?.shot_type ?? null,
-      firstShotResult: serve?.result ?? null,
-      resultType: point.result_type,
-      wonByPlayer1: point.won_by_player1 ?? false,
-      setNumber: point.set_number ?? undefined,
-      pointScore: point.point_score,
-      gameScore: point.game_score,
-    });
-    if (dot) dots.push(dot);
-  }
-
-  return {
-    zoneStats: computeZoneStats(dots),
-    matchCount: recent.length,
-    serves: dots.length,
-    unavailable: false,
-  };
 }
 
 /** One of this player's matches, and the seat they sat in for it. */
@@ -454,18 +267,6 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
 
   const supabase = await createClient();
 
-  const statsPromise = (async () => {
-    if (own.length === 0) return new Map<string, ProfileStatRow>();
-    const { data } = await supabase
-      .from("match_stats_with_percentages")
-      .select(STAT_COLUMNS)
-      .in(
-        "match_id",
-        own.map((r) => r.match.id),
-      );
-    return statRowsByKey((data ?? []) as unknown as DbStatRow[]);
-  })();
-
   const entriesPromise = (async () => {
     const ids = [
       ...new Set(
@@ -513,40 +314,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
     return { entriesById, eventsById };
   })();
 
-  // Insights only for the one match that shows them: the column is a
-  // paragraph per side, and reading it for every row would be most of the
-  // payload for one card.
-  const insightPromise = (async () => {
-    const last = own[0];
-    if (!last) return null;
-    const { data } = await supabase
-      .from("matches")
-      .select("insights")
-      .eq("id", last.match.id)
-      .maybeSingle();
-    return (data?.insights ?? null) as DbInsights | null;
-  })();
-
-  // The heaviest read on the page, and it depends on nothing the others
-  // produce — only on which side of each match this player was, which `own`
-  // already knows. Sequencing it after them would add a whole round trip to
-  // the time before anything renders.
-  const servePromise = serveMapFor(
-    supabase,
-    own.map((r) => ({ id: r.match.id, isPlayer1: r.isPlayer1 })),
-  );
-
-  const [
-    statsByKey,
-    { entriesById: entries, eventsById: events },
-    insightRow,
-    serve,
-  ] = await Promise.all([
-    statsPromise,
-    entriesPromise,
-    insightPromise,
-    servePromise,
-  ]);
+  const { entriesById: entries, eventsById: events } = await entriesPromise;
 
   const results: ProfileResult[] = own.map(({ match, isPlayer1 }) => ({
     id: match.id,
@@ -558,44 +326,12 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
       (isPlayer1 ? match.player2_name : match.player1_name) ?? "Unknown",
     score: match.score,
     tournamentName: match.tournament_name,
-    stats: statsByKey.get(statKey(match.id, isPlayer1)) ?? null,
+    stats: null,
   }));
 
   const duals = dualRecordFrom(results, entries, events);
   const strip = seasonStrip(results, duals);
   const { wins, losses } = strip;
-
-  const toRow = (result: ProfileResult): ProfileMatchRow => {
-    const entry = result.entryId ? entries.get(result.entryId) : null;
-    const event = entry ? events.get(entry.eventId) : null;
-    const school = resolveSchool(entry, event, result.tournamentName);
-    return {
-      id: result.id,
-      date: formatMatchDayShort(result.date),
-      opponent: shortName(result.opponentName),
-      school,
-      schoolAbbr: school ? getInitials(school) : null,
-      line: resolveLine(entry),
-      won: result.won,
-      score: buildScoreString(result.score, result.isPlayer1),
-    };
-  };
-
-  const last = results[0];
-  const lastMatch: ProfileLastMatch | null = last
-    ? {
-        ...toRow(last),
-        opponentInitial: getInitials(last.opponentName).charAt(0) || "?",
-        insight: (() => {
-          const side = last.isPlayer1
-            ? insightRow?.player1
-            : insightRow?.player2;
-          const summary = side?.summary?.trim();
-          return summary ? { summary } : null;
-        })(),
-        chips: chipsFrom(last.stats),
-      }
-    : null;
 
   const { name, firstName } = rosterPlayerName(row);
 
@@ -623,61 +359,6 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
       .slice(0, RECENT_WINDOW)
       .reverse()
       .map(profileFormBar),
-    kpis: strip.kpis,
-    hasStats: strip.hasStats,
-    lastMatch,
-    listSource: own.map(({ match, isPlayer1 }) => ({
-      row: {
-        ...match,
-        player1_name: match.player1_name ?? "Unknown",
-        player2_name: match.player2_name ?? "Unknown",
-        // `DbMatch.date` is typed as present; an undated row prints the
-        // list's own fallback for it, as on the Matches page.
-        date: match.date as string,
-        score: match.score as DbMatch["score"],
-      },
-      isPlayer1,
-    })),
     lines: lineHistoryFrom(results, entries),
-    serve,
   };
 });
-
-/**
- * This player's matches as the Matches list draws them — the same rows, with
- * the same analysis state — so the profile's history reads like the list its
- * "All N" link opens.
- *
- * `enrichMatches` is the list page's own: opponent style, the vendor
- * reconcile and the analysis read, in that order (guardrails §3.2). The list
- * row draws player1 as "you", so a match where this player was player2 — an
- * intra-squad match — is turned to their side first (`fromPlayerSide`), or it
- * would show their opponent's name and the opposite result.
- */
-export async function getPlayerMatchList(
-  profile: PlayerProfile,
-  viewerId: string,
-): Promise<DisplayMatch[]> {
-  if (profile.listSource.length === 0) return [];
-  const supabase = await createClient();
-  const sources = new Map(profile.listSource.map((s) => [s.row.id, s]));
-  const rows = await enrichMatches(
-    supabase,
-    profile.listSource.map((s) => s.row),
-    { id: viewerId },
-  );
-  // A row whose side is unknown is left out rather than drawn as player1 —
-  // that default is exactly the misattribution `fromPlayerSide` exists to
-  // prevent. Unreachable today: `enrichMatches` only ever drops rows.
-  return rows.flatMap((match) => {
-    const source = sources.get(match.id);
-    if (!source) return [];
-    return [
-      fromPlayerSide(
-        match,
-        source.isPlayer1,
-        scoreWinner(source.row.score) !== null,
-      ),
-    ];
-  });
-}

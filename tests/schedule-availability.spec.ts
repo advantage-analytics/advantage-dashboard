@@ -37,8 +37,6 @@ const UNGATED: Record<string, string> = {
     "inside CourtRecord, which Team Home gates",
   "src/components/dashboard/team/dual-history.tsx":
     "Team Home's history region, which the page gates",
-  "src/components/dashboard/team/player-profile/line-history-card.tsx":
-    "the player profile page gates the card",
   "src/components/dashboard/matches/match-actions/attach-line-picker.tsx":
     "opened only from the gated 'Add to an event' controls",
   "src/lib/schedule/actions.ts": "revalidatePath after schedule writes",

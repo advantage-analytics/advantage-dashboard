@@ -159,7 +159,7 @@ ready).
 
 ## T12 · Retire the old profile pieces
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T7, T9, T10
 - **files:** `player-profile/profile-identity.tsx`, `last-match-card.tsx`, `serve-placement-card.tsx`, `match-history-card.tsx`, `line-history-card.tsx`, `src/lib/data/player-profile-server.ts`, `tests/player-profile-serve-card.spec.ts`, `tests/player-profile-serve-map.spec.ts` — guess

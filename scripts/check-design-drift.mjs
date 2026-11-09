@@ -375,8 +375,9 @@ const CHECKS = [
     key: "size",
     // 5 → 4: report-insight-card.tsx's claim moved from design 04 F2's
     // off-scale `text-[15px]` to the scale's `.text-title` (16px) when the
-    // card was re-laid out on 2026-09-16 (spec › Decisions 5).
-    seed: 4,
+    // card was re-laid out on 2026-09-16 (spec › Decisions 5). 4 → 3: the
+    // team player profile's retired cards took one with them (2026-11-09).
+    seed: 3,
     label: "off-scale text-[Npx]",
     fix: "snap to the SKILL.md type scale, or add the missing step to it",
   },
