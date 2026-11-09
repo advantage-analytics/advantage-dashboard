@@ -117,7 +117,23 @@ export function useVizState(): VizStateContextValue {
  * the serialized query string (not object identity, since a re-parsed
  * VizState is a new object every render even when nothing changed).
  */
-export function VizStateProvider({ children }: { children: ReactNode }) {
+export function VizStateProvider({
+  children,
+  errorSplitJudged: errorSplitJudgedProp,
+}: {
+  children: ReactNode;
+  /**
+   * The Error-type rule a link is read under, for a host with no match
+   * filters provider above it. The season page passes
+   * `seasonErrorSplitJudged` over its matches
+   * (`profile-visualizations-view.tsx`), so a `?verr=` parses here exactly
+   * as its Server Component parsed it — the hook below answers `true`
+   * outside a provider, which on an unjudged season would keep `unforced`
+   * raw while the server collapsed it to every error. Omitted, the rule is
+   * the match's.
+   */
+  errorSplitJudged?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -125,7 +141,8 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   // A link's Error type is read against this match: unjudged, `forced` opens
   // on every error (`parseVizState`'s `match`). The flag is fixed for the
   // page's life, so the parse below needn't rerun when it is read.
-  const errorSplitJudged = useErrorSplitJudged();
+  const matchErrorSplitJudged = useErrorSplitJudged();
+  const errorSplitJudged = errorSplitJudgedProp ?? matchErrorSplitJudged;
 
   // Lazy initializer: `parseVizState` only needs to run once, on mount — on
   // every later render `state` already holds what it would recompute to (or,

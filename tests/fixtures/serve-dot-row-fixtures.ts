@@ -1,9 +1,10 @@
 /**
- * Building blocks for a fake `shots` row joined to its point, shared by
- * `home-serve-data.spec.ts` and `player-profile-serve-map.spec.ts` —
- * `loadHomeServes` and `serveMapFor` both read through
- * `fetchServeShotsForMatches`, so their test rows are built from the same
- * shapes.
+ * Building blocks for a fake `shots` row joined to its point, shaped as
+ * `loadHomeServes` (`lib/data/home-serve-data.ts`) reads one — the rows
+ * `home-serve-data.spec.ts` builds. The profile's serve map, which read the
+ * same shape, was retired with the profile redesign (T12, 2026-11), so this
+ * has one consumer now; it stays a fixture so a second reader of the join
+ * builds its rows here rather than by hand.
  */
 
 /** The `points` side of a joined shots row, shaped as either loader reads it. */

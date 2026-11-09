@@ -38,6 +38,16 @@ import { SeasonVizLightbox } from "./season-viz-lightbox";
  * every write is a `router.replace`, which re-renders the page on the
  * server with the new state. `side` is the side the server computed the
  * cards for; the pressed chip follows the store so a switch reads at once.
+ * `errorSplitJudged` is the season's own Error-type rule
+ * (`seasonErrorSplitJudged`), handed to the store so a `?verr=` in a link
+ * parses in the browser exactly as the page parsed it on the server — the
+ * store's default is the match's rule, which a season has no provider for.
+ *
+ * The wall's own player (`SeasonVizBody`, the report's `shots-tab.tsx`
+ * rule): while a card is open `state.filters.player` is the card's — its
+ * You | Opponent switch rewrites it — so the wall keeps the player it was
+ * showing when the card opened, and closing goes back to it rather than to
+ * the side the reader switched to inside the card.
  *
  * Saved: saved views are the workspace's (`saved_views`), listed and managed
  * on the match report with the report's own context; the season lists none
@@ -51,6 +61,7 @@ export function ProfileVisualizationsView({
   side,
   cards,
   lightbox,
+  errorSplitJudged,
 }: {
   /** The player's full name — the cards' subject for "you". */
   playerName: string;
@@ -63,20 +74,72 @@ export function ProfileVisualizationsView({
   cards: SeasonCard[];
   /** The opened card, when `?cut=` names one; `null` on the wall. */
   lightbox: SeasonLightboxData | null;
+  /** The season's Error-type rule: every analyzed match judged its errors. */
+  errorSplitJudged: boolean;
 }) {
   return (
-    <VizStateProvider>
-      <SeasonWall
+    <VizStateProvider errorSplitJudged={errorSplitJudged}>
+      <SeasonVizBody
         playerName={playerName}
         firstName={firstName}
         analyzed={analyzed}
         side={side}
         cards={cards}
+        lightbox={lightbox}
       />
-      {lightbox !== null && (
-        <SeasonVizLightbox data={lightbox} wallPlayer={side} />
-      )}
     </VizStateProvider>
+  );
+}
+
+/**
+ * Inside the store: the wall and, over it, the lightbox container — which
+ * is always mounted, because it is the one that knows the reader has just
+ * opened a card the server has not answered for yet (it draws the pending
+ * frame then; `season-viz-lightbox.tsx`, "Two clocks").
+ */
+function SeasonVizBody({
+  playerName,
+  firstName,
+  analyzed,
+  side,
+  cards,
+  lightbox,
+}: {
+  playerName: string;
+  firstName: string;
+  analyzed: number;
+  side: PlayerFilter;
+  cards: SeasonCard[];
+  lightbox: SeasonLightboxData | null;
+}) {
+  const { state } = useVizState();
+
+  // The wall's own player, as `shots-tab.tsx` keeps it. On the wall it is
+  // the store's (so the chip reads pressed the instant it is clicked); while
+  // a card is open the store's player belongs to the card and the wall holds
+  // what it had. A hard load of an open card (`?cut=…&player=…`) has no
+  // "what it had", and takes the card's side — the one the server drew the
+  // cards for, and the one the card was most likely opened from. A
+  // render-phase update on the wall, as the report does it; no effect.
+  const [wallPlayer, setWallPlayer] = useState<PlayerFilter>(() =>
+    state.cut === null ? state.filters.player : side,
+  );
+  if (state.cut === null && state.filters.player !== wallPlayer) {
+    setWallPlayer(state.filters.player);
+  }
+
+  return (
+    <>
+      <SeasonWall
+        playerName={playerName}
+        firstName={firstName}
+        analyzed={analyzed}
+        side={side}
+        player={wallPlayer}
+        cards={cards}
+      />
+      <SeasonVizLightbox data={lightbox} wallPlayer={wallPlayer} />
+    </>
   );
 }
 
@@ -85,22 +148,20 @@ function SeasonWall({
   firstName,
   analyzed,
   side,
+  player,
   cards,
 }: {
   playerName: string;
   firstName: string;
   analyzed: number;
+  /** The side `cards` were computed for. */
   side: PlayerFilter;
+  /** The wall's own You | Opponent — the pressed chip. */
+  player: PlayerFilter;
   cards: SeasonCard[];
 }) {
-  const { state, setState, hrefFor } = useVizState();
+  const { setState, hrefFor } = useVizState();
   const [collection, setCollection] = useState<WallCollection>("default");
-
-  // The wall's own player: the store's while the wall is what shows (so the
-  // chip reads pressed the instant it is clicked); while a card is open the
-  // store's player is the card's, and the wall keeps the side it was drawn
-  // for.
-  const player: PlayerFilter = state.cut === null ? state.filters.player : side;
 
   function choosePlayer(next: PlayerFilter) {
     if (next === player) return;

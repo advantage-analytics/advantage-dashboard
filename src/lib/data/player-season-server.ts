@@ -38,6 +38,7 @@ import {
   type SeasonMatch,
   type SeasonTallies,
 } from "@/lib/data/player-season";
+import type { SeasonVizMatch } from "@/lib/data/player-season-viz";
 import type { H2HStats } from "@/components/dashboard/matches/match-detail/head-to-head-rows";
 import { parseBallPathsFile } from "@/components/dashboard/matches/match-detail/film/film-ball";
 import { isDerivedMatch } from "@/components/dashboard/matches/match-detail/match-filters/model";
@@ -88,6 +89,19 @@ import { lobShotKeys } from "@/components/dashboard/matches/match-detail/match-f
  * match — unknown, so the fold leaves the match out of the lob rows and the
  * Net game card says "Passed or lobbed" — never an empty set, which would
  * count a lob over the net player among the passes.
+ *
+ * ── Two loaders, one read ───────────────────────────────────────────────────
+ * `loadPlayerSeason` is the Statistics tab's: the matches, their points AND
+ * their lob files, then the Head to head and card folds. `loadPlayerSeasonCourts`
+ * is the Visualizations tab's on a request that renders it alone
+ * (`?tab=visualizations` — every click in the wall or the lightbox): the
+ * same matches and the same points, but no file is asked for and nothing is
+ * folded, because the courts (`player-season-viz.ts`) read a match's points,
+ * seat and flags only — a `SeasonVizMatch` has no `lobKeys` — and the lob
+ * download per Advantage Intelligence match is the one read on this page
+ * that goes through the service role. Its result is typed so the Statistics
+ * fold cannot run over it: a season folded with every `lobKeys` null reads
+ * "Passed or lobbed" on every match, and nothing on screen says why.
  *
  * ── Failing closed ──────────────────────────────────────────────────────────
  * A points read that answers `null` (a page of shots failed) or a stats read
@@ -284,15 +298,16 @@ export async function mapWithConcurrency<T, R>(
 }
 
 /**
- * The season over `sides`, read through `supabase`. This is the whole fetch;
- * `getPlayerSeason` is the request-time wrapper that supplies the client,
- * the matches and the file reader.
+ * The analyzed matches over `sides`, read through `supabase` — the read both
+ * loaders share. `readLobs` is asked for each Advantage Intelligence match's
+ * lob keys; `null` asks for no file at all and leaves every match's
+ * `lobKeys` null (the courts loader — see "Two loaders, one read").
  */
-export async function loadPlayerSeason(
+async function readAnalyzedMatches(
   supabase: SupabaseClient,
   sides: readonly PlayerMatchSide[],
-  deps: PlayerSeasonDeps,
-): Promise<PlayerSeason> {
+  readLobs: ((matchId: string) => Promise<ReadonlySet<number> | null>) | null,
+): Promise<SeasonMatch[]> {
   // Two waves. First the cheap reads that cover the whole season in one
   // query each — the job state the report gates on (reads nothing for no
   // matches) and both seats' published rows — which say which matches can be
@@ -330,10 +345,10 @@ export async function loadPlayerSeason(
   });
 
   // Each match's points and — for the Advantage Intelligence matches, the
-  // only ones with a file — its lob keys, a few matches at a time
-  // (`SEASON_READ_CONCURRENCY`). Bookmarks are left off the points read:
-  // nothing in the fold reads who saved a point, and reading them is two
-  // more round trips and a roster RPC per match.
+  // only ones with a file, when a reader was handed in — its lob keys, a few
+  // matches at a time (`SEASON_READ_CONCURRENCY`). Bookmarks are left off
+  // the points read: nothing in the fold reads who saved a point, and
+  // reading them is two more round trips and a roster RPC per match.
   const reads = await mapWithConcurrency(
     candidates,
     SEASON_READ_CONCURRENCY,
@@ -342,8 +357,8 @@ export async function loadPlayerSeason(
         getMatchPointsFromSupabase(s.match.id, supabase, {
           includeBookmarks: false,
         }),
-        isDerived(s.match)
-          ? readLobKeys(deps, s.match.id)
+        readLobs !== null && isDerived(s.match)
+          ? readLobs(s.match.id)
           : Promise.resolve(null),
       ]);
       // `null` is a failed read, never an empty match (`fetchAllPages`).
@@ -388,6 +403,22 @@ export async function loadPlayerSeason(
     });
   });
 
+  return perMatch;
+}
+
+/**
+ * The season over `sides`, read through `supabase`. This is the whole fetch;
+ * `getPlayerSeason` is the request-time wrapper that supplies the client,
+ * the matches and the file reader.
+ */
+export async function loadPlayerSeason(
+  supabase: SupabaseClient,
+  sides: readonly PlayerMatchSide[],
+  deps: PlayerSeasonDeps,
+): Promise<PlayerSeason> {
+  const perMatch = await readAnalyzedMatches(supabase, sides, (matchId) =>
+    readLobKeys(deps, matchId),
+  );
   return {
     analyzed: perMatch.length,
     matchesPlayed: sides.length,
@@ -395,6 +426,49 @@ export async function loadPlayerSeason(
     groups: foldSeasonRows(perMatch),
     tallies: foldSeasonTallies(perMatch),
     perMatch,
+  };
+}
+
+/**
+ * What the Visualizations tab reads on a request that renders it alone: the
+ * season's analyzed matches as the courts fold them (`player-season-viz.ts`),
+ * with no lob files and no Statistics fold — see "Two loaders, one read".
+ */
+export interface PlayerSeasonCourts {
+  /** As `PlayerSeason.analyzed`: matches the report would draw, with points. */
+  analyzed: number;
+  /** As `PlayerSeason.matchesPlayed`. */
+  matchesPlayed: number;
+  /**
+   * The analyzed matches, newest first, as `SeasonVizMatch`es — points, seat
+   * and flags; no `lobKeys`, no stats rows. SERVER-ONLY, as
+   * `PlayerSeason.perMatch` is: a season's points are megabytes.
+   */
+  perMatch: SeasonVizMatch[];
+}
+
+/**
+ * The courts' season over `sides`: the same matches and points as
+ * `loadPlayerSeason`, no file read, nothing folded. No `deps` — there is
+ * nothing here for the service role to do.
+ */
+export async function loadPlayerSeasonCourts(
+  supabase: SupabaseClient,
+  sides: readonly PlayerMatchSide[],
+): Promise<PlayerSeasonCourts> {
+  const perMatch = await readAnalyzedMatches(supabase, sides, null);
+  return {
+    analyzed: perMatch.length,
+    matchesPlayed: sides.length,
+    perMatch: perMatch.map(
+      ({ matchId, points, isPlayer1, isDerived, errorSplitJudged }) => ({
+        matchId,
+        points,
+        isPlayer1,
+        isDerived,
+        errorSplitJudged,
+      }),
+    ),
   };
 }
 
@@ -416,4 +490,21 @@ export const getPlayerSeason = cache(async function getPlayerSeason(
   return loadPlayerSeason(supabase, sides.own, {
     loadBallPathsBody: supabaseBallPathsBody(lazyAdminClient()),
   });
+});
+
+/**
+ * The courts' season, for a request that renders the Visualizations tab
+ * alone (`page.tsx`, "What a Visualizations request skips"). Its own
+ * `cache()`: a request calls exactly one of the two loaders, so the points
+ * are read once either way; a request that called both would read them
+ * twice, which is why the page picks one per request.
+ */
+export const getPlayerSeasonCourts = cache(async function getPlayerSeasonCourts(
+  programId: string,
+  playerId: string,
+): Promise<PlayerSeasonCourts | null> {
+  const sides = await getPlayerMatchSides(programId, playerId);
+  if (!sides) return null;
+  const supabase = await createClient();
+  return loadPlayerSeasonCourts(supabase, sides.own);
 });

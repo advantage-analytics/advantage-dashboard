@@ -120,8 +120,13 @@ export function ProfileTitle() {
  * inactive view unmounts rather than hides, so a chart's hover state never
  * outlives the switch away from it.
  *
- * The switch is client-side (native history, no server render), so the page
- * renders every view's content once and this decides which one shows.
+ * The switch is client-side (native history, no server render), and this
+ * decides which rendered body shows. A Statistics request renders both
+ * bodies, so the switch to Visualizations costs nothing; a Visualizations
+ * request (`?tab=visualizations`, every viz click) renders only its own and
+ * puts `ProfileStatisticsDeferred` in the Statistics slot, which asks the
+ * server for the rest the moment it shows — `page.tsx`, "What a
+ * Visualizations request skips".
  */
 export function ProfileViewWhen({
   view,

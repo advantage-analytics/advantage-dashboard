@@ -9,6 +9,7 @@ import {
 } from "@/lib/data/player-profile-server";
 import {
   getPlayerSeason,
+  getPlayerSeasonCourts,
   seasonOpponentCount,
 } from "@/lib/data/player-season-server";
 import {
@@ -35,7 +36,12 @@ import {
   ProfileViewWhen,
 } from "@/components/dashboard/team/player-profile/profile-frame";
 import { ProfileActions } from "@/components/dashboard/team/player-profile/profile-actions";
+import { ProfileStatisticsDeferred } from "@/components/dashboard/team/player-profile/profile-statistics-deferred";
 import { ProfileStatisticsView } from "@/components/dashboard/team/player-profile/profile-statistics-view";
+import {
+  PROFILE_VIEW_PARAM,
+  parseProfileView,
+} from "@/components/dashboard/team/player-profile/profile-view";
 import { ProfileVisualizationsView } from "@/components/dashboard/team/player-profile/profile-visualizations-view";
 import {
   AnalyzedCountPending,
@@ -92,8 +98,26 @@ import { askEntryHref } from "@/lib/services/ask/entry";
  * (`player-season-viz.ts`), never in the browser: a season's points are
  * megabytes. A click in the wall or the lightbox writes the URL
  * (`VizStateProvider`'s `router.replace`), which renders this page again
- * with the new state. `?tab=` itself is read client-side (`ProfileViewWhen`),
- * so both bodies render and the switch costs no server round trip.
+ * with the new state. The URL's player is the wall's side on the wall and
+ * the card's while one is open; the wall's own player is kept in the
+ * browser meanwhile (`profile-visualizations-view.tsx`), and closing writes
+ * it back, so the cards are recomputed for it then.
+ *
+ * ── What a Visualizations request skips ─────────────────────────────────────
+ * `?tab=` is read client-side for the switch (`ProfileViewWhen`, native
+ * history, no server render) AND here, once, to decide what to render. A
+ * Statistics request (the default) renders both bodies, so switching to
+ * Visualizations costs nothing. A Visualizations request —
+ * `?tab=visualizations`, which is every viz click — renders the
+ * Visualizations body alone over `getPlayerSeasonCourts`: the same matches
+ * and points, but no ball-paths download (the courts never read lobs, and
+ * that file is this page's one service-role read) and no Statistics fold,
+ * evidence line or signature for a body nothing would show. The Statistics
+ * slot holds `ProfileStatisticsDeferred` instead, which draws the Statistics
+ * skeleton and asks the server for the page again the moment the reader
+ * switches to it — one round trip, the one a first load of Statistics would
+ * cost, and only then. A request calls exactly one of the two season
+ * loaders, so the points are read once either way.
  *
  * ── Why the numbers match the roster's ──────────────────────────────────────
  * `getPlayerProfile` folds both of a claimed player's ids the way
@@ -181,6 +205,11 @@ export default async function PlayerProfilePage({
   const matchesPlayed = profile.matchesPlayed;
   const opponentsCount = sides ? seasonOpponentCount(sides.own) : 0;
 
+  // Which body this request is for (see "What a Visualizations request
+  // skips"): the courts alone on `?tab=visualizations`, both otherwise.
+  const courtsOnly =
+    parseProfileView(query[PROFILE_VIEW_PARAM]) === "visualizations";
+
   return (
     // The match detail layout's box: a fixed height from the viewport, so
     // the rail and the pane scroll on their own (`match-report.tsx`'s note).
@@ -226,7 +255,11 @@ export default async function PlayerProfilePage({
                   {matchesPlayed} {matchesPlayed === 1 ? "match" : "matches"}
                 </span>
                 <Suspense fallback={<AnalyzedCountPending />}>
-                  <AnalyzedCount programId={active.id} playerId={playerId} />
+                  <AnalyzedCount
+                    programId={active.id}
+                    playerId={playerId}
+                    courtsOnly={courtsOnly}
+                  />
                 </Suspense>
               </p>
             </div>
@@ -253,23 +286,29 @@ export default async function PlayerProfilePage({
           {/* The pane body: the one place the season is awaited for the
               cards. `WidgetBoundary` outside the `Suspense`, so a season read
               that throws (it fails closed — `player-season-server.ts`) draws
-              the retry in the body while the rail and title stay. */}
+              the retry in the body while the rail and title stay. On a
+              Visualizations request the Statistics body is not rendered;
+              its slot asks for it when it is shown (`ProfileStatisticsDeferred`). */}
           <WidgetBoundary label="Statistics">
-            <Suspense
-              fallback={
-                <ProfileViewWhen view="statistics">
-                  <ProfileStatisticsPanePending />
-                </ProfileViewWhen>
-              }
-            >
-              <ProfileStatisticsBody
-                programId={active.id}
-                playerId={playerId}
-                rosterPlayerId={profile.playerId}
-                playerName={profile.name}
-                firstName={profile.firstName}
-              />
-            </Suspense>
+            {courtsOnly ? (
+              <ProfileStatisticsDeferred />
+            ) : (
+              <Suspense
+                fallback={
+                  <ProfileViewWhen view="statistics">
+                    <ProfileStatisticsPanePending />
+                  </ProfileViewWhen>
+                }
+              >
+                <ProfileStatisticsBody
+                  programId={active.id}
+                  playerId={playerId}
+                  rosterPlayerId={profile.playerId}
+                  playerName={profile.name}
+                  firstName={profile.firstName}
+                />
+              </Suspense>
+            )}
           </WidgetBoundary>
           <WidgetBoundary label="Visualizations">
             <Suspense
@@ -285,6 +324,7 @@ export default async function PlayerProfilePage({
                 playerName={profile.name}
                 firstName={profile.firstName}
                 query={query}
+                courtsOnly={courtsOnly}
               />
             </Suspense>
           </WidgetBoundary>
@@ -297,16 +337,23 @@ export default async function PlayerProfilePage({
 /**
  * The facts line's "· N analyzed", once the season has landed. A season read
  * that fails is the body's to report (its retry); here it drops the clause
- * rather than print a count nobody measured.
+ * rather than print a count nobody measured. Reads the loader the body of
+ * this request reads (`courtsOnly`), so the season is read once.
  */
 async function AnalyzedCount({
   programId,
   playerId,
+  courtsOnly,
 }: {
   programId: string;
   playerId: string;
+  courtsOnly: boolean;
 }) {
-  const season = await getPlayerSeason(programId, playerId).catch(() => null);
+  const season = await (
+    courtsOnly
+      ? getPlayerSeasonCourts(programId, playerId)
+      : getPlayerSeason(programId, playerId)
+  ).catch(() => null);
   if (!season) return null;
   return <span>· {season.analyzed} analyzed</span>;
 }
@@ -354,13 +401,14 @@ async function ProfileStatisticsBody({
 }
 
 /**
- * The Visualizations tab's body: the same season (`cache()`d, so this is the
- * Statistics body's read, not a second one), the workspace's bands and the
- * viewer's unit, then the wall's four cards for the URL's side and — when
- * `?cut=` names one — the opened card's court, statistics, per-row mark ids
- * and per-option counts, all computed here (`player-season-viz.ts`) and
- * handed to the client view as plain data. No `MatchPoint` leaves this
- * function.
+ * The Visualizations tab's body: the season — on a Visualizations request
+ * the courts' read (`getPlayerSeasonCourts`: the points, no lob files, no
+ * fold); otherwise the Statistics body's own `cache()`d read, not a second
+ * one — the workspace's bands and the viewer's unit, then the wall's four
+ * cards for the URL's side and — when `?cut=` names one — the opened card's
+ * court, statistics, per-row mark ids and per-option counts, all computed
+ * here (`player-season-viz.ts`) and handed to the client view as plain data.
+ * No `MatchPoint` leaves this function.
  */
 async function ProfileVisualizationsBody({
   programId,
@@ -368,29 +416,33 @@ async function ProfileVisualizationsBody({
   playerName,
   firstName,
   query,
+  courtsOnly,
 }: {
   programId: string;
   playerId: string;
   playerName: string;
   firstName: string;
   query: Record<string, string | string[] | undefined>;
+  courtsOnly: boolean;
 }) {
   const [season, bandSettings, preferences] = await Promise.all([
-    getPlayerSeason(programId, playerId),
+    courtsOnly
+      ? getPlayerSeasonCourts(programId, playerId)
+      : getPlayerSeason(programId, playerId),
     getBandSettings(programId),
     getPreferences(),
   ]);
   if (!season) return null;
   const bands = { bands: bandSettings, unit: preferences.unit };
-  // Read as `VizStateProvider` reads it, with the season's own judged rule,
-  // so a `?verr=` on an unjudged season opens on every error here too.
-  const state = parseSeasonVizState(
-    query,
-    seasonErrorSplitJudged(season.perMatch),
-  );
-  // The wall's side: the URL's player on the wall; while a card is open the
-  // URL's player is the card's, and the wall under it is drawn for the same
-  // side — the one the card was most likely opened from.
+  // The season's own Error-type rule, read here and handed to the client
+  // store too, so a `?verr=` parses the same on both ends: on an unjudged
+  // season `unforced` opens on every error here AND in the browser.
+  const errorSplitJudged = seasonErrorSplitJudged(season.perMatch);
+  const state = parseSeasonVizState(query, errorSplitJudged);
+  // The side the cards are computed for: the URL's player. On the wall that
+  // is the wall's; while a card is open it is the card's — the wall's own
+  // player is kept in the browser meanwhile (`profile-visualizations-view.tsx`)
+  // and closing writes it back here, so the cards are recomputed for it.
   const side = state.filters.player;
   return (
     <ProfileViewWhen view="visualizations">
@@ -404,6 +456,7 @@ async function ProfileVisualizationsBody({
           you: playerName,
           opponent: "Opponents",
         })}
+        errorSplitJudged={errorSplitJudged}
       />
     </ProfileViewWhen>
   );

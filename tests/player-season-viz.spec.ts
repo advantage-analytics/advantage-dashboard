@@ -720,22 +720,41 @@ const passthrough = (tag: string) =>
     return React.createElement(tag, attrs, children as React.ReactNode);
   };
 
+const fragment = ({ children }: { children?: React.ReactNode }) =>
+  React.createElement(React.Fragment, null, children);
+
 type ShellProps = Record<string, unknown> & {
   statRowDots: (pick: StatPick) => Set<string> | null;
-  filterPanel?: { countWith: (patch: Partial<VizFilters>) => number };
+  filterPanel?: {
+    countWith: (patch: Partial<VizFilters>) => number;
+    errorSplitJudged: boolean;
+  };
   result: { dots: unknown[] };
+  filters: VizFilters;
+  onClose: () => void;
+  player?: { value: string; onChange: (player: "you" | "opponent") => void };
 };
 
+/**
+ * The view, rendered to static markup with the shell stubbed to capture its
+ * props. `replaced` collects every URL the store asked the router for, so a
+ * handler the shell was given can be called and its write read back.
+ * `errorSplitJudged` is the season's rule the page hands the view; the match
+ * hook under it is stubbed `true`, so a test that passes `false` shows the
+ * prop winning.
+ */
 function renderView(
   props: {
     analyzed: number;
     side: "you" | "opponent";
     cards: SeasonCard[];
     lightbox: SeasonLightboxData | null;
+    errorSplitJudged?: boolean;
   },
   query: string,
 ) {
   const shellProps: ShellProps[] = [];
+  const replaced: string[] = [];
   const loader = createLoader({
     // `vizStateQuery` builds a URLSearchParams per card href.
     globals: { URLSearchParams },
@@ -743,7 +762,13 @@ function renderView(
       "next/navigation": {
         useSearchParams: () => new URLSearchParams(query),
         usePathname: () => "/dashboard/team/roster/p-maya",
-        useRouter: () => ({ replace() {}, push() {}, refresh() {} }),
+        useRouter: () => ({
+          replace(url: string) {
+            replaced.push(url);
+          },
+          push() {},
+          refresh() {},
+        }),
       },
       "next/link": { __esModule: true, default: passthrough("a") },
       "@/lib/ui/use-mounted": { useMounted: () => true },
@@ -761,22 +786,44 @@ function renderView(
           });
         },
       },
+      // The pending frame's dialog, inline: a Radix portal renders nothing
+      // on the server, and this reads the frame's markup, not its mounting.
+      "@radix-ui/react-dialog": {
+        Root: fragment,
+        Portal: fragment,
+        Overlay: passthrough("div"),
+        Content: passthrough("div"),
+        Title: passthrough("h2"),
+        Close: passthrough("button"),
+      },
+      "@/components/ui/tooltip": { TooltipProvider: fragment },
+      "@/components/dashboard/shared/chrome-tooltip": {
+        ChromeTooltip: fragment,
+      },
     },
   });
   const { ProfileVisualizationsView } = loader.load(VIEW) as {
     ProfileVisualizationsView: React.ComponentType<
-      typeof props & { playerName: string; firstName: string }
+      typeof props & {
+        playerName: string;
+        firstName: string;
+        errorSplitJudged: boolean;
+      }
     >;
   };
   const html = renderToStaticMarkup(
     React.createElement(ProfileVisualizationsView, {
       playerName: "Maya Chen",
       firstName: "Maya",
+      errorSplitJudged: true,
       ...props,
     }),
   );
-  return { html, shellProps };
+  return { html, shellProps, replaced };
 }
+
+/** The query a `router.replace` URL carries. */
+const queryOf = (url: string) => new URL(url, "http://test").searchParams;
 
 /** Anything in `value` that looks like a `MatchPoint[]`. */
 function carriesPoints(value: unknown, seen = new Set<unknown>()): boolean {
@@ -905,6 +952,172 @@ test.describe("the Visualizations view, rendered", () => {
     );
   });
 
+  test("a card the server has not answered for draws the shell's frame as a loading status — on the first open, and when the last answer is another card's", () => {
+    const cards = buildSeasonCards(JUDGED, "you", BANDS);
+    const serveState = parseVizState(
+      new URLSearchParams("cut=serve&ball=first"),
+      { errorSplitJudged: true },
+    );
+    const serve = buildSeasonLightbox(JUDGED, serveState, BANDS, NAMES)!;
+
+    // The first open: the URL names a card, the server has answered nothing
+    // yet. Until T9's fix a click showed nothing at all here.
+    const first = renderView(
+      { analyzed: 2, side: "you", cards, lightbox: null },
+      "tab=visualizations&cut=serve&ball=first",
+    );
+    expect(first.shellProps).toEqual([]);
+    expect(first.html).not.toContain("season-shell");
+    const frame = first.html.slice(
+      first.html.indexOf('data-testid="season-lightbox-pending"'),
+    );
+    expect(frame.length).toBeGreaterThan(0);
+    // The DS loading contract (`empty-and-loading.md`): one status for the
+    // region, named for the cut; the dialog named the same; bars hidden and
+    // from the primitive; a token, never a hex; no spinner. Close is real.
+    expect(frame.split('role="status"').length - 1).toBe(1);
+    expect(frame).toContain('aria-label="Loading Serve placement"');
+    expect(frame).toContain(">Loading Serve placement</h2>");
+    expect(frame).toContain("data-pending-bar");
+    expect(frame).toContain("motion-safe:animate-pulse");
+    expect(frame).toContain('aria-hidden="true"');
+    expect(frame).not.toMatch(/#[0-9a-fA-F]{6}\b/);
+    expect(frame).not.toContain("animate-spin");
+    expect(frame).toContain('aria-label="Close"');
+    // The shell's own frame: its overlay (drawn before the box), its box,
+    // its two columns.
+    expect(first.html).toContain("fixed inset-0 z-50");
+    expect(frame).toContain("w-[min(1212px,calc(100vw-32px))]");
+    expect(frame).toContain("md:w-[340px]");
+    expect(frame).not.toContain("data-court-stage");
+
+    // The serve card was closed and the Errors card clicked before the
+    // server answered: `data` is still the serve court. The frame again —
+    // never the serve court under the errors filters.
+    const next = renderView(
+      { analyzed: 2, side: "you", cards, lightbox: serve },
+      "tab=visualizations&cut=errors&verr=unforced",
+    );
+    expect(next.shellProps).toEqual([]);
+    expect(next.html).toContain('aria-label="Loading Errors"');
+
+    // Another chart of the same cut is another court too.
+    const zones = renderView(
+      { analyzed: 2, side: "you", cards, lightbox: serve },
+      "tab=visualizations&cut=serve&ball=first&chart=zones",
+    );
+    expect(zones.shellProps).toEqual([]);
+    expect(zones.html).toContain('aria-label="Loading Serve placement"');
+
+    // The answer for the card asked for: the shell, no frame.
+    const landed = renderView(
+      { analyzed: 2, side: "you", cards, lightbox: serve },
+      "tab=visualizations&cut=serve&ball=first",
+    );
+    expect(landed.shellProps).toHaveLength(1);
+    expect(landed.html).not.toContain("season-lightbox-pending");
+
+    // Closing the frame goes where closing the shell goes: the wall, on the
+    // wall's own player.
+    const pendingClose = first.html.indexOf('aria-label="Close"');
+    expect(pendingClose).toBeGreaterThan(-1);
+  });
+
+  test("the wall keeps its own player: a You | Opponent switch inside the card rewrites the URL's player, and closing writes the wall's back", () => {
+    // A hard load of the opponents' Returns card: the wall's player is the
+    // card's side (what the server drew the cards for), and the wall's chip
+    // under the card reads so.
+    const state = parseVizState(
+      new URLSearchParams("cut=returnPlacement&player=opponent"),
+      { errorSplitJudged: true },
+    );
+    const cards = buildSeasonCards(JUDGED, "opponent", BANDS);
+    const lightbox = buildSeasonLightbox(JUDGED, state, BANDS, NAMES)!;
+    const { html, shellProps, replaced } = renderView(
+      { analyzed: 2, side: "opponent", cards, lightbox },
+      "tab=visualizations&cut=returnPlacement&player=opponent",
+    );
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Opponent<\/button>/);
+    expect(shellProps).toHaveLength(1);
+    const shell = shellProps[0];
+    expect(shell.player!.value).toBe("opponent");
+
+    // The switch inside the card: the URL's player becomes the card's.
+    shell.player!.onChange("you");
+    expect(replaced).toHaveLength(1);
+    expect(queryOf(replaced[0]).get("cut")).toBe("returnPlacement");
+    expect(queryOf(replaced[0]).get("player")).toBeNull();
+
+    // Close: no cut, and the player is the WALL's — the one it had when the
+    // card opened — not the one just switched to inside it.
+    shell.onClose();
+    expect(replaced).toHaveLength(2);
+    expect(queryOf(replaced[1]).get("cut")).toBeNull();
+    expect(queryOf(replaced[1]).get("player")).toBe("opponent");
+    expect(queryOf(replaced[1]).get("tab")).toBe("visualizations");
+
+    // The view's wiring: the wall's player is the view's own state, handed
+    // to the wall's chip and to the lightbox's close alike, and the wall
+    // never reads the store's player while a card is open.
+    const source = readFileSync(VIEW, "utf8");
+    expect(source).toContain("useState<PlayerFilter>");
+    expect(source).toContain("player={wallPlayer}");
+    expect(source).toContain("wallPlayer={wallPlayer}");
+    expect(source).toMatch(
+      /state\.cut === null && state\.filters\.player !== wallPlayer/,
+    );
+  });
+
+  test("the store reads ?verr= by the season's rule, as the server does: on an unjudged season Unforced opens on every error in the browser too", () => {
+    const query = "tab=visualizations&cut=errors&verr=unforced";
+
+    // Unjudged: the server collapsed `unforced` to both kinds, and so must
+    // the store's optimistic filters — the match hook under it says `true`.
+    const unjudgedState = parseSeasonVizState(
+      { cut: "errors", verr: "unforced" },
+      false,
+    );
+    const unjudged = buildSeasonLightbox(
+      UNJUDGED,
+      unjudgedState,
+      BANDS,
+      NAMES,
+    )!;
+    const a = renderView(
+      {
+        analyzed: 2,
+        side: "you",
+        cards: buildSeasonCards(UNJUDGED, "you", BANDS),
+        lightbox: unjudged,
+        errorSplitJudged: false,
+      },
+      query,
+    );
+    expect(a.shellProps).toHaveLength(1);
+    expect(a.shellProps[0].filters.error).toEqual(["unforced", "forced"]);
+    expect(a.shellProps[0].filters).toEqual(unjudged.filters);
+    expect(a.shellProps[0].filterPanel!.errorSplitJudged).toBe(false);
+
+    // Judged: the same link keeps Unforced alone, on both ends.
+    const judgedState = parseSeasonVizState(
+      { cut: "errors", verr: "unforced" },
+      true,
+    );
+    const judged = buildSeasonLightbox(JUDGED, judgedState, BANDS, NAMES)!;
+    const b = renderView(
+      {
+        analyzed: 2,
+        side: "you",
+        cards: buildSeasonCards(JUDGED, "you", BANDS),
+        lightbox: judged,
+        errorSplitJudged: true,
+      },
+      query,
+    );
+    expect(b.shellProps[0].filters.error).toEqual(["unforced"]);
+    expect(b.shellProps[0].filters).toEqual(judged.filters);
+  });
+
   test("the container's source names no point: no MatchPoint, no points prop, none of the omitted slots", () => {
     const source = readFileSync(CONTAINER, "utf8");
     expect(source).not.toContain("MatchPoint");
@@ -915,5 +1128,93 @@ test.describe("the Visualizations view, rendered", () => {
     expect(source).toContain("useVizState");
     expect(source).toContain("setState(");
     expect(source).not.toContain("computeViz");
+  });
+});
+
+/* ── A Visualizations request ───────────────────────────────────────────── */
+
+const PAGE = "src/app/dashboard/team/roster/[playerId]/page.tsx";
+const DEFERRED =
+  "src/components/dashboard/team/player-profile/profile-statistics-deferred.tsx";
+
+test.describe("a Visualizations request renders the courts alone", () => {
+  const source = readFileSync(PAGE, "utf8");
+  const page = source.slice(
+    source.indexOf("export default async function PlayerProfilePage"),
+  );
+  const pageBody = page.slice(0, page.indexOf("\n}\n"));
+
+  test("the page reads ?tab= once on the server and, for Visualizations, skips the Statistics body and reads the courts' season", () => {
+    expect(pageBody).toContain(
+      'parseProfileView(query[PROFILE_VIEW_PARAM]) === "visualizations"',
+    );
+    // The Statistics slot: the deferred stand-in on a courts-only request,
+    // the Suspense-wrapped body otherwise.
+    expect(pageBody).toMatch(
+      /courtsOnly \? \(\s*<ProfileStatisticsDeferred \/>\s*\) : \(\s*<Suspense/,
+    );
+    // Both season readers on the page pick the loader by it, so the points
+    // are read once per request and no lob file on a courts-only one.
+    expect(pageBody.split("courtsOnly={courtsOnly}").length - 1).toBe(2);
+    for (const reader of ["AnalyzedCount", "ProfileVisualizationsBody"]) {
+      expect(source).toMatch(
+        new RegExp(
+          `async function ${reader}[\\s\\S]*?courtsOnly\\s*\\?\\s*getPlayerSeasonCourts\\(programId, playerId\\)\\s*:\\s*getPlayerSeason\\(programId, playerId\\)`,
+        ),
+      );
+    }
+    // The season's Error-type rule is the one the store gets.
+    expect(source).toMatch(
+      /const errorSplitJudged = seasonErrorSplitJudged\(season\.perMatch\);[\s\S]*parseSeasonVizState\(query, errorSplitJudged\)[\s\S]*errorSplitJudged=\{errorSplitJudged\}/,
+    );
+  });
+
+  test("ProfileStatisticsDeferred shows nothing under Visualizations, and the Statistics skeleton plus one refresh once Statistics shows", () => {
+    const render = (query: string) => {
+      const loader = createLoader({
+        stubs: {
+          "next/navigation": {
+            useSearchParams: () => new URLSearchParams(query),
+            usePathname: () => "/dashboard/team/roster/p-maya",
+            useRouter: () => ({ refresh() {}, replace() {}, push() {} }),
+          },
+          "next/image": { __esModule: true, default: passthrough("img") },
+          "next/link": { __esModule: true, default: passthrough("a") },
+          "framer-motion": {
+            useReducedMotion: () => true,
+            motion: new Proxy(
+              {},
+              { get: (_, tag) => passthrough(String(tag)) },
+            ),
+            AnimatePresence: fragment,
+          },
+        },
+      });
+      const { ProfileStatisticsDeferred } = loader.load(DEFERRED) as {
+        ProfileStatisticsDeferred: React.ComponentType;
+      };
+      return renderToStaticMarkup(
+        React.createElement(ProfileStatisticsDeferred),
+      );
+    };
+
+    // Visualizations is the view: nothing in the Statistics slot.
+    expect(render("tab=visualizations&cut=serve")).toBe("");
+    // Statistics is: the skeleton the first load draws, in the tab's panel.
+    const shown = render("cut=serve");
+    expect(shown).toContain('role="tabpanel"');
+    expect(shown).toContain('aria-label="Loading statistics"');
+    expect(shown).toContain("data-pending-bar");
+    expect(shown).not.toContain("<button");
+
+    // And the refresh that brings the body: asked once, on mount, through
+    // the router — never a navigation that would change the URL.
+    const deferred = readFileSync(DEFERRED, "utf8");
+    expect(deferred).toMatch(
+      /useEffect\(\(\) => \{\s*router\.refresh\(\);\s*\}, \[router\]\)/,
+    );
+    expect(deferred).not.toContain("router.replace");
+    expect(deferred).not.toContain("router.push");
+    expect(deferred).toContain('<ProfileViewWhen view="statistics">');
   });
 });

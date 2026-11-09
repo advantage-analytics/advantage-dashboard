@@ -12,7 +12,14 @@ import tailwindcss from "@tailwindcss/postcss";
  * tab's browser specs share it so the lightbox and the wall are measured
  * with their real styles. Server actions and `next/navigation` are mocked.
  */
-export async function startStyledHarness(entry: string): Promise<{
+export async function startStyledHarness(
+  entry: string,
+  options: {
+    /** Further webpack aliases — a harness that renders `next/link`, say,
+     *  points it at `next-link-browser-mock.tsx`. */
+    alias?: Record<string, string>;
+  } = {},
+): Promise<{
   origin: string;
   close: () => Promise<void>;
 }> {
@@ -59,6 +66,7 @@ export async function startStyledHarness(entry: string): Promise<{
             "next/navigation": resolve(
               "tests/fixtures/viz-navigation-browser-mock.ts",
             ),
+            ...options.alias,
             "@": resolve("src"),
           },
         },

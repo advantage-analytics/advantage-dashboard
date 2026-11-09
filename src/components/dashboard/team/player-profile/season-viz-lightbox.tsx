@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 
+import { SeasonLightboxPending } from "@/components/dashboard/loading/season-lightbox-pending";
 import { useVizState } from "@/components/dashboard/matches/match-detail/shots/use-viz-state";
 import { VizLightboxShell } from "@/components/dashboard/matches/match-detail/shots/viz-lightbox-shell";
 import {
@@ -34,35 +35,50 @@ import { useMounted } from "@/lib/ui/use-mounted";
  * to watch or save), no band editor, no draft — the shell draws court,
  * legend filter, Filters and Statistics alone.
  *
- * `filters` is the store's optimistic value, so a ticked option reads as
- * ticked while the server answers; the court and the words follow a round
- * trip later. Closing drops the shell at once (`state.cut` goes null before
- * the server's answer removes `data`).
+ * ── Two clocks ──────────────────────────────────────────────────────────────
+ * `state` is the store's optimistic value and `data` is the server's last
+ * answer, and between a click and the round trip they disagree. A filter
+ * tick is left optimistic on purpose: the ticked option reads as ticked at
+ * once and the court follows a moment later, the same court under the same
+ * title. The cut (and the chart) is different — the shell draws `data`'s
+ * court and words, and `state`'s cut is what the reader asked for, so while
+ * they differ the shell would show the LAST card under the next card's
+ * filters (close the serve card, click Errors: the serve court with error
+ * filters), or nothing at all on the first open, when there is no `data`
+ * yet. So whenever `data` is missing or names another cut or chart than
+ * `state`, this draws `SeasonLightboxPending` — the shell's frame with a
+ * loading status — until the server's answer matches the ask.
+ *
+ * Closing drops the dialog at once: `state.cut` goes null before the
+ * server's answer removes `data`, and the wall gets back its own player
+ * (`wallPlayer`), which a You | Opponent switch inside the card never
+ * touched.
  */
 export function SeasonVizLightbox({
   data,
   wallPlayer,
 }: {
-  data: SeasonLightboxData;
-  /** The wall's own You | Opponent, which closing restores. */
+  /** The server's answer for the URL it last rendered; `null` on the wall
+   *  and until the first answer for an opened card lands. */
+  data: SeasonLightboxData | null;
+  /** The wall's own You | Opponent, which closing restores — a player
+   *  switched inside the lightbox does not leak onto the wall. */
   wallPlayer: PlayerFilter;
 }) {
   const { state, setState } = useVizState();
   const mounted = useMounted();
 
+  const statRowDotIds = data?.statRowDotIds ?? null;
   const statRowDots = useMemo(() => {
     const sets = new Map(
-      Object.entries(data.statRowDotIds).map(([key, ids]) => [
+      Object.entries(statRowDotIds ?? {}).map(([key, ids]) => [
         key,
         new Set(ids),
       ]),
     );
     return (pick: StatPick): Set<string> | null =>
       sets.get(statPickKey(pick)) ?? null;
-  }, [data.statRowDotIds]);
-
-  const countWith = (patch: Partial<VizFilters>): number =>
-    data.optionCounts[optionCountKey(patch)] ?? 0;
+  }, [statRowDotIds]);
 
   // A client-only portal, as the report's: never in the server HTML. Gone
   // the moment the reader closes, before the server's answer lands.
@@ -77,8 +93,21 @@ export function SeasonVizLightbox({
     });
   }
 
+  // The server has not answered for THIS card yet (see "Two clocks").
+  if (data === null || data.cut !== state.cut || data.chart !== state.chart) {
+    return <SeasonLightboxPending cut={state.cut} onClose={close} />;
+  }
+  const court = data;
+
+  const countWith = (patch: Partial<VizFilters>): number =>
+    court.optionCounts[optionCountKey(patch)] ?? 0;
+
   function clearFilters() {
-    setState((prev) => ({ ...prev, filters: data.clearFilters, viewId: null }));
+    setState((prev) => ({
+      ...prev,
+      filters: court.clearFilters,
+      viewId: null,
+    }));
   }
 
   function setFilters(next: VizFilters) {
@@ -95,27 +124,27 @@ export function SeasonVizLightbox({
 
   return (
     <VizLightboxShell
-      cut={data.cut}
-      chart={data.chart}
+      cut={court.cut}
+      chart={court.chart}
       filters={state.filters}
-      result={data.result}
-      stats={data.stats}
-      subjectName={data.subjectName}
-      unit={data.unit}
-      bandZones={data.bandZones}
-      hasFilters={data.hasFilters}
+      result={court.result}
+      stats={court.stats}
+      subjectName={court.subjectName}
+      unit={court.unit}
+      bandZones={court.bandZones}
+      hasFilters={court.hasFilters}
       statRowDots={statRowDots}
-      title={data.title}
-      subtitle={data.subtitle}
-      filterPhrases={data.filterPhrases}
-      panelActive={data.panelActive}
+      title={court.title}
+      subtitle={court.subtitle}
+      filterPhrases={court.filterPhrases}
+      panelActive={court.panelActive}
       onClose={close}
       onClearFilters={clearFilters}
       player={{ value: state.filters.player, onChange: choosePlayer }}
       filterPanel={{
         onChange: setFilters,
-        sets: data.sets,
-        errorSplitJudged: data.errorSplitJudged,
+        sets: court.sets,
+        errorSplitJudged: court.errorSplitJudged,
         countWith,
       }}
     />

@@ -8,6 +8,7 @@ import {
 } from "@/lib/data/player-profile-server";
 import {
   loadPlayerSeason,
+  loadPlayerSeasonCourts,
   lobKeysFromBallPathsBody,
   mapWithConcurrency,
   SEASON_READ_CONCURRENCY,
@@ -825,6 +826,62 @@ test("the file reader is asked only about derived matches, with ids the matches 
   expect(byId.get("m-d")?.lobKeys).toBeNull();
   // No file at all for a SwingVision import.
   expect(byId.get("m-a")?.lobKeys).toBeNull();
+});
+
+test("loadPlayerSeasonCourts reads the season's matches and points with no file and no fold — the Visualizations request's read", async () => {
+  const { client, log, sides } = await adaSides();
+  const { deps, asked } = fakeBallPaths({
+    "m-b": { ok: true, value: LOB_FILE },
+  });
+  // The roster and matches reads are `adaSides`'s; what follows is each
+  // loader's own.
+  log.splice(0);
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+  const seasonReads = log.splice(0);
+  const courts = await loadPlayerSeasonCourts(client, sides.own);
+  const courtsReads = log.splice(0);
+
+  // The same analyzed matches, in the same order, with the same points,
+  // seats and flags — what the courts fold (`player-season-viz.ts`) reads.
+  expect(courts.analyzed).toBe(season.analyzed);
+  expect(courts.matchesPlayed).toBe(season.matchesPlayed);
+  expect(courts.perMatch.map((m) => m.matchId)).toEqual(
+    season.perMatch.map((m) => m.matchId),
+  );
+  courts.perMatch.forEach((m, i) => {
+    const full = season.perMatch[i];
+    expect(m.points).toEqual(full.points);
+    expect(m.isPlayer1).toBe(full.isPlayer1);
+    expect(m.isDerived).toBe(full.isDerived);
+    expect(m.errorSplitJudged).toBe(full.errorSplitJudged);
+    // Nothing the Statistics fold needs and the courts do not: no lob keys,
+    // no stats rows, no date or opponent.
+    expect(Object.keys(m).sort()).toEqual([
+      "errorSplitJudged",
+      "isDerived",
+      "isPlayer1",
+      "matchId",
+      "points",
+    ]);
+  });
+  expect(courts).not.toHaveProperty("groups");
+  expect(courts).not.toHaveProperty("tallies");
+
+  // The same points reads — one per candidate, no more — and the file
+  // reader is never part of it: the season loader asked for files, the
+  // courts loader takes no reader at all.
+  const pointReads = (entries: string[]) =>
+    entries.filter((entry) => entry.startsWith("points.match(")).sort();
+  expect(pointReads(courtsReads)).toEqual(pointReads(seasonReads));
+  expect(pointReads(courtsReads).length).toBeGreaterThan(0);
+  expect(asked.length).toBeGreaterThan(0);
+  // Neither loader reads the matches again — both are handed `sides` — and
+  // the courts loader reads nothing the season loader does not.
+  for (const entry of courtsReads) {
+    expect(entry).not.toMatch(/^matches\./);
+    expect(seasonReads).toContain(entry);
+  }
 });
 
 test("a reader that throws is logged and read as unknown, not as a failed season", async () => {
