@@ -418,7 +418,9 @@ export interface SeasonNetGame {
   /**
    * Every analyzed match knew its lobs (`seasonHasLobs`). When false, the
    * card draws Passed as "Passed or lobbed", as the report does without a
-   * ball-paths file.
+   * ball-paths file, and `endings.lobbed` is 0 on both sides: the lobs the
+   * matches WITH a file found are folded into `passed`, so the segments the
+   * card draws still add up to `total`.
    */
   hasLobs: boolean;
 }
@@ -443,7 +445,18 @@ export function seasonNetGame(
     addNetGame(you, netGameTally(m.points, m.isPlayer1, m.lobKeys));
     addNetGame(opp, netGameTally(m.points, !m.isPlayer1, m.lobKeys));
   }
-  return { you, opp, hasLobs: seasonHasLobs(matches) };
+  const hasLobs = seasonHasLobs(matches);
+  if (!hasLobs) {
+    // Without lobs for every match the card has no Lobbed segment, only
+    // "Passed or lobbed" — so the lobs the matches with a file did find go
+    // there, or the drawn segments would add up to less than `total`. The
+    // match report never meets this: one match either has its file or not.
+    for (const side of [you, opp]) {
+      side.endings.passed += side.endings.lobbed;
+      side.endings.lobbed = 0;
+    }
+  }
+  return { you, opp, hasLobs };
 }
 
 /** One of the Rally length card's three bands, summed over the season. */
