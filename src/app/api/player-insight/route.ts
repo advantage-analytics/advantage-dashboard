@@ -140,7 +140,15 @@ export async function POST(request: Request): Promise<Response> {
 
   // The roster, as the viewer, for the WORKSPACE's program — the id the
   // cookie resolved to, never one from the body.
-  const sides = await getPlayerMatchSides(active.id, parsed.value.playerId);
+  // Inside a try: the roster and matches reads fail closed (they throw), and
+  // a throw answers through `errorResponse` like every other refusal here.
+  let sides: Awaited<ReturnType<typeof getPlayerMatchSides>>;
+  try {
+    sides = await getPlayerMatchSides(active.id, parsed.value.playerId);
+  } catch (err) {
+    console.error("[player-insight] could not read the player's matches", err);
+    return errorResponse(transportError("internal_error", "matches_read"));
+  }
   if (!sides) {
     return errorResponse(
       refusal(
@@ -156,6 +164,14 @@ export async function POST(request: Request): Promise<Response> {
   // loader fails closed — a points read that fails throws rather than
   // dropping the match — and a season short one match is not a season to
   // write a claim about, so the throw is the 500 here.
+  //
+  // This is a second read of the season the page just folded: `cache()` does
+  // not span requests, and no claim is stored server-side to answer from —
+  // the card's cache is the viewer's `sessionStorage`, keyed on the season
+  // signature, so a visit that changes nothing never POSTs here at all. What
+  // keeps a POST cheap is the loader's own bounds: matches the report would
+  // not draw are never read, and the per-match points reads run a few at a
+  // time (`SEASON_READ_CONCURRENCY`), not all at once.
   let season: PlayerSeason;
   try {
     const supabase = await createClient();

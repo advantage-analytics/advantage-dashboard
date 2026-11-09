@@ -17,6 +17,7 @@ import { YouPill } from "@/components/ui/you-pill";
 import { getInitials } from "@/lib/data/match-utils";
 import { recordLabel } from "@/lib/data/player-profile";
 import type { PlayerProfile } from "@/lib/data/player-profile-server";
+import { ROSTER_PLAYER_PARAM } from "@/lib/data/roster-player-cut";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +49,12 @@ export function ProfileRail({
   isSelf: boolean;
   /** This player's photo, or null to draw initials. */
   photoUrl: string | null;
-  /** Every match of theirs the program recorded. */
+  /**
+   * Every match of theirs the program recorded — the same number as the
+   * title's facts line (`PlayerSeason.matchesPlayed`), so the page shows one
+   * count. The Matches list it links to hides a match with no score
+   * (`transformDbMatch`), so its rows can read a little fewer.
+   */
   matchesCount: number;
   /** Distinct opponents across those matches. */
   opponentsCount: number;
@@ -65,22 +71,27 @@ export function ProfileRail({
       <ProfileViewSwitcher />
 
       {/* Quiet blue words, not rows: they leave the page, the tabs above do
-          not. The Matches list's `?player=` filter keys on the player's NAME
-          (`matches-page-content.tsx` compares `normalizedPersonName` of
-          `player1.name`), so that is what it is handed — an id there would
-          filter to nothing; `MatchHistoryCard`'s "All N" link does the same.
-          Opponents takes `profile.playerId`, never the URL's id — a claimed
-          player's old links carry their login. */}
+          not. Each lands on the rows its number counts (Matches hides an unscored match). Matches takes
+          `?rosterPlayer=` (`roster-player-cut.ts`): this player in EITHER
+          seat, by roster id — the list's `?player=` facet reads seat one by
+          name and would miss a match a teammate recorded first. Both take
+          `profile.playerId`, never the URL's id — a claimed player's old
+          links carry their login. A count of 0 is plain text: a link to an
+          empty list is a door to nothing. */}
       <nav
         aria-label="More about this player"
         className="flex flex-col items-start gap-2.5 px-[25px] pt-4"
       >
         <RailLink
-          href={`/dashboard/matches?player=${encodeURIComponent(profile.name)}`}
+          count={matchesCount}
+          href={`/dashboard/matches?${ROSTER_PLAYER_PARAM}=${encodeURIComponent(profile.playerId)}`}
         >
           {countLabel(matchesCount, "match", "matches")}
         </RailLink>
-        <RailLink href={`/dashboard/opponents?facedBy=${profile.playerId}`}>
+        <RailLink
+          count={opponentsCount}
+          href={`/dashboard/opponents?facedBy=${profile.playerId}`}
+        >
           {countLabel(opponentsCount, "opponent", "opponents")}
         </RailLink>
       </nav>
@@ -102,11 +113,21 @@ export function ProfileRail({
 
 function RailLink({
   href,
+  count,
   children,
 }: {
   href: string;
+  /** What the words count; 0 draws them as plain text, not a link. */
+  count: number;
   children: React.ReactNode;
 }) {
+  if (count === 0) {
+    return (
+      <span className="tabular text-[13px] text-[var(--ink-500)]">
+        {children}
+      </span>
+    );
+  }
   return (
     <Link
       href={href}
@@ -186,9 +207,13 @@ export function ProfilePlayerBlock({
             </div>
           )}
           {(style.length > 0 || pill) && (
-            <div className="flex min-w-0 items-center gap-2">
+            // Wraps rather than truncates: hand and backhand are the facts
+            // this line exists for, and "Right-handed · Two-handed backhand"
+            // beside a pill is wider than the rail — the pill takes the next
+            // line instead of cutting the facts off.
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               {style.length > 0 && (
-                <span className="min-w-0 truncate text-[12px] text-[var(--ink-600)]">
+                <span className="min-w-0 text-[12px] text-[var(--ink-600)]">
                   {style.join(" · ")}
                 </span>
               )}

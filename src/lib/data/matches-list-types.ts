@@ -31,6 +31,8 @@ export interface DbMatch {
   verified_at?: string | null;
   duration: number | null;
   source_provider?: string | null;
+  /** Seat two's id — an auth uid or a `program_players.id`, like `player1_id`. */
+  player2_id?: string | null;
 }
 
 export interface DisplayMatch {
@@ -68,7 +70,8 @@ export interface DisplayMatch {
      */
     profileId?: string | null;
   };
-  player2: { name: string };
+  /** `id` and `profileId` as on `player1`, for seat two. */
+  player2: { name: string; id?: string | null; profileId?: string | null };
   /**
    * Set by `fromPlayerSide`: player1 here is the row's seat TWO, so its own
    * `match_stats` row is `is_player1 = false`.
@@ -135,7 +138,7 @@ export function transformDbMatch(
     duration: formatMatchDuration(row.duration),
     sourceProvider: row.source_provider ?? undefined,
     player1: { name: row.player1_name, id: row.player1_id },
-    player2: { name: row.player2_name },
+    player2: { name: row.player2_name, id: row.player2_id ?? null },
     score: {
       sets,
       // The shared rule (a stored winner, then sets). A level score has always

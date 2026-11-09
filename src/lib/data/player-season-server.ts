@@ -17,6 +17,11 @@ import {
   type DbMatchStatsView,
 } from "@/lib/data/match-stats-server";
 import { verificationFor } from "@/lib/data/match-verification";
+import { matchPageKind } from "@/lib/data/match-analysis";
+import {
+  analysisFor,
+  loadMatchAnalysis,
+} from "@/lib/data/match-analysis-server";
 import {
   personalOpponentKey,
   UNKNOWN_OPPONENT_NAME,
@@ -54,10 +59,18 @@ import { lobShotKeys } from "@/components/dashboard/matches/match-detail/match-f
  * Each match keeps its own seat all the way into the fold; nothing here
  * flips a point to a common side (guardrails §4).
  *
- * "Analyzed" is "has points". A stats row alone — a hand-entered result, a
- * video still in analysis — has nothing the point-level calculators can
- * count, and the report itself short-circuits such a match to the progress
- * card rather than drawing zeroes.
+ * "Analyzed" is the match report's own gate plus points. The report draws a
+ * match only when `matchPageKind` says `"report"` — never for a job still
+ * uploading, queued, processing or deriving, a failed one (bar the
+ * `stats_unavailable` exemption) or a cancelled one — over the same job state
+ * the page reads (`loadMatchAnalysis` → `analysisFor`, without the page's
+ * reap, which is a write). So a match the report shows as Analysis steps is
+ * not folded here even when it still holds points from an earlier attempt; it
+ * still counts in `matchesPlayed`. A stats row alone — a hand-entered result
+ * — has nothing the point-level calculators can count, so a match also needs
+ * points. `processing_jobs` is per-creator under RLS, exactly as on the
+ * report: a viewer who did not submit a match's video sees no job for it, and
+ * both surfaces read it from its source provider instead.
  *
  * ── The one service-role read ───────────────────────────────────────────────
  * Everything runs as the viewer under RLS except the ball-paths file: the
@@ -95,11 +108,14 @@ export interface PlayerSeasonDeps {
 }
 
 export interface PlayerSeason {
-  /** Matches with points — the ones every figure below is folded from. */
+  /**
+   * Matches the report would draw as a report, with points — the ones every
+   * figure below is folded from.
+   */
   analyzed: number;
   /**
-   * Every match of theirs the program recorded, analyzed or not — the rail's
-   * "N matches", the same count as `PlayerProfile.matchesPlayed`.
+   * Every match of theirs the program recorded, analyzed or not — the title's
+   * and the rail's "N matches", the same count as `PlayerProfile.matchesPlayed`.
    */
   matchesPlayed: number;
   /**
@@ -197,14 +213,6 @@ interface DbSeasonStatRow extends DbMatchStatsView {
 }
 
 /**
- * A seat with points but no stats row reads as the report reads it: the
- * zeroed defaults. Tiebreaks won is the one figure the view does not carry;
- * the report counts it from the score for its own strip, and no Head to head
- * row reads it, so it is 0 here.
- */
-const NO_STATS_ROW: H2HStats = transformToPlayerStats(undefined, 0);
-
-/**
  * Both seats' published rows for every match, keyed by `statKey`, in one
  * read through the viewer's client. The columns are the report's own
  * (`MATCH_STATS_VIEW_COLUMNS`) so `transformToPlayerStats` sees what it
@@ -236,6 +244,46 @@ async function readSeatStats(
 }
 
 /**
+ * How many matches' points (and ball-paths files) are read at once. A season
+ * is tens of matches and each read is several pages of points and shots, so
+ * firing them all together is a burst of connections per profile view — and
+ * per insight request, which reads the season again. Small enough to be
+ * polite to the pool, large enough that a season is a few round trips deep.
+ */
+export const SEASON_READ_CONCURRENCY = 4;
+
+/**
+ * `fn` over `items`, at most `limit` running at once, results in input order.
+ * A rejection rejects the whole map (the loader fails closed), and no worker
+ * takes another item after it: the calls already running finish on their own
+ * and are ignored.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  let failed = false;
+  const worker = async () => {
+    while (!failed && next < items.length) {
+      const i = next++;
+      try {
+        results[i] = await fn(items[i], i);
+      } catch (err) {
+        failed = true;
+        throw err;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker),
+  );
+  return results;
+}
+
+/**
  * The season over `sides`, read through `supabase`. This is the whole fetch;
  * `getPlayerSeason` is the request-time wrapper that supplies the client,
  * the matches and the file reader.
@@ -245,40 +293,71 @@ export async function loadPlayerSeason(
   sides: readonly PlayerMatchSide[],
   deps: PlayerSeasonDeps,
 ): Promise<PlayerSeason> {
-  // One wave: the published rows for every match, each match's points, and —
-  // for the Advantage Intelligence matches, the only ones with a file — its
-  // lob keys. None depends on another, and a season is many matches, so the
-  // reads go out together rather than one match at a time. Bookmarks are
-  // left off the points read: nothing in the fold reads who saved a point,
-  // and reading them is two more round trips and a roster RPC per match.
-  const [statsByKey, pointsByMatch, lobKeysByMatch] = await Promise.all([
-    readSeatStats(
-      supabase,
-      sides.map((s) => s.match.id),
-    ),
-    Promise.all(
-      sides.map((s) =>
+  // Two waves. First the cheap reads that cover the whole season in one
+  // query each — the job state the report gates on (reads nothing for no
+  // matches) and both seats' published rows — which say which matches can be
+  // folded at all.
+  const matchIds = sides.map((s) => s.match.id);
+  const [jobs, statsByKey] = await Promise.all([
+    // `strict`: a failed jobs read throws rather than reading as "no jobs",
+    // which would fold in-flight matches and drop withheld-statistics ones.
+    loadMatchAnalysis(supabase, matchIds, { strict: true }),
+    readSeatStats(supabase, matchIds),
+  ]);
+
+  // Then the heavy per-match reads, only for those: a match the report shows
+  // as Analysis steps is not folded, so its points are not read; nor are a
+  // job-less match's (hand-scored, or an import) that published nothing for
+  // either seat, which has no points — every writer that stores points also
+  // publishes the stats row. A video match is read even with no stats row: a
+  // `timeline` match keeps its points and withholds its statistics.
+  const candidates = sides.filter(({ match }) => {
+    const analysis = analysisFor(jobs, {
+      id: match.id,
+      sourceProvider: match.source_provider ?? undefined,
+    });
+    // The report's own gate: in flight, failed, cancelled — not a finished
+    // analysis to fold.
+    if (matchPageKind(analysis) !== "report") return false;
+    // A video match is read whether or not this viewer can see its job:
+    // `processing_jobs` is per-creator under RLS, so a teammate's upload
+    // reads job-less here exactly as it does on the report, which draws it.
+    if (jobs.has(match.id) || isDerived(match)) return true;
+    return (
+      statsByKey.has(statKey(match.id, true)) ||
+      statsByKey.has(statKey(match.id, false))
+    );
+  });
+
+  // Each match's points and — for the Advantage Intelligence matches, the
+  // only ones with a file — its lob keys, a few matches at a time
+  // (`SEASON_READ_CONCURRENCY`). Bookmarks are left off the points read:
+  // nothing in the fold reads who saved a point, and reading them is two
+  // more round trips and a roster RPC per match.
+  const reads = await mapWithConcurrency(
+    candidates,
+    SEASON_READ_CONCURRENCY,
+    async (s) => {
+      const [points, lobKeys] = await Promise.all([
         getMatchPointsFromSupabase(s.match.id, supabase, {
           includeBookmarks: false,
         }),
-      ),
-    ),
-    Promise.all(
-      sides.map((s) =>
         isDerived(s.match)
           ? readLobKeys(deps, s.match.id)
           : Promise.resolve(null),
-      ),
-    ),
-  ]);
+      ]);
+      // `null` is a failed read, never an empty match (`fetchAllPages`).
+      // Thrown here, inside the pool, so no further match is read after it.
+      if (points === null) {
+        throw new Error(`Could not read the points of match ${s.match.id}`);
+      }
+      return [points, lobKeys] as const;
+    },
+  );
 
   const perMatch: SeasonMatch[] = [];
-  sides.forEach(({ match, isPlayer1 }, i) => {
-    const points = pointsByMatch[i];
-    // `null` is a failed read, never an empty match (`fetchAllPages`).
-    if (points === null) {
-      throw new Error(`Could not read the points of match ${match.id}`);
-    }
+  candidates.forEach(({ match, isPlayer1 }, i) => {
+    const [points, lobKeys] = reads[i];
     if (points.length === 0) return;
     perMatch.push({
       matchId: match.id,
@@ -299,9 +378,13 @@ export async function loadPlayerSeason(
         verified: verificationFor(match) != null,
         errorsJudgedAt: match.errors_judged_at,
       }),
-      lobKeys: lobKeysByMatch[i],
-      youStats: statsByKey.get(statKey(match.id, isPlayer1)) ?? NO_STATS_ROW,
-      oppStats: statsByKey.get(statKey(match.id, !isPlayer1)) ?? NO_STATS_ROW,
+      lobKeys,
+      // A seat with points but no stats row is unknown, not zeroes: the fold
+      // leaves it out of that match's published rows (`SeasonMatchStats`).
+      // Tiebreaks won is the one figure the view does not carry; no Head to
+      // head row reads it, so it is 0 on the rows that exist.
+      youStats: statsByKey.get(statKey(match.id, isPlayer1)) ?? null,
+      oppStats: statsByKey.get(statKey(match.id, !isPlayer1)) ?? null,
     });
   });
 

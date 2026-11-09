@@ -430,7 +430,7 @@ function reportRows(m: SeasonMatch, judged: boolean) {
   return h2hGroups(m.isDerived, judged).flatMap((group) =>
     withPointRows(
       group.configs,
-      buildStatRows(group.configs, m.youStats, m.oppStats),
+      buildStatRows(group.configs, m.youStats!, m.oppStats!),
       you,
       opp,
     ),
@@ -549,6 +549,36 @@ test.describe("count rows", () => {
     expect(doubleFaults.opp.display).toBe("3.0");
     expect(doubleFaults.lowerIsBetter).toBe(true);
     expect(doubleFaults.leader).toBe("you");
+  });
+
+  test("a seat with no stats row sits out of the published rows for that match, never as zeroes", () => {
+    // B has points but no stats row for the player's seat.
+    const season = [MATCH_A, { ...MATCH_B, youStats: null }];
+    const groups = foldSeasonRows(season);
+
+    // A published count: only A's 20 for the player; both matches for the
+    // opponents, whose row is there.
+    expect(row(groups, "Winners").you).toEqual({
+      value: 20,
+      display: "20.0",
+      detail: "20 in 1 match",
+      matches: 1,
+    });
+    expect(row(groups, "Winners").opp.matches).toBe(2);
+    // A published rate: A's 30/50 alone, not pooled with a 0/0 or a 0/n.
+    expect(row(groups, "First serve in").you).toMatchObject({
+      detail: "30/50",
+      matches: 1,
+    });
+    // Total points won (key of ofKey): A's 42 of 70 alone.
+    expect(row(groups, "Total points won").you.detail).toBe("42/70");
+
+    // A row counted from the points still reads B's points for the player.
+    const fromPoints = h2hGroups(false, false)
+      .flatMap((g) => g.configs)
+      .find((c) => c.fromPoints === "returnWinners");
+    if (!fromPoints) throw new Error("no return winners row");
+    expect(row(groups, fromPoints.label).you.matches).toBe(2);
   });
 
   test("each per-match figure is the report's own row value", () => {
@@ -814,6 +844,26 @@ test.describe("per-match points", () => {
   });
 });
 
+test.describe("same-day order", () => {
+  test("two matches on one day sort by id, whatever order they arrive in", () => {
+    const day = "2026-10-05";
+    const m = (matchId: string) => ({ ...MATCH_A, matchId, date: day });
+    // Newest first, as the loader reads them — the order must not depend on it.
+    expect(
+      seasonPerMatch([m("m-3"), m("m-1"), m("m-2")]).map((x) => x.matchId),
+    ).toEqual(["m-1", "m-2", "m-3"]);
+    expect(
+      seasonPerMatch([m("m-2"), m("m-3"), m("m-1")]).map((x) => x.matchId),
+    ).toEqual(["m-1", "m-2", "m-3"]);
+    // The calendar day still comes first.
+    expect(
+      seasonPerMatch([{ ...m("m-1"), date: "2026-10-06" }, m("m-2")]).map(
+        (x) => x.matchId,
+      ),
+    ).toEqual(["m-2", "m-1"]);
+  });
+});
+
 test.describe("how points ended", () => {
   test("is the sum of each match's outcomeTally, taken with the season's error split", () => {
     const season = seasonOutcomes(SEASON);
@@ -861,8 +911,8 @@ test.describe("how points ended", () => {
 
 test.describe("the net game", () => {
   test("is the sum of each match's netGameTally, with lobs only when every match had them", () => {
-    const season = seasonNetGame(SEASON);
-    expect(season.hasLobs).toBe(false);
+    const season = seasonNetGame([MATCH_B, { ...MATCH_A, lobKeys: B_LOBS }]);
+    expect(season.hasLobs).toBe(true);
     const sum = (parts: NetGameTally[]): NetGameTally => ({
       total: parts.reduce((n, t) => n + t.total, 0),
       endings: {
@@ -884,11 +934,12 @@ test.describe("the net game", () => {
         "drawn-in": parts.reduce((n, t) => n + t.entries["drawn-in"], 0),
       },
     });
+    const withLobs = [MATCH_B, { ...MATCH_A, lobKeys: B_LOBS }];
     expect(season.you).toEqual(
-      sum(SEASON.map((m) => netGameTally(m.points, m.isPlayer1, m.lobKeys))),
+      sum(withLobs.map((m) => netGameTally(m.points, m.isPlayer1, m.lobKeys))),
     );
     expect(season.opp).toEqual(
-      sum(SEASON.map((m) => netGameTally(m.points, !m.isPlayer1, m.lobKeys))),
+      sum(withLobs.map((m) => netGameTally(m.points, !m.isPlayer1, m.lobKeys))),
     );
     // The player came in once and won it on a volley; the opponents came in
     // twice in B and were lobbed once and passed once.
@@ -903,6 +954,26 @@ test.describe("the net game", () => {
       entries: { approach: 2 },
     });
     expect(seasonNetGame([MATCH_B]).hasLobs).toBe(true);
+  });
+
+  test("without lobs for every match, a found lob is counted among the passes", () => {
+    // A has no file, B has one: the card draws no Lobbed segment, so B's lob
+    // over the opponent must land in "Passed or lobbed", not vanish.
+    const season = seasonNetGame(SEASON);
+    expect(season.hasLobs).toBe(false);
+    expect(season.opp).toMatchObject({
+      total: 2,
+      endings: { lobbed: 0, passed: 2 },
+    });
+    // What the card draws without a Lobbed segment adds up to the total.
+    for (const side of [season.you, season.opp]) {
+      const { winner, passed } = side.endings;
+      const drawn =
+        winner + side.endings["opponent-error"] + side.endings["own-error"];
+      expect(drawn + passed).toBe(side.total);
+    }
+    // The match's own tally is untouched — the report keeps its Lobbed.
+    expect(netGameTally(B_POINTS, true, B_LOBS).endings.lobbed).toBe(1);
   });
 });
 

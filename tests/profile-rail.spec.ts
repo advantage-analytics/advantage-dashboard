@@ -152,14 +152,27 @@ test("?tab=visualizations selects the second row", () => {
 
 test("the links carry what each page filters by, and pluralise", () => {
   const html = render();
-  // The Matches list's `?player=` filters by name, not id.
-  expect(html).toContain('href="/dashboard/matches?player=Maya%20Chen"');
+  // Matches by roster id in either seat (`?rosterPlayer=`), never the
+  // `?player=` name facet, which reads seat one only.
+  expect(html).toContain('href="/dashboard/matches?rosterPlayer=pp-1"');
+  expect(html).not.toContain("matches?player=");
   expect(html).toContain("12 matches");
   expect(html).toContain('href="/dashboard/opponents?facedBy=pp-1"');
   expect(html).toContain("9 opponents");
   const one = render({ matchesCount: 1, opponentsCount: 1 });
   expect(one).toContain("1 match<");
   expect(one).toContain("1 opponent<");
+});
+
+test("a count of zero is plain text, not a link to an empty page", () => {
+  const html = render({ matchesCount: 3, opponentsCount: 0 });
+  expect(html).toContain('href="/dashboard/matches?rosterPlayer=pp-1"');
+  expect(html).not.toContain("facedBy=");
+  expect(html).toMatch(/<span[^>]*>0 opponents<\/span>/);
+
+  const none = render({ matchesCount: 0, opponentsCount: 0 });
+  expect(none).not.toContain("/dashboard/matches?");
+  expect(none).toMatch(/<span[^>]*>0 matches<\/span>/);
 });
 
 test("New match fills the footer only when the viewer can upload", () => {

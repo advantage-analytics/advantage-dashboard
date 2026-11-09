@@ -9,6 +9,8 @@ import {
 import {
   loadPlayerSeason,
   lobKeysFromBallPathsBody,
+  mapWithConcurrency,
+  SEASON_READ_CONCURRENCY,
   seasonOpponentCount,
   type PlayerSeasonDeps,
 } from "@/lib/data/player-season-server";
@@ -64,6 +66,10 @@ class FakeQuery implements PromiseLike<Answer> {
     return this;
   }
   eq(column: string, value: unknown) {
+    // Which match a points read is for, so a spec can see which were read.
+    if (this.table === "points" && column === "match_id") {
+      this.log.push(`points.match(${String(value)})`);
+    }
     this.filters.push((row) => row[column] === value);
     return this;
   }
@@ -134,7 +140,14 @@ function fakeClient(
     },
     rpc(name: string) {
       log.push(`rpc:${name}`);
-      return Promise.resolve({ data: rpcs[name] ?? null, error: null });
+      const answer = rpcs[name];
+      if (answer instanceof Error) {
+        return Promise.resolve({
+          data: null,
+          error: { message: answer.message },
+        });
+      }
+      return Promise.resolve({ data: answer ?? null, error: null });
     },
   } as unknown as SupabaseClient;
   return { client, log };
@@ -427,6 +440,67 @@ test("a match with stats but no points is not analyzed, and still counts as play
   expect(season.tallies.perMatch.map((m) => m.matchId)).not.toContain("m-c");
 });
 
+/** A `processing_jobs` row as `loadMatchAnalysis` selects it. */
+function jobRow(matchId: string, status: string, createdAt: string): Row {
+  return {
+    id: `job-${matchId}-${createdAt}`,
+    match_id: matchId,
+    created_by: "u-coach",
+    status,
+    upload_progress_percent: null,
+    error_message: null,
+    error_category: null,
+    error_code: null,
+    error_step: null,
+    video_object_key: "v",
+    results_object_key: status === "completed" ? "r" : null,
+    resubmitted_from_job_id: null,
+    billable_seconds: 3600,
+    external_job_id: "ext",
+    created_at: createdAt,
+    updated_at: createdAt,
+    derivation_version: status === "completed" ? "v1" : null,
+    submitted_at: null,
+    queued_ack_at: null,
+    vendor_started_at: null,
+  };
+}
+
+test("analyzed is the report's own gate: a match still analysing is not folded, but is played", async () => {
+  // m-b's job finished; m-d was sent again and its new job is queued, though
+  // its points from the earlier attempt are still there.
+  const { client, sides } = await adaSides(
+    fullTables({
+      processing_jobs: [
+        jobRow("m-b", "completed", "2026-09-22T09:00:00Z"),
+        jobRow("m-d", "queued", "2026-10-10T09:00:00Z"),
+      ],
+    }),
+  );
+  const { deps } = fakeBallPaths({});
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+
+  expect(season.matchesPlayed).toBe(4);
+  expect(season.analyzed).toBe(2);
+  expect(season.perMatch.map((m) => m.matchId)).toEqual(["m-a", "m-b"]);
+  expect(season.tallies.perMatch.map((m) => m.matchId)).not.toContain("m-d");
+});
+
+test("a failed job that is not stats_unavailable is not folded either", async () => {
+  const failed = {
+    ...jobRow("m-d", "failed", "2026-10-10T09:00:00Z"),
+    error_step: "vendor",
+  };
+  const { client, sides } = await adaSides(
+    fullTables({ processing_jobs: [failed] }),
+  );
+  const { deps } = fakeBallPaths({});
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+  expect(season.perMatch.map((m) => m.matchId)).toEqual(["m-a", "m-b"]);
+});
+
 test("isDerived and errorSplitJudged come from each match's own row", async () => {
   const { client, sides } = await adaSides();
   const { deps } = fakeBallPaths({});
@@ -466,6 +540,33 @@ test("dates leave as calendar days and opponents are named from the other seat",
   ]);
 });
 
+test("two matches on one day reach the tracker in id order, not read order", async () => {
+  // The matches read is newest first; matches stores no recording time, so a
+  // day's matches are ordered by id — stable, whatever order they arrive in.
+  const day = "2026-10-20T00:00:00+00:00";
+  const same = [
+    matchRow({ id: "m-x2", date: day }),
+    matchRow({ id: "m-x1", date: day }),
+  ];
+  const tables = fullTables({
+    matches: same,
+    match_stats_with_percentages: same.flatMap((m) => [
+      statRow(m.id, true, 1),
+      statRow(m.id, false, 2),
+    ]),
+    points: same.flatMap((m) => pointRows(m.id, 2)),
+    shots: shotRows(same.flatMap((m) => pointRows(m.id, 2))),
+  });
+  const { client, sides } = await adaSides(tables);
+  const { deps } = fakeBallPaths({});
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+  expect(season.tallies.perMatch.map((m) => m.matchId)).toEqual([
+    "m-x1",
+    "m-x2",
+  ]);
+});
+
 test("both seats' stats rows are read, and 'you' is this player's seat", async () => {
   const { client, log, sides } = await adaSides();
   const { deps } = fakeBallPaths({});
@@ -480,16 +581,184 @@ test("both seats' stats rows are read, and 'you' is this player's seat", async (
   ).toHaveLength(1);
 
   // m-a: Ada is seat one → her row is `is_player1 = true` (winners 10).
-  expect(byId.get("m-a")?.youStats.winners).toBe(10);
-  expect(byId.get("m-a")?.oppStats.winners).toBe(20);
+  expect(byId.get("m-a")?.youStats?.winners).toBe(10);
+  expect(byId.get("m-a")?.oppStats?.winners).toBe(20);
   // m-b: Ada is seat two → her row is `is_player1 = false` (winners 21).
-  expect(byId.get("m-b")?.youStats.winners).toBe(21);
-  expect(byId.get("m-b")?.oppStats.winners).toBe(11);
+  expect(byId.get("m-b")?.youStats?.winners).toBe(21);
+  expect(byId.get("m-b")?.oppStats?.winners).toBe(11);
   // The published fractions ride along for the pooled rate rows.
-  expect(byId.get("m-b")?.youStats.fractions.firstServeInPct).toEqual({
+  expect(byId.get("m-b")?.youStats?.fractions.firstServeInPct).toEqual({
     made: 30,
     attempts: 50,
   });
+});
+
+test("a seat with points but no stats row is null, not zeroes", async () => {
+  // m-d keeps its points but loses Ada's (seat one) stats row.
+  const { client, sides } = await adaSides(
+    fullTables({
+      match_stats_with_percentages: STATS.filter(
+        (r) => !(r.match_id === "m-d" && r.is_player1),
+      ),
+    }),
+  );
+  const { deps } = fakeBallPaths({});
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+  const mD = season.perMatch.find((m) => m.matchId === "m-d");
+  expect(mD?.youStats).toBeNull();
+  expect(mD?.oppStats?.winners).toBe(23);
+  // Winners: m-a 10 and m-b 21 for Ada — m-d is out, not a 0.
+  const winners = season.groups
+    .flatMap((g) => g.rows)
+    .find((r) => r.label === "Winners");
+  expect(winners?.you).toMatchObject({ matches: 2, detail: "31 in 2 matches" });
+  expect(winners?.opp.matches).toBe(3);
+});
+
+test("a job-less import that published nothing is never read for points", async () => {
+  // m-a is a SwingVision import: no job, and here no stats row for either
+  // seat. Every import that stores points also publishes the stats row, so it
+  // has none to read. (A video match is read regardless — its job may be a
+  // teammate's, hidden by RLS — see the timeline-upload test.)
+  const { client, log, sides } = await adaSides(
+    fullTables({
+      match_stats_with_percentages: STATS.filter((r) => r.match_id !== "m-a"),
+    }),
+  );
+  const { deps } = fakeBallPaths({});
+  log.length = 0;
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+
+  expect(log).not.toContain("points.match(m-a)");
+  expect(season.matchesPlayed).toBe(4);
+  expect(season.perMatch.map((m) => m.matchId)).not.toContain("m-a");
+});
+
+test("a match the report would not draw is never read for points or lobs", async () => {
+  const { client, log, sides } = await adaSides(
+    fullTables({
+      processing_jobs: [jobRow("m-d", "processing", "2026-10-10T09:00:00Z")],
+    }),
+  );
+  const { deps, asked } = fakeBallPaths({});
+  log.length = 0;
+
+  await loadPlayerSeason(client, sides.own, deps);
+
+  expect(log).not.toContain("points.match(m-d)");
+  expect(asked).not.toContain("m-d");
+});
+
+test("a job with no stats row is still read: a timeline match keeps its points", async () => {
+  const { client, log, sides } = await adaSides(
+    fullTables({
+      match_stats_with_percentages: STATS.filter((r) => r.match_id !== "m-b"),
+      processing_jobs: [jobRow("m-b", "completed", "2026-09-22T09:00:00Z")],
+    }),
+  );
+  const { deps } = fakeBallPaths({});
+  log.length = 0;
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+  expect(log).toContain("points.match(m-b)");
+  expect(season.perMatch.map((m) => m.matchId)).toContain("m-b");
+});
+
+test("a video match is read with no visible job and no stats row: a teammate's timeline upload", async () => {
+  // processing_jobs is per-creator under RLS: this viewer sees no job for
+  // m-b (a video match), and it published no statistics. The report still
+  // draws it, so the season reads and folds it.
+  const { client, log, sides } = await adaSides(
+    fullTables({
+      match_stats_with_percentages: STATS.filter((r) => r.match_id !== "m-b"),
+      processing_jobs: [],
+    }),
+  );
+  const { deps } = fakeBallPaths({});
+  log.length = 0;
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+  expect(log).toContain("points.match(m-b)");
+  expect(season.perMatch.map((m) => m.matchId)).toContain("m-b");
+});
+
+test("a jobs read that fails throws rather than reading as no jobs", async () => {
+  const { client, sides } = await adaSides(
+    fullTables({ processing_jobs: new Error("timeout") }),
+  );
+  const { deps } = fakeBallPaths({});
+  await expect(loadPlayerSeason(client, sides.own, deps)).rejects.toThrow(
+    /processing jobs/,
+  );
+});
+
+test("the points reads run a few matches at a time, not the whole season at once", async () => {
+  // Eight more of Ada's matches, each with points and stats.
+  const extra = Array.from({ length: 8 }, (_, i) => `m-x${i}`);
+  const tables = fullTables({
+    matches: [...MATCHES, ...extra.map((id) => matchRow({ id }))],
+    match_stats_with_percentages: [
+      ...STATS,
+      ...extra.flatMap((id) => [statRow(id, true, 1), statRow(id, false, 2)]),
+    ],
+    points: [...POINTS, ...extra.flatMap((id) => pointRows(id, 2))],
+    shots: shotRows([...POINTS, ...extra.flatMap((id) => pointRows(id, 2))]),
+  });
+  const { client, log, sides } = await adaSides(tables);
+  const { deps } = fakeBallPaths({});
+  log.length = 0;
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+
+  expect(season.analyzed).toBe(11);
+  // Before the first match's shots are read, only the first few matches'
+  // points reads have gone out — the pool, not all twelve.
+  const firstShots = log.findIndex((e) => e.startsWith("shots.select"));
+  const before = log
+    .slice(0, firstShots)
+    .filter((e) => e.startsWith("points.match("));
+  expect(before).toHaveLength(SEASON_READ_CONCURRENCY);
+  // And every candidate is still read, once.
+  expect(log.filter((e) => e.startsWith("points.match("))).toHaveLength(12);
+});
+
+test("mapWithConcurrency never runs more than its limit, and keeps input order", async () => {
+  let running = 0;
+  let peak = 0;
+  const out = await mapWithConcurrency([5, 1, 4, 2, 3, 0], 2, async (n, i) => {
+    running += 1;
+    peak = Math.max(peak, running);
+    await new Promise((r) => setTimeout(r, n));
+    running -= 1;
+    return `${i}:${n}`;
+  });
+  expect(peak).toBe(2);
+  expect(out).toEqual(["0:5", "1:1", "2:4", "3:2", "4:3", "5:0"]);
+  expect(await mapWithConcurrency([], 4, async () => 1)).toEqual([]);
+  await expect(
+    mapWithConcurrency([1, 2], 2, async (n) => {
+      if (n === 2) throw new Error("boom");
+      return n;
+    }),
+  ).rejects.toThrow("boom");
+});
+
+test("mapWithConcurrency takes no new item once one has failed", async () => {
+  const started: number[] = [];
+  await expect(
+    mapWithConcurrency([0, 1, 2, 3, 4, 5], 2, async (n) => {
+      started.push(n);
+      await new Promise((r) => setTimeout(r, n === 0 ? 1 : 20));
+      if (n === 0) throw new Error("boom");
+      return n;
+    }),
+  ).rejects.toThrow("boom");
+  // Let any straggler worker run its in-flight item out.
+  await new Promise((r) => setTimeout(r, 60));
+  // 0 fails while 1 is still running; nothing after 1 is started.
+  expect(started).toEqual([0, 1]);
 });
 
 test("the points of every match are read together, without bookmarks", async () => {
@@ -651,6 +920,27 @@ test("a points read that fails throws rather than folding a season short", async
   } finally {
     console.error = original;
   }
+});
+
+test("a roster read that fails throws, never reads as not on the roster", async () => {
+  const { client } = fakeClient(fullTables(), {
+    program_roster_full: new Error("rpc down"),
+  });
+  await expect(readPlayerMatchSides(client, PROGRAM, "p-ada")).rejects.toThrow(
+    /the roster/,
+  );
+});
+
+test("a matches read that fails throws, never reads as no matches", async () => {
+  const { client } = fakeClient(
+    fullTables({ matches: new Error("bad column") }),
+    {
+      program_roster_full: ROSTER,
+    },
+  );
+  await expect(readPlayerMatchSides(client, PROGRAM, "p-ada")).rejects.toThrow(
+    /this player's matches/,
+  );
 });
 
 test("a stats read that fails throws", async () => {

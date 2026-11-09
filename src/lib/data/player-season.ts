@@ -100,10 +100,16 @@ export interface SeasonMatchStats {
    * no file — unknown, never "no lobs".
    */
   lobKeys: ReadonlySet<number> | null;
-  /** The player's published statistics for this match. */
-  youStats: H2HStats;
-  /** The opponent's. */
-  oppStats: H2HStats;
+  /**
+   * The player's published statistics for this match, or `null` when the
+   * match has no `match_stats_with_percentages` row for their seat. A missing
+   * row is unknown, never zeroes: that seat sits out of every published row
+   * (count and rate) for this match, while the rows counted from the points
+   * (`fromPoints`) still read them.
+   */
+  youStats: H2HStats | null;
+  /** The opponent's, with the same `null`. */
+  oppStats: H2HStats | null;
 }
 
 /** One analyzed match with the identity the right-column cards name. */
@@ -199,6 +205,26 @@ const emptyPool = (): Pool => ({ sum: 0, made: 0, attempts: 0, n: 0 });
 
 const finite = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
+
+/**
+ * What `buildStatRows` is handed for a seat with no stats row. Every figure
+ * it yields is ignored — `publishedFor` keeps that seat out of the published
+ * rows — so this only gives the call its shape.
+ */
+const NO_PUBLISHED: H2HStats = { fractions: {} };
+
+/**
+ * Whether a row's figure for a seat can be read this match: a row counted
+ * from the points always can; a published one only when the seat has a stats
+ * row. Without this a missing row would fold in as zeroes and drag the
+ * season's averages and pooled rates down.
+ */
+function publishedFor(
+  config: Pick<H2HRowConfig, "fromPoints">,
+  stats: H2HStats | null,
+): stats is H2HStats {
+  return Boolean(config.fromPoints) || stats !== null;
+}
 
 /**
  * The made/attempts behind one side's rate row for one match, read where the
@@ -299,7 +325,11 @@ export function foldSeasonRows(
     const oppDerived = tallySide(m.points, !m.isPlayer1, m.lobKeys);
 
     groups.forEach((group, gi) => {
-      const published = buildStatRows(group.configs, m.youStats, m.oppStats);
+      const published = buildStatRows(
+        group.configs,
+        m.youStats ?? NO_PUBLISHED,
+        m.oppStats ?? NO_PUBLISHED,
+      );
       const rows = withPointRows(
         group.configs,
         published,
@@ -318,12 +348,24 @@ export function foldSeasonRows(
           );
         }
         const pool = pools[gi][ri];
+        const youIn = publishedFor(config, m.youStats);
+        const oppIn = publishedFor(config, m.oppStats);
         if (seasonRowKind(config) === "rate") {
-          addFraction(pool.you, rowFraction(config, m.youStats, youDerived));
-          addFraction(pool.opp, rowFraction(config, m.oppStats, oppDerived));
+          if (youIn) {
+            addFraction(
+              pool.you,
+              rowFraction(config, m.youStats ?? NO_PUBLISHED, youDerived),
+            );
+          }
+          if (oppIn) {
+            addFraction(
+              pool.opp,
+              rowFraction(config, m.oppStats ?? NO_PUBLISHED, oppDerived),
+            );
+          }
         } else {
-          addCount(pool.you, rows[ri].you.value);
-          addCount(pool.opp, rows[ri].opp.value);
+          if (youIn) addCount(pool.you, rows[ri].you.value);
+          if (oppIn) addCount(pool.opp, rows[ri].opp.value);
         }
       });
     });
@@ -364,22 +406,37 @@ export interface SeasonPerMatch {
   total: number;
 }
 
-/** Oldest first (`compareMatchDays`); a match with no readable date sorts last. */
+/**
+ * Season order, oldest first: by calendar day (`compareMatchDays`, a match
+ * with no readable date last), then — two matches on one day compare equal
+ * there — by id. `matches` stores no recording time (`date`'s time part
+ * means nothing, `match-day.ts`), so a day's matches cannot be put in the
+ * order they were played; the id at least makes the order stable, rather
+ * than whatever order the loader read them in.
+ */
+export function compareSeasonMatches(
+  a: Pick<SeasonMatch, "date" | "matchId">,
+  b: Pick<SeasonMatch, "date" | "matchId">,
+): number {
+  const byDay = compareMatchDays(a.date, b.date);
+  if (byDay !== 0) return byDay;
+  return a.matchId < b.matchId ? -1 : a.matchId > b.matchId ? 1 : 0;
+}
+
+/** Oldest first (`compareSeasonMatches`); a match with no readable date sorts last. */
 export function seasonPerMatch(
   matches: readonly SeasonMatch[],
 ): SeasonPerMatch[] {
-  return matches
-    .map((m) => {
-      const { allPoints } = tallySide(m.points, m.isPlayer1, null);
-      return {
-        matchId: m.matchId,
-        date: m.date,
-        opponent: m.opponent,
-        youWon: allPoints.won,
-        total: allPoints.total,
-      };
-    })
-    .sort((a, b) => compareMatchDays(a.date, b.date));
+  return [...matches].sort(compareSeasonMatches).map((m) => {
+    const { allPoints } = tallySide(m.points, m.isPlayer1, null);
+    return {
+      matchId: m.matchId,
+      date: m.date,
+      opponent: m.opponent,
+      youWon: allPoints.won,
+      total: allPoints.total,
+    };
+  });
 }
 
 /** How points ended over the season — the summed `outcomeTally` per side. */
@@ -418,7 +475,9 @@ export interface SeasonNetGame {
   /**
    * Every analyzed match knew its lobs (`seasonHasLobs`). When false, the
    * card draws Passed as "Passed or lobbed", as the report does without a
-   * ball-paths file.
+   * ball-paths file, and `endings.lobbed` is 0 on both sides: the lobs the
+   * matches WITH a file found are folded into `passed`, so the segments the
+   * card draws still add up to `total`.
    */
   hasLobs: boolean;
 }
@@ -443,7 +502,18 @@ export function seasonNetGame(
     addNetGame(you, netGameTally(m.points, m.isPlayer1, m.lobKeys));
     addNetGame(opp, netGameTally(m.points, !m.isPlayer1, m.lobKeys));
   }
-  return { you, opp, hasLobs: seasonHasLobs(matches) };
+  const hasLobs = seasonHasLobs(matches);
+  if (!hasLobs) {
+    // Without lobs for every match the card has no Lobbed segment, only
+    // "Passed or lobbed" — so the lobs the matches with a file did find go
+    // there, or the drawn segments would add up to less than `total`. The
+    // match report never meets this: one match either has its file or not.
+    for (const side of [you, opp]) {
+      side.endings.passed += side.endings.lobbed;
+      side.endings.lobbed = 0;
+    }
+  }
+  return { you, opp, hasLobs };
 }
 
 /** One of the Rally length card's three bands, summed over the season. */
