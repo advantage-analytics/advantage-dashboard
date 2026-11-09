@@ -22,6 +22,14 @@ const BAR_SLOT = "flex h-7 w-[5.5px] items-center justify-center";
 
 const BAR_HIT = `group/bar pointer-events-auto touch:pointer-events-none ${BAR_SLOT}`;
 
+/**
+ * `touchTaps`: on touch the slot spreads to 14px — touch-only spacing, never a
+ * bigger bar (chrome.md → Touch) — and an `::after` stretches its tap area to
+ * 44px tall, so a finger can pick one match out of five.
+ */
+const TOUCH_SLOT = "touch:w-[14px]";
+const BAR_HIT_TOUCH = `group/bar pointer-events-auto relative ${BAR_SLOT} ${TOUCH_SLOT} touch:after:absolute touch:after:inset-x-0 touch:after:-inset-y-2 touch:after:content-['']`;
+
 const BAR = `${FORM_TICK} h-3 transition-[opacity,height] duration-[var(--duration-hover)] group-hover/bar:h-4 group-hover/bar:!opacity-100 group-hover/form:opacity-40`;
 
 function FormBarMark({ result }: { result: FormResult }) {
@@ -60,12 +68,16 @@ function barLabel(bar: FormBar): string {
  * Two inputs get the row instead. A finger cannot hit 5.5px, so on touch the
  * bars let taps through, and for a keyboard they are not tab stops, which would
  * add five to every row. The screen-reader summary still states the strip.
+ * `touchTaps` opts a host out of the touch pass-through when its row has room
+ * to space the bars — Team Home's Top movers, whose bars are the only way to a
+ * match. A tap then opens the bar's match; a press-and-hold shows its readout.
  */
 export function FormStrip({
   bars,
   slots,
   empty = <EmptyMark label="No form yet" />,
   linked = true,
+  touchTaps = false,
 }: {
   bars: readonly FormBar[];
   /** Pad to this many bars with ghosts, as `FormTicks`' `slots` does. */
@@ -73,9 +85,14 @@ export function FormStrip({
   /** What to draw for no results at all. Ignored when `slots` is set. */
   empty?: React.ReactNode;
   linked?: boolean;
+  /** Keep linked bars tappable on touch, spaced to 14px slots (≈70px for five). */
+  touchTaps?: boolean;
 }) {
   if (bars.length === 0 && slots === undefined) return <>{empty}</>;
   const ghosts = slots === undefined ? 0 : Math.max(0, slots - bars.length);
+  const tappable = linked && touchTaps;
+  const hit = tappable ? BAR_HIT_TOUCH : BAR_HIT;
+  const ghostSlot = tappable ? `${BAR_SLOT} ${TOUCH_SLOT}` : BAR_SLOT;
   return (
     <>
       <span className="sr-only">
@@ -95,7 +112,7 @@ export function FormStrip({
                     aria-label={barLabel(bar)}
                     data-own-hover
                     onClick={(event) => event.stopPropagation()}
-                    className={BAR_HIT}
+                    className={hit}
                   >
                     <FormBarMark result={bar.result} />
                   </Link>
@@ -115,7 +132,7 @@ export function FormStrip({
             </Tooltip>
           ))}
           {Array.from({ length: ghosts }, (_, index) => (
-            <span key={`ghost-${index}`} aria-hidden className={BAR_SLOT}>
+            <span key={`ghost-${index}`} aria-hidden className={ghostSlot}>
               <span className={`${FORM_TICK} h-3 bg-[var(--ink-100)]`} />
             </span>
           ))}

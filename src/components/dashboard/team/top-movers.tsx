@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { FormStrip } from "@/components/dashboard/shared/form-strip";
+import { STRETCHED } from "@/components/dashboard/matches/match-detail/head-to-head-table";
 import {
   DayZeroShape,
   GHOST_OPACITY,
@@ -112,12 +113,12 @@ function Row({ mover }: { mover: TopMover }) {
       <Link
         href={`/dashboard/team/roster/${mover.playerId}`}
         data-focus-ring="none"
-        className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)] after:absolute after:inset-0 after:rounded-[var(--radius-element)] after:content-[''] focus-visible:after:[box-shadow:var(--focus-ring)]"
+        className={`min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)] ${STRETCHED}`}
       >
         {mover.name}
       </Link>
       <span className="relative z-10 flex items-center">
-        <FormStrip bars={mover.form} empty={null} />
+        <FormStrip bars={mover.form} empty={null} touchTaps />
       </span>
       <span className="grid grid-cols-[1fr_44px_40px] items-baseline gap-2.5">
         <span className="text-micro whitespace-nowrap">{mover.metric}</span>
