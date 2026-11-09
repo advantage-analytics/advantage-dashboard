@@ -1,5 +1,4 @@
 import { Filter } from "lucide-react";
-import type { MatchPoint } from "@/lib/data/match-points-server";
 import {
   MatchesFilterPanel,
   type FilterPanelSection,
@@ -10,14 +9,12 @@ import { LegendMark } from "./legend-mark";
 import { LEGEND_PICKS, type LegendPick } from "./lightbox-points";
 import type { LegendItem } from "./viz-labels";
 import {
-  computeViz,
   filterKeysFor,
   type Cut,
   type VizFilters,
   type VizResult,
 } from "./viz-model";
 import { errorOptionsFor, OPTIONS } from "./viz-url";
-import type { MatchFilterContext } from "../match-filters/model";
 
 /* ── Filters panel ─────────────────────────────────────────────────────── */
 
@@ -47,9 +44,9 @@ export function LightboxFilterPanel({
   hasActive,
   engaged,
   result,
-  points,
-  subjectIsPlayer1,
-  matchCtx,
+  sets,
+  errorSplitJudged,
+  countWith,
 }: {
   cut: Cut;
   filters: VizFilters;
@@ -59,26 +56,20 @@ export function LightboxFilterPanel({
   hasActive: boolean;
   /** Any cut is on — the panel's, the legend's or a Statistics row's. */
   engaged: boolean;
-  result: VizResult;
-  points: MatchPoint[];
-  subjectIsPlayer1: boolean;
-  matchCtx: MatchFilterContext;
+  /** The court's live count, its whole pool, and the noun they count. */
+  result: Pick<VizResult, "count" | "total" | "noun">;
+  /** The sets there are to pick (the Set row shows only with two or more). */
+  sets: readonly number[];
+  /** The match's errors are judged: Error type offers Unforced and Forced
+   *  apart, not one "Errors" option (`errorOptionsFor`). */
+  errorSplitJudged: boolean;
+  /** How many marks the court would hold with `patch` applied over the live
+   *  filters — each checklist option's count. The match report runs
+   *  `computeViz`; a host with no points in the browser answers its own way. */
+  countWith: (patch: Partial<VizFilters>) => number;
 }) {
   const keys = new Set(filterKeysFor(cut));
-  const countWith = (patch: Partial<VizFilters>) =>
-    computeViz(
-      points,
-      cut,
-      { ...filters, ...patch },
-      subjectIsPlayer1,
-      "scatter",
-      matchCtx,
-    ).count;
-
-  const sets = [...new Set(points.map((p) => p.setNumber))]
-    .filter((n) => n > 0)
-    .sort((a, b) => a - b);
-  const errorOptions = errorOptionsFor(matchCtx.errorSplitJudged === true);
+  const errorOptions = errorOptionsFor(errorSplitJudged);
 
   const sections: FilterPanelSection<PanelKey>[] = [];
   if (keys.has("ball"))
@@ -224,8 +215,9 @@ export function LightboxFilterStrip({
   onClear,
 }: {
   phrases: string[];
-  shown: number;
-  total: number;
+  /** "N of M points" — omitted by a host with no points to count. */
+  shown?: number;
+  total?: number;
   statOnly: boolean;
   onClear: () => void;
 }) {
@@ -249,12 +241,18 @@ export function LightboxFilterStrip({
       <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
         {sentence}
       </span>
-      <span
-        className="size-[3px] rounded-full"
-        style={{ background: "var(--ink-300)" }}
-        aria-hidden="true"
-      />
-      <span className="text-micro tabular">{draftCountLine(shown, total)}</span>
+      {shown !== undefined && total !== undefined && (
+        <>
+          <span
+            className="size-[3px] rounded-full"
+            style={{ background: "var(--ink-300)" }}
+            aria-hidden="true"
+          />
+          <span className="text-micro tabular">
+            {draftCountLine(shown, total)}
+          </span>
+        </>
+      )}
       <div className="flex-1" />
       <button
         type="button"
