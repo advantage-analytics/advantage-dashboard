@@ -55,14 +55,10 @@ test("nothing is interactive, no colour is a hex, nothing spins", () => {
  */
 test("no dashboard loading boundary wraps another route's loading boundary", () => {
   const root = path.join(process.cwd(), "src/app/dashboard");
-  const boundaries: string[] = [];
-  const walk = (dir: string) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isDirectory()) walk(path.join(dir, entry.name));
-      else if (entry.name === "loading.tsx") boundaries.push(dir);
-    }
-  };
-  walk(root);
+  const boundaries = fs
+    .readdirSync(root, { recursive: true, encoding: "utf8" })
+    .filter((file) => path.basename(file) === "loading.tsx")
+    .map((file) => path.join(root, path.dirname(file)));
 
   const nested = boundaries.flatMap((outer) =>
     boundaries

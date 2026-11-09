@@ -42,9 +42,9 @@ const DAY_ZERO: Record<PresenceSurface, (p: WorkspacePresence) => boolean> = {
   home: (p) => !p.matches,
   // `matches/(list)/page.tsx` — no match and no draft in flight.
   matches: (p) => !p.matches && !p.drafts,
-  // `team/page.tsx` via `getTeamHomePresence`.
+  // `team/(home)/page.tsx` via `getTeamHomePresence`.
   teamHome: (p) => !p.matches && !p.roster && !p.duals,
-  // `team/roster/page.tsx` — no player, no invite, no join request.
+  // `team/roster/(list)/page.tsx` — no player, no invite, no join request.
   roster: (p) => !p.roster && !p.rosterInFlight,
   // `static-schedule.tsx` — no schedule row, and a row is an event.
   schedule: (p) => !p.events,
