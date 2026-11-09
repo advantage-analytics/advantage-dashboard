@@ -9,6 +9,8 @@ import {
 import {
   loadPlayerSeason,
   lobKeysFromBallPathsBody,
+  mapWithConcurrency,
+  SEASON_READ_CONCURRENCY,
   seasonOpponentCount,
   type PlayerSeasonDeps,
 } from "@/lib/data/player-season-server";
@@ -64,6 +66,10 @@ class FakeQuery implements PromiseLike<Answer> {
     return this;
   }
   eq(column: string, value: unknown) {
+    // Which match a points read is for, so a spec can see which were read.
+    if (this.table === "points" && column === "match_id") {
+      this.log.push(`points.match(${String(value)})`);
+    }
     this.filters.push((row) => row[column] === value);
     return this;
   }
@@ -574,6 +580,106 @@ test("a seat with points but no stats row is null, not zeroes", async () => {
     .find((r) => r.label === "Winners");
   expect(winners?.you).toMatchObject({ matches: 2, detail: "31 in 2 matches" });
   expect(winners?.opp.matches).toBe(3);
+});
+
+test("a job-less match that published nothing is never read for points", async () => {
+  // m-c is a video match with no job row the viewer can see and, here, no
+  // stats row for either seat: nothing stored it, so it has no points.
+  const { client, log, sides } = await adaSides(
+    fullTables({
+      match_stats_with_percentages: STATS.filter((r) => r.match_id !== "m-c"),
+    }),
+  );
+  const { deps, asked } = fakeBallPaths({});
+  log.length = 0;
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+
+  expect(log).not.toContain("points.match(m-c)");
+  expect(asked).not.toContain("m-c");
+  expect(season.matchesPlayed).toBe(4);
+  expect(season.perMatch.map((m) => m.matchId)).toEqual(["m-a", "m-b", "m-d"]);
+});
+
+test("a match the report would not draw is never read for points or lobs", async () => {
+  const { client, log, sides } = await adaSides(
+    fullTables({
+      processing_jobs: [jobRow("m-d", "processing", "2026-10-10T09:00:00Z")],
+    }),
+  );
+  const { deps, asked } = fakeBallPaths({});
+  log.length = 0;
+
+  await loadPlayerSeason(client, sides.own, deps);
+
+  expect(log).not.toContain("points.match(m-d)");
+  expect(asked).not.toContain("m-d");
+});
+
+test("a job with no stats row is still read: a timeline match keeps its points", async () => {
+  const { client, log, sides } = await adaSides(
+    fullTables({
+      match_stats_with_percentages: STATS.filter((r) => r.match_id !== "m-b"),
+      processing_jobs: [jobRow("m-b", "completed", "2026-09-22T09:00:00Z")],
+    }),
+  );
+  const { deps } = fakeBallPaths({});
+  log.length = 0;
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+  expect(log).toContain("points.match(m-b)");
+  expect(season.perMatch.map((m) => m.matchId)).toContain("m-b");
+});
+
+test("the points reads run a few matches at a time, not the whole season at once", async () => {
+  // Eight more of Ada's matches, each with points and stats.
+  const extra = Array.from({ length: 8 }, (_, i) => `m-x${i}`);
+  const tables = fullTables({
+    matches: [...MATCHES, ...extra.map((id) => matchRow({ id }))],
+    match_stats_with_percentages: [
+      ...STATS,
+      ...extra.flatMap((id) => [statRow(id, true, 1), statRow(id, false, 2)]),
+    ],
+    points: [...POINTS, ...extra.flatMap((id) => pointRows(id, 2))],
+    shots: shotRows([...POINTS, ...extra.flatMap((id) => pointRows(id, 2))]),
+  });
+  const { client, log, sides } = await adaSides(tables);
+  const { deps } = fakeBallPaths({});
+  log.length = 0;
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+
+  expect(season.analyzed).toBe(11);
+  // Before the first match's shots are read, only the first few matches'
+  // points reads have gone out — the pool, not all twelve.
+  const firstShots = log.findIndex((e) => e.startsWith("shots.select"));
+  const before = log
+    .slice(0, firstShots)
+    .filter((e) => e.startsWith("points.match("));
+  expect(before).toHaveLength(SEASON_READ_CONCURRENCY);
+  // And every candidate is still read, once.
+  expect(log.filter((e) => e.startsWith("points.match("))).toHaveLength(12);
+});
+
+test("mapWithConcurrency never runs more than its limit, and keeps input order", async () => {
+  let running = 0;
+  let peak = 0;
+  const out = await mapWithConcurrency([5, 1, 4, 2, 3, 0], 2, async (n, i) => {
+    running += 1;
+    peak = Math.max(peak, running);
+    await new Promise((r) => setTimeout(r, n));
+    running -= 1;
+    return `${i}:${n}`;
+  });
+  expect(peak).toBe(2);
+  expect(out).toEqual(["0:5", "1:1", "2:4", "3:2", "4:3", "5:0"]);
+  expect(await mapWithConcurrency([], 4, async () => 1)).toEqual([]);
+  await expect(
+    mapWithConcurrency([1, 2], 2, async (n) => {
+      if (n === 2) throw new Error("boom");
+      return n;
+    }),
+  ).rejects.toThrow("boom");
 });
 
 test("the points of every match are read together, without bookmarks", async () => {
