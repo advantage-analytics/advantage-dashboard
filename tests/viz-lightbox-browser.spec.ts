@@ -419,7 +419,7 @@ test("2 · Watch clears a landed statistic's Film remainder as well as ?f=", asy
   await expect(page.getByTestId("remainder")).toHaveText("none");
 });
 
-test("3 · loosening the card's own filter: the title follows, the count never passes its denominator", async ({
+test("3 · loosening the card's own filter: the title and the denominator follow, the count never passes it", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
@@ -432,7 +432,8 @@ test("3 · loosening the card's own filter: the title follows, the count never p
   const read = async () =>
     (await count.getAttribute("aria-label"))!.match(/\d+/g)!.map(Number);
   const [n1, m1] = await read();
-  expect(n1).toBeLessThanOrEqual(m1);
+  // On the card, the denominator is the card's own points: all of them.
+  expect(n1).toBe(m1);
   await dialog.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   const serve = panel.getByRole("radiogroup").first();
@@ -442,9 +443,10 @@ test("3 · loosening the card's own filter: the title follows, the count never p
   await expect(
     dialog.getByRole("heading", { name: "Serve placement" }),
   ).toBeVisible();
+  // Off it, the widest set: every serve the player hit.
   const [n2, m2] = await read();
   expect(n2).toBeLessThanOrEqual(m2);
-  expect(m2).toBe(m1);
+  expect(m2).toBeGreaterThan(m1);
   expect(n2).toBeGreaterThanOrEqual(n1);
 });
 
@@ -573,4 +575,222 @@ test("Esc, Esc closes the Filters panel and then the lightbox, even while the pa
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page).not.toHaveURL(/cut=/);
+});
+
+/* ── Gate fixes (PR #684 review, round 3) ─────────────────────────────── */
+
+test("R3·1 · a selected point filtered off the court is let go: no ring when it returns, and one Esc closes", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "Serve placement" });
+  const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
+  const first = marks.first();
+  const id = (await first.getAttribute("data-viz-mark"))!;
+  await first.focus();
+  await page.keyboard.press("Enter");
+  await expect(first).toHaveAttribute("aria-pressed", "true");
+  const selected = dialog.locator(`[data-viz-mark="${id}"]`);
+  // A zone the selected point did not land in takes it off the court.
+  await dialog.getByRole("button", { name: "Filters" }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  let gone = false;
+  for (const zone of ["T", "Body", "Wide"]) {
+    const box = panel.getByRole("checkbox", {
+      name: new RegExp(`^${zone}\\s*\\d*$`),
+    });
+    await box.click();
+    await expect(box).toHaveAttribute("aria-checked", "true");
+    if ((await selected.count()) === 0) {
+      gone = true;
+      break;
+    }
+    await box.click();
+    await expect(box).toHaveAttribute("aria-checked", "false");
+  }
+  expect(gone).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await dialog
+    .locator("[data-viz-filter-strip]")
+    .getByRole("button", { name: "Clear filter" })
+    .click();
+  // Back on the court, and not selected: no ring, no faded siblings.
+  await expect(selected).toHaveCount(1);
+  await expect(selected).toHaveAttribute("aria-pressed", "false");
+  await expect(dialog.locator("[data-viz-selected-ring]")).toHaveCount(0);
+  await expect(page).not.toHaveURL(/zone=/);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("R3·6 · a Create view draft opens over Saved, from a hard load and from the wall", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve&draft=1`);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toHaveCount(0);
+  const saved = page.getByRole("button", { name: "Saved", exact: true });
+  await expect(saved).toHaveAttribute("aria-pressed", "true");
+  // Opened on top of Default, it still closes onto Saved.
+  await page.getByRole("button", { name: "Default", exact: true }).click();
+  await page.evaluate(() => {
+    window.history.pushState(null, "", "/?tab=shots&cut=serve&draft=1");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(saved).toHaveAttribute("aria-pressed", "true");
+});
+
+test("R3·5 · Watch names the player in the Video strip when the points are the opponent's", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve&ball=first&fixture=watchall`);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await expect(page).toHaveURL(/player=opponent/);
+  await dialog.getByRole("button", { name: /^Watch these/ }).click();
+  await expect(page).toHaveURL(/tab=film/);
+  expect(new URL(page.url()).searchParams.get("pnl")).toBe(
+    "First serves · Blake Rivera",
+  );
+  // The viewer's own points carry no name.
+  await page.goto(`${origin}/?tab=shots&cut=serve&ball=first&fixture=watchall`);
+  await page.getByRole("button", { name: /^Watch these/ }).click();
+  await expect(page).toHaveURL(/tab=film/);
+  expect(new URL(page.url()).searchParams.get("pnl")).toBe("First serves");
+});
+
+test("R3·3 · Watch → Video → Back keeps the wall's player and collection", async ({
+  page,
+}) => {
+  // Next's own router sees a pushState; the harness's mock needs a popstate.
+  const settle = () =>
+    page.evaluate(() => window.dispatchEvent(new PopStateEvent("popstate")));
+  await page.goto(`${origin}/?tab=shots&fixture=watchall`);
+  const dialog = page.getByRole("dialog");
+  // The Opponent's wall, a card of theirs, and Watch.
+  await page.getByRole("button", { name: "Opponent" }).click();
+  await page.getByRole("link", { name: /^First serves, Blake Rivera/ }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: /^Watch these/ }).click();
+  await expect(page).toHaveURL(/tab=film/);
+  await settle();
+  await expect(page.getByText("Video tab")).toBeVisible();
+  await page.goBack();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Opponent" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  // An edited saved view (no `view=` left in its URL) still closes on Saved.
+  await page.getByRole("button", { name: "Saved", exact: true }).click();
+  await page.getByRole("link", { name: /Saved serve/ }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await expect(page).not.toHaveURL(/view=sv1/);
+  await dialog.getByRole("button", { name: /^Watch these/ }).click();
+  await expect(page).toHaveURL(/tab=film/);
+  await settle();
+  await expect(page.getByText("Video tab")).toBeVisible();
+  await page.goBack();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(
+    page.getByRole("button", { name: "Saved", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("R3·4 · Back/Forward between two saved views starts each fresh: pane, zoom, selection and picks", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&view=sv1`);
+  const first = page.getByRole("dialog", { name: "Saved serve" });
+  await expect(first).toBeVisible();
+  // Everything that is the view's own: a pick, a zoom, the Statistics pane.
+  await first
+    .getByRole("group", { name: "Filter by outcome" })
+    .getByRole("button", { name: /^Won/ })
+    .click();
+  await first.getByRole("button", { name: "Zoom in" }).click();
+  await first.getByRole("button", { name: "Statistics" }).click();
+  await page.evaluate(() => {
+    window.history.pushState(
+      null,
+      "",
+      "/?tab=shots&cut=returnPlacement&view=sv2",
+    );
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+  const second = page.getByRole("dialog", { name: "Saved returns" });
+  await expect(second).toBeVisible();
+  await expect(second.getByRole("button", { name: "Points" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(
+    second.getByRole("button", { name: "Fit the court" }),
+  ).toBeDisabled();
+  await expect(second.locator("[data-viz-filter-strip]")).toHaveCount(0);
+  // Back to the first: fresh as well.
+  await page.goBack();
+  await expect(first).toBeVisible();
+  await expect(first.getByRole("button", { name: "Points" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(
+    first.getByRole("button", { name: "Fit the court" }),
+  ).toBeDisabled();
+  await expect(
+    first
+      .getByRole("group", { name: "Filter by outcome" })
+      .getByRole("button", { name: /^Won/ }),
+  ).toHaveAttribute("aria-pressed", "false");
+});
+
+test("R3·7 · a saved view is its own baseline: nothing applied on open, and Clear returns to the view", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&view=sv1`);
+  const dialog = page.getByRole("dialog", { name: "Saved serve" });
+  await expect(dialog).toBeVisible();
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  const filtersButton = dialog.getByRole("button", { name: "Filters" });
+  // The view's own filters are not "applied".
+  await expect(strip).toHaveCount(0);
+  await expect(filtersButton).not.toHaveCSS(
+    "background-color",
+    "rgb(245, 245, 245)",
+  );
+  // A filter of its own: the title stays the view's, the strip names only it.
+  await filtersButton.click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  await panel.getByRole("radio", { name: "Deuce" }).click();
+  await page.keyboard.press("Escape");
+  await expect(strip).toContainText("Deuce");
+  await expect(
+    dialog.getByRole("heading", { name: "Saved serve" }),
+  ).toBeVisible();
+  await expect(page).not.toHaveURL(/view=sv1/);
+  // …and a legend pick on top. Clear lets go of both, back on the view.
+  await dialog
+    .getByRole("group", { name: "Filter by outcome" })
+    .getByRole("button", { name: /^Won/ })
+    .click();
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(strip).toHaveCount(0);
+  await expect(page).toHaveURL(/view=sv1/);
+  await expect(page).not.toHaveURL(/deuce/);
+  await expect(
+    dialog.getByRole("heading", { name: "Saved serve" }),
+  ).toBeVisible();
 });

@@ -25,6 +25,7 @@ import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { BandSettings } from "@/lib/data/viz-bands";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 import type { DistanceUnit } from "@/lib/format/distance";
+import { WallMemoryProvider } from "@/components/dashboard/matches/match-detail/shots/viz-wall-memory";
 import { FilmHeadProvider } from "@/components/dashboard/matches/match-detail/film-head-context";
 import {
   FilmCutProvider,
@@ -447,7 +448,11 @@ export function MatchReportProvider({
   return (
     <MatchReportContext value={value}>
       <FilmCutProvider cut={pendingCut} onClear={clearPendingCut}>
-        <FilmHeadProvider>{children}</FilmHeadProvider>
+        <FilmHeadProvider>
+          {/* The Visualizations wall's player and collection, kept across
+              the tab unmounting (Watch → Video → Back). */}
+          <WallMemoryProvider>{children}</WallMemoryProvider>
+        </FilmHeadProvider>
       </FilmCutProvider>
     </MatchReportContext>
   );

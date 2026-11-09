@@ -384,6 +384,7 @@ test("reconcileVizState: an own query lands — intended state is kept and the q
   });
   expect(result.state).toEqual(intended);
   expect(result.ownQueries).toEqual([]);
+  expect(result.external).toBe(false);
 });
 
 test("reconcileVizState: only the later of two own queries lands — the earlier is retired too, not left to be mistaken for own later", () => {
@@ -408,6 +409,7 @@ test("reconcileVizState: only the later of two own queries lands — the earlier
     parseVizState(new URLSearchParams("cut=serve&ball=first")),
   );
   expect(later.ownQueries).toEqual(["cut=serve&ball=first"]);
+  expect(later.external).toBe(true);
 });
 
 test("reconcileVizState: an external navigation while an own query is pending wins over the intended state", () => {
@@ -421,6 +423,7 @@ test("reconcileVizState: an external navigation while an own query is pending wi
     parseVizState(new URLSearchParams("cut=returnPlacement")),
   );
   expect(result.ownQueries).toEqual(["cut=returnPlacement"]);
+  expect(result.external).toBe(true);
 });
 
 /* ── `sameView` (F4) ────────────────────────────────────────────────────

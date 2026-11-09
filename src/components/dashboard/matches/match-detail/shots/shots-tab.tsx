@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMounted } from "@/lib/ui/use-mounted";
 import {
   VizWall,
@@ -19,6 +19,7 @@ import { shotsWriteAccess } from "@/components/dashboard/matches/match-detail/sh
 import { VizEmpty } from "@/components/dashboard/matches/match-detail/shots/viz-empty";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
+import { useWallMemory } from "@/components/dashboard/matches/match-detail/shots/viz-wall-memory";
 
 /**
  * The Visualizations tab's panel: the wall (`VizWall`, four court-first
@@ -66,12 +67,21 @@ export function ShotsTab() {
 }
 
 function ShotsTabBody() {
-  const { state } = useVizState();
-  // A hard load of a saved view's link opens over Saved, like a click.
+  const { state, navigation } = useVizState();
+  // What the wall showed before the tab last unmounted — "Watch these N
+  // points" leaves for the Video tab, and Back mounts the tab again on the
+  // lightbox's URL, which names neither the wall's player nor its collection.
+  const wallMemory = useWallMemory();
+  const remembered = wallMemory?.memory ?? null;
+  const remember = wallMemory?.remember;
+  // Otherwise a hard load of a saved view's link, or of a "Create view"
+  // draft, opens over Saved, as a click from there does.
   const [wallCollection, setWallCollection] = useState<WallCollection>(
-    state.cut !== null && state.viewId !== null && !state.draft
-      ? "saved"
-      : "default",
+    () =>
+      remembered?.collection ??
+      (state.cut !== null && (state.viewId !== null || state.draft)
+        ? "saved"
+        : "default"),
   );
   const { meta, actions } = useMatchReport();
   const points = useVizPoints(useMatchData());
@@ -82,27 +92,55 @@ function ShotsTabBody() {
   // belongs to the opened card (and its You | Opponent switch), so the wall
   // keeps the player it showed when the card opened, and closing goes back
   // to it.
-  const [wallPlayer, setWallPlayer] = useState<PlayerFilter>(
-    state.cut === null ? state.filters.player : "you",
+  const [wallPlayer, setWallPlayer] = useState<PlayerFilter>(() =>
+    state.cut === null ? state.filters.player : (remembered?.player ?? "you"),
   );
   if (state.cut === null && state.filters.player !== wallPlayer) {
     setWallPlayer(state.filters.player);
   }
+  useEffect(() => {
+    remember?.({ player: wallPlayer, collection: wallCollection });
+  }, [remember, wallPlayer, wallCollection]);
 
   // One lightbox per OPENING — keyed on that, never on the live `viewId`:
   // editing a filter, switching You | Opponent or saving a view all rewrite
   // `viewId`, and a remount there would close the Filters popover, drop the
   // legend and Statistics picks, the pane and the zoom, and lose the focus
   // return. The collection the card opened from is fixed at the same moment
-  // (a saved view over Saved, a default card over Default), so closing an
-  // edited saved view still lands on Saved. A render-phase update on the
-  // closed → open edge; no effect.
+  // (a saved view or a draft over Saved, a default card over Default), so
+  // closing an edited saved view still lands on Saved. A render-phase update
+  // on the closed → open edge; no effect.
   const isOpen = state.cut !== null;
   const [opening, setOpening] = useState({ count: 0, open: isOpen });
   if (opening.open !== isOpen) {
     setOpening({ count: opening.count + (isOpen ? 1 : 0), open: isOpen });
-    if (isOpen && !state.draft)
-      setWallCollection(state.viewId ? "saved" : "default");
+    if (isOpen)
+      setWallCollection(
+        state.viewId !== null || state.draft ? "saved" : "default",
+      );
+  }
+
+  // Back/Forward from one open saved view to another is a new opening too:
+  // the pane, zoom, selection and picks belong to the view they were made
+  // on. Only a navigation the store did not make counts (`navigation`), and
+  // only when it lands a different saved view — an edit's own `viewId`
+  // rewrite never remounts.
+  const [visit, setVisit] = useState({
+    navigation,
+    viewId: state.viewId,
+    count: 0,
+  });
+  if (visit.navigation !== navigation || visit.viewId !== state.viewId) {
+    const landedOtherView =
+      visit.navigation !== navigation &&
+      isOpen &&
+      state.viewId !== null &&
+      state.viewId !== visit.viewId;
+    setVisit({
+      navigation,
+      viewId: state.viewId,
+      count: visit.count + (landedOtherView ? 1 : 0),
+    });
   }
 
   // Before anything else, so no URL can reach an empty court.
@@ -135,7 +173,7 @@ function ShotsTabBody() {
       />
       {lightboxOpen && (
         <VizLightbox
-          key={opening.count}
+          key={`${opening.count}:${visit.count}`}
           wallPlayer={wallPlayer}
           onWatchPoints={actions.watchPointSet}
         />

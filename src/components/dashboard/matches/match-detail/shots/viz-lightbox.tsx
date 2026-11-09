@@ -158,6 +158,8 @@ export function VizLightbox({
   const [activeMarkId, setActiveMarkId] = useState<string | null>(null);
   const [focusedMarkId, setFocusedMarkId] = useState<string | null>(null);
   const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
+  // The saved view this lightbox opened on (see `baseView`).
+  const [openedViewId] = useState(state.viewId);
   const [rovingMarkId, setRovingMarkId] = useState<string | null>(null);
   const readoutLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -306,6 +308,17 @@ export function VizLightbox({
     (dots ?? []).some((dot) => dot.id === selectedMarkId)
       ? selectedMarkId
       : null;
+  // A selection whose mark has left the court (a filter, a legend or
+  // Statistics pick, a player switch) is DROPPED, not just hidden: clearing
+  // the filter must not bring the ring back, nor make the next Esc spend
+  // itself deselecting a point nobody can see. Render-phase, as the stale
+  // picks above; only once the marks are known.
+  if (
+    selectedMarkId !== null &&
+    dots !== undefined &&
+    visibleSelectedMarkId === null
+  )
+    setSelectedMarkId(null);
 
   // A row selects its point's mark on the court (the first mark that stands
   // for that point), so the row and the mark light together.
@@ -327,22 +340,106 @@ export function VizLightbox({
         null)
       : null;
 
-  // The list's denominator: the widest set any filter here can reach — the
-  // cut's points for this player with every filter off ("12 / 52", where
-  // 52 is every serve point). Nothing a reader loosens can pass it.
-  const playerOnCourt = state.filters.player;
+  const savedView =
+    state.viewId !== null
+      ? (meta.savedViews.find((v) => v.id === state.viewId) ?? null)
+      : null;
+  // The saved view this lightbox opened on stays its baseline after an edit
+  // rewrites `viewId` to null (a new lightbox per opening, and per
+  // Back/Forward onto another view, so this never goes stale); a view saved
+  // from here takes over.
+  const baseView =
+    savedView ??
+    (openedViewId !== null
+      ? (meta.savedViews.find((v) => v.id === openedViewId) ?? null)
+      : null);
+  const defaultCut = defaultCutsFor(errorsJudgedIn(matchCtx)).find(
+    (c) => c.cut === state.cut,
+  );
+  // The court's baseline: a saved view's own filters, else the wall card's
+  // ("First serves" is first serves), always for the player on court. While
+  // the court still holds them the view's or card's name is the title and
+  // they are not repeated in the strip or counted as applied; loosen one
+  // (Serve: Any) and the title falls back to the cut's own name, so title,
+  // strip and Watch label always describe the live filters.
+  const baseline: {
+    name: string;
+    filters: VizFilters;
+    keys: (keyof VizFilters)[];
+    view: { id: string; player: VizFilters["player"] } | null;
+  } | null =
+    baseView !== null && baseView.cut === state.cut
+      ? (() => {
+          const filters: VizFilters = {
+            ...EMPTY_VIZ_FILTERS,
+            ...baseView.filters,
+            player: state.filters.player,
+          };
+          return {
+            name: baseView.name,
+            filters,
+            keys: (
+              Object.keys(EMPTY_VIZ_FILTERS) as (keyof VizFilters)[]
+            ).filter(
+              (key) =>
+                key !== "player" &&
+                !sameFilterValue(key, filters, EMPTY_VIZ_FILTERS),
+            ),
+            view: {
+              id: baseView.id,
+              player: baseView.filters.player ?? EMPTY_VIZ_FILTERS.player,
+            },
+          };
+        })()
+      : defaultCut && baseView === null
+        ? {
+            name: defaultCut.name,
+            filters: {
+              ...EMPTY_VIZ_FILTERS,
+              ...defaultCut.filters,
+              player: state.filters.player,
+            },
+            keys: Object.keys(defaultCut.filters) as (keyof VizFilters)[],
+            view: null,
+          }
+        : null;
+  const cardFilters: VizFilters | null = baseline?.filters ?? null;
+  const cardKeys = baseline?.keys ?? [];
+  const onCard =
+    cardFilters !== null &&
+    cardKeys.every((key) => sameFilterValue(key, state.filters, cardFilters));
+  // The list's denominator. On the baseline it is the view's or card's own
+  // points (an unfiltered "First serves" reads 40 / 40, the strip naming
+  // anything narrower); off it — a loosened card, a link — it is the widest
+  // set, the cut for this player with no filters, and the strip names every
+  // filter in force. Either way N never passes M.
+  const denominatorFilters: VizFilters =
+    onCard && cardFilters !== null
+      ? cardFilters
+      : { ...EMPTY_VIZ_FILTERS, player: state.filters.player };
   const allPointsBehind = useMemo(() => {
     if (cut === null) return [];
     const all = computeViz(
       points,
       cut,
-      { ...EMPTY_VIZ_FILTERS, player: playerOnCourt },
+      denominatorFilters,
       subjectIsPlayer1,
       "scatter",
       matchCtx,
     );
     return pointsBehind(cut, all.dots, points);
-  }, [points, cut, playerOnCourt, subjectIsPlayer1, matchCtx]);
+    // `denominatorFilters` is rebuilt every render; its content is keyed by
+    // these.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    points,
+    cut,
+    onCard,
+    baseView,
+    state.filters.player,
+    subjectIsPlayer1,
+    matchCtx,
+  ]);
 
   /* ── Band editor (moved from the fullscreen viewer) ───────────────────── */
 
@@ -567,36 +664,11 @@ export function VizLightbox({
 
   /* ── Words ────────────────────────────────────────────────────────────── */
 
-  const savedView =
-    state.viewId !== null
-      ? (meta.savedViews.find((v) => v.id === state.viewId) ?? null)
-      : null;
-  const defaultCut = defaultCutsFor(errorsJudgedIn(matchCtx)).find(
-    (c) => c.cut === cut,
-  );
-  // The wall card's own filters, as `VizFilters` — "First serves" is first
-  // serves. While the court still holds them the card's name is the title
-  // and they are not repeated in the strip; loosen one (Serve: Any) and the
-  // title falls back to the cut's own name, so title, strip and Watch label
-  // always describe the live filters.
-  const cardFilters: VizFilters | null = defaultCut
-    ? {
-        ...EMPTY_VIZ_FILTERS,
-        ...defaultCut.filters,
-        player: state.filters.player,
-      }
-    : null;
-  const cardKeys = defaultCut
-    ? (Object.keys(defaultCut.filters) as (keyof VizFilters)[])
-    : [];
-  const onCard =
-    cardFilters !== null &&
-    savedView === null &&
-    cardKeys.every((key) => sameFilterValue(key, state.filters, cardFilters));
   const title = isDraft
     ? "New view"
-    : (savedView?.name ??
-      (onCard && defaultCut ? defaultCut.name : CUT_LABEL[cut]));
+    : onCard && baseline !== null
+      ? baseline.name
+      : (savedView?.name ?? CUT_LABEL[cut]);
   const subjectWord = state.filters.player === "you" ? "You" : "Opponent";
   const subtitle = isDraft
     ? "Pick a chart and filters, then save it as a view."
@@ -639,18 +711,29 @@ export function VizLightbox({
     }));
   }
 
-  // What "Clear filter" leaves: the card's own filters while the title
-  // still names the card, otherwise nothing but the player — exactly the
-  // filters the strip names are removed.
+  // What "Clear filter" leaves: a saved view's own filters, always — Clear
+  // goes back to the view; the card's while the title still names the card;
+  // otherwise nothing but the player. Exactly the filters the strip names
+  // are removed.
   const clearTarget: VizFilters =
-    onCard && cardFilters !== null
-      ? cardFilters
+    baseline !== null && (onCard || baseline.view !== null)
+      ? baseline.filters
       : { ...EMPTY_VIZ_FILTERS, player: state.filters.player };
+  // Back on the view's filters for the view's own player, the court IS the
+  // view again: keep its id, so its title, Saved highlight and link return.
+  const clearViewId =
+    baseline?.view != null && baseline.view.player === state.filters.player
+      ? baseline.view.id
+      : null;
 
   function clearFilters() {
     setLegendPick(null);
     setStatPick(null);
-    setState((prev) => ({ ...prev, filters: clearTarget, viewId: null }));
+    setState((prev) => ({
+      ...prev,
+      filters: clearTarget,
+      viewId: clearViewId,
+    }));
   }
 
   function setFilters(next: VizFilters) {
@@ -1098,8 +1181,15 @@ export function VizLightbox({
                       onWatchPoints(
                         playable.map((p) => p.pointNumber),
                         // The Video tab's strip names the set in the lightbox's
-                        // own words: the card, then the strip's sentence.
-                        [title, ...phrases]
+                        // own words: the card, whose points they are when not
+                        // the viewer's own, then the strip's sentence.
+                        [
+                          title,
+                          ...(state.filters.player === "you"
+                            ? []
+                            : [opp.shortName]),
+                          ...phrases,
+                        ]
                           .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
                           .join(" · "),
                       )

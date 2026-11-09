@@ -24,6 +24,13 @@ interface VizStateContextValue {
   state: VizState;
   setState: (next: VizState | ((prev: VizState) => VizState)) => void;
   hrefFor: (next: VizState) => string;
+  /**
+   * Counts the URL changes this store did NOT ask for — Back/Forward, a
+   * pasted or clicked link — so a reader can tell an outside navigation
+   * from its own edits (the lightbox starts over on a different saved view,
+   * never on an edit). Bumped in the same render that sets the new `state`.
+   */
+  navigation: number;
 }
 
 const VizStateContext = createContext<VizStateContextValue | null>(null);
@@ -128,6 +135,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   const [state, setRenderedState] = useState<VizState>(() =>
     parseVizState(searchParams, { errorSplitJudged }),
   );
+  const [navigation, setNavigation] = useState(0);
   const intendedRef = useRef<VizState>(state);
   const ownQueriesRef = useRef<string[]>([query]);
 
@@ -138,6 +146,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
       intended: intendedRef.current,
       match: { errorSplitJudged },
     });
+    if (reconciled.external) setNavigation((n) => n + 1);
     intendedRef.current = reconciled.state;
     ownQueriesRef.current = reconciled.ownQueries;
     setRenderedState(reconciled.state);
@@ -179,8 +188,8 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ state, setState, hrefFor }),
-    [state, setState, hrefFor],
+    () => ({ state, setState, hrefFor, navigation }),
+    [state, setState, hrefFor, navigation],
   );
 
   return <VizStateContext value={value}>{children}</VizStateContext>;

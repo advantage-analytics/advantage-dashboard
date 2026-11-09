@@ -404,14 +404,19 @@ export function reconcileVizState({
   intended: VizState;
   /** Passed straight to `parseVizState` for an external query. */
   match?: VizParseMatch;
-}): { state: VizState; ownQueries: string[] } {
+}): { state: VizState; ownQueries: string[]; external: boolean } {
   const idx = ownQueries.indexOf(urlQuery);
   if (idx !== -1) {
-    return { state: intended, ownQueries: ownQueries.slice(idx + 1) };
+    return {
+      state: intended,
+      ownQueries: ownQueries.slice(idx + 1),
+      external: false,
+    };
   }
   return {
     state: parseVizState(new URLSearchParams(urlQuery), match),
     ownQueries: [urlQuery],
+    external: true,
   };
 }
 
