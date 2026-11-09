@@ -81,6 +81,17 @@ const savedViews = [
     shared: false,
     mine: true,
   },
+  {
+    id: "sv4",
+    name: "Saved errors",
+    cut: "errors" as const,
+    chart: "scatter" as const,
+    // As a judged reading stored it; this match's errors are not judged.
+    filters: { ...EMPTY_VIZ_FILTERS, error: ["unforced"] },
+    order: 3,
+    shared: false,
+    mine: true,
+  },
 ];
 
 /**
@@ -166,6 +177,15 @@ createRoot(document.getElementById("root")!).render(
         readOnly={window.location.search.includes("readonly=1")}
       >
         <main className="mx-auto max-w-[1200px] p-6">
+          {/* As the dashboard shell and the share page mount MobileGate:
+              always present, an `alertdialog` with no `data-state`, only
+              hidden from md up. */}
+          <div
+            role="alertdialog"
+            aria-label="Mobile gate"
+            aria-modal="true"
+            className="md:hidden"
+          />
           <RemainderProbe />
           <NestedLayerProbe />
           <ShownTab />

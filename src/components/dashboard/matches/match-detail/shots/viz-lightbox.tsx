@@ -74,6 +74,7 @@ import { CUT_LABEL, legendItemsFor } from "./viz-labels";
 import { isMarkRovingKey } from "./viz-mark-roving";
 import {
   EMPTY_VIZ_FILTERS,
+  collapseErrorFilter,
   computeViz,
   errorsJudgedIn,
   filterKeysFor,
@@ -380,9 +381,17 @@ export function VizLightbox({
   } | null =
     baseView !== null && baseView.cut === state.cut
       ? (() => {
+          // Read as the URL reads it: on a match whose errors are not
+          // judged, a stored Unforced (or Forced) is every error
+          // (`parseVizState`'s `collapseErrorFilter`), so a hard-loaded
+          // view is not mistaken for an edit of itself.
           const filters: VizFilters = {
             ...EMPTY_VIZ_FILTERS,
             ...baseView.filters,
+            error: collapseErrorFilter(
+              baseView.filters.error ?? EMPTY_VIZ_FILTERS.error,
+              errorSplitJudged,
+            ),
             player: state.filters.player,
           };
           return {
@@ -639,11 +648,15 @@ export function VizLightbox({
       if (e.key !== "Escape" || e.defaultPrevented) return;
       const own = contentRef.current;
       const layers = [...document.querySelectorAll<HTMLElement>(LAYERS)].filter(
-        (el) => el !== own,
+        (el) => el !== own && el.dataset.state !== undefined,
       );
+      // Only Radix layers carry `data-state`; anything else matching a
+      // layer role (MobileGate's always-mounted `alertdialog`, FloatMenu's
+      // inner `role="menu"` list) says nothing about what is open, and
+      // reading it as open would leave this listener inert.
       const isOpen = (el: HTMLElement) =>
         ["open", "delayed-open", "instant-open"].includes(
-          el.dataset.state ?? "open",
+          el.dataset.state ?? "",
         );
       // Any layer open above the lightbox keeps the key.
       if (layers.some(isOpen)) return;
@@ -757,6 +770,11 @@ export function VizLightbox({
     setStatPick(null);
     setState((prev) => ({
       ...prev,
+      // Back to a saved view is back to its chart too: the id comes back
+      // with it, and the title, Saved highlight and menu all name the view.
+      ...(baseline?.view != null && baseView !== null
+        ? { chart: baseView.chart }
+        : {}),
       filters: clearTarget,
       viewId: clearViewId,
     }));

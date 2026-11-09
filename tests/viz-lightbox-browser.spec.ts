@@ -898,3 +898,58 @@ test("R4·4 · Esc reaches a nested non-popper layer before the lightbox", async
   await page.keyboard.press("Escape");
   await expect(lightbox).toHaveCount(0);
 });
+
+/* ── Gate fixes (PR #684 review, round 5) ─────────────────────────────── */
+
+test("R5·1 · Esc, Esc closes the Chart menu and then the lightbox, even while the menu is fading out", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "Serve placement" });
+  await dialog.getByRole("button", { name: "Scatter" }).click();
+  await expect(page.getByRole("menuitemradio", { name: /Heat/ })).toBeVisible();
+  // Back to back: the second press lands inside the menu's exit animation.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page).not.toHaveURL(/cut=/);
+});
+
+test("R5·3 · Clear on an edited view puts back its chart too, with its id", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&view=sv1`);
+  const dialog = page.getByRole("dialog", { name: "Saved serve" });
+  await dialog.getByRole("button", { name: "Scatter" }).click();
+  await page.getByRole("menuitemradio", { name: /Heat/ }).click();
+  await expect(page).toHaveURL(/chart=heat/);
+  await dialog.getByRole("button", { name: "Filters" }).click();
+  await page
+    .getByRole("dialog", { name: "Filter the court" })
+    .getByRole("radio", { name: "Deuce" })
+    .click();
+  await page.keyboard.press("Escape");
+  await dialog
+    .locator("[data-viz-filter-strip]")
+    .getByRole("button", { name: "Clear filter" })
+    .click();
+  await expect(page).toHaveURL(/view=sv1/);
+  await expect(page).not.toHaveURL(/chart=heat/);
+  await expect(dialog.getByRole("button", { name: "Scatter" })).toBeVisible();
+});
+
+test("R5·4 · a view stored as Unforced, hard-loaded on an unjudged match, is not read as an edit", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=errors&view=sv4&verr=unforced`);
+  const dialog = page.getByRole("dialog", { name: "Saved errors" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator("[data-viz-filter-strip]")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Filters" })).not.toHaveCSS(
+    "background-color",
+    "rgb(245, 245, 245)",
+  );
+});
