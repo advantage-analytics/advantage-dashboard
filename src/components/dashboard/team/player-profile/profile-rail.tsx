@@ -207,9 +207,13 @@ export function ProfilePlayerBlock({
             </div>
           )}
           {(style.length > 0 || pill) && (
-            <div className="flex min-w-0 items-center gap-2">
+            // Wraps rather than truncates: hand and backhand are the facts
+            // this line exists for, and "Right-handed · Two-handed backhand"
+            // beside a pill is wider than the rail — the pill takes the next
+            // line instead of cutting the facts off.
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               {style.length > 0 && (
-                <span className="min-w-0 truncate text-[12px] text-[var(--ink-600)]">
+                <span className="min-w-0 text-[12px] text-[var(--ink-600)]">
                   {style.join(" · ")}
                 </span>
               )}
