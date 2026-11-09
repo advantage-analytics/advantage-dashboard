@@ -68,10 +68,12 @@ export function ProfileRail({
       <ProfileViewSwitcher />
 
       {/* Quiet blue words on one line, not rows: they leave the page, the
-          tabs above do not. Their left edge is the tab icons' (24px). Each lands on the rows its number counts (Matches hides an unscored match). Matches takes
-          `?rosterPlayer=` (`roster-player-cut.ts`): this player in EITHER
-          seat, by roster id — the list's `?player=` facet reads seat one by
-          name and would miss a match a teammate recorded first. Both take
+          tabs above do not. Their left edge is the tab icons' (24px). Each
+          lands on the rows its number counts (Matches hides an unscored
+          match). Matches takes `?rosterPlayer=` (`roster-player-cut.ts`):
+          this player in EITHER seat, by roster id — the list's `?player=`
+          facet reads seat one by name and would miss a match a teammate
+          recorded first. Both take
           `profile.playerId`, never the URL's id — a claimed player's old
           links carry their login. A count of 0 is plain text: a link to an
           empty list is a door to nothing. */}
