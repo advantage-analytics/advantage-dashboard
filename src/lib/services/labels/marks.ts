@@ -105,6 +105,13 @@ export const LABEL_ONLY_FLAGS = {
    * never say, so it never fires on them.
    */
   LAST_SHOT_UNTRACKED: "last_shot_untracked",
+  /**
+   * A point of a locked game that does not add up (game-boundary.ts
+   * `lockedGameNeeds`) whose last ball, called the other way, would hand the
+   * point to the side the game needs: "Was the last ball out?" after a
+   * boundary drag. Read off the live rows, never the vendor's file.
+   */
+  LAST_BALL_AGAINST_GAME: "last_ball_against_game",
 } as const;
 
 /**
@@ -193,6 +200,7 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_GUESSED]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_SHOT_UNTRACKED]: { tier: "count", scope: "point" },
+  [LABEL_ONLY_FLAGS.LAST_BALL_AGAINST_GAME]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.NET_BY_TRAJECTORY]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS]: { tier: "count", scope: "point" },
   [POINT_FLAGS.ENDING_SUSPECT_LINE]: { tier: "hint", scope: "point" },
@@ -285,6 +293,15 @@ export interface LabelMarkParams {
   last_call_overruled: { vendorCall: "in" | "out" | "net"; eventId: number };
   /** The vendor stroke the point ends on, whose ball was not tracked. */
   last_shot_untracked: { eventId: number };
+  /**
+   * The last ball (`shotId`), the call that would hand the point to the side
+   * its locked game needs (`gameWinner`), and that side.
+   */
+  last_ball_against_game: {
+    shotId: string;
+    call: "in" | "out";
+    gameWinner: LabelSide;
+  };
   net_by_trajectory: NoParams;
   shot_after_point_end: {
     /** The last live stroke that lands out or in the net. */
