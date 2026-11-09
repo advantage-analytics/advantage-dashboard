@@ -158,7 +158,7 @@ export function EventTableSkeleton() {
 /**
  * `ComingSoonPage`'s frame (`coming-soon.tsx`) while it loads: one bar at the
  * `text-display` line height where its `<h1>` lands, nothing invented below
- * it. Used by `team/schedule/loading.tsx` while the schedule is stubbed.
+ * it. Used by `team/schedule/(list)/loading.tsx` while the schedule is stubbed.
  *
  * Deliberately NOT the dashboard root's `loading.tsx` any more. Next
  * prefetches a dynamic route only "down to the first loading boundary", so a

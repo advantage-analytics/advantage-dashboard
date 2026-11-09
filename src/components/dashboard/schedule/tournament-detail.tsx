@@ -2,7 +2,7 @@
 
 /*
  * LIVE — do not mistake this for part of the dormant tree.
- * `app/dashboard/team/schedule/[eventId]/page.tsx` renders it, beside
+ * `app/dashboard/team/schedule/[eventId]/(event)/page.tsx` renders it, beside
  * `dual-detail.tsx`, on the event-table kit (`event-table.tsx`).
  *
  * See `./README.md` for the full live/dormant map.

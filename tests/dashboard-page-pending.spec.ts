@@ -8,7 +8,7 @@ import { createLoader } from "./fixtures/vm-modules";
 
 /**
  * `DashboardPagePending` — `ComingSoonPage`'s frame while it loads
- * (`team/schedule/loading.tsx`). Offline: rendered to static markup and read
+ * (`team/schedule/(list)/loading.tsx`). Offline: rendered to static markup and read
  * as text.
  *
  *   - one `role="status"`, labelled "Loading page"
@@ -45,17 +45,32 @@ test("nothing is interactive, no colour is a hex, nothing spins", () => {
 
 /**
  * Next prefetches a dynamic route only down to its first `loading.tsx`. A
- * boundary that wraps several routes is therefore what every one of them
- * paints first, a round trip before its own skeleton: the dashboard root's
- * lone title bar did that to every page, and `team/loading.tsx` drew Team
- * Home's skeleton over Roster, Ask and the rest. Each route's skeleton must be
- * its first boundary under the shell.
+ * boundary whose folder also holds a deeper route with its own `loading.tsx`
+ * is therefore what that route paints first, a round trip before its own
+ * skeleton: the dashboard root's lone title bar did that to every page,
+ * `team/loading.tsx` drew Team Home over Roster and Ask, and Roster's list
+ * skeleton drew over the player profile. A list page and its detail route
+ * keep their skeletons apart by putting the list in a route group
+ * (`roster/(list)/`, `schedule/[eventId]/(event)/`).
  */
-test("no loading boundary wraps more than one dashboard route", () => {
-  for (const file of [
-    "src/app/dashboard/loading.tsx",
-    "src/app/dashboard/team/loading.tsx",
-  ]) {
-    expect(fs.existsSync(path.join(process.cwd(), file)), file).toBe(false);
-  }
+test("no dashboard loading boundary wraps another route's loading boundary", () => {
+  const root = path.join(process.cwd(), "src/app/dashboard");
+  const boundaries: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) walk(path.join(dir, entry.name));
+      else if (entry.name === "loading.tsx") boundaries.push(dir);
+    }
+  };
+  walk(root);
+
+  const nested = boundaries.flatMap((outer) =>
+    boundaries
+      .filter((inner) => inner.startsWith(outer + path.sep))
+      .map(
+        (inner) =>
+          `${path.relative(root, outer) || "."} wraps ${path.relative(root, inner)}`,
+      ),
+  );
+  expect(nested).toEqual([]);
 });

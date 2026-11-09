@@ -13,7 +13,7 @@ import type { ReactNode } from "react";
  *
  * Unlike the other coming-soon routes, the implementation behind this one is
  * complete and kept. Turning it back on: set this to `true`, delete the stub
- * branch at the top of `schedule/page.tsx`, point `schedule/loading.tsx` back
+ * branch at the top of `schedule/(list)/page.tsx`, point `schedule/(list)/loading.tsx` back
  * at `SchedulePageSkeleton`, and move the nav row back to second — `nav.ts`'s
  * `comingSoon` follows the flag on its own. `tests/nav-icons.spec.ts` fails
  * until the page and the nav row agree, and `tests/schedule-availability.spec.ts`
