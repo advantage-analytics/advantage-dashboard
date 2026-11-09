@@ -8,7 +8,7 @@ import ts from "typescript";
 // at the first data read: a mismatched workspace must redirect before any of
 // its home data is loaded. No credentials or live database writes are needed.
 function homeRoute(
-  route: "(home)" | "team",
+  route: "(home)" | "team/(home)",
   kind: "personal" | "team" | null,
   role = "owner",
 ) {
@@ -69,12 +69,12 @@ test("personal workspace proceeds to its own home data", async () => {
 });
 
 test("Team Home sends a personal workspace back before team reads", async () => {
-  const route = homeRoute("team", "personal");
+  const route = homeRoute("team/(home)", "personal");
   await expect(route.render()).rejects.toThrow("redirect:/dashboard");
   expect(route.dataReads).toEqual([]);
 });
 
-for (const home of ["(home)", "team"] as const) {
+for (const home of ["(home)", "team/(home)"] as const) {
   test(`${home} sends a signed-out request to login before data reads`, async () => {
     const route = homeRoute(home, null);
     await expect(route.render()).rejects.toThrow("redirect:/login");

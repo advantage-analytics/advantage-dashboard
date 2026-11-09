@@ -381,8 +381,8 @@ line and the actions sit on its baseline; counts live in the summary line
 ("6 players · 2 invites pending"), never on pills. A header carries at most
 one primary, its companion `ghost`. Home is the exception: it opens on "Your
 season" at 24px so the first display type is a KPI number (Personal Home
-Recipes). Shipped on `settings/layout.tsx`, `team/page.tsx`,
-`team/roster/page.tsx`, `help/page.tsx` and the opponents pages.
+Recipes). Shipped on `settings/layout.tsx`, `team/(home)/page.tsx`,
+`team/roster/(list)/page.tsx`, `help/page.tsx` and the opponents pages.
 
 ```
 // Title — first in the scroll body, 32px above it

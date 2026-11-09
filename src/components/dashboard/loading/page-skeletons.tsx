@@ -156,12 +156,17 @@ export function EventTableSkeleton() {
 }
 
 /**
- * The dashboard root's `loading.tsx` — the boundary that catches every route
- * with no `loading.tsx` of its own (Ask, Help, Opponents, Statistics, Team
- * Ask, Team Statistics, the settings redirects). The one shape those pages
- * share is `ComingSoonPage`'s frame (`coming-soon.tsx`) and its `<h1
- * className="text-display">`, so that's all this draws — one bar at the
- * `text-display` line height, nothing invented below it.
+ * `ComingSoonPage`'s frame (`coming-soon.tsx`) while it loads: one bar at the
+ * `text-display` line height where its `<h1>` lands, nothing invented below
+ * it. Used by `team/schedule/(list)/loading.tsx` while the schedule is stubbed.
+ *
+ * Deliberately NOT the dashboard root's `loading.tsx` any more. Next
+ * prefetches a dynamic route only "down to the first loading boundary", so a
+ * root boundary made this lone bar the only thing ever prefetched: every
+ * click painted it first, and the route's real skeleton arrived a round trip
+ * later — a title bar, then the skeleton, then the page. Each route's own
+ * `loading.tsx` is now the first boundary under the shell; a route with none
+ * (Help, Opponents, Statistics, the redirects) renders in one step.
  */
 export function DashboardPagePending() {
   return (

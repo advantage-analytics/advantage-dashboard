@@ -57,7 +57,7 @@ const COACH_BUILT_SEATS: Seat[] = [{ role: "owner" }, { role: "coach" }];
 
 /**
  * The Roster page's own count, transcribed from
- * `app/dashboard/team/roster/page.tsx`. Restated here rather than imported,
+ * `app/dashboard/team/roster/(list)/page.tsx`. Restated here rather than imported,
  * because the point of the assertions below is that the two agree — a shared
  * helper would make them agree by construction and prove nothing.
  */

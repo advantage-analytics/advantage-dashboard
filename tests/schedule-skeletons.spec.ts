@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
- * The team schedule's two route skeletons — `schedule/[eventId]/loading.tsx`
+ * The team schedule's two route skeletons — `schedule/[eventId]/(event)/loading.tsx`
  * (`EventTableSkeleton`) and `schedule/single/[matchId]/loading.tsx`
  * (`SingleMatchPending`). Offline: rendered to static markup and read as text
  * — what is asserted is the Carbon/DS contract and the real pages' geometry,
