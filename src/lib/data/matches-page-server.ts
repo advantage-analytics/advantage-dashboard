@@ -129,6 +129,14 @@ export async function withRosterProfiles(
     matches,
     supabase.rpc("program_roster_full", { p_program_id: programId }),
   ]);
+  if (roster.error) {
+    // Degrades to "links nobody" — the list still renders — but a
+    // `?rosterPlayer=` cut then finds no seat, so say why in the logs.
+    console.error("[matches] could not read the roster to resolve players", {
+      programId,
+      error: roster.error.message,
+    });
+  }
   const canonical = canonicalRosterIds((roster.data ?? []) as RosterIdRow[]);
   const profileOf = (id: string | null | undefined) =>
     id ? (canonical.get(id) ?? null) : null;

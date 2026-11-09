@@ -114,8 +114,8 @@ export interface PlayerSeason {
    */
   analyzed: number;
   /**
-   * Every match of theirs the program recorded, analyzed or not — the rail's
-   * "N matches", the same count as `PlayerProfile.matchesPlayed`.
+   * Every match of theirs the program recorded, analyzed or not — the title's
+   * and the rail's "N matches", the same count as `PlayerProfile.matchesPlayed`.
    */
   matchesPlayed: number;
   /**
@@ -337,24 +337,27 @@ export async function loadPlayerSeason(
   const reads = await mapWithConcurrency(
     candidates,
     SEASON_READ_CONCURRENCY,
-    (s) =>
-      Promise.all([
+    async (s) => {
+      const [points, lobKeys] = await Promise.all([
         getMatchPointsFromSupabase(s.match.id, supabase, {
           includeBookmarks: false,
         }),
         isDerived(s.match)
           ? readLobKeys(deps, s.match.id)
           : Promise.resolve(null),
-      ]),
+      ]);
+      // `null` is a failed read, never an empty match (`fetchAllPages`).
+      // Thrown here, inside the pool, so no further match is read after it.
+      if (points === null) {
+        throw new Error(`Could not read the points of match ${s.match.id}`);
+      }
+      return [points, lobKeys] as const;
+    },
   );
 
   const perMatch: SeasonMatch[] = [];
   candidates.forEach(({ match, isPlayer1 }, i) => {
     const [points, lobKeys] = reads[i];
-    // `null` is a failed read, never an empty match (`fetchAllPages`).
-    if (points === null) {
-      throw new Error(`Could not read the points of match ${match.id}`);
-    }
     if (points.length === 0) return;
     perMatch.push({
       matchId: match.id,

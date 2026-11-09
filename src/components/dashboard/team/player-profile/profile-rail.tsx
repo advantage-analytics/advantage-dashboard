@@ -49,7 +49,12 @@ export function ProfileRail({
   isSelf: boolean;
   /** This player's photo, or null to draw initials. */
   photoUrl: string | null;
-  /** Every match of theirs the program recorded. */
+  /**
+   * Every match of theirs the program recorded — the same number as the
+   * title's facts line (`PlayerSeason.matchesPlayed`), so the page shows one
+   * count. The Matches list it links to hides a match with no score
+   * (`transformDbMatch`), so its rows can read a little fewer.
+   */
   matchesCount: number;
   /** Distinct opponents across those matches. */
   opponentsCount: number;
@@ -66,7 +71,7 @@ export function ProfileRail({
       <ProfileViewSwitcher />
 
       {/* Quiet blue words, not rows: they leave the page, the tabs above do
-          not. Each lands on exactly what its number counts. Matches takes
+          not. Each lands on the rows its number counts (Matches hides an unscored match). Matches takes
           `?rosterPlayer=` (`roster-player-cut.ts`): this player in EITHER
           seat, by roster id — the list's `?player=` facet reads seat one by
           name and would miss a match a teammate recorded first. Both take

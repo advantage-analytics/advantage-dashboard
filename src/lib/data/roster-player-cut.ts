@@ -4,7 +4,7 @@ import type { DisplayMatch } from "@/lib/data/matches-list-types";
  * The team Matches list's `?rosterPlayer=<player_id>` cut: every match that
  * names one roster player in EITHER seat — exactly the set the player
  * profile's "N matches" counts (`readPlayerMatchSides`), so the rail's link
- * lands on its own number.
+ * lands on its own number (less any unscored match, which the list hides).
  *
  * The list's Roster facet (`?player=<name>`) cannot do this: it reads
  * `player1` by name, the program's side of an ordinary row, so a match a
