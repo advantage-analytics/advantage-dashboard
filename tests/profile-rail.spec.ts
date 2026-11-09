@@ -99,13 +99,16 @@ test("the rail is the Player summary landmark", () => {
   expect(render()).toContain('aria-label="Player summary"');
 });
 
-test("the player block: name, facts, record with form, hand and backhand", () => {
+test("the player block: name, facts, record with form, and how they play", () => {
   const html = render();
   expect(html).toContain("Maya Chen");
   expect(html).toContain("Junior · Singles 2");
   expect(html).toContain("3–1");
   expect(html).toContain('data-component="FormStrip"');
-  expect(html).toContain("Right-handed · Two-handed backhand");
+  expect(html).toContain("<dt");
+  expect(html).toContain(">Record<");
+  expect(html).toContain(">Plays<");
+  expect(html).toContain("Right · Two-handed");
   // No pill on a teammate's claimed page.
   expect(html).not.toContain(">You<");
   expect(html).not.toContain("Coach-managed");
@@ -118,6 +121,7 @@ test("an unrecorded fact is left out, not drawn as a dash", () => {
   expect(html).not.toContain("Singles");
   expect(html).not.toContain("·");
   expect(html).not.toContain("handed");
+  expect(html).not.toContain(">Plays<");
 });
 
 test("You on the viewer's own page; Coach-managed on an unclaimed teammate's", () => {
