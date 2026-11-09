@@ -339,7 +339,7 @@ async function readAnalyzedMatches(
     // failed read: nothing is cached or served from the cache this request.
     caching === null
       ? Promise.resolve(null)
-      : readPointsVersions(supabase, matchIds),
+      : readPointsVersions(supabase, matchIds, caching.versionsState),
   ]);
   const readPoints = cachedPointsReader(caching, versions, (matchId) =>
     getMatchPointsFromSupabase(matchId, supabase, {

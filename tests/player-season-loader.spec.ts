@@ -23,6 +23,7 @@ import {
 import {
   BoundedLru,
   pointsWeight,
+  versionsReadState,
   type SeasonPointsCaching,
 } from "@/lib/data/season-points-cache";
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -1065,6 +1066,7 @@ function freshCaching(
   return {
     cache,
     scope: { viewerId: "u-coach", programId: PROGRAM, ...scope },
+    versionsState: versionsReadState(),
   };
 }
 
@@ -1235,6 +1237,30 @@ test("a versions read that fails reads the whole season uncached and caches noth
   }
   expect(pointReadsIn(log)).toHaveLength(4);
   expect(caching.cache.size).toBe(0);
+  // The table is missing: the next request does not ask again.
+  expect(log.some((e) => e.startsWith("match_points_versions."))).toBe(false);
+});
+
+test("two requests for the same season at once read each match's points once", async () => {
+  const caching = freshCaching();
+  const { client, log, sides } = await adaSides(
+    fullTables({ match_points_versions: VERSIONS }),
+  );
+  log.splice(0);
+  const [a, b] = await Promise.all([
+    loadPlayerSeasonCourts(client, sides.own, caching),
+    loadPlayerSeasonCourts(client, sides.own, caching),
+  ]);
+  expect(a).toEqual(b);
+  // m-c has no version, so it is read by each; the three analyzed matches
+  // once between them.
+  expect(pointReadsIn(log)).toEqual([
+    "points.match(m-a)",
+    "points.match(m-b)",
+    "points.match(m-c)",
+    "points.match(m-c)",
+    "points.match(m-d)",
+  ]);
 });
 
 test("a failed points read still throws with caching on, and leaves nothing cached for that match", async () => {

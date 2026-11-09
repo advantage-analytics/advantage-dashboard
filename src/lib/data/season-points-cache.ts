@@ -156,10 +156,8 @@ export class BoundedLru<V> {
 }
 
 /**
- * The weight of one match's points: its points and their shots. A point is a
- * few hundred bytes and a shot about as much again, so 40,000 is a few tens
- * of megabytes per instance — a squad's worth of seasons, a few hundred
- * matches.
+ * The weight of one match's points: its points and their shots. An analysed
+ * match weighs about 1,000 (a few hundred points, a few shots each).
  */
 export function pointsWeight(points: readonly MatchPoint[]): number {
   let weight = points.length;
@@ -167,8 +165,15 @@ export function pointsWeight(points: readonly MatchPoint[]): number {
   return weight;
 }
 
-/** The weight bound: points plus shots held at once, per instance. */
-export const SEASON_POINTS_CACHE_MAX_WEIGHT = 40_000;
+/**
+ * The weight bound: points plus shots held at once, per instance. At about
+ * 1,000 a match, 250,000 is some 250 analysed matches — several full
+ * seasons, so a coach moving between two big players' profiles still hits.
+ * In memory a point (forty-odd fields, its shot picks) and a shot (sixteen)
+ * average under a kilobyte, so the full bound is ~200 MB: a tenth of a
+ * Vercel function's default 2 GB.
+ */
+export const SEASON_POINTS_CACHE_MAX_WEIGHT = 250_000;
 /** How long an entry lives. The version already invalidates a changed
  *  match; the age bound only lets memory go back after a session ends. */
 export const SEASON_POINTS_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -181,26 +186,77 @@ export const seasonPointsCache = new BoundedLru<MatchPoint[]>({
 });
 
 /**
+ * What the versions read remembers between requests, per process: whether
+ * the table is known to be missing (the migration not applied yet) and when
+ * a failure was last logged.
+ */
+export interface VersionsReadState {
+  /** Until when the table counts as missing: no query is sent before then. */
+  absentUntil: number;
+  /** When a failure was last logged. */
+  lastWarnedAt: number;
+  now: () => number;
+}
+
+/** How long a missing table is believed before asking again — applying the
+ *  migration turns the cache on within this, with no deploy. */
+export const VERSIONS_ABSENT_RETRY_MS = 10 * 60 * 1000;
+/** At most one failure warning per this long. */
+export const VERSIONS_WARN_INTERVAL_MS = 10 * 60 * 1000;
+
+export function versionsReadState(
+  now: () => number = Date.now,
+): VersionsReadState {
+  return { absentUntil: 0, lastWarnedAt: -Infinity, now };
+}
+
+/** The process's one state. */
+const processVersionsState: VersionsReadState = versionsReadState();
+
+/** PostgREST's "no such table" (PGRST205, from its schema cache) or
+ *  Postgres's own (42P01). */
+function isMissingTable(error: { code?: string; message?: string }): boolean {
+  return (
+    error.code === "PGRST205" ||
+    error.code === "42P01" ||
+    /does not exist|could not find the table/i.test(error.message ?? "")
+  );
+}
+
+/**
  * The points version of each of `matchIds` the viewer can read, through
- * their own client — `null` when the read failed (the caller then caches
+ * their own client — `null` when there is no answer (the caller then caches
  * nothing). A match missing from the answer has no version the viewer can
  * see and is read uncached.
+ *
+ * Until the migration is applied the table does not exist: the first read
+ * that says so marks it missing for `VERSIONS_ABSENT_RETRY_MS`, and no query
+ * is sent meanwhile. Any failure is logged at most once per
+ * `VERSIONS_WARN_INTERVAL_MS`.
  */
 export async function readPointsVersions(
   supabase: SupabaseClient,
   matchIds: readonly string[],
+  state: VersionsReadState = processVersionsState,
 ): Promise<Map<string, string> | null> {
   const versions = new Map<string, string>();
   if (matchIds.length === 0) return versions;
+  const now = state.now();
+  if (now < state.absentUntil) return null;
   const { data, error } = await supabase
     .from("match_points_versions")
     .select("match_id, version")
     .in("match_id", [...matchIds]);
   if (error) {
-    console.warn(
-      "[season-points-cache] versions unreadable; reading uncached",
-      error.message,
-    );
+    if (isMissingTable(error))
+      state.absentUntil = now + VERSIONS_ABSENT_RETRY_MS;
+    if (now - state.lastWarnedAt >= VERSIONS_WARN_INTERVAL_MS) {
+      state.lastWarnedAt = now;
+      console.warn(
+        "[season-points-cache] versions unreadable; reading uncached",
+        error.message,
+      );
+    }
     return null;
   }
   for (const row of (data ?? []) as {
@@ -227,14 +283,34 @@ export interface SeasonPointsScope {
 export interface SeasonPointsCaching {
   cache: BoundedLru<MatchPoint[]>;
   scope: SeasonPointsScope;
+  /** The versions read's memory; the process's own when absent. */
+  versionsState?: VersionsReadState;
+}
+
+/** Reads in flight, per cache and key: a second miss for a key already
+ *  being read waits for that read instead of reading again. */
+const inflightByCache = new WeakMap<
+  BoundedLru<MatchPoint[]>,
+  Map<string, Promise<MatchPoint[] | null>>
+>();
+
+function inflightFor(cache: BoundedLru<MatchPoint[]>) {
+  let inflight = inflightByCache.get(cache);
+  if (!inflight) {
+    inflight = new Map();
+    inflightByCache.set(cache, inflight);
+  }
+  return inflight;
 }
 
 /**
  * A points reader for one request: `read(matchId)` answers from the cache
- * when this viewer already read that match at its current version, else
- * calls `load` and stores a successful, non-empty answer. A `null` (a failed
- * read) is never stored — the loader throws on it. With no caching, or no
- * version for the match, every call is `load`.
+ * when this viewer already read that match at its current version, joins a
+ * read of the same key already in flight, else calls `load` and stores a
+ * successful, non-empty answer. A `null` (a failed read) or a rejection is
+ * never stored — the in-flight entry goes either way, and every waiter gets
+ * the failure, which the loader throws on. With no caching, or no version
+ * for the match, every call is `load`.
  */
 export function cachedPointsReader(
   caching: SeasonPointsCaching | null,
@@ -248,8 +324,19 @@ export function cachedPointsReader(
     const key = seasonPointsCacheKey({ ...scope, matchId, version });
     const hit = cache.get(key);
     if (hit !== undefined) return hit;
-    const points = await load(matchId);
-    if (points !== null && points.length > 0) cache.set(key, points);
-    return points;
+    const inflight = inflightFor(cache);
+    const running = inflight.get(key);
+    if (running !== undefined) return running;
+    const read = (async () => {
+      try {
+        const points = await load(matchId);
+        if (points !== null && points.length > 0) cache.set(key, points);
+        return points;
+      } finally {
+        inflight.delete(key);
+      }
+    })();
+    inflight.set(key, read);
+    return read;
   };
 }

@@ -11,9 +11,12 @@
 -- triggers, the way ask_point_facts is kept (20261015090038).
 --
 -- Read by the signed-in viewer through their own client, under RLS: a row is
--- visible exactly when its match is (the policy defers to matches' own RLS),
--- so a viewer who cannot read a match gets no version for it and the app
--- reads that match uncached. Written only by the trigger functions below.
+-- visible exactly when the match's POINTS are — the policy is the points
+-- table's own (`match_id in (select visible_match_ids())`), not matches',
+-- which reads "created or played in" and could differ — so a cache hit is
+-- never looser than the points read it stands in for. A viewer who cannot
+-- read a match's points gets no version for it and the app reads that match
+-- uncached. Written only by the trigger functions below.
 --
 -- The app fails open: until this migration is applied, the version read
 -- errors and every season is read uncached, as before.
@@ -39,12 +42,15 @@ create policy match_points_versions_select_with_match
   on public.match_points_versions
   for select
   to authenticated
-  using (exists (select 1 from public.matches m where m.id = match_id));
+  using (match_id in (select public.visible_match_ids()));
 
 -- ── 2. The bump ─────────────────────────────────────────────────────────────
 --
 -- SECURITY DEFINER so that whoever writes points or shots — service_role, or
--- a user through RLS — moves a counter nobody else may write. The exists()
+-- a user through RLS — moves a counter nobody else may write. Rows are
+-- written in match_id order, so two statements touching several matches
+-- each lock their version rows in the same order and cannot deadlock on
+-- them. The exists()
 -- skips a match that is gone (a cascaded delete from matches: its points'
 -- delete fires after the match row is deleted, and the version row goes with
 -- it by its own cascade).
@@ -63,6 +69,7 @@ as $$
     from unnest(match_ids) as u (match_id)
    where u.match_id is not null
      and exists (select 1 from public.matches m where m.id = u.match_id)
+   order by u.match_id
   on conflict (match_id) do update
     set version = v.version + 1,
         changed_at = now();

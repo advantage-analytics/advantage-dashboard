@@ -25,10 +25,15 @@ async function fixture() {
   await db.exec(`
     create role anon; create role authenticated; create role service_role;
     create table matches(id uuid primary key, visible boolean not null default true);
-    -- matches' own RLS, reduced to a flag: the version policy defers to it.
+    -- matches' own RLS lets this viewer read every match; the POINTS rule
+    -- (live: points' policy over visible_match_ids()) is narrower, reduced
+    -- here to the flag. The version policy must follow the points rule.
     alter table matches enable row level security;
-    create policy matches_visible on matches for select to authenticated using (visible);
+    create policy matches_all on matches for select to authenticated using (true);
     grant select on matches to authenticated;
+    create function public.visible_match_ids() returns setof uuid
+      language sql stable security definer set search_path = ''
+      as $$ select id from public.matches where visible $$;
     create table points(id uuid primary key, match_id uuid not null references matches(id) on delete cascade, point_number int);
     create table shots(id uuid primary key default gen_random_uuid(), point_id uuid not null references points(id) on delete cascade, shot_number int, zone text);
     insert into matches(id) values ('${A}'), ('${B}'), ('${C}');
@@ -114,7 +119,7 @@ test("deleting a match cascades through its points without failing, and drops it
     assert.deepEqual(await versions(db), { [B]: 1 });
   }));
 
-test("a viewer reads a version only for a match they can read, and writes none", () =>
+test("a viewer reads a version only for a match whose points they can read — not merely the match — and writes none", () =>
   withDb(async (db) => {
     await db.exec(`update matches set visible = false where id = '${B}'`);
     await db.exec("set role authenticated");
@@ -140,4 +145,25 @@ test("a viewer reads a version only for a match they can read, and writes none",
     } finally {
       await db.exec("reset role");
     }
+  }));
+
+test("the policy is the points rule, and the bump writes rows in match_id order", async () => {
+  const sql = await readFile(
+    new URL(`../../supabase/migrations/${MIGRATION}`, import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    sql,
+    /using \(match_id in \(select public\.visible_match_ids\(\)\)\)/,
+  );
+  assert.doesNotMatch(sql, /m\.id = match_id\b/);
+  assert.match(sql, /order by u\.match_id\s+on conflict/);
+});
+
+test("one statement over several matches bumps each once", () =>
+  withDb(async (db) => {
+    await db.exec(
+      `update shots set zone = 'x' where point_id in ('${PA1}', '${PB1}')`,
+    );
+    assert.deepEqual(await versions(db), { [A]: 2, [B]: 2 });
   }));
