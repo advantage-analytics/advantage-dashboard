@@ -33,25 +33,34 @@ test("mints inside one window share st/se; every mint keeps the full TTL", () =>
   }
 });
 
-test("two playback mints in a row produce the identical URL with rscc", () => {
+test("playback mints in one window produce the identical URL with rscc", () => {
   const previous = { ...process.env };
+  const realNow = Date.now;
   try {
     process.env.AZURE_STORAGE_ACCOUNT = "devstoreaccount1";
     process.env.AZURE_STORAGE_KEY = Buffer.alloc(32).toString("base64");
     process.env.AZURE_STORAGE_CONTAINER = "playback-cache";
     delete process.env.AZURE_STORAGE_ENDPOINT;
 
-    const first = mintPlaybackSas({ blobName: "m/playback.mp4" });
-    const second = mintPlaybackSas({ blobName: "m/playback.mp4" });
-    // Same window unless the test straddles a boundary, which it cannot
-    // in practice (two synchronous calls); compare only when it did not.
-    if (first.expiresAt.getTime() === second.expiresAt.getTime()) {
-      expect(second.playbackUrl).toBe(first.playbackUrl);
-    }
+    // Fixed clock: two loads an hour apart inside one window, then one in the
+    // next window. A clock-derived st/se would fail the first comparison.
+    const boundary = Date.UTC(2026, 10, 9, 12);
+    const at = (ms: number) => {
+      Date.now = () => ms;
+      return mintPlaybackSas({ blobName: "m/playback.mp4" });
+    };
+    const first = at(boundary - 5 * 60 * 60 * 1000);
+    const second = at(boundary - 4 * 60 * 60 * 1000);
+    const next = at(boundary + 60 * 1000);
+    expect(second.playbackUrl).toBe(first.playbackUrl);
+    expect(next.playbackUrl).not.toBe(first.playbackUrl);
+    expect(next.expiresAt.getTime()).toBeGreaterThan(first.expiresAt.getTime());
+
     const url = new URL(first.playbackUrl);
     expect(url.searchParams.get("sp")).toBe("r");
     expect(url.searchParams.get("rscc")).toBe(PLAYBACK_CACHE_CONTROL);
   } finally {
+    Date.now = realNow;
     for (const key of Object.keys(process.env))
       if (!(key in previous)) delete process.env[key];
     Object.assign(process.env, previous);
