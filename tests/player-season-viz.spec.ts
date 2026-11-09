@@ -980,18 +980,25 @@ test.describe("the Visualizations view, rendered", () => {
     );
 
     // Before the shell's chunk has loaded: the frame drawn by hand — a
-    // status named for the cut, bars from the primitive, a real Close, and
-    // no dialog (nothing takes focus from the card). The DS loading
-    // contract (`empty-and-loading.md`): one status, hidden bars, a token,
-    // no spinner; the shell's own geometry, no court, no enter fade.
+    // modal named for the cut, a status inside it, bars from the primitive,
+    // a real Close. The DS loading contract (`empty-and-loading.md`): one
+    // status, hidden bars, a token, no spinner; the shell's own geometry,
+    // no court, no enter fade.
     const frame = first.firstPass.slice(
       first.firstPass.indexOf('data-testid="lightbox-chunk-pending"'),
     );
     expect(frame.length).toBeGreaterThan(0);
     expect(first.firstPass).not.toContain("season-shell");
     expect(frame.split('role="status"').length - 1).toBe(1);
-    expect(frame).toContain('aria-label="Loading Serve placement"');
-    expect(frame).not.toContain('role="dialog"');
+    // A modal in its own right while it shows: named for the cut, focusable
+    // so it can take focus on mount (and give it back to the card as it
+    // leaves), Tab kept inside by its own rule.
+    expect(first.firstPass).toMatch(
+      /<div[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-label="Loading Serve placement"[^>]*tabindex="-1"[^>]*data-testid="lightbox-chunk-pending"/,
+    );
+    expect(
+      first.firstPass.split('aria-label="Loading Serve placement"').length - 1,
+    ).toBe(2);
     expect(frame).toContain("data-pending-bar");
     expect(frame).toContain("motion-safe:animate-pulse");
     expect(frame).toContain('aria-hidden="true"');
@@ -1055,6 +1062,68 @@ test.describe("the Visualizations view, rendered", () => {
     expect(landed.shellProps).toHaveLength(1);
     expect(landed.shellProps[0].pending).toBe(false);
     expect(landed.shellProps[0].result).toBe(serve.result);
+  });
+
+  test("an answer from before this opening is never shown: the serve card closed with a filter on and reopened before the close landed is pending, not the filtered court", async () => {
+    const cards = buildSeasonCards(JUDGED, "you", BANDS);
+    // The server's last answer: the serve card with Zone T ticked.
+    const filtered = buildSeasonLightbox(
+      JUDGED,
+      parseVizState(new URLSearchParams("cut=serve&ball=first&zone=t"), {
+        errorSplitJudged: true,
+      }),
+      BANDS,
+      NAMES,
+    )!;
+    expect(filtered.filters.zone).toEqual(["t"]);
+
+    // Reopened on the card's own filters: the cut and chart match, the
+    // filters do not — pending, never the filtered court as the default.
+    const reopened = await renderView(
+      { analyzed: 2, side: "you", cards, lightbox: filtered },
+      "tab=visualizations&cut=serve&ball=first",
+    );
+    expect(reopened.shellProps).toHaveLength(1);
+    expect(reopened.shellProps[0].pending).toBe(true);
+    expect(reopened.shellProps[0].result.dots).toEqual([]);
+    expect(reopened.shellProps[0].filterPhrases).toEqual([]);
+
+    // The same answer where it was asked for — a hard load of the filtered
+    // link — is the court, filters and all: the store's parse of the URL
+    // and the server's echo serialise alike.
+    const asked = await renderView(
+      { analyzed: 2, side: "you", cards, lightbox: filtered },
+      "tab=visualizations&cut=serve&ball=first&zone=t",
+    );
+    expect(asked.shellProps).toHaveLength(1);
+    expect(asked.shellProps[0].pending).toBe(false);
+    expect(asked.shellProps[0].result).toBe(filtered.result);
+    expect(asked.shellProps[0].filterPhrases).toEqual(filtered.filterPhrases);
+
+    // And the wall's own switch inside the card is part of the ask: a court
+    // answered for the other player's filters is not this card's.
+    const theirs = buildSeasonLightbox(
+      JUDGED,
+      parseVizState(
+        new URLSearchParams("cut=serve&ball=first&player=opponent"),
+        { errorSplitJudged: true },
+      ),
+      BANDS,
+      NAMES,
+    )!;
+    const mine = await renderView(
+      { analyzed: 2, side: "you", cards, lightbox: theirs },
+      "tab=visualizations&cut=serve&ball=first",
+    );
+    expect(mine.shellProps[0].pending).toBe(true);
+
+    // The rule, in the source: every court named since the card opened is
+    // remembered, and the answer must echo one of them.
+    const source = readFileSync(CONTAINER, "utf8");
+    expect(source).toMatch(
+      /opening\.asked\.has\(courtSignature\(data\.cut, data\.chart, data\.filters\)\)/,
+    );
+    expect(source).toMatch(/asked: new Set\(\[\.\.\.opening\.asked, asked\]\)/);
   });
 
   test("a season with nothing analyzed opens nothing: a ?cut= in a stale link draws neither frame", async () => {
@@ -1161,14 +1230,24 @@ test.describe("the Visualizations view, rendered", () => {
 
     // The view's wiring: the wall's player is the view's own state, handed
     // to the wall's chip and to the lightbox's close alike, and the wall
-    // never reads the store's player while a card is open.
+    // never reads the store's player while a card is open. The cards it
+    // shows are the last ones computed for that player (`shown`), so a
+    // switch inside a card never changes the wall under the scrim — the
+    // opener card stays for focus to return to — and the server's cards
+    // for another side only mark the wall busy.
     const source = readFileSync(VIEW, "utf8");
     expect(source).toContain("useState<PlayerFilter>");
-    expect(source).toContain("player={wallPlayer}");
-    expect(source).toContain("wallPlayer={wallPlayer}");
+    expect(source).toContain("player={player}");
+    expect(source).toContain("wallPlayer={player}");
     expect(source).toMatch(
-      /state\.cut === null && state\.filters\.player !== wallPlayer/,
+      /const player =\s*state\.cut === null \? state\.filters\.player : wallPlayer;/,
     );
+    expect(source).toMatch(
+      /if \(side === player && \(shown\.cards !== cards \|\| shown\.side !== side\)\)/,
+    );
+    expect(source).toContain("cards={shown.cards}");
+    expect(source).toContain("cardsSide={shown.side}");
+    expect(source).toContain("busy={analyzed > 0 && side !== player}");
   });
 
   test("the store reads ?verr= by the season's rule, as the server does: on an unjudged season Unforced opens on every error in the browser too", async () => {
@@ -1236,8 +1315,18 @@ test.describe("the Visualizations view, rendered", () => {
     // share the mount, another card gets another.
     expect(source).not.toMatch(/^import[^;]*viz-lightbox-shell"/m);
     expect(source).toMatch(
-      /lazy\(\(\)\s*=>\s*import\(\s*"@\/components\/dashboard\/matches\/match-detail\/shots\/viz-lightbox-shell"/,
+      /function loadShell[\s\S]*?import\(\s*"@\/components\/dashboard\/matches\/match-detail\/shots\/viz-lightbox-shell"/,
     );
+    expect(source).toMatch(/let LazyShell[\s\S]*?=\s*lazy\(loadShell\)/);
+    // A failed chunk forgets itself: the cached import and the lazy
+    // component that remembers the rejection are both dropped, so the
+    // boundary's retry asks for the chunk again.
+    expect(source).toMatch(
+      /shellChunk = null;\s*LazyShell = lazy\(loadShell\);\s*throw error;/,
+    );
+    expect(source).toContain("const Shell = LazyShell;");
+    // Not `next/dynamic` anywhere it is `React.lazy`.
+    expect(source).not.toMatch(/\bdynamic\(/);
     expect(source).toMatch(/key=\{`\$\{cut\}:\$\{state\.chart\}`\}/);
     expect(source).toContain("pending={pending}");
     expect(source).toContain("appear={opening.shellReady}");

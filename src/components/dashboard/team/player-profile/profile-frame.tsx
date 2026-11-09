@@ -121,12 +121,13 @@ export function ProfileTitle() {
  * outlives the switch away from it.
  *
  * The switch is client-side (native history, no server render), and this
- * decides which rendered body shows. A Statistics request renders both
- * bodies, so the switch to Visualizations costs nothing; a Visualizations
- * request (`?tab=visualizations`, every viz click) renders only its own and
- * puts `ProfileStatisticsDeferred` in the Statistics slot, which asks the
- * server for the rest the moment it shows — `page.tsx`, "What a
- * Visualizations request skips".
+ * decides which rendered body shows. The page renders ONE body per request
+ * — the Statistics body on a Statistics request (the default URL), the
+ * Visualizations body on `?tab=visualizations` — and the other view's slot
+ * holds its stand-in (`profile-body-deferred.tsx`), which shows nothing
+ * while the rendered view is up and, the moment its own view is, draws that
+ * view's skeleton and asks the server for the page again — `page.tsx`,
+ * "One body per request".
  */
 export function ProfileViewWhen({
   view,

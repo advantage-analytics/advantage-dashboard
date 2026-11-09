@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
@@ -26,12 +26,15 @@ import { PendingBar, PendingRegion } from "./pending";
  * mounted when the court lands, so the opener's focus return, the scrim
  * and the reader's place are one opening's.
  *
- * `LightboxChunkPending` is the fourth: the same frame drawn by hand, with
- * no dialog semantics, for the moment before the shell's chunk has loaded
- * (`season-viz-lightbox.tsx`, once per session). It takes no focus — the
- * clicked card keeps it, which is what the shell records as the opener when
- * it mounts a beat later — so it is a status, not a dialog; Esc and Close
- * still reach `onClose`, so a slow network never traps a reader.
+ * `LightboxChunkPending` is the fourth: the same frame drawn by hand for the
+ * moment before the shell's chunk has loaded (`season-viz-lightbox.tsx`,
+ * once per session). A modal dialog in its own right, since a scrim that
+ * Tab can walk behind is not one: it takes focus on mount and keeps Tab
+ * inside (Close is its one control), and as it leaves — for the shell, or
+ * on Esc — it hands focus back to the element that had it, the clicked
+ * card, which is what the shell then records as its opener. Esc closes it
+ * unless a Radix layer is open above it (a header menu, a tooltip), which
+ * keeps the key, as the shell's own rule has it.
  *
  * The title is a bar, not the cut's name: the shell titles the card's own
  * name ("First serves") while the court holds the card's filters and the
@@ -112,11 +115,16 @@ export function LightboxBodyPending({ label }: { label: string }) {
   );
 }
 
+/** The Radix layers that take Esc before this frame, and how they say they
+ *  are open — `VizLightboxShell`'s own rule. */
+const LAYERS =
+  '[data-radix-popper-content-wrapper] > *, [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+const OPEN_STATES = ["open", "delayed-open", "instant-open"];
+
 /**
- * The frame before the shell's chunk has loaded. Not a dialog (see above):
- * nothing moves focus, nothing is trapped, and the scrim does not fade in —
- * the shell takes its place in the same spot without a fade of its own
- * (`appear={false}`), so the hand-off is still.
+ * The frame before the shell's chunk has loaded (see above). The scrim does
+ * not fade in — the shell takes its place in the same spot without a fade
+ * of its own (`appear={false}`), so the hand-off is still.
  */
 export function LightboxChunkPending({
   label,
@@ -125,9 +133,39 @@ export function LightboxChunkPending({
   label: string;
   onClose: () => void;
 }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Focus: taken on mount, kept inside while shown, given back as it leaves
+  // to whatever had it — the clicked card.
+  useEffect(() => {
+    const opener =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    boxRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (opener?.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.defaultPrevented) return;
+      if (event.key === "Tab") {
+        // Close is the one control: Tab and Shift+Tab both land on it.
+        event.preventDefault();
+        closeRef.current?.focus();
+        return;
+      }
+      if (event.key !== "Escape") return;
+      const own = boxRef.current;
+      const layerOpen = [
+        ...document.querySelectorAll<HTMLElement>(LAYERS),
+      ].some(
+        (el) => el !== own && OPEN_STATES.includes(el.dataset.state ?? ""),
+      );
+      if (layerOpen) return;
       event.preventDefault();
       onClose();
     };
@@ -138,7 +176,15 @@ export function LightboxChunkPending({
   return createPortal(
     <>
       <div aria-hidden="true" className={LIGHTBOX_OVERLAY_CLASS} />
-      <div data-testid="lightbox-chunk-pending" className={LIGHTBOX_BOX_CLASS}>
+      <div
+        ref={boxRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Loading ${label}`}
+        tabIndex={-1}
+        data-testid="lightbox-chunk-pending"
+        className={LIGHTBOX_BOX_CLASS}
+      >
         <TooltipProvider>
           <div className="flex items-start gap-2.5 px-6 pt-6 pb-5">
             <div aria-hidden="true" className="flex min-w-0 flex-col gap-1">
@@ -148,8 +194,16 @@ export function LightboxChunkPending({
               <LightboxSubtitlePending />
             </div>
             <span className="flex-1" />
-            <ChromeTooltip label="Close" shortcut="Esc" align="end">
+            {/* Close's tooltip opens when Tab lands on it; an Esc then is the
+                tooltip's first, and it hands it on, as the shell's does. */}
+            <ChromeTooltip
+              label="Close"
+              shortcut="Esc"
+              align="end"
+              onEscapeKeyDown={onClose}
+            >
               <button
+                ref={closeRef}
                 type="button"
                 aria-label="Close"
                 onClick={onClose}

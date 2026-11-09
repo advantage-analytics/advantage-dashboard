@@ -17,5 +17,10 @@ export function useRouter() {
       window.history.replaceState(null, "", url);
       window.dispatchEvent(new PopStateEvent("popstate"));
     },
+    /** A server re-render of the current URL. A harness that plays the
+     *  server listens for it (`season-viz-harness.tsx`); others ignore it. */
+    refresh() {
+      window.dispatchEvent(new Event("harness-refresh"));
+    },
   };
 }

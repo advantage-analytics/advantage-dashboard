@@ -1,6 +1,12 @@
 "use client";
 
-import { lazy, Suspense, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useMemo,
+  useState,
+  type LazyExoticComponent,
+} from "react";
 
 import { LightboxChunkPending } from "@/components/dashboard/loading/lightbox-pending";
 import { useVizState } from "@/components/dashboard/matches/match-detail/shots/use-viz-state";
@@ -12,7 +18,10 @@ import {
   type PlayerFilter,
   type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
-import { courtFor } from "@/components/dashboard/matches/match-detail/shots/viz-url";
+import {
+  courtFor,
+  vizStateQuery,
+} from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import type { StatPick } from "@/components/dashboard/matches/match-detail/shots/stat-cut";
 import {
   cutNoun,
@@ -40,20 +49,26 @@ import { useMounted } from "@/lib/ui/use-mounted";
  *
  * ── Two clocks ──────────────────────────────────────────────────────────────
  * `state` is the store's optimistic value and `data` is the server's last
- * answer, and between a click and the round trip they disagree. A filter
- * tick is left optimistic on purpose: the ticked option reads as ticked at
- * once and the court follows a moment later, the same court under the same
- * title. The cut (and the chart) is different — the shell draws `data`'s
- * court and words, and `state`'s cut is what the reader asked for, so while
- * they differ the shell would show the LAST card under the next card's
+ * answer, and between a click and the round trip they disagree. The shell
+ * draws `data`'s court and words, so `data` is shown only when it answers
+ * something THIS opening asked for: every court the store has named since
+ * the card opened — cut, chart and filters, serialised as the URL carries
+ * them (`courtSignature`) — is remembered (`opening.asked`), and `data`
+ * must echo one of them. A filter tick inside the card is therefore left
+ * optimistic on purpose: the ticked option reads as ticked at once and the
+ * court follows a moment later, the same court under the same title, since
+ * the court before the tick was asked for too. What is never shown is an
+ * answer from before this opening — the LAST card under the next card's
  * filters (close the serve card, click Errors: the serve court with error
- * filters), or nothing at all on the first open, when there is no `data`
- * yet. So whenever `data` is missing or names another cut or chart than
- * `state`, the shell is rendered `pending` — its own frame with a loading
+ * filters), or the serve card closed with a filter on and reopened before
+ * the close landed (the filtered court and title as the card's default) —
+ * nor nothing at all on the first open, when there is no `data` yet. In
+ * those the shell is rendered `pending` — its own frame with a loading
  * status in place of the words and the court — over an empty court, until
- * the server's answer matches the ask. The SAME shell: one dialog per
- * opening (`key` is the card), so the opener it recorded when the card was
- * clicked is the one focus returns to, and the scrim never fades twice.
+ * the server's answer is one that was asked for. The SAME shell: one
+ * dialog per opening (`key` is the card), so the opener it recorded when
+ * the card was clicked is the one focus returns to, and the scrim never
+ * fades twice.
  *
  * A season with nothing analyzed has nothing to open: the server answers
  * `null` for any `?cut=` there, for good, so a stale link draws no frame.
@@ -70,20 +85,54 @@ import { useMounted } from "@/lib/ui/use-mounted";
  * `next/dynamic`: the frame drawn while the chunk loads needs the cut and
  * close, which `dynamic`'s `loading` slot is handed neither of; the
  * `mounted` gate below is its `ssr: false`. That frame
- * (`LightboxChunkPending`) takes no focus and does not fade in, and the
- * shell that replaces it skips its own fade (`appear`), so the one time per
- * session this happens is still.
+ * (`LightboxChunkPending`) holds focus for the moment and gives it back to
+ * the card as it leaves, so the shell records the card as its opener; it
+ * does not fade in, and the shell that replaces it skips its own fade
+ * (`appear`), so the one time per session this happens is still.
+ *
+ * A chunk that fails to load (a deploy between page and click, a dropped
+ * connection) throws to the page's `WidgetBoundary`, whose Try again
+ * refreshes the page and mounts this again. `React.lazy` remembers a
+ * rejection for the life of its component, so the failure also drops the
+ * cached import and makes a fresh lazy component (`loadShell`): the retry
+ * asks for the chunk again instead of re-throwing until a full reload.
  */
 
+type ShellModule =
+  typeof import("@/components/dashboard/matches/match-detail/shots/viz-lightbox-shell");
+
 let shellLoaded = false;
-const VizLightboxShell = lazy(() =>
-  import("@/components/dashboard/matches/match-detail/shots/viz-lightbox-shell").then(
-    (m) => {
-      shellLoaded = true;
-      return { default: m.VizLightboxShell };
-    },
-  ),
-);
+let shellChunk: Promise<{ default: ShellModule["VizLightboxShell"] }> | null =
+  null;
+let LazyShell: LazyExoticComponent<ShellModule["VizLightboxShell"]> =
+  lazy(loadShell);
+
+function loadShell(): Promise<{ default: ShellModule["VizLightboxShell"] }> {
+  shellChunk ??=
+    import("@/components/dashboard/matches/match-detail/shots/viz-lightbox-shell").then(
+      (m) => {
+        shellLoaded = true;
+        return { default: m.VizLightboxShell };
+      },
+      (error: unknown) => {
+        // Forget the failed import and the lazy component that remembers it,
+        // so the next render — the boundary's retry — asks again.
+        shellChunk = null;
+        LazyShell = lazy(loadShell);
+        throw error;
+      },
+    );
+  return shellChunk;
+}
+
+const EMPTY_PARAMS = new URLSearchParams();
+
+/** One court, as a string: the cut, chart and filters a `VizState` names,
+ *  serialised as the URL would carry them (`vizStateQuery`), so the store's
+ *  filters and the server's echo of them compare as the URL compares. */
+function courtSignature(cut: Cut, chart: Chart, filters: VizFilters): string {
+  return vizStateQuery(EMPTY_PARAMS, { cut, chart, filters, viewId: null });
+}
 
 const noDots = (): Set<string> | null => null;
 
@@ -157,19 +206,32 @@ export function SeasonVizLightbox({
       sets.get(statPickKey(pick)) ?? null;
   }, [statRowDotIds]);
 
-  // Whether the shell's chunk was already here when this opening began. It
-  // was not on the first open of a session: the chunk frame showed first,
-  // and the shell replacing it must not fade in again. Fixed on the
-  // closed → open edge, a render-phase update as `shots-tab.tsx` keeps its
-  // own opening; no effect.
+  // This opening: whether the shell's chunk was already here when it began
+  // (it was not on the first open of a session: the chunk frame showed
+  // first, and the shell replacing it must not fade in again), and every
+  // court the store has named since (see "Two clocks"). Reset on the
+  // closed → open edge, grown as the store moves; render-phase updates as
+  // `shots-tab.tsx` keeps its own opening, no effect.
   const isOpen = state.cut !== null;
+  const asked =
+    state.cut === null
+      ? null
+      : courtSignature(state.cut, state.chart, state.filters);
   const [opening, setOpening] = useState(() => ({
     open: isOpen,
     shellReady: shellLoaded,
+    asked: new Set(asked === null ? [] : [asked]),
   }));
   if (opening.open !== isOpen) {
-    setOpening({ open: isOpen, shellReady: shellLoaded });
+    setOpening({
+      open: isOpen,
+      shellReady: shellLoaded,
+      asked: new Set(asked === null ? [] : [asked]),
+    });
+  } else if (asked !== null && !opening.asked.has(asked)) {
+    setOpening({ ...opening, asked: new Set([...opening.asked, asked]) });
   }
+  const Shell = LazyShell;
 
   // A client-only portal, as the report's: never in the server HTML. Gone
   // the moment the reader closes, before the server's answer lands. Never
@@ -186,10 +248,11 @@ export function SeasonVizLightbox({
     });
   }
 
-  // The server's answer for THIS card, or the empty court while it is on
-  // its way (see "Two clocks").
+  // The server's answer for a court THIS opening asked for, or the empty
+  // court while it is on its way (see "Two clocks").
   const court: SeasonLightboxData =
-    data !== null && data.cut === cut && data.chart === state.chart
+    data !== null &&
+    opening.asked.has(courtSignature(data.cut, data.chart, data.filters))
       ? data
       : emptyCourt(cut, state.chart, state.filters, data);
   const pending = court !== data;
@@ -221,7 +284,7 @@ export function SeasonVizLightbox({
     <Suspense
       fallback={<LightboxChunkPending label={CUT_LABEL[cut]} onClose={close} />}
     >
-      <VizLightboxShell
+      <Shell
         // One dialog per card: the same mount from pending to landed, a new
         // one for another card.
         key={`${cut}:${state.chart}`}

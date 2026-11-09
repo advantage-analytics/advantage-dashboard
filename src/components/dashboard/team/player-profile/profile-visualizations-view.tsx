@@ -126,8 +126,22 @@ function SeasonVizBody({
   const [wallPlayer, setWallPlayer] = useState<PlayerFilter>(() =>
     state.cut === null ? state.filters.player : side,
   );
-  if (state.cut === null && state.filters.player !== wallPlayer) {
-    setWallPlayer(state.filters.player);
+  const player = state.cut === null ? state.filters.player : wallPlayer;
+  if (player !== wallPlayer) setWallPlayer(player);
+
+  // The cards the wall shows: the server's, whenever they are for the
+  // wall's own player; otherwise the last ones that were. The server
+  // computes cards for the URL's player, which is the CARD's while one is
+  // open — so after a You | Opponent switch inside a card the server's
+  // cards are the other side's, and showing them would replace the wall
+  // under the scrim: a slot the other side has nothing for (no serves, no
+  // errors) would leave, taking with it the card the lightbox will return
+  // focus to when it closes. The wall keeps the cards it had instead, and
+  // reads busy (`SeasonWall`) until the server's cards are its player's
+  // again. Same render-phase update.
+  const [shown, setShown] = useState(() => ({ side, cards }));
+  if (side === player && (shown.cards !== cards || shown.side !== side)) {
+    setShown({ side, cards });
   }
 
   return (
@@ -136,13 +150,14 @@ function SeasonVizBody({
         playerName={playerName}
         firstName={firstName}
         analyzed={analyzed}
-        side={side}
-        player={wallPlayer}
-        cards={cards}
+        player={player}
+        cards={shown.cards}
+        cardsSide={shown.side}
+        busy={analyzed > 0 && side !== player}
       />
       <SeasonVizLightbox
         data={lightbox}
-        wallPlayer={wallPlayer}
+        wallPlayer={player}
         analyzed={analyzed}
       />
     </>
@@ -153,18 +168,21 @@ function SeasonWall({
   playerName,
   firstName,
   analyzed,
-  side,
   player,
   cards,
+  cardsSide,
+  busy,
 }: {
   playerName: string;
   firstName: string;
   analyzed: number;
-  /** The side `cards` were computed for. */
-  side: PlayerFilter;
   /** The wall's own You | Opponent — the pressed chip. */
   player: PlayerFilter;
+  /** The cards shown, and the side they were computed for. */
   cards: SeasonCard[];
+  cardsSide: PlayerFilter;
+  /** The server's cards are another side's than the chip's (see below). */
+  busy: boolean;
 }) {
   const { setState, hrefFor } = useVizState();
   const [collection, setCollection] = useState<WallCollection>("default");
@@ -180,11 +198,11 @@ function SeasonWall({
   }
 
   const visible = cards.filter((card) => card.total > 0);
-  const subjectName = side === "you" ? playerName : "Opponents";
+  const subjectName = cardsSide === "you" ? playerName : "Opponents";
 
-  // The cards are another side's than the chip's for one round trip — after
-  // a chip click, or after closing a card whose player was switched inside
-  // it — so until the server's cards are the chip's the wall reads busy:
+  // The server's cards are another side's than the chip's for one round
+  // trip — after a chip click, or after closing a card whose player was
+  // switched inside it — so until they are the chip's the wall reads busy:
   // `aria-busy`, dimmed, and not for opening (a card for the wrong side
   // would open the wrong court: pointer events are off and an activation
   // that still arrives, Enter on a focused card, is swallowed), with one
@@ -192,9 +210,10 @@ function SeasonWall({
   // are: the lightbox returns focus to the card that opened it the moment
   // it closes, and this wall is busy at exactly that moment after a card
   // whose player was switched — an inert card cannot take focus. The cards
-  // stay drawn, since they are real and a moment old, never a skeleton; a
-  // season with nothing analyzed has nothing to recompute.
-  const stale = analyzed > 0 && side !== player;
+  // stay drawn — the last ones for the chip's side (`SeasonVizBody`), real
+  // and a moment old, never a skeleton; a season with nothing analyzed has
+  // nothing to recompute.
+  const stale = busy;
   const arriving =
     player === "you" ? `${playerName}’s courts` : "the opponents’ courts";
 

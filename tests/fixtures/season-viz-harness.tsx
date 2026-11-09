@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useSearchParams } from "next/navigation";
+import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { ProfileVisualizationsView } from "@/components/dashboard/team/player-profile/profile-visualizations-view";
 import { seasonErrorSplitJudged } from "@/lib/data/player-season";
 import {
@@ -22,17 +23,26 @@ import { ASYMMETRIC_SERVES } from "./viz-serve-points";
  * — exactly as the real round trip hands new props to a client tree that
  * keeps its state. `?delay=` (ms, default 400) is read once at load so a
  * spec can hold the "server" back long enough to look at the gap; `?empty=1`
- * makes it a season with nothing analyzed.
+ * makes it a season with nothing analyzed; `?p1serves=1` keeps only the
+ * points the player served, so the opponents have no serve card (and the
+ * player no returns card).
+ *
+ * The view sits in the page's own `WidgetBoundary`, and the navigation
+ * mock's `router.refresh()` re-renders this harness the way a refresh
+ * re-renders the page — new children, so the boundary lets go of an error.
  *
  * `data-landed` names the last URL "the server" answered.
  */
 const LOAD_PARAMS = new URLSearchParams(window.location.search);
+const ALL_POINTS = [...ASYMMETRIC_SERVES, ...RALLY_POINTS];
 const SEASON: SeasonVizMatch[] = LOAD_PARAMS.has("empty")
   ? []
   : [
       {
         matchId: "m-1",
-        points: [...ASYMMETRIC_SERVES, ...RALLY_POINTS],
+        points: LOAD_PARAMS.has("p1serves")
+          ? ALL_POINTS.filter((point) => point.serverIsPlayer1)
+          : ALL_POINTS,
         isPlayer1: true,
         isDerived: false,
         errorSplitJudged: true,
@@ -77,14 +87,28 @@ function Harness() {
     );
     return () => window.clearTimeout(timer);
   }, [query, answer.query]);
+  // `router.refresh()` from the boundary's Try again: the server renders
+  // the page again for the same URL.
+  const [generation, setGeneration] = useState(0);
+  useEffect(() => {
+    const onRefresh = () => setGeneration((n) => n + 1);
+    window.addEventListener("harness-refresh", onRefresh);
+    return () => window.removeEventListener("harness-refresh", onRefresh);
+  }, []);
   return (
-    <main className="p-6" data-landed={answer.query}>
-      <ProfileVisualizationsView
-        playerName="Avery Kim"
-        firstName="Avery"
-        analyzed={SEASON.length}
-        {...answer.props}
-      />
+    <main
+      className="p-6"
+      data-landed={answer.query}
+      data-generation={generation}
+    >
+      <WidgetBoundary label="Visualizations">
+        <ProfileVisualizationsView
+          playerName="Avery Kim"
+          firstName="Avery"
+          analyzed={SEASON.length}
+          {...answer.props}
+        />
+      </WidgetBoundary>
     </main>
   );
 }
