@@ -254,8 +254,9 @@ export const SEASON_READ_CONCURRENCY = 4;
 
 /**
  * `fn` over `items`, at most `limit` running at once, results in input order.
- * A rejection rejects the whole map (the loader fails closed); the workers
- * already running finish on their own and are ignored.
+ * A rejection rejects the whole map (the loader fails closed), and no worker
+ * takes another item after it: the calls already running finish on their own
+ * and are ignored.
  */
 export async function mapWithConcurrency<T, R>(
   items: readonly T[],
@@ -264,10 +265,16 @@ export async function mapWithConcurrency<T, R>(
 ): Promise<R[]> {
   const results = new Array<R>(items.length);
   let next = 0;
+  let failed = false;
   const worker = async () => {
-    while (next < items.length) {
+    while (!failed && next < items.length) {
       const i = next++;
-      results[i] = await fn(items[i], i);
+      try {
+        results[i] = await fn(items[i], i);
+      } catch (err) {
+        failed = true;
+        throw err;
+      }
     }
   };
   await Promise.all(
@@ -292,7 +299,9 @@ export async function loadPlayerSeason(
   // folded at all.
   const matchIds = sides.map((s) => s.match.id);
   const [jobs, statsByKey] = await Promise.all([
-    loadMatchAnalysis(supabase, matchIds),
+    // `strict`: a failed jobs read throws rather than reading as "no jobs",
+    // which would fold in-flight matches and drop withheld-statistics ones.
+    loadMatchAnalysis(supabase, matchIds, { strict: true }),
     readSeatStats(supabase, matchIds),
   ]);
 
@@ -310,7 +319,10 @@ export async function loadPlayerSeason(
     // The report's own gate: in flight, failed, cancelled — not a finished
     // analysis to fold.
     if (matchPageKind(analysis) !== "report") return false;
-    if (jobs.has(match.id)) return true;
+    // A video match is read whether or not this viewer can see its job:
+    // `processing_jobs` is per-creator under RLS, so a teammate's upload
+    // reads job-less here exactly as it does on the report, which draws it.
+    if (jobs.has(match.id) || isDerived(match)) return true;
     return (
       statsByKey.has(statKey(match.id, true)) ||
       statsByKey.has(statKey(match.id, false))

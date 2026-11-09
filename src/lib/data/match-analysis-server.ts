@@ -72,7 +72,7 @@ interface JobRow {
 export async function loadMatchAnalysis(
   supabase: SupabaseClient,
   matchIds: string[],
-  options: { reap?: boolean } = {},
+  options: { reap?: boolean; strict?: boolean } = {},
 ): Promise<Map<string, MatchAnalysis>> {
   const out = new Map<string, MatchAnalysis>();
   if (matchIds.length === 0) return out;
@@ -124,6 +124,11 @@ export async function loadMatchAnalysis(
     .order("created_at", { ascending: false });
 
   if (error) {
+    // `strict` callers fold the result into figures (the player season), where
+    // "no jobs" is a wrong answer, not a degraded one: they fail closed.
+    if (options.strict) {
+      throw new Error(`Could not read processing jobs: ${error.message}`);
+    }
     // Not fatal. A matches list that renders without analysis state is far
     // better than one that does not render, and the mock this replaces could
     // not fail at all — so a failure here must not become a page crash.

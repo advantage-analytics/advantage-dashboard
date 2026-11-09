@@ -610,23 +610,24 @@ test("a seat with points but no stats row is null, not zeroes", async () => {
   expect(winners?.opp.matches).toBe(3);
 });
 
-test("a job-less match that published nothing is never read for points", async () => {
-  // m-c is a video match with no job row the viewer can see and, here, no
-  // stats row for either seat: nothing stored it, so it has no points.
+test("a job-less import that published nothing is never read for points", async () => {
+  // m-a is a SwingVision import: no job, and here no stats row for either
+  // seat. Every import that stores points also publishes the stats row, so it
+  // has none to read. (A video match is read regardless — its job may be a
+  // teammate's, hidden by RLS — see the timeline-upload test.)
   const { client, log, sides } = await adaSides(
     fullTables({
-      match_stats_with_percentages: STATS.filter((r) => r.match_id !== "m-c"),
+      match_stats_with_percentages: STATS.filter((r) => r.match_id !== "m-a"),
     }),
   );
-  const { deps, asked } = fakeBallPaths({});
+  const { deps } = fakeBallPaths({});
   log.length = 0;
 
   const season = await loadPlayerSeason(client, sides.own, deps);
 
-  expect(log).not.toContain("points.match(m-c)");
-  expect(asked).not.toContain("m-c");
+  expect(log).not.toContain("points.match(m-a)");
   expect(season.matchesPlayed).toBe(4);
-  expect(season.perMatch.map((m) => m.matchId)).toEqual(["m-a", "m-b", "m-d"]);
+  expect(season.perMatch.map((m) => m.matchId)).not.toContain("m-a");
 });
 
 test("a match the report would not draw is never read for points or lobs", async () => {
@@ -657,6 +658,34 @@ test("a job with no stats row is still read: a timeline match keeps its points",
   const season = await loadPlayerSeason(client, sides.own, deps);
   expect(log).toContain("points.match(m-b)");
   expect(season.perMatch.map((m) => m.matchId)).toContain("m-b");
+});
+
+test("a video match is read with no visible job and no stats row: a teammate's timeline upload", async () => {
+  // processing_jobs is per-creator under RLS: this viewer sees no job for
+  // m-b (a video match), and it published no statistics. The report still
+  // draws it, so the season reads and folds it.
+  const { client, log, sides } = await adaSides(
+    fullTables({
+      match_stats_with_percentages: STATS.filter((r) => r.match_id !== "m-b"),
+      processing_jobs: [],
+    }),
+  );
+  const { deps } = fakeBallPaths({});
+  log.length = 0;
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+  expect(log).toContain("points.match(m-b)");
+  expect(season.perMatch.map((m) => m.matchId)).toContain("m-b");
+});
+
+test("a jobs read that fails throws rather than reading as no jobs", async () => {
+  const { client, sides } = await adaSides(
+    fullTables({ processing_jobs: new Error("timeout") }),
+  );
+  const { deps } = fakeBallPaths({});
+  await expect(loadPlayerSeason(client, sides.own, deps)).rejects.toThrow(
+    /processing jobs/,
+  );
 });
 
 test("the points reads run a few matches at a time, not the whole season at once", async () => {
@@ -708,6 +737,22 @@ test("mapWithConcurrency never runs more than its limit, and keeps input order",
       return n;
     }),
   ).rejects.toThrow("boom");
+});
+
+test("mapWithConcurrency takes no new item once one has failed", async () => {
+  const started: number[] = [];
+  await expect(
+    mapWithConcurrency([0, 1, 2, 3, 4, 5], 2, async (n) => {
+      started.push(n);
+      await new Promise((r) => setTimeout(r, n === 0 ? 1 : 20));
+      if (n === 0) throw new Error("boom");
+      return n;
+    }),
+  ).rejects.toThrow("boom");
+  // Let any straggler worker run its in-flight item out.
+  await new Promise((r) => setTimeout(r, 60));
+  // 0 fails while 1 is still running; nothing after 1 is started.
+  expect(started).toEqual([0, 1]);
 });
 
 test("the points of every match are read together, without bookmarks", async () => {
