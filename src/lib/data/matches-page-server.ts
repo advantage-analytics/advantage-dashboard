@@ -113,11 +113,12 @@ export async function withViewerSide(
 }
 
 /**
- * Each match's player resolved to their profile on this team's roster, so the
- * team table can link the name. Both of a claimed player's ids fold onto the
- * one profile (`canonicalRosterIds`); an id the roster no longer holds — an
- * archived player, whose matches keep their old id — resolves to null rather
- * than to a link that 404s. A failed roster read links nobody.
+ * Each match's players resolved to their profiles on this team's roster, so
+ * the team table can link the name and `?rosterPlayer=` can find a player in
+ * either seat (`roster-player-cut.ts`). Both of a claimed player's ids fold
+ * onto the one profile (`canonicalRosterIds`); an id the roster no longer
+ * holds — an archived player, whose matches keep their old id — resolves to
+ * null rather than to a link that 404s. A failed roster read links nobody.
  */
 export async function withRosterProfiles(
   supabase: SupabaseClient,
@@ -129,13 +130,11 @@ export async function withRosterProfiles(
     supabase.rpc("program_roster_full", { p_program_id: programId }),
   ]);
   const canonical = canonicalRosterIds((roster.data ?? []) as RosterIdRow[]);
+  const profileOf = (id: string | null | undefined) =>
+    id ? (canonical.get(id) ?? null) : null;
   return list.map((match) => ({
     ...match,
-    player1: {
-      ...match.player1,
-      profileId: match.player1.id
-        ? (canonical.get(match.player1.id) ?? null)
-        : null,
-    },
+    player1: { ...match.player1, profileId: profileOf(match.player1.id) },
+    player2: { ...match.player2, profileId: profileOf(match.player2.id) },
   }));
 }
