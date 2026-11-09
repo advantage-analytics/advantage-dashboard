@@ -100,10 +100,16 @@ export interface SeasonMatchStats {
    * no file — unknown, never "no lobs".
    */
   lobKeys: ReadonlySet<number> | null;
-  /** The player's published statistics for this match. */
-  youStats: H2HStats;
-  /** The opponent's. */
-  oppStats: H2HStats;
+  /**
+   * The player's published statistics for this match, or `null` when the
+   * match has no `match_stats_with_percentages` row for their seat. A missing
+   * row is unknown, never zeroes: that seat sits out of every published row
+   * (count and rate) for this match, while the rows counted from the points
+   * (`fromPoints`) still read them.
+   */
+  youStats: H2HStats | null;
+  /** The opponent's, with the same `null`. */
+  oppStats: H2HStats | null;
 }
 
 /** One analyzed match with the identity the right-column cards name. */
@@ -199,6 +205,26 @@ const emptyPool = (): Pool => ({ sum: 0, made: 0, attempts: 0, n: 0 });
 
 const finite = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
+
+/**
+ * What `buildStatRows` is handed for a seat with no stats row. Every figure
+ * it yields is ignored — `publishedFor` keeps that seat out of the published
+ * rows — so this only gives the call its shape.
+ */
+const NO_PUBLISHED: H2HStats = { fractions: {} };
+
+/**
+ * Whether a row's figure for a seat can be read this match: a row counted
+ * from the points always can; a published one only when the seat has a stats
+ * row. Without this a missing row would fold in as zeroes and drag the
+ * season's averages and pooled rates down.
+ */
+function publishedFor(
+  config: Pick<H2HRowConfig, "fromPoints">,
+  stats: H2HStats | null,
+): stats is H2HStats {
+  return Boolean(config.fromPoints) || stats !== null;
+}
 
 /**
  * The made/attempts behind one side's rate row for one match, read where the
@@ -299,7 +325,11 @@ export function foldSeasonRows(
     const oppDerived = tallySide(m.points, !m.isPlayer1, m.lobKeys);
 
     groups.forEach((group, gi) => {
-      const published = buildStatRows(group.configs, m.youStats, m.oppStats);
+      const published = buildStatRows(
+        group.configs,
+        m.youStats ?? NO_PUBLISHED,
+        m.oppStats ?? NO_PUBLISHED,
+      );
       const rows = withPointRows(
         group.configs,
         published,
@@ -318,12 +348,24 @@ export function foldSeasonRows(
           );
         }
         const pool = pools[gi][ri];
+        const youIn = publishedFor(config, m.youStats);
+        const oppIn = publishedFor(config, m.oppStats);
         if (seasonRowKind(config) === "rate") {
-          addFraction(pool.you, rowFraction(config, m.youStats, youDerived));
-          addFraction(pool.opp, rowFraction(config, m.oppStats, oppDerived));
+          if (youIn) {
+            addFraction(
+              pool.you,
+              rowFraction(config, m.youStats ?? NO_PUBLISHED, youDerived),
+            );
+          }
+          if (oppIn) {
+            addFraction(
+              pool.opp,
+              rowFraction(config, m.oppStats ?? NO_PUBLISHED, oppDerived),
+            );
+          }
         } else {
-          addCount(pool.you, rows[ri].you.value);
-          addCount(pool.opp, rows[ri].opp.value);
+          if (youIn) addCount(pool.you, rows[ri].you.value);
+          if (oppIn) addCount(pool.opp, rows[ri].opp.value);
         }
       });
     });

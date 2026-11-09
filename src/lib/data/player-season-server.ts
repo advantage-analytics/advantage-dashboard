@@ -197,14 +197,6 @@ interface DbSeasonStatRow extends DbMatchStatsView {
 }
 
 /**
- * A seat with points but no stats row reads as the report reads it: the
- * zeroed defaults. Tiebreaks won is the one figure the view does not carry;
- * the report counts it from the score for its own strip, and no Head to head
- * row reads it, so it is 0 here.
- */
-const NO_STATS_ROW: H2HStats = transformToPlayerStats(undefined, 0);
-
-/**
  * Both seats' published rows for every match, keyed by `statKey`, in one
  * read through the viewer's client. The columns are the report's own
  * (`MATCH_STATS_VIEW_COLUMNS`) so `transformToPlayerStats` sees what it
@@ -300,8 +292,12 @@ export async function loadPlayerSeason(
         errorsJudgedAt: match.errors_judged_at,
       }),
       lobKeys: lobKeysByMatch[i],
-      youStats: statsByKey.get(statKey(match.id, isPlayer1)) ?? NO_STATS_ROW,
-      oppStats: statsByKey.get(statKey(match.id, !isPlayer1)) ?? NO_STATS_ROW,
+      // A seat with points but no stats row is unknown, not zeroes: the fold
+      // leaves it out of that match's published rows (`SeasonMatchStats`).
+      // Tiebreaks won is the one figure the view does not carry; no Head to
+      // head row reads it, so it is 0 on the rows that exist.
+      youStats: statsByKey.get(statKey(match.id, isPlayer1)) ?? null,
+      oppStats: statsByKey.get(statKey(match.id, !isPlayer1)) ?? null,
     });
   });
 

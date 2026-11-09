@@ -430,7 +430,7 @@ function reportRows(m: SeasonMatch, judged: boolean) {
   return h2hGroups(m.isDerived, judged).flatMap((group) =>
     withPointRows(
       group.configs,
-      buildStatRows(group.configs, m.youStats, m.oppStats),
+      buildStatRows(group.configs, m.youStats!, m.oppStats!),
       you,
       opp,
     ),
@@ -549,6 +549,36 @@ test.describe("count rows", () => {
     expect(doubleFaults.opp.display).toBe("3.0");
     expect(doubleFaults.lowerIsBetter).toBe(true);
     expect(doubleFaults.leader).toBe("you");
+  });
+
+  test("a seat with no stats row sits out of the published rows for that match, never as zeroes", () => {
+    // B has points but no stats row for the player's seat.
+    const season = [MATCH_A, { ...MATCH_B, youStats: null }];
+    const groups = foldSeasonRows(season);
+
+    // A published count: only A's 20 for the player; both matches for the
+    // opponents, whose row is there.
+    expect(row(groups, "Winners").you).toEqual({
+      value: 20,
+      display: "20.0",
+      detail: "20 in 1 match",
+      matches: 1,
+    });
+    expect(row(groups, "Winners").opp.matches).toBe(2);
+    // A published rate: A's 30/50 alone, not pooled with a 0/0 or a 0/n.
+    expect(row(groups, "First serve in").you).toMatchObject({
+      detail: "30/50",
+      matches: 1,
+    });
+    // Total points won (key of ofKey): A's 42 of 70 alone.
+    expect(row(groups, "Total points won").you.detail).toBe("42/70");
+
+    // A row counted from the points still reads B's points for the player.
+    const fromPoints = h2hGroups(false, false)
+      .flatMap((g) => g.configs)
+      .find((c) => c.fromPoints === "returnWinners");
+    if (!fromPoints) throw new Error("no return winners row");
+    expect(row(groups, fromPoints.label).you.matches).toBe(2);
   });
 
   test("each per-match figure is the report's own row value", () => {

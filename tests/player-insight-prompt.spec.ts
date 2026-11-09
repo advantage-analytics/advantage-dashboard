@@ -194,7 +194,7 @@ test.describe("seasonInsightSignature", () => {
       MATCH_A,
       {
         ...MATCH_B,
-        youStats: { ...MATCH_B.youStats, totalPointsWon: 60 },
+        youStats: { ...MATCH_B.youStats!, totalPointsWon: 60 },
       },
     ]);
     expect(seasonInsightSignature(rederived)).not.toBe(base);

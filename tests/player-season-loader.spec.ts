@@ -480,16 +480,39 @@ test("both seats' stats rows are read, and 'you' is this player's seat", async (
   ).toHaveLength(1);
 
   // m-a: Ada is seat one → her row is `is_player1 = true` (winners 10).
-  expect(byId.get("m-a")?.youStats.winners).toBe(10);
-  expect(byId.get("m-a")?.oppStats.winners).toBe(20);
+  expect(byId.get("m-a")?.youStats?.winners).toBe(10);
+  expect(byId.get("m-a")?.oppStats?.winners).toBe(20);
   // m-b: Ada is seat two → her row is `is_player1 = false` (winners 21).
-  expect(byId.get("m-b")?.youStats.winners).toBe(21);
-  expect(byId.get("m-b")?.oppStats.winners).toBe(11);
+  expect(byId.get("m-b")?.youStats?.winners).toBe(21);
+  expect(byId.get("m-b")?.oppStats?.winners).toBe(11);
   // The published fractions ride along for the pooled rate rows.
-  expect(byId.get("m-b")?.youStats.fractions.firstServeInPct).toEqual({
+  expect(byId.get("m-b")?.youStats?.fractions.firstServeInPct).toEqual({
     made: 30,
     attempts: 50,
   });
+});
+
+test("a seat with points but no stats row is null, not zeroes", async () => {
+  // m-d keeps its points but loses Ada's (seat one) stats row.
+  const { client, sides } = await adaSides(
+    fullTables({
+      match_stats_with_percentages: STATS.filter(
+        (r) => !(r.match_id === "m-d" && r.is_player1),
+      ),
+    }),
+  );
+  const { deps } = fakeBallPaths({});
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+  const mD = season.perMatch.find((m) => m.matchId === "m-d");
+  expect(mD?.youStats).toBeNull();
+  expect(mD?.oppStats?.winners).toBe(23);
+  // Winners: m-a 10 and m-b 21 for Ada — m-d is out, not a 0.
+  const winners = season.groups
+    .flatMap((g) => g.rows)
+    .find((r) => r.label === "Winners");
+  expect(winners?.you).toMatchObject({ matches: 2, detail: "31 in 2 matches" });
+  expect(winners?.opp.matches).toBe(3);
 });
 
 test("the points of every match are read together, without bookmarks", async () => {
