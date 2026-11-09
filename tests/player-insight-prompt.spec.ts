@@ -216,7 +216,7 @@ test.describe("buildPlayerInsightPrompt", () => {
 
   test("names the player and the sample", () => {
     expect(prompt).toContain("Player: Maya Chen");
-    expect(prompt).toContain("Matches recorded this season: 3");
+    expect(prompt).toContain("Matches recorded: 3");
     expect(prompt).toContain(
       "Matches analyzed (every figure below comes from these): 2",
     );
@@ -243,6 +243,15 @@ test.describe("buildPlayerInsightPrompt", () => {
     expect(prompt).not.toContain("Passed the net player");
     expect(prompt).not.toContain("Break points saved");
     expect(prompt).not.toContain("Double faults");
+  });
+
+  test("does not call all-time figures a season", () => {
+    // The fold covers every recorded match, not one academic season.
+    expect(prompt).not.toContain("this season");
+    expect(prompt).not.toContain("Maya's season");
+    expect(prompt).not.toContain("Season figures");
+    expect(prompt).toContain("Figures over every analyzed match on record");
+    expect(prompt).toContain("never present them as a single season's");
   });
 
   test("carries the voice rules: one sentence, eight words, no digits, third person", () => {

@@ -160,20 +160,24 @@ function groupsText(groups: readonly SeasonGroup[], firstName: string): string {
  * themself and their coaches, so the sentence is third person; and nobody
  * here knows the player's pronouns, so the sentence uses their first name or
  * "they".
+ *
+ * The figures are ALL-TIME — every match of theirs the program recorded
+ * (`getPlayerMatchSides`), not one academic season — and the rail's "N
+ * matches" counts the same set, so the prompt never says "this season".
  */
 export function buildPlayerInsightPrompt(input: PlayerInsightInput): string {
   const { name, firstName, matchesPlayed, analyzed, groups, tallies } = input;
   return `You write the claim line on the Advantage Intelligence card of a player's profile on Advantage, a tennis analytics platform for collegiate programs. The page is read by the player and by their coaching staff.
 
 Player: ${name}
-Matches recorded this season: ${matchesPlayed}
+Matches recorded: ${matchesPlayed}
 Matches analyzed (every figure below comes from these): ${analyzed}
 Points won per analyzed match (oldest → newest): ${pointsWonLine(tallies.perMatch)}
 
-Season figures — ${firstName} against their opponents. A count is the per-match average; a rate is pooled over every point of the analyzed matches.
+Figures over every analyzed match on record — ${firstName} against their opponents. They span every season on record, not one, so never present them as a single season's. A count is the per-match average; a rate is pooled over every point of the analyzed matches.
 ${groupsText(groups, firstName)}
 
-Write ONE sentence: the single most important thing this data says about ${firstName}'s season.
+Write ONE sentence: the single most important thing this data says about ${firstName}'s game across these matches.
 
 The rules below are the product's voice, not style preferences. Breaking one is a defect.
 
