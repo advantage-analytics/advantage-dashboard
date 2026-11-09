@@ -82,8 +82,8 @@ markers is hand-written — edit it as things move.
 | `/dashboard/settings/teams` | [`src/app/dashboard/settings/teams/page.tsx`](src/app/dashboard/settings/teams/page.tsx) |
 | `/dashboard/settings/usage` | [`src/app/dashboard/settings/usage/page.tsx`](src/app/dashboard/settings/usage/page.tsx) |
 | `/dashboard/statistics` | [`src/app/dashboard/statistics/page.tsx`](src/app/dashboard/statistics/page.tsx) |
+| `/dashboard/team` | [`src/app/dashboard/team/(home)/page.tsx`](src/app/dashboard/team/(home)/page.tsx) |
 | `/dashboard/team/ask` | [`src/app/dashboard/team/ask/page.tsx`](src/app/dashboard/team/ask/page.tsx) |
-| `/dashboard/team` | [`src/app/dashboard/team/page.tsx`](src/app/dashboard/team/page.tsx) |
 | `/dashboard/team/roster/[playerId]` | [`src/app/dashboard/team/roster/[playerId]/page.tsx`](src/app/dashboard/team/roster/[playerId]/page.tsx) |
 | `/dashboard/team/roster` | [`src/app/dashboard/team/roster/page.tsx`](src/app/dashboard/team/roster/page.tsx) |
 | `/dashboard/team/schedule/[eventId]/edit` | [`src/app/dashboard/team/schedule/[eventId]/edit/page.tsx`](src/app/dashboard/team/schedule/[eventId]/edit/page.tsx) |
