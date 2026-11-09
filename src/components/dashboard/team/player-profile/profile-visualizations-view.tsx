@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 
 import { LegendMark } from "@/components/dashboard/matches/match-detail/shots/legend-mark";
 import { LifecycleChip } from "@/components/dashboard/matches/match-detail/shots/lifecycle-chip";
@@ -17,6 +17,7 @@ import type {
   SeasonCard,
   SeasonLightboxData,
 } from "@/lib/data/player-season-viz";
+import { cn } from "@/lib/utils";
 import { SeasonVizLightbox } from "./season-viz-lightbox";
 
 /**
@@ -37,8 +38,9 @@ import { SeasonVizLightbox } from "./season-viz-lightbox";
  * click, the switch and the lightbox's edits all write the same store — and
  * every write is a `router.replace`, which re-renders the page on the
  * server with the new state. `side` is the side the server computed the
- * cards for; the pressed chip follows the store so a switch reads at once.
- * `errorSplitJudged` is the season's own Error-type rule
+ * cards for; the pressed chip follows the store so a switch reads at once,
+ * and until the server's cards are the chip's the wall reads busy
+ * (`SeasonWall`). `errorSplitJudged` is the season's own Error-type rule
  * (`seasonErrorSplitJudged`), handed to the store so a `?verr=` in a link
  * parses in the browser exactly as the page parsed it on the server — the
  * store's default is the match's rule, which a season has no provider for.
@@ -94,8 +96,8 @@ export function ProfileVisualizationsView({
 /**
  * Inside the store: the wall and, over it, the lightbox container — which
  * is always mounted, because it is the one that knows the reader has just
- * opened a card the server has not answered for yet (it draws the pending
- * frame then; `season-viz-lightbox.tsx`, "Two clocks").
+ * opened a card the server has not answered for yet (it draws the shell
+ * pending then; `season-viz-lightbox.tsx`, "Two clocks").
  */
 function SeasonVizBody({
   playerName,
@@ -138,7 +140,11 @@ function SeasonVizBody({
         player={wallPlayer}
         cards={cards}
       />
-      <SeasonVizLightbox data={lightbox} wallPlayer={wallPlayer} />
+      <SeasonVizLightbox
+        data={lightbox}
+        wallPlayer={wallPlayer}
+        analyzed={analyzed}
+      />
     </>
   );
 }
@@ -175,6 +181,22 @@ function SeasonWall({
 
   const visible = cards.filter((card) => card.total > 0);
   const subjectName = side === "you" ? playerName : "Opponents";
+
+  // The cards are another side's than the chip's for one round trip — after
+  // a chip click, or after closing a card whose player was switched inside
+  // it — so until the server's cards are the chip's the wall reads busy:
+  // `aria-busy`, dimmed, and not for opening (a card for the wrong side
+  // would open the wrong court: pointer events are off and an activation
+  // that still arrives, Enter on a focused card, is swallowed), with one
+  // status naming what is on its way. Not `inert`, as the day-zero pages
+  // are: the lightbox returns focus to the card that opened it the moment
+  // it closes, and this wall is busy at exactly that moment after a card
+  // whose player was switched — an inert card cannot take focus. The cards
+  // stay drawn, since they are real and a moment old, never a skeleton; a
+  // season with nothing analyzed has nothing to recompute.
+  const stale = analyzed > 0 && side !== player;
+  const arriving =
+    player === "you" ? `${playerName}’s courts` : "the opponents’ courts";
 
   return (
     <div className="@container flex flex-col gap-[18px]">
@@ -222,36 +244,61 @@ function SeasonWall({
         )}
       </div>
       {collection === "default" ? (
-        analyzed === 0 ? (
-          <EmptyWall>
-            No analyzed matches yet. Serve, return and rally placement is drawn
-            from the points in {firstName}&rsquo;s matches, as each one is
-            analysed.
-          </EmptyWall>
-        ) : visible.length > 0 ? (
+        <>
+          {stale && (
+            <p role="status" className="sr-only">
+              Loading {arriving}
+            </p>
+          )}
           <div
-            role="list"
-            aria-label="Default views"
-            className="grid grid-cols-1 gap-4 @min-[640px]:grid-cols-2"
+            aria-busy={stale || undefined}
+            onClickCapture={stale ? swallowActivation : undefined}
+            data-stale={stale ? "" : undefined}
+            className={cn(
+              "flex flex-col",
+              stale &&
+                "pointer-events-none opacity-40 motion-safe:transition-opacity motion-safe:duration-200",
+            )}
           >
-            {visible.map((card) => (
-              <div key={card.key} role="listitem">
-                <WallCard
-                  name={card.name}
-                  playerName={subjectName}
-                  possessive={card.subject === "you" ? "your" : "their"}
-                  cut={card.cut}
-                  dots={card.dots}
-                  summary={card.summary}
-                  href={hrefFor(card.state)}
-                  navigateState={card.state}
-                />
+            {analyzed === 0 ? (
+              <EmptyWall>
+                No analyzed matches yet. Serve, return and rally placement is
+                drawn from the points in {firstName}&rsquo;s matches, as each
+                one is analysed.
+              </EmptyWall>
+            ) : visible.length > 0 ? (
+              <div
+                role="list"
+                aria-label="Default views"
+                className="grid grid-cols-1 gap-4 @min-[640px]:grid-cols-2"
+              >
+                {/* Keyed on the cut, not the side: the slot's element stays
+                    when the server's cards change side under an open card
+                    (a player switched inside it), so the card the lightbox
+                    recorded as its opener is still on the page to take
+                    focus back when it closes. */}
+                {visible.map((card) => (
+                  <div key={card.cut} role="listitem">
+                    <WallCard
+                      name={card.name}
+                      playerName={subjectName}
+                      possessive={card.subject === "you" ? "your" : "their"}
+                      cut={card.cut}
+                      dots={card.dots}
+                      summary={card.summary}
+                      href={hrefFor(card.state)}
+                      navigateState={card.state}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <EmptyWall>
+                No serves, returns, or rallies recorded yet.
+              </EmptyWall>
+            )}
           </div>
-        ) : (
-          <EmptyWall>No serves, returns, or rallies recorded yet.</EmptyWall>
-        )
+        </>
       ) : (
         <EmptyWall>
           Saved views live on the match report. Open one of {firstName}&rsquo;s
@@ -260,6 +307,12 @@ function SeasonWall({
       )}
     </div>
   );
+}
+
+/** A card's activation while the wall is busy: nothing opens (see `stale`). */
+function swallowActivation(event: MouseEvent) {
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 /**

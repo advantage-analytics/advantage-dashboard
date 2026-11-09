@@ -21,24 +21,26 @@ import { ASYMMETRIC_SERVES } from "./viz-serve-points";
  * `page.tsx` would compute for that URL — the side, the cards, the lightbox
  * — exactly as the real round trip hands new props to a client tree that
  * keeps its state. `?delay=` (ms, default 400) is read once at load so a
- * spec can hold the "server" back long enough to look at the gap.
+ * spec can hold the "server" back long enough to look at the gap; `?empty=1`
+ * makes it a season with nothing analyzed.
  *
  * `data-landed` names the last URL "the server" answered.
  */
-const SEASON: SeasonVizMatch[] = [
-  {
-    matchId: "m-1",
-    points: [...ASYMMETRIC_SERVES, ...RALLY_POINTS],
-    isPlayer1: true,
-    isDerived: false,
-    errorSplitJudged: true,
-  },
-];
+const LOAD_PARAMS = new URLSearchParams(window.location.search);
+const SEASON: SeasonVizMatch[] = LOAD_PARAMS.has("empty")
+  ? []
+  : [
+      {
+        matchId: "m-1",
+        points: [...ASYMMETRIC_SERVES, ...RALLY_POINTS],
+        isPlayer1: true,
+        isDerived: false,
+        errorSplitJudged: true,
+      },
+    ];
 const BANDS = { bands: DEFAULT_BANDS, unit: "ft" as const };
 const NAMES = { you: "Avery Kim", opponent: "Opponents" };
-const DELAY_MS = Number(
-  new URLSearchParams(window.location.search).get("delay") ?? 400,
-);
+const DELAY_MS = Number(LOAD_PARAMS.get("delay") ?? 400);
 
 /** What `page.tsx`'s Visualizations body hands the view for one URL. */
 function serverRender(query: string) {

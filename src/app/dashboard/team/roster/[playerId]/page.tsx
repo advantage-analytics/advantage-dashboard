@@ -36,7 +36,10 @@ import {
   ProfileViewWhen,
 } from "@/components/dashboard/team/player-profile/profile-frame";
 import { ProfileActions } from "@/components/dashboard/team/player-profile/profile-actions";
-import { ProfileStatisticsDeferred } from "@/components/dashboard/team/player-profile/profile-statistics-deferred";
+import {
+  ProfileStatisticsDeferred,
+  ProfileVisualizationsDeferred,
+} from "@/components/dashboard/team/player-profile/profile-body-deferred";
 import { ProfileStatisticsView } from "@/components/dashboard/team/player-profile/profile-statistics-view";
 import {
   PROFILE_VIEW_PARAM,
@@ -103,21 +106,28 @@ import { askEntryHref } from "@/lib/services/ask/entry";
  * browser meanwhile (`profile-visualizations-view.tsx`), and closing writes
  * it back, so the cards are recomputed for it then.
  *
- * ── What a Visualizations request skips ─────────────────────────────────────
+ * ── One body per request ────────────────────────────────────────────────────
  * `?tab=` is read client-side for the switch (`ProfileViewWhen`, native
- * history, no server render) AND here, once, to decide what to render. A
- * Statistics request (the default) renders both bodies, so switching to
- * Visualizations costs nothing. A Visualizations request —
- * `?tab=visualizations`, which is every viz click — renders the
- * Visualizations body alone over `getPlayerSeasonCourts`: the same matches
- * and points, but no ball-paths download (the courts never read lobs, and
- * that file is this page's one service-role read) and no Statistics fold,
- * evidence line or signature for a body nothing would show. The Statistics
- * slot holds `ProfileStatisticsDeferred` instead, which draws the Statistics
- * skeleton and asks the server for the page again the moment the reader
- * switches to it — one round trip, the one a first load of Statistics would
- * cost, and only then. A request calls exactly one of the two season
- * loaders, so the points are read once either way.
+ * history, no server render) AND here, once, to decide which body to
+ * render: the Statistics body on a Statistics request (the default URL),
+ * the Visualizations body on `?tab=visualizations` — which is every viz
+ * click, since the store keeps `tab`. Each costs what the other does not
+ * need. The Visualizations body reads `getPlayerSeasonCourts` — the same
+ * matches and points, but no ball-paths download (the courts never read
+ * lobs, and that file is this page's one service-role read) and no
+ * Statistics fold, evidence line or signature. The Statistics body reads
+ * `getPlayerSeason` and skips the cards and the lightbox, which on a wall
+ * of four courts over a season are the bulk of the RSC payload. A request
+ * calls exactly one of the two season loaders (`AnalyzedCount` reads the
+ * same one), so the points are read once either way.
+ *
+ * The body not rendered has a stand-in in its slot
+ * (`profile-body-deferred.tsx`): nothing while the other view is up, and
+ * when the reader switches to it, that view's skeleton and one
+ * `router.refresh()`, whose render carries the body — one round trip, the
+ * one a first load of that view would cost. The two cannot ping-pong: a
+ * stand-in is shown only while its own view is the URL's, and that URL's
+ * render carries its body, not another stand-in it would show.
  *
  * ── Why the numbers match the roster's ──────────────────────────────────────
  * `getPlayerProfile` folds both of a claimed player's ids the way
@@ -205,8 +215,8 @@ export default async function PlayerProfilePage({
   const matchesPlayed = profile.matchesPlayed;
   const opponentsCount = sides ? seasonOpponentCount(sides.own) : 0;
 
-  // Which body this request is for (see "What a Visualizations request
-  // skips"): the courts alone on `?tab=visualizations`, both otherwise.
+  // Which body this request is for (see "One body per request"): the courts
+  // on `?tab=visualizations`, the Statistics otherwise.
   const courtsOnly =
     parseProfileView(query[PROFILE_VIEW_PARAM]) === "visualizations";
 
@@ -286,9 +296,9 @@ export default async function PlayerProfilePage({
           {/* The pane body: the one place the season is awaited for the
               cards. `WidgetBoundary` outside the `Suspense`, so a season read
               that throws (it fails closed — `player-season-server.ts`) draws
-              the retry in the body while the rail and title stay. On a
-              Visualizations request the Statistics body is not rendered;
-              its slot asks for it when it is shown (`ProfileStatisticsDeferred`). */}
+              the retry in the body while the rail and title stay. One body
+              per request: the other view's slot holds its stand-in, which
+              asks for the body when it is shown (`profile-body-deferred.tsx`). */}
           <WidgetBoundary label="Statistics">
             {courtsOnly ? (
               <ProfileStatisticsDeferred />
@@ -311,22 +321,25 @@ export default async function PlayerProfilePage({
             )}
           </WidgetBoundary>
           <WidgetBoundary label="Visualizations">
-            <Suspense
-              fallback={
-                <ProfileViewWhen view="visualizations">
-                  <ProfileVisualizationsPanePending />
-                </ProfileViewWhen>
-              }
-            >
-              <ProfileVisualizationsBody
-                programId={active.id}
-                playerId={playerId}
-                playerName={profile.name}
-                firstName={profile.firstName}
-                query={query}
-                courtsOnly={courtsOnly}
-              />
-            </Suspense>
+            {courtsOnly ? (
+              <Suspense
+                fallback={
+                  <ProfileViewWhen view="visualizations">
+                    <ProfileVisualizationsPanePending />
+                  </ProfileViewWhen>
+                }
+              >
+                <ProfileVisualizationsBody
+                  programId={active.id}
+                  playerId={playerId}
+                  playerName={profile.name}
+                  firstName={profile.firstName}
+                  query={query}
+                />
+              </Suspense>
+            ) : (
+              <ProfileVisualizationsDeferred />
+            )}
           </WidgetBoundary>
         </MatchReportPane>
       </MatchReportFrame>
@@ -401,10 +414,10 @@ async function ProfileStatisticsBody({
 }
 
 /**
- * The Visualizations tab's body: the season — on a Visualizations request
- * the courts' read (`getPlayerSeasonCourts`: the points, no lob files, no
- * fold); otherwise the Statistics body's own `cache()`d read, not a second
- * one — the workspace's bands and the viewer's unit, then the wall's four
+ * The Visualizations tab's body, rendered on a Visualizations request alone
+ * ("One body per request"): the courts' season (`getPlayerSeasonCourts` —
+ * the points, no lob files, no fold; `cache()`d, so `AnalyzedCount` shares
+ * it), the workspace's bands and the viewer's unit, then the wall's four
  * cards for the URL's side and — when `?cut=` names one — the opened card's
  * court, statistics, per-row mark ids and per-option counts, all computed
  * here (`player-season-viz.ts`) and handed to the client view as plain data.
@@ -416,19 +429,15 @@ async function ProfileVisualizationsBody({
   playerName,
   firstName,
   query,
-  courtsOnly,
 }: {
   programId: string;
   playerId: string;
   playerName: string;
   firstName: string;
   query: Record<string, string | string[] | undefined>;
-  courtsOnly: boolean;
 }) {
   const [season, bandSettings, preferences] = await Promise.all([
-    courtsOnly
-      ? getPlayerSeasonCourts(programId, playerId)
-      : getPlayerSeason(programId, playerId),
+    getPlayerSeasonCourts(programId, playerId),
     getBandSettings(programId),
     getPreferences(),
   ]);

@@ -5,10 +5,10 @@ import { startStyledHarness } from "./fixtures/viz-styled-harness-server";
 /**
  * The season Visualizations tab in a real browser (`season-viz-harness.tsx`,
  * the page's Server Component played by a timer): what a reader sees
- * between a click and the server's answer, and what the wall is left on
- * after a card. The static spec (`player-season-viz.spec.ts`) pins what the
- * container hands the shell for one render; this pins the sequence, which
- * is where both findings lived.
+ * between a click and the server's answer, where focus goes, and what the
+ * wall is left on after a card. The static spec (`player-season-viz.spec.ts`)
+ * pins what the container hands the shell for one render; this pins the
+ * sequence, which is where the findings lived.
  */
 
 let origin: string;
@@ -32,94 +32,174 @@ test.afterAll(async () => {
 const PROFILE = "/dashboard/team/roster/p-avery";
 
 /** The wall's own You | Opponent, by CSS: while a dialog is open Radix hides
- *  the rest of the page from the accessibility tree, and a role query would
- *  not find it. */
+ *  the rest of the page from the accessibility tree, and while the wall is
+ *  busy it is `inert`, so a role query would not find it either way. */
 const wallPressed = (page: Page) =>
   page.locator(
     '#root [role="group"][aria-label="Player"] button[aria-pressed="true"]',
   );
+const wallList = (page: Page) =>
+  page.locator('#root [role="list"][aria-label="Default views"]');
+const wallBusy = (page: Page) => page.locator("#root [data-stale]");
 
-test("opening a card draws the shell's frame as a loading status until the server answers — on the first open, and never the last card's court under the next card's cut", async ({
+/** Holds the shell's chunk back so the frame drawn before it is on screen
+ *  long enough to look at; the page's own bundle is left alone. */
+async function slowShellChunk(page: Page, ms: number) {
+  await page.route("**/*.js", async (route) => {
+    if (route.request().url().endsWith("/bundle.js")) return route.continue();
+    await new Promise((done) => setTimeout(done, ms));
+    await route.continue();
+  });
+}
+
+test("one dialog per opening: the frame before the chunk, the shell pending, then the court — and Esc puts focus back on the card, on the first open and on a card switch", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1512, height: 982 });
-  await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=1200`);
+  await slowShellChunk(page, 900);
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=1500`);
   const wall = page.getByRole("list", { name: "Default views" });
   await expect(wall).toBeVisible();
+  const serveCard = wall.getByRole("link", {
+    name: /^First serves, Avery Kim/,
+  });
+  const rallyCard = wall.getByRole("link", { name: /^Rally shots, Avery Kim/ });
 
-  // The first open: the frame, named for the cut, the moment the card is
-  // clicked — a status and a dialog, no court yet.
-  await wall.getByRole("link", { name: /^First serves, Avery Kim/ }).click();
+  // The first open of the session: before the shell's chunk has loaded, the
+  // frame by hand — a status named for the cut, no dialog, and the card
+  // keeps focus. Esc on it closes.
+  await serveCard.click();
+  const chunkFrame = page.getByTestId("lightbox-chunk-pending");
+  await expect(chunkFrame).toBeVisible();
+  await expect(
+    chunkFrame.getByRole("status", { name: "Loading Serve placement" }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(serveCard).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(chunkFrame).toHaveCount(0);
+  await expect(serveCard).toBeFocused();
+  expect(new URL(page.url()).searchParams.get("cut")).toBeNull();
+
+  // Again, and this time let it land. The shell arrives pending: ONE
+  // dialog, named for the cut, the status inside, no court, no enter fade
+  // (it replaced the frame). The same dialog then shows the court.
+  await serveCard.click();
+  await expect(chunkFrame).toBeVisible();
   const loadingServe = page.getByRole("dialog", {
     name: "Loading Serve placement",
   });
-  await expect(loadingServe).toBeVisible();
+  await expect(loadingServe).toBeVisible({ timeout: 5_000 });
+  await expect(chunkFrame).toHaveCount(0);
   await expect(
     loadingServe.getByRole("status", { name: "Loading Serve placement" }),
   ).toBeVisible();
-  await expect(page.locator("[data-court-stage]")).toHaveCount(0);
   await expect(
-    loadingServe.getByRole("button", { name: "Close" }),
+    loadingServe.locator("[data-pending-bar]").first(),
   ).toBeVisible();
-
-  // Then the card's own court, and the frame is gone.
+  await expect(page.locator("[data-court-stage]")).toHaveCount(0);
+  await expect(loadingServe).not.toHaveClass(/animate-in/);
+  await loadingServe.evaluate((el) => el.setAttribute("data-opening", "one"));
   const serve = page.getByRole("dialog", { name: "First serves" });
   await expect(serve).toBeVisible({ timeout: 5_000 });
-  await expect(loadingServe).toHaveCount(0);
+  await expect(serve).toHaveAttribute("data-opening", "one");
+  await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect(
     serve.locator("[data-court-stage] [data-viz-mark]").first(),
   ).toBeVisible();
+  await expect(page.locator("[data-pending-bar]")).toHaveCount(0);
 
-  // Close, then open another card before the server has answered the close:
-  // the store's cut is the new card's while the last answer is still the
-  // serve court. The frame for THAT cut — never the serve court drawn under
-  // the rally card's filters.
+  // Esc: focus returns to the card that opened it.
   await page.keyboard.press("Escape");
-  await expect(serve).toHaveCount(0);
-  await wall.getByRole("link", { name: /^Rally shots, Avery Kim/ }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(serveCard).toBeFocused();
+
+  // A card switch before the server has answered the close: the store's cut
+  // is the rally card's while the last answer is still the serve court. The
+  // shell (its chunk cached now, so with its fade) pending for THAT cut —
+  // never the serve court under the rally card's filters — then the rally
+  // court in the same dialog, and Esc lands focus on the rally card.
+  await rallyCard.click();
   const loadingRally = page.getByRole("dialog", {
     name: "Loading Rally placement",
   });
   await expect(loadingRally).toBeVisible();
+  await expect(loadingRally).toHaveClass(/animate-in/);
   await expect(page.getByRole("dialog", { name: "First serves" })).toHaveCount(
     0,
   );
   await expect(page.locator("[data-court-stage]")).toHaveCount(0);
+  await loadingRally.evaluate((el) => el.setAttribute("data-opening", "two"));
   const rally = page.getByRole("dialog", { name: "Rally shots" });
   await expect(rally).toBeVisible({ timeout: 5_000 });
-  await expect(loadingRally).toHaveCount(0);
-
-  // Esc on the frame itself closes it too — a reader is never stuck behind
-  // a server that has not answered.
+  await expect(rally).toHaveAttribute("data-opening", "two");
+  await expect(page.getByRole("dialog")).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await wall.getByRole("link", { name: /^First serves, Avery Kim/ }).click();
+  await expect(rallyCard).toBeFocused();
+
+  // Esc on the pending shell itself closes it, focus back on its card.
+  await serveCard.click();
   await expect(loadingServe).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(serveCard).toBeFocused();
   expect(new URL(page.url()).searchParams.get("cut")).toBeNull();
 
   expect(errors).toEqual([]);
 });
 
-test("a player switched inside the card stays in the card: the wall keeps You, and closing lands on it", async ({
+test("the wall reads busy until the server's cards are the chip's — after a chip click, and after closing a card whose player was switched inside it", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1512, height: 982 });
-  await page.goto(`${origin}${PROFILE}?tab=visualizations`);
-  const wall = page.getByRole("list", { name: "Default views" });
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=700`);
   await expect(wallPressed(page)).toHaveText("You");
+  await expect(wallBusy(page)).toHaveCount(0);
 
-  await wall.getByRole("link", { name: /^First serves, Avery Kim/ }).click();
+  // The chip: pressed at once; the cards dimmed, inert and busy, still
+  // yours, with one status naming what is on its way — until the server's
+  // cards are the opponents'.
+  await page
+    .locator('#root [role="group"][aria-label="Player"]')
+    .getByRole("button", { name: "Opponent" })
+    .click();
+  await expect(wallPressed(page)).toHaveText("Opponent");
+  await expect(wallBusy(page)).toHaveAttribute("aria-busy", "true");
+  await expect(wallBusy(page)).toHaveClass(/pointer-events-none/);
+  await expect(
+    wallList(page).locator('a[aria-label^="First serves, Avery Kim"]'),
+  ).toHaveCount(1);
+  await expect(
+    page.locator('#root [role="status"]', {
+      hasText: "Loading the opponents’ courts",
+    }),
+  ).toHaveCount(1);
+  await expect(wallBusy(page)).toHaveCount(0, { timeout: 5_000 });
+  await expect(
+    wallList(page).locator('a[aria-label^="First serves, Opponents"]'),
+  ).toHaveCount(1);
+  await expect(page.locator('#root [role="status"]')).toHaveCount(0);
+
+  // Back to You, then open a card and switch its player inside: the wall
+  // under the card keeps You, and once the server's cards are the
+  // opponents' it reads busy there too — hidden under the scrim.
+  await page
+    .locator('#root [role="group"][aria-label="Player"]')
+    .getByRole("button", { name: "You" })
+    .click();
+  await expect(wallBusy(page)).toHaveCount(0, { timeout: 5_000 });
+  const wall = page.getByRole("list", { name: "Default views" });
+  const serveCard = wall.getByRole("link", {
+    name: /^First serves, Avery Kim/,
+  });
+  await serveCard.click();
   const dialog = page.getByRole("dialog", { name: "First serves" });
   await expect(dialog).toBeVisible({ timeout: 5_000 });
-
-  // Opponent, inside the card: the chip flips at once, the court and the
-  // subtitle follow the server, the URL carries the card's player.
   const cardPlayer = dialog.getByRole("group", { name: "Player" });
   await cardPlayer.getByRole("button", { name: "Opponent" }).click();
   await expect(
@@ -129,45 +209,49 @@ test("a player switched inside the card stays in the card: the wall keeps You, a
     timeout: 5_000,
   });
   expect(new URL(page.url()).searchParams.get("player")).toBe("opponent");
-  // The wall under it still says You.
   await expect(wallPressed(page)).toHaveText("You");
+  await expect(wallBusy(page)).toHaveAttribute("aria-busy", "true");
 
-  // Close: the wall, on its own player — not the one switched to inside the
-  // card — and the server recomputes the cards for it.
+  // Close: the wall on its own player, busy until its cards come back, then
+  // settled on You with your cards; focus on the card that opened it.
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(wallPressed(page)).toHaveText("You");
+  await expect(wallBusy(page)).toHaveAttribute("aria-busy", "true");
   const params = new URL(page.url()).searchParams;
   expect(params.get("cut")).toBeNull();
   expect(params.get("player")).toBeNull();
   expect(params.get("tab")).toBe("visualizations");
+  await expect(wallBusy(page)).toHaveCount(0, { timeout: 5_000 });
   await expect(
     wall.getByRole("link", { name: /^First serves, Avery Kim/ }),
-  ).toBeVisible({ timeout: 5_000 });
+  ).toBeVisible();
   await expect(wall.getByRole("link", { name: /Opponents/ })).toHaveCount(0);
+  await expect(serveCard).toBeFocused();
 
-  // The wall's own switch still works, and is what a later open restores.
-  await page
-    .locator('#root [role="group"][aria-label="Player"]')
-    .getByRole("button", { name: "Opponent" })
-    .click();
-  await expect(wallPressed(page)).toHaveText("Opponent");
-  await expect(
-    wall.getByRole("link", { name: /^First serves, Opponents/ }),
-  ).toBeVisible({ timeout: 5_000 });
-  await wall.getByRole("link", { name: /^First serves, Opponents/ }).click();
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
-  await dialog
-    .getByRole("group", { name: "Player" })
-    .getByRole("button", { name: "You" })
-    .click();
-  await expect(dialog).toContainText("Serve placement · Avery Kim", {
-    timeout: 5_000,
-  });
-  await page.keyboard.press("Escape");
+  expect(errors).toEqual([]);
+});
+
+test("a season with nothing analyzed opens nothing for a stale ?cut= link", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=serve&ball=first&empty=1&delay=100`,
+  );
+  await expect(page.getByTestId("season-viz-empty")).toContainText(
+    "No analyzed matches yet.",
+  );
+  // Give the lazy shell every chance to arrive: nothing opens, nothing
+  // loads, nothing is busy.
+  await page.waitForTimeout(800);
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(wallPressed(page)).toHaveText("Opponent");
-  expect(new URL(page.url()).searchParams.get("player")).toBe("opponent");
-
+  await expect(page.getByTestId("lightbox-chunk-pending")).toHaveCount(0);
+  await expect(
+    page.locator('[role="status"]', { hasText: /^Loading/ }),
+  ).toHaveCount(0);
+  await expect(page.locator("[data-pending-bar]")).toHaveCount(0);
+  await expect(wallBusy(page)).toHaveCount(0);
   expect(errors).toEqual([]);
 });

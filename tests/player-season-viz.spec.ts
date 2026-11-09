@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 import * as React from "react";
+import * as ReactDOM from "react-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -28,6 +29,10 @@ import {
   statPickDotIds,
   type StatPick,
 } from "@/components/dashboard/matches/match-detail/shots/stat-cut";
+import {
+  LIGHTBOX_BOX_CLASS,
+  LIGHTBOX_OVERLAY_CLASS,
+} from "@/components/dashboard/matches/match-detail/shots/lightbox-frame";
 import { CUT_LABEL } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import {
   EMPTY_VIZ_FILTERS,
@@ -731,8 +736,11 @@ type ShellProps = Record<string, unknown> & {
   };
   result: { dots: unknown[] };
   filters: VizFilters;
+  stats: { groups: unknown[] };
   onClose: () => void;
   player?: { value: string; onChange: (player: "you" | "opponent") => void };
+  pending?: boolean;
+  appear?: boolean;
 };
 
 /**
@@ -742,8 +750,14 @@ type ShellProps = Record<string, unknown> & {
  * `errorSplitJudged` is the season's rule the page hands the view; the match
  * hook under it is stubbed `true`, so a test that passes `false` shows the
  * prop winning.
+ *
+ * Two passes: the shell is `React.lazy`, so the first render suspends on
+ * its import and draws the chunk frame (`firstPass`); a tick later the
+ * module has landed and the same tree renders the shell (`html`). The chunk
+ * frame's portal is rendered inline (`createPortal` stubbed), as the frame
+ * itself is what is read.
  */
-function renderView(
+async function renderView(
   props: {
     analyzed: number;
     side: "you" | "opponent";
@@ -756,9 +770,14 @@ function renderView(
   const shellProps: ShellProps[] = [];
   const replaced: string[] = [];
   const loader = createLoader({
-    // `vizStateQuery` builds a URLSearchParams per card href.
-    globals: { URLSearchParams },
+    // `vizStateQuery` builds a URLSearchParams per card href; the chunk
+    // frame portals onto `document.body`.
+    globals: { URLSearchParams, document: { body: {} } },
     stubs: {
+      "react-dom": {
+        ...ReactDOM,
+        createPortal: (children: React.ReactNode) => children,
+      },
       "next/navigation": {
         useSearchParams: () => new URLSearchParams(query),
         usePathname: () => "/dashboard/team/roster/p-maya",
@@ -786,16 +805,6 @@ function renderView(
           });
         },
       },
-      // The pending frame's dialog, inline: a Radix portal renders nothing
-      // on the server, and this reads the frame's markup, not its mounting.
-      "@radix-ui/react-dialog": {
-        Root: fragment,
-        Portal: fragment,
-        Overlay: passthrough("div"),
-        Content: passthrough("div"),
-        Title: passthrough("h2"),
-        Close: passthrough("button"),
-      },
       "@/components/ui/tooltip": { TooltipProvider: fragment },
       "@/components/dashboard/shared/chrome-tooltip": {
         ChromeTooltip: fragment,
@@ -811,15 +820,18 @@ function renderView(
       }
     >;
   };
-  const html = renderToStaticMarkup(
-    React.createElement(ProfileVisualizationsView, {
-      playerName: "Maya Chen",
-      firstName: "Maya",
-      errorSplitJudged: true,
-      ...props,
-    }),
-  );
-  return { html, shellProps, replaced };
+  const element = React.createElement(ProfileVisualizationsView, {
+    playerName: "Maya Chen",
+    firstName: "Maya",
+    errorSplitJudged: true,
+    ...props,
+  });
+  const firstPass = renderToStaticMarkup(element);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  shellProps.length = 0;
+  replaced.length = 0;
+  const html = renderToStaticMarkup(element);
+  return { html, firstPass, shellProps, replaced };
 }
 
 /** The query a `router.replace` URL carries. */
@@ -848,8 +860,8 @@ function carriesPoints(value: unknown, seen = new Set<unknown>()): boolean {
 }
 
 test.describe("the Visualizations view, rendered", () => {
-  test("nothing analyzed: the wall's strip over the redesign's empty wall with a season sentence — no card, no 0, no 0%", () => {
-    const { html, shellProps } = renderView(
+  test("nothing analyzed: the wall's strip over the redesign's empty wall with a season sentence — no card, no 0, no 0%", async () => {
+    const { html, shellProps } = await renderView(
       {
         analyzed: 0,
         side: "you",
@@ -879,13 +891,13 @@ test.describe("the Visualizations view, rendered", () => {
     expect(shellProps).toEqual([]);
   });
 
-  test("a season: four wall cards in the wall's grid, each a link into the URL, and the opened card's shell with no points, footer, band editor or draft", () => {
+  test("a season: four wall cards in the wall's grid, each a link into the URL, and the opened card's shell with no points, footer, band editor or draft", async () => {
     const state = parseVizState(new URLSearchParams("cut=serve&ball=first"), {
       errorSplitJudged: true,
     });
     const cards = buildSeasonCards(JUDGED, "you", BANDS);
     const lightbox = buildSeasonLightbox(JUDGED, state, BANDS, NAMES)!;
-    const { html, shellProps } = renderView(
+    const { html, shellProps } = await renderView(
       { analyzed: 2, side: "you", cards, lightbox },
       "tab=visualizations&cut=serve&ball=first",
     );
@@ -952,7 +964,7 @@ test.describe("the Visualizations view, rendered", () => {
     );
   });
 
-  test("a card the server has not answered for draws the shell's frame as a loading status — on the first open, and when the last answer is another card's", () => {
+  test("a card the server has not answered for is the shell, pending — on the first open, and when the last answer is another card's; before the shell's chunk, the frame by hand", async () => {
     const cards = buildSeasonCards(JUDGED, "you", BANDS);
     const serveState = parseVizState(
       new URLSearchParams("cut=serve&ball=first"),
@@ -961,69 +973,160 @@ test.describe("the Visualizations view, rendered", () => {
     const serve = buildSeasonLightbox(JUDGED, serveState, BANDS, NAMES)!;
 
     // The first open: the URL names a card, the server has answered nothing
-    // yet. Until T9's fix a click showed nothing at all here.
-    const first = renderView(
+    // yet. Until the fix a click showed nothing at all here.
+    const first = await renderView(
       { analyzed: 2, side: "you", cards, lightbox: null },
       "tab=visualizations&cut=serve&ball=first",
     );
-    expect(first.shellProps).toEqual([]);
-    expect(first.html).not.toContain("season-shell");
-    const frame = first.html.slice(
-      first.html.indexOf('data-testid="season-lightbox-pending"'),
+
+    // Before the shell's chunk has loaded: the frame drawn by hand — a
+    // status named for the cut, bars from the primitive, a real Close, and
+    // no dialog (nothing takes focus from the card). The DS loading
+    // contract (`empty-and-loading.md`): one status, hidden bars, a token,
+    // no spinner; the shell's own geometry, no court, no enter fade.
+    const frame = first.firstPass.slice(
+      first.firstPass.indexOf('data-testid="lightbox-chunk-pending"'),
     );
     expect(frame.length).toBeGreaterThan(0);
-    // The DS loading contract (`empty-and-loading.md`): one status for the
-    // region, named for the cut; the dialog named the same; bars hidden and
-    // from the primitive; a token, never a hex; no spinner. Close is real.
+    expect(first.firstPass).not.toContain("season-shell");
     expect(frame.split('role="status"').length - 1).toBe(1);
     expect(frame).toContain('aria-label="Loading Serve placement"');
-    expect(frame).toContain(">Loading Serve placement</h2>");
+    expect(frame).not.toContain('role="dialog"');
     expect(frame).toContain("data-pending-bar");
     expect(frame).toContain("motion-safe:animate-pulse");
     expect(frame).toContain('aria-hidden="true"');
     expect(frame).not.toMatch(/#[0-9a-fA-F]{6}\b/);
     expect(frame).not.toContain("animate-spin");
+    expect(frame).not.toContain("animate-in");
     expect(frame).toContain('aria-label="Close"');
-    // The shell's own frame: its overlay (drawn before the box), its box,
-    // its two columns.
-    expect(first.html).toContain("fixed inset-0 z-50");
-    expect(frame).toContain("w-[min(1212px,calc(100vw-32px))]");
+    // The scrim is drawn before the box; both are the shell's own classes.
+    expect(first.firstPass).toContain(LIGHTBOX_OVERLAY_CLASS);
+    expect(frame).toContain(LIGHTBOX_BOX_CLASS);
     expect(frame).toContain("md:w-[340px]");
     expect(frame).not.toContain("data-court-stage");
 
+    // With the chunk: the shell itself, `pending`, over an empty court — the
+    // one dialog that will show the court when the answer lands, so the
+    // opener it records is the card. Its chunk was here when this opening
+    // began (the warm-up pass loaded it), so it enters with its fade.
+    expect(first.html).not.toContain("lightbox-chunk-pending");
+    expect(first.shellProps).toHaveLength(1);
+    const shell = first.shellProps[0];
+    expect(shell.pending).toBe(true);
+    expect(shell.appear).toBe(true);
+    expect(shell.cut).toBe("serve");
+    expect(shell.title).toBe("Serve placement");
+    expect(shell.result.dots).toEqual([]);
+    expect(shell.stats.groups).toEqual([]);
+    expect(
+      shell.statRowDots({ group: "deuce", row: "deuce-t", label: "Deuce T" }),
+    ).toBeNull();
+    expect(shell.filterPanel!.countWith({ zone: ["t"] })).toBe(0);
+    expect(shell.player).toBeDefined();
+    expect(carriesPoints(shell)).toBe(false);
+
     // The serve card was closed and the Errors card clicked before the
-    // server answered: `data` is still the serve court. The frame again —
-    // never the serve court under the errors filters.
-    const next = renderView(
+    // server answered: `data` is still the serve court. Pending again, for
+    // Errors — never the serve court under the errors filters.
+    const next = await renderView(
       { analyzed: 2, side: "you", cards, lightbox: serve },
       "tab=visualizations&cut=errors&verr=unforced",
     );
-    expect(next.shellProps).toEqual([]);
-    expect(next.html).toContain('aria-label="Loading Errors"');
+    expect(next.shellProps).toHaveLength(1);
+    expect(next.shellProps[0].pending).toBe(true);
+    expect(next.shellProps[0].cut).toBe("errors");
+    expect(next.shellProps[0].title).toBe("Errors");
+    expect(next.shellProps[0].result.dots).toEqual([]);
 
     // Another chart of the same cut is another court too.
-    const zones = renderView(
+    const zones = await renderView(
       { analyzed: 2, side: "you", cards, lightbox: serve },
       "tab=visualizations&cut=serve&ball=first&chart=zones",
     );
-    expect(zones.shellProps).toEqual([]);
-    expect(zones.html).toContain('aria-label="Loading Serve placement"');
+    expect(zones.shellProps[0].pending).toBe(true);
+    expect(zones.shellProps[0].chart).toBe("zones");
 
-    // The answer for the card asked for: the shell, no frame.
-    const landed = renderView(
+    // The answer for the card asked for: the shell with the court, not
+    // pending.
+    const landed = await renderView(
       { analyzed: 2, side: "you", cards, lightbox: serve },
       "tab=visualizations&cut=serve&ball=first",
     );
     expect(landed.shellProps).toHaveLength(1);
-    expect(landed.html).not.toContain("season-lightbox-pending");
-
-    // Closing the frame goes where closing the shell goes: the wall, on the
-    // wall's own player.
-    const pendingClose = first.html.indexOf('aria-label="Close"');
-    expect(pendingClose).toBeGreaterThan(-1);
+    expect(landed.shellProps[0].pending).toBe(false);
+    expect(landed.shellProps[0].result).toBe(serve.result);
   });
 
-  test("the wall keeps its own player: a You | Opponent switch inside the card rewrites the URL's player, and closing writes the wall's back", () => {
+  test("a season with nothing analyzed opens nothing: a ?cut= in a stale link draws neither frame", async () => {
+    const { html, firstPass, shellProps } = await renderView(
+      {
+        analyzed: 0,
+        side: "you",
+        cards: buildSeasonCards([], "you", BANDS),
+        lightbox: null,
+      },
+      "tab=visualizations&cut=serve&ball=first",
+    );
+    expect(firstPass).not.toContain("lightbox-chunk-pending");
+    expect(html).not.toContain("lightbox-chunk-pending");
+    expect(shellProps).toEqual([]);
+    expect(html).toContain("No analyzed matches yet.");
+    expect(html).not.toContain("aria-busy");
+  });
+
+  test("the wall reads busy while the server's cards are another side's than the chip's, and not once they are", async () => {
+    const yours = buildSeasonCards(JUDGED, "you", BANDS);
+    // The Opponent chip was clicked: the store (and the chip) say opponent,
+    // the server's cards are still yours.
+    const stale = await renderView(
+      { analyzed: 2, side: "you", cards: yours, lightbox: null },
+      "tab=visualizations&player=opponent",
+    );
+    expect(stale.html).toMatch(/aria-pressed="true"[^>]*>Opponent<\/button>/);
+    expect(stale.html).toContain('aria-busy="true"');
+    expect(stale.html).toContain("pointer-events-none");
+    expect(stale.html).toContain('data-stale=""');
+    expect(stale.html).toContain("opacity-40");
+    expect(stale.html).toContain("motion-safe:transition-opacity");
+    expect(stale.html).toMatch(
+      /<p role="status" class="sr-only">Loading the opponents’ courts<\/p>/,
+    );
+    // The cards stay drawn, as the side they were computed for — a moment
+    // old, not a skeleton.
+    expect(stale.html).toContain("First serves, Maya Chen");
+    expect(stale.html).not.toContain("data-pending-bar");
+
+    // Landed: the cards are the chip's, nothing busy.
+    const landed = await renderView(
+      {
+        analyzed: 2,
+        side: "opponent",
+        cards: buildSeasonCards(JUDGED, "opponent", BANDS),
+        lightbox: null,
+      },
+      "tab=visualizations&player=opponent",
+    );
+    expect(landed.html).not.toContain("aria-busy");
+    expect(landed.html).not.toContain("pointer-events-none");
+    expect(landed.html).not.toContain("data-stale");
+    expect(landed.html).not.toContain("Loading the opponents");
+    expect(landed.html).toContain("First serves, Opponents");
+
+    // Back to You, the other way round, named for the player.
+    const back = await renderView(
+      {
+        analyzed: 2,
+        side: "opponent",
+        cards: buildSeasonCards(JUDGED, "opponent", BANDS),
+        lightbox: null,
+      },
+      "tab=visualizations",
+    );
+    expect(back.html).toContain('aria-busy="true"');
+    expect(back.html).toContain("Loading Maya Chen’s courts");
+  });
+
+  test("the wall keeps its own player: a You | Opponent switch inside the card rewrites the URL's player, and closing writes the wall's back", async () => {
     // A hard load of the opponents' Returns card: the wall's player is the
     // card's side (what the server drew the cards for), and the wall's chip
     // under the card reads so.
@@ -1033,7 +1136,7 @@ test.describe("the Visualizations view, rendered", () => {
     );
     const cards = buildSeasonCards(JUDGED, "opponent", BANDS);
     const lightbox = buildSeasonLightbox(JUDGED, state, BANDS, NAMES)!;
-    const { html, shellProps, replaced } = renderView(
+    const { html, shellProps, replaced } = await renderView(
       { analyzed: 2, side: "opponent", cards, lightbox },
       "tab=visualizations&cut=returnPlacement&player=opponent",
     );
@@ -1068,7 +1171,7 @@ test.describe("the Visualizations view, rendered", () => {
     );
   });
 
-  test("the store reads ?verr= by the season's rule, as the server does: on an unjudged season Unforced opens on every error in the browser too", () => {
+  test("the store reads ?verr= by the season's rule, as the server does: on an unjudged season Unforced opens on every error in the browser too", async () => {
     const query = "tab=visualizations&cut=errors&verr=unforced";
 
     // Unjudged: the server collapsed `unforced` to both kinds, and so must
@@ -1083,7 +1186,7 @@ test.describe("the Visualizations view, rendered", () => {
       BANDS,
       NAMES,
     )!;
-    const a = renderView(
+    const a = await renderView(
       {
         analyzed: 2,
         side: "you",
@@ -1104,7 +1207,7 @@ test.describe("the Visualizations view, rendered", () => {
       true,
     );
     const judged = buildSeasonLightbox(JUDGED, judgedState, BANDS, NAMES)!;
-    const b = renderView(
+    const b = await renderView(
       {
         analyzed: 2,
         side: "you",
@@ -1128,49 +1231,68 @@ test.describe("the Visualizations view, rendered", () => {
     expect(source).toContain("useVizState");
     expect(source).toContain("setState(");
     expect(source).not.toContain("computeViz");
+    // The shell is loaded on the first open, never with the profile, and
+    // the one dialog per card is keyed on the card: pending and landed
+    // share the mount, another card gets another.
+    expect(source).not.toMatch(/^import[^;]*viz-lightbox-shell"/m);
+    expect(source).toMatch(
+      /lazy\(\(\)\s*=>\s*import\(\s*"@\/components\/dashboard\/matches\/match-detail\/shots\/viz-lightbox-shell"/,
+    );
+    expect(source).toMatch(/key=\{`\$\{cut\}:\$\{state\.chart\}`\}/);
+    expect(source).toContain("pending={pending}");
+    expect(source).toContain("appear={opening.shellReady}");
   });
 });
 
-/* ── A Visualizations request ───────────────────────────────────────────── */
+/* ── One body per request ───────────────────────────────────────────────── */
 
 const PAGE = "src/app/dashboard/team/roster/[playerId]/page.tsx";
 const DEFERRED =
-  "src/components/dashboard/team/player-profile/profile-statistics-deferred.tsx";
+  "src/components/dashboard/team/player-profile/profile-body-deferred.tsx";
 
-test.describe("a Visualizations request renders the courts alone", () => {
+test.describe("one body per request", () => {
   const source = readFileSync(PAGE, "utf8");
   const page = source.slice(
     source.indexOf("export default async function PlayerProfilePage"),
   );
   const pageBody = page.slice(0, page.indexOf("\n}\n"));
 
-  test("the page reads ?tab= once on the server and, for Visualizations, skips the Statistics body and reads the courts' season", () => {
+  test("the page reads ?tab= once on the server and renders the body it names, the other view's stand-in beside it", () => {
     expect(pageBody).toContain(
       'parseProfileView(query[PROFILE_VIEW_PARAM]) === "visualizations"',
     );
-    // The Statistics slot: the deferred stand-in on a courts-only request,
-    // the Suspense-wrapped body otherwise.
+    // The Statistics slot: the stand-in on a Visualizations request, the
+    // Suspense-wrapped body otherwise …
     expect(pageBody).toMatch(
-      /courtsOnly \? \(\s*<ProfileStatisticsDeferred \/>\s*\) : \(\s*<Suspense/,
+      /courtsOnly \? \(\s*<ProfileStatisticsDeferred \/>\s*\) : \(\s*<Suspense[\s\S]*?<ProfileStatisticsBody/,
     );
-    // Both season readers on the page pick the loader by it, so the points
-    // are read once per request and no lob file on a courts-only one.
-    expect(pageBody.split("courtsOnly={courtsOnly}").length - 1).toBe(2);
-    for (const reader of ["AnalyzedCount", "ProfileVisualizationsBody"]) {
-      expect(source).toMatch(
-        new RegExp(
-          `async function ${reader}[\\s\\S]*?courtsOnly\\s*\\?\\s*getPlayerSeasonCourts\\(programId, playerId\\)\\s*:\\s*getPlayerSeason\\(programId, playerId\\)`,
-        ),
-      );
-    }
-    // The season's Error-type rule is the one the store gets.
+    // … and the Visualizations slot the other way round.
+    expect(pageBody).toMatch(
+      /courtsOnly \? \(\s*<Suspense[\s\S]*?<ProfileVisualizationsBody[\s\S]*?<\/Suspense>\s*\) : \(\s*<ProfileVisualizationsDeferred \/>/,
+    );
+    // The facts line reads whichever season the body of the request reads;
+    // the Visualizations body, rendered on its own request alone, reads the
+    // courts' season and never the full one.
+    expect(pageBody.split("courtsOnly={courtsOnly}").length - 1).toBe(1);
     expect(source).toMatch(
+      /async function AnalyzedCount[\s\S]*?courtsOnly\s*\?\s*getPlayerSeasonCourts\(programId, playerId\)\s*:\s*getPlayerSeason\(programId, playerId\)/,
+    );
+    const vizBody = source.slice(
+      source.indexOf("async function ProfileVisualizationsBody"),
+    );
+    expect(vizBody).toContain("getPlayerSeasonCourts(programId, playerId)");
+    expect(vizBody).not.toMatch(/\bgetPlayerSeason\(/);
+    // The season's Error-type rule is the one the store gets.
+    expect(vizBody).toMatch(
       /const errorSplitJudged = seasonErrorSplitJudged\(season\.perMatch\);[\s\S]*parseSeasonVizState\(query, errorSplitJudged\)[\s\S]*errorSplitJudged=\{errorSplitJudged\}/,
     );
   });
 
-  test("ProfileStatisticsDeferred shows nothing under Visualizations, and the Statistics skeleton plus one refresh once Statistics shows", () => {
-    const render = (query: string) => {
+  test("each stand-in shows nothing on the request that rendered it, and its view's skeleton plus one refresh once that view shows — so the two cannot ping-pong", () => {
+    const render = (
+      name: "ProfileStatisticsDeferred" | "ProfileVisualizationsDeferred",
+      query: string,
+    ) => {
       const loader = createLoader({
         stubs: {
           "next/navigation": {
@@ -1190,31 +1312,45 @@ test.describe("a Visualizations request renders the courts alone", () => {
           },
         },
       });
-      const { ProfileStatisticsDeferred } = loader.load(DEFERRED) as {
-        ProfileStatisticsDeferred: React.ComponentType;
-      };
-      return renderToStaticMarkup(
-        React.createElement(ProfileStatisticsDeferred),
-      );
+      const mod = loader.load(DEFERRED) as Record<string, React.ComponentType>;
+      return renderToStaticMarkup(React.createElement(mod[name]));
     };
 
-    // Visualizations is the view: nothing in the Statistics slot.
-    expect(render("tab=visualizations&cut=serve")).toBe("");
-    // Statistics is: the skeleton the first load draws, in the tab's panel.
-    const shown = render("cut=serve");
-    expect(shown).toContain('role="tabpanel"');
-    expect(shown).toContain('aria-label="Loading statistics"');
-    expect(shown).toContain("data-pending-bar");
-    expect(shown).not.toContain("<button");
+    // A Statistics request (no `tab`) renders the Visualizations stand-in:
+    // nothing at that URL. A Visualizations request renders the Statistics
+    // stand-in: nothing at that URL either. Neither can ask for a refresh
+    // on the request that drew it.
+    expect(render("ProfileVisualizationsDeferred", "")).toBe("");
+    expect(render("ProfileVisualizationsDeferred", "cut=serve")).toBe("");
+    expect(render("ProfileStatisticsDeferred", "tab=visualizations")).toBe("");
+    expect(
+      render("ProfileStatisticsDeferred", "tab=visualizations&cut=serve"),
+    ).toBe("");
 
-    // And the refresh that brings the body: asked once, on mount, through
-    // the router — never a navigation that would change the URL.
+    // Switched: each draws its own view's skeleton — the first load's — in
+    // the tab's panel, nothing interactive.
+    const statistics = render("ProfileStatisticsDeferred", "cut=serve");
+    expect(statistics).toContain('role="tabpanel"');
+    expect(statistics).toContain('aria-label="Loading statistics"');
+    expect(statistics).toContain("data-pending-bar");
+    expect(statistics).not.toContain("<button");
+    const visualizations = render(
+      "ProfileVisualizationsDeferred",
+      "tab=visualizations",
+    );
+    expect(visualizations).toContain('role="tabpanel"');
+    expect(visualizations).toContain('aria-label="Loading visualizations"');
+    expect(visualizations).toContain("data-pending-bar");
+    expect(visualizations).not.toContain("<button");
+
+    // And the refresh that brings the body: once, on mount, through the
+    // router — never a navigation that would change the URL.
     const deferred = readFileSync(DEFERRED, "utf8");
     expect(deferred).toMatch(
       /useEffect\(\(\) => \{\s*router\.refresh\(\);\s*\}, \[router\]\)/,
     );
     expect(deferred).not.toContain("router.replace");
     expect(deferred).not.toContain("router.push");
-    expect(deferred).toContain('<ProfileViewWhen view="statistics">');
+    expect(deferred).toContain("<ProfileViewWhen view={view}>");
   });
 });
