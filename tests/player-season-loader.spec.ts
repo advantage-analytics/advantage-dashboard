@@ -16,6 +16,18 @@ import {
   type PlayerSeasonDeps,
 } from "@/lib/data/player-season-server";
 import { foldSeasonRows, foldSeasonTallies } from "@/lib/data/player-season";
+import {
+  buildSeasonCards,
+  buildSeasonLightbox,
+} from "@/lib/data/player-season-viz";
+import {
+  BoundedLru,
+  pointsWeight,
+  type SeasonPointsCaching,
+} from "@/lib/data/season-points-cache";
+import type { MatchPoint } from "@/lib/data/match-points-server";
+import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
+import { parseVizState } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { transportError } from "@/lib/services/match-video/http";
 import { lobKeyOf } from "@/components/dashboard/matches/match-detail/match-filters/net-game";
 
@@ -1032,4 +1044,215 @@ test("a player with no matches is an empty season, with no reads", async () => {
   expect(season.tallies.perMatch).toEqual([]);
   expect(log).toEqual([]);
   expect(asked).toEqual([]);
+});
+
+/* ── Points across requests (`season-points-cache.ts`) ───────────────────── */
+
+const VERSIONS = [
+  { match_id: "m-a", version: 1 },
+  { match_id: "m-b", version: 4 },
+  { match_id: "m-d", version: 2 },
+];
+
+function freshCaching(
+  scope: Partial<SeasonPointsCaching["scope"]> = {},
+  cache = new BoundedLru<MatchPoint[]>({
+    maxWeight: 10_000,
+    ttlMs: 60_000,
+    weigh: pointsWeight,
+  }),
+): SeasonPointsCaching {
+  return {
+    cache,
+    scope: { viewerId: "u-coach", programId: PROGRAM, ...scope },
+  };
+}
+
+const pointReadsIn = (log: string[]) =>
+  log.filter((e) => e.startsWith("points.match(")).sort();
+
+test("a cached season is identical to an uncached one, figure for figure, and the second request reads no points", async () => {
+  const tables = fullTables({ match_points_versions: VERSIONS });
+  const { client, log, sides } = await adaSides(tables);
+  const caching = freshCaching();
+  const files = { "m-b": { ok: true, value: LOB_FILE } } as const;
+
+  log.splice(0);
+  const uncached = await loadPlayerSeason(
+    client,
+    sides.own,
+    fakeBallPaths(files).deps,
+  );
+  const uncachedReads = pointReadsIn(log.splice(0));
+
+  const first = await loadPlayerSeason(
+    client,
+    sides.own,
+    fakeBallPaths(files).deps,
+    caching,
+  );
+  expect(pointReadsIn(log.splice(0))).toEqual(uncachedReads);
+
+  const second = fakeBallPaths(files);
+  const again = await loadPlayerSeason(client, sides.own, second.deps, caching);
+  const againLog = log.splice(0);
+
+  expect(first).toEqual(uncached);
+  expect(again).toEqual(uncached);
+  // Only m-c — a candidate with no points, so nothing to cache — is read
+  // again; the three analyzed matches come from the cache.
+  expect(pointReadsIn(againLog)).toEqual(["points.match(m-c)"]);
+  expect(againLog.some((e) => e.startsWith("shots.select"))).toBe(false);
+  // The service-role file reads never enter the cache: every request asks.
+  expect([...second.asked].sort()).toEqual(["m-b", "m-c", "m-d"]);
+
+  // The Visualizations tab's courts, cards and lightbox over the cached
+  // season are the uncached season's, value for value.
+  const courtsUncached = await loadPlayerSeasonCourts(client, sides.own);
+  const courtsCached = await loadPlayerSeasonCourts(client, sides.own, caching);
+  expect(courtsCached).toEqual(courtsUncached);
+  const bands = { bands: DEFAULT_BANDS, unit: "ft" as const };
+  const names = { you: "Ada Okafor", opponent: "Opponents" };
+  for (const side of ["you", "opponent"] as const) {
+    expect(buildSeasonCards(courtsCached.perMatch, side, bands)).toEqual(
+      buildSeasonCards(courtsUncached.perMatch, side, bands),
+    );
+  }
+  for (const query of [
+    "cut=serve&ball=first",
+    "cut=rallyPlacement",
+    "cut=errors&vp=opponent",
+  ]) {
+    const state = parseVizState(new URLSearchParams(query), {
+      errorSplitJudged: false,
+    });
+    expect(
+      buildSeasonLightbox(courtsCached.perMatch, state, bands, names),
+      query,
+    ).toEqual(
+      buildSeasonLightbox(courtsUncached.perMatch, state, bands, names),
+    );
+  }
+});
+
+test("a bumped version reads that match again and only that match", async () => {
+  const caching = freshCaching();
+  const before = await adaSides(
+    fullTables({ match_points_versions: VERSIONS }),
+  );
+  await loadPlayerSeasonCourts(before.client, before.sides.own, caching);
+
+  // A label publish rewrote m-b: new points, and the trigger bumped it.
+  const relabelled = POINTS.map((p) =>
+    p.match_id === "m-b" ? { ...p, result_type: "Ace" } : p,
+  );
+  const after = await adaSides(
+    fullTables({
+      points: relabelled,
+      match_points_versions: VERSIONS.map((v) =>
+        v.match_id === "m-b" ? { ...v, version: 5 } : v,
+      ),
+    }),
+  );
+  after.log.splice(0);
+  const season = await loadPlayerSeasonCourts(
+    after.client,
+    after.sides.own,
+    caching,
+  );
+
+  expect(pointReadsIn(after.log)).toEqual([
+    "points.match(m-b)",
+    "points.match(m-c)",
+  ]);
+  const mb = season.perMatch.find((m) => m.matchId === "m-b")!;
+  expect(mb.points.every((p) => p.resultType === "Ace")).toBe(true);
+  expect(season).toEqual(
+    await loadPlayerSeasonCourts(after.client, after.sides.own),
+  );
+});
+
+test("the cache is per viewer and per program: nobody else is ever served another's read", async () => {
+  const cache = new BoundedLru<MatchPoint[]>({
+    maxWeight: 10_000,
+    ttlMs: 60_000,
+    weigh: pointsWeight,
+  });
+  const { client, log, sides } = await adaSides(
+    fullTables({ match_points_versions: VERSIONS }),
+  );
+  await loadPlayerSeasonCourts(client, sides.own, freshCaching({}, cache));
+
+  for (const scope of [{ viewerId: "u-ada" }, { programId: "prog-2" }]) {
+    log.splice(0);
+    await loadPlayerSeasonCourts(client, sides.own, freshCaching(scope, cache));
+    expect(pointReadsIn(log), JSON.stringify(scope)).toEqual([
+      "points.match(m-a)",
+      "points.match(m-b)",
+      "points.match(m-c)",
+      "points.match(m-d)",
+    ]);
+  }
+});
+
+test("a match with no version the viewer can read is read every time, and never cached", async () => {
+  const caching = freshCaching();
+  const { client, log, sides } = await adaSides(
+    fullTables({
+      match_points_versions: VERSIONS.filter((v) => v.match_id !== "m-d"),
+    }),
+  );
+  await loadPlayerSeasonCourts(client, sides.own, caching);
+  log.splice(0);
+  await loadPlayerSeasonCourts(client, sides.own, caching);
+  expect(pointReadsIn(log)).toEqual(["points.match(m-c)", "points.match(m-d)"]);
+  expect(
+    caching.cache
+      .keys()
+      .map((key) => key.split("|")[2])
+      .sort(),
+  ).toEqual(["m-a", "m-b"]);
+});
+
+test("a versions read that fails reads the whole season uncached and caches nothing", async () => {
+  const caching = freshCaching();
+  const { client, log, sides } = await adaSides(
+    fullTables({
+      match_points_versions: new Error(
+        'relation "public.match_points_versions" does not exist',
+      ),
+    }),
+  );
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const season = await loadPlayerSeasonCourts(client, sides.own, caching);
+    expect(season).toEqual(await loadPlayerSeasonCourts(client, sides.own));
+    log.splice(0);
+    await loadPlayerSeasonCourts(client, sides.own, caching);
+  } finally {
+    console.warn = warn;
+  }
+  expect(pointReadsIn(log)).toHaveLength(4);
+  expect(caching.cache.size).toBe(0);
+});
+
+test("a failed points read still throws with caching on, and leaves nothing cached for that match", async () => {
+  const caching = freshCaching();
+  const { client, sides } = await adaSides(
+    fullTables({
+      match_points_versions: VERSIONS,
+      shots: new Error("shots page failed"),
+    }),
+  );
+  const error = console.error;
+  console.error = () => {};
+  try {
+    await expect(
+      loadPlayerSeasonCourts(client, sides.own, caching),
+    ).rejects.toThrow(/Could not read the points/);
+  } finally {
+    console.error = error;
+  }
+  expect(caching.cache.size).toBe(0);
 });

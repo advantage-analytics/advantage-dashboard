@@ -419,7 +419,7 @@ async function ProfileStatisticsBody({
  * the points, no lob files, no fold; `cache()`d, so `AnalyzedCount` shares
  * it), the workspace's bands and the viewer's unit, then the wall's four
  * cards for the URL's side and — when `?cut=` names one — the opened card's
- * court, statistics, per-row mark ids and per-option counts, all computed
+ * court, statistics, per-row mark positions and per-option counts, all computed
  * here (`player-season-viz.ts`) and handed to the client view as plain data.
  * No `MatchPoint` leaves this function.
  */

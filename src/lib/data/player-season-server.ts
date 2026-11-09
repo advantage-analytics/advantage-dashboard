@@ -2,6 +2,7 @@ import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user-server";
 import { lazyAdminClient } from "@/lib/supabase/admin";
 import {
   supabaseBallPathsBody,
@@ -11,6 +12,12 @@ import { statKey } from "@/lib/data/aggregate";
 import { errorSplitJudged } from "@/lib/data/error-split";
 import { matchDay } from "@/lib/data/match-day";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
+import {
+  cachedPointsReader,
+  readPointsVersions,
+  seasonPointsCache,
+  type SeasonPointsCaching,
+} from "@/lib/data/season-points-cache";
 import {
   MATCH_STATS_VIEW_COLUMNS,
   transformToPlayerStats,
@@ -102,6 +109,14 @@ import { lobShotKeys } from "@/components/dashboard/matches/match-detail/match-f
  * that goes through the service role. Its result is typed so the Statistics
  * fold cannot run over it: a season folded with every `lobKeys` null reads
  * "Passed or lobbed" on every match, and nothing on screen says why.
+ *
+ * ── Points across requests ──────────────────────────────────────────────────
+ * Each match's points come through `season-points-cache.ts`: a per-viewer,
+ * per-program, in-process LRU keyed by the match's points version, so the
+ * Visualizations tab's every click does not re-read the season. Only the
+ * points are cached — the matches, seats, job state and stats rows that pick
+ * which matches are folded are read on every request, and the service-role
+ * lob files never enter the cache. A failed version read reads uncached.
  *
  * ── Failing closed ──────────────────────────────────────────────────────────
  * A points read that answers `null` (a page of shots failed) or a stats read
@@ -307,18 +322,30 @@ async function readAnalyzedMatches(
   supabase: SupabaseClient,
   sides: readonly PlayerMatchSide[],
   readLobs: ((matchId: string) => Promise<ReadonlySet<number> | null>) | null,
+  caching: SeasonPointsCaching | null,
 ): Promise<SeasonMatch[]> {
   // Two waves. First the cheap reads that cover the whole season in one
   // query each — the job state the report gates on (reads nothing for no
   // matches) and both seats' published rows — which say which matches can be
   // folded at all.
   const matchIds = sides.map((s) => s.match.id);
-  const [jobs, statsByKey] = await Promise.all([
+  const [jobs, statsByKey, versions] = await Promise.all([
     // `strict`: a failed jobs read throws rather than reading as "no jobs",
     // which would fold in-flight matches and drop withheld-statistics ones.
     loadMatchAnalysis(supabase, matchIds, { strict: true }),
     readSeatStats(supabase, matchIds),
+    // The points versions, as this viewer can read them, BEFORE any points
+    // are read (`season-points-cache.ts`, "Invalidation"). `null` on a
+    // failed read: nothing is cached or served from the cache this request.
+    caching === null
+      ? Promise.resolve(null)
+      : readPointsVersions(supabase, matchIds),
   ]);
+  const readPoints = cachedPointsReader(caching, versions, (matchId) =>
+    getMatchPointsFromSupabase(matchId, supabase, {
+      includeBookmarks: false,
+    }),
+  );
 
   // Then the heavy per-match reads, only for those: a match the report shows
   // as Analysis steps is not folded, so its points are not read; nor are a
@@ -354,9 +381,7 @@ async function readAnalyzedMatches(
     SEASON_READ_CONCURRENCY,
     async (s) => {
       const [points, lobKeys] = await Promise.all([
-        getMatchPointsFromSupabase(s.match.id, supabase, {
-          includeBookmarks: false,
-        }),
+        readPoints(s.match.id),
         readLobs !== null && isDerived(s.match)
           ? readLobs(s.match.id)
           : Promise.resolve(null),
@@ -415,9 +440,13 @@ export async function loadPlayerSeason(
   supabase: SupabaseClient,
   sides: readonly PlayerMatchSide[],
   deps: PlayerSeasonDeps,
+  caching: SeasonPointsCaching | null = null,
 ): Promise<PlayerSeason> {
-  const perMatch = await readAnalyzedMatches(supabase, sides, (matchId) =>
-    readLobKeys(deps, matchId),
+  const perMatch = await readAnalyzedMatches(
+    supabase,
+    sides,
+    (matchId) => readLobKeys(deps, matchId),
+    caching,
   );
   return {
     analyzed: perMatch.length,
@@ -455,8 +484,9 @@ export interface PlayerSeasonCourts {
 export async function loadPlayerSeasonCourts(
   supabase: SupabaseClient,
   sides: readonly PlayerMatchSide[],
+  caching: SeasonPointsCaching | null = null,
 ): Promise<PlayerSeasonCourts> {
-  const perMatch = await readAnalyzedMatches(supabase, sides, null);
+  const perMatch = await readAnalyzedMatches(supabase, sides, null, caching);
   return {
     analyzed: perMatch.length,
     matchesPlayed: sides.length,
@@ -469,6 +499,22 @@ export async function loadPlayerSeasonCourts(
         errorSplitJudged,
       }),
     ),
+  };
+}
+
+/**
+ * The request's caching: the process's cache, keyed by the signed-in viewer
+ * (`getAuthUser`, `cache()`d — the dashboard layout has already asked) and
+ * the program. Nobody signed in caches nothing.
+ */
+async function requestCaching(
+  programId: string,
+): Promise<SeasonPointsCaching | null> {
+  const user = await getAuthUser();
+  if (!user) return null;
+  return {
+    cache: seasonPointsCache,
+    scope: { viewerId: user.id, programId },
   };
 }
 
@@ -486,10 +532,16 @@ export const getPlayerSeason = cache(async function getPlayerSeason(
 ): Promise<PlayerSeason | null> {
   const sides = await getPlayerMatchSides(programId, playerId);
   if (!sides) return null;
-  const supabase = await createClient();
-  return loadPlayerSeason(supabase, sides.own, {
-    loadBallPathsBody: supabaseBallPathsBody(lazyAdminClient()),
-  });
+  const [supabase, caching] = await Promise.all([
+    createClient(),
+    requestCaching(programId),
+  ]);
+  return loadPlayerSeason(
+    supabase,
+    sides.own,
+    { loadBallPathsBody: supabaseBallPathsBody(lazyAdminClient()) },
+    caching,
+  );
 });
 
 /**
@@ -505,6 +557,9 @@ export const getPlayerSeasonCourts = cache(async function getPlayerSeasonCourts(
 ): Promise<PlayerSeasonCourts | null> {
   const sides = await getPlayerMatchSides(programId, playerId);
   if (!sides) return null;
-  const supabase = await createClient();
-  return loadPlayerSeasonCourts(supabase, sides.own);
+  const [supabase, caching] = await Promise.all([
+    createClient(),
+    requestCaching(programId),
+  ]);
+  return loadPlayerSeasonCourts(supabase, sides.own, caching);
 });

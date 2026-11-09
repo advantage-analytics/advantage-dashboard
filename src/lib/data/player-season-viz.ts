@@ -411,7 +411,7 @@ export const SEASON_CUT_LABEL: Record<Cut, string> = {
   errors: "Errors",
 };
 
-/** The lookup key for a Statistics row's marks (`statRowDotIds`). On serve
+/** The lookup key for a Statistics row's marks (`statRowDots`). On serve
  *  the group is the court side the row sits in, as `LightboxStats` picks it. */
 export function statPickKey(pick: Pick<StatPick, "group" | "row">): string {
   return `${pick.group}/${pick.row}`;
@@ -485,11 +485,50 @@ export interface SeasonLightboxData {
    *  when every match judged its errors. */
   errorSplitJudged: boolean;
   /** Each Statistics row's marks, by `statPickKey` — every row of `stats`
-   *  has an entry. */
-  statRowDotIds: Record<string, string[]>;
+   *  has an entry: the positions in `result.dots` of the marks the row
+   *  picks, ascending (`encodeStatRowDots`). Positions, not ids: the ids are
+   *  already in `result.dots`, and a row list repeating them was most of the
+   *  payload. `decodeStatRowDots` turns one back into the id set the shell
+   *  reads. */
+  statRowDots: Record<string, number[]>;
   /** Each Filters-panel option's count, by `optionCountKey` — every patch
    *  of `filterOptionPatches` has an entry. */
   optionCounts: Record<string, number>;
+}
+
+/**
+ * One Statistics row's marks as positions in `dots`: every mark whose id the
+ * row picks, ascending, each once. An id the row picks that is not on the
+ * court (`statPickDotIds` on serve reads its own zoned court, which can hold
+ * a mark the live filters leave off) has no position and is dropped — the
+ * shell only ever asks the set about marks it draws, and every mark it draws
+ * is one of `dots`, so the answers are the same.
+ */
+export function encodeStatRowDots(
+  dots: readonly Pick<VizDot, "id">[],
+  ids: Iterable<string>,
+): number[] {
+  const picked = new Set(ids);
+  const indices: number[] = [];
+  dots.forEach((dot, i) => {
+    if (picked.has(dot.id)) indices.push(i);
+  });
+  return indices;
+}
+
+/** A row's positions back into the ids the shell's `statRowDots` answers
+ *  with. An index outside `dots` (never written by `encodeStatRowDots`) is
+ *  ignored. */
+export function decodeStatRowDots(
+  dots: readonly Pick<VizDot, "id">[],
+  indices: readonly number[],
+): Set<string> {
+  const ids = new Set<string>();
+  for (const i of indices) {
+    const dot = dots[i];
+    if (dot !== undefined) ids.add(dot.id);
+  }
+  return ids;
 }
 
 /**
@@ -546,7 +585,7 @@ export function buildSeasonLightbox(
   // A Statistics row's marks: the stats' own rule per match
   // (`statPickDotIds`), united. On serve the pick's group is the court
   // side, as `LightboxStats` hands it.
-  const statRowDotIds: Record<string, string[]> = {};
+  const statRowDots: Record<string, number[]> = {};
   for (const group of stats.groups) {
     for (const row of group.rows) {
       const pick: StatPick = {
@@ -554,7 +593,7 @@ export function buildSeasonLightbox(
         row: row.key,
         label: row.label,
       };
-      const ids: string[] = [];
+      const ids = new Set<string>();
       for (const part of parts) {
         for (const id of statPickDotIds(
           part.points,
@@ -566,9 +605,9 @@ export function buildSeasonLightbox(
           pick,
           bands.bands,
         ))
-          ids.push(id);
+          ids.add(id);
       }
-      statRowDotIds[statPickKey(pick)] = ids;
+      statRowDots[statPickKey(pick)] = encodeStatRowDots(result.dots, ids);
     }
   }
 
@@ -662,7 +701,7 @@ export function buildSeasonLightbox(
     clearFilters,
     sets,
     errorSplitJudged: judged,
-    statRowDotIds,
+    statRowDots,
     optionCounts,
   };
 }
