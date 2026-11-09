@@ -203,6 +203,18 @@ export interface VizState {
    * doc comment for why draft never survives a `setState` call).
    */
   draft?: boolean;
+  /**
+   * The saved view an edited court came from (`?vfrom=`), while `viewId` is
+   * null: an edit drops `viewId` (the court is no longer exactly the view)
+   * but the lightbox still measures against the view — its title, the
+   * strip, the denominator and "Clear filter" all take its filters as the
+   * baseline. In the URL so it survives a remount (Watch → Video → Back) and
+   * a reload. Never set alongside `viewId` (that IS the baseline), on the
+   * wall or on a draft; `applyVizUpdate` keeps it moving: a saved or picked
+   * view replaces it, a new cut or the wall drops it. Optional and omitted
+   * when absent, like `draft`.
+   */
+  editedFrom?: string;
 }
 
 /* ── Parse & serialize helper ──────────────────────────────────────────── */
@@ -302,6 +314,7 @@ const VIZ_KEYS = [
   "view",
   "vset",
   "draft",
+  "vfrom",
   // Retired with the fullscreen viewer; still a viz key so an old
   // `&fullscreen=1` link is cleaned off the URL by the next update.
   "fullscreen",
@@ -367,8 +380,27 @@ export function applyVizUpdate(
   update: VizState | ((prev: VizState) => VizState),
 ): VizState {
   const resolved = typeof update === "function" ? update(prev) : update;
-  if (!resolved.draft) return resolved;
-  return { ...resolved, draft: false };
+  const editedFrom = nextEditedFrom(prev, resolved);
+  if (!resolved.draft && resolved.editedFrom === editedFrom) return resolved;
+  const next: VizState = { ...resolved };
+  if (next.draft) next.draft = false;
+  if (editedFrom === undefined) delete next.editedFrom;
+  else next.editedFrom = editedFrom;
+  return next;
+}
+
+/**
+ * Where `editedFrom` goes on an update: nowhere on the wall, on a court that
+ * IS a saved view (`viewId` names the baseline itself), on a draft or on a
+ * new cut; otherwise the view the previous court was, or came from — so an
+ * edit to view V, and every edit after it, measures against V until another
+ * view is saved or picked.
+ */
+function nextEditedFrom(prev: VizState, next: VizState): string | undefined {
+  if (next.cut === null || next.viewId !== null || next.draft === true)
+    return undefined;
+  if (next.cut !== prev.cut) return undefined;
+  return next.editedFrom ?? prev.viewId ?? prev.editedFrom ?? undefined;
 }
 
 /**
@@ -499,6 +531,8 @@ export function parseVizState(
   // without a `draft` key relies on that (`{}`'s missing key and `{draft:
   // undefined}` compare equal under `toEqual`; `{draft: false}` would not).
   const draft = cut !== null && params.get("draft") === "1";
+  const editedFrom =
+    cut !== null && viewId === null && !draft ? params.get("vfrom") : null;
 
   return {
     cut,
@@ -506,6 +540,7 @@ export function parseVizState(
     filters,
     viewId,
     ...(draft ? { draft: true } : {}),
+    ...(editedFrom ? { editedFrom } : {}),
   };
 }
 
@@ -547,6 +582,8 @@ export function vizStateQuery(
   // Serialize viewId if present
   if (state.viewId !== null) {
     next.set("view", state.viewId);
+  } else if (state.editedFrom !== undefined && state.draft !== true) {
+    next.set("vfrom", state.editedFrom);
   }
 
   // Serialize filters: only non-default keys that are in filterKeysFor(cut)

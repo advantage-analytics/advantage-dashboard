@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import {
   MatchReportProvider,
@@ -46,8 +48,8 @@ const points = [...ASYMMETRIC_SERVES, ...RALLY_POINTS].map((point, i) =>
     : point,
 );
 
-/** Two saved views: a Saved collection to open from, and a second view to
- *  go Back/Forward to. */
+/** Saved views: a Saved collection to open from, a second view to go
+ *  Back/Forward to, and one with a filter of its own. */
 const savedViews = [
   {
     id: "sv1",
@@ -66,6 +68,16 @@ const savedViews = [
     chart: "scatter" as const,
     filters: { ...EMPTY_VIZ_FILTERS },
     order: 1,
+    shared: false,
+    mine: true,
+  },
+  {
+    id: "sv3",
+    name: "Saved first serves",
+    cut: "serve" as const,
+    chart: "scatter" as const,
+    filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
+    order: 2,
     shared: false,
     mine: true,
   },
@@ -96,6 +108,31 @@ function RemainderProbe() {
         {filmRemainder ? "remainder" : "none"}
       </output>
     </div>
+  );
+}
+
+/**
+ * Test-only: a Radix Dialog (a non-popper layer) that opens over whatever is
+ * up when a spec calls `window.__openNestedLayer()`, so a spec can check Esc
+ * reaches it before the lightbox.
+ */
+function NestedLayerProbe() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    (window as unknown as { __openNestedLayer: () => void }).__openNestedLayer =
+      () => setOpen(true);
+  }, []);
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          className="fixed top-4 left-4 z-[60] bg-white p-4"
+        >
+          <DialogPrimitive.Title>Nested layer</DialogPrimitive.Title>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
 
@@ -130,6 +167,7 @@ createRoot(document.getElementById("root")!).render(
       >
         <main className="mx-auto max-w-[1200px] p-6">
           <RemainderProbe />
+          <NestedLayerProbe />
           <ShownTab />
         </main>
       </MatchReportProvider>

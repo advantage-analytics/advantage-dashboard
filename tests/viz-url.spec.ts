@@ -837,3 +837,55 @@ test.describe("Error type on a match whose errors are not judged", () => {
     ]);
   });
 });
+
+test("applyVizUpdate keeps the edited view's id: an edit, a save, a pick, a new cut and the wall", () => {
+  const onV = parseVizState(new URLSearchParams("cut=serve&view=V"));
+  // An edit drops viewId and remembers V; a second edit keeps V.
+  const edited = applyVizUpdate(onV, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, court: ["deuce"] },
+    viewId: null,
+  }));
+  expect(edited.editedFrom).toBe("V");
+  const again = applyVizUpdate(edited, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, zone: ["t"] },
+    viewId: null,
+  }));
+  expect(again.editedFrom).toBe("V");
+  expect(vizStateQuery(new URLSearchParams(), again)).toContain("vfrom=V");
+  // Saving as W, then editing: W is the baseline now.
+  const savedW = applyVizUpdate(again, (prev) => ({ ...prev, viewId: "W" }));
+  expect(savedW.editedFrom).toBeUndefined();
+  const editedW = applyVizUpdate(savedW, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, court: [] },
+    viewId: null,
+  }));
+  expect(editedW.editedFrom).toBe("W");
+  // A new cut, or the wall, lets go of it.
+  expect(
+    applyVizUpdate(editedW, (prev) => ({ ...prev, cut: "rallyPlacement" }))
+      .editedFrom,
+  ).toBeUndefined();
+  expect(
+    applyVizUpdate(editedW, (prev) => ({ ...prev, cut: null })).editedFrom,
+  ).toBeUndefined();
+  // A draft has none; picking W from it, then editing, measures against W.
+  const draft = parseVizState(new URLSearchParams("cut=serve&draft=1&vfrom=V"));
+  expect(draft.editedFrom).toBeUndefined();
+  const picked = applyVizUpdate(draft, (prev) => ({ ...prev, viewId: "W" }));
+  const pickedEdited = applyVizUpdate(picked, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, court: ["ad"] },
+    viewId: null,
+  }));
+  expect(pickedEdited.editedFrom).toBe("W");
+  // `?vfrom=` round-trips, and never rides alongside `view=`.
+  expect(
+    parseVizState(new URLSearchParams("cut=serve&vfrom=V")).editedFrom,
+  ).toBe("V");
+  expect(
+    parseVizState(new URLSearchParams("cut=serve&view=W&vfrom=V")).editedFrom,
+  ).toBeUndefined();
+});

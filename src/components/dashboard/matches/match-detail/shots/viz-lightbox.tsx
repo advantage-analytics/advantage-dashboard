@@ -85,6 +85,24 @@ import { useErrorSplitJudged } from "../match-filters/provider";
 import { lightboxCountLine } from "./wall-summary";
 import { useMatchFilters } from "../match-filters/provider";
 
+/** A saved view's filter group, named when the reader loosens it to "any". */
+const LOOSENED_LABEL: Partial<Record<keyof VizFilters, string>> = {
+  ball: "Serve",
+  court: "Court",
+  set: "Set",
+  zone: "Zone",
+  result: "Result",
+  pressure: "Score",
+  rally: "Rally",
+  game: "Game",
+  error: "Error type",
+  match: "Advanced filters",
+};
+
+/** Opens the Video tab on the points the lightbox shows, by point number,
+ *  named by `label` in its strip. */
+export type WatchPoints = (pointNumbers: number[], label: string) => void;
+
 /**
  * The opened card (canvas "Final flow" / "Flow states" S03–S17): a Dialog v3
  * lightbox over the wall, replacing both the focused page and the fullscreen
@@ -100,11 +118,6 @@ import { useMatchFilters } from "../match-filters/provider";
  * `computeVizStats`, one resolved subject (guardrails §4) — and the footer's
  * N is `pointsBehind()` over the same marks the court draws.
  */
-
-/** Opens the Video tab on the points the lightbox shows, by point number,
- *  named by `label` in its strip. */
-export type WatchPoints = (pointNumbers: number[], label: string) => void;
-
 export function VizLightbox({
   wallPlayer,
   onWatchPoints,
@@ -158,8 +171,6 @@ export function VizLightbox({
   const [activeMarkId, setActiveMarkId] = useState<string | null>(null);
   const [focusedMarkId, setFocusedMarkId] = useState<string | null>(null);
   const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
-  // The saved view this lightbox opened on (see `baseView`).
-  const [openedViewId] = useState(state.viewId);
   const [rovingMarkId, setRovingMarkId] = useState<string | null>(null);
   const readoutLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -344,15 +355,14 @@ export function VizLightbox({
     state.viewId !== null
       ? (meta.savedViews.find((v) => v.id === state.viewId) ?? null)
       : null;
-  // The saved view this lightbox opened on stays its baseline after an edit
-  // rewrites `viewId` to null (a new lightbox per opening, and per
-  // Back/Forward onto another view, so this never goes stale); a view saved
-  // from here takes over.
+  // The saved view the court is, or was edited from (`?vfrom=`, which the
+  // store moves on every save, pick and new cut — `applyVizUpdate`). In the
+  // URL, so a remount (Watch → Video → Back) or a reload keeps it.
+  const baseViewId = state.viewId ?? state.editedFrom ?? null;
   const baseView =
-    savedView ??
-    (openedViewId !== null
-      ? (meta.savedViews.find((v) => v.id === openedViewId) ?? null)
-      : null);
+    baseViewId !== null
+      ? (meta.savedViews.find((v) => v.id === baseViewId) ?? null)
+      : null;
   const defaultCut = defaultCutsFor(errorsJudgedIn(matchCtx)).find(
     (c) => c.cut === state.cut,
   );
@@ -602,16 +612,20 @@ export function VizLightbox({
     }
   }
 
-  // Esc must reach the lightbox's own step whenever nothing is genuinely
-  // open above it. Radix hands Esc to its TOPMOST layer, and a menu or
-  // popover that has just closed (the Filters panel, the chart menu) stays
-  // mounted — still topmost — through its ~150ms exit animation; an Esc in
-  // that window (Esc to close the panel, Esc again to close the lightbox) was
-  // swallowed by the closing layer and the lightbox stayed open. This
-  // capture listener, on the document like Radix's own, runs the step itself
-  // unless an OPEN menu, popover or tooltip is up (those keep the key, and
-  // their own handlers decide). It stands down once the dialog's own handler
-  // has acted (`defaultPrevented`), so a lone dialog is unchanged.
+  // Esc normally reaches the lightbox through Radix: the topmost layer
+  // gets it, and the Dialog's own `onEscapeKeyDown` (below) takes one step
+  // back. A nested Dialog, AlertDialog, Select, menu or popover opened above
+  // it is topmost and handles Esc first, as it should.
+  //
+  // One case Radix gets wrong: a menu or popover that has just closed (the
+  // Filters panel, the chart menu) stays mounted, and still topmost,
+  // through its ~150ms exit animation. An Esc in that window (Esc to close
+  // the panel, then Esc again to close the lightbox) is swallowed by the
+  // closing layer, and the lightbox stays open. This capture listener takes
+  // the key ONLY then: when a layer is closing and no other layer is open,
+  // it runs the step itself. Otherwise it does nothing, and Radix routes
+  // the key. Tooltips forward their own Esc (`escapeFromTooltip`).
+  const contentRef = useRef<HTMLDivElement>(null);
   const escapeRef = useRef<() => void>(() => {});
   useEffect(() => {
     escapeRef.current = () => {
@@ -619,12 +633,22 @@ export function VizLightbox({
     };
   });
   useEffect(() => {
+    const LAYERS =
+      '[data-radix-popper-content-wrapper] > *, [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
-      const openAbove = document.querySelector(
-        '[data-radix-popper-content-wrapper] [data-state="open"], [data-radix-popper-content-wrapper] [data-state="delayed-open"], [data-radix-popper-content-wrapper] [data-state="instant-open"]',
+      const own = contentRef.current;
+      const layers = [...document.querySelectorAll<HTMLElement>(LAYERS)].filter(
+        (el) => el !== own,
       );
-      if (openAbove) return;
+      const isOpen = (el: HTMLElement) =>
+        ["open", "delayed-open", "instant-open"].includes(
+          el.dataset.state ?? "open",
+        );
+      // Any layer open above the lightbox keeps the key.
+      if (layers.some(isOpen)) return;
+      // Nothing closing: the Dialog's own handler takes it.
+      if (!layers.some((el) => el.dataset.state === "closed")) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       escapeRef.current();
@@ -666,8 +690,10 @@ export function VizLightbox({
 
   const title = isDraft
     ? "New view"
-    : onCard && baseline !== null
-      ? baseline.name
+    : baseline !== null && (onCard || baseline.view !== null)
+      ? // A saved view keeps its name while edited: the strip names every
+        // change from it, and Clear goes back to it.
+        baseline.name
       : (savedView?.name ?? CUT_LABEL[cut]);
   const subjectWord = state.filters.player === "you" ? "You" : "Opponent";
   const subtitle = isDraft
@@ -747,13 +773,28 @@ export function VizLightbox({
     (key) =>
       key !== "player" && !sameFilterValue(key, state.filters, clearTarget),
   );
-  // The strip's sentence: EVERY applied filter the title does not already
-  // say (all of them on a saved view or a loosened card), then the legend's
-  // pick and a Statistics row — so nothing narrows the court unseen.
+  // The strip's sentence: exactly what "Clear filter" removes. On a card
+  // the card's own filters are left out while it holds them, and every
+  // filter is named once it is loosened. On a saved view, every change from
+  // the view: a filter added, a view filter changed (its new value), or a
+  // view filter loosened to nothing ("Serve: any"). Then the legend's pick
+  // and a Statistics row — so nothing narrows or widens the court unseen.
   const names = { you: you.shortName, opponent: opp.shortName };
+  const onView = baseline !== null && baseline.view !== null;
+  const unchangedBaseKey = (key: keyof VizFilters) =>
+    cardFilters !== null &&
+    cardKeys.includes(key) &&
+    (onView ? sameFilterValue(key, state.filters, cardFilters) : onCard);
   const phrases = activeFilterEntries(state, names, { errorSplitJudged })
-    .filter((e) => e.key !== "player" && !(onCard && cardKeys.includes(e.key)))
+    .filter((e) => e.key !== "player" && !unchangedBaseKey(e.key))
     .map((e) => e.label);
+  if (onView)
+    for (const key of cardKeys)
+      if (
+        !unchangedBaseKey(key) &&
+        sameFilterValue(key, state.filters, EMPTY_VIZ_FILTERS)
+      )
+        phrases.push(`${LOOSENED_LABEL[key] ?? "Filter"}: any`);
   if (legendPick !== null)
     phrases.push(
       { won: "Won", lost: "Lost", out: "Out", ace: "Aces" }[legendPick],
@@ -798,6 +839,7 @@ export function VizLightbox({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(13,13,13,0.4)] data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none" />
         <DialogPrimitive.Content
+          ref={contentRef}
           aria-describedby="viz-lightbox-subtitle"
           onKeyDown={onKeyDown}
           onEscapeKeyDown={(e) => {

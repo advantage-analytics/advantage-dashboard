@@ -794,3 +794,107 @@ test("R3·7 · a saved view is its own baseline: nothing applied on open, and Cl
     dialog.getByRole("heading", { name: "Saved serve" }),
   ).toBeVisible();
 });
+
+/* ── Gate fixes (PR #684 review, round 4) ─────────────────────────────── */
+
+test("R4·1 · a view picked from a draft's menu is the baseline after an edit: Clear lands back on it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&draft=1`);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Serve placement" }).click();
+  await page.getByRole("menuitemradio", { name: /^Saved serve Serve/ }).click();
+  await expect(page).toHaveURL(/view=sv1/);
+  await dialog.getByRole("button", { name: "Filters" }).click();
+  await page
+    .getByRole("dialog", { name: "Filter the court" })
+    .getByRole("radio", { name: "Deuce" })
+    .click();
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/vfrom=sv1/);
+  await expect(
+    dialog.getByRole("heading", { name: "Saved serve" }),
+  ).toBeVisible();
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await expect(strip).toContainText("Deuce");
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(page).toHaveURL(/view=sv1/);
+  await expect(strip).toHaveCount(0);
+});
+
+test("R4·2 · an edited view stays the baseline through Watch → Video → Back", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&view=sv1&fixture=watchall`);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Filters" }).click();
+  await page
+    .getByRole("dialog", { name: "Filter the court" })
+    .getByRole("radio", { name: "Deuce" })
+    .click();
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/vfrom=sv1/);
+  await dialog.getByRole("button", { name: /^Watch these/ }).click();
+  await expect(page).toHaveURL(/tab=film/);
+  // Next's own router sees a pushState; the harness's mock needs a popstate.
+  await page.evaluate(() =>
+    window.dispatchEvent(new PopStateEvent("popstate")),
+  );
+  await expect(page.getByText("Video tab")).toBeVisible();
+  await page.goBack();
+  // Remounted, and still measured against the view.
+  await expect(
+    dialog.getByRole("heading", { name: "Saved serve" }),
+  ).toBeVisible();
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await expect(strip).toContainText("Deuce");
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(page).toHaveURL(/view=sv1/);
+  await expect(strip).toHaveCount(0);
+});
+
+test("R4·3 · loosening a view's own filter is named in the strip, and Clear puts back exactly that", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&ball=first&view=sv3`);
+  const dialog = page.getByRole("dialog", { name: "Saved first serves" });
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await expect(strip).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Filters" }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  await panel
+    .getByRole("radiogroup")
+    .first()
+    .getByRole("radio", { name: "Any" })
+    .click();
+  await page.keyboard.press("Escape");
+  await expect(page).not.toHaveURL(/ball=first/);
+  await expect(strip).toContainText("Serve: any");
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(strip).toHaveCount(0);
+  await expect(page).toHaveURL(/ball=first/);
+  await expect(page).toHaveURL(/view=sv3/);
+});
+
+test("R4·4 · Esc reaches a nested non-popper layer before the lightbox", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const lightbox = page.getByRole("dialog", { name: "Serve placement" });
+  await expect(lightbox).toBeVisible();
+  await page.evaluate(() =>
+    (
+      window as unknown as { __openNestedLayer: () => void }
+    ).__openNestedLayer(),
+  );
+  const nested = page.getByRole("dialog", { name: "Nested layer" });
+  await expect(nested).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(nested).toHaveCount(0);
+  await expect(lightbox).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(lightbox).toHaveCount(0);
+});

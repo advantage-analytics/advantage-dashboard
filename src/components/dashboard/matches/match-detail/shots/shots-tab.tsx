@@ -79,7 +79,8 @@ function ShotsTabBody() {
   const [wallCollection, setWallCollection] = useState<WallCollection>(
     () =>
       remembered?.collection ??
-      (state.cut !== null && (state.viewId !== null || state.draft)
+      (state.cut !== null &&
+      (state.viewId !== null || state.editedFrom !== undefined || state.draft)
         ? "saved"
         : "default"),
   );
@@ -116,29 +117,32 @@ function ShotsTabBody() {
     setOpening({ count: opening.count + (isOpen ? 1 : 0), open: isOpen });
     if (isOpen)
       setWallCollection(
-        state.viewId !== null || state.draft ? "saved" : "default",
+        state.viewId !== null || state.editedFrom !== undefined || state.draft
+          ? "saved"
+          : "default",
       );
   }
 
   // Back/Forward from one open saved view to another is a new opening too:
   // the pane, zoom, selection and picks belong to the view they were made
   // on. Only a navigation the store did not make counts (`navigation`), and
-  // only when it lands a different saved view — an edit's own `viewId`
-  // rewrite never remounts.
+  // only when it lands on a different view — the court's view, or the one it
+  // was edited from, so an edit never remounts.
+  const baseViewId = state.viewId ?? state.editedFrom ?? null;
   const [visit, setVisit] = useState({
     navigation,
-    viewId: state.viewId,
+    viewId: baseViewId,
     count: 0,
   });
-  if (visit.navigation !== navigation || visit.viewId !== state.viewId) {
+  if (visit.navigation !== navigation || visit.viewId !== baseViewId) {
     const landedOtherView =
       visit.navigation !== navigation &&
       isOpen &&
-      state.viewId !== null &&
-      state.viewId !== visit.viewId;
+      baseViewId !== null &&
+      baseViewId !== visit.viewId;
     setVisit({
       navigation,
-      viewId: state.viewId,
+      viewId: baseViewId,
       count: visit.count + (landedOtherView ? 1 : 0),
     });
   }
