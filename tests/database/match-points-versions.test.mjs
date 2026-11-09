@@ -4,14 +4,14 @@ import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 
 /**
- * `match_points_versions` (20261109120000): the counter the season points
+ * `match_points_versions` (20261109214402): the counter the season points
  * cache (`src/lib/data/season-points-cache.ts`) keys on. Every write to a
  * match's points or shots must move it, or a cached season would keep
  * showing points that have since been relabelled; and a viewer must see a
  * version only for a match they can read.
  */
 
-const MIGRATION = "20261109120000_match_points_versions.sql";
+const MIGRATION = "20261109214402_match_points_versions.sql";
 
 const A = "00000000-0000-4000-8000-00000000000a";
 const B = "00000000-0000-4000-8000-00000000000b";

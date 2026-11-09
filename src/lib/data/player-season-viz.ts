@@ -593,7 +593,7 @@ export function buildSeasonLightbox(
         row: row.key,
         label: row.label,
       };
-      const ids = new Set<string>();
+      const ids: string[] = [];
       for (const part of parts) {
         for (const id of statPickDotIds(
           part.points,
@@ -605,7 +605,7 @@ export function buildSeasonLightbox(
           pick,
           bands.bands,
         ))
-          ids.add(id);
+          ids.push(id);
       }
       statRowDots[statPickKey(pick)] = encodeStatRowDots(result.dots, ids);
     }
