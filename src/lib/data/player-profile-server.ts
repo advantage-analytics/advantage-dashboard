@@ -218,11 +218,6 @@ export interface DbPlayerMatchRow {
   created_by: string | null;
   /** The opponent's stored id — the Opponents page's key when it is set. */
   opponent_player_id: string | null;
-  /**
-   * When the row was recorded — a real moment, unlike `date`. Orders two
-   * matches on one calendar day (`seasonPerMatch`).
-   */
-  created_at: string | null;
 }
 
 interface DbEntryRow {
@@ -400,7 +395,7 @@ export async function readPlayerMatchSides(
   const { data: matchRows } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, event_entry_id, round, result, match_type, court_type, verified, verified_at, errors_judged_at, duration, source_provider, created_by, opponent_player_id, created_at",
+      "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, event_entry_id, round, result, match_type, court_type, verified, verified_at, errors_judged_at, duration, source_provider, created_by, opponent_player_id",
     )
     .eq("program_id", programId)
     .or(

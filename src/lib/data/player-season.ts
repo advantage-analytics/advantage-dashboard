@@ -122,11 +122,6 @@ export interface SeasonMatch extends SeasonMatchStats {
   date: string | null;
   /** The opponent's name, as the match names them. */
   opponent: string;
-  /**
-   * `matches.created_at` — a real moment, read only to order two matches on
-   * the same calendar day; absent or unreadable falls back to `matchId`.
-   */
-  createdAt?: string | null;
 }
 
 /* ── Head to head rows ───────────────────────────────────────────────────── */
@@ -411,30 +406,20 @@ export interface SeasonPerMatch {
   total: number;
 }
 
-/** `createdAt` as a number to sort on, or `null` when absent or unreadable. */
-function createdMs(m: Pick<SeasonMatch, "createdAt">): number | null {
-  if (!m.createdAt) return null;
-  const ms = Date.parse(m.createdAt);
-  return Number.isNaN(ms) ? null : ms;
-}
-
 /**
  * Season order, oldest first: by calendar day (`compareMatchDays`, a match
  * with no readable date last), then — two matches on one day compare equal
- * there — by when each was recorded, then by id, so a day's matches never
- * keep the newest-first order the loader read them in.
+ * there — by id. `matches` stores no recording time (`date`'s time part
+ * means nothing, `match-day.ts`), so a day's matches cannot be put in the
+ * order they were played; the id at least makes the order stable, rather
+ * than whatever order the loader read them in.
  */
 export function compareSeasonMatches(
-  a: Pick<SeasonMatch, "date" | "createdAt" | "matchId">,
-  b: Pick<SeasonMatch, "date" | "createdAt" | "matchId">,
+  a: Pick<SeasonMatch, "date" | "matchId">,
+  b: Pick<SeasonMatch, "date" | "matchId">,
 ): number {
   const byDay = compareMatchDays(a.date, b.date);
   if (byDay !== 0) return byDay;
-  const ca = createdMs(a);
-  const cb = createdMs(b);
-  if (ca !== null && cb !== null && ca !== cb) return ca - cb;
-  if (ca !== null && cb === null) return -1;
-  if (ca === null && cb !== null) return 1;
   return a.matchId < b.matchId ? -1 : a.matchId > b.matchId ? 1 : 0;
 }
 
