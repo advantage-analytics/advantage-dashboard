@@ -11,6 +11,8 @@ import {
   buildSeasonCards,
   buildSeasonLightbox,
   courtSignature,
+  decodeStatRowDots,
+  encodeStatRowDots,
   filterOptionPatches,
   mergeVizResults,
   mergeVizStats,
@@ -505,8 +507,13 @@ test.describe("buildSeasonLightbox", () => {
 
           // Its marks: the stats' own rule per match, united.
           const pick = pickFor(cut, group.key, row);
-          const ids = data.statRowDotIds[statPickKey(pick)];
-          expect(ids, statPickKey(pick)).toBeDefined();
+          const indices = data.statRowDots[statPickKey(pick)];
+          expect(indices, statPickKey(pick)).toBeDefined();
+          // Positions into the court's marks, ascending, each once.
+          expect(indices).toEqual([...new Set(indices)].sort((a, b) => a - b));
+          for (const i of indices)
+            expect(i >= 0 && i < data.result.dots.length).toBe(true);
+          const ids = decodeStatRowDots(data.result.dots, indices);
           const expected = parts.flatMap((p) => [
             ...statPickDotIds(
               p.points,
@@ -519,7 +526,12 @@ test.describe("buildSeasonLightbox", () => {
               DEFAULT_BANDS,
             ),
           ]);
-          expect([...ids].sort()).toEqual([...expected].sort());
+          // The same marks on court as the ids the stats' rule picks: an id
+          // the rule picks that is not drawn is never asked about.
+          const drawn = new Set(data.result.dots.map((d) => d.id));
+          expect([...ids].sort()).toEqual(
+            [...new Set(expected.filter((id) => drawn.has(id)))].sort(),
+          );
         }
       }
       // Every part's row has a season row.
@@ -952,11 +964,21 @@ test.describe("the Visualizations view, rendered", () => {
     // The two lookups, turned into the shell's functions.
     const pick = { group: "deuce", row: "deuce-t", label: "Deuce T" };
     expect([...props.statRowDots(pick)!].sort()).toEqual(
-      [...lightbox.statRowDotIds[statPickKey(pick)]].sort(),
+      [
+        ...decodeStatRowDots(
+          lightbox.result.dots,
+          lightbox.statRowDots[statPickKey(pick)],
+        ),
+      ].sort(),
     );
     expect(
       props.statRowDots({ group: "ad", row: "ad-wide", label: "x" })?.size,
-    ).toBe(lightbox.statRowDotIds["ad/ad-wide"].length);
+    ).toBe(
+      decodeStatRowDots(
+        lightbox.result.dots,
+        lightbox.statRowDots["ad/ad-wide"],
+      ).size,
+    );
     expect(props.filterPanel!.countWith({ zone: ["t"] })).toBe(
       lightbox.optionCounts["zone=t"],
     );
@@ -1494,5 +1516,66 @@ test.describe("one body per request", () => {
     expect(deferred).not.toContain("router.replace");
     expect(deferred).not.toContain("router.push");
     expect(deferred).toContain("<ProfileViewWhen view={view}>");
+  });
+});
+
+/* ── Statistics rows as positions (`encodeStatRowDots`) ─────────────────── */
+
+test.describe("statRowDots encoding", () => {
+  const DOTS = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
+
+  test("round-trips: the decoded set is the picked ids that are on the court", () => {
+    const indices = encodeStatRowDots(DOTS, ["c", "a", "a", "zz"]);
+    expect(indices).toEqual([0, 2]);
+    expect([...decodeStatRowDots(DOTS, indices)].sort()).toEqual(["a", "c"]);
+    expect(encodeStatRowDots(DOTS, [])).toEqual([]);
+    expect(decodeStatRowDots(DOTS, [])).toEqual(new Set());
+    // An index past the court is ignored rather than read as a mark.
+    expect([...decodeStatRowDots(DOTS, [1, 9])]).toEqual(["b"]);
+  });
+
+  test("for every drawn mark, the decoded rows answer exactly as the old id lists did", () => {
+    for (const query of [
+      "cut=serve&ball=first",
+      "cut=serve&court=deuce",
+      "cut=returnPlacement",
+      "cut=rallyPlacement",
+      "cut=errors",
+    ]) {
+      const state = parseVizState(new URLSearchParams(query), {
+        errorSplitJudged: true,
+      });
+      const data = buildSeasonLightbox(JUDGED, state, BANDS, NAMES)!;
+      const cut = state.cut!;
+      const parts = JUDGED.map((m) => partFor(m, cut, state.filters));
+      for (const group of data.stats.groups) {
+        for (const row of group.rows) {
+          const pick = pickFor(cut, group.key, row);
+          // What the payload carried before: every id the rule picks.
+          const old = new Set(
+            parts.flatMap((p) => [
+              ...statPickDotIds(
+                p.points,
+                cut,
+                state.filters,
+                p.subject,
+                p.ctx,
+                p.result.dots,
+                pick,
+                DEFAULT_BANDS,
+              ),
+            ]),
+          );
+          const now = decodeStatRowDots(
+            data.result.dots,
+            data.statRowDots[statPickKey(pick)],
+          );
+          for (const dot of data.result.dots)
+            expect(now.has(dot.id), `${query} ${statPickKey(pick)}`).toBe(
+              old.has(dot.id),
+            );
+        }
+      }
+    }
   });
 });

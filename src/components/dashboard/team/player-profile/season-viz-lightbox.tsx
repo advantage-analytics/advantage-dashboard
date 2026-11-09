@@ -23,6 +23,7 @@ import type { StatPick } from "@/components/dashboard/matches/match-detail/shots
 import {
   courtSignature,
   cutNoun,
+  decodeStatRowDots,
   optionCountKey,
   statPickKey,
   type SeasonLightboxData,
@@ -35,7 +36,7 @@ import { useMounted } from "@/lib/ui/use-mounted";
  *
  * This container owns nothing but the hand-off. It turns the server's two
  * lookups into the functions the shell wants — `statRowDots` from the
- * per-row mark ids, `countWith` from the per-option counts — and every
+ * per-row mark positions, `countWith` from the per-option counts — and every
  * change the reader makes (a filter, "Clear filter", You | Opponent, close)
  * goes to the URL through the tab's one store (`useVizState`, `viz-url.ts`),
  * so the page's Server Component recomputes and hands new props back. It
@@ -160,7 +161,7 @@ function emptyCourt(
     clearFilters: { ...EMPTY_VIZ_FILTERS, player: filters.player },
     sets: [],
     errorSplitJudged: last?.errorSplitJudged ?? true,
-    statRowDotIds: {},
+    statRowDots: {},
     optionCounts: {},
   };
 }
@@ -187,17 +188,22 @@ export function SeasonVizLightbox({
   const { state, setState } = useVizState();
   const mounted = useMounted();
 
-  const statRowDotIds = data?.statRowDotIds ?? null;
+  // Each row's positions in the court's marks, back into the id sets the
+  // shell asks (`decodeStatRowDots`), once per server answer.
+  const rowDots = data?.statRowDots ?? null;
+  const courtDots = data?.result.dots ?? null;
   const statRowDots = useMemo(() => {
     const sets = new Map(
-      Object.entries(statRowDotIds ?? {}).map(([key, ids]) => [
-        key,
-        new Set(ids),
-      ]),
+      courtDots === null
+        ? []
+        : Object.entries(rowDots ?? {}).map(([key, indices]) => [
+            key,
+            decodeStatRowDots(courtDots, indices),
+          ]),
     );
     return (pick: StatPick): Set<string> | null =>
       sets.get(statPickKey(pick)) ?? null;
-  }, [statRowDotIds]);
+  }, [rowDots, courtDots]);
 
   // This opening: whether the shell's chunk was already here when it began
   // (it was not on the first open of a session: the chunk frame showed
