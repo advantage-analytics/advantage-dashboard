@@ -122,6 +122,11 @@ export interface SeasonMatch extends SeasonMatchStats {
   date: string | null;
   /** The opponent's name, as the match names them. */
   opponent: string;
+  /**
+   * `matches.created_at` — a real moment, read only to order two matches on
+   * the same calendar day; absent or unreadable falls back to `matchId`.
+   */
+  createdAt?: string | null;
 }
 
 /* ── Head to head rows ───────────────────────────────────────────────────── */
@@ -406,22 +411,47 @@ export interface SeasonPerMatch {
   total: number;
 }
 
-/** Oldest first (`compareMatchDays`); a match with no readable date sorts last. */
+/** `createdAt` as a number to sort on, or `null` when absent or unreadable. */
+function createdMs(m: Pick<SeasonMatch, "createdAt">): number | null {
+  if (!m.createdAt) return null;
+  const ms = Date.parse(m.createdAt);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/**
+ * Season order, oldest first: by calendar day (`compareMatchDays`, a match
+ * with no readable date last), then — two matches on one day compare equal
+ * there — by when each was recorded, then by id, so a day's matches never
+ * keep the newest-first order the loader read them in.
+ */
+export function compareSeasonMatches(
+  a: Pick<SeasonMatch, "date" | "createdAt" | "matchId">,
+  b: Pick<SeasonMatch, "date" | "createdAt" | "matchId">,
+): number {
+  const byDay = compareMatchDays(a.date, b.date);
+  if (byDay !== 0) return byDay;
+  const ca = createdMs(a);
+  const cb = createdMs(b);
+  if (ca !== null && cb !== null && ca !== cb) return ca - cb;
+  if (ca !== null && cb === null) return -1;
+  if (ca === null && cb !== null) return 1;
+  return a.matchId < b.matchId ? -1 : a.matchId > b.matchId ? 1 : 0;
+}
+
+/** Oldest first (`compareSeasonMatches`); a match with no readable date sorts last. */
 export function seasonPerMatch(
   matches: readonly SeasonMatch[],
 ): SeasonPerMatch[] {
-  return matches
-    .map((m) => {
-      const { allPoints } = tallySide(m.points, m.isPlayer1, null);
-      return {
-        matchId: m.matchId,
-        date: m.date,
-        opponent: m.opponent,
-        youWon: allPoints.won,
-        total: allPoints.total,
-      };
-    })
-    .sort((a, b) => compareMatchDays(a.date, b.date));
+  return [...matches].sort(compareSeasonMatches).map((m) => {
+    const { allPoints } = tallySide(m.points, m.isPlayer1, null);
+    return {
+      matchId: m.matchId,
+      date: m.date,
+      opponent: m.opponent,
+      youWon: allPoints.won,
+      total: allPoints.total,
+    };
+  });
 }
 
 /** How points ended over the season — the summed `outcomeTally` per side. */

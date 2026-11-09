@@ -844,6 +844,60 @@ test.describe("per-match points", () => {
   });
 });
 
+test.describe("same-day order", () => {
+  test("two matches on one day run oldest recorded first, whatever order they arrive in", () => {
+    const day = "2026-10-05";
+    const early = {
+      ...MATCH_A,
+      matchId: "z-early",
+      date: day,
+      createdAt: "2026-10-05T09:00:00Z",
+    };
+    const late = {
+      ...MATCH_B,
+      matchId: "a-late",
+      date: day,
+      createdAt: "2026-10-05T17:30:00Z",
+    };
+    // Newest first, as the loader reads them.
+    expect(seasonPerMatch([late, early]).map((m) => m.matchId)).toEqual([
+      "z-early",
+      "a-late",
+    ]);
+    expect(seasonPerMatch([early, late]).map((m) => m.matchId)).toEqual([
+      "z-early",
+      "a-late",
+    ]);
+  });
+
+  test("without a recorded time the id breaks the tie, and a known time goes first", () => {
+    const day = "2026-10-05";
+    const m = (matchId: string, createdAt?: string | null) => ({
+      ...MATCH_A,
+      matchId,
+      date: day,
+      createdAt,
+    });
+    expect(
+      seasonPerMatch([m("m-2"), m("m-1", null), m("m-3", "garbage")]).map(
+        (x) => x.matchId,
+      ),
+    ).toEqual(["m-1", "m-2", "m-3"]);
+    expect(
+      seasonPerMatch([m("m-1"), m("m-9", "2026-10-05T10:00:00Z")]).map(
+        (x) => x.matchId,
+      ),
+    ).toEqual(["m-9", "m-1"]);
+    // The calendar day still comes first.
+    expect(
+      seasonPerMatch([
+        { ...m("m-1", "2026-10-01T00:00:00Z"), date: "2026-10-06" },
+        m("m-2", "2026-10-09T00:00:00Z"),
+      ]).map((x) => x.matchId),
+    ).toEqual(["m-2", "m-1"]);
+  });
+});
+
 test.describe("how points ended", () => {
   test("is the sum of each match's outcomeTally, taken with the season's error split", () => {
     const season = seasonOutcomes(SEASON);

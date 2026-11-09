@@ -352,6 +352,7 @@ export async function loadPlayerSeason(
       opponent:
         (isPlayer1 ? match.player2_name : match.player1_name)?.trim() ||
         UNKNOWN_OPPONENT_NAME,
+      createdAt: match.created_at,
       points,
       isPlayer1,
       isDerived: isDerived(match),

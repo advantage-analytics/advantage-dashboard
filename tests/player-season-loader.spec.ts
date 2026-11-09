@@ -208,6 +208,7 @@ function matchRow(overrides: Partial<DbPlayerMatchRow> & { id: string }) {
     source_provider: "swing-vision",
     created_by: "u-coach",
     opponent_player_id: null,
+    created_at: null,
     ...overrides,
   };
 }
@@ -530,6 +531,33 @@ test("dates leave as calendar days and opponents are named from the other seat",
     ["m-a", "2026-09-14", "Ana Castillo"],
     ["m-b", "2026-09-21", "Bea Lindqvist"],
     ["m-d", "2026-10-09", "ANA  castillo"],
+  ]);
+});
+
+test("two matches on one day reach the tracker oldest recorded first", async () => {
+  // The matches read is newest first; m-x2 was recorded after m-x1 on the
+  // same day, so it arrives first and must not stay first.
+  const day = "2026-10-20T00:00:00+00:00";
+  const same = [
+    matchRow({ id: "m-x2", date: day, created_at: "2026-10-20T18:00:00Z" }),
+    matchRow({ id: "m-x1", date: day, created_at: "2026-10-20T09:00:00Z" }),
+  ];
+  const tables = fullTables({
+    matches: same,
+    match_stats_with_percentages: same.flatMap((m) => [
+      statRow(m.id, true, 1),
+      statRow(m.id, false, 2),
+    ]),
+    points: same.flatMap((m) => pointRows(m.id, 2)),
+    shots: shotRows(same.flatMap((m) => pointRows(m.id, 2))),
+  });
+  const { client, sides } = await adaSides(tables);
+  const { deps } = fakeBallPaths({});
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+  expect(season.tallies.perMatch.map((m) => m.matchId)).toEqual([
+    "m-x1",
+    "m-x2",
   ]);
 });
 
