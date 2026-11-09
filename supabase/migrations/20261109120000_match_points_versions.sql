@@ -48,9 +48,12 @@ create policy match_points_versions_select_with_match
 --
 -- SECURITY DEFINER so that whoever writes points or shots — service_role, or
 -- a user through RLS — moves a counter nobody else may write. Rows are
--- written in match_id order, so two statements touching several matches
--- each lock their version rows in the same order and cannot deadlock on
--- them. The exists()
+-- written in match_id order, so within one statement two writers touching
+-- several matches lock their version rows in the same order and cannot
+-- deadlock on them. Across statements this promises nothing: a row lock is
+-- held until commit, so a transaction that bumps match B and then, in a
+-- later statement, match A can still meet one doing the reverse — the same
+-- exposure the points and shots rows themselves already carry. The exists()
 -- skips a match that is gone (a cascaded delete from matches: its points'
 -- delete fires after the match row is deleted, and the version row goes with
 -- it by its own cascade).
@@ -69,6 +72,7 @@ as $$
     from unnest(match_ids) as u (match_id)
    where u.match_id is not null
      and exists (select 1 from public.matches m where m.id = u.match_id)
+   -- One lock order per statement (see above).
    order by u.match_id
   on conflict (match_id) do update
     set version = v.version + 1,

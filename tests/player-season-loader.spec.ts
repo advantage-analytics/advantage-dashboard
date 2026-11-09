@@ -133,7 +133,11 @@ class FakeQuery implements PromiseLike<Answer> {
 
   private answer(): Answer {
     if (this.rows instanceof Error) {
-      return { data: null, error: { message: this.rows.message } };
+      const { code } = this.rows as Error & { code?: string };
+      return {
+        data: null,
+        error: { message: this.rows.message, ...(code ? { code } : {}) },
+      };
     }
     let data = this.rows.filter((row) =>
       this.filters.every((keep) => keep(row)),
@@ -1220,8 +1224,9 @@ test("a versions read that fails reads the whole season uncached and caches noth
   const caching = freshCaching();
   const { client, log, sides } = await adaSides(
     fullTables({
-      match_points_versions: new Error(
-        'relation "public.match_points_versions" does not exist',
+      match_points_versions: Object.assign(
+        new Error('relation "public.match_points_versions" does not exist'),
+        { code: "42P01" },
       ),
     }),
   );

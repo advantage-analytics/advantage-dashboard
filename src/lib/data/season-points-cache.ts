@@ -156,8 +156,9 @@ export class BoundedLru<V> {
 }
 
 /**
- * The weight of one match's points: its points and their shots. An analysed
- * match weighs about 1,000 (a few hundred points, a few shots each).
+ * The weight of one match's points: its points and their shots. On the live
+ * data an analysed match weighs about 700 on average (around a hundred
+ * points, about six shots each).
  */
 export function pointsWeight(points: readonly MatchPoint[]): number {
   let weight = points.length;
@@ -167,11 +168,11 @@ export function pointsWeight(points: readonly MatchPoint[]): number {
 
 /**
  * The weight bound: points plus shots held at once, per instance. At about
- * 1,000 a match, 250,000 is some 250 analysed matches — several full
- * seasons, so a coach moving between two big players' profiles still hits.
- * In memory a point (forty-odd fields, its shot picks) and a shot (sixteen)
- * average under a kilobyte, so the full bound is ~200 MB: a tenth of a
- * Vercel function's default 2 GB.
+ * 700 a match, 250,000 is some 350 analysed matches — several full seasons,
+ * so a coach moving between two big players' profiles still hits. In memory
+ * that is roughly 90–115 MB at the full bound (a point is forty-odd fields
+ * and its shot picks, a shot sixteen): about a twentieth of a Vercel
+ * function's default 2 GB.
  */
 export const SEASON_POINTS_CACHE_MAX_WEIGHT = 250_000;
 /** How long an entry lives. The version already invalidates a changed
@@ -188,13 +189,16 @@ export const seasonPointsCache = new BoundedLru<MatchPoint[]>({
 /**
  * What the versions read remembers between requests, per process: whether
  * the table is known to be missing (the migration not applied yet) and when
- * a failure was last logged.
+ * each kind of failure was last logged.
  */
 export interface VersionsReadState {
   /** Until when the table counts as missing: no query is sent before then. */
   absentUntil: number;
-  /** When a failure was last logged. */
-  lastWarnedAt: number;
+  /** When "the table is missing" was last logged. */
+  lastMissingWarnAt: number;
+  /** When any other failure was last logged — its own clock, so a missing
+   *  table's warning never hides the first sign of something else. */
+  lastOtherWarnAt: number;
   now: () => number;
 }
 
@@ -207,20 +211,23 @@ export const VERSIONS_WARN_INTERVAL_MS = 10 * 60 * 1000;
 export function versionsReadState(
   now: () => number = Date.now,
 ): VersionsReadState {
-  return { absentUntil: 0, lastWarnedAt: -Infinity, now };
+  return {
+    absentUntil: 0,
+    lastMissingWarnAt: -Infinity,
+    lastOtherWarnAt: -Infinity,
+    now,
+  };
 }
 
 /** The process's one state. */
 const processVersionsState: VersionsReadState = versionsReadState();
 
 /** PostgREST's "no such table" (PGRST205, from its schema cache) or
- *  Postgres's own (42P01). */
-function isMissingTable(error: { code?: string; message?: string }): boolean {
-  return (
-    error.code === "PGRST205" ||
-    error.code === "42P01" ||
-    /does not exist|could not find the table/i.test(error.message ?? "")
-  );
+ *  Postgres's own (42P01) — by code only. A message match would also catch
+ *  a missing column (42703), function (42883) or role, none of which says
+ *  the migration is absent. */
+export function isMissingTable(error: { code?: string }): boolean {
+  return error.code === "PGRST205" || error.code === "42P01";
 }
 
 /**
@@ -230,9 +237,9 @@ function isMissingTable(error: { code?: string; message?: string }): boolean {
  * see and is read uncached.
  *
  * Until the migration is applied the table does not exist: the first read
- * that says so marks it missing for `VERSIONS_ABSENT_RETRY_MS`, and no query
- * is sent meanwhile. Any failure is logged at most once per
- * `VERSIONS_WARN_INTERVAL_MS`.
+ * that says so (by code) marks it missing for `VERSIONS_ABSENT_RETRY_MS`,
+ * and no query is sent meanwhile. Each kind of failure — missing, other — is
+ * logged at most once per `VERSIONS_WARN_INTERVAL_MS`, on its own clock.
  */
 export async function readPointsVersions(
   supabase: SupabaseClient,
@@ -248,12 +255,16 @@ export async function readPointsVersions(
     .select("match_id, version")
     .in("match_id", [...matchIds]);
   if (error) {
-    if (isMissingTable(error))
-      state.absentUntil = now + VERSIONS_ABSENT_RETRY_MS;
-    if (now - state.lastWarnedAt >= VERSIONS_WARN_INTERVAL_MS) {
-      state.lastWarnedAt = now;
+    const missing = isMissingTable(error);
+    if (missing) state.absentUntil = now + VERSIONS_ABSENT_RETRY_MS;
+    const last = missing ? state.lastMissingWarnAt : state.lastOtherWarnAt;
+    if (now - last >= VERSIONS_WARN_INTERVAL_MS) {
+      if (missing) state.lastMissingWarnAt = now;
+      else state.lastOtherWarnAt = now;
       console.warn(
-        "[season-points-cache] versions unreadable; reading uncached",
+        missing
+          ? "[season-points-cache] match_points_versions is missing; reading uncached"
+          : "[season-points-cache] versions unreadable; reading uncached",
         error.message,
       );
     }

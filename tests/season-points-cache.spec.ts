@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   BoundedLru,
   cachedPointsReader,
+  isMissingTable,
   pointsWeight,
   readPointsVersions,
   seasonPointsCacheKey,
@@ -298,4 +299,52 @@ test("any other versions failure is asked again every request, but warned about 
   });
   expect(flaky.queries()).toBe(4);
   expect(warnings).toHaveLength(2);
+});
+
+test("only the missing-table codes count as missing — never a message that merely says 'does not exist'", async () => {
+  expect(isMissingTable({ code: "PGRST205" })).toBe(true);
+  expect(isMissingTable({ code: "42P01" })).toBe(true);
+  for (const error of [
+    { code: "42703", message: 'column "version" does not exist' },
+    { code: "42883", message: "function visible_match_ids() does not exist" },
+    { code: "42704", message: 'role "authenticated" does not exist' },
+    { message: "could not find the table" },
+  ])
+    expect(isMissingTable(error), error.message).toBe(false);
+
+  // A missing column is asked about again on the next request.
+  let now = 1_000;
+  const state = versionsReadState(() => now);
+  const column = versionsClient({
+    code: "42703",
+    message: "column match_points_versions.version does not exist",
+  });
+  await quietly(async () => {
+    await readPointsVersions(column.client, ["m-1"], state);
+    now += 1;
+    await readPointsVersions(column.client, ["m-1"], state);
+  });
+  expect(column.queries()).toBe(2);
+  expect(state.absentUntil).toBe(0);
+});
+
+test("each kind of failure warns on its own clock: a recent warning of one never hides the first of the other", async () => {
+  let now = 1_000;
+  const state = versionsReadState(() => now);
+  const missing = versionsClient({ code: "42P01", message: "missing" });
+  const flaky = versionsClient({ message: "fetch failed" });
+  const { warnings } = await quietly(async () => {
+    await readPointsVersions(flaky.client, ["m-1"], state); // warns
+    now += 1;
+    await readPointsVersions(flaky.client, ["m-1"], state); // quiet
+    now += 1;
+    // Moments after a network warning, the first "missing" still logs.
+    await readPointsVersions(missing.client, ["m-1"], state);
+  });
+  expect(warnings.map((w) => String((w as unknown[])[1]))).toEqual([
+    "fetch failed",
+    "missing",
+  ]);
+  expect(state.lastOtherWarnAt).toBe(1_000);
+  expect(state.lastMissingWarnAt).toBe(1_002);
 });
