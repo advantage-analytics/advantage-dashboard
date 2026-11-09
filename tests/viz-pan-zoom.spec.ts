@@ -150,8 +150,8 @@ test("panBy: an in-range move at high zoom passes through", () => {
 test("zoomPercentLabel: formats as a rounded percent", () => {
   expect(zoomPercentLabel(2.2)).toBe("220%");
   expect(zoomPercentLabel(1)).toBe("100%");
-  expect(zoomPercentLabel(ZOOM_MIN)).toBe("55%");
-  expect(zoomPercentLabel(ZOOM_MAX)).toBe("320%");
+  expect(zoomPercentLabel(ZOOM_MIN)).toBe("30%");
+  expect(zoomPercentLabel(ZOOM_MAX)).toBe("600%");
 });
 
 // ── Gesture feel: stage-aware zoom floor and continuous pinch ──────────────

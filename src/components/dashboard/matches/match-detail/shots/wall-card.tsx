@@ -4,11 +4,13 @@ import { useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { APRON_FILL, CourtArt } from "./court-art";
+import { SERVE_COURT, SERVE_COURT_THROUGH_NET } from "./court-geometry";
 import type { Cut, VizDot } from "./viz-model";
 import type { VizState } from "./viz-url";
 import { viewIdentityKey } from "./viz-url";
 import { useVizState } from "./use-viz-state";
 import { courtTileDomId } from "./viz-court-transition";
+import { armCourtMorph } from "./viz-court-morph";
 import {
   wallSegmentReadout,
   type WallSegment,
@@ -40,6 +42,22 @@ const SEGMENT_FILLS = [
   "var(--ink-300)",
 ];
 
+/**
+ * The art box. Every card keeps the half-court frame's 334:216 box capped at
+ * 300px, except Serve: its court carries on past the net to the near service
+ * line (`SERVE_COURT_THROUGH_NET`), so its box is taller by exactly the art it
+ * added and its cap grows by the same ratio — a serve mark is the same size on
+ * screen as on the half court. Cards keep their natural height (the wall's
+ * grid is `items-start`): stretching the other card in Serve's row only
+ * buried its court in apron, so the two footers are allowed to sit apart.
+ */
+const ART_MAX_H = 300;
+const HALF_ASPECT = SERVE_COURT.viewBox.w / SERVE_COURT.viewBox.h;
+const SERVE_ASPECT =
+  SERVE_COURT_THROUGH_NET.viewBox.w / SERVE_COURT_THROUGH_NET.viewBox.h;
+const SERVE_MAX_H =
+  (ART_MAX_H * SERVE_COURT_THROUGH_NET.viewBox.h) / SERVE_COURT.viewBox.h;
+
 const CARD_CLASS =
   "flex flex-col rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-primary)] hover:border-[var(--border-medium)] hover:shadow-[var(--shadow-card-emphasis)] focus-visible:shadow-[0_0_0_2px_var(--blue-ring-40)] focus-visible:outline-none motion-reduce:transition-none";
 
@@ -70,6 +88,7 @@ export function WallCard({
   const { setState } = useVizState();
   const ownKey = viewIdentityKey(navigateState);
   const domId = ownKey !== null ? courtTileDomId(ownKey) : undefined;
+  const serve = cut === "serve";
 
   // A plain click opens the lightbox over the wall through the store (no
   // navigation, so the wall keeps its scroll); a modified click is left to
@@ -77,6 +96,8 @@ export function WallCard({
   function handleClick(e: MouseEvent<HTMLAnchorElement>): void {
     if (!isPlainLeftClick(e)) return;
     e.preventDefault();
+    // Its court starts for the lightbox's now (`viz-court-morph.ts`).
+    armCourtMorph(e.currentTarget, cut);
     setState(navigateState);
   }
 
@@ -89,17 +110,26 @@ export function WallCard({
       className={CARD_CLASS}
     >
       <div
-        data-viz-court-art="true"
-        className="relative max-h-[300px] w-full overflow-hidden rounded-t-[var(--radius-card)]"
-        style={{ aspectRatio: "334 / 216", backgroundColor: APRON_FILL }}
+        className="flex w-full flex-1 flex-col justify-center overflow-hidden rounded-t-[var(--radius-card)]"
+        style={{ backgroundColor: APRON_FILL }}
       >
-        <CourtArt
-          cut={cut}
-          dots={dots}
-          chart="scatter"
-          fill
-          className="block h-full w-full"
-        />
+        <div
+          data-viz-court-art="true"
+          className="relative w-full"
+          style={{
+            aspectRatio: serve ? SERVE_ASPECT : HALF_ASPECT,
+            maxHeight: serve ? SERVE_MAX_H : ART_MAX_H,
+          }}
+        >
+          <CourtArt
+            cut={cut}
+            dots={dots}
+            chart="scatter"
+            fill
+            serveFrame={serve ? "throughNet" : "half"}
+            className="block h-full w-full"
+          />
+        </div>
       </div>
       <div className="flex flex-col gap-1 border-t border-[var(--border-hairline)] px-5 pt-[14px] pb-[18px]">
         <div className="flex min-w-0 items-baseline gap-3">

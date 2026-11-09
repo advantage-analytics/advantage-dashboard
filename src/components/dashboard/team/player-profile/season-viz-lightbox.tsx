@@ -3,10 +3,12 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useMemo,
   useState,
   type LazyExoticComponent,
 } from "react";
+import { useRouter } from "next/navigation";
 
 import { LightboxChunkPending } from "@/components/dashboard/loading/lightbox-pending";
 import { useVizState } from "@/components/dashboard/matches/match-detail/shots/use-viz-state";
@@ -16,18 +18,30 @@ import {
   type Chart,
   type Cut,
   type PlayerFilter,
+  type VizDot,
   type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
-import { courtFor } from "@/components/dashboard/matches/match-detail/shots/viz-url";
+import {
+  courtFor,
+  withoutSeasonFilters,
+  type SeasonFilters,
+} from "@/components/dashboard/matches/match-detail/shots/viz-url";
+import { ChartMenu } from "@/components/dashboard/matches/match-detail/shots/chart-menu";
+import type { LightboxSeasonFilters } from "@/components/dashboard/matches/match-detail/shots/lightbox-filters";
 import type { StatPick } from "@/components/dashboard/matches/match-detail/shots/stat-cut";
 import {
+  advancedAvailability,
   courtSignature,
   cutNoun,
   optionCountKey,
+  seasonAdvancedOptions,
   statPickKey,
+  type SeasonDotPoint,
   type SeasonLightboxData,
 } from "@/lib/data/player-season-viz";
 import { useMounted } from "@/lib/ui/use-mounted";
+import { formatMatchDayShort } from "@/lib/data/match-day";
+import { pointSetQuery } from "@/lib/match-video/point-set";
 
 /**
  * The season's opened card: `VizLightboxShell` over data the page computed
@@ -43,7 +57,17 @@ import { useMounted } from "@/lib/ui/use-mounted";
  *
  * Read-only by decision (2026-11-08): no Points column, no footer (nothing
  * to watch or save), no band editor, no draft — the shell draws court,
- * legend filter, Filters and Statistics alone.
+ * legend filter, Filters and Statistics alone. The chart menu (Scatter ·
+ * Heat · Zones, `ChartMenu` without its band rows) writes `?chart=`, and
+ * the server folds the season under it; the Filters panel adds the
+ * season's own "Opponent plays" and "Matches" (`VizState.season`,
+ * `?vopp=` / `?vm=`), which the match report never draws.
+ *
+ * Each mark knows its match (`dotPoints`, `matches`): the readout names it
+ * ("vs Lee · Nov 3") and says where in it the point was, and the second
+ * click on a selected mark opens that match's Video tab on that one point
+ * (`?tab=film&pn=…`, `point-set.ts`) with `router.push`, so Back comes back
+ * to this card. A match with nothing to play offers the focus alone.
  *
  * ── Two clocks ──────────────────────────────────────────────────────────────
  * `state` is the store's optimistic value and `data` is the server's last
@@ -162,8 +186,34 @@ function emptyCourt(
     errorSplitJudged: last?.errorSplitJudged ?? true,
     statRowDotIds: {},
     optionCounts: {},
+    advancedOptions: NO_ADVANCED_OPTIONS,
+    names: last?.names ?? { you: "", opponent: "" },
+    matches: [],
+    dotPoints: [],
+    season: null,
+    seasonOptions: {
+      handCounts: { any: 0, right: 0, left: 0, unknown: 0 },
+      matches: [],
+    },
   };
 }
+
+/** A match's Video tab on one point, named by `label` in its strip. */
+export function seasonWatchHref(
+  matchId: string,
+  pointNumber: number,
+  label: string,
+): string {
+  const query = pointSetQuery(
+    new URLSearchParams({ tab: "film" }),
+    [pointNumber],
+    label,
+  );
+  return `/dashboard/matches/${encodeURIComponent(matchId)}?${query}`;
+}
+
+/** No advanced options, for the court drawn while the answer is on its way. */
+const NO_ADVANCED_OPTIONS = seasonAdvancedOptions([]);
 
 export function SeasonVizLightbox({
   data,
@@ -186,8 +236,83 @@ export function SeasonVizLightbox({
 }) {
   const { state, setState } = useVizState();
   const mounted = useMounted();
+  const router = useRouter();
+
+  // Each mark's match and point, by mark id and by point id (a point id is
+  // unique across matches, as a mark id is).
+  const dotPoints = data?.dotPoints ?? null;
+  const resultDots = data?.result.dots ?? null;
+  const refs = useMemo(() => {
+    const byDot = new Map<string, SeasonDotPoint>();
+    const byPoint = new Map<string, SeasonDotPoint>();
+    if (dotPoints !== null && resultDots !== null)
+      resultDots.forEach((dot, i) => {
+        const ref = dotPoints[i];
+        if (!ref) return;
+        byDot.set(dot.id, ref);
+        if (dot.meta?.pointId) byPoint.set(dot.meta.pointId, ref);
+      });
+    return { byDot, byPoint };
+  }, [dotPoints, resultDots]);
+  const seasonMatches = data?.matches ?? null;
+  const playerName = data?.names.you ?? "";
+  // The readout's "Set 1 · Game 4 · Maya Chen serving", as the report's.
+  const whereFor = useCallback(
+    (pointId: string): string | null => {
+      const ref = refs.byPoint.get(pointId);
+      if (!ref) return null;
+      const [m, , setNumber, gameNumber, server] = ref;
+      const parts: string[] = [];
+      if (setNumber > 0) parts.push(`Set ${setNumber}`);
+      if (gameNumber > 0) parts.push(`Game ${gameNumber}`);
+      if (server !== -1)
+        parts.push(
+          `${server === 1 ? playerName : (seasonMatches?.[m]?.opponentName ?? "Opponent")} serving`,
+        );
+      return parts.length > 0 ? parts.join(" · ") : null;
+    },
+    [refs, playerName, seasonMatches],
+  );
+  // "vs Lee · Nov 3" — the calendar day, read as one (`match-day.ts`).
+  const matchFor = useCallback(
+    (dot: VizDot): string | null => {
+      const ref = refs.byDot.get(dot.id);
+      const match = ref ? seasonMatches?.[ref[0]] : undefined;
+      if (!match) return null;
+      return [
+        `vs ${match.opponentName}`,
+        ...(match.date ? [formatMatchDayShort(match.date)] : []),
+      ].join(" · ");
+    },
+    [refs, seasonMatches],
+  );
+  const canWatch = useCallback(
+    (dot: VizDot): boolean => {
+      const ref = refs.byDot.get(dot.id);
+      if (!ref || ref[1] <= 0) return false;
+      return seasonMatches?.[ref[0]]?.hasPlayableVideo === true;
+    },
+    [refs, seasonMatches],
+  );
+  const seasonTitle = data?.title ?? "";
 
   const statRowDotIds = data?.statRowDotIds ?? null;
+  // "Advanced filters": the season's options, with no count (nothing to
+  // count with here); a Show writes `filters.match` to the URL, and the
+  // server applies it to each match.
+  const advancedOptions = data?.advancedOptions ?? null;
+  const names = data?.names ?? null;
+  const advanced = useMemo(
+    () =>
+      advancedOptions === null || names === null
+        ? undefined
+        : {
+            availability: advancedAvailability(advancedOptions),
+            youName: names.you,
+            oppName: names.opponent,
+          },
+    [advancedOptions, names],
+  );
   const statRowDots = useMemo(() => {
     const sets = new Map(
       Object.entries(statRowDotIds ?? {}).map(([key, ids]) => [
@@ -209,14 +334,24 @@ export function SeasonVizLightbox({
   const asked =
     state.cut === null
       ? null
-      : courtSignature(state.cut, state.chart, state.filters, errorSplitJudged);
+      : courtSignature(
+          state.cut,
+          state.chart,
+          state.filters,
+          errorSplitJudged,
+          state.season,
+        );
   const [opening, setOpening] = useState(() => ({
+    // Which opening this is — the shell's `key`, so a chart or return-half
+    // switch inside the card keeps the one dialog.
+    id: 0,
     open: isOpen,
     shellReady: shellLoaded,
     asked: new Set(asked === null ? [] : [asked]),
   }));
   if (opening.open !== isOpen) {
     setOpening({
+      id: opening.id + 1,
       open: isOpen,
       shellReady: shellLoaded,
       asked: new Set(asked === null ? [] : [asked]),
@@ -246,7 +381,13 @@ export function SeasonVizLightbox({
   const court: SeasonLightboxData =
     data !== null &&
     opening.asked.has(
-      courtSignature(data.cut, data.chart, data.filters, errorSplitJudged),
+      courtSignature(
+        data.cut,
+        data.chart,
+        data.filters,
+        errorSplitJudged,
+        data.season,
+      ),
     )
       ? data
       : emptyCourt(cut, state.chart, state.filters, data);
@@ -257,11 +398,30 @@ export function SeasonVizLightbox({
 
   function clearFilters() {
     setState((prev) => ({
-      ...prev,
+      ...withoutSeasonFilters(prev),
       filters: court.clearFilters,
       viewId: null,
     }));
   }
+
+  function setSeasonFilters(next: SeasonFilters | undefined) {
+    setState((prev) => ({
+      ...withoutSeasonFilters(prev),
+      ...(next ? { season: next } : {}),
+      viewId: null,
+    }));
+  }
+
+  const seasonFilters: LightboxSeasonFilters = {
+    value: state.season,
+    onChange: setSeasonFilters,
+    matches: court.seasonOptions.matches.map((m) => ({
+      id: m.id,
+      label: `vs ${m.opponentName}`,
+      detail: m.date ? formatMatchDayShort(m.date) : null,
+      count: m.count,
+    })),
+  };
 
   function setFilters(next: VizFilters) {
     setState((prev) => ({ ...prev, filters: next, viewId: null }));
@@ -280,9 +440,9 @@ export function SeasonVizLightbox({
       fallback={<LightboxChunkPending label={CUT_LABEL[cut]} onClose={close} />}
     >
       <Shell
-        // One dialog per card: the same mount from pending to landed, a new
-        // one for another card.
-        key={`${cut}:${state.chart}`}
+        // One dialog per opening: the same mount from pending to landed and
+        // across a chart switch, a new one for another card.
+        key={opening.id}
         pending={pending}
         appear={opening.shellReady}
         cut={court.cut}
@@ -295,6 +455,30 @@ export function SeasonVizLightbox({
         bandZones={court.bandZones}
         hasFilters={court.hasFilters}
         statRowDots={pending ? noDots : statRowDots}
+        whereFor={pending ? undefined : whereFor}
+        matchFor={pending ? undefined : matchFor}
+        watch={
+          pending
+            ? undefined
+            : {
+                canWatch,
+                onWatch: (dot, phrases) => {
+                  const ref = refs.byDot.get(dot.id);
+                  const match = ref ? seasonMatches?.[ref[0]] : undefined;
+                  if (!ref || !match || !canWatch(dot)) return;
+                  router.push(
+                    seasonWatchHref(
+                      match.id,
+                      ref[1],
+                      [seasonTitle, ...phrases]
+                        .filter((p) => p !== "")
+                        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+                        .join(" · "),
+                    ),
+                  );
+                },
+              }
+        }
         title={court.title}
         subtitle={court.subtitle}
         filterPhrases={court.filterPhrases}
@@ -307,7 +491,10 @@ export function SeasonVizLightbox({
           sets: court.sets,
           errorSplitJudged: court.errorSplitJudged,
           countWith,
+          advanced,
+          season: seasonFilters,
         }}
+        controls={() => <ChartMenu />}
       />
     </Suspense>
   );

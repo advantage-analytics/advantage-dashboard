@@ -179,9 +179,17 @@ test("fullscreen marks can be selected by pointer and keyboard", async ({
   await top.click();
   await expect(top).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("fullscreen")).toContainText("Point won");
+  // A click on the SELECTED mark is its second click: the court hands it
+  // back to `onSelect` (the lightbox watches it; this harness toggles), it
+  // does not step the stack.
   await top.click();
-  await expect(beneath).toHaveAttribute("aria-pressed", "true");
+  await expect(top).toHaveAttribute("aria-pressed", "false");
+  // The mark underneath, from the keyboard; then a click on the mark over
+  // it — not the selected one — steps the stack, back to the top.
   await beneath.press("Enter");
+  await expect(beneath).toHaveAttribute("aria-pressed", "true");
+  await top.click();
+  await expect(top).toHaveAttribute("aria-pressed", "true");
   await expect(beneath).toHaveAttribute("aria-pressed", "false");
   await beneath.press(" ");
   await expect(beneath).toHaveAttribute("aria-pressed", "true");

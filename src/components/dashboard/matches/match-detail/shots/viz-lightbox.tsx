@@ -27,12 +27,16 @@ import {
   errorsJudgedIn,
   filterKeysFor,
   type PlayerFilter,
+  type VizDot,
   type VizFilters,
 } from "./viz-model";
 import { activeFilterEntries, courtFor, sameFilterValue } from "./viz-url";
-import { useErrorSplitJudged } from "../match-filters/provider";
+import {
+  useErrorSplitJudged,
+  useFiltersPanelData,
+  useMatchFilters,
+} from "../match-filters/provider";
 import { lightboxCountLine } from "./wall-summary";
-import { useMatchFilters } from "../match-filters/provider";
 
 /** A saved view's filter group, named when the reader loosens it to "any". */
 const LOOSENED_LABEL: Partial<Record<keyof VizFilters, string>> = {
@@ -169,6 +173,19 @@ export function VizLightbox({
     [pointById, youIsPlayer1],
   );
 
+  // The second click on a mark or its row: that one point in the Video tab,
+  // by the same hand-off as "Watch these N points" (`watchPointSet`), when
+  // the match has a video to play and the point a clip in it.
+  const canWatchFilm = meta.hasPlayableVideo && onWatchPoints !== undefined;
+  const canWatchDot = useCallback(
+    (dot: VizDot) => {
+      if (!canWatchFilm || !dot.meta?.pointId) return false;
+      const point = pointById.get(dot.meta.pointId);
+      return point !== undefined && isPlayable(point);
+    },
+    [canWatchFilm, pointById],
+  );
+
   const savedView =
     state.viewId !== null
       ? (meta.savedViews.find((v) => v.id === state.viewId) ?? null)
@@ -277,6 +294,38 @@ export function VizLightbox({
     matchCtx,
   ]);
 
+  // The Filters panel's "Advanced filters": the Video tab's options over
+  // this match (short names, as its strip words them), counted on this court.
+  const panelData = useFiltersPanelData();
+  const countAdvanced = useCallback(
+    (filters: VizFilters) =>
+      cut === null
+        ? 0
+        : computeViz(
+            points,
+            cut,
+            filters,
+            subjectIsPlayer1,
+            "scatter",
+            matchCtx,
+          ).count,
+    [points, cut, subjectIsPlayer1, matchCtx],
+  );
+  const advanced = useMemo(
+    () => ({
+      availability: panelData.availability,
+      youName: panelData.youName,
+      oppName: panelData.oppName,
+      count: countAdvanced,
+    }),
+    [
+      panelData.availability,
+      panelData.youName,
+      panelData.oppName,
+      countAdvanced,
+    ],
+  );
+
   const sets = useMemo(
     () =>
       [...new Set(points.map((p) => p.setNumber))]
@@ -286,6 +335,18 @@ export function VizLightbox({
   );
 
   if (cut === null || result === null || stats === null) return null;
+
+  /** The Video tab strip's words for a hand-off: the card, whose points
+   *  they are when not the viewer's own, then the strip's sentence. */
+  function watchLabel(sentence: string[]): string {
+    return [
+      title,
+      ...(state.filters.player === "you" ? [] : [opp.shortName]),
+      ...sentence,
+    ]
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+      .join(" · ");
+  }
 
   // Back to the wall: no cut, no filters, the wall's own player. The wall
   // never unmounted, so its scroll is where it was.
@@ -401,6 +462,16 @@ export function VizLightbox({
       hasFilters={hasFilters}
       statRowDots={statRowDots}
       whereFor={whereFor}
+      watch={{
+        canWatch: canWatchDot,
+        onWatch: (dot, sentence) => {
+          const point = dot.meta?.pointId
+            ? pointById.get(dot.meta.pointId)
+            : undefined;
+          if (point && onWatchPoints)
+            onWatchPoints([point.pointNumber], watchLabel(sentence));
+        },
+      }}
       title={title}
       subtitle={subtitle}
       filterPhrases={phrases}
@@ -421,6 +492,7 @@ export function VizLightbox({
             "scatter",
             matchCtx,
           ).count,
+        advanced,
       }}
       controls={({ enterBandEdit }) => (
         <>
@@ -485,15 +557,8 @@ export function VizLightbox({
                 onWatchPoints(
                   playable.map((p) => p.pointNumber),
                   // The Video tab's strip names the set in the lightbox's
-                  // own words: the card, whose points they are when not the
-                  // viewer's own, then the strip's sentence.
-                  [
-                    title,
-                    ...(state.filters.player === "you" ? [] : [opp.shortName]),
-                    ...sentence,
-                  ]
-                    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-                    .join(" · "),
+                  // own words (`watchLabel`).
+                  watchLabel(sentence),
                 )
               }
               className={advButton("primary", "sm")}

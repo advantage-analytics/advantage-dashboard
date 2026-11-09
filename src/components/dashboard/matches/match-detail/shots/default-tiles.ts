@@ -61,7 +61,7 @@ export interface DefaultTile {
 }
 
 /**
- * The eight default tiles in wall order: your four (first serves, returns,
+ * The eight default tiles in wall order: your four (all serves, returns,
  * rally shots, unforced errors — or Errors, unjudged), then the opponent's
  * four. `hrefFor` is the caller's
  * `useVizState().hrefFor` (or an equivalent pure function in a test), applied

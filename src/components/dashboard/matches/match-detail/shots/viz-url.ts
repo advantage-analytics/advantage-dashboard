@@ -215,6 +215,78 @@ export interface VizState {
    * when absent, like `draft`.
    */
   editedFrom?: string;
+  /**
+   * The season page's own filters (`?vopp=`, `?vm=`) — which matches of a
+   * player's season the opened card is drawn over. Read only where the
+   * provider is a season's (`VizParseMatch.season`); the match report never
+   * parses them, and they are not `VizFilters`, so a saved view can never
+   * carry them. Omitted when neither is on, like `draft`.
+   */
+  season?: SeasonFilters;
+}
+
+/* ── Season filters ─────────────────────────────────────────────────────── */
+
+/** "Opponent plays": the opponent's hand, or a match that does not say. */
+export type OpponentHandFilter = "right" | "left" | "unknown";
+
+/** The season's two filters: one hand (null = Any) and the ticked matches
+ *  (none ticked = every match). */
+export interface SeasonFilters {
+  opponentHand: OpponentHandFilter | null;
+  matches: string[];
+}
+
+export const OPPONENT_HAND_FILTERS: readonly OpponentHandFilter[] = [
+  "right",
+  "left",
+  "unknown",
+];
+
+/** The URL params the season's filters travel as. */
+export const SEASON_HAND_PARAM = "vopp";
+export const SEASON_MATCH_PARAM = "vm";
+
+/** A match id as the URL may name one — a shape check only; the server
+ *  keeps the ids that are matches of this season. */
+const MATCH_ID_PATTERN = /^[\w-]{1,64}$/;
+
+/** `season` in canonical form (ids deduped and sorted), or `undefined` when
+ *  neither filter is on — the shape `VizState.season` is kept in. */
+export function normalizeSeasonFilters(
+  season: SeasonFilters | null | undefined,
+): SeasonFilters | undefined {
+  if (!season) return undefined;
+  const opponentHand = OPPONENT_HAND_FILTERS.includes(
+    season.opponentHand as OpponentHandFilter,
+  )
+    ? season.opponentHand
+    : null;
+  const matches = [...new Set(season.matches)]
+    .filter((id) => MATCH_ID_PATTERN.test(id))
+    .sort();
+  if (opponentHand === null && matches.length === 0) return undefined;
+  return { opponentHand, matches };
+}
+
+/** `state` without its season filters ("Clear filter", a closed card). */
+export function withoutSeasonFilters(state: VizState): VizState {
+  if (state.season === undefined) return state;
+  const next = { ...state };
+  delete next.season;
+  return next;
+}
+
+function parseSeasonFilters(
+  params: URLSearchParams,
+): SeasonFilters | undefined {
+  const hand = params.get(SEASON_HAND_PARAM);
+  return normalizeSeasonFilters({
+    opponentHand: OPPONENT_HAND_FILTERS.includes(hand as OpponentHandFilter)
+      ? (hand as OpponentHandFilter)
+      : null,
+    matches: params.getAll(SEASON_MATCH_PARAM),
+  });
 }
 
 /* ── Parse & serialize helper ──────────────────────────────────────────── */
@@ -315,6 +387,8 @@ const VIZ_KEYS = [
   "vset",
   "draft",
   "vfrom",
+  SEASON_HAND_PARAM,
+  SEASON_MATCH_PARAM,
   // Retired with the fullscreen viewer; still a viz key so an old
   // `&fullscreen=1` link is cleaned off the URL by the next update.
   "fullscreen",
@@ -457,6 +531,9 @@ export interface VizParseMatch {
   /** `MatchFilterContext.errorSplitJudged === true` — pass a boolean, never
    *  the raw optional flag. */
   errorSplitJudged: boolean;
+  /** The season page: `?vopp=` and `?vm=` are read into `VizState.season`.
+   *  Omitted (the match report), they parse away. */
+  season?: boolean;
 }
 
 /**
@@ -533,6 +610,10 @@ export function parseVizState(
   const draft = cut !== null && params.get("draft") === "1";
   const editedFrom =
     cut !== null && viewId === null && !draft ? params.get("vfrom") : null;
+  const season =
+    cut !== null && match?.season === true
+      ? parseSeasonFilters(params)
+      : undefined;
 
   return {
     cut,
@@ -541,6 +622,7 @@ export function parseVizState(
     viewId,
     ...(draft ? { draft: true } : {}),
     ...(editedFrom ? { editedFrom } : {}),
+    ...(season ? { season } : {}),
   };
 }
 
@@ -614,6 +696,15 @@ export function vizStateQuery(
   if (allowedKeys.has("match") && state.filters.match) {
     const match = serializeMatchFilters(state.filters.match);
     if (match) next.set(VIZ_MATCH_FILTERS_PARAM, match);
+  }
+
+  // The season's own filters, canonical (ids sorted) so one selection is
+  // one query string whatever order the ticks came in.
+  const season = normalizeSeasonFilters(state.season);
+  if (season) {
+    if (season.opponentHand !== null)
+      next.set(SEASON_HAND_PARAM, season.opponentHand);
+    for (const id of season.matches) next.append(SEASON_MATCH_PARAM, id);
   }
 
   return next.toString();

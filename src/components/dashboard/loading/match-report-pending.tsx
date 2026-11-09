@@ -439,14 +439,21 @@ export function StatisticsPanePending() {
 
 /**
  * One wall card (`wall-card.tsx`): the court to the card's edges, then the
- * footer — a 16px title with its count, the 6px split bar and its key.
+ * footer — a 16px title with its count, the 6px split bar and its key. The
+ * Serve card's court runs on past the net (`SERVE_COURT_THROUGH_NET`, a
+ * 334:314 box capped at 300 × 314/216 px), so its placeholder is that tall.
  */
-function WallCardPending() {
+export const WALL_SERVE_ART_PENDING = {
+  aspectRatio: "334 / 314",
+  maxHeight: 436,
+};
+export const WALL_ART_PENDING = { aspectRatio: "334 / 216", maxHeight: 300 };
+function WallCardPending({ serve = false }: { serve?: boolean }) {
   return (
     <div className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
       <div
-        className="max-h-[300px] w-full"
-        style={{ aspectRatio: "334 / 216" }}
+        className="w-full"
+        style={serve ? WALL_SERVE_ART_PENDING : WALL_ART_PENDING}
       >
         <PendingBar className="h-full w-full rounded-none" />
       </div>
@@ -486,7 +493,7 @@ export function VisualizationsPanePending() {
         <PendingBar className="h-[26px] w-[80px] rounded-full" />
       </div>
       <div className="grid grid-cols-1 gap-4 @min-[640px]:grid-cols-2">
-        <WallCardPending />
+        <WallCardPending serve />
         <WallCardPending />
         <WallCardPending />
         <WallCardPending />

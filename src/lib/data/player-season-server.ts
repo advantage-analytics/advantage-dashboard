@@ -39,6 +39,7 @@ import {
   type SeasonTallies,
 } from "@/lib/data/player-season";
 import type { SeasonVizMatch } from "@/lib/data/player-season-viz";
+import { normalizePlayerHand } from "@/components/dashboard/matches/player-hands";
 import type { H2HStats } from "@/components/dashboard/matches/match-detail/head-to-head-rows";
 import { parseBallPathsFile } from "@/components/dashboard/matches/match-detail/film/film-ball";
 import { isDerivedMatch } from "@/components/dashboard/matches/match-detail/match-filters/model";
@@ -382,6 +383,13 @@ async function readAnalyzedMatches(
       opponent:
         (isPlayer1 ? match.player2_name : match.player1_name)?.trim() ||
         UNKNOWN_OPPONENT_NAME,
+      // The opponent's hand, read for the opponent's SEAT once, here
+      // (guardrails §4): the wizard writes `player_hand` for seat one and
+      // `opponent_hand` for seat two, so a player in seat two faced the
+      // `player_hand`. Unvalidated text, normalised; anything else is null.
+      opponentHand: normalizePlayerHand(
+        isPlayer1 ? match.opponent_hand : match.player_hand,
+      ),
       points,
       isPlayer1,
       isDerived: isDerived(match),
@@ -460,13 +468,29 @@ export async function loadPlayerSeasonCourts(
   return {
     analyzed: perMatch.length,
     matchesPlayed: sides.length,
+    // The day and the opponent ride along for the opened card's readout
+    // ("vs Lee · Nov 3"); a match's video is read as Advantage
+    // Intelligence's (`SeasonVizMatch.hasPlayableVideo`), since signing each
+    // match's playback here would be a storage probe per match per view.
     perMatch: perMatch.map(
-      ({ matchId, points, isPlayer1, isDerived, errorSplitJudged }) => ({
+      ({
         matchId,
         points,
         isPlayer1,
         isDerived,
         errorSplitJudged,
+        date,
+        opponent,
+        opponentHand,
+      }) => ({
+        matchId,
+        points,
+        isPlayer1,
+        isDerived,
+        errorSplitJudged,
+        date,
+        opponent,
+        opponentHand,
       }),
     ),
   };

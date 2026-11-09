@@ -889,3 +889,101 @@ test("applyVizUpdate keeps the edited view's id: an edit, a save, a pick, a new 
     parseVizState(new URLSearchParams("cut=serve&view=W&vfrom=V")).editedFrom,
   ).toBeUndefined();
 });
+
+/* ── The season's own filters (`?vopp=`, `?vm=`) ──────────────────────── */
+
+test.describe("season filters", () => {
+  const SEASON_PARSE = { errorSplitJudged: true, season: true };
+
+  test("the season reads ?vopp= and ?vm= into state.season, canonical; the match report parses them away", async () => {
+    const { parseVizState } =
+      await import("@/components/dashboard/matches/match-detail/shots/viz-url");
+    const params = new URLSearchParams(
+      "cut=serve&vopp=left&vm=bb11&vm=aa22&vm=bb11",
+    );
+    expect(parseVizState(params, SEASON_PARSE).season).toEqual({
+      opponentHand: "left",
+      matches: ["aa22", "bb11"],
+    });
+    // The report: no flag, no season.
+    expect(
+      parseVizState(params, { errorSplitJudged: true }),
+    ).not.toHaveProperty("season");
+    expect(parseVizState(params)).not.toHaveProperty("season");
+    // The wall never carries them.
+    expect(
+      parseVizState(new URLSearchParams("vopp=left&vm=aa22"), SEASON_PARSE),
+    ).not.toHaveProperty("season");
+  });
+
+  test("untrusted values: an unknown hand reads as Any, a malformed id is dropped, nothing on is no season", async () => {
+    const { parseVizState } =
+      await import("@/components/dashboard/matches/match-detail/shots/viz-url");
+    expect(
+      parseVizState(
+        new URLSearchParams("cut=serve&vopp=both&vm=%3Cscript%3E&vm=x y"),
+        SEASON_PARSE,
+      ),
+    ).not.toHaveProperty("season");
+    expect(
+      parseVizState(
+        new URLSearchParams("cut=serve&vopp=unknown&vm=bad%20id!"),
+        SEASON_PARSE,
+      ).season,
+    ).toEqual({ opponentHand: "unknown", matches: [] });
+  });
+
+  test("vizStateQuery writes them sorted, round-trips, and every viz write cleans them off (the report never keeps one)", async () => {
+    const { parseVizState, vizStateQuery } =
+      await import("@/components/dashboard/matches/match-detail/shots/viz-url");
+    const state = {
+      cut: "serve" as const,
+      chart: "heat" as const,
+      filters: EMPTY_VIZ_FILTERS,
+      viewId: null,
+      season: { opponentHand: "right" as const, matches: ["cc", "aa"] },
+    };
+    const q = vizStateQuery(new URLSearchParams("tab=visualizations"), state);
+    const params = new URLSearchParams(q);
+    expect(params.get("vopp")).toBe("right");
+    expect(params.getAll("vm")).toEqual(["aa", "cc"]);
+    expect(params.get("tab")).toBe("visualizations");
+    expect(parseVizState(params, SEASON_PARSE)).toEqual({
+      ...state,
+      season: { opponentHand: "right", matches: ["aa", "cc"] },
+    });
+    // A state without a season (the report's every write) drops stray keys.
+    const cleaned = new URLSearchParams(
+      vizStateQuery(new URLSearchParams("tab=shots&vopp=left&vm=aa"), {
+        cut: "serve",
+        chart: "scatter",
+        filters: EMPTY_VIZ_FILTERS,
+        viewId: null,
+      }),
+    );
+    expect(cleaned.has("vopp")).toBe(false);
+    expect(cleaned.has("vm")).toBe(false);
+    expect(cleaned.get("tab")).toBe("shots");
+    // And the wall writes none.
+    expect(vizStateQuery(new URLSearchParams(), { ...state, cut: null })).toBe(
+      "",
+    );
+  });
+
+  test("withoutSeasonFilters drops the key; normalizeSeasonFilters is undefined when nothing is on", async () => {
+    const { withoutSeasonFilters, normalizeSeasonFilters } =
+      await import("@/components/dashboard/matches/match-detail/shots/viz-url");
+    const state = {
+      cut: "serve" as const,
+      chart: "scatter" as const,
+      filters: EMPTY_VIZ_FILTERS,
+      viewId: null,
+      season: { opponentHand: null, matches: ["aa"] },
+    };
+    expect(withoutSeasonFilters(state)).not.toHaveProperty("season");
+    expect(
+      normalizeSeasonFilters({ opponentHand: null, matches: [] }),
+    ).toBeUndefined();
+    expect(normalizeSeasonFilters(undefined)).toBeUndefined();
+  });
+});

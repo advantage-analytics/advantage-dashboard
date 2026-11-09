@@ -3,22 +3,74 @@ import {
   MatchesFilterPanel,
   type FilterPanelSection,
 } from "@/components/dashboard/matches/matches-filter-panel";
-import { draftCountLine } from "../match-filters/panel-draft";
+import { LightboxAdvancedPanel } from "./lightbox-advanced-panel";
+import {
+  activeFilterCount,
+  EMPTY_MATCH_FILTERS,
+  type MatchFilterAvailability,
+  type MatchFilters,
+} from "../match-filters/model";
+import { draftCountLine, type CountNoun } from "../match-filters/panel-draft";
 import { cn } from "@/lib/utils";
 import { LegendMark } from "./legend-mark";
 import { LEGEND_PICKS, type LegendPick } from "./lightbox-points";
 import type { LegendItem } from "./viz-labels";
 import {
+  EMPTY_VIZ_FILTERS,
   filterKeysFor,
+  foldedMatchFilters,
+  withFoldedFilters,
   type Cut,
   type VizFilters,
   type VizResult,
 } from "./viz-model";
-import { errorOptionsFor, OPTIONS } from "./viz-url";
+import {
+  carryFilters,
+  cutAvailability,
+  errorOptionsFor,
+  normalizeSeasonFilters,
+  OPTIONS,
+  type OpponentHandFilter,
+  type SeasonFilters,
+} from "./viz-url";
 
 /* ── Filters panel ─────────────────────────────────────────────────────── */
 
-type PanelKey = "ball" | "court" | "set" | "zone" | "pressure" | "error";
+type PanelKey =
+  | "ball"
+  | "court"
+  | "set"
+  | "zone"
+  | "pressure"
+  | "error"
+  // The season's own groups ("Opponent plays", "Matches").
+  | "vopp"
+  | "vm";
+
+/**
+ * A player's season only (`season-viz-lightbox.tsx`): "Opponent plays" and
+ * "Matches", which narrow the court to some of the season's matches. Never
+ * passed by the match report — one match has one opponent.
+ */
+export interface LightboxSeasonFilters {
+  /** The live selection (`VizState.season`), or none. */
+  value: SeasonFilters | undefined;
+  onChange: (next: SeasonFilters | undefined) => void;
+  /** The checklist's rows, newest first: "vs Lee", its short date and the
+   *  marks it adds to the court — counted on the server. */
+  matches: readonly {
+    id: string;
+    label: string;
+    detail: string | null;
+    count: number;
+  }[];
+}
+
+const OPPONENT_HAND_OPTIONS: { value: OpponentHandFilter; label: string }[] = [
+  { value: "right", label: "Right" },
+  { value: "left", label: "Left" },
+  { value: "unknown", label: "Unknown" },
+];
 
 const NOUN: Record<VizResult["noun"], { singular: string; plural: string }> = {
   serves: { singular: "serve", plural: "serves" },
@@ -26,6 +78,29 @@ const NOUN: Record<VizResult["noun"], { singular: string; plural: string }> = {
   shots: { singular: "shot", plural: "shots" },
   errors: { singular: "error", plural: "errors" },
 };
+
+const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
+  serves: { one: "serve", many: "serves" },
+  returns: { one: "return", many: "returns" },
+  shots: { one: "shot", many: "shots" },
+  errors: { one: "error", many: "errors" },
+};
+
+/**
+ * What the panel's "Advanced filters" row needs from its host: the Video
+ * tab's `FiltersPanel` options this court can produce, the two names its
+ * options use, and — where the host has the points — how many marks the
+ * court would hold under a whole set of filters, for its "Show N serves".
+ */
+export interface LightboxAdvancedFilters {
+  /** `optionAvailability` over the match (the season: every match's, united). */
+  availability: MatchFilterAvailability;
+  youName: string;
+  oppName: string;
+  /** The court's count under `filters`. Omitted (the season, whose points
+   *  stay on the server), the advanced panel shows no count. */
+  count?: (filters: VizFilters) => number;
+}
 
 /**
  * The lightbox's Filters (canvas S15): the Matches list's own panel
@@ -47,6 +122,8 @@ export function LightboxFilterPanel({
   sets,
   errorSplitJudged,
   countWith,
+  advanced,
+  season,
 }: {
   cut: Cut;
   filters: VizFilters;
@@ -67,6 +144,12 @@ export function LightboxFilterPanel({
    *  filters — each checklist option's count. The match report runs
    *  `computeViz`; a host with no points in the browser answers its own way. */
   countWith: (patch: Partial<VizFilters>) => number;
+  /** The "Advanced filters" row and the Video tab's panel it slides to,
+   *  editing `filters.match`. Omitted, there is no such row. */
+  advanced?: LightboxAdvancedFilters;
+  /** The season's "Opponent plays" and "Matches", above Advanced filters.
+   *  Omitted (the match report), neither is drawn. */
+  season?: LightboxSeasonFilters;
 }) {
   const keys = new Set(filterKeysFor(cut));
   const errorOptions = errorOptionsFor(errorSplitJudged);
@@ -144,15 +227,63 @@ export function LightboxFilterPanel({
       },
     });
 
+  if (season) {
+    sections.push({
+      label: "Opponent plays",
+      segmented: [
+        {
+          key: "vopp",
+          options: [{ value: null, label: "Any" }, ...OPPONENT_HAND_OPTIONS],
+        },
+      ],
+    });
+    if (season.matches.length > 0) {
+      const byId = new Map(season.matches.map((m) => [m.id, m]));
+      sections.push({
+        label: "Matches",
+        checklist: {
+          key: "vm",
+          values: season.matches.map((m) => m.id),
+          displayValue: (id) => byId.get(id)?.label ?? id,
+          detail: (id) => byId.get(id)?.detail ?? null,
+          count: (id) => byId.get(id)?.count ?? 0,
+        },
+      });
+    }
+  }
+
+  const seasonValue = season?.value;
+  function setSeason(patch: Partial<SeasonFilters>) {
+    season?.onChange(
+      normalizeSeasonFilters({
+        opponentHand: seasonValue?.opponentHand ?? null,
+        matches: seasonValue?.matches ?? [],
+        ...patch,
+      }),
+    );
+  }
+
   function isChecklistActive(key: PanelKey, value: string): boolean {
+    if (key === "vm") return seasonValue?.matches.includes(value) === true;
     if (key === "error") {
       const option = errorOptions[Number(value)];
       return option.values.every((v) => filters.error.includes(v));
     }
-    return (filters[key] as readonly string[]).includes(value);
+    return (filters[key as keyof VizFilters] as readonly string[]).includes(
+      value,
+    );
   }
 
   function toggleChecklist(key: PanelKey, value: string) {
+    if (key === "vm") {
+      const current = seasonValue?.matches ?? [];
+      setSeason({
+        matches: current.includes(value)
+          ? current.filter((id) => id !== value)
+          : [...current, value],
+      });
+      return;
+    }
     if (key === "error") {
       const option = errorOptions[Number(value)];
       const on = isChecklistActive(key, value);
@@ -162,7 +293,7 @@ export function LightboxFilterPanel({
       setFilters({ ...filters, error: [...new Set(next)] });
       return;
     }
-    const current = filters[key] as readonly string[];
+    const current = filters[key as keyof VizFilters] as readonly string[];
     const next = current.includes(value)
       ? current.filter((v) => v !== value)
       : [...current, value];
@@ -170,11 +301,18 @@ export function LightboxFilterPanel({
   }
 
   function segmentedValue(key: PanelKey): string | null {
-    const current = filters[key] as readonly (string | number)[];
+    if (key === "vopp") return seasonValue?.opponentHand ?? null;
+    const current = filters[key as keyof VizFilters] as readonly (
+      string | number
+    )[];
     return current.length === 1 ? String(current[0]) : null;
   }
 
   function selectSegment(key: PanelKey, value: string | null) {
+    if (key === "vopp") {
+      setSeason({ opponentHand: value as OpponentHandFilter | null });
+      return;
+    }
     const next =
       value === null ? [] : key === "set" ? [Number(value)] : [value];
     setFilters({ ...filters, [key]: next } as VizFilters);
@@ -194,8 +332,34 @@ export function LightboxFilterPanel({
       totalCount={result.total}
       label="Filter the court"
       noun={NOUN[result.noun]}
+      surface="menu"
+      subview={
+        advanced && keys.has("match")
+          ? {
+              label: "Advanced filters",
+              summary: advancedSummary(filters.match ?? EMPTY_MATCH_FILTERS),
+              render: (back) => (
+                <LightboxAdvancedPanel
+                  cut={cut}
+                  filters={filters}
+                  setFilters={setFilters}
+                  total={result.total}
+                  noun={COUNT_NOUN[result.noun]}
+                  advanced={advanced}
+                  back={back}
+                />
+              ),
+            }
+          : undefined
+      }
     />
   );
+}
+
+/** The Advanced filters row's quiet line: what it holds, or what is in it. */
+export function advancedSummary(match: MatchFilters): string {
+  const n = activeFilterCount(match);
+  return n === 0 ? "Score, return, result…" : `${n} applied`;
 }
 
 /* ── Applied strip ─────────────────────────────────────────────────────── */

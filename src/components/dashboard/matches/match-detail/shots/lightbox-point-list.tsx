@@ -21,7 +21,9 @@ import { scoreColumns } from "@/components/dashboard/matches/match-detail/film/f
  * sides, the winner's mark, title, detail and the mono score. No progress
  * rule and no shot well: a lit row here is the selected mark, not a playing
  * point. Clicking a row selects its mark on the court; selecting a mark
- * lights its row and scrolls it into view.
+ * lights its row and scrolls it into view. A click (or Enter) on the lit row
+ * is the second click and watches its point (`VizLightboxShell`'s `select`);
+ * when it can, the lit row's grey line ends "· Click again to watch".
  */
 export const LightboxPointList = memo(function LightboxPointList({
   points,
@@ -29,6 +31,7 @@ export const LightboxPointList = memo(function LightboxPointList({
   selectedPointId,
   onSelectPoint,
   emptyLine,
+  canWatch,
 }: {
   /** The matched points, in match order (`pointsBehind`). */
   points: MatchPoint[];
@@ -39,6 +42,8 @@ export const LightboxPointList = memo(function LightboxPointList({
   onSelectPoint: (point: MatchPoint) => void;
   /** The empty line under "No points to play". */
   emptyLine: string;
+  /** Whether the lit row's second click can watch its point. */
+  canWatch: (point: MatchPoint) => boolean;
 }) {
   const sides = useMatchSides();
   const { context: labelContext } = useMatchFilters();
@@ -74,7 +79,12 @@ export const LightboxPointList = memo(function LightboxPointList({
     if (selectedPointId === null) return;
     listRef.current
       ?.querySelector(`[data-point-id="${CSS.escape(selectedPointId)}"]`)
-      ?.scrollIntoView({ block: "nearest" });
+      ?.scrollIntoView({
+        block: "nearest",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+      });
   }, [selectedPointId]);
 
   if (points.length === 0) {
@@ -113,18 +123,28 @@ export const LightboxPointList = memo(function LightboxPointList({
           {group.points.map((point) => {
             const isYou = point.wonByPlayer1 === youIsPlayer1;
             const side = isYou ? sides.you : sides.opp;
+            const isSelected = point.id === selectedPointId;
+            const detail = pointDetail(point, labelContext.hands);
             return (
               <PointRow
                 key={point.id}
                 point={point}
                 title={pointResultLabel(point, labelContext)}
-                detail={pointDetail(point, labelContext.hands)}
+                detail={
+                  // The second click, said on the lit row's own grey line —
+                  // same 11px ink-500, truncating with it.
+                  isSelected && canWatch(point)
+                    ? [detail, "Click again to watch"]
+                        .filter((part) => part !== "")
+                        .join(" · ")
+                    : detail
+                }
                 isYou={isYou}
                 initials={side.initials}
                 crestUrl={side.player.crestUrl ?? null}
                 workspace={workspace}
                 showPointScore={hasPointScore}
-                isActive={point.id === selectedPointId}
+                isActive={isSelected}
                 activeStart={0}
                 activeEnd={0}
                 onSelect={onSelectPoint}

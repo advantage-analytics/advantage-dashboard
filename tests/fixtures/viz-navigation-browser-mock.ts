@@ -17,6 +17,11 @@ export function useRouter() {
       window.history.replaceState(null, "", url);
       window.dispatchEvent(new PopStateEvent("popstate"));
     },
+    /** A new history entry, as the app router's: Back comes back. */
+    push(url: string) {
+      window.history.pushState(null, "", url);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
     /** A server re-render of the current URL. A harness that plays the
      *  server listens for it (`season-viz-harness.tsx`); others ignore it. */
     refresh() {

@@ -37,19 +37,20 @@ const BANDS = { bands: DEFAULT_BANDS, unit: "ft" as const };
 
 test("the wall has four cuts, in order, one per card", () => {
   expect(DEFAULT_CUTS.map((c) => [c.cut, c.name])).toEqual([
-    ["serve", "First serves"],
+    ["serve", "All serves"],
     ["returnPlacement", "Returns"],
     ["rallyPlacement", "Rally shots"],
     ["errors", "Unforced errors"],
   ]);
   expect(defaultCutsFor(false).map((c) => c.name)).toEqual([
-    "First serves",
+    "All serves",
     "Returns",
     "Rally shots",
     "Errors",
   ]);
-  // First serves keeps its filter; the errors cut keeps errorsJudgedIn's rule.
-  expect(DEFAULT_CUTS[0].filters).toEqual({ ball: ["first"] });
+  // All serves holds no filter (first and second); the errors cut keeps
+  // errorsJudgedIn's rule.
+  expect(DEFAULT_CUTS[0].filters).toEqual({});
   expect(DEFAULT_CUTS[3].filters).toEqual({ error: ["unforced"] });
 });
 

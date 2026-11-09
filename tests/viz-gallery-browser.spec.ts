@@ -142,7 +142,7 @@ test("the wall's Default and Saved collections open cards over the wall", async 
   // A default card opens over the wall with the keyboard; the wall stays.
   await page.getByRole("button", { name: "Default" }).click();
   const defaultServe = defaults.locator(
-    'a[href*="cut=serve"][href*="ball=first"]:not([href*="player="])',
+    'a[href*="cut=serve"]:not([href*="ball="]):not([href*="player="])',
   );
   await defaultServe.focus();
   await page.keyboard.press("Enter");

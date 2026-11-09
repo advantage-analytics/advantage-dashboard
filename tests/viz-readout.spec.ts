@@ -3,7 +3,9 @@ import {
   buildMarkReadout,
   buildReadout,
   buildZoneReadout,
+  markClickHint,
   placeReadout,
+  statRowTooltip,
 } from "@/components/dashboard/matches/match-detail/shots/viz-readout";
 import type { VizDotMeta } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 
@@ -328,6 +330,8 @@ test.describe("buildMarkReadout (the lightbox)", () => {
       score: "30-15",
       shot: "First serve",
       where: "Set 2 · Game 5 · You serving",
+      match: null,
+      hint: null,
     });
   });
   test("an ace is Ace; a miss is Out; the errors cut says Error", () => {
@@ -351,6 +355,101 @@ test.describe("buildMarkReadout (the lightbox)", () => {
         "ft",
         null,
       ),
-    ).toEqual({ title: "Point lost", score: null, shot: null, where: null });
+    ).toEqual({
+      title: "Point lost",
+      score: null,
+      shot: null,
+      where: null,
+      match: null,
+      hint: null,
+    });
+  });
+  test("the season's match line and the hint ride along as handed", () => {
+    expect(
+      buildMarkReadout(meta, "won", "serve", "ft", null, {
+        match: "vs Lee · Nov 3",
+        hint: markClickHint(false, true),
+      }),
+    ).toMatchObject({
+      match: "vs Lee · Nov 3",
+      hint: "Click to focus · Click again to watch",
+    });
+  });
+});
+
+test.describe("markClickHint (the readout's last line)", () => {
+  test("not selected: focus, then watch", () => {
+    expect(markClickHint(false, true)).toBe(
+      "Click to focus · Click again to watch",
+    );
+  });
+  test("selected (the readout pinned): the second click watches", () => {
+    expect(markClickHint(true, true)).toBe("Click again to watch");
+  });
+  test("nothing to play: the focus alone, selected or not", () => {
+    expect(markClickHint(false, false)).toBe("Click to focus");
+    expect(markClickHint(true, false)).toBe("Click to focus");
+  });
+});
+
+test.describe("statRowTooltip (a Statistics row's readout)", () => {
+  const row = {
+    key: "deuce-t",
+    label: "Deuce T",
+    count: 20,
+    won: 12,
+    winPct: 60,
+  };
+  test("a won-rate row: won of count in the cut's noun, the group's average, keep these N", () => {
+    expect(
+      statRowTooltip(row, "serve", { average: 55, total: 64 }, false),
+    ).toEqual({
+      title: "Deuce T",
+      value: "60%",
+      lines: ["12 of 20 serves won", "Average 55% across the court"],
+      hint: "Click to keep these 20 points",
+    });
+    expect(
+      statRowTooltip(
+        { ...row, count: 1, won: 1, winPct: 100 },
+        "returnPlacement",
+        { average: null, total: 9 },
+        false,
+      ),
+    ).toEqual({
+      title: "Deuce T",
+      value: "100%",
+      lines: ["1 of 1 return won"],
+      hint: "Click to keep this point",
+    });
+  });
+  test("the kept row says how to let go; rally rows keep shots", () => {
+    expect(
+      statRowTooltip(row, "rallyPlacement", { average: 50, total: 40 }, true)
+        .hint,
+    ).toBe("Click to show all again");
+    expect(
+      statRowTooltip(row, "rallyPosition", { average: 50, total: 40 }, false)
+        .lines[0],
+    ).toBe("12 of 20 shots won");
+    expect(
+      statRowTooltip(row, "rallyPosition", { average: 50, total: 40 }, false)
+        .hint,
+    ).toBe("Click to keep these 20 shots");
+  });
+  test("an errors share row counts its errors of the group's, no average", () => {
+    expect(
+      statRowTooltip(
+        { key: "net", label: "Net", count: 4, won: 0, winPct: 33, share: true },
+        "errors",
+        { average: null, total: 12 },
+        false,
+      ),
+    ).toEqual({
+      title: "Net",
+      value: "33%",
+      lines: ["4 of 12 errors"],
+      hint: "Click to keep these 4 points",
+    });
   });
 });

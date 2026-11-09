@@ -8,9 +8,17 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { VIEWER_COURT, viewerInitialTransform } from "./court-geometry";
+import {
+  VIEWER_COURT,
+  viewerFullCourtTransform,
+  viewerInitialTransform,
+} from "./court-geometry";
 import {
   BUTTON_STEP,
+  GLIDE_MS,
+  centreOn,
+  glideEase,
+  glideFrame,
   minZoomFor,
   panBy,
   wheelDeltaPx,
@@ -57,9 +65,21 @@ export interface PanZoomApi {
   panning: boolean;
   zoomIn: () => void;
   zoomOut: () => void;
-  /** Back to `viewerInitialTransform(cut, stage)` — the "Fit the court" button
-   *  and the `0` key. */
+  /** Back to `viewerInitialTransform(cut, stage)` — the cut's 100% — the `0`
+   *  key. */
   fit: () => void;
+  /** Out to `viewerFullCourtTransform(stage)` — the "Full court" button. */
+  fullCourt: () => void;
+  /**
+   * Glide so the art point `point` (`viewerArtPoint` px at z=1) sits at the
+   * stage's centre: `GLIDE_MS`, ease-out `cubic-bezier(0.16, 1, 0.3, 1)`,
+   * zooming in to `minZ` on the way when the court is further out than that
+   * (the zoom is kept otherwise). Under `prefers-reduced-motion: reduce` it
+   * jumps. Any other change to the transform — a drag, the wheel, a pinch, a
+   * zoom button or key, a re-fit — cancels a glide in flight, so the two
+   * never fight.
+   */
+  glideTo: (point: { x: number; y: number }, minZ: number) => void;
   /** One arrow-key step, in stage pixels. */
   nudge: (dx: number, dy: number) => void;
   onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
@@ -100,6 +120,23 @@ export function usePanZoom(
   const [stage, setStage] = useState<Size>({ w: 0, h: 0 });
   const [t, setT] = useState<PanZoom>({ z: 1, px: 0, py: 0 });
   const [panning, setPanning] = useState(false);
+
+  /* ── Glide ─────────────────────────────────────────────────────────────── */
+
+  // The transform as of the last commit, for a glide to start from: a glide
+  // starts in an event handler, where reading state would be a stale closure.
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+  const glideRef = useRef<number | null>(null);
+  const cancelGlide = useCallback(() => {
+    if (glideRef.current !== null) {
+      cancelAnimationFrame(glideRef.current);
+      glideRef.current = null;
+    }
+  }, []);
+  useEffect(() => cancelGlide, [cancelGlide]);
 
   const dragRef = useRef<{
     id: number;
@@ -143,13 +180,45 @@ export function usePanZoom(
   // render, before layout) would seed a degenerate transform, so it waits.
   useLayoutEffect(() => {
     if (stage.w === 0 || stage.h === 0) return;
+    cancelGlide();
     setT(viewerInitialTransform(cut, stage));
-  }, [cut, stage]);
+  }, [cut, stage, cancelGlide]);
 
   const fit = useCallback(() => {
     if (locked || stage.w === 0 || stage.h === 0) return;
+    cancelGlide();
     setT(viewerInitialTransform(cut, stage));
-  }, [cut, stage, locked]);
+  }, [cut, stage, locked, cancelGlide]);
+
+  const fullCourt = useCallback(() => {
+    if (locked || stage.w === 0 || stage.h === 0) return;
+    cancelGlide();
+    setT(viewerFullCourtTransform(stage));
+  }, [stage, locked, cancelGlide]);
+
+  const glideTo = useCallback(
+    (point: { x: number; y: number }, minZ: number) => {
+      if (locked || stage.w === 0 || stage.h === 0) return;
+      cancelGlide();
+      const from = tRef.current;
+      const to = centreOn(point, Math.max(from.z, minZ), ART, stage);
+      const reduced =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reduced) {
+        setT(to);
+        return;
+      }
+      const start = performance.now();
+      const step = (now: number) => {
+        const k = Math.min(1, Math.max(0, (now - start) / GLIDE_MS));
+        setT(glideFrame(from, to, glideEase(k), ART, stage));
+        glideRef.current = k < 1 ? requestAnimationFrame(step) : null;
+      };
+      glideRef.current = requestAnimationFrame(step);
+    },
+    [stage, locked, cancelGlide],
+  );
 
   /* ── Zoom ──────────────────────────────────────────────────────────────── */
 
@@ -158,12 +227,13 @@ export function usePanZoom(
   const zoomByFactor = useCallback(
     (factor: number) => {
       if (locked || stage.w === 0 || stage.h === 0) return;
+      cancelGlide();
       const centre = { x: stage.w / 2, y: stage.h / 2 };
       setT((prev) =>
         zoomAbout(prev, factor, centre, ART, stage, minZoomFor(ART, stage)),
       );
     },
-    [stage, locked],
+    [stage, locked, cancelGlide],
   );
 
   const zoomIn = useCallback(() => zoomByFactor(BUTTON_STEP), [zoomByFactor]);
@@ -195,6 +265,7 @@ export function usePanZoom(
       // `onWheel`. Swallowed even while locked, for the same reason.
       e.preventDefault();
       if (locked) return;
+      cancelGlide();
       if (e.ctrlKey || e.metaKey) {
         const factor = wheelZoomFactor(wheelDeltaPx(e.deltaY, e.deltaMode));
         const anchor = anchorOf(e.clientX, e.clientY);
@@ -228,6 +299,7 @@ export function usePanZoom(
       if (locked) return;
       const g = e as GestureEvent;
       if (!(g.scale > 0)) return;
+      cancelGlide();
       const factor = g.scale / lastScale;
       lastScale = g.scale;
       const anchor = anchorOf(g.clientX, g.clientY);
@@ -244,16 +316,17 @@ export function usePanZoom(
     // Re-attached whenever the stage resizes, so the handler always clamps
     // against the CURRENT stage — cheaper than a ref read during render,
     // which the React Compiler rules (rightly) reject.
-  }, [stage, stageRef, locked]);
+  }, [stage, stageRef, locked, cancelGlide]);
 
   /* ── Pan ───────────────────────────────────────────────────────────────── */
 
   const nudge = useCallback(
     (dx: number, dy: number) => {
       if (locked || stage.w === 0 || stage.h === 0) return;
+      cancelGlide();
       setT((prev) => panBy(prev, dx, dy, ART, stage));
     },
-    [stage, locked],
+    [stage, locked, cancelGlide],
   );
 
   /**
@@ -297,6 +370,7 @@ export function usePanZoom(
             e.currentTarget.setPointerCapture(id);
           }
           pinchRef.current = pinchState();
+          cancelGlide();
           setPanning(true);
           onDragStart?.();
           return;
@@ -309,7 +383,7 @@ export function usePanZoom(
         active: false,
       };
     },
-    [locked, onDragStart],
+    [locked, onDragStart, cancelGlide],
   );
 
   const onPointerMove = useCallback(
@@ -348,6 +422,7 @@ export function usePanZoom(
         // Crossed the dead zone: NOW it is a drag. The pan below still starts
         // from the press's own origin, so the first few pixels aren't dropped.
         drag.active = true;
+        cancelGlide();
         e.currentTarget.setPointerCapture(e.pointerId);
         setPanning(true);
         onDragStart?.();
@@ -356,7 +431,7 @@ export function usePanZoom(
       drag.y = e.clientY;
       setT((prev) => panBy(prev, dx, dy, ART, stage));
     },
-    [stage, onDragStart, locked],
+    [stage, onDragStart, locked, cancelGlide],
   );
 
   const onPointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -393,6 +468,8 @@ export function usePanZoom(
     zoomIn,
     zoomOut,
     fit,
+    fullCourt,
+    glideTo,
     nudge,
     onPointerDown,
     onPointerMove,
