@@ -94,15 +94,12 @@ export function MatchReportRailFooter({ children }: { children: ReactNode }) {
  * not to the window. It is the only unnamed container inside the pane; name it
  * (`@container/report`) if a nested one ever appears.
  *
- * `id="match-report-pane"` (F4 fix round 2): this is the ONE scrollable
- * ancestor for every report view, including the Visualizations tab's
- * focused court — `viz-focused.tsx` reaches it by this id to reset scroll
- * to the top when the shown view changes (a click on a "Views" grid tile
- * far down the page must land on the big court, not leave the viewer
- * scrolled to where they clicked). A `ref` can't cross this boundary
- * cleanly since `ShotsTab` mounts several DOM levels below this div with no
- * shared context carrying a ref down; the id is the simplest correct
- * handle, matching this codebase's existing `document.getElementById(...)`
+ * `id="match-report-pane"`: this is the ONE scrollable ancestor for every
+ * report view, and the filters drawer (`filter-rail.tsx`) reaches it by this
+ * id. A `ref` can't cross this boundary cleanly since the views mount
+ * several DOM levels below this div with no shared context carrying a ref
+ * down; the id is the simplest correct handle, matching this codebase's
+ * existing `document.getElementById(...)`
  * pattern for cross-tree DOM reach (e.g. `matches-page-content.tsx`,
  * `static-schedule.tsx`).
  */

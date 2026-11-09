@@ -9,14 +9,10 @@ import { ACE_STAR_FILL } from "./court-art";
 import { cn } from "@/lib/utils";
 
 /**
- * Shared vocabulary for the toolbar's two menus (`cut-menu.tsx`,
- * `chart-menu.tsx`) and anything that needs to name a cut or chart in text
- * (`viz-focused.tsx`'s eyebrow). Pulled out of `viz-toolbar.tsx` so those menus
- * — which `viz-toolbar.tsx` renders — don't import back from it: `viz-toolbar`
- * imported `CutMenu`/`ChartMenu` while `cut-menu`/`chart-menu` imported
- * `CUT_LABEL`/`CHART_LABEL`/`VizMenuTrigger` from `viz-toolbar`, a circular
- * import that happened to resolve at build time but was one refactor away from
- * not. This file has no dependents inside the cycle, so it breaks it cleanly.
+ * Shared vocabulary for the cut and chart menus (`cut-menu.tsx`,
+ * `chart-menu.tsx`) and anything that needs to name a cut or chart in text.
+ * Kept apart from the menus so they and the code that hosts them can all
+ * import it without a circular import.
  */
 
 export const CUT_LABEL: Record<Cut, string> = {
@@ -63,7 +59,9 @@ const WON_ITEM: LegendItem = {
   key: "won",
   glyph: "circle",
   color: "var(--viz-good)",
-  label: "Point won",
+  // Won / Lost / Out — the lightbox legend's own words (its filter keys,
+  // `LEGEND_PICKS`), so the wall and every legend in the tab read alike.
+  label: "Won",
 };
 const LOST_ITEM: LegendItem = {
   key: "lost",
@@ -75,7 +73,7 @@ const MISS_ITEM: LegendItem = {
   key: "miss",
   glyph: "circle",
   color: "var(--ink-300)",
-  label: "Miss",
+  label: "Out",
 };
 const OUTCOME_ITEMS: LegendItem[] = [WON_ITEM, LOST_ITEM, MISS_ITEM];
 const ERROR_ITEM: LegendItem = { ...LOST_ITEM, key: "error", label: "Error" };
@@ -156,6 +154,16 @@ export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
   }
   if (cut === "serve") return [...OUTCOME_ITEMS, ACE_ITEM];
   return [...OUTCOME_ITEMS, FOREHAND_ITEM, BACKHAND_ITEM];
+}
+
+/**
+ * The wall's one legend, above the four cards (canvas "Legend — as shipped",
+ * `cut="all"`): every glyph the four default courts can draw — the outcome
+ * trio and the ace star from the serve card, the two stroke shapes from the
+ * return, rally and errors cards.
+ */
+export function wallLegendItems(): LegendItem[] {
+  return [...OUTCOME_ITEMS, ACE_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
 }
 
 /**
@@ -275,7 +283,7 @@ export function loadedViewLabel(
  *
  * `haspopup` defaults to `"menu"` (the `cut-menu`/`chart-menu` shape); pass
  * `"dialog"` for a trigger that opens a `role="dialog"` panel instead —
- * `filters-popover.tsx`'s Filters trigger opens a form, not a `role="menu"`
+ * `lightbox-filters.tsx`'s Filters trigger opens a form, not a `role="menu"`
  * list, and `aria-haspopup` needs to say so. It is applied AFTER
  * `...buttonProps` (which the prop type excludes it from anyway) so nothing
  * can shadow it back to the hardcoded default.
@@ -285,6 +293,7 @@ export function VizMenuTrigger({
   label,
   meta,
   open,
+  engaged = false,
   haspopup = "menu",
   tone = "light",
   className,
@@ -297,6 +306,9 @@ export function VizMenuTrigger({
    *  comment. Never truncates; the label gives up width first. */
   meta?: React.ReactNode;
   open: boolean;
+  /** A choice away from the default is applied: the trigger keeps the
+   *  open wash (the Matches toolbar's engaged grammar). */
+  engaged?: boolean;
   haspopup?: "menu" | "dialog";
   /**
    * Phase 2A: the dark fullscreen-viewer chrome (f4b-report P2d — 28px
@@ -310,7 +322,7 @@ export function VizMenuTrigger({
    * React 19 ref-as-prop — `save-view-dialog.tsx` anchors under this exact
    * button (`cut-menu.tsx` forwards its own `triggerRef` here) rather than
    * hand-rolling a second position. Unused by `chart-menu.tsx`/
-   * `filters-popover.tsx`, which have nothing anchoring to them.
+   * `lightbox-filters.tsx`, which have nothing anchoring to them.
    */
   ref?: React.Ref<HTMLButtonElement>;
 } & Omit<
@@ -328,29 +340,36 @@ export function VizMenuTrigger({
       aria-expanded={open}
       className={cn(
         "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 px-2 text-[12px] font-medium transition-colors duration-200",
-        dark ? "text-white" : "text-[var(--ink-700)]",
         dark
-          ? open
-            ? "bg-white/[0.18]"
-            : "bg-white/10"
-          : open
-            ? "bg-[var(--surface-muted)]"
-            : "bg-[var(--surface-subtle)]",
-        !open &&
-          (dark ? "hover:bg-white/[0.18]" : "hover:bg-[var(--surface-muted)]"),
+          ? cn(
+              "text-white",
+              open ? "bg-white/[0.18]" : "bg-white/10 hover:bg-white/[0.18]",
+            )
+          : // The Matches toolbar's trigger grammar (DS Data Table rule 6):
+            // no fill at rest, the subtle wash on hover, and the wash plus
+            // ink-900 while open or engaged.
+            open || engaged
+            ? "bg-[var(--surface-subtle)] text-[var(--ink-900)]"
+            : "text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
         className,
       )}
       style={{ borderRadius: "var(--radius-element)" }}
     >
       <Icon
-        className={cn("size-[13px] shrink-0", dark && "text-white/70")}
+        className={cn(
+          "size-[13px] shrink-0",
+          dark ? "text-white/70" : "text-[var(--ink-400)]",
+        )}
         strokeWidth={1.5}
         aria-hidden="true"
       />
       <span className="truncate">{label}</span>
       {meta}
       <Chevron
-        className={cn("size-3 shrink-0", dark && "text-white/70")}
+        className={cn(
+          "size-3 shrink-0",
+          dark ? "text-white/70" : "text-[var(--ink-400)]",
+        )}
         strokeWidth={1.5}
         aria-hidden="true"
       />

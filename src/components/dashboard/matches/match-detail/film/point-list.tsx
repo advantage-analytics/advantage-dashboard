@@ -275,7 +275,7 @@ interface PointListProps {
   nowPlaying?: { id: string; index: number | null } | null;
 }
 
-interface GameGroup {
+export interface GameGroup {
   key: string;
   setNumber: number;
   gameNumber: number;
@@ -297,6 +297,73 @@ interface GameGroup {
  * bail out on their own; `PointRow`'s own memo stops the row bodies but not
  * the work of offering them.
  */
+/**
+ * The list's game groups: `visiblePoints` grouped by set and game, in order,
+ * each headed "Set 1 · Game 3" with the you-first game score and who served.
+ * Exported for the Visualizations lightbox's Points column, which heads its
+ * rows exactly as this list does.
+ *
+ * A tiebreak is the one game whose server changes mid-game. Read off ALL the
+ * points, so a filtered list that happens to keep one server's points still
+ * heads it as a tiebreak — and still names who served FIRST, which the first
+ * visible point need not be. Grouped on `gameNumber`, not on the game score:
+ * the score is the label, and on a match that has none every group would
+ * collapse into one.
+ */
+export function groupPointsByGame(
+  visiblePoints: MatchPoint[],
+  allPoints: MatchPoint[],
+  youIsPlayer1: boolean,
+  youName: string,
+  oppName: string,
+  showGameScore: boolean,
+): GameGroup[] {
+  const tiebreakFirstServer = new Map<string, boolean>();
+  const firstServer = new Map<string, boolean>();
+  for (const point of allPoints) {
+    const key = `${point.setNumber}-${point.gameNumber}`;
+    const seen = firstServer.get(key);
+    if (seen === undefined) firstServer.set(key, point.serverIsPlayer1);
+    else if (seen !== point.serverIsPlayer1) tiebreakFirstServer.set(key, seen);
+  }
+
+  const out: GameGroup[] = [];
+  let current: GameGroup | undefined;
+  for (const point of visiblePoints) {
+    const key = `${point.setNumber}-${point.gameNumber}`;
+    const firstServerIsPlayer1 = tiebreakFirstServer.get(key);
+    const serverIsYou =
+      (firstServerIsPlayer1 ?? point.serverIsPlayer1) === youIsPlayer1;
+    if (
+      !current ||
+      current.setNumber !== point.setNumber ||
+      current.gameNumber !== point.gameNumber
+    ) {
+      current = {
+        key: `${point.setNumber}-${point.gameNumber}-${point.id}`,
+        setNumber: point.setNumber,
+        gameNumber: point.gameNumber,
+        serverName: lastNameOf(serverIsYou ? youName : oppName),
+        // You-first for a header under the viewer's name, the way the room
+        // reads it; null when the match has no real game score column, and
+        // "—" on a game whose score the stream never read (`score_frozen`).
+        gameScore: showGameScore
+          ? (youFirstScore(
+              readGameScore(point) ?? "",
+              point.serverIsPlayer1,
+              youIsPlayer1,
+            ) ?? UNREAD_SCORE)
+          : null,
+        tiebreak: firstServerIsPlayer1 !== undefined,
+        points: [],
+      };
+      out.push(current);
+    }
+    current.points.push(point);
+  }
+  return out;
+}
+
 export const PointList = memo(function PointList({
   allPoints,
   visiblePoints,
@@ -356,70 +423,18 @@ export const PointList = memo(function PointList({
   const { hasGameScore: showGameScore, hasPointScore: showPointScore } =
     useMemo(() => scoreColumns(allPoints), [allPoints]);
 
-  // A tiebreak is the one game whose server changes mid-game. Read off ALL the
-  // points, so a filtered list that happens to keep one server's points still
-  // heads it as a tiebreak — and still names who served FIRST, which the first
-  // visible point need not be. Maps each tiebreak's key to that first server.
-  const tiebreakFirstServer = useMemo(() => {
-    const first = new Map<string, boolean>();
-    const out = new Map<string, boolean>();
-    for (const point of allPoints) {
-      const key = `${point.setNumber}-${point.gameNumber}`;
-      const seen = first.get(key);
-      if (seen === undefined) first.set(key, point.serverIsPlayer1);
-      else if (seen !== point.serverIsPlayer1) out.set(key, seen);
-    }
-    return out;
-  }, [allPoints]);
-
-  // Grouped on `gameNumber`, not on the game score: the score is the label,
-  // and on a match that has none every group would collapse into one.
-  const groups = useMemo(() => {
-    const out: GameGroup[] = [];
-    let current: GameGroup | undefined;
-
-    for (const point of visiblePoints) {
-      const key = `${point.setNumber}-${point.gameNumber}`;
-      const firstServerIsPlayer1 = tiebreakFirstServer.get(key);
-      const serverIsYou =
-        (firstServerIsPlayer1 ?? point.serverIsPlayer1) === youIsPlayer1;
-      if (
-        !current ||
-        current.setNumber !== point.setNumber ||
-        current.gameNumber !== point.gameNumber
-      ) {
-        current = {
-          key: `${point.setNumber}-${point.gameNumber}-${point.id}`,
-          setNumber: point.setNumber,
-          gameNumber: point.gameNumber,
-          serverName: lastNameOf(serverIsYou ? youName : oppName),
-          // You-first for a header under the viewer's name, the way the room
-          // reads it; null when the match has no real game score column, and
-          // "—" on a game whose score the stream never read (`score_frozen`).
-          gameScore: showGameScore
-            ? (youFirstScore(
-                readGameScore(point) ?? "",
-                point.serverIsPlayer1,
-                youIsPlayer1,
-              ) ?? UNREAD_SCORE)
-            : null,
-          tiebreak: firstServerIsPlayer1 !== undefined,
-          points: [],
-        };
-        out.push(current);
-      }
-      current.points.push(point);
-    }
-
-    return out;
-  }, [
-    visiblePoints,
-    youIsPlayer1,
-    youName,
-    oppName,
-    showGameScore,
-    tiebreakFirstServer,
-  ]);
+  const groups = useMemo(
+    () =>
+      groupPointsByGame(
+        visiblePoints,
+        allPoints,
+        youIsPlayer1,
+        youName,
+        oppName,
+        showGameScore,
+      ),
+    [allPoints, visiblePoints, youIsPlayer1, youName, oppName, showGameScore],
+  );
 
   const clearAll = filmFilters.clearAll;
 
@@ -986,6 +1001,8 @@ export const PointRow = memo(function PointRow({
   onOpenInRoom,
   tone = "light",
   spaceIsPlayPause = false,
+  selectable = false,
+  showProgress = true,
 }: {
   point: MatchPoint;
   /** The row's name — `pointResultLabel`, never the raw result type. */
@@ -1011,13 +1028,21 @@ export const PointRow = memo(function PointRow({
   tone?: FilmListTone;
   /** The host owns Space (see `PointList`); the row answers only Enter. */
   spaceIsPlayPause?: boolean;
+  /**
+   * The Visualizations lightbox's list: a row selects its mark on the court,
+   * so it is a button whether or not the point has a clip.
+   */
+  selectable?: boolean;
+  /** `false` there too: the lit row is a selection, not a playing point, so
+   *  it takes the wash without the 2px progress rule. */
+  showProgress?: boolean;
 }) {
   const t = ROW_TONE[tone];
   const readOnly = useFilmReadOnly();
   const pointScore = readPointScore(point);
   // A point with no `videoTime` has nowhere to seek to. It still reads, it
   // just cannot be clicked — imports predating video timing are full of them.
-  const seekable = point.videoTime != null;
+  const seekable = selectable || point.videoTime != null;
 
   return (
     <div
@@ -1029,7 +1054,13 @@ export const PointRow = memo(function PointRow({
       // something a test can assert on without pinning a token's value.
       data-point-id={point.id}
       data-playing={isActive ? "true" : undefined}
-      aria-label={seekable ? `${title} — jump to this point` : undefined}
+      aria-label={
+        seekable
+          ? selectable
+            ? `${title} — show on the court`
+            : `${title} — jump to this point`
+          : undefined
+      }
       // A Shift-held press would otherwise extend the document's selection
       // from wherever the last caret was, so the ⇧-click that opens the room
       // leaves a band of highlighted rows behind it. Suppressed only while
@@ -1152,7 +1183,7 @@ export const PointRow = memo(function PointRow({
       {/* The playing row's rule, as the room draws it (`PanelRow`): a bare
           2px blue line growing from the row's left edge across its full
           width as the point plays — no grey track under it. */}
-      {isActive && (
+      {isActive && showProgress && (
         <span
           aria-hidden="true"
           className="absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]"

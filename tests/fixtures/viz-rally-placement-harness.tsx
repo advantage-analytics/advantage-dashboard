@@ -5,7 +5,7 @@ import { ChartMenu } from "@/components/dashboard/matches/match-detail/shots/cha
 import { CutMenu } from "@/components/dashboard/matches/match-detail/shots/cut-menu";
 import { CourtArt } from "@/components/dashboard/matches/match-detail/shots/court-art";
 import { CourtTile } from "@/components/dashboard/matches/match-detail/shots/court-tile";
-import { VizFullscreenCourt } from "@/components/dashboard/matches/match-detail/shots/viz-fullscreen-court";
+import { LightboxCourt } from "@/components/dashboard/matches/match-detail/shots/lightbox-court";
 import {
   VizStateProvider,
   useVizState,
@@ -153,7 +153,7 @@ function Harness() {
         data-testid="fullscreen"
         style={{ position: "relative", width: 700, height: 700 }}
       >
-        <VizFullscreenCourt
+        <LightboxCourt
           cut={cut}
           chart={state.chart}
           dots={result.dots}

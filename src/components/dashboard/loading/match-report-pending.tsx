@@ -19,7 +19,6 @@ import {
   VIEW_ICONS,
   viewRowClass,
 } from "@/components/dashboard/matches/match-detail/report-view-switcher";
-import { VIZ_TILE_GRID_CLASS } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import { InsightMark } from "@/components/dashboard/matches/match-detail/insight-mark";
 import { INSIGHT_SURFACE } from "@/components/dashboard/matches/match-detail/report-insight-card";
 import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
@@ -350,23 +349,29 @@ export function StatisticsPanePending() {
 
 /* ── Pane: Visualizations ──────────────────────────────────────────────── */
 
-/** One `CourtTile`: the 334:216 court, a 16px title, the pill row. */
-function TilePending() {
+/**
+ * One wall card (`wall-card.tsx`): the court to the card's edges, then the
+ * footer — a 16px title with its count, the 6px split bar and its key.
+ */
+function WallCardPending() {
   return (
     <div className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="w-full" style={{ aspectRatio: "334 / 216" }}>
+      <div
+        className="max-h-[300px] w-full"
+        style={{ aspectRatio: "334 / 216" }}
+      >
         <PendingBar className="h-full w-full rounded-none" />
       </div>
-      <div className="flex flex-col gap-2 px-4 pt-[14px] pb-[15px]">
-        <div className="flex h-5 items-center">
-          <PendingBar className="h-3.5 w-40" />
+      <div className="flex flex-col gap-1 border-t border-[var(--border-hairline)] px-5 pt-[14px] pb-[18px]">
+        <div className="flex h-5 items-center justify-between gap-3">
+          <PendingBar className="h-3.5 w-28" />
+          <PendingBar className="h-2.5 w-14" />
         </div>
-        <div className="flex h-5 items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <PendingBar className="h-5 w-14 rounded-full" />
-            <PendingBar className="h-5 w-16 rounded-full" />
-          </div>
+        <PendingBar className="mt-[10px] h-1.5 rounded-[3px]" />
+        <div className="mt-[6px] flex h-4 items-center gap-3.5">
           <PendingBar className="h-2.5 w-12" />
+          <PendingBar className="h-2.5 w-10" />
+          <PendingBar className="h-2.5 w-14" />
         </div>
       </div>
     </div>
@@ -374,63 +379,30 @@ function TilePending() {
 }
 
 /**
- * The wall (two rows of three tiles, `viz-wall.tsx`) or the focused view's
- * toolbar + court card + 292px stats card (`viz-focused.tsx`). The saved-views
- * band is per-workspace and so not drawn.
+ * The wall (`viz-wall.tsx`): the chip row (Default | Saved · You |
+ * Opponent) over four cards, two by two. A `?cut=` link draws the same: the
+ * lightbox opens over the wall once the page is there. The saved-views
+ * collection is per-workspace and so not drawn.
  */
-export function VisualizationsPanePending({
-  focused = false,
-}: {
-  focused?: boolean;
-}) {
+export function VisualizationsPanePending() {
   return (
     <PendingRegion
       label="visualizations"
-      innerClassName="@container flex flex-col gap-6"
+      innerClassName="@container flex flex-col gap-[18px]"
     >
-      {focused ? (
-        <>
-          <div className="flex h-8 items-center gap-2">
-            <PendingBar className="h-7 w-28 rounded-[var(--radius-element)]" />
-            <PendingBar className="h-7 w-24 rounded-[var(--radius-element)]" />
-            <PendingBar className="h-7 w-20 rounded-[var(--radius-element)]" />
-          </div>
-          <div className="flex items-start gap-4">
-            <div className="flex min-w-[360px] flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)]">
-              <div className="flex h-[47px] items-center gap-3 px-4">
-                <PendingBar className="h-3.5 w-44" />
-                <div className="flex-1" />
-                <PendingBar className="size-7 rounded-[8px]" />
-              </div>
-              <div className="mx-4" style={{ aspectRatio: "334 / 216" }}>
-                <PendingBar className="h-full w-full rounded-none" />
-              </div>
-              <div className="flex h-[46px] items-center gap-3 px-4">
-                <PendingBar className="h-2.5 w-16" />
-                <PendingBar className="h-2.5 w-16" />
-              </div>
-            </div>
-            <div className="surface-card flex w-[292px] shrink-0 flex-col gap-3 p-4">
-              <PendingBar className="h-2.5 w-24" />
-              {[0, 1, 2, 3].map((row) => (
-                <div key={row} className="flex h-6 items-center gap-2">
-                  <PendingBar className="w-28" />
-                  <div className="flex-1" />
-                  <PendingBar className="w-10" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      ) : (
-        [0, 1].map((row) => (
-          <div key={row} className={VIZ_TILE_GRID_CLASS}>
-            <TilePending />
-            <TilePending />
-            <TilePending />
-          </div>
-        ))
-      )}
+      <div className="flex h-[26px] items-center gap-2">
+        <PendingBar className="h-[26px] w-[70px] rounded-full" />
+        <PendingBar className="h-[26px] w-[60px] rounded-full" />
+        <span className="mx-2 h-4 w-px bg-[var(--border-medium)]" />
+        <PendingBar className="h-[26px] w-[48px] rounded-full" />
+        <PendingBar className="h-[26px] w-[80px] rounded-full" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 @min-[640px]:grid-cols-2">
+        <WallCardPending />
+        <WallCardPending />
+        <WallCardPending />
+        <WallCardPending />
+      </div>
     </PendingRegion>
   );
 }
@@ -545,13 +517,7 @@ export function FilmPanePending() {
  * and the pane for `view`. Pure props — this is what the offline spec
  * renders — and `match-report-skeleton.tsx` is the one that reads the URL.
  */
-export function MatchReportPending({
-  view,
-  focused = false,
-}: {
-  view: ReportView;
-  focused?: boolean;
-}) {
+export function MatchReportPending({ view }: { view: ReportView }) {
   return (
     <div className="flex h-[calc(100dvh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
       <MatchReportFrame>
@@ -570,7 +536,7 @@ export function MatchReportPending({
           {view === "statistics" ? (
             <StatisticsPanePending />
           ) : view === "shots" ? (
-            <VisualizationsPanePending focused={focused} />
+            <VisualizationsPanePending />
           ) : (
             <FilmPanePending />
           )}

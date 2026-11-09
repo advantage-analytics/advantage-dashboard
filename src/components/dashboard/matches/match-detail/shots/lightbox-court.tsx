@@ -27,6 +27,7 @@ import {
   trianglePointsFor,
   viewerArtPoint,
   viewerHeatFilterRegion,
+  viewerBandEdges,
   zoneCellX,
   zoneOpacity,
 } from "./court-geometry";
@@ -35,7 +36,12 @@ import {
   VizBandsOverlay,
   type VizBandsOverlayProps,
 } from "./viz-bands-overlay";
-import { buildReadout, buildZoneReadout, placeReadout } from "./viz-readout";
+import {
+  buildMarkReadout,
+  buildReadout,
+  buildZoneReadout,
+  placeReadout,
+} from "./viz-readout";
 import { nextMarkIndex } from "./viz-mark-roving";
 import { isPlacementCut } from "./cut-kinds";
 import {
@@ -47,9 +53,9 @@ import {
 import type { DistanceUnit } from "@/lib/format/distance";
 
 /**
- * The fullscreen viewer's court (Phase 2A, Task 4; f4b-report P2b/P2c) — one
+ * The lightbox's court (once the fullscreen viewer's, Phase 2A) — one
  * upright, full-length court drawn from `VIEWER_COURT`, inside a pan/zoom
- * layer the shell (`viz-fullscreen.tsx`) drives through `use-pan-zoom.ts`.
+ * layer the lightbox (`viz-lightbox.tsx`) drives through `use-pan-zoom.ts`.
  *
  * It is NOT `court-art.tsx`: that component draws the two in-shell frames
  * (the cropped serve half, the rotated landscape return frame), each with its
@@ -83,6 +89,16 @@ import type { DistanceUnit } from "@/lib/format/distance";
  *   on the pan, which is what lets `MarkLayer` be `memo`'d away from both.
  */
 
+/** A Statistics row's place on the court: a serve zone, or a band. */
+export type CourtOutline =
+  | { kind: "zone"; key: ZoneKey }
+  | {
+      kind: "band";
+      band: "depth" | "contact";
+      dividersFt: number[];
+      index: number;
+    };
+
 /* ── Type scale inside the art ───────────────────────────────────────────── */
 // These are SVG `font-size` ATTRIBUTES in viewBox units, not CSS `text-[Npx]`
 // — the art scales with the zoom, so they are part of the drawing's geometry
@@ -109,8 +125,17 @@ const AD_LABEL_X = (VIEWER_COURT.centreX + VIEWER_COURT.singlesRight) / 2;
  *  so the dividers and their labels read first. */
 const EDITING_ART_OPACITY = 0.35;
 
-const HOVER_MARK_R = 2.4;
-const HOVER_HALO_R = 5.6;
+/** The lightbox draws its court lines 1.3× the viewer's, in viewBox units,
+ *  so they scale with the drawn court rather than staying a fixed px. */
+const LINE_SCALE = 1.3;
+/** The selection ring: the shipped active treatment — the mark at its own
+ *  size, a 1.5px white ring at its radius + 3. */
+const SELECTED_RING_R = VIEWER_COURT.markRadius + 3;
+const SELECTED_RING_W = 1.5;
+/** The siblings of a selected mark sit back at 40%. */
+const UNSELECTED_OPACITY = 0.4;
+/** The mark readout's narrowest width (canvas S04). */
+const MIN_READOUT_W = 168;
 /** The keyboard-only ring, outside the hover halo. */
 const FOCUS_RING_R = 7.6;
 
@@ -150,7 +175,7 @@ function highlightedZoneKeys(filters: VizFilters): Set<ZoneKey> {
   return keys;
 }
 
-export function VizFullscreenCourt({
+export function LightboxCourt({
   cut,
   chart,
   dots,
@@ -170,9 +195,9 @@ export function VizFullscreenCourt({
   onDeactivate,
   onRove,
   onSelect,
-  watchPointId = null,
-  canWatchPoint,
-  onWatchPoint,
+  whereFor,
+  focusIds = null,
+  outline = null,
   onReadoutEnter,
   onReadoutLeave,
   editing = false,
@@ -216,9 +241,13 @@ export function VizFullscreenCourt({
   onDeactivate: (id: string) => void;
   onRove: (id: string) => void;
   onSelect: (id: string) => void;
-  watchPointId?: string | null;
-  canWatchPoint?: (pointId: string) => boolean;
-  onWatchPoint?: (pointId: string) => void;
+  /** "Set 2 · Game 5 · You serving" for a point id — the readout's last
+   *  line, read off the point by the lightbox. */
+  whereFor?: (pointId: string) => string | null;
+  /** A hovered Statistics row's marks: the rest sit back at 40%. */
+  focusIds?: ReadonlySet<string> | null;
+  /** The hovered or chosen Statistics row's zone, outlined dashed white. */
+  outline?: CourtOutline | null;
   onReadoutEnter?: () => void;
   onReadoutLeave?: () => void;
   /**
@@ -262,12 +291,15 @@ export function VizFullscreenCourt({
       ? null
       : (dots.find((d) => d.id === activeId) ?? null);
   const activeMeta = active?.meta ?? null;
-  const readout = activeMeta
-    ? buildReadout(activeMeta, { subject: subjectName }, cut, unit)
-    : null;
-  const watchablePointId =
-    active !== null && watchPointId && canWatchPoint?.(watchPointId)
-      ? watchPointId
+  const markReadout =
+    active !== null && activeMeta
+      ? buildMarkReadout(
+          activeMeta,
+          active.outcome,
+          cut,
+          unit,
+          activeMeta.pointId ? (whereFor?.(activeMeta.pointId) ?? null) : null,
+        )
       : null;
 
   // A serve zone answers hover and a tap the way a mark does: the tap pins it
@@ -287,14 +319,14 @@ export function VizFullscreenCourt({
       ? buildZoneReadout(shownZone, activeZoneStats, { subject: subjectName })
       : null;
 
-  const shownReadout = readout ?? zoneReadout;
+  const shownReadout = markReadout ?? zoneReadout;
   let readoutStyle: React.CSSProperties | null = null;
   if (shownReadout !== null) {
     // Viewbox -> art px -> layer px (the svg is `artPx * z`) -> stage px (the
     // wrapper is translated by px/py). A zone hangs from the net, so the card
     // sits over its cell and leaves the percentage below the net readable.
     let art: { x: number; y: number } | null = null;
-    if (active !== null && readout !== null) {
+    if (active !== null && markReadout !== null) {
       const p = projectViewerDot(cut, active);
       art = viewerArtPoint(p.x, p.y);
     } else if (shownZone !== null) {
@@ -302,15 +334,21 @@ export function VizFullscreenCourt({
       art = viewerArtPoint((cell.x1 + cell.x2) / 2, VIEWER_COURT.netY);
     }
     if (art !== null) {
+      // A mark's card clears its selection ring by 8px; the ring's radius is
+      // in viewBox units, scaled to stage px through the art.
+      const ringPx =
+        (SELECTED_RING_R * VIEWER_COURT.artPx.w * z) / VIEWER_COURT.viewBox.w;
       const place = placeReadout(
         { x: transform.px + art.x * z, y: transform.py + art.y * z },
         stage,
+        markReadout !== null ? ringPx + 8 : undefined,
       );
       readoutStyle = {
         ...DARK_READOUT_STYLE,
         left: place.left,
         top: place.top,
-        width: place.width,
+        minWidth: Math.min(MIN_READOUT_W, place.width),
+        maxWidth: place.width,
         transform: `translate(-50%, ${place.below ? "0" : "-100%"})`,
       };
     }
@@ -413,6 +451,7 @@ export function VizFullscreenCourt({
           )}
 
           <CourtLines />
+          {outline !== null && <OutlineRect outline={outline} />}
           {chart === "zones" && cut !== "serve" && bands === null && (
             <text
               x={VIEWER_COURT.centreX}
@@ -462,6 +501,7 @@ export function VizFullscreenCourt({
                 focusedId={focusedId}
                 selectedId={selectedId}
                 rovingId={rovingId}
+                focusIds={focusIds}
                 interactive={!editing}
                 onActivate={onActivate}
                 onDeactivate={onDeactivate}
@@ -475,58 +515,134 @@ export function VizFullscreenCourt({
         {editorLayer}
       </div>
 
-      {shownReadout !== null && readoutStyle !== null && (
+      {markReadout !== null && readoutStyle !== null && active !== null && (
         <div
           data-viz-readout=""
-          aria-hidden={watchablePointId ? undefined : true}
-          className={`${watchablePointId ? "pointer-events-auto" : "pointer-events-none"} absolute z-[2] flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
-          onPointerDown={(event) => event.stopPropagation()}
-          onPointerEnter={onReadoutEnter}
-          onPointerLeave={(event) => {
-            if (!event.currentTarget.contains(document.activeElement))
-              onReadoutLeave?.();
-          }}
-          onFocus={onReadoutEnter}
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget))
-              onReadoutLeave?.();
-          }}
+          aria-hidden="true"
+          className={`pointer-events-none absolute z-[2] flex flex-col gap-0.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
           style={readoutStyle}
         >
-          <span className="text-[12px] font-medium text-white">
-            {shownReadout.title}
-          </span>
-          {shownReadout.lines.map((line, index) => (
-            <span
-              key={index}
-              className={
-                index === shownReadout.monoLine
-                  ? "mono tabular text-[11px]"
-                  : "text-[11px]"
-              }
-              style={{
-                color:
-                  index === shownReadout.monoLine
-                    ? "rgba(255,255,255,0.45)"
-                    : "rgba(255,255,255,0.64)",
-              }}
-            >
-              {line}
+          <span className="mb-0.5 flex items-center gap-[7px]">
+            <ReadoutGlyph dot={active} />
+            <span className="text-[12px] leading-[1.35] font-medium text-white">
+              {markReadout.title}
             </span>
-          ))}
-          {watchablePointId && onWatchPoint && (
-            <button
-              type="button"
-              data-viz-watch-point
-              onClick={() => onWatchPoint(watchablePointId)}
-              className="mt-1 cursor-pointer self-start text-[11px] font-medium text-white underline underline-offset-2 hover:text-white/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-            >
-              Watch point
-            </button>
+            {markReadout.score !== null && (
+              <span className="ml-auto pl-3.5 text-[11px] leading-[1.35] text-white/[0.64] tabular-nums">
+                {markReadout.score}
+              </span>
+            )}
+          </span>
+          {markReadout.shot !== null && (
+            <span className="text-[11px] leading-[1.45] text-white/[0.64]">
+              {markReadout.shot}
+            </span>
+          )}
+          {markReadout.where !== null && (
+            <span className="text-[11px] leading-[1.45] text-white/[0.64]">
+              {markReadout.where}
+            </span>
           )}
         </div>
       )}
+      {markReadout === null &&
+        zoneReadout !== null &&
+        readoutStyle !== null && (
+          <div
+            data-viz-readout=""
+            aria-hidden="true"
+            className={`pointer-events-none absolute z-[2] flex flex-col gap-0.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
+            style={readoutStyle}
+          >
+            <span className="text-[12px] font-medium text-white">
+              {zoneReadout.title}
+            </span>
+            {zoneReadout.lines.map((line, index) => (
+              <span
+                key={index}
+                className="text-[11px] leading-[1.45] text-white/[0.64]"
+              >
+                {line}
+              </span>
+            ))}
+          </div>
+        )}
     </>
+  );
+}
+
+/** The dashed white outline of a Statistics row's zone or band. */
+function OutlineRect({ outline }: { outline: CourtOutline }) {
+  let x: number;
+  let y: number;
+  let w: number;
+  let h: number;
+  if (outline.kind === "zone") {
+    const cell = zoneCellX(ZONES.findIndex((z) => z.key === outline.key));
+    x = cell.x1;
+    w = cell.x2 - cell.x1;
+    y = VIEWER_COURT.farServiceY;
+    h = VIEWER_COURT.netY - VIEWER_COURT.farServiceY;
+  } else {
+    const edges = viewerBandEdges(outline.band, outline.dividersFt);
+    x = VIEWER_COURT.singlesLeft;
+    w = VIEWER_COURT.singlesRight - VIEWER_COURT.singlesLeft;
+    y = edges[outline.index];
+    h = edges[outline.index + 1] - edges[outline.index];
+  }
+  return (
+    <rect
+      data-viz-outline=""
+      x={x}
+      y={y}
+      width={w}
+      height={Math.max(0, h)}
+      fill="none"
+      stroke={LINE_COLOR}
+      strokeWidth={1.5}
+      strokeDasharray="4 3"
+      vectorEffect="non-scaling-stroke"
+      pointerEvents="none"
+    />
+  );
+}
+
+/** The readout's legend glyph: the mark's own shape and fill, 10px. */
+function ReadoutGlyph({ dot }: { dot: VizDot }) {
+  const fill = fillFor(dot);
+  return (
+    <svg
+      aria-hidden="true"
+      width={10}
+      height={10}
+      viewBox="0 0 10 10"
+      className="shrink-0"
+    >
+      {dot.shape === "star" ? (
+        <polygon
+          points={starPoints(5, 5, 4.2)}
+          fill={fill}
+          stroke="#000"
+          strokeWidth={0.4}
+        />
+      ) : dot.shape === "triangle" ? (
+        <polygon
+          points={trianglePointsFor("serve", 5, 5, 2.2)}
+          fill={fill}
+          stroke="#000"
+          strokeWidth={0.4}
+        />
+      ) : (
+        <circle
+          cx={5}
+          cy={5}
+          r={3.6}
+          fill={fill}
+          stroke="#000"
+          strokeWidth={0.4}
+        />
+      )}
+    </svg>
   );
 }
 
@@ -576,19 +692,11 @@ const CourtLines = memo(function CourtLines() {
     <>
       <g
         stroke={LINE_COLOR}
-        strokeWidth={VIEWER_COURT.lineWidth}
+        strokeWidth={VIEWER_COURT.lineWidth * LINE_SCALE}
         fill="none"
-        vectorEffect="non-scaling-stroke"
       >
         {segments.map(([x1, y1, x2, y2], index) => (
-          <line
-            key={index}
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            vectorEffect="non-scaling-stroke"
-          />
+          <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} />
         ))}
       </g>
       <line
@@ -597,8 +705,7 @@ const CourtLines = memo(function CourtLines() {
         x2={VIEWER_COURT.netX2}
         y2={VIEWER_COURT.netY}
         stroke={LINE_COLOR}
-        strokeWidth={VIEWER_COURT.netWidth}
-        vectorEffect="non-scaling-stroke"
+        strokeWidth={VIEWER_COURT.netWidth * LINE_SCALE}
       />
     </>
   );
@@ -627,6 +734,7 @@ const MarkLayer = memo(function MarkLayer({
   focusedId,
   selectedId,
   rovingId,
+  focusIds,
   interactive,
   onActivate,
   onDeactivate,
@@ -635,6 +743,7 @@ const MarkLayer = memo(function MarkLayer({
 }: {
   cut: Cut;
   dots: VizDot[];
+  focusIds: ReadonlySet<string> | null;
   subjectName: string;
   /** The viewer's Units preference — the announced label's speed follows it,
    *  same as the visible readout. */
@@ -722,8 +831,12 @@ const MarkLayer = memo(function MarkLayer({
   return (
     <>
       {placed.map(({ dot, x, y, fill, label }, index) => {
-        const isActive = dot.id === activeId;
+        const isSelected = dot.id === selectedId;
         const isFocused = dot.id === focusedId;
+        const dimmed =
+          selectedId !== null
+            ? !isSelected
+            : focusIds !== null && !focusIds.has(dot.id);
         return (
           <g
             key={dot.id}
@@ -736,6 +849,7 @@ const MarkLayer = memo(function MarkLayer({
             aria-label={label}
             aria-pressed={dot.id === selectedId}
             className="cursor-pointer outline-none"
+            opacity={dimmed ? UNSELECTED_OPACITY : undefined}
             onMouseEnter={() => onActivate(dot.id, false)}
             onMouseLeave={() => onDeactivate(dot.id)}
             onFocus={(e) =>
@@ -775,20 +889,20 @@ const MarkLayer = memo(function MarkLayer({
                 vectorEffect="non-scaling-stroke"
               />
             )}
-            {isActive && (
+            {isSelected && (
               <circle
+                data-viz-selected-ring=""
                 cx={x}
                 cy={y}
-                r={HOVER_HALO_R}
+                r={SELECTED_RING_R}
                 fill="none"
                 stroke={LINE_COLOR}
-                strokeWidth={0.7}
-                strokeOpacity={0.55}
+                strokeWidth={SELECTED_RING_W}
                 vectorEffect="non-scaling-stroke"
               />
             )}
             <circle cx={x} cy={y} r={9} fill="transparent" />
-            <Mark dot={dot} x={x} y={y} fill={fill} active={isActive} />
+            <Mark dot={dot} x={x} y={y} fill={fill} />
           </g>
         );
       })}
@@ -830,17 +944,17 @@ function Mark({
   x,
   y,
   fill,
-  active,
 }: {
   dot: VizDot;
   x: number;
   y: number;
   fill: string;
-  active: boolean;
 }) {
-  const stroke = active ? LINE_COLOR : "#000";
-  const strokeWidth = active ? 0.8 : VIEWER_COURT.markStroke;
-  const r = active ? HOVER_MARK_R : VIEWER_COURT.markRadius;
+  // Hover changes nothing on the mark (the readout is the hover); a selected
+  // mark keeps its own size inside the ring.
+  const stroke = "#000";
+  const strokeWidth = VIEWER_COURT.markStroke;
+  const r = VIEWER_COURT.markRadius;
 
   if (dot.shape === "star") {
     return (

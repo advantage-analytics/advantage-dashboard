@@ -17,6 +17,26 @@
 export const POINT_SET_PARAM = "pn";
 
 /**
+ * The set's words (`?pnl=`), when whoever built it can name it — the
+ * Visualizations lightbox's "Watch these N points" sends its card and cut,
+ * "First serves · To the T". A label, not a filter: the Video tab's strip
+ * reads it in place of "12 chosen points" and nothing is narrowed by it. It
+ * travels with `?pn=` and is dropped whenever the set changes.
+ */
+export const POINT_SET_LABEL_PARAM = "pnl";
+
+/** The longest label kept; anything past it is cut. */
+const MAX_POINT_SET_LABEL = 120;
+
+/** A `?pnl=` value, trimmed and capped; null when blank. */
+export function parsePointSetLabel(
+  value: string | null | undefined,
+): string | null {
+  const text = (value ?? "").trim().slice(0, MAX_POINT_SET_LABEL);
+  return text === "" ? null : text;
+}
+
+/**
  * The most points one set names. `ask.exec_query` returns at most 200 rows,
  * so a set the "Show me" action builds can never hold more; a hand-written
  * link beyond it is cut to the first 200, not refused.
@@ -58,16 +78,22 @@ export function serializePointSet(numbers: readonly number[]): string {
 
 /**
  * A query string with `?pn=` set to `numbers`, or removed for null/empty.
- * Every other parameter is carried through; `current` is never mutated.
+ * `?pnl=` is written with `label` beside a set and otherwise removed, so a
+ * changed set never keeps an old set's words. Every other parameter is
+ * carried through; `current` is never mutated.
  */
 export function pointSetQuery(
   current: URLSearchParams | string,
   numbers: readonly number[] | null,
+  label: string | null = null,
 ): string {
   const next = new URLSearchParams(current.toString());
   const value = numbers ? serializePointSet(numbers) : "";
   if (value) next.set(POINT_SET_PARAM, value);
   else next.delete(POINT_SET_PARAM);
+  const words = value ? parsePointSetLabel(label) : null;
+  if (words) next.set(POINT_SET_LABEL_PARAM, words);
+  else next.delete(POINT_SET_LABEL_PARAM);
   return next.toString();
 }
 

@@ -54,14 +54,13 @@ export function setOutcome(set: ScoreLineSet): "you" | "opp" | "level" {
 }
 
 /**
- * One row's cells — the SHARED derivation behind both scoreboards that draw a
- * match's two score rows: this file's rail row and the fullscreen court
- * viewer's slab row (`shots/viz-fullscreen.tsx`). Final review #10: the
- * viewer had hand-copied the lost-set dimming, the `isYou ? player1 :
- * player2` indexing and the tiebreak slot, and this is the one widget where
- * getting that indexing backwards looks entirely fine on screen while
- * attributing the score to the wrong player (docs/ui-revamp-guardrails.md
- * §4). One function, two renderers.
+ * One row's cells — the derivation behind this file's rail score rows, kept
+ * as one function (the fullscreen court viewer drew a second copy of these
+ * rows until the Visualizations lightbox replaced it). This is the one
+ * widget where getting the `isYou ? player1 : player2` indexing backwards
+ * looks entirely fine on screen while attributing the score to the wrong
+ * player (docs/ui-revamp-guardrails.md §4), so a new scoreboard takes its
+ * cells from here rather than re-deriving them.
  *
  * `sets` must already be you-first — the shape `useMatchSides().sets` hands
  * over. This function never looks at which id is which; it only applies

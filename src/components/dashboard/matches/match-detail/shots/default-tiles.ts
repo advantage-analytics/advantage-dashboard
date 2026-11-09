@@ -11,10 +11,14 @@
  */
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import { depthBandRows, type BandSettings } from "@/lib/data/viz-bands";
+import type { DistanceUnit } from "@/lib/format/distance";
 import { defaultCutsFor } from "./default-cuts";
+import { wallSummaryFor, type WallSummary } from "./wall-summary";
 import {
   EMPTY_VIZ_FILTERS,
   computeViz,
+  computeVizStats,
   errorsJudgedIn,
   tileCountLabel,
   type Chart,
@@ -50,12 +54,16 @@ export interface DefaultTile {
    * tiles means that subject has nothing to show (mirrors `viz-wall.tsx`'s
    * `EmptySubjectRow` rule). */
   total: number;
+  /** The wall card's footer (count, split bar, key) — built only when the
+   *  caller passes `bands`, from `computeVizStats` over this tile's own
+   *  `computeViz` result. */
+  summary?: WallSummary;
 }
 
 /**
- * The ten default tiles in wall order: your five (serve, return placement,
- * return contact, rally placement, unforced errors — or Errors, unjudged), then the opponent's
- * five. `hrefFor` is the caller's
+ * The eight default tiles in wall order: your four (first serves, returns,
+ * rally shots, unforced errors — or Errors, unjudged), then the opponent's
+ * four. `hrefFor` is the caller's
  * `useVizState().hrefFor` (or an equivalent pure function in a test), applied
  * to each tile's own `VizState` to build its `href`.
  */
@@ -67,6 +75,10 @@ export function buildDefaultTiles(
    *  `errorSplitJudged` picks the errors cut (`defaultCutsFor`) and how the
    *  cut reads error kinds. Omitted = judged (`errorsJudgedIn`). */
   matchCtx?: MatchFilterContext,
+  /** The workspace's bands and the viewer's unit (`useVizBands()`): given,
+   *  every tile also carries its wall `summary`, bucketed exactly as the
+   *  lightbox's Statistics column is. */
+  bands?: { bands: BandSettings; unit: DistanceUnit },
 ): DefaultTile[] {
   const cuts = defaultCutsFor(errorsJudgedIn(matchCtx));
   const rows: { subject: PlayerFilter; side: DefaultTileSide }[] = [
@@ -109,6 +121,23 @@ export function buildDefaultTiles(
         state,
         href: hrefFor(state),
         total: result.total,
+        summary: bands
+          ? wallSummaryFor(
+              cut.cut,
+              result,
+              computeVizStats(
+                points,
+                cut.cut,
+                filters,
+                row.side.isPlayer1,
+                result,
+                bands.bands,
+                bands.unit,
+                matchCtx,
+              ),
+              depthBandRows(bands.bands, bands.unit),
+            )
+          : undefined,
       });
     }
   }

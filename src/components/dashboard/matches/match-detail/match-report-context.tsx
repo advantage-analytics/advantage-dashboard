@@ -11,6 +11,9 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { pointSetQuery } from "@/lib/match-video/point-set";
+import { useClearMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import { MATCH_FILTERS_PARAM } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { matchViewSource, track, type MatchViewSource } from "@/lib/analytics";
 import {
   ALL_REPORT_VIEWS,
@@ -22,6 +25,7 @@ import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { BandSettings } from "@/lib/data/viz-bands";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 import type { DistanceUnit } from "@/lib/format/distance";
+import { WallMemoryProvider } from "@/components/dashboard/matches/match-detail/shots/viz-wall-memory";
 import { FilmHeadProvider } from "@/components/dashboard/matches/match-detail/film-head-context";
 import {
   FilmCutProvider,
@@ -68,6 +72,13 @@ export interface MatchReportActions {
    * names the card the click came from, for analytics only (`stat_clicked`).
    */
   watchCut(cut: FilmCut, label: string, section?: string): void;
+  /**
+   * Open the Video view on a set of points by number — the Video tab's
+   * point-set layer (`?pn=`, `lib/match-video/point-set.ts`), named in its
+   * strip by `label` (`?pnl=`). The Visualizations lightbox's "Watch these N
+   * points". A no-op without a playable video, as `watchCut` is.
+   */
+  watchPointSet(pointNumbers: readonly number[], label: string): void;
   collapseInsight(): void;
   expandInsight(): void;
 }
@@ -301,6 +312,11 @@ export function MatchReportProvider({
   const [pendingCut, setPendingCut] = useState<FilmCutIntent | null>(null);
   const clearPendingCut = useCallback(() => setPendingCut(null), []);
 
+  // `watchPointSet` clears the shared filters: the Video list must show
+  // exactly the points it hands over, not those points AND whatever `?f=`
+  // still holds.
+  const clearFilters = useClearMatchFilters();
+
   const actions = useMemo<MatchReportActions>(
     () => ({
       selectView(next) {
@@ -321,6 +337,26 @@ export function MatchReportProvider({
         const query = new URLSearchParams(window.location.search);
         query.set("tab", "film");
         query.set("point", pointId);
+        query.delete("fullscreen");
+        window.history.pushState(null, "", `${pathname}?${query.toString()}`);
+      },
+      watchPointSet(pointNumbers, label) {
+        if (!hasPlayableVideo || pointNumbers.length === 0) return;
+        // The set IS the cut: the shared layer goes for this hand-off, the
+        // way a statistic's `watchCut` writes its own. Cleared in state AND
+        // in the pushed URL, so the provider's mirror has nothing to put
+        // back; Back returns to the entry that still carries `?f=`.
+        clearFilters();
+        const query = new URLSearchParams(
+          pointSetQuery(
+            window.location.search.replace(/^\?/, ""),
+            pointNumbers,
+            label,
+          ),
+        );
+        query.set("tab", "film");
+        query.delete(MATCH_FILTERS_PARAM);
+        query.delete("point");
         query.delete("fullscreen");
         window.history.pushState(null, "", `${pathname}?${query.toString()}`);
       },
@@ -346,7 +382,15 @@ export function MatchReportProvider({
         setInsight("expanded");
       },
     }),
-    [view, searchParams, pathname, defaultView, hasPlayableVideo, matchId],
+    [
+      view,
+      searchParams,
+      pathname,
+      defaultView,
+      hasPlayableVideo,
+      matchId,
+      clearFilters,
+    ],
   );
 
   const meta = useMemo<MatchReportMeta>(
@@ -404,7 +448,11 @@ export function MatchReportProvider({
   return (
     <MatchReportContext value={value}>
       <FilmCutProvider cut={pendingCut} onClear={clearPendingCut}>
-        <FilmHeadProvider>{children}</FilmHeadProvider>
+        <FilmHeadProvider>
+          {/* The Visualizations wall's player and collection, kept across
+              the tab unmounting (Watch → Video → Back). */}
+          <WallMemoryProvider>{children}</WallMemoryProvider>
+        </FilmHeadProvider>
       </FilmCutProvider>
     </MatchReportContext>
   );

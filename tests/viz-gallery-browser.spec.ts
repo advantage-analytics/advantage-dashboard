@@ -92,7 +92,7 @@ test.afterAll(async () => {
   if (outputPath) rmSync(outputPath, { recursive: true, force: true });
 });
 
-test("default and saved gallery navigation omits only the selected identity", async ({
+test("the wall's Default and Saved collections open cards over the wall", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -103,84 +103,58 @@ test("default and saved gallery navigation omits only the selected identity", as
     "aria-pressed",
     "true",
   );
-  await expect(page.getByRole("list", { name: "Default views" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Saved serve/ })).toHaveCount(0);
-  await page.getByRole("button", { name: "Saved", exact: true }).click();
+  const defaults = page.getByRole("list", { name: "Default views" });
+  await expect(defaults).toBeVisible();
+  // One player at a time (the fixture only holds serves, so one card each);
+  // the switch is URL-backed.
+  await expect(defaults.getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "You" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: "Opponent" }).click();
+  await expect(page).toHaveURL(/player=opponent/);
   await expect(
-    page.getByRole("button", { name: "Saved", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+    defaults.locator('a[href*="cut=serve"][href*="player=opponent"]'),
+  ).toHaveCount(1);
+  await page.getByRole("button", { name: "You" }).click();
+  await expect(page).not.toHaveURL(/player=opponent/);
+
+  // The Saved collection.
+  await page.getByRole("button", { name: "Saved", exact: true }).click();
   await expect(
     page.getByRole("list", { name: "Saved views" }).getByRole("listitem"),
   ).toHaveCount(3);
   await expect(page.getByRole("link", { name: "Create view" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Saved views" })).toHaveCount(
-    0,
-  );
+
+  // A saved view opens over the wall, and closing lands back on Saved.
+  await page
+    .getByRole("link", { name: /Saved serve/ })
+    .first()
+    .click();
+  await expect(page.getByTestId("lightbox")).toContainText("saved-serve");
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByTestId("lightbox")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Saved", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  // A default card opens over the wall with the keyboard; the wall stays.
   await page.getByRole("button", { name: "Default" }).click();
-  const gallery = page.getByRole("list").last();
-  const defaultServe = page.locator(
+  const defaultServe = defaults.locator(
     'a[href*="cut=serve"][href*="ball=first"]:not([href*="player="])',
   );
   await defaultServe.focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByTestId("focused")).toBeVisible();
-  await expect(defaultServe).toHaveCount(0);
-  await expect(page.getByRole("link", { name: /Saved serve/ })).toBeVisible();
-  await expect(gallery.getByRole("listitem")).toHaveCount(12);
-  await page.getByRole("button", { name: "Filter set" }).click();
-  await expect(gallery.getByRole("listitem")).toHaveCount(12);
-  await page.getByRole("link", { name: /Saved serve/ }).click();
-  await expect(page.getByTestId("focused")).toContainText("saved-serve");
-  await page.getByRole("button", { name: "Back to wall" }).click();
-  await expect(
-    page.getByRole("button", { name: "Saved", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("link", { name: /Saved serve/ })).toBeVisible();
-  await page.getByRole("link", { name: /Saved serve/ }).click();
-  await page.screenshot({
-    path: test.info().outputPath("gallery-focused-saved.png"),
-    fullPage: true,
-  });
-  await expect(page.getByRole("link", { name: /Saved serve/ })).toHaveCount(0);
-  await expect(
-    page.getByRole("link", { name: /Second saved serve/ }),
-  ).toBeVisible();
-  await expect(defaultServe).toBeVisible();
-  await page.getByRole("link", { name: /Second saved serve/ }).click();
-  await expect(page.getByTestId("focused")).toContainText("saved-serve-2");
-  await expect(
-    page.getByRole("link", { name: /Second saved serve/ }),
-  ).toHaveCount(0);
-  await expect(page.getByRole("link", { name: /Saved serve/ })).toBeVisible();
-  await page.getByRole("link", { name: /Saved serve/ }).click();
-  await expect(page.getByTestId("focused")).toContainText("saved-serve");
-  await page
-    .getByRole("button", { name: "Open First serves, every zone fullscreen" })
-    .first()
-    .click();
-  await expect(page.getByTestId("fullscreen")).toBeVisible();
-  await page.getByRole("button", { name: "Exit fullscreen" }).click();
-  await expect(page.getByTestId("fullscreen")).toHaveCount(0);
-  await page.getByRole("link", { name: /Saved serve/ }).click();
-  await expect(page.getByTestId("focused")).toContainText("saved-serve");
-  await page.evaluate(() => {
-    window.history.pushState(null, "", "/?tab=shots&cut=serve&ball=first");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  });
-  await expect(defaultServe).toHaveCount(0);
+  await expect(page.getByTestId("lightbox")).toContainText("you:serve");
+  await expect(defaults).toBeVisible();
+
+  // Back and forward move between the wall and the opened card.
   await page.goBack();
-  await expect(page.getByTestId("focused")).toContainText("saved-serve");
-  await expect(defaultServe).toBeVisible();
+  await expect(page.getByTestId("lightbox")).toHaveCount(0);
   await page.goForward();
-  await expect(defaultServe).toHaveCount(0);
-  await page.getByRole("button", { name: "Back to wall" }).click();
-  await expect(defaultServe).toBeVisible();
-  await page.getByRole("button", { name: "Saved", exact: true }).click();
-  await expect(page.getByRole("link", { name: /Saved serve/ })).toBeVisible();
-  await page.getByRole("button", { name: "Default" }).click();
-  await page.screenshot({
-    path: test.info().outputPath("gallery-overview.png"),
-    fullPage: true,
-  });
+  await expect(page.getByTestId("lightbox")).toContainText("you:serve");
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByTestId("lightbox")).toHaveCount(0);
   expect(errors).toEqual([]);
 });

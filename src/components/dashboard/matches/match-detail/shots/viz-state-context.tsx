@@ -10,23 +10,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { flushSync } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   applyVizUpdate,
-  focusTargetAfterViewChange,
   parseVizState,
   reconcileVizState,
-  viewIdentityKey,
   vizStateQuery,
   type VizState,
 } from "./viz-url";
-import {
-  courtTileDomId,
-  supportsViewTransitions,
-  VIZ_COURT_TRANSITION_NAME,
-  VIZ_FOCUSED_HEADING_ID,
-} from "./viz-court-transition";
 import { useErrorSplitJudged } from "../match-filters/provider";
 
 interface VizStateContextValue {
@@ -34,52 +25,15 @@ interface VizStateContextValue {
   setState: (next: VizState | ((prev: VizState) => VizState)) => void;
   hrefFor: (next: VizState) => string;
   /**
-   * The `viewIdentityKey` (`viz-url.ts`) of the court a morph currently
-   * in flight is landing ON — `null` outside a morph. The wall's tiles, the
-   * focused view's own "Views" grid tiles, and `viz-focused.tsx`'s big court
-   * each compare THEIR OWN `viewIdentityKey` against this to decide whether
-   * THEY are this morph's destination, and if so render with
-   * `view-transition-name: viz-court-shared` so the browser pairs them with
-   * whatever `runCourtMorph` marked as the source.
+   * Counts the URL changes this store did NOT ask for — Back/Forward, a
+   * pasted or clicked link — so a reader can tell an outside navigation
+   * from its own edits (the lightbox starts over on a different saved view,
+   * never on an edit). Bumped in the same render that sets the new `state`.
    */
-  morphTargetKey: string | null;
-  /**
-   * The ONE animation: run `setState(next)` as a native View Transition
-   * that shared-element-morphs `sourceEl` (the DOM node the visitor
-   * clicked, or the court they're leaving) into the destination that
-   * matches `targetKey`. Falls straight through to a plain `setState(next)`
-   * — no morph — when the visitor prefers reduced motion, the browser
-   * doesn't support `document.startViewTransition`, or `sourceEl` wasn't
-   * found (nothing to morph FROM). See `viz-court-transition.ts` for why
-   * this is the browser's native API rather than React's `<ViewTransition>`.
-   */
-  runCourtMorph: (opts: {
-    sourceEl: HTMLElement | null;
-    next: VizState;
-    targetKey: string | null;
-    reducedMotion: boolean;
-  }) => void;
-  /**
-   * One-shot: true for the very first render after a court-identity change
-   * (`viewIdentityKey` before ≠ after) arrived from OUTSIDE this store —
-   * browser back/forward being the case that matters, since Next's
-   * navigation there gives no synchronous hook to snapshot the outgoing DOM
-   * before the router commits the new one, so `runCourtMorph`'s
-   * shared-element approach isn't reachable for it — the fallback here is a
-   * plain 200ms crossfade for the case a clean reverse isn't achievable.
-   * `VizWall`/`VizFocused` read this once on mount to opt into that plain
-   * crossfade, then call `clearExternalCourtSwap()` so it doesn't replay on
-   * an unrelated later render.
-   */
-  externalCourtSwap: boolean;
-  clearExternalCourtSwap: () => void;
+  navigation: number;
 }
 
 const VizStateContext = createContext<VizStateContextValue | null>(null);
-
-// Below this, the pane reads as "not scrolled" — a few px of rubber-band
-// or rounding jitter shouldn't disqualify the court morph.
-const SCROLL_MORPH_THRESHOLD_PX = 8;
 
 /**
  * The Visualizations tab's client-side URL binding: `useSearchParams()` in,
@@ -115,34 +69,6 @@ export function useVizState(): VizStateContextValue {
     );
   }
   return ctx;
-}
-
-/**
- * Shared by `VizWall` and `VizFocused` — the one-shot "opt into a plain
- * crossfade for this mount" flag, read from `externalCourtSwap`. See
- * `VizStateContextValue.externalCourtSwap`'s doc comment for why this fallback
- * exists (browser back/forward can't run `runCourtMorph`'s shared-element
- * approach).
- *
- * Returns `useState`'s initial snapshot of `externalCourtSwap` — `true` for
- * exactly the first render after an external court-identity change, even
- * though both call sites stay mounted across ordinary within-store
- * navigation. The effect clears the flag on every render where it still
- * reads `true` (keyed on the flag itself, not `[]`): a `[]`-deps effect would
- * only ever clear whatever the flag was at this hook's OWN first mount, so a
- * later external swap arriving while the component stays mounted (e.g.
- * another Back navigation) would never get cleared, and the stale `true`
- * would replay the fade on some unrelated later mount. `fallbackFadeIn`
- * itself can't be re-triggered by that clearing — it's the `useState`
- * initializer's captured value and never reacts to later prop/flag changes.
- */
-export function useExternalSwapFadeIn(): boolean {
-  const { externalCourtSwap, clearExternalCourtSwap } = useVizState();
-  const [fallbackFadeIn] = useState(externalCourtSwap);
-  useEffect(() => {
-    if (externalCourtSwap) clearExternalCourtSwap();
-  }, [externalCourtSwap, clearExternalCourtSwap]);
-  return fallbackFadeIn;
 }
 
 /**
@@ -209,77 +135,23 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   const [state, setRenderedState] = useState<VizState>(() =>
     parseVizState(searchParams, { errorSplitJudged }),
   );
+  const [navigation, setNavigation] = useState(0);
   const intendedRef = useRef<VizState>(state);
   const ownQueriesRef = useRef<string[]>([query]);
 
-  // The morph's destination key (`null` outside a transition) and the
-  // one-shot "this court swap arrived from outside the store" flag — see
-  // the doc comments on `VizStateContextValue`.
-  const [morphTargetKey, setMorphTargetKey] = useState<string | null>(null);
-  const [externalCourtSwap, setExternalCourtSwap] = useState(false);
-
-  // Keyboard focus (and, in `viz-focused.tsx`'s own
-  // scroll-to-top effect, the scroll position) must follow the VIEW change
-  // itself, never a view transition settling — a hidden document, a
-  // browser without the API, and reduced motion all skip or abort the
-  // animation (`document.startViewTransition`'s `ready` rejects with
-  // "Transition was aborted because of invalid state"), but `state` still
-  // changes underneath it, and this plain effect fires on that alone.
-  // Seeded with the INITIAL state's key so the first run always compares
-  // equal to itself (`focusTargetAfterViewChange` returns `null`) — first
-  // mount must never steal focus.
-  const focusTrackedKeyRef = useRef<string | null>(viewIdentityKey(state));
-
-  const viewKey = viewIdentityKey(state);
   useEffect(() => {
-    const prevKey = focusTrackedKeyRef.current;
-
-    // The fullscreen viewer owns focus while it is up, and
-    // it is a portal on `document.body` — so moving focus to the focused
-    // view's eyebrow here would put it BEHIND the overlay, silently (every
-    // window-level key still works, so nothing looks wrong). A tile's
-    // fullscreen glyph changes `cut`/`viewId` AND sets `fullscreen` in one
-    // update, and parent effects flush after child ones, so this effect runs
-    // right after the viewer's own mount-focus and would undo it. The key is
-    // still tracked, so the NEXT change compares against the right baseline
-    // and exiting the viewer restores focus to the door as usual.
-    if (state.fullscreen !== true) {
-      const target = focusTargetAfterViewChange(prevKey, viewKey);
-
-      if (target === "focused-view") {
-        document.getElementById(VIZ_FOCUSED_HEADING_ID)?.focus();
-      } else if (target === "opened-tile" && prevKey !== null) {
-        document.getElementById(courtTileDomId(prevKey))?.focus();
-      }
-    }
-
-    focusTrackedKeyRef.current = viewKey;
-  }, [viewKey, state.fullscreen]);
-
-  useEffect(() => {
-    // Read BEFORE `reconcileVizState` overwrites `intendedRef` below — an
-    // own query still needs this comparison skipped (own navigations get
-    // their morph, if any, from `runCourtMorph` directly, not from this
-    // fallback), so the check has to happen while `ownQueriesRef` still
-    // reflects the pre-reconciliation bookkeeping.
-    const wasOwnQuery = ownQueriesRef.current.includes(query);
-    const prevKey = viewIdentityKey(intendedRef.current);
-
     const reconciled = reconcileVizState({
       urlQuery: query,
       ownQueries: ownQueriesRef.current,
       intended: intendedRef.current,
       match: { errorSplitJudged },
     });
+    if (reconciled.external) setNavigation((n) => n + 1);
     intendedRef.current = reconciled.state;
     ownQueriesRef.current = reconciled.ownQueries;
     setRenderedState(reconciled.state);
     // `reconciled.state` is derived from `query`, so re-running only when
     // `query` changes is correct.
-
-    if (!wasOwnQuery && prevKey !== viewIdentityKey(reconciled.state)) {
-      setExternalCourtSwap(true);
-    }
   }, [query, errorSplitJudged]);
 
   // `hrefFor`/`setState` wrapped in `useCallback`, and the context value
@@ -315,148 +187,9 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
     [pathname, router, searchParams],
   );
 
-  // The ONE animation. `sourceEl` is the real DOM node the visitor just
-  // interacted with (the tile they clicked, or the court they're leaving)
-  // — callers find it imperatively (a ref or a `querySelector` off the
-  // click event's `currentTarget`), never from React state, because it has
-  // to be marked with `view-transition-name` on the OLD DOM, before
-  // `setState` mutates anything. `targetKey` identifies whichever element
-  // should carry that same name once the NEW DOM exists — NOT a
-  // `viewIdentityKey` (two elements can share one: the big court and its
-  // own "current" tile in the Views grid — see
-  // `VIZ_FOCUSED_COURT_MORPH_TARGET`'s doc comment for the bug that shape
-  // caused), but either `VIZ_FOCUSED_COURT_MORPH_TARGET` (every forward
-  // morph's destination is always the one big court) or a wall tile's own
-  // `courtTileDomId(...)` (the reverse morph — "Back to wall" leaves
-  // `next.cut === null`, so the destination can't be derived from `next` at
-  // all; it's the tile matching the view being LEFT, computed by the
-  // caller from `state`, not `next`).
-  //
-  // This function is now PURELY decorative — it drives the
-  // shared-element morph and nothing else. Focus and scroll used to hang
-  // off `transition.ready`/`finished` here, which broke the moment the
-  // transition itself was skipped or aborted rather than merely unsupported
-  // — a hidden document rejects `ready` with "Transition was aborted
-  // because of invalid state" (confirmed live in the signed-in app's
-  // preview pane), and every promise branch that existed to catch that
-  // still depended on the SAME transition object settling at all. Focus/
-  // scroll now live entirely in the provider's own `viewKey`-keyed
-  // `useEffect` above (and `viz-focused.tsx`'s pre-existing scroll-to-top
-  // effect), which fires off `state` itself — reachable no matter how
-  // `state` got there.
-  const runCourtMorph = useCallback(
-    ({
-      sourceEl,
-      next,
-      targetKey,
-      reducedMotion,
-    }: {
-      sourceEl: HTMLElement | null;
-      next: VizState;
-      targetKey: string | null;
-      reducedMotion: boolean;
-    }): void => {
-      // A gallery tile can be selected after scrolling deep into the pane.
-      // That selection scrolls the destination court to the top; morphing
-      // during the scroll makes the shared court appear to jump. In that
-      // position, make the state change directly and let the focused view
-      // perform its existing scroll/focus landing.
-      const pane = document.getElementById("match-report-pane");
-      if (
-        reducedMotion ||
-        !sourceEl ||
-        !supportsViewTransitions() ||
-        (pane !== null && pane.scrollTop > SCROLL_MORPH_THRESHOLD_PX)
-      ) {
-        setState(next);
-        return;
-      }
-
-      const previousName = sourceEl.style.viewTransitionName;
-      sourceEl.style.viewTransitionName = VIZ_COURT_TRANSITION_NAME;
-
-      const transition = document.startViewTransition(() => {
-        // `document.startViewTransition`'s callback must have committed its
-        // DOM mutation by the time it returns (or the promise it returns
-        // resolves) — a plain `setState` here would leave the actual DOM
-        // update to React's own scheduling, which the browser can't wait
-        // on. `flushSync` forces both state changes into one synchronous
-        // commit, so the "new" snapshot the API captures right after this
-        // callback returns is the post-navigation DOM, not the stale one.
-        flushSync(() => {
-          setMorphTargetKey(targetKey);
-          setState(next);
-        });
-
-        // Reset the JIT name on `sourceEl` HERE — synchronously, still
-        // inside this callback, before the browser captures the "new"
-        // snapshot — not only in the `.finally()` below. When the source
-        // unmounts (a wall/Views-grid tile morphing into the focused view),
-        // this is moot; but a Views-grid tile clicked to switch to a
-        // DIFFERENT focused view never unmounts (`VizFocused` stays
-        // mounted, only its props change), and React does not reset a
-        // style property it didn't itself write — it diffs against its OWN
-        // last-rendered style object, and that tile's `viewTransitionName`
-        // was `undefined` both before and after this click (it was never
-        // this navigation's destination), so React sees no change and
-        // leaves the manually-set name sitting on the DOM. Left alone,
-        // that tile AND the big court (the real destination) would both
-        // carry `VIZ_COURT_TRANSITION_NAME` in the same "new" snapshot —
-        // caught live via the `viz-motion-harness` route
-        // (`Unexpected duplicate view-transition-name`), see the sibling
-        // f5-report.md for the reproduction.
-        sourceEl.style.viewTransitionName = previousName;
-      });
-
-      // Nothing awaits `ready` any more (see the doc comment above) — this
-      // `.catch()` exists ONLY to keep a hidden-document/aborted rejection
-      // from surfacing as an unhandled promise rejection in the console.
-      transition.ready.catch(() => {});
-
-      transition.finished
-        .catch(() => {
-          // `finished` rejects if the transition gets skipped (e.g. the
-          // visitor clicks again mid-flight, or the document is hidden).
-          // The state change above already landed regardless — only the
-          // animation itself was interrupted, so there's nothing here to
-          // retry.
-        })
-        .finally(() => {
-          sourceEl.style.viewTransitionName = previousName;
-          // A second click can start morph 2 (its own `targetKey`)
-          // before this `.finally()` for morph 1 runs — clearing
-          // unconditionally could land AFTER morph 2 already set its own
-          // key, wiping out a still-in-flight morph's target. Only clear
-          // the key this morph itself set.
-          setMorphTargetKey((k) => (k === targetKey ? null : k));
-        });
-    },
-    [setState],
-  );
-
-  const clearExternalCourtSwap = useCallback(() => {
-    setExternalCourtSwap(false);
-  }, []);
-
   const value = useMemo(
-    () => ({
-      state,
-      setState,
-      hrefFor,
-      morphTargetKey,
-      runCourtMorph,
-      externalCourtSwap,
-      clearExternalCourtSwap,
-    }),
-    [
-      state,
-      setState,
-      hrefFor,
-      morphTargetKey,
-      runCourtMorph,
-      externalCourtSwap,
-      clearExternalCourtSwap,
-    ],
+    () => ({ state, setState, hrefFor, navigation }),
+    [state, setState, hrefFor, navigation],
   );
 
   return <VizStateContext value={value}>{children}</VizStateContext>;
