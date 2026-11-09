@@ -42,7 +42,9 @@ info:
     the video-analysis routes answer `ErrorResponse`, with the allowance
     figures, the builder's `details` or the resubmit `reason` beside `error`
     where the handler adds them; the admin upload routes answer
-    `{ ok: false, message }`; and the two insight routes answer plain text.
+    `{ ok: false, message }`; and the two Focus-card insight routes answer
+    plain text. `/api/player-insight` streams the same plain text but refuses
+    as `ErrorResponse` through `errorResponse()`.
 
     `/api/ask` is same-origin and body-capped exactly as the video mutations
     are, and refuses through the same `errorResponse()` — `ErrorResponse`
@@ -2358,6 +2360,114 @@ paths:
               example: Not a program
         "500":
           $ref: "#/components/responses/InsightLlmError"
+
+  /api/player-insight:
+    post:
+      tags: [Insights]
+      operationId: streamPlayerInsight
+      summary: Stream a team player profile's season claim line
+      description: >-
+        The team player profile's counterpart to `/api/team-insight`: one
+        sentence of at most eight words, no digits, about ONE player's
+        analyzed season, streamed as plain text from `getLLMStream()`. The
+        program is the ACTIVE team workspace from the workspace cookie
+        (`getWorkspaceContext()`), never a body field; the player must be on
+        that program's roster, read through `program_roster_full` as the
+        viewer (`getPlayerMatchSides()`). Every figure the prompt states is
+        folded server-side from the season's match reports
+        (`loadPlayerSeason()`, without the ball-paths file read, so no
+        service role is used), and the evidence line the card shows under the
+        claim is composed by the page from the same fold
+        (`buildSeasonEvidence` in `src/lib/data/player-insight.ts`), never by
+        the model. Answers 204 when none of the player's matches is analyzed.
+        Unlike the two older insight routes, every refusal is an
+        `ErrorResponse` through `errorResponse()`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayerInsightRequest"
+            example:
+              playerId: 7c1f2e3d-4b5a-4c6d-8e7f-9a0b1c2d3e4f
+      responses:
+        "200":
+          $ref: "#/components/responses/InsightStream"
+        "204":
+          description: >-
+            None of the player's matches is analyzed, so there is nothing to
+            claim.
+        "400":
+          description: >-
+            The body is not `application/json`, not an object, carries a key
+            other than `playerId` (named in `detail` as
+            `unexpected_field:<key>`), or its `playerId` is not a UUID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: This request is not valid.
+                code: invalid_request
+                detail: player_id_not_uuid
+        "401":
+          description: No session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Sign in to continue.
+                code: unauthenticated
+                detail: no_session
+        "404":
+          description: >-
+            The active workspace is personal (`not_a_program`), or `playerId`
+            names nobody on the active program's roster (`player_not_found`).
+            A player of a program the viewer is not a member of is the second
+            case: the roster is read for the workspace's program only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                not_a_program:
+                  summary: A personal workspace has no roster.
+                  value:
+                    error: Switch to a team workspace to read a player's season.
+                    code: not_a_program
+                    detail: personal_workspace
+                player_not_found:
+                  summary: Not on this program's roster.
+                  value:
+                    error: This player is not on the roster.
+                    code: player_not_found
+                    detail: not_on_roster
+        "413":
+          description: The body is over 4096 bytes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: This request is too large.
+                code: request_too_large
+                detail: content_length
+        "500":
+          description: >-
+            The season could not be read (`season_read` — a points or stats
+            read failed, and a season short one match is not one to write a
+            claim about) or the LLM adapter could not start a stream
+            (`stream_open`). A stream that fails after the first byte errors
+            the body, not the status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Something went wrong on our side. Try again in a moment.
+                code: internal_error
+                detail: stream_open
 
   /api/ask:
     post:
@@ -4932,6 +5042,19 @@ components:
           type: string
           format: uuid
         jobId:
+          type: string
+          format: uuid
+    PlayerInsightRequest:
+      type: object
+      description: >-
+        The player whose season the claim is about — a
+        `program_roster_full.player_id` on the active team workspace's roster
+        (`profile.playerId` on the profile page). No program id: the program
+        is the workspace's.
+      required: [playerId]
+      additionalProperties: false
+      properties:
+        playerId:
           type: string
           format: uuid
     AskTag:

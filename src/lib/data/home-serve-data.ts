@@ -64,7 +64,7 @@ export async function loadHomeServes(
     if (!pt) continue;
     const serve = pickServeShot(pointShots);
     // firstShot* = played serve — the only shot `pointToServeDot` reads.
-    // Mirrors the match-detail mapping in serve-placement-card.tsx.
+    // Mirrors the match-detail serve-zone mapping.
     const point: ServePointInput = {
       id: pt.id,
       serverIsPlayer1: pt.server_is_player1,

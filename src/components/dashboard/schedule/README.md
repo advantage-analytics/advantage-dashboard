@@ -160,9 +160,9 @@ Two files are shared across routes and must survive any future deletion.
 (T8–T11, event pages as match tables), and `static-tournament-builder.tsx` lost its
 frame the same way `dual-build-step.tsx` did, when `static/new-tournament-flow.tsx`
 took over on `WizardShell` (T16, dual/tournament designs). `row-action.tsx` is
-not imported under `static/` at all, but is used from three separate live
-surfaces: `/dashboard/team/roster` directly, and the player profile's
-`team/player-profile/last-match-card.tsx` and `match-history-card.tsx`. The
+not imported under `static/` at all, but is live on `/dashboard/team/roster`
+(the player profile's old last-match and match-history cards, which also drew
+it, are retired). The
 event pages no longer draw it — their line actions are the drawer's buttons.
 
 ### The near-duplicate that was here

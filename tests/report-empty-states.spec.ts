@@ -66,6 +66,25 @@ const REAL = new Set([
   // The Net game card's classifiers and its hatch fill: pure, loaded for real.
   "@/components/dashboard/matches/match-detail/match-filters/net-game",
   "@/components/dashboard/matches/match-detail/chart-fills",
+  // The head-to-head rows and the Point endings tally — the cards' own
+  // calculators, pure so the player profile's season fold can run them on
+  // the server; a marker here would hand the cards `NaN` totals.
+  "@/components/dashboard/matches/match-detail/head-to-head-rows",
+  "@/components/dashboard/matches/match-detail/point-endings-tally",
+  // The How points ended card's drawing (T5): the body the report's card
+  // and the player profile's season card share. Loaded for real so the
+  // card's own anatomy — names, dashes, sentence — is what is checked.
+  "@/components/dashboard/matches/match-detail/point-endings-body",
+  // The momentum plot's frame, shared by the report's and the season's
+  // tracker: pure constants and path builders.
+  "@/components/dashboard/matches/match-detail/momentum-plot",
+  // The Rally length and Net game cards' drawings (T6), shared with the
+  // player profile's season cards, and the Rally length tally (pure, run by
+  // the season fold too): loaded for real so the cards' own anatomy is what
+  // is checked.
+  "@/components/dashboard/matches/match-detail/rally-length-bands",
+  "@/components/dashboard/matches/match-detail/rally-length-body",
+  "@/components/dashboard/matches/match-detail/net-game-body",
 ]);
 
 function render(

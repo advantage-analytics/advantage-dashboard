@@ -67,10 +67,20 @@ export function MatchReportFrame({ children }: { children: ReactNode }) {
   );
 }
 
-export function MatchReportRail({ children }: { children: ReactNode }) {
+/**
+ * `label` names the landmark: "Match summary" on the report, "Player summary"
+ * on the team player profile, which borrows this frame (design Q).
+ */
+export function MatchReportRail({
+  label = "Match summary",
+  children,
+}: {
+  label?: string;
+  children: ReactNode;
+}) {
   return (
     <aside
-      aria-label="Match summary"
+      aria-label={label}
       className="flex min-h-0 [flex:0_0_300px] flex-col overflow-y-auto border-r border-[var(--border-hairline)] bg-[var(--surface-card)]"
     >
       {children}

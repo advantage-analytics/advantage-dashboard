@@ -23,6 +23,11 @@ import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { ZoneKey } from "@/lib/data/serve-zones";
 import { isTextEntry } from "@/lib/ui/is-text-entry";
 import { cn } from "@/lib/utils";
+import {
+  LightboxBodyPending,
+  LightboxSubtitlePending,
+  LightboxTitlePending,
+} from "@/components/dashboard/loading/lightbox-pending";
 
 import {
   bandEditorDirty,
@@ -51,6 +56,12 @@ import {
   pointsBehind,
   type LegendPick,
 } from "./lightbox-points";
+import {
+  LIGHTBOX_BOX_CLASS,
+  LIGHTBOX_CLOSE_CLASS,
+  LIGHTBOX_ENTER_CLASS,
+  LIGHTBOX_OVERLAY_CLASS,
+} from "./lightbox-frame";
 import { LightboxStats } from "./lightbox-stats";
 import { KEY_PAN_PX } from "./pan-zoom";
 import type { StatPick } from "./stat-cut";
@@ -164,6 +175,23 @@ export interface VizLightboxShellProps {
   } | null;
   /** "Create view": the blank court with its prompt. */
   draft?: { readOnly: boolean; onChooseView: () => void };
+  /**
+   * The frame alone, while the host's data is on its way: the header's
+   * words and the two columns are drawn as a loading status named for
+   * `title` (`loading/lightbox-pending.tsx`) — the season page's opened card
+   * before the server answers (`season-viz-lightbox.tsx`). The same dialog
+   * stays mounted when the court lands, so the scrim, focus and the
+   * opener's return belong to the one opening. The data props are still
+   * read (the hooks run over them) but nothing of them is drawn; a host
+   * passes empties.
+   */
+  pending?: boolean;
+  /**
+   * `false` skips the enter fade on the scrim and the box: the dialog is
+   * replacing a frame already on screen (the season's chunk-load frame,
+   * `LightboxChunkPending`), not appearing over the page.
+   */
+  appear?: boolean;
 }
 
 /** The legend's picks, worded for the strip. */
@@ -216,6 +244,8 @@ export function VizLightboxShell({
   pointList,
   footer,
   draft,
+  pending = false,
+  appear = true,
 }: VizLightboxShellProps) {
   const isDraft = draft !== undefined;
   const canEdit = bandEditor?.canEdit === true;
@@ -602,7 +632,7 @@ export function VizLightboxShell({
     activeStatPick !== null && !panelActive && legendPick === null;
 
   const footerActions =
-    !isDraft && footer ? footer({ matched, phrases }) : null;
+    !isDraft && !pending && footer ? footer({ matched, phrases }) : null;
 
   // The court's outline: the hovered row, else the chosen one — a serve
   // zone, or a depth or contact band; other rows (Direction, Stroke, Miss)
@@ -637,7 +667,13 @@ export function VizLightboxShell({
       }}
     >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(13,13,13,0.4)] data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none" />
+        <DialogPrimitive.Overlay
+          className={cn(
+            LIGHTBOX_OVERLAY_CLASS,
+            appear && LIGHTBOX_ENTER_CLASS,
+            "motion-reduce:animate-none",
+          )}
+        />
         <DialogPrimitive.Content
           ref={contentRef}
           aria-describedby="viz-lightbox-subtitle"
@@ -656,7 +692,11 @@ export function VizLightboxShell({
               opener.focus({ preventScroll: true });
             }
           }}
-          className="fixed top-[clamp(16px,10dvh,96px)] left-1/2 z-50 flex h-[min(880px,calc(100dvh-clamp(16px,10dvh,96px)-32px))] w-[min(1212px,calc(100vw-32px))] -translate-x-1/2 flex-col rounded-[14px] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none"
+          className={cn(
+            LIGHTBOX_BOX_CLASS,
+            appear && LIGHTBOX_ENTER_CLASS,
+            "motion-reduce:animate-none",
+          )}
         >
           <TooltipProvider>
             {/* The bands receipt's live region, mounted for the lightbox's
@@ -673,13 +713,13 @@ export function VizLightboxShell({
                   tabIndex={-1}
                   className="m-0 truncate text-[16px] leading-[1.4] font-medium text-[var(--ink-900)] outline-none"
                 >
-                  {title}
+                  {pending ? <LightboxTitlePending label={title} /> : title}
                 </DialogPrimitive.Title>
                 <p
                   id="viz-lightbox-subtitle"
                   className="m-0 text-[12px] text-[var(--ink-600)]"
                 >
-                  {subtitle}
+                  {pending ? <LightboxSubtitlePending /> : subtitle}
                 </p>
               </div>
               <span className="flex-1" />
@@ -691,7 +731,7 @@ export function VizLightboxShell({
               >
                 <DialogPrimitive.Close
                   aria-label="Close"
-                  className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
+                  className={LIGHTBOX_CLOSE_CLASS}
                 >
                   <X className="size-3.5" strokeWidth={1.5} aria-hidden />
                 </DialogPrimitive.Close>
@@ -699,302 +739,308 @@ export function VizLightboxShell({
             </div>
 
             {/* ── Body ───────────────────────────────────────────────── */}
-            <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 md:flex-row md:overflow-visible">
-              {/* Court column */}
-              <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
-                <div className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
-                  {player && (
+            {pending ? (
+              <LightboxBodyPending label={title} />
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 md:flex-row md:overflow-visible">
+                {/* Court column */}
+                <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
+                  <div className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
+                    {player && (
+                      <div
+                        className="flex gap-1.5"
+                        role="group"
+                        aria-label="Player"
+                      >
+                        {(["you", "opponent"] as const).map((value) => (
+                          <LifecycleChip
+                            key={value}
+                            pressed={player.value === value}
+                            onClick={() => player.onChange(value)}
+                          >
+                            {value === "you" ? "You" : "Opponent"}
+                          </LifecycleChip>
+                        ))}
+                      </div>
+                    )}
+                    {controls && (
+                      <ControlsSlot
+                        render={controls}
+                        enterBandEdit={enterBandEdit}
+                      />
+                    )}
+                    {!isDraft && filterPanel && (
+                      <LightboxFilterPanel
+                        cut={cut}
+                        filters={filters}
+                        setFilters={filterPanel.onChange}
+                        onClear={clearFilters}
+                        hasActive={panelActive}
+                        engaged={anyCut}
+                        result={result}
+                        sets={filterPanel.sets}
+                        errorSplitJudged={filterPanel.errorSplitJudged}
+                        countWith={filterPanel.countWith}
+                      />
+                    )}
+                    {receipt !== null && (
+                      <span
+                        aria-hidden="true"
+                        className="ml-auto truncate text-[11px] text-[var(--ink-600)]"
+                      >
+                        {receipt.message}
+                      </span>
+                    )}
+                  </div>
+
+                  {!isDraft && (
+                    <LightboxFilterStrip
+                      phrases={phrases}
+                      shown={pointList ? matched.length : undefined}
+                      total={pointList?.total}
+                      statOnly={statOnly}
+                      onClear={clearFilters}
+                    />
+                  )}
+
+                  <div
+                    ref={setStageEl}
+                    data-court-stage=""
+                    className={cn(
+                      "relative h-[420px] shrink-0 overflow-hidden rounded-[10px] select-none md:h-auto md:min-h-[360px] md:flex-1 md:shrink",
+                      editing
+                        ? "cursor-default"
+                        : "cursor-grab active:cursor-grabbing",
+                    )}
+                    style={{
+                      touchAction: "none",
+                      background: heat ? HEAT_APRON_FILL : APRON_FILL,
+                    }}
+                    onPointerDown={pz.onPointerDown}
+                    onPointerMove={pz.onPointerMove}
+                    onPointerUp={pz.onPointerUp}
+                    onPointerCancel={pz.onPointerUp}
+                    onClick={(event) => {
+                      const target = event.target;
+                      if (
+                        target instanceof Element &&
+                        event.currentTarget.contains(target) &&
+                        target.closest(
+                          "[data-viz-mark],[data-viz-readout],[data-chrome]",
+                        ) === null
+                      ) {
+                        dropActiveMark();
+                      }
+                    }}
+                  >
+                    <LightboxCourt
+                      cut={cut}
+                      chart={chart}
+                      dots={isDraft ? [] : dots}
+                      zoneStats={isDraft ? null : result.zoneStats}
+                      filters={filters}
+                      subjectName={subjectName}
+                      unit={unit}
+                      bands={isDraft ? null : bandOverlay}
+                      transform={pz.t}
+                      stage={pz.stage}
+                      panning={pz.panning}
+                      activeId={activeMarkId ?? visibleSelectedMarkId}
+                      focusedId={focusedMarkId}
+                      selectedId={visibleSelectedMarkId}
+                      rovingId={rovingMarkId}
+                      onActivate={activateMark}
+                      onDeactivate={deactivateMark}
+                      onRove={roveMark}
+                      onSelect={selectMark}
+                      whereFor={whereFor}
+                      focusIds={statHover !== null ? hoverIds : null}
+                      outline={outline}
+                      onReadoutEnter={holdReadout}
+                      onReadoutLeave={releaseReadout}
+                      editing={editing}
+                      editorLayer={
+                        activeEditor !== null ? (
+                          <VizBandsEditorHandles
+                            state={activeEditor}
+                            z={pz.t.z}
+                            unit={unit}
+                            update={updateEditor}
+                          />
+                        ) : null
+                      }
+                    />
+
+                    {draft ? (
+                      <StageCard>
+                        <p className="text-[13px] font-medium text-[var(--ink-900)]">
+                          Pick what to plot
+                        </p>
+                        <p className="text-micro max-w-[240px] text-[var(--ink-600)]">
+                          {draft.readOnly
+                            ? "Choose a view, a chart and filters."
+                            : "Choose a view, a chart and filters — then save it."}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={draft.onChooseView}
+                          className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                        >
+                          Choose a view
+                        </button>
+                      </StageCard>
+                    ) : (
+                      result.count === 0 && (
+                        <StageCard>
+                          <p className="text-[12px] text-[var(--ink-600)]">
+                            {hasFilters
+                              ? `No ${result.noun} match these filters`
+                              : `No ${result.noun} recorded for ${subjectName} yet`}
+                          </p>
+                          {hasFilters && !editing && (
+                            <button
+                              type="button"
+                              onClick={clearFilters}
+                              className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </StageCard>
+                      )
+                    )}
+
+                    {activeEditor !== null && (
+                      <VizBandsEditorBanner kind={activeEditor.kind} />
+                    )}
+
+                    {activeEditor !== null && bands !== null ? (
+                      <div
+                        data-chrome=""
+                        className="absolute right-3 bottom-3 left-3 h-12 overflow-hidden rounded-[12px] backdrop-blur-[8px]"
+                        style={{ background: "rgba(13,13,13,0.72)" }}
+                      >
+                        <VizBandsEditorSlab
+                          state={activeEditor}
+                          current={bands}
+                          saving={saving}
+                          unit={unit}
+                          onReset={() => updateEditor(resetBandEditor)}
+                          onCancel={exitEdit}
+                          onSave={saveEdit}
+                        />
+                      </div>
+                    ) : (
+                      !isDraft && (
+                        <ZoomControls
+                          relative={zoomRelative}
+                          atFit={atFit}
+                          onZoomIn={pz.zoomIn}
+                          onZoomOut={pz.zoomOut}
+                          onFit={pz.fit}
+                          onEscape={escapeFromTooltip}
+                        />
+                      )
+                    )}
+                  </div>
+
+                  {!isDraft &&
+                    (chart === "scatter" ? (
+                      <LegendFilter
+                        items={legend}
+                        counts={legendCounts(result.dots)}
+                        pick={legendPick}
+                        onPick={(next) => {
+                          setLegendPick(next);
+                          setSelectedMarkId(null);
+                        }}
+                      />
+                    ) : (
+                      <div
+                        role="group"
+                        aria-label="Legend"
+                        className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
+                      >
+                        {legend.map((item) =>
+                          item.glyph === "ramp" ? (
+                            <HeatRampLegend key={item.key} />
+                          ) : (
+                            <span key={item.key} className="px-1">
+                              <LegendMark item={item} />
+                            </span>
+                          ),
+                        )}
+                      </div>
+                    ))}
+                </div>
+
+                {/* Right column */}
+                <div className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]">
+                  <div className="flex min-h-7 items-center gap-1.5 border-b border-[var(--border-hairline)] pb-3">
                     <div
                       className="flex gap-1.5"
                       role="group"
-                      aria-label="Player"
+                      aria-label="Right panel"
                     >
-                      {(["you", "opponent"] as const).map((value) => (
+                      {pointList && (
                         <LifecycleChip
-                          key={value}
-                          pressed={player.value === value}
-                          onClick={() => player.onChange(value)}
+                          pressed={pane === "points"}
+                          onClick={() => setPane("points")}
                         >
-                          {value === "you" ? "You" : "Opponent"}
+                          Points
                         </LifecycleChip>
-                      ))}
-                    </div>
-                  )}
-                  {controls && (
-                    <ControlsSlot
-                      render={controls}
-                      enterBandEdit={enterBandEdit}
-                    />
-                  )}
-                  {!isDraft && filterPanel && (
-                    <LightboxFilterPanel
-                      cut={cut}
-                      filters={filters}
-                      setFilters={filterPanel.onChange}
-                      onClear={clearFilters}
-                      hasActive={panelActive}
-                      engaged={anyCut}
-                      result={result}
-                      sets={filterPanel.sets}
-                      errorSplitJudged={filterPanel.errorSplitJudged}
-                      countWith={filterPanel.countWith}
-                    />
-                  )}
-                  {receipt !== null && (
-                    <span
-                      aria-hidden="true"
-                      className="ml-auto truncate text-[11px] text-[var(--ink-600)]"
-                    >
-                      {receipt.message}
-                    </span>
-                  )}
-                </div>
-
-                {!isDraft && (
-                  <LightboxFilterStrip
-                    phrases={phrases}
-                    shown={pointList ? matched.length : undefined}
-                    total={pointList?.total}
-                    statOnly={statOnly}
-                    onClear={clearFilters}
-                  />
-                )}
-
-                <div
-                  ref={setStageEl}
-                  data-court-stage=""
-                  className={cn(
-                    "relative h-[420px] shrink-0 overflow-hidden rounded-[10px] select-none md:h-auto md:min-h-[360px] md:flex-1 md:shrink",
-                    editing
-                      ? "cursor-default"
-                      : "cursor-grab active:cursor-grabbing",
-                  )}
-                  style={{
-                    touchAction: "none",
-                    background: heat ? HEAT_APRON_FILL : APRON_FILL,
-                  }}
-                  onPointerDown={pz.onPointerDown}
-                  onPointerMove={pz.onPointerMove}
-                  onPointerUp={pz.onPointerUp}
-                  onPointerCancel={pz.onPointerUp}
-                  onClick={(event) => {
-                    const target = event.target;
-                    if (
-                      target instanceof Element &&
-                      event.currentTarget.contains(target) &&
-                      target.closest(
-                        "[data-viz-mark],[data-viz-readout],[data-chrome]",
-                      ) === null
-                    ) {
-                      dropActiveMark();
-                    }
-                  }}
-                >
-                  <LightboxCourt
-                    cut={cut}
-                    chart={chart}
-                    dots={isDraft ? [] : dots}
-                    zoneStats={isDraft ? null : result.zoneStats}
-                    filters={filters}
-                    subjectName={subjectName}
-                    unit={unit}
-                    bands={isDraft ? null : bandOverlay}
-                    transform={pz.t}
-                    stage={pz.stage}
-                    panning={pz.panning}
-                    activeId={activeMarkId ?? visibleSelectedMarkId}
-                    focusedId={focusedMarkId}
-                    selectedId={visibleSelectedMarkId}
-                    rovingId={rovingMarkId}
-                    onActivate={activateMark}
-                    onDeactivate={deactivateMark}
-                    onRove={roveMark}
-                    onSelect={selectMark}
-                    whereFor={whereFor}
-                    focusIds={statHover !== null ? hoverIds : null}
-                    outline={outline}
-                    onReadoutEnter={holdReadout}
-                    onReadoutLeave={releaseReadout}
-                    editing={editing}
-                    editorLayer={
-                      activeEditor !== null ? (
-                        <VizBandsEditorHandles
-                          state={activeEditor}
-                          z={pz.t.z}
-                          unit={unit}
-                          update={updateEditor}
-                        />
-                      ) : null
-                    }
-                  />
-
-                  {draft ? (
-                    <StageCard>
-                      <p className="text-[13px] font-medium text-[var(--ink-900)]">
-                        Pick what to plot
-                      </p>
-                      <p className="text-micro max-w-[240px] text-[var(--ink-600)]">
-                        {draft.readOnly
-                          ? "Choose a view, a chart and filters."
-                          : "Choose a view, a chart and filters — then save it."}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={draft.onChooseView}
-                        className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-                      >
-                        Choose a view
-                      </button>
-                    </StageCard>
-                  ) : (
-                    result.count === 0 && (
-                      <StageCard>
-                        <p className="text-[12px] text-[var(--ink-600)]">
-                          {hasFilters
-                            ? `No ${result.noun} match these filters`
-                            : `No ${result.noun} recorded for ${subjectName} yet`}
-                        </p>
-                        {hasFilters && !editing && (
-                          <button
-                            type="button"
-                            onClick={clearFilters}
-                            className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-                          >
-                            Clear
-                          </button>
-                        )}
-                      </StageCard>
-                    )
-                  )}
-
-                  {activeEditor !== null && (
-                    <VizBandsEditorBanner kind={activeEditor.kind} />
-                  )}
-
-                  {activeEditor !== null && bands !== null ? (
-                    <div
-                      data-chrome=""
-                      className="absolute right-3 bottom-3 left-3 h-12 overflow-hidden rounded-[12px] backdrop-blur-[8px]"
-                      style={{ background: "rgba(13,13,13,0.72)" }}
-                    >
-                      <VizBandsEditorSlab
-                        state={activeEditor}
-                        current={bands}
-                        saving={saving}
-                        unit={unit}
-                        onReset={() => updateEditor(resetBandEditor)}
-                        onCancel={exitEdit}
-                        onSave={saveEdit}
-                      />
-                    </div>
-                  ) : (
-                    !isDraft && (
-                      <ZoomControls
-                        relative={zoomRelative}
-                        atFit={atFit}
-                        onZoomIn={pz.zoomIn}
-                        onZoomOut={pz.zoomOut}
-                        onFit={pz.fit}
-                        onEscape={escapeFromTooltip}
-                      />
-                    )
-                  )}
-                </div>
-
-                {!isDraft &&
-                  (chart === "scatter" ? (
-                    <LegendFilter
-                      items={legend}
-                      counts={legendCounts(result.dots)}
-                      pick={legendPick}
-                      onPick={(next) => {
-                        setLegendPick(next);
-                        setSelectedMarkId(null);
-                      }}
-                    />
-                  ) : (
-                    <div
-                      role="group"
-                      aria-label="Legend"
-                      className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
-                    >
-                      {legend.map((item) =>
-                        item.glyph === "ramp" ? (
-                          <HeatRampLegend key={item.key} />
-                        ) : (
-                          <span key={item.key} className="px-1">
-                            <LegendMark item={item} />
-                          </span>
-                        ),
                       )}
-                    </div>
-                  ))}
-              </div>
-
-              {/* Right column */}
-              <div className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]">
-                <div className="flex min-h-7 items-center gap-1.5 border-b border-[var(--border-hairline)] pb-3">
-                  <div
-                    className="flex gap-1.5"
-                    role="group"
-                    aria-label="Right panel"
-                  >
-                    {pointList && (
                       <LifecycleChip
-                        pressed={pane === "points"}
-                        onClick={() => setPane("points")}
+                        pressed={pane === "stats"}
+                        onClick={() => setPane("stats")}
                       >
-                        Points
+                        Statistics
                       </LifecycleChip>
-                    )}
-                    <LifecycleChip
-                      pressed={pane === "stats"}
-                      onClick={() => setPane("stats")}
-                    >
-                      Statistics
-                    </LifecycleChip>
-                  </div>
-                  <span className="flex-1" />
-                  {pane === "points" && pointList && !isDraft && (
-                    <span
-                      className="mono tabular text-[10px] text-[var(--ink-400)]"
-                      aria-label={`${matched.length} of ${pointList.total} points`}
-                    >
-                      {matched.length}{" "}
-                      <span className="text-[var(--ink-300)]">/</span>{" "}
-                      {pointList.total}
-                    </span>
-                  )}
-                </div>
-                {!isDraft &&
-                  (pane === "points" && pointList ? (
-                    pointList.render({
-                      points: matched,
-                      selectedPointId,
-                      onSelectPoint: selectPoint,
-                      emptyLine:
-                        cut === "serve" && dots.length > 0
-                          ? `${dots.length} ${dots.length === 1 ? "serve" : "serves"} went out. A fault isn't a point, so there is no clip; the court shows where they landed.`
-                          : `No ${result.noun} match these filters.`,
-                    })
-                  ) : (
-                    <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
-                      <LightboxStats
-                        stats={stats}
-                        cut={cut}
-                        pick={activeStatPick}
-                        onPick={(pick) => {
-                          setSelectedMarkId(null);
-                          setStatPick(
-                            pick === null ? null : { stamp: courtStamp, pick },
-                          );
-                        }}
-                        onHover={setStatHover}
-                      />
                     </div>
-                  ))}
+                    <span className="flex-1" />
+                    {pane === "points" && pointList && !isDraft && (
+                      <span
+                        className="mono tabular text-[10px] text-[var(--ink-400)]"
+                        aria-label={`${matched.length} of ${pointList.total} points`}
+                      >
+                        {matched.length}{" "}
+                        <span className="text-[var(--ink-300)]">/</span>{" "}
+                        {pointList.total}
+                      </span>
+                    )}
+                  </div>
+                  {!isDraft &&
+                    (pane === "points" && pointList ? (
+                      pointList.render({
+                        points: matched,
+                        selectedPointId,
+                        onSelectPoint: selectPoint,
+                        emptyLine:
+                          cut === "serve" && dots.length > 0
+                            ? `${dots.length} ${dots.length === 1 ? "serve" : "serves"} went out. A fault isn't a point, so there is no clip; the court shows where they landed.`
+                            : `No ${result.noun} match these filters.`,
+                      })
+                    ) : (
+                      <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
+                        <LightboxStats
+                          stats={stats}
+                          cut={cut}
+                          pick={activeStatPick}
+                          onPick={(pick) => {
+                            setSelectedMarkId(null);
+                            setStatPick(
+                              pick === null
+                                ? null
+                                : { stamp: courtStamp, pick },
+                            );
+                          }}
+                          onHover={setStatHover}
+                        />
+                      </div>
+                    ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* ── Footer ─────────────────────────────────────────────── */}
             {/* Only when it has an action: a read-only host (no Watch, no

@@ -9,13 +9,12 @@ This project has several components with overlapping names rendering in
 different routes. Picking by filename similarity wastes a full cycle and,
 worse, silently edits a page the user was not looking at.
 
-**Serve placement exists four times:**
+**Serve placement exists three times:**
 
 | File                                                                          | Renders on                          |
 | ----------------------------------------------------------------------------- | ----------------------------------- |
 | `src/components/dashboard/home/serve-placement-home.tsx`                      | `/dashboard`                        |
 | `src/components/dashboard/home/serve-placement-quiet-strip.tsx`               | `/dashboard`, inside the card above |
-| `src/components/dashboard/team/player-profile/serve-placement-card.tsx`       | `/dashboard/team/roster/[playerId]` |
 | `src/components/dashboard/matches/serve-placement/serve-placement-widget.tsx` | nothing — see below                 |
 
 The last one is the trap. `ServePlacementWidget` itself has no importer; the
@@ -53,13 +52,13 @@ Match cards and score rows have the same problem.
 Find every place a component is rendered:
 
 ```bash
-grep -rn "ServePlacementCard" src/app src/components
+grep -rn "ServePlacementHome" src/app src/components
 ```
 
 Find which route a component belongs to by walking up from it:
 
 ```bash
-grep -rln "serve-placement-card" src/app src/components
+grep -rln "serve-placement-home" src/app src/components
 ```
 
 ## Do not

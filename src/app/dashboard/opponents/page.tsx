@@ -12,6 +12,16 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 export const metadata = { title: "Opponents" };
 
 /**
+ * `?opponent=<group key>` opens that row's drawer on either page.
+ * `?facedBy=<roster playerId>` (once or repeated) seeds the team page's
+ * Faced-by filter; the personal page has no such facet and ignores it.
+ */
+type OpponentsSearchParams = {
+  opponent?: string | string[];
+  facedBy?: string | string[];
+};
+
+/**
  * One route, two products, decided by the active workspace's kind.
  *
  * ── Personal ────────────────────────────────────────────────────────────────
@@ -41,7 +51,7 @@ export const metadata = { title: "Opponents" };
 export default async function OpponentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ opponent?: string | string[] }>;
+  searchParams: Promise<OpponentsSearchParams>;
 }) {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
@@ -84,7 +94,7 @@ async function PersonalOpponents({
   searchParams,
 }: {
   userId: string;
-  searchParams: Promise<{ opponent?: string | string[] }>;
+  searchParams: Promise<OpponentsSearchParams>;
 }) {
   const [{ opponents, totals }, { opponent }] = await Promise.all([
     getPersonalOpponents(userId),
@@ -116,9 +126,9 @@ async function TeamOpponents({
 }: {
   programId: string;
   viewerId: string;
-  searchParams: Promise<{ opponent?: string | string[] }>;
+  searchParams: Promise<OpponentsSearchParams>;
 }) {
-  const [{ opponents, totals }, { opponent }] = await Promise.all([
+  const [{ opponents, totals }, { opponent, facedBy }] = await Promise.all([
     getTeamOpponents(programId, viewerId),
     searchParams,
   ]);
@@ -130,6 +140,8 @@ async function TeamOpponents({
       opponents={opponents}
       totals={totals}
       initialSelectedKey={typeof opponent === "string" ? opponent : null}
+      // A profile's "N opponents" link lands already cut to that player.
+      initialFacedBy={facedBy ?? null}
     />
   );
 }

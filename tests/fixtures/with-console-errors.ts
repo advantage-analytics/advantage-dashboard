@@ -3,7 +3,7 @@
  * print, and restores the original `console.error` afterwards even if `run`
  * throws.
  *
- * Shared by `tests/paged-query.spec.ts`, `tests/player-profile-serve-map.spec.ts`
+ * Shared by `tests/paged-query.spec.ts`, `tests/custom-program-search.spec.ts`
  * and `tests/upload-route-guards.spec.ts` — each asserts on the exact
  * `console.error` calls a fail-closed read or a route's catch block makes,
  * without letting the expected-failure cases spam the test output.

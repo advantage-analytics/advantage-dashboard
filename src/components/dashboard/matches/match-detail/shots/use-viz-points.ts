@@ -2,36 +2,15 @@
 
 import { useMemo } from "react";
 
-import {
-  isDerivedMatch,
-  isUnreturnedServe,
-} from "@/components/dashboard/matches/match-detail/match-filters/model";
+import { isDerivedMatch } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { Match } from "@/lib/data/types";
+import { vizPoints } from "./viz-points";
 
-/**
- * The points the Visualizations tab reads, with a derived match's aces named.
- *
- * `viz-model.ts` and `serve-zones.ts` find an ace by `resultType === "Ace"`
- * (the Result filter, the star glyph, the zone tiles' ace count). The
- * Advantage Intelligence derivation never writes "Ace" — every unreturned
- * serve is a "Service Winner", like a missed return — yet the head-to-head
- * Aces row and Serve › Result "Ace" count exactly those
- * (`isUnreturnedServe`, product decision 2026-09-29). Relabelling them once here, rather than threading a flag
- * through every model call, keeps this tab's aces the head-to-head's aces.
- * SwingVision points pass through untouched, and so does the array.
- */
-export function vizPoints(
-  points: MatchPoint[],
-  isDerived: boolean,
-): MatchPoint[] {
-  if (!isDerived) return points;
-  return points.map((p) =>
-    isUnreturnedServe(p) && p.resultType !== "Ace"
-      ? { ...p, resultType: "Ace" }
-      : p,
-  );
-}
+// The pure relabelling lives in `viz-points.ts` (no directive) so the player
+// profile's season fold can call it on the server; re-exported here so every
+// existing `import { vizPoints } from "./use-viz-points"` keeps working.
+export { vizPoints };
 
 /**
  * `useMatchData()`'s points through {@link vizPoints}, memoised per match.

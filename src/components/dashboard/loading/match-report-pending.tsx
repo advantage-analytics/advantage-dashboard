@@ -42,6 +42,10 @@ import { PendingBar, PendingRegion } from "./pending";
  *   `film/film-player.tsx`      → `FilmFramePending` (`film-frame-pending.tsx`)
  *                                 over the element while a credential is re-signed
  *
+ * The Statistics parts (`InsightPending`, `StatisticsRowPending`) are also
+ * the team player profile's (`player-profile-pending.tsx`), whose Statistics
+ * tab draws the report's row class for class.
+ *
  * Every pane mirrors the loaded view's own row/column geometry
  * (`statistics-view.tsx`, `viz-wall.tsx`, `film-tab.tsx`) so nothing jumps
  * when the data lands. Conditional parts — the unpublished notice, the
@@ -152,10 +156,25 @@ function TitleRowPending({ view }: { view: ReportView }) {
 
 /* ── Pane: Statistics ──────────────────────────────────────────────────── */
 
-/** The three `H2H_GROUPS` titles; kept inline so this chunk does not pull in the card. */
-const H2H_GROUP_TITLES = ["Serve", "Return", "Points"] as const;
+/**
+ * The Head to head table's groups and how many rows each draws
+ * (`H2H_GROUPS` in `head-to-head-rows.ts`: Serve 7, Return 4, Points 9).
+ * Kept inline so this chunk does not pull in the row configs;
+ * `tests/player-profile-pending.spec.ts` pins the counts to them.
+ */
+export const H2H_GROUP_SHAPE = [
+  { title: "Serve", rows: 7 },
+  { title: "Return", rows: 4 },
+  { title: "Points", rows: 9 },
+] as const;
 
-function HeadToHeadPending() {
+/**
+ * `HeadToHeadTable`'s anatomy: the eyebrow and the group labels are known
+ * chrome and render as text; the right micro, the two names and every row
+ * are bars. Shared by the report and the player profile, whose season card
+ * is the same table.
+ */
+export function HeadToHeadPending() {
   return (
     <section
       aria-label="Head to head"
@@ -180,14 +199,14 @@ function HeadToHeadPending() {
           </span>
         ))}
       </div>
-      {H2H_GROUP_TITLES.map((title) => (
+      {H2H_GROUP_SHAPE.map(({ title, rows }) => (
         <div key={title} className="flex flex-col">
           <div className="flex items-baseline pt-3 pb-0.5">
             <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
               {title}
             </span>
           </div>
-          {[0, 1, 2, 3].map((row) => (
+          {Array.from({ length: rows }, (_, row) => (
             <div key={row} className="flex min-h-[30px] items-center">
               <span className="min-w-0 flex-1">
                 <PendingBar className={row % 2 ? "w-28" : "w-36"} />
@@ -210,18 +229,20 @@ function ChartCardPending({
   eyebrow,
   padding,
   gap,
+  className,
   children,
 }: {
   eyebrow: string;
   padding: string;
   /** The loaded card's own column gap — they differ (`gap-2.5` vs `gap-3`). */
   gap: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
     <section
       aria-label={eyebrow}
-      className={cn("surface-card flex flex-col", gap)}
+      className={cn("surface-card flex flex-col", gap, className)}
       style={{ padding }}
     >
       <div className="flex h-4 items-center gap-2">
@@ -234,12 +255,125 @@ function ChartCardPending({
   );
 }
 
+/** One side's name row over its 10px track — How points ended and Net game. */
+function SideBarPending({ children }: { children?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex h-[17px] items-center gap-2">
+        <PendingBar className="h-2.5 w-20" />
+        <div className="flex-1" />
+        <PendingBar className="h-2.5 w-6" />
+      </div>
+      <PendingBar className="h-2.5 rounded-[var(--radius-cell)]" />
+      {children}
+    </div>
+  );
+}
+
 /**
- * The Advantage Intelligence card's expanded anatomy (`report-insight-card.tsx`):
- * the engine's mark and name render — that chrome is known before the match
- * is — and the claim, the evidence line and the fold toggle pulse.
+ * The chart column, in the loaded reading order — Performance tracker → How
+ * points ended → Rally length → Net game (`statistics-view.tsx`,
+ * `profile-statistics-view.tsx`). Every eyebrow is real text. The column's
+ * classes are the loaded one's, and Rally length takes the column's slack
+ * (`flex-1`) as its loaded card does, so the two columns end on one line.
+ *
+ * `setLabels`: the report's tracker draws a set-label row under its plot; a
+ * season's draws none.
  */
-function InsightPending() {
+export function ChartColumnPending({
+  setLabels = true,
+}: {
+  setLabels?: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-4 *:shrink-0">
+      {/* 104px figure, the set-label row on a match, then the legend row. */}
+      <ChartCardPending
+        eyebrow="Performance tracker"
+        padding="16px 20px 12px"
+        gap="gap-2.5"
+      >
+        <PendingBar className="h-[104px] rounded-[var(--radius-cell)]" />
+        {setLabels && (
+          <div className="flex h-[15px] items-center justify-center">
+            <PendingBar className="h-2.5 w-10" />
+          </div>
+        )}
+        <div className="flex h-[15px] items-center gap-3.5">
+          <PendingBar className="h-2.5 w-20" />
+          <PendingBar className="h-2.5 w-20" />
+        </div>
+      </ChartCardPending>
+      {/* Two name rows over a 10px track, then the legend — up to six
+          entries (a judged match), wrapping as the loaded legend does. */}
+      <ChartCardPending
+        eyebrow="How points ended"
+        padding="16px 20px 14px"
+        gap="gap-3"
+      >
+        <SideBarPending />
+        <SideBarPending />
+        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 pt-0.5">
+          {["w-14", "w-10", "w-24", "w-16", "w-12", "w-20"].map((w) => (
+            <div key={w} className="flex h-[17px] items-center">
+              <PendingBar className={`h-2.5 ${w}`} />
+            </div>
+          ))}
+        </div>
+      </ChartCardPending>
+      {/* The band (at least 96px, growing into the column's slack), its
+          three labels, then the legend row. */}
+      <ChartCardPending
+        eyebrow="Rally length"
+        padding="16px 20px 14px"
+        gap="gap-3"
+        className="min-h-0 flex-1"
+      >
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          <PendingBar className="min-h-24 flex-1 rounded-[var(--radius-cell)]" />
+          <div className="flex h-[17px] items-center gap-3">
+            <PendingBar className="h-2.5 w-16" />
+            <PendingBar className="h-2.5 w-16" />
+            <PendingBar className="h-2.5 w-16" />
+          </div>
+        </div>
+        <div className="flex h-[15px] items-center gap-3.5">
+          <PendingBar className="h-2.5 w-20" />
+          <PendingBar className="h-2.5 w-20" />
+          <div className="flex-1" />
+          <PendingBar className="h-2.5 w-24" />
+        </div>
+      </ChartCardPending>
+      {/* Per side: the name row, the 10px endings bar, the 4px entries bar
+          and the "Came in by" line; then the Won · Lost legend. */}
+      <ChartCardPending eyebrow="Net game" padding="16px 20px 14px" gap="gap-3">
+        {[0, 1].map((side) => (
+          <SideBarPending key={side}>
+            <PendingBar className="h-1 rounded-[var(--radius-cell)]" />
+            <div className="flex h-[17px] items-center">
+              <PendingBar className="h-2.5 w-40" />
+            </div>
+          </SideBarPending>
+        ))}
+        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 pt-0.5">
+          {["w-8", "w-14", "w-24", "w-8", "w-16", "w-14"].map((w, i) => (
+            <div key={i} className="flex h-[15px] items-center">
+              <PendingBar className={`h-2.5 ${w}`} />
+            </div>
+          ))}
+        </div>
+      </ChartCardPending>
+    </div>
+  );
+}
+
+/**
+ * The Advantage Intelligence card's anatomy (`report-insight-card.tsx`):
+ * the engine's mark and name render — that chrome is known before the match
+ * is — and the claim and the evidence line pulse. `toggle` draws the
+ * report's fold toggle; the profile's season slot has none.
+ */
+export function InsightPending({ toggle = true }: { toggle?: boolean }) {
   return (
     <section
       aria-label="Advantage Intelligence summary"
@@ -255,8 +389,12 @@ function InsightPending() {
         <div className="mt-1 flex h-6 items-center gap-[7px] border-t border-[var(--border-hairline)] pt-2.5">
           <InsightMark />
           <span className="text-micro">Advantage Intelligence</span>
-          <div className="flex-1" />
-          <PendingBar className="size-6 rounded-[var(--radius-element)]" />
+          {toggle && (
+            <>
+              <div className="flex-1" />
+              <PendingBar className="size-6 rounded-[var(--radius-element)]" />
+            </>
+          )}
         </div>
       </div>
     </section>
@@ -264,9 +402,26 @@ function InsightPending() {
 }
 
 /**
- * `statistics-view.tsx`: the insight card, then the widgets row —
- * head-to-head beside the 416px chart column.
+ * `statistics-view.tsx`'s widgets row: head-to-head and the chart column,
+ * 1:1 from 720px of pane, stacked under it. The row stretches (no
+ * `items-start`), as the loaded one does.
  */
+export function StatisticsRowPending({
+  setLabels = true,
+}: {
+  setLabels?: boolean;
+}) {
+  return (
+    <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row">
+      <div className="min-w-0 flex-1">
+        <HeadToHeadPending />
+      </div>
+      <ChartColumnPending setLabels={setLabels} />
+    </div>
+  );
+}
+
+/** `statistics-view.tsx`: the insight card, then the widgets row. */
 export function StatisticsPanePending() {
   return (
     <PendingRegion
@@ -275,74 +430,7 @@ export function StatisticsPanePending() {
       innerClassName="flex flex-col gap-4"
     >
       <InsightPending />
-      <div className="flex flex-col gap-4 @min-[720px]:flex-row @min-[720px]:items-start">
-        <div className="min-w-0 flex-1">
-          <HeadToHeadPending />
-        </div>
-        <div className="flex w-full shrink-0 flex-col gap-4 @min-[720px]:w-[416px]">
-          {/* 104px figure, the set-label row, then the legend row. */}
-          <ChartCardPending
-            eyebrow="Performance tracker"
-            padding="16px 20px 12px"
-            gap="gap-2.5"
-          >
-            <PendingBar className="h-[104px] rounded-[var(--radius-cell)]" />
-            <div className="flex h-[15px] items-center justify-center">
-              <PendingBar className="h-2.5 w-10" />
-            </div>
-            <div className="flex h-[15px] items-center gap-3.5">
-              <PendingBar className="h-2.5 w-20" />
-              <PendingBar className="h-2.5 w-20" />
-            </div>
-          </ChartCardPending>
-          {/* The 96px band, its three labels, then the legend row. */}
-          <ChartCardPending
-            eyebrow="Rally length"
-            padding="16px 20px 14px"
-            gap="gap-3"
-          >
-            <div className="flex flex-col gap-2">
-              <PendingBar className="h-24 rounded-[var(--radius-cell)]" />
-              <div className="flex h-[17px] items-center gap-3">
-                <PendingBar className="h-2.5 w-16" />
-                <PendingBar className="h-2.5 w-16" />
-                <PendingBar className="h-2.5 w-16" />
-              </div>
-            </div>
-            <div className="flex h-[15px] items-center gap-3.5">
-              <PendingBar className="h-2.5 w-20" />
-              <PendingBar className="h-2.5 w-20" />
-              <div className="flex-1" />
-              <PendingBar className="h-2.5 w-24" />
-            </div>
-          </ChartCardPending>
-          {/* Two name rows over a 10px track, then the legend — up to six
-              entries (a judged match), wrapping as the loaded legend does. */}
-          <ChartCardPending
-            eyebrow="How points ended"
-            padding="16px 20px 14px"
-            gap="gap-3"
-          >
-            {[0, 1].map((row) => (
-              <div key={row} className="flex flex-col gap-1.5">
-                <div className="flex h-[17px] items-center gap-2">
-                  <PendingBar className="h-2.5 w-20" />
-                  <div className="flex-1" />
-                  <PendingBar className="h-2.5 w-6" />
-                </div>
-                <PendingBar className="h-2.5 rounded-[var(--radius-cell)]" />
-              </div>
-            ))}
-            <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 pt-0.5">
-              {["w-14", "w-10", "w-24", "w-16", "w-12", "w-20"].map((w) => (
-                <div key={w} className="flex h-[17px] items-center">
-                  <PendingBar className={`h-2.5 ${w}`} />
-                </div>
-              ))}
-            </div>
-          </ChartCardPending>
-        </div>
-      </div>
+      <StatisticsRowPending />
     </PendingRegion>
   );
 }
