@@ -36,11 +36,21 @@ import {
 } from "@/components/dashboard/team/player-profile/profile-frame";
 import { ProfileActions } from "@/components/dashboard/team/player-profile/profile-actions";
 import { ProfileStatisticsView } from "@/components/dashboard/team/player-profile/profile-statistics-view";
+import { ProfileVisualizationsView } from "@/components/dashboard/team/player-profile/profile-visualizations-view";
 import {
   AnalyzedCountPending,
   ProfileStatisticsPanePending,
+  ProfileVisualizationsPanePending,
 } from "@/components/dashboard/loading/player-profile-pending";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
+import {
+  buildSeasonCards,
+  buildSeasonLightbox,
+  parseSeasonVizState,
+} from "@/lib/data/player-season-viz";
+import { seasonErrorSplitJudged } from "@/lib/data/player-season";
+import { getBandSettings } from "@/lib/data/viz-bands-server";
+import { getPreferences } from "@/lib/data/preferences-server";
 import { askEntryHref } from "@/lib/services/ask/entry";
 
 /**
@@ -71,9 +81,19 @@ import { askEntryHref } from "@/lib/services/ask/entry";
  * opponents" is `seasonOpponentCount` over the same rows the season would
  * count them from. Two things do need the season, and each streams inside
  * its own `<Suspense>`: the facts line's "N analyzed" (a bar until it lands)
- * and the Statistics tab's body (`ProfileStatisticsPanePending` until it
- * lands — `player-profile-pending.tsx`, the same parts `loading.tsx` draws).
- * Visualizations draws no body yet; it arrives in its own task.
+ * and the two tabs' bodies (`ProfileStatisticsPanePending` and
+ * `ProfileVisualizationsPanePending` until they land —
+ * `player-profile-pending.tsx`, the same parts `loading.tsx` draws).
+ *
+ * ── The Visualizations tab and the URL ──────────────────────────────────────
+ * The wall's side (`?player=`) and the opened card (`?cut=` and its filters,
+ * `viz-url.ts`) are read from `searchParams`, and every card, summary and
+ * lightbox figure is computed HERE from the season's points
+ * (`player-season-viz.ts`), never in the browser: a season's points are
+ * megabytes. A click in the wall or the lightbox writes the URL
+ * (`VizStateProvider`'s `router.replace`), which renders this page again
+ * with the new state. `?tab=` itself is read client-side (`ProfileViewWhen`),
+ * so both bodies render and the switch costs no server round trip.
  *
  * ── Why the numbers match the roster's ──────────────────────────────────────
  * `getPlayerProfile` folds both of a claimed player's ids the way
@@ -96,10 +116,12 @@ export async function generateMetadata({
 
 export default async function PlayerProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ playerId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { playerId } = await params;
+  const [{ playerId }, query] = await Promise.all([params, searchParams]);
 
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
@@ -249,6 +271,23 @@ export default async function PlayerProfilePage({
               />
             </Suspense>
           </WidgetBoundary>
+          <WidgetBoundary label="Visualizations">
+            <Suspense
+              fallback={
+                <ProfileViewWhen view="visualizations">
+                  <ProfileVisualizationsPanePending />
+                </ProfileViewWhen>
+              }
+            >
+              <ProfileVisualizationsBody
+                programId={active.id}
+                playerId={playerId}
+                playerName={profile.name}
+                firstName={profile.firstName}
+                query={query}
+              />
+            </Suspense>
+          </WidgetBoundary>
         </MatchReportPane>
       </MatchReportFrame>
     </div>
@@ -309,6 +348,62 @@ async function ProfileStatisticsBody({
         tallies={season.tallies}
         evidence={buildSeasonEvidence(season)}
         insightSignature={seasonInsightSignature(season)}
+      />
+    </ProfileViewWhen>
+  );
+}
+
+/**
+ * The Visualizations tab's body: the same season (`cache()`d, so this is the
+ * Statistics body's read, not a second one), the workspace's bands and the
+ * viewer's unit, then the wall's four cards for the URL's side and — when
+ * `?cut=` names one — the opened card's court, statistics, per-row mark ids
+ * and per-option counts, all computed here (`player-season-viz.ts`) and
+ * handed to the client view as plain data. No `MatchPoint` leaves this
+ * function.
+ */
+async function ProfileVisualizationsBody({
+  programId,
+  playerId,
+  playerName,
+  firstName,
+  query,
+}: {
+  programId: string;
+  playerId: string;
+  playerName: string;
+  firstName: string;
+  query: Record<string, string | string[] | undefined>;
+}) {
+  const [season, bandSettings, preferences] = await Promise.all([
+    getPlayerSeason(programId, playerId),
+    getBandSettings(programId),
+    getPreferences(),
+  ]);
+  if (!season) return null;
+  const bands = { bands: bandSettings, unit: preferences.unit };
+  // Read as `VizStateProvider` reads it, with the season's own judged rule,
+  // so a `?verr=` on an unjudged season opens on every error here too.
+  const state = parseSeasonVizState(
+    query,
+    seasonErrorSplitJudged(season.perMatch),
+  );
+  // The wall's side: the URL's player on the wall; while a card is open the
+  // URL's player is the card's, and the wall under it is drawn for the same
+  // side — the one the card was most likely opened from.
+  const side = state.filters.player;
+  return (
+    <ProfileViewWhen view="visualizations">
+      <ProfileVisualizationsView
+        playerName={playerName}
+        firstName={firstName}
+        analyzed={season.analyzed}
+        side={side}
+        cards={buildSeasonCards(season.perMatch, side, bands)}
+        lightbox={buildSeasonLightbox(season.perMatch, state, bands, {
+          you: playerName,
+          opponent: "Opponents",
+        })}
       />
     </ProfileViewWhen>
   );

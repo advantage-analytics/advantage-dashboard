@@ -210,10 +210,16 @@ test.describe("profile page wiring", () => {
     expect(pageBody).toContain("<Suspense");
     expect(pageBody).toContain("<ProfileStatisticsBody");
     expect(pageBody).toContain('<ProfileViewWhen view="statistics">');
-    // …and the component that does is rendered inside it.
-    const suspense = pageBody.lastIndexOf("<Suspense");
-    expect(pageBody.indexOf("<ProfileStatisticsBody")).toBeGreaterThan(
+    // …and the component that does is rendered inside one — the `<Suspense`
+    // nearest above it (the Visualizations body has its own after it).
+    const statisticsBody = pageBody.indexOf("<ProfileStatisticsBody");
+    const suspense = pageBody.lastIndexOf("<Suspense", statisticsBody);
+    expect(suspense).toBeGreaterThan(-1);
+    expect(pageBody.indexOf("<ProfileStatisticsPanePending")).toBeGreaterThan(
       suspense,
+    );
+    expect(pageBody.indexOf("<ProfileStatisticsPanePending")).toBeLessThan(
+      statisticsBody,
     );
     expect(source).toMatch(
       /async function ProfileStatisticsBody[\s\S]*await getPlayerSeason\(/,

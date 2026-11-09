@@ -1628,6 +1628,21 @@ function sortRows(rows: StatRow[]): StatRow[] {
 }
 
 /**
+ * The order `computeVizStats` gives a group's rows, for a caller that has
+ * summed rows from several matches and must put them back in it (the player
+ * profile's season fold, `lib/data/player-season-viz.ts`): share rows (the
+ * errors cut's, `errorStats`) by count, every other group by win rate
+ * (`sortRows`). `tests/player-season-viz.spec.ts` pins that one match merged
+ * with itself comes back in `computeVizStats`' own order.
+ */
+export function orderStatRows(rows: StatRow[]): StatRow[] {
+  if (rows.some((row) => row.share)) {
+    return [...rows].sort((a, b) => b.count - a.count || rowTieBreak(a, b));
+  }
+  return sortRows(rows);
+}
+
+/**
  * The claim→evidence sentence. Only rows with `count >= 3` ("qualifying")
  * take part — as the headline AND as the comparison set — so the clause
  * never gets its ceiling from a small-sample row a reader has no reason to

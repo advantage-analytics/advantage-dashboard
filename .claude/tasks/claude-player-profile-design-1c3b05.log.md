@@ -118,3 +118,15 @@ is the runner's. Newest entries at the bottom.
 1. First real run: check the third-person claim voice on a live season and whether zero-valued count rows in the prompt read as signal.
 2. Insight routes have no rate limiting (docs/llm-setup.md §10).
 3. Lob rows are absent from the prompt (no ball-paths read in the route).
+
+## T9 · Visualizations tab: the season wall on the redesigned cards — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New pure `player-season-viz.ts` (`buildSeasonCards`, `buildSeasonLightbox`, merges per match on its own seat and errors rule). New `profile-visualizations-view.tsx` (the season wall: strip, `WallCard` grid, empty walls) and `season-viz-lightbox.tsx` (a "use client" container around `VizLightboxShell`, read-only, no pointList, footer, bandEditor or draft; `statRowDots`/`countWith` come from server lookups; filters round-trip through the URL). The page gains a Visualizations `WidgetBoundary` + Suspense with a wall-shaped skeleton. `vizPoints` moved to plain `shots/viz-points.ts` (re-exported). `viz-model.ts` gains `orderStatRows`. 35 offline specs.
+**follow-ups:**
+
+1. Filter changes re-read every match's points; a cross-request season cache or precomputed per-match viz would make the lightbox instant.
+2. Lazy-load the shell with `next/dynamic` and trim mark `meta` to cut the profile bundle and payload.
+3. Saved views over a season (the Saved side now points to the match report).
+4. A per-mark "vs Opponent · date" readout would need a dotId→match lookup on the client.
+5. Move `CUT_LABEL` to a plain module so `SEASON_CUT_LABEL` stops mirroring it.

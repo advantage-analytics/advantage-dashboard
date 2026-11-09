@@ -121,7 +121,7 @@ ready).
 
 ## T9 · Visualizations tab: the season wall on the redesigned cards
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T2, T3
 - **files:** `src/lib/data/player-season-viz.ts` (new, pure), `player-profile/profile-visualizations-view.tsx` (new), `player-profile/season-viz-lightbox.tsx` (new, "use client"), `src/lib/data/player-season-server.ts`, `src/app/dashboard/team/roster/[playerId]/page.tsx`, `tests/player-season-viz.spec.ts` — guess
