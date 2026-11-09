@@ -191,6 +191,7 @@ export function reviewItemThenLabel(item: ReviewItem): string {
       return has("last_landing_missing", "last_shot_unresolved") &&
         !has(
           "last_call_overruled",
+          "last_ball_against_game",
           "net_by_trajectory",
           "winner_disputed",
           "ending_suspect_line",
@@ -571,8 +572,15 @@ function lastBallAnswers(
     : null;
   const target = call?.shotId ?? last.id;
   const shank = landedOnOwnSide(last);
+  // A locked game that does not add up asks for the call that gives it the
+  // point (`lastBallAgainstGame`), after the vendor's own call.
+  const forGame = item.members.find(
+    (member) =>
+      member.state === "open" && member.mark.code === "last_ball_against_game",
+  )?.mark;
   const expected: "in" | "out" | "net" | null =
     call?.mark.params.vendorCall ??
+    (forGame?.code === "last_ball_against_game" ? forGame.params.call : null) ??
     (() => {
       const own = effectiveShotResult(last);
       return own === "in" || own === "out" || own === "net" ? own : null;

@@ -42,6 +42,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   pick_winner: "Pick the winner",
   last_call_overruled: "Was the last ball in?",
   last_shot_untracked: "Was the last shot real?",
+  last_ball_against_game: "Was the last ball out?",
   net_by_trajectory: "Into the net?",
   phantom_strokes_dropped: "1 shot removed",
   out_ball_rally_continued: "Out call ignored",
@@ -190,6 +191,9 @@ export function hintLabel(mark: LabelMark, names?: MarkNames): string {
   // last ball out?" → "Yes, make it out".
   if (mark.code === "last_call_overruled") {
     return lastCallQuestion(mark.params.vendorCall);
+  }
+  if (mark.code === "last_ball_against_game") {
+    return lastCallQuestion(mark.params.call);
   }
   const label = markLabel(mark);
   if (mark.code !== "shot_after_point_end") return label;
@@ -359,6 +363,10 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       }
       const call = mark.params.vendorCall === "net" ? "in the net" : "out";
       return `The last ball is in by its landing, but the vendor called it ${call}. Watch the bounce: if it was ${call}, change the result.`;
+    }
+    case "last_ball_against_game": {
+      const { call, gameWinner } = mark.params;
+      return `This game doesn’t add up where you set its start: ${names[gameWinner]} should win this point. If the last ball was ${call}, the point goes to ${names[gameWinner]}.`;
     }
     case "last_shot_untracked":
       return "No ball was tracked off the last shot. Most often it isn’t a shot at all, just a swing at a dead ball: delete it, and the point ends on the shot before.";

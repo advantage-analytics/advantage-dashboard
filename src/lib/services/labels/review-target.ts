@@ -174,6 +174,8 @@ function memberTarget(
       const { count } = pointRowMarkList(point, marks);
       return [lastCallAnswer(point, count, ghosts)?.shotId ?? last, "landing"];
     }
+    case "last_ball_against_game":
+      return [mark.params.shotId, "landing"];
     case "last_landing_missing":
     case "last_shot_unresolved":
     case "net_by_trajectory":
