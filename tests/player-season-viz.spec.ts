@@ -1492,7 +1492,7 @@ test.describe("one body per request", () => {
     // and never a navigation to a different URL.
     const deferred = readFileSync(DEFERRED, "utf8");
     expect(deferred).toMatch(
-      /useEffect\(\(\) => \{\s*router\.replace\(window\.location\.pathname \+ window\.location\.search, \{\s*scroll: false,\s*\}\);\s*\}, \[router\]\)/,
+      /function RefreshOnMount\(\) \{[\s\S]*?useEffect\(\(\) => \{\s*revalidate\(router\);\s*\}, \[router\]\)/,
     );
     expect(
       deferred.slice(deferred.indexOf("function RefreshOnMount")),
@@ -1547,7 +1547,7 @@ test.describe("one body per request", () => {
     // once per body with the query it arrived under …
     expect(slot).toContain("useContext(ProfileBodyCacheContext)");
     expect(slot).toMatch(
-      /if \(body !== null && bodies\.get\(view\)\?\.body !== body\)\s*bodies\.set\(view, \{ body, query \}\);/,
+      /if \(store && body !== null && store\.kept\.get\(view\)\?\.body !== body\)\s*store\.kept\.set\(view, \{ body, query \}\);/,
     );
     expect(
       readFileSync(
@@ -1560,8 +1560,18 @@ test.describe("one body per request", () => {
     expect(slot).toContain(
       'view === "visualizations" ? vizQueryKey(searchParams) : ""',
     );
+    expect(slot).toContain(
+      "const shown = body ?? (kept && kept.query === query ? kept.body : null);",
+    );
+    // A kept body is never trusted as fresh: every switch onto a view with a
+    // body on screen asks for the page again in the background — a switch
+    // onto the stand-in does not (its own request is the fetch), and a first
+    // load is not a switch.
     expect(slot).toMatch(
-      /if \(kept && kept\.query === query\) return <>\{kept\.body\}<\/>;/,
+      /const was = store\.swapShown\(view\);\s*if \(was !== null && was !== view && hasBody\) revalidate\(router\);/,
+    );
+    expect(deferred).toMatch(
+      /function revalidate\([\s\S]*?router\.replace\(window\.location\.pathname \+ window\.location\.search, \{\s*scroll: false,\s*\}\);/,
     );
   });
 });

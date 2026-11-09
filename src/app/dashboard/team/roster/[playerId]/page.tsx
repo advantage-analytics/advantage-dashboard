@@ -120,20 +120,21 @@ import { askEntryHref } from "@/lib/services/ask/entry";
  *
  * The body not rendered has a stand-in in its slot
  * (`profile-body-deferred.tsx`): nothing while the other view is up, and
- * when the reader switches to it, that view's skeleton and one
- * soft navigation to the URL it is at (`RefreshOnMount`, not `router.refresh()`,
+ * when the reader switches to it, that view's skeleton and one soft
+ * navigation to the URL it is at (`RefreshOnMount`, not `router.refresh()`,
  * which fell back to a full document load), whose render carries the body —
- * one round trip, the
- * one a first load of that view would cost. The two cannot ping-pong: a
+ * one round trip, the one a first load of that view would cost. The two
+ * cannot ping-pong: a
  * stand-in is shown only while its own view is the URL's, and that URL's
  * render carries its body, not another stand-in it would show.
  *
- * That round trip is paid once per view per visit, not once per switch:
- * each slot is a `ProfileBodySlot`, which keeps the last body it was handed
- * and shows it again when a later request rendered the other view. A switch
- * back to a view already seen is instant and asks the server for nothing
- * (the Visualizations body only while the URL's viz state is the one it was
- * rendered for — `profile-body-deferred.tsx`).
+ * That skeleton is shown once per view per visit, not once per switch: each
+ * slot is a `ProfileBodySlot`, which keeps the last body it was handed and
+ * shows it again when a later request rendered the other view (the
+ * Visualizations body only while the URL's viz state is the one it was
+ * rendered for). A switch back to a view already seen is instant, and asks
+ * for the page again in the background so a body that went stale meanwhile
+ * is replaced rather than trusted — `profile-body-deferred.tsx`.
  *
  * ── Why the numbers match the roster's ──────────────────────────────────────
  * `getPlayerProfile` folds both of a claimed player's ids the way

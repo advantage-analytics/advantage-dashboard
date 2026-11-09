@@ -14,7 +14,7 @@ import {
   ProfileVisualizationsPanePending,
 } from "@/components/dashboard/loading/player-profile-pending";
 import { PROFILE_VIEW_PARAM, type ProfileView } from "./profile-view";
-import { ProfileViewWhen } from "./profile-frame";
+import { ProfileViewWhen, useProfileView } from "./profile-frame";
 
 /**
  * The stand-in for the body a request did not render.
@@ -29,8 +29,8 @@ import { ProfileViewWhen } from "./profile-frame";
  * the moment its own view is, it draws that view's skeleton (the same one
  * the first load draws) and asks the server for the page again
  * (a soft `router.replace` to the URL it is at, `RefreshOnMount`): the URL
- * now names this view, so that render carries
- * its body, which streams in where the skeleton was. Client state on the
+ * now names this view, so that render carries its body, which streams in
+ * where the skeleton was. Client state on the
  * page — the wall's player, the store — survives the refresh, as it does
  * every viz click.
  *
@@ -66,22 +66,39 @@ export function ProfileVisualizationsDeferred() {
 }
 
 type KeptBody = { body: ReactNode; query: string };
-type KeptBodies = Map<ProfileView, KeptBody>;
+type ProfileBodyStore = {
+  /** Each view's last server-rendered body. */
+  kept: Map<ProfileView, KeptBody>;
+  /** Records `view` as the one on screen and returns the one that was, or
+   * null on the profile's first commit — how a switch is told apart from a
+   * load, across page remounts. */
+  swapShown: (view: ProfileView) => ProfileView | null;
+};
 
-const ProfileBodyCacheContext = createContext<KeptBodies | null>(null);
+const ProfileBodyCacheContext = createContext<ProfileBodyStore | null>(null);
 
 /**
  * Where the slots keep their bodies: above the page, in
  * `roster/[playerId]/layout.tsx`. Not in the slot's own state: Next keys a
- * page segment by its search params, so the refresh under `?tab=…` mounts a
+ * page segment by its search params, so the request under `?tab=…` mounts a
  * new page tree and every state inside it starts empty. The layout's segment
  * is keyed by `[playerId]` alone, so it survives a `?tab=` or viz change and
  * starts empty for another player's profile.
  */
 export function ProfileBodyCache({ children }: { children: ReactNode }) {
-  const [bodies] = useState<KeptBodies>(() => new Map());
+  const [store] = useState<ProfileBodyStore>(() => {
+    let shown: ProfileView | null = null;
+    return {
+      kept: new Map(),
+      swapShown(view) {
+        const was = shown;
+        shown = view;
+        return was;
+      },
+    };
+  });
   return (
-    <ProfileBodyCacheContext.Provider value={bodies}>
+    <ProfileBodyCacheContext.Provider value={store}>
       {children}
     </ProfileBodyCacheContext.Provider>
   );
@@ -91,21 +108,34 @@ export function ProfileBodyCache({ children }: { children: ReactNode }) {
  * One view's slot in the pane: the body this request rendered, else the last
  * body an earlier render of this profile handed it, else the stand-in.
  *
- * Without it every switch was a round trip: the refresh that brings
+ * Without it every switch was a round trip: the request that brings
  * Visualizations renders Statistics as a stand-in again (one body per
  * request), so going back threw away the Statistics body the browser already
  * held and paid the full season read a second time — and again on every
  * switch after. The slot keeps the server-rendered element (a description,
  * not a mounted tree — the inactive view still unmounts, `ProfileViewWhen`)
- * in `ProfileBodyCache`, so a switch back re-mounts it from memory with no
- * request at all.
+ * in `ProfileBodyCache`, so a switch back re-mounts it from memory without
+ * waiting on the server.
  *
- * Kept only while it is current. Statistics reads the season alone, so its
- * body holds for any URL. The Visualizations body is the one for the viz
+ * Kept only while it matches the URL. Statistics reads the season alone, so
+ * its body holds for any URL. The Visualizations body is the one for the viz
  * state in the URL at the time it arrived (`?player=`, `?cut=` and its
  * filters), so it is reused only while the URL's query — `tab` aside — is
  * the same; Back or Forward onto a different viz state draws the stand-in
  * and asks for the right body.
+ *
+ * And never trusted as fresh. Every switch onto a view that has a body to
+ * show — kept here, or restored by Next's own back/forward cache, which a
+ * native `?tab=` push can also hit — shows it at once and asks for the page
+ * again in the background (`revalidate`, with no skeleton: the body stays
+ * up). The data may have moved since that body arrived — Edit player renamed
+ * them, an analysis finished, a score was rebuilt — and only the view on
+ * screen re-renders when that happens, so the other view would otherwise
+ * show the old name and numbers until the reader left the player. The fresh
+ * body lands in place of the shown one (the same elements, so React updates
+ * it rather than remounting it) and is kept in its turn. A switch onto the
+ * stand-in does not revalidate: the stand-in's own request is the fetch.
+ * A first load is not a switch and asks for nothing more.
  *
  * `body` is null on a request that rendered the other view.
  */
@@ -116,15 +146,17 @@ export function ProfileBodySlot({
   view: ProfileView;
   body: ReactNode | null;
 }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const active = useProfileView() === view;
   // What the body depends on, beyond the view: nothing for Statistics, the
   // viz state for Visualizations.
   const query = view === "visualizations" ? vizQueryKey(searchParams) : "";
-  // Outside the layout (a spec rendering the slot alone) it keeps nothing
-  // past its own mount.
-  const shared = useContext(ProfileBodyCacheContext);
-  const [own] = useState<KeptBodies>(() => new Map());
-  const bodies = shared ?? own;
+  // Null outside the layout (a spec rendering the slot alone): nothing kept,
+  // nothing revalidated.
+  const store = useContext(ProfileBodyCacheContext);
+  const kept = store?.kept.get(view);
+  const shown = body ?? (kept && kept.query === query ? kept.body : null);
 
   // Stored after commit: a kept body is only ever read by a LATER render (one
   // whose request rendered the other view), never by the one that brings it.
@@ -132,13 +164,21 @@ export function ProfileBodySlot({
   // URL the server rendered it for — so a Back/Forward under the same body
   // does not re-stamp it.
   useEffect(() => {
-    if (body !== null && bodies.get(view)?.body !== body)
-      bodies.set(view, { body, query });
-  }, [bodies, view, body, query]);
+    if (store && body !== null && store.kept.get(view)?.body !== body)
+      store.kept.set(view, { body, query });
+  }, [store, view, body, query]);
 
-  const kept = bodies.get(view);
-  if (body !== null) return <>{body}</>;
-  if (kept && kept.query === query) return <>{kept.body}</>;
+  // A switch onto this view — the store, not this slot, remembers what was
+  // on screen, since a switch can remount the page — revalidates what it
+  // shows. Once per switch: `shown` is this view from then on.
+  const hasBody = shown !== null;
+  useEffect(() => {
+    if (!store || !active) return;
+    const was = store.swapShown(view);
+    if (was !== null && was !== view && hasBody) revalidate(router);
+  }, [store, active, view, hasBody, router]);
+
+  if (shown !== null) return <>{shown}</>;
   return view === "statistics" ? (
     <ProfileStatisticsDeferred />
   ) : (
@@ -188,9 +228,14 @@ function ProfileBodyDeferred({
 function RefreshOnMount() {
   const router = useRouter();
   useEffect(() => {
-    router.replace(window.location.pathname + window.location.search, {
-      scroll: false,
-    });
+    revalidate(router);
   }, [router]);
   return null;
+}
+
+/** A soft navigation to the URL the address bar already shows (see above). */
+function revalidate(router: ReturnType<typeof useRouter>) {
+  router.replace(window.location.pathname + window.location.search, {
+    scroll: false,
+  });
 }
