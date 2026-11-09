@@ -27,11 +27,11 @@ import {
   HeadToHeadTable,
   LABEL_SLOT,
   RowLabel,
-  STRETCHED,
   type FigureTarget,
   type RowInteraction,
   type TargetHandlers,
 } from "@/components/dashboard/matches/match-detail/head-to-head-table";
+import { STRETCHED } from "@/lib/ui/stretched-link";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { useStatisticsLobKeys } from "@/components/dashboard/matches/match-detail/statistics-lob-keys";
 import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
