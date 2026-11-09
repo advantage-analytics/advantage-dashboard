@@ -185,7 +185,7 @@ export default async function PlayerProfilePage({
               : (roster.members.find((m) => m.playerId === profile.playerId)
                   ?.avatarUrl ?? null)
           }
-          matchesCount={matchesPlayed}
+          matchesCount={profile.matchesListed}
           opponentsCount={opponentsCount}
           newMatchHref={newMatchHref}
         />

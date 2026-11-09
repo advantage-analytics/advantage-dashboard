@@ -136,6 +136,12 @@ export interface PlayerProfile {
   backhand: string | null;
   managedBy: "coach" | "self";
   matchesPlayed: number;
+  /**
+   * The matches the Matches list will show for this player: those with a
+   * score for both seats (`transformDbMatch` drops the rest). The rail's
+   * link counts these, so it lands on exactly the rows it names.
+   */
+  matchesListed: number;
   wins: number;
   losses: number;
   duals: { wins: number; losses: number };
@@ -605,6 +611,10 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
     backhand: row.backhand ?? null,
     managedBy: row.managed_by === "coach" ? "coach" : "self",
     matchesPlayed: results.length,
+    matchesListed: own.filter(
+      ({ match }) =>
+        !!match.score?.player1?.length && !!match.score?.player2?.length,
+    ).length,
     wins,
     losses,
     duals,
