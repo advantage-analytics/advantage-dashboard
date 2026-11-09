@@ -953,3 +953,50 @@ test("R5·4 · a view stored as Unforced, hard-loaded on an unjudged match, is n
     "rgb(245, 245, 245)",
   );
 });
+
+/* ── Gate fixes (PR #684 review, round 6) ─────────────────────────────── */
+
+test("R6·1 · a view stored as Unforced, picked from the menu on an unjudged match, is not read as an edit", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&draft=1`);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Serve placement" }).click();
+  await page
+    .getByRole("menuitemradio", { name: /^Saved errors Errors/ })
+    .click();
+  await expect(page).toHaveURL(/view=sv4/);
+  await expect(
+    dialog.getByRole("heading", { name: "Saved errors" }),
+  ).toBeVisible();
+  await expect(dialog.locator("[data-viz-filter-strip]")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Filters" })).not.toHaveCSS(
+    "background-color",
+    "rgb(245, 245, 245)",
+  );
+});
+
+test("R6·2 · Clear for the other player keeps the reader's chart: the view does not come back, so neither does its chart", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&view=sv1`);
+  const dialog = page.getByRole("dialog", { name: "Saved serve" });
+  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await dialog.getByRole("button", { name: "Scatter" }).click();
+  await page.getByRole("menuitemradio", { name: /Heat/ }).click();
+  await expect(page).toHaveURL(/chart=heat/);
+  await dialog.getByRole("button", { name: "Filters" }).click();
+  await page
+    .getByRole("dialog", { name: "Filter the court" })
+    .getByRole("radio", { name: "Deuce" })
+    .click();
+  await page.keyboard.press("Escape");
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(strip).toHaveCount(0);
+  await expect(page).not.toHaveURL(/deuce/);
+  await expect(page).not.toHaveURL(/view=sv1/);
+  await expect(page).toHaveURL(/chart=heat/);
+});

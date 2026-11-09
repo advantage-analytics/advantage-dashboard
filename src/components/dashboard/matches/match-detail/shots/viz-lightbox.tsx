@@ -250,6 +250,15 @@ export function VizLightbox({
   const activeStatPick =
     statPick !== null && statPick.stamp === courtStamp ? statPick.pick : null;
   const errorSplitJudged = useErrorSplitJudged();
+  // The court's filters as the URL would read them: a store pick (a saved
+  // view from the menu or the band) keeps a view's raw Error type, while a
+  // parse collapses it on a match whose errors are not judged. Every
+  // comparison against the baseline reads this, so the same view never
+  // reads as an edit of itself by the path it came in on.
+  const liveFilters: VizFilters = {
+    ...state.filters,
+    error: collapseErrorFilter(state.filters.error, errorSplitJudged),
+  };
 
   // A Statistics row's marks, by the stats' own rules (`stat-cut.ts`).
   // The serve rows' marks, all six at once, while Statistics is open on the
@@ -426,7 +435,7 @@ export function VizLightbox({
   const cardKeys = baseline?.keys ?? [];
   const onCard =
     cardFilters !== null &&
-    cardKeys.every((key) => sameFilterValue(key, state.filters, cardFilters));
+    cardKeys.every((key) => sameFilterValue(key, liveFilters, cardFilters));
   // The list's denominator. On the baseline it is the view's or card's own
   // points (an unfiltered "First serves" reads 40 / 40, the strip naming
   // anything narrower); off it — a loosened card, a link — it is the widest
@@ -770,9 +779,11 @@ export function VizLightbox({
     setStatPick(null);
     setState((prev) => ({
       ...prev,
-      // Back to a saved view is back to its chart too: the id comes back
-      // with it, and the title, Saved highlight and menu all name the view.
-      ...(baseline?.view != null && baseView !== null
+      // Back to a saved view is back to its chart too, but only when the
+      // court IS the view again (its id comes back, so the title, Saved
+      // highlight and menu name it). For the other player it is not, and
+      // the chart the reader chose stays.
+      ...(clearViewId !== null && baseView !== null
         ? { chart: baseView.chart }
         : {}),
       filters: clearTarget,
@@ -789,7 +800,7 @@ export function VizLightbox({
   // view or a `?f=` link can carry, which the panel does not edit.
   const panelActive = filterKeysFor(cut).some(
     (key) =>
-      key !== "player" && !sameFilterValue(key, state.filters, clearTarget),
+      key !== "player" && !sameFilterValue(key, liveFilters, clearTarget),
   );
   // The strip's sentence: exactly what "Clear filter" removes. On a card
   // the card's own filters are left out while it holds them, and every
@@ -802,7 +813,7 @@ export function VizLightbox({
   const unchangedBaseKey = (key: keyof VizFilters) =>
     cardFilters !== null &&
     cardKeys.includes(key) &&
-    (onView ? sameFilterValue(key, state.filters, cardFilters) : onCard);
+    (onView ? sameFilterValue(key, liveFilters, cardFilters) : onCard);
   const phrases = activeFilterEntries(state, names, { errorSplitJudged })
     .filter((e) => e.key !== "player" && !unchangedBaseKey(e.key))
     .map((e) => e.label);
@@ -810,7 +821,7 @@ export function VizLightbox({
     for (const key of cardKeys)
       if (
         !unchangedBaseKey(key) &&
-        sameFilterValue(key, state.filters, EMPTY_VIZ_FILTERS)
+        sameFilterValue(key, liveFilters, EMPTY_VIZ_FILTERS)
       )
         phrases.push(`${LOOSENED_LABEL[key] ?? "Filter"}: any`);
   if (legendPick !== null)
