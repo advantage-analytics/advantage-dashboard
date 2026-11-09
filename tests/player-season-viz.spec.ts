@@ -1425,14 +1425,15 @@ test.describe("one body per request", () => {
     expect(pageBody).toContain(
       'parseProfileView(query[PROFILE_VIEW_PARAM]) === "visualizations"',
     );
-    // The Statistics slot: the stand-in on a Visualizations request, the
-    // Suspense-wrapped body otherwise …
+    // The Statistics slot: no body on a Visualizations request (the slot
+    // draws what it kept, else the stand-in), the Suspense-wrapped body
+    // otherwise …
     expect(pageBody).toMatch(
-      /courtsOnly \? \(\s*<ProfileStatisticsDeferred \/>\s*\) : \(\s*<Suspense[\s\S]*?<ProfileStatisticsBody/,
+      /<ProfileBodySlot\s+view="statistics"\s+scope=\{active\.id\}\s+body=\{\s*courtsOnly \? null : \(\s*<Suspense[\s\S]*?<ProfileStatisticsBody/,
     );
     // … and the Visualizations slot the other way round.
     expect(pageBody).toMatch(
-      /courtsOnly \? \(\s*<Suspense[\s\S]*?<ProfileVisualizationsBody[\s\S]*?<\/Suspense>\s*\) : \(\s*<ProfileVisualizationsDeferred \/>/,
+      /<ProfileBodySlot\s+view="visualizations"\s+scope=\{active\.id\}\s+body=\{\s*courtsOnly \? \(\s*<Suspense[\s\S]*?<ProfileVisualizationsBody[\s\S]*?<\/Suspense>\s*\) : null\s*\}/,
     );
     // The facts line reads whichever season the body of the request reads;
     // the Visualizations body, rendered on its own request alone, reads the
@@ -1507,15 +1508,106 @@ test.describe("one body per request", () => {
     expect(visualizations).toContain("data-pending-bar");
     expect(visualizations).not.toContain("<button");
 
-    // And the refresh that brings the body: once, on mount, through the
-    // router — never a navigation that would change the URL.
+    // And the request that brings the body: once, on mount, a soft replace
+    // to the URL the address bar already shows — never `router.refresh()`,
+    // which after a native `?tab=` push fell back to a full document load,
+    // and never a navigation to a different URL.
     const deferred = readFileSync(DEFERRED, "utf8");
     expect(deferred).toMatch(
-      /useEffect\(\(\) => \{\s*router\.refresh\(\);\s*\}, \[router\]\)/,
+      /function RefreshOnMount\(\) \{[\s\S]*?useEffect\(\(\) => \{\s*revalidate\(router\);\s*\}, \[router\]\)/,
     );
-    expect(deferred).not.toContain("router.replace");
+    expect(
+      deferred.slice(deferred.indexOf("function RefreshOnMount")),
+    ).not.toContain("router.refresh");
     expect(deferred).not.toContain("router.push");
     expect(deferred).toContain("<ProfileViewWhen view={view}>");
+  });
+
+  test("a slot keeps the body it was handed, so a switch back is not another round trip", () => {
+    const loader = createLoader({
+      stubs: {
+        "next/navigation": {
+          useSearchParams: () => new URLSearchParams("tab=visualizations"),
+          usePathname: () => "/dashboard/team/roster/p-maya",
+          useRouter: () => ({ refresh() {}, replace() {}, push() {} }),
+        },
+        "next/image": { __esModule: true, default: passthrough("img") },
+        "next/link": { __esModule: true, default: passthrough("a") },
+        "framer-motion": {
+          useReducedMotion: () => true,
+          motion: new Proxy({}, { get: (_, tag) => passthrough(String(tag)) }),
+          AnimatePresence: fragment,
+        },
+      },
+    });
+    const mod = loader.load(DEFERRED) as Record<
+      string,
+      React.ComponentType<{
+        view: string;
+        scope: string;
+        body: React.ReactNode;
+      }>
+    >;
+    const render = (view: string, body: React.ReactNode) =>
+      renderToStaticMarkup(
+        React.createElement(mod.ProfileBodySlot, {
+          view,
+          scope: "prog-a",
+          body,
+        }),
+      );
+
+    // The body this request rendered is drawn as it is …
+    expect(
+      render("visualizations", React.createElement("i", null, "wall")),
+    ).toBe("<i>wall</i>");
+    // … and with nothing handed and nothing kept, the stand-in: its
+    // skeleton and the refresh while its view is the URL's.
+    expect(render("visualizations", null)).toContain(
+      'aria-label="Loading visualizations"',
+    );
+
+    const deferred = readFileSync(DEFERRED, "utf8");
+    const slot = deferred.slice(
+      deferred.indexOf("export function ProfileBodySlot"),
+      deferred.indexOf("function bodyKey"),
+    );
+    // It keeps them above the page — in the `[playerId]` layout, whose
+    // segment survives a `?tab=` change where the page's does not — stamped
+    // once per body with what it was rendered for and when it arrived …
+    expect(slot).toContain("useContext(ProfileBodyCacheContext)");
+    expect(slot).toMatch(
+      /if \(store && body !== null && store\.kept\.get\(view\)\?\.body !== body\)\s*store\.kept\.set\(view, \{ body, key, at: Date\.now\(\) \}\);/,
+    );
+    expect(
+      readFileSync(
+        "src/app/dashboard/team/roster/[playerId]/layout.tsx",
+        "utf8",
+      ),
+    ).toContain("<ProfileBodyCache>{children}</ProfileBodyCache>");
+    // … and drawn only while that is still what the slot would render: the
+    // same program always (the page hands both slots the active workspace),
+    // and for Visualizations the same viz state, `tab` aside.
+    expect(slot).toContain("const key = bodyKey(view, scope, searchParams);");
+    expect(slot).toContain(
+      "const shown = body ?? (kept && kept.key === key ? kept.body : null);",
+    );
+    const keyFn = deferred.slice(deferred.indexOf("function bodyKey"));
+    expect(keyFn).toMatch(
+      /if \(view !== "visualizations"\) return scope;[\s\S]*?\(\[name\]\) => name !== PROFILE_VIEW_PARAM[\s\S]*?return `\$\{scope\}\?/,
+    );
+    expect(pageBody.split("scope={active.id}").length - 1).toBe(2);
+    // A kept body is never trusted for long: a switch onto a view with a
+    // body on screen asks for the page again in the background once that
+    // body is 30 seconds old — a switch onto the stand-in does not (its own
+    // request is the fetch), and a first load is not a switch.
+    expect(slot).toMatch(
+      /const was = store\.swapShown\(view\);\s*if \(was === null \|\| was === view \|\| !hasBody\) return;\s*const arrived = store\.kept\.get\(view\)\?\.at \?\? 0;\s*if \(Date\.now\(\) - arrived >= REVALIDATE_AFTER_MS\) revalidate\(router\);/,
+    );
+    expect(deferred).toContain("const REVALIDATE_AFTER_MS = 30_000;");
+    expect(deferred).toMatch(
+      /function revalidate\([\s\S]*?router\.replace\(window\.location\.pathname \+ window\.location\.search, \{\s*scroll: false,\s*\}\);/,
+    );
   });
 });
 
