@@ -251,14 +251,25 @@ export function useMatchFilters(): MatchFiltersValue {
 }
 
 /**
- * Whether this match's errors are judged (`MatchFilterContext.errorSplitJudged`)
- * — the one flag the Shots tab's errors cut, Error type options and link
- * parsing read. Unlike `useMatchFilters()` it needs no `MatchDataProvider`:
- * `VizStateProvider` reads it, and offline harnesses mount that provider with
- * no match at all. Under a `MatchFiltersProvider` (every match page) it is that
- * provider's flag, absent = not judged; outside one there is no match to
- * judge, so `true` — the stored reading, `errorsJudgedIn(undefined)`'s rule.
+ * Clears every layer the Video list ANDs with a point set — the shared
+ * filters (`?f=`) and a landed statistic's Film-only remainder — or does
+ * nothing outside a provider. Unlike `useMatchFilters()` it builds no
+ * fallback (which needs the match's data), so `MatchReportProvider` can read
+ * it wherever it is mounted: its `watchPointSet` hands the Video tab exactly
+ * the points it names.
  */
+export function useClearMatchFilters(): () => void {
+  const provided = use(MatchFiltersContext);
+  const clearFilters = provided?.clearFilters;
+  const setFilmRemainder = provided?.setFilmRemainder;
+  // Stable while the provider's writers are, so the report's memoized
+  // actions do not rebuild on every render.
+  return useCallback(() => {
+    clearFilters?.();
+    setFilmRemainder?.(null);
+  }, [clearFilters, setFilmRemainder]);
+}
+
 export function useErrorSplitJudged(): boolean {
   const provided = use(MatchFiltersContext);
   return provided ? provided.context.errorSplitJudged === true : true;

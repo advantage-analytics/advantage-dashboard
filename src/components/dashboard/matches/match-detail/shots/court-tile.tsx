@@ -3,7 +3,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import Link from "next/link";
-import { Maximize2 } from "lucide-react";
 import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
 import { heatFloorTintRgba } from "./court-geometry";
 import { fitPillCount, VIZ_PILL_RADIUS } from "./viz-labels";
@@ -11,12 +10,7 @@ import type { Chart, Cut, VizDot, VizBandZones, VizResult } from "./viz-model";
 import type { VizState } from "./viz-url";
 import { viewIdentityKey } from "./viz-url";
 import { useVizState } from "./use-viz-state";
-import { usePrefersReducedMotion } from "./use-reduced-motion";
-import {
-  VIZ_COURT_TRANSITION_NAME,
-  VIZ_FOCUSED_COURT_MORPH_TARGET,
-  courtTileDomId,
-} from "./viz-court-transition";
+import { courtTileDomId } from "./viz-court-transition";
 
 /**
  * The wall/band card: art on top, a dark player-name chip over it, then a
@@ -38,68 +32,15 @@ import {
  * to arbitrate it: there is no anchor to accidentally activate, so nothing
  * needs suppressing.
  *
- * F5: `navigateState`, when given, is this tile's OWN `VizState` (the same
- * one `href` was built from) — supplying it upgrades the plain `<Link>`
- * into the morph's source. A plain left-click intercepts the Link's default
- * navigation (`e.preventDefault()`; Next's `<Link>` skips its own handling
- * once the passed `onClick` does this — see `node_modules/next/dist/
- * client/link.js`) and instead hands `runCourtMorph`
- * (`viz-state-context.tsx`) this tile's complete card as the transition's
- * source element. A modified click (⌘/ctrl/shift/alt/middle-button) is left
- * alone, so opening a tile in a new tab still works exactly like any other
- * link — the one reason these tiles are real `<Link>`s and not buttons.
- *
- * Task 5: `actionSlot` (the fullscreen-door glyph) renders as a SIBLING of
- * the `<Link>`/static `<div>`, inside an outer `relative` wrapper this
- * component owns — never as a child of the anchor. A `<button>` nested
- * inside a real `<a href>` can't be selectively click-suppressed (the same
- * problem `as="static"` above exists to sidestep for the Manage ⋯ menu), so
- * the glyph gets its own element outside the anchor entirely instead of
- * trying to arbitrate the same conflict again. The card's hover styling
- * moves from the anchor's own `hover:` to the wrapper's `group`/
- * `group-hover:` so hovering the glyph (a sibling, not a descendant of the
- * anchor) still reads as hovering the card.
+ * `navigateState`, when given, is this tile's OWN `VizState` (the same one
+ * `href` was built from): a plain left-click sets it through the store,
+ * which opens the lightbox over the wall without a navigation, while a
+ * modified click (⌘/ctrl/shift/alt/middle) is left to the link, so opening a
+ * tile in a new tab still works — the one reason tiles are real `<Link>`s.
  */
 
 const CARD_CLASS =
   "flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-primary)] group-hover:border-[var(--border-medium)] group-hover:shadow-[var(--shadow-card-emphasis)] motion-reduce:transition-none";
-
-/**
- * Task 5's tile glyph — 24×24, `top-[10px] right-[10px]`, opens the
- * fullscreen viewer for `tileState` directly, bypassing the wall→focused
- * morph entirely (a fullscreen open is never a morph source or target).
- * `aria-label` names the tile so a screen-reader user hears which court is
- * about to open, since — unlike the tile itself — this control does not
- * also focus the view first; no tooltip (report P2a: "the tile is the
- * button", i.e. this is a second, smaller affordance beside it, not the
- * primary one a hover-delay label would be worth adding for).
- */
-export function TileFullscreenGlyph({
-  name,
-  tileState,
-}: {
-  name: string;
-  tileState: VizState;
-}) {
-  const { setState } = useVizState();
-  return (
-    <button
-      type="button"
-      aria-label={`Open ${name} fullscreen`}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        // Updater form ignores `prev` on purpose — the target is this
-        // tile's own full state (`tileState`), not a patch onto whatever
-        // the store currently holds.
-        setState(() => ({ ...tileState, fullscreen: true }));
-      }}
-      className="absolute top-[10px] right-[10px] z-[1] flex h-6 w-6 cursor-pointer items-center justify-center rounded-[8px] bg-[rgba(13,13,13,0.72)] text-white transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.92)]"
-    >
-      <Maximize2 className="h-3 w-3" strokeWidth={1.6} aria-hidden="true" />
-    </button>
-  );
-}
 
 const PILL_CLASS = `inline-flex h-5 shrink-0 items-center ${VIZ_PILL_RADIUS} border px-[7px] text-[10px] font-medium whitespace-nowrap`;
 const PILL_STYLE = {
@@ -213,7 +154,6 @@ export function CourtTile({
   ariaDescribedBy,
   current = false,
   navigateState,
-  actionSlot,
 }: {
   playerName: string;
   name: string;
@@ -267,55 +207,25 @@ export function CourtTile({
    */
   current?: boolean;
   /**
-   * F5: this tile's OWN `VizState` — the same one `href` was built from.
-   * Supplying it does two things: it makes a plain left-click morph
-   * straight into the focused view (via `runCourtMorph`) instead of a plain
-   * navigation, and it gives the tile a stable `id`
-   * (`courtTileDomId(viewIdentityKey(navigateState))`) and a
-   * `view-transition-name` for whenever it's the RETURN morph's
-   * destination (`runCourtMorph`'s `targetKey` matching this tile's own
-   * key). Omit it for a tile that isn't a real navigation target —
-   * `manageable-saved-view-tile.tsx`'s `as="static"` tiles never pass it
-   * at all, so they get neither the `id`/`view-transition-name` nor the
-   * click interception; they're a `<div>`, not a `<Link>`, in the first
-   * place.
+   * This tile's OWN `VizState` — the same one `href` was built from. A
+   * plain left-click sets it through the store (the lightbox opens over the
+   * wall); it also gives the tile a stable `id`
+   * (`courtTileDomId(viewIdentityKey(navigateState))`). Omit it for a tile
+   * that isn't a navigation target (Manage mode's `as="static"` tiles).
    */
   navigateState?: VizState;
-  /**
-   * Task 5's fullscreen-door glyph (`TileFullscreenGlyph`, above) — a
-   * SIBLING of the anchor/static `<div>`, never its child. Omitted in
-   * Manage mode (`manageable-saved-view-tile.tsx` never passes it) and on
-   * the dashed "Create view" tile (`saved-views-band.tsx`'s `NewViewTile`
-   * doesn't render a `CourtTile` at all).
-   */
-  actionSlot?: ReactNode;
 }) {
-  const { runCourtMorph, morphTargetKey } = useVizState();
-  const reducedMotion = usePrefersReducedMotion();
+  const { setState } = useVizState();
 
   const ownKey = navigateState ? viewIdentityKey(navigateState) : null;
   const domId = ownKey !== null ? courtTileDomId(ownKey) : undefined;
-  // Compared by DOM id, not by `viewIdentityKey` equality — a Views-grid
-  // tile can share its `viewIdentityKey` with the big court currently on
-  // screen (the "current" ring), and matching on that key alone let both
-  // claim `VIZ_COURT_TRANSITION_NAME` at once. See
-  // `VIZ_FOCUSED_COURT_MORPH_TARGET`'s doc comment for the incident this
-  // fixed.
-  const isMorphTarget = domId !== undefined && domId === morphTargetKey;
 
+  // A plain left-click opens the lightbox over the wall through the store; a
+  // modified click is left to the link (a new tab still works).
   function handleClick(e: MouseEvent<HTMLAnchorElement>): void {
     if (!navigateState || !isPlainLeftClick(e)) return;
     e.preventDefault();
-    const sourceEl = e.currentTarget;
-    runCourtMorph({
-      sourceEl,
-      next: navigateState,
-      // A tile only ever navigates INTO the focused view (never to the
-      // wall), so the destination is always the one big court — see
-      // `VIZ_FOCUSED_COURT_MORPH_TARGET`.
-      targetKey: VIZ_FOCUSED_COURT_MORPH_TARGET,
-      reducedMotion,
-    });
+    setState(navigateState);
   }
 
   // Defect fix: mirrors `CourtArt`'s own `showHeat` test exactly, so the art
@@ -417,7 +327,6 @@ export function CourtTile({
         >
           {body}
         </div>
-        {actionSlot}
       </div>
     );
   }
@@ -429,17 +338,11 @@ export function CourtTile({
         id={domId}
         onClick={handleClick}
         className={CARD_CLASS}
-        style={{
-          ...ringStyle,
-          viewTransitionName: isMorphTarget
-            ? VIZ_COURT_TRANSITION_NAME
-            : undefined,
-        }}
+        style={ringStyle}
         aria-current={current ? "true" : undefined}
       >
         {body}
       </Link>
-      {actionSlot}
     </div>
   );
 }

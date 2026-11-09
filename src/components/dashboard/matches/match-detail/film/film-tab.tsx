@@ -13,7 +13,9 @@ import { createClient } from "@/lib/supabase/client";
 import type { DistanceUnit } from "@/lib/format/distance";
 import {
   parsePointSet,
+  parsePointSetLabel,
   pointSetQuery,
+  POINT_SET_LABEL_PARAM,
   POINT_SET_PARAM,
 } from "@/lib/match-video/point-set";
 
@@ -303,6 +305,9 @@ function FilmRoom({
    * opens the same points.
    */
   const [pointSet, setPointSetState] = useState<readonly number[] | null>(null);
+  // The set's words, from `?pnl=` beside `?pn=`; any change to the set
+  // drops them (`setPointSet`, `pointSetQuery`).
+  const [pointSetLabel, setPointSetLabel] = useState<string | null>(null);
   const writePointSetParam = useCallback((next: readonly number[] | null) => {
     const current = window.location.search.replace(/^\?/, "");
     const after = pointSetQuery(current, next);
@@ -316,6 +321,7 @@ function FilmRoom({
   const setPointSet = useCallback(
     (next: readonly number[] | null) => {
       setPointSetState(next && next.length > 0 ? next : null);
+      setPointSetLabel(null);
       writePointSetParam(next);
     },
     [writePointSetParam],
@@ -366,10 +372,20 @@ function FilmRoom({
       savedOnly,
       setSavedOnly,
       pointSet,
+      pointSetLabel,
       setPointSet,
       clearAll,
     }),
-    [shared, setShared, remainder, savedOnly, pointSet, setPointSet, clearAll],
+    [
+      shared,
+      setShared,
+      remainder,
+      savedOnly,
+      pointSet,
+      pointSetLabel,
+      setPointSet,
+      clearAll,
+    ],
   );
   // Stable across a playback tick (`currentTime` re-renders this component
   // ~4x/second) so `FilmFilterStrip`'s own `memo` actually skips re-rendering
@@ -1074,14 +1090,16 @@ function FilmRoom({
     latestLayers.current = { shared, remainder };
   });
   const pointSetParam = searchParams?.get(POINT_SET_PARAM) ?? null;
+  const pointSetLabelParam = searchParams?.get(POINT_SET_LABEL_PARAM) ?? null;
   useEffect(() => {
     const numbers = parsePointSet(pointSetParam);
     if (!numbers) return;
     // The URL arriving is the external event; this runs once per value.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPointSetState(numbers);
+    setPointSetLabel(parsePointSetLabel(pointSetLabelParam));
     setLanding({ ...latestLayers.current });
-  }, [pointSetParam]);
+  }, [pointSetParam, pointSetLabelParam]);
 
   /** Door one: the report player's maximize control, from wherever it is. */
   const enterRoom = useCallback(() => {

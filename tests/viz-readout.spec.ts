@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  buildMarkReadout,
   buildReadout,
   buildZoneReadout,
   placeReadout,
@@ -299,5 +300,57 @@ test("a mark panned out of view pins the readout to the nearest edge", () => {
     top: 782,
     width: 220,
     below: false,
+  });
+});
+
+test.describe("buildMarkReadout (the lightbox)", () => {
+  const meta = {
+    pointId: "p",
+    setNumber: 2,
+    pointScore: "30-15",
+    wonBySubject: true,
+    shotType: "First Serve",
+    result: "In",
+    isAce: false,
+    speedMph: null,
+  };
+  test("legend word, score, shot and the caller's where", () => {
+    expect(
+      buildMarkReadout(
+        meta,
+        "won",
+        "serve",
+        "ft",
+        "Set 2 · Game 5 · You serving",
+      ),
+    ).toEqual({
+      title: "Point won",
+      score: "30-15",
+      shot: "First serve",
+      where: "Set 2 · Game 5 · You serving",
+    });
+  });
+  test("an ace is Ace; a miss is Out; the errors cut says Error", () => {
+    expect(
+      buildMarkReadout({ ...meta, isAce: true }, "won", "serve", "ft", null)
+        .title,
+    ).toBe("Ace");
+    expect(
+      buildMarkReadout({ ...meta, result: "Out" }, "miss", "serve", "ft", null),
+    ).toMatchObject({ title: "Out", shot: "First serve, out" });
+    expect(buildMarkReadout(meta, "lost", "errors", "ft", null).title).toBe(
+      "Error",
+    );
+  });
+  test("nothing is invented: no score, no shot, no speed when unrecorded", () => {
+    expect(
+      buildMarkReadout(
+        { ...meta, pointScore: null, shotType: null, result: null },
+        "lost",
+        "serve",
+        "ft",
+        null,
+      ),
+    ).toEqual({ title: "Point lost", score: null, shot: null, where: null });
   });
 });

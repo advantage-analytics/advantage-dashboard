@@ -43,6 +43,13 @@ test.beforeAll(async () => {
         resolve: {
           extensions: [".tsx", ".ts", ".jsx", ".js"],
           alias: {
+            // The chart menu's band rows read the bands context, whose
+            // server action a plain bundle cannot load.
+            "@/lib/posthog-client$": resolve(
+              "tests/fixtures/posthog-client-off-mock.ts",
+            ),
+            "@/app/dashboard/matches/(detail)/[matchId]/viz-bands-actions":
+              resolve("tests/fixtures/viz-fullscreen-actions-browser-mock.ts"),
             "@": resolve("src"),
             "next/link": resolve("tests/fixtures/next-link-browser-mock.tsx"),
             "next/navigation": resolve(
@@ -171,7 +178,7 @@ test("fullscreen marks can be selected by pointer and keyboard", async ({
   const beneath = fullscreenMark("low-p1-deep");
   await top.click();
   await expect(top).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("fullscreen")).toContainText("won the point");
+  await expect(page.getByTestId("fullscreen")).toContainText("Point won");
   await top.click();
   await expect(beneath).toHaveAttribute("aria-pressed", "true");
   await beneath.press("Enter");

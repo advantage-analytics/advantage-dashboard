@@ -32,27 +32,22 @@ test("fitPillCount on an empty list stays empty", () => {
 test.describe("legendItemsFor", () => {
   test("serve scatter: won, lost, miss, ace(star)", () => {
     const items = legendItemsFor("serve", "scatter");
-    expect(items.map((i) => i.label)).toEqual([
-      "Point won",
-      "Lost",
-      "Miss",
-      "Ace",
-    ]);
+    expect(items.map((i) => i.label)).toEqual(["Won", "Lost", "Out", "Ace"]);
     const ace = items.find((i) => i.label === "Ace")!;
     expect(ace.glyph).toBe("star");
   });
 
   test("serve zones: outcome trio only, no ace", () => {
     const items = legendItemsFor("serve", "zones");
-    expect(items.map((i) => i.label)).toEqual(["Point won", "Lost", "Miss"]);
+    expect(items.map((i) => i.label)).toEqual(["Won", "Lost", "Out"]);
   });
 
   test("returnPlacement scatter: won, lost, miss, forehand(circle), backhand(triangle)", () => {
     const items = legendItemsFor("returnPlacement", "scatter");
     expect(items.map((i) => i.label)).toEqual([
-      "Point won",
+      "Won",
       "Lost",
-      "Miss",
+      "Out",
       "Forehand",
       "Backhand",
     ]);
@@ -69,9 +64,9 @@ test.describe("legendItemsFor", () => {
   test("returnContact scatter: same shape legend as returnPlacement", () => {
     const items = legendItemsFor("returnContact", "scatter");
     expect(items.map((i) => i.label)).toEqual([
-      "Point won",
+      "Won",
       "Lost",
-      "Miss",
+      "Out",
       "Forehand",
       "Backhand",
     ]);
@@ -108,7 +103,7 @@ test.describe("legendItemsFor", () => {
   test("rallyPosition scatter: won, lost, forehand(circle), backhand(triangle) — no miss", () => {
     const items = legendItemsFor("rallyPosition", "scatter");
     expect(items.map((i) => i.label)).toEqual([
-      "Point won",
+      "Won",
       "Lost",
       "Forehand",
       "Backhand",

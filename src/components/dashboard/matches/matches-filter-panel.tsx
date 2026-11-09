@@ -53,6 +53,9 @@ export interface ChecklistFacet<K extends string> {
   key: K;
   values: string[];
   displayValue?: (value: string) => string;
+  /** A count beside each row (the Visualizations lightbox: how many this
+   *  option alone would leave). Omitted, rows carry no count. */
+  count?: (value: string) => number;
 }
 
 export interface FilterPanelSection<K extends string> {
@@ -80,6 +83,9 @@ interface MatchesFilterPanelProps<K extends string> {
   label?: string;
   /** The footer's noun, singular and plural. Matches by default. */
   noun?: { singular: string; plural: string };
+  /** The trigger stays engaged for a cut applied outside this panel too
+   *  (the lightbox's legend and Statistics row). Defaults to `hasActive`. */
+  engaged?: boolean;
 }
 
 const SEGMENT_ROW =
@@ -141,12 +147,13 @@ export function MatchesFilterPanel<K extends string>({
   totalCount,
   label = "Filter matches",
   noun = { singular: "match", plural: "matches" },
+  engaged: engagedProp,
 }: MatchesFilterPanelProps<K>): React.JSX.Element | null {
   const [open, setOpen] = useState(false);
   // A panel with nothing in it is a button that does nothing when pressed.
   if (sections.length === 0) return null;
 
-  const engaged = open || hasActive;
+  const engaged = open || (engagedProp ?? hasActive);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -210,13 +217,18 @@ export function MatchesFilterPanel<K extends string>({
                     >
                       <CheckboxMark checked={active} />
                       <span
-                        className="min-w-0 truncate text-[12px]"
+                        className="min-w-0 flex-1 truncate text-[12px]"
                         style={{ color: "var(--ink-900)" }}
                       >
                         {section.checklist!.displayValue
                           ? section.checklist!.displayValue(value)
                           : value}
                       </span>
+                      {section.checklist!.count && (
+                        <span className="text-micro tabular">
+                          {section.checklist!.count(value)}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

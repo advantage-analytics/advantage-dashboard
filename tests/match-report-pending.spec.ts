@@ -44,12 +44,12 @@ const loader = createLoader({
 const { MatchReportPending } = loader.load(
   "src/components/dashboard/loading/match-report-pending.tsx",
 ) as {
-  MatchReportPending: React.ComponentType<{ view: View; focused?: boolean }>;
+  MatchReportPending: React.ComponentType<{ view: View }>;
 };
 
-function render(view: View, focused = false) {
+function render(view: View) {
   return renderToStaticMarkup(
-    React.createElement(MatchReportPending, { view, focused }),
+    React.createElement(MatchReportPending, { view }),
   );
 }
 
@@ -107,12 +107,10 @@ test("statistics: the cards' eyebrows and the head-to-head groups are drawn", ()
     expect(html).toContain(text);
 });
 
-test("shots: the wall is six tiles; the focused view is a court beside a stats card", () => {
+test("shots: the wall is four court-first cards, each with its split bar", () => {
   const wall = render("shots");
-  expect(wall.match(/aspect-ratio:334 \/ 216/g)?.length).toBe(6);
-  const focused = render("shots", true);
-  expect(focused.match(/aspect-ratio:334 \/ 216/g)?.length).toBe(1);
-  expect(focused).toContain("w-[292px]");
+  expect(wall.match(/aspect-ratio:334 \/ 216/g)?.length).toBe(4);
+  expect(wall.match(/h-1\.5 rounded-\[3px\]/g)?.length).toBe(4);
 });
 
 test("film: a 16:9 frame in the skeleton token, never the player's dark ground", () => {

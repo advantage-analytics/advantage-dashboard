@@ -384,6 +384,7 @@ test("reconcileVizState: an own query lands — intended state is kept and the q
   });
   expect(result.state).toEqual(intended);
   expect(result.ownQueries).toEqual([]);
+  expect(result.external).toBe(false);
 });
 
 test("reconcileVizState: only the later of two own queries lands — the earlier is retired too, not left to be mistaken for own later", () => {
@@ -408,6 +409,7 @@ test("reconcileVizState: only the later of two own queries lands — the earlier
     parseVizState(new URLSearchParams("cut=serve&ball=first")),
   );
   expect(later.ownQueries).toEqual(["cut=serve&ball=first"]);
+  expect(later.external).toBe(true);
 });
 
 test("reconcileVizState: an external navigation while an own query is pending wins over the intended state", () => {
@@ -421,6 +423,7 @@ test("reconcileVizState: an external navigation while an own query is pending wi
     parseVizState(new URLSearchParams("cut=returnPlacement")),
   );
   expect(result.ownQueries).toEqual(["cut=returnPlacement"]);
+  expect(result.external).toBe(true);
 });
 
 /* ── `sameView` (F4) ────────────────────────────────────────────────────
@@ -741,152 +744,24 @@ test("focusTargetAfterViewChange: the wall to itself (both null) steals no focus
   expect(focusTargetAfterViewChange(null, null)).toBeNull();
 });
 
-/* ── Phase 2A: fullscreen court viewer ────────────────────────────────────
- * `fullscreen` opens `viz-fullscreen.tsx` over the focused court. Only
- * meaningful alongside a real cut (dropped on the wall, same as `draft`),
- * and `draft` wins when both are present. Unlike `draft`, `applyVizUpdate`
- * never clears it, and it is excluded from `viewIdentityKey`/`sameView`.
- */
-
-test("parseVizState reads fullscreen=1 alongside a cut", () => {
-  const s = parseVizState(new URLSearchParams("cut=serve&fullscreen=1"));
-  expect(s.fullscreen).toBe(true);
-});
-
-test("parseVizState: fullscreen is falsy without the param, and without a valid value", () => {
-  expect(parseVizState(new URLSearchParams("cut=serve")).fullscreen).not.toBe(
-    true,
+/** The fullscreen viewer is retired (the lightbox replaced it): an old
+ * `&fullscreen=1` link opens the lightbox and the key is cleaned off. */
+test("a retired fullscreen=1 parses away and is dropped by the next update", () => {
+  const state = parseVizState(
+    new URLSearchParams("tab=shots&cut=serve&fullscreen=1"),
   );
-  expect(
-    parseVizState(new URLSearchParams("cut=serve&fullscreen=yes")).fullscreen,
-  ).not.toBe(true);
-});
-
-test("parseVizState: fullscreen is dropped on the wall even if the param is present", () => {
-  const s = parseVizState(new URLSearchParams("fullscreen=1"));
-  expect(s.cut).toBeNull();
-  expect(s.fullscreen).not.toBe(true);
-});
-
-test("parseVizState: draft wins over fullscreen when both params are present", () => {
-  const s = parseVizState(
-    new URLSearchParams("cut=serve&draft=1&fullscreen=1"),
-  );
-  expect(s.draft).toBe(true);
-  expect(s.fullscreen).not.toBe(true);
-});
-
-test("vizStateQuery round trip: fullscreen=1 survives alongside cut, and is omitted when false", () => {
-  const fsQuery = vizStateQuery(new URLSearchParams(), {
+  expect(state).toEqual({
     cut: "serve",
     chart: "scatter",
-    viewId: null,
     filters: EMPTY_VIZ_FILTERS,
-    fullscreen: true,
-  });
-  const back = new URLSearchParams(fsQuery);
-  expect(back.get("fullscreen")).toBe("1");
-  expect(parseVizState(back).fullscreen).toBe(true);
-
-  const plainQuery = vizStateQuery(new URLSearchParams(), {
-    cut: "serve",
-    chart: "scatter",
     viewId: null,
-    filters: EMPTY_VIZ_FILTERS,
   });
-  expect(new URLSearchParams(plainQuery).get("fullscreen")).toBeNull();
-});
-
-test("vizStateQuery: fullscreen never serializes on the wall, even if the state somehow carries it", () => {
-  const q = vizStateQuery(new URLSearchParams(), {
-    cut: null,
-    chart: "scatter",
-    viewId: null,
-    filters: EMPTY_VIZ_FILTERS,
-    fullscreen: true,
-  });
-  expect(new URLSearchParams(q).get("fullscreen")).toBeNull();
-});
-
-test("applyVizUpdate: fullscreen survives a filter-only update (unlike draft, it is not cleared)", () => {
-  const openState = parseVizState(
-    new URLSearchParams("cut=serve&fullscreen=1"),
-  );
-  const next = applyVizUpdate(openState, (prev) => ({
-    ...prev,
-    filters: { ...prev.filters, ball: ["first"] },
-  }));
-  expect(next.fullscreen).toBe(true);
-  expect(next.filters.ball).toEqual(["first"]);
-});
-
-test("applyVizUpdate: fullscreen survives a cut/chart change made while open", () => {
-  const openState = parseVizState(
-    new URLSearchParams("cut=serve&fullscreen=1"),
-  );
-  const next = applyVizUpdate(openState, (prev) => ({
-    ...prev,
-    cut: "returnContact",
-    chart: "scatter",
-  }));
-  expect(next.fullscreen).toBe(true);
-  expect(next.cut).toBe("returnContact");
-});
-
-test("applyVizUpdate: fullscreen is dropped from the OUTPUT by setting cut back to null (Back to wall)", () => {
-  const openState = parseVizState(
-    new URLSearchParams("cut=serve&fullscreen=1"),
-  );
-  const wallState = applyVizUpdate(openState, (prev) => ({
-    ...prev,
-    cut: null,
-  }));
-  // Omitted, not `false` — matches `draft`'s own convention.
-  expect("fullscreen" in wallState).toBe(false);
-  expect(wallState.fullscreen).not.toBe(true);
-
-  // The URL layer agrees, but the point of this fix is that the IN-MEMORY
-  // state itself never carries "viewer open over the wall" even for one
-  // render before the URL round-trips back through parseVizState.
-  const q = vizStateQuery(new URLSearchParams(), wallState);
-  const back = new URLSearchParams(q);
-  expect(back.get("fullscreen")).toBeNull();
-  expect(parseVizState(back).fullscreen).not.toBe(true);
-});
-
-test("applyVizUpdate: draft wins over fullscreen — an update that sets draft while fullscreen is open drops fullscreen from the OUTPUT", () => {
-  const openState = parseVizState(
-    new URLSearchParams("cut=serve&fullscreen=1"),
-  );
-  const next = applyVizUpdate(openState, (prev) => ({
-    ...prev,
-    draft: true,
-  }));
-  expect("fullscreen" in next).toBe(false);
-  expect(next.fullscreen).not.toBe(true);
-  // applyVizUpdate's existing draft-clearing rule still applies on top.
-  expect(next.draft).not.toBe(true);
-});
-
-test("viewIdentityKey: fullscreen does not change the view identity", () => {
-  const openState = parseVizState(
-    new URLSearchParams("cut=serve&fullscreen=1"),
-  );
-  const closedState = parseVizState(new URLSearchParams("cut=serve"));
-  expect(viewIdentityKey(openState)).toBe(viewIdentityKey(closedState));
-});
-
-test("sameView: fullscreen does not affect whether a state matches a tile", () => {
-  const openState = parseVizState(
-    new URLSearchParams("cut=serve&fullscreen=1"),
-  );
   expect(
-    sameView(openState, {
-      cut: "serve",
-      chart: "scatter",
-      filters: EMPTY_VIZ_FILTERS,
-    }),
-  ).toBe(true);
+    vizStateQuery(
+      new URLSearchParams("tab=shots&cut=serve&fullscreen=1"),
+      state,
+    ),
+  ).toBe("tab=shots&cut=serve");
 });
 
 /* ── Forced vs unforced: unjudged matches (T4) ─────────────────────────── */
@@ -961,4 +836,56 @@ test.describe("Error type on a match whose errors are not judged", () => {
       "Double faults",
     ]);
   });
+});
+
+test("applyVizUpdate keeps the edited view's id: an edit, a save, a pick, a new cut and the wall", () => {
+  const onV = parseVizState(new URLSearchParams("cut=serve&view=V"));
+  // An edit drops viewId and remembers V; a second edit keeps V.
+  const edited = applyVizUpdate(onV, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, court: ["deuce"] },
+    viewId: null,
+  }));
+  expect(edited.editedFrom).toBe("V");
+  const again = applyVizUpdate(edited, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, zone: ["t"] },
+    viewId: null,
+  }));
+  expect(again.editedFrom).toBe("V");
+  expect(vizStateQuery(new URLSearchParams(), again)).toContain("vfrom=V");
+  // Saving as W, then editing: W is the baseline now.
+  const savedW = applyVizUpdate(again, (prev) => ({ ...prev, viewId: "W" }));
+  expect(savedW.editedFrom).toBeUndefined();
+  const editedW = applyVizUpdate(savedW, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, court: [] },
+    viewId: null,
+  }));
+  expect(editedW.editedFrom).toBe("W");
+  // A new cut, or the wall, lets go of it.
+  expect(
+    applyVizUpdate(editedW, (prev) => ({ ...prev, cut: "rallyPlacement" }))
+      .editedFrom,
+  ).toBeUndefined();
+  expect(
+    applyVizUpdate(editedW, (prev) => ({ ...prev, cut: null })).editedFrom,
+  ).toBeUndefined();
+  // A draft has none; picking W from it, then editing, measures against W.
+  const draft = parseVizState(new URLSearchParams("cut=serve&draft=1&vfrom=V"));
+  expect(draft.editedFrom).toBeUndefined();
+  const picked = applyVizUpdate(draft, (prev) => ({ ...prev, viewId: "W" }));
+  const pickedEdited = applyVizUpdate(picked, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, court: ["ad"] },
+    viewId: null,
+  }));
+  expect(pickedEdited.editedFrom).toBe("W");
+  // `?vfrom=` round-trips, and never rides alongside `view=`.
+  expect(
+    parseVizState(new URLSearchParams("cut=serve&vfrom=V")).editedFrom,
+  ).toBe("V");
+  expect(
+    parseVizState(new URLSearchParams("cut=serve&view=W&vfrom=V")).editedFrom,
+  ).toBeUndefined();
 });

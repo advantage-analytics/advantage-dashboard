@@ -1,7 +1,8 @@
 /**
- * Default cuts for the Visualizations tab redesign.
- * Five quick-start views that pre-populate the visualization with
- * sensible filters and pill labels.
+ * Default cuts for the Visualizations tab: the wall's four court-first cards
+ * (canvas W5), in order — First serves, Returns, Rally shots, Unforced
+ * errors. `name` is the card's title and the lightbox's. Return contact is
+ * no longer a card of its own; it stays a cut (the chart menu, saved views).
  *
  * Pure TypeScript; no React, no "use client".
  */
@@ -25,28 +26,21 @@ export const DEFAULT_CUTS: DefaultCut[] = [
   {
     cut: "serve",
     chart: "scatter",
-    name: "First serves, every zone",
+    name: "First serves",
     filters: { ball: ["first"] },
     pills: ["1st", "All zones", "Deuce + Ad"],
   },
   {
     cut: "returnPlacement",
     chart: "scatter",
-    name: "Return placement",
+    name: "Returns",
     filters: {},
     pills: ["All strokes", "Deuce + Ad"],
   },
   {
-    cut: "returnContact",
-    chart: "scatter",
-    name: "Return contact",
-    filters: { ball: ["first"] },
-    pills: ["1st serve", "Deuce + Ad"],
-  },
-  {
     cut: "rallyPlacement",
     chart: "scatter",
-    name: "Rally placement",
+    name: "Rally shots",
     filters: {},
     pills: ["All rally shots"],
   },

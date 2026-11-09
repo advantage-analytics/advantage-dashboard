@@ -53,7 +53,7 @@ import {
  * - `VizBandsEditorSlab`: what the bottom slab crossfades to.
  *
  * All three are driven by the one `BandEditorState` the viewer holds
- * (`viz-fullscreen.tsx`), and every decision about where a divider may go is
+ * (`viz-lightbox.tsx`), and every decision about where a divider may go is
  * `band-editor-state.ts`'s. Nothing here writes: Save hands the reducer's
  * payload to `useVizBands().applyBands`, the same optimistic, sequenced path
  * a preset pick takes, and never calls the server action itself.
@@ -319,7 +319,7 @@ function rangeSummary(state: BandEditorState, unit: DistanceUnit): string {
  * What the bottom slab crossfades to (P2m): "Depth bands" + mono scheme |
  * mono range summary … Reset · Cancel · Save bands. It fades IN over 200ms
  * (none under reduced motion); the viewer's own controls fade out underneath
- * it (`viz-fullscreen.tsx`).
+ * it (`viz-lightbox.tsx`).
  */
 export function VizBandsEditorSlab({
   state,
