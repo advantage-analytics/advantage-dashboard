@@ -17,6 +17,11 @@ import {
   type DbMatchStatsView,
 } from "@/lib/data/match-stats-server";
 import { verificationFor } from "@/lib/data/match-verification";
+import { matchPageKind } from "@/lib/data/match-analysis";
+import {
+  analysisFor,
+  loadMatchAnalysis,
+} from "@/lib/data/match-analysis-server";
 import {
   personalOpponentKey,
   UNKNOWN_OPPONENT_NAME,
@@ -54,10 +59,18 @@ import { lobShotKeys } from "@/components/dashboard/matches/match-detail/match-f
  * Each match keeps its own seat all the way into the fold; nothing here
  * flips a point to a common side (guardrails §4).
  *
- * "Analyzed" is "has points". A stats row alone — a hand-entered result, a
- * video still in analysis — has nothing the point-level calculators can
- * count, and the report itself short-circuits such a match to the progress
- * card rather than drawing zeroes.
+ * "Analyzed" is the match report's own gate plus points. The report draws a
+ * match only when `matchPageKind` says `"report"` — never for a job still
+ * uploading, queued, processing or deriving, a failed one (bar the
+ * `stats_unavailable` exemption) or a cancelled one — over the same job state
+ * the page reads (`loadMatchAnalysis` → `analysisFor`, without the page's
+ * reap, which is a write). So a match the report shows as Analysis steps is
+ * not folded here even when it still holds points from an earlier attempt; it
+ * still counts in `matchesPlayed`. A stats row alone — a hand-entered result
+ * — has nothing the point-level calculators can count, so a match also needs
+ * points. `processing_jobs` is per-creator under RLS, exactly as on the
+ * report: a viewer who did not submit a match's video sees no job for it, and
+ * both surfaces read it from its source provider instead.
  *
  * ── The one service-role read ───────────────────────────────────────────────
  * Everything runs as the viewer under RLS except the ball-paths file: the
@@ -95,7 +108,10 @@ export interface PlayerSeasonDeps {
 }
 
 export interface PlayerSeason {
-  /** Matches with points — the ones every figure below is folded from. */
+  /**
+   * Matches the report would draw as a report, with points — the ones every
+   * figure below is folded from.
+   */
   analyzed: number;
   /**
    * Every match of theirs the program recorded, analyzed or not — the rail's
@@ -243,11 +259,11 @@ export async function loadPlayerSeason(
   // reads go out together rather than one match at a time. Bookmarks are
   // left off the points read: nothing in the fold reads who saved a point,
   // and reading them is two more round trips and a roster RPC per match.
-  const [statsByKey, pointsByMatch, lobKeysByMatch] = await Promise.all([
-    readSeatStats(
-      supabase,
-      sides.map((s) => s.match.id),
-    ),
+  const matchIds = sides.map((s) => s.match.id);
+  const [jobs, statsByKey, pointsByMatch, lobKeysByMatch] = await Promise.all([
+    // The job state the report gates on; reads nothing for no matches.
+    loadMatchAnalysis(supabase, matchIds),
+    readSeatStats(supabase, matchIds),
     Promise.all(
       sides.map((s) =>
         getMatchPointsFromSupabase(s.match.id, supabase, {
@@ -272,6 +288,13 @@ export async function loadPlayerSeason(
       throw new Error(`Could not read the points of match ${match.id}`);
     }
     if (points.length === 0) return;
+    // The report's own gate: a match it shows as Analysis steps (in flight,
+    // failed, cancelled) is not a finished analysis to fold.
+    const analysis = analysisFor(jobs, {
+      id: match.id,
+      sourceProvider: match.source_provider ?? undefined,
+    });
+    if (matchPageKind(analysis) !== "report") return;
     perMatch.push({
       matchId: match.id,
       // The calendar day, not the stored moment (`match-day.ts`), so what

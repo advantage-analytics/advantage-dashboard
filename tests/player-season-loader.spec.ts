@@ -427,6 +427,67 @@ test("a match with stats but no points is not analyzed, and still counts as play
   expect(season.tallies.perMatch.map((m) => m.matchId)).not.toContain("m-c");
 });
 
+/** A `processing_jobs` row as `loadMatchAnalysis` selects it. */
+function jobRow(matchId: string, status: string, createdAt: string): Row {
+  return {
+    id: `job-${matchId}-${createdAt}`,
+    match_id: matchId,
+    created_by: "u-coach",
+    status,
+    upload_progress_percent: null,
+    error_message: null,
+    error_category: null,
+    error_code: null,
+    error_step: null,
+    video_object_key: "v",
+    results_object_key: status === "completed" ? "r" : null,
+    resubmitted_from_job_id: null,
+    billable_seconds: 3600,
+    external_job_id: "ext",
+    created_at: createdAt,
+    updated_at: createdAt,
+    derivation_version: status === "completed" ? "v1" : null,
+    submitted_at: null,
+    queued_ack_at: null,
+    vendor_started_at: null,
+  };
+}
+
+test("analyzed is the report's own gate: a match still analysing is not folded, but is played", async () => {
+  // m-b's job finished; m-d was sent again and its new job is queued, though
+  // its points from the earlier attempt are still there.
+  const { client, sides } = await adaSides(
+    fullTables({
+      processing_jobs: [
+        jobRow("m-b", "completed", "2026-09-22T09:00:00Z"),
+        jobRow("m-d", "queued", "2026-10-10T09:00:00Z"),
+      ],
+    }),
+  );
+  const { deps } = fakeBallPaths({});
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+
+  expect(season.matchesPlayed).toBe(4);
+  expect(season.analyzed).toBe(2);
+  expect(season.perMatch.map((m) => m.matchId)).toEqual(["m-a", "m-b"]);
+  expect(season.tallies.perMatch.map((m) => m.matchId)).not.toContain("m-d");
+});
+
+test("a failed job that is not stats_unavailable is not folded either", async () => {
+  const failed = {
+    ...jobRow("m-d", "failed", "2026-10-10T09:00:00Z"),
+    error_step: "vendor",
+  };
+  const { client, sides } = await adaSides(
+    fullTables({ processing_jobs: [failed] }),
+  );
+  const { deps } = fakeBallPaths({});
+
+  const season = await loadPlayerSeason(client, sides.own, deps);
+  expect(season.perMatch.map((m) => m.matchId)).toEqual(["m-a", "m-b"]);
+});
+
 test("isDerived and errorSplitJudged come from each match's own row", async () => {
   const { client, sides } = await adaSides();
   const { deps } = fakeBallPaths({});
