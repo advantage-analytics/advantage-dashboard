@@ -124,9 +124,8 @@ import { askEntryHref } from "@/lib/services/ask/entry";
  * navigation to the URL it is at (`RefreshOnMount`, not `router.refresh()`,
  * which fell back to a full document load), whose render carries the body —
  * one round trip, the one a first load of that view would cost. The two
- * cannot ping-pong: a
- * stand-in is shown only while its own view is the URL's, and that URL's
- * render carries its body, not another stand-in it would show.
+ * cannot ping-pong: a stand-in is shown only while its own view is the URL's,
+ * and that URL's render carries its body, not another stand-in it would show.
  *
  * That skeleton is shown once per view per visit, not once per switch: each
  * slot is a `ProfileBodySlot`, which keeps the last body it was handed and
@@ -309,6 +308,7 @@ export default async function PlayerProfilePage({
           <WidgetBoundary label="Statistics">
             <ProfileBodySlot
               view="statistics"
+              scope={active.id}
               body={
                 courtsOnly ? null : (
                   <Suspense
@@ -333,6 +333,7 @@ export default async function PlayerProfilePage({
           <WidgetBoundary label="Visualizations">
             <ProfileBodySlot
               view="visualizations"
+              scope={active.id}
               body={
                 courtsOnly ? (
                   <Suspense

@@ -30,9 +30,10 @@ import { ProfileViewWhen, useProfileView } from "./profile-frame";
  * the first load draws) and asks the server for the page again
  * (a soft `router.replace` to the URL it is at, `RefreshOnMount`): the URL
  * now names this view, so that render carries its body, which streams in
- * where the skeleton was. Client state on the
- * page — the wall's player, the store — survives the refresh, as it does
- * every viz click.
+ * where the skeleton was. That request is a navigation to a new search, and
+ * Next keys the page segment by its search, so the page tree remounts and
+ * any state inside it starts over — whatever must outlive it lives above the
+ * page, as the kept bodies do (`ProfileBodyCache`).
  *
  * The two cannot ping-pong: a request renders the body of the view its URL
  * names and the stand-in of the other, each stand-in is shown only while
@@ -65,7 +66,8 @@ export function ProfileVisualizationsDeferred() {
   );
 }
 
-type KeptBody = { body: ReactNode; query: string };
+/** A body, what it was rendered for (`bodyKey`), and when it arrived. */
+type KeptBody = { body: ReactNode; key: string; at: number };
 type ProfileBodyStore = {
   /** Each view's last server-rendered body. */
   kept: Map<ProfileView, KeptBody>;
@@ -117,12 +119,17 @@ export function ProfileBodyCache({ children }: { children: ReactNode }) {
  * in `ProfileBodyCache`, so a switch back re-mounts it from memory without
  * waiting on the server.
  *
- * Kept only while it matches the URL. Statistics reads the season alone, so
- * its body holds for any URL. The Visualizations body is the one for the viz
- * state in the URL at the time it arrived (`?player=`, `?cut=` and its
- * filters), so it is reused only while the URL's query — `tab` aside — is
- * the same; Back or Forward onto a different viz state draws the stand-in
- * and asks for the right body.
+ * Kept only while it matches what it was rendered for (`bodyKey`). Always
+ * the program (`scope`, the active workspace's id): one profile URL can be
+ * valid in two programs — a claimed player's old links carry their user id —
+ * and `WorkspaceSync` refreshes in place when another tab switches the
+ * workspace, so without it the other view could show the last team's season
+ * under the new team's header. Beyond that, Statistics reads the season
+ * alone, so its body holds for any URL; the Visualizations body is the one
+ * for the viz state in the URL at the time it arrived (`?player=`, `?cut=`
+ * and its filters), so it is reused only while the URL's query — `tab` aside
+ * — is the same. Back or Forward onto a different viz state draws the
+ * stand-in and asks for the right body.
  *
  * And never trusted as fresh. Every switch onto a view that has a body to
  * show — kept here, or restored by Next's own back/forward cache, which a
@@ -135,38 +142,43 @@ export function ProfileBodyCache({ children }: { children: ReactNode }) {
  * body lands in place of the shown one (the same elements, so React updates
  * it rather than remounting it) and is kept in its turn. A switch onto the
  * stand-in does not revalidate: the stand-in's own request is the fetch.
- * A first load is not a switch and asks for nothing more.
+ * A first load is not a switch and asks for nothing more. Nor does a body
+ * younger than `REVALIDATE_AFTER_MS`: each revalidation is a full render of
+ * the page, season read included, and a reader comparing the two views
+ * flips between them in seconds — the body that just arrived is as fresh as
+ * the one a request would bring.
  *
  * `body` is null on a request that rendered the other view.
  */
 export function ProfileBodySlot({
   view,
+  scope,
   body,
 }: {
   view: ProfileView;
+  /** The program the body was read in — the active workspace's id. */
+  scope: string;
   body: ReactNode | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const active = useProfileView() === view;
-  // What the body depends on, beyond the view: nothing for Statistics, the
-  // viz state for Visualizations.
-  const query = view === "visualizations" ? vizQueryKey(searchParams) : "";
+  const key = bodyKey(view, scope, searchParams);
   // Null outside the layout (a spec rendering the slot alone): nothing kept,
   // nothing revalidated.
   const store = useContext(ProfileBodyCacheContext);
   const kept = store?.kept.get(view);
-  const shown = body ?? (kept && kept.query === query ? kept.body : null);
+  const shown = body ?? (kept && kept.key === key ? kept.body : null);
 
   // Stored after commit: a kept body is only ever read by a LATER render (one
   // whose request rendered the other view), never by the one that brings it.
-  // Stamped once per body, with the query of the frame it arrived in — the
-  // URL the server rendered it for — so a Back/Forward under the same body
-  // does not re-stamp it.
+  // Stamped once per body, with the key and time of the frame it arrived in
+  // — what the server rendered it for — so a Back/Forward under the same
+  // body does not re-stamp it.
   useEffect(() => {
     if (store && body !== null && store.kept.get(view)?.body !== body)
-      store.kept.set(view, { body, query });
-  }, [store, view, body, query]);
+      store.kept.set(view, { body, key, at: Date.now() });
+  }, [store, view, body, key]);
 
   // A switch onto this view — the store, not this slot, remembers what was
   // on screen, since a switch can remount the page — revalidates what it
@@ -175,7 +187,9 @@ export function ProfileBodySlot({
   useEffect(() => {
     if (!store || !active) return;
     const was = store.swapShown(view);
-    if (was !== null && was !== view && hasBody) revalidate(router);
+    if (was === null || was === view || !hasBody) return;
+    const arrived = store.kept.get(view)?.at ?? 0;
+    if (Date.now() - arrived >= REVALIDATE_AFTER_MS) revalidate(router);
   }, [store, active, view, hasBody, router]);
 
   if (shown !== null) return <>{shown}</>;
@@ -186,15 +200,26 @@ export function ProfileBodySlot({
   );
 }
 
-/** The URL's query without `tab`, in a stable order — a key, not a URL. */
-function vizQueryKey(params: URLSearchParams): string {
+/** How old a body may be before a switch onto it asks for it again. */
+const REVALIDATE_AFTER_MS = 30_000;
+
+/**
+ * What a view's body was rendered for: the program, and for Visualizations
+ * the URL's query without `tab`, in a stable order — a key, not a URL.
+ */
+function bodyKey(
+  view: ProfileView,
+  scope: string,
+  params: URLSearchParams,
+): string {
+  if (view !== "visualizations") return scope;
   const rest = [...params.entries()].filter(
-    ([key]) => key !== PROFILE_VIEW_PARAM,
+    ([name]) => name !== PROFILE_VIEW_PARAM,
   );
   rest.sort(([a, x], [b, y]) =>
     a === b ? x.localeCompare(y) : a.localeCompare(b),
   );
-  return rest.map(([key, value]) => `${key}=${value}`).join("&");
+  return `${scope}?${rest.map(([name, value]) => `${name}=${value}`).join("&")}`;
 }
 
 function ProfileBodyDeferred({
