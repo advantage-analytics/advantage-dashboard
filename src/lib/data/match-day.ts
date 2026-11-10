@@ -260,6 +260,13 @@ export function formatMatchDayLong(date: MatchDateInput): string {
   return label(date, LONG);
 }
 
+const MONTH_YEAR = formatter({ month: "long", year: "numeric" });
+
+/** "September 2026" — a list's month heading (the lightbox's Matches sheet). */
+export function formatMatchDayMonth(date: MatchDateInput): string {
+  return label(date, MONTH_YEAR);
+}
+
 /** "Sep 28", or "Sep 28, 2025" once the match is not from this year. */
 export function formatMatchDayShortYear(
   date: MatchDateInput,

@@ -880,6 +880,7 @@ test("loadPlayerSeasonCourts reads the season's matches and points with no file 
     expect(m.date).toBe(full.date);
     expect(m.opponent).toBe(full.opponent);
     expect(Object.keys(m).sort()).toEqual([
+      "courtType",
       "date",
       "errorSplitJudged",
       "isDerived",
@@ -888,6 +889,8 @@ test("loadPlayerSeasonCourts reads the season's matches and points with no file 
       "opponent",
       "opponentHand",
       "points",
+      "score",
+      "won",
     ]);
   });
   expect(courts).not.toHaveProperty("groups");

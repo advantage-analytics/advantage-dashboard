@@ -18,7 +18,7 @@ import type {
   SeasonLightboxData,
 } from "@/lib/data/player-season-viz";
 import { cn } from "@/lib/utils";
-import { SeasonVizLightbox } from "./season-viz-lightbox";
+import { SeasonVizLightbox, type SeasonSaveView } from "./season-viz-lightbox";
 
 /**
  * The player profile's Visualizations tab (design Q): the match report's
@@ -67,6 +67,7 @@ export function ProfileVisualizationsView({
   savedCards,
   lightbox,
   errorSplitJudged,
+  saveView,
 }: {
   /** The player's full name — the cards' subject for "you". */
   playerName: string;
@@ -83,6 +84,8 @@ export function ProfileVisualizationsView({
   lightbox: SeasonLightboxData | null;
   /** The season's Error-type rule: every analyzed match judged its errors. */
   errorSplitJudged: boolean;
+  /** What the opened card's "Save as view" needs; absent leaves it out. */
+  saveView?: SeasonSaveView;
 }) {
   return (
     <VizStateProvider errorSplitJudged={errorSplitJudged} season>
@@ -95,6 +98,7 @@ export function ProfileVisualizationsView({
         savedCards={savedCards}
         lightbox={lightbox}
         errorSplitJudged={errorSplitJudged}
+        saveView={saveView}
       />
     </VizStateProvider>
   );
@@ -115,6 +119,7 @@ function SeasonVizBody({
   savedCards,
   lightbox,
   errorSplitJudged,
+  saveView,
 }: {
   playerName: string;
   firstName: string;
@@ -124,6 +129,7 @@ function SeasonVizBody({
   savedCards: SeasonCard[];
   lightbox: SeasonLightboxData | null;
   errorSplitJudged: boolean;
+  saveView?: SeasonSaveView;
 }) {
   const { state } = useVizState();
 
@@ -172,6 +178,7 @@ function SeasonVizBody({
         wallPlayer={player}
         analyzed={analyzed}
         errorSplitJudged={errorSplitJudged}
+        saveView={saveView}
       />
     </>
   );

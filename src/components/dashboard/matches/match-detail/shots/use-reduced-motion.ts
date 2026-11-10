@@ -31,8 +31,7 @@ function getReducedMotionServerSnapshot(): boolean {
  *
  * Originally lived inline in `saved-views-band.tsx` (its reorder
  * animation's own reduced-motion check); pulled out here, unchanged, so
- * every viz motion (the lightbox's point glide and court morph,
- * `viz-court-morph.ts`) reads the SAME preference instead of standing up a
+ * every viz motion (the lightbox's point glide) reads the SAME preference instead of standing up a
  * second `useSyncExternalStore` that could drift from the first.
  */
 export function usePrefersReducedMotion(): boolean {

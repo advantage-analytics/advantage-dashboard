@@ -572,7 +572,9 @@ export async function loadMatchDetail(
     foldUnreconciled,
   ] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId, supabase),
-    getMatchPointsFromSupabase(matchId, supabase),
+    getMatchPointsFromSupabase(matchId, supabase, {
+      programId: dbRow.program_id,
+    }),
     // The history needs to know which ids mean "me" — a coach may have
     // recorded this athlete's earlier matches against a roster profile they
     // only claimed later. Chained inside the batch rather than awaited in

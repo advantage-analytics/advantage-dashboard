@@ -1275,9 +1275,8 @@ test("a landing cut opens at 100% on the far half, net along the stage's bottom;
     const netArtY = ((236 + 117) / 706) * 1258;
     const netStageY = home.py + netArtY * home.z;
     expect(netStageY).toBeLessThan(s.height);
-    // The serve sits VIEWER_SERVE_DROP (20 units) higher, so its net is a
-    // little further up; the other landing cuts keep the net at the edge.
-    expect(s.height - netStageY).toBeLessThan(cut === "serve" ? 130 : 80);
+    // Every landing cut, the serve too, keeps the net at the edge.
+    expect(s.height - netStageY).toBeLessThan(80);
 
     const full = dialog.getByRole("button", { name: "Full court" });
     await expect(full).toBeEnabled();

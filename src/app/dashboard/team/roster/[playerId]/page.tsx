@@ -350,6 +350,7 @@ export default async function PlayerProfilePage({
                       playerId={playerId}
                       playerName={profile.name}
                       firstName={profile.firstName}
+                      workspaceName={active.name}
                       query={query}
                     />
                   </Suspense>
@@ -447,12 +448,15 @@ async function ProfileVisualizationsBody({
   playerId,
   playerName,
   firstName,
+  workspaceName,
   query,
 }: {
   programId: string;
   playerId: string;
   playerName: string;
   firstName: string;
+  /** The program's name, for the Save dialog's "Share with team" row. */
+  workspaceName: string;
   query: Record<string, string | string[] | undefined>;
 }) {
   const [season, bandSettings, preferences, savedViews] = await Promise.all([
@@ -490,6 +494,7 @@ async function ProfileVisualizationsBody({
           savedViews,
         )}
         errorSplitJudged={errorSplitJudged}
+        saveView={{ savedViews, workspaceName }}
       />
     </ProfileViewWhen>
   );

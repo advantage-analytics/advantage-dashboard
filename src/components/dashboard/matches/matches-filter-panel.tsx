@@ -105,6 +105,9 @@ interface MatchesFilterPanelProps<K extends string> {
    * handed back to the trigger as the popover closes: the host moves it.
    */
   footRow?: FilterPanelFootRow;
+  /** Several foot rows, top to bottom, under one hairline (the season
+   *  lightbox's "Matches" over "Advanced filters"). Wins over `footRow`. */
+  footRows?: readonly FilterPanelFootRow[];
   /** The trigger button, for a host that hands focus back to it later. */
   triggerRef?: Ref<HTMLButtonElement>;
 }
@@ -201,6 +204,7 @@ export function MatchesFilterPanel<K extends string>({
   engaged: engagedProp,
   surface = "panel",
   footRow,
+  footRows: footRowsProp,
   triggerRef,
 }: MatchesFilterPanelProps<K>): React.JSX.Element | null {
   const [open, setOpen] = useState(false);
@@ -208,22 +212,41 @@ export function MatchesFilterPanel<K extends string>({
   // the trigger must not take it back as the popover unmounts.
   const handedOffRef = useRef(false);
 
+  // Opened from inside a modal dialog (the Visualizations lightbox), the
+  // panel portals into that dialog: portaled to <body> it sits outside the
+  // dialog's scroll lock, which then cancels every wheel over the panel and
+  // its sections cannot scroll. Read from the trigger as it opens.
+  const footRows = footRowsProp ?? (footRow ? [footRow] : []);
+  const triggerBoxRef = useRef<HTMLSpanElement | null>(null);
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  const onOpenChange = (next: boolean) => {
+    if (next)
+      setContainer(
+        triggerBoxRef.current?.closest<HTMLElement>('[role="dialog"]') ?? null,
+      );
+    setOpen(next);
+  };
+
   // A panel with nothing in it is a button that does nothing when pressed.
   if (sections.length === 0) return null;
 
   const engaged = open || (engagedProp ?? hasActive);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <FilterTrigger
-          ref={triggerRef}
-          aria-expanded={open}
-          engaged={engaged}
-        />
-      </PopoverTrigger>
+    <Popover open={open} onOpenChange={onOpenChange}>
+      {/* Only so the trigger's dialog can be found; `contents` draws no box. */}
+      <span ref={triggerBoxRef} className="contents">
+        <PopoverTrigger asChild>
+          <FilterTrigger
+            ref={triggerRef}
+            aria-expanded={open}
+            engaged={engaged}
+          />
+        </PopoverTrigger>
+      </span>
 
       <PopoverContent
+        container={container}
         sideOffset={6}
         align="start"
         // Keep the whole panel on screen. Radix shifts it back inside the
@@ -243,137 +266,143 @@ export function MatchesFilterPanel<K extends string>({
         }}
         className={filterPanelSurfaceClasses(surface)}
       >
-        {sections.map((section, i) => (
-          <div key={section.label}>
-            {i > 0 &&
-              section.checklist === undefined &&
-              section.segmented !== undefined &&
-              sections[i - 1]?.checklist !== undefined && (
-                // The one divider in 18a — ahead of Opponent, the first
-                // segmented section after a run of checklists. Sections never
-                // rule themselves off from a same-kind neighbour.
-                <div
-                  className="mx-2 my-0.5 h-px"
-                  style={{ background: "var(--border-hairline)" }}
-                />
-              )}
-            <p
-              className="px-2 pt-2 pb-1 text-[11px]"
-              style={{ color: "var(--ink-400)" }}
-            >
-              {section.label}
-            </p>
+        {/* The sections scroll on their own; the foot row and the footer
+            below stay put, so a long checklist (a season's Matches) never
+            pushes "Advanced filters" or Clear all out of reach. */}
+        <div data-filter-panel-sections="" className="min-h-0 overflow-y-auto">
+          {sections.map((section, i) => (
+            <div key={section.label}>
+              {i > 0 &&
+                section.checklist === undefined &&
+                section.segmented !== undefined &&
+                sections[i - 1]?.checklist !== undefined && (
+                  // The one divider in 18a — ahead of Opponent, the first
+                  // segmented section after a run of checklists. Sections never
+                  // rule themselves off from a same-kind neighbour.
+                  <div
+                    className="mx-2 my-0.5 h-px"
+                    style={{ background: "var(--border-hairline)" }}
+                  />
+                )}
+              <p
+                className="px-2 pt-2 pb-1 text-[11px]"
+                style={{ color: "var(--ink-400)" }}
+              >
+                {section.label}
+              </p>
 
-            {section.checklist && (
-              <div className="flex flex-col pb-1.5">
-                {section.checklist.values.map((value) => {
-                  const active = isChecklistActive(
-                    section.checklist!.key,
-                    value,
-                  );
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      role="checkbox"
-                      aria-checked={active}
-                      onClick={() =>
-                        onToggleChecklist(section.checklist!.key, value)
-                      }
-                      className="flex h-8 items-center gap-[9px] rounded-[var(--radius-element)] px-2 text-left transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
-                    >
-                      <CheckboxMark checked={active} />
-                      <span
-                        className="min-w-0 flex-1 truncate text-[12px]"
-                        style={{ color: "var(--ink-900)" }}
+              {section.checklist && (
+                <div className="flex flex-col pb-1.5">
+                  {section.checklist.values.map((value) => {
+                    const active = isChecklistActive(
+                      section.checklist!.key,
+                      value,
+                    );
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        role="checkbox"
+                        aria-checked={active}
+                        onClick={() =>
+                          onToggleChecklist(section.checklist!.key, value)
+                        }
+                        className="flex h-8 items-center gap-[9px] rounded-[var(--radius-element)] px-2 text-left transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
                       >
-                        {section.checklist!.displayValue
-                          ? section.checklist!.displayValue(value)
-                          : value}
-                        {/* A real space, so the row's name reads
+                        <CheckboxMark checked={active} />
+                        <span
+                          className="min-w-0 flex-1 truncate text-[12px]"
+                          style={{ color: "var(--ink-900)" }}
+                        >
+                          {section.checklist!.displayValue
+                            ? section.checklist!.displayValue(value)
+                            : value}
+                          {/* A real space, so the row's name reads
                                 "vs Lee Nov 3", not "vs LeeNov 3". */}
-                        {section.checklist!.detail?.(value) && " "}
-                        {section.checklist!.detail?.(value) && (
-                          <span
-                            className="ml-1 text-[11px]"
-                            style={{ color: "var(--ink-500)" }}
-                          >
-                            {section.checklist!.detail(value)}
+                          {section.checklist!.detail?.(value) && " "}
+                          {section.checklist!.detail?.(value) && (
+                            <span
+                              className="ml-1 text-[11px]"
+                              style={{ color: "var(--ink-500)" }}
+                            >
+                              {section.checklist!.detail(value)}
+                            </span>
+                          )}
+                        </span>
+                        {section.checklist!.count && (
+                          <span className="text-micro tabular">
+                            {section.checklist!.count(value)}
                           </span>
                         )}
-                      </span>
-                      {section.checklist!.count && (
-                        <span className="text-micro tabular">
-                          {section.checklist!.count(value)}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
-            {section.segmented?.map((facet) => (
-              <div key={facet.key}>
-                {facet.rowLabel && (
-                  <p
-                    className="px-2 pb-1 text-[10px]"
-                    style={{ color: "var(--ink-500)" }}
-                  >
-                    {facet.rowLabel}
-                  </p>
-                )}
-                <Segmented
-                  facet={facet}
-                  value={segmentedValue(facet.key)}
-                  onSelect={(v) => onSelectSegment(facet.key, v)}
-                />
-              </div>
-            ))}
-          </div>
-        ))}
+              {section.segmented?.map((facet) => (
+                <div key={facet.key}>
+                  {facet.rowLabel && (
+                    <p
+                      className="px-2 pb-1 text-[10px]"
+                      style={{ color: "var(--ink-500)" }}
+                    >
+                      {facet.rowLabel}
+                    </p>
+                  )}
+                  <Segmented
+                    facet={facet}
+                    value={segmentedValue(facet.key)}
+                    onSelect={(v) => onSelectSegment(facet.key, v)}
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
 
-        {footRow !== undefined && (
-          <>
-            <div
-              className="mx-2 my-0.5 h-px"
-              style={{ background: "var(--border-hairline)" }}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                handedOffRef.current = true;
-                setOpen(false);
-                footRow.onSelect();
-              }}
-              className="flex h-8 items-center gap-[9px] rounded-[var(--radius-element)] px-2 text-left transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
-            >
-              <span
-                className="shrink-0 text-[12px]"
-                style={{ color: "var(--ink-900)" }}
-              >
-                {footRow.label}
-              </span>
-              <span
-                data-foot-row-summary=""
-                className="min-w-0 flex-1 truncate text-right text-[11px]"
-                style={{ color: "var(--ink-500)" }}
-              >
-                {footRow.summary}
-              </span>
-              <ChevronRight
-                className="size-3 shrink-0"
-                strokeWidth={1.5}
-                style={{ color: "var(--ink-400)" }}
-                aria-hidden="true"
-              />
-            </button>
-          </>
+        {footRows.length > 0 && (
+          <div
+            className="mx-2 my-0.5 h-px shrink-0"
+            style={{ background: "var(--border-hairline)" }}
+          />
         )}
+        {footRows.map((row) => (
+          <button
+            key={row.label}
+            type="button"
+            onClick={() => {
+              handedOffRef.current = true;
+              setOpen(false);
+              row.onSelect();
+            }}
+            className="flex h-8 shrink-0 items-center gap-[9px] rounded-[var(--radius-element)] px-2 text-left transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
+          >
+            <span
+              className="shrink-0 text-[12px]"
+              style={{ color: "var(--ink-900)" }}
+            >
+              {row.label}
+            </span>
+            <span
+              data-foot-row-summary=""
+              className="min-w-0 flex-1 truncate text-right text-[11px]"
+              style={{ color: "var(--ink-500)" }}
+            >
+              {row.summary}
+            </span>
+            <ChevronRight
+              className="size-3 shrink-0"
+              strokeWidth={1.5}
+              style={{ color: "var(--ink-400)" }}
+              aria-hidden="true"
+            />
+          </button>
+        ))}
 
         {/* Footer — the only place a count lives; the trigger carries none. */}
         <div
-          className="mt-0.5 flex items-center gap-2 px-2 pt-2 pb-1"
+          className="mt-0.5 flex shrink-0 items-center gap-2 px-2 pt-2 pb-1"
           style={{ borderTop: "1px solid var(--border-hairline)" }}
         >
           <button

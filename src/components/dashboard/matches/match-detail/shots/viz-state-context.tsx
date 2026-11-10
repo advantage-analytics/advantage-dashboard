@@ -207,9 +207,22 @@ export function VizStateProvider({
       ownQueriesRef.current = [...ownQueriesRef.current, q];
 
       setRenderedState(resolved);
-      router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+      const href = q ? `${pathname}?${q}` : pathname;
+      if (season) {
+        // The season's courts are folded on the server from the URL, so the
+        // profile needs the round trip.
+        router.replace(href, { scroll: false });
+      } else {
+        // The match report computes every court in the browser from
+        // `useMatchData()`; the page's Server Component reads no viz key.
+        // `router.replace` would re-run the whole report on the server (the
+        // match, its points and shots, video signing, reconcile) on every
+        // click for nothing, so the URL is written in place. Next keeps
+        // `useSearchParams` in step with the native history API.
+        window.history.replaceState(null, "", href);
+      }
     },
-    [pathname, router, searchParams],
+    [pathname, router, searchParams, season],
   );
 
   const value = useMemo(

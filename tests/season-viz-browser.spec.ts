@@ -157,13 +157,12 @@ test("one dialog per opening: the frame before the chunk (a modal, Esc and Tab k
   // shell (its chunk cached now, so with an entrance of its own) pending for
   // THAT cut — never the serve court under the rally card's filters — then
   // the rally court in the same dialog, and Esc lands focus on the rally
-  // card. The entrance is the card's flight drawing the box open
-  // (`viz-court-morph.ts`) — or, with no flight, the CSS fade — so watch
-  // each frame for either.
+  // card. Opening draws no animation, so no frame of it shows one.
   await page.evaluate(() => {
-    const w = window as unknown as { sawEnter: boolean };
+    const w = window as unknown as { sawEnter: boolean; enterDone: boolean };
     w.sawEnter = false;
-    const end = performance.now() + 1500;
+    w.enterDone = false;
+    const end = performance.now() + 800;
     const look = () => {
       const box = document.querySelector("[data-lightbox-box]");
       if (
@@ -171,20 +170,22 @@ test("one dialog per opening: the frame before the chunk (a modal, Esc and Tab k
         (box.getAnimations().length > 0 || box.classList.contains("animate-in"))
       )
         w.sawEnter = true;
-      if (!w.sawEnter && performance.now() < end) requestAnimationFrame(look);
+      if (performance.now() < end) requestAnimationFrame(look);
+      else w.enterDone = true;
     };
     requestAnimationFrame(look);
   });
   await rallyCard.click();
   const loadingRally = shellPending(page, "Rally placement");
   await expect(loadingRally).toBeVisible();
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => (window as unknown as { sawEnter: boolean }).sawEnter,
-      ),
-    )
-    .toBe(true);
+  await page.waitForFunction(
+    () => (window as unknown as { enterDone: boolean }).enterDone,
+  );
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { sawEnter: boolean }).sawEnter,
+    ),
+  ).toBe(false);
   await expect(page.getByRole("dialog", { name: "All serves" })).toHaveCount(0);
   await expect(page.locator("[data-court-stage]")).toHaveCount(0);
   await loadingRally.evaluate((el) => el.setAttribute("data-opening", "two"));
@@ -757,7 +758,7 @@ test("the chart menu: Scatter · Heat · Zones in the season's card, no band row
   expect(errors).toEqual([]);
 });
 
-test("Opponent plays and Matches: the season's own groups in Filters, newest first with each match's count; a hand and a tick narrow the court, the strip names them, Clear filter lets go of both", async ({
+test("Matches: a row in Filters opens the Matches sheet; its Result, Opponent and Surface menus and ticks are a draft that Show applies, the strip names them, Clear filter lets go", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -770,74 +771,107 @@ test("Opponent plays and Matches: the season's own groups in Filters, newest fir
   await expect(serve).toBeVisible({ timeout: 8_000 });
   const all = await marks(serve).count();
 
+  // The panel holds shot filters only: no "Opponent plays", no checklist of
+  // matches — one "Matches" row above "Advanced filters".
   await serve.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   await expect(panel).toBeVisible();
-  await expect(
-    panel.getByText("Opponent plays", { exact: true }),
-  ).toBeVisible();
-  await expect(panel.getByText("Matches", { exact: true })).toBeVisible();
-  for (const name of ["Right", "Left", "Unknown"])
-    await expect(panel.getByRole("radio", { name })).toBeVisible();
-  // Newest first, each "vs …" with its short date and its count; the three
-  // counts add up to the court.
-  const rows = panel.getByRole("checkbox", { name: /^vs / });
-  await expect(rows).toHaveCount(3);
-  const names = await rows.allInnerTexts();
-  expect(names.map((n) => n.split("\n")[0].replace(/\s+/g, " "))).toEqual([
-    "vs Jordan Lee Nov 3",
-    "vs Sam Ortiz Oct 20",
-    "vs Riley Park Oct 6",
-  ]);
-  const counts = names.map((n) => Number(n.trim().split(/\s+/).pop()));
-  expect(counts.reduce((a, b) => a + b, 0)).toBe(all);
-  // The Matches rows sit above the Advanced filters row.
+  await expect(panel.getByText("Opponent plays", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(panel.getByRole("checkbox", { name: /^vs / })).toHaveCount(0);
+  const matchesRow = panel.getByRole("button", { name: /^Matches/ });
+  await expect(matchesRow).toContainText("All 3");
   const order = await panel.evaluate((el) => {
     const text = el.textContent ?? "";
-    return [
-      text.indexOf("Opponent plays"),
-      text.indexOf("Matches"),
-      text.indexOf("Advanced filters"),
-    ];
+    return [text.indexOf("Matches"), text.indexOf("Advanced filters")];
   });
+  expect(order[0]).toBeGreaterThan(-1);
   expect(order[0]).toBeLessThan(order[1]);
-  expect(order[1]).toBeLessThan(order[2]);
 
-  // Lefties: Sam Ortiz's match alone.
-  await panel.getByRole("radio", { name: "Left" }).click();
-  await expect(panel.getByRole("radio", { name: "Left" })).toBeChecked();
+  // The row opens the sheet: newest first under month headings, each row
+  // "vs …", its result mark, score and short date.
+  await matchesRow.click();
+  const sheet = page.locator("#viz-matches-sheet");
+  await expect(sheet).toBeVisible();
+  await expect(panel).toHaveCount(0);
+  const rows = sheet.getByRole("checkbox", { name: /^vs / });
+  await expect(rows).toHaveCount(3);
+  expect(
+    (await rows.allInnerTexts()).map((t) => t.replace(/\s+/g, " ").trim()),
+  ).toEqual([
+    "vs Jordan Lee Won 6–3, 6–4 Nov 3",
+    "vs Sam Ortiz Lost 4–6, 6–7 Oct 20",
+    "vs Riley Park Won 7–5, 6–2 Oct 6",
+  ]);
+  await expect(sheet.getByText("November", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("October", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("All 3 matches")).toBeVisible();
+  const show = sheet.getByRole("button", { name: /^Show / });
+  await expect(show).toHaveText(`Show ${all} serves`);
+  await expect(show).toBeDisabled();
+
+  // Result: Won leaves two matches; its count says so before the pick.
+  await sheet.getByRole("button", { name: "Result" }).click();
+  const resultMenu = page.getByRole("menu", { name: "Result" });
+  await expect(
+    resultMenu.getByRole("menuitemradio", { name: /Won/ }),
+  ).toContainText("2");
+  await resultMenu.getByRole("menuitemradio", { name: /Won/ }).click();
+  await expect(sheet.getByRole("button", { name: "Won" })).toBeVisible();
+  await expect(rows).toHaveCount(2);
+  await expect(sheet.getByText("2 of 3 matches")).toBeVisible();
+  // A draft: nothing has reached the court or the URL yet.
+  expect(new URL(page.url()).searchParams.get("vres")).toBeNull();
+
+  // Surface: Hard keeps both won matches (Outdoor and Indoor Hard Court).
+  await sheet.getByRole("button", { name: "Surface" }).click();
+  await page
+    .getByRole("menu", { name: "Surface" })
+    .getByRole("menuitemradio", { name: /^Hard/ })
+    .click();
+  await expect(rows).toHaveCount(2);
+
+  // Tick one: only it counts; "Use all shown" would let it go.
+  await rows.nth(1).click();
+  await expect(rows.nth(1)).toBeChecked();
+  await expect(sheet.getByText("1 of 2 picked")).toBeVisible();
+  await expect(
+    sheet.getByRole("button", { name: "Use all shown" }),
+  ).toBeVisible();
+  await expect(show).toBeEnabled();
+  await show.click();
+
+  await expect(sheet).toHaveCount(0);
   await expect
-    .poll(() => new URL(page.url()).searchParams.get("vopp"))
-    .toBe("left");
-  await expect
-    .poll(() => marks(serve).count(), { timeout: 8_000 })
-    .toBe(counts[1]);
+    .poll(() => {
+      const q = new URL(page.url()).searchParams;
+      return [q.get("vres"), q.get("vsurf"), q.getAll("vm").join(",")];
+    })
+    .toEqual(["won", "hard", "m-3"]);
   const strip = serve.locator("[data-viz-filter-strip]");
-  await expect(strip).toContainText("Lefties");
-  // A match of another hand now adds nothing.
-  await expect(rows.nth(0)).toContainText(/0$/);
-
-  // Any again, then tick two matches: their sum.
-  await panel.getByRole("radio", { name: "Any" }).last().click();
-  await rows.nth(2).click();
-  await rows.nth(0).click();
-  await expect(rows.nth(0)).toBeChecked();
-  await expect
-    .poll(() => new URL(page.url()).searchParams.getAll("vm"))
-    .toEqual(["m-1", "m-3"]);
+  await expect(strip).toContainText("Won");
+  await expect(strip).toContainText("Hard court");
+  await expect(strip).toContainText("1 match");
   await expect
     .poll(() => marks(serve).count(), { timeout: 8_000 })
-    .toBe(counts[0] + counts[2]);
-  await expect(strip).toContainText("2 matches");
-  await expect(page.getByRole("dialog", { name: /^Loading/ })).toHaveCount(0);
+    .toBeLessThan(all);
 
-  // Clear filter: both groups let go, every match again.
+  // The Matches row sums it up the next time Filters opens.
+  await serve.getByRole("button", { name: "Filters" }).click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "Filter the court" })
+      .getByRole("button", { name: /^Matches/ }),
+  ).toContainText("Won · Hard · 1 of 3");
   await page.keyboard.press("Escape");
+
+  // Clear filter: every match again, no season key left in the URL.
   await strip.getByRole("button", { name: "Clear filter" }).click();
   await expect.poll(() => marks(serve).count(), { timeout: 8_000 }).toBe(all);
   const url = new URL(page.url()).searchParams;
-  expect(url.has("vopp")).toBe(false);
-  expect(url.has("vm")).toBe(false);
+  for (const key of ["vopp", "vres", "vsurf", "vm"])
+    expect(url.has(key)).toBe(false);
 
   // Closing drops them, and the wall's links never carry them.
   await page.keyboard.press("Escape");
@@ -845,8 +879,42 @@ test("Opponent plays and Matches: the season's own groups in Filters, newest fir
   for (const href of await wall
     .getByRole("link")
     .evaluateAll((els) => els.map((el) => el.getAttribute("href") ?? "")))
-    expect(href).not.toMatch(/[?&](vopp|vm)=/);
+    expect(href).not.toMatch(/[?&](vopp|vres|vsurf|vm)=/);
   expect(errors).toEqual([]);
+});
+
+test("the Matches sheet throws its draft away on Esc, and its search only finds a row", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&hands=1&delay=100`);
+  const wall = page.getByRole("list", { name: "Default views" });
+  await wall.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
+  const serve = page.getByRole("dialog", { name: "All serves" });
+  await expect(serve).toBeVisible({ timeout: 8_000 });
+  await serve.getByRole("button", { name: "Filters" }).click();
+  await page
+    .getByRole("dialog", { name: "Filter the court" })
+    .getByRole("button", { name: /^Matches/ })
+    .click();
+  const sheet = page.locator("#viz-matches-sheet");
+  await expect(sheet).toBeVisible();
+  await sheet
+    .getByRole("searchbox", { name: "Search opponents" })
+    .fill("ortiz");
+  const rows = sheet.getByRole("checkbox", { name: /^vs / });
+  await expect(rows).toHaveCount(1);
+  // Search narrows the list, not what counts.
+  await expect(sheet.getByText("All 3 matches")).toBeVisible();
+  await sheet
+    .getByRole("searchbox", { name: "Search opponents" })
+    .fill("nobody");
+  await expect(sheet.getByText("No opponent matches “nobody”.")).toBeVisible();
+  await sheet.getByRole("searchbox", { name: "Search opponents" }).fill("");
+  await rows.first().click();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.getAll("vm")).toEqual([]);
 });
 
 test("a ?vm= naming no match of the season is ignored: the card opens on the whole season, not stuck loading", async ({
@@ -878,17 +946,9 @@ test("a chart switch keeps the season's court exactly where it is — at 100%, a
   await expect(marks(serve).first()).toBeVisible({ timeout: 8_000 });
   const all = await marks(serve).count();
   const stage = serve.locator("[data-court-stage]");
-  // The card's court flies in with the lightbox's own stage riding scaled
-  // under it (`viz-court-morph.ts`, `handOver`): the baseline is the stage
-  // at rest, once the flight is over.
+  // The baseline is the stage at rest, once nothing is animating.
   await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          !document.documentElement.hasAttribute("data-viz-court-morph") &&
-          document.getAnimations().length === 0,
-      ),
-    )
+    .poll(() => page.evaluate(() => document.getAnimations().length === 0))
     .toBe(true);
 
   // The stage's box and the court's pan/zoom, two frames after the last

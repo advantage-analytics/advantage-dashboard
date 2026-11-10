@@ -22,7 +22,6 @@ import type { WorkspaceKind } from "@/lib/workspace/types";
 import type { Cut, Chart, VizFilters } from "./viz-model";
 import { activeFilterEntries } from "./viz-url";
 import type { PhraseNames } from "../match-filters/applied-words";
-import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useErrorSplitJudged } from "../match-filters/provider";
 import { CUT_LABEL, CHART_LABEL } from "./viz-labels";
 import { cn } from "@/lib/utils";
@@ -110,6 +109,7 @@ export function SaveViewDialog({
   onSaved,
   tone = "light",
   side = "bottom",
+  names,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -123,11 +123,13 @@ export function SaveViewDialog({
   onSaved: (view: SavedView) => void;
   tone?: FloatMenuTone;
   side?: "top" | "bottom";
+  /** The two sides' names for the dark tone's prefilled name. The dialog
+   *  reads no match context of its own, so the player profile can draw it. */
+  names?: PhraseNames;
 }) {
   const router = useRouter();
   const dark = tone === "dark";
   const [name, setName] = useState("");
-  const sides = useMatchSides();
   const errorSplitJudged = useErrorSplitJudged();
   const [shared, setShared] = useState(false);
   const [duplicate, setDuplicate] = useState(false);
@@ -156,17 +158,7 @@ export function SaveViewDialog({
     if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- external source (dialog opened by a click outside this component), not a render-derivable value
       setName(
-        dark
-          ? suggestedViewName(
-              cut,
-              filters,
-              {
-                you: sides.you.shortName,
-                opponent: sides.opp.shortName,
-              },
-              errorSplitJudged,
-            )
-          : "",
+        dark ? suggestedViewName(cut, filters, names, errorSplitJudged) : "",
       );
       setShared(false);
       setDuplicate(false);
