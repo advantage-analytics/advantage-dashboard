@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { ArrowRightLeft } from "lucide-react";
 
+import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { statDisplay } from "@/components/dashboard/matches/match-detail/head-to-head-rows";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import { formatMatchDayShort } from "@/lib/data/match-day";
 import { surname } from "@/lib/data/match-utils";
 import {
@@ -32,7 +34,19 @@ import {
  * arrow swaps it to the last five pooled, and the text beside it names what
  * is shown. With five or fewer, the last five would be nearly the whole
  * record, so the icon is not drawn. Each axis label carries the blue shape's
- * figure; the legend names the last match ("Last match · vs Ruiz, Nov 7").
+ * figure.
+ *
+ * ── Reading it (board 10, "Game profile with hover readouts") ─────────────
+ * Hovering or focusing a blue vertex (a ~16px hit area) opens the DS dark
+ * readout above it (`ChartTooltip`, as the report's charts): the rate, the
+ * blue figure, Overall's, and how many points apart they are. While it is
+ * open the axis label and spoke darken and the Overall vertex on that axis
+ * gets a ring, so both points being compared are marked. On a finger a tap
+ * selects a vertex and the readout stays until a tap lands outside the card
+ * (`useTouchReadout` / `useFingerTap`). The legend keys both shapes as a
+ * short solid line — the blue one naming the match ("Last match · vs Ruiz,
+ * Nov 7"), Overall with its match count; hovering or focusing a key fades the
+ * other shape to a quarter and the other key to 0.4.
  *
  * Every figure is the server's (`seasonGameProfile`, `player-season.ts`):
  * pooled from the same per-row made/attempts as the season Head to head, so
@@ -55,11 +69,24 @@ const CY = 125;
 const RADIUS = 92;
 const LABEL_RADIUS = 118;
 const RINGS = [25, 50, 75, 100] as const;
+/** A vertex's hover and tap target, in plot units (the plot draws near 1:1). */
+const HIT_RADIUS = 16;
+/** How near an edge (plot units) a vertex's readout hangs from its own side. */
+const READOUT_EDGE = 80;
+
+/** A legend key's or shape's dimmed opacity while the other is singled out. */
+const SHAPE_FADED = 0.25;
+const KEY_FADED = 0.4;
+
+const FADE = "transition-opacity duration-200 motion-reduce:transition-none";
+
+function angleOf(axis: number): number {
+  return -Math.PI / 2 + (axis * 2 * Math.PI) / GAME_PROFILE_AXES.length;
+}
 
 function point(axis: number, value: number): [number, number] {
-  const angle = -Math.PI / 2 + (axis * 2 * Math.PI) / GAME_PROFILE_AXES.length;
   const r = (RADIUS * Math.max(0, Math.min(100, value))) / 100;
-  return [CX + Math.cos(angle) * r, CY + Math.sin(angle) * r];
+  return [CX + Math.cos(angleOf(axis)) * r, CY + Math.sin(angleOf(axis)) * r];
 }
 
 function polygon(values: readonly (number | null)[]): string {
@@ -89,21 +116,52 @@ export function gameProfileLegend(
   return `Last match · vs ${surname(lastMatch.opponent)}${day ? `, ${day}` : ""}`;
 }
 
-/** The two-line key for a solid line, laid flat. */
-function LineKey({ color, label }: { color: string; label: string }) {
+/** The legend's Overall entry: "Overall · 12 matches". */
+export function gameProfileOverallLegend(analyzed: number): string {
+  return `Overall · ${analyzed} ${analyzed === 1 ? "match" : "matches"}`;
+}
+
+/**
+ * The readout's last line: how far the blue figure sits from Overall, in
+ * percentage points, taken between the two figures as printed so the line
+ * never disagrees with the numbers above it. `null` when either is missing.
+ */
+export function gameProfileDelta(
+  recent: number | null,
+  overall: number | null,
+): string | null {
+  if (recent === null || overall === null) return null;
+  const delta = Math.round(recent) - Math.round(overall);
+  if (delta === 0) return "Level with overall";
+  const n = Math.abs(delta);
+  return `${delta > 0 ? "+" : "−"}${n} ${n === 1 ? "point" : "points"} ${delta > 0 ? "above" : "below"} overall`;
+}
+
+/** Which way a vertex's readout hangs, so it stays inside the card. */
+export function gameProfileReadoutAlign(x: number): "start" | "center" | "end" {
+  if (x < READOUT_EDGE) return "start";
+  if (x > VIEW_W - READOUT_EDGE) return "end";
+  return "center";
+}
+
+type Shape = "recent" | "overall";
+
+/**
+ * A shape's key: a short solid line in its stroke colour. Both shapes key
+ * the same way — each is drawn by its stroke — in the legend and in the
+ * readout alike.
+ */
+function LineKey({ color, width = 10 }: { color: string; width?: number }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <svg
-        aria-hidden="true"
-        width={18}
-        height={8}
-        viewBox="0 0 18 8"
-        className="block shrink-0"
-      >
-        <line x1={0} y1={4} x2={18} y2={4} stroke={color} strokeWidth={1.5} />
-      </svg>
-      <span className="text-micro whitespace-nowrap">{label}</span>
-    </span>
+    <svg
+      aria-hidden="true"
+      width={width}
+      height={8}
+      viewBox={`0 0 ${width} 8`}
+      className="block shrink-0"
+    >
+      <line x1={0} y1={4} x2={width} y2={4} stroke={color} strokeWidth={2} />
+    </svg>
   );
 }
 
@@ -120,6 +178,15 @@ export function SeasonGameProfileCard({
   profile: SeasonGameProfile;
 }) {
   const [five, setFive] = useState(false);
+  /** The vertex whose readout is open. */
+  const [axis, setAxis] = useState<number | null>(null);
+  /** The legend key singled out. */
+  const [key, setKey] = useState<Shape | null>(null);
+  const cardRef = useTouchReadout<HTMLElement>(axis !== null, () =>
+    setAxis(null),
+  );
+  const fingerTap = useFingerTap();
+
   const canSwap = profile.lastFive !== null;
   const showFive = canSwap && five;
   const recent: GameProfileValues | null = showFive
@@ -127,21 +194,27 @@ export function SeasonGameProfileCard({
     : (profile.lastMatch?.values ?? null);
   const empty = analyzed === 0 || recent === null;
   const name = surname(playerName);
+  const recentName = gameProfileShowing(showFive);
   const action = showFive
     ? "Show last match"
     : `Show last ${GAME_PROFILE_RECENT} matches`;
 
   const description = empty
     ? `${name}'s game profile: no analyzed match yet.`
-    : `${name}'s ${showFive ? `last ${GAME_PROFILE_RECENT} matches` : "last match"} against their overall: ` +
+    : `${name}'s ${recentName.toLowerCase()} against their overall: ` +
       GAME_PROFILE_AXES.map(
-        (axis, i) =>
-          `${axis.label} ${gameProfileFigure(recent[i])} (overall ${gameProfileFigure(profile.overall[i])})`,
+        (a, i) =>
+          `${a.label} ${gameProfileFigure(recent[i])} (overall ${gameProfileFigure(profile.overall[i])})`,
       ).join(", ") +
       ".";
 
+  const open = !empty && axis !== null ? axis : null;
+  const openPoint =
+    open !== null && recent ? point(open, recent[open] ?? 0) : null;
+
   return (
     <section
+      ref={cardRef}
       aria-labelledby={HEADING_ID}
       className="surface-card flex flex-col gap-2.5"
       style={{ padding: "16px 20px 14px" }}
@@ -158,7 +231,7 @@ export function SeasonGameProfileCard({
             style={{ color: "var(--ink-500)" }}
             aria-live="polite"
           >
-            {gameProfileShowing(showFive)}
+            {recentName}
           </span>
         )}
         {!empty && canSwap && (
@@ -186,83 +259,187 @@ export function SeasonGameProfileCard({
         )}
       </div>
 
-      <svg
-        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-        className="mx-auto block h-auto w-full max-w-[420px]"
-        role="img"
-        aria-label={description}
-      >
-        {RINGS.map((ring) => (
-          <polygon
-            key={ring}
-            points={polygon(GAME_PROFILE_AXES.map(() => ring))}
-            fill="none"
-            stroke="var(--ink-200)"
-            strokeWidth={1}
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
-        {GAME_PROFILE_AXES.map((axis, i) => {
-          const [x, y] = point(i, 100);
-          return (
-            <line
-              key={axis.label}
-              x1={CX}
-              y1={CY}
-              x2={x}
-              y2={y}
+      {/* The plot and its readout share one box, so the readout's anchor (a
+          zero-size point at the vertex, in % of the box) tracks the SVG's
+          scale. */}
+      <div className="relative mx-auto w-full max-w-[420px]">
+        <svg
+          viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+          className="block h-auto w-full overflow-visible"
+          role={empty ? "img" : "group"}
+          aria-label={description}
+        >
+          {RINGS.map((ring) => (
+            <polygon
+              key={ring}
+              points={polygon(GAME_PROFILE_AXES.map(() => ring))}
+              fill="none"
               stroke="var(--ink-200)"
               strokeWidth={1}
               vectorEffect="non-scaling-stroke"
             />
-          );
-        })}
-        {!empty && (
-          <>
-            <polygon
-              data-testid="game-profile-overall"
-              points={polygon(profile.overall)}
-              fill="none"
-              stroke="var(--viz-opp)"
-              strokeWidth={1.5}
-              strokeLinejoin="round"
-              vectorEffect="non-scaling-stroke"
-            />
-            <polygon
-              data-testid="game-profile-recent"
-              points={polygon(recent)}
-              fill="var(--viz-you)"
-              fillOpacity={0.14}
-              stroke="var(--viz-you)"
-              strokeWidth={1.5}
-              strokeLinejoin="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          </>
-        )}
-        {GAME_PROFILE_AXES.map((axis, i) => {
-          const angle =
-            -Math.PI / 2 + (i * 2 * Math.PI) / GAME_PROFILE_AXES.length;
-          const x = CX + Math.cos(angle) * LABEL_RADIUS;
-          const y = CY + Math.sin(angle) * LABEL_RADIUS + 4;
-          const dx = x - CX;
-          return (
-            <text
-              key={axis.label}
-              x={x.toFixed(1)}
-              y={y.toFixed(1)}
-              textAnchor={
-                Math.abs(dx) < 4 ? "middle" : dx > 0 ? "start" : "end"
-              }
-              fontSize={11}
-              fill="var(--ink-500)"
-              className="tabular"
+          ))}
+          {GAME_PROFILE_AXES.map((a, i) => {
+            const [x, y] = point(i, 100);
+            return (
+              <line
+                key={a.label}
+                x1={CX}
+                y1={CY}
+                x2={x}
+                y2={y}
+                stroke={open === i ? "var(--ink-300)" : "var(--ink-200)"}
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+            );
+          })}
+          {!empty && (
+            <>
+              <polygon
+                data-testid="game-profile-overall"
+                points={polygon(profile.overall)}
+                fill="none"
+                stroke="var(--viz-opp)"
+                strokeWidth={1.5}
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+                opacity={key === "recent" ? SHAPE_FADED : 1}
+                className={FADE}
+              />
+              <polygon
+                data-testid="game-profile-recent"
+                points={polygon(recent)}
+                fill="var(--viz-you)"
+                fillOpacity={0.14}
+                stroke="var(--viz-you)"
+                strokeWidth={1.5}
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+                opacity={key === "overall" ? SHAPE_FADED : 1}
+                className={FADE}
+              />
+            </>
+          )}
+          {GAME_PROFILE_AXES.map((a, i) => {
+            const x = CX + Math.cos(angleOf(i)) * LABEL_RADIUS;
+            const y = CY + Math.sin(angleOf(i)) * LABEL_RADIUS + 4;
+            const dx = x - CX;
+            return (
+              <text
+                key={a.label}
+                x={x.toFixed(1)}
+                y={y.toFixed(1)}
+                textAnchor={
+                  Math.abs(dx) < 4 ? "middle" : dx > 0 ? "start" : "end"
+                }
+                fontSize={11}
+                fill={open === i ? "var(--ink-900)" : "var(--ink-500)"}
+                className="tabular"
+                aria-hidden={empty ? undefined : true}
+              >
+                {a.label} {empty ? "—" : gameProfileFigure(recent[i])}
+              </text>
+            );
+          })}
+          {!empty &&
+            GAME_PROFILE_AXES.map((a, i) => {
+              const [rx, ry] = point(i, recent[i] ?? 0);
+              const lit = open === i;
+              const overall = profile.overall[i];
+              const delta = gameProfileDelta(recent[i], overall);
+              return (
+                <g key={a.label} data-axis={i}>
+                  {lit && overall !== null && (
+                    <circle
+                      data-testid="game-profile-overall-ring"
+                      cx={point(i, overall)[0]}
+                      cy={point(i, overall)[1]}
+                      r={3.5}
+                      fill="var(--surface-card)"
+                      stroke="var(--viz-opp)"
+                      strokeWidth={1.5}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+                  {recent[i] !== null && (
+                    <circle
+                      cx={rx}
+                      cy={ry}
+                      r={lit ? 4 : 2.5}
+                      fill="var(--viz-you)"
+                      stroke="var(--surface-card)"
+                      strokeWidth={1.5}
+                      vectorEffect="non-scaling-stroke"
+                      // The blue shape's own vertices fade with it.
+                      opacity={key === "overall" ? SHAPE_FADED : 1}
+                      className={`pointer-events-none ${FADE}`}
+                    />
+                  )}
+                  {/* The hit area: hover, focus and a finger's tap. The
+                      readout is drawn `aria-hidden`, so its words are this
+                      target's name too. */}
+                  <circle
+                    data-testid="game-profile-vertex"
+                    cx={rx}
+                    cy={ry}
+                    r={HIT_RADIUS}
+                    fill="transparent"
+                    tabIndex={0}
+                    role="img"
+                    aria-label={`${a.label}: ${recentName} ${gameProfileFigure(recent[i])}, overall ${gameProfileFigure(overall)}${delta ? `, ${delta}` : ""}.`}
+                    className="cursor-default outline-none"
+                    onMouseEnter={() => setAxis(i)}
+                    onMouseLeave={() => setAxis(null)}
+                    onFocus={() => setAxis(i)}
+                    onBlur={() => setAxis(null)}
+                    onPointerDown={(e) => {
+                      if (fingerTap.press(e, axis === i)) setAxis(i);
+                    }}
+                    onClick={() =>
+                      fingerTap.click(undefined, () => setAxis(null))
+                    }
+                  />
+                </g>
+              );
+            })}
+        </svg>
+
+        {/* The readout's anchor: a point at the open vertex. */}
+        {openPoint && open !== null && recent && (
+          <span
+            className="pointer-events-none absolute size-0"
+            style={{
+              left: `${(openPoint[0] / VIEW_W) * 100}%`,
+              top: `${(openPoint[1] / VIEW_H) * 100}%`,
+            }}
+          >
+            <ChartTooltip
+              open
+              align={gameProfileReadoutAlign(openPoint[0])}
+              offset={8}
+              className="gap-[3px] px-[11px] py-[9px]"
             >
-              {axis.label} {empty ? "—" : gameProfileFigure(recent[i])}
-            </text>
-          );
-        })}
-      </svg>
+              <span className="text-[12px] font-medium text-white">
+                {GAME_PROFILE_AXES[open].label}
+              </span>
+              <span className="tabular inline-flex items-center gap-1.5 text-[11px] text-white/[0.64]">
+                <LineKey color="var(--viz-you-mid)" width={8} />
+                {recentName} {gameProfileFigure(recent[open])}
+              </span>
+              <span className="tabular inline-flex items-center gap-1.5 text-[11px] text-white/[0.64]">
+                <LineKey color="var(--viz-opp-mid)" width={8} />
+                Overall {gameProfileFigure(profile.overall[open])}
+              </span>
+              {gameProfileDelta(recent[open], profile.overall[open]) && (
+                <span className="tabular text-[10px] text-white/[0.64]">
+                  {gameProfileDelta(recent[open], profile.overall[open])}
+                </span>
+              )}
+            </ChartTooltip>
+          </span>
+        )}
+      </div>
 
       {empty ? (
         <p className="text-micro" style={{ color: "var(--ink-500)" }}>
@@ -271,15 +448,39 @@ export function SeasonGameProfileCard({
             : "No point in these matches records a serve, return or net rate."}
         </p>
       ) : (
-        <div
-          aria-hidden="true"
-          className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5"
-        >
-          <LineKey
-            color="var(--viz-you)"
-            label={gameProfileLegend(showFive, profile.lastMatch)}
-          />
-          <LineKey color="var(--viz-opp)" label="Overall" />
+        // Each key is focusable, so a keyboard gets the same single-out as a
+        // pointer; its words are the key's own, so nothing extra is announced.
+        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5">
+          <span
+            data-testid="game-profile-key-recent"
+            tabIndex={0}
+            onMouseEnter={() => setKey("recent")}
+            onMouseLeave={() => setKey(null)}
+            onFocus={() => setKey("recent")}
+            onBlur={() => setKey(null)}
+            className={`-mx-1 -my-0.5 inline-flex cursor-default items-center gap-1.5 rounded px-1 py-0.5 ${FADE}`}
+            style={{ opacity: key === "overall" ? KEY_FADED : 1 }}
+          >
+            <LineKey color="var(--viz-you)" />
+            <span className="text-micro whitespace-nowrap">
+              {gameProfileLegend(showFive, profile.lastMatch)}
+            </span>
+          </span>
+          <span
+            data-testid="game-profile-key-overall"
+            tabIndex={0}
+            onMouseEnter={() => setKey("overall")}
+            onMouseLeave={() => setKey(null)}
+            onFocus={() => setKey("overall")}
+            onBlur={() => setKey(null)}
+            className={`-mx-1 -my-0.5 inline-flex cursor-default items-center gap-1.5 rounded px-1 py-0.5 ${FADE}`}
+            style={{ opacity: key === "recent" ? KEY_FADED : 1 }}
+          >
+            <LineKey color="var(--viz-opp)" />
+            <span className="text-micro whitespace-nowrap">
+              {gameProfileOverallLegend(analyzed)}
+            </span>
+          </span>
         </div>
       )}
     </section>

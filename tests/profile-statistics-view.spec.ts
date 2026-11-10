@@ -231,7 +231,7 @@ test.describe("Game profile, with matches", () => {
     expect(html).toContain("1st serve in 57%");
     expect(html).toContain("BP converted —");
     expect(html).toContain("Last match · vs Ruiz, Nov 7");
-    expect(html).toContain(">Overall<");
+    expect(html).toContain(">Overall · 3 matches<");
     // Two solid shapes: nothing dashed anywhere on the card.
     expect(html).not.toContain("stroke-dasharray");
     expect(html).toMatch(
@@ -251,6 +251,82 @@ test.describe("Game profile, with matches", () => {
     // Before the swap the blue shape is still the last match.
     expect(html).toContain(">Last match<");
     expect(html).toContain("1st serve in 57%");
+  });
+});
+
+test.describe("Game profile readouts and legend", () => {
+  const card = () =>
+    loader().load(PROFILE + "season-game-profile-card.tsx") as {
+      SeasonGameProfileCard: React.ComponentType<Record<string, unknown>>;
+      gameProfileDelta: (r: number | null, o: number | null) => string | null;
+      gameProfileReadoutAlign: (x: number) => "start" | "center" | "end";
+      gameProfileOverallLegend: (n: number) => string;
+    };
+
+  test("the readout's last line: points above, below or level, from the printed figures", () => {
+    const { gameProfileDelta } = card();
+    expect(gameProfileDelta(76, 71)).toBe("+5 points above overall");
+    expect(gameProfileDelta(44, 52)).toBe("−8 points below overall");
+    expect(gameProfileDelta(45.4, 44.6)).toBe("Level with overall");
+    expect(gameProfileDelta(53, 52)).toBe("+1 point above overall");
+    expect(gameProfileDelta(null, 52)).toBeNull();
+    expect(gameProfileDelta(50, null)).toBeNull();
+  });
+
+  test("the readout hangs from its own side near an edge, centred otherwise", () => {
+    const { gameProfileReadoutAlign } = card();
+    expect(gameProfileReadoutAlign(40)).toBe("start");
+    expect(gameProfileReadoutAlign(210)).toBe("center");
+    expect(gameProfileReadoutAlign(390)).toBe("end");
+  });
+
+  test("six focusable vertices of about 16px, each named with both figures", () => {
+    const { SeasonGameProfileCard } = card();
+    const html = renderToStaticMarkup(
+      React.createElement(SeasonGameProfileCard, {
+        playerName: "Maya Chen",
+        analyzed: 12,
+        profile: {
+          overall: [64, 71, 52, 44, 66, 45],
+          lastMatch: {
+            values: [57, 76, 44, 52, 73, null],
+            opponent: "Ana Ruiz",
+            date: "2026-11-07",
+          },
+          lastFive: null,
+        },
+      }),
+    );
+    const vertices =
+      html.match(/<circle data-testid="game-profile-vertex"[^>]*>/g) ?? [];
+    expect(vertices).toHaveLength(6);
+    for (const v of vertices) {
+      expect(v).toContain('r="16"');
+      expect(v).toContain('tabindex="0"');
+    }
+    expect(html).toContain(
+      'aria-label="1st serve won: Last match 76%, overall 71%, +5 points above overall."',
+    );
+    // No attempts on an axis: a dash, and no delta.
+    expect(html).toContain(
+      'aria-label="BP converted: Last match —, overall 45%."',
+    );
+    // Nothing open until a vertex is hovered, focused or tapped.
+    expect(html).not.toContain("game-profile-overall-ring");
+    // The legend: both keys a short line — blue naming the match, slate
+    // with the count; both focusable.
+    expect(html).toMatch(
+      /data-testid="game-profile-key-recent" tabindex="0"[\s\S]*?width="10"[\s\S]*?stroke="var\(--viz-you\)"[\s\S]*?Last match · vs Ruiz, Nov 7/,
+    );
+    expect(html).toMatch(
+      /data-testid="game-profile-key-overall" tabindex="0"[\s\S]*?stroke="var\(--viz-opp\)"[\s\S]*?Overall · 12 matches/,
+    );
+    // Fades respect reduced motion.
+    expect(html).toContain("motion-reduce:transition-none");
+  });
+
+  test("one match: Overall · 1 match", () => {
+    expect(card().gameProfileOverallLegend(1)).toBe("Overall · 1 match");
   });
 });
 
