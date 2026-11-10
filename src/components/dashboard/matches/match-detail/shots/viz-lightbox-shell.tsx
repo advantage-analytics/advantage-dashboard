@@ -55,10 +55,10 @@ import { LightboxCourt, type CourtOutline } from "./lightbox-court";
 import {
   LegendFilter,
   LightboxFilterPanel,
-  LightboxFilterStrip,
   type LightboxAdvancedFilters,
   type LightboxSeasonFilters,
 } from "./lightbox-filters";
+import { LightboxFilterStrip } from "./lightbox-filter-strip";
 import {
   dotMatchesPick,
   legendCounts,
