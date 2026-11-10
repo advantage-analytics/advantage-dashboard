@@ -32,9 +32,9 @@ import { SeasonRallyLengthCard } from "@/components/dashboard/team/player-profil
  * description come from `/api/player-insight`, whose figures the server
  * fills in from the fold, with the evidence line the page composed from the
  * same fold (`buildSeasonEvidence`) as the fallback, so every figure on the
- * card is the server's. With none it is `ProfileInsightEmpty`, saying so — the card is
- * never asked for a player with nothing analyzed, because there is nothing
- * for a claim to be about.
+ * card is the server's. With none it is `ProfileInsightEmpty`, saying so —
+ * the card is never asked for a player with nothing analyzed, because there
+ * is nothing for a claim to be about.
  *
  * ── No analyzed matches ─────────────────────────────────────────────────────
  * Unlike the report, which withholds its row for a match with no points, this

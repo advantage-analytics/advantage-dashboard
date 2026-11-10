@@ -327,6 +327,17 @@ test.describe("resolvePlayerInsight", () => {
     }
   });
 
+  test("a one-line answer splits at its first sentence", () => {
+    const insight = resolvePlayerInsight(
+      `Maya wins the long exchanges. Maya takes {${won}} of points to the opponents' {${lost}}. Longer rallies favour their baseline game.`,
+      figures,
+    );
+    expect(insight!.claim).toBe("Maya wins the long exchanges.");
+    expect(insight!.description!.map((p) => p.text).join("")).toBe(
+      "Maya takes 53% of points to the opponents' 47%. Longer rallies favour their baseline game.",
+    );
+  });
+
   test("no claim when it is empty or types a figure; labels and quotes are stripped", () => {
     expect(resolvePlayerInsight("", figures)).toBeNull();
     expect(

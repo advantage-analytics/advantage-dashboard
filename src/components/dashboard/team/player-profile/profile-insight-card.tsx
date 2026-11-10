@@ -19,9 +19,10 @@ import { ProfileInsightEmpty } from "@/components/dashboard/team/player-profile/
  * credit foot. Both come from `/api/player-insight`, which reads the model's
  * answer whole and fills the description's figures in from the season fold
  * (`resolvePlayerInsight`), so every number on the card is one the fold
- * produced. When the description failed the route's checks the card prints
- * the computed `evidence` line in its place (`buildSeasonEvidence`), which is
- * true whether or not the model ever wrote anything. No fold toggle: the
+ * produced. Until the answer lands — and whenever the description failed the
+ * route's checks — the card prints the computed `evidence` line in its place
+ * (`buildSeasonEvidence`): it is there from first paint, and true whether or
+ * not the model ever writes anything. No fold toggle: the
  * profile has no collapse state, and a toggle would promise one.
  *
  * ── Cache ───────────────────────────────────────────────────────────────────
@@ -169,6 +170,9 @@ export function ProfileInsightCard({
     return <ProfileInsightEmpty firstName={firstName} reason="unavailable" />;
   }
 
+  const description =
+    state.status === "done" ? state.insight.description : null;
+
   return (
     <section
       aria-label="Advantage Intelligence summary"
@@ -177,38 +181,31 @@ export function ProfileInsightCard({
       className={INSIGHT_SURFACE}
     >
       <div className="flex flex-col gap-2 p-[16px_20px_12px]">
+        {/* The claim is a headline, so it balances. While it is arriving the
+            slot holds one bar at the report skeleton's size, so the claim's
+            line does not grow when the sentence lands. */}
         {state.status === "done" ? (
-          <>
-            {/* The claim is a headline, so it balances; the description is
-                prose and stays `pretty`. */}
-            <p
-              className="text-body [text-wrap:balance]"
-              style={{ color: "var(--ink-900)", fontWeight: 500 }}
-            >
-              {state.insight.claim}
-            </p>
-            <p
-              className="text-[11px] leading-[1.6] [text-wrap:pretty] text-[var(--ink-700)]"
-              data-insight-part={
-                state.insight.description ? "description" : "evidence"
-              }
-            >
-              <Parts parts={state.insight.description ?? evidence} />
-            </p>
-          </>
+          <p
+            className="text-body [text-wrap:balance]"
+            style={{ color: "var(--ink-900)", fontWeight: 500 }}
+          >
+            {state.insight.claim}
+          </p>
         ) : (
-          // One bar at the claim's size, two at the description's, so the
-          // card does not jump when the answer lands.
-          <PendingRegion label="insight" innerClassName="flex flex-col gap-2">
-            <div className="flex h-5 items-center">
-              <PendingBar className="h-3.5 w-[72%]" />
-            </div>
-            <div className="flex flex-col gap-1.5 py-0.5">
-              <PendingBar className="h-2.5 w-full" />
-              <PendingBar className="h-2.5 w-[58%]" />
-            </div>
+          <PendingRegion label="insight" innerClassName="flex h-5 items-center">
+            <PendingBar className="h-3.5 w-[72%]" />
           </PendingRegion>
         )}
+
+        {/* The description once it lands; until then — and whenever it failed
+            the route's checks — the computed evidence line, which is true
+            from first paint and needs nothing the server did not know. */}
+        <p
+          className="text-[11px] leading-[1.6] [text-wrap:pretty] text-[var(--ink-700)]"
+          data-insight-part={description ? "description" : "evidence"}
+        >
+          <Parts parts={description ?? evidence} />
+        </p>
 
         <div className="mt-1 flex h-6 items-center gap-[7px] border-t border-[var(--border-hairline)] pt-2.5">
           <InsightMark />

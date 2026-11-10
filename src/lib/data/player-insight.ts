@@ -330,7 +330,8 @@ function resolveDescription(
 }
 
 /**
- * The model's two lines as the card shows them, or `null` when there is no
+ * The model's two lines as the card shows them (a one-line answer splits at
+ * its first sentence), or `null` when there is no
  * claim to show — an empty answer, or a claim that typed a digit (a figure
  * nobody verified, in the one line that must carry none). A description that
  * fails its checks is dropped on its own: the claim stands, and the card
@@ -340,10 +341,17 @@ export function resolvePlayerInsight(
   raw: string,
   figures: readonly SeasonFigure[],
 ): PlayerInsight | null {
-  const lines = raw
+  let lines = raw
     .split(/\r?\n/)
     .map(cleanLine)
     .filter((l) => l !== "");
+  // The model sometimes runs both parts into one line. The claim is its first
+  // sentence, so split there rather than read the whole answer as a claim
+  // (which would carry the description's keys and be refused).
+  if (lines.length === 1) {
+    const [first, ...rest] = lines[0].split(/(?<=[.?])\s+/);
+    lines = [first, rest.join(" ")];
+  }
   const claim = lines[0] ?? "";
   if (claim === "" || /\d/.test(claim) || /\{F\d+\}/.test(claim)) return null;
   const description = resolveDescription(lines.slice(1).join(" "), figures);
