@@ -146,6 +146,9 @@ interface OpenFlight {
   target: Element | null;
   aimed: string;
   startedAt: number;
+  /** When the frame's entrance fell back to its late timeline
+   *  (`joinAt`), if it did. */
+  lateAt?: number;
   /** When the current aim's animation ends. */
   endsAt: number;
   ended: boolean;
@@ -470,24 +473,33 @@ function insetWithin(card: Rect, box: Rect, radius: string): string {
 const BOX_OPEN_CLIP = `inset(-${BOX_CLIP_OUTSET_PX}px round ${BOX_RADIUS})`;
 
 /** A piece that mounts too late to join the flight's timeline — on a slow
- *  device the box can mount after the court has landed — plays its whole
- *  entrance compressed into this, instead of joining at its end (a pop:
- *  the ease-out curve is all but done well before then). */
+ *  device the box can mount after the court has landed — would join at its
+ *  end and pop in already open. Instead the frame's entrance falls back to a
+ *  late timeline: started when the first such piece mounts, played at
+ *  `LATE_RATE`, so the whole entrance replays in `LATE_JOIN_MS`. */
 const LATE_JOIN_MS = 220;
+/** The whole entrance's length: the last content group's end. */
+const ENTRANCE_END_MS = CONTENT_AT_MS + 2 * CONTENT_STAGGER_MS + CONTENT_MS;
+/** Fast enough that the whole late entrance, rows included, fits
+ *  `LATE_JOIN_MS`. */
+const LATE_RATE = ENTRANCE_END_MS / LATE_JOIN_MS;
 
 /** Starts `el`'s animation at the flight's elapsed time, so a piece that
- *  mounts late joins the one timeline. One that would have under
- *  `LATE_JOIN_MS` of it left replays it from the start, sped up to fit
- *  `LATE_JOIN_MS`, so it still visibly opens. */
+ *  mounts late joins the one timeline. Once a piece would have under
+ *  `LATE_JOIN_MS` of it left, every piece from then on joins ONE late
+ *  timeline instead (`f.lateAt`, at `LATE_RATE`) — the same clock and speed
+ *  for all of them, so the rows keep their order behind the header. */
 function joinAt(a: Animation, f: OpenFlight): Animation {
-  const elapsed = Math.max(0, performance.now() - f.startedAt);
+  const now = performance.now();
+  const elapsed = Math.max(0, now - f.startedAt);
   const end = Number(a.effect?.getComputedTiming().endTime ?? 0);
-  if (end - elapsed >= LATE_JOIN_MS) {
+  if (f.lateAt === undefined && end - elapsed >= LATE_JOIN_MS) {
     a.currentTime = elapsed;
-  } else {
-    a.currentTime = 0;
-    a.playbackRate = Math.max(1, end / LATE_JOIN_MS);
+    return a;
   }
+  f.lateAt ??= now;
+  a.playbackRate = LATE_RATE;
+  a.currentTime = (now - f.lateAt) * LATE_RATE;
   return a;
 }
 
