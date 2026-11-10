@@ -39,6 +39,11 @@ export const FILTER_SHEET_SCRIM_CLASS =
 export const FILTER_SHEET_CLASS =
   "fixed inset-y-0 right-0 z-50 overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] pb-[env(safe-area-inset-bottom)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none";
 
+/** The focusable container inside the sheet: fixed at the open width, so the
+ *  contents do not reflow while the sheet's own width animates. */
+export const FILTER_SHEET_PANEL_CLASS =
+  "flex h-full w-[340px] max-w-[100vw] flex-col outline-none";
+
 /** Open: 340px sliding in. Closing: shrinking to nothing. */
 export function filterSheetWidthClass(closing: boolean): string {
   return closing

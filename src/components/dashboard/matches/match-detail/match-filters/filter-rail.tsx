@@ -20,6 +20,7 @@ import { serializeMatchFilters, type MatchFilters } from "./model";
 import { useFiltersPanelData, useMatchFilters } from "./provider";
 import {
   FILTER_SHEET_CLASS,
+  FILTER_SHEET_PANEL_CLASS,
   FILTER_SHEET_SCRIM_CLASS,
   filterSheetWidthClass,
   inertPageBehind,
@@ -195,15 +196,15 @@ function FilterRailShell({
   const closing = phase === "closing";
   const panelRef = useRef<HTMLDivElement>(null);
   const scrimRef = useRef<HTMLDivElement>(null);
-  const asideRef = useRef<HTMLElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   // Modal to assistive tech too: the page behind goes `inert` while the
   // sheet is open and comes back the moment it starts closing, before the
   // provider hands focus back to the trigger behind it.
   useEffect(() => {
     if (phase !== "open") return;
-    const keep = [scrimRef.current, asideRef.current].filter(
-      (el): el is HTMLElement => el !== null,
+    const keep = [scrimRef.current, sheetRef.current].filter(
+      (el): el is HTMLDivElement => el !== null,
     );
     return inertPageBehind(keep);
   }, [phase]);
@@ -260,8 +261,8 @@ function FilterRailShell({
           closing && "pointer-events-none opacity-0",
         )}
       />
-      <aside
-        ref={asideRef}
+      <div
+        ref={sheetRef}
         id={FILTER_RAIL_ID}
         aria-label="Filters"
         aria-modal="true"
@@ -274,11 +275,7 @@ function FilterRailShell({
         }}
         className={cn(FILTER_SHEET_CLASS, filterSheetWidthClass(closing))}
       >
-        <div
-          ref={panelRef}
-          tabIndex={-1}
-          className="flex h-full w-[340px] max-w-[100vw] flex-col outline-none"
-        >
+        <div ref={panelRef} tabIndex={-1} className={FILTER_SHEET_PANEL_CLASS}>
           <FiltersPanel
             key={serializeMatchFilters(filters)}
             className="min-h-0 flex-1"
@@ -296,7 +293,7 @@ function FilterRailShell({
             onClose={close}
           />
         </div>
-      </aside>
+      </div>
     </>
   );
 }

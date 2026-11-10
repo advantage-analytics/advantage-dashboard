@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 import {
   FILTER_SHEET_CLASS,
+  FILTER_SHEET_PANEL_CLASS,
   FILTER_SHEET_SCRIM_CLASS,
   filterSheetWidthClass,
   wrapTabInSheet,
@@ -99,11 +100,7 @@ export function LightboxAdvancedDrawer({
         }}
         className={cn(FILTER_SHEET_CLASS, filterSheetWidthClass(closing))}
       >
-        <div
-          ref={panelRef}
-          tabIndex={-1}
-          className="flex h-full w-[340px] max-w-[100vw] flex-col outline-none"
-        >
+        <div ref={panelRef} tabIndex={-1} className={FILTER_SHEET_PANEL_CLASS}>
           <LightboxAdvancedPanel
             cut={cut}
             filters={filters}
