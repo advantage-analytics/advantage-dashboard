@@ -45,6 +45,10 @@ test.describe("serve wall card: through the net", () => {
     expect(SERVE_COURT_THROUGH_NET.netOuterY).toBeGreaterThan(
       SERVE_COURT_THROUGH_NET.serviceLineOuterY,
     );
+    // The far baseline is in frame, with a little apron behind it.
+    expect(SERVE_COURT_THROUGH_NET.baselineOuterY).toBeGreaterThan(
+      box.minY + 5,
+    );
     // The net sits inside the art with a strip of the near boxes below it.
     expect(bottom - SERVE_COURT_THROUGH_NET.netOuterY).toBeGreaterThan(20);
     // The court surface runs past the window, so the frame edge cuts it.
@@ -53,13 +57,13 @@ test.describe("serve wall card: through the net", () => {
     );
   });
 
-  test("the same 334:216 box as every card, zoomed in on the half court", () => {
+  test("the same 334:216 box as every card, at the half court's own scale", () => {
     expect(box.w / box.h).toBeCloseTo(
       SERVE_COURT.viewBox.w / SERVE_COURT.viewBox.h,
       6,
     );
-    // Narrower window in the same box: the court draws larger.
-    expect(box.w).toBeLessThan(SERVE_COURT.viewBox.w);
+    // No wider than the half court: the court never draws smaller.
+    expect(box.w).toBeLessThanOrEqual(SERVE_COURT.viewBox.w + 1e-9);
     // Centred on the court.
     expect(box.minX + box.w / 2).toBeCloseTo(SERVE_COURT.centerX, 6);
   });
@@ -145,8 +149,8 @@ test.describe("glide", () => {
   });
 });
 
-test.describe("serve wall card: a mark past the zoomed window", () => {
-  test("is pinned ON the window's edge, half cut by the frame, and carries its offset back to its true spot", () => {
+test.describe("serve wall card: a deep serve", () => {
+  test("is drawn in frame, unpinned, now the window reaches past the far baseline", () => {
     const loader = createLoader({ globals: { URLSearchParams } });
     const { CourtArt } = loader.load(
       "src/components/dashboard/matches/match-detail/shots/court-art.tsx",
@@ -182,19 +186,16 @@ test.describe("serve wall card: a mark past the zoomed window", () => {
         serveFrame: "throughNet",
       }),
     );
-    // Exactly one pinned wrapper, carrying a positive offset back down-court.
-    const pinned = [
-      ...html.matchAll(
-        /data-viz-pinned="" data-viz-pinned-dx="([-\d.e]+)" data-viz-pinned-dy="([-\d.e]+)"/g,
-      ),
-    ];
-    expect(pinned).toHaveLength(1);
-    expect(Number(pinned[0][2])).toBeLessThan(0);
-    // Its mark sits on the window's top edge.
+    // The window starts behind the far baseline, past where the serve frame
+    // clamps a deep mark, so nothing is pinned to its edge: every mark is
+    // drawn at its own (clamped) spot, inside the window.
+    expect(html).not.toContain("data-viz-pinned");
     const top = SERVE_COURT_THROUGH_NET.edgeGroup.top;
-    const after = html.slice(html.indexOf("data-viz-pinned=")).slice(0, 600);
-    const cy = Number(/cy="([-\d.e]+)"/.exec(after)?.[1]);
-    expect(cy).toBeCloseTo(top, 3);
+    const ys = [...html.matchAll(/<circle[^>]*cy="([-\d.e]+)"/g)].map((m) =>
+      Number(m[1]),
+    );
+    expect(ys.length).toBeGreaterThanOrEqual(2);
+    for (const y of ys) expect(y).toBeGreaterThan(top);
     // The half-court frame never pins.
     const half = renderToStaticMarkup(
       React.createElement(CourtArt, {

@@ -62,13 +62,12 @@ export const SERVE_BACKGROUND_PATH =
 /* ── Serve court through the net (the wall card) ───────────────────────────
  *
  * The wall's serve card is the same 334:216 box as every other card, framed
- * on the part of the court a serve lands in: from part way back behind the
- * far service line, through the two service boxes, past the net and into the
- * near service boxes, cropped at the card's edges. That window is narrower
- * than the half court's, so the court is zoomed in a little (~1.08×) — a
- * serve mark reads larger than on the half court — and the far baseline is
- * out of frame. The court carries on out of frame on every side; it is never
- * the whole court.
+ * on the half a serve lands in: from just behind the far baseline, through
+ * the two service boxes, past the net and into a strip of the near service
+ * boxes, cropped at the card's edges. That window is the half court's own
+ * size (334 wide), so a serve mark draws at the half court's scale. The
+ * court carries on out of frame below and at the sides; it is never the
+ * whole court.
  *
  * Coordinates: the near half is the far half reflected across the net, as
  * `VIEWER_COURT` draws it: `nearServiceLineY = netY + (netY − serviceLineY)`
@@ -94,12 +93,14 @@ const serveOuterToGroupY = (y: number) =>
   SERVE_GROUP_ORIGIN_Y + (y - SERVE_GROUP_TRANSLATE_Y) / SERVE_GROUP_SCALE;
 const SERVE_NEAR_SERVICE_Y =
   SERVE_COURT.netY + (SERVE_COURT.netY - SERVE_COURT.serviceLineY); // 355.5
-// The window, in outer units: 60% of the way back from the far service line
-// (109.8) to the far baseline (29.45) at the top, and a strip of the near
-// service boxes below the net (211.35) at the bottom. Its width follows from
-// the card's 334:216 aspect, centred on the court.
-const SERVE_THROUGH_NET_TOP = 50;
-const SERVE_THROUGH_NET_BOTTOM = 250;
+// The window, in outer units: from behind the far baseline (29.45) —
+// about 13 units of apron, so the baseline and its centre mark read as the
+// court's far end — down to a strip of the near service boxes below the net
+// (211.35). Its width follows from the card's 334:216 aspect, centred on
+// the court. (It used to start at 50, 60% of the way back from the service
+// line, with the far baseline out of frame.)
+const SERVE_THROUGH_NET_TOP = 16;
+const SERVE_THROUGH_NET_BOTTOM = 232;
 const SERVE_THROUGH_NET_H = SERVE_THROUGH_NET_BOTTOM - SERVE_THROUGH_NET_TOP;
 const SERVE_THROUGH_NET_W =
   (SERVE_THROUGH_NET_H * SERVE_COURT.viewBox.w) / SERVE_COURT.viewBox.h;
@@ -108,7 +109,7 @@ export const SERVE_COURT_THROUGH_NET = {
   viewBox: {
     minX: SERVE_COURT.centerX - SERVE_THROUGH_NET_W / 2,
     minY: SERVE_THROUGH_NET_TOP,
-    w: SERVE_THROUGH_NET_W, // ≈309.3
+    w: SERVE_THROUGH_NET_W, // 334, the half court's own
     h: SERVE_THROUGH_NET_H,
   },
   nearServiceLineY: SERVE_NEAR_SERVICE_Y,
@@ -125,6 +126,7 @@ export const SERVE_COURT_THROUGH_NET = {
   /** The net's height in the outer viewBox — inside the art, not its edge. */
   netOuterY: serveGroupToOuterY(SERVE_COURT.netY), // 211.35
   serviceLineOuterY: serveGroupToOuterY(SERVE_COURT.serviceLineY), // ≈109.8
+  baselineOuterY: serveGroupToOuterY(SERVE_COURT.baselineY), // ≈29.45
 } as const;
 
 /** The window itself — the card's art region rounds its top corners. */
