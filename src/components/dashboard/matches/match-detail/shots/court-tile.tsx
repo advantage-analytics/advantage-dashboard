@@ -11,6 +11,7 @@ import type { VizState } from "./viz-url";
 import { viewIdentityKey } from "./viz-url";
 import { useVizState } from "./use-viz-state";
 import { courtTileDomId } from "./viz-court-transition";
+import { armCourtMorph } from "./viz-court-morph";
 
 /**
  * The wall/band card: art on top, a dark player-name chip over it, then a
@@ -225,6 +226,8 @@ export function CourtTile({
   function handleClick(e: MouseEvent<HTMLAnchorElement>): void {
     if (!navigateState || !isPlainLeftClick(e)) return;
     e.preventDefault();
+    // Its court starts for the lightbox's now (`viz-court-morph.ts`).
+    armCourtMorph(e.currentTarget, navigateState.cut ?? cut);
     setState(navigateState);
   }
 

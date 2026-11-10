@@ -33,6 +33,9 @@ import {
   VIEWER_COURT,
   projectViewerDot,
   viewerInitialTransform,
+  viewerFullCourtTransform,
+  viewerLandingHalf,
+  VIEWER_LANDING_FRAME,
   lateralToViewBoxX,
   viewerBandY,
   viewerBandEdges,
@@ -49,6 +52,7 @@ import {
   ZOOM_MIN,
   ZOOM_MAX,
   clampPan,
+  minZoomFor,
 } from "@/components/dashboard/matches/match-detail/shots/pan-zoom";
 
 /**
@@ -1180,10 +1184,15 @@ test.describe("projectViewerDot clamping", () => {
  * per cut. `art` below is `VIEWER_COURT.artPx` (652×1258).
  *
  * 2026-09-21: the drawable field (`viewBox`) widened to give far-back
- * contacts room to draw, but "Fit the court" still lands on
+ * contacts room to draw, but the court frame the viewer fits is still
  * `VIEWER_COURT.courtFrame` — the old, narrower handoff view — not the whole
  * widened art. `fitZ` below is the frame's own fit scale, computed the same
  * way `viewerInitialTransform` computes it (frame units × px-per-unit).
+ *
+ * 2026-11-09: a landing cut's 100% is the half its shots land in
+ * (`VIEWER_LANDING_FRAME`, the far half to just past the net), net along the
+ * stage's bottom edge; the whole court frame is `viewerFullCourtTransform`.
+ * Contact cuts are unchanged.
  */
 test.describe("viewerInitialTransform", () => {
   const stage = { w: 700, h: 900 };
@@ -1194,19 +1203,71 @@ test.describe("viewerInitialTransform", () => {
   const frameHpx = frame.h * pxPerUnit;
   const fitZ = Math.min(stage.w / frameWpx, stage.h / frameHpx);
 
-  test("serve/returnPlacement (landing cuts): fits the court FRAME (not the widened art), centred on both axes", () => {
-    for (const cut of ["serve", "returnPlacement"] as const) {
-      const t = viewerInitialTransform(cut, stage);
-      expect(t.z).toBeCloseTo(fitZ, 6);
-      // The frame's own centre point (not the art's) lands on the stage's
-      // own centre.
-      const frameCentre = viewerArtPoint(
-        frame.minX + frame.w / 2,
-        frame.minY + frame.h / 2,
-      );
-      expect(t.px + frameCentre.x * t.z).toBeCloseTo(stage.w / 2, 5);
-      expect(t.py + frameCentre.y * t.z).toBeCloseTo(stage.h / 2, 5);
+  test("landing cuts open on the FAR half: the half frame fitted, net (+ gutter) on the stage's bottom edge, centred across", () => {
+    for (const s of [stage, { w: 1100, h: 640 }, { w: 820, h: 560 }]) {
+      for (const cut of [
+        "serve",
+        "returnPlacement",
+        "rallyPlacement",
+        "errors",
+      ] as const) {
+        expect(viewerLandingHalf(cut)).toBe("far");
+        const half = VIEWER_LANDING_FRAME;
+        const halfZ = Math.min(
+          s.w / (half.w * pxPerUnit),
+          s.h / (half.h * pxPerUnit),
+        );
+        const t = viewerInitialTransform(cut, s);
+        expect(t.z).toBeCloseTo(halfZ, 6);
+        const bottom = viewerArtPoint(0, half.minY + half.h);
+        expect(t.py + bottom.y * t.z).toBeCloseTo(s.h, 4);
+        const net = viewerArtPoint(VIEWER_COURT.centreX, VIEWER_COURT.netY);
+        // The net is inside the stage, within the gutter (net line + zone labels) of its bottom edge.
+        const netStageY = t.py + net.y * t.z;
+        expect(netStageY).toBeLessThan(s.h);
+        expect(s.h - netStageY).toBeLessThan(80);
+        expect(t.px + net.x * t.z).toBeCloseTo(s.w / 2, 4);
+        // The far baseline is on stage too: the whole landing half shows.
+        const farBaseline = viewerArtPoint(0, VIEWER_COURT.farBaselineY);
+        expect(t.py + farBaseline.y * t.z).toBeGreaterThanOrEqual(0);
+      }
     }
+  });
+
+  test("Full court fits the whole court FRAME (not the widened art), centred on both axes, and reads below a landing cut's 100%", () => {
+    const t = viewerFullCourtTransform(stage);
+    expect(t.z).toBeCloseTo(fitZ, 6);
+    const frameCentre = viewerArtPoint(
+      frame.minX + frame.w / 2,
+      frame.minY + frame.h / 2,
+    );
+    expect(t.px + frameCentre.x * t.z).toBeCloseTo(stage.w / 2, 5);
+    expect(t.py + frameCentre.y * t.z).toBeCloseTo(stage.h / 2, 5);
+    for (const s of [
+      { w: 1100, h: 640 },
+      { w: 820, h: 560 },
+    ]) {
+      expect(viewerFullCourtTransform(s).z).toBeLessThan(
+        viewerInitialTransform("serve", s).z,
+      );
+    }
+  });
+
+  test("Full court is inside the zoom range a small stage allows", () => {
+    for (const s of [
+      { w: 420, h: 380 },
+      { w: 600, h: 420 },
+    ]) {
+      const t = viewerFullCourtTransform(s);
+      expect(t.z).toBeGreaterThanOrEqual(minZoomFor(art, s));
+      const fz = Math.min(s.w / frameWpx, s.h / frameHpx);
+      expect(t.z).toBeCloseTo(fz, 6);
+    }
+  });
+
+  test("contact cuts keep their own framing: no landing half", () => {
+    expect(viewerLandingHalf("returnContact")).toBeNull();
+    expect(viewerLandingHalf("rallyPosition")).toBeNull();
   });
 
   test("returnContact/rallyPosition (contact cuts): zooms to 1.6x the FRAME's fit, near baseline at 500/950 of stage height, horizontally centred", () => {

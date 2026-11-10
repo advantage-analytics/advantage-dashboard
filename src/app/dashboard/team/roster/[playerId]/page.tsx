@@ -52,8 +52,10 @@ import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import {
   buildSeasonCards,
   buildSeasonLightbox,
+  buildSeasonViewCards,
   parseSeasonVizState,
 } from "@/lib/data/player-season-viz";
+import { getSavedViews } from "@/lib/data/saved-views-server";
 import { seasonErrorSplitJudged } from "@/lib/data/player-season";
 import { getBandSettings } from "@/lib/data/viz-bands-server";
 import { getPreferences } from "@/lib/data/preferences-server";
@@ -435,7 +437,10 @@ async function ProfileStatisticsBody({
  * cards for the URL's side and — when `?cut=` names one — the opened card's
  * court, statistics, per-row mark positions and per-option counts, all computed
  * here (`player-season-viz.ts`) and handed to the client view as plain data.
- * No `MatchPoint` leaves this function.
+ * The Saved collection is the workspace's saved views (`getSavedViews`,
+ * RLS-scoped: the viewer's private views and the program's shared ones),
+ * each folded over the season the same way. No `MatchPoint` leaves this
+ * function.
  */
 async function ProfileVisualizationsBody({
   programId,
@@ -450,10 +455,11 @@ async function ProfileVisualizationsBody({
   firstName: string;
   query: Record<string, string | string[] | undefined>;
 }) {
-  const [season, bandSettings, preferences] = await Promise.all([
+  const [season, bandSettings, preferences, savedViews] = await Promise.all([
     getPlayerSeasonCourts(programId, playerId),
     getBandSettings(programId),
     getPreferences(),
+    getSavedViews(programId),
   ]);
   if (!season) return null;
   const bands = { bands: bandSettings, unit: preferences.unit };
@@ -475,10 +481,14 @@ async function ProfileVisualizationsBody({
         analyzed={season.analyzed}
         side={side}
         cards={buildSeasonCards(season.perMatch, side, bands)}
-        lightbox={buildSeasonLightbox(season.perMatch, state, bands, {
-          you: playerName,
-          opponent: "Opponents",
-        })}
+        savedCards={buildSeasonViewCards(season.perMatch, savedViews, bands)}
+        lightbox={buildSeasonLightbox(
+          season.perMatch,
+          state,
+          bands,
+          { you: playerName, opponent: "Opponents" },
+          savedViews,
+        )}
         errorSplitJudged={errorSplitJudged}
       />
     </ProfileViewWhen>

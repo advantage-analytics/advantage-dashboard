@@ -20,7 +20,12 @@ import {
   type ProfileView,
 } from "@/components/dashboard/team/player-profile/profile-view";
 import { cn } from "@/lib/utils";
-import { InsightPending, StatisticsRowPending } from "./match-report-pending";
+import {
+  InsightPending,
+  StatisticsRowPending,
+  WALL_ART_PENDING,
+  WALL_SERVE_ART_PENDING,
+} from "./match-report-pending";
 import { PendingBar, PendingRegion } from "./pending";
 
 /**
@@ -223,8 +228,8 @@ export function ProfileStatisticsPanePending() {
  * (`viz-wall.tsx`, canvas W5 + card D3) — the strip's chips (`Default |
  * Saved`, `You | Opponent`, the legend's keys) as 26px pills, then the four
  * cards in the wall's 2×2 grid from 640px of pane: each a court (the card's
- * 334:216 frame) over a footer with the title and count line, the 6px split
- * bar and its key. Bars only, since every word on the loaded wall is a
+ * 334:216 frame, Serve's 334:314) over a footer with the title and count
+ * line, the 6px split bar and its key. Bars only, since every word on the loaded wall is a
  * figure or a count that has not arrived yet.
  */
 export function ProfileVisualizationsPanePending() {
@@ -263,8 +268,8 @@ export function ProfileVisualizationsPanePending() {
             className="flex flex-col rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]"
           >
             <div
-              className="max-h-[300px] w-full overflow-hidden rounded-t-[var(--radius-card)]"
-              style={{ aspectRatio: "334 / 216" }}
+              className="w-full overflow-hidden rounded-t-[var(--radius-card)]"
+              style={i === 0 ? WALL_SERVE_ART_PENDING : WALL_ART_PENDING}
             >
               <PendingBar className="h-full w-full rounded-none" />
             </div>

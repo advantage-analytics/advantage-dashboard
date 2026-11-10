@@ -59,6 +59,59 @@ export const SERVE_COURT = {
 export const SERVE_BACKGROUND_PATH =
   "M103,9 H417 A10,10 0 0 1 427,19 V225 H93 V19 A10,10 0 0 1 103,9 Z";
 
+/* ── Serve court through the net (the wall card) ───────────────────────────
+ *
+ * The wall's serve card draws past the net: the far half exactly as
+ * `SERVE_COURT` draws it (same group transform, same scale, so a serve mark is
+ * the same size on screen), then the net, then the NEAR service boxes down to
+ * the near service line, cropped a little past it at the card's bottom edge —
+ * the court carries on out of frame, it is not the whole court.
+ *
+ * The near half is the far half reflected across the net, as `VIEWER_COURT`
+ * draws it: `nearServiceLineY = netY + (netY − serviceLineY)` (355.5) in the
+ * group's own pre-transform units. `cropY` is where the art is cut, in those
+ * same units, and `viewBox` is the outer (post-transform) box: the far edge
+ * and width are `SERVE_COURT.viewBox`'s, only the height grows.
+ *
+ * Every other serve consumer (saved-view tiles, the focused/labelled views)
+ * keeps `SERVE_COURT`: a tile strip of mixed cuts wants one uniform aspect.
+ */
+// The serve group transform's own numbers — `translate(260,117) scale(0.85)
+// translate(-260,-125)` — named so the inverse below reads off the same
+// numbers `court-art.tsx` renders with (`SERVE_COURT.groupTransform`)
+// instead of a second, driftable copy. `SERVE_COURT.centerX` (260) already
+// doubles as both the outer translate's x target and the inner translate's
+// x origin, so only the y-axis pair needs new names here.
+const SERVE_GROUP_SCALE = 0.85;
+const SERVE_GROUP_TRANSLATE_Y = 117;
+const SERVE_GROUP_ORIGIN_Y = 125;
+const serveGroupToOuterY = (y: number) =>
+  SERVE_GROUP_TRANSLATE_Y + SERVE_GROUP_SCALE * (y - SERVE_GROUP_ORIGIN_Y);
+const SERVE_NEAR_SERVICE_Y =
+  SERVE_COURT.netY + (SERVE_COURT.netY - SERVE_COURT.serviceLineY); // 355.5
+// ≈0.64 m of court past the near service line before the crop, so the line
+// reads as a line on the court and not as the frame's edge.
+const SERVE_THROUGH_NET_CROP_Y = SERVE_NEAR_SERVICE_Y + 12; // 367.5
+const SERVE_THROUGH_NET_BOTTOM = serveGroupToOuterY(SERVE_THROUGH_NET_CROP_Y);
+
+export const SERVE_COURT_THROUGH_NET = {
+  viewBox: {
+    minX: SERVE_COURT.viewBox.minX,
+    minY: SERVE_COURT.viewBox.minY,
+    w: SERVE_COURT.viewBox.w,
+    h: SERVE_THROUGH_NET_BOTTOM - SERVE_COURT.viewBox.minY, // ≈314.1
+  },
+  nearServiceLineY: SERVE_NEAR_SERVICE_Y,
+  cropY: SERVE_THROUGH_NET_CROP_Y,
+  /** The net's height in the outer viewBox — inside the art, not its edge. */
+  netOuterY: serveGroupToOuterY(SERVE_COURT.netY), // 211.35
+  nearServiceOuterY: serveGroupToOuterY(SERVE_NEAR_SERVICE_Y), // ≈312.9
+} as const;
+
+/** The far corners rounded as `SERVE_BACKGROUND_PATH`'s, the bottom square —
+ *  the card's own radius clips it there. */
+export const SERVE_THROUGH_NET_BACKGROUND_PATH = `M103,9 H417 A10,10 0 0 1 427,19 V${SERVE_THROUGH_NET_BOTTOM} H93 V19 A10,10 0 0 1 103,9 Z`;
+
 export interface ServeDotFraction {
   x: number;
   y: number;
@@ -299,15 +352,9 @@ export interface HeatBounds {
   yMax: number;
 }
 
-// The serve group transform's own numbers — `translate(260,117) scale(0.85)
-// translate(-260,-125)` — named so the inverse below reads off the same
-// numbers `court-art.tsx` renders with (`SERVE_COURT.groupTransform`)
-// instead of a second, driftable copy. `SERVE_COURT.centerX` (260) already
-// doubles as both the outer translate's x target and the inner translate's
-// x origin, so only the y-axis pair needs new names here.
-const SERVE_GROUP_SCALE = 0.85;
-const SERVE_GROUP_TRANSLATE_Y = 117;
-const SERVE_GROUP_ORIGIN_Y = 125;
+// The serve group transform's numbers (`SERVE_GROUP_SCALE` and the y pair)
+// are declared beside `SERVE_COURT` above, where the through-net frame
+// needs them first.
 
 /**
  * Inverts `SERVE_COURT.groupTransform` on the x-axis — maps a point in the
@@ -333,6 +380,28 @@ function serveViewBoxToLogicalY(viewBoxY: number): number {
     (viewBoxY - SERVE_GROUP_TRANSLATE_Y) / SERVE_GROUP_SCALE +
     SERVE_GROUP_ORIGIN_Y
   );
+}
+
+/**
+ * A rect in a serve frame's own viewBox → the same rect in pre-transform
+ * (logical) units, which are `VIEWER_COURT`'s: the lightbox's far half IS
+ * `SERVE_COURT`'s logical box. The card-to-lightbox court morph
+ * (`viz-court-morph.ts`) lands a card's serve court on the lightbox's with it.
+ */
+export function serveViewBoxRectToViewer(r: {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}): { x: number; y: number; w: number; h: number } {
+  const x = serveViewBoxToLogicalX(r.x);
+  const y = serveViewBoxToLogicalY(r.y);
+  return {
+    x,
+    y,
+    w: serveViewBoxToLogicalX(r.x + r.w) - x,
+    h: serveViewBoxToLogicalY(r.y + r.h) - y,
+  };
 }
 
 // The full visible serve-frame view, in pre-transform (logical) coordinates
@@ -1213,58 +1282,134 @@ const VIEWER_CONTACT_ZOOM_MULTIPLIER = 1.6;
 const VIEWER_CONTACT_BASELINE_STAGE_FRACTION = 500 / 950;
 
 /**
+ * Which half of `VIEWER_COURT` a cut's marks land in, for the viewer's 100%
+ * framing — `null` for the contact cuts, which keep their own framing.
+ *
+ * Every landing cut is the FAR half, for either subject: `projectViewerDot`
+ * draws a landing at `netY − depthM · …`, and `depthM` is metres past the net
+ * in the HITTER's direction of travel — the model normalises every shot to
+ * its own hitter (`viz-model.ts`: the opponent's view is the opponent's own
+ * shots, read from behind them), so "You" and "Opponent" both send their
+ * shots away from the camera. Only net balls (`depthM < 0`, pinned to the net
+ * line by `atNet` on serve) sit at or just short of the net.
+ * `tests/court-geometry.spec.ts` pins this against the lightbox fixtures for
+ * both subjects.
+ */
+export function viewerLandingHalf(cut: Cut): "far" | "near" | null {
+  return isLandingCut(cut) ? "far" : null;
+}
+
+/**
+ * The landing cuts' 100% frame, in `VIEWER_COURT.viewBox` units: the far half
+ * of `courtFrame` — its own apron behind the far baseline down to the net —
+ * plus `VIEWER_NET_GUTTER` past the net, so the net line and a net ball's mark
+ * draw whole instead of half-cut by the stage's edge.
+ */
+// Wide enough for the serve chart's per-zone win % and count, drawn just
+// past the net (`ZONE_PCT_Y` / `ZONE_COUNT_Y` in `lightbox-court.tsx`), so the
+// 100% framing shows them rather than cropping them off.
+const VIEWER_NET_GUTTER = 28;
+export const VIEWER_LANDING_FRAME = {
+  minX: VIEWER_COURT.courtFrame.minX,
+  minY: VIEWER_COURT.courtFrame.minY,
+  w: VIEWER_COURT.courtFrame.w,
+  h: VIEWER_COURT.netY + VIEWER_NET_GUTTER - VIEWER_COURT.courtFrame.minY,
+} as const;
+
+/** `frame`'s fit scale on `stage`, clamped to the zoom range. */
+function frameFitZ(
+  frame: { w: number; h: number },
+  stage: Size,
+  multiplier = 1,
+): number {
+  const pxPerUnit = VIEWER_COURT.artPx.w / VIEWER_COURT.viewBox.w;
+  const fitZ = Math.min(
+    stage.w / (frame.w * pxPerUnit),
+    stage.h / (frame.h * pxPerUnit),
+  );
+  return clampNum(fitZ * multiplier, ZOOM_MIN, ZOOM_MAX);
+}
+
+/**
+ * The whole court — `VIEWER_COURT.courtFrame`, the handoff's own view, not the
+ * wide apron beyond it — fitted to `stage` and centred on both axes. The
+ * lightbox's "Full court" control. Below 100% on every cut, since every
+ * cut's 100% (`viewerInitialTransform`) is closer in than this.
+ */
+export function viewerFullCourtTransform(stage: Size): PanZoom {
+  const frame = VIEWER_COURT.courtFrame;
+  const z = frameFitZ(frame, stage);
+  const centre = viewerArtPoint(
+    frame.minX + frame.w / 2,
+    frame.minY + frame.h / 2,
+  );
+  return clampPan(
+    {
+      z,
+      px: stage.w / 2 - centre.x * z,
+      py: stage.h / 2 - centre.y * z,
+    },
+    VIEWER_COURT.artPx,
+    stage,
+  );
+}
+
+/**
  * The fullscreen viewer's starting pan/zoom for `cut`, given the current
  * `stage` (viewport) size — `use-pan-zoom.ts` seeds its reducer with this on
- * mount and on every cut change, then `zoomAbout`/`panBy` (Task 1,
- * `pan-zoom.ts`) take over from user input.
+ * mount and on every cut change, the `0` key comes back to it, and the zoom
+ * readout calls it 100%. `zoomAbout`/`panBy` (`pan-zoom.ts`) take over from
+ * user input.
  *
- * `"serve"`/`"returnPlacement"` (landing cuts): fit the whole
- * `VIEWER_COURT.artPx` (595×948) inside `stage`, centred on both axes — the
- * same "see the whole court" starting point `viz-focused.tsx`'s existing
- * tiles already give those two cuts.
+ * Landing cuts (`"serve"`, `"returnPlacement"`, `"rallyPlacement"`,
+ * `"errors"`): the half the shots land in (`viewerLandingHalf` — the far
+ * half), `VIEWER_LANDING_FRAME` fitted to the stage, horizontally centred,
+ * with the net (and its small gutter) along the stage's BOTTOM edge — on a
+ * stage taller than the half, the extra shows the far apron above, never the
+ * empty near half. The whole court is a zoom-out away
+ * (`viewerFullCourtTransform`).
  *
- * `"returnContact"`/`"rallyPosition"` (contact/rally cuts): the useful
- * content is only the NEAR half, so start zoomed in
- * (`VIEWER_CONTACT_ZOOM_MULTIPLIER` × the fit scale above) with the near
- * baseline placed at `VIEWER_CONTACT_BASELINE_STAGE_FRACTION` of the
+ * `"returnContact"`/`"rallyPosition"` (contact/rally cuts), unchanged: the
+ * useful content is only the NEAR half, so start zoomed in
+ * (`VIEWER_CONTACT_ZOOM_MULTIPLIER` × the whole court frame's fit) with the
+ * near baseline placed at `VIEWER_CONTACT_BASELINE_STAGE_FRACTION` of the
  * stage's height and the court horizontally centred — solving
  * `stagePoint = px + artPoint · z` for `px`/`py` with that target
  * `stagePoint` and the near-baseline/centre-line `artPoint`s held fixed.
  *
- * Both branches clamp `z` to `[ZOOM_MIN, ZOOM_MAX]` (Task 1's own range)
- * before solving `px`/`py`, then clamp the whole result with Task 1's
- * `clampPan` so a degenerate (very small/large) `stage` can never seed a
- * transform that immediately violates `clampPan`'s own invariant.
+ * Both branches clamp `z` to `[ZOOM_MIN, ZOOM_MAX]` before solving `px`/`py`,
+ * then clamp the whole result with `clampPan` so a degenerate (very
+ * small/large) `stage` can never seed a transform that immediately violates
+ * `clampPan`'s own invariant.
  */
 export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
   const art = VIEWER_COURT.artPx;
-  // Fit the COURT FRAME (the handoff's own view), not the whole drawable
-  // field — the wide apron exists so far-back contacts have somewhere to be,
-  // not to shrink the court at rest.
-  const frame = VIEWER_COURT.courtFrame;
-  const pxPerUnit = art.w / VIEWER_COURT.viewBox.w;
-  const frameW = frame.w * pxPerUnit;
-  const frameH = frame.h * pxPerUnit;
-  const fitZ = Math.min(stage.w / frameW, stage.h / frameH);
-  const isLanding = isLandingCut(cut);
-  const rawZ = isLanding ? fitZ : fitZ * VIEWER_CONTACT_ZOOM_MULTIPLIER;
-  const z = clampNum(rawZ, ZOOM_MIN, ZOOM_MAX);
+  const centre = viewerArtPoint(VIEWER_COURT.centreX, 0);
 
-  let px: number;
-  let py: number;
-  if (isLanding) {
-    const frameCentre = viewerArtPoint(
-      frame.minX + frame.w / 2,
-      frame.minY + frame.h / 2,
+  if (viewerLandingHalf(cut) !== null) {
+    const frame = VIEWER_LANDING_FRAME;
+    const z = frameFitZ(frame, stage);
+    const bottom = viewerArtPoint(0, frame.minY + frame.h);
+    return clampPan(
+      { z, px: stage.w / 2 - centre.x * z, py: stage.h - bottom.y * z },
+      art,
+      stage,
     );
-    px = stage.w / 2 - frameCentre.x * z;
-    py = stage.h / 2 - frameCentre.y * z;
-  } else {
-    const centre = viewerArtPoint(VIEWER_COURT.centreX, 0);
-    const nearBaseline = viewerArtPoint(0, VIEWER_COURT.nearBaselineY);
-    px = stage.w / 2 - centre.x * z;
-    py = stage.h * VIEWER_CONTACT_BASELINE_STAGE_FRACTION - nearBaseline.y * z;
   }
 
-  return clampPan({ z, px, py }, art, stage);
+  const z = frameFitZ(
+    VIEWER_COURT.courtFrame,
+    stage,
+    VIEWER_CONTACT_ZOOM_MULTIPLIER,
+  );
+  const nearBaseline = viewerArtPoint(0, VIEWER_COURT.nearBaselineY);
+  return clampPan(
+    {
+      z,
+      px: stage.w / 2 - centre.x * z,
+      py: stage.h * VIEWER_CONTACT_BASELINE_STAGE_FRACTION - nearBaseline.y * z,
+    },
+    art,
+    stage,
+  );
 }

@@ -40,6 +40,7 @@ import {
   buildMarkReadout,
   buildReadout,
   buildZoneReadout,
+  markClickHint,
   placeReadout,
 } from "./viz-readout";
 import { nextMarkIndex } from "./viz-mark-roving";
@@ -196,6 +197,8 @@ export function LightboxCourt({
   onRove,
   onSelect,
   whereFor,
+  matchFor,
+  canWatchMark,
   focusIds = null,
   outline = null,
   onReadoutEnter,
@@ -244,6 +247,12 @@ export function LightboxCourt({
   /** "Set 2 · Game 5 · You serving" for a point id — the readout's last
    *  line, read off the point by the lightbox. */
   whereFor?: (pointId: string) => string | null;
+  /** "vs Lee · Nov 3" — which match a mark is from, on a court drawn over
+   *  several (the season's); omitted on one match's court. */
+  matchFor?: (dot: VizDot) => string | null;
+  /** Whether a second click on this mark can watch it — the readout's hint
+   *  says "Click to focus" alone when it cannot. Omitted: never. */
+  canWatchMark?: (dot: VizDot) => boolean;
   /** A hovered Statistics row's marks: the rest sit back at 40%. */
   focusIds?: ReadonlySet<string> | null;
   /** The hovered or chosen Statistics row's zone, outlined dashed white. */
@@ -299,6 +308,13 @@ export function LightboxCourt({
           cut,
           unit,
           activeMeta.pointId ? (whereFor?.(activeMeta.pointId) ?? null) : null,
+          {
+            match: matchFor?.(active) ?? null,
+            hint: markClickHint(
+              active.id === selectedId,
+              canWatchMark?.(active) ?? false,
+            ),
+          },
         )
       : null;
 
@@ -541,6 +557,24 @@ export function LightboxCourt({
           {markReadout.where !== null && (
             <span className="text-[11px] leading-[1.45] text-white/[0.64]">
               {markReadout.where}
+            </span>
+          )}
+          {markReadout.match !== null && (
+            <span
+              data-viz-readout-match=""
+              className="text-[11px] leading-[1.45] text-white/[0.64]"
+            >
+              {markReadout.match}
+            </span>
+          )}
+          {markReadout.hint !== null && (
+            // The hint under a 1px hairline, 6px either side (the column's
+            // 2px gap plus 4px above it).
+            <span
+              data-viz-readout-hint=""
+              className="mt-1 border-t border-[rgba(255,255,255,0.12)] pt-1.5 text-[11px] leading-[1.45] text-white/[0.64]"
+            >
+              {markReadout.hint}
             </span>
           )}
         </div>
@@ -859,8 +893,21 @@ const MarkLayer = memo(function MarkLayer({
             onKeyDown={(e) => handleKeyDown(e, index)}
             onClick={(e) => {
               e.stopPropagation();
-              // Two shots can land on the same coordinate. Repeated clicks
-              // cycle that stack, so the mark underneath is selectable too.
+              // A click on the SELECTED mark is its second click: the shell
+              // watches it (`select`), it does not step the stack.
+              if (dot.id === selectedId) {
+                onSelect(dot.id);
+                return;
+              }
+              // Two shots can land on the same coordinate (within 0.5
+              // units). A click on a mark that is NOT the selected one, while
+              // another mark of its stack is, steps the selection to the next
+              // mark of that stack, so the one underneath is selectable too;
+              // with nothing of the stack selected it selects the mark
+              // clicked. Once the stepped-to mark is the one under the
+              // pointer, the next click watches it. A mark wholly hidden
+              // under another is reached from the Points list or the arrow
+              // keys.
               const stack = placed.filter(
                 (item) => Math.hypot(item.x - x, item.y - y) < 0.5,
               );

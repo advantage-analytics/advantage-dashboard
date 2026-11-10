@@ -21,10 +21,10 @@ test("a wall card opens the lightbox over the wall, and Esc puts focus back on t
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots`);
-  const card = page.getByRole("link", { name: /^First serves, Avery Kim/ });
+  const card = page.getByRole("link", { name: /^All serves, Avery Kim/ });
   await card.focus();
   await page.keyboard.press("Enter");
-  const dialog = page.getByRole("dialog", { name: "First serves" });
+  const dialog = page.getByRole("dialog", { name: "All serves" });
   await expect(dialog).toBeVisible();
   await expect(page).toHaveURL(/cut=serve/);
   await expect(dialog).toContainText(
@@ -76,14 +76,13 @@ test("Watch these N points follows the marks and needs a playable video", async 
   await expect(page).toHaveURL(/tab=film/);
   const url = new URL(page.url());
   expect(url.searchParams.get("pn")).toMatch(/^\d+$/);
-  // This link is every serve, not the First serves card: the label is the
-  // live filters' own name.
-  expect(url.searchParams.get("pnl")).toBe("Serve placement");
-  // On the card (first serves), the card's name.
+  // Every serve is the All serves card itself: the label is the card's name.
+  expect(url.searchParams.get("pnl")).toBe("All serves");
+  // Narrowed to first serves, the card's name and the filter beyond it.
   await page.goto(`${origin}/?tab=shots&cut=serve&ball=first&fixture=watch`);
   await page.getByRole("button", { name: /^Watch these/ }).click();
   await expect(page).toHaveURL(/tab=film/);
-  expect(new URL(page.url()).searchParams.get("pnl")).toBe("First serves");
+  expect(new URL(page.url()).searchParams.get("pnl")).toBe("All serves · 1st");
 });
 
 test("a mark's readout appears on hover and stays inside the court", async ({
@@ -136,23 +135,21 @@ test("click selects a mark: white ring, siblings at 40%, a control-free readout;
   await expect(dialog).toHaveCount(0);
 });
 
-test("zooming shows the level and frees Fit; lines are 1.3× and scale with the court", async ({
+test("zooming shows the level; 0 comes back to 100%; lines are 1.3× and scale with the court", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const dialog = page.getByRole("dialog");
-  const fit = dialog.getByRole("button", { name: "Fit the court" });
-  await expect(fit).toBeDisabled();
   await expect(dialog.getByText(/Drag to move around/)).toHaveCount(0);
   await dialog.getByRole("button", { name: "Zoom in" }).click();
   await expect(dialog.getByText(/^\d+% · Drag to move around$/)).toBeVisible();
-  await expect(fit).toBeEnabled();
   await page.waitForTimeout(300);
   await page.screenshot({
     path: test.info().outputPath("lightbox-zoomed.png"),
   });
-  await fit.click();
+  await page.locator("[data-court-stage] [data-viz-mark]").first().focus();
+  await page.keyboard.press("0");
   await expect(dialog.getByText(/Drag to move around/)).toHaveCount(0);
   const line = dialog.locator("[data-court] svg g[stroke] line").first();
   await expect(line).not.toHaveAttribute("vector-effect", /.*/);
@@ -248,9 +245,9 @@ test("the Filters panel is the Matches panel over the cut's own keys, and Clear 
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
-  await page.goto(`${origin}/?tab=shots&cut=serve&ball=first`);
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
   const dialog = page.getByRole("dialog");
-  // The card's own filter (first serves) is not "applied".
+  // The card (every serve) holds no filter, so nothing is "applied".
   await expect(dialog.locator("[data-viz-filter-strip]")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
@@ -258,6 +255,10 @@ test("the Filters panel is the Matches panel over the cut's own keys, and Clear 
   await expect(panel).toContainText("Serve");
   await expect(panel).toContainText("Court");
   await expect(panel).toContainText("Zone");
+  // The season's own groups are the profile's alone: one match has one
+  // opponent.
+  await expect(panel).not.toContainText("Opponent plays");
+  await expect(panel.getByRole("checkbox", { name: /^vs / })).toHaveCount(0);
   await panel.getByRole("radio", { name: "Deuce" }).click();
   await expect(page).toHaveURL(/vcourt=deuce|court=deuce/);
   await page.screenshot({ path: test.info().outputPath("filters.png") });
@@ -266,7 +267,7 @@ test("the Filters panel is the Matches panel over the cut's own keys, and Clear 
   await expect(strip).toContainText("Deuce");
   await strip.getByRole("button", { name: "Clear filter" }).click();
   await expect(strip).toHaveCount(0);
-  await expect(page).toHaveURL(/ball=first/);
+  await expect(page).toHaveURL(/cut=serve/);
   await expect(page).not.toHaveURL(/deuce/);
 });
 
@@ -372,10 +373,10 @@ test("1 · a filter edit or a player switch keeps the lightbox mounted: popover,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots`);
-  const card = page.getByRole("link", { name: /^First serves, Avery Kim/ });
+  const card = page.getByRole("link", { name: /^All serves, Avery Kim/ });
   await card.focus();
   await page.keyboard.press("Enter");
-  const dialog = page.getByRole("dialog", { name: "First serves" });
+  const dialog = page.getByRole("dialog", { name: "All serves" });
   const legend = dialog.getByRole("group", { name: "Filter by outcome" });
   const won = legend.getByRole("button", { name: /^Won/ });
   await won.click();
@@ -399,7 +400,7 @@ test("1 · a filter edit or a player switch keeps the lightbox mounted: popover,
   // Settled before Esc: the strip goes once the clear has committed.
   await expect(strip).toHaveCount(0);
   await expect(page).not.toHaveURL(/deuce/);
-  await expect(page).toHaveURL(/ball=first/);
+  await expect(page).toHaveURL(/cut=serve/);
   // The same lightbox, so Esc closes it and focus returns to the card that
   // opened it.
   await page.keyboard.press("Escape");
@@ -413,20 +414,20 @@ test("2 · Watch clears a landed statistic's Film remainder as well as ?f=", asy
   await page.goto(`${origin}/?tab=shots&fixture=watch`);
   await page.getByRole("button", { name: "Seed remainder" }).click();
   await expect(page.getByTestId("remainder")).toHaveText("remainder");
-  await page.getByRole("link", { name: /^First serves, Avery Kim/ }).click();
+  await page.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
   await page.getByRole("button", { name: /^Watch these/ }).click();
   await expect(page).toHaveURL(/tab=film/);
   await expect(page.getByTestId("remainder")).toHaveText("none");
 });
 
-test("3 · loosening the card's own filter: the title and the denominator follow, the count never passes it", async ({
+test("3 · narrowing the All serves card: the title stays the card's, the denominator stays every serve, the count never passes it", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
-  await page.goto(`${origin}/?tab=shots&cut=serve&ball=first`);
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
   const dialog = page.getByRole("dialog");
   await expect(
-    dialog.getByRole("heading", { name: "First serves" }),
+    dialog.getByRole("heading", { name: "All serves" }),
   ).toBeVisible();
   const count = dialog.getByLabel(/^\d+ of \d+ points$/);
   const read = async () =>
@@ -437,17 +438,19 @@ test("3 · loosening the card's own filter: the title and the denominator follow
   await dialog.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   const serve = panel.getByRole("radiogroup").first();
-  await serve.getByRole("radio", { name: "Any" }).click();
+  await serve.getByRole("radio", { name: "1st" }).click();
   await page.keyboard.press("Escape");
-  // Every serve now: the card's name gives way to the cut's own.
+  await expect(page).toHaveURL(/ball=first/);
+  // The card holds no filter of its own, so it is still the card, with the
+  // first-serve filter named in the strip.
   await expect(
-    dialog.getByRole("heading", { name: "Serve placement" }),
+    dialog.getByRole("heading", { name: "All serves" }),
   ).toBeVisible();
-  // Off it, the widest set: every serve the player hit.
+  await expect(dialog.locator("[data-viz-filter-strip]")).toContainText("1st");
   const [n2, m2] = await read();
+  expect(m2).toBe(m1);
   expect(n2).toBeLessThanOrEqual(m2);
-  expect(m2).toBeGreaterThan(m1);
-  expect(n2).toBeGreaterThanOrEqual(n1);
+  expect(n2).toBeLessThan(n1);
 });
 
 test("7 · a filter the panel doesn't edit (a link's Result) is named in the strip and cleared by it", async ({
@@ -565,7 +568,7 @@ test("Esc, Esc closes the Filters panel and then the lightbox, even while the pa
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve`);
-  const dialog = page.getByRole("dialog", { name: "Serve placement" });
+  const dialog = page.getByRole("dialog", { name: "All serves" });
   await dialog.getByRole("button", { name: "Filters" }).click();
   await expect(
     page.getByRole("dialog", { name: "Filter the court" }),
@@ -584,7 +587,7 @@ test("R3·1 · a selected point filtered off the court is let go: no ring when i
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve`);
-  const dialog = page.getByRole("dialog", { name: "Serve placement" });
+  const dialog = page.getByRole("dialog", { name: "All serves" });
   const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
   const first = marks.first();
   const id = (await first.getAttribute("data-viz-mark"))!;
@@ -656,13 +659,13 @@ test("R3·5 · Watch names the player in the Video strip when the points are the
   await dialog.getByRole("button", { name: /^Watch these/ }).click();
   await expect(page).toHaveURL(/tab=film/);
   expect(new URL(page.url()).searchParams.get("pnl")).toBe(
-    "First serves · Blake Rivera",
+    "All serves · Blake Rivera · 1st",
   );
   // The viewer's own points carry no name.
   await page.goto(`${origin}/?tab=shots&cut=serve&ball=first&fixture=watchall`);
   await page.getByRole("button", { name: /^Watch these/ }).click();
   await expect(page).toHaveURL(/tab=film/);
-  expect(new URL(page.url()).searchParams.get("pnl")).toBe("First serves");
+  expect(new URL(page.url()).searchParams.get("pnl")).toBe("All serves · 1st");
 });
 
 test("R3·3 · Watch → Video → Back keeps the wall's player and collection", async ({
@@ -675,7 +678,7 @@ test("R3·3 · Watch → Video → Back keeps the wall's player and collection",
   const dialog = page.getByRole("dialog");
   // The Opponent's wall, a card of theirs, and Watch.
   await page.getByRole("button", { name: "Opponent" }).click();
-  await page.getByRole("link", { name: /^First serves, Blake Rivera/ }).click();
+  await page.getByRole("link", { name: /^All serves, Blake Rivera/ }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: /^Watch these/ }).click();
   await expect(page).toHaveURL(/tab=film/);
@@ -735,9 +738,8 @@ test("R3·4 · Back/Forward between two saved views starts each fresh: pane, zoo
     "aria-pressed",
     "true",
   );
-  await expect(
-    second.getByRole("button", { name: "Fit the court" }),
-  ).toBeDisabled();
+  // Back at its 100% framing: no zoom level showing.
+  await expect(second.getByText(/Drag to move around/)).toHaveCount(0);
   await expect(second.locator("[data-viz-filter-strip]")).toHaveCount(0);
   // Back to the first: fresh as well.
   await page.goBack();
@@ -746,9 +748,8 @@ test("R3·4 · Back/Forward between two saved views starts each fresh: pane, zoo
     "aria-pressed",
     "true",
   );
-  await expect(
-    first.getByRole("button", { name: "Fit the court" }),
-  ).toBeDisabled();
+  // Back at its 100% framing: no zoom level showing.
+  await expect(first.getByText(/Drag to move around/)).toHaveCount(0);
   await expect(
     first
       .getByRole("group", { name: "Filter by outcome" })
@@ -883,7 +884,7 @@ test("R4·4 · Esc reaches a nested non-popper layer before the lightbox", async
   page,
 }) => {
   await page.goto(`${origin}/?tab=shots&cut=serve`);
-  const lightbox = page.getByRole("dialog", { name: "Serve placement" });
+  const lightbox = page.getByRole("dialog", { name: "All serves" });
   await expect(lightbox).toBeVisible();
   await page.evaluate(() =>
     (
@@ -906,7 +907,7 @@ test("R5·1 · Esc, Esc closes the Chart menu and then the lightbox, even while 
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve`);
-  const dialog = page.getByRole("dialog", { name: "Serve placement" });
+  const dialog = page.getByRole("dialog", { name: "All serves" });
   await dialog.getByRole("button", { name: "Scatter" }).click();
   await expect(page.getByRole("menuitemradio", { name: /Heat/ })).toBeVisible();
   // Back to back: the second press lands inside the menu's exit animation.
@@ -999,4 +1000,460 @@ test("R6·2 · Clear for the other player keeps the reader's chart: the view doe
   await expect(page).not.toHaveURL(/deuce/);
   await expect(page).not.toHaveURL(/view=sv1/);
   await expect(page).toHaveURL(/chart=heat/);
+});
+
+/* ── Pass 1: chart icons, the menu surface, Advanced filters ──────────── */
+
+test("every chart row in the chart menu carries its leading icon", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  await dialog.getByRole("button", { name: "Scatter" }).click();
+  const menu = page.getByRole("menu", { name: "Chart" });
+  await expect(menu).toBeVisible();
+  // Let the menu's open animation (a 95% zoom) settle before measuring.
+  await page.waitForTimeout(300);
+  const labels: number[] = [];
+  for (const name of ["Scatter", "Heat", "Zones"]) {
+    const row = menu.getByRole("menuitemradio", {
+      name: new RegExp(`^${name}`),
+    });
+    await expect(row.locator("svg")).toHaveCount(
+      name === "Scatter" ? 2 : 1, // Scatter is chosen: its check is the second.
+    );
+    // The icon leads the row, so the three labels start on one line.
+    labels.push((await row.getByText(name, { exact: true }).boundingBox())!.x);
+  }
+  expect(new Set(labels.map(Math.round)).size).toBe(1);
+});
+
+test("the lightbox's Filters takes the float-menu surface, and Advanced filters slides to the Video tab's panel and back", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  await dialog.getByRole("button", { name: "Filters" }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  await expect(panel).toBeVisible();
+  // FloatMenu geometry: 10px radius, 5px inset.
+  await expect(panel).toHaveCSS("border-top-left-radius", "10px");
+  await expect(panel).toHaveCSS("padding-top", "5px");
+
+  // The row sits at the foot, above the footer, with a quiet summary.
+  const row = panel.getByRole("button", { name: /^Advanced filters/ });
+  await expect(row).toContainText("Score, return, result…");
+  await row.click();
+  const back = panel.getByRole("button", { name: "Filters", exact: true });
+  await expect(back).toBeVisible();
+  await expect(back).toBeFocused();
+  await expect(row).toHaveCount(0);
+  // The Video tab's accordion: section headers that expand.
+  const sections = panel.locator("[data-section]");
+  expect(await sections.count()).toBeGreaterThan(0);
+
+  // Esc steps back to the panel, focus on the row, popover still open.
+  await page.keyboard.press("Escape");
+  await expect(row).toBeFocused();
+  await expect(panel.getByRole("checkbox").first()).toBeVisible();
+
+  // Pick one option and Show: it lands in the URL's advanced filters and
+  // the strip names it; the panel is back on its own rows.
+  await row.click();
+  const header = sections.first().getByRole("button").first();
+  // The accordion may open on its first section already.
+  if ((await header.getAttribute("aria-expanded")) !== "true")
+    await header.click();
+  await expect(header).toHaveAttribute("aria-expanded", "true");
+  await sections
+    .first()
+    .locator('button[aria-pressed="false"]')
+    .first()
+    .click();
+  const show = panel.getByRole("button", { name: /^Show \d+ serves?$/ });
+  await expect(show).toBeEnabled();
+  await page.screenshot({ path: test.info().outputPath("advanced.png") });
+  await show.click();
+  await expect(page).toHaveURL(/[?&]vf=/);
+  await expect(row).toContainText("1 applied");
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(dialog.locator("[data-viz-filter-strip]")).toBeVisible();
+
+  // Every open starts on the panel's own rows.
+  await dialog.getByRole("button", { name: "Filters" }).click();
+  await row.click();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Filters" }).click();
+  await expect(row).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+/* ── Pass 2: half court is 100%, Full court, the glide ───────────────────── */
+
+/** The pan layer's transform: z from its width (art is 652 px wide at z=1),
+ *  px/py from its translate. */
+async function courtTransform(page: import("@playwright/test").Page) {
+  return page.locator("[data-court]").evaluate((el) => {
+    const style = (el as HTMLElement).style;
+    const m = /translate\(([-\d.]+)px, ([-\d.]+)px\)/.exec(style.transform);
+    return {
+      z: parseFloat(style.width) / 652,
+      px: m ? parseFloat(m[1]) : NaN,
+      py: m ? parseFloat(m[2]) : NaN,
+    };
+  });
+}
+
+test("a landing cut opens at 100% on the far half, net along the stage's bottom; Full court zooms out below 100%; 0 returns", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const cut of ["serve", "returnPlacement"]) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+    const dialog = page.getByRole("dialog");
+    const stage = page.locator("[data-court-stage]");
+    await expect(stage).toBeVisible();
+    await expect(dialog.getByText(/Drag to move around/)).toHaveCount(0);
+    const s = (await stage.boundingBox())!;
+    const home = await courtTransform(page);
+    // The net (VIEWER_COURT.netY 236, viewBox minY −117, h 706 → art y) sits
+    // just above the stage's bottom edge.
+    const netArtY = ((236 + 117) / 706) * 1258;
+    const netStageY = home.py + netArtY * home.z;
+    expect(netStageY).toBeLessThan(s.height);
+    expect(s.height - netStageY).toBeLessThan(80);
+
+    const full = dialog.getByRole("button", { name: "Full court" });
+    await expect(full).toBeEnabled();
+    await full.hover();
+    await expect(page.getByRole("tooltip")).toContainText("Full court");
+    await full.click();
+    const level = dialog.getByText(/^\d+% · Drag to move around$/);
+    await expect(level).toBeVisible();
+    const pct = Number((await level.textContent())!.match(/^(\d+)%/)![1]);
+    expect(pct).toBeLessThan(100);
+    await expect(full).toBeDisabled();
+    const out = await courtTransform(page);
+    expect(out.z).toBeLessThan(home.z);
+    // The whole court frame (far baseline 14 → near baseline 458) is on stage.
+    const artY = (y: number) => ((y + 117) / 706) * 1258;
+    expect(out.py + artY(14) * out.z).toBeGreaterThanOrEqual(0);
+    expect(out.py + artY(458) * out.z).toBeLessThanOrEqual(s.height);
+
+    // `0` from anywhere on the court's keyboard (a zoom button here: the
+    // returns fixture has few marks).
+    await dialog.getByRole("button", { name: "Zoom in" }).focus();
+    await page.keyboard.press("0");
+    await expect(dialog.getByText(/Drag to move around/)).toHaveCount(0);
+    const back = await courtTransform(page);
+    expect(back.z).toBeCloseTo(home.z, 4);
+    expect(back.py).toBeCloseTo(home.py, 1);
+  }
+});
+
+test("contact cuts keep their framing: 1.6× the whole court's fit, near baseline at 500/950 of the stage", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=returnContact`);
+  const stage = page.locator("[data-court-stage]");
+  await expect(stage).toBeVisible();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText(/Drag to move around/)).toHaveCount(0);
+  const s = (await stage.boundingBox())!;
+  const t = await courtTransform(page);
+  const pxPerUnit = 652 / 366;
+  const fit = Math.min(
+    s.width / (334 * pxPerUnit),
+    s.height / (532 * pxPerUnit),
+  );
+  expect(t.z).toBeCloseTo(fit * 1.6, 3);
+  const nearBaselineArtY = ((458 + 117) / 706) * 1258;
+  expect(t.py + nearBaselineArtY * t.z).toBeCloseTo(s.height * (500 / 950), 0);
+});
+
+test("clicking a mark glides it to the stage centre at 150%; a click on the empty court deselects and stays put", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog");
+  const stage = page.locator("[data-court-stage]");
+  const mark = stage.locator("[data-viz-mark]").first();
+  await expect(mark).toBeVisible();
+  const home = await courtTransform(page);
+  await mark.dispatchEvent("click");
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  // Mid-glide the court has not arrived yet.
+  await page.waitForTimeout(420);
+  const s = (await stage.boundingBox())!;
+  const m = (await mark.locator('circle[r="9"]').boundingBox())!;
+  expect(Math.abs(m.x + m.width / 2 - (s.x + s.width / 2))).toBeLessThan(12);
+  expect(Math.abs(m.y + m.height / 2 - (s.y + s.height / 2))).toBeLessThan(12);
+  const after = await courtTransform(page);
+  expect(after.z / home.z).toBeCloseTo(1.5, 2);
+  await expect(dialog.getByText("150% · Drag to move around")).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath("lightbox-glided.png"),
+  });
+  // A second click on the selected mark is a watch, not a deselect — and
+  // this match has no video, so it does nothing at all.
+  await mark.dispatchEvent("click");
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  // A click on the empty court deselects, and does not move the court.
+  await stage.dispatchEvent("click");
+  await expect(mark).toHaveAttribute("aria-pressed", "false");
+  await page.waitForTimeout(400);
+  const still = await courtTransform(page);
+  expect(still.px).toBeCloseTo(after.px, 1);
+  expect(still.py).toBeCloseTo(after.py, 1);
+  expect(still.z).toBeCloseTo(after.z, 4);
+});
+
+test("the glide animates over ~320ms, and a drag mid-glide cancels it cleanly", async ({
+  page,
+}) => {
+  // The glide is a requestAnimationFrame tween on performance.now(), both of
+  // which Playwright's clock owns: pausing it holds the glide mid-way for as
+  // long as the drag takes, however slow the runner is.
+  await page.clock.install();
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const stage = page.locator("[data-court-stage]");
+  const mark = stage.locator("[data-viz-mark]").first();
+  await expect(mark).toBeVisible();
+  const home = await courtTransform(page);
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+  await mark.dispatchEvent("click");
+  await page.clock.runFor(96);
+  await expect
+    .poll(async () => (await courtTransform(page)).z)
+    .toBeGreaterThan(home.z);
+  const early = await courtTransform(page);
+  // Moving, not yet there.
+  expect(early.z / home.z).toBeLessThan(1.5);
+  // A drag from an empty patch of court takes over.
+  const s = (await stage.boundingBox())!;
+  await page.mouse.move(s.x + 30, s.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(s.x + 90, s.y + 70, { steps: 4 });
+  await page.mouse.up();
+  const dragged = await courtTransform(page);
+  await page.clock.runFor(600);
+  await page.waitForTimeout(100);
+  const settled = await courtTransform(page);
+  // Nothing moved once the drag ended: the glide did not resume.
+  expect(settled.px).toBeCloseTo(dragged.px, 1);
+  expect(settled.py).toBeCloseTo(dragged.py, 1);
+  expect(settled.z).toBeCloseTo(dragged.z, 4);
+  // …and it stopped short of the glide's 150%.
+  expect(settled.z / home.z).toBeLessThan(1.49);
+});
+
+test("with reduced motion the glide is a jump; a Points row glides the court too", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const stage = page.locator("[data-court-stage]");
+  const mark = stage.locator("[data-viz-mark]").first();
+  await expect(mark).toBeVisible();
+  const home = await courtTransform(page);
+  await mark.dispatchEvent("click");
+  // Within a frame or two, not a 320ms tween.
+  await page.waitForTimeout(40);
+  const s = (await stage.boundingBox())!;
+  const m = (await mark.locator('circle[r="9"]').boundingBox())!;
+  expect(Math.abs(m.x + m.width / 2 - (s.x + s.width / 2))).toBeLessThan(12);
+  expect(Math.abs(m.y + m.height / 2 - (s.y + s.height / 2))).toBeLessThan(12);
+  expect((await courtTransform(page)).z / home.z).toBeCloseTo(1.5, 2);
+
+  // Deselect (a click on the empty court), back to 100%, then pick from the
+  // Points list.
+  await stage.dispatchEvent("click");
+  await expect(mark).toHaveAttribute("aria-pressed", "false");
+  await mark.focus();
+  await page.keyboard.press("0");
+  const list = page.getByRole("dialog").getByRole("list", { name: "Points" });
+  const row = list.locator("[data-point-id]").last();
+  await row.click();
+  const pointId = await row.getAttribute("data-point-id");
+  const selected = stage.locator('[data-viz-mark][aria-pressed="true"]');
+  await expect(selected).toHaveCount(1);
+  expect(pointId).not.toBeNull();
+  await page.waitForTimeout(40);
+  const sm = (await selected.locator('circle[r="9"]').boundingBox())!;
+  expect(Math.abs(sm.x + sm.width / 2 - (s.x + s.width / 2))).toBeLessThan(12);
+  expect(Math.abs(sm.y + sm.height / 2 - (s.y + s.height / 2))).toBeLessThan(
+    12,
+  );
+});
+
+/* ── Pass 3: the second click, the hint, the Statistics row's readout ──── */
+
+test("the readout's hint: focus then watch, the pinned readout's watch, and the focus alone without video", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  const hint = page.locator("[data-viz-readout] [data-viz-readout-hint]");
+
+  // No playable video: the focus alone, before and after selecting.
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const stage = page.locator("[data-court-stage]");
+  let mark = stage.locator("[data-viz-mark]").first();
+  await mark.hover({ force: true });
+  await expect(hint).toHaveText("Click to focus");
+  await mark.dispatchEvent("click");
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  await expect(hint).toHaveText("Click to focus");
+
+  // Every point playable: focus then watch, then — pinned — watch.
+  await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watchall`);
+  mark = stage.locator("[data-viz-mark]").first();
+  await mark.hover({ force: true });
+  await expect(hint).toHaveText("Click to focus · Click again to watch");
+  // The hint sits under a 1px hairline at 12% white.
+  const border = await hint.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return [cs.borderTopWidth, cs.borderTopColor, cs.paddingTop];
+  });
+  expect(border).toEqual(["1px", "rgba(255, 255, 255, 0.12)", "6px"]);
+  await mark.dispatchEvent("click");
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  await page.mouse.move(5, 5);
+  await expect(hint).toHaveText("Click again to watch");
+});
+
+test("a second click on the selected mark watches that one point in the Video tab; Enter does too", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const how of ["click", "enter"] as const) {
+    await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watchall`);
+    const stage = page.locator("[data-court-stage]");
+    const mark = stage.locator("[data-viz-mark]").first();
+    await mark.dispatchEvent("click");
+    await expect(mark).toHaveAttribute("aria-pressed", "true");
+    // The lit row is this mark's point: its number is what the URL carries.
+    const row = page
+      .getByRole("dialog")
+      .locator('[data-point-id][data-playing="true"]');
+    await expect(row).toHaveCount(1);
+    expect(new URL(page.url()).searchParams.get("tab")).not.toBe("film");
+    if (how === "click") await mark.dispatchEvent("click");
+    else {
+      await mark.focus();
+      await page.keyboard.press("Enter");
+    }
+    await expect(page).toHaveURL(/tab=film/);
+    const url = new URL(page.url());
+    expect(url.searchParams.get("pn")).toMatch(/^\d+$/);
+    expect(url.searchParams.get("pnl")).toBe("All serves");
+  }
+});
+
+test("a click on the empty court deselects; a drag across it does not", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const stage = page.locator("[data-court-stage]");
+  const mark = stage.locator("[data-viz-mark]").first();
+  await mark.dispatchEvent("click");
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  const s = (await stage.boundingBox())!;
+  // A drag from a corner of the apron keeps the selection.
+  await page.mouse.move(s.x + 20, s.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(s.x + 80, s.y + 60, { steps: 4 });
+  await page.mouse.up();
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  // A plain click there lets it go.
+  await page.mouse.click(s.x + 20, s.y + 20);
+  await expect(mark).toHaveAttribute("aria-pressed", "false");
+});
+
+test("a Points row: the lit row says click again to watch, and its second click watches", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watchall`);
+  const list = page.getByRole("dialog").getByRole("list", { name: "Points" });
+  const row = list.locator("[data-point-id]").first();
+  await expect(row).not.toContainText("Click again to watch");
+  await row.click();
+  await expect(row).toHaveAttribute("data-playing", "true");
+  // The grey second line, ending with the hint (the mono score follows it).
+  await expect(row).toContainText(/\S · Click again to watch/);
+  // No icon joined it: the row's buttons are its own (none on this report).
+  await expect(row.locator("svg.lucide-play")).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.get("tab")).not.toBe("film");
+  await row.click();
+  await expect(page).toHaveURL(/tab=film/);
+  expect(new URL(page.url()).searchParams.get("pn")).toMatch(/^\d+$/);
+
+  // Without video the lit row says nothing more, and a second click stays.
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const plain = list.locator("[data-point-id]").first();
+  await plain.click();
+  await expect(plain).toHaveAttribute("data-playing", "true");
+  await expect(plain).not.toContainText("Click again to watch");
+  await plain.click();
+  await expect(page).not.toHaveURL(/tab=film/);
+  await plain.press("Enter");
+  await expect(page).not.toHaveURL(/tab=film/);
+});
+
+test("a Statistics row's tooltip hangs beside it with the row's own numbers, and never takes the pointer", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Statistics" }).click();
+  const rows = dialog.locator("button[aria-pressed]:not([disabled])", {
+    hasText: /%/,
+  });
+  const row = rows.first();
+  const label = (await row.getAttribute("aria-label"))!;
+  // "Deuce T: 60% of 5 points won"
+  const [, name, pct, count] = label.match(
+    /^(.+): (\d+)% of (\d+) points won$/,
+  )!;
+  await row.hover();
+  const tip = dialog.locator("[data-stat-tooltip]");
+  await expect(tip).toBeVisible();
+  await expect(tip).toContainText(name);
+  await expect(tip).toContainText(`${pct}%`);
+  await expect(tip).toContainText(new RegExp(`\\d+ of ${count} serves? won`));
+  await expect(tip).toContainText(/Average \d+% across the court/);
+  await expect(tip).toContainText(`Click to keep these ${count} points`);
+  // Beside the row, to its left, vertically centred on it.
+  const r = (await row.boundingBox())!;
+  const t = (await tip.boundingBox())!;
+  expect(t.x + t.width).toBeLessThanOrEqual(r.x);
+  expect(Math.abs(t.y + t.height / 2 - (r.y + r.height / 2))).toBeLessThan(3);
+  // A label, not a control.
+  const events = await tip.evaluate(
+    (el) =>
+      getComputedStyle(el.closest("[data-stat-tooltip-anchor] > span")!)
+        .pointerEvents,
+  );
+  expect(events).toBe("none");
+  // The court outline still answers the hover.
+  await expect(page.locator("[data-viz-outline]")).toHaveCount(1);
+  // Kept, the hint turns to letting go.
+  await row.click();
+  await expect(tip).toContainText("Click to show all again");
+  await page.screenshot({
+    path: test.info().outputPath("lightbox-stat-tooltip.png"),
+  });
 });

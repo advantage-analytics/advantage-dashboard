@@ -1,6 +1,6 @@
 /**
  * Default cuts for the Visualizations tab: the wall's four court-first cards
- * (canvas W5), in order — First serves, Returns, Rally shots, Unforced
+ * (canvas W5), in order — All serves, Returns, Rally shots, Unforced
  * errors. `name` is the card's title and the lightbox's. Return contact is
  * no longer a card of its own; it stays a cut (the chart menu, saved views).
  *
@@ -26,9 +26,11 @@ export const DEFAULT_CUTS: DefaultCut[] = [
   {
     cut: "serve",
     chart: "scatter",
-    name: "First serves",
-    filters: { ball: ["first"] },
-    pills: ["1st", "All zones", "Deuce + Ad"],
+    name: "All serves",
+    // Every serve, first and second — the card opens unfiltered (2026-11-09;
+    // it was first serves only). 1st / 2nd stay one Ball pill away.
+    filters: {},
+    pills: ["All serves", "All zones", "Deuce + Ad"],
   },
   {
     cut: "returnPlacement",

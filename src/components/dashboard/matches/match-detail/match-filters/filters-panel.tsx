@@ -78,6 +78,7 @@ export function FiltersPanel({
   tone = "light",
   filmCut = null,
   noun,
+  embedded = false,
 }: {
   /** The applied filters — the draft starts here. */
   filters: MatchFilters;
@@ -88,8 +89,10 @@ export function FiltersPanel({
   onApply: (next: MatchFilters) => void;
   /** The header's X: close without touching the applied filters. */
   onClose: () => void;
-  /** How many points the list would show under `draft`. */
-  countFor: (draft: MatchFilters) => number;
+  /** How many points the list would show under `draft`. Omitted (a host
+   *  with no points in the browser — the season's lightbox), the footer
+   *  states no count and the primary reads "Show serves". */
+  countFor?: (draft: MatchFilters) => number;
   /** Every point on the match — the count's denominator. */
   total: number;
   className?: string;
@@ -104,6 +107,13 @@ export function FiltersPanel({
   filmCut?: string | null;
   /** What `countFor` counts, when not points (the Visualizations tab). */
   noun?: CountNoun;
+  /**
+   * Inside another panel (the Visualizations lightbox's Filters, which slides
+   * to this with its own "Filters" back row): no header — the host's back row
+   * is the way out — rows on the host's 8px inset, and no "N of M" line,
+   * which the primary's "Show N serves" already says at that width.
+   */
+  embedded?: boolean;
 }) {
   const titleId = useId();
   const names = { you: youName, opponent: oppName };
@@ -116,7 +126,11 @@ export function FiltersPanel({
   // `countFor` re-filters the whole match, so it only reruns when the draft
   // itself changes — not on every render (e.g. the accordion opening/closing
   // while the film keeps playing behind the panel).
-  const count = useMemo(() => countFor(draft), [countFor, draft]);
+  const count = useMemo(
+    () => (countFor ? countFor(draft) : null),
+    [countFor, draft],
+  );
+  const pad = embedded ? "px-2" : "px-5";
 
   return (
     <section
@@ -127,30 +141,32 @@ export function FiltersPanel({
         className,
       )}
     >
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--border-hairline)] pr-2.5 pl-5">
-        <h2
-          id={titleId}
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-[12px] font-medium"
-          style={{ color: "var(--ink-900)" }}
-        >
-          <SlidersHorizontal
-            className="size-[13px] shrink-0"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-          Filters
-        </h2>
-        <ChromeTooltip label="Close" shortcut="Esc">
-          <button
-            type="button"
-            aria-label="Close filters"
-            onClick={onClose}
-            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
+      {!embedded && (
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--border-hairline)] pr-2.5 pl-5">
+          <h2
+            id={titleId}
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-[12px] font-medium"
+            style={{ color: "var(--ink-900)" }}
           >
-            <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-          </button>
-        </ChromeTooltip>
-      </div>
+            <SlidersHorizontal
+              className="size-[13px] shrink-0"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            Filters
+          </h2>
+          <ChromeTooltip label="Close" shortcut="Esc">
+            <button
+              type="button"
+              aria-label="Close filters"
+              onClick={onClose}
+              className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
+            >
+              <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+            </button>
+          </ChromeTooltip>
+        </div>
+      )}
 
       {filmCut && (
         // Read-only: no button, no aria-pressed. The strip's Clear is what
@@ -165,7 +181,7 @@ export function FiltersPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {sections.length === 0 ? (
-          <p className="text-body-sm px-5 py-4">
+          <p className={cn("text-body-sm py-4", pad)}>
             No filterable points in this match.
           </p>
         ) : (
@@ -180,12 +196,18 @@ export function FiltersPanel({
               summary={sectionSummary(draft, section.id, names)}
               draft={draft}
               onToggleOption={actions.toggle}
+              pad={pad}
             />
           ))
         )}
       </div>
 
-      <div className="flex h-[60px] shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] pr-4 pl-5">
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-3 border-t border-[var(--border-hairline)]",
+          embedded ? "h-12 px-2" : "h-[60px] pr-4 pl-5",
+        )}
+      >
         <button
           type="button"
           onClick={actions.clear}
@@ -198,20 +220,26 @@ export function FiltersPanel({
         >
           Clear all
         </button>
-        <span
-          aria-live="polite"
-          className="min-w-0 flex-1 text-right text-[11px] whitespace-nowrap tabular-nums"
-          style={{ color: "var(--ink-500)" }}
-        >
-          {draftCountLine(count, total, noun)}
-        </span>
+        {count === null || embedded ? (
+          <span className="flex-1" />
+        ) : (
+          <span
+            aria-live="polite"
+            className="min-w-0 flex-1 text-right text-[11px] whitespace-nowrap tabular-nums"
+            style={{ color: "var(--ink-500)" }}
+          >
+            {draftCountLine(count, total, noun)}
+          </span>
+        )}
         <button
           type="button"
           onClick={actions.apply}
           disabled={!canApply(draft, filters)}
           className={cn(advButton("primary", "sm"), "whitespace-nowrap")}
         >
-          {showPointsLabel(count, noun)}
+          {count === null
+            ? `Show ${noun?.many ?? "points"}`
+            : showPointsLabel(count, noun)}
         </button>
       </div>
     </section>
@@ -225,6 +253,7 @@ function FilterSection({
   summary,
   draft,
   onToggleOption,
+  pad,
 }: {
   section: PanelSection;
   open: boolean;
@@ -233,6 +262,8 @@ function FilterSection({
   summary: string | null;
   draft: MatchFilters;
   onToggleOption: (group: PanelGroup["group"], value: unknown) => void;
+  /** The rows' side inset — the drawer's 20px, or the host's own. */
+  pad: string;
 }) {
   const bodyId = useId();
   return (
@@ -245,7 +276,10 @@ function FilterSection({
         aria-expanded={open}
         aria-controls={bodyId}
         onClick={onToggleOpen}
-        className="flex h-11 w-full cursor-pointer items-center gap-2 px-5 text-left focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        className={cn(
+          "flex h-11 w-full cursor-pointer items-center gap-2 text-left focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+          pad,
+        )}
       >
         <span
           className="shrink-0 text-[12px] font-medium"
@@ -270,7 +304,11 @@ function FilterSection({
           aria-hidden="true"
         />
       </button>
-      <div id={bodyId} hidden={!open} className="flex flex-col gap-4 px-5 pb-4">
+      <div
+        id={bodyId}
+        hidden={!open}
+        className={cn("flex flex-col gap-4 pb-4", pad)}
+      >
         {section.id === "custom" && (
           <p className="text-micro">
             One shot in the rally has to match every choice here.

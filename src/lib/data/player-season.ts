@@ -122,6 +122,9 @@ export interface SeasonMatch extends SeasonMatchStats {
   date: string | null;
   /** The opponent's name, as the match names them. */
   opponent: string;
+  /** The opponent's hand off the match row (`SeasonVizMatch.opponentHand`),
+   *  null when it does not say. Optional: a fold reads none of it. */
+  opponentHand?: "right" | "left" | null;
 }
 
 /* ── Head to head rows ───────────────────────────────────────────────────── */

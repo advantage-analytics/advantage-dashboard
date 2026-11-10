@@ -721,3 +721,31 @@ test("validateVizInput keeps a non-ace result value off serve, dropping only ace
     filters: { ...EMPTY_VIZ_FILTERS, result: ["won"] },
   });
 });
+
+/* ── The season's own filters never reach a saved view ─────────────────── */
+
+test("a saved view never carries the season's filters: vopp, vm and season are not filter keys", () => {
+  const blob = {
+    ball: ["first"],
+    vopp: "left",
+    vm: ["aa11", "bb22"],
+    season: { opponentHand: "left", matches: ["aa11"] },
+    opponentHand: "left",
+    matches: ["aa11"],
+  };
+  const params = filtersToParams(blob);
+  expect(params.has("vopp")).toBe(false);
+  expect(params.has("vm")).toBe(false);
+  expect([...params.keys()]).toEqual(["ball"]);
+  const valid = validateVizInput({
+    cut: "serve",
+    chart: "scatter",
+    filters: blob,
+  });
+  expect(valid).not.toBeNull();
+  expect(valid!.filters).toEqual({ ...EMPTY_VIZ_FILTERS, ball: ["first"] });
+  expect(valid).not.toHaveProperty("season");
+  expect(Object.keys(valid!.filters).sort()).toEqual(
+    Object.keys(EMPTY_VIZ_FILTERS).sort(),
+  );
+});

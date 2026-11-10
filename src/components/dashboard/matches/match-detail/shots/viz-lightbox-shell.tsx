@@ -39,7 +39,12 @@ import {
   type BandEditorState,
 } from "./band-editor-state";
 import { APRON_FILL, HEAT_APRON_FILL } from "./court-art";
-import { viewerInitialTransform } from "./court-geometry";
+import {
+  projectViewerDot,
+  viewerArtPoint,
+  viewerFullCourtTransform,
+  viewerInitialTransform,
+} from "./court-geometry";
 import { bandKindFor } from "./cut-kinds";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
@@ -48,6 +53,8 @@ import {
   LegendFilter,
   LightboxFilterPanel,
   LightboxFilterStrip,
+  type LightboxAdvancedFilters,
+  type LightboxSeasonFilters,
 } from "./lightbox-filters";
 import {
   dotMatchesPick,
@@ -63,8 +70,9 @@ import {
   LIGHTBOX_OVERLAY_CLASS,
 } from "./lightbox-frame";
 import { LightboxStats } from "./lightbox-stats";
-import { KEY_PAN_PX } from "./pan-zoom";
+import { GLIDE_MIN_RELATIVE_ZOOM, KEY_PAN_PX } from "./pan-zoom";
 import type { StatPick } from "./stat-cut";
+import { COURT_MORPH_CLOSE_EASE, runCourtMorphClose } from "./viz-court-morph";
 import { usePanZoom } from "./use-pan-zoom";
 import type { BandReceipt, BandSaveOutcome } from "./viz-bands-context";
 import {
@@ -80,6 +88,7 @@ import type {
   Chart,
   Cut,
   PlayerFilter,
+  VizDot,
   VizFilters,
   VizResult,
   VizStats,
@@ -94,6 +103,9 @@ export interface LightboxPointListArgs {
   onSelectPoint: (point: MatchPoint) => void;
   /** The empty line under "No points to play". */
   emptyLine: string;
+  /** Whether a second click on this row can watch its point — the selected
+   *  row's line ends "Click again to watch" only then. Stable identity. */
+  canWatch: (point: MatchPoint) => boolean;
 }
 
 /** What the footer's actions are built from. */
@@ -125,6 +137,21 @@ export interface VizLightboxShellProps {
   statRowDots: (pick: StatPick) => Set<string> | null;
   /** A mark's readout's last line ("Set 1 · Game 4 · You serving"). */
   whereFor?: (pointId: string) => string | null;
+  /** "vs Lee · Nov 3": which match a mark is from, on a court drawn over
+   *  several (the season's). Omitted on one match's court. */
+  matchFor?: (dot: VizDot) => string | null;
+  /**
+   * The second click. A click (or Enter) on the SELECTED mark, or on its
+   * Points row, watches that one point when `canWatch` says it can; the
+   * first click only selects. `onWatch` is handed the strip's sentence (the
+   * host's filters, then the legend's and a Statistics row's pick) to name
+   * the point by. Omitted, a second click does nothing and every hint reads
+   * "Click to focus".
+   */
+  watch?: {
+    canWatch: (dot: VizDot) => boolean;
+    onWatch: (dot: VizDot, phrases: string[]) => void;
+  };
 
   /* ── Words ───────────────────────────────────────────────────────────── */
   title: string;
@@ -147,6 +174,11 @@ export interface VizLightboxShellProps {
     sets: readonly number[];
     errorSplitJudged: boolean;
     countWith: (patch: Partial<VizFilters>) => number;
+    /** The "Advanced filters" row (`filters.match`). Omitted, not drawn. */
+    advanced?: LightboxAdvancedFilters;
+    /** A season's "Opponent plays" and "Matches". Omitted (the match
+     *  report), not drawn. */
+    season?: LightboxSeasonFilters;
   };
   /** The control row's menus (view, chart). `enterBandEdit` opens the band
    *  editor, when `bandEditor` allows it. */
@@ -231,6 +263,8 @@ export function VizLightboxShell({
   hasFilters,
   statRowDots,
   whereFor,
+  matchFor,
+  watch,
   title,
   subtitle,
   filterPhrases,
@@ -301,10 +335,6 @@ export function VizLightboxShell({
   const releaseReadout = useCallback(() => {
     setActiveMarkId(null);
     setFocusedMarkId(null);
-  }, []);
-  const selectMark = useCallback((id: string) => {
-    setActiveMarkId(null);
-    setSelectedMarkId((prev) => (prev === id ? null : id));
   }, []);
 
   /** The right column: the points behind the marks, or their statistics.
@@ -383,19 +413,6 @@ export function VizLightboxShell({
   if (selectedMarkId !== null && visibleSelectedMarkId === null)
     setSelectedMarkId(null);
 
-  // A row selects its point's mark on the court (the first mark that stands
-  // for that point), so the row and the mark light together.
-  const selectPoint = useCallback(
-    (point: MatchPoint) => {
-      const dot = dots.find(
-        (d) => d.meta?.pointId === point.id && markIsPoint(cut, d),
-      );
-      if (!dot) return;
-      setActiveMarkId(null);
-      setSelectedMarkId((prev) => (prev === dot.id ? null : dot.id));
-    },
-    [dots, cut],
-  );
   const selectedPointId =
     visibleSelectedMarkId !== null
       ? (dots.find((d) => d.id === visibleSelectedMarkId)?.meta?.pointId ??
@@ -426,6 +443,79 @@ export function VizLightboxShell({
   const exitEdit = useCallback(() => setEditor(null), []);
 
   const pz = usePanZoom(cut, stageRef, dropActiveMark, editing);
+
+  /* ── Selecting a mark glides the court to it ──────────────────────────── */
+
+  // Selecting (a mark's click or Enter, or a Points row) centres the mark on
+  // the stage, easing in to 150% of the cut's 100% on the way when the court
+  // is further out than that; deselecting leaves the court where it is.
+  const { glideTo, stage: pzStage } = pz;
+  const glideToMark = useCallback(
+    (dot: VizDot) => {
+      if (pzStage.w === 0 || pzStage.h === 0) return;
+      const p = projectViewerDot(cut, dot);
+      const home = viewerInitialTransform(cut, pzStage);
+      glideTo(viewerArtPoint(p.x, p.y), home.z * GLIDE_MIN_RELATIVE_ZOOM);
+    },
+    [cut, pzStage, glideTo],
+  );
+  // The host's watch and the strip's sentence, read at click time through
+  // refs so `select` keeps its identity across the host's renders (the mark
+  // layer is memoised on it).
+  const watchRef = useRef(watch);
+  const phrasesRef = useRef<string[]>([]);
+  useEffect(() => {
+    watchRef.current = watch;
+  });
+  // First click selects and glides; a click on the mark already selected
+  // (or its row, or Enter on it) is the second click and watches its point,
+  // when the host can play it — otherwise nothing. Deselecting is Esc or a
+  // click on the empty court, never a second click.
+  const select = useCallback(
+    (dot: VizDot) => {
+      setActiveMarkId(null);
+      if (visibleSelectedMarkId === dot.id) {
+        const host = watchRef.current;
+        if (host?.canWatch(dot)) host.onWatch(dot, phrasesRef.current);
+        return;
+      }
+      setSelectedMarkId(dot.id);
+      glideToMark(dot);
+    },
+    [visibleSelectedMarkId, glideToMark],
+  );
+  const selectMark = useCallback(
+    (id: string) => {
+      const dot = dots.find((d) => d.id === id);
+      if (dot) select(dot);
+    },
+    [dots, select],
+  );
+  // A row selects its point's mark on the court (the first mark that stands
+  // for that point), so the row and the mark light together.
+  const markOfPoint = useCallback(
+    (point: MatchPoint) =>
+      dots.find((d) => d.meta?.pointId === point.id && markIsPoint(cut, d)),
+    [dots, cut],
+  );
+  const selectPoint = useCallback(
+    (point: MatchPoint) => {
+      const dot = markOfPoint(point);
+      if (dot) select(dot);
+    },
+    [markOfPoint, select],
+  );
+  const canWatchMark = watch?.canWatch;
+  const canWatchPoint = useCallback(
+    (point: MatchPoint) => {
+      const dot = markOfPoint(point);
+      return dot !== undefined && (canWatchMark?.(dot) ?? false);
+    },
+    [markOfPoint, canWatchMark],
+  );
+  // The press that may end in a click on the empty court: a press that
+  // moved past the pan's dead zone was a drag, and does not deselect.
+  const pressRef = useRef<{ x: number; y: number } | null>(null);
 
   // A resize re-fits the court while the editor is open: re-fit the draft to
   // the new zoom during render, the way a stale editor is dropped above.
@@ -479,6 +569,59 @@ export function VizLightboxShell({
     }
     return savedBandZones;
   }, [unit, savedBandZones, activeEditor]);
+
+  /* ── Closing ──────────────────────────────────────────────────────────── */
+
+  // A close the reader asks for (Esc, Close, the scrim) plays out before the
+  // host drops the lightbox: the court shrinks back into the card it came
+  // from (`viz-court-morph.ts`) while the scrim and the box fade, then
+  // `onClose`. The ref guards a second Esc or click in that window; the
+  // state draws the fade. A close the host makes itself (the URL losing its
+  // cut) unmounts at once, as before.
+  const closingRef = useRef(false);
+  const closeTimerRef = useRef<number | null>(null);
+  const [closingMs, setClosingMs] = useState<number | null>(null);
+  const closing = closingMs !== null;
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current !== null)
+        window.clearTimeout(closeTimerRef.current);
+    },
+    [],
+  );
+  function requestClose() {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    const stage =
+      contentRef.current?.querySelector<HTMLElement>(
+        "[data-court-morph-target]",
+      ) ?? null;
+    const ms = runCourtMorphClose(
+      stage,
+      cut,
+      stage !== null && stage === stageEl ? pz.t : null,
+    );
+    if (ms <= 0) {
+      onClose();
+      return;
+    }
+    setClosingMs(ms);
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      onClose();
+    }, ms);
+  }
+  const exitStyle = closing
+    ? {
+        animationDuration: `${closingMs}ms`,
+        animationTimingFunction: COURT_MORPH_CLOSE_EASE,
+      }
+    : undefined;
+  const exitClass = "animate-out fade-out-0 fill-mode-forwards";
+
+  // A lightbox opened on its loading frame (the season's court on its way)
+  // fades its body in when the court lands, rather than cutting to it.
+  const [openedPending] = useState(pending);
 
   // Focus goes back to whatever opened the lightbox — the card, a saved
   // view's tile — when it is still on the page.
@@ -547,7 +690,7 @@ export function VizLightboxShell({
   // the applied strip goes and the column shifts up) would otherwise need
   // two presses to close.
   function escapeFromTooltip() {
-    if (!escapeStep()) onClose();
+    if (!escapeStep()) requestClose();
   }
 
   // Esc normally reaches the lightbox through Radix: the topmost layer
@@ -600,17 +743,20 @@ export function VizLightboxShell({
 
   /* ── Derived ──────────────────────────────────────────────────────────── */
 
-  // Zoom is shown against the fitted court: "180%" is 1.8× the fit.
-  const fitT =
-    pz.stage.w > 0 && pz.stage.h > 0
-      ? viewerInitialTransform(cut, pz.stage)
-      : null;
-  const zoomRelative = fitT ? pz.t.z / fitT.z : 1;
-  const atFit =
-    fitT === null ||
-    (Math.abs(zoomRelative - 1) < 0.005 &&
-      Math.abs(pz.t.px - fitT.px) < 0.5 &&
-      Math.abs(pz.t.py - fitT.py) < 0.5);
+  // Zoom is shown against the cut's own framing (`viewerInitialTransform`):
+  // a landing cut's half court is 100%, so "150%" is 1.5× that and the whole
+  // court ("Full court") reads below 100%.
+  const measured = pz.stage.w > 0 && pz.stage.h > 0;
+  const homeT = measured ? viewerInitialTransform(cut, pz.stage) : null;
+  const fullT = measured ? viewerFullCourtTransform(pz.stage) : null;
+  const zoomRelative = homeT ? pz.t.z / homeT.z : 1;
+  const sameT = (a: { z: number; px: number; py: number } | null) =>
+    a === null ||
+    (Math.abs(pz.t.z / a.z - 1) < 0.005 &&
+      Math.abs(pz.t.px - a.px) < 0.5 &&
+      Math.abs(pz.t.py - a.py) < 0.5);
+  const atHome = sameT(homeT);
+  const atFullCourt = sameT(fullT);
 
   const matched = isDraft || !points ? [] : pointsBehind(cut, dots, points);
   const legend = legendItemsFor(cut, chart);
@@ -627,6 +773,9 @@ export function VizLightboxShell({
   const phrases = [...filterPhrases];
   if (legendPick !== null) phrases.push(LEGEND_WORD[legendPick]);
   if (activeStatPick !== null) phrases.push(activeStatPick.label);
+  useEffect(() => {
+    phrasesRef.current = phrases;
+  });
   const anyCut = panelActive || legendPick !== null || activeStatPick !== null;
   const statOnly =
     activeStatPick !== null && !panelActive && legendPick === null;
@@ -663,16 +812,17 @@ export function VizLightboxShell({
     <DialogPrimitive.Root
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) requestClose();
       }}
     >
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay
           className={cn(
             LIGHTBOX_OVERLAY_CLASS,
-            appear && LIGHTBOX_ENTER_CLASS,
-            "motion-reduce:animate-none",
+            appear && !closing && LIGHTBOX_ENTER_CLASS,
+            closing && exitClass,
           )}
+          style={exitStyle}
         />
         <DialogPrimitive.Content
           ref={contentRef}
@@ -694,9 +844,10 @@ export function VizLightboxShell({
           }}
           className={cn(
             LIGHTBOX_BOX_CLASS,
-            appear && LIGHTBOX_ENTER_CLASS,
-            "motion-reduce:animate-none",
+            appear && !closing && LIGHTBOX_ENTER_CLASS,
+            closing && exitClass,
           )}
+          style={exitStyle}
         >
           <TooltipProvider>
             {/* The bands receipt's live region, mounted for the lightbox's
@@ -742,7 +893,12 @@ export function VizLightboxShell({
             {pending ? (
               <LightboxBodyPending label={title} />
             ) : (
-              <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 md:flex-row md:overflow-visible">
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 md:flex-row md:overflow-visible",
+                  openedPending && "animate-in duration-200 fade-in-0",
+                )}
+              >
                 {/* Court column */}
                 <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
                   <div className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
@@ -781,6 +937,8 @@ export function VizLightboxShell({
                         sets={filterPanel.sets}
                         errorSplitJudged={filterPanel.errorSplitJudged}
                         countWith={filterPanel.countWith}
+                        advanced={filterPanel.advanced}
+                        season={filterPanel.season}
                       />
                     )}
                     {receipt !== null && (
@@ -806,6 +964,7 @@ export function VizLightboxShell({
                   <div
                     ref={setStageEl}
                     data-court-stage=""
+                    data-court-morph-target=""
                     className={cn(
                       "relative h-[420px] shrink-0 overflow-hidden rounded-[10px] select-none md:h-auto md:min-h-[360px] md:flex-1 md:shrink",
                       editing
@@ -816,7 +975,13 @@ export function VizLightboxShell({
                       touchAction: "none",
                       background: heat ? HEAT_APRON_FILL : APRON_FILL,
                     }}
-                    onPointerDown={pz.onPointerDown}
+                    onPointerDown={(event) => {
+                      pressRef.current = {
+                        x: event.clientX,
+                        y: event.clientY,
+                      };
+                      pz.onPointerDown(event);
+                    }}
                     onPointerMove={pz.onPointerMove}
                     onPointerUp={pz.onPointerUp}
                     onPointerCancel={pz.onPointerUp}
@@ -830,6 +995,15 @@ export function VizLightboxShell({
                         ) === null
                       ) {
                         dropActiveMark();
+                        // A click on the empty court lets go of the
+                        // selection — but not the end of a drag.
+                        const press = pressRef.current;
+                        const dragged =
+                          press !== null &&
+                          Math.abs(event.clientX - press.x) +
+                            Math.abs(event.clientY - press.y) >
+                            4;
+                        if (!dragged && !editing) setSelectedMarkId(null);
                       }
                     }}
                   >
@@ -854,6 +1028,8 @@ export function VizLightboxShell({
                       onRove={roveMark}
                       onSelect={selectMark}
                       whereFor={whereFor}
+                      matchFor={matchFor}
+                      canWatchMark={canWatchMark}
                       focusIds={statHover !== null ? hoverIds : null}
                       outline={outline}
                       onReadoutEnter={holdReadout}
@@ -934,10 +1110,11 @@ export function VizLightboxShell({
                       !isDraft && (
                         <ZoomControls
                           relative={zoomRelative}
-                          atFit={atFit}
+                          atHome={atHome}
+                          atFullCourt={atFullCourt}
                           onZoomIn={pz.zoomIn}
                           onZoomOut={pz.zoomOut}
-                          onFit={pz.fit}
+                          onFullCourt={pz.fullCourt}
                           onEscape={escapeFromTooltip}
                         />
                       )
@@ -1011,10 +1188,14 @@ export function VizLightboxShell({
                   </div>
                   {!isDraft &&
                     (pane === "points" && pointList ? (
+                      // `selectPoint` reads the watch and sentence refs only
+                      // when a row is clicked, never while this renders.
+                      // eslint-disable-next-line react-hooks/refs -- see above
                       pointList.render({
                         points: matched,
                         selectedPointId,
                         onSelectPoint: selectPoint,
+                        canWatch: canWatchPoint,
                         emptyLine:
                           cut === "serve" && dots.length > 0
                             ? `${dots.length} ${dots.length === 1 ? "serve" : "serves"} went out. A fault isn't a point, so there is no clip; the court shows where they landed.`
@@ -1088,23 +1269,27 @@ function StageCard({ children }: { children: ReactNode }) {
 }
 
 /**
- * + / − / Fit, bottom-right of the court (canvas S11), and — only while the
- * court is zoomed or panned — the level, bottom-left: "180% · Drag to move
- * around". Fit is spent at the fitted court.
+ * + / − / Full court, bottom-right of the court (canvas S11), and — only
+ * while the court is off its 100% framing — the level, bottom-left: "150% ·
+ * Drag to move around". Full court zooms out to the whole court (below 100%
+ * on a landing cut, whose 100% is the half the shots land in) and is spent
+ * there; `0` comes back to 100%.
  */
 function ZoomControls({
   relative,
-  atFit,
+  atHome,
+  atFullCourt,
   onZoomIn,
   onZoomOut,
-  onFit,
+  onFullCourt,
   onEscape,
 }: {
   relative: number;
-  atFit: boolean;
+  atHome: boolean;
+  atFullCourt: boolean;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onFit: () => void;
+  onFullCourt: () => void;
   /** The lightbox's Esc step, for when a zoom button's tooltip holds Esc. */
   onEscape: () => void;
 }) {
@@ -1152,24 +1337,19 @@ function ZoomControls({
           aria-hidden="true"
           className="mx-0.5 h-4 w-px bg-[var(--border-medium)]"
         />
-        <ChromeTooltip
-          label="Fit the court"
-          shortcut="0"
-          side="top"
-          onEscapeKeyDown={onEscape}
-        >
+        <ChromeTooltip label="Full court" side="top" onEscapeKeyDown={onEscape}>
           <button
             type="button"
-            aria-label="Fit the court"
-            onClick={onFit}
-            disabled={atFit}
+            aria-label="Full court"
+            onClick={onFullCourt}
+            disabled={atFullCourt}
             className={button}
           >
             <Maximize className="size-3.5" strokeWidth={1.5} aria-hidden />
           </button>
         </ChromeTooltip>
       </div>
-      {!atFit && (
+      {!atHome && (
         <span
           data-chrome=""
           className="pointer-events-none absolute bottom-3 left-3 inline-flex h-[26px] items-center rounded-[8px] bg-[var(--surface-card)] px-2.5 text-[11px] text-[var(--ink-700)] tabular-nums shadow-[var(--shadow-dropdown)]"

@@ -721,6 +721,18 @@
   }
 }
 
+/* Visualizations: a card's court growing into the lightbox's court
+   (src/components/dashboard/matches/match-detail/shots/viz-court-morph.ts).
+   While the copy of the card's court flies, the lightbox's own court - or
+   the loading bar standing in for it - stays hidden under it, so the two
+   never show at once and the lightbox's court is the final frame. The
+   attribute is on <html> only for the flight (380ms plus a 100ms settle).
+   Keep this block ASCII-only: Turbopack's dev CSS pipeline silently drops a
+   whole block with non-ASCII text in it (see commit 7c059e446). */
+html[data-viz-court-morph] [data-court-morph-target] {
+  opacity: 0;
+}
+
 /* The film room's court marks (film-court-card.tsx) entering. A mark's
    steady-state opacity is a pure function of film time (markOpacity), so it
    is written INLINE on the element and changes as the playhead moves - which

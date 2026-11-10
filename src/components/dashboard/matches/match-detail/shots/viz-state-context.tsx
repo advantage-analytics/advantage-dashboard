@@ -120,8 +120,16 @@ export function useVizState(): VizStateContextValue {
 export function VizStateProvider({
   children,
   errorSplitJudged: errorSplitJudgedProp,
+  season = false,
 }: {
   children: ReactNode;
+  /**
+   * A player's season (`profile-visualizations-view.tsx`): the URL's
+   * `?vopp=` / `?vm=` are read into `VizState.season`, as its Server
+   * Component reads them (`parseSeasonVizState`). The match report omits it
+   * and never parses them.
+   */
+  season?: boolean;
   /**
    * The Error-type rule a link is read under, for a host with no match
    * filters provider above it. The season page passes
@@ -150,7 +158,7 @@ export function VizStateProvider({
   // below sets), so calling it unconditionally here would re-parse the query
   // string on every render for no reason.
   const [state, setRenderedState] = useState<VizState>(() =>
-    parseVizState(searchParams, { errorSplitJudged }),
+    parseVizState(searchParams, { errorSplitJudged, season }),
   );
   const [navigation, setNavigation] = useState(0);
   const intendedRef = useRef<VizState>(state);
@@ -161,7 +169,7 @@ export function VizStateProvider({
       urlQuery: query,
       ownQueries: ownQueriesRef.current,
       intended: intendedRef.current,
-      match: { errorSplitJudged },
+      match: { errorSplitJudged, season },
     });
     if (reconciled.external) setNavigation((n) => n + 1);
     intendedRef.current = reconciled.state;
@@ -169,7 +177,7 @@ export function VizStateProvider({
     setRenderedState(reconciled.state);
     // `reconciled.state` is derived from `query`, so re-running only when
     // `query` changes is correct.
-  }, [query, errorSplitJudged]);
+  }, [query, errorSplitJudged, season]);
 
   // `hrefFor`/`setState` wrapped in `useCallback`, and the context value
   // itself in `useMemo`: every reader downstream of

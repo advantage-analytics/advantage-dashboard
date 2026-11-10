@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Flame, Grid3x3, ScatterChart } from "lucide-react";
+import { Flame, Grid3x3, ScatterChart, type LucideIcon } from "lucide-react";
 import {
   FloatMenu,
   FloatMenuDivider,
@@ -128,19 +128,14 @@ export function ChartMenu({
         label="Scatter"
         description="Every landing point, coloured by outcome"
         chosen={state.chart === "scatter"}
+        icon={<ChartRowIcon icon={ScatterChart} />}
         onSelect={() => selectChart("scatter")}
       />
       <FloatMenuItem
         label="Heat"
         description="Where they cluster — the ramp replaces the legend"
         chosen={state.chart === "heat"}
-        icon={
-          <Flame
-            className="size-[13px] shrink-0 text-[var(--ink-400)]"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-        }
+        icon={<ChartRowIcon icon={Flame} />}
         onSelect={() => selectChart("heat")}
       />
       {zonesAllowed && (
@@ -152,6 +147,7 @@ export function ChartMenu({
               : "Count and points won per depth or contact band"
           }
           chosen={state.chart === "zones"}
+          icon={<ChartRowIcon icon={Grid3x3} />}
           onSelect={() => selectChart("zones")}
         />
       )}
@@ -171,6 +167,21 @@ export function ChartMenu({
         />
       )}
     </FloatMenu>
+  );
+}
+
+/**
+ * A chart row's leading glyph — the same one the trigger wears for that
+ * chart, 13px in `--ink-400`. Every chart row carries one, so Scatter, Heat
+ * and Zones start their labels on one line.
+ */
+function ChartRowIcon({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <Icon
+      className="size-[13px] shrink-0 text-[var(--ink-400)]"
+      strokeWidth={1.5}
+      aria-hidden="true"
+    />
   );
 }
 

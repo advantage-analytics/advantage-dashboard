@@ -127,6 +127,10 @@ export interface DbPlayerMatchRow {
   created_by: string | null;
   /** The opponent's stored id — the Opponents page's key when it is set. */
   opponent_player_id: string | null;
+  /** Raw, unvalidated hands (`normalizePlayerHand`). The wizard writes
+   *  `player_*` for seat one and `opponent_*` for seat two. */
+  player_hand: string | null;
+  opponent_hand: string | null;
 }
 
 interface DbEntryRow {
@@ -214,7 +218,7 @@ export async function readPlayerMatchSides(
   const { data: matchRows, error: matchesError } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, event_entry_id, round, result, match_type, court_type, verified, verified_at, errors_judged_at, duration, source_provider, created_by, opponent_player_id",
+      "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, event_entry_id, round, result, match_type, court_type, verified, verified_at, errors_judged_at, duration, source_provider, created_by, opponent_player_id, player_hand, opponent_hand",
     )
     .eq("program_id", programId)
     .or(

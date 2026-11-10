@@ -80,7 +80,14 @@ export function LightboxBodyPending({ label }: { label: string }) {
           </div>
           <PendingBar className="h-[26px] w-[72px] rounded-[var(--radius-pill)]" />
         </div>
-        <PendingBar className="h-[420px] w-full shrink-0 rounded-[10px] md:h-auto md:min-h-[360px] md:flex-1 md:shrink" />
+        {/* The court's stand-in: what a card's court grows into while the
+            court is on its way (`viz-court-morph.ts`). */}
+        <div
+          data-court-morph-target=""
+          className="flex h-[420px] w-full shrink-0 md:h-auto md:min-h-[360px] md:flex-1 md:shrink"
+        >
+          <PendingBar className="h-full w-full rounded-[10px]" />
+        </div>
         <div className="flex h-4 items-center gap-x-[14px]">
           <PendingBar className="h-2.5 w-10" />
           <PendingBar className="h-2.5 w-10" />

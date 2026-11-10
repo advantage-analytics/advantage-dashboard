@@ -83,7 +83,7 @@ test("one dialog per opening: the frame before the chunk (a modal, Esc and Tab k
   const wall = page.getByRole("list", { name: "Default views" });
   await expect(wall).toBeVisible();
   const serveCard = wall.getByRole("link", {
-    name: /^First serves, Avery Kim/,
+    name: /^All serves, Avery Kim/,
   });
   const rallyCard = wall.getByRole("link", { name: /^Rally shots, Avery Kim/ });
 
@@ -140,7 +140,7 @@ test("one dialog per opening: the frame before the chunk (a modal, Esc and Tab k
   await expect(page.locator("[data-court-stage]")).toHaveCount(0);
   await expect(loadingServe).not.toHaveClass(/animate-in/);
   await loadingServe.evaluate((el) => el.setAttribute("data-opening", "one"));
-  const serve = page.getByRole("dialog", { name: "First serves" });
+  const serve = page.getByRole("dialog", { name: "All serves" });
   await expect(serve).toBeVisible({ timeout: 8_000 });
   await expect(serve).toHaveAttribute("data-opening", "one");
   await expect(page.getByRole("dialog")).toHaveCount(1);
@@ -161,9 +161,7 @@ test("one dialog per opening: the frame before the chunk (a modal, Esc and Tab k
   const loadingRally = shellPending(page, "Rally placement");
   await expect(loadingRally).toBeVisible();
   await expect(loadingRally).toHaveClass(/animate-in/);
-  await expect(page.getByRole("dialog", { name: "First serves" })).toHaveCount(
-    0,
-  );
+  await expect(page.getByRole("dialog", { name: "All serves" })).toHaveCount(0);
   await expect(page.locator("[data-court-stage]")).toHaveCount(0);
   await loadingRally.evaluate((el) => el.setAttribute("data-opening", "two"));
   const rally = page.getByRole("dialog", { name: "Rally shots" });
@@ -194,10 +192,10 @@ test("a filter ticked inside the card keeps the court (optimistic); the card clo
   await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=1200`);
   const wall = page.getByRole("list", { name: "Default views" });
   const serveCard = wall.getByRole("link", {
-    name: /^First serves, Avery Kim/,
+    name: /^All serves, Avery Kim/,
   });
   await serveCard.click();
-  const serve = page.getByRole("dialog", { name: "First serves" });
+  const serve = page.getByRole("dialog", { name: "All serves" });
   await expect(serve).toBeVisible({ timeout: 8_000 });
   const all = await marks(serve).count();
   expect(all).toBeGreaterThan(0);
@@ -250,8 +248,8 @@ test("two options ticked against the option order still land: the store's click 
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=600`);
   const wall = page.getByRole("list", { name: "Default views" });
-  await wall.getByRole("link", { name: /^First serves, Avery Kim/ }).click();
-  const serve = page.getByRole("dialog", { name: "First serves" });
+  await wall.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
+  const serve = page.getByRole("dialog", { name: "All serves" });
   await expect(serve).toBeVisible({ timeout: 8_000 });
   const all = await marks(serve).count();
   expect(all).toBeGreaterThan(0);
@@ -310,7 +308,7 @@ test("the wall reads busy until the server's cards are the chip's — after a ch
   await expect(wallBusy(page)).toHaveAttribute("aria-busy", "true");
   await expect(wallBusy(page)).toHaveClass(/pointer-events-none/);
   await expect(
-    wallList(page).locator('a[aria-label^="First serves, Avery Kim"]'),
+    wallList(page).locator('a[aria-label^="All serves, Avery Kim"]'),
   ).toHaveCount(1);
   await expect(
     page.locator('#root [role="status"]', {
@@ -319,7 +317,7 @@ test("the wall reads busy until the server's cards are the chip's — after a ch
   ).toHaveCount(1);
   await expect(wallBusy(page)).toHaveCount(0, { timeout: 5_000 });
   await expect(
-    wallList(page).locator('a[aria-label^="First serves, Opponents"]'),
+    wallList(page).locator('a[aria-label^="All serves, Opponents"]'),
   ).toHaveCount(1);
   await expect(page.locator('#root [role="status"]')).toHaveCount(0);
 
@@ -333,10 +331,10 @@ test("the wall reads busy until the server's cards are the chip's — after a ch
   await expect(wallBusy(page)).toHaveCount(0, { timeout: 5_000 });
   const wall = page.getByRole("list", { name: "Default views" });
   const serveCard = wall.getByRole("link", {
-    name: /^First serves, Avery Kim/,
+    name: /^All serves, Avery Kim/,
   });
   await serveCard.click();
-  const dialog = page.getByRole("dialog", { name: "First serves" });
+  const dialog = page.getByRole("dialog", { name: "All serves" });
   await expect(dialog).toBeVisible({ timeout: 8_000 });
   const cardPlayer = dialog.getByRole("group", { name: "Player" });
   await cardPlayer.getByRole("button", { name: "Opponent" }).click();
@@ -350,10 +348,10 @@ test("the wall reads busy until the server's cards are the chip's — after a ch
   await expect(wallPressed(page)).toHaveText("You");
   await expect(wallBusy(page)).toHaveAttribute("aria-busy", "true");
   await expect(
-    wallList(page).locator('a[aria-label^="First serves, Avery Kim"]'),
+    wallList(page).locator('a[aria-label^="All serves, Avery Kim"]'),
   ).toHaveCount(1);
   await expect(
-    wallList(page).locator('a[aria-label^="First serves, Opponents"]'),
+    wallList(page).locator('a[aria-label^="All serves, Opponents"]'),
   ).toHaveCount(0);
 
   // Close: the wall on its own player, busy until its cards come back, then
@@ -369,7 +367,7 @@ test("the wall reads busy until the server's cards are the chip's — after a ch
   await expect(serveCard).toBeFocused();
   await expect(wallBusy(page)).toHaveCount(0, { timeout: 5_000 });
   await expect(
-    wall.getByRole("link", { name: /^First serves, Avery Kim/ }),
+    wall.getByRole("link", { name: /^All serves, Avery Kim/ }),
   ).toBeVisible();
   await expect(wall.getByRole("link", { name: /Opponents/ })).toHaveCount(0);
   await expect(serveCard).toBeFocused();
@@ -388,7 +386,7 @@ test("a card the other side has nothing for: switched to Opponent inside, the em
   );
   const wall = page.getByRole("list", { name: "Default views" });
   const serveCard = wall.getByRole("link", {
-    name: /^First serves, Avery Kim/,
+    name: /^All serves, Avery Kim/,
   });
   await expect(serveCard).toBeVisible();
 
@@ -403,7 +401,7 @@ test("a card the other side has nothing for: switched to Opponent inside, the em
     wallList(page).locator('a[aria-label^="Rally shots, Opponents"]'),
   ).toHaveCount(1);
   await expect(
-    wallList(page).locator('a[aria-label^="First serves"]'),
+    wallList(page).locator('a[aria-label^="All serves"]'),
   ).toHaveCount(0);
   await page
     .locator('#root [role="group"][aria-label="Player"]')
@@ -415,7 +413,7 @@ test("a card the other side has nothing for: switched to Opponent inside, the em
   // Your serve card, switched to Opponent inside: the court is honest about
   // the nothing, the wall under it still holds your serve card.
   await serveCard.click();
-  const dialog = page.getByRole("dialog", { name: "First serves" });
+  const dialog = page.getByRole("dialog", { name: "All serves" });
   await expect(dialog).toBeVisible({ timeout: 8_000 });
   await dialog
     .getByRole("group", { name: "Player" })
@@ -429,7 +427,7 @@ test("a card the other side has nothing for: switched to Opponent inside, the em
   );
   await expect(marks(dialog)).toHaveCount(0);
   await expect(
-    wallList(page).locator('a[aria-label^="First serves, Avery Kim"]'),
+    wallList(page).locator('a[aria-label^="All serves, Avery Kim"]'),
   ).toHaveCount(1);
 
   // Esc: focus on that card, not on the body.
@@ -464,7 +462,7 @@ test("a shell chunk that fails to load reaches the boundary, and Try again loads
   // message has been seen.
   await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=3000`);
   const wall = page.getByRole("list", { name: "Default views" });
-  await wall.getByRole("link", { name: /^First serves, Avery Kim/ }).click();
+  await wall.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
 
   // The page's own boundary (`WidgetBoundary`) takes the failed import.
   const retry = page.getByRole("status").filter({
@@ -481,7 +479,7 @@ test("a shell chunk that fails to load reaches the boundary, and Try again loads
   // still open in it), the import is asked for afresh — the same files,
   // requested again, not a rejection remembered — and the court lands.
   await retry.getByRole("button", { name: "Try again" }).click();
-  const serve = page.getByRole("dialog", { name: "First serves" });
+  const serve = page.getByRole("dialog", { name: "All serves" });
   await expect(serve).toBeVisible({ timeout: 10_000 });
   await expect(marks(serve).first()).toBeVisible();
   await expect(retry).toHaveCount(0);
@@ -515,4 +513,315 @@ test("a season with nothing analyzed opens nothing for a stale ?cut= link", asyn
   await expect(page.locator("[data-pending-bar]")).toHaveCount(0);
   await expect(wallBusy(page)).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test("Saved: the workspace's views over the season; opening one names it, and closing lands back on Saved", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=50`);
+  await expect(wallList(page)).toBeVisible();
+
+  await page.getByRole("button", { name: "Saved" }).click();
+  const saved = page.locator('#root [role="list"][aria-label="Saved views"]');
+  await expect(saved).toBeVisible();
+  await expect(saved.getByRole("listitem")).toHaveCount(2);
+  await expect(saved).toContainText("Second serves");
+  await expect(saved).toContainText("Their rally shots");
+  if (process.env.SEASON_SAVED_SHOT)
+    await page.screenshot({ path: process.env.SEASON_SAVED_SHOT });
+
+  await saved.getByRole("link", { name: /^Second serves/ }).click();
+  const dialog = page.getByRole("dialog", { name: /Second serves/ });
+  await expect(dialog).toBeVisible();
+  await expect(page).toHaveURL(/view=v-second/);
+  if (process.env.SEASON_SAVED_SHOT)
+    await page.screenshot({
+      path: process.env.SEASON_SAVED_SHOT.replace(/\.png$/, "-open.png"),
+    });
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(saved).toBeVisible();
+  await expect(page).not.toHaveURL(/view=/);
+  expect(errors).toEqual([]);
+});
+
+test("Saved, a view's link: the page opens on Saved with the view's court; a workspace with none says so", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&delay=50&cut=serve&ball=second&view=v-second`,
+  );
+  await expect(
+    page.getByRole("dialog", { name: /Second serves/ }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.locator('#root [role="list"][aria-label="Saved views"]'),
+  ).toBeVisible();
+
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&nosaved=1`);
+  await page.getByRole("button", { name: "Saved" }).click();
+  await expect(page.getByText("No saved views yet.")).toBeVisible();
+});
+
+test("Advanced filters on the season: the Video tab's panel without counts, and a Show reaches the server", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=300`);
+  const wall = page.getByRole("list", { name: "Default views" });
+  await wall.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
+  const serve = page.getByRole("dialog", { name: "All serves" });
+  await expect(serve).toBeVisible({ timeout: 8_000 });
+  await serve.getByRole("button", { name: "Filters" }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  await panel.getByRole("button", { name: /^Advanced filters/ }).click();
+  await expect(
+    panel.getByRole("button", { name: "Filters", exact: true }),
+  ).toBeVisible();
+  const sections = panel.locator("[data-section]");
+  expect(await sections.count()).toBeGreaterThan(0);
+  const header = sections.first().getByRole("button").first();
+  // The accordion may open on its first section already.
+  if ((await header.getAttribute("aria-expanded")) !== "true")
+    await header.click();
+  await expect(header).toHaveAttribute("aria-expanded", "true");
+  await sections
+    .first()
+    .locator('button[aria-pressed="false"]')
+    .first()
+    .click();
+  // No count on the season: the primary names the noun alone.
+  const show = panel.getByRole("button", { name: "Show serves" });
+  await expect(show).toBeEnabled();
+  await show.click();
+  await expect(page).toHaveURL(/[?&]vf=/);
+  await page.keyboard.press("Escape");
+  await expect(serve.locator("[data-viz-filter-strip]")).toBeVisible({
+    timeout: 8_000,
+  });
+  expect(errors).toEqual([]);
+});
+
+test('a season mark names its match — "vs Jordan Lee · Nov 3" and where in it — and its second click opens that match\'s Video tab on that point; Back comes back to the card', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+
+  // No video for the match: the focus alone, and a second click stays.
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&cut=serve&delay=50`);
+  let dialog = page.getByRole("dialog", { name: "All serves" });
+  let mark = marks(dialog).first();
+  await expect(mark).toBeVisible();
+  await mark.hover({ force: true });
+  const readout = dialog.locator("[data-viz-readout]");
+  await expect(readout.locator("[data-viz-readout-match]")).toHaveText(
+    "vs Jordan Lee · Nov 3",
+  );
+  await expect(readout).toContainText(
+    /Set \d+ · Game \d+ · (Avery Kim|Jordan Lee) serving/,
+  );
+  await expect(readout.locator("[data-viz-readout-hint]")).toHaveText(
+    "Click to focus",
+  );
+  await mark.dispatchEvent("click");
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  await mark.dispatchEvent("click");
+  await expect(page).toHaveURL(new RegExp(`${PROFILE}\\?`));
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+
+  // With video: focus, then watch — the match's own Video tab, one point.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=serve&delay=50&video=1`,
+  );
+  dialog = page.getByRole("dialog", { name: "All serves" });
+  mark = marks(dialog).first();
+  await mark.hover({ force: true });
+  await expect(readout.locator("[data-viz-readout-hint]")).toHaveText(
+    "Click to focus · Click again to watch",
+  );
+  await mark.dispatchEvent("click");
+  await page.mouse.move(5, 5);
+  await expect(readout.locator("[data-viz-readout-hint]")).toHaveText(
+    "Click again to watch",
+  );
+  await page.screenshot({
+    path: test.info().outputPath("season-readout.png"),
+  });
+  await mark.dispatchEvent("click");
+  await expect(page).toHaveURL(/\/dashboard\/matches\/m-1\?/);
+  const url = new URL(page.url());
+  expect(url.searchParams.get("tab")).toBe("film");
+  expect(url.searchParams.get("pn")).toMatch(/^\d+$/);
+  expect(url.searchParams.get("pnl")).toBe("All serves");
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`${PROFILE}\\?.*cut=serve`));
+  await expect(page.getByRole("dialog", { name: "All serves" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("the chart menu: Scatter · Heat · Zones in the season's card, no band rows; Heat reaches the server in the same dialog, and back", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&hands=1&delay=300`);
+  const wall = page.getByRole("list", { name: "Default views" });
+  await wall.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
+  const serve = page.getByRole("dialog", { name: "All serves" });
+  await expect(serve).toBeVisible({ timeout: 8_000 });
+  const all = await marks(serve).count();
+  expect(all).toBeGreaterThan(0);
+  await serve.evaluate((el) => el.setAttribute("data-mark", "first"));
+
+  await serve.getByRole("button", { name: "Scatter" }).click();
+  for (const name of ["Scatter", "Heat", "Zones"])
+    await expect(
+      page.getByRole("menuitemradio", { name: new RegExp(name) }),
+    ).toBeVisible();
+  // No band rows and no band editor on the season.
+  await expect(page.getByText("Edit bands…")).toHaveCount(0);
+  await page.getByRole("menuitemradio", { name: /Heat/ }).click();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("chart"))
+    .toBe("heat");
+  // Heat draws the ramp, not the marks — once the server has answered.
+  await expect.poll(() => marks(serve).count(), { timeout: 8_000 }).toBe(0);
+  await expect(serve.getByRole("button", { name: "Heat" })).toBeVisible();
+  // The same dialog throughout (one per opening, never remounted).
+  await expect(serve).toHaveAttribute("data-mark", "first");
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+
+  // Zones, then back to Scatter: every mark again.
+  await serve.getByRole("button", { name: "Heat" }).click();
+  await page.getByRole("menuitemradio", { name: /Zones/ }).click();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("chart"))
+    .toBe("zones");
+  await serve.getByRole("button", { name: "Zones" }).click();
+  await page.getByRole("menuitemradio", { name: /Scatter/ }).click();
+  await expect.poll(() => marks(serve).count(), { timeout: 8_000 }).toBe(all);
+  expect(new URL(page.url()).searchParams.get("chart")).toBeNull();
+  await expect(serve).toHaveAttribute("data-mark", "first");
+  expect(errors).toEqual([]);
+});
+
+test("Opponent plays and Matches: the season's own groups in Filters, newest first with each match's count; a hand and a tick narrow the court, the strip names them, Clear filter lets go of both", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&hands=1&delay=300`);
+  const wall = page.getByRole("list", { name: "Default views" });
+  await wall.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
+  const serve = page.getByRole("dialog", { name: "All serves" });
+  await expect(serve).toBeVisible({ timeout: 8_000 });
+  const all = await marks(serve).count();
+
+  await serve.getByRole("button", { name: "Filters" }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  await expect(panel).toBeVisible();
+  await expect(
+    panel.getByText("Opponent plays", { exact: true }),
+  ).toBeVisible();
+  await expect(panel.getByText("Matches", { exact: true })).toBeVisible();
+  for (const name of ["Right", "Left", "Unknown"])
+    await expect(panel.getByRole("radio", { name })).toBeVisible();
+  // Newest first, each "vs …" with its short date and its count; the three
+  // counts add up to the court.
+  const rows = panel.getByRole("checkbox", { name: /^vs / });
+  await expect(rows).toHaveCount(3);
+  const names = await rows.allInnerTexts();
+  expect(names.map((n) => n.split("\n")[0].replace(/\s+/g, " "))).toEqual([
+    "vs Jordan Lee Nov 3",
+    "vs Sam Ortiz Oct 20",
+    "vs Riley Park Oct 6",
+  ]);
+  const counts = names.map((n) => Number(n.trim().split(/\s+/).pop()));
+  expect(counts.reduce((a, b) => a + b, 0)).toBe(all);
+  // The Matches rows sit above the Advanced filters row.
+  const order = await panel.evaluate((el) => {
+    const text = el.textContent ?? "";
+    return [
+      text.indexOf("Opponent plays"),
+      text.indexOf("Matches"),
+      text.indexOf("Advanced filters"),
+    ];
+  });
+  expect(order[0]).toBeLessThan(order[1]);
+  expect(order[1]).toBeLessThan(order[2]);
+
+  // Lefties: Sam Ortiz's match alone.
+  await panel.getByRole("radio", { name: "Left" }).click();
+  await expect(panel.getByRole("radio", { name: "Left" })).toBeChecked();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("vopp"))
+    .toBe("left");
+  await expect
+    .poll(() => marks(serve).count(), { timeout: 8_000 })
+    .toBe(counts[1]);
+  const strip = serve.locator("[data-viz-filter-strip]");
+  await expect(strip).toContainText("Lefties");
+  // A match of another hand now adds nothing.
+  await expect(rows.nth(0)).toContainText(/0$/);
+
+  // Any again, then tick two matches: their sum.
+  await panel.getByRole("radio", { name: "Any" }).last().click();
+  await rows.nth(2).click();
+  await rows.nth(0).click();
+  await expect(rows.nth(0)).toBeChecked();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.getAll("vm"))
+    .toEqual(["m-1", "m-3"]);
+  await expect
+    .poll(() => marks(serve).count(), { timeout: 8_000 })
+    .toBe(counts[0] + counts[2]);
+  await expect(strip).toContainText("2 matches");
+  await expect(page.getByRole("dialog", { name: /^Loading/ })).toHaveCount(0);
+
+  // Clear filter: both groups let go, every match again.
+  await page.keyboard.press("Escape");
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect.poll(() => marks(serve).count(), { timeout: 8_000 }).toBe(all);
+  const url = new URL(page.url()).searchParams;
+  expect(url.has("vopp")).toBe(false);
+  expect(url.has("vm")).toBe(false);
+
+  // Closing drops them, and the wall's links never carry them.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  for (const href of await wall
+    .getByRole("link")
+    .evaluateAll((els) => els.map((el) => el.getAttribute("href") ?? "")))
+    expect(href).not.toMatch(/[?&](vopp|vm)=/);
+  expect(errors).toEqual([]);
+});
+
+test("a ?vm= naming no match of the season is ignored: the card opens on the whole season, not stuck loading", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&hands=1&delay=200`);
+  const wall = page.getByRole("list", { name: "Default views" });
+  await wall.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
+  const serve = page.getByRole("dialog", { name: "All serves" });
+  await expect(serve).toBeVisible({ timeout: 8_000 });
+  const all = await marks(serve).count();
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&hands=1&delay=200&cut=serve&vm=ffff`,
+  );
+  await expect(serve).toBeVisible({ timeout: 8_000 });
+  await expect.poll(() => marks(serve).count(), { timeout: 8_000 }).toBe(all);
+  await expect(serve.locator("[data-viz-filter-strip]")).toHaveCount(0);
 });

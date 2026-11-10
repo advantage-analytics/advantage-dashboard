@@ -51,10 +51,12 @@ import { SeasonVizLightbox } from "./season-viz-lightbox";
  * showing when the card opened, and closing goes back to it rather than to
  * the side the reader switched to inside the card.
  *
- * Saved: saved views are the workspace's (`saved_views`), listed and managed
- * on the match report with the report's own context; the season lists none
- * yet, and its Saved side says so in the wall's empty shape rather than
- * offering a "Create view" that the read-only season lightbox cannot keep.
+ * Saved: the workspace's saved views (`saved_views` — the viewer's private
+ * ones and the program's shared ones), each drawn over the season as a
+ * `WallCard` in the same grid (`savedCards`, `buildSeasonViewCards`), each
+ * for its own stored player. Read-only: they are created, renamed, shared
+ * and reordered on the match report, and the season lightbox keeps nothing,
+ * so there is no "Create view" tile and no Manage mode here.
  */
 export function ProfileVisualizationsView({
   playerName,
@@ -62,6 +64,7 @@ export function ProfileVisualizationsView({
   analyzed,
   side,
   cards,
+  savedCards,
   lightbox,
   errorSplitJudged,
 }: {
@@ -74,19 +77,22 @@ export function ProfileVisualizationsView({
   /** The side the server computed `cards` for (`?player=`). */
   side: PlayerFilter;
   cards: SeasonCard[];
+  /** The workspace's saved views over the season, in their order. */
+  savedCards: SeasonCard[];
   /** The opened card, when `?cut=` names one; `null` on the wall. */
   lightbox: SeasonLightboxData | null;
   /** The season's Error-type rule: every analyzed match judged its errors. */
   errorSplitJudged: boolean;
 }) {
   return (
-    <VizStateProvider errorSplitJudged={errorSplitJudged}>
+    <VizStateProvider errorSplitJudged={errorSplitJudged} season>
       <SeasonVizBody
         playerName={playerName}
         firstName={firstName}
         analyzed={analyzed}
         side={side}
         cards={cards}
+        savedCards={savedCards}
         lightbox={lightbox}
         errorSplitJudged={errorSplitJudged}
       />
@@ -106,6 +112,7 @@ function SeasonVizBody({
   analyzed,
   side,
   cards,
+  savedCards,
   lightbox,
   errorSplitJudged,
 }: {
@@ -114,6 +121,7 @@ function SeasonVizBody({
   analyzed: number;
   side: PlayerFilter;
   cards: SeasonCard[];
+  savedCards: SeasonCard[];
   lightbox: SeasonLightboxData | null;
   errorSplitJudged: boolean;
 }) {
@@ -156,6 +164,7 @@ function SeasonVizBody({
         player={player}
         cards={shown.cards}
         cardsSide={shown.side}
+        savedCards={savedCards}
         busy={analyzed > 0 && side !== player}
       />
       <SeasonVizLightbox
@@ -175,6 +184,7 @@ function SeasonWall({
   player,
   cards,
   cardsSide,
+  savedCards,
   busy,
 }: {
   playerName: string;
@@ -185,11 +195,20 @@ function SeasonWall({
   /** The cards shown, and the side they were computed for. */
   cards: SeasonCard[];
   cardsSide: PlayerFilter;
+  /** The saved views over the season — the Saved collection. */
+  savedCards: SeasonCard[];
   /** The server's cards are another side's than the chip's (see below). */
   busy: boolean;
 }) {
-  const { setState, hrefFor } = useVizState();
-  const [collection, setCollection] = useState<WallCollection>("default");
+  const { state, setState, hrefFor } = useVizState();
+  // A hard load of a saved view's link (`?view=`, or `?vfrom=` once edited)
+  // starts on Saved, so closing it lands among the views, as on the report.
+  const [collection, setCollection] = useState<WallCollection>(() =>
+    state.cut !== null &&
+    (state.viewId !== null || state.editedFrom !== undefined)
+      ? "saved"
+      : "default",
+  );
 
   function choosePlayer(next: PlayerFilter) {
     if (next === player) return;
@@ -293,7 +312,7 @@ function SeasonWall({
               <div
                 role="list"
                 aria-label="Default views"
-                className="grid grid-cols-1 gap-4 @min-[640px]:grid-cols-2"
+                className="grid grid-cols-1 items-start gap-4 @min-[640px]:grid-cols-2"
               >
                 {/* Keyed on the cut, not the side: the slot's element stays
                     when the server's cards change side under an open card
@@ -323,11 +342,80 @@ function SeasonWall({
           </div>
         </>
       ) : (
-        <EmptyWall>
-          Saved views live on the match report. Open one of {firstName}&rsquo;s
-          matches to create or use one.
-        </EmptyWall>
+        <SavedWall
+          savedCards={savedCards}
+          playerName={playerName}
+          firstName={firstName}
+          analyzed={analyzed}
+        />
       )}
+    </div>
+  );
+}
+
+/**
+ * The Saved collection: every saved view the viewer can see in this
+ * workspace, over the season, in the Default side's grid. A view whose cut
+ * has nothing in the season is not drawn — the wall's own rule, never an
+ * empty court — and when that leaves none, one sentence says so.
+ */
+function SavedWall({
+  savedCards,
+  playerName,
+  firstName,
+  analyzed,
+}: {
+  savedCards: SeasonCard[];
+  playerName: string;
+  firstName: string;
+  analyzed: number;
+}) {
+  const { hrefFor } = useVizState();
+  const visible = savedCards.filter((card) => card.total > 0);
+
+  if (savedCards.length === 0) {
+    return (
+      <EmptyWall>
+        No saved views yet. Save one from a match&rsquo;s Visualizations tab and
+        it shows here over {firstName}&rsquo;s season.
+      </EmptyWall>
+    );
+  }
+  if (analyzed === 0) {
+    return (
+      <EmptyWall>
+        No analyzed matches yet. Saved views are drawn from the points in{" "}
+        {firstName}&rsquo;s matches, as each one is analysed.
+      </EmptyWall>
+    );
+  }
+  if (visible.length === 0) {
+    return (
+      <EmptyWall>
+        None of the saved views has anything in {firstName}&rsquo;s matches yet.
+      </EmptyWall>
+    );
+  }
+  return (
+    <div
+      role="list"
+      aria-label="Saved views"
+      className="grid grid-cols-1 items-start gap-4 @min-[640px]:grid-cols-2"
+    >
+      {visible.map((card) => (
+        <div key={card.key} role="listitem">
+          <WallCard
+            name={card.name}
+            playerName={card.subject === "you" ? playerName : "Opponents"}
+            possessive={card.subject === "you" ? "your" : "their"}
+            cut={card.cut}
+            dots={card.dots}
+            summary={card.summary}
+            href={hrefFor(card.state)}
+            navigateState={card.state}
+          />
+        </div>
+      ))}
     </div>
   );
 }

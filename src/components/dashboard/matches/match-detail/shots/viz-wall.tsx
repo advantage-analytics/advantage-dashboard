@@ -149,7 +149,7 @@ export function VizWall({
           <div
             role="list"
             aria-label="Default views"
-            className="grid grid-cols-1 gap-4 @min-[640px]:grid-cols-2"
+            className="grid grid-cols-1 items-start gap-4 @min-[640px]:grid-cols-2"
           >
             {visibleTiles.map((tile) => (
               <div key={tile.key} role="listitem">

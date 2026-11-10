@@ -233,6 +233,8 @@ function matchRow(overrides: Partial<DbPlayerMatchRow> & { id: string }) {
     source_provider: "swing-vision",
     created_by: "u-coach",
     opponent_player_id: null,
+    player_hand: null,
+    opponent_hand: null,
     ...overrides,
   };
 }
@@ -872,13 +874,19 @@ test("loadPlayerSeasonCourts reads the season's matches and points with no file 
     expect(m.isPlayer1).toBe(full.isPlayer1);
     expect(m.isDerived).toBe(full.isDerived);
     expect(m.errorSplitJudged).toBe(full.errorSplitJudged);
-    // Nothing the Statistics fold needs and the courts do not: no lob keys,
-    // no stats rows, no date or opponent.
+    // The day and opponent ride along for the opened card's readout
+    // ("vs Lee · Nov 3"); nothing the Statistics fold needs and the courts do
+    // not — no lob keys, no stats rows.
+    expect(m.date).toBe(full.date);
+    expect(m.opponent).toBe(full.opponent);
     expect(Object.keys(m).sort()).toEqual([
+      "date",
       "errorSplitJudged",
       "isDerived",
       "isPlayer1",
       "matchId",
+      "opponent",
+      "opponentHand",
       "points",
     ]);
   });

@@ -109,7 +109,10 @@ test("statistics: the cards' eyebrows and the head-to-head groups are drawn", ()
 
 test("shots: the wall is four court-first cards, each with its split bar", () => {
   const wall = render("shots");
-  expect(wall.match(/aspect-ratio:334 \/ 216/g)?.length).toBe(4);
+  // Serve's art runs past the net to the near service line (334:314); the
+  // other three keep the half-court box.
+  expect(wall.match(/aspect-ratio:334 \/ 314/g)?.length).toBe(1);
+  expect(wall.match(/aspect-ratio:334 \/ 216/g)?.length).toBe(3);
   expect(wall.match(/h-1\.5 rounded-\[3px\]/g)?.length).toBe(4);
 });
 
