@@ -6,14 +6,16 @@ import { Filter } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/dashboard/matches/match-detail/shots/use-reduced-motion";
 
 /**
- * The applied-filter strip (v3's Data Table rule 6) for a list page: the cut
- * stated in words — never chips, never a badge — a middot, the count, and
- * one quiet action. The Matches page and the match report's Video tab draw
- * it; the Visualizations lightbox keeps its own copy
- * (`shots/lightbox-filter-strip.tsx`), which this mirrors.
+ * The applied-filter strip (v3's Data Table rule 6): the cut stated in
+ * words — never chips, never a badge — a middot, the count, and one quiet
+ * action. The ONE strip in the dashboard: the Matches page, both Opponents
+ * pages, the Schedule, the match report's Video tab and the Visualizations
+ * lightbox (match and season) all draw this, through a thin wrapper that
+ * words their own cut. Do not hand-copy the markup again.
  *
  * It unfolds into its column rather than popping in, and folds away rather
- * than vanishing (globals.css `.filter-strip-reveal`): whatever sits below
+ * than vanishing, the way the roster's "Not in the lineup" divider comes and
+ * goes (globals.css `.filter-strip-reveal`): whatever sits below
  * eases down by the strip's height instead of jumping the moment a filter
  * lands. The host's flex gap is folded into a negative margin while shut —
  * pass the gap the strip sits in — so the column opens by the strip AND its
@@ -30,8 +32,9 @@ import { usePrefersReducedMotion } from "@/components/dashboard/matches/match-de
 export interface AppliedFilterStripProps {
   /** The cut in words, or null while nothing is applied (the strip folds). */
   sentence: string | null;
-  /** "N of M points", "4 of 12". */
-  count: string;
+  /** "N of M points", "4 of 12" — or null for a host with nothing to count
+   *  (the Visualizations lightbox on a draft chart): no middot, no count. */
+  count: string | null;
   /** The one quiet action's label — "Clear filter", "Back to all points". */
   action: string;
   onClear: () => void;
@@ -46,12 +49,12 @@ export interface AppliedFilterStripProps {
 
 interface StripWords {
   sentence: string;
-  count: string;
+  count: string | null;
   action: string;
 }
 
-/** The fold's own length (globals.css `.filter-strip-reveal`). */
-const STRIP_FOLD_MS = 250;
+/** The fold's own length — the faster exit (globals.css `.filter-strip-reveal`). */
+const STRIP_FOLD_MS = 160;
 
 export function AppliedFilterStrip({
   sentence,
@@ -117,12 +120,16 @@ export function AppliedFilterStrip({
             <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
               {words.sentence}
             </span>
-            <span
-              className="size-[3px] rounded-full"
-              style={{ background: "var(--ink-300)" }}
-              aria-hidden="true"
-            />
-            <span className="text-micro tabular">{words.count}</span>
+            {words.count !== null && (
+              <>
+                <span
+                  className="size-[3px] rounded-full"
+                  style={{ background: "var(--ink-300)" }}
+                  aria-hidden="true"
+                />
+                <span className="text-micro tabular">{words.count}</span>
+              </>
+            )}
             <div className="flex-1" />
             <button
               type="button"

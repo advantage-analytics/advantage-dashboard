@@ -309,8 +309,8 @@ Tailwind utility shadows are also used in specific contexts:
 
 Three curves, one set: each row's Framer array and CSS token are the same
 curve. Use the token on the CSS side so a component animating in both places
-stays in step — today only `--ease-primary` has `var()` call sites, and the
-other two are hard-coded as literals wherever they appear.
+stays in step — `--ease-primary` and `--ease-out-expo` have `var()` call
+sites; `--ease-chart` is still hard-coded as a literal wherever it appears.
 
 **Forbidden**: bounce, elastic, glassmorphism effects.
 
@@ -362,7 +362,24 @@ whileTap={{ scale: 0.97 }}
 
 // Tab indicator
 layoutId="activeTab"
+
+// Inline row reveal — a row that appears inside a column and pushes what is
+// below it (the roster's "Not in the lineup" divider, the applied-filter strip)
+initial={{ opacity: 0, height: 0 }}
+animate={{ opacity: 1, height: "auto" }}
+exit={{ opacity: 0, height: 0, transition: { duration: 0.16, ease: EASE } }}
+transition={{ duration: 0.22, ease: EASE }} // EASE = --ease-out-expo
 ```
+
+**Inline row reveal.** Height and opacity together on `--ease-out-expo`,
+**220ms in, 160ms out** — exits undercut arrivals, the eye is already back on
+the content. Height, not a transform: the point is the space, so the content
+below eases with it instead of jumping. The canonical cut is the roster's
+bench divider (`team/roster-table.tsx`, `ROW_SLIDE` / `DIVIDER_OUT`). In CSS,
+`grid-template-rows: 0fr → 1fr` over a `min-h-0 overflow-hidden` child stands
+in for `height: auto`, and the column's flex gap folds into a negative margin
+while shut — `.filter-strip-reveal` in `globals.css`. Under reduced motion it
+is simply open or shut.
 
 ### Reduced Motion
 

@@ -170,17 +170,19 @@ export function TeamOpponentsPageContent({
           facedByChoices={facedByChoices}
         />
 
-        {filtered ? (
-          <OpponentsFilterStrip
-            description={describeOpponentFilters(cut.filters, {
-              programs: programChoices,
-              facedBy: facedByChoices,
-            })}
-            shown={shown}
-            inView={inView}
-            onClear={clearFilters}
-          />
-        ) : null}
+        <OpponentsFilterStrip
+          description={
+            filtered
+              ? describeOpponentFilters(cut.filters, {
+                  programs: programChoices,
+                  facedBy: facedByChoices,
+                })
+              : null
+          }
+          shown={shown}
+          inView={inView}
+          onClear={clearFilters}
+        />
 
         {/* A cut that leaves nothing keeps the card and its header row and
             says so in the body; the title row, chips and footer do not move. */}
