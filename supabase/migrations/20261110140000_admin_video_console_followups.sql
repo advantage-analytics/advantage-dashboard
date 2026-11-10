@@ -22,11 +22,11 @@
 --    trigger recomputes on any write to a job in the chain, and the
 --    migration backfills every current attempt.
 --
--- Not changed: a job write takes the match lock (prevent_competing_admin_job,
--- BEFORE) and then updates the item row (video_outcome, AFTER), the reverse
--- of abandon's item → match. That inversion predates the console chain work;
--- Postgres breaks such a deadlock by aborting one side, and both are safe to
--- retry.
+-- 3. A job write takes the match lock (prevent_competing_admin_job, BEFORE)
+--    and then updated the item row (video_outcome, AFTER): the reverse of
+--    abandon's item → match, so the two could deadlock and Postgres would
+--    abort one — possibly a vendor webhook, which is not retried. The mirror
+--    now takes the item row with SKIP LOCKED and leaves it alone when busy.
 
 create or replace function public.admin_reconcile_submission_item(p_actor_id uuid, p_operation_id uuid, p_item_id uuid, p_mode text)
  returns jsonb
@@ -207,6 +207,17 @@ declare
 begin
   select * into v_attempt from public.admin_video_attempts
    where operation_id = p_operation_id and item_id = p_item_id;
+  if not found then
+    return;
+  end if;
+  -- Never wait on the item row: a job write already holds the match lock
+  -- (prevent_competing_admin_job), and abandon locks item → match, so waiting
+  -- here would deadlock the two and could cost a vendor webhook its write.
+  -- When the row is busy, abandon is the one holding it (it is about to
+  -- delete this attempt) or another job write that mirrors after it.
+  perform 1 from public.admin_upload_submission_items
+   where operation_id = v_attempt.operation_id and item_id = v_attempt.item_id
+     for update skip locked;
   if not found then
     return;
   end if;

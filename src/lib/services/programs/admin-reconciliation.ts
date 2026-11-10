@@ -56,7 +56,7 @@ const REFUSALS: Record<string, string> = {
   "mode-unsupported":
     "A video completes only through the vendor. It can be abandoned, not marked complete.",
   "attempt-active":
-    "The vendor has accepted this video, so it cannot be abandoned.",
+    "This video's analysis is still running — the vendor has it, or a retry or reprocess is under way — so it cannot be abandoned.",
   "quota-held":
     "This video still holds a processing reservation. Release the reservation first.",
   "attempt-completed": "This attempt already completed.",
@@ -64,7 +64,7 @@ const REFUSALS: Record<string, string> = {
   "analysis-missing":
     "The analysis has not landed: this match has no points or statistics yet.",
   "analysis-present":
-    "The analysis already landed for this match. Mark it complete instead.",
+    "The analysis already landed for this match, so it cannot be abandoned. A file attempt can be marked complete instead.",
 };
 
 /**
