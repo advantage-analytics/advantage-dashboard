@@ -42,7 +42,6 @@ declare
   v_is_client boolean := coalesce(
     nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', ''
   ) in ('authenticated', 'anon');
-  v_lineage boolean;
 begin
   perform 1 from public.matches where id=new.match_id for update;
   if exists(select 1 from public.admin_file_attempts where match_id=new.match_id) then
@@ -89,7 +88,7 @@ begin
   -- Walk up the resubmission chain on this match. Bounded: a chain is one
   -- link per retry, and the bound also ends any cycle. On the client branch
   -- the lineage is unchanged by this write, so it is the server-written one.
-  select exists(
+  if exists(
     with recursive chain(id, depth) as (
       select new.resubmitted_from_job_id, 0
       union all
@@ -99,8 +98,7 @@ begin
        where c.depth<32
     )
     select 1 from chain where id=v_reserved
-  ) into v_lineage;
-  if v_lineage then
+  ) then
     return new;
   end if;
 
