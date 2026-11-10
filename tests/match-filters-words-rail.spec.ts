@@ -203,6 +203,8 @@ test.describe("filters drawer placement", () => {
     expect(rail).toContain("createPortal(shell, document.body)");
     expect(rail).toContain("FILTER_SHEET_CLASS");
     expect(rail).toContain("wrapTabInSheet");
+    expect(rail).toContain("inertPageBehind(");
+    expect(rail).toContain('aria-modal="true"');
 
     const sheet = read("match-filters/filter-sheet.ts");
     expect(sheet).toMatch(/FILTER_SHEET_CLASS =\s*"fixed inset-y-0 right-0 /);

@@ -22,6 +22,7 @@ import {
   FILTER_SHEET_CLASS,
   FILTER_SHEET_SCRIM_CLASS,
   filterSheetWidthClass,
+  inertPageBehind,
   wrapTabInSheet,
 } from "./filter-sheet";
 import {
@@ -97,14 +98,21 @@ export function FilterRailProvider({ children }: { children: ReactNode }) {
     triggerRef.current = element;
   }, []);
   // Focus that was inside the rail goes back to the button that opened it,
-  // rather than to <body> when the rail's subtree leaves the DOM.
+  // rather than to <body> when the rail's subtree leaves the DOM. After the
+  // commit, not here: while the sheet is open the page behind it — the
+  // trigger included — is `inert` and cannot take focus; the shell lifts
+  // that in its effect cleanup, which runs before this effect.
+  const focusBackRef = useRef(false);
   const close = useCallback(() => {
     const rail = document.getElementById(FILTER_RAIL_ID);
-    if (rail?.contains(document.activeElement)) {
-      triggerRef.current?.focus({ preventScroll: true });
-    }
+    focusBackRef.current = rail?.contains(document.activeElement) ?? false;
     dispatch("close");
   }, []);
+  useEffect(() => {
+    if (phase === "open" || !focusBackRef.current) return;
+    focusBackRef.current = false;
+    triggerRef.current?.focus({ preventScroll: true });
+  }, [phase]);
 
   const value = useMemo<FilterRailValue>(
     () => ({
@@ -186,6 +194,19 @@ function FilterRailShell({
   const { phase, close, finish } = rail;
   const closing = phase === "closing";
   const panelRef = useRef<HTMLDivElement>(null);
+  const scrimRef = useRef<HTMLDivElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
+
+  // Modal to assistive tech too: the page behind goes `inert` while the
+  // sheet is open and comes back the moment it starts closing, before the
+  // provider hands focus back to the trigger behind it.
+  useEffect(() => {
+    if (phase !== "open") return;
+    const keep = [scrimRef.current, asideRef.current].filter(
+      (el): el is HTMLElement => el !== null,
+    );
+    return inertPageBehind(keep);
+  }, [phase]);
 
   const { filters, setFilters, filmRemainder } = useMatchFilters();
   const { availability, youName, oppName, total } = useFiltersPanelData();
@@ -227,6 +248,7 @@ function FilterRailShell({
           drawer's 200ms; closing, it lets clicks through at once, so the
           page is usable before the fade ends. */}
       <div
+        ref={scrimRef}
         aria-hidden
         data-testid="filter-rail-scrim"
         // Keep focus in the drawer through the press, so `close` sees it
@@ -239,8 +261,11 @@ function FilterRailShell({
         )}
       />
       <aside
+        ref={asideRef}
         id={FILTER_RAIL_ID}
         aria-label="Filters"
+        aria-modal="true"
+        role="dialog"
         // Shrinking to nothing, it must not stay in the tab order.
         inert={closing}
         onKeyDown={(event) => wrapTabInSheet(event, panelRef.current)}
@@ -252,7 +277,7 @@ function FilterRailShell({
         <div
           ref={panelRef}
           tabIndex={-1}
-          className="flex h-full w-[340px] flex-col outline-none"
+          className="flex h-full w-[340px] max-w-[100vw] flex-col outline-none"
         >
           <FiltersPanel
             key={serializeMatchFilters(filters)}

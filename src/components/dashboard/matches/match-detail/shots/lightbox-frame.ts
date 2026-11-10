@@ -21,7 +21,13 @@ export const LIGHTBOX_ENTER_CLASS =
  *  and the box's layout rect is its rect on screen (the court morph measures
  *  it, `viz-court-morph.ts`). The height keeps the old top-anchored budget —
  *  `clamp(16px,10dvh,96px)` plus 32px of the viewport — now split evenly
- *  above and below, so a small viewport still fits with the same margins. */
+ *  above and below, so a small viewport still fits with the same margins.
+ *
+ *  No transform, filter or `contain` at rest, either: the Advanced filters
+ *  sheet (`lightbox-advanced-drawer.tsx`) renders inside this box as
+ *  `fixed` and reaches the WINDOW's edge only while the box is not its
+ *  containing block. `tests/viz-lightbox-browser.spec.ts` pins the sheet to
+ *  the window's rect and fails if that breaks. */
 export const LIGHTBOX_BOX_CLASS =
   "fixed inset-0 z-50 m-auto flex h-[min(880px,calc(100dvh-clamp(16px,10dvh,96px)-32px))] w-[min(1212px,calc(100vw-32px))] flex-col rounded-[14px] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] outline-none";
 

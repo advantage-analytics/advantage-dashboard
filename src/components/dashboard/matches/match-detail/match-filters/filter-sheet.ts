@@ -26,9 +26,14 @@ import type { KeyboardEvent } from "react";
  * the DOM when the out animation ends.
  */
 
-/** The dim behind the sheet: the whole window. Fades with the sheet. */
+/**
+ * The dim behind the sheet: the whole window. Fades with the sheet. The
+ * peek drawers' `DrawerScrim` (`shared/drawer-sheet.tsx`) is the same wash
+ * stopped under the header — keep the two in step. `touch-none`: a drag on
+ * it must not scroll the page underneath.
+ */
 export const FILTER_SHEET_SCRIM_CLASS =
-  "fixed inset-0 z-50 cursor-default bg-black/20 transition-opacity duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none starting:opacity-0";
+  "fixed inset-0 z-50 cursor-default touch-none bg-black/20 transition-opacity duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none starting:opacity-0";
 
 /** The sheet itself, at rest; `filterSheetWidthClass` adds the slide. */
 export const FILTER_SHEET_CLASS =
@@ -39,6 +44,30 @@ export function filterSheetWidthClass(closing: boolean): string {
   return closing
     ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
     : "w-[340px] max-w-full animate-[roster-drawer-in_200ms_var(--ease-primary)_both]";
+}
+
+/**
+ * Make everything on the page behind a <body>-level sheet `inert`, so a
+ * screen reader's virtual cursor cannot walk into the dimmed chrome and
+ * follow a link that drops the draft. Marks each child of <body> that holds
+ * none of `keep` (the scrim and the sheet) and is not inert already; layers
+ * portalled in later (a tooltip on the sheet's X) are untouched. Returns the
+ * undo, which must run before focus goes back to anything behind the sheet.
+ *
+ * The lightbox host does not need this: its shell marks the rest of the box
+ * `inert`, and Radix hides the page behind the dialog already.
+ */
+export function inertPageBehind(keep: readonly Element[]): () => void {
+  const marked: Element[] = [];
+  for (const child of Array.from(document.body.children)) {
+    if (keep.some((el) => child.contains(el))) continue;
+    if (child.hasAttribute("inert")) continue;
+    child.setAttribute("inert", "");
+    marked.push(child);
+  }
+  return () => {
+    for (const el of marked) el.removeAttribute("inert");
+  };
 }
 
 /** What Tab may land on inside the sheet. */

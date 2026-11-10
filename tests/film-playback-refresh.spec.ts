@@ -4315,16 +4315,25 @@ test("Advanced filters… opens the 340px sheet on the window's edge, counting t
       ),
     )
     .toBe(true);
+  // Modal to assistive tech: a dialog, and the page behind it inert.
+  await expect(drawer).toHaveAttribute("role", "dialog");
+  await expect(drawer).toHaveAttribute("aria-modal", "true");
+  await expect(list).toHaveJSProperty("inert", false);
+  expect(
+    await list.evaluate((el) => el.closest("[inert]") !== null),
+    "the point list sits under an inert ancestor",
+  ).toBe(true);
   // The draft is the applied filters (none) under the saved toggle: 1 of 4.
   await expect(drawer).toContainText("1 of 4 points");
   await expect(
     drawer.getByRole("button", { name: "Show 1 point" }),
   ).toBeDisabled();
 
-  // Esc closes it and hands focus back to the trigger.
+  // Esc closes it and hands focus back to the trigger, the page live again.
   await page.keyboard.press("Escape");
   await expect(drawer).toHaveCount(0);
   await expect(trigger).toBeFocused();
+  await expect(page.locator("body > [inert]")).toHaveCount(0);
 
   // Re-picking "Advanced filters…" reopens it; the X closes it.
   await trigger.click();
