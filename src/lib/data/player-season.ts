@@ -512,9 +512,12 @@ export function gameProfileValues(
  * exists; with none dated it is all there is.
  */
 function recentFormOrder(matches: readonly SeasonMatch[]): SeasonMatch[] {
-  const ordered = [...matches].sort(compareSeasonMatches);
-  const undated = ordered.filter((m) => matchDay(m.date) === null);
-  return [...undated, ...ordered.filter((m) => matchDay(m.date) !== null)];
+  const undated: SeasonMatch[] = [];
+  const dated: SeasonMatch[] = [];
+  for (const m of [...matches].sort(compareSeasonMatches)) {
+    (matchDay(m.date) === null ? undated : dated).push(m);
+  }
+  return [...undated, ...dated];
 }
 
 export function seasonGameProfile(

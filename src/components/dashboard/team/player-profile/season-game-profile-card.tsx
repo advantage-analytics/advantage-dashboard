@@ -103,8 +103,11 @@ function point(axis: number, value: number): [number, number] {
  */
 export function gameProfilePolygon(values: readonly (number | null)[]): string {
   return values
-    .flatMap((v, i) => (v === null ? [] : [point(i, v)]))
-    .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`)
+    .flatMap((v, i) => {
+      if (v === null) return [];
+      const [x, y] = point(i, v);
+      return [`${x.toFixed(1)},${y.toFixed(1)}`];
+    })
     .join(" ");
 }
 
