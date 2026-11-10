@@ -13,6 +13,7 @@ import {
   type GenderedSquad,
   type Squad,
 } from "@/lib/data/squad";
+import { ilikeLiteral } from "@/lib/data/ilike";
 import { playerSeat, viewerSide } from "@/lib/data/viewer-side";
 import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
 import type {
@@ -151,11 +152,6 @@ function one<T>(embed: Embedded<T>): T | null {
 const DIRECTORY_COLUMNS =
   "id, school_name, school_abbrev, team, division, conference";
 
-/** A term as a literal `ilike` pattern: its wildcards match themselves. */
-function ilikeExact(term: string): string {
-  return term.replace(/[\\%_]/g, "\\$&");
-}
-
 /**
  * `client` is the bearer client. Typed as the library's own class rather
  * than a structural stand-in: a spec fakes `from().select().eq()…` and casts,
@@ -218,7 +214,7 @@ export function createMcpUserReads(
       const named = client
         .from("programs")
         .select(DIRECTORY_COLUMNS)
-        .ilike("school_name", ilikeExact(schoolName))
+        .ilike("school_name", ilikeLiteral(schoolName))
         .eq("org_type", "college");
       const { data, error } = await (team ? named.eq("team", team) : named)
         .order("id")

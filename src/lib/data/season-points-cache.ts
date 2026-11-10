@@ -144,11 +144,6 @@ export class BoundedLru<V> {
     return this.entries.has(key);
   }
 
-  clear(): void {
-    this.entries.clear();
-    this.total = 0;
-  }
-
   private remove(key: string, entry: Entry<V>): void {
     this.entries.delete(key);
     this.total -= entry.weight;

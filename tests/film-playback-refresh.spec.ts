@@ -4318,6 +4318,19 @@ test("Advanced filters… opens the 340px drawer over the list, counting the dra
   await expect(drawer).toBeVisible();
   await drawer.getByRole("button", { name: "Close filters" }).click();
   await expect(drawer).toHaveCount(0);
+
+  // The report dims behind the open drawer; a click on the dim closes it,
+  // and the dim leaves with it.
+  const scrim = page.getByTestId("filter-rail-scrim");
+  await expect(scrim).toHaveCount(0);
+  await trigger.click();
+  await menu.getByText("Advanced filters…").click();
+  await expect(drawer).toBeVisible();
+  await expect(scrim).toBeVisible();
+  await scrim.click({ position: { x: 8, y: 8 } });
+  await expect(drawer).toHaveCount(0);
+  await expect(scrim).toHaveCount(0);
+  await expect(trigger).toBeFocused();
 });
 
 test("before the first point the card says so and offers the first point", async ({

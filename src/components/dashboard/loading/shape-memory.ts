@@ -63,19 +63,20 @@ export function useRecalledShape<T>(
   );
 }
 
+function write(surface: string, workspaceId: string, serialised: string) {
+  try {
+    localStorage.setItem(storageKey(surface, workspaceId), serialised);
+  } catch {
+    // Private mode or a full quota — the skeleton falls back to its default.
+  }
+}
+
 export function rememberShape(
   surface: string,
   workspaceId: string,
   shape: unknown,
 ): void {
-  try {
-    localStorage.setItem(
-      storageKey(surface, workspaceId),
-      JSON.stringify(shape),
-    );
-  } catch {
-    // Private mode or a full quota — the skeleton falls back to its default.
-  }
+  write(surface, workspaceId, JSON.stringify(shape));
 }
 
 /**
@@ -90,7 +91,7 @@ export function useRememberShape(
 ): void {
   const serialised = JSON.stringify(shape);
   useEffect(() => {
-    rememberShape(surface, workspaceId, JSON.parse(serialised));
+    write(surface, workspaceId, serialised);
   }, [surface, workspaceId, serialised]);
 }
 

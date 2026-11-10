@@ -128,7 +128,6 @@ const REPORT: McpMatchReport = {
   shareToken: "tok_abc",
 };
 
-/** What `reads.ownMatch()` answers: a hand-scored personal match, not on a line. */
 type Row = Record<string, unknown>;
 
 const HARVARD_MENS = {
@@ -160,6 +159,7 @@ const ANDERSON_TWO = {
 };
 const DIRECTORY = [HARVARD_MENS, HARVARD_WOMENS, ANDERSON_ONE, ANDERSON_TWO];
 
+/** What `reads.ownMatch()` answers: a hand-scored personal match, not on a line. */
 const OWN_MATCH: McpOwnMatch = {
   id: MATCH_A,
   programId: null,
