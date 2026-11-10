@@ -28,3 +28,13 @@ is the runner's. Newest entries at the bottom.
 
 1. `RosterMenu.tsx`'s `RosterRow` uses the opposite grammar (nowrap name, truncating meta); decide whether the two menus should agree.
 2. The T2 and T3 specs each build their own popover/loader stubs; a shared fixture would trim that.
+
+## T4 · Add the Teammates section to the opponent picker — blocked
+
+**gate:** mechanical FAIL — lint pass, typecheck pass, tests (shard 1/2) 1 failed / 4718 passed: `tests/design-drift.spec.ts:13` "lower-case middot segment: 3 (seed 2)", new hit `DetailsStepContent.tsx:963 return "Teammate · from the roster";` (capitalise the segment after the middot, e.g. "Teammate · From the roster"). Shard 2/2 not run (stopped at first failure). Completion review not run. Two earlier full `npm test` runs were killed by SIGTERM mid-suite (exit 143, no failing test); the suite was re-run in shards to reach a verdict.
+**stash:** 24f65723863cf61d82a4b3672d927ad81fcdc231
+**changed (stashed):** new `teammates.ts` and `OpponentMenu.tsx`; `RosterMenu.tsx` exports `RosterRow` + `TeammatesMenuSection`; `types.ts` adds `"teammate"` to `ValueSource`; `DetailsStepContent.tsx` / `UploadWizardSteps.tsx` wire the Teammates section; new `tests/upload-opponent-teammates.spec.ts`; `tests/upload-player-details.spec.ts` follows the moved name button.
+**follow-ups:**
+
+1. `buildMatchData` already writes `opponentPlayerId` to `opponent_player_id`, so a teammate pick reaches the DB before T5; a roster "safety arm" row without a real `program_players` id could break the FK on save — T5 should guard it.
+2. A restored draft keeps `opponentSource: "teammate"` without re-checking the roster.
