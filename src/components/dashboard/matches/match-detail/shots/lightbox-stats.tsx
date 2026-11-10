@@ -101,10 +101,12 @@ interface TipAnchor {
  * the hover wash rounded 8px with 8px of room each side. Over the groups,
  * the canvas's two figures (`summaryFigures`): "Points won · 14 of 44" and
  * "Landed in · 44 of 44", each a 16px % over its label and a 4px bar,
- * spread with the groups as the stack's first item. The groups share the column's height evenly — 24px apart at
- * least, 56px at most, so on a tall screen they settle in the middle rather
- * than drifting apart — and a list taller than the column scrolls as one
- * stacked at 24px (`GroupSpacer`).
+ * spread with the groups as the stack's first item. The stack starts 20px
+ * under the switch, as drawn, and its items spread down the column 24px
+ * apart at least and 56px at most; what is left over falls below it, never
+ * above (centred, it left a blank band over the first group that read as a
+ * failed render). A list taller than the column scrolls as one stacked at
+ * 24px (`GroupSpacer`).
  *
  * Every figure is the row's own (`computeVizStats`); the tick is this
  * match's average for the group — the "This match" benchmark, until a
@@ -146,8 +148,6 @@ export function LightboxStats({
   }
   const groups = displayGroups(stats, cut);
   const figures = summaryFigures(stats);
-  // The items the column spreads: the figures (one block) and each group.
-  const stacked = groups.length + (figures.length > 0 ? 1 : 0);
   // The tooltip's words, read off the rows as they are now — a click that
   // keeps the row turns its hint to "Click to show all again" in place.
   const tipGroup =
@@ -216,7 +216,7 @@ export function LightboxStats({
           </span>,
           tip.anchor.host,
         )}
-      <GroupSpacer edge="top" grow={stacked > 1} />
+      <GroupSpacer edge="top" />
       {figures.length > 0 && (
         <>
           <div
@@ -363,31 +363,21 @@ export function LightboxStats({
 }
 
 /**
- * The room around the groups, all growing alike so the groups spread over
- * the column's height (space-evenly). Between groups it is 24px at least and
- * 56px at most; once those cap, the top and bottom take what is left and the
- * stack sits centred. With no room to spare each holds its minimum — 20px
- * above, 24px between, nothing below — the stack the column always drew,
- * and it scrolls.
+ * The room around the groups: a fixed 20px above, 24–56px between (the
+ * between spacers and the bottom one grow alike, the between ones capped),
+ * and the rest below. With no room to spare each holds its minimum — 20px
+ * above, 24px between, nothing below — and the column scrolls.
  */
-function GroupSpacer({
-  edge,
-  grow = true,
-}: {
-  edge: "top" | "between" | "bottom";
-  /** `false` for the top above a lone item: one group (and no figures)
-   *  centred in a tall column left a blank band over it that read as
-   *  something failed to render, so it starts from the top instead. */
-  grow?: boolean;
-}) {
+function GroupSpacer({ edge }: { edge: "top" | "between" | "bottom" }) {
   return (
     <div
       aria-hidden="true"
       data-stat-spacer={edge}
       className={cn(
-        grow ? "flex-1 shrink-0" : "shrink-0",
-        edge === "top" && "min-h-5",
-        edge === "between" && "max-h-14 min-h-6",
+        "shrink-0",
+        edge === "top" && "h-5",
+        edge === "between" && "max-h-14 min-h-6 flex-1",
+        edge === "bottom" && "flex-1",
       )}
     />
   );
