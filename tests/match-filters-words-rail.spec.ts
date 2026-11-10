@@ -209,6 +209,16 @@ test.describe("filters drawer placement", () => {
     expect(MATCH_REPORT_FRAME_ID).toBe("match-report-frame");
   });
 
+  // The report dims behind the open drawer under the Dialog scrim, which
+  // closes it on click and lets clicks through while it fades out.
+  test("the drawer dims the report behind it; the dim closes it", () => {
+    const rail = read("match-filters/filter-rail.tsx");
+    expect(rail).toContain('data-testid="filter-rail-scrim"');
+    expect(rail).toContain("bg-[rgba(13,13,13,0.4)]");
+    expect(rail).toMatch(/onClick=\{close\}/);
+    expect(rail).toMatch(/closing\s*\?\s*"pointer-events-none/);
+  });
+
   // The drawer focuses its own container on open; the Video tab's
   // window-level shortcuts (Space plays, arrows step, S saves) must not fire
   // from inside it.

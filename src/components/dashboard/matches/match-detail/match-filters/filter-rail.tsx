@@ -31,7 +31,8 @@ import {
  * (the frame's right edge), from just under the top header to the bottom,
  * above the page content. The video keeps its size and nothing reflows — the
  * film keeps playing beside every filter operation. White surface, hairline
- * left edge, `--shadow-dropdown`: the peek drawer's paint.
+ * left edge, `--shadow-dropdown`: the peek drawer's paint. Behind it the
+ * rest of the report dims under the Dialog scrim, which closes it on click.
  *
  * ── Placement ───────────────────────────────────────────────────────────
  * `FilmRoom` (film/film-tab.tsx) renders `FilterRail`, which portals the
@@ -224,43 +225,64 @@ function FilterRailShell({
   }, [phase, close]);
 
   return (
-    <aside
-      id={FILTER_RAIL_ID}
-      aria-label="Filters"
-      // Shrinking to nothing, it must not stay in the tab order.
-      inert={closing}
-      onAnimationEnd={(event) => {
-        if (event.animationName === "roster-drawer-out") finish();
-      }}
-      className={cn(
-        "absolute inset-y-0 right-0 z-30 overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none",
-        closing
-          ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
-          : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
-      )}
-    >
+    <>
+      {/* The dim: the Dialog scrim (`reference/chrome.md`) over the report
+          frame, under the drawer. The film keeps playing beneath it — a
+          dim, not a pause — and a click on it closes the drawer like the X.
+          It fades with the drawer's 200ms; closing, it lets clicks through
+          at once, so the page is usable before the fade ends. */}
       <div
-        ref={panelRef}
-        tabIndex={-1}
-        className="flex h-full w-[340px] flex-col outline-none"
+        aria-hidden
+        data-testid="filter-rail-scrim"
+        // Keep focus in the drawer through the press, so `close` sees it
+        // there and hands it back to the trigger rather than to <body>.
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={close}
+        className={cn(
+          "absolute inset-0 z-30 bg-[rgba(13,13,13,0.4)] motion-reduce:animate-none",
+          closing
+            ? "pointer-events-none animate-[fadeIn_200ms_var(--ease-primary)_reverse_both]"
+            : "animate-[fadeIn_200ms_var(--ease-primary)_both]",
+        )}
+      />
+      <aside
+        id={FILTER_RAIL_ID}
+        aria-label="Filters"
+        // Shrinking to nothing, it must not stay in the tab order.
+        inert={closing}
+        onAnimationEnd={(event) => {
+          if (event.animationName === "roster-drawer-out") finish();
+        }}
+        className={cn(
+          "absolute inset-y-0 right-0 z-30 overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none",
+          closing
+            ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
+            : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
+        )}
       >
-        <FiltersPanel
-          key={serializeMatchFilters(filters)}
-          className="min-h-0 flex-1"
-          filters={filters}
-          availability={availability}
-          youName={youName}
-          oppName={oppName}
-          countFor={countFor}
-          total={total}
-          filmCut={filmRemainder?.label ?? null}
-          onApply={(next) => {
-            setFilters(next);
-            close();
-          }}
-          onClose={close}
-        />
-      </div>
-    </aside>
+        <div
+          ref={panelRef}
+          tabIndex={-1}
+          className="flex h-full w-[340px] flex-col outline-none"
+        >
+          <FiltersPanel
+            key={serializeMatchFilters(filters)}
+            className="min-h-0 flex-1"
+            filters={filters}
+            availability={availability}
+            youName={youName}
+            oppName={oppName}
+            countFor={countFor}
+            total={total}
+            filmCut={filmRemainder?.label ?? null}
+            onApply={(next) => {
+              setFilters(next);
+              close();
+            }}
+            onClose={close}
+          />
+        </div>
+      </aside>
+    </>
   );
 }
