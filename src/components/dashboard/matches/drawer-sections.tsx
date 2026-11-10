@@ -591,7 +591,8 @@ const forgetListeners = new Set<(matchId: string) => void>();
  */
 export function forgetMatchSnapshot(matchId: string): void {
   snapshotCache.delete(matchId);
-  pairCache.delete(matchId);
+  pairCache.delete(pairKey(matchId, false));
+  pairCache.delete(pairKey(matchId, true));
   for (const listener of forgetListeners) listener(matchId);
 }
 
@@ -761,7 +762,14 @@ export function toSnapshotPair(
   };
 }
 
+/**
+ * Keyed by match AND side: which row is "you" depends on `turned`, and a team
+ * row's turn can change within a session (a claim, a merge, a roster edit
+ * and `router.refresh()`), so a pair split one way must never be served the
+ * other.
+ */
 const pairCache = new Map<string, SnapshotPair | null>();
+const pairKey = (matchId: string, turned: boolean) => `${matchId}:${turned}`;
 
 /**
  * `useMatchSnapshot`, but both seats' rows in one read, for the Matches
@@ -792,8 +800,10 @@ export function useMatchSnapshotPair(
     };
   }, [matchId]);
 
+  const key = pairKey(matchId, turned);
+
   useEffect(() => {
-    if (pairCache.has(matchId)) return;
+    if (pairCache.has(key)) return;
     let cancelled = false;
 
     createClient()
@@ -807,17 +817,17 @@ export function useMatchSnapshotPair(
         const you = rows.find((row) => row.is_player1 === !turned) ?? null;
         const opp = rows.find((row) => row.is_player1 === turned) ?? null;
         const pair = toSnapshotPair(you, opp);
-        if (pair || !pending) pairCache.set(matchId, pair);
-        if (!cancelled) setLoaded({ id: matchId, pair });
+        if (pair || !pending) pairCache.set(key, pair);
+        if (!cancelled) setLoaded({ id: key, pair });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [matchId, pending, revision, turned]);
+  }, [key, matchId, pending, revision, turned]);
 
-  if (pairCache.has(matchId)) return pairCache.get(matchId);
-  return loaded?.id === matchId ? loaded.pair : undefined;
+  if (pairCache.has(key)) return pairCache.get(key);
+  return loaded?.id === key ? loaded.pair : undefined;
 }
 
 /** The surname a comparison column is headed by. */
