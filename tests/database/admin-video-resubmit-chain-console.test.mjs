@@ -1,74 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { PGlite } from "@electric-sql/pglite";
-import { setup, id } from "./fixtures/admin-video-harness.mjs";
+import { id } from "./fixtures/admin-video-harness.mjs";
+import { consoleHarness } from "./fixtures/admin-video-console-harness.mjs";
 
 const migrations = [
   "20261110013000_admin_video_allow_resubmit_chain.sql",
   "20261110063746_admin_video_resubmit_chain_console.sql",
   "20261110074526_admin_video_console_followups.sql",
 ];
-const load = async (db, name) =>
-  db.exec(
-    await readFile(
-      new URL("../../supabase/migrations/" + name, import.meta.url),
-      "utf8",
-    ),
-  );
-
-const request = {
-  playerId: id(4),
-  opponentName: "Opponent",
-  score: { player1: [6, 7], player2: [4, 6] },
-  date: "2026-09-15",
-  courtType: "Hard",
-  bestOf: 3,
-  startSeconds: 10,
-  endSeconds: 610,
-  initialTopPlayerIsPlayer1: false,
-  adScoring: true,
-  fixedCamera: false,
-};
-
 // `upTo` stops before a migration, so a test can apply it later itself.
 async function harness(upTo = migrations.length) {
-  const db = new PGlite();
-  await setup(db);
-  // Live columns the harness snapshot predates, with live's defaults: jobs
-  // written in one transaction share `now()`.
-  await db.exec(`
-    alter table processing_jobs add column resubmitted_from_job_id uuid;
-    alter table processing_jobs add column created_at timestamptz not null default now();
-    alter table admin_upload_submissions add column personal_user_id uuid;
-  `);
-  for (const name of migrations.slice(0, upTo)) await load(db, name);
-
-  const submit = async (op) => {
-    await db.exec("set role service_role");
-    const attempt = (
-      await db.query(
-        "select admin_submit_match_video($1,$2,$3,$4,null,null,$5) as data",
-        [id(2), id(op), id(op + 1), id(10), request],
-      )
-    ).rows[0].data;
-    await db.exec("reset role");
-    return attempt;
-  };
-  // A server session (resubmitJob, the webhook).
-  await db.query("select set_config('request.jwt.claims',$1,false)", [
-    JSON.stringify({ role: "service_role" }),
-  ]);
-  const insertJob = (jobId, matchId, from, status = "uploaded") =>
-    db.query(
-      "insert into processing_jobs(id,match_id,created_by,status,resubmitted_from_job_id) values($1,$2,$3,$4,$5)",
-      [jobId, matchId, id(2), status, from],
-    );
-  const setStatus = (jobId, status, extra = "") =>
-    db.query(`update processing_jobs set status=$1${extra} where id=$2`, [
-      status,
-      jobId,
-    ]);
+  const base = await consoleHarness(migrations, upTo);
+  const { db, insertJob } = base;
   // A live job on ANOTHER match whose lineage points at `from`.
   const insertForeignJob = async (jobId, from) => {
     await db.query(
@@ -83,11 +26,6 @@ async function harness(upTo = migrations.length) {
         matchId,
       ])
     ).rows[0].analysis_method;
-  const reconcile = (op) =>
-    db.query(
-      "select admin_reconcile_submission_item($1,$2,$3,'abandon') as data",
-      [id(1), id(op), id(op + 1)],
-    );
   const item = async (op) =>
     (
       await db.query(
@@ -95,16 +33,7 @@ async function harness(upTo = migrations.length) {
         [id(op), id(op + 1)],
       )
     ).rows[0];
-  return {
-    db,
-    submit,
-    insertJob,
-    insertForeignJob,
-    analysisMethod,
-    setStatus,
-    reconcile,
-    item,
-  };
+  return { ...base, insertForeignJob, analysisMethod, item };
 }
 
 const refuse = (fn, message) =>
@@ -297,7 +226,7 @@ test("the migration backfills items whose chain already moved on", async () => {
     await h.setStatus(id(500), "failed");
     // Before the follow-up the failed reprocess is what shows.
     assert.equal((await h.item(300)).result.stateJobId, id(500));
-    await load(h.db, migrations.at(-1));
+    await h.load(migrations.at(-1));
     const r = (await h.item(300)).result;
     assert.equal(r.state, "completed");
     assert.equal(r.stateJobId, reserved);
