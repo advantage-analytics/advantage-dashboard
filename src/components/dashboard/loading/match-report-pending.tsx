@@ -334,9 +334,11 @@ function radarRing(share: number): string {
 
 /**
  * The player profile's "Game profile" card: the header at the loaded one's
- * 28px (its swap button may land there), the radar's four rings and six
- * spokes in the skeleton token — the frame every state of the card draws,
- * empty included — at the loaded figure's size, then the two-key legend.
+ * 28px (its swap button may land there), then the radar's four rings and six
+ * spokes. Those are known chrome — every state of the card draws them, empty
+ * included — so, like the eyebrows, they render as themselves (the loaded
+ * `--ink-200` hairlines, no pulse) at the loaded figure's size. Then the
+ * two-key legend as bars.
  */
 function GameProfilePending() {
   return (
@@ -349,14 +351,14 @@ function GameProfilePending() {
       <svg
         aria-hidden="true"
         viewBox={`0 0 ${RADAR_W} ${RADAR_H}`}
-        className="mx-auto block h-auto w-full max-w-[420px] motion-safe:animate-pulse"
+        className="mx-auto block h-auto w-full max-w-[420px]"
       >
         {[0.25, 0.5, 0.75, 1].map((share) => (
           <polygon
             key={share}
             points={radarRing(share)}
             fill="none"
-            stroke="var(--surface-skeleton)"
+            stroke="var(--ink-200)"
             strokeWidth={1}
             vectorEffect="non-scaling-stroke"
           />
@@ -370,7 +372,7 @@ function GameProfilePending() {
               y1={RADAR_CY}
               x2={(RADAR_W / 2 + Math.cos(angle) * RADAR_R).toFixed(1)}
               y2={(RADAR_CY + Math.sin(angle) * RADAR_R).toFixed(1)}
-              stroke="var(--surface-skeleton)"
+              stroke="var(--ink-200)"
               strokeWidth={1}
               vectorEffect="non-scaling-stroke"
             />

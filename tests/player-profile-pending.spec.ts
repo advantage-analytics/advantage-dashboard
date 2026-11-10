@@ -183,10 +183,11 @@ test("statistics pane: the Differential under the head to head, Game profile for
   expect(differential).toBeGreaterThan(h2h);
   expect(radar).toBeGreaterThan(differential);
   expect(html).not.toContain("Performance tracker");
-  // The radar's frame: four rings and six spokes, in the skeleton token.
+  // The radar's frame — known chrome, drawn as the loaded card's own
+  // hairlines: four rings and six spokes, no pulse, no skeleton token.
   expect(html.match(/<polygon/g)?.length).toBe(4);
   expect(html.match(/<line /g)?.length).toBe(6);
-  expect(html).toContain('stroke="var(--surface-skeleton)"');
+  expect(html.match(/stroke="var\(--ink-200\)"/g)?.length).toBe(10);
   // The header is the loaded card's 28px, where its swap may land.
   expect(html).toContain('class="flex items-center gap-2 h-7"');
 });

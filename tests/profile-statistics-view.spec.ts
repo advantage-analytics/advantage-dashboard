@@ -230,7 +230,7 @@ test.describe("Game profile, with matches", () => {
     // Axis labels carry the blue shape's figure; an axis with no attempts is a dash.
     expect(html).toContain("1st serve in 57%");
     expect(html).toContain("BP converted —");
-    expect(html).toContain("Last match · vs Ruiz, Nov 7");
+    expect(html).toContain("Last match vs Ruiz, Nov 7");
     expect(html).toContain(">Overall · 3 matches<");
     // Two solid shapes: nothing dashed anywhere on the card.
     expect(html).not.toContain("stroke-dasharray");
@@ -316,7 +316,7 @@ test.describe("Game profile readouts and legend", () => {
     // The legend: both keys a short line — blue naming the match, slate
     // with the count; both focusable.
     expect(html).toMatch(
-      /data-testid="game-profile-key-recent" tabindex="0"[\s\S]*?width="10"[\s\S]*?stroke="var\(--viz-you\)"[\s\S]*?Last match · vs Ruiz, Nov 7/,
+      /data-testid="game-profile-key-recent" tabindex="0"[\s\S]*?width="10"[\s\S]*?stroke="var\(--viz-you\)"[\s\S]*?Last match vs Ruiz, Nov 7/,
     );
     expect(html).toMatch(
       /data-testid="game-profile-key-overall" tabindex="0"[\s\S]*?stroke="var\(--viz-opp\)"[\s\S]*?Overall · 12 matches/,

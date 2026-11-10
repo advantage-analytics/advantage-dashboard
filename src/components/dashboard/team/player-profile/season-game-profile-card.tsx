@@ -44,8 +44,8 @@ import {
  * gets a ring, so both points being compared are marked. On a finger a tap
  * selects a vertex and the readout stays until a tap lands outside the card
  * (`useTouchReadout` / `useFingerTap`). The legend keys both shapes as a
- * short solid line — the blue one naming the match ("Last match · vs Ruiz,
- * Nov 7"), Overall with its match count; hovering or focusing a key fades the
+ * short solid line — the blue one naming the match ("Last match vs Ruiz, Nov
+ * 7"), Overall with its match count; hovering or focusing a key fades the
  * other shape to a quarter and the other key to 0.4.
  *
  * Every figure is the server's (`seasonGameProfile`, `player-season.ts`):
@@ -106,14 +106,18 @@ export function gameProfileShowing(five: boolean): string {
   return five ? `Last ${GAME_PROFILE_RECENT} matches` : "Last match";
 }
 
-/** The legend's blue entry: "Last match · vs Ruiz, Nov 7". */
+/**
+ * The legend's blue entry: "Last match vs Ruiz, Nov 7". No middot: a segment
+ * after one is sentence case (`check-design-drift.mjs`), and "Vs" reads worse
+ * than the one phrase.
+ */
 export function gameProfileLegend(
   five: boolean,
   lastMatch: SeasonGameProfile["lastMatch"],
 ): string {
   if (five || !lastMatch) return gameProfileShowing(five);
   const day = lastMatch.date ? formatMatchDayShort(lastMatch.date) : "";
-  return `Last match · vs ${surname(lastMatch.opponent)}${day ? `, ${day}` : ""}`;
+  return `Last match vs ${surname(lastMatch.opponent)}${day ? `, ${day}` : ""}`;
 }
 
 /** The legend's Overall entry: "Overall · 12 matches". */
