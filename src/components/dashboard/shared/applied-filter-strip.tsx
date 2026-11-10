@@ -31,9 +31,11 @@ import { usePrefersReducedMotion } from "./use-reduced-motion";
  * The wrapper is the `role="status"` region, and it is always mounted, so a
  * cut landing is announced (a live region that mounts already holding its
  * words usually is not). The action folds the strip, which goes `inert` on
- * its way out; when focus was on it, it moves to the control just before
- * the strip — on every list page the toolbar that set the filter — rather
- * than falling to <body>.
+ * its way out; when focus was on it, it moves to the control that set the
+ * filter rather than falling to <body>. A host names that control with
+ * `focusAfterClear` (the Video tab's point-list trigger sits AFTER its
+ * strip); otherwise it is the last Tab stop before the strip, which on
+ * every list page is the toolbar.
  *
  * No `next/navigation` here — the Video tab's offline spec loads its strip
  * through `createLoader()`.
@@ -47,6 +49,12 @@ export interface AppliedFilterStripProps {
   /** The one quiet action's label — "Clear filter", "Back to all points". */
   action: string;
   onClear: () => void;
+  /**
+   * Moves focus to the control that set the filter, after a clear made from
+   * the strip with focus on it. Returns whether it did; when it did not (or
+   * is absent), focus goes to the last Tab stop before the strip.
+   */
+  focusAfterClear?: () => boolean;
   /** The host column's flex gap, in px, folded away while the strip is shut. */
   gap: number;
   /**
@@ -65,10 +73,20 @@ interface StripWords {
 /** The fold's own length — the faster exit (globals.css `.filter-strip-reveal`). */
 const STRIP_FOLD_MS = 160;
 
-const TABBABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/** Tab stops only: every clause drops `tabindex="-1"`, which a roving
+ *  group's unselected items and programmatic-only targets carry. */
+const TABBABLE = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]",
+]
+  .map((clause) => `${clause}:not([tabindex="-1"])`)
+  .join(", ");
 
-/** Focus the last visible, live control that comes before `el` in the page. */
+/** Focus the last visible, live Tab stop that comes before `el` in the page. */
 function focusControlBefore(el: Element): void {
   const controls = document.querySelectorAll<HTMLElement>(TABBABLE);
   for (let i = controls.length - 1; i >= 0; i--) {
@@ -90,6 +108,7 @@ export function AppliedFilterStrip({
   count,
   action,
   onClear,
+  focusAfterClear,
   gap,
   kind,
 }: AppliedFilterStripProps) {
@@ -141,7 +160,8 @@ export function AppliedFilterStrip({
     const strip = ref.current;
     const hadFocus = strip?.contains(document.activeElement) ?? false;
     onClear();
-    if (strip && hadFocus) focusControlBefore(strip);
+    if (!strip || !hadFocus) return;
+    if (!focusAfterClear?.()) focusControlBefore(strip);
   };
 
   return (

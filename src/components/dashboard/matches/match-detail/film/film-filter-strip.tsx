@@ -37,6 +37,7 @@ export const FilmFilterStrip = memo(function FilmFilterStrip({
   names,
   shown,
   total,
+  focusAfterClear,
 }: {
   filmFilters: FilmListFilters;
   /** Short names, as the list prints them ("G. Revelli"). */
@@ -45,6 +46,9 @@ export const FilmFilterStrip = memo(function FilmFilterStrip({
   shown: number;
   /** Every point on the match. */
   total: number;
+  /** Focus the point list's filters trigger (`useFilterRail().focusTrigger`):
+   *  it sits after the strip, so the strip's default would miss it. */
+  focusAfterClear?: () => boolean;
 }) {
   return (
     <AppliedFilterStrip
@@ -58,6 +62,7 @@ export const FilmFilterStrip = memo(function FilmFilterStrip({
       count={draftCountLine(shown, total)}
       action={filmStripAction(filmFilters)}
       onClear={filmFilters.clearAll}
+      focusAfterClear={focusAfterClear}
     />
   );
 });
