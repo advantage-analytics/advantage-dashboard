@@ -6,7 +6,7 @@ import { setup, id } from "./fixtures/admin-video-harness.mjs";
 
 const migrations = [
   "20261110013000_admin_video_allow_resubmit_chain.sql",
-  "20261110120000_admin_video_resubmit_chain_console.sql",
+  "20261110063746_admin_video_resubmit_chain_console.sql",
 ];
 
 const request = {
