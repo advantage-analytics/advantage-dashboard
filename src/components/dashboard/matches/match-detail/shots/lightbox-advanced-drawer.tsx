@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 import type { FilterRailPhase } from "../match-filters/rail-state";
 import { LightboxAdvancedPanel } from "./lightbox-advanced-panel";
+import { prefersReducedMotion } from "./use-reduced-motion";
 import { COUNT_NOUN, type LightboxAdvancedFilters } from "./lightbox-filters";
 import type { Cut, VizFilters, VizResult } from "./viz-model";
 
@@ -74,11 +75,7 @@ export function LightboxAdvancedDrawer({
   // `motion-reduce:animate-none` means no `animationend` ever fires, so a
   // closing drawer would sit at width 0 forever — finish it at once instead.
   useEffect(() => {
-    if (
-      closing &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    )
-      onFinish();
+    if (closing && prefersReducedMotion()) onFinish();
   }, [closing, onFinish]);
 
   // Tab and Shift+Tab wrap inside the drawer. The rest of the box is

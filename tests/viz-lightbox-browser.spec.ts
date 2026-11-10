@@ -1661,3 +1661,56 @@ test("R7·1 · a chart switch keeps the court exactly where it is — at 100%, a
   const moved = await courtState(page);
   await cycle(moved);
 });
+
+test("R7·2 · a stage that resizes keeps a zoomed, panned court: the filter strip appearing and going does not re-fit it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  const stage = dialog.locator("[data-court-stage]");
+  await expect(stage.locator("[data-viz-mark]").first()).toBeVisible();
+  // Zoom in and drag off-centre.
+  await dialog.getByRole("button", { name: "Zoom in" }).click();
+  await expect(dialog.getByText(/^\d+% · Drag to move around$/)).toBeVisible();
+  const s = (await stage.boundingBox())!;
+  await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(s.x + s.width / 2 - 120, s.y + s.height / 2 + 60, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  const before = await courtTransform(page);
+  const centreArt = (t: { z: number; px: number; py: number }, h: number) => ({
+    x: (s.width / 2 - t.px) / t.z,
+    y: (h / 2 - t.py) / t.z,
+  });
+  const beforeCentre = centreArt(before, s.height);
+  // A Statistics row keeps its points: the filter strip appears over the
+  // stage and the stage gets shorter.
+  await dialog.getByRole("button", { name: "Statistics" }).click();
+  await dialog.locator("[data-viz-stat-row], li button").first().click();
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await expect(strip).toBeVisible();
+  await expect
+    .poll(async () => (await stage.boundingBox())!.height)
+    .not.toBe(s.height);
+  const shorter = (await stage.boundingBox())!;
+  const during = await courtTransform(page);
+  // Same zoom, and the same spot of court at the stage's centre.
+  expect(during.z).toBeCloseTo(before.z, 4);
+  const duringCentre = centreArt(during, shorter.height);
+  expect(duringCentre.x).toBeCloseTo(beforeCentre.x, 0);
+  expect(duringCentre.y).toBeCloseTo(beforeCentre.y, 0);
+  // And back.
+  await strip.getByRole("button").first().click();
+  await expect(strip).toHaveCount(0);
+  await expect
+    .poll(async () => (await stage.boundingBox())!.height)
+    .toBeCloseTo(s.height, 0);
+  const after = await courtTransform(page);
+  expect(after.z).toBeCloseTo(before.z, 4);
+  const afterCentre = centreArt(after, s.height);
+  expect(afterCentre.x).toBeCloseTo(beforeCentre.x, 0);
+  expect(afterCentre.y).toBeCloseTo(beforeCentre.y, 0);
+});

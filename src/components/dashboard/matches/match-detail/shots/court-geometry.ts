@@ -112,6 +112,14 @@ export const SERVE_COURT_THROUGH_NET = {
     h: SERVE_THROUGH_NET_H,
   },
   nearServiceLineY: SERVE_NEAR_SERVICE_Y,
+  /** The window's edges in the group's own units — a serve mark that lands
+   *  past one (a deep long fault, a wide one off the apron) is pinned just
+   *  inside it on the card, so every serve the footer counts is drawn. */
+  edgeGroup: {
+    top: serveOuterToGroupY(SERVE_THROUGH_NET_TOP),
+    left: SERVE_COURT.centerX - SERVE_THROUGH_NET_W / 2 / SERVE_GROUP_SCALE,
+    right: SERVE_COURT.centerX + SERVE_THROUGH_NET_W / 2 / SERVE_GROUP_SCALE,
+  },
   /** The court surface runs past the window's bottom edge (group units). */
   cropY: serveOuterToGroupY(SERVE_THROUGH_NET_BOTTOM) + 12,
   /** The net's height in the outer viewBox — inside the art, not its edge. */

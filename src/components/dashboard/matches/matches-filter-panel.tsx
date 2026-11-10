@@ -131,7 +131,11 @@ export function filterPanelSurfaceClasses(
 ): string {
   const layout =
     "flex max-h-[var(--radix-popover-content-available-height)] w-[min(272px,var(--radix-popover-content-available-width))] flex-col overflow-y-auto";
-  if (surface === "menu") return `${layout} ${floatMenuToneClasses("light")}`;
+  // The lightbox's menu surface stops taking clicks the moment it starts to
+  // close: its exit fade otherwise sits over the court for ~150ms and eats
+  // the click that was meant for the dimmed box behind the drawer it opened.
+  if (surface === "menu")
+    return `${layout} ${floatMenuToneClasses("light")} data-[state=closed]:pointer-events-none`;
   return `${layout} rounded-xl border-[var(--border-medium)] p-1.5 shadow-[var(--shadow-dropdown)]`;
 }
 

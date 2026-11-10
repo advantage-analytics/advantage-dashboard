@@ -474,6 +474,20 @@ function HeatFilterDef({
  * `HeatLayer`'s own `useMemo` over its circle array has a stable `project`
  * identity to key on.
  */
+/** A serve mark's centre held one mark-radius inside the wall card's
+ *  zoomed window, in the serve group's own units. */
+function pinInsideServeWindow(p: { cx: number; cy: number }): {
+  cx: number;
+  cy: number;
+} {
+  const edge = SERVE_COURT_THROUGH_NET.edgeGroup;
+  const inset = SERVE_DOT_R + 1;
+  return {
+    cx: Math.min(Math.max(p.cx, edge.left + inset), edge.right - inset),
+    cy: Math.max(p.cy, edge.top + inset),
+  };
+}
+
 const projectServeHeatDot = (d: VizDot) =>
   projectServeMetricDot({ lateralM: d.lateralM, depthPastNetM: d.depthM });
 const projectReturnPlacementHeatDot = (d: VizDot) =>
@@ -927,7 +941,13 @@ export function CourtArt({
                 // (`atNet`); it draws through the SAME glyph path below
                 // every other dot uses (an ordinary miss-coloured circle —
                 // an ace is always "in", so `d.shape` is never "star" here).
-                const { cx, cy } = atNetPosition(d.atNet, "serve", projected);
+                const placed = atNetPosition(d.atNet, "serve", projected);
+                // The card's zoomed window (`SERVE_COURT_THROUGH_NET`) cuts
+                // off part of the back court: a mark beyond its edge is
+                // pinned just inside, never dropped off the card.
+                const { cx, cy } = throughNet
+                  ? pinInsideServeWindow(placed)
+                  : placed;
                 return (
                   <CourtMark
                     key={d.id}
