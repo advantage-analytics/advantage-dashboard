@@ -197,17 +197,6 @@ function determinePlayer(
   return point.won_by_player1 ? "player1" : "player2";
 }
 
-/** Points per shots request (`getMatchPointsFromSupabase`): ~30 shots a
- *  point at the long end keeps a chunk inside one 1000-row page. */
-const SHOT_READ_POINT_CHUNK = 30;
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size)
-    out.push(items.slice(i, i + size));
-  return out;
-}
-
 /**
  * Who bookmarked which point, workspace-wide. Saving a point is a
  * WORKSPACE-wide act: under the T4 policy, SELECT on point_bookmarks returns
@@ -334,7 +323,38 @@ export async function getMatchPointsFromSupabase(
   const supabase = client ?? (await createClient());
   const { includeBookmarks = true, programId } = options;
 
-  // Fetch points first
+  // The match's shots, in pages, started alongside the points: they are read
+  // by `shots.match_id` (trigger-kept from the shot's point,
+  // `20261110191701_shots_match_id_rls.sql`) on its own index, so they need
+  // no point ids — one query a match instead of an `in.(…)` list per chunk,
+  // and no burst of requests when a season reads several matches at once.
+  // PostgREST caps a response at 1000 rows, and a full three-set match passes
+  // that — a single request silently dropped the tail of the match, which
+  // the film room's shot feed shows row by row. The order is total (point,
+  // shot number, id) so pages never overlap or skip.
+  //
+  // Fail-closed, like `supabaseAttachmentSourceRows`: an error on any page
+  // returns `null` ("no answer") rather than points carrying half their shots.
+  // A point with its shots cut off reads as a short rally and relabels its
+  // serve, return and last shot — a wrong answer that looks like a right one.
+  const shotsRead = fetchAllPages<DbShot>(async (from, to) => {
+    const { data, error } = await supabase
+      .from("shots")
+      .select(
+        "id, point_id, shot_number, is_player1, shot_type, spin_type, speed_mph, video_time, bounce_video_time, zone, result, contact_x, contact_y, landing_x, landing_y",
+      )
+      .eq("match_id", matchId)
+      .order("point_id", { ascending: true })
+      .order("shot_number", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to);
+    // The helper stops at the first error, so this logs exactly once.
+    if (error) console.error("Failed to fetch shots:", error.message);
+    return { data: data as DbShot[] | null, error };
+  });
+  // Handled here too: a match with no points returns before awaiting it.
+  shotsRead.catch(() => {});
+
   const { data: pointsData, error: pointsError } = await supabase
     .from("points")
     .select(
@@ -354,52 +374,17 @@ export async function getMatchPointsFromSupabase(
   const points = pointsData as DbPoint[];
   const pointIds = points.map((p) => p.id);
 
-  // Fetch shots for these points, in pages. PostgREST caps a response at 1000
-  // rows by default, and a full three-set match passes that — a single request
-  // silently dropped the tail of the match, which the film room's shot feed
-  // shows row by row. The order is total (point, shot number, id) so pages
-  // never overlap or skip.
-  //
-  // Fail-closed, like `supabaseAttachmentSourceRows`: an error on any page
-  // returns `null` ("no answer") rather than points carrying half their shots.
-  // A point with its shots cut off reads as a short rally and relabels its
-  // serve, return and last shot — a wrong answer that looks like a right one.
-  //
-  // The points are read in chunks, all at once: each chunk's shots fit one
-  // page on a real match (a point holds a few dozen shots at most), so the
-  // read is one round trip instead of one per 1000 rows, and each request's
-  // `in.(…)` list stays short. A chunk that does pass a page still pages.
-  // The bookmarks need only the point ids, so they are read alongside.
-  const shotChunks = chunk(pointIds, SHOT_READ_POINT_CHUNK);
-  const [chunkShots, savedByPointId] = await Promise.all([
-    Promise.all(
-      shotChunks.map((ids) =>
-        fetchAllPages<DbShot>(async (from, to) => {
-          const { data, error } = await supabase
-            .from("shots")
-            .select(
-              "id, point_id, shot_number, is_player1, shot_type, spin_type, speed_mph, video_time, bounce_video_time, zone, result, contact_x, contact_y, landing_x, landing_y",
-            )
-            .in("point_id", ids)
-            .order("point_id", { ascending: true })
-            .order("shot_number", { ascending: true })
-            .order("id", { ascending: true })
-            .range(from, to);
-          // The helper stops at the first error, so this logs once a chunk.
-          if (error) console.error("Failed to fetch shots:", error.message);
-          return { data: data as DbShot[] | null, error };
-        }),
-      ),
-    ),
-    // Who bookmarked each point, workspace-wide (see fetchSavedByPointId).
+  // Who bookmarked each point, workspace-wide (see fetchSavedByPointId),
+  // read while the shots finish.
+  const [shots, savedByPointId] = await Promise.all([
+    shotsRead,
     includeBookmarks
       ? fetchSavedByPointId(supabase, matchId, pointIds, programId)
       : Promise.resolve(
           new Map<string, { userId: string; name: string | null }[]>(),
         ),
   ]);
-  if (chunkShots.some((c) => c === null)) return null;
-  const shots = (chunkShots as DbShot[][]).flat();
+  if (!shots) return null;
 
   // Group shots by point_id
   const shotsByPointId = new Map<string, DbShot[]>();

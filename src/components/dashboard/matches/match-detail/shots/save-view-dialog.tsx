@@ -110,6 +110,7 @@ export function SaveViewDialog({
   tone = "light",
   side = "bottom",
   names,
+  note,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -126,6 +127,9 @@ export function SaveViewDialog({
   /** The two sides' names for the dark tone's prefilled name. The dialog
    *  reads no match context of its own, so the player profile can draw it. */
   names?: PhraseNames;
+  /** One more quiet line under "Depth bands are not part of a view": what
+   *  else on screen the view will not keep (a season's match filters). */
+  note?: string;
 }) {
   const router = useRouter();
   const dark = tone === "dark";
@@ -357,6 +361,17 @@ export function SaveViewDialog({
             >
               Depth bands are not part of a view.
             </p>
+            {note && (
+              <p
+                data-save-view-note=""
+                className="text-[11px]"
+                style={{
+                  color: dark ? "rgba(255,255,255,0.45)" : "var(--ink-500)",
+                }}
+              >
+                {note}
+              </p>
+            )}
           </div>
 
           {workspaceKind === "team" && (

@@ -60,11 +60,12 @@ import { getSavedViews } from "@/lib/data/saved-views-server";
 import { seasonErrorSplitJudged } from "@/lib/data/player-season";
 import { getBandSettings } from "@/lib/data/viz-bands-server";
 import { getPreferences } from "@/lib/data/preferences-server";
+import { askEntryHref } from "@/lib/services/ask/entry";
+import { otherPlayer } from "@/components/dashboard/matches/match-detail/match-filters/panel-draft";
 
 /** `getPreferences` once per request, so the early start above and the
  *  Visualizations body share one read. */
 const requestPreferences = cache(getPreferences);
-import { askEntryHref } from "@/lib/services/ask/entry";
 
 /**
  * One player's page — Platform Audit `Te` (their own) and `Te2` (a coach's
@@ -502,21 +503,24 @@ async function ProfileVisualizationsBody({
   // timer lets this answer go out first, and once it lands the wall's
   // You | Opponent swaps sides in the browser with no round trip
   // (`profile-visualizations-view.tsx`).
-  const otherSideCards = new Promise<SeasonCard[]>((resolve, reject) =>
-    setTimeout(() => {
-      try {
-        resolve(
-          buildSeasonCards(
-            season.perMatch,
-            side === "you" ? "opponent" : "you",
-            bands,
-          ),
-        );
-      } catch (error) {
-        reject(error);
-      }
-    }, 0),
-  );
+  // Only on the wall: while a card is open the wall is hidden and every
+  // filter click is a round trip, so streaming the other side there would
+  // ship a whole second wall per click for nothing. Closing the card
+  // re-renders the wall, and the stream comes with it.
+  const otherSideCards =
+    state.cut === null
+      ? new Promise<SeasonCard[]>((resolve, reject) =>
+          setTimeout(() => {
+            try {
+              resolve(
+                buildSeasonCards(season.perMatch, otherPlayer(side), bands),
+              );
+            } catch (error) {
+              reject(error);
+            }
+          }, 0),
+        )
+      : undefined;
   return (
     <ProfileViewWhen view="visualizations">
       <ProfileVisualizationsView

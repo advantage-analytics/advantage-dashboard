@@ -166,7 +166,8 @@ function serverRender(query: string) {
     errorSplitJudged,
     // `?otherside=1`: the page's streamed other-side wall, landing a moment
     // after the answer, as `page.tsx` sends it.
-    ...(LOAD_PARAMS.has("otherside")
+    // On the wall only, as `page.tsx` streams it.
+    ...(LOAD_PARAMS.has("otherside") && state.cut === null
       ? {
           otherSideCards: new Promise<ReturnType<typeof buildSeasonCards>>(
             (resolve) =>

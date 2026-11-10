@@ -1614,10 +1614,23 @@ test.describe("the Visualizations view, rendered", () => {
     expect(typeof footer).toBe("function");
     const { start, end } = footer({ matched: [], phrases: [] });
     expect(end).toBeNull();
-    const html = renderToStaticMarkup(start);
-    expect(html).toContain('data-testid="save-as-view"');
-    expect(html).toContain('data-cut="serve"');
-    expect(html).toContain('data-workspace="Test U"');
+    // The button loads with the opened card (`React.lazy`), so the footer is
+    // a Suspense boundary whose fallback reads "Save as view" while it
+    // loads, around the button with this card's cut and workspace.
+    const boundary = start as React.ReactElement<{
+      fallback: React.ReactElement;
+      children: React.ReactElement<Record<string, unknown>>;
+    }>;
+    expect(renderToStaticMarkup(boundary.props.fallback)).toContain(
+      "Save as view",
+    );
+    expect(boundary.props.children.props).toMatchObject({
+      cut: "serve",
+      workspaceKind: "team",
+      workspaceName: "Test U",
+    });
+    // No season filter on: no "not part of a view" note.
+    expect(boundary.props.children.props.note).toBeUndefined();
   });
 
   test("the container's source names no point: no MatchPoint, no points prop, none of the omitted slots", () => {
@@ -2068,11 +2081,15 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
     )!;
     const each = HANDS.map((m) => count(m, "cut=serve"));
     expect(data.result.count).toBe(sum(each));
-    expect(data.seasonOptions.handCounts).toEqual({
-      any: sum(each),
-      right: each[0],
-      left: each[1],
-      unknown: each[2],
+    // Each row carries its match's hand, for the sheet's Opponent menu.
+    expect(
+      Object.fromEntries(
+        data.seasonOptions.matches.map((m) => [m.id, [m.count, m.hand]]),
+      ),
+    ).toEqual({
+      a: [each[0], "right"],
+      b: [each[1], "left"],
+      d: [each[2], "unknown"],
     });
     // Newest first, by match day.
     expect(data.seasonOptions.matches.map((m) => m.id)).toEqual([
@@ -2106,7 +2123,7 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
     // Every mark names B — index 1 into `matches`, which stays the season.
     expect(new Set(data.dotPoints.map((ref) => ref[0]))).toEqual(new Set([1]));
     expect(data.matches.map((m) => m.id)).toEqual(["a", "b", "d"]);
-    expect(data.filterPhrases).toEqual(["1st", "Lefties"]);
+    expect(data.filterPhrases).toEqual(["1st", "Left-handed"]);
     expect(data.subtitle).toContain("1 match ·");
     expect(data.panelActive).toBe(true);
     expect(data.hasFilters).toBe(true);
@@ -2127,10 +2144,6 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
       a: [count(A, "cut=serve&ball=first"), "right"],
       d: [count(D, "cut=serve&ball=first"), "unknown"],
     });
-    // The hand counts read every other live filter (the first serves).
-    expect(data.seasonOptions.handCounts.right).toBe(
-      count(HANDS[0], "cut=serve&ball=first"),
-    );
     // Statistics and the option counts are the lefty's alone too.
     expect(data.stats.total).toBe(part.result.count);
     expect(data.optionCounts[optionCountKey({ zone: ["t"] })]).toBe(
@@ -2153,7 +2166,7 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
       NAMES,
     )!;
     expect(data.result.count).toBe(count(D, "cut=rallyPlacement"));
-    expect(data.filterPhrases).toEqual(["Opponent's hand unknown"]);
+    expect(data.filterPhrases).toEqual(["Hand unknown"]);
   });
 
   test("two ticked matches: the court is their sum, the strip says '2 matches', and an id outside the season is ignored", () => {
@@ -2173,10 +2186,7 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
       surface: null,
       matches: ["a", "d", "ffff"],
     });
-    // The hand counts are over the ticked matches; a match row is itself
-    // alone, ticked or not.
-    expect(data.seasonOptions.handCounts.any).toBe(sum(expected));
-    expect(data.seasonOptions.handCounts.left).toBe(0);
+    // A match row is itself alone, ticked or not.
     expect(data.seasonOptions.matches.find((m) => m.id === "b")!.count).toBe(
       count(B, "cut=errors&verr=unforced"),
     );

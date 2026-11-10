@@ -790,20 +790,20 @@ export interface SeasonMatchOption {
   surface: SeasonSurface;
 }
 
-/** The season-only groups of the Filters panel, computed here. */
+/** The Matches sheet's rows, computed here. The sheet counts its own menus'
+ *  options in the browser, over these rows. */
 export interface SeasonFilterOptions {
-  /** The court's mark count under each "Opponent plays" choice, over the
-   *  ticked matches (`any`: no hand filter). */
-  handCounts: Record<OpponentHandFilter | "any", number>;
   /** Every analyzed match, newest first (`compareMatchDays`). */
   matches: SeasonMatchOption[];
 }
 
 /** The strip's words for "Opponent plays". */
 export const OPPONENT_HAND_PHRASE: Record<OpponentHandFilter, string> = {
-  right: "Righties",
-  left: "Lefties",
-  unknown: "Opponent's hand unknown",
+  // The Matches sheet's own menu words (`lightbox-matches-sheet.tsx`), so the
+  // strip, the panel's Matches row and the menu name one filter one way.
+  right: "Right-handed",
+  left: "Left-handed",
+  unknown: "Hand unknown",
 };
 
 /** The strip's words for "Result" and "Surface". */
@@ -812,7 +812,7 @@ export const SEASON_RESULT_PHRASE: Record<SeasonResultFilter, string> = {
   lost: "Lost",
 };
 export const SEASON_SURFACE_PHRASE: Record<SeasonSurface, string> = {
-  hard: "Hard court",
+  hard: "Hard",
   clay: "Clay",
   grass: "Grass",
   unknown: "Surface unknown",
@@ -1144,20 +1144,6 @@ export function buildSeasonLightbox(
       `${applied.matches.length} ${applied.matches.length === 1 ? "match" : "matches"}`,
     );
 
-  // The two season-only groups' counts: each option over every other live
-  // filter, summed from the parts already computed.
-  const handCounts: Record<OpponentHandFilter | "any", number> = {
-    any: 0,
-    right: 0,
-    left: 0,
-    unknown: 0,
-  };
-  perMatch.forEach((m, i) => {
-    if (!seasonMatchPasses(m, applied, { hand: false })) return;
-    const n = allParts[i].result.count;
-    handCounts.any += n;
-    handCounts[opponentHandOf(m)] += n;
-  });
   const matchOptions: SeasonMatchOption[] = perMatch
     .map((m, i) => ({
       id: m.matchId,
@@ -1221,7 +1207,7 @@ export function buildSeasonLightbox(
       );
     }),
     season: normalizeSeasonFilters(state.season) ?? null,
-    seasonOptions: { handCounts, matches: matchOptions },
+    seasonOptions: { matches: matchOptions },
   };
 }
 

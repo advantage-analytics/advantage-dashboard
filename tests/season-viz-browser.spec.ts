@@ -851,7 +851,7 @@ test("Matches: a row in Filters opens the Matches sheet; its Result, Opponent an
     .toEqual(["won", "hard", "m-3"]);
   const strip = serve.locator("[data-viz-filter-strip]");
   await expect(strip).toContainText("Won");
-  await expect(strip).toContainText("Hard court");
+  await expect(strip).toContainText("Hard");
   await expect(strip).toContainText("1 match");
   await expect
     .poll(() => marks(serve).count(), { timeout: 8_000 })

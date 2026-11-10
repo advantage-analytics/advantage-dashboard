@@ -17,6 +17,7 @@ import {
   EMPTY_VIZ_FILTERS,
   type PlayerFilter,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import { otherPlayer } from "@/components/dashboard/matches/match-detail/match-filters/panel-draft";
 import { VizStateProvider } from "@/components/dashboard/matches/match-detail/shots/viz-state-context";
 import type { VizState } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import type { WallCollection } from "@/components/dashboard/matches/match-detail/shots/viz-wall";
@@ -117,7 +118,7 @@ export function ProfileVisualizationsView({
         if (!live) return;
         setCache((c) =>
           c.base === cards
-            ? { ...c, bySide: { ...c.bySide, [otherSide(side)]: other } }
+            ? { ...c, bySide: { ...c.bySide, [otherPlayer(side)]: other } }
             : c,
         );
       },
@@ -527,10 +528,6 @@ function EmptyWall({ children }: { children: ReactNode }) {
       </p>
     </div>
   );
-}
-
-function otherSide(side: PlayerFilter): PlayerFilter {
-  return side === "you" ? "opponent" : "you";
 }
 
 /** A state without its player — two wall states that differ only in the

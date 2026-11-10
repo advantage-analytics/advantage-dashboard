@@ -128,6 +128,9 @@ class FakeQuery implements PromiseLike<Answer> {
     onfulfilled?: ((value: Answer) => R1 | PromiseLike<R1>) | null,
     onrejected?: ((reason: unknown) => R2 | PromiseLike<R2>) | null,
   ): PromiseLike<R1 | R2> {
+    // When a points read answers, so a spec can tell reads issued together
+    // from reads issued one after another.
+    if (this.table === "points") this.log.push("points.answered");
     return Promise.resolve(this.answer()).then(onfulfilled, onrejected);
   }
 
@@ -333,6 +336,7 @@ function shotRows(points: Row[]): Row[] {
     {
       id: `${point.id}-s1`,
       point_id: point.id,
+      match_id: point.match_id,
       shot_number: 1,
       is_player1: true,
       shot_type: "Serve",
@@ -350,6 +354,7 @@ function shotRows(points: Row[]): Row[] {
     {
       id: `${point.id}-s2`,
       point_id: point.id,
+      match_id: point.match_id,
       shot_number: 2,
       is_player1: false,
       shot_type: "Forehand",
@@ -733,11 +738,11 @@ test("the points reads run a few matches at a time, not the whole season at once
   const season = await loadPlayerSeason(client, sides.own, deps);
 
   expect(season.analyzed).toBe(11);
-  // Before the first match's shots are read, only the first few matches'
+  // Before the first match's read has answered, only the first few matches'
   // points reads have gone out — the pool, not all twelve.
-  const firstShots = log.findIndex((e) => e.startsWith("shots.select"));
+  const firstAnswer = log.indexOf("points.answered");
   const before = log
-    .slice(0, firstShots)
+    .slice(0, firstAnswer)
     .filter((e) => e.startsWith("points.match("));
   expect(before).toHaveLength(SEASON_READ_CONCURRENCY);
   // And every candidate is still read, once.
@@ -791,13 +796,13 @@ test("the points of every match are read together, without bookmarks", async () 
   const pointsReads = log.filter((e) => e.startsWith("points.select"));
   const shotsReads = log.filter((e) => e.startsWith("shots.select"));
   expect(pointsReads).toHaveLength(4);
-  // Only the three matches with points go on to read their shots.
-  expect(shotsReads).toHaveLength(3);
-  // Every points query was issued before any shots query: the matches were
-  // read in one wave, not one after another.
+  // Each match's shots are read by match id alongside its points, so every
+  // match asks for them, one query a match.
+  expect(shotsReads).toHaveLength(4);
+  // Every points query was issued before any of them answered: the matches
+  // were read in one wave, not one after another.
   const lastPoints = log.lastIndexOf(pointsReads[pointsReads.length - 1]);
-  const firstShots = log.findIndex((e) => e.startsWith("shots.select"));
-  expect(lastPoints).toBeLessThan(firstShots);
+  expect(lastPoints).toBeLessThan(log.indexOf("points.answered"));
   // Nothing in the fold reads who saved a point.
   expect(log.some((e) => e.startsWith("point_bookmarks"))).toBe(false);
   // And Bea's match was never asked about.
@@ -1119,7 +1124,9 @@ test("a cached season is identical to an uncached one, figure for figure, and th
   // Only m-c — a candidate with no points, so nothing to cache — is read
   // again; the three analyzed matches come from the cache.
   expect(pointReadsIn(againLog)).toEqual(["points.match(m-c)"]);
-  expect(againLog.some((e) => e.startsWith("shots.select"))).toBe(false);
+  // Its shots read goes out alongside (by match id); the cached three read
+  // none.
+  expect(againLog.filter((e) => e.startsWith("shots.select"))).toHaveLength(1);
   // The service-role file reads never enter the cache: every request asks.
   expect([...second.asked].sort()).toEqual(["m-b", "m-c", "m-d"]);
 

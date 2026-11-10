@@ -23,11 +23,11 @@ import {
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   courtFor,
+  normalizeSeasonFilters,
   withoutSeasonFilters,
   type SeasonFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { ChartMenu } from "@/components/dashboard/matches/match-detail/shots/chart-menu";
-import { SaveAsViewButton } from "@/components/dashboard/matches/match-detail/shots/save-as-view-button";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { LightboxSeasonFilters } from "@/components/dashboard/matches/match-detail/shots/lightbox-filters";
 import type { StatPick } from "@/components/dashboard/matches/match-detail/shots/stat-cut";
@@ -126,6 +126,31 @@ import { pointSetQuery } from "@/lib/match-video/point-set";
  * asks for the chunk again instead of re-throwing until a full reload.
  */
 
+/**
+ * "Save as view" — the Save popover and the server action it calls — loads
+ * with the opened card, not with the profile: the shell itself is
+ * `React.lazy` for the same reason (below), and a profile load ships none
+ * of either.
+ */
+const LazySaveAsViewButton = lazy(() =>
+  import("@/components/dashboard/matches/match-detail/shots/save-as-view-button").then(
+    (m) => ({ default: m.SaveAsViewButton }),
+  ),
+);
+
+/** The footer's "Save as view" while its chunk loads: the same blue words,
+ *  inert, so the footer does not shift when the button lands. */
+function SaveAsViewPending() {
+  return (
+    <span
+      aria-hidden="true"
+      className="text-[12px] font-medium text-[var(--blue)] opacity-60"
+    >
+      Save as view
+    </span>
+  );
+}
+
 /** What the opened card's "Save as view" needs: the workspace's views (the
  *  name check) and its name (the "Share with team" row). */
 export interface SeasonSaveView {
@@ -205,7 +230,6 @@ function emptyCourt(
     dotPoints: [],
     season: null,
     seasonOptions: {
-      handCounts: { any: 0, right: 0, left: 0, unknown: 0 },
       matches: [],
     },
   };
@@ -513,17 +537,27 @@ export function SeasonVizLightbox({
           saveView
             ? () => ({
                 start: (
-                  <SaveAsViewButton
-                    cut={court.cut}
-                    chart={court.chart}
-                    filters={state.filters}
-                    savedViews={saveView.savedViews}
-                    workspaceKind="team"
-                    workspaceName={saveView.workspaceName}
-                    onSaved={(view) =>
-                      setState((prev) => ({ ...prev, viewId: view.id }))
-                    }
-                  />
+                  <Suspense fallback={<SaveAsViewPending />}>
+                    <LazySaveAsViewButton
+                      cut={court.cut}
+                      chart={court.chart}
+                      filters={state.filters}
+                      savedViews={saveView.savedViews}
+                      workspaceKind="team"
+                      workspaceName={saveView.workspaceName}
+                      onSaved={(view) =>
+                        setState((prev) => ({ ...prev, viewId: view.id }))
+                      }
+                      // A view keeps the court's own filters; the season's
+                      // match filters (Result, Opponent, Surface, ticked
+                      // matches) are not part of one, so say so.
+                      note={
+                        normalizeSeasonFilters(state.season)
+                          ? "The Matches filters are not part of a view."
+                          : undefined
+                      }
+                    />
+                  </Suspense>
                 ),
                 end: null,
               })

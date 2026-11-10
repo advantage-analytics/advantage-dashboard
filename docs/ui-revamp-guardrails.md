@@ -269,6 +269,31 @@ be. Doubles teams and existing users depend on it.
 > the RPCs and do not mention this follow-up write.
 > `src/lib/admin/uploads/opponent-team.ts`.
 
+> **A reviewed exception, added 2026-11-10: the `shots.match_id` backfill.**
+> Approved by the owner on 2026-11-10 and applied live as
+> `supabase/migrations/20261110191701_shots_match_id_rls.sql`. It added a new
+> column, `shots.match_id`, and filled it for every existing shot from its
+> point's `points.match_id` in one `UPDATE`, with the table's user triggers
+> off for that statement only (so it bumped no points version and rebuilt no
+> Ask facts). Allowed because it writes **only** the new column, a copy of a
+> value the row already implied through `point_id`: no column a statistic,
+> a score, a seat or a mark is read from changed, and no `points`, `matches`
+> or `match_stats` row was written. The Verified lock's trigger
+> (`zz_shots_guard_verified_match`) was among those switched off, which is
+> safe for the same reason. From then on a `BEFORE` trigger
+> (`shots_set_match_id`) sets the column from the point on every insert and
+> on any update naming `point_id` or `match_id`, ignoring what a writer sends,
+> and `points_carry_match_id_to_shots` moves a point's shots with it; neither
+> function is executable by `authenticated` or `anon`. The shots `SELECT`
+> policy now reads `match_id IN (visible_match_ids())`, the set the points and
+> match_stats policies already use; `visible_match_ids()`'s program route
+> became a `program_members` semi-join with the same rule (any membership row;
+> `role` is NOT NULL). Verified on 2026-11-10 in a rolled-back dry run and
+> again live: the same shots visible to the same coach before and after
+> (16,734, 1,124 on the test match), and every row's `match_id` equal to its
+> point's. Anything else that writes existing `shots` rows still needs its
+> own entry here.
+
 > **A reviewed exception, added 2026-10-28: the Verified lock on the
 > rebuild paths.** `jobs/[jobId]/rederive` (its `handler.ts` takes a required
 > `matchVerified` dependency) and `jobs/[jobId]/resubmit` refuse a match

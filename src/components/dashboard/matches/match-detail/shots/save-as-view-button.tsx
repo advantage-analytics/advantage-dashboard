@@ -21,6 +21,7 @@ export function SaveAsViewButton({
   workspaceKind,
   workspaceName,
   onSaved,
+  note,
 }: {
   cut: Cut;
   chart: Chart;
@@ -29,6 +30,8 @@ export function SaveAsViewButton({
   workspaceKind: WorkspaceKind;
   workspaceName: string;
   onSaved: (view: SavedView) => void;
+  /** Handed to the dialog (`SaveViewDialog.note`). */
+  note?: string;
 }) {
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -54,6 +57,7 @@ export function SaveAsViewButton({
         workspaceName={workspaceName}
         side="top"
         onSaved={onSaved}
+        note={note}
       />
     </>
   );

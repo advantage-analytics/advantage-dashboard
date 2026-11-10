@@ -318,9 +318,12 @@ export function LightboxMatchesSheet({
   const sum = counting.reduce((n, m) => n + m.count, 0);
   const total = matches.reduce((n, m) => n + m.count, 0);
   const applied = seasonFiltersFrom(draft, matches);
+  // Against what is applied as this sheet would apply it, so a link's tick
+  // of a match outside the season (dropped on the server too) does not
+  // leave Show armed with nothing to change.
   const unchanged =
     JSON.stringify(applied ?? null) ===
-    JSON.stringify(normalizeSeasonFilters(season.value) ?? null);
+    JSON.stringify(seasonFiltersFrom(draftFrom(season.value), matches) ?? null);
   const narrowed =
     draft.result !== null ||
     draft.hand !== null ||
@@ -330,11 +333,8 @@ export function LightboxMatchesSheet({
   // A month heading carries its year only when the season spans more than
   // one; within one year the month alone reads cleaner.
   const years = new Set(matches.map((m) => m.date?.slice(0, 4) ?? ""));
-  const monthOf = (date: string | null) => {
-    if (!date) return "Undated";
-    const label = formatMatchDayMonth(date);
-    return years.size > 1 ? label : label.replace(/\s\d{4}$/, "");
-  };
+  const monthOf = (date: string | null) =>
+    date ? formatMatchDayMonth(date, { year: years.size > 1 }) : "Undated";
 
   const toggle = (id: string) =>
     setDraft((d) => ({
@@ -517,14 +517,7 @@ export function LightboxMatchesSheet({
           <div className="flex h-[60px] shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] pr-4 pl-5">
             <button
               type="button"
-              onClick={() =>
-                setDraft({
-                  result: null,
-                  hand: null,
-                  surface: null,
-                  ticked: [],
-                })
-              }
+              onClick={() => setDraft(draftFrom(undefined))}
               disabled={!narrowed}
               className="shrink-0 cursor-pointer text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] disabled:cursor-default disabled:text-[var(--ink-300)]"
             >
