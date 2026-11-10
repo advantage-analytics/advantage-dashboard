@@ -94,6 +94,22 @@ async function traceAfter(
         const r = el.getBoundingClientRect();
         return { x: r.left, y: r.top, w: r.width, h: r.height };
       };
+      const resting = (el: Element | null | undefined) => {
+        if (
+          !(el instanceof HTMLElement) ||
+          getComputedStyle(el).transform === "none" ||
+          !(el.offsetParent instanceof HTMLElement)
+        )
+          return box(el);
+        const p = el.offsetParent;
+        const r = p.getBoundingClientRect();
+        return {
+          x: r.left + p.clientLeft + el.offsetLeft,
+          y: r.top + p.clientTop + el.offsetTop,
+          w: el.offsetWidth,
+          h: el.offsetHeight,
+        };
+      };
       const frame = () => {
         const dialog = document.querySelector<HTMLElement>(
           '[role="dialog"]:not([data-testid="lightbox-chunk-pending"])',
@@ -104,7 +120,9 @@ async function traceAfter(
           ),
           ghost: box(document.querySelector(`${ghostSel} > div`)),
           ghosts: document.querySelectorAll(ghostSel).length,
-          stage: box(
+          // Where the stage comes to rest: mid-flight it rides scaled under
+          // the copy (`handOver`), so its box on screen is not its own.
+          stage: resting(
             document.querySelector("[role=dialog] [data-court-morph-target]"),
           ),
           dialogOpacity: dialog

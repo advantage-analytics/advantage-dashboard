@@ -53,8 +53,9 @@ interface TipAnchor {
  * The lightbox's Statistics column (canvas "Statistics bar variations" A2,
  * S09/S16/S17): each group under its eyebrow with the average on the right
  * ("Average 63%" beside a sample of the tick); each row label · won of count
- * · %, over a 4px bar with the average's tick. The best row's % is 13/500
- * ink-900. The groups share the column's height evenly — 24px apart at
+ * · %, over a 4px bar with the average's tick — as drawn in round 3's
+ * decisions (option 03 A): every row 12px ink-900, the count 11px ink-500,
+ * no row singled out; the bar's tick 8px tall at 50%. The groups share the column's height evenly — 24px apart at
  * least, 56px at most, so on a tall screen they settle in the middle rather
  * than drifting apart — and a list taller than the column scrolls as one
  * stacked at 24px (`GroupSpacer`).
@@ -169,14 +170,6 @@ export function LightboxStats({
       <GroupSpacer edge="top" />
       {groups.map((group, i) => {
         const average = groupAverage(group);
-        const counted = group.rows.filter(
-          (r) => r.count > 0 && r.winPct !== null,
-        );
-        const best = counted.length
-          ? counted.reduce((a, b) =>
-              (b.winPct ?? 0) > (a.winPct ?? 0) ? b : a,
-            )
-          : null;
         return (
           <Fragment key={group.key}>
             {i > 0 && <GroupSpacer edge="between" />}
@@ -203,7 +196,6 @@ export function LightboxStats({
                   <li key={row.key}>
                     <StatRowButton
                       row={row}
-                      best={best?.key === row.key && !row.share}
                       average={average}
                       pressed={
                         pick?.group === group.key && pick.row === row.key
@@ -288,14 +280,12 @@ function GroupSpacer({ edge }: { edge: "top" | "between" | "bottom" }) {
 
 function StatRowButton({
   row,
-  best,
   average,
   pressed,
   onClick,
   onHover,
 }: {
   row: StatRow;
-  best: boolean;
   average: number | null;
   pressed: boolean;
   onClick: () => void;
@@ -324,27 +314,13 @@ function StatRowButton({
     >
       <span
         aria-hidden="true"
-        className="grid grid-cols-[minmax(0,1fr)_56px_40px] items-baseline gap-2.5"
+        className="grid grid-cols-[minmax(0,1fr)_56px_40px] items-baseline gap-2.5 text-[12px] text-[var(--ink-900)]"
       >
-        <span
-          className={cn(
-            "truncate text-[12px]",
-            best || pressed ? "text-[var(--ink-900)]" : "text-[var(--ink-700)]",
-          )}
-        >
-          {row.label}
-        </span>
+        <span className="truncate">{row.label}</span>
         <span className="text-micro text-right tabular-nums">
           {row.share ? row.count : `${row.won} of ${row.count}`}
         </span>
-        <span
-          className={cn(
-            "text-right tabular-nums",
-            best
-              ? "text-[13px] font-medium text-[var(--ink-900)]"
-              : "text-[13px] text-[var(--ink-700)]",
-          )}
-        >
+        <span className="text-right tabular-nums">
           {pct === null ? "—" : `${pct}%`}
         </span>
       </span>
@@ -360,7 +336,7 @@ function StatRowButton({
         )}
         {average !== null && (
           <b
-            className="absolute -inset-y-[3px] w-px bg-[var(--ink-900)] opacity-35"
+            className="absolute -top-0.5 h-2 w-px bg-[var(--ink-900)] opacity-50"
             style={{ left: `${average}%` }}
           />
         )}

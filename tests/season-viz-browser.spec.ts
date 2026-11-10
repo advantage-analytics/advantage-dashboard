@@ -878,6 +878,18 @@ test("a chart switch keeps the season's court exactly where it is — at 100%, a
   await expect(marks(serve).first()).toBeVisible({ timeout: 8_000 });
   const all = await marks(serve).count();
   const stage = serve.locator("[data-court-stage]");
+  // The card's court flies in with the lightbox's own stage riding scaled
+  // under it (`viz-court-morph.ts`, `handOver`): the baseline is the stage
+  // at rest, once the flight is over.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          !document.documentElement.hasAttribute("data-viz-court-morph") &&
+          document.getAnimations().length === 0,
+      ),
+    )
+    .toBe(true);
 
   // The stage's box and the court's pan/zoom, two frames after the last
   // change so a stage resize (and its re-fit) has had its turn.

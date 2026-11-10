@@ -1269,7 +1269,9 @@ test("a landing cut opens at 100% on the far half, net along the stage's bottom;
     const netArtY = ((236 + 117) / 706) * 1258;
     const netStageY = home.py + netArtY * home.z;
     expect(netStageY).toBeLessThan(s.height);
-    expect(s.height - netStageY).toBeLessThan(80);
+    // The serve sits VIEWER_SERVE_DROP (20 units) higher, so its net is a
+    // little further up; the other landing cuts keep the net at the edge.
+    expect(s.height - netStageY).toBeLessThan(cut === "serve" ? 130 : 80);
 
     const full = dialog.getByRole("button", { name: "Full court" });
     await expect(full).toBeEnabled();
@@ -1335,7 +1337,7 @@ test("clicking a mark glides it to the stage centre at 150%; a click on the empt
   // Mid-glide the court has not arrived yet.
   await page.waitForTimeout(420);
   const s = (await stage.boundingBox())!;
-  const m = (await mark.locator('circle[r="9"]').boundingBox())!;
+  const m = (await mark.locator('circle[fill="transparent"]').boundingBox())!;
   expect(Math.abs(m.x + m.width / 2 - (s.x + s.width / 2))).toBeLessThan(12);
   expect(Math.abs(m.y + m.height / 2 - (s.y + s.height / 2))).toBeLessThan(12);
   const after = await courtTransform(page);
@@ -1412,7 +1414,7 @@ test("with reduced motion the glide is a jump; a Points row glides the court too
   // Within a frame or two, not a 320ms tween.
   await page.waitForTimeout(40);
   const s = (await stage.boundingBox())!;
-  const m = (await mark.locator('circle[r="9"]').boundingBox())!;
+  const m = (await mark.locator('circle[fill="transparent"]').boundingBox())!;
   expect(Math.abs(m.x + m.width / 2 - (s.x + s.width / 2))).toBeLessThan(12);
   expect(Math.abs(m.y + m.height / 2 - (s.y + s.height / 2))).toBeLessThan(12);
   expect((await courtTransform(page)).z / home.z).toBeCloseTo(1.5, 2);
@@ -1431,7 +1433,9 @@ test("with reduced motion the glide is a jump; a Points row glides the court too
   await expect(selected).toHaveCount(1);
   expect(pointId).not.toBeNull();
   await page.waitForTimeout(40);
-  const sm = (await selected.locator('circle[r="9"]').boundingBox())!;
+  const sm = (await selected
+    .locator('circle[fill="transparent"]')
+    .boundingBox())!;
   expect(Math.abs(sm.x + sm.width / 2 - (s.x + s.width / 2))).toBeLessThan(12);
   expect(Math.abs(sm.y + sm.height / 2 - (s.y + s.height / 2))).toBeLessThan(
     12,
@@ -1695,6 +1699,11 @@ test("R7·2 · a stage that resizes keeps a zoomed, panned court: the filter str
   await expect
     .poll(async () => (await stage.boundingBox())!.height)
     .not.toBe(s.height);
+  // The strip unfolds (`.viz-filter-strip-reveal`), so the stage shrinks
+  // over a few frames: read it once it has come to rest.
+  await expect
+    .poll(() => page.evaluate(() => document.getAnimations().length))
+    .toBe(0);
   const shorter = (await stage.boundingBox())!;
   const during = await courtTransform(page);
   // Same zoom, and the same spot of court at the stage's centre.

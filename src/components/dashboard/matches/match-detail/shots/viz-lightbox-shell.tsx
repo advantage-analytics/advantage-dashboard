@@ -1273,7 +1273,12 @@ export function VizLightboxShell({
                             : `No ${result.noun} match these filters.`,
                       })
                     ) : (
-                      <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
+                      // `-mx-2 px-2`: a row's hover wash hangs 8px past the
+                      // column on both sides (`StatRowButton`'s `-mx-2`), and
+                      // a scroller clips both axes — without the room its
+                      // wash was cut square at the column's edge, flush to
+                      // the text.
+                      <div className="-mx-2 px-2 md:min-h-0 md:flex-1 md:overflow-y-auto">
                         <LightboxStats
                           stats={stats}
                           cut={cut}

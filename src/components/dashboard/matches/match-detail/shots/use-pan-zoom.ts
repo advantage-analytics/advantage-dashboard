@@ -161,13 +161,20 @@ export function usePanZoom(
   useLayoutEffect(() => {
     const el = stageRef.current;
     if (!el) return;
+    // The stage's own layout size, never its size on screen: the court morph
+    // scales the stage while it rides in under the card's court
+    // (`viz-court-morph.ts`, `handOver`), and a resize measured mid-flight
+    // would seed the 100% framing for a stage a fraction of its size. The
+    // fractional on-screen rect is kept whenever it agrees with the layout
+    // size (no transform), as before.
     const measure = () => {
       const rect = el.getBoundingClientRect();
-      setStage((prev) =>
-        prev.w === rect.width && prev.h === rect.height
-          ? prev
-          : { w: rect.width, h: rect.height },
-      );
+      const transformed =
+        Math.abs(rect.width - el.offsetWidth) > 1 ||
+        Math.abs(rect.height - el.offsetHeight) > 1;
+      const w = transformed ? el.offsetWidth : rect.width;
+      const h = transformed ? el.offsetHeight : rect.height;
+      setStage((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
     };
     measure();
     const observer = new ResizeObserver(measure);

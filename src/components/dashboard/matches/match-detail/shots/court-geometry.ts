@@ -1334,6 +1334,17 @@ export const VIEWER_LANDING_FRAME = {
   h: VIEWER_COURT.netY + VIEWER_NET_GUTTER - VIEWER_COURT.courtFrame.minY,
 } as const;
 
+/**
+ * How far (viewBox units) the serve's 100% sits higher than the other landing
+ * cuts': the window slides this far toward the near side at the same zoom, so
+ * the court rides up the stage — most of the empty apron behind the far
+ * baseline goes, the DEUCE COURT / AD COURT labels (`COURT_SIDE_LABEL_Y`,
+ * 9 above the baseline) keep a few units of air above them, and the space
+ * opens past the net instead, toward the near service boxes the wall's serve
+ * card carries on into.
+ */
+export const VIEWER_SERVE_DROP = 20;
+
 /** `frame`'s fit scale on `stage`, clamped to the zoom range. */
 function frameFitZ(
   frame: { w: number; h: number },
@@ -1384,8 +1395,9 @@ export function viewerFullCourtTransform(stage: Size): PanZoom {
  * half), `VIEWER_LANDING_FRAME` fitted to the stage, horizontally centred,
  * with the net (and its small gutter) along the stage's BOTTOM edge — on a
  * stage taller than the half, the extra shows the far apron above, never the
- * empty near half. The whole court is a zoom-out away
- * (`viewerFullCourtTransform`).
+ * empty near half. `"serve"` alone sits `VIEWER_SERVE_DROP` higher at the
+ * same zoom, so a little of the court past the net shows instead of the far
+ * apron. The whole court is a zoom-out away (`viewerFullCourtTransform`).
  *
  * `"returnContact"`/`"rallyPosition"` (contact/rally cuts), unchanged: the
  * useful content is only the NEAR half, so start zoomed in
@@ -1407,7 +1419,8 @@ export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
   if (viewerLandingHalf(cut) !== null) {
     const frame = VIEWER_LANDING_FRAME;
     const z = frameFitZ(frame, stage);
-    const bottom = viewerArtPoint(0, frame.minY + frame.h);
+    const drop = cut === "serve" ? VIEWER_SERVE_DROP : 0;
+    const bottom = viewerArtPoint(0, frame.minY + frame.h + drop);
     return clampPan(
       { z, px: stage.w / 2 - centre.x * z, py: stage.h - bottom.y * z },
       art,
