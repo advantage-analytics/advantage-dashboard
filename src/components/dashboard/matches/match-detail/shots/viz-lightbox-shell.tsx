@@ -72,7 +72,11 @@ import {
 import { LightboxStats } from "./lightbox-stats";
 import { GLIDE_MIN_RELATIVE_ZOOM, KEY_PAN_PX } from "./pan-zoom";
 import type { StatPick } from "./stat-cut";
-import { COURT_MORPH_CLOSE_EASE, runCourtMorphClose } from "./viz-court-morph";
+import {
+  COURT_MORPH_CLOSE_EASE,
+  isCourtMorphOpening,
+  runCourtMorphClose,
+} from "./viz-court-morph";
 import { usePanZoom } from "./use-pan-zoom";
 import type { BandReceipt, BandSaveOutcome } from "./viz-bands-context";
 import {
@@ -618,6 +622,12 @@ export function VizLightboxShell({
       }
     : undefined;
   const exitClass = "animate-out fade-out-0 fill-mode-forwards";
+  // Opened by a card whose court is flying in: the flight draws the frame's
+  // entrance (the box opening out of the card, the scrim with it, the rows
+  // after — `viz-court-morph.ts`), so the plain fade-in stays off. Read once,
+  // on mount: the flight ends long before anything re-renders this.
+  const [morphing] = useState(isCourtMorphOpening);
+  const enterClass = appear && !closing && !morphing && LIGHTBOX_ENTER_CLASS;
 
   // A lightbox opened on its loading frame (the season's court on its way)
   // fades its body in when the court lands, rather than cutting to it.
@@ -817,9 +827,10 @@ export function VizLightboxShell({
     >
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay
+          data-lightbox-scrim=""
           className={cn(
             LIGHTBOX_OVERLAY_CLASS,
-            appear && !closing && LIGHTBOX_ENTER_CLASS,
+            enterClass,
             closing && exitClass,
           )}
           style={exitStyle}
@@ -842,11 +853,8 @@ export function VizLightboxShell({
               opener.focus({ preventScroll: true });
             }
           }}
-          className={cn(
-            LIGHTBOX_BOX_CLASS,
-            appear && !closing && LIGHTBOX_ENTER_CLASS,
-            closing && exitClass,
-          )}
+          data-lightbox-box=""
+          className={cn(LIGHTBOX_BOX_CLASS, enterClass, closing && exitClass)}
           style={exitStyle}
         >
           <TooltipProvider>
@@ -857,7 +865,12 @@ export function VizLightboxShell({
             </div>
 
             {/* ── Header ─────────────────────────────────────────────── */}
-            <div className="flex items-start gap-2.5 px-6 pt-6 pb-5">
+            {/* `data-lightbox-enter`: the order the frame's rows rise in
+                after a card's court flies in (`viz-court-morph.ts`). */}
+            <div
+              data-lightbox-enter="0"
+              className="flex items-start gap-2.5 px-6 pt-6 pb-5"
+            >
               <div className="flex min-w-0 flex-col gap-1">
                 <DialogPrimitive.Title
                   ref={titleRef}
@@ -901,7 +914,10 @@ export function VizLightboxShell({
               >
                 {/* Court column */}
                 <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
-                  <div className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
+                  <div
+                    data-lightbox-enter="1"
+                    className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3"
+                  >
                     {player && (
                       <div
                         className="flex gap-1.5"
@@ -1121,38 +1137,49 @@ export function VizLightboxShell({
                     )}
                   </div>
 
-                  {!isDraft &&
-                    (chart === "scatter" ? (
-                      <LegendFilter
-                        items={legend}
-                        counts={legendCounts(result.dots)}
-                        pick={legendPick}
-                        onPick={(next) => {
-                          setLegendPick(next);
-                          setSelectedMarkId(null);
-                        }}
-                      />
-                    ) : (
-                      <div
-                        role="group"
-                        aria-label="Legend"
-                        className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
-                      >
-                        {legend.map((item) =>
-                          item.glyph === "ramp" ? (
-                            <HeatRampLegend key={item.key} />
-                          ) : (
-                            <span key={item.key} className="px-1">
-                              <LegendMark item={item} />
-                            </span>
-                          ),
-                        )}
-                      </div>
-                    ))}
+                  {!isDraft && (
+                    <div data-lightbox-enter="1">
+                      {chart === "scatter" ? (
+                        <LegendFilter
+                          items={legend}
+                          counts={legendCounts(result.dots)}
+                          pick={legendPick}
+                          onPick={(next) => {
+                            setLegendPick(next);
+                            setSelectedMarkId(null);
+                          }}
+                        />
+                      ) : (
+                        // `min-h-6`: the Scatter legend's row height (its
+                        // keys are 24px buttons), so a chart switch never
+                        // changes the stage's height — a resized stage re-fits
+                        // the court (`usePanZoom`) and would throw away the
+                        // reader's pan and zoom.
+                        <div
+                          role="group"
+                          aria-label="Legend"
+                          className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-0.5"
+                        >
+                          {legend.map((item) =>
+                            item.glyph === "ramp" ? (
+                              <HeatRampLegend key={item.key} />
+                            ) : (
+                              <span key={item.key} className="px-1">
+                                <LegendMark item={item} />
+                              </span>
+                            ),
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Right column */}
-                <div className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]">
+                <div
+                  data-lightbox-enter="2"
+                  className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]"
+                >
                   <div className="flex min-h-7 items-center gap-1.5 border-b border-[var(--border-hairline)] pb-3">
                     <div
                       className="flex gap-1.5"
@@ -1228,7 +1255,10 @@ export function VizLightboxShell({
                 Save as view) gets the body's own bottom padding instead of an
                 empty bar. */}
             {footerActions ? (
-              <div className="mt-5 flex items-center gap-2.5 border-t border-[var(--border-hairline)] px-6 pt-4 pb-5">
+              <div
+                data-lightbox-enter="2"
+                className="mt-5 flex items-center gap-2.5 border-t border-[var(--border-hairline)] px-6 pt-4 pb-5"
+              >
                 {footerActions.start}
                 <span className="flex-1" />
                 {footerActions.end}

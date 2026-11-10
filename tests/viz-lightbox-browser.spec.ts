@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { startStyledHarness } from "./fixtures/viz-styled-harness-server";
 
 let origin: string;
@@ -30,10 +30,13 @@ test("a wall card opens the lightbox over the wall, and Esc puts focus back on t
   await expect(dialog).toContainText(
     /Serve placement · You · \d+ (of \d+ )?in, \d+ of those \d+ won/,
   );
-  // Dialog v3 geometry at 1512 × 982.
+  // Dialog v3 geometry at 1512 × 982, centred on both axes: the old
+  // top-anchored height budget (982 − 96 − 32 = 854), split evenly.
   const box = (await dialog.boundingBox())!;
   expect(Math.round(box.width)).toBe(1212);
-  expect(Math.round(box.y)).toBe(96);
+  expect(Math.round(box.height)).toBe(854);
+  expect(Math.round(box.x)).toBe(150);
+  expect(Math.round(box.y)).toBe(64);
   await page.waitForTimeout(800);
   await page.screenshot({ path: test.info().outputPath("lightbox.png") });
   await page.keyboard.press("Escape");
@@ -1456,4 +1459,67 @@ test("a Statistics row's tooltip hangs beside it with the row's own numbers, and
   await page.screenshot({
     path: test.info().outputPath("lightbox-stat-tooltip.png"),
   });
+});
+
+/** The stage's box and the court's pan/zoom (`[data-court]`'s translate and
+ *  size, `z` × the art), read two frames after the last change so a stage
+ *  resize — and the re-fit it triggers — has had its turn. */
+async function courtState(page: Page) {
+  return page.evaluate(async () => {
+    await new Promise((done) =>
+      requestAnimationFrame(() => requestAnimationFrame(done)),
+    );
+    const stage = document.querySelector("[data-court-stage]")!;
+    const court = stage.querySelector<HTMLElement>("[data-court]")!;
+    const r = stage.getBoundingClientRect();
+    return {
+      stage: [r.x, r.y, r.width, r.height],
+      transform: court.style.transform,
+      width: court.style.width,
+      height: court.style.height,
+    };
+  });
+}
+
+test("R7·1 · a chart switch keeps the court exactly where it is — at 100%, and panned and zoomed: Scatter → Heat → Zones → Scatter", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  const stage = dialog.locator("[data-court-stage]");
+  await expect(stage.locator("[data-viz-mark]").first()).toBeVisible();
+
+  async function cycle(expected: Awaited<ReturnType<typeof courtState>>) {
+    for (const [from, to] of [
+      ["Scatter", "Heat"],
+      ["Heat", "Zones"],
+      ["Zones", "Scatter"],
+    ]) {
+      await dialog.getByRole("button", { name: from, exact: true }).click();
+      await page
+        .getByRole("menuitemradio", { name: new RegExp(`^${to}`) })
+        .click();
+      await expect(
+        dialog.getByRole("button", { name: to, exact: true }),
+      ).toBeVisible();
+      expect(await courtState(page), `on ${to}`).toEqual(expected);
+    }
+  }
+
+  // At 100%: no reflow of the stage, no re-fit.
+  await cycle(await courtState(page));
+
+  // Zoomed in and dragged off-centre: the same pan and zoom on every chart.
+  await dialog.getByRole("button", { name: "Zoom in" }).click();
+  await expect(dialog.getByText(/^\d+% · Drag to move around$/)).toBeVisible();
+  const s = (await stage.boundingBox())!;
+  await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(s.x + s.width / 2 - 120, s.y + s.height / 2 + 60, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  const moved = await courtState(page);
+  await cycle(moved);
 });

@@ -30,8 +30,37 @@
  * growing from the card's art box to the stage) only — nothing that lays out.
  * Reduced motion never arms it; the lightbox then only fades.
  *
+ * ── Motion thesis (the open) ─────────────────────────────────────────────
+ * Focal moment: the card's court flying to the stage. It is the one thing
+ * that moves through space; everything else takes its timing from it, so the
+ * open reads as one gesture, not a court flying through a dialog that popped
+ * in around it.
+ * Continuity: the dialog grows out of the card with the court. Its box is
+ * revealed by a clip-path that starts on the card's art box and opens to the
+ * whole box on the flight's own curve and length, fading up over its first
+ * `BOX_FADE_MS` so the growing edge is never a hard white slab; the scrim
+ * fades on the same curve and length. The box is never scaled — its layout
+ * rect stays its rect on screen, which is what the flight aims at.
+ * Then the frame fills in: header (0), the court's control row and legend
+ * (1), the right column and footer (2) — `data-lightbox-enter` —
+ * rise `CONTENT_RISE_PX` and fade in from `CONTENT_AT_MS`, as the court
+ * decelerates onto the stage, `CONTENT_STAGGER_MS` apart (80ms in all).
+ * The stage itself never fades: it is revealed under the copy as it lands,
+ * so there is one court on screen at every frame.
+ * Timings: court + box clip + scrim 380ms `OPEN_EASE`; box opacity 0–160ms;
+ * contents 280/320/360ms + 220ms each, done by 580ms; the copy's 100ms
+ * settle at landing. Every piece is transform, opacity or clip-path.
+ * The close is the faster reverse: 240ms ease-in-out, the court shrinking
+ * into the card while the box clips back toward it and fades; the stage
+ * hands over to the copy in the first quarter, so it is one court again.
+ * Reduced motion: none of this — the lightbox fades (opacity only, 150ms).
+ * One timeline: a box, scrim or row that mounts mid-flight (the shell
+ * replacing the chunk's frame, the season's court arriving) joins the
+ * animation at the flight's elapsed time instead of starting over.
+ *
  * A leaf module (no React): `wall-card.tsx` and `court-tile.tsx` arm it on a
- * plain click, `viz-lightbox-shell.tsx` asks it to run the close.
+ * plain click; `viz-lightbox-shell.tsx` asks it whether a flight is drawing
+ * the entrance (`isCourtMorphOpening`) and to run the close.
  */
 
 import type { Cut } from "./viz-model";
@@ -56,12 +85,27 @@ const SETTLE_MS = 100;
 /** Close: faster than the open, a standard ease-in-out. */
 const COURT_MORPH_CLOSE_MS = 240;
 export const COURT_MORPH_CLOSE_EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+/** The box's fade up while its clip opens (the edge is soft, then crisp). */
+const BOX_FADE_MS = 160;
+/** How far outside the box the open clip ends: past `--shadow-dropdown`'s
+ *  reach (8px + 30px blur), so the shadow is whole by the end. */
+const BOX_CLIP_OUTSET_PX = 48;
+const BOX_RADIUS = "14px";
+/** The frame's contents: when the first group starts (from the click), the
+ *  step between groups, each group's length and rise. */
+const CONTENT_AT_MS = 280;
+const CONTENT_STAGGER_MS = 40;
+const CONTENT_MS = 220;
+const CONTENT_RISE_PX = 6;
 /** Reduced motion's close: the fade-in's own length (tw-animate's 150ms). */
 const COURT_MORPH_REDUCED_CLOSE_MS = 150;
 /** How long the copy waits on a lightbox that never shows up. */
 const TARGET_WAIT_MS = 2500;
 
 const TARGET_SELECTOR = "[data-court-morph-target]";
+const BOX_SELECTOR = "[data-lightbox-box]";
+const SCRIM_SELECTOR = "[data-lightbox-scrim]";
+const ENTER_SELECTOR = "[data-lightbox-enter]";
 const FLYING_ATTR = "data-viz-court-morph";
 const STAGE_RADIUS = "10px";
 
@@ -107,6 +151,12 @@ interface OpenFlight {
   ended: boolean;
   raf: number;
   timers: number[];
+  /** The frame's box and scrim this flight is animating (the chunk's frame,
+   *  then the shell's), and the content rows it has started. */
+  box: HTMLElement | null;
+  scrim: HTMLElement | null;
+  frameAnims: Animation[];
+  entered: WeakSet<Element>;
 }
 
 let opened: Source | null = null;
@@ -347,8 +397,8 @@ function currentTarget(): Element | null {
  * Where the stage will stand before any lightbox is on the page (the match
  * report's chunk still loading): the box measured off its own class, the
  * stage inside it by the shell's spacing — header 88px, control row 53px,
- * a 340px right column 24px away on a wide screen, the legend and footer
- * under it. A guess the flight re-aims from as soon as the real one mounts.
+ * a 340px right column 24px away on a wide screen, the 24px legend and the
+ * footer under it (111px). A guess the flight re-aims from as soon as the real one mounts.
  */
 function predictedStage(): Rect {
   const probe = document.createElement("div");
@@ -361,7 +411,7 @@ function predictedStage(): Rect {
   const x = box.x + 24;
   const y = box.y + 141;
   const w = wide ? Math.min(800, box.w - 48 - 364) : box.w - 48;
-  const h = wide ? Math.max(360, box.y + box.h - 113 - y) : 420;
+  const h = wide ? Math.max(360, box.y + box.h - 111 - y) : 420;
   return { x, y, w, h };
 }
 
@@ -370,6 +420,126 @@ function aimFor(f: OpenFlight): { box: Rect; court: Rect } {
   const stage = f.target ? rectOf(f.target) : predictedStage();
   const t = viewerInitialTransform(f.source.cut, { w: stage.w, h: stage.h });
   return { box: stage, court: regionOnStage(f.from.region, stage, t) };
+}
+
+/** The last element on the page matching `selector`, if it has a box. */
+function lastShown(selector: string): HTMLElement | null {
+  const all = document.querySelectorAll<HTMLElement>(selector);
+  for (let i = all.length - 1; i >= 0; i--) {
+    if (all[i].getBoundingClientRect().width > 0) return all[i];
+  }
+  return null;
+}
+
+/** `card` as an `inset()` on `box` (both on screen), its edges held inside
+ *  the box: a card beside the box starts the reveal on the box's nearest
+ *  edge rather than outside it. */
+function insetWithin(card: Rect, box: Rect, radius: string): string {
+  const clampX = (v: number) => Math.min(Math.max(v, 0), box.w);
+  const clampY = (v: number) => Math.min(Math.max(v, 0), box.h);
+  const l = clampX(card.x - box.x);
+  const r = clampX(card.x + card.w - box.x);
+  const t = clampY(card.y - box.y);
+  const b = clampY(card.y + card.h - box.y);
+  return `inset(${t}px ${box.w - r}px ${box.h - b}px ${l}px round ${radius})`;
+}
+
+const BOX_OPEN_CLIP = `inset(-${BOX_CLIP_OUTSET_PX}px round ${BOX_RADIUS})`;
+
+/** Starts `el`'s animation at the flight's elapsed time, so a piece that
+ *  mounts late joins the one timeline. */
+function joinAt(a: Animation, f: OpenFlight): Animation {
+  a.currentTime = Math.max(0, performance.now() - f.startedAt);
+  return a;
+}
+
+/**
+ * The frame around the court (see the motion thesis): the box opens out of
+ * the card, the scrim fades with it, and the content rows rise in once the
+ * court is nearly down. Called every frame of the flight; only a box, scrim
+ * or row it has not seen yet is started.
+ */
+function animateFrame(f: OpenFlight): void {
+  const box = lastShown(BOX_SELECTOR);
+  if (box !== null && box !== f.box) {
+    f.box = box;
+    const timing: KeyframeAnimationOptions = {
+      duration: COURT_MORPH_OPEN_MS,
+      easing: OPEN_EASE,
+      fill: "both",
+    };
+    f.frameAnims.push(
+      joinAt(
+        box.animate(
+          [
+            { clipPath: insetWithin(f.from.box, rectOf(box), f.from.radius) },
+            { clipPath: BOX_OPEN_CLIP },
+          ],
+          timing,
+        ),
+        f,
+      ),
+      joinAt(
+        box.animate([{ opacity: 0 }, { opacity: 1 }], {
+          duration: BOX_FADE_MS,
+          easing: "linear",
+          fill: "both",
+        }),
+        f,
+      ),
+    );
+  }
+  const scrim = lastShown(SCRIM_SELECTOR);
+  if (scrim !== null && scrim !== f.scrim) {
+    f.scrim = scrim;
+    f.frameAnims.push(
+      joinAt(
+        scrim.animate([{ opacity: 0 }, { opacity: 1 }], {
+          duration: COURT_MORPH_OPEN_MS,
+          easing: OPEN_EASE,
+          fill: "both",
+        }),
+        f,
+      ),
+    );
+  }
+  if (box === null) return;
+  box.querySelectorAll<HTMLElement>(ENTER_SELECTOR).forEach((el) => {
+    if (f.entered.has(el)) return;
+    f.entered.add(el);
+    const step = Number(el.dataset.lightboxEnter) || 0;
+    // Not kept in `frameAnims`: the rows finish after the court lands, and
+    // end on their own resting style (fill "backwards" only).
+    joinAt(
+      el.animate(
+        [
+          { opacity: 0, transform: `translateY(${CONTENT_RISE_PX}px)` },
+          { opacity: 1, transform: "translateY(0)" },
+        ],
+        {
+          duration: CONTENT_MS,
+          delay: CONTENT_AT_MS + step * CONTENT_STAGGER_MS,
+          easing: OPEN_EASE,
+          fill: "backwards",
+        },
+      ),
+      f,
+    );
+  });
+}
+
+/** Lets go of the box's and scrim's held open state — in the same task as
+ *  `setFlying(false)`, which stops hiding them, so no frame falls between. */
+function releaseFrame(f: OpenFlight): void {
+  f.frameAnims.forEach((a) => a.cancel());
+  f.frameAnims = [];
+}
+
+/** Whether a card's court is flying into the lightbox now. The shell reads
+ *  it once, on mount, to leave its own fade-in off: the flight is drawing
+ *  the frame's entrance. */
+export function isCourtMorphOpening(): boolean {
+  return flight !== null;
 }
 
 function setFlying(on: boolean): void {
@@ -417,6 +587,7 @@ function launch(f: OpenFlight): boolean {
 /** Watches for the target to appear or change while the copy flies. */
 function watch(f: OpenFlight): void {
   if (flight !== f) return;
+  animateFrame(f);
   const next = currentTarget();
   if (next === null && f.target !== null && !f.target.isConnected) {
     // The lightbox went away mid-flight (closed before its chunk loaded):
@@ -448,6 +619,7 @@ function settle(f: OpenFlight): void {
   cancelAnimationFrame(f.raf);
   f.timers.forEach((t) => window.clearTimeout(t));
   setFlying(false);
+  releaseFrame(f);
   const ghost = f.ghost;
   ghost.root.animate([{ opacity: 1 }, { opacity: 0 }], {
     duration: SETTLE_MS,
@@ -465,6 +637,7 @@ function finishOpen(): void {
   cancelAnimationFrame(f.raf);
   f.timers.forEach((t) => window.clearTimeout(t));
   setFlying(false);
+  releaseFrame(f);
   removeGhost(f.ghost);
 }
 
@@ -518,10 +691,15 @@ export function armCourtMorph(card: HTMLElement, cut: Cut): void {
     ended: false,
     raf: 0,
     timers: [],
+    box: null,
+    scrim: null,
+    frameAnims: [],
+    entered: new WeakSet(),
   };
   flight = f;
   setFlying(true);
   launch(f);
+  animateFrame(f);
   f.raf = requestAnimationFrame(() => watch(f));
   // A lightbox that never mounts (the open was dropped) lets the card go.
   f.timers.push(
@@ -612,6 +790,25 @@ export function runCourtMorphClose(
     ],
     timing,
   );
+  // The stage hands over to the copy as the copy fades up on it, so the
+  // court is never on screen twice while the box fades around the copy.
+  stage.animate(
+    [{ opacity: 1 }, { opacity: 0, offset: 0.25 }, { opacity: 0 }],
+    timing,
+  );
+  // The box closes back toward the card as it fades (the open, reversed).
+  const frame = stage.closest<HTMLElement>(BOX_SELECTOR);
+  if (frame !== null) {
+    frame.animate(
+      [
+        { clipPath: BOX_OPEN_CLIP },
+        {
+          clipPath: insetWithin(box, rectOf(frame), cornerRadius(apronEl)),
+        },
+      ],
+      timing,
+    );
+  }
   closing = {
     ghost,
     timer: window.setTimeout(finishClose, COURT_MORPH_CLOSE_MS),

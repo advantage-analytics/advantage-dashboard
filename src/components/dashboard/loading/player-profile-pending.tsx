@@ -24,7 +24,6 @@ import {
   InsightPending,
   StatisticsRowPending,
   WALL_ART_PENDING,
-  WALL_SERVE_ART_PENDING,
 } from "./match-report-pending";
 import { PendingBar, PendingRegion } from "./pending";
 
@@ -269,7 +268,7 @@ export function ProfileVisualizationsPanePending() {
           >
             <div
               className="w-full overflow-hidden rounded-t-[var(--radius-card)]"
-              style={i === 0 ? WALL_SERVE_ART_PENDING : WALL_ART_PENDING}
+              style={WALL_ART_PENDING}
             >
               <PendingBar className="h-full w-full rounded-none" />
             </div>

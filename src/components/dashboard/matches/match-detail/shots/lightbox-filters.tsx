@@ -461,7 +461,7 @@ export function LegendFilter({
     <div
       role="group"
       aria-label="Filter by outcome"
-      className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
+      className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-0.5"
     >
       {items.map((item) => {
         const key = PICK_FOR_ITEM[item.key];

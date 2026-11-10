@@ -154,13 +154,37 @@ test("one dialog per opening: the frame before the chunk (a modal, Esc and Tab k
 
   // A card switch before the server has answered the close: the store's cut
   // is the rally card's while the last answer is still the serve court. The
-  // shell (its chunk cached now, so with its fade) pending for THAT cut —
-  // never the serve court under the rally card's filters — then the rally
-  // court in the same dialog, and Esc lands focus on the rally card.
+  // shell (its chunk cached now, so with an entrance of its own) pending for
+  // THAT cut — never the serve court under the rally card's filters — then
+  // the rally court in the same dialog, and Esc lands focus on the rally
+  // card. The entrance is the card's flight drawing the box open
+  // (`viz-court-morph.ts`) — or, with no flight, the CSS fade — so watch
+  // each frame for either.
+  await page.evaluate(() => {
+    const w = window as unknown as { sawEnter: boolean };
+    w.sawEnter = false;
+    const end = performance.now() + 1500;
+    const look = () => {
+      const box = document.querySelector("[data-lightbox-box]");
+      if (
+        box !== null &&
+        (box.getAnimations().length > 0 || box.classList.contains("animate-in"))
+      )
+        w.sawEnter = true;
+      if (!w.sawEnter && performance.now() < end) requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+  });
   await rallyCard.click();
   const loadingRally = shellPending(page, "Rally placement");
   await expect(loadingRally).toBeVisible();
-  await expect(loadingRally).toHaveClass(/animate-in/);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { sawEnter: boolean }).sawEnter,
+      ),
+    )
+    .toBe(true);
   await expect(page.getByRole("dialog", { name: "All serves" })).toHaveCount(0);
   await expect(page.locator("[data-court-stage]")).toHaveCount(0);
   await loadingRally.evaluate((el) => el.setAttribute("data-opening", "two"));
@@ -824,4 +848,67 @@ test("a ?vm= naming no match of the season is ignored: the card opens on the who
   await expect(serve).toBeVisible({ timeout: 8_000 });
   await expect.poll(() => marks(serve).count(), { timeout: 8_000 }).toBe(all);
   await expect(serve.locator("[data-viz-filter-strip]")).toHaveCount(0);
+});
+
+test("a chart switch keeps the season's court exactly where it is — at 100%, and panned and zoomed, through the server's answers", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&hands=1&delay=50`);
+  const wall = page.getByRole("list", { name: "Default views" });
+  await wall.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
+  const serve = page.getByRole("dialog", { name: "All serves" });
+  await expect(marks(serve).first()).toBeVisible({ timeout: 8_000 });
+  const all = await marks(serve).count();
+  const stage = serve.locator("[data-court-stage]");
+
+  // The stage's box and the court's pan/zoom, two frames after the last
+  // change so a stage resize (and its re-fit) has had its turn.
+  const read = () =>
+    page.evaluate(async () => {
+      await new Promise((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(done)),
+      );
+      const el = document.querySelector("[data-court-stage]")!;
+      const court = el.querySelector<HTMLElement>("[data-court]")!;
+      const r = el.getBoundingClientRect();
+      return {
+        stage: [r.x, r.y, r.width, r.height],
+        transform: court.style.transform,
+        width: court.style.width,
+      };
+    });
+
+  async function cycle(expected: Awaited<ReturnType<typeof read>>) {
+    for (const [from, to, count] of [
+      ["Scatter", "Heat", 0],
+      ["Heat", "Zones", 0],
+      ["Zones", "Scatter", all],
+    ] as const) {
+      await serve.getByRole("button", { name: from, exact: true }).click();
+      await page
+        .getByRole("menuitemradio", { name: new RegExp(`^${to}`) })
+        .click();
+      // Once the server has answered for this chart.
+      await expect(
+        serve.getByRole("button", { name: to, exact: true }),
+      ).toBeVisible({ timeout: 8_000 });
+      await expect
+        .poll(() => marks(serve).count(), { timeout: 8_000 })
+        .toBe(count);
+      expect(await read(), `on ${to}`).toEqual(expected);
+    }
+  }
+
+  await cycle(await read());
+
+  await serve.getByRole("button", { name: "Zoom in" }).click();
+  const s = (await stage.boundingBox())!;
+  await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(s.x + s.width / 2 - 120, s.y + s.height / 2 + 60, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  await cycle(await read());
 });
