@@ -379,7 +379,8 @@ bench divider (`team/roster-table.tsx`, `ROW_SLIDE` / `DIVIDER_OUT`). In CSS,
 `grid-template-rows: 0fr → 1fr` over a `min-h-0 overflow-hidden` child stands
 in for `height: auto`, and the column's flex gap folds into a negative margin
 while shut — `.filter-strip-reveal` in `globals.css`. Under reduced motion it
-is simply open or shut.
+snaps to place with only a 150ms fade in (opacity is kept, travel is dropped)
+and shuts at once.
 
 ### Reduced Motion
 

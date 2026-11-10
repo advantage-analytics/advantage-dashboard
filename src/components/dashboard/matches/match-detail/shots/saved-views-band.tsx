@@ -44,7 +44,7 @@ import { CourtTile } from "./court-tile";
 import { ManageableSavedViewTile } from "./manageable-saved-view-tile";
 import { savedViewNamePool } from "./save-view-dialog";
 import { useVizState } from "./use-viz-state";
-import { usePrefersReducedMotion } from "./use-reduced-motion";
+import { usePrefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
 import type { VizState } from "./viz-url";
 import { activeFilterEntries, viewIdentityKey } from "./viz-url";
 import {

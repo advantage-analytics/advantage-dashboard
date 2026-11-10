@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Filter } from "lucide-react";
 
-import { usePrefersReducedMotion } from "@/components/dashboard/matches/match-detail/shots/use-reduced-motion";
+import { usePrefersReducedMotion } from "./use-reduced-motion";
 
 /**
  * The applied-filter strip (v3's Data Table rule 6): the cut stated in
@@ -19,12 +19,21 @@ import { usePrefersReducedMotion } from "@/components/dashboard/matches/match-de
  * eases down by the strip's height instead of jumping the moment a filter
  * lands. The host's flex gap is folded into a negative margin while shut —
  * pass the gap the strip sits in — so the column opens by the strip AND its
- * gap together.
+ * gap together. Outside production the strip reads its parent's computed
+ * row gap once and warns when the two disagree, since a mismatch only ever
+ * shows as a few pixels' offset.
  *
- * The words it last showed stay through the fold and go when it ends (at
- * once under reduced motion, where nothing transitions). A strip already
- * open on the first render (a link with filters) is simply open: nothing
- * transitions from a first style.
+ * The words it last showed stay through the fold and go when it ends. Under
+ * reduced motion it snaps open with a short fade and shuts at once. A strip
+ * already open on the first render (a link with filters) is simply open:
+ * nothing transitions from a first style.
+ *
+ * The wrapper is the `role="status"` region, and it is always mounted, so a
+ * cut landing is announced (a live region that mounts already holding its
+ * words usually is not). The action folds the strip, which goes `inert` on
+ * its way out; when focus was on it, it moves to the control just before
+ * the strip — on every list page the toolbar that set the filter — rather
+ * than falling to <body>.
  *
  * No `next/navigation` here — the Video tab's offline spec loads its strip
  * through `createLoader()`.
@@ -56,6 +65,26 @@ interface StripWords {
 /** The fold's own length — the faster exit (globals.css `.filter-strip-reveal`). */
 const STRIP_FOLD_MS = 160;
 
+const TABBABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Focus the last visible, live control that comes before `el` in the page. */
+function focusControlBefore(el: Element): void {
+  const controls = document.querySelectorAll<HTMLElement>(TABBABLE);
+  for (let i = controls.length - 1; i >= 0; i--) {
+    const control = controls[i];
+    if (el.contains(control)) continue;
+    if (
+      !(control.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)
+    )
+      continue;
+    if (control.closest("[inert]") || control.getClientRects().length === 0)
+      continue;
+    control.focus({ preventScroll: true });
+    return;
+  }
+}
+
 export function AppliedFilterStrip({
   sentence,
   count,
@@ -66,6 +95,7 @@ export function AppliedFilterStrip({
 }: AppliedFilterStripProps) {
   const open = sentence !== null;
   const reduced = usePrefersReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
   const [kept, setKept] = useState<StripWords | null>(
     open ? { sentence, count, action } : null,
   );
@@ -93,8 +123,31 @@ export function AppliedFilterStrip({
     return () => window.clearTimeout(timer);
   }, [folding]);
 
+  // Outside production: the margin the strip folds away must be the gap its
+  // column really has, or the page sits a few pixels off with nothing shut.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const parent = ref.current?.parentElement;
+    if (!parent) return;
+    const actual = parseFloat(getComputedStyle(parent).rowGap);
+    if (Number.isFinite(actual) && actual !== gap) {
+      console.warn(
+        `AppliedFilterStrip (${kind}): gap={${gap}} but its column's row gap is ${actual}px — pass the column's gap.`,
+      );
+    }
+  }, [gap, kind]);
+
+  const clear = () => {
+    const strip = ref.current;
+    const hadFocus = strip?.contains(document.activeElement) ?? false;
+    onClear();
+    if (strip && hadFocus) focusControlBefore(strip);
+  };
+
   return (
     <div
+      ref={ref}
+      role="status"
       data-filter-strip-reveal=""
       data-open={open || undefined}
       // Only while it folds away: its action is still drawn then, and must
@@ -106,7 +159,6 @@ export function AppliedFilterStrip({
       <div className="min-h-0 overflow-hidden">
         {words !== null && (
           <div
-            role="status"
             {...{ [`data-${kind}-filter-strip`]: "" }}
             className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
             style={{ background: "var(--surface-subtle)" }}
@@ -133,7 +185,7 @@ export function AppliedFilterStrip({
             <div className="flex-1" />
             <button
               type="button"
-              onClick={onClear}
+              onClick={clear}
               className="cursor-pointer rounded-[var(--radius-element)] text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >
               {words.action}

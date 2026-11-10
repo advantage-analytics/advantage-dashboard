@@ -749,8 +749,8 @@ html[data-viz-court-morph] [data-lightbox-scrim] {
    auto. The host column's flex gap is --filter-strip-gap (set inline by the
    strip), folded into a negative margin while closed, so whatever sits below
    eases with the strip instead of jumping. The closed rule's transition runs
-   on the way out, the open rule's on the way in. Reduced motion: no
-   transition, it is simply open or shut. ASCII only. */
+   on the way out, the open rule's on the way in. Reduced motion: below.
+   ASCII only. */
 .filter-strip-reveal {
   display: grid;
   grid-template-rows: 0fr;
@@ -770,10 +770,16 @@ html[data-viz-court-morph] [data-lightbox-scrim] {
     margin-top 220ms var(--ease-out-expo),
     opacity 220ms var(--ease-out-expo);
 }
+/* Reduced motion keeps the acknowledgement and drops the travel: the strip
+   and the content below snap to place, and only the strip's opacity eases
+   in (--duration-fast), so a filter landing still visibly answers. Shutting
+   is instant. Opacity-only, which DS foundations keep under reduced motion. */
 @media (prefers-reduced-motion: reduce) {
-  .filter-strip-reveal,
-  .filter-strip-reveal[data-open] {
+  .filter-strip-reveal {
     transition: none;
+  }
+  .filter-strip-reveal[data-open] {
+    transition: opacity var(--duration-fast) var(--ease-out-expo);
   }
 }
 

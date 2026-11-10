@@ -28,7 +28,7 @@ import {
   type PanZoom,
   type Size,
 } from "./pan-zoom";
-import { prefersReducedMotion } from "./use-reduced-motion";
+import { prefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
 import type { Cut } from "./viz-model";
 
 /**
