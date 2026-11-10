@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Share match-type options and an isPracticeMatch predicate
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) new `src/lib/matches/match-type.ts`; `src/components/dashboard/matches/match-actions/edit-match-dialog.tsx` (~233); new `tests/match-type.spec.ts`
 - **done when:**
