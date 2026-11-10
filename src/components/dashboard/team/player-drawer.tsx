@@ -48,8 +48,8 @@ import { profileHref } from "@/components/dashboard/team/roster-table";
 import { useClaimInvite } from "@/components/dashboard/team/roster-claim-invite";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 import {
+  MeasureSelector,
   Sparkline,
-  drawerPercent,
   type SparkPoint,
 } from "@/components/dashboard/shared/drawer-stat-chart";
 
@@ -557,50 +557,11 @@ export function PlayerDrawer({
               date row. Only where there is a chart. */}
             {active && hasStats && (
               <div className="flex flex-col gap-3">
-                <div
-                  role="group"
-                  aria-label="Measure"
-                  className="-mx-2 grid grid-cols-4 gap-0.5"
-                >
-                  {member.measures.map((measure) => {
-                    const selected = measure.key === active?.key;
-                    return (
-                      <button
-                        key={measure.key}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => setActiveKey(measure.key)}
-                        className={cn(
-                          "flex min-w-0 cursor-pointer flex-col items-start gap-0.5 rounded-[var(--radius-element)] px-2 pt-2 pb-[7px] text-left transition-colors duration-[var(--duration-hover)] ease-[var(--ease-primary)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                          selected
-                            ? "bg-[var(--surface-subtle)]"
-                            : "hover:bg-[var(--surface-muted)]",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "max-w-full truncate text-[10px]",
-                            selected
-                              ? "text-[var(--ink-700)]"
-                              : "text-[var(--ink-600)]",
-                          )}
-                        >
-                          {measure.pill}
-                        </span>
-                        <span
-                          className={cn(
-                            "tabular text-[14px]",
-                            selected
-                              ? "text-[var(--ink-900)]"
-                              : "text-[var(--ink-700)]",
-                          )}
-                        >
-                          {drawerPercent(measure.value)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <MeasureSelector
+                  measures={member.measures}
+                  activeKey={active.key}
+                  onSelect={setActiveKey}
+                />
                 <div className="flex flex-col gap-2.5 pt-1">
                   <div className="flex items-baseline justify-between">
                     <span className="text-[12px] text-[var(--ink-600)]">

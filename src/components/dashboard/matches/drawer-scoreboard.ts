@@ -33,34 +33,43 @@ export function drawerScoreboardProps(
     .filter(Boolean)
     .join(" · ");
 
+  // Who took each set, once for both rows.
+  const outcomes = sets.map((set): "player1" | "player2" | "level" =>
+    set.player1 > set.player2
+      ? "player1"
+      : set.player2 > set.player1
+        ? "player2"
+        : "level",
+  );
   // The last set of an unfinished match is the one left open.
   const completed = (index: number) =>
     status === "Final" || index < sets.length - 1;
+  // Whether anyone won. The list defaults `score.winner` to player2 when the
+  // score decides nobody (a level or unfinished score), and that default must
+  // not draw a winner's check: only a retirement, withdrawal or default — a
+  // winner the games may not show — or a final with more sets on one side
+  // names one.
+  const setsWon = (seat: "player1" | "player2") =>
+    outcomes.filter((outcome) => outcome === seat).length;
+  const decided =
+    status !== "Unfinished" &&
+    (status !== "Final" || setsWon("player1") !== setsWon("player2"));
 
-  const row = (seat: "player1" | "player2"): RailScoreboardPlayer => {
-    const outcomes = sets.map((set): "player1" | "player2" | "level" =>
-      set.player1 > set.player2
-        ? "player1"
-        : set.player2 > set.player1
-          ? "player2"
-          : "level",
-    );
-    return {
-      id: seat,
-      name: match[seat].name,
-      sets: sets.map((set) => set[seat]),
-      // `tiebreakOf` returns the LOSER's points; only drawn on a lost set.
-      tiebreaks: sets.map((set) => tiebreakOf(set)),
-      lostSets: outcomes.map(
-        (outcome, index) =>
-          outcome !== "level" && outcome !== seat && completed(index),
-      ),
-      wonSets: outcomes.map(
-        (outcome, index) => outcome === seat && completed(index),
-      ),
-      won: sets.length > 0 && match.score.winner === seat,
-    };
-  };
+  const row = (seat: "player1" | "player2"): RailScoreboardPlayer => ({
+    id: seat,
+    name: match[seat].name,
+    sets: sets.map((set) => set[seat]),
+    // `tiebreakOf` returns the LOSER's points; only drawn on a lost set.
+    tiebreaks: sets.map((set) => tiebreakOf(set)),
+    lostSets: outcomes.map(
+      (outcome, index) =>
+        outcome !== "level" && outcome !== seat && completed(index),
+    ),
+    wonSets: outcomes.map(
+      (outcome, index) => outcome === seat && completed(index),
+    ),
+    won: sets.length > 0 && decided && match.score.winner === seat,
+  });
 
   const players: [RailScoreboardPlayer, RailScoreboardPlayer] = [
     row("player1"),

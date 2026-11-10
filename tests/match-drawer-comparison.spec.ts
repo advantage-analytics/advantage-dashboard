@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -223,4 +224,62 @@ test.describe("drawerScoreboardProps", () => {
     expect(props.players[0].wonSets).toEqual([true, false]);
     expect(props.players[1].wonSets).toEqual([false, false]);
   });
+});
+
+test.describe("no invented winner", () => {
+  test("a level final names nobody", () => {
+    const props = drawerScoreboardProps(
+      match({
+        score: {
+          sets: [
+            { player1: 6, player2: 4 },
+            { player1: 4, player2: 6 },
+          ],
+          winner: "player2",
+        },
+      }),
+    );
+    expect(props.players.map((p) => p.won)).toEqual([false, false]);
+  });
+
+  test("an unfinished match names nobody, whoever leads", () => {
+    const props = drawerScoreboardProps(
+      match({
+        matchContext: "unfinished",
+        score: {
+          sets: [{ player1: 6, player2: 2 }],
+          winner: "player1",
+        },
+      }),
+    );
+    expect(props.players.map((p) => p.won)).toEqual([false, false]);
+  });
+
+  test("a retirement keeps its stored winner though the sets are level", () => {
+    const props = drawerScoreboardProps(
+      match({
+        matchContext: "retired",
+        score: {
+          sets: [
+            { player1: 4, player2: 6 },
+            { player1: 3, player2: 1 },
+          ],
+          winner: "player1",
+        },
+      }),
+    );
+    expect(props.players[0].won).toBe(true);
+  });
+});
+
+test("the drawer's figures are cached per side, not per match alone", () => {
+  // A team row's turn can change within a session; a pair split for one side
+  // must never be served for the other.
+  const source = readFileSync(
+    "src/components/dashboard/matches/drawer-sections.tsx",
+    "utf8",
+  );
+  expect(source).toContain("const key = pairKey(matchId, turned);");
+  expect(source).toContain("pairCache.has(key)");
+  expect(source).not.toContain("pairCache.has(matchId)");
 });

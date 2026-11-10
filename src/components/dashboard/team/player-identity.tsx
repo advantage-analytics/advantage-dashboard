@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { UserRoundCog } from "lucide-react";
-import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { CoachManagedMark } from "@/components/ui/coach-managed-mark";
 import { FormStrip } from "@/components/dashboard/shared/form-strip";
 import type { FormBar } from "@/lib/data/form-bar";
 import { PersonAvatar } from "@/components/ui/person-avatar";
@@ -14,7 +13,7 @@ import { recordLabel } from "@/lib/data/player-profile";
  * coach opening a player from the roster and then their page sees one block.
  *
  *   - the header: a 40px avatar beside the name, with the facts line
- *     ("Junior · Singles 2") and the viewer's own `You` pill under it;
+ *     ("Junior · Singles 2") under it;
  *   - a labelled list at full width — Record (the record and the form strip)
  *     and Plays — whose values start on the name's left edge (52px = the
  *     avatar's 40 + the 12px gap).
@@ -25,12 +24,9 @@ import { recordLabel } from "@/lib/data/player-profile";
  * that runs to two, and `overflow-wrap:anywhere` breaks a single unbroken
  * word rather than letting it run out of a 250px rail.
  *
- * Coach-managed is a glyph, not a pill (design owner's pick over the pill,
- * 2026-11-10): `UserRoundCog` straight after the name, ink-400, with the dark
- * tooltip saying what it means. It is focusable so the tooltip opens from the
- * keyboard too, and `ChromeTooltip` opens it on press-and-hold on a touch
- * screen. `Shield` (the guardian choice in the claim flow) and `Lock`
- * (private) were ruled out because the app already uses them.
+ * Coach-managed is `CoachManagedMark` (`ui/coach-managed-mark.tsx`) straight
+ * after the name, and the viewer's own `You` pill follows it — both beside
+ * the name, so the facts line holds facts only.
  */
 export function PlayerIdentity({
   name,
@@ -52,7 +48,7 @@ export function PlayerIdentity({
   photoUrl?: string | null;
   /** Plain facts for the line under the name, in order; empties are dropped. */
   facts: readonly (string | null | undefined)[];
-  /** The one pill that depends on who is reading — today only `YouPill`. */
+  /** The one pill that depends on who is reading — today only `YouPill`, drawn beside the name. */
   pill?: React.ReactNode;
   coachManaged?: boolean;
   wins?: number;
@@ -99,17 +95,20 @@ export function PlayerIdentity({
             ) : (
               name
             )}
-            {coachManaged && <CoachManagedMark align={markAlign} />}
+            {coachManaged && (
+              <CoachManagedMark align={markAlign} className="ml-1.5" />
+            )}
+            {/* `You` is identity, not standing, so it sits beside the name
+                (Settings Pages rule, `reference/settings.md`), never on the
+                facts line. */}
+            {pill && (
+              <span className="ml-2 inline-flex align-[2px]">{pill}</span>
+            )}
           </Heading>
-          {(factLine.length > 0 || pill) && (
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              {factLine.length > 0 && (
-                <span className="tabular min-w-0 text-[12px] leading-[18px] text-[var(--ink-600)]">
-                  {factLine.join(" · ")}
-                </span>
-              )}
-              {pill}
-            </div>
+          {factLine.length > 0 && (
+            <span className="tabular min-w-0 text-[12px] leading-[18px] text-[var(--ink-600)]">
+              {factLine.join(" · ")}
+            </span>
           )}
         </div>
       </div>
@@ -138,39 +137,5 @@ export function PlayerIdentity({
         </dl>
       )}
     </div>
-  );
-}
-
-/**
- * The Coach-managed glyph and the tooltip that names it.
- *
- * The tooltip opens BELOW the glyph: the block sits straight under the
- * drawer's 44px header (and the rail's top), so a tooltip above it would
- * cover the ‹ › and ✕ a reader is about to use. One edge lines up with the
- * glyph (`align`, chosen by the host): centred, it would hang off the name's
- * end, and at the wrong edge it ran past the drawer and off the screen. The
- * label
- * is the state, the detail what it means — "No login yet" first, because
- * that is the fact; who uploads follows from it. What to DO about it is the
- * drawer's well, for staff, and never repeated here.
- */
-function CoachManagedMark({ align }: { align: "start" | "end" }) {
-  return (
-    <ChromeTooltip
-      label="Coach-managed"
-      detail="No login yet · Staff upload their matches"
-      side="bottom"
-      align={align}
-      sideOffset={6}
-    >
-      <span
-        role="img"
-        aria-label="Coach-managed"
-        tabIndex={0}
-        className="ml-1.5 inline-flex cursor-default rounded-[var(--radius-cell)] align-[-1px] text-[var(--ink-400)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-600)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
-      >
-        <UserRoundCog className="size-3.5" strokeWidth={1.5} aria-hidden />
-      </span>
-    </ChromeTooltip>
   );
 }
