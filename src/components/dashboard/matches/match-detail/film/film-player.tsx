@@ -768,10 +768,16 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
           // with the frame's own width, which the tab's list beside it sets.
           // `isolate` + `translateZ(0)`: its own compositing layer, so WebKit
           // clips a PLAYING <video> to the 14px corners instead of painting
-          // its square ones over them. The `after:` hairline is the cards'
-          // edge (`--border-card`'s weight) drawn inside the frame, over the
-          // film, so the corners read as crisply as the cards beside it.
-          className="@container relative isolate aspect-video w-full [transform:translateZ(0)] overflow-hidden rounded-[14px] bg-[#1A1A1C] after:pointer-events-none after:absolute after:inset-0 after:z-10 after:rounded-[14px] after:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)] after:content-['']"
+          // its square ones over them. The corners are ONE `clip-path`, not
+          // `rounded` + `overflow-hidden`: those antialias the dark ground and
+          // whatever covers it separately along the same curve, and the
+          // ground showed through as a dark fringe on the corners under the
+          // light loading cover (and under a light court). `overflow-hidden`
+          // stays, square, so nothing inside adds to the page's overflow. The
+          // `after:` hairline is the cards' edge (`--border-card`'s weight)
+          // drawn inside the frame, over the film, so the corners read as
+          // crisply as the cards beside it.
+          className="@container relative isolate aspect-video w-full [transform:translateZ(0)] overflow-hidden bg-[#1A1A1C] [clip-path:inset(0_round_14px)] after:pointer-events-none after:absolute after:inset-0 after:z-10 after:rounded-[14px] after:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)] after:content-['']"
         >
           <video
             // The reload key. A `src` swap on a live element can keep serving

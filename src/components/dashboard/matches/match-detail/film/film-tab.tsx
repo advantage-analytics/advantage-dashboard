@@ -1163,9 +1163,10 @@ function FilmRoom({
     // under it, the point list beside them in a fixed 320px column (the
     // room's own panel width) running the pane's full height, so finding a
     // point, watching it and reading its shots happen side by side. The view
-    // fills the pane's height (`flex-1`); the list column is a stretched flex item with no
-    // content height of its own — its card is absolutely positioned inside
-    // it — so it inherits that height and its rows scroll within the card.
+    // fills the pane's height (`flex-1`); the list column is a stretched
+    // flex item with no content height of its own — its card is absolutely
+    // positioned inside it — so it inherits that height and its rows scroll
+    // within the card.
     // Under 720px of pane (the `@container` breakpoint `statistics-view.tsx`
     // stacks at) the columns stack and the list takes what is left. Stacked,
     // the player column keeps its content height (`flex-none`): as a
