@@ -378,7 +378,11 @@ function PointSummary({ point }: { point: MatchPoint }) {
           {winner.initials}
         </span>
       )}
-      <span className="flex min-w-0 flex-col gap-px">
+      {/* `flex-1`: the column takes the row's width rather than shrinking to
+          its longest line. Shrunk to fit, the `truncate` box was exactly the
+          text's width and clipped the last glyph ("2s") at a fractional
+          edge, with no ellipsis because nothing had overflowed. */}
+      <span className="flex min-w-0 flex-1 flex-col gap-px">
         <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
           {pointResultLabel(point, filterContext)}
         </span>
