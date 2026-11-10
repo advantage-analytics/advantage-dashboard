@@ -303,6 +303,20 @@ test.describe("the player's film", () => {
     expect(live.slice(0, live.indexOf(">") + 1)).not.toContain("inert");
   });
 
+  // Each element holds its own connection to storage and Safari allows about
+  // six per host: a read-ahead loading from the first second starved newly
+  // opened consoles once a few were up.
+  test("the read-ahead opens no connection until the film can play", () => {
+    const pending = tag(render(), "data-label-video-read-ahead");
+    expect(pending).not.toContain("src=");
+
+    const ready = tag(
+      render({ initialReady: true }),
+      "data-label-video-read-ahead",
+    );
+    expect(ready).toContain(`src="${VIDEO.url}"`);
+  });
+
   test("a media error says which thing broke: the link, or the file's format", () => {
     const link = render({ initialFailure: "link" });
     expect(link).toContain('data-testid="film-reload-panel"');
