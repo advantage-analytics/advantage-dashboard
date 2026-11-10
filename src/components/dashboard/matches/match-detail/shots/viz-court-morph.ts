@@ -53,12 +53,13 @@
  * `CONTENT_STAGGER_MS` apart, so court and frame settle together.
  * The stage itself never fades: it is revealed under the copy as it lands,
  * so there is one court on screen at every frame.
- * Timings: court + box clip + scrim 380ms `OPEN_EASE`; copy → stage
+ * Timings: court + box clip + scrim 380ms `OPEN_EASE`; copy → stage (the
+ * stage's own animations start at the hand-over, `handOver`)
  * 150–285ms; contents 120/150/180ms + 240ms each, done by 420ms. Every
  * piece is transform, opacity or clip-path.
  * The close is the faster reverse: 240ms ease-in-out, the court shrinking
  * into the card, the stage locked under the copy until the copy covers it
- * (30%), the box's rows fading in 90ms and the box, opaque, clipping back
+ * (30%), the box's rows hidden at once and the box, opaque, clipping back
  * onto the whole card and only then fading (last 30%) — one court, one card.
  * Reduced motion: none of this — the lightbox fades (opacity only, 150ms).
  * One timeline: a box, scrim or row that mounts mid-flight (the shell
@@ -112,10 +113,9 @@ const CONTENT_STAGGER_MS = 30;
 const CONTENT_MS = 240;
 const CONTENT_RISE_PX = 6;
 /** Close: when (fraction of the move) the copy has fully covered the stage
- *  and the stage drops out under it; the box's rows fading out first; and
+ *  and the stage drops out under it; and
  *  when the box, by then sitting on the card, starts to let it through. */
 const CLOSE_HANDOVER_AT = 0.3;
-const CLOSE_CONTENT_MS = 90;
 const CLOSE_BOX_FADE_AT = 0.7;
 /** Reduced motion's close: the fade-in's own length (tw-animate's 150ms). */
 const COURT_MORPH_REDUCED_CLOSE_MS = 150;
@@ -185,8 +185,12 @@ interface OpenFlight {
   scrim: HTMLElement | null;
   frameAnims: Animation[];
   entered: WeakSet<Element>;
-  /** The lightbox's stage riding under the copy (`handOver`). */
+  /** The lightbox's stage riding under the copy (`handOver`), and the
+   *  element whose inline `transform-origin` the move set. */
   stageAnims: Animation[];
+  stageEl: HTMLElement | null;
+  /** The pending start of the stage's animations (`handOver`). */
+  stageTimer: number;
 }
 
 let opened: Source | null = null;
@@ -357,15 +361,21 @@ function transformOnto(
  * linear in the copy's own, so a keyframe pair on each end stays aligned in
  * between.
  */
-function stageFollowing(
-  at: Move,
-  home: Move,
-  stage: Rect,
-): { transformOrigin: string; transform: string } {
+function stageFollowing(at: Move, home: Move): { transform: string } {
   return {
-    transformOrigin: `${home.ax - stage.x}px ${home.ay - stage.y}px`,
     transform: `translate(${at.ax - home.ax}px, ${at.ay - home.ay}px) scale(${at.kx / home.kx}, ${at.ky / home.ky})`,
   };
+}
+
+/** The stage's `transform-origin` for `stageFollowing` (`q0`). Set as an
+ *  inline style for the length of the move, NEVER as a keyframe: an animated
+ *  `transform-origin` cannot run on the compositor, so the whole stage
+ *  animation fell back to the main thread and repainted the court every
+ *  frame — on a slow machine that blocked the main thread for the entire
+ *  flight. A keyframe list of `transform` (and `opacity`) alone stays on the
+ *  compositor. */
+function stageOrigin(home: Move, stage: Rect): string {
+  return `${home.ax - stage.x}px ${home.ay - stage.y}px`;
 }
 
 function insetOf(r: Rect, radius: string): string {
@@ -682,8 +692,11 @@ function animateFrame(f: OpenFlight): void {
 function releaseFrame(f: OpenFlight): void {
   f.frameAnims.forEach((a) => a.cancel());
   f.frameAnims = [];
+  window.clearTimeout(f.stageTimer);
   f.stageAnims.forEach((a) => a.cancel());
   f.stageAnims = [];
+  if (f.stageEl) f.stageEl.style.transformOrigin = "";
+  f.stageEl = null;
 }
 
 /**
@@ -707,33 +720,54 @@ function handOver(
   duration: number,
   copyOpacity: number,
 ): void {
+  window.clearTimeout(f.stageTimer);
   f.stageAnims.forEach((a) => a.cancel());
   f.stageAnims = [];
+  if (f.stageEl) f.stageEl.style.transformOrigin = "";
+  f.stageEl = null;
   if (!(stageEl instanceof HTMLElement) || !stageEl.hasAttribute(STAGE_ATTR))
     return;
-  const timing: KeyframeAnimationOptions = {
-    duration,
-    easing: OPEN_EASE,
-    fill: "both",
+  // The stage's animations start at the hand-over, not at take-off: ANY
+  // animation on the stage makes the browser paint the whole court then and
+  // there, and on a slow machine that paint held the main thread for the
+  // entire flight. Until `HANDOVER_FROM` the stage is hidden by the flying
+  // rule anyway (`globals.css`), so nothing needs to move it; from then on
+  // its animations run on the flight's own clock (`currentTime`), locked to
+  // the copy as if they had started with it. A re-aim already mid-fade
+  // starts them at once.
+  const startedAt = performance.now();
+  const start = () => {
+    if (flight !== f) return;
+    stageEl.style.transformOrigin = stageOrigin(to, stage);
+    f.stageEl = stageEl;
+    const timing: KeyframeAnimationOptions = {
+      duration,
+      easing: OPEN_EASE,
+      fill: "both",
+    };
+    f.stageAnims.push(
+      stageEl.animate(
+        [stageFollowing(from, to), stageFollowing(to, to)],
+        timing,
+      ),
+      // Shown the moment the copy starts to fade: under the copy until then,
+      // and hidden before it, when the stage's own box (wider than the
+      // card's) would spill past the copy's clip.
+      stageEl.animate(
+        [
+          { opacity: 0 },
+          { opacity: 0, offset: HANDOVER_FROM },
+          { opacity: 1, offset: Math.min(1, HANDOVER_FROM + 0.001) },
+          { opacity: 1 },
+        ],
+        { duration, fill: "both" },
+      ),
+    );
+    const elapsed = performance.now() - startedAt;
+    f.stageAnims.forEach((a) => (a.currentTime = elapsed));
   };
-  f.stageAnims.push(
-    stageEl.animate(
-      [stageFollowing(from, to, stage), stageFollowing(to, to, stage)],
-      timing,
-    ),
-    // Shown the moment the copy starts to fade: under the copy until then,
-    // and hidden before it, when the stage's own box (wider than the card's)
-    // would spill past the copy's clip.
-    stageEl.animate(
-      [
-        { opacity: 0 },
-        { opacity: 0, offset: HANDOVER_FROM },
-        { opacity: 1, offset: Math.min(1, HANDOVER_FROM + 0.001) },
-        { opacity: 1 },
-      ],
-      { duration, fill: "both" },
-    ),
-  );
+  if (copyOpacity < 1) start();
+  else f.stageTimer = window.setTimeout(start, duration * HANDOVER_FROM);
   // A re-aim mid-fade (the season's court replacing its loading bar) goes on
   // fading from where the copy is, over what is left of the new move.
   f.ghost.root.animate(
@@ -929,6 +963,8 @@ export function armCourtMorph(card: HTMLElement, cut: Cut): void {
     frameAnims: [],
     entered: new WeakSet(),
     stageAnims: [],
+    stageEl: null,
+    stageTimer: 0,
   };
   flight = f;
   setFlying(true);
@@ -1028,27 +1064,29 @@ export function runCourtMorphClose(
     [{ transform: moveCss(home) }, { transform: moveCss(atCard) }],
     timing,
   );
+  // The stage unmounts with the dialog, so its inline origin goes with it.
+  stage.style.transformOrigin = stageOrigin(home, stageBox);
   stage.animate(
     [
-      { ...stageFollowing(home, home, stageBox), opacity: 1 },
+      { ...stageFollowing(home, home), opacity: 1 },
       { opacity: 1, offset: CLOSE_HANDOVER_AT },
       { opacity: 0, offset: Math.min(1, CLOSE_HANDOVER_AT + 0.001) },
-      { ...stageFollowing(atCard, home, stageBox), opacity: 0 },
+      { ...stageFollowing(atCard, home), opacity: 0 },
     ],
     timing,
   );
   // The box shrinks back into the whole card, opaque (the open, reversed):
-  // its rows fade first so the box closes as a plain card, and it lets the
-  // real card show through only once it sits on it.
+  // its rows go first so the box closes as a plain card, and it lets the
+  // real card show through only once it sits on it. The rows are hidden
+  // outright, not faded: an animation on each would make the browser paint
+  // them all (the points list too) as the close starts — the main-thread
+  // stall the open avoids (`handOver`). The dialog unmounts when the close
+  // ends, so nothing has to restore them.
   const frame = stage.closest<HTMLElement>(BOX_SELECTOR);
   if (frame !== null) {
-    frame.querySelectorAll<HTMLElement>(ENTER_SELECTOR).forEach((el) =>
-      el.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: CLOSE_CONTENT_MS,
-        easing: "linear",
-        fill: "forwards",
-      }),
-    );
+    frame
+      .querySelectorAll<HTMLElement>(ENTER_SELECTOR)
+      .forEach((el) => (el.style.visibility = "hidden"));
     frame.animate(
       [
         { clipPath: BOX_OPEN_CLIP, opacity: 1 },

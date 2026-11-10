@@ -274,14 +274,16 @@ test.describe("the match report", () => {
     // the dialog fades.
     await dialog.getByRole("heading").first().focus();
     const closing = await traceAfter(page, { escape: true }, 600);
+    // Part way back: smaller than it landed at, still larger than the card.
+    // (Not "the dialog has started to fade": the box now stays opaque until
+    // it sits on the card, and fades only over the last 30%.)
+    const landedW = Math.max(0, ...opening.map((f) => f.ghost?.w ?? 0));
     const closingAt = closing.find(
       (f) =>
         f.ghosts === 1 &&
         f.ghost !== null &&
-        f.dialogOpacity !== null &&
-        f.dialogOpacity < 1 &&
-        f.ghost.w < s.w &&
-        f.ghost.w > c.w - 1,
+        f.ghost.w < landedW - 1 &&
+        f.ghost.w > c.w + 1,
     );
     expect(closingAt, "a frame with the copy shrinking").toBeDefined();
     const cg = closingAt!.ghost!;
