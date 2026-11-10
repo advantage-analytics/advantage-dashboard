@@ -540,3 +540,59 @@ test("pending dual and tournament rows carry resume only for their own actor", a
   expect(actions.get(id(3))).toEqual({ resume: false, abandon: false });
   expect(actions.get(id(4))).toEqual({ resume: false, abandon: false });
 });
+
+test("a video item follows the retry or reprocess its result names", async () => {
+  const h = harness();
+  const job = (
+    jobId: string,
+    matchId: string,
+    status: string,
+    error: string | null = null,
+  ) =>
+    h.tables.processing_jobs.push({
+      id: jobId,
+      match_id: matchId,
+      status,
+      derivation_version: null,
+      error_message: error,
+      external_job_id: null,
+    });
+  const video = (n: number, reserved: string, latest: string | null) => {
+    const item = h.add(n, "video");
+    const matchId = item.match_id as string;
+    item.processing_job_id = id(n + 3000);
+    job(id(n + 3000), matchId, reserved, "upload interrupted");
+    if (latest) {
+      item.result = { stateJobId: id(n + 5000) };
+      job(
+        id(n + 5000),
+        matchId,
+        latest,
+        latest === "failed" ? "vendor rejected" : null,
+      );
+    }
+    return item;
+  };
+  video(1, "failed", null); // no retry: the reserved job, abandonable
+  video(2, "failed", "processing"); // a retry running
+  video(3, "failed", "failed"); // every job failed: abandonable again
+  video(4, "failed", "processing");
+  // A stateJobId on another match is never trusted.
+  h.tables.processing_jobs.at(-1)!.match_id = id(9999);
+  const result = await getAdminUploadHistory({}, h.deps);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const item = (n: number) =>
+    result.rows.find((r) => r.operationId === id(n))!.items[0];
+  expect(item(1).state).toBe("failed");
+  expect(item(1).error).toBe("upload interrupted");
+  expect(item(1).reconcile.abandon).toBe(true);
+  expect(item(2).state).toBe("processing");
+  expect(item(2).error).toBe(null);
+  expect(item(2).reconcile.abandon).toBe(false);
+  expect(item(3).state).toBe("failed");
+  expect(item(3).error).toBe("vendor rejected");
+  expect(item(3).reconcile.abandon).toBe(true);
+  expect(item(4).state).toBe("failed");
+  expect(item(4).reconcile.abandon).toBe(true);
+});
