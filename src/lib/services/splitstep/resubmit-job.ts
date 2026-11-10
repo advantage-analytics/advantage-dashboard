@@ -130,6 +130,7 @@ import {
   MAX_TOTAL_ATTEMPTS,
 } from "@/lib/data/match-analysis";
 import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
+import { isMissingColumnError } from "@/lib/data/match-video-choice";
 import { readCorrectedAdScoring } from "@/lib/services/labels/ad-scoring";
 
 // Defined in match-analysis.ts so client code can classify with them (this
@@ -322,6 +323,8 @@ interface ParentJob {
   resubmitted_from_job_id: string | null;
   playback_object_key: string | null;
   playback_status: string | null;
+  /** Absent on a database without the column yet (read as Azure). */
+  playback_store?: string | null;
 }
 
 export async function resubmitJob(params: {
@@ -387,13 +390,22 @@ export async function resubmitJob(params: {
   //    athlete, for "Send for analysis again". `derivation_failed` is
   //    excluded on purpose: its results already exist and resubmitting the
   //    video would spend quota to recompute what a derivation re-run gets free.
-  const { data: parentRow, error: parentError } = await supabase
-    .from("processing_jobs")
-    .select(
-      "id, match_id, created_by, status, error_category, error_code, error_step, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id, playback_object_key, playback_status",
-    )
-    .eq("id", jobId)
-    .maybeSingle();
+  const PARENT_COLUMNS =
+    "id, match_id, created_by, status, error_category, error_code, error_step, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id, playback_object_key, playback_status";
+  const readParent = (columns: string) =>
+    supabase
+      .from("processing_jobs")
+      .select(columns)
+      .eq("id", jobId)
+      .maybeSingle();
+  let { data: parentRow, error: parentError } = await readParent(
+    `${PARENT_COLUMNS}, playback_store`,
+  );
+  // A database without `playback_store` yet: every copy is in Azure.
+  if (isMissingColumnError(parentError)) {
+    ({ data: parentRow, error: parentError } =
+      await readParent(PARENT_COLUMNS));
+  }
 
   if (parentError || !parentRow) {
     return { ok: false, reason: "not_found", message: "Job not found." };
@@ -404,7 +416,7 @@ export async function resubmitJob(params: {
   // program, but nothing may spend quota on a departed person's behalf, so
   // the job reads as not found — the same answer the route gives for
   // "not yours".
-  const raw = parentRow as Omit<ParentJob, "created_by"> & {
+  const raw = parentRow as unknown as Omit<ParentJob, "created_by"> & {
     created_by: string | null;
   };
   if (!raw.created_by) {
@@ -813,10 +825,12 @@ export async function resubmitJob(params: {
       // child made after that never got one and played the raw file (Cj v
       // Summer). A ready copy comes along; one still processing reaches the
       // child through that same report.
+      // Its store comes too: a copy in R2 is not in Azure.
       ...(parent.playback_status === "ready" && parent.playback_object_key
         ? {
             playback_object_key: parent.playback_object_key,
             playback_status: "ready",
+            ...(parent.playback_store === "r2" ? { playback_store: "r2" } : {}),
           }
         : {}),
     })

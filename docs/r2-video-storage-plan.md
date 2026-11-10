@@ -213,7 +213,7 @@ drops these parts of the brief:
 ```
 upload ─▶ Azure videos/ (Hot → Cold after 30 days) ─▶ SplitStep (Azure SAS, unchanged)
               │
-              └─▶ Event Grid ─▶ playback worker ─▶ R2 playback/…  (R2_BUCKET set)
+              └─▶ Event Grid ─▶ playback worker ─▶ R2 playback/…  (R2_BUCKET_VIDEOS set)
                                                └▶ /api/webhooks/playback {store:"r2"}
                                                     → processing_jobs.playback_store
 players: a ready copy with playback_store='r2' → HEAD + presigned GET on R2
@@ -313,19 +313,19 @@ The playback worker image on ACR (~$5/month) is unchanged.
 
 ## 6. Phase 1: what this branch builds
 
-| Piece                    | Where                                                                                                                                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R2 signing, HEAD, delete | `src/lib/services/video-storage/r2.ts`. SigV4 presign is hand-rolled and synchronous, checked byte-for-byte against `@smithy/signature-v4` in `tests/r2-presign.spec.ts`                          |
-| Store dispatch           | `src/lib/services/video-storage/stores.ts`: `mintStoredPlayback`, `storedObjectExists`, `mintSampleVideo`                                                                                         |
-| Chooser                  | `choosePlaybackFile` returns `store`, and its existence check takes the store. A borrowed copy keeps its maker's store                                                                            |
-| Readers                  | `getMatchVideo` / `getSharedMatchVideo` (match, share, admin, Ask), `loadJobVideo` (label console, 8 h) and the sample page and route                                                             |
-| Worker                   | `workers/playback/run.sh` uploads with `rclone` to R2 when `R2_BUCKET` is set and reports `store`. `deploy.sh` passes the R2 key pair as Container Apps **secrets**. The Dockerfile adds `rclone` |
-| Webhook                  | `playback-copy.ts`: `parsePlaybackReport` accepts `store` (`azure` when absent, refusing anything unknown). Every `ready` write sets `playback_store`                                             |
-| Resubmit                 | A child job inherits `playback_store` with the copy                                                                                                                                               |
-| Purge                    | Match and account delete also remove playback copies from R2                                                                                                                                      |
-| Backfill                 | `scripts/backfill-playback-to-r2.ts`. Dry run by default; `--apply`, `--limit`, `--sample`. Resumable. Checks every part's MD5 against R2's ETag and the final size. Never deletes the Azure copy |
-| Redaction                | `safeErrorMessage` also drops bare `sig=` / `X-Amz-Signature=` / `X-Amz-Credential=`                                                                                                              |
-| Config                   | `.env.example`: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `SAMPLE_VIDEO_STORE`. `@aws-sdk/client-s3` is in `serverExternalPackages`                               |
+| Piece                    | Where                                                                                                                                                                                                                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R2 signing, HEAD, delete | `src/lib/services/video-storage/r2.ts`. SigV4 presign is hand-rolled and synchronous, checked byte-for-byte against `@smithy/signature-v4` in `tests/r2-presign.spec.ts`                                                                                                         |
+| Store dispatch           | `src/lib/services/video-storage/stores.ts`: `mintStoredPlayback`, `storedObjectExists`, `mintSampleVideo`                                                                                                                                                                        |
+| Chooser                  | `choosePlaybackFile` returns `store`, and its existence check takes the store. A borrowed copy keeps its maker's store                                                                                                                                                           |
+| Readers                  | `getMatchVideo` / `getSharedMatchVideo` (match, share, admin, Ask), `loadJobVideo` (label console, 8 h) and the sample page and route                                                                                                                                            |
+| Worker                   | `workers/playback/run.sh` uploads with `rclone` to R2 when `R2_BUCKET_VIDEOS` is set and reports `store`. `deploy.sh` passes the **write** key pair as Container Apps **secrets**. The Dockerfile adds `rclone`                                                                  |
+| Webhook                  | `playback-copy.ts`: `parsePlaybackReport` accepts `store` (`azure` when absent, refusing anything unknown). Every `ready` write sets `playback_store`                                                                                                                            |
+| Resubmit                 | A child job inherits `playback_store` with the copy                                                                                                                                                                                                                              |
+| Purge                    | Match and account delete also remove playback copies from R2                                                                                                                                                                                                                     |
+| Backfill                 | `scripts/backfill-playback-to-r2.ts`. Dry run by default; `--apply`, `--limit`, `--sample`. Resumable. Checks every part's MD5 against R2's ETag and the final size. Never deletes the Azure copy                                                                                |
+| Redaction                | `safeErrorMessage` also drops bare `sig=` / `X-Amz-Signature=` / `X-Amz-Credential=`                                                                                                                                                                                             |
+| Config                   | `.env.example`: `R2_ACCOUNT_ID`, `R2_BUCKET_VIDEOS`, the read pair `R2_READ_ACCESS_KEY_ID`/`R2_READ_SECRET_ACCESS_KEY` (Vercel), the write pair `R2_WRITE_*` (worker and backfill only, never Vercel), `SAMPLE_VIDEO_STORE`. `@aws-sdk/client-s3` is in `serverExternalPackages` |
 
 Behaviour notes:
 
@@ -351,13 +351,11 @@ Behaviour notes:
 
 ## 7. Risks
 
-1. **Unverified live R2 behaviour, until credentials are available:**
-   - whether `response-cache-control` is honoured
-   - range and seek in the film player, `/label` and the seek-lane preview
-   - rclone's upload from the worker
-2. **Revocation is unchanged.** As with an account-key SAS, a presigned URL cannot be withdrawn before it expires. Rotating the token kills all of them.
-3. **The 8 h label URL** is embedded in HTML and never refreshed, exactly as with Azure today.
-4. **Metrics gap:** Azure shows no egress before 10-10. Enable Storage diagnostic logs for a month if exact per-caller attribution is wanted.
+1. **Delete with the read token only.** Vercel holds only the read token, so deleting a match or an account cannot remove its R2 playback copy. The purge logs the count, and `scripts/cleanup-orphan-storage.ts` has to learn R2 to sweep them (follow-up). This is a privacy gap on account delete until that sweep exists or a delete-capable token is given to the app.
+2. **rclone's upload from the worker** is not exercised until the image is rebuilt and one upload runs through it.
+3. **Revocation is unchanged.** As with an account-key SAS, a presigned URL cannot be withdrawn before it expires. Rotating the token kills all of them.
+4. **The 8 h label URL** is embedded in HTML and never refreshed, exactly as with Azure today.
+5. **Metrics gap:** Azure shows no egress before 10-10. Enable Storage diagnostic logs for a month if exact per-caller attribution is wanted.
 
 ## 8. Follow-ups
 
@@ -370,10 +368,30 @@ Behaviour notes:
   - The 5.92 GB orphan in `videos/`.
 - Spike 1 (R2 → Azure restage) and spike 3 (R2 copy over 5 GB) are no longer needed under this design. Their scripts stay in the shared notes folder in case the restage path ever returns.
 
-## What's needed for the live checks
+## Live R2 checks (2026-11-09, bucket `advantage-video`)
 
-An R2 API token pair, the account ID and the bucket name, exported in a shell, plus one
-playback copy in the bucket. Then:
+These were run against a 120 s, 720p H.264 test file (43.6 MB) under `spike-r2/`, which
+was deleted afterwards. URLs came from this branch's `mintR2Playback`, signed with the read
+token.
 
-- `spike2-presign.mjs`: range, seek, `304`, and whether the cache-control header comes back.
-- Play one R2-backed match in the film player, `/label` and the seek-lane preview.
+| Check                                                       | Result                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------- |
+| Two mints in one window                                     | identical URL                                           |
+| `Range: bytes=0-1023`                                       | 206, `Accept-Ranges: bytes`, `Content-Type: video/mp4`  |
+| `response-cache-control` honoured                           | yes: `Cache-Control: private, no-cache`                 |
+| Seek to the middle (range)                                  | 206 with the right `Content-Range`                      |
+| Revalidate with `If-None-Match: <etag>`                     | 304                                                     |
+| HEAD with the GET URL                                       | 403 (as expected: the server uses the SDK's HEAD)       |
+| SDK HEAD with the read token (`r2ObjectExists`)             | true for the object, false for a missing key            |
+| Tampered signature / same signature on another key          | 403 / 403                                               |
+| 8 h label URL                                               | 206                                                     |
+| Headless Chrome `<video>`: metadata, seek to 90 s, play     | duration 120.0 s, played on from 91.5 s, `readyState` 4 |
+| `PutObject` `If-None-Match: *` over an existing key (write) | 412                                                     |
+
+The film player, `/label` and the seek-lane preview all set `src` to this URL on a plain
+`<video>`, so the headless check covers them. Playing a real match from R2 waits on the
+first R2-backed copy.
+
+Not run:
+
+- **The 8 GB R2 → Azure Put Block From URL timing.** It only matters if trimmed copies or a restage path come back. Run `r2-spikes/spike-restage-8g.mjs` in the shared notes folder with the `R2_*` exported in your shell. It builds the 8 GB object inside R2 with `UploadPartCopy`, so nothing is uploaded from your machine. It also tests `If-None-Match` on `CompleteMultipartUpload`.

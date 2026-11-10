@@ -11,7 +11,7 @@ import {
   sampleMatchVideo,
 } from "@/lib/sample-match";
 import { mintSampleVideoCredential } from "@/lib/services/sample-match/video";
-import { mintPlaybackSas } from "@/lib/services/splitstep/video-url/azure-sas";
+import { mintSampleVideo } from "@/lib/services/video-storage/stores";
 import { NO_FILM_ENTRY } from "@/lib/match-video/film-entry";
 
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
@@ -132,7 +132,7 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
   const data = sampleMatchData();
   const { match, statsResult, points, keyMoments, insights, kpiHistory } = data;
   // A playable first link, minted here as a real report's page mints one.
-  const video = sampleMatchVideo(mintSampleVideoCredential(mintPlaybackSas));
+  const video = sampleMatchVideo(mintSampleVideoCredential(mintSampleVideo));
 
   // The single attribution point (guardrails §4): every you/opp decision
   // routes through `getMatchSides`, keyed on `match.isUserPlayer1` — which

@@ -50,8 +50,32 @@ test("a ready report must name the derived key", () => {
     sourceKey,
     status: "ready",
     playbackKey: "playback/u/m/original.mp4",
+    // No store named: a worker that still writes to Azure.
+    store: "azure",
     error: null,
   });
+  expect(
+    parsePlaybackReport({
+      sourceKey,
+      status: "ready",
+      playbackKey: "playback/u/m/original.mp4",
+      store: "r2",
+    })?.store,
+  ).toBe("r2");
+  // A store this app does not know is not a report.
+  expect(
+    parsePlaybackReport({
+      sourceKey,
+      status: "ready",
+      playbackKey: "playback/u/m/original.mp4",
+      store: "s3",
+    }),
+  ).toBeNull();
+  // Only a ready copy has a store.
+  expect(
+    parsePlaybackReport({ sourceKey, status: "processing", store: "r2" })
+      ?.store,
+  ).toBeNull();
   // Any other blob — someone else's upload, the vendor copy — is refused.
   expect(
     parsePlaybackReport({
@@ -92,7 +116,19 @@ test("processing and failed keep a copy already made; ready sets it", () => {
     playback_status: "ready",
     playback_error: null,
     playback_object_key: "playback/u/m/original.mp4",
+    playback_store: "azure",
   });
+  // Every ready write names the store, so none is left over from an old copy.
+  expect(
+    playbackColumns(
+      parsePlaybackReport({
+        sourceKey,
+        status: "ready",
+        playbackKey: "playback/u/m/original.mp4",
+        store: "r2",
+      })!,
+    ).playback_store,
+  ).toBe("r2");
 });
 
 test("only a ready report writes over a ready copy", async () => {

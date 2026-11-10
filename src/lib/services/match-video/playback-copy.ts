@@ -16,7 +16,14 @@ import type { createAdminClient } from "@/lib/supabase/admin";
  * The worker signs each report with `PLAYBACK_CALLBACK_SECRET`; the key it
  * names must be the one derived here from the upload's, so a report can only
  * ever point a job at its own copy.
+ *
+ * Since November 2026 the worker writes the copy to R2, and a `ready` report
+ * says so with `store: "r2"` (`docs/r2-video-storage-plan.md`). A report with
+ * no store is from a worker that still writes to Azure, and is recorded as
+ * Azure: the store is written on every `ready`, never left over from before.
  */
+
+import type { VideoStore } from "@/lib/services/video-storage/stores";
 
 export const PLAYBACK_PREFIX = "playback/";
 
@@ -48,6 +55,8 @@ export interface PlaybackReport {
   status: PlaybackStatus;
   /** Present on `ready`; always `playbackKeyFor(sourceKey)`. */
   playbackKey: string | null;
+  /** Where a `ready` copy was written; null otherwise. */
+  store: VideoStore | null;
   error: string | null;
 }
 
@@ -66,10 +75,13 @@ export function parsePlaybackReport(value: unknown): PlaybackReport | null {
   const derived = playbackKeyFor(sourceKey);
   if (!derived) return null;
   if (status === "ready" && raw.playbackKey !== derived) return null;
+  const store = raw.store ?? "azure";
+  if (store !== "azure" && store !== "r2") return null;
   return {
     sourceKey,
     status,
     playbackKey: status === "ready" ? derived : null,
+    store: status === "ready" ? store : null,
     error:
       status === "failed" && typeof raw.error === "string"
         ? raw.error.slice(0, ERROR_MAX_LENGTH)
@@ -82,12 +94,14 @@ export function playbackColumns(report: PlaybackReport): {
   playback_status: PlaybackStatus;
   playback_error: string | null;
   playback_object_key?: string;
+  playback_store?: VideoStore;
 } {
   if (report.status === "ready") {
     return {
       playback_status: "ready",
       playback_error: null,
       playback_object_key: report.playbackKey!,
+      playback_store: report.store ?? "azure",
     };
   }
   return { playback_status: report.status, playback_error: report.error };
@@ -107,14 +121,26 @@ export async function applyPlaybackReport(
   db: ReturnType<typeof createAdminClient>,
   report: PlaybackReport,
 ): Promise<number> {
-  let update = db
-    .from("processing_jobs")
-    .update(playbackColumns(report))
-    .eq("video_object_key", report.sourceKey);
-  if (report.status !== "ready") {
-    update = update.or("playback_status.is.null,playback_status.neq.ready");
+  const write = (columns: ReturnType<typeof playbackColumns>) => {
+    let update = db
+      .from("processing_jobs")
+      .update(columns)
+      .eq("video_object_key", report.sourceKey);
+    if (report.status !== "ready") {
+      update = update.or("playback_status.is.null,playback_status.neq.ready");
+    }
+    return update.select("id");
+  };
+  const columns = playbackColumns(report);
+  let { data, error } = await write(columns);
+  // A database without `playback_store` yet (42703). Record the copy anyway:
+  // read as Azure, an R2 copy is not found there and players fall back to
+  // the upload until the migration lands and the backfill marks it.
+  if (error?.code === "42703" && "playback_store" in columns) {
+    const { playback_store: _unwritten, ...rest } = columns;
+    void _unwritten;
+    ({ data, error } = await write(rest));
   }
-  const { data, error } = await update.select("id");
   if (error)
     throw new Error(`Could not record the playback copy: ${error.message}`);
   return data?.length ?? 0;

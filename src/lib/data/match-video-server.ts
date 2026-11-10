@@ -13,19 +13,22 @@ import {
   type PlaybackAttachmentRow,
 } from "@/lib/services/match-video/playback";
 import type { AttachmentPlaybackCredential } from "@/lib/services/match-video/storage";
+import { resolveAzureStorageConfig } from "@/lib/services/splitstep/video-url/azure-sas";
 import {
-  mintPlaybackSas,
-  resolveAzureStorageConfig,
-  videoContainerClient,
-} from "@/lib/services/splitstep/video-url/azure-sas";
+  mintStoredPlayback,
+  storedObjectExists,
+} from "@/lib/services/video-storage/stores";
 import { type AdminClient, lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 import {
   PLAYBACK_JOB_COLUMNS,
+  PLAYBACK_JOB_COLUMNS_BEFORE_STORE,
   choosePlaybackFile,
+  isMissingColumnError,
   type PlaybackChoice,
+  type PlaybackJobRow,
 } from "./match-video-choice";
 import { activeAttachment, finalObjectExists } from "./match-video-seams";
 
@@ -403,26 +406,28 @@ function supabaseProviderVideo(
   admin: AdminClient,
 ): MatchVideoDeps["loadProviderVideo"] {
   return async (matchId) => {
-    const { data: jobs } = await admin
-      .from("processing_jobs")
-      .select(PLAYBACK_JOB_COLUMNS)
-      .eq("match_id", matchId)
-      .or("video_object_key.not.is.null,trimmed_object_key.not.is.null")
-      .order("created_at", { ascending: false })
-      .limit(JOBS_CONSIDERED);
+    const read = (columns: string) =>
+      admin
+        .from("processing_jobs")
+        .select(columns)
+        .eq("match_id", matchId)
+        .or("video_object_key.not.is.null,trimmed_object_key.not.is.null")
+        .order("created_at", { ascending: false })
+        .limit(JOBS_CONSIDERED)
+        .returns<PlaybackJobRow[]>();
+    let { data: jobs, error } = await read(PLAYBACK_JOB_COLUMNS);
+    // A database without `playback_store` yet: every copy is in Azure.
+    if (isMissingColumnError(error)) {
+      ({ data: jobs } = await read(PLAYBACK_JOB_COLUMNS_BEFORE_STORE));
+    }
 
     try {
-      const container = videoContainerClient();
-      const choice = await choosePlaybackFile(jobs ?? [], (blobName) =>
-        container
-          .getBlockBlobClient(blobName)
-          .exists()
-          .catch(() => false),
-      );
+      const choice = await choosePlaybackFile(jobs ?? [], storedObjectExists);
       if (!choice) return null;
 
-      const { playbackUrl, expiresAt } = mintPlaybackSas({
-        blobName: choice.blobName,
+      const { playbackUrl, expiresAt } = mintStoredPlayback({
+        key: choice.blobName,
+        store: choice.store,
       });
       return {
         url: playbackUrl,

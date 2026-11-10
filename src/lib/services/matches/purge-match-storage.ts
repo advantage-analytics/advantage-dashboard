@@ -12,6 +12,10 @@ import {
   resultsKeyUserSegment,
 } from "@/lib/services/splitstep/object-keys";
 import { deleteVideoBlob } from "@/lib/services/splitstep/video-url";
+import {
+  deleteR2Object,
+  resolveR2Config,
+} from "@/lib/services/video-storage/r2";
 import { MATCH_DATA_BUCKET } from "@/lib/services/upload/storage.service";
 
 export interface PurgeMatchStorageOptions {
@@ -363,6 +367,36 @@ export async function purgeMatchStorage(
         const count = removed.filter((r) => r.deleted).length;
         if (count > 0) {
           console.log(`[${label}] removed ${count} video blob(s)`);
+        }
+
+        // The playback copy may also be in R2 (the worker writes it there,
+        // and the backfill copies older ones), so it is removed there too,
+        // whatever `playback_store` says: during a backfill it is in both.
+        // Deleting needs the WRITE token. Where only the read token is
+        // configured (Vercel), the copies are logged by key for
+        // scripts/cleanup-orphan-storage.ts to remove.
+        const playbackKeys = new Set(
+          (jobs ?? [])
+            .map((j) => j.playback_object_key as string | null)
+            .filter((k): k is string => Boolean(k)),
+        );
+        const r2Keys = blobNames.filter((k) => playbackKeys.has(k));
+        if (r2Keys.length > 0 && !resolveR2Config("write").ok) {
+          console.error(
+            `[${label}] ${r2Keys.length} playback cop(ies) may remain in R2 — ` +
+              `no R2 write token here; remove with scripts/cleanup-orphan-storage.ts`,
+          );
+        } else if (r2Keys.length > 0) {
+          const results = await Promise.allSettled(
+            r2Keys.map((key) => deleteR2Object(key)),
+          );
+          const failed = results.filter((r) => r.status === "rejected").length;
+          if (failed > 0) {
+            console.error(
+              `[${label}] could not remove ${failed} playback cop(ies) from R2 — ` +
+                `recover with scripts/cleanup-orphan-storage.ts`,
+            );
+          }
         }
       } catch (err) {
         console.error(`[${label}] video cleanup threw:`, err);

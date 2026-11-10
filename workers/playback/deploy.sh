@@ -4,7 +4,14 @@
 #
 #   IMAGE=<registry>/playback-worker:<tag> \
 #   PLAYBACK_CALLBACK_SECRET=<same value as in Vercel> \
+#   R2_ACCOUNT_ID=... R2_BUCKET_VIDEOS=... R2_WRITE_ACCESS_KEY_ID=... R2_WRITE_SECRET_ACCESS_KEY=... \
 #     workers/playback/deploy.sh
+#
+# The four R2_* are optional: with them the worker writes playback copies to
+# Cloudflare R2 (docs/r2-video-storage-plan.md), without them to Azure as
+# before. The key pair becomes Container Apps secrets, never a plain env var.
+# It is the WRITE token (Object Read & Write, scoped to the bucket), never the
+# read token the app signs URLs with.
 #
 # Needs `az login` as someone who can create resources and assign roles in the
 # resource group. Never an account key: the job runs as its own user-assigned
@@ -31,6 +38,12 @@ set -euo pipefail
 
 : "${IMAGE:?set IMAGE to the pushed worker image}"
 : "${PLAYBACK_CALLBACK_SECRET:?set PLAYBACK_CALLBACK_SECRET}"
+R2_ACCOUNT_ID="${R2_ACCOUNT_ID:-}"; R2_BUCKET_VIDEOS="${R2_BUCKET_VIDEOS:-}"
+R2_WRITE_ACCESS_KEY_ID="${R2_WRITE_ACCESS_KEY_ID:-}"; R2_WRITE_SECRET_ACCESS_KEY="${R2_WRITE_SECRET_ACCESS_KEY:-}"
+if [[ -n "$R2_BUCKET_VIDEOS" && ( -z "$R2_ACCOUNT_ID" || -z "$R2_WRITE_ACCESS_KEY_ID" || -z "$R2_WRITE_SECRET_ACCESS_KEY" ) ]]; then
+  echo "R2_BUCKET_VIDEOS is set: R2_ACCOUNT_ID, R2_WRITE_ACCESS_KEY_ID and R2_WRITE_SECRET_ACCESS_KEY are needed too" >&2
+  exit 1
+fi
 RG="${RG:-advantage-dashboard}"
 LOC="${LOC:-canadaeast}"
 ACCT="${ACCT:-advantagedashboardca}"
@@ -95,6 +108,15 @@ if ! az containerapp env show -g "$RG" -n "$ENV_NAME" -o none 2>/dev/null; then
 fi
 
 step "job $JOB"
+secrets=("callback-secret=$PLAYBACK_CALLBACK_SECRET")
+env_vars=("AZURE_CLIENT_ID=$ID_CLIENT" "STORAGE_ACCOUNT=$ACCT" "STORAGE_CONTAINER=$CONT"
+  "QUEUE_NAME=$QUEUE" "CALLBACK_URL=$CALLBACK_URL" "PLAYBACK_CALLBACK_SECRET=secretref:callback-secret")
+if [[ -n "$R2_BUCKET_VIDEOS" ]]; then
+  secrets+=("r2-write-access-key-id=$R2_WRITE_ACCESS_KEY_ID" "r2-write-secret-access-key=$R2_WRITE_SECRET_ACCESS_KEY")
+  env_vars+=("R2_ACCOUNT_ID=$R2_ACCOUNT_ID" "R2_BUCKET_VIDEOS=$R2_BUCKET_VIDEOS"
+    "R2_WRITE_ACCESS_KEY_ID=secretref:r2-write-access-key-id"
+    "R2_WRITE_SECRET_ACCESS_KEY=secretref:r2-write-secret-access-key")
+fi
 common=(
   --image "$IMAGE" --cpu 4 --memory 8Gi
   --replica-timeout 14400 --replica-retry-limit 1
@@ -104,15 +126,14 @@ common=(
   --scale-rule-metadata "accountName=$ACCT" "queueName=$QUEUE" "queueLength=1"
     "queueLengthStrategy=visibleonly"
   --scale-rule-identity "$ID_ID"
-  --secrets "callback-secret=$PLAYBACK_CALLBACK_SECRET"
-  --env-vars "AZURE_CLIENT_ID=$ID_CLIENT" "STORAGE_ACCOUNT=$ACCT" "STORAGE_CONTAINER=$CONT"
-    "QUEUE_NAME=$QUEUE" "CALLBACK_URL=$CALLBACK_URL" "PLAYBACK_CALLBACK_SECRET=secretref:callback-secret"
+  --secrets "${secrets[@]}"
+  --env-vars "${env_vars[@]}"
 )
 if az containerapp job show -g "$RG" -n "$JOB" -o none 2>/dev/null; then
+  # Secrets first: an env var naming a secretref that does not exist yet is refused.
+  az containerapp job secret set -g "$RG" -n "$JOB" --secrets "${secrets[@]}" -o none
   az containerapp job update -g "$RG" -n "$JOB" --image "$IMAGE" \
-    --replace-env-vars "AZURE_CLIENT_ID=$ID_CLIENT" "STORAGE_ACCOUNT=$ACCT" "STORAGE_CONTAINER=$CONT" \
-      "QUEUE_NAME=$QUEUE" "CALLBACK_URL=$CALLBACK_URL" "PLAYBACK_CALLBACK_SECRET=secretref:callback-secret" -o none
-  az containerapp job secret set -g "$RG" -n "$JOB" --secrets "callback-secret=$PLAYBACK_CALLBACK_SECRET" -o none
+    --replace-env-vars "${env_vars[@]}" -o none
 else
   registry=()
   [[ -n "$REGISTRY_SERVER" ]] && registry=(--registry-server "$REGISTRY_SERVER" --registry-identity "$ID_ID")
