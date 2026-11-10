@@ -1220,17 +1220,24 @@ test("clicking a mark glides it to the stage centre at 150%; a click on the empt
 test("the glide animates over ~320ms, and a drag mid-glide cancels it cleanly", async ({
   page,
 }) => {
+  // The glide is a requestAnimationFrame tween on performance.now(), both of
+  // which Playwright's clock owns: pausing it holds the glide mid-way for as
+  // long as the drag takes, however slow the runner is.
+  await page.clock.install();
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const stage = page.locator("[data-court-stage]");
   const mark = stage.locator("[data-viz-mark]").first();
   await expect(mark).toBeVisible();
   const home = await courtTransform(page);
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
   await mark.dispatchEvent("click");
-  await page.waitForTimeout(60);
+  await page.clock.runFor(96);
+  await expect
+    .poll(async () => (await courtTransform(page)).z)
+    .toBeGreaterThan(home.z);
   const early = await courtTransform(page);
   // Moving, not yet there.
-  expect(early.z).toBeGreaterThan(home.z);
   expect(early.z / home.z).toBeLessThan(1.5);
   // A drag from an empty patch of court takes over.
   const s = (await stage.boundingBox())!;
@@ -1239,7 +1246,8 @@ test("the glide animates over ~320ms, and a drag mid-glide cancels it cleanly", 
   await page.mouse.move(s.x + 90, s.y + 70, { steps: 4 });
   await page.mouse.up();
   const dragged = await courtTransform(page);
-  await page.waitForTimeout(400);
+  await page.clock.runFor(600);
+  await page.waitForTimeout(100);
   const settled = await courtTransform(page);
   // Nothing moved once the drag ended: the glide did not resume.
   expect(settled.px).toBeCloseTo(dragged.px, 1);

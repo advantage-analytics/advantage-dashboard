@@ -65,6 +65,87 @@ async function sampleAfter(
   );
 }
 
+/** One frame of `traceAfter`: the boxes and opacity `sampleAfter` reads. */
+type Frame = {
+  card: Box | null;
+  ghost: Box | null;
+  ghosts: number;
+  stage: Box | null;
+  dialogOpacity: number | null;
+  flying: boolean;
+};
+
+/**
+ * Clicks `selector` (or presses Esc) in the page, then records every
+ * animation frame for `ms`. A fixed-time sample says "at 120ms the copy is
+ * mid-flight", which a slow CI runner breaks by starting the animation late;
+ * a trace asks whether the copy was EVER mid-flight, which is the claim.
+ */
+async function traceAfter(
+  page: Page,
+  action: { click: string } | { escape: true },
+  ms: number,
+): Promise<Frame[]> {
+  return page.evaluate(
+    async ({ action, ms, ghostSel, cardSel }) => {
+      const box = (el: Element | null | undefined) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.left, y: r.top, w: r.width, h: r.height };
+      };
+      const frame = () => {
+        const dialog = document.querySelector<HTMLElement>(
+          '[role="dialog"]:not([data-testid="lightbox-chunk-pending"])',
+        );
+        return {
+          card: box(
+            document.querySelector(`${cardSel} [data-viz-court-art] svg`),
+          ),
+          ghost: box(document.querySelector(`${ghostSel} > div`)),
+          ghosts: document.querySelectorAll(ghostSel).length,
+          stage: box(
+            document.querySelector("[role=dialog] [data-court-morph-target]"),
+          ),
+          dialogOpacity: dialog
+            ? Number(getComputedStyle(dialog).opacity)
+            : null,
+          flying: document.documentElement.hasAttribute("data-viz-court-morph"),
+        };
+      };
+      if ("click" in action) {
+        const target = document.querySelector(action.click) as HTMLElement;
+        target.focus();
+        target.click();
+      } else {
+        document.activeElement?.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Escape",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      }
+      const frames = [frame()];
+      const end = performance.now() + ms;
+      while (performance.now() < end) {
+        await new Promise((done) => requestAnimationFrame(done));
+        frames.push(frame());
+      }
+      return frames;
+    },
+    { action, ms, ghostSel: GHOST, cardSel: SERVE_CARD },
+  );
+}
+
+/** A frame whose copy has grown past the card but not past the stage —
+ *  the copy part way through its flight. */
+const growing = (f: Frame) =>
+  f.ghosts === 1 &&
+  f.ghost !== null &&
+  f.card !== null &&
+  f.ghost.w > f.card.w * 1.05 &&
+  (f.stage === null || f.ghost.w < f.stage.w + 1);
+
 const centre = (b: Box) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
 /** `v` lies between `a` and `b` (either order), with a pixel of slack. */
 const between = (v: number, a: number, b: number) =>
@@ -103,25 +184,32 @@ test.describe("the match report", () => {
     await wallWarm(page);
     const card = page.locator(SERVE_CARD);
 
-    // ~120ms in: one copy in flight, part way from the card to the stage.
-    const mid = await sampleAfter(page, { click: SERVE_CARD }, 120);
-    expect(mid.ghosts).toBe(1);
-    expect(mid.flying).toBe(true);
-    expect(mid.ghost).not.toBeNull();
-    expect(mid.stage).not.toBeNull();
-    const g = mid.ghost!;
-    const s = mid.stage!;
+    // During the flight one copy is part way from the card to the stage.
+    const opening = await traceAfter(page, { click: SERVE_CARD }, 900);
+    const mid = opening.find((f) => growing(f) && f.stage !== null);
+    expect(mid, "a frame with the copy mid-flight").toBeDefined();
+    expect(mid!.flying).toBe(true);
+    const g = mid!.ghost!;
+    const s = mid!.stage!;
     // The card's own court is hidden while its copy is away, so measure the
     // card's art box from the layout (visibility keeps its box).
-    const c = mid.card!;
-    expect(g.w).toBeGreaterThan(c.w * 1.05);
-    expect(g.w).toBeLessThan(s.w + 1);
+    const c = mid!.card!;
     expect(between(centre(g).x, centre(c).x, centre(s).x)).toBe(true);
     expect(between(centre(g).y, centre(c).y, centre(s).y)).toBe(true);
 
-    // ~500ms: the copy is gone, the dialog is fully opaque, and the stage —
+    // Then the copy is gone, the dialog is fully opaque, and the stage —
     // the lightbox's own court — shows.
-    await page.waitForTimeout(400);
+    await expect(page.locator(GHOST)).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Number(
+            getComputedStyle(document.querySelector('[role="dialog"]')!)
+              .opacity,
+          ),
+        ),
+      )
+      .toBe(1);
     const settled = await page.evaluate(
       ({ ghostSel }) => ({
         ghosts: document.querySelectorAll(ghostSel).length,
@@ -143,13 +231,18 @@ test.describe("the match report", () => {
     // Esc: the copy starts on the stage and shrinks toward the card while
     // the dialog fades.
     await dialog.getByRole("heading").first().focus();
-    const closingAt = await sampleAfter(page, { escape: true }, 130);
-    expect(closingAt.ghosts).toBe(1);
-    expect(closingAt.dialogOpacity).not.toBeNull();
-    expect(closingAt.dialogOpacity!).toBeLessThan(1);
-    const cg = closingAt.ghost!;
-    expect(cg.w).toBeLessThan(s.w);
-    expect(cg.w).toBeGreaterThan(c.w - 1);
+    const closing = await traceAfter(page, { escape: true }, 600);
+    const closingAt = closing.find(
+      (f) =>
+        f.ghosts === 1 &&
+        f.ghost !== null &&
+        f.dialogOpacity !== null &&
+        f.dialogOpacity < 1 &&
+        f.ghost.w < s.w &&
+        f.ghost.w > c.w - 1,
+    );
+    expect(closingAt, "a frame with the copy shrinking").toBeDefined();
+    const cg = closingAt!.ghost!;
     expect(between(centre(cg).x, centre(c).x, centre(s).x)).toBe(true);
     expect(between(centre(cg).y, centre(c).y, centre(s).y)).toBe(true);
 
@@ -178,10 +271,12 @@ test.describe("the match report", () => {
     });
     await page.goto(`${origin}/?tab=shots`);
     await expect(page.locator(SERVE_CARD)).toBeVisible();
-    const mid = await sampleAfter(page, { click: SERVE_CARD }, 120);
-    expect(mid.ghosts).toBe(1);
-    expect(mid.stage).toBeNull();
-    expect(mid.ghost!.w).toBeGreaterThan(mid.card!.w * 1.05);
+    const frames = await traceAfter(page, { click: SERVE_CARD }, 400);
+    // It set off before there was a stage to aim at.
+    expect(
+      frames.some((f) => growing(f) && f.stage === null),
+      "a frame with the copy flying and no stage yet",
+    ).toBe(true);
     await expect(
       page.getByRole("dialog", { name: "All serves" }),
     ).toBeVisible();
@@ -244,18 +339,27 @@ test.describe("the match report", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await wallWarm(page);
     const card = page.locator(SERVE_CARD);
-    const mid = await sampleAfter(page, { click: SERVE_CARD }, 60);
-    expect(mid.ghosts).toBe(0);
-    expect(mid.flying).toBe(false);
-    expect(mid.dialogOpacity).not.toBeNull();
-    // The fade in (150ms), under way.
-    expect(mid.dialogOpacity!).toBeLessThan(1);
-    await page.waitForTimeout(300);
+    const fadeIn = await traceAfter(page, { click: SERVE_CARD }, 500);
+    expect(fadeIn.every((f) => f.ghosts === 0 && !f.flying)).toBe(true);
+    // The fade in (150ms) was under way at some frame.
+    expect(
+      fadeIn.some(
+        (f) =>
+          f.dialogOpacity !== null &&
+          f.dialogOpacity > 0 &&
+          f.dialogOpacity < 1,
+      ),
+      "a frame part way through the fade in",
+    ).toBe(true);
     const dialog = page.getByRole("dialog", { name: "All serves" });
+    await expect(dialog).toBeVisible();
     await dialog.getByRole("heading").first().focus();
-    const out = await sampleAfter(page, { escape: true }, 60);
-    expect(out.ghosts).toBe(0);
-    expect(out.dialogOpacity!).toBeLessThan(1);
+    const fadeOut = await traceAfter(page, { escape: true }, 500);
+    expect(fadeOut.every((f) => f.ghosts === 0)).toBe(true);
+    expect(
+      fadeOut.some((f) => f.dialogOpacity !== null && f.dialogOpacity < 1),
+      "a frame part way through the fade out",
+    ).toBe(true);
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(card).toBeFocused();
   });
@@ -287,12 +391,21 @@ test.describe("the season", () => {
       `${origin}/dashboard/team/roster/p-avery?tab=visualizations&delay=1500`,
     );
     await expect(page.locator(SERVE_CARD)).toBeVisible();
-    const mid = await sampleAfter(page, { click: SERVE_CARD }, 120);
-    expect(mid.ghosts).toBe(1);
-    expect(mid.ghost!.w).toBeGreaterThan(mid.card!.w * 1.05);
+    const frames = await traceAfter(page, { click: SERVE_CARD }, 700);
+    // The target is the pending frame's loading bar, not a stage, so the
+    // claim is only that the copy grew past the card on its way.
+    expect(
+      frames.some(
+        (f) =>
+          f.ghosts === 1 &&
+          f.ghost !== null &&
+          f.card !== null &&
+          f.ghost.w > f.card.w * 1.05,
+      ),
+      "a frame with the copy grown past the card",
+    ).toBe(true);
     // Landed on the loading frame: the copy is gone, the bar shows.
-    await page.waitForTimeout(450);
-    expect(await page.locator(GHOST).count()).toBe(0);
+    await expect(page.locator(GHOST)).toHaveCount(0);
     await expect(
       page.locator("[role=dialog] [data-court-morph-target]").last(),
     ).toHaveCSS("opacity", "1");
