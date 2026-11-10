@@ -309,6 +309,8 @@ export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
         const diff = row.winners - row.errors;
         const other = row.id === "you" ? oppDiff : youDiff;
         const leads = diff > other;
+        const figId = `fig-${row.id}`;
+        const figHovered = hovered === figId;
 
         return (
           <div key={row.id} className="flex flex-col gap-1.5">
@@ -326,17 +328,16 @@ export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
                   style={{
                     fontWeight: leads ? 500 : 400,
                     color: leads ? "var(--ink-900)" : "var(--ink-500)",
-                    backgroundColor:
-                      hovered === `fig-${row.id}`
-                        ? "var(--surface-subtle)"
-                        : "transparent",
+                    backgroundColor: figHovered
+                      ? "var(--surface-subtle)"
+                      : "transparent",
                   }}
-                  {...hoverTarget(`fig-${row.id}`)}
+                  {...hoverTarget(figId)}
                 >
                   {signed(diff)}
                 </button>
                 <ChartTooltip
-                  open={hovered === `fig-${row.id}`}
+                  open={figHovered}
                   align="end"
                   offset={6}
                   className="gap-0.5 px-2.5 py-2"
