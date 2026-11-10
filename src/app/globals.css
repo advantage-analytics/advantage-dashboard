@@ -765,6 +765,31 @@ html[data-viz-court-morph] [data-lightbox-scrim] {
   }
 }
 
+/* The applied-filter strip on a list page (shared/applied-filter-strip.tsx,
+   AppliedFilterStrip: the Matches page and the Video tab) - the same unfold.
+   The host column's flex gap is --filter-strip-gap (set inline by the strip),
+   folded into a negative margin while closed, so whatever sits below eases
+   down with the strip instead of jumping the moment a filter lands, and eases
+   back up as it is cleared. Same 250ms on --ease-primary as the lightbox
+   strip above; keep the two in step. ASCII only. */
+.filter-strip-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: calc(var(--filter-strip-gap, 0px) * -1);
+  transition:
+    grid-template-rows 250ms var(--ease-primary),
+    margin-top 250ms var(--ease-primary);
+}
+.filter-strip-reveal[data-open] {
+  grid-template-rows: 1fr;
+  margin-top: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .filter-strip-reveal {
+    transition: none;
+  }
+}
+
 /* Visualizations lightbox: a mark grows a little under the pointer or
    focus (lightbox-court.tsx, data-active on [data-viz-mark]) so the point
    you are on answers where you are looking, not only in the readout. Scaled

@@ -1,8 +1,8 @@
 "use client";
 
 import { memo } from "react";
-import { Filter } from "lucide-react";
 
+import { AppliedFilterStrip } from "@/components/dashboard/shared/applied-filter-strip";
 import { draftCountLine } from "../match-filters/panel-draft";
 import {
   filmListActive,
@@ -25,6 +25,10 @@ import {
  * The fullscreen film room does not draw it: the room has its own chrome, and
  * its points drawer keeps a header "Clear all".
  *
+ * The strip and its unfold are `AppliedFilterStrip` (shared/), the Matches
+ * page's own; this only words the Video tab's layers. It sits in the film
+ * column's 16px gap (`film-tab.tsx`, `gap-4`).
+ *
  * No `next/navigation` here — the offline spec loads this file through
  * `createLoader()`.
  */
@@ -42,37 +46,18 @@ export const FilmFilterStrip = memo(function FilmFilterStrip({
   /** Every point on the match. */
   total: number;
 }) {
-  if (!filmListActive(filmFilters)) return null;
   return (
-    <div
-      role="status"
-      data-film-filter-strip=""
-      className="flex shrink-0 flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-      style={{ background: "var(--surface-subtle)" }}
-    >
-      <Filter
-        className="size-[13px] shrink-0"
-        strokeWidth={1.5}
-        style={{ color: "var(--ink-500)" }}
-        aria-hidden="true"
-      />
-      <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-        {filmListSentence(filmFilters, names)}
-      </span>
-      <span
-        className="size-[3px] rounded-full"
-        style={{ background: "var(--ink-300)" }}
-        aria-hidden="true"
-      />
-      <span className="text-micro tabular">{draftCountLine(shown, total)}</span>
-      <div className="flex-1" />
-      <button
-        type="button"
-        onClick={filmFilters.clearAll}
-        className="cursor-pointer rounded-[var(--radius-element)] text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-      >
-        {filmStripAction(filmFilters)}
-      </button>
-    </div>
+    <AppliedFilterStrip
+      kind="film"
+      gap={16}
+      sentence={
+        filmListActive(filmFilters)
+          ? filmListSentence(filmFilters, names)
+          : null
+      }
+      count={draftCountLine(shown, total)}
+      action={filmStripAction(filmFilters)}
+      onClear={filmFilters.clearAll}
+    />
   );
 });
