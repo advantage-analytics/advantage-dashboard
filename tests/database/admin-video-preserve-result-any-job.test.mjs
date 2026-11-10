@@ -7,7 +7,7 @@ const migrations = [
   "20261110013000_admin_video_allow_resubmit_chain.sql",
   "20261110063746_admin_video_resubmit_chain_console.sql",
   "20261110074526_admin_video_console_followups.sql",
-  "20261110090000_preserve_video_result_any_job.sql",
+  "20261110082322_preserve_video_result_any_job.sql",
 ];
 // `upTo` stops before a migration, so a test can apply it later itself.
 async function harness(upTo = migrations.length) {
