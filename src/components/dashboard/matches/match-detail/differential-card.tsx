@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
@@ -15,10 +15,16 @@ import {
   segmentMotion,
   SegmentTooltip,
 } from "@/components/dashboard/matches/match-detail/point-endings-body";
+import type { OutcomeSide } from "@/components/dashboard/matches/match-detail/point-endings-body";
 import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import {
+  EASE,
+  isDimmed,
+  isKeyDimmed,
+  useDifferentialHover,
+} from "@/components/dashboard/matches/match-detail/differential-hover";
 import { EmptyMark } from "@/components/ui/empty-mark";
-import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import { surnameLabels } from "@/lib/data/match-utils";
 
 /**
@@ -54,7 +60,6 @@ export function signed(value: number): string {
   return "0";
 }
 
-type Side = "you" | "opp";
 type Half = "winners" | "unforcedErrors";
 
 /**
@@ -77,31 +82,13 @@ function NameRow({
   );
 }
 
-/** The card's hover/focus easing, as the head to head's figures use. */
-const EASE = "duration-200 ease-[var(--ease-primary)]";
-
 /** "1 winner", "18 winners". */
 function counted(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-/**
- * Whether one half of one player's bar (and its count) fades while `hovered`
- * is the target under the cursor: another half (`you-winners`), a figure
- * (`fig-you`, which keeps its own row lit) or a legend key (`key-winners`,
- * which keeps that kind lit for both players). Nothing hovered, nothing
- * fades.
- */
-export function isDimmed(
-  hovered: string | null,
-  side: Side,
-  half: Half,
-): boolean {
-  if (hovered === null) return false;
-  if (hovered.startsWith("key-")) return hovered !== `key-${half}`;
-  if (hovered.startsWith("fig-")) return hovered !== `fig-${side}`;
-  return hovered !== `${side}-${half}`;
-}
+/** Re-exported: the rule lives in `differential-hover.ts`, shared with the season card. */
+export { isDimmed };
 
 export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
   const { meta, actions } = useMatchReport();
@@ -110,27 +97,8 @@ export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
   const errorSplitJudged = useMatchFilters().context.errorSplitJudged === true;
   const youIsPlayer1 = sides.you.isPlayer1;
   const shouldReduceMotion = useReducedMotion();
-  const [hovered, setHovered] = useState<string | null>(null);
-  const cardRef = useTouchReadout<HTMLElement>(hovered !== null, () =>
-    setHovered(null),
-  );
-  const fingerTap = useFingerTap();
-
-  /**
-   * Hover, focus and tap wiring for a target that only reads — a figure or a
-   * legend key. A finger's tap selects it and the readout stays until a tap
-   * lands outside the card (`useTouchReadout`), as the bars' do.
-   */
-  const hoverTarget = (id: string) => ({
-    onPointerDown: (e: React.PointerEvent) => {
-      if (fingerTap.press(e, hovered === id)) setHovered(id);
-    },
-    onClick: () => fingerTap.click(undefined, () => setHovered(null)),
-    onMouseEnter: () => setHovered(id),
-    onMouseLeave: () => setHovered(null),
-    onFocus: () => setHovered(id),
-    onBlur: () => setHovered(null),
-  });
+  const { hovered, cardRef, fingerTap, clear, hoverTarget } =
+    useDifferentialHover();
 
   const { you, opp } = useMemo(
     () => ({
@@ -145,7 +113,7 @@ export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
   const errorLabel = errorSplitJudged ? "Unforced errors" : "Errors";
 
   const rows: {
-    id: Side;
+    id: OutcomeSide;
     name: string;
     otherName: string;
     winners: number;
@@ -276,8 +244,13 @@ export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
               watch,
               `${label}. ${row.name} ${count}, ${row.otherName} ${otherCount}.`,
             )}
+            // With no video to open the half still needs a role, or a screen
+            // reader drops its label: a button with nothing to click, as the
+            // figures and keys are.
+            role="button"
+            aria-disabled={watch ? undefined : "true"}
             {...hoverTarget(id)}
-            onClick={() => fingerTap.click(watch, () => setHovered(null))}
+            onClick={() => fingerTap.click(watch, clear)}
           >
             <SegmentTooltip
               open={hovered === id}
@@ -428,10 +401,7 @@ export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
             aria-label={`Highlight ${label.toLowerCase()} for both players`}
             className={`-mx-1 inline-flex cursor-default items-center gap-1.5 rounded-[var(--radius-cell)] border-0 bg-transparent px-1 transition-opacity ${EASE}`}
             style={{
-              opacity:
-                hovered?.startsWith("key-") && hovered !== `key-${kind}`
-                  ? HOVER_DIMMED
-                  : 1,
+              opacity: isKeyDimmed(hovered, kind) ? HOVER_DIMMED : 1,
             }}
             {...hoverTarget(`key-${kind}`)}
           >
