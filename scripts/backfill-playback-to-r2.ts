@@ -46,6 +46,7 @@ import { createClient } from "@supabase/supabase-js";
 import { videoContainerClient } from "../src/lib/services/splitstep/video-url";
 import { SAMPLE_VIDEO_BLOB } from "../src/lib/services/sample-match/video";
 import {
+  isNotFound,
   r2Client,
   requireR2Config,
 } from "../src/lib/services/video-storage/r2";
@@ -112,24 +113,23 @@ async function pendingKeys(db: ReturnType<typeof admin>): Promise<string[]> {
 }
 
 async function r2Size(key: string): Promise<number | null> {
-  const { bucket } = requireR2Config("write");
+  const config = requireR2Config("write");
   try {
-    const head = await r2Client(requireR2Config("write")).send(
-      new HeadObjectCommand({ Bucket: bucket, Key: key }),
+    const head = await r2Client(config).send(
+      new HeadObjectCommand({ Bucket: config.bucket, Key: key }),
     );
     return head.ContentLength ?? null;
   } catch (error) {
-    const status = (error as { $metadata?: { httpStatusCode?: number } })
-      .$metadata?.httpStatusCode;
-    if (status === 404) return null;
+    if (isNotFound(error)) return null;
     throw error;
   }
 }
 
 /** Azure → R2, part by part, every part's MD5 checked against R2's ETag. */
 async function copyToR2(key: string, size: number): Promise<void> {
-  const { bucket } = requireR2Config("write");
-  const s3 = r2Client(requireR2Config("write"));
+  const config = requireR2Config("write");
+  const { bucket } = config;
+  const s3 = r2Client(config);
   const blob = videoContainerClient().getBlockBlobClient(key);
   const { UploadId } = await s3.send(
     new CreateMultipartUploadCommand({

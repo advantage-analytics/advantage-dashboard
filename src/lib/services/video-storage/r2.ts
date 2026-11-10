@@ -190,9 +190,7 @@ export function presignR2Get(params: {
     hmac(hmac(hmac(`AWS4${config.secretAccessKey}`, day), "auto"), "s3"),
     "aws4_request",
   );
-  const signature = createHmac("sha256", signingKey)
-    .update(stringToSign)
-    .digest("hex");
+  const signature = hmac(signingKey, stringToSign).toString("hex");
   return `https://${host}${path}?${canonicalQuery}&X-Amz-Signature=${signature}`;
 }
 
@@ -250,7 +248,7 @@ export function r2Client(config: R2Config = requireR2Config()): S3Client {
   return client;
 }
 
-function isNotFound(error: unknown): boolean {
+export function isNotFound(error: unknown): boolean {
   const e = error as { name?: string; $metadata?: { httpStatusCode?: number } };
   return e?.name === "NotFound" || e?.$metadata?.httpStatusCode === 404;
 }
