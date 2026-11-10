@@ -580,8 +580,9 @@ export function VizLightboxShell({
   /* ── Advanced filters drawer ─────────────────────────────────────────── */
 
   // The Filters popover's "Advanced filters" row closes the popover and
-  // opens a 340px drawer inside the box (`lightbox-advanced-drawer.tsx`),
-  // with the rest of the box dimmed and inert. The phases are the report
+  // opens the advanced-filters sheet on the window's right edge, over the
+  // box (`lightbox-advanced-drawer.tsx`), with the window dimmed and the
+  // rest of the box inert. The phases are the report
   // rail's (`rail-state.ts`): the out animation keeps it drawn while
   // `"closing"`. Focus goes back to the Filters trigger on every close —
   // the trigger is the one way back in, and everything else was inert.

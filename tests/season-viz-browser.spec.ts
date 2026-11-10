@@ -593,7 +593,7 @@ test("Saved, a view's link: the page opens on Saved with the view's court; a wor
   await expect(page.getByText("No saved views yet.")).toBeVisible();
 });
 
-test("Advanced filters on the season: the drawer inside the box, the Video tab's panel without counts, and a Show reaches the server", async ({
+test("Advanced filters on the season: the sheet over the box, the Video tab's panel without counts, and a Show reaches the server", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -608,7 +608,7 @@ test("Advanced filters on the season: the drawer inside the box, the Video tab's
   await trigger.click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   await panel.getByRole("button", { name: /^Advanced filters/ }).click();
-  // The popover closes and the drawer opens inside the box, focus in it.
+  // The popover closes and the drawer opens over the box, focus in it.
   await expect(panel).toHaveCount(0);
   const drawer = serve.getByRole("complementary", {
     name: "Advanced filters",

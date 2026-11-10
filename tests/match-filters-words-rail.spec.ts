@@ -15,7 +15,6 @@ import {
 import {
   escClosesRail,
   filterRailReducer,
-  MATCH_REPORT_FRAME_ID,
 } from "@/components/dashboard/matches/match-detail/match-filters/rail-state";
 
 /**
@@ -194,29 +193,37 @@ test.describe("filters drawer placement", () => {
   );
   const read = (file: string) => readFileSync(path.join(dir, file), "utf8");
 
-  // `#match-report-pane` is the page's scroll container and overflows on a
-  // short viewport; a drawer positioned inside it scrolled away with the
-  // cards. It must portal into the frame, which is relative and never scrolls.
-  test("the drawer portals into the report frame, which is its relative anchor", () => {
+  // The panel holds a draft, so it is modal: a full-height sheet on the
+  // window's edge over the icon rail and header too. Inside
+  // `#match-report-pane` (a scroll container whose `@container` contains
+  // `fixed`) it would stop at the pane and scroll with the cards, so it
+  // portals to <body>.
+  test("the drawer is the shared sheet, portalled to <body> and fixed to the window", () => {
     const rail = read("match-filters/filter-rail.tsx");
-    expect(rail).toContain("createPortal(shell, host)");
-    expect(rail).toContain("document.getElementById(MATCH_REPORT_FRAME_ID)");
+    expect(rail).toContain("createPortal(shell, document.body)");
+    expect(rail).toContain("FILTER_SHEET_CLASS");
+    expect(rail).toContain("wrapTabInSheet");
+    expect(rail).toContain("inertPageBehind(");
+    expect(rail).toContain('aria-modal="true"');
 
-    const report = read("match-report.tsx");
-    expect(report).toMatch(
-      /id=\{MATCH_REPORT_FRAME_ID\}\s*className="relative /,
-    );
-    expect(MATCH_REPORT_FRAME_ID).toBe("match-report-frame");
+    const sheet = read("match-filters/filter-sheet.ts");
+    expect(sheet).toMatch(/FILTER_SHEET_CLASS =\s*"fixed inset-y-0 right-0 /);
+    expect(sheet).toMatch(/FILTER_SHEET_SCRIM_CLASS =\s*"fixed inset-0 /);
+
+    // The Visualizations lightbox opens the same sheet.
+    const lightbox = read("shots/lightbox-advanced-drawer.tsx");
+    expect(lightbox).toContain("FILTER_SHEET_CLASS");
+    expect(lightbox).toContain("FILTER_SHEET_SCRIM_CLASS");
   });
 
-  // The report dims behind the open drawer under the Dialog scrim, which
-  // closes it on click and lets clicks through while it fades out.
-  test("the drawer dims the report behind it; the dim closes it", () => {
+  // The whole window dims behind the open drawer under the peek drawers'
+  // wash, which closes it on click and lets clicks through while it fades.
+  test("the drawer dims the window behind it; the dim closes it", () => {
     const rail = read("match-filters/filter-rail.tsx");
     expect(rail).toContain('data-testid="filter-rail-scrim"');
-    expect(rail).toContain("bg-[rgba(13,13,13,0.4)]");
+    expect(read("match-filters/filter-sheet.ts")).toContain("bg-black/20");
     expect(rail).toMatch(/onClick=\{close\}/);
-    expect(rail).toMatch(/closing\s*\?\s*"pointer-events-none/);
+    expect(rail).toMatch(/closing && "pointer-events-none opacity-0"/);
   });
 
   // The drawer focuses its own container on open; the Video tab's
