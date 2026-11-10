@@ -65,6 +65,20 @@ async function harness() {
       status,
       jobId,
     ]);
+  // A live job on ANOTHER match whose lineage points at `from`.
+  const insertForeignJob = async (jobId, from) => {
+    await db.query(
+      "insert into matches(id,created_by,match_type) values($1,$2,'Singles')",
+      [id(21), id(2)],
+    );
+    await insertJob(jobId, id(21), from, "processing");
+  };
+  const analysisMethod = async (matchId) =>
+    (
+      await db.query("select analysis_method from matches where id=$1", [
+        matchId,
+      ])
+    ).rows[0].analysis_method;
   const reconcile = (op) =>
     db.query(
       "select admin_reconcile_submission_item($1,$2,$3,'abandon') as data",
@@ -77,7 +91,16 @@ async function harness() {
         [id(op), id(op + 1)],
       )
     ).rows[0];
-  return { db, submit, insertJob, setStatus, reconcile, item };
+  return {
+    db,
+    submit,
+    insertJob,
+    insertForeignJob,
+    analysisMethod,
+    setStatus,
+    reconcile,
+    item,
+  };
 }
 
 const refuse = (fn, message) =>
@@ -105,21 +128,11 @@ test("abandon refuses while a resubmission of the reserved job is live", async (
     }
     // Nothing moved.
     assert.equal((await h.item(300)).status, "succeeded");
-    const kept = (
-      await h.db.query(
-        "select analysis_method,source_provider from matches where id=$1",
-        [match],
-      )
-    ).rows[0];
-    assert.equal(kept.analysis_method, "ai");
+    assert.equal(await h.analysisMethod(match), "ai");
 
     // A live job on ANOTHER match with lineage to the reserved job is not a
     // descendant on this match.
-    await h.db.query(
-      "insert into matches(id,created_by,match_type) values($1,$2,'Singles')",
-      [id(21), id(2)],
-    );
-    await h.insertJob(id(510), id(21), reserved, "processing");
+    await h.insertForeignJob(id(510), reserved);
 
     // Once the grandchild is terminal, abandon goes through (the other
     // terminal states are covered below).
@@ -128,12 +141,7 @@ test("abandon refuses while a resubmission of the reserved job is live", async (
     assert.equal(done.jobId, reserved);
     assert.equal((await h.item(300)).status, "failed");
     assert.equal((await h.item(300)).error_code, "abandoned");
-    const after = (
-      await h.db.query("select analysis_method from matches where id=$1", [
-        match,
-      ])
-    ).rows[0];
-    assert.equal(after.analysis_method, "manual");
+    assert.equal(await h.analysisMethod(match), "manual");
   } finally {
     await h.db.close();
   }
@@ -216,11 +224,7 @@ test("the console item mirrors the newest job of the reserved job's chain", asyn
     assert.equal((await state()).stateJobId, id(501));
 
     // A job on another match naming the reserved job never speaks for it.
-    await h.db.query(
-      "insert into matches(id,created_by,match_type) values($1,$2,'Singles')",
-      [id(21), id(2)],
-    );
-    await h.insertJob(id(510), id(21), reserved, "processing");
+    await h.insertForeignJob(id(510), reserved);
     assert.equal((await state()).stateJobId, id(501));
 
     // The item stays succeeded throughout.
