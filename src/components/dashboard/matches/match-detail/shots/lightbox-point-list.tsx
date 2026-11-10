@@ -1,5 +1,6 @@
 "use client";
 
+import { prefersReducedMotion } from "./use-reduced-motion";
 import { memo, useEffect, useMemo, useRef } from "react";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { pointResultLabel } from "@/components/dashboard/matches/match-detail/match-filters/model";
@@ -81,9 +82,7 @@ export const LightboxPointList = memo(function LightboxPointList({
       ?.querySelector(`[data-point-id="${CSS.escape(selectedPointId)}"]`)
       ?.scrollIntoView({
         block: "nearest",
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth",
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
       });
   }, [selectedPointId]);
 

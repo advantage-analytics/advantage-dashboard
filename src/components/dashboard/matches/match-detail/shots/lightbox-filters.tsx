@@ -357,7 +357,7 @@ export function LightboxFilterPanel({
 }
 
 /** The Advanced filters row's quiet line: what it holds, or what is in it. */
-export function advancedSummary(match: MatchFilters): string {
+function advancedSummary(match: MatchFilters): string {
   const n = activeFilterCount(match);
   return n === 0 ? "Score, return, result…" : `${n} applied`;
 }

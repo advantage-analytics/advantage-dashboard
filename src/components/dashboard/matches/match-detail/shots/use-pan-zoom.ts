@@ -27,6 +27,7 @@ import {
   type PanZoom,
   type Size,
 } from "./pan-zoom";
+import { prefersReducedMotion } from "./use-reduced-motion";
 import type { Cut } from "./viz-model";
 
 /**
@@ -202,10 +203,7 @@ export function usePanZoom(
       cancelGlide();
       const from = tRef.current;
       const to = centreOn(point, Math.max(from.z, minZ), ART, stage);
-      const reduced =
-        typeof window !== "undefined" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (reduced) {
+      if (prefersReducedMotion()) {
         setT(to);
         return;
       }

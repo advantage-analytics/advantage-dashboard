@@ -45,18 +45,19 @@ import {
 } from "./court-geometry";
 import type { PanZoom } from "./pan-zoom";
 import { LIGHTBOX_BOX_CLASS } from "./lightbox-frame";
+import { prefersReducedMotion } from "./use-reduced-motion";
 
 /** Open: the arrival curve and length (`animate.md`: 300–500ms for an
  *  overlay, ease-out-expo-like for arrivals). */
-export const COURT_MORPH_OPEN_MS = 380;
+const COURT_MORPH_OPEN_MS = 380;
 const OPEN_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 /** The copy's fade once the lightbox's own court is revealed under it. */
 const SETTLE_MS = 100;
 /** Close: faster than the open, a standard ease-in-out. */
-export const COURT_MORPH_CLOSE_MS = 240;
+const COURT_MORPH_CLOSE_MS = 240;
 export const COURT_MORPH_CLOSE_EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
 /** Reduced motion's close: the fade-in's own length (tw-animate's 150ms). */
-export const COURT_MORPH_REDUCED_CLOSE_MS = 150;
+const COURT_MORPH_REDUCED_CLOSE_MS = 150;
 /** How long the copy waits on a lightbox that never shows up. */
 const TARGET_WAIT_MS = 2500;
 
@@ -111,13 +112,6 @@ interface OpenFlight {
 let opened: Source | null = null;
 let flight: OpenFlight | null = null;
 let closing: { ghost: Ghost; timer: number } | null = null;
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
 
 function canAnimate(): boolean {
   return (

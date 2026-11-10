@@ -200,7 +200,7 @@ function emptyCourt(
 }
 
 /** A match's Video tab on one point, named by `label` in its strip. */
-export function seasonWatchHref(
+function seasonWatchHref(
   matchId: string,
   pointNumber: number,
   label: string,

@@ -14,6 +14,11 @@ function getReducedMotionSnapshot(): boolean {
   return window.matchMedia(REDUCED_MOTION_QUERY).matches;
 }
 
+/** Non-hook read for event handlers and effects (SSR-safe). */
+export function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && getReducedMotionSnapshot();
+}
+
 function getReducedMotionServerSnapshot(): boolean {
   return false;
 }
