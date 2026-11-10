@@ -229,26 +229,26 @@ async function markInR2(
 
 /** Delete every queued R2 playback copy, confirming each is gone. */
 async function drainDeletes(db: ReturnType<typeof admin>) {
+  if (!APPLY) {
+    const { data, error } = await db
+      .from("r2_pending_deletes")
+      .select("object_key, queued_by, attempts")
+      .order("queued_at");
+    if (error) throw new Error(`Could not read the queue: ${error.message}`);
+    for (const r of data ?? []) {
+      console.log(
+        `  queued: ${r.object_key} (${r.queued_by}, ${r.attempts} attempt(s))`,
+      );
+    }
+    console.log(
+      `${data?.length ?? 0} queued. Dry run: re-run with --apply to delete.`,
+    );
+    return;
+  }
   const write = requireR2Config("write");
   const s3 = r2Client(write);
   let total = 0;
   for (;;) {
-    if (!APPLY) {
-      const { data, error } = await db
-        .from("r2_pending_deletes")
-        .select("object_key, queued_by, attempts")
-        .order("queued_at");
-      if (error) throw new Error(`Could not read the queue: ${error.message}`);
-      for (const r of data ?? []) {
-        console.log(
-          `  queued: ${r.object_key} (${r.queued_by}, ${r.attempts} attempt(s))`,
-        );
-      }
-      console.log(
-        `${data?.length ?? 0} queued. Dry run: re-run with --apply to delete.`,
-      );
-      return;
-    }
     const keys = await claimR2Deletes(db, 50);
     if (keys.length === 0) break;
     for (const Key of keys) {

@@ -376,10 +376,11 @@ export async function purgeMatchStorage(
         // unshared playback key is queued; deleting an absent object is a
         // no-op. Only keys of rows marked R2 are worth an alarm if queueing
         // fails.
+        const blobNameSet = new Set(blobNames);
         const playbackRows = (jobs ?? []).filter(
           (j) =>
             j.playback_object_key &&
-            blobNames.includes(j.playback_object_key as string),
+            blobNameSet.has(j.playback_object_key as string),
         );
         const r2Keys = [
           ...new Set(playbackRows.map((j) => j.playback_object_key as string)),

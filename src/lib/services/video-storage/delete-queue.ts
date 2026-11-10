@@ -81,27 +81,27 @@ export async function confirmR2Deletes(
   keys: string[],
   exists: (key: string) => Promise<boolean>,
 ): Promise<{ removed: number; remaining: number }> {
-  let removed = 0;
-  let remaining = 0;
-  for (const key of new Set(keys.filter(isPlaybackCopyKey))) {
-    let present: boolean;
-    try {
-      present = await exists(key);
-    } catch {
-      remaining += 1;
-      continue;
-    }
-    if (present) {
-      remaining += 1;
-      await db
-        .from(TABLE)
-        .update({ last_error: "still present after the drainer's delete" })
-        .eq("object_key", key);
-      continue;
-    }
-    const { error } = await db.from(TABLE).delete().eq("object_key", key);
-    if (error) remaining += 1;
-    else removed += 1;
-  }
+  // At most one claim's worth of keys, so the HEADs run side by side.
+  const outcomes = await Promise.all(
+    [...new Set(keys.filter(isPlaybackCopyKey))].map(async (key) => {
+      let present: boolean;
+      try {
+        present = await exists(key);
+      } catch {
+        return false;
+      }
+      if (present) {
+        await db
+          .from(TABLE)
+          .update({ last_error: "still present after the drainer's delete" })
+          .eq("object_key", key);
+        return false;
+      }
+      const { error } = await db.from(TABLE).delete().eq("object_key", key);
+      return !error;
+    }),
+  );
+  const removed = outcomes.filter(Boolean).length;
+  const remaining = outcomes.length - removed;
   return { removed, remaining };
 }
