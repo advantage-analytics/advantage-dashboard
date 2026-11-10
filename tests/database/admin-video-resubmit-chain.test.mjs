@@ -123,6 +123,31 @@ test("a resubmission of a console-reserved video job is not a competing analysis
     await as("authenticated");
     await refuse(() => setStatus(id(506), "cancelled"));
 
+    // A client on a lineage child may cancel and nothing else, and may give
+    // the lineage up but never point it anywhere — not even in a write of
+    // its own that leaves status alone, then a cancel against it.
+    await as("service_role");
+    await insertJob(id(508), reserved);
+    await setStatus(id(508), "failed");
+    const setLineage = (jobId, from, status = null) =>
+      db.query(
+        "update processing_jobs set resubmitted_from_job_id=$1, status=coalesce($3,status) where id=$2",
+        [from, jobId, status],
+      );
+    await as("authenticated");
+    await refuse(() => setStatus(id(508), "uploaded"));
+    await refuse(() => setStatus(id(508), "queued"));
+    await refuse(() => setLineage(id(508), null, "uploaded"));
+    await refuse(() => setLineage(id(508), id(500)));
+    await setLineage(id(508), null);
+    await refuse(() => setLineage(id(508), reserved));
+    await refuse(() => setStatus(id(508), "cancelled"));
+    // The server may restore it; then the client's cancel stands again.
+    await as("service_role");
+    await setLineage(id(508), reserved);
+    await as("authenticated");
+    await setStatus(id(508), "cancelled");
+
     // A spreadsheet on a video-reserved match is still refused.
     await as("service_role");
     await refuse(() =>
@@ -139,7 +164,7 @@ test("a resubmission of a console-reserved video job is not a competing analysis
         [match],
       )
     ).rows[0].n;
-    assert.equal(onMatch, 5);
+    assert.equal(onMatch, 6);
   } finally {
     await db.close();
   }
