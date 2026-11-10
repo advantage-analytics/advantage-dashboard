@@ -1,18 +1,21 @@
 "use client";
 
-import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import {
+  isDimmed,
+  useDifferentialHover,
+} from "@/components/dashboard/matches/match-detail/differential-hover";
 import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import {
   HOVER_DIMMED,
+  type OutcomeSide,
   segmentMotion,
   SegmentTooltip,
 } from "@/components/dashboard/matches/match-detail/point-endings-body";
 import { SEASON_OPPONENTS_LABEL } from "@/components/dashboard/team/player-profile/season-head-to-head-card";
 import { EmptyMark } from "@/components/ui/empty-mark";
-import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import { surname } from "@/lib/data/match-utils";
 import type { SeasonOutcomes } from "@/lib/data/player-season";
 
@@ -50,25 +53,7 @@ const HEADING_ID = "season-differential-heading";
 /** The card's hover/focus easing, as the report's card uses. */
 const EASE = "duration-200 ease-[var(--ease-primary)]";
 
-type Side = "you" | "opp";
 type Half = "winners" | "errors";
-
-/**
- * Whether one half of one row fades while `hovered` is under the cursor — the
- * report card's `isDimmed`: another half (`you-winners`), a figure (`fig-you`,
- * which keeps its own row lit) or a legend key (`key-winners`, which keeps
- * that kind lit on both rows). Nothing hovered, nothing fades.
- */
-export function isSeasonDimmed(
-  hovered: string | null,
-  side: Side,
-  half: Half,
-): boolean {
-  if (hovered === null) return false;
-  if (hovered.startsWith("key-")) return hovered !== `key-${half}`;
-  if (hovered.startsWith("fig-")) return hovered !== `fig-${side}`;
-  return hovered !== `${side}-${half}`;
-}
 
 /** "+3.3", "−1.2" (a true minus), "0.0" — one decimal, as a count row. */
 export function signedPerMatch(value: number): string {
@@ -109,30 +94,10 @@ export function SeasonDifferentialCard({
   const errorLabel = outcomes.errorSplitJudged ? "Unforced errors" : "Errors";
   const name = surname(playerName);
   const shouldReduceMotion = useReducedMotion();
-  const [hovered, setHovered] = useState<string | null>(null);
-  const cardRef = useTouchReadout<HTMLElement>(hovered !== null, () =>
-    setHovered(null),
-  );
-  const fingerTap = useFingerTap();
-
-  /**
-   * Hover, focus and tap wiring for every target — a bar half, a figure or a
-   * legend key. A finger's tap selects it and the readout stays until a tap
-   * lands outside the card (`useTouchReadout`), as the report's card does.
-   */
-  const hoverTarget = (id: string) => ({
-    onPointerDown: (e: React.PointerEvent) => {
-      if (fingerTap.press(e, hovered === id)) setHovered(id);
-    },
-    onClick: () => fingerTap.click(undefined, () => setHovered(null)),
-    onMouseEnter: () => setHovered(id),
-    onMouseLeave: () => setHovered(null),
-    onFocus: () => setHovered(id),
-    onBlur: () => setHovered(null),
-  });
+  const { hovered, cardRef, hoverTarget } = useDifferentialHover();
 
   const rows: {
-    id: Side;
+    id: OutcomeSide;
     name: string;
     otherName: string;
     winners: number;
@@ -223,16 +188,13 @@ export function SeasonDifferentialCard({
   }
 
   /** One half of one row's bar: errors (left of zero) or winners (right). */
-  const half = (
-    row: (typeof rows)[number],
-    key: Half,
-    value: number,
-    otherValue: number,
-    fill: string,
-    label: string,
-  ) => {
+  const half = (row: (typeof rows)[number], key: Half) => {
     const id = `${row.id}-${key}`;
     const left = key === "errors";
+    const value = left ? row.errors : row.winners;
+    const otherValue = left ? row.otherErrors : row.otherWinners;
+    const fill = left ? row.errorsFill : row.winnersFill;
+    const label = left ? errorLabel : "Winners";
     const share = (value / scale) * 100;
     return (
       <div className={`flex min-w-0 flex-1 ${left ? "justify-end" : ""}`}>
@@ -248,10 +210,14 @@ export function SeasonDifferentialCard({
             }}
             {...segmentMotion(
               share,
-              isSeasonDimmed(hovered, row.id, key),
+              isDimmed(hovered, row.id, key),
               shouldReduceMotion,
             )}
             tabIndex={0}
+            // A button with nothing to click, as the figures and keys are:
+            // without a role a screen reader drops the label.
+            role="button"
+            aria-disabled="true"
             aria-label={`${label} per match. ${row.name} ${value.toFixed(1)}, ${row.otherName} ${otherValue.toFixed(1)}.`}
             {...hoverTarget(id)}
           >
@@ -335,22 +301,8 @@ export function SeasonDifferentialCard({
             </div>
 
             <div className="flex h-2.5 w-full gap-0.5">
-              {half(
-                row,
-                "errors",
-                row.errors,
-                row.otherErrors,
-                row.errorsFill,
-                errorLabel,
-              )}
-              {half(
-                row,
-                "winners",
-                row.winners,
-                row.otherWinners,
-                row.winnersFill,
-                "Winners",
-              )}
+              {half(row, "errors")}
+              {half(row, "winners")}
             </div>
 
             <div
@@ -361,7 +313,7 @@ export function SeasonDifferentialCard({
               <span
                 className={`min-w-0 flex-1 pr-1.5 text-right transition-opacity ${EASE}`}
                 style={{
-                  opacity: isSeasonDimmed(hovered, row.id, "errors")
+                  opacity: isDimmed(hovered, row.id, "errors")
                     ? HOVER_DIMMED
                     : 1,
                 }}
@@ -371,7 +323,7 @@ export function SeasonDifferentialCard({
               <span
                 className={`min-w-0 flex-1 pl-1.5 transition-opacity ${EASE}`}
                 style={{
-                  opacity: isSeasonDimmed(hovered, row.id, "winners")
+                  opacity: isDimmed(hovered, row.id, "winners")
                     ? HOVER_DIMMED
                     : 1,
                 }}
