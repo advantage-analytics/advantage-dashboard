@@ -172,9 +172,18 @@ export const H2H_GROUP_SHAPE = [
 /**
  * The rows the match report leaves off its own table (`withoutShotKindRows`:
  * Lob points won, Drop shot points won), both in the Points group. The team
- * player profile's season card draws them.
+ * player profile's season card draws them. Kept as a number so this chunk
+ * does not import the row configs; `tests/differential-card.spec.ts` pins it
+ * to the filter.
+ *
+ * The report's Points group then draws 8 rows, the count for a match whose
+ * errors are not yet split forced/unforced (one Errors row). A judged match
+ * draws 9 and grows by one row when it lands. The skeleton renders before the
+ * match is known, and the two kinds are an even split of analysed matches
+ * (48 judged, 47 not, 2026-11-09), so it is sized for the unjudged one: the
+ * video-analysed matches, where new matches come from.
  */
-const REPORT_OMITTED_POINT_ROWS = 2;
+export const REPORT_OMITTED_POINT_ROWS = 2;
 
 /**
  * `HeadToHeadTable`'s anatomy: the eyebrow and the group labels are known

@@ -98,6 +98,12 @@ export interface H2HRowConfig {
   plusKey?: H2HStatKey;
   /** The LOWER number is the better one — double faults, unforced errors. */
   lowerIsBetter?: boolean;
+  /**
+   * A count of attempts, where more is neither better nor worse: no figure
+   * is emphasised as leading (Net point attempts, Approach attempts — more
+   * approaches is a style, not a win).
+   */
+  noLeader?: boolean;
   /** Why a keyless row can never carry a value. */
   note?: string;
   /**
@@ -289,6 +295,7 @@ export const POINT_ROWS: H2HRowConfig[] = [
   {
     label: "Net point attempts",
     fromPoints: "netAttempts",
+    noLeader: true,
     cut: { netBy: "either" },
     sideBy: "net",
     noun: "net points",
@@ -309,6 +316,7 @@ export const POINT_ROWS: H2HRowConfig[] = [
     // attempts sits over Net points won. A cell's cut is every one of them.
     label: "Approach attempts",
     fromPoints: "approachAttempts",
+    noLeader: true,
     cut: { netBy: "either", netEntry: "approach" },
     sideBy: "net",
     noun: "approach points",
@@ -610,10 +618,11 @@ export function statDisplay(
  * lead.
  */
 export function rowLeader(
-  config: Pick<H2HRowConfig, "lowerIsBetter">,
+  config: Pick<H2HRowConfig, "lowerIsBetter" | "noLeader">,
   you: number | null,
   opp: number | null,
 ): "you" | "opp" | null {
+  if (config.noLeader) return null;
   if (you === null || opp === null) return null;
   if (you === opp) return null;
   const youAhead = config.lowerIsBetter ? you < opp : you > opp;
