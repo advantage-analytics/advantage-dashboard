@@ -7,7 +7,7 @@ import { setup, id } from "./fixtures/admin-video-harness.mjs";
 const migrations = [
   "20261110013000_admin_video_allow_resubmit_chain.sql",
   "20261110063746_admin_video_resubmit_chain_console.sql",
-  "20261110140000_admin_video_console_followups.sql",
+  "20261110074526_admin_video_console_followups.sql",
 ];
 const load = async (db, name) =>
   db.exec(
