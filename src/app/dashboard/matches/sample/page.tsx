@@ -225,7 +225,7 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
                   <MatchReportWhen view="shots">
                     <ShotsTab />
                   </MatchReportWhen>
-                  <MatchReportWhen view="film" scrollsInside>
+                  <MatchReportWhen view="film">
                     {/* `NO_FILM_ENTRY`: no Add / Replace / Align for a clip
                         that is nobody's. Points come from `MatchDataProvider`. */}
                     <FilmTab

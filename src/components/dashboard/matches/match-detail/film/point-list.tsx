@@ -1443,8 +1443,12 @@ function EmptyList({
 /** The zero state's paint, per tone. The copy above is the same in both. */
 const EMPTY_TONE = {
   light: {
-    // Centred in the card (the approved "States" frame).
-    root: "flex flex-col items-center gap-1.5 px-7 pt-[22px] pb-6 text-center",
+    // Centred in the card, both ways (the approved "States" frame, and
+    // since 2026-11-09 vertically too): the card now keeps the column's
+    // full height when empty, and a message pinned under the header left
+    // the rest of it reading as unfinished. Stacked, the card is as tall
+    // as this block, so `flex-1` adds nothing there.
+    root: "flex flex-1 flex-col items-center justify-center gap-1.5 px-7 pt-[22px] pb-6 text-center",
     title: "text-[13px] text-[var(--ink-900)]",
     body: "max-w-[40ch] text-[11px] leading-[1.55]",
     bodyStyle: { color: "var(--ink-500)" } as const,

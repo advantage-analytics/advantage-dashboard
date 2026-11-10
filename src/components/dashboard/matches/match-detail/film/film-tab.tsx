@@ -1163,8 +1163,7 @@ function FilmRoom({
     // under it, the point list beside them in a fixed 320px column (the
     // room's own panel width) running the pane's full height, so finding a
     // point, watching it and reading its shots happen side by side. The view
-    // takes the pane's height (`min-h-0 flex-1`, handed down by `When
-    // scrollsInside`); the list column is a stretched flex item with no
+    // fills the pane's height (`flex-1`); the list column is a stretched flex item with no
     // content height of its own — its card is absolutely positioned inside
     // it — so it inherits that height and its rows scroll within the card.
     // Under 720px of pane (the `@container` breakpoint `statistics-view.tsx`
@@ -1173,7 +1172,11 @@ function FilmRoom({
     // shrinkable `flex-1` beside a list hundreds of rows tall it was squeezed
     // to nothing, and "This point" with it (0–20px at 1024×768). The pane
     // (`@container … overflow-y-auto`) scrolls what no longer fits.
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    // No `min-h-0` here, on the row below or on the panel above
+    // (`MatchReportWhen`): the three fill the pane and grow together when
+    // the window is too short for their content, which keeps the pane's
+    // bottom padding under the last card at every width.
+    <div className="flex flex-1 flex-col gap-4">
       {/* SwingVision Add video T10 (canvas frame ExpiryNotice): full width,
           above the player and the point list, in the last 30 days before an
           unwatched attachment expires. Keyed on the attachment so a
@@ -1198,12 +1201,12 @@ function FilmRoom({
       />
       <div
         ref={clockRef}
-        // Side by side the row may not shrink under the player column's
-        // content (`min-h-auto`): "This point" has a floor, and when the
-        // window is too short for it the row grows past the pane — which
-        // scrolls — and the point list, stretched to the row, grows with it,
-        // so the two columns always end on the same line.
-        className="flex min-h-0 flex-1 flex-col gap-4 @min-[720px]:min-h-auto @min-[720px]:flex-row"
+        // The row never shrinks under the player column's content: "This
+        // point" has a floor, and when the window is too short for it the
+        // row grows past the pane — which scrolls — and the point list,
+        // stretched to the row, grows with it, so the two columns always
+        // end on the same line.
+        className="flex flex-1 flex-col gap-4 @min-[720px]:flex-row"
       >
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 @max-[720px]:flex-none">
           {/* Above the player and right-aligned: maintenance for the person who

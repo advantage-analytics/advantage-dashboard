@@ -234,7 +234,7 @@ export default async function AdminMatchReportPage({
                       <ShotsTab />
                     </MatchReportWhen>
                     {video && (
-                      <MatchReportWhen view="film" scrollsInside>
+                      <MatchReportWhen view="film">
                         <FilmTab
                           video={video}
                           unit={unit}
