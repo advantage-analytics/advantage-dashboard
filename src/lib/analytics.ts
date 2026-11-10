@@ -87,7 +87,10 @@ export function secondsSince(startMs: number, nowMs = Date.now()): number {
 /**
  * Error text safe to send: the message only, cut short. Upload errors carry
  * Azure SAS URLs (signed credentials) and Supabase detail, so anything that
- * looks like a URL is dropped before it leaves the browser.
+ * looks like a URL is dropped before it leaves the browser. A signature can
+ * also turn up without its URL — a query string quoted on its own — so the
+ * credential parameters of an Azure SAS (`sig`) and an R2 presigned URL
+ * (`X-Amz-Signature`, `X-Amz-Credential`) are dropped wherever they appear.
  */
 export function safeErrorMessage(error: unknown): string {
   const raw =
@@ -96,7 +99,13 @@ export function safeErrorMessage(error: unknown): string {
       : typeof error === "string"
         ? error
         : "unknown";
-  return raw.replace(/https?:\/\/\S+/g, "[url]").slice(0, 200);
+  return raw
+    .replace(/https?:\/\/\S+/g, "[url]")
+    .replace(
+      /\b(sig|X-Amz-Signature|X-Amz-Credential)=[^&\s]+/gi,
+      "$1=[redacted]",
+    )
+    .slice(0, 200);
 }
 
 // -- Navigation ------------------------------------------------------------

@@ -17,6 +17,9 @@
  *   vendor's 7-day link expires. Older jobs, and any whose copy missed, have
  *   none. It can be silent.
  *
+ * The playback copy may live in R2 (`playback_store = 'r2'`, since November
+ * 2026) and is checked and signed there; the other two are always in Azure.
+ *
  * ── The clock ───────────────────────────────────────────────────────────────
  * `points.video_time` is seconds into the file the vendor analysed, plus the
  * job's `start_time_seconds` (added at ingest). So:
@@ -27,6 +30,11 @@
  *   offset to subtract.
  */
 
+import {
+  storeOf,
+  type VideoStore,
+} from "@/lib/services/video-storage/store-of";
+
 export interface PlaybackJobRow {
   video_object_key: string | null;
   trimmed_object_key: string | null;
@@ -34,14 +42,18 @@ export interface PlaybackJobRow {
   /** Absent on a loader that does not read them: no copy. */
   playback_object_key?: string | null;
   playback_status?: string | null;
+  /** `r2`, or `azure` / null (Azure). */
+  playback_store?: string | null;
 }
 
 /** The columns `choosePlaybackFile` reads, for a loader's select. */
 export const PLAYBACK_JOB_COLUMNS =
-  "video_object_key, trimmed_object_key, start_time_seconds, playback_object_key, playback_status";
+  "video_object_key, trimmed_object_key, start_time_seconds, playback_object_key, playback_status, playback_store";
 
 export interface PlaybackChoice {
   blobName: string;
+  /** Where {@link blobName} lives: sign and check it there. */
+  store: VideoStore;
   /** Seconds to subtract from `points.video_time` to seek in this file. */
   startTimeSeconds: number;
   source: "playback" | "upload" | "vendor-copy";
@@ -60,17 +72,28 @@ export interface PlaybackChoice {
  */
 export async function choosePlaybackFile(
   jobs: PlaybackJobRow[],
-  blobExists: (blobName: string) => Promise<boolean>,
+  blobExists: (blobName: string, store: VideoStore) => Promise<boolean>,
   prefer: PlaybackChoice["source"] = "upload",
 ): Promise<PlaybackChoice | null> {
   for (const job of jobs) {
-    const copyKey = playbackCopyFor(job, jobs);
-    if (copyKey && (await blobExists(copyKey))) {
-      return {
-        blobName: copyKey,
-        startTimeSeconds: 0,
-        source: "playback",
-      };
+    const copy = playbackCopyFor(job, jobs);
+    if (copy) {
+      // A copy in R2 that R2 cannot confirm (an outage, a bad token, a copy
+      // not yet backfilled) is looked for in Azure under the same key before
+      // anything else: a backfilled copy is still there, and it plays far
+      // better than the raw upload.
+      for (const store of copy.store === "r2"
+        ? (["r2", "azure"] as const)
+        : (["azure"] as const)) {
+        if (await blobExists(copy.key, store)) {
+          return {
+            blobName: copy.key,
+            store,
+            startTimeSeconds: 0,
+            source: "playback",
+          };
+        }
+      }
     }
     const vendorCopy = job.trimmed_object_key
       ? vendorCopyChoice(job.trimmed_object_key, job.start_time_seconds)
@@ -78,13 +101,17 @@ export async function choosePlaybackFile(
     if (
       prefer === "vendor-copy" &&
       vendorCopy &&
-      (await blobExists(vendorCopy.blobName))
+      (await blobExists(vendorCopy.blobName, "azure"))
     ) {
       return vendorCopy;
     }
-    if (job.video_object_key && (await blobExists(job.video_object_key))) {
+    if (
+      job.video_object_key &&
+      (await blobExists(job.video_object_key, "azure"))
+    ) {
       return {
         blobName: job.video_object_key,
+        store: "azure",
         startTimeSeconds: 0,
         source: "upload",
       };
@@ -105,19 +132,25 @@ export async function choosePlaybackFile(
 function playbackCopyFor(
   job: PlaybackJobRow,
   jobs: PlaybackJobRow[],
-): string | null {
-  const own = readyCopyKey(job);
+): { key: string; store: VideoStore } | null {
+  const own = readyCopy(job);
   if (own || !job.video_object_key) return own;
   for (const other of jobs) {
     if (other.video_object_key !== job.video_object_key) continue;
-    const shared = readyCopyKey(other);
+    const shared = readyCopy(other);
     if (shared) return shared;
   }
   return null;
 }
 
-function readyCopyKey(row: PlaybackJobRow): string | null {
-  return (row.playback_status === "ready" && row.playback_object_key) || null;
+function readyCopy(
+  row: PlaybackJobRow,
+): { key: string; store: VideoStore } | null {
+  if (row.playback_status !== "ready" || !row.playback_object_key) return null;
+  return {
+    key: row.playback_object_key,
+    store: storeOf(row.playback_store),
+  };
 }
 
 function vendorCopyChoice(
@@ -127,6 +160,7 @@ function vendorCopyChoice(
   const start = Number(startTimeSeconds ?? 0);
   return {
     blobName,
+    store: "azure",
     startTimeSeconds: Number.isFinite(start) && start > 0 ? start : 0,
     source: "vendor-copy",
   };

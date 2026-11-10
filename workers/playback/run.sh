@@ -16,17 +16,35 @@
 # time, frame count and duration as the upload, or nothing is uploaded.
 #
 # The upload itself is never touched. Results go to the app's
-# /api/video/playback, signed with PLAYBACK_CALLBACK_SECRET (HMAC-SHA256 of
+# /api/webhooks/playback, signed with PLAYBACK_CALLBACK_SECRET (HMAC-SHA256 of
 # the body, hex, in x-playback-signature), which writes processing_jobs.
 #
+# Where the copy goes: Cloudflare R2 when R2_BUCKET_VIDEOS is set, since R2 charges
+# nothing for the downloads every viewer makes (docs/r2-video-storage-plan.md);
+# Azure, as before, when it is not. The `ready` report names the store.
+#
 # Environment: AZURE_CLIENT_ID (the job's user-assigned identity), STORAGE_ACCOUNT,
-# STORAGE_CONTAINER, QUEUE_NAME, CALLBACK_URL, PLAYBACK_CALLBACK_SECRET.
+# STORAGE_CONTAINER, QUEUE_NAME, CALLBACK_URL, PLAYBACK_CALLBACK_SECRET; for R2,
+# R2_ACCOUNT_ID, R2_BUCKET_VIDEOS, R2_WRITE_ACCESS_KEY_ID,
+# R2_WRITE_SECRET_ACCESS_KEY (the write token, scoped to that one bucket).
 set -euo pipefail
 
 : "${STORAGE_ACCOUNT:?}" "${STORAGE_CONTAINER:?}" "${QUEUE_NAME:?}"
 : "${CALLBACK_URL:?}" "${PLAYBACK_CALLBACK_SECRET:?}"
 WORK="${WORK:-/tmp/playback}"
 MAX_ATTEMPTS=3
+STORE=azure
+if [[ -n "${R2_BUCKET_VIDEOS:-}" ]]; then
+  : "${R2_ACCOUNT_ID:?}" "${R2_WRITE_ACCESS_KEY_ID:?}" "${R2_WRITE_SECRET_ACCESS_KEY:?}"
+  STORE=r2
+  # rclone reads its remote from the environment: nothing on disk, nothing in
+  # argv where `ps` could show the secret.
+  export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+    RCLONE_CONFIG_R2_ACCESS_KEY_ID="$R2_WRITE_ACCESS_KEY_ID" \
+    RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$R2_WRITE_SECRET_ACCESS_KEY" \
+    RCLONE_CONFIG_R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+    RCLONE_CONFIG_R2_REGION=auto RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
+fi
 # Remux only a file that already plays well: H.264 yuv420p ≤1080p, at most
 # this bitrate, and keyframes no further apart than this.
 REMUX_MAX_BITRATE=4500000
@@ -39,10 +57,10 @@ az_b() { az storage blob "$@" --account-name "$STORAGE_ACCOUNT" --container-name
 callback() {
   local body sig
   body="$(jq -nc --arg source "$SOURCE" --arg status "$1" --arg playback "${DEST:-}" \
-    --arg error "${2:-}" --arg mode "${MODE:-}" \
+    --arg error "${2:-}" --arg mode "${MODE:-}" --arg store "$STORE" \
     'def blank: if . == "" then null else . end;
      {sourceKey:$source, status:$status, playbackKey:($playback|blank),
-      error:($error|blank), mode:($mode|blank)}')"
+      error:($error|blank), mode:($mode|blank), store:$store}')"
   sig="$(printf '%s' "$body" | openssl dgst -sha256 -hmac "$PLAYBACK_CALLBACK_SECRET" -hex | awk '{print $NF}')"
   curl -fsS -X POST "$CALLBACK_URL" -H 'content-type: application/json' \
     -H "x-playback-signature: $sig" --data "$body" -o /dev/null --max-time 30 \
@@ -50,6 +68,43 @@ callback() {
 }
 
 az login --identity ${AZURE_CLIENT_ID:+--client-id "$AZURE_CLIENT_ID"} -o none
+
+# Drain the R2 delete queue first, best-effort. Deleting a match or an account
+# queues its playback copy (r2_pending_deletes) because the app holds only R2's
+# read token; this worker holds the write token. The app hands out keys and
+# drops a row only once its own HEAD confirms the object is gone, so nothing
+# here is trusted on its word. Only playback/...mp4 keys are ever deleted.
+drain_r2_deletes() {
+  [[ "$STORE" == r2 ]] || return 0
+  local url="${CALLBACK_URL%/}/deletes" body keys deleted=() key
+  sign() { printf '%s' "$1" | openssl dgst -sha256 -hmac "$PLAYBACK_CALLBACK_SECRET" -hex | awk '{print $NF}'; }
+  # ts (epoch ms) is signed: the app refuses a request more than 10 min old.
+  body="$(jq -nc --argjson ts "$(($(date +%s) * 1000))" '{action:"claim", ts:$ts}')"
+  keys="$(curl -fsS -X POST "$url" -H 'content-type: application/json' \
+    -H "x-playback-signature: $(sign "$body")" --data "$body" --max-time 30 \
+    | jq -r '.keys[]?')" || { log "r2 delete queue: claim failed"; return 0; }
+  [[ -n "$keys" ]] || return 0
+  while IFS= read -r key; do
+    [[ "$key" =~ ^playback/[^/]+/[^/]+/[^/]+\.mp4$ ]] || continue
+    rclone deletefile "r2:$R2_BUCKET_VIDEOS/$key" --retries 3 -q 2>/dev/null || true
+    # Reported only when R2 answers that it is gone: an empty listing, or
+    # rclone's "not found" exits (3 directory, 4 file). Any other failure
+    # (network, auth) is not reported, so it costs the row no attempt.
+    local listing rc=0
+    listing="$(rclone lsf "r2:$R2_BUCKET_VIDEOS/$key" 2>/dev/null)" || rc=$?
+    if { (( rc == 0 )) && [[ -z "$listing" ]]; } || (( rc == 3 || rc == 4 )); then
+      deleted+=("$key")
+    fi
+  done <<<"$keys"
+  (( ${#deleted[@]} )) || return 0
+  body="$(printf '%s\n' "${deleted[@]}" | jq -Rnc --argjson ts "$(($(date +%s) * 1000))" \
+    '{action:"done", keys:[inputs], ts:$ts}')"
+  curl -fsS -X POST "$url" -H 'content-type: application/json' \
+    -H "x-playback-signature: $(sign "$body")" --data "$body" -o /dev/null --max-time 60 \
+    || log "r2 delete queue: report failed"
+  log "r2 delete queue: deleted ${#deleted[@]}"
+}
+drain_r2_deletes || true
 
 # Four hours unseen: longer than any encode, so a crash brings it back.
 MSG="$(az_q get --visibility-timeout 14400 -o json)"
@@ -191,9 +246,18 @@ if ! same_timeline; then
   fail "timeline changed ($MODE)"
 fi
 
-az_b upload --name "$DEST" --file "$OUT" --overwrite --content-type video/mp4 \
-  --max-connections 8 --no-progress -o none
+if [[ "$STORE" == r2 ]]; then
+  # Multipart above 100 MB; rclone checks the size, and each part's MD5,
+  # before it returns. Same key as Azure's, in the bucket's root.
+  rclone copyto "$OUT" "r2:$R2_BUCKET_VIDEOS/$DEST" \
+    --header-upload "Content-Type: video/mp4" \
+    --s3-upload-cutoff 100M --s3-chunk-size 64M --s3-upload-concurrency 8 \
+    --retries 3 --low-level-retries 10 --stats 0 -q
+else
+  az_b upload --name "$DEST" --file "$OUT" --overwrite --content-type video/mp4 \
+    --max-connections 8 --no-progress -o none
+fi
 rm -f "$OUT" "$SRC"
 callback ready
 done_msg
-log "ready ($MODE)"
+log "ready ($MODE, $STORE)"
