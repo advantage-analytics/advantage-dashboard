@@ -146,6 +146,8 @@ export function LightboxStats({
   }
   const groups = displayGroups(stats, cut);
   const figures = summaryFigures(stats);
+  // The items the column spreads: the figures (one block) and each group.
+  const stacked = groups.length + (figures.length > 0 ? 1 : 0);
   // The tooltip's words, read off the rows as they are now — a click that
   // keeps the row turns its hint to "Click to show all again" in place.
   const tipGroup =
@@ -214,7 +216,7 @@ export function LightboxStats({
           </span>,
           tip.anchor.host,
         )}
-      <GroupSpacer edge="top" />
+      <GroupSpacer edge="top" grow={stacked > 1} />
       {figures.length > 0 && (
         <>
           <div
@@ -368,13 +370,22 @@ export function LightboxStats({
  * above, 24px between, nothing below — the stack the column always drew,
  * and it scrolls.
  */
-function GroupSpacer({ edge }: { edge: "top" | "between" | "bottom" }) {
+function GroupSpacer({
+  edge,
+  grow = true,
+}: {
+  edge: "top" | "between" | "bottom";
+  /** `false` for the top above a lone item: one group (and no figures)
+   *  centred in a tall column left a blank band over it that read as
+   *  something failed to render, so it starts from the top instead. */
+  grow?: boolean;
+}) {
   return (
     <div
       aria-hidden="true"
       data-stat-spacer={edge}
       className={cn(
-        "flex-1 shrink-0",
+        grow ? "flex-1 shrink-0" : "shrink-0",
         edge === "top" && "min-h-5",
         edge === "between" && "max-h-14 min-h-6",
       )}
