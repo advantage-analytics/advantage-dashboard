@@ -351,7 +351,7 @@ Behaviour notes:
 
 ### After `/pr-check` (2026-11-10)
 
-- **Deletes are queued.** The app keeps only R2's read token. Deleting a match or an account queues its unshared playback key in `r2_pending_deletes` (migration `20261110060000_r2_pending_deletes.sql`, **awaiting approval**; it also stops a browser from clearing `playback_store`).
+- **Deletes are queued.** The app keeps only R2's read token. Deleting a match or an account queues its unshared playback key in `r2_pending_deletes` (migration `20261110053933_r2_pending_deletes.sql`, applied 2026-11-10; it also stops a browser from clearing `playback_store`).
   - **Worker:** drains the queue at the start of every run through `POST /api/webhooks/playback/deletes`, signed like its reports.
   - **Manual:** `scripts/backfill-playback-to-r2.ts --drain-deletes [--apply]` drains it when no upload is coming.
   - **Safety:** a row is removed only after the app's own HEAD confirms the object is gone, and only `playback/…mp4` keys can be queued or deleted.
@@ -365,7 +365,7 @@ Behaviour notes:
 
 ## 7. Risks
 
-1. **Delete latency.** A deleted match's R2 copy stays until the queue drains, at the next worker run or a manual `--drain-deletes`. Until the queue migration is applied, the purge logs that it could not queue copies of rows marked R2.
+1. **Delete latency.** A deleted match's R2 copy stays until the queue drains, at the next worker run or a manual `--drain-deletes`.
 2. **rclone's upload from the worker** is not exercised until the image is rebuilt and one upload runs through it.
 3. **Revocation is unchanged.** As with an account-key SAS, a presigned URL cannot be withdrawn before it expires. Rotating the token kills all of them.
 4. **The 8 h label URL** is embedded in HTML and never refreshed, exactly as with Azure today.
