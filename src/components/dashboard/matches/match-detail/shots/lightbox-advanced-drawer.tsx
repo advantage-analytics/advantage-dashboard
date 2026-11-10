@@ -141,7 +141,6 @@ export function LightboxAdvancedDrawer({
             noun={COUNT_NOUN[result.noun]}
             advanced={advanced}
             onClose={onClose}
-            onCloseTooltipEscape={onClose}
           />
         </div>
       </aside>

@@ -446,10 +446,25 @@ function insetWithin(card: Rect, box: Rect, radius: string): string {
 
 const BOX_OPEN_CLIP = `inset(-${BOX_CLIP_OUTSET_PX}px round ${BOX_RADIUS})`;
 
+/** A piece that mounts too late to join the flight's timeline — on a slow
+ *  device the box can mount after the court has landed — plays its whole
+ *  entrance compressed into this, instead of joining at its end (a pop:
+ *  the ease-out curve is all but done well before then). */
+const LATE_JOIN_MS = 220;
+
 /** Starts `el`'s animation at the flight's elapsed time, so a piece that
- *  mounts late joins the one timeline. */
+ *  mounts late joins the one timeline. One that would have under
+ *  `LATE_JOIN_MS` of it left replays it from the start, sped up to fit
+ *  `LATE_JOIN_MS`, so it still visibly opens. */
 function joinAt(a: Animation, f: OpenFlight): Animation {
-  a.currentTime = Math.max(0, performance.now() - f.startedAt);
+  const elapsed = Math.max(0, performance.now() - f.startedAt);
+  const end = Number(a.effect?.getComputedTiming().endTime ?? 0);
+  if (end - elapsed >= LATE_JOIN_MS) {
+    a.currentTime = elapsed;
+  } else {
+    a.currentTime = 0;
+    a.playbackRate = Math.max(1, end / LATE_JOIN_MS);
+  }
   return a;
 }
 

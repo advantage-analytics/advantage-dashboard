@@ -208,12 +208,7 @@ export function FiltersPanel({
         )}
       </div>
 
-      <div
-        className={cn(
-          "flex shrink-0 items-center gap-3 border-t border-[var(--border-hairline)]",
-          "h-[60px] pr-4 pl-5",
-        )}
-      >
+      <div className="flex h-[60px] shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] pr-4 pl-5">
         <button
           type="button"
           onClick={actions.clear}

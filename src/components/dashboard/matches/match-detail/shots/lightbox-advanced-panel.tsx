@@ -36,7 +36,6 @@ export function LightboxAdvancedPanel({
   noun,
   advanced,
   onClose,
-  onCloseTooltipEscape,
 }: {
   cut: Cut;
   filters: VizFilters;
@@ -46,8 +45,6 @@ export function LightboxAdvancedPanel({
   advanced: LightboxAdvancedFilters;
   /** The X, Show and Esc: back to the lightbox. */
   onClose: () => void;
-  /** Esc while the X's tooltip holds the key. */
-  onCloseTooltipEscape: () => void;
 }) {
   const { availability, youName, oppName, count } = advanced;
   // Only the court player decides what the carry rule keeps, so the probe
@@ -96,7 +93,7 @@ export function LightboxAdvancedPanel({
         onClose();
       }}
       onClose={onClose}
-      onCloseTooltipEscape={onCloseTooltipEscape}
+      onCloseTooltipEscape={onClose}
     />
   );
 }
