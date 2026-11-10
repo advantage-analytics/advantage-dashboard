@@ -162,14 +162,21 @@ async function traceAfter(
   );
 }
 
-/** A frame whose copy has grown past the card but not past the stage —
- *  the copy part way through its flight. */
-const growing = (f: Frame) =>
-  f.ghosts === 1 &&
-  f.ghost !== null &&
-  f.card !== null &&
-  f.ghost.w > f.card.w * 1.05 &&
-  (f.stage === null || f.ghost.w < f.stage.w + 1);
+/** A frame whose copy has grown past the card but not yet to the size it
+ *  lands at — the copy part way through its flight. The landed size is the
+ *  trace's own widest copy, not the stage's width: the copy is the card's
+ *  whole art box, apron and all, so it can land wider than the stage, and a
+ *  stage-width cap left only the first frames or two of the flight to match
+ *  — which a slow runner's sampler missed. */
+const growingIn = (frames: Frame[]) => {
+  const landed = Math.max(0, ...frames.map((f) => f.ghost?.w ?? 0));
+  return (f: Frame) =>
+    f.ghosts === 1 &&
+    f.ghost !== null &&
+    f.card !== null &&
+    f.ghost.w > f.card.w * 1.05 &&
+    f.ghost.w < landed - 1;
+};
 
 const centre = (b: Box) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
 /** `v` lies between `a` and `b` (either order), with a pixel of slack. */
@@ -214,7 +221,7 @@ test.describe("the match report", () => {
     // (it aims at the stage's predicted rect meanwhile), so the frame need
     // not have a stage yet; it is checked against the stage it lands on.
     const opening = await traceAfter(page, { click: SERVE_CARD }, 900);
-    const mid = opening.find(growing);
+    const mid = opening.find(growingIn(opening));
     expect(mid, "a frame with the copy mid-flight").toBeDefined();
     expect(mid!.flying).toBe(true);
     const g = mid!.ghost!;
@@ -440,7 +447,7 @@ test.describe("the match report", () => {
     const frames = await traceAfter(page, { click: SERVE_CARD }, 400);
     // It set off before there was a stage to aim at.
     expect(
-      frames.some((f) => growing(f) && f.stage === null),
+      frames.some((f) => growingIn(frames)(f) && f.stage === null),
       "a frame with the copy flying and no stage yet",
     ).toBe(true);
     await expect(
