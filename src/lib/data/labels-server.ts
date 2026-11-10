@@ -16,9 +16,7 @@ import { parseLabelStartScore } from "@/lib/services/labels/session-fields";
 import { normalizePlayerHand } from "@/components/dashboard/matches/player-hands";
 import {
   PLAYBACK_JOB_COLUMNS,
-  PLAYBACK_JOB_COLUMNS_BEFORE_STORE,
   choosePlaybackFile,
-  isMissingColumnError,
   type PlaybackJobRow,
 } from "@/lib/data/match-video-choice";
 import { resolveAzureStorageConfig } from "@/lib/services/splitstep/video-url/azure-sas";
@@ -954,17 +952,11 @@ async function loadJobVideo(
 ): Promise<LabelVideo | null> {
   if (!resolveAzureStorageConfig().ok) return null;
 
-  const read = (columns: string) =>
-    db
-      .from("processing_jobs")
-      .select(columns)
-      .eq("id", jobId)
-      .maybeSingle<PlaybackJobRow>();
-  let { data: job, error } = await read(PLAYBACK_JOB_COLUMNS);
-  // A database without `playback_store` yet: every copy is in Azure.
-  if (isMissingColumnError(error)) {
-    ({ data: job, error } = await read(PLAYBACK_JOB_COLUMNS_BEFORE_STORE));
-  }
+  const { data: job, error } = await db
+    .from("processing_jobs")
+    .select(PLAYBACK_JOB_COLUMNS)
+    .eq("id", jobId)
+    .maybeSingle<PlaybackJobRow>();
   if (error) throw new Error(`Could not read the job: ${error.message}`);
   if (!job) return null;
 

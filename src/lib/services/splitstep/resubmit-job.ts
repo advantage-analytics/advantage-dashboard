@@ -130,7 +130,6 @@ import {
   MAX_TOTAL_ATTEMPTS,
 } from "@/lib/data/match-analysis";
 import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
-import { isMissingColumnError } from "@/lib/data/match-video-choice";
 import { readCorrectedAdScoring } from "@/lib/services/labels/ad-scoring";
 
 // Defined in match-analysis.ts so client code can classify with them (this
@@ -323,8 +322,7 @@ interface ParentJob {
   resubmitted_from_job_id: string | null;
   playback_object_key: string | null;
   playback_status: string | null;
-  /** Absent on a database without the column yet (read as Azure). */
-  playback_store?: string | null;
+  playback_store: string | null;
 }
 
 export async function resubmitJob(params: {
@@ -390,22 +388,13 @@ export async function resubmitJob(params: {
   //    athlete, for "Send for analysis again". `derivation_failed` is
   //    excluded on purpose: its results already exist and resubmitting the
   //    video would spend quota to recompute what a derivation re-run gets free.
-  const PARENT_COLUMNS =
-    "id, match_id, created_by, status, error_category, error_code, error_step, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id, playback_object_key, playback_status";
-  const readParent = (columns: string) =>
-    supabase
-      .from("processing_jobs")
-      .select(columns)
-      .eq("id", jobId)
-      .maybeSingle();
-  let { data: parentRow, error: parentError } = await readParent(
-    `${PARENT_COLUMNS}, playback_store`,
-  );
-  // A database without `playback_store` yet: every copy is in Azure.
-  if (isMissingColumnError(parentError)) {
-    ({ data: parentRow, error: parentError } =
-      await readParent(PARENT_COLUMNS));
-  }
+  const { data: parentRow, error: parentError } = await supabase
+    .from("processing_jobs")
+    .select(
+      "id, match_id, created_by, status, error_category, error_code, error_step, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id, playback_object_key, playback_status, playback_store",
+    )
+    .eq("id", jobId)
+    .maybeSingle();
 
   if (parentError || !parentRow) {
     return { ok: false, reason: "not_found", message: "Job not found." };

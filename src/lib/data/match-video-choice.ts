@@ -30,7 +30,10 @@
  *   offset to subtract.
  */
 
-import type { VideoStore } from "@/lib/services/video-storage/stores";
+import {
+  storeOf,
+  type VideoStore,
+} from "@/lib/services/video-storage/store-of";
 
 export interface PlaybackJobRow {
   video_object_key: string | null;
@@ -39,29 +42,13 @@ export interface PlaybackJobRow {
   /** Absent on a loader that does not read them: no copy. */
   playback_object_key?: string | null;
   playback_status?: string | null;
-  /** `r2` or null (Azure). Absent before the column's migration. */
+  /** `r2`, or `azure` / null (Azure). */
   playback_store?: string | null;
 }
 
 /** The columns `choosePlaybackFile` reads, for a loader's select. */
 export const PLAYBACK_JOB_COLUMNS =
   "video_object_key, trimmed_object_key, start_time_seconds, playback_object_key, playback_status, playback_store";
-
-/**
- * {@link PLAYBACK_JOB_COLUMNS} without `playback_store`, for a database that
- * has not had that column's migration yet. Naming a missing column fails the
- * whole read, and with it every player, so loaders retry with this on 42703
- * ({@link isMissingColumnError}). Remove once the migration is everywhere.
- */
-export const PLAYBACK_JOB_COLUMNS_BEFORE_STORE =
-  "video_object_key, trimmed_object_key, start_time_seconds, playback_object_key, playback_status";
-
-/** PostgREST's answer for a column the database does not have. */
-export function isMissingColumnError(
-  error: { code?: string } | null | undefined,
-): boolean {
-  return error?.code === "42703";
-}
 
 export interface PlaybackChoice {
   blobName: string;
@@ -90,13 +77,23 @@ export async function choosePlaybackFile(
 ): Promise<PlaybackChoice | null> {
   for (const job of jobs) {
     const copy = playbackCopyFor(job, jobs);
-    if (copy && (await blobExists(copy.key, copy.store))) {
-      return {
-        blobName: copy.key,
-        store: copy.store,
-        startTimeSeconds: 0,
-        source: "playback",
-      };
+    if (copy) {
+      // A copy in R2 that R2 cannot confirm (an outage, a bad token, a copy
+      // not yet backfilled) is looked for in Azure under the same key before
+      // anything else: a backfilled copy is still there, and it plays far
+      // better than the raw upload.
+      for (const store of copy.store === "r2"
+        ? (["r2", "azure"] as const)
+        : (["azure"] as const)) {
+        if (await blobExists(copy.key, store)) {
+          return {
+            blobName: copy.key,
+            store,
+            startTimeSeconds: 0,
+            source: "playback",
+          };
+        }
+      }
     }
     const vendorCopy = job.trimmed_object_key
       ? vendorCopyChoice(job.trimmed_object_key, job.start_time_seconds)
@@ -152,7 +149,7 @@ function readyCopy(
   if (row.playback_status !== "ready" || !row.playback_object_key) return null;
   return {
     key: row.playback_object_key,
-    store: row.playback_store === "r2" ? "r2" : "azure",
+    store: storeOf(row.playback_store),
   };
 }
 

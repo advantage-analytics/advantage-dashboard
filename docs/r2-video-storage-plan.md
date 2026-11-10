@@ -349,9 +349,23 @@ Behaviour notes:
 6. **You:** apply the Cold lifecycle rule above.
 7. After a few weeks: compare Azure egress (Metrics → Egress by API name and Authentication), then decide on deleting the Azure `playback/` copies.
 
+### After `/pr-check` (2026-11-10)
+
+- **Deletes are queued.** The app keeps only R2's read token. Deleting a match or an account queues its unshared playback key in `r2_pending_deletes` (migration `20261110060000_r2_pending_deletes.sql`, **awaiting approval**; it also stops a browser from clearing `playback_store`).
+  - **Worker:** drains the queue at the start of every run through `POST /api/webhooks/playback/deletes`, signed like its reports.
+  - **Manual:** `scripts/backfill-playback-to-r2.ts --drain-deletes [--apply]` drains it when no upload is coming.
+  - **Safety:** a row is removed only after the app's own HEAD confirms the object is gone, and only `playback/…mp4` keys can be queued or deleted.
+- **Same-key fallback.** A copy marked R2 that R2 can't confirm is looked for in Azure under the same key before the player falls back to the upload.
+- **Kill switch.** `VIDEO_READ_STORE=azure` stops every R2 read, sample included. A copy marked R2 is looked for in Azure, and otherwise the player falls back to the upload or the vendor copy.
+- **Logging.**
+  - R2 errors other than "not found" are logged by key and status, never by URL.
+  - One failed Azure delete no longer hides the other results or blocks the R2 queueing.
+  - The "remain in R2" alarm fires only for rows marked R2.
+- **Cleanup.** The missing-column fallbacks are gone (the column is live), and the chooser reuses `storeOf()`.
+
 ## 7. Risks
 
-1. **Delete with the read token only.** Vercel holds only the read token, so deleting a match or an account cannot remove its R2 playback copy. The purge logs the count, and `scripts/cleanup-orphan-storage.ts` has to learn R2 to sweep them (follow-up). This is a privacy gap on account delete until that sweep exists or a delete-capable token is given to the app.
+1. **Delete latency.** A deleted match's R2 copy stays until the queue drains, at the next worker run or a manual `--drain-deletes`. Until the queue migration is applied, the purge logs that it could not queue copies of rows marked R2.
 2. **rclone's upload from the worker** is not exercised until the image is rebuilt and one upload runs through it.
 3. **Revocation is unchanged.** As with an account-key SAS, a presigned URL cannot be withdrawn before it expires. Rotating the token kills all of them.
 4. **The 8 h label URL** is embedded in HTML and never refreshed, exactly as with Azure today.
@@ -361,7 +375,6 @@ Behaviour notes:
 
 - **Label console uses the playback copy instead of trimmed.** `loadJobVideo` prefers `vendor-copy` while a job has no playback copy, but after the playback copy it already plays that. If nothing needs the vendor's cut, trimmed copies can go to Cold too.
 - Delete the Azure `playback/` copies once R2 playback is confirmed.
-- Remove `PLAYBACK_JOB_COLUMNS_BEFORE_STORE` and the 42703 fallbacks once the migration is everywhere.
 - Teach `scripts/cleanup-orphan-storage.ts` to sweep R2 `playback/`.
 - Stale text elsewhere:
   - The `azure-sas.ts:26-28` header and the `azure-storage` skill's layout line.

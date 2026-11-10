@@ -24,9 +24,7 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 import {
   PLAYBACK_JOB_COLUMNS,
-  PLAYBACK_JOB_COLUMNS_BEFORE_STORE,
   choosePlaybackFile,
-  isMissingColumnError,
   type PlaybackChoice,
   type PlaybackJobRow,
 } from "./match-video-choice";
@@ -406,20 +404,14 @@ function supabaseProviderVideo(
   admin: AdminClient,
 ): MatchVideoDeps["loadProviderVideo"] {
   return async (matchId) => {
-    const read = (columns: string) =>
-      admin
-        .from("processing_jobs")
-        .select(columns)
-        .eq("match_id", matchId)
-        .or("video_object_key.not.is.null,trimmed_object_key.not.is.null")
-        .order("created_at", { ascending: false })
-        .limit(JOBS_CONSIDERED)
-        .returns<PlaybackJobRow[]>();
-    let { data: jobs, error } = await read(PLAYBACK_JOB_COLUMNS);
-    // A database without `playback_store` yet: every copy is in Azure.
-    if (isMissingColumnError(error)) {
-      ({ data: jobs } = await read(PLAYBACK_JOB_COLUMNS_BEFORE_STORE));
-    }
+    const { data: jobs } = await admin
+      .from("processing_jobs")
+      .select(PLAYBACK_JOB_COLUMNS)
+      .eq("match_id", matchId)
+      .or("video_object_key.not.is.null,trimmed_object_key.not.is.null")
+      .order("created_at", { ascending: false })
+      .limit(JOBS_CONSIDERED)
+      .returns<PlaybackJobRow[]>();
 
     try {
       const choice = await choosePlaybackFile(jobs ?? [], storedObjectExists);

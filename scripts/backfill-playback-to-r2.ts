@@ -9,6 +9,13 @@
  *   npx tsx scripts/backfill-playback-to-r2.ts --apply --limit 5
  *   npx tsx scripts/backfill-playback-to-r2.ts --apply         # the rest
  *   npx tsx scripts/backfill-playback-to-r2.ts --apply --sample  # also sample/match-v1.mp4
+ *   npx tsx scripts/backfill-playback-to-r2.ts --drain-deletes   # list queued R2 deletes
+ *   npx tsx scripts/backfill-playback-to-r2.ts --drain-deletes --apply  # delete them
+ *
+ * `--drain-deletes` empties `r2_pending_deletes`: playback copies of deleted
+ * matches and accounts, which the app (read token only) cannot delete itself.
+ * The playback worker drains it too, at the start of every run; this is for
+ * when no upload has come through to start one.
  *
  * Resumable: a copy already in R2 at the same size is not copied again, only
  * marked; a job already marked is not read at all. Run it as often as needed.
@@ -38,6 +45,7 @@ import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
+  DeleteObjectCommand,
   HeadObjectCommand,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
@@ -45,6 +53,10 @@ import { createClient } from "@supabase/supabase-js";
 
 import { videoContainerClient } from "../src/lib/services/splitstep/video-url";
 import { SAMPLE_VIDEO_BLOB } from "../src/lib/services/sample-match/video";
+import {
+  claimR2Deletes,
+  confirmR2Deletes,
+} from "../src/lib/services/video-storage/delete-queue";
 import {
   isNotFound,
   r2Client,
@@ -69,6 +81,7 @@ try {
 const args = process.argv.slice(2);
 const APPLY = args.includes("--apply");
 const SAMPLE = args.includes("--sample");
+const DRAIN = args.includes("--drain-deletes");
 const limitArg = args.indexOf("--limit");
 const LIMIT = limitArg >= 0 ? Number(args[limitArg + 1]) : Infinity;
 if (!(LIMIT > 0)) throw new Error("--limit needs a positive number");
@@ -214,8 +227,50 @@ async function markInR2(
   return data?.length ?? 0;
 }
 
+/** Delete every queued R2 playback copy, confirming each is gone. */
+async function drainDeletes(db: ReturnType<typeof admin>) {
+  const write = requireR2Config("write");
+  const s3 = r2Client(write);
+  let total = 0;
+  for (;;) {
+    if (!APPLY) {
+      const { data, error } = await db
+        .from("r2_pending_deletes")
+        .select("object_key, queued_by, attempts")
+        .order("queued_at");
+      if (error) throw new Error(`Could not read the queue: ${error.message}`);
+      for (const r of data ?? []) {
+        console.log(
+          `  queued: ${r.object_key} (${r.queued_by}, ${r.attempts} attempt(s))`,
+        );
+      }
+      console.log(
+        `${data?.length ?? 0} queued. Dry run: re-run with --apply to delete.`,
+      );
+      return;
+    }
+    const keys = await claimR2Deletes(db, 50);
+    if (keys.length === 0) break;
+    for (const Key of keys) {
+      await s3.send(new DeleteObjectCommand({ Bucket: write.bucket, Key }));
+    }
+    const { removed, remaining } = await confirmR2Deletes(
+      db,
+      keys,
+      async (key) => (await r2Size(key)) !== null,
+    );
+    total += removed;
+    if (remaining > 0) {
+      console.log(`  ${remaining} still present after delete; left queued`);
+      break;
+    }
+  }
+  console.log(`Done: ${total} R2 playback cop(ies) deleted and dequeued.`);
+}
+
 async function main() {
   requireR2Config("write");
+  if (DRAIN) return drainDeletes(admin());
   const db = admin();
   const keys = (await pendingKeys(db)).slice(0, LIMIT);
   const container = videoContainerClient();

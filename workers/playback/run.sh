@@ -69,6 +69,37 @@ callback() {
 
 az login --identity ${AZURE_CLIENT_ID:+--client-id "$AZURE_CLIENT_ID"} -o none
 
+# Drain the R2 delete queue first, best-effort. Deleting a match or an account
+# queues its playback copy (r2_pending_deletes) because the app holds only R2's
+# read token; this worker holds the write token. The app hands out keys and
+# drops a row only once its own HEAD confirms the object is gone, so nothing
+# here is trusted on its word. Only playback/...mp4 keys are ever deleted.
+drain_r2_deletes() {
+  [[ "$STORE" == r2 ]] || return 0
+  local url="${CALLBACK_URL%/}/deletes" body keys deleted=() key
+  sign() { printf '%s' "$1" | openssl dgst -sha256 -hmac "$PLAYBACK_CALLBACK_SECRET" -hex | awk '{print $NF}'; }
+  body='{"action":"claim"}'
+  keys="$(curl -fsS -X POST "$url" -H 'content-type: application/json' \
+    -H "x-playback-signature: $(sign "$body")" --data "$body" --max-time 30 \
+    | jq -r '.keys[]?')" || { log "r2 delete queue: claim failed"; return 0; }
+  [[ -n "$keys" ]] || return 0
+  while IFS= read -r key; do
+    [[ "$key" =~ ^playback/[^/]+/[^/]+/[^/]+\.mp4$ ]] || continue
+    rclone deletefile "r2:$R2_BUCKET_VIDEOS/$key" --retries 3 -q 2>/dev/null || true
+    # Reported only when a listing confirms it is gone (absent already counts).
+    if ! rclone lsf "r2:$R2_BUCKET_VIDEOS/$key" 2>/dev/null | grep -q .; then
+      deleted+=("$key")
+    fi
+  done <<<"$keys"
+  (( ${#deleted[@]} )) || return 0
+  body="$(printf '%s\n' "${deleted[@]}" | jq -Rnc '{action:"done", keys:[inputs]}')"
+  curl -fsS -X POST "$url" -H 'content-type: application/json' \
+    -H "x-playback-signature: $(sign "$body")" --data "$body" -o /dev/null --max-time 60 \
+    || log "r2 delete queue: report failed"
+  log "r2 delete queue: deleted ${#deleted[@]}"
+}
+drain_r2_deletes || true
+
 # Four hours unseen: longer than any encode, so a crash brings it back.
 MSG="$(az_q get --visibility-timeout 14400 -o json)"
 if [[ "$(jq 'length' <<<"$MSG")" == 0 ]]; then

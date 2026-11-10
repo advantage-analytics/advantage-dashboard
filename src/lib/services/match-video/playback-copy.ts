@@ -23,7 +23,7 @@ import type { createAdminClient } from "@/lib/supabase/admin";
  * Azure: the store is written on every `ready`, never left over from before.
  */
 
-import type { VideoStore } from "@/lib/services/video-storage/stores";
+import type { VideoStore } from "@/lib/services/video-storage/store-of";
 
 export const PLAYBACK_PREFIX = "playback/";
 
@@ -121,26 +121,14 @@ export async function applyPlaybackReport(
   db: ReturnType<typeof createAdminClient>,
   report: PlaybackReport,
 ): Promise<number> {
-  const write = (columns: ReturnType<typeof playbackColumns>) => {
-    let update = db
-      .from("processing_jobs")
-      .update(columns)
-      .eq("video_object_key", report.sourceKey);
-    if (report.status !== "ready") {
-      update = update.or("playback_status.is.null,playback_status.neq.ready");
-    }
-    return update.select("id");
-  };
-  const columns = playbackColumns(report);
-  let { data, error } = await write(columns);
-  // A database without `playback_store` yet (42703). Record the copy anyway:
-  // read as Azure, an R2 copy is not found there and players fall back to
-  // the upload until the migration lands and the backfill marks it.
-  if (error?.code === "42703" && "playback_store" in columns) {
-    const { playback_store: _unwritten, ...rest } = columns;
-    void _unwritten;
-    ({ data, error } = await write(rest));
+  let update = db
+    .from("processing_jobs")
+    .update(playbackColumns(report))
+    .eq("video_object_key", report.sourceKey);
+  if (report.status !== "ready") {
+    update = update.or("playback_status.is.null,playback_status.neq.ready");
   }
+  const { data, error } = await update.select("id");
   if (error)
     throw new Error(`Could not record the playback copy: ${error.message}`);
   return data?.length ?? 0;
