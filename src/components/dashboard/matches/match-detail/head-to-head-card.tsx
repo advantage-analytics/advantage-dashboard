@@ -18,6 +18,7 @@ import {
   groupsFor,
   tallySide,
   withLobAvailability,
+  withoutShotKindRows,
   withPointRows,
   type H2HRow,
   type H2HValue,
@@ -445,7 +446,11 @@ export function HeadToHeadCard() {
   const errorSplitJudged = context.errorSplitJudged === true;
   const groups = useMemo(
     () =>
-      withLobAvailability(groupsFor(isDerived, errorSplitJudged), !!lobKeys),
+      // Lob points and Drop shot points are left off the match report
+      // (`withoutShotKindRows`).
+      withoutShotKindRows(
+        withLobAvailability(groupsFor(isDerived, errorSplitJudged), !!lobKeys),
+      ),
     [isDerived, errorSplitJudged, lobKeys],
   );
 

@@ -4,7 +4,10 @@ import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 import { watchableSegmentProps } from "@/components/dashboard/matches/match-detail/film-cut-context";
-import { SegmentTooltip } from "@/components/dashboard/matches/match-detail/point-endings-body";
+import {
+  segmentMotion,
+  SegmentTooltip,
+} from "@/components/dashboard/matches/match-detail/point-endings-body";
 import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { hatch } from "@/components/dashboard/matches/match-detail/chart-fills";
 import type {
@@ -52,8 +55,6 @@ import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
  * never a skeleton and never a zero (`reference/empty-and-loading.md`).
  */
 
-const EASE_CHART = [0.2, 0, 0.4, 1] as const;
-
 interface SegmentMeta<K extends string> {
   key: K;
   label: string;
@@ -91,8 +92,6 @@ const ENDINGS: SegmentMeta<NetEnding>[] = [
   },
   { key: "lobbed", label: "Lobbed", you: YOU_5, opp: OPP_5 },
 ];
-
-const WON_ENDINGS: NetEnding[] = ["winner", "opponent-error"];
 
 const ENTRIES: SegmentMeta<NetEntry>[] = [
   {
@@ -198,35 +197,18 @@ export function NetGameBody({
     </div>
   );
 
+  // One flat row in bar order, as the Point endings card keys its bar
+  // (design canvas "Match page refinements", board 6, option B). Which
+  // endings are won and which lost, the words already say.
   const legend = (
-    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 pt-0.5">
-      {(
-        [
-          ["Won", endings.filter((e) => WON_ENDINGS.includes(e.key))],
-          ["Lost", endings.filter((e) => !WON_ENDINGS.includes(e.key))],
-        ] as const
-      ).map(([group, items]) => (
-        <span
-          key={group}
-          className="inline-flex flex-wrap items-center gap-x-3.5 gap-y-1.5"
-        >
-          <span
-            className="text-micro whitespace-nowrap"
-            style={{ color: "var(--ink-600)" }}
-          >
-            {group}
-          </span>
-          {items.map((e) => (
-            <span key={e.key} className="inline-flex items-center gap-1.5">
-              <LegendMark color={e.you} />
-              <span
-                className="text-micro whitespace-nowrap"
-                style={{ color: "var(--ink-400)" }}
-              >
-                {e.label}
-              </span>
-            </span>
-          ))}
+    <div
+      aria-hidden="true"
+      className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 pt-0.5"
+    >
+      {endings.map((e) => (
+        <span key={e.key} className="inline-flex items-center gap-1.5">
+          <LegendMark color={e.you} />
+          <span className="text-micro whitespace-nowrap">{e.label}</span>
         </span>
       ))}
     </div>
@@ -257,7 +239,7 @@ export function NetGameBody({
             </div>
             <div
               aria-hidden="true"
-              className="h-2.5 w-full rounded-[var(--radius-cell)]"
+              className="h-3.5 w-full rounded-[var(--radius-cell)]"
               style={{ background: "var(--ink-100)" }}
             />
           </div>
@@ -317,7 +299,7 @@ export function NetGameBody({
   }) => (
     <motion.div
       key={id}
-      // The 10px bar takes taps 17px above and below; the 4px bar 8px, so it
+      // The 14px bar takes taps 17px above and below; the 6px bar 8px, so it
       // never reaches over the endings bar above it.
       className={`relative touch:before:absolute touch:before:inset-x-0 touch:before:content-[''] ${tall ? "touch:before:-inset-y-[17px]" : "touch:before:-inset-y-[8px]"} ${watch ? "cursor-pointer" : "cursor-default"}`}
       style={{
@@ -327,20 +309,11 @@ export function NetGameBody({
         borderTopRightRadius: isLast ? "var(--radius-cell)" : undefined,
         borderBottomRightRadius: isLast ? "var(--radius-cell)" : undefined,
       }}
-      initial={
-        shouldReduceMotion
-          ? { width: `${share}%`, opacity: 0 }
-          : { width: "0%" }
-      }
-      animate={
-        shouldReduceMotion
-          ? { width: `${share}%`, opacity: 1 }
-          : { width: `${share}%` }
-      }
-      transition={{
-        duration: shouldReduceMotion ? 0.2 : 0.5,
-        ease: EASE_CHART,
-      }}
+      {...segmentMotion(
+        share,
+        hovered !== null && hovered !== id,
+        shouldReduceMotion,
+      )}
       tabIndex={0}
       {...watchableSegmentProps(watch, `${label}. ${detail}.`)}
       onPointerDown={(e) => {
@@ -366,7 +339,9 @@ export function NetGameBody({
     <section
       ref={cardRef}
       aria-labelledby={headingId}
-      className="surface-card flex flex-col gap-3"
+      // `flex-1`: the card shares the chart column's spare height with Rally
+      // length; `justify-between` spreads its share between the rows.
+      className="surface-card flex flex-1 flex-col justify-between gap-3"
       style={{ padding: "16px 20px 14px" }}
       data-testid="net-game-card"
     >
@@ -406,12 +381,12 @@ export function NetGameBody({
               // not a bar that reads as zero of something.
               <div
                 aria-hidden="true"
-                className="h-2.5 w-full rounded-[var(--radius-cell)]"
+                className="h-3.5 w-full rounded-[var(--radius-cell)]"
                 style={{ background: "var(--ink-100)" }}
               />
             ) : (
               <>
-                <div className="flex h-2.5 w-full gap-0.5">
+                <div className="flex h-3.5 w-full gap-0.5">
                   {endingSegs.map((e, i) =>
                     segment({
                       id: `${row.id}-ending-${e.key}`,
@@ -426,7 +401,7 @@ export function NetGameBody({
                     }),
                   )}
                 </div>
-                <div className="flex h-1 w-full gap-0.5">
+                <div className="flex h-1.5 w-full gap-0.5">
                   {entrySegs.map((e, i) =>
                     segment({
                       id: `${row.id}-entry-${e.key}`,

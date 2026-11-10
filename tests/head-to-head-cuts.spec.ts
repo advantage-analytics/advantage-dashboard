@@ -52,6 +52,7 @@ const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 const EXPECTED_CUTS: Record<string, FilmCut> = {
   "Net point attempts": { netBy: "either" },
   "Net points won": { netBy: "either" },
+  "Approach attempts": { netBy: "either", netEntry: "approach" },
   "Approach points won": { netBy: "either", netEntry: "approach" },
   "Passed the net player": { netBy: "either", netEnding: "passed" },
   "Lob points won": { lobBy: "either" },
@@ -80,6 +81,7 @@ const EXPECTED_CUTS: Record<string, FilmCut> = {
 const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
   "Net point attempts": { netBy: "you" },
   "Net points won": { netBy: "you", resultOutcome: ["won"] },
+  "Approach attempts": { netBy: "you", netEntry: "approach" },
   "Approach points won": {
     netBy: "you",
     netEntry: "approach",

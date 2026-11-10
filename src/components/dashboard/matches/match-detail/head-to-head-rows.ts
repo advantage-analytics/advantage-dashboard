@@ -138,9 +138,9 @@ export interface H2HRowConfig {
    *   match publishes no aces at all (see `DERIVED_SERVE_ROWS`).
    * - `netAttempts`, `netPointsWon` — counted with `cameToNet`, the predicate
    *   the rows' cut opens, so a figure and its "Watch all N" cannot disagree.
-   * - `approachPointsWon`, `passingShotsWon` — counted with `netEntryOf` /
-   *   `netEndingOf` (`match-filters/net-game.ts`), the predicates behind the
-   *   cuts' `netEntry` / `netEnding`.
+   * - `approachAttempts`, `approachPointsWon`, `passingShotsWon` — counted
+   *   with `netEntryOf` / `netEndingOf` (`match-filters/net-game.ts`), the
+   *   predicates behind the cuts' `netEntry` / `netEnding`.
    * - `lobPointsWon` — counted with `hitALob` over the ball-paths file's lobs;
    *   no file, no figure and no cut (`withLobAvailability`).
    */
@@ -149,6 +149,7 @@ export interface H2HRowConfig {
     | "unreturnedServes"
     | "netAttempts"
     | "netPointsWon"
+    | "approachAttempts"
     | "approachPointsWon"
     | "passingShotsWon"
     | "lobPointsWon"
@@ -301,6 +302,16 @@ export const POINT_ROWS: H2HRowConfig[] = [
     sideWon: true,
     noun: "net points",
     verb: "won",
+  },
+  {
+    // Every net point that side came in on by approaching (`netEntryOf`), won
+    // or lost: the count the next row's rate is taken over, as Net point
+    // attempts sits over Net points won. A cell's cut is every one of them.
+    label: "Approach attempts",
+    fromPoints: "approachAttempts",
+    cut: { netBy: "either", netEntry: "approach" },
+    sideBy: "net",
+    noun: "approach points",
   },
   {
     // Of the net points that side came in on by approaching (`netEntryOf`),
@@ -538,6 +549,25 @@ export function withLobAvailability(
             : null;
       return note ? { ...config, cut: undefined, note } : config;
     }),
+  }));
+}
+
+/**
+ * The groups without the Lob points and Drop shot points rows: the match
+ * report's table (product decision, 2026-11-09 — both read off shot kinds
+ * that are not accurate enough to publish as a match figure). The team player
+ * profile's season fold still draws them, so the rows stay configured.
+ */
+export function withoutShotKindRows(
+  groups: { title: string; configs: H2HRowConfig[] }[],
+): { title: string; configs: H2HRowConfig[] }[] {
+  return groups.map((group) => ({
+    title: group.title,
+    configs: group.configs.filter(
+      (config) =>
+        config.fromPoints !== "lobPointsWon" &&
+        config.fromPoints !== "dropShotPointsWon",
+    ),
   }));
 }
 
@@ -883,6 +913,8 @@ function derivedValue(config: H2HRowConfig, d: DerivedSide): number | null {
       return d.shotsRecorded ? d.netPoints.total : null;
     case "netPointsWon":
       return rate(d.netPoints);
+    case "approachAttempts":
+      return d.shotsRecorded ? d.approachPoints.total : null;
     case "approachPointsWon":
       return rate(d.approachPoints);
     case "passingShotsWon":
