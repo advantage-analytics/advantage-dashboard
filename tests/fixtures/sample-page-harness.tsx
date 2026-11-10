@@ -14,7 +14,7 @@ import {
 import { MatchReportScoreboard } from "@/components/dashboard/matches/match-detail/report-scoreboard";
 import { MatchReportViewSwitcher } from "@/components/dashboard/matches/match-detail/report-view-switcher";
 import {
-  MatchReportTitle,
+  MatchReportTitleActions,
   MatchReportTitleRow,
 } from "@/components/dashboard/matches/match-detail/report-title-row";
 import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
@@ -24,7 +24,10 @@ import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-t
 import { SKIP_DEAD_HINT_SEEN_STORAGE_KEY } from "@/components/dashboard/matches/match-detail/film/film-room-prefs";
 import { MatchFiltersProvider } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
-import { SampleBanner } from "@/components/dashboard/onboarding/sample-banner";
+import {
+  SampleSendOwnMatch,
+  SampleTitle,
+} from "@/components/dashboard/onboarding/sample-title";
 import { TourRunner } from "@/components/dashboard/onboarding/tour-runner";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import { NO_FILM_ENTRY } from "@/lib/match-video/film-entry";
@@ -155,7 +158,11 @@ function SampleReport() {
               summary={summary}
               isDerived={isDerived}
               statsPublished={statsPublished}
-              foldUnreconciled={data.foldUnreconciled}
+              // No fold note, though the fixture records one: "couldn't match
+              // every point to the final score you entered" is about a score
+              // the viewer never entered, and it would be the first thing a
+              // new player reads about the analysis.
+              foldUnreconciled={false}
               hasPlayableVideo
               defaultView="statistics"
               savedViews={[]}
@@ -177,13 +184,14 @@ function SampleReport() {
                 </MatchReportRail>
 
                 <MatchReportPane>
-                  <SampleBanner />
-
                   <MatchReportTitleRow>
                     <div className="min-w-0">
-                      <MatchReportTitle />
+                      <SampleTitle />
                       <MatchReportFacts />
                     </div>
+                    <MatchReportTitleActions>
+                      <SampleSendOwnMatch />
+                    </MatchReportTitleActions>
                   </MatchReportTitleRow>
 
                   <MatchReportWhen view="statistics">
