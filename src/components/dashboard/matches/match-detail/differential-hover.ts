@@ -16,6 +16,14 @@ import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
  * (`fig-you`) or a legend key (`key-winners`).
  */
 
+/** The cards' hover/focus easing. */
+export const EASE = "duration-200 ease-[var(--ease-primary)]";
+
+/** Whether a legend key other than `half`'s is hovered (the keys fade). */
+export function isKeyDimmed(hovered: string | null, half: string): boolean {
+  return !!hovered?.startsWith("key-") && hovered !== `key-${half}`;
+}
+
 /**
  * Whether one half of one player's bar (and its count) fades while `hovered`
  * is the target under the cursor: another half, a figure (which keeps its own

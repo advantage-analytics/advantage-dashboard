@@ -4,7 +4,9 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import {
+  EASE,
   isDimmed,
+  isKeyDimmed,
   useDifferentialHover,
 } from "@/components/dashboard/matches/match-detail/differential-hover";
 import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
@@ -49,9 +51,6 @@ import type { SeasonOutcomes } from "@/lib/data/player-season";
  */
 
 const HEADING_ID = "season-differential-heading";
-
-/** The card's hover/focus easing, as the report's card uses. */
-const EASE = "duration-200 ease-[var(--ease-primary)]";
 
 type Half = "winners" | "errors";
 
@@ -351,10 +350,7 @@ export function SeasonDifferentialCard({
             aria-label={`Highlight ${label.toLowerCase()} for both rows`}
             className={`-mx-1 inline-flex cursor-default items-center gap-1.5 rounded-[var(--radius-cell)] border-0 bg-transparent px-1 transition-opacity ${EASE}`}
             style={{
-              opacity:
-                hovered?.startsWith("key-") && hovered !== `key-${kind}`
-                  ? HOVER_DIMMED
-                  : 1,
+              opacity: isKeyDimmed(hovered, kind) ? HOVER_DIMMED : 1,
             }}
             {...hoverTarget(`key-${kind}`)}
           >

@@ -19,7 +19,9 @@ import type { OutcomeSide } from "@/components/dashboard/matches/match-detail/po
 import { LegendMark } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import {
+  EASE,
   isDimmed,
+  isKeyDimmed,
   useDifferentialHover,
 } from "@/components/dashboard/matches/match-detail/differential-hover";
 import { EmptyMark } from "@/components/ui/empty-mark";
@@ -80,15 +82,12 @@ function NameRow({
   );
 }
 
-/** The card's hover/focus easing, as the head to head's figures use. */
-const EASE = "duration-200 ease-[var(--ease-primary)]";
-
 /** "1 winner", "18 winners". */
 function counted(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-/** The hover rule now lives with the season card's (`differential-hover.ts`). */
+/** Re-exported: the rule lives in `differential-hover.ts`, shared with the season card. */
 export { isDimmed };
 
 export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
@@ -402,10 +401,7 @@ export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
             aria-label={`Highlight ${label.toLowerCase()} for both players`}
             className={`-mx-1 inline-flex cursor-default items-center gap-1.5 rounded-[var(--radius-cell)] border-0 bg-transparent px-1 transition-opacity ${EASE}`}
             style={{
-              opacity:
-                hovered?.startsWith("key-") && hovered !== `key-${kind}`
-                  ? HOVER_DIMMED
-                  : 1,
+              opacity: isKeyDimmed(hovered, kind) ? HOVER_DIMMED : 1,
             }}
             {...hoverTarget(`key-${kind}`)}
           >
