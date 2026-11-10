@@ -142,6 +142,9 @@ const FOCUS_RING_R = 7.6;
 /** A mark's hit area: its own radius and a little more for the hand, so the
  *  readout only answers on the point itself. */
 const MARK_HIT_R = VIEWER_COURT.markRadius + 1.6;
+/** The hit area's screen-space margin (a non-scaling stroke, half of it
+ *  outside the radius): a few pixels however far the court is zoomed out. */
+const MARK_HIT_FLOOR_PX = 6;
 
 /** The handoff's own highlighted-box alpha (P2b's `fill-opacity="0.09"`). */
 const ZONE_HIGHLIGHT_OPACITY = 0.09;
@@ -959,7 +962,18 @@ const MarkLayer = memo(function MarkLayer({
             {/* The hit area: the mark grown by a hair, so the readout comes
                 up over the point and not a mark's width off it (it was r 9
                 round a 2.2 mark, and answered 18px from its centre). */}
-            <circle cx={x} cy={y} r={MARK_HIT_R} fill="transparent" />
+            {/* Plus a 3px ring that does not scale (a transparent
+                non-scaling stroke still takes the pointer), so zoomed out
+                to Full court the target never shrinks to a pixel or two. */}
+            <circle
+              cx={x}
+              cy={y}
+              r={MARK_HIT_R}
+              fill="transparent"
+              stroke="transparent"
+              strokeWidth={MARK_HIT_FLOOR_PX}
+              vectorEffect="non-scaling-stroke"
+            />
             {/* Grows a little while hovered or focused (`data-active`,
                 globals.css `[data-viz-mark-glyph]`): the point you are on
                 answers under the pointer as well as in the readout. */}

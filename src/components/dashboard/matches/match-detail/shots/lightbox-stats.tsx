@@ -32,11 +32,18 @@ function displayGroups(stats: VizStats, cut: Cut): StatGroup[] {
   }));
 }
 
+/** Points counted and won over every row of a group together. */
+function groupTotals(group: StatGroup): { count: number; won: number } {
+  return {
+    count: group.rows.reduce((n, r) => n + r.count, 0),
+    won: group.rows.reduce((n, r) => n + r.won, 0),
+  };
+}
+
 /** Won of every row together — the group's average, the bar's tick. */
 function groupAverage(group: StatGroup): number | null {
   if (group.rows.some((r) => r.share)) return null;
-  const count = group.rows.reduce((n, r) => n + r.count, 0);
-  const won = group.rows.reduce((n, r) => n + r.won, 0);
+  const { count, won } = groupTotals(group);
   return count === 0 ? null : Math.round((won / count) * 100);
 }
 
@@ -60,8 +67,7 @@ function summaryFigures(stats: VizStats): Figure[] {
   const figures: Figure[] = [];
   const first = stats.groups.find((g) => g.rows.length > 0);
   if (first && !first.rows.some((r) => r.share)) {
-    const of = first.rows.reduce((n, r) => n + r.count, 0);
-    const won = first.rows.reduce((n, r) => n + r.won, 0);
+    const { count: of, won } = groupTotals(first);
     figures.push({ key: "won", label: "Points won", count: won, of });
   }
   if (stats.landed) {
@@ -256,14 +262,12 @@ export function LightboxStats({
       )}
       {groups.map((group, i) => {
         const average = groupAverage(group);
-        const counted = group.rows.filter(
-          (r) => r.count > 0 && r.winPct !== null,
-        );
-        const best = counted.length
-          ? counted.reduce((a, b) =>
-              (b.winPct ?? 0) > (a.winPct ?? 0) ? b : a,
-            )
-          : null;
+        // Every row at the group's top rate: tied rows read alike, so none
+        // looks better than its equal.
+        const rates = group.rows
+          .filter((r) => r.count > 0 && r.winPct !== null)
+          .map((r) => r.winPct!);
+        const bestPct = rates.length ? Math.max(...rates) : null;
         return (
           <Fragment key={group.key}>
             {i > 0 && <GroupSpacer edge="between" />}
@@ -290,7 +294,12 @@ export function LightboxStats({
                   <li key={row.key}>
                     <StatRowButton
                       row={row}
-                      best={best?.key === row.key && !row.share}
+                      best={
+                        bestPct !== null &&
+                        row.count > 0 &&
+                        row.winPct === bestPct &&
+                        !row.share
+                      }
                       average={average}
                       pressed={
                         pick?.group === group.key && pick.row === row.key
