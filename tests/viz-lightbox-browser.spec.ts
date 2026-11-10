@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { startStyledHarness } from "./fixtures/viz-styled-harness-server";
 
 let origin: string;
@@ -30,10 +30,13 @@ test("a wall card opens the lightbox over the wall, and Esc puts focus back on t
   await expect(dialog).toContainText(
     /Serve placement · You · \d+ (of \d+ )?in, \d+ of those \d+ won/,
   );
-  // Dialog v3 geometry at 1512 × 982.
+  // Dialog v3 geometry at 1512 × 982, centred on both axes: the old
+  // top-anchored height budget (982 − 96 − 32 = 854), split evenly.
   const box = (await dialog.boundingBox())!;
   expect(Math.round(box.width)).toBe(1212);
-  expect(Math.round(box.y)).toBe(96);
+  expect(Math.round(box.height)).toBe(854);
+  expect(Math.round(box.x)).toBe(150);
+  expect(Math.round(box.y)).toBe(64);
   await page.waitForTimeout(800);
   await page.screenshot({ path: test.info().outputPath("lightbox.png") });
   await page.keyboard.press("Escape");
@@ -1029,7 +1032,30 @@ test("every chart row in the chart menu carries its leading icon", async ({
   expect(new Set(labels.map(Math.round)).size).toBe(1);
 });
 
-test("the lightbox's Filters takes the float-menu surface, and Advanced filters slides to the Video tab's panel and back", async ({
+/** Open the lightbox's Filters and pick its "Advanced filters" row. */
+async function openAdvancedDrawer(page: Page, dialog: Locator) {
+  await dialog.getByRole("button", { name: "Filters", exact: true }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  await panel.getByRole("button", { name: /^Advanced filters/ }).click();
+  // The popover's exit animation runs over the court for ~150ms; a click
+  // aimed at the dimmed court must not land on it.
+  await expect(page.locator("[data-radix-popper-content-wrapper]")).toHaveCount(
+    0,
+  );
+  return dialog.getByRole("complementary", { name: "Advanced filters" });
+}
+
+/** Whether focus is inside the advanced filters drawer. */
+function focusInDrawer(page: Page) {
+  return page.evaluate(
+    () =>
+      document
+        .getElementById("viz-advanced-drawer")
+        ?.contains(document.activeElement) === true,
+  );
+}
+
+test("the lightbox's Filters takes the float-menu surface, and its Advanced filters row closes it and opens the drawer inside the box", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -1037,7 +1063,8 @@ test("the lightbox's Filters takes the float-menu surface, and Advanced filters 
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const dialog = page.getByRole("dialog", { name: "All serves" });
-  await dialog.getByRole("button", { name: "Filters" }).click();
+  const trigger = dialog.getByRole("button", { name: "Filters", exact: true });
+  await trigger.click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   await expect(panel).toBeVisible();
   // FloatMenu geometry: 10px radius, 5px inset.
@@ -1048,22 +1075,101 @@ test("the lightbox's Filters takes the float-menu surface, and Advanced filters 
   const row = panel.getByRole("button", { name: /^Advanced filters/ });
   await expect(row).toContainText("Score, return, result…");
   await row.click();
-  const back = panel.getByRole("button", { name: "Filters", exact: true });
-  await expect(back).toBeVisible();
-  await expect(back).toBeFocused();
-  await expect(row).toHaveCount(0);
+
+  // The popover closes; the drawer opens inside the box, flush right and
+  // the box's whole height, 340px once its slide has run.
+  await expect(panel).toHaveCount(0);
+  const drawer = dialog.getByRole("complementary", {
+    name: "Advanced filters",
+  });
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toHaveCSS("animation-name", "roster-drawer-in");
+  await expect
+    .poll(async () => Math.round((await drawer.boundingBox())!.width))
+    .toBe(340);
+  const box = (await dialog.boundingBox())!;
+  const rail = (await drawer.boundingBox())!;
+  expect(Math.round(rail.x + rail.width)).toBe(Math.round(box.x + box.width));
+  expect(Math.round(rail.y)).toBe(Math.round(box.y));
+  expect(Math.round(rail.height)).toBe(Math.round(box.height));
+  await expect(
+    drawer.getByRole("heading", { name: "Advanced filters" }),
+  ).toBeVisible();
   // The Video tab's accordion: section headers that expand.
-  const sections = panel.locator("[data-section]");
-  expect(await sections.count()).toBeGreaterThan(0);
+  expect(await drawer.locator("[data-section]").count()).toBeGreaterThan(0);
 
-  // Esc steps back to the panel, focus on the row, popover still open.
+  // Focus moves in, and Tab stays in: the rest of the box is inert.
+  await expect.poll(() => focusInDrawer(page)).toBe(true);
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  expect(
+    await dialog.locator("[inert]").count(),
+    "header and body inert",
+  ).toBeGreaterThanOrEqual(2);
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press("Tab");
+    expect(await focusInDrawer(page)).toBe(true);
+  }
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press("Shift+Tab");
+    expect(await focusInDrawer(page)).toBe(true);
+  }
+
+  // The X (aria-labelled, dark tooltip) closes it; focus is back on Filters.
+  await drawer.getByRole("button", { name: "Close advanced filters" }).click();
+  await expect(drawer).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(dialog.locator("[inert]")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("the advanced drawer closes on a click in the dimmed box and on Esc; a second Esc closes the lightbox", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  const trigger = dialog.getByRole("button", { name: "Filters", exact: true });
+
+  // The dimmed court: a click there closes the drawer, not the lightbox.
+  let drawer = await openAdvancedDrawer(page, dialog);
+  await expect(drawer).toBeVisible();
+  const scrim = dialog.locator("[data-lightbox-drawer-scrim]");
+  await expect(scrim).toHaveCSS("background-color", /0\.2\)$/);
+  const box = (await dialog.boundingBox())!;
+  await page.mouse.click(box.x + 300, box.y + box.height / 2);
+  await expect(drawer).toHaveCount(0);
+  await expect(scrim).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(page).toHaveURL(/cut=serve/);
+  await expect(trigger).toBeFocused();
+
+  // Esc closes the drawer first, then the lightbox.
+  drawer = await openAdvancedDrawer(page, dialog);
+  await expect.poll(() => focusInDrawer(page)).toBe(true);
   await page.keyboard.press("Escape");
-  await expect(row).toBeFocused();
-  await expect(panel.getByRole("checkbox").first()).toBeVisible();
+  await expect(drawer).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(trigger).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page).not.toHaveURL(/cut=/);
+  expect(errors).toEqual([]);
+});
 
-  // Pick one option and Show: it lands in the URL's advanced filters and
-  // the strip names it; the panel is back on its own rows.
-  await row.click();
+test("a pick in the advanced drawer and Show writes vf=, closes the drawer and the strip names the cut", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await expect(strip).toHaveCount(0);
+  const drawer = await openAdvancedDrawer(page, dialog);
+  const sections = drawer.locator("[data-section]");
   const header = sections.first().getByRole("button").first();
   // The accordion may open on its first section already.
   if ((await header.getAttribute("aria-expanded")) !== "true")
@@ -1074,25 +1180,60 @@ test("the lightbox's Filters takes the float-menu surface, and Advanced filters 
     .locator('button[aria-pressed="false"]')
     .first()
     .click();
-  const show = panel.getByRole("button", { name: /^Show \d+ serves?$/ });
+  // The report counts the court's marks under the draft, client-side.
+  const show = drawer.getByRole("button", { name: /^Show \d+ serves?$/ });
   await expect(show).toBeEnabled();
-  await page.screenshot({ path: test.info().outputPath("advanced.png") });
+  await expect(drawer).toContainText(/\d+ of \d+/);
   await show.click();
   await expect(page).toHaveURL(/[?&]vf=/);
-  await expect(row).toContainText("1 applied");
-  await page.keyboard.press("Escape");
-  await expect(panel).toHaveCount(0);
-  await expect(dialog.locator("[data-viz-filter-strip]")).toBeVisible();
-
-  // Every open starts on the panel's own rows.
-  await dialog.getByRole("button", { name: "Filters" }).click();
-  await row.click();
-  await page.keyboard.press("Escape");
-  await page.keyboard.press("Escape");
-  await expect(panel).toHaveCount(0);
-  await dialog.getByRole("button", { name: "Filters" }).click();
-  await expect(row).toBeVisible();
+  await expect(drawer).toHaveCount(0);
+  await expect(strip).toBeVisible();
+  await expect(strip).not.toHaveText("");
+  await expect(
+    dialog.getByRole("button", { name: "Filters", exact: true }),
+  ).toBeFocused();
+  // The row now says what is in it.
+  await dialog.getByRole("button", { name: "Filters", exact: true }).click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "Filter the court" })
+      .getByRole("button", { name: /^Advanced filters/ }),
+  ).toContainText("1 applied");
   expect(errors).toEqual([]);
+});
+
+test("under reduced motion the advanced drawer does not slide: full width on its first frame, gone at once on close", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  await dialog.getByRole("button", { name: "Filters", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Filter the court" })
+    .getByRole("button", { name: /^Advanced filters/ })
+    .click();
+  // The first frame the drawer is drawn on: already 340px, no animation.
+  const first = await page.evaluate(
+    () =>
+      new Promise<{ width: number; animation: string }>((resolve) => {
+        const look = () => {
+          const el = document.getElementById("viz-advanced-drawer");
+          if (!el) return requestAnimationFrame(look);
+          resolve({
+            width: el.getBoundingClientRect().width,
+            animation: getComputedStyle(el).animationName,
+          });
+        };
+        look();
+      }),
+  );
+  expect(first.animation).toBe("none");
+  expect(Math.round(first.width)).toBe(340);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#viz-advanced-drawer")).toHaveCount(0);
+  await expect(dialog).toBeVisible();
 });
 
 /* ── Pass 2: half court is 100%, Full court, the glide ───────────────────── */
@@ -1456,4 +1597,120 @@ test("a Statistics row's tooltip hangs beside it with the row's own numbers, and
   await page.screenshot({
     path: test.info().outputPath("lightbox-stat-tooltip.png"),
   });
+});
+
+/** The stage's box and the court's pan/zoom (`[data-court]`'s translate and
+ *  size, `z` × the art), read two frames after the last change so a stage
+ *  resize — and the re-fit it triggers — has had its turn. */
+async function courtState(page: Page) {
+  return page.evaluate(async () => {
+    await new Promise((done) =>
+      requestAnimationFrame(() => requestAnimationFrame(done)),
+    );
+    const stage = document.querySelector("[data-court-stage]")!;
+    const court = stage.querySelector<HTMLElement>("[data-court]")!;
+    const r = stage.getBoundingClientRect();
+    return {
+      stage: [r.x, r.y, r.width, r.height],
+      transform: court.style.transform,
+      width: court.style.width,
+      height: court.style.height,
+    };
+  });
+}
+
+test("R7·1 · a chart switch keeps the court exactly where it is — at 100%, and panned and zoomed: Scatter → Heat → Zones → Scatter", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  const stage = dialog.locator("[data-court-stage]");
+  await expect(stage.locator("[data-viz-mark]").first()).toBeVisible();
+
+  async function cycle(expected: Awaited<ReturnType<typeof courtState>>) {
+    for (const [from, to] of [
+      ["Scatter", "Heat"],
+      ["Heat", "Zones"],
+      ["Zones", "Scatter"],
+    ]) {
+      await dialog.getByRole("button", { name: from, exact: true }).click();
+      await page
+        .getByRole("menuitemradio", { name: new RegExp(`^${to}`) })
+        .click();
+      await expect(
+        dialog.getByRole("button", { name: to, exact: true }),
+      ).toBeVisible();
+      expect(await courtState(page), `on ${to}`).toEqual(expected);
+    }
+  }
+
+  // At 100%: no reflow of the stage, no re-fit.
+  await cycle(await courtState(page));
+
+  // Zoomed in and dragged off-centre: the same pan and zoom on every chart.
+  await dialog.getByRole("button", { name: "Zoom in" }).click();
+  await expect(dialog.getByText(/^\d+% · Drag to move around$/)).toBeVisible();
+  const s = (await stage.boundingBox())!;
+  await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(s.x + s.width / 2 - 120, s.y + s.height / 2 + 60, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  const moved = await courtState(page);
+  await cycle(moved);
+});
+
+test("R7·2 · a stage that resizes keeps a zoomed, panned court: the filter strip appearing and going does not re-fit it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  const stage = dialog.locator("[data-court-stage]");
+  await expect(stage.locator("[data-viz-mark]").first()).toBeVisible();
+  // Zoom in and drag off-centre.
+  await dialog.getByRole("button", { name: "Zoom in" }).click();
+  await expect(dialog.getByText(/^\d+% · Drag to move around$/)).toBeVisible();
+  const s = (await stage.boundingBox())!;
+  await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(s.x + s.width / 2 - 120, s.y + s.height / 2 + 60, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  const before = await courtTransform(page);
+  const centreArt = (t: { z: number; px: number; py: number }, h: number) => ({
+    x: (s.width / 2 - t.px) / t.z,
+    y: (h / 2 - t.py) / t.z,
+  });
+  const beforeCentre = centreArt(before, s.height);
+  // A Statistics row keeps its points: the filter strip appears over the
+  // stage and the stage gets shorter.
+  await dialog.getByRole("button", { name: "Statistics" }).click();
+  await dialog.locator("[data-viz-stat-row], li button").first().click();
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await expect(strip).toBeVisible();
+  await expect
+    .poll(async () => (await stage.boundingBox())!.height)
+    .not.toBe(s.height);
+  const shorter = (await stage.boundingBox())!;
+  const during = await courtTransform(page);
+  // Same zoom, and the same spot of court at the stage's centre.
+  expect(during.z).toBeCloseTo(before.z, 4);
+  const duringCentre = centreArt(during, shorter.height);
+  expect(duringCentre.x).toBeCloseTo(beforeCentre.x, 0);
+  expect(duringCentre.y).toBeCloseTo(beforeCentre.y, 0);
+  // And back.
+  await strip.getByRole("button").first().click();
+  await expect(strip).toHaveCount(0);
+  await expect
+    .poll(async () => (await stage.boundingBox())!.height)
+    .toBeCloseTo(s.height, 0);
+  const after = await courtTransform(page);
+  expect(after.z).toBeCloseTo(before.z, 4);
+  const afterCentre = centreArt(after, s.height);
+  expect(afterCentre.x).toBeCloseTo(beforeCentre.x, 0);
+  expect(afterCentre.y).toBeCloseTo(beforeCentre.y, 0);
 });

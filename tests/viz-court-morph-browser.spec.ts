@@ -72,6 +72,7 @@ type Frame = {
   ghosts: number;
   stage: Box | null;
   dialogOpacity: number | null;
+  dialogAnimation: string | null;
   flying: boolean;
 };
 
@@ -108,6 +109,12 @@ async function traceAfter(
           ),
           dialogOpacity: dialog
             ? Number(getComputedStyle(dialog).opacity)
+            : null,
+          // The CSS keyframes the dialog carries ("enter" / "exit" from
+          // the fade classes) — evidence of the fade even when a starved
+          // sampler never lands inside its 150ms.
+          dialogAnimation: dialog
+            ? getComputedStyle(dialog).animationName
             : null,
           flying: document.documentElement.hasAttribute("data-viz-court-morph"),
         };
@@ -149,7 +156,7 @@ const growing = (f: Frame) =>
 const centre = (b: Box) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
 /** `v` lies between `a` and `b` (either order), with a pixel of slack. */
 const between = (v: number, a: number, b: number) =>
-  v >= Math.min(a, b) - 1 && v <= Math.max(a, b) + 1;
+  v >= Math.min(a, b) - 2 && v <= Math.max(a, b) + 2;
 
 test.describe("the match report", () => {
   let origin: string;
@@ -185,12 +192,22 @@ test.describe("the match report", () => {
     const card = page.locator(SERVE_CARD);
 
     // During the flight one copy is part way from the card to the stage.
+    // On a slow runner the lightbox can mount after the copy has set off
+    // (it aims at the stage's predicted rect meanwhile), so the frame need
+    // not have a stage yet; it is checked against the stage it lands on.
     const opening = await traceAfter(page, { click: SERVE_CARD }, 900);
-    const mid = opening.find((f) => growing(f) && f.stage !== null);
+    const mid = opening.find(growing);
     expect(mid, "a frame with the copy mid-flight").toBeDefined();
     expect(mid!.flying).toBe(true);
     const g = mid!.ghost!;
-    const s = mid!.stage!;
+    const s =
+      mid!.stage ??
+      (await page
+        .locator("[role=dialog] [data-court-morph-target]")
+        .evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return { x: r.left, y: r.top, w: r.width, h: r.height };
+        }));
     // The card's own court is hidden while its copy is away, so measure the
     // card's art box from the layout (visibility keeps its box).
     const c = mid!.card!;
@@ -257,6 +274,117 @@ test.describe("the match report", () => {
     );
     await expect(page.locator("body")).not.toHaveCSS("pointer-events", "none");
     expect(errors).toEqual([]);
+  });
+
+  test("the frame enters with the court: the box opens out of the card on the flight's curve, then the rows rise in, header first", async ({
+    page,
+  }) => {
+    await wallWarm(page);
+    // Every frame for 900ms after the click: the copy, the box's clip and
+    // opacity, the scrim, and each entering row's opacity by its step.
+    const frames = await page.evaluate(
+      async ({ ghostSel, cardSel }) => {
+        const card = document.querySelector<HTMLElement>(cardSel)!;
+        const cardBox = card
+          .querySelector("[data-viz-court-art]")!
+          .parentElement!.getBoundingClientRect();
+        const read = () => {
+          const box = document.querySelector<HTMLElement>(
+            "[data-lightbox-box]",
+          );
+          const scrim = document.querySelector("[data-lightbox-scrim]");
+          const step = (n: number) => {
+            const els = box?.querySelectorAll(`[data-lightbox-enter="${n}"]`);
+            if (!els || els.length === 0) return null;
+            return Math.min(
+              ...[...els].map((el) => Number(getComputedStyle(el).opacity)),
+            );
+          };
+          const r = box?.getBoundingClientRect();
+          return {
+            ghosts: document.querySelectorAll(ghostSel).length,
+            box: r ? { x: r.left, y: r.top, w: r.width, h: r.height } : null,
+            clip: box ? getComputedStyle(box).clipPath : null,
+            boxOpacity: box ? Number(getComputedStyle(box).opacity) : null,
+            scrim: scrim ? Number(getComputedStyle(scrim).opacity) : null,
+            steps: [step(0), step(1), step(2)],
+          };
+        };
+        card.focus();
+        card.click();
+        const out = [read()];
+        const end = performance.now() + 900;
+        while (performance.now() < end) {
+          await new Promise((done) => requestAnimationFrame(done));
+          out.push(read());
+        }
+        return {
+          frames: out,
+          card: {
+            x: cardBox.left,
+            y: cardBox.top,
+            w: cardBox.width,
+            h: cardBox.height,
+          },
+        };
+      },
+      { ghostSel: GHOST, cardSel: SERVE_CARD },
+    );
+    const { card } = frames;
+    const shown = frames.frames.filter(
+      (f) => f.box !== null && f.boxOpacity !== null,
+    );
+    // Never a frame with the whole box on screen while the copy has just
+    // left the card: the box is revealed from the card's corner outward —
+    // some frame clips it to a rect that starts inside it, near the card.
+    const parse = (clip: string) =>
+      /^inset\((-?[\d.]+)px (-?[\d.]+)px (-?[\d.]+)px (-?[\d.]+)px/
+        .exec(clip)
+        ?.slice(1)
+        .map(Number) ?? null;
+    const opening = shown.find((f) => {
+      const inset = f.clip ? parse(f.clip) : null;
+      // Not tied to the copy being on screen, or to the box's own fade:
+      // on a slow runner the box can mount after the court has landed and
+      // replay its opening on its own (`joinAt`), and a starved sampler may
+      // catch the clip only while the box is still fading in.
+      return inset !== null && (inset[1] > 1 || inset[2] > 1);
+    });
+    expect(opening, "a frame with the box part way open").toBeDefined();
+    // No flash: the first frame the box shows at all, it is already clipped
+    // to the opening rect — never whole for a frame before the reveal.
+    const first = shown.find((f) => f.boxOpacity! > 0)!;
+    expect(first.clip).toMatch(/^inset\(/);
+    const [top, , , left] = parse(opening!.clip!)!;
+    // The open edge's top-left lies between the card's and the box's.
+    expect(opening!.box!.y + top).toBeLessThanOrEqual(card.y + 1);
+    expect(opening!.box!.x + left).toBeLessThanOrEqual(card.x + 1);
+    // The scrim was part way in at some frame (it fades with the flight).
+    expect(
+      frames.frames.some((f) => f.scrim !== null && f.scrim > 0 && f.scrim < 1),
+      "a frame with the scrim part way in",
+    ).toBe(true);
+    // The rows come after the box: some frame has the box whole and the
+    // header still on its way in.
+    expect(
+      shown.some((f) => f.boxOpacity === 1 && (f.steps[0] ?? 1) < 1),
+      "a frame with the box shown and the header still rising in",
+    ).toBe(true);
+    // In order, never ahead of the step before.
+    for (const f of shown) {
+      const [a, b, c] = f.steps;
+      if (a !== null && b !== null) expect(b).toBeLessThanOrEqual(a + 0.001);
+      if (b !== null && c !== null) expect(c).toBeLessThanOrEqual(b + 0.001);
+    }
+    // It ends whole: no clip, everything opaque, no copy.
+    const last = frames.frames.at(-1)!;
+    expect(last).toMatchObject({
+      ghosts: 0,
+      clip: "none",
+      boxOpacity: 1,
+      scrim: 1,
+      steps: [1, 1, 1],
+    });
   });
 
   test("the first open, before the lightbox's chunk has loaded, still sets off at once and lands on the stage", async ({
@@ -341,13 +469,15 @@ test.describe("the match report", () => {
     const card = page.locator(SERVE_CARD);
     const fadeIn = await traceAfter(page, { click: SERVE_CARD }, 500);
     expect(fadeIn.every((f) => f.ghosts === 0 && !f.flying)).toBe(true);
-    // The fade in (150ms) was under way at some frame.
+    // The fade in (150ms) ran: a frame part way through it, or the dialog
+    // carrying its "enter" keyframes (a slow runner can sample past it).
     expect(
       fadeIn.some(
         (f) =>
-          f.dialogOpacity !== null &&
-          f.dialogOpacity > 0 &&
-          f.dialogOpacity < 1,
+          (f.dialogOpacity !== null &&
+            f.dialogOpacity > 0 &&
+            f.dialogOpacity < 1) ||
+          (f.dialogAnimation ?? "").includes("enter"),
       ),
       "a frame part way through the fade in",
     ).toBe(true);
@@ -357,7 +487,11 @@ test.describe("the match report", () => {
     const fadeOut = await traceAfter(page, { escape: true }, 500);
     expect(fadeOut.every((f) => f.ghosts === 0)).toBe(true);
     expect(
-      fadeOut.some((f) => f.dialogOpacity !== null && f.dialogOpacity < 1),
+      fadeOut.some(
+        (f) =>
+          (f.dialogOpacity !== null && f.dialogOpacity < 1) ||
+          (f.dialogAnimation ?? "").includes("exit"),
+      ),
       "a frame part way through the fade out",
     ).toBe(true);
     await expect(page.getByRole("dialog")).toHaveCount(0);

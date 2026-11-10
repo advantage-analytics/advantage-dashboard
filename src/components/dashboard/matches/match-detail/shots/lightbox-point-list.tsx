@@ -150,6 +150,7 @@ export const LightboxPointList = memo(function LightboxPointList({
                 tone="light"
                 selectable
                 showProgress={false}
+                inset
               />
             );
           })}

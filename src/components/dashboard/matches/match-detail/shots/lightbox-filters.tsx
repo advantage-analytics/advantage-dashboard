@@ -1,9 +1,9 @@
+import type { Ref } from "react";
 import { Filter } from "lucide-react";
 import {
   MatchesFilterPanel,
   type FilterPanelSection,
 } from "@/components/dashboard/matches/matches-filter-panel";
-import { LightboxAdvancedPanel } from "./lightbox-advanced-panel";
 import {
   activeFilterCount,
   EMPTY_MATCH_FILTERS,
@@ -16,17 +16,12 @@ import { LegendMark } from "./legend-mark";
 import { LEGEND_PICKS, type LegendPick } from "./lightbox-points";
 import type { LegendItem } from "./viz-labels";
 import {
-  EMPTY_VIZ_FILTERS,
   filterKeysFor,
-  foldedMatchFilters,
-  withFoldedFilters,
   type Cut,
   type VizFilters,
   type VizResult,
 } from "./viz-model";
 import {
-  carryFilters,
-  cutAvailability,
   errorOptionsFor,
   normalizeSeasonFilters,
   OPTIONS,
@@ -79,7 +74,8 @@ const NOUN: Record<VizResult["noun"], { singular: string; plural: string }> = {
   errors: { singular: "error", plural: "errors" },
 };
 
-const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
+/** "Show 9 serves": the advanced drawer's count noun for the court's noun. */
+export const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
   serves: { one: "serve", many: "serves" },
   returns: { one: "return", many: "returns" },
   shots: { one: "shot", many: "shots" },
@@ -123,6 +119,8 @@ export function LightboxFilterPanel({
   errorSplitJudged,
   countWith,
   advanced,
+  onOpenAdvanced,
+  triggerRef,
   season,
 }: {
   cut: Cut;
@@ -144,9 +142,13 @@ export function LightboxFilterPanel({
    *  filters — each checklist option's count. The match report runs
    *  `computeViz`; a host with no points in the browser answers its own way. */
   countWith: (patch: Partial<VizFilters>) => number;
-  /** The "Advanced filters" row and the Video tab's panel it slides to,
-   *  editing `filters.match`. Omitted, there is no such row. */
+  /** The "Advanced filters" row, which closes this popover and opens the
+   *  lightbox's drawer (`onOpenAdvanced`) over `filters.match`. Either
+   *  omitted, or a cut with no `match` key, there is no such row. */
   advanced?: LightboxAdvancedFilters;
+  onOpenAdvanced?: () => void;
+  /** The Filters trigger — the drawer hands focus back to it on close. */
+  triggerRef?: Ref<HTMLButtonElement>;
   /** The season's "Opponent plays" and "Matches", above Advanced filters.
    *  Omitted (the match report), neither is drawn. */
   season?: LightboxSeasonFilters;
@@ -333,22 +335,13 @@ export function LightboxFilterPanel({
       label="Filter the court"
       noun={NOUN[result.noun]}
       surface="menu"
-      subview={
-        advanced && keys.has("match")
+      triggerRef={triggerRef}
+      footRow={
+        advanced && onOpenAdvanced && keys.has("match")
           ? {
               label: "Advanced filters",
               summary: advancedSummary(filters.match ?? EMPTY_MATCH_FILTERS),
-              render: (back) => (
-                <LightboxAdvancedPanel
-                  cut={cut}
-                  filters={filters}
-                  setFilters={setFilters}
-                  total={result.total}
-                  noun={COUNT_NOUN[result.noun]}
-                  advanced={advanced}
-                  back={back}
-                />
-              ),
+              onSelect: onOpenAdvanced,
             }
           : undefined
       }
@@ -461,7 +454,7 @@ export function LegendFilter({
     <div
       role="group"
       aria-label="Filter by outcome"
-      className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
+      className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-0.5"
     >
       {items.map((item) => {
         const key = PICK_FOR_ITEM[item.key];

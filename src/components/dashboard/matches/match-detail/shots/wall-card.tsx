@@ -4,7 +4,7 @@ import { useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { APRON_FILL, CourtArt } from "./court-art";
-import { SERVE_COURT, SERVE_COURT_THROUGH_NET } from "./court-geometry";
+import { SERVE_COURT } from "./court-geometry";
 import type { Cut, VizDot } from "./viz-model";
 import type { VizState } from "./viz-url";
 import { viewIdentityKey } from "./viz-url";
@@ -43,20 +43,14 @@ const SEGMENT_FILLS = [
 ];
 
 /**
- * The art box. Every card keeps the half-court frame's 334:216 box capped at
- * 300px, except Serve: its court carries on past the net to the near service
- * line (`SERVE_COURT_THROUGH_NET`), so its box is taller by exactly the art it
- * added and its cap grows by the same ratio — a serve mark is the same size on
- * screen as on the half court. Cards keep their natural height (the wall's
- * grid is `items-start`): stretching the other card in Serve's row only
- * buried its court in apron, so the two footers are allowed to sit apart.
+ * The art box: every card, Serve included, is the half-court frame's 334:216
+ * box capped at 300px, so the wall's cards are one size. Serve fills that box
+ * with a window zoomed in on the service boxes and the net
+ * (`SERVE_COURT_THROUGH_NET`, the same aspect), the others with their half
+ * court. Cards keep their natural height (the wall's grid is `items-start`).
  */
 const ART_MAX_H = 300;
-const HALF_ASPECT = SERVE_COURT.viewBox.w / SERVE_COURT.viewBox.h;
-const SERVE_ASPECT =
-  SERVE_COURT_THROUGH_NET.viewBox.w / SERVE_COURT_THROUGH_NET.viewBox.h;
-const SERVE_MAX_H =
-  (ART_MAX_H * SERVE_COURT_THROUGH_NET.viewBox.h) / SERVE_COURT.viewBox.h;
+const ART_ASPECT = SERVE_COURT.viewBox.w / SERVE_COURT.viewBox.h;
 
 const CARD_CLASS =
   "flex flex-col rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-primary)] hover:border-[var(--border-medium)] hover:shadow-[var(--shadow-card-emphasis)] focus-visible:shadow-[0_0_0_2px_var(--blue-ring-40)] focus-visible:outline-none motion-reduce:transition-none";
@@ -117,8 +111,8 @@ export function WallCard({
           data-viz-court-art="true"
           className="relative w-full"
           style={{
-            aspectRatio: serve ? SERVE_ASPECT : HALF_ASPECT,
-            maxHeight: serve ? SERVE_MAX_H : ART_MAX_H,
+            aspectRatio: ART_ASPECT,
+            maxHeight: ART_MAX_H,
           }}
         >
           <CourtArt
@@ -127,7 +121,11 @@ export function WallCard({
             chart="scatter"
             fill
             serveFrame={serve ? "throughNet" : "half"}
-            className="block h-full w-full"
+            // Absolutely placed so the box's 334:216 aspect alone sets the
+            // card's height: in flow, a return or errors court's own svg
+            // aspect (wider than the box's) grew the box under the 300px
+            // cap, and its card ended taller than the serve card beside it.
+            className="absolute inset-0 block h-full w-full"
           />
         </div>
       </div>

@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   type ReactNode,
@@ -48,6 +49,8 @@ import {
 import { bandKindFor } from "./cut-kinds";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
+import { filterRailReducer } from "../match-filters/rail-state";
+import { LightboxAdvancedDrawer } from "./lightbox-advanced-drawer";
 import { LightboxCourt, type CourtOutline } from "./lightbox-court";
 import {
   LegendFilter,
@@ -72,7 +75,11 @@ import {
 import { LightboxStats } from "./lightbox-stats";
 import { GLIDE_MIN_RELATIVE_ZOOM, KEY_PAN_PX } from "./pan-zoom";
 import type { StatPick } from "./stat-cut";
-import { COURT_MORPH_CLOSE_EASE, runCourtMorphClose } from "./viz-court-morph";
+import {
+  COURT_MORPH_CLOSE_EASE,
+  isCourtMorphOpening,
+  runCourtMorphClose,
+} from "./viz-court-morph";
 import { usePanZoom } from "./use-pan-zoom";
 import type { BandReceipt, BandSaveOutcome } from "./viz-bands-context";
 import {
@@ -570,6 +577,39 @@ export function VizLightboxShell({
     return savedBandZones;
   }, [unit, savedBandZones, activeEditor]);
 
+  /* ── Advanced filters drawer ─────────────────────────────────────────── */
+
+  // The Filters popover's "Advanced filters" row closes the popover and
+  // opens a 340px drawer inside the box (`lightbox-advanced-drawer.tsx`),
+  // with the rest of the box dimmed and inert. The phases are the report
+  // rail's (`rail-state.ts`): the out animation keeps it drawn while
+  // `"closing"`. Focus goes back to the Filters trigger on every close —
+  // the trigger is the one way back in, and everything else was inert.
+  const [drawerPhase, dispatchDrawer] = useReducer(filterRailReducer, "closed");
+  const filtersTriggerRef = useRef<HTMLButtonElement>(null);
+  const drawerFocusBackRef = useRef(false);
+  const openAdvanced = useCallback(() => dispatchDrawer("toggle"), []);
+  const closeDrawer = useCallback(() => {
+    drawerFocusBackRef.current = true;
+    dispatchDrawer("close");
+  }, []);
+  const finishDrawer = useCallback(() => dispatchDrawer("closed"), []);
+  // After the commit that lifts `inert` from the box — an inert trigger
+  // cannot take focus.
+  useEffect(() => {
+    if (drawerPhase === "open" || !drawerFocusBackRef.current) return;
+    drawerFocusBackRef.current = false;
+    filtersTriggerRef.current?.focus({ preventScroll: true });
+  }, [drawerPhase]);
+  const advancedFilters = filterPanel?.advanced;
+  const drawerShown =
+    drawerPhase !== "closed" &&
+    advancedFilters !== undefined &&
+    !pending &&
+    !isDraft;
+  /** The drawer is up: the rest of the box is dimmed and inert. */
+  const drawerOpen = drawerShown && drawerPhase === "open";
+
   /* ── Closing ──────────────────────────────────────────────────────────── */
 
   // A close the reader asks for (Esc, Close, the scrim) plays out before the
@@ -618,6 +658,12 @@ export function VizLightboxShell({
       }
     : undefined;
   const exitClass = "animate-out fade-out-0 fill-mode-forwards";
+  // Opened by a card whose court is flying in: the flight draws the frame's
+  // entrance (the box opening out of the card, the scrim with it, the rows
+  // after — `viz-court-morph.ts`), so the plain fade-in stays off. Read once,
+  // on mount: the flight ends long before anything re-renders this.
+  const [morphing] = useState(isCourtMorphOpening);
+  const enterClass = appear && !closing && !morphing && LIGHTBOX_ENTER_CLASS;
 
   // A lightbox opened on its loading frame (the season's court on its way)
   // fades its body in when the court lands, rather than cutting to it.
@@ -669,10 +715,14 @@ export function VizLightboxShell({
 
   /* ── Esc ──────────────────────────────────────────────────────────────── */
 
-  // Esc steps back one layer at a time: the band editor, then a selected
-  // point, then the lightbox itself. Returns whether it stepped back short of
-  // closing.
+  // Esc steps back one layer at a time: the advanced filters drawer, the
+  // band editor, then a selected point, then the lightbox itself. Returns
+  // whether it stepped back short of closing.
   function escapeStep(): boolean {
+    if (drawerOpen) {
+      closeDrawer();
+      return true;
+    }
     if (editing) {
       exitEdit();
       return true;
@@ -817,9 +867,10 @@ export function VizLightboxShell({
     >
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay
+          data-lightbox-scrim=""
           className={cn(
             LIGHTBOX_OVERLAY_CLASS,
-            appear && !closing && LIGHTBOX_ENTER_CLASS,
+            enterClass,
             closing && exitClass,
           )}
           style={exitStyle}
@@ -842,11 +893,8 @@ export function VizLightboxShell({
               opener.focus({ preventScroll: true });
             }
           }}
-          className={cn(
-            LIGHTBOX_BOX_CLASS,
-            appear && !closing && LIGHTBOX_ENTER_CLASS,
-            closing && exitClass,
-          )}
+          data-lightbox-box=""
+          className={cn(LIGHTBOX_BOX_CLASS, enterClass, closing && exitClass)}
           style={exitStyle}
         >
           <TooltipProvider>
@@ -857,7 +905,13 @@ export function VizLightboxShell({
             </div>
 
             {/* ── Header ─────────────────────────────────────────────── */}
-            <div className="flex items-start gap-2.5 px-6 pt-6 pb-5">
+            {/* `data-lightbox-enter`: the order the frame's rows rise in
+                after a card's court flies in (`viz-court-morph.ts`). */}
+            <div
+              data-lightbox-enter="0"
+              inert={drawerOpen}
+              className="flex items-start gap-2.5 px-6 pt-6 pb-5"
+            >
               <div className="flex min-w-0 flex-col gap-1">
                 <DialogPrimitive.Title
                   ref={titleRef}
@@ -894,6 +948,7 @@ export function VizLightboxShell({
               <LightboxBodyPending label={title} />
             ) : (
               <div
+                inert={drawerOpen}
                 className={cn(
                   "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 md:flex-row md:overflow-visible",
                   openedPending && "animate-in duration-200 fade-in-0",
@@ -901,7 +956,10 @@ export function VizLightboxShell({
               >
                 {/* Court column */}
                 <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
-                  <div className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
+                  <div
+                    data-lightbox-enter="1"
+                    className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3"
+                  >
                     {player && (
                       <div
                         className="flex gap-1.5"
@@ -938,6 +996,8 @@ export function VizLightboxShell({
                         errorSplitJudged={filterPanel.errorSplitJudged}
                         countWith={filterPanel.countWith}
                         advanced={filterPanel.advanced}
+                        onOpenAdvanced={openAdvanced}
+                        triggerRef={filtersTriggerRef}
                         season={filterPanel.season}
                       />
                     )}
@@ -1121,38 +1181,49 @@ export function VizLightboxShell({
                     )}
                   </div>
 
-                  {!isDraft &&
-                    (chart === "scatter" ? (
-                      <LegendFilter
-                        items={legend}
-                        counts={legendCounts(result.dots)}
-                        pick={legendPick}
-                        onPick={(next) => {
-                          setLegendPick(next);
-                          setSelectedMarkId(null);
-                        }}
-                      />
-                    ) : (
-                      <div
-                        role="group"
-                        aria-label="Legend"
-                        className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
-                      >
-                        {legend.map((item) =>
-                          item.glyph === "ramp" ? (
-                            <HeatRampLegend key={item.key} />
-                          ) : (
-                            <span key={item.key} className="px-1">
-                              <LegendMark item={item} />
-                            </span>
-                          ),
-                        )}
-                      </div>
-                    ))}
+                  {!isDraft && (
+                    <div data-lightbox-enter="1">
+                      {chart === "scatter" ? (
+                        <LegendFilter
+                          items={legend}
+                          counts={legendCounts(result.dots)}
+                          pick={legendPick}
+                          onPick={(next) => {
+                            setLegendPick(next);
+                            setSelectedMarkId(null);
+                          }}
+                        />
+                      ) : (
+                        // `min-h-6`: the Scatter legend's row height (its
+                        // keys are 24px buttons), so a chart switch never
+                        // changes the stage's height — a resized stage re-fits
+                        // the court (`usePanZoom`) and would throw away the
+                        // reader's pan and zoom.
+                        <div
+                          role="group"
+                          aria-label="Legend"
+                          className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-0.5"
+                        >
+                          {legend.map((item) =>
+                            item.glyph === "ramp" ? (
+                              <HeatRampLegend key={item.key} />
+                            ) : (
+                              <span key={item.key} className="px-1">
+                                <LegendMark item={item} />
+                              </span>
+                            ),
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Right column */}
-                <div className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]">
+                <div
+                  data-lightbox-enter="2"
+                  className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]"
+                >
                   <div className="flex min-h-7 items-center gap-1.5 border-b border-[var(--border-hairline)] pb-3">
                     <div
                       className="flex gap-1.5"
@@ -1228,13 +1299,31 @@ export function VizLightboxShell({
                 Save as view) gets the body's own bottom padding instead of an
                 empty bar. */}
             {footerActions ? (
-              <div className="mt-5 flex items-center gap-2.5 border-t border-[var(--border-hairline)] px-6 pt-4 pb-5">
+              <div
+                data-lightbox-enter="2"
+                inert={drawerOpen}
+                className="mt-5 flex items-center gap-2.5 border-t border-[var(--border-hairline)] px-6 pt-4 pb-5"
+              >
                 {footerActions.start}
                 <span className="flex-1" />
                 {footerActions.end}
               </div>
             ) : (
               <div aria-hidden="true" className="h-6 shrink-0" />
+            )}
+
+            {/* ── Advanced filters drawer ────────────────────────────── */}
+            {drawerShown && filterPanel && advancedFilters && (
+              <LightboxAdvancedDrawer
+                phase={drawerPhase}
+                onClose={closeDrawer}
+                onFinish={finishDrawer}
+                cut={cut}
+                filters={filters}
+                setFilters={filterPanel.onChange}
+                result={result}
+                advanced={advancedFilters}
+              />
             )}
           </TooltipProvider>
         </DialogPrimitive.Content>

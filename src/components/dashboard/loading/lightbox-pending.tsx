@@ -73,7 +73,12 @@ export function LightboxBodyPending({ label }: { label: string }) {
       innerClassName="flex min-h-0 flex-1 flex-col gap-6 overflow-hidden px-6 md:flex-row"
     >
       <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
-        <div className="flex min-h-7 items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
+        {/* `data-lightbox-enter`: the rows rise in, in this order, after a
+            card's court flies in (`viz-court-morph.ts`) — as the shell's. */}
+        <div
+          data-lightbox-enter="1"
+          className="flex min-h-7 items-center gap-2 border-b border-[var(--border-hairline)] pb-3"
+        >
           <div className="flex gap-1.5">
             <PendingBar className="h-[26px] w-[50px] rounded-[var(--radius-pill)]" />
             <PendingBar className="h-[26px] w-[82px] rounded-[var(--radius-pill)]" />
@@ -88,14 +93,21 @@ export function LightboxBodyPending({ label }: { label: string }) {
         >
           <PendingBar className="h-full w-full rounded-[10px]" />
         </div>
-        <div className="flex h-4 items-center gap-x-[14px]">
+        {/* The legend row: 24px, the landed legend's on every chart. */}
+        <div
+          data-lightbox-enter="1"
+          className="flex h-6 items-center gap-x-[14px]"
+        >
           <PendingBar className="h-2.5 w-10" />
           <PendingBar className="h-2.5 w-10" />
           <PendingBar className="h-2.5 w-12" />
           <PendingBar className="h-2.5 w-14" />
         </div>
       </div>
-      <div className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]">
+      <div
+        data-lightbox-enter="2"
+        className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]"
+      >
         <div className="flex min-h-7 items-center border-b border-[var(--border-hairline)] pb-3">
           <PendingBar className="h-[26px] w-[78px] rounded-[var(--radius-pill)]" />
         </div>
@@ -182,7 +194,11 @@ export function LightboxChunkPending({
 
   return createPortal(
     <>
-      <div aria-hidden="true" className={LIGHTBOX_OVERLAY_CLASS} />
+      <div
+        aria-hidden="true"
+        data-lightbox-scrim=""
+        className={LIGHTBOX_OVERLAY_CLASS}
+      />
       <div
         ref={boxRef}
         role="dialog"
@@ -190,10 +206,14 @@ export function LightboxChunkPending({
         aria-label={`Loading ${label}`}
         tabIndex={-1}
         data-testid="lightbox-chunk-pending"
+        data-lightbox-box=""
         className={LIGHTBOX_BOX_CLASS}
       >
         <TooltipProvider>
-          <div className="flex items-start gap-2.5 px-6 pt-6 pb-5">
+          <div
+            data-lightbox-enter="0"
+            className="flex items-start gap-2.5 px-6 pt-6 pb-5"
+          >
             <div aria-hidden="true" className="flex min-w-0 flex-col gap-1">
               <span className="flex h-[22px] items-center">
                 <PendingBar className="h-3 w-36" />

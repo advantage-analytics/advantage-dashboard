@@ -1003,6 +1003,7 @@ export const PointRow = memo(function PointRow({
   spaceIsPlayPause = false,
   selectable = false,
   showProgress = true,
+  inset = false,
 }: {
   point: MatchPoint;
   /** The row's name — `pointResultLabel`, never the raw result type. */
@@ -1036,6 +1037,13 @@ export const PointRow = memo(function PointRow({
   /** `false` there too: the lit row is a selection, not a playing point, so
    *  it takes the wash without the 2px progress rule. */
   showProgress?: boolean;
+  /**
+   * The lightbox's list too: the row sits 8px in from the column's edges
+   * with the DS's rounded hover wash (8px, as the Statistics rows beside
+   * it), its content still on the 14px line. The Video tab keeps the room's
+   * full-bleed row.
+   */
+  inset?: boolean;
 }) {
   const t = ROW_TONE[tone];
   const readOnly = useFilmReadOnly();
@@ -1090,6 +1098,7 @@ export const PointRow = memo(function PointRow({
       }}
       className={cn(
         t.root,
+        inset && "mx-2 rounded-[8px] px-[6px]",
         seekable ? t.seekable : "cursor-default opacity-45",
         isActive && t.playing,
       )}

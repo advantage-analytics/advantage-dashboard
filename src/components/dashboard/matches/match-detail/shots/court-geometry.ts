@@ -61,20 +61,23 @@ export const SERVE_BACKGROUND_PATH =
 
 /* ── Serve court through the net (the wall card) ───────────────────────────
  *
- * The wall's serve card draws past the net: the far half exactly as
- * `SERVE_COURT` draws it (same group transform, same scale, so a serve mark is
- * the same size on screen), then the net, then the NEAR service boxes down to
- * the near service line, cropped a little past it at the card's bottom edge —
- * the court carries on out of frame, it is not the whole court.
+ * The wall's serve card is the same 334:216 box as every other card, framed
+ * on the part of the court a serve lands in: from part way back behind the
+ * far service line, through the two service boxes, past the net and into the
+ * near service boxes, cropped at the card's edges. That window is narrower
+ * than the half court's, so the court is zoomed in a little (~1.08×) — a
+ * serve mark reads larger than on the half court — and the far baseline is
+ * out of frame. The court carries on out of frame on every side; it is never
+ * the whole court.
  *
- * The near half is the far half reflected across the net, as `VIEWER_COURT`
- * draws it: `nearServiceLineY = netY + (netY − serviceLineY)` (355.5) in the
- * group's own pre-transform units. `cropY` is where the art is cut, in those
- * same units, and `viewBox` is the outer (post-transform) box: the far edge
- * and width are `SERVE_COURT.viewBox`'s, only the height grows.
+ * Coordinates: the near half is the far half reflected across the net, as
+ * `VIEWER_COURT` draws it: `nearServiceLineY = netY + (netY − serviceLineY)`
+ * (355.5) in the group's own pre-transform units. `viewBox` is the outer
+ * (post-transform) window; `cropY` is how far down, in group units, the court
+ * surface is drawn (past the window, so the frame edge cuts it).
  *
  * Every other serve consumer (saved-view tiles, the focused/labelled views)
- * keeps `SERVE_COURT`: a tile strip of mixed cuts wants one uniform aspect.
+ * keeps `SERVE_COURT`.
  */
 // The serve group transform's own numbers — `translate(260,117) scale(0.85)
 // translate(-260,-125)` — named so the inverse below reads off the same
@@ -87,30 +90,45 @@ const SERVE_GROUP_TRANSLATE_Y = 117;
 const SERVE_GROUP_ORIGIN_Y = 125;
 const serveGroupToOuterY = (y: number) =>
   SERVE_GROUP_TRANSLATE_Y + SERVE_GROUP_SCALE * (y - SERVE_GROUP_ORIGIN_Y);
+const serveOuterToGroupY = (y: number) =>
+  SERVE_GROUP_ORIGIN_Y + (y - SERVE_GROUP_TRANSLATE_Y) / SERVE_GROUP_SCALE;
 const SERVE_NEAR_SERVICE_Y =
   SERVE_COURT.netY + (SERVE_COURT.netY - SERVE_COURT.serviceLineY); // 355.5
-// ≈0.64 m of court past the near service line before the crop, so the line
-// reads as a line on the court and not as the frame's edge.
-const SERVE_THROUGH_NET_CROP_Y = SERVE_NEAR_SERVICE_Y + 12; // 367.5
-const SERVE_THROUGH_NET_BOTTOM = serveGroupToOuterY(SERVE_THROUGH_NET_CROP_Y);
+// The window, in outer units: 60% of the way back from the far service line
+// (109.8) to the far baseline (29.45) at the top, and a strip of the near
+// service boxes below the net (211.35) at the bottom. Its width follows from
+// the card's 334:216 aspect, centred on the court.
+const SERVE_THROUGH_NET_TOP = 50;
+const SERVE_THROUGH_NET_BOTTOM = 250;
+const SERVE_THROUGH_NET_H = SERVE_THROUGH_NET_BOTTOM - SERVE_THROUGH_NET_TOP;
+const SERVE_THROUGH_NET_W =
+  (SERVE_THROUGH_NET_H * SERVE_COURT.viewBox.w) / SERVE_COURT.viewBox.h;
 
 export const SERVE_COURT_THROUGH_NET = {
   viewBox: {
-    minX: SERVE_COURT.viewBox.minX,
-    minY: SERVE_COURT.viewBox.minY,
-    w: SERVE_COURT.viewBox.w,
-    h: SERVE_THROUGH_NET_BOTTOM - SERVE_COURT.viewBox.minY, // ≈314.1
+    minX: SERVE_COURT.centerX - SERVE_THROUGH_NET_W / 2,
+    minY: SERVE_THROUGH_NET_TOP,
+    w: SERVE_THROUGH_NET_W, // ≈309.3
+    h: SERVE_THROUGH_NET_H,
   },
   nearServiceLineY: SERVE_NEAR_SERVICE_Y,
-  cropY: SERVE_THROUGH_NET_CROP_Y,
+  /** The window's edges in the group's own units — a serve mark that lands
+   *  past one (a deep long fault, a wide one off the apron) is pinned just
+   *  inside it on the card, so every serve the footer counts is drawn. */
+  edgeGroup: {
+    top: serveOuterToGroupY(SERVE_THROUGH_NET_TOP),
+    left: SERVE_COURT.centerX - SERVE_THROUGH_NET_W / 2 / SERVE_GROUP_SCALE,
+    right: SERVE_COURT.centerX + SERVE_THROUGH_NET_W / 2 / SERVE_GROUP_SCALE,
+  },
+  /** The court surface runs past the window's bottom edge (group units). */
+  cropY: serveOuterToGroupY(SERVE_THROUGH_NET_BOTTOM) + 12,
   /** The net's height in the outer viewBox — inside the art, not its edge. */
   netOuterY: serveGroupToOuterY(SERVE_COURT.netY), // 211.35
-  nearServiceOuterY: serveGroupToOuterY(SERVE_NEAR_SERVICE_Y), // ≈312.9
+  serviceLineOuterY: serveGroupToOuterY(SERVE_COURT.serviceLineY), // ≈109.8
 } as const;
 
-/** The far corners rounded as `SERVE_BACKGROUND_PATH`'s, the bottom square —
- *  the card's own radius clips it there. */
-export const SERVE_THROUGH_NET_BACKGROUND_PATH = `M103,9 H417 A10,10 0 0 1 427,19 V${SERVE_THROUGH_NET_BOTTOM} H93 V19 A10,10 0 0 1 103,9 Z`;
+/** The window itself — the card's art region rounds its top corners. */
+export const SERVE_THROUGH_NET_BACKGROUND_PATH = `M${SERVE_COURT_THROUGH_NET.viewBox.minX},${SERVE_THROUGH_NET_TOP} H${SERVE_COURT_THROUGH_NET.viewBox.minX + SERVE_THROUGH_NET_W} V${SERVE_THROUGH_NET_BOTTOM} H${SERVE_COURT_THROUGH_NET.viewBox.minX} Z`;
 
 export interface ServeDotFraction {
   x: number;

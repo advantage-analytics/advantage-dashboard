@@ -727,9 +727,15 @@
    the loading bar standing in for it - stays hidden under it, so the two
    never show at once and the lightbox's court is the final frame. The
    attribute is on <html> only for the flight (380ms plus a 100ms settle).
+   The lightbox's box and scrim are hidden too until the flight's own
+   animation picks them up (the box opening out of the card, the scrim
+   fading on the same curve) - a Web Animation outranks this rule, so they
+   show exactly as the flight draws them and never pop in for a frame first.
    Keep this block ASCII-only: Turbopack's dev CSS pipeline silently drops a
    whole block with non-ASCII text in it (see commit 7c059e446). */
-html[data-viz-court-morph] [data-court-morph-target] {
+html[data-viz-court-morph] [data-court-morph-target],
+html[data-viz-court-morph] [data-lightbox-box],
+html[data-viz-court-morph] [data-lightbox-scrim] {
   opacity: 0;
 }
 

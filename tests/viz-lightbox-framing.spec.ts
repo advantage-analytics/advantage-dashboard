@@ -34,21 +34,31 @@ test.describe("serve wall card: through the net", () => {
   const box = SERVE_COURT_THROUGH_NET.viewBox;
   const bottom = box.minY + box.h;
 
-  test("the art includes the near service line, and the net sits inside it", () => {
-    expect(SERVE_COURT_THROUGH_NET.nearServiceLineY).toBeCloseTo(355.5, 6);
+  test("the window holds the service boxes and the net, with near court below it", () => {
     // Outer (post-group-transform) heights.
-    expect(SERVE_COURT_THROUGH_NET.netOuterY).toBeGreaterThan(box.minY + 20);
-    expect(SERVE_COURT_THROUGH_NET.netOuterY).toBeLessThan(bottom - 20);
-    expect(SERVE_COURT_THROUGH_NET.nearServiceOuterY).toBeLessThan(bottom);
-    // Cropped a little past the line — not the whole near half.
-    expect(bottom - SERVE_COURT_THROUGH_NET.nearServiceOuterY).toBeLessThan(15);
+    expect(SERVE_COURT_THROUGH_NET.serviceLineOuterY).toBeGreaterThan(
+      box.minY + 20,
+    );
+    expect(SERVE_COURT_THROUGH_NET.netOuterY).toBeGreaterThan(
+      SERVE_COURT_THROUGH_NET.serviceLineOuterY,
+    );
+    // The net sits inside the art with a strip of the near boxes below it.
+    expect(bottom - SERVE_COURT_THROUGH_NET.netOuterY).toBeGreaterThan(20);
+    // The court surface runs past the window, so the frame edge cuts it.
+    expect(117 + 0.85 * (SERVE_COURT_THROUGH_NET.cropY - 125)).toBeGreaterThan(
+      bottom,
+    );
   });
 
-  test("same width and far edge as the half court, so a serve mark is the same size; only taller", () => {
-    expect(box.minX).toBe(SERVE_COURT.viewBox.minX);
-    expect(box.minY).toBe(SERVE_COURT.viewBox.minY);
-    expect(box.w).toBe(SERVE_COURT.viewBox.w);
-    expect(box.h).toBeGreaterThan(SERVE_COURT.viewBox.h);
+  test("the same 334:216 box as every card, zoomed in on the half court", () => {
+    expect(box.w / box.h).toBeCloseTo(
+      SERVE_COURT.viewBox.w / SERVE_COURT.viewBox.h,
+      6,
+    );
+    // Narrower window in the same box: the court draws larger.
+    expect(box.w).toBeLessThan(SERVE_COURT.viewBox.w);
+    // Centred on the court.
+    expect(box.minX + box.w / 2).toBeCloseTo(SERVE_COURT.centerX, 6);
   });
 });
 
