@@ -160,8 +160,11 @@ test.describe("wiring", () => {
       "utf8",
     );
     expect(drawer).toContain(
-      "useMatchSnapshot(match.id, inFlight, match.turned)",
+      "useMatchSnapshotPair(match.id, inFlight, match.turned)",
     );
+    // The one-sided read the schedule's drawer keeps, and the pair's
+    // "you" row: both pick the seat the list row reads from.
     expect(sections).toContain('.eq("is_player1", !turned)');
+    expect(sections).toContain("row.is_player1 === !turned");
   });
 });

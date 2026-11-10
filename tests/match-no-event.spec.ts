@@ -100,7 +100,7 @@ test("a list row with an event prints the name, not 'No event'", () => {
   expect(html).not.toContain("No event");
 });
 
-test("the drawer's Event fact reads a muted 'No event'", () => {
+test("the drawer's date · event line reads a muted 'No event'", () => {
   const { MatchDrawer } = loader.load(
     "src/components/dashboard/matches/match-drawer.tsx",
   ) as { MatchDrawer: React.ComponentType<Record<string, unknown>> };
@@ -123,8 +123,11 @@ test("the drawer's Event fact reads a muted 'No event'", () => {
     }),
   );
 
-  expect(html).toMatch(/<dd[^>]*>No event<\/dd>/);
+  expect(html).toMatch(
+    /<span[^>]*style="color:var\(--ink-400\)"[^>]*>No event<\/span>/,
+  );
   expect(html).not.toContain("Unknown Event");
+  expect(html).not.toContain("Not specified");
 });
 
 test("realTournamentName still reads the legacy placeholder as no event", () => {
