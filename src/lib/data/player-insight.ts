@@ -331,9 +331,9 @@ function resolveDescription(
 
 /**
  * The model's two lines as the card shows them (a one-line answer splits at
- * its first sentence), or `null` when there is no
- * claim to show — an empty answer, or a claim that typed a digit (a figure
- * nobody verified, in the one line that must carry none). A description that
+ * its first sentence), or `null` when there is no claim to show — an empty
+ * answer, or a claim that typed a digit (a figure nobody verified, in the
+ * one line that must carry none). A description that
  * fails its checks is dropped on its own: the claim stands, and the card
  * prints the computed evidence line in its place.
  */
@@ -353,7 +353,8 @@ export function resolvePlayerInsight(
     lines = [first, rest.join(" ")];
   }
   const claim = lines[0] ?? "";
-  if (claim === "" || /\d/.test(claim) || /\{F\d+\}/.test(claim)) return null;
+  // A cited key carries a digit, so this also refuses a claim that cites one.
+  if (claim === "" || /\d/.test(claim)) return null;
   const description = resolveDescription(lines.slice(1).join(" "), figures);
   return { claim, description };
 }
