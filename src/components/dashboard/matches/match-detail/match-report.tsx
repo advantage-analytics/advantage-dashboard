@@ -17,7 +17,6 @@ import {
 import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
 import { MatchReportMoreMenu } from "@/components/dashboard/matches/match-detail/report-more-menu";
 import { MatchReportInsight } from "@/components/dashboard/matches/match-detail/report-insight-card";
-import { MATCH_REPORT_PANE_PAD } from "./match-report-layout";
 // Parts that live in their own files: one import line here and one entry in
 // the `MatchReport` object at the bottom. Those files read `useMatchReport`
 // from `match-report-context.tsx`, never from this file, so adding one cannot
@@ -122,7 +121,7 @@ export function MatchReportPane({ children }: { children: ReactNode }) {
       // their hairline and shadow). F1 draws this pane on the grey page
       // ground; that was overruled after the build (spec › Decisions 1).
       style={{
-        padding: `${MATCH_REPORT_PANE_PAD.top}px ${MATCH_REPORT_PANE_PAD.x}px ${MATCH_REPORT_PANE_PAD.bottom}px`,
+        padding: "20px 56px 24px",
         background: "var(--surface-card)",
       }}
     >
