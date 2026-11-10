@@ -325,6 +325,50 @@ test.describe("Game profile readouts and legend", () => {
     expect(html).toContain("motion-reduce:transition-none");
   });
 
+  test("an axis with no attempts is skipped, never drawn at 0", () => {
+    const { gameProfilePolygon, gameProfileTarget } = card() as unknown as {
+      gameProfilePolygon: (v: (number | null)[]) => string;
+      gameProfileTarget: (
+        axis: number,
+        recent: number | null,
+        overall: number | null,
+      ) => [number, number];
+    };
+    // Five measured vertices, the sixth (BP converted) left out — not a
+    // sixth point at the centre (210,125).
+    const shape = gameProfilePolygon([57, 76, 44, 52, 73, null]);
+    expect(shape.split(" ")).toHaveLength(5);
+    expect(shape).not.toContain("210.0,125.0");
+    // The target falls back to Overall's vertex, then to the rim.
+    expect(gameProfileTarget(5, null, 45)).toEqual(
+      gameProfileTarget(5, 45, null),
+    );
+    expect(gameProfileTarget(0, null, null)).toEqual([210, 33]);
+  });
+
+  test("the plot's own name is short; the figures are each vertex's", () => {
+    const { SeasonGameProfileCard } = card();
+    const html = renderToStaticMarkup(
+      React.createElement(SeasonGameProfileCard, {
+        playerName: "Maya Chen",
+        analyzed: 3,
+        profile: {
+          overall: [64, 71, 52, 44, 66, 45],
+          lastMatch: {
+            values: [57, 76, 44, 52, 73, null],
+            opponent: "Ana Ruiz",
+            date: "2026-11-07",
+          },
+          lastFive: null,
+        },
+      }),
+    );
+    expect(html).toContain(
+      'role="group" aria-label="Chen&#x27;s last match against their overall, on six rates"',
+    );
+    expect(html).not.toMatch(/role="group" aria-label="[^"]*%/);
+  });
+
   test("one match: Overall · 1 match", () => {
     expect(card().gameProfileOverallLegend(1)).toBe("Overall · 1 match");
   });

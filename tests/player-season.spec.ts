@@ -1120,6 +1120,36 @@ test.describe("the game profile", () => {
     expect(profile.overall).toEqual(gameProfileValues(six));
   });
 
+  test("an undated match is never the last match while a dated one exists", () => {
+    const undated: SeasonMatch = {
+      ...MATCH_B,
+      matchId: "z",
+      date: null,
+      opponent: "Nodate",
+    };
+    const profile = seasonGameProfile([MATCH_A, undated, MATCH_B]);
+    // A (Oct 5) is the latest dated match, though compareSeasonMatches files
+    // the undated one last.
+    expect(profile.lastMatch).toMatchObject({
+      opponent: "Ruiz",
+      date: "2026-10-05",
+    });
+    // …and the undated one is the oldest, so it leaves the last five first.
+    const dated = [1, 2, 3, 4, 5].map((d) => ({
+      ...MATCH_A,
+      matchId: `d${d}`,
+      date: `2026-10-0${d}`,
+    }));
+    expect(seasonGameProfile([undated, ...dated]).lastFive).toEqual(
+      gameProfileValues(dated),
+    );
+    // With nothing dated, the undated match is all there is.
+    expect(seasonGameProfile([undated]).lastMatch).toMatchObject({
+      opponent: "Nodate",
+      date: null,
+    });
+  });
+
   test("with no matches every axis is empty and there is no last match", () => {
     const profile = seasonGameProfile([]);
     expect(profile.overall).toEqual(GAME_PROFILE_AXES.map(() => null));

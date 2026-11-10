@@ -1,5 +1,10 @@
 import type { MatchPoint } from "@/lib/data/match-points-server";
-import { compareMatchDays } from "@/lib/data/match-day";
+import { compareMatchDays, matchDay } from "@/lib/data/match-day";
+import {
+  GAME_PROFILE_AXES,
+  GAME_PROFILE_RECENT,
+  type GameProfileValues,
+} from "@/lib/data/game-profile-axes";
 import {
   buildStatRows,
   h2hGroups,
@@ -444,39 +449,21 @@ export function withoutSeasonShotKindRows(
 
 /* ── Game profile ───────────────────────────────────────────────────────── */
 
-/**
- * The Game profile radar's six axes (design canvas "Match page refinements",
- * board 10), each a rate of the player's, 0–100%. `rows` are the season Head
- * to head rows the axis pools — Return won pools the first- and second-serve
- * return rows' made and attempts, so it is every return point the player
- * played, not a mean of two percentages.
- */
-export const GAME_PROFILE_AXES = [
-  { label: "1st serve in", rows: ["First serve in"] },
-  { label: "1st serve won", rows: ["First serve points won"] },
-  { label: "2nd serve won", rows: ["Second serve points won"] },
-  {
-    label: "Return won",
-    rows: ["First serve returns won", "Second serve returns won"],
-  },
-  { label: "Net won", rows: ["Net points won"] },
-  { label: "BP converted", rows: ["Break points converted"] },
-] as const;
-
-/** One radar shape: a value per `GAME_PROFILE_AXES` entry, `null` with no attempts. */
-export type GameProfileValues = (number | null)[];
-
-/**
- * How many recent matches the swap combines, and the record it needs before
- * it is offered: with five or fewer, the last five would be nearly the whole
- * season, so the card shows the last match only.
- */
-export const GAME_PROFILE_RECENT = 5;
+// The axes, the shape type and the recent-match count live in a module with
+// no imports (`game-profile-axes.ts`), so the client card can read them
+// without pulling this fold and its calculators into its bundle.
+export {
+  GAME_PROFILE_AXES,
+  GAME_PROFILE_RECENT,
+  type GameProfileValues,
+} from "@/lib/data/game-profile-axes";
 
 export interface SeasonGameProfile {
   /** The player's whole season — the slate outline. */
   overall: GameProfileValues;
-  /** The latest analyzed match (`compareSeasonMatches`), `null` with none. */
+  /**
+   * The latest dated analyzed match (`recentFormOrder`), `null` with none.
+   */
   lastMatch: {
     values: GameProfileValues;
     opponent: string;
@@ -517,10 +504,23 @@ export function gameProfileValues(
   });
 }
 
+/**
+ * The season oldest first for "recent form": `compareSeasonMatches` order,
+ * except a match with no readable date counts as the OLDEST, not the newest
+ * (where that comparator files it). Nothing says when an undated match was
+ * played, so it must never stand in as the last match while a dated one
+ * exists; with none dated it is all there is.
+ */
+function recentFormOrder(matches: readonly SeasonMatch[]): SeasonMatch[] {
+  const ordered = [...matches].sort(compareSeasonMatches);
+  const undated = ordered.filter((m) => matchDay(m.date) === null);
+  return [...undated, ...ordered.filter((m) => matchDay(m.date) !== null)];
+}
+
 export function seasonGameProfile(
   matches: readonly SeasonMatch[],
 ): SeasonGameProfile {
-  const ordered = [...matches].sort(compareSeasonMatches);
+  const ordered = recentFormOrder(matches);
   const last = ordered.at(-1);
   return {
     overall: gameProfileValues(ordered),

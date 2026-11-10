@@ -4,7 +4,6 @@ import { useState } from "react";
 import { ArrowRightLeft } from "lucide-react";
 
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
-import { statDisplay } from "@/components/dashboard/matches/match-detail/head-to-head-rows";
 import {
   Tooltip,
   TooltipContent,
@@ -13,12 +12,14 @@ import {
 import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import { formatMatchDayShort } from "@/lib/data/match-day";
 import { surname } from "@/lib/data/match-utils";
+// The axes from their import-free module and only types from the fold, so
+// neither the season fold nor the report's calculators reach this bundle.
 import {
   GAME_PROFILE_AXES,
   GAME_PROFILE_RECENT,
   type GameProfileValues,
-  type SeasonGameProfile,
-} from "@/lib/data/player-season";
+} from "@/lib/data/game-profile-axes";
+import type { SeasonGameProfile } from "@/lib/data/player-season";
 
 /**
  * The team player profile's "Game profile" (design canvas "Match page
@@ -84,21 +85,51 @@ function angleOf(axis: number): number {
   return -Math.PI / 2 + (axis * 2 * Math.PI) / GAME_PROFILE_AXES.length;
 }
 
+/** A one-decimal coordinate: enough for a 420-unit plot, and short markup. */
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
 function point(axis: number, value: number): [number, number] {
   const r = (RADIUS * Math.max(0, Math.min(100, value))) / 100;
-  return [CX + Math.cos(angleOf(axis)) * r, CY + Math.sin(angleOf(axis)) * r];
+  return [
+    round1(CX + Math.cos(angleOf(axis)) * r),
+    round1(CY + Math.sin(angleOf(axis)) * r),
+  ];
 }
 
-function polygon(values: readonly (number | null)[]): string {
+/**
+ * A shape through its measured vertices only. An axis with no attempts
+ * (`null`) is skipped — its neighbours join across it — never drawn at 0,
+ * which would read as "converted none" for a rate nobody measured.
+ */
+export function gameProfilePolygon(values: readonly (number | null)[]): string {
   return values
-    .map((v, i) => point(i, v ?? 0))
+    .flatMap((v, i) => (v === null ? [] : [point(i, v)]))
     .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`)
     .join(" ");
 }
 
-/** "57%", or an em dash for an axis with no attempts. */
+/**
+ * Where an axis's hover target and readout sit: the blue vertex; with no
+ * blue figure, the Overall vertex; with neither, the rim — so the readout
+ * that says "—" never hangs over a centre point it does not mean.
+ */
+export function gameProfileTarget(
+  axis: number,
+  recent: number | null,
+  overall: number | null,
+): [number, number] {
+  return point(axis, recent ?? overall ?? 100);
+}
+
+/**
+ * "57%", or an em dash for an axis with no attempts — the season head to
+ * head's own rounding (`statDisplay`), written here so this client module
+ * does not import the report's row configs.
+ */
 export function gameProfileFigure(value: number | null): string {
-  return statDisplay(value, true) || "—";
+  return value === null || !Number.isFinite(value)
+    ? "—"
+    : `${Math.round(value)}%`;
 }
 
 /** The text beside the swap: what the blue shape is. */
@@ -169,6 +200,40 @@ function LineKey({ color, width = 10 }: { color: string; width?: number }) {
   );
 }
 
+/**
+ * A legend key: focusable, so a keyboard singles its shape out as a pointer
+ * does, and faded while the other shape is singled out.
+ */
+function ShapeKey({
+  shape,
+  active,
+  onSingleOut,
+  color,
+  label,
+}: {
+  shape: Shape;
+  active: Shape | null;
+  onSingleOut: (shape: Shape | null) => void;
+  color: string;
+  label: string;
+}) {
+  return (
+    <span
+      data-testid={`game-profile-key-${shape}`}
+      tabIndex={0}
+      onMouseEnter={() => onSingleOut(shape)}
+      onMouseLeave={() => onSingleOut(null)}
+      onFocus={() => onSingleOut(shape)}
+      onBlur={() => onSingleOut(null)}
+      className={`-mx-1 -my-0.5 inline-flex cursor-default items-center gap-1.5 rounded px-1 py-0.5 ${FADE}`}
+      style={{ opacity: active !== null && active !== shape ? KEY_FADED : 1 }}
+    >
+      <LineKey color={color} />
+      <span className="text-micro whitespace-nowrap">{label}</span>
+    </span>
+  );
+}
+
 export function SeasonGameProfileCard({
   playerName,
   analyzed,
@@ -203,18 +268,22 @@ export function SeasonGameProfileCard({
     ? "Show last match"
     : `Show last ${GAME_PROFILE_RECENT} matches`;
 
+  // A short name for the plot: each axis's figures are its own target's
+  // label, so naming them here too would announce every figure twice.
   const description = empty
     ? `${name}'s game profile: no analyzed match yet.`
-    : `${name}'s ${recentName.toLowerCase()} against their overall: ` +
-      GAME_PROFILE_AXES.map(
-        (a, i) =>
-          `${a.label} ${gameProfileFigure(recent[i])} (overall ${gameProfileFigure(profile.overall[i])})`,
-      ).join(", ") +
-      ".";
+    : `${name}'s ${recentName.toLowerCase()} against their overall, on six rates`;
 
   const open = !empty && axis !== null ? axis : null;
   const openPoint =
-    open !== null && recent ? point(open, recent[open] ?? 0) : null;
+    open !== null && recent
+      ? gameProfileTarget(open, recent[open], profile.overall[open])
+      : null;
+
+  const openDelta =
+    open !== null && recent
+      ? gameProfileDelta(recent[open], profile.overall[open])
+      : null;
 
   return (
     <section
@@ -276,7 +345,7 @@ export function SeasonGameProfileCard({
           {RINGS.map((ring) => (
             <polygon
               key={ring}
-              points={polygon(GAME_PROFILE_AXES.map(() => ring))}
+              points={gameProfilePolygon(GAME_PROFILE_AXES.map(() => ring))}
               fill="none"
               stroke="var(--ink-200)"
               strokeWidth={1}
@@ -302,7 +371,7 @@ export function SeasonGameProfileCard({
             <>
               <polygon
                 data-testid="game-profile-overall"
-                points={polygon(profile.overall)}
+                points={gameProfilePolygon(profile.overall)}
                 fill="none"
                 stroke="var(--viz-opp)"
                 strokeWidth={1.5}
@@ -313,7 +382,7 @@ export function SeasonGameProfileCard({
               />
               <polygon
                 data-testid="game-profile-recent"
-                points={polygon(recent)}
+                points={gameProfilePolygon(recent)}
                 fill="var(--viz-you)"
                 fillOpacity={0.14}
                 stroke="var(--viz-you)"
@@ -348,17 +417,18 @@ export function SeasonGameProfileCard({
           })}
           {!empty &&
             GAME_PROFILE_AXES.map((a, i) => {
-              const [rx, ry] = point(i, recent[i] ?? 0);
               const lit = open === i;
               const overall = profile.overall[i];
+              const [tx, ty] = gameProfileTarget(i, recent[i], overall);
+              const overallPoint = overall === null ? null : point(i, overall);
               const delta = gameProfileDelta(recent[i], overall);
               return (
                 <g key={a.label} data-axis={i}>
-                  {lit && overall !== null && (
+                  {lit && overallPoint && (
                     <circle
                       data-testid="game-profile-overall-ring"
-                      cx={point(i, overall)[0]}
-                      cy={point(i, overall)[1]}
+                      cx={overallPoint[0]}
+                      cy={overallPoint[1]}
                       r={3.5}
                       fill="var(--surface-card)"
                       stroke="var(--viz-opp)"
@@ -368,8 +438,8 @@ export function SeasonGameProfileCard({
                   )}
                   {recent[i] !== null && (
                     <circle
-                      cx={rx}
-                      cy={ry}
+                      cx={tx}
+                      cy={ty}
                       r={lit ? 4 : 2.5}
                       fill="var(--viz-you)"
                       stroke="var(--surface-card)"
@@ -385,8 +455,8 @@ export function SeasonGameProfileCard({
                       target's name too. */}
                   <circle
                     data-testid="game-profile-vertex"
-                    cx={rx}
-                    cy={ry}
+                    cx={tx}
+                    cy={ty}
                     r={HIT_RADIUS}
                     fill="transparent"
                     tabIndex={0}
@@ -435,9 +505,9 @@ export function SeasonGameProfileCard({
                 <LineKey color="var(--viz-opp-mid)" width={8} />
                 Overall {gameProfileFigure(profile.overall[open])}
               </span>
-              {gameProfileDelta(recent[open], profile.overall[open]) && (
+              {openDelta && (
                 <span className="tabular text-[10px] text-white/[0.64]">
-                  {gameProfileDelta(recent[open], profile.overall[open])}
+                  {openDelta}
                 </span>
               )}
             </ChartTooltip>
@@ -455,36 +525,20 @@ export function SeasonGameProfileCard({
         // Each key is focusable, so a keyboard gets the same single-out as a
         // pointer; its words are the key's own, so nothing extra is announced.
         <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5">
-          <span
-            data-testid="game-profile-key-recent"
-            tabIndex={0}
-            onMouseEnter={() => setKey("recent")}
-            onMouseLeave={() => setKey(null)}
-            onFocus={() => setKey("recent")}
-            onBlur={() => setKey(null)}
-            className={`-mx-1 -my-0.5 inline-flex cursor-default items-center gap-1.5 rounded px-1 py-0.5 ${FADE}`}
-            style={{ opacity: key === "overall" ? KEY_FADED : 1 }}
-          >
-            <LineKey color="var(--viz-you)" />
-            <span className="text-micro whitespace-nowrap">
-              {gameProfileLegend(showFive, profile.lastMatch)}
-            </span>
-          </span>
-          <span
-            data-testid="game-profile-key-overall"
-            tabIndex={0}
-            onMouseEnter={() => setKey("overall")}
-            onMouseLeave={() => setKey(null)}
-            onFocus={() => setKey("overall")}
-            onBlur={() => setKey(null)}
-            className={`-mx-1 -my-0.5 inline-flex cursor-default items-center gap-1.5 rounded px-1 py-0.5 ${FADE}`}
-            style={{ opacity: key === "recent" ? KEY_FADED : 1 }}
-          >
-            <LineKey color="var(--viz-opp)" />
-            <span className="text-micro whitespace-nowrap">
-              {gameProfileOverallLegend(analyzed)}
-            </span>
-          </span>
+          <ShapeKey
+            shape="recent"
+            active={key}
+            onSingleOut={setKey}
+            color="var(--viz-you)"
+            label={gameProfileLegend(showFive, profile.lastMatch)}
+          />
+          <ShapeKey
+            shape="overall"
+            active={key}
+            onSingleOut={setKey}
+            color="var(--viz-opp)"
+            label={gameProfileOverallLegend(analyzed)}
+          />
         </div>
       )}
     </section>
