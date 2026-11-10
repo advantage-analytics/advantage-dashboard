@@ -456,14 +456,15 @@ async function RosterContent({
     </div>
   );
 
+  const ranked = players.filter((m) => m.lineupSpot !== null).length;
   return (
     <>
       {report}
       {/* Teaches the loading skeleton this roster's size for the next visit. */}
       <RememberRosterShape
         workspaceId={active.id}
-        ranked={players.filter((m) => m.lineupSpot !== null).length}
-        benched={players.filter((m) => m.lineupSpot === null).length}
+        ranked={ranked}
+        benched={players.length - ranked}
         invites={roster.invites.length}
         staffLine={staff.length > 0}
       />

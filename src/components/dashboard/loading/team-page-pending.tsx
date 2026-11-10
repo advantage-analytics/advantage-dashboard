@@ -190,8 +190,16 @@ function RosterRowsSkeleton() {
 function PlayerRowPending({ spot }: { spot: boolean }) {
   return (
     <div className={`${ROW} h-[52px]`}>
+      {/* A bench row has no line: the table prints a quiet dash there, which
+          is chrome rather than data, so it renders as itself. */}
       <div className={COL.spot}>
-        {spot && <PendingBar className="mx-auto w-3" />}
+        {spot ? (
+          <PendingBar className="mx-auto w-3" />
+        ) : (
+          <span className="mono block text-center text-[11px] text-[var(--ink-400)]">
+            —
+          </span>
+        )}
       </div>
       <div className={`${COL.player} flex items-center gap-2.5`}>
         <PendingBar className="size-[26px] shrink-0 rounded-full" />

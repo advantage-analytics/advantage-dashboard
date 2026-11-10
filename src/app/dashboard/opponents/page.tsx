@@ -4,6 +4,7 @@ import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { OpponentsDayZero } from "@/components/dashboard/opponents/opponents-day-zero";
 import { OpponentsPageContent } from "@/components/dashboard/opponents/opponents-page-content";
 import { OpponentsSkeleton } from "@/components/dashboard/opponents/opponents-skeleton";
+import { RememberOpponentsDayZero } from "@/components/dashboard/opponents/opponents-shape-memory";
 import { TeamOpponentsPageContent } from "@/components/dashboard/opponents/team-opponents-page-content";
 import { getPersonalOpponents } from "@/lib/data/personal-opponents-server";
 import { getTeamOpponents } from "@/lib/data/team-opponents-server";
@@ -101,7 +102,12 @@ async function PersonalOpponents({
     searchParams,
   ]);
   if (opponents.length === 0) {
-    return <OpponentsDayZero unnamedMatches={totals.unnamed} />;
+    return (
+      <>
+        <RememberOpponentsDayZero scope="personal" unnamed={totals.unnamed} />
+        <OpponentsDayZero unnamedMatches={totals.unnamed} />
+      </>
+    );
   }
   return (
     <OpponentsPageContent
@@ -133,7 +139,12 @@ async function TeamOpponents({
     searchParams,
   ]);
   if (opponents.length === 0) {
-    return <OpponentsDayZero scope="team" />;
+    return (
+      <>
+        <RememberOpponentsDayZero scope="team" />
+        <OpponentsDayZero scope="team" />
+      </>
+    );
   }
   return (
     <TeamOpponentsPageContent

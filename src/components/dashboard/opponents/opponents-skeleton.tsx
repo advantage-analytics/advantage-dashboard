@@ -20,7 +20,8 @@ import {
 } from "./opponents-table-layout";
 import { OpponentsTableHeader } from "./opponents-table-header";
 import { OpponentsToolbarStatic } from "./opponents-toolbar";
-import { useRecalledOpponentsRows } from "./opponents-shape-memory";
+import { OpponentsDayZero } from "./opponents-day-zero";
+import { useRecalledOpponentsShape } from "./opponents-shape-memory";
 
 /**
  * The populated page's frame with the data blanked — the `Suspense` fallback
@@ -43,7 +44,11 @@ export function OpponentsSkeleton({
   const team = scope === "team";
   // The opponent count is only known once the matches have been read and
   // grouped — the read this skeleton waits on — so it comes from memory.
-  const rows = useRecalledOpponentsRows(scope);
+  const { dayZero, rows, unnamed } = useRecalledOpponentsShape(scope);
+  // Nothing to load into rows last time: draw the page this resolves to.
+  if (dayZero) {
+    return <OpponentsDayZero scope={scope} unnamedMatches={unnamed} />;
+  }
   return (
     <div className={OPPONENTS_PAGE_FRAME}>
       <div className={cn(OPPONENTS_PAGE_COLUMN, OPPONENTS_PAGE_GAP)}>
