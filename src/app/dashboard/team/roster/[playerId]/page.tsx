@@ -36,10 +36,7 @@ import {
   ProfileViewWhen,
 } from "@/components/dashboard/team/player-profile/profile-frame";
 import { ProfileActions } from "@/components/dashboard/team/player-profile/profile-actions";
-import {
-  ProfileStatisticsDeferred,
-  ProfileVisualizationsDeferred,
-} from "@/components/dashboard/team/player-profile/profile-body-deferred";
+import { ProfileBodySlot } from "@/components/dashboard/team/player-profile/profile-body-deferred";
 import { ProfileStatisticsView } from "@/components/dashboard/team/player-profile/profile-statistics-view";
 import {
   PROFILE_VIEW_PARAM,
@@ -125,11 +122,20 @@ import { askEntryHref } from "@/lib/services/ask/entry";
  *
  * The body not rendered has a stand-in in its slot
  * (`profile-body-deferred.tsx`): nothing while the other view is up, and
- * when the reader switches to it, that view's skeleton and one
- * `router.refresh()`, whose render carries the body — one round trip, the
- * one a first load of that view would cost. The two cannot ping-pong: a
- * stand-in is shown only while its own view is the URL's, and that URL's
- * render carries its body, not another stand-in it would show.
+ * when the reader switches to it, that view's skeleton and one soft
+ * navigation to the URL it is at (`RefreshOnMount`, not `router.refresh()`,
+ * which fell back to a full document load), whose render carries the body —
+ * one round trip, the one a first load of that view would cost. The two
+ * cannot ping-pong: a stand-in is shown only while its own view is the URL's,
+ * and that URL's render carries its body, not another stand-in it would show.
+ *
+ * That skeleton is shown once per view per visit, not once per switch: each
+ * slot is a `ProfileBodySlot`, which keeps the last body it was handed and
+ * shows it again when a later request rendered the other view (the
+ * Visualizations body only while the URL's viz state is the one it was
+ * rendered for). A switch back to a view already seen is instant, and asks
+ * for the page again in the background so a body that went stale meanwhile
+ * is replaced rather than trusted — `profile-body-deferred.tsx`.
  *
  * ── Why the numbers match the roster's ──────────────────────────────────────
  * `getPlayerProfile` folds both of a claimed player's ids the way
@@ -302,46 +308,54 @@ export default async function PlayerProfilePage({
               per request: the other view's slot holds its stand-in, which
               asks for the body when it is shown (`profile-body-deferred.tsx`). */}
           <WidgetBoundary label="Statistics">
-            {courtsOnly ? (
-              <ProfileStatisticsDeferred />
-            ) : (
-              <Suspense
-                fallback={
-                  <ProfileViewWhen view="statistics">
-                    <ProfileStatisticsPanePending />
-                  </ProfileViewWhen>
-                }
-              >
-                <ProfileStatisticsBody
-                  programId={active.id}
-                  playerId={playerId}
-                  rosterPlayerId={profile.playerId}
-                  playerName={profile.name}
-                  firstName={profile.firstName}
-                />
-              </Suspense>
-            )}
+            <ProfileBodySlot
+              view="statistics"
+              scope={active.id}
+              body={
+                courtsOnly ? null : (
+                  <Suspense
+                    fallback={
+                      <ProfileViewWhen view="statistics">
+                        <ProfileStatisticsPanePending />
+                      </ProfileViewWhen>
+                    }
+                  >
+                    <ProfileStatisticsBody
+                      programId={active.id}
+                      playerId={playerId}
+                      rosterPlayerId={profile.playerId}
+                      playerName={profile.name}
+                      firstName={profile.firstName}
+                    />
+                  </Suspense>
+                )
+              }
+            />
           </WidgetBoundary>
           <WidgetBoundary label="Visualizations">
-            {courtsOnly ? (
-              <Suspense
-                fallback={
-                  <ProfileViewWhen view="visualizations">
-                    <ProfileVisualizationsPanePending />
-                  </ProfileViewWhen>
-                }
-              >
-                <ProfileVisualizationsBody
-                  programId={active.id}
-                  playerId={playerId}
-                  playerName={profile.name}
-                  firstName={profile.firstName}
-                  query={query}
-                />
-              </Suspense>
-            ) : (
-              <ProfileVisualizationsDeferred />
-            )}
+            <ProfileBodySlot
+              view="visualizations"
+              scope={active.id}
+              body={
+                courtsOnly ? (
+                  <Suspense
+                    fallback={
+                      <ProfileViewWhen view="visualizations">
+                        <ProfileVisualizationsPanePending />
+                      </ProfileViewWhen>
+                    }
+                  >
+                    <ProfileVisualizationsBody
+                      programId={active.id}
+                      playerId={playerId}
+                      playerName={profile.name}
+                      firstName={profile.firstName}
+                      query={query}
+                    />
+                  </Suspense>
+                ) : null
+              }
+            />
           </WidgetBoundary>
         </MatchReportPane>
       </MatchReportFrame>
@@ -421,7 +435,7 @@ async function ProfileStatisticsBody({
  * the points, no lob files, no fold; `cache()`d, so `AnalyzedCount` shares
  * it), the workspace's bands and the viewer's unit, then the wall's four
  * cards for the URL's side and — when `?cut=` names one — the opened card's
- * court, statistics, per-row mark ids and per-option counts, all computed
+ * court, statistics, per-row mark positions and per-option counts, all computed
  * here (`player-season-viz.ts`) and handed to the client view as plain data.
  * The Saved collection is the workspace's saved views (`getSavedViews`,
  * RLS-scoped: the viewer's private views and the program's shared ones),

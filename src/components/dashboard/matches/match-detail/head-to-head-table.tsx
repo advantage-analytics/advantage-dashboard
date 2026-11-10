@@ -79,14 +79,6 @@ export const EASE = "duration-200 ease-[var(--ease-primary)]";
  */
 const FIGURE = `tabular -mr-1.5 rounded-[var(--radius-cell)] px-1.5 py-0.5 text-[13px] transition-colors ${EASE}`;
 
-/**
- * The label target's stretched box: its `::after` covers the whole row, so the
- * hit area is exactly the row's wash. The ring moves onto it (with
- * `data-focus-ring="none"` on the element) so focus draws the same box.
- */
-export const STRETCHED =
-  "after:absolute after:inset-0 after:rounded-[var(--radius-element)] after:content-[''] focus-visible:after:[box-shadow:var(--focus-ring)]";
-
 /** The label slot's box: the row's left, stretching to the first column. */
 export const LABEL_SLOT =
   "flex min-w-0 flex-1 items-center self-stretch pr-3 text-[12px] text-[var(--ink-600)]";

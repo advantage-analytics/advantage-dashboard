@@ -52,6 +52,7 @@ function mark<C extends LabelMarkCode>(
 const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   winner_disputed: { scoreWinner: "p2", lastStrokeWinner: "p1" },
   last_call_overruled: { vendorCall: "out", eventId: 7 },
+  last_ball_against_game: { shotId: "s9", call: "out", gameWinner: "p1" },
   last_shot_untracked: { eventId: 7 },
   net_by_trajectory: {},
   winner_to_error_by_bounce: { loser: "p1" },
@@ -310,6 +311,7 @@ test.describe("the item table", () => {
       ],
       [
         "last_call_overruled",
+        "last_ball_against_game",
         "net_by_trajectory",
         "winner_disputed",
         "ending_suspect_line",

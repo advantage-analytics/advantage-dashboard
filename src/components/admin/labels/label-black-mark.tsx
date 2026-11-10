@@ -441,6 +441,17 @@ function hintActions(
         },
       ];
     }
+    case "last_ball_against_game": {
+      if (!onPatchShot) return [];
+      const { shotId, call } = mark.params;
+      return [
+        {
+          label: lastCallAction(call),
+          // The labeller's call: the ending and winner follow the write.
+          run: () => onPatchShot(shotId, { result: call, result_called: true }),
+        },
+      ];
+    }
     case "second_serve_as_first": {
       if (!onPatchShot) return [];
       const { shotId } = mark.params;

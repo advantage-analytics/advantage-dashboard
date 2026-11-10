@@ -33,6 +33,7 @@ import {
   advancedAvailability,
   courtSignature,
   cutNoun,
+  decodeStatRowDots,
   optionCountKey,
   seasonAdvancedOptions,
   statPickKey,
@@ -49,7 +50,7 @@ import { pointSetQuery } from "@/lib/match-video/point-set";
  *
  * This container owns nothing but the hand-off. It turns the server's two
  * lookups into the functions the shell wants — `statRowDots` from the
- * per-row mark ids, `countWith` from the per-option counts — and every
+ * per-row mark positions, `countWith` from the per-option counts — and every
  * change the reader makes (a filter, "Clear filter", You | Opponent, close)
  * goes to the URL through the tab's one store (`useVizState`, `viz-url.ts`),
  * so the page's Server Component recomputes and hands new props back. It
@@ -184,7 +185,7 @@ function emptyCourt(
     clearFilters: { ...EMPTY_VIZ_FILTERS, player: filters.player },
     sets: [],
     errorSplitJudged: last?.errorSplitJudged ?? true,
-    statRowDotIds: {},
+    statRowDots: {},
     optionCounts: {},
     advancedOptions: NO_ADVANCED_OPTIONS,
     names: last?.names ?? { you: "", opponent: "" },
@@ -296,7 +297,10 @@ export function SeasonVizLightbox({
   );
   const seasonTitle = data?.title ?? "";
 
-  const statRowDotIds = data?.statRowDotIds ?? null;
+  // Each row's positions in the court's marks, back into the id sets the
+  // shell asks (`decodeStatRowDots`), once per server answer.
+  const rowDots = data?.statRowDots ?? null;
+  const courtDots = data?.result.dots ?? null;
   // "Advanced filters": the season's options, with no count (nothing to
   // count with here); a Show writes `filters.match` to the URL, and the
   // server applies it to each match.
@@ -315,14 +319,16 @@ export function SeasonVizLightbox({
   );
   const statRowDots = useMemo(() => {
     const sets = new Map(
-      Object.entries(statRowDotIds ?? {}).map(([key, ids]) => [
-        key,
-        new Set(ids),
-      ]),
+      courtDots === null
+        ? []
+        : Object.entries(rowDots ?? {}).map(([key, indices]) => [
+            key,
+            decodeStatRowDots(courtDots, indices),
+          ]),
     );
     return (pick: StatPick): Set<string> | null =>
       sets.get(statPickKey(pick)) ?? null;
-  }, [statRowDotIds]);
+  }, [rowDots, courtDots]);
 
   // This opening: whether the shell's chunk was already here when it began
   // (it was not on the first open of a session: the chunk frame showed

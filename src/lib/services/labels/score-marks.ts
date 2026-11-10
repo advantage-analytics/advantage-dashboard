@@ -44,7 +44,12 @@ import {
 } from "@/lib/services/splitstep/derivation/court";
 import { SIDE_DEAD_ZONE_M } from "@/lib/services/splitstep/derivation/flags";
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
-import { firstServeFaultAlone, lastShotUnresolved } from "./marks-state";
+import { lockedGameNeeds } from "./game-boundary";
+import {
+  firstServeFaultAlone,
+  lastBallAgainstGame,
+  lastShotUnresolved,
+} from "./marks-state";
 import { gameDecided, gameKey, isCountedPoint, labelScores } from "./score";
 import {
   isServeStroke,
@@ -315,15 +320,49 @@ export function liveRowMarks(
   return out;
 }
 
+/** A point `lockedGameMarks` can read: a row mark's, with its lock. */
+export type LockedMarkPoint = ScoreMarkPoint &
+  RowMarkPoint &
+  Partial<Pick<LabelPoint, "gameStartLocked">>;
+
+/**
+ * "Was the last ball out?" (`lastBallAgainstGame`) on each point of a locked
+ * game that does not add up (`lockedGameNeeds`) whose last ball, called the
+ * other way, gives it to the side the game needs, by point id. What a
+ * dragged game boundary asks of its points, beside the band's "Check N
+ * points" slot. A point handed without its strokes raises nothing; ghosts
+ * are not strokes here, as in `liveRowMarks`.
+ */
+export function lockedGameMarks(
+  points: readonly LockedMarkPoint[],
+  adScoring: boolean,
+  start: LabelStartScore | null = null,
+): Record<string, LabelMark[]> {
+  const out: Record<string, LabelMark[]> = {};
+  const needs = lockedGameNeeds(points, adScoring, start);
+  if (needs.size === 0) return out;
+  for (const point of points) {
+    const gameWinner = needs.get(point.id);
+    if (gameWinner === undefined || !point.shots) continue;
+    const mark = lastBallAgainstGame(
+      { winner: point.winner, ending: point.ending, shots: point.shots },
+      gameWinner,
+      true,
+    );
+    if (mark) out[point.id] = [mark];
+  }
+  return out;
+}
+
 /**
  * The session's marks with the two score marks read off the live rows, then
- * `liveRowMarks`, appended after each point's other marks, and the score
- * marks' `missing_point` suggestions after the file's. Everything else passes
- * through untouched.
+ * `liveRowMarks` and `lockedGameMarks`, appended after each point's other
+ * marks, and the score marks' `missing_point` suggestions after the file's.
+ * Everything else passes through untouched.
  */
 export function withLiveScoreMarks(
   marks: LabelMarks,
-  points: readonly (ScoreMarkPoint & RowMarkPoint)[],
+  points: readonly LockedMarkPoint[],
   adScoring: boolean,
   scores?: ReturnType<typeof labelScores>,
   /** Where the video starts in the match; null: at the beginning. */
@@ -337,7 +376,11 @@ export function withLiveScoreMarks(
     start,
   );
   const merged: Record<string, LabelMark[]> = { ...marks.points };
-  for (const list of [live.points, liveRowMarks(points)]) {
+  for (const list of [
+    live.points,
+    liveRowMarks(points),
+    lockedGameMarks(points, adScoring, start),
+  ]) {
     for (const [id, own] of Object.entries(list)) {
       merged[id] = [...(merged[id] ?? []), ...own];
     }

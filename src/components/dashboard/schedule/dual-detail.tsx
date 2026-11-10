@@ -2,7 +2,7 @@
 
 /*
  * LIVE — do not mistake this for part of the dormant tree.
- * `app/dashboard/team/schedule/[eventId]/page.tsx` renders it. The schedule
+ * `app/dashboard/team/schedule/[eventId]/(event)/page.tsx` renders it. The schedule
  * page's rail, `static/event-drawer.tsx`, summarises the same dual in 340px;
  * this is the DB-wired event page, drawn as a line table in the Matches
  * page's grammar (`event-table.tsx`).

@@ -438,6 +438,8 @@ export async function beginPublication(
     sourceUrl = mintPlaybackSas({
       blobName: keys.value.staged,
       ttlSeconds: PUBLICATION_SOURCE_SAS_TTL_SECONDS,
+      // Server-side copy source: keep it exactly this short, no cache window.
+      stable: false,
     }).playbackUrl;
   } catch (cause) {
     return fail("storage_unavailable", configDetail(cause));
