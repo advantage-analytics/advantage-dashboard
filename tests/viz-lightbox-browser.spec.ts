@@ -1714,3 +1714,27 @@ test("R7·2 · a stage that resizes keeps a zoomed, panned court: the filter str
   expect(afterCentre.x).toBeCloseTo(beforeCentre.x, 0);
   expect(afterCentre.y).toBeCloseTo(beforeCentre.y, 0);
 });
+
+test("R7·3 · at Full court, a stage that resizes re-fits the whole court: the filter strip appearing leaves Full court spent", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  const stage = dialog.locator("[data-court-stage]");
+  await expect(stage.locator("[data-viz-mark]").first()).toBeVisible();
+  const full = dialog.getByRole("button", { name: "Full court" });
+  await full.click();
+  await expect(full).toBeDisabled();
+  const before = (await stage.boundingBox())!;
+  // A Statistics row keeps its points: the filter strip appears and the
+  // stage gets shorter.
+  await dialog.getByRole("button", { name: "Statistics" }).click();
+  await dialog.locator("[data-viz-stat-row], li button").first().click();
+  await expect(dialog.locator("[data-viz-filter-strip]")).toBeVisible();
+  await expect
+    .poll(async () => (await stage.boundingBox())!.height)
+    .not.toBe(before.height);
+  // Still the whole court, fitted to the new stage: Full court stays spent.
+  await expect(full).toBeDisabled();
+});

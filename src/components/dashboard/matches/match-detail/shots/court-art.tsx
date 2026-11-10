@@ -474,17 +474,17 @@ function HeatFilterDef({
  * `HeatLayer`'s own `useMemo` over its circle array has a stable `project`
  * identity to key on.
  */
-/** A serve mark's centre held one mark-radius inside the wall card's
- *  zoomed window, in the serve group's own units. */
-function pinInsideServeWindow(p: { cx: number; cy: number }): {
+/** A serve mark that lands past the wall card's zoomed window, pinned ON
+ *  the window's edge (in the serve group's own units): the frame cuts it in
+ *  half, which reads as "beyond here" rather than as a landing spot. */
+function pinToServeWindowEdge(p: { cx: number; cy: number }): {
   cx: number;
   cy: number;
 } {
   const edge = SERVE_COURT_THROUGH_NET.edgeGroup;
-  const inset = SERVE_DOT_R + 1;
   return {
-    cx: Math.min(Math.max(p.cx, edge.left + inset), edge.right - inset),
-    cy: Math.max(p.cy, edge.top + inset),
+    cx: Math.min(Math.max(p.cx, edge.left), edge.right),
+    cy: Math.max(p.cy, edge.top),
   };
 }
 
@@ -944,11 +944,12 @@ export function CourtArt({
                 const placed = atNetPosition(d.atNet, "serve", projected);
                 // The card's zoomed window (`SERVE_COURT_THROUGH_NET`) cuts
                 // off part of the back court: a mark beyond its edge is
-                // pinned just inside, never dropped off the card.
+                // pinned on the edge, half cut by the frame, never dropped
+                // off the card.
                 const { cx, cy } = throughNet
-                  ? pinInsideServeWindow(placed)
+                  ? pinToServeWindowEdge(placed)
                   : placed;
-                return (
+                const mark = (
                   <CourtMark
                     key={d.id}
                     dot={d}
@@ -960,6 +961,20 @@ export function CourtArt({
                     count={dots.length}
                     interaction={markInteraction}
                   />
+                );
+                if (cx === placed.cx && cy === placed.cy) return mark;
+                // Pinned: the offset back to its true spot travels with it,
+                // so the card-to-lightbox flight (`viz-court-morph.ts`) can
+                // carry the mark to where the lightbox draws it.
+                return (
+                  <g
+                    key={d.id}
+                    data-viz-pinned=""
+                    data-viz-pinned-dx={placed.cx - cx}
+                    data-viz-pinned-dy={placed.cy - cy}
+                  >
+                    {mark}
+                  </g>
                 );
               })}
           </g>

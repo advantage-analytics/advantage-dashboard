@@ -334,6 +334,28 @@ function reidentify(copy: SVGSVGElement): void {
   });
 }
 
+/**
+ * A zoomed serve card pins a mark that lands past its window onto the
+ * window's edge (`court-art.tsx`, `data-viz-pinned`); the lightbox draws it
+ * at its true spot. The copy carries each such mark back to that spot (its
+ * own offset, in the serve group's units) and lets the art overflow the
+ * card's window, so nothing jumps when the copy hands over: the copy's own
+ * clip, which opens to the stage, frames it instead.
+ */
+function unpinMarks(copy: SVGSVGElement): void {
+  const pinned = copy.querySelectorAll<SVGGElement>("[data-viz-pinned]");
+  if (pinned.length === 0) return;
+  pinned.forEach((g) => {
+    const dx = Number(g.getAttribute("data-viz-pinned-dx")) || 0;
+    const dy = Number(g.getAttribute("data-viz-pinned-dy")) || 0;
+    g.setAttribute("transform", `translate(${dx} ${dy})`);
+  });
+  copy.style.overflow = "visible";
+  copy
+    .querySelectorAll("[clip-path]")
+    .forEach((el) => el.removeAttribute("clip-path"));
+}
+
 function buildGhost(
   svg: SVGSVGElement,
   svgBox: Rect,
@@ -364,6 +386,7 @@ function buildGhost(
   const copy = svg.cloneNode(true) as SVGSVGElement;
   copy.removeAttribute("id");
   reidentify(copy);
+  unpinMarks(copy);
   copy.setAttribute("width", "100%");
   copy.setAttribute("height", "100%");
   copy.style.display = "block";

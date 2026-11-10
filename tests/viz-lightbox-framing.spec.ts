@@ -1,3 +1,6 @@
+import * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createLoader } from "./fixtures/vm-modules";
 import { expect, test } from "@playwright/test";
 import {
   computeViz,
@@ -139,5 +142,68 @@ test.describe("glide", () => {
     expect(Math.abs(c.x - point.x)).toBeLessThan(Math.abs(c0.x - point.x));
     expect(mid.z).toBeGreaterThan(home.z);
     expect(mid.z).toBeLessThan(to.z);
+  });
+});
+
+test.describe("serve wall card: a mark past the zoomed window", () => {
+  test("is pinned ON the window's edge, half cut by the frame, and carries its offset back to its true spot", () => {
+    const loader = createLoader({ globals: { URLSearchParams } });
+    const { CourtArt } = loader.load(
+      "src/components/dashboard/matches/match-detail/shots/court-art.tsx",
+    ) as {
+      CourtArt: React.ComponentType<Record<string, unknown>>;
+    };
+    // One serve deep behind the far baseline (well past the window's top),
+    // one in the box.
+    const dots = [
+      {
+        id: "deep",
+        outcome: "lost",
+        shape: "circle",
+        lateralM: 0,
+        depthM: 23,
+        atNet: false,
+      },
+      {
+        id: "in",
+        outcome: "won",
+        shape: "circle",
+        lateralM: 0,
+        depthM: 4,
+        atNet: false,
+      },
+    ];
+    const html = renderToStaticMarkup(
+      React.createElement(CourtArt, {
+        cut: "serve",
+        dots,
+        chart: "scatter",
+        fill: true,
+        serveFrame: "throughNet",
+      }),
+    );
+    // Exactly one pinned wrapper, carrying a positive offset back down-court.
+    const pinned = [
+      ...html.matchAll(
+        /data-viz-pinned="" data-viz-pinned-dx="([-\d.e]+)" data-viz-pinned-dy="([-\d.e]+)"/g,
+      ),
+    ];
+    expect(pinned).toHaveLength(1);
+    expect(Number(pinned[0][2])).toBeLessThan(0);
+    // Its mark sits on the window's top edge.
+    const top = SERVE_COURT_THROUGH_NET.edgeGroup.top;
+    const after = html.slice(html.indexOf("data-viz-pinned=")).slice(0, 600);
+    const cy = Number(/cy="([-\d.e]+)"/.exec(after)?.[1]);
+    expect(cy).toBeCloseTo(top, 3);
+    // The half-court frame never pins.
+    const half = renderToStaticMarkup(
+      React.createElement(CourtArt, {
+        cut: "serve",
+        dots,
+        chart: "scatter",
+        fill: true,
+      }),
+    );
+    expect(half).not.toContain("data-viz-pinned");
   });
 });
