@@ -284,7 +284,13 @@ be. Doubles teams and existing users depend on it.
 > (`shots_set_match_id`) sets the column from the point on every insert and
 > on any update naming `point_id` or `match_id`, ignoring what a writer sends,
 > and `points_carry_match_id_to_shots` moves a point's shots with it; neither
-> function is executable by `authenticated` or `anon`. The shots `SELECT`
+> function is executable by `authenticated` or `anon`. That second trigger is
+> an ongoing write to existing `shots` rows, but only of `match_id` and only
+> when a point itself changes match; unlike the backfill it runs with the
+> table's triggers on (points version, Ask facts, the Verified lock). The
+> migration also made the column NOT NULL, added the index
+> `shots_match_point_shot_idx (match_id, point_id, shot_number, id)` that the
+> match's shots read uses, and granted `authenticated` SELECT on the column. The shots `SELECT`
 > policy now reads `match_id IN (visible_match_ids())`, the set the points and
 > match_stats policies already use; `visible_match_ids()`'s program route
 > became a `program_members` semi-join with the same rule (any membership row;
