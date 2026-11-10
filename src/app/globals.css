@@ -739,6 +739,52 @@ html[data-viz-court-morph] [data-lightbox-scrim] {
   opacity: 0;
 }
 
+/* Visualizations lightbox: the filter strip unfolding over the court
+   (lightbox-filters.tsx, LightboxFilterStrip). grid-template-rows 0fr to
+   1fr opens it without animating height, and the -12px margin while closed
+   takes back the court column's own 12px gap, so the column opens by the
+   strip AND its gap together and the stage under it (flex-1) shrinks a
+   little every frame instead of 49px at once. 250ms on --ease-primary, the
+   film room's shot-well unfold. Reduced motion: no transition, it is simply
+   open or shut. ASCII only (see the block above). */
+.viz-filter-strip-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: -12px;
+  transition:
+    grid-template-rows 250ms var(--ease-primary),
+    margin-top 250ms var(--ease-primary);
+}
+.viz-filter-strip-reveal[data-open] {
+  grid-template-rows: 1fr;
+  margin-top: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .viz-filter-strip-reveal {
+    transition: none;
+  }
+}
+
+/* Visualizations lightbox: a mark grows a little under the pointer or
+   focus (lightbox-court.tsx, data-active on [data-viz-mark]) so the point
+   you are on answers where you are looking, not only in the readout. Scaled
+   about its own centre (fill-box), 150ms out on --ease-out-expo; the stroke
+   is non-scaling, so the outline stays a hairline. Reduced motion keeps the
+   size change (it is state, not decoration) and drops the tween. */
+[data-viz-mark-glyph] {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 150ms var(--ease-out-expo);
+}
+[data-viz-mark][data-active] [data-viz-mark-glyph] {
+  transform: scale(1.4);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-viz-mark-glyph] {
+    transition: none;
+  }
+}
+
 /* The film room's court marks (film-court-card.tsx) entering. A mark's
    steady-state opacity is a pure function of film time (markOpacity), so it
    is written INLINE on the element and changes as the playhead moves - which

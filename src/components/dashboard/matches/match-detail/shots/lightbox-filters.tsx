@@ -1,5 +1,4 @@
 import type { Ref } from "react";
-import { Filter } from "lucide-react";
 import {
   MatchesFilterPanel,
   type FilterPanelSection,
@@ -10,7 +9,7 @@ import {
   type MatchFilterAvailability,
   type MatchFilters,
 } from "../match-filters/model";
-import { draftCountLine, type CountNoun } from "../match-filters/panel-draft";
+import type { CountNoun } from "../match-filters/panel-draft";
 import { cn } from "@/lib/utils";
 import { LegendMark } from "./legend-mark";
 import { LEGEND_PICKS, type LegendPick } from "./lightbox-points";
@@ -353,73 +352,6 @@ export function LightboxFilterPanel({
 function advancedSummary(match: MatchFilters): string {
   const n = activeFilterCount(match);
   return n === 0 ? "Score, return, result…" : `${n} applied`;
-}
-
-/* ── Applied strip ─────────────────────────────────────────────────────── */
-
-/**
- * The applied strip under the court's control row (DS Data Table rule 6, a
- * copy of the Video tab's `FilmFilterStrip`): the filter glyph, the cut as
- * one sentence of capitalised phrases joined by middots ("Aces · To the T"),
- * "N of M points", and one quiet action — "Back to all points" when a
- * Statistics row is the only cut, "Clear filter" otherwise. Never chips.
- */
-export function LightboxFilterStrip({
-  phrases,
-  shown,
-  total,
-  statOnly,
-  onClear,
-}: {
-  phrases: string[];
-  /** "N of M points" — omitted by a host with no points to count. */
-  shown?: number;
-  total?: number;
-  statOnly: boolean;
-  onClear: () => void;
-}) {
-  if (phrases.length === 0) return null;
-  const sentence = phrases
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-    .join(" · ");
-  return (
-    <div
-      role="status"
-      data-viz-filter-strip=""
-      className="flex shrink-0 flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-      style={{ background: "var(--surface-subtle)" }}
-    >
-      <Filter
-        className="size-[13px] shrink-0"
-        strokeWidth={1.5}
-        style={{ color: "var(--ink-500)" }}
-        aria-hidden="true"
-      />
-      <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-        {sentence}
-      </span>
-      {shown !== undefined && total !== undefined && (
-        <>
-          <span
-            className="size-[3px] rounded-full"
-            style={{ background: "var(--ink-300)" }}
-            aria-hidden="true"
-          />
-          <span className="text-micro tabular">
-            {draftCountLine(shown, total)}
-          </span>
-        </>
-      )}
-      <div className="flex-1" />
-      <button
-        type="button"
-        onClick={onClear}
-        className="cursor-pointer rounded-[var(--radius-element)] text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-      >
-        {statOnly ? "Back to all points" : "Clear filter"}
-      </button>
-    </div>
-  );
 }
 
 /* ── Legend as a filter ────────────────────────────────────────────────── */

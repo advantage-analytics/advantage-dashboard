@@ -36,23 +36,31 @@
  * open reads as one gesture, not a court flying through a dialog that popped
  * in around it.
  * Continuity: the dialog grows out of the card with the court. Its box is
- * revealed by a clip-path that starts on the card's art box and opens to the
- * whole box on the flight's own curve and length, fading up over its first
- * `BOX_FADE_MS` so the growing edge is never a hard white slab; the scrim
+ * revealed by a clip-path that starts on the whole card and opens to the
+ * whole box on the flight's own curve and length, opaque throughout — the
+ * card itself growing, never a translucent slab over the page; the scrim
  * fades on the same curve and length. The box is never scaled — its layout
  * rect stays its rect on screen, which is what the flight aims at.
- * Then the frame fills in: header (0), the court's control row and legend
- * (1), the right column and footer (2) — `data-lightbox-enter` —
- * rise `CONTENT_RISE_PX` and fade in from `CONTENT_AT_MS`, as the court
- * decelerates onto the stage, `CONTENT_STAGGER_MS` apart (80ms in all).
+ * Hand-over: the copy is the card's drawing, cropped to the card's window,
+ * so the lightbox's own court rides locked under it (`handOver`) and the
+ * copy fades off it at 40–75% of the move — the zone labels, the far
+ * baseline and the controls fade in on the spot, instead of popping in when
+ * the copy lands.
+ * The frame fills in with it, not after: header (0), the court's control
+ * row and legend (1), the right column and footer (2) —
+ * `data-lightbox-enter` — rise `CONTENT_RISE_PX` and fade in from
+ * `CONTENT_AT_MS`, while the court is still travelling,
+ * `CONTENT_STAGGER_MS` apart, so court and frame settle together.
  * The stage itself never fades: it is revealed under the copy as it lands,
  * so there is one court on screen at every frame.
- * Timings: court + box clip + scrim 380ms `OPEN_EASE`; box opacity 0–160ms;
- * contents 280/320/360ms + 220ms each, done by 580ms; the copy's 100ms
- * settle at landing. Every piece is transform, opacity or clip-path.
+ * Timings: court + box clip + scrim 380ms `OPEN_EASE`; copy → stage (the
+ * stage's own animations start at the hand-over, `handOver`)
+ * 150–285ms; contents 120/150/180ms + 240ms each, done by 420ms. Every
+ * piece is transform, opacity or clip-path.
  * The close is the faster reverse: 240ms ease-in-out, the court shrinking
- * into the card while the box clips back toward it and fades; the stage
- * hands over to the copy in the first quarter, so it is one court again.
+ * into the card, the stage locked under the copy until the copy covers it
+ * (30%), the box's rows hidden at once and the box, opaque, clipping back
+ * onto the whole card and only then fading (last 30%) — one court, one card.
  * Reduced motion: none of this — the lightbox fades (opacity only, 150ms).
  * One timeline: a box, scrim or row that mounts mid-flight (the shell
  * replacing the chunk's frame, the season's court arriving) joins the
@@ -85,18 +93,30 @@ const SETTLE_MS = 100;
 /** Close: faster than the open, a standard ease-in-out. */
 const COURT_MORPH_CLOSE_MS = 240;
 export const COURT_MORPH_CLOSE_EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
-/** The box's fade up while its clip opens (the edge is soft, then crisp). */
-const BOX_FADE_MS = 160;
+/** When, as fractions of the move, the copy fades off the lightbox's own
+ *  court locked under it (`handOver`). On `OPEN_EASE` the court has covered
+ *  ~90% of its way by 40% of the time, so the stage is all but at rest when
+ *  it shows, and the swap is done well before the court settles. */
+const HANDOVER_FROM = 0.4;
+const HANDOVER_TO = 0.75;
 /** How far outside the box the open clip ends: past `--shadow-dropdown`'s
  *  reach (8px + 30px blur), so the shadow is whole by the end. */
 const BOX_CLIP_OUTSET_PX = 48;
 const BOX_RADIUS = "14px";
 /** The frame's contents: when the first group starts (from the click), the
- *  step between groups, each group's length and rise. */
-const CONTENT_AT_MS = 280;
-const CONTENT_STAGGER_MS = 40;
-const CONTENT_MS = 220;
+ *  step between groups, each group's length and rise. They start while the
+ *  court is still in the air and are done as it settles (~420ms), so the
+ *  frame and the court land as one: at 280ms they began only once the court
+ *  had all but stopped, and the open read as "court, then dialog". */
+const CONTENT_AT_MS = 120;
+const CONTENT_STAGGER_MS = 30;
+const CONTENT_MS = 240;
 const CONTENT_RISE_PX = 6;
+/** Close: when (fraction of the move) the copy has fully covered the stage
+ *  and the stage drops out under it; and
+ *  when the box, by then sitting on the card, starts to let it through. */
+const CLOSE_HANDOVER_AT = 0.3;
+const CLOSE_BOX_FADE_AT = 0.7;
 /** Reduced motion's close: the fade-in's own length (tw-animate's 150ms). */
 const COURT_MORPH_REDUCED_CLOSE_MS = 150;
 /** How long the copy waits on a lightbox that never shows up. */
@@ -107,6 +127,8 @@ const BOX_SELECTOR = "[data-lightbox-box]";
 const SCRIM_SELECTOR = "[data-lightbox-scrim]";
 const ENTER_SELECTOR = "[data-lightbox-enter]";
 const FLYING_ATTR = "data-viz-court-morph";
+/** The shell's real court stage, as opposed to the loading bar. */
+const STAGE_ATTR = "data-court-stage";
 const STAGE_RADIUS = "10px";
 
 interface Rect {
@@ -134,10 +156,13 @@ interface Ghost {
 interface OpenFlight {
   ghost: Ghost;
   source: Source;
-  /** The copy's frame at the card (its art box, its svg box, the court in it). */
+  /** The copy's frame at the card (its art box, its svg box, the court in it),
+   *  and the whole card, which the dialog's box opens out of. */
   from: {
     box: Rect;
     radius: string;
+    card: Rect;
+    cardRadius: string;
     svg: Rect;
     content: Rect;
     region: Rect;
@@ -160,6 +185,12 @@ interface OpenFlight {
   scrim: HTMLElement | null;
   frameAnims: Animation[];
   entered: WeakSet<Element>;
+  /** The lightbox's stage riding under the copy (`handOver`), and the
+   *  element whose inline `transform-origin` the move set. */
+  stageAnims: Animation[];
+  stageEl: HTMLElement | null;
+  /** The pending start of the stage's animations (`handOver`). */
+  stageTimer: number;
 }
 
 let opened: Source | null = null;
@@ -263,6 +294,35 @@ function regionOnStage(region: Rect, stage: Rect, t: PanZoom): Rect {
   };
 }
 
+/** The copy's transform, as numbers: `translate(ax, ay) scale(kx, ky)` with
+ *  the origin at the copy's top-left, which sits at the page's 0,0. */
+interface Move {
+  ax: number;
+  ay: number;
+  kx: number;
+  ky: number;
+}
+
+function moveCss(m: Move): string {
+  return `translate(${m.ax}px, ${m.ay}px) scale(${m.kx}, ${m.ky})`;
+}
+
+/** The copy sitting on the card, unscaled. */
+function moveAt(svg: Rect): Move {
+  return { ax: svg.x, ay: svg.y, kx: 1, ky: 1 };
+}
+
+/** A computed `transform` (`matrix(a, b, c, d, e, f)`) back to a `Move` —
+ *  the copy only ever translates and scales, so b and c are 0. */
+function moveOf(computed: string, fallback: Move): Move {
+  const m = /^matrix\(([^)]+)\)$/.exec(computed);
+  if (!m) return fallback;
+  const [a, , , d, e, f] = m[1].split(",").map(Number);
+  return [a, d, e, f].every(Number.isFinite)
+    ? { ax: e, ay: f, kx: a, ky: d }
+    : fallback;
+}
+
 /**
  * The copy's transform (from its own box at 0,0, origin top-left) that puts
  * the court it draws (`content`, inside `svg`) onto `onto`, centred. `exact`
@@ -276,7 +336,7 @@ function transformOnto(
   content: Rect,
   onto: Rect,
   exact: boolean,
-): string {
+): Move {
   const fit = Math.min(onto.w / content.w, onto.h / content.h);
   const kx = exact ? onto.w / content.w : fit;
   const ky = exact ? onto.h / content.h : fit;
@@ -284,7 +344,38 @@ function transformOnto(
   const cy = onto.y + onto.h / 2;
   const ox = content.x - svg.x + content.w / 2;
   const oy = content.y - svg.y + content.h / 2;
-  return `translate(${cx - ox * kx}px, ${cy - oy * ky}px) scale(${kx}, ${ky})`;
+  return { ax: cx - ox * kx, ay: cy - oy * ky, kx, ky };
+}
+
+/**
+ * The lightbox's own stage, moved so its court sits exactly under the copy
+ * while the copy is at `at` — given that the copy at `home` lies exactly on
+ * the stage at rest (`stage`, its rect on screen). Both are interpolated
+ * linearly in the same eased progress, so the two stay locked together for
+ * the whole move and can trade places at any frame.
+ *
+ * The stage's origin is the spot under the copy's own origin at `home`
+ * (`q0`); about it, a stage point under copy point p sits at
+ * `stage + q0 + k_home·p`, and `translate(at − home) scale(k_at / k_home)`
+ * carries it to `at + k_at·p` — where the copy draws p. Both terms are
+ * linear in the copy's own, so a keyframe pair on each end stays aligned in
+ * between.
+ */
+function stageFollowing(at: Move, home: Move): { transform: string } {
+  return {
+    transform: `translate(${at.ax - home.ax}px, ${at.ay - home.ay}px) scale(${at.kx / home.kx}, ${at.ky / home.ky})`,
+  };
+}
+
+/** The stage's `transform-origin` for `stageFollowing` (`q0`). Set as an
+ *  inline style for the length of the move, NEVER as a keyframe: an animated
+ *  `transform-origin` cannot run on the compositor, so the whole stage
+ *  animation fell back to the main thread and repainted the court every
+ *  frame — on a slow machine that blocked the main thread for the entire
+ *  flight. A keyframe list of `transform` (and `opacity`) alone stays on the
+ *  compositor. */
+function stageOrigin(home: Move, stage: Rect): string {
+  return `${home.ax - stage.x}px ${home.ay - stage.y}px`;
 }
 
 function insetOf(r: Rect, radius: string): string {
@@ -441,9 +532,32 @@ function predictedStage(): Rect {
   return { x, y, w, h };
 }
 
+/**
+ * Where `el` sits at rest: its rect on screen without its own transform —
+ * the stage is moved under the copy while it flies (`handOver`), and a
+ * re-aim must aim at where it will come to rest, not where it is drawn now.
+ * Its layout offset from its offset parent, which nothing here transforms.
+ */
+function restingRectOf(el: Element): Rect {
+  if (
+    !(el instanceof HTMLElement) ||
+    getComputedStyle(el).transform === "none" ||
+    !(el.offsetParent instanceof HTMLElement)
+  )
+    return rectOf(el);
+  const parent = el.offsetParent;
+  const p = rectOf(parent);
+  return {
+    x: p.x + parent.clientLeft + el.offsetLeft,
+    y: p.y + parent.clientTop + el.offsetTop,
+    w: el.offsetWidth,
+    h: el.offsetHeight,
+  };
+}
+
 /** The court rect for the flight's target (or the predicted stage). */
 function aimFor(f: OpenFlight): { box: Rect; court: Rect } {
-  const stage = f.target ? rectOf(f.target) : predictedStage();
+  const stage = f.target ? restingRectOf(f.target) : predictedStage();
   const t = viewerInitialTransform(f.source.cut, { w: stage.w, h: stage.h });
   return { box: stage, court: regionOnStage(f.from.region, stage, t) };
 }
@@ -518,23 +632,24 @@ function animateFrame(f: OpenFlight): void {
   const box = lastShown(BOX_SELECTOR);
   if (box !== null && box !== f.box) {
     f.box = box;
+    // Opaque from the first frame: the box is the card itself growing (it
+    // starts on the whole card, footer and all), never a translucent slab.
     f.frameAnims.push(
       joinAt(
         box.animate(
           [
-            { clipPath: insetWithin(f.from.box, rectOf(box), f.from.radius) },
-            { clipPath: BOX_OPEN_CLIP },
+            {
+              clipPath: insetWithin(
+                f.from.card,
+                rectOf(box),
+                f.from.cardRadius,
+              ),
+              opacity: 1,
+            },
+            { clipPath: BOX_OPEN_CLIP, opacity: 1 },
           ],
           timing,
         ),
-        f,
-      ),
-      joinAt(
-        box.animate([{ opacity: 0 }, { opacity: 1 }], {
-          duration: BOX_FADE_MS,
-          easing: "linear",
-          fill: "both",
-        }),
         f,
       ),
     );
@@ -571,11 +686,105 @@ function animateFrame(f: OpenFlight): void {
   });
 }
 
-/** Lets go of the box's and scrim's held open state — in the same task as
- *  `setFlying(false)`, which stops hiding them, so no frame falls between. */
+/** Lets go of the box's, scrim's and stage's held open state — in the same
+ *  task as `setFlying(false)`, which stops hiding them, so no frame falls
+ *  between. */
 function releaseFrame(f: OpenFlight): void {
   f.frameAnims.forEach((a) => a.cancel());
   f.frameAnims = [];
+  window.clearTimeout(f.stageTimer);
+  f.stageAnims.forEach((a) => a.cancel());
+  f.stageAnims = [];
+  if (f.stageEl) f.stageEl.style.transformOrigin = "";
+  f.stageEl = null;
+}
+
+/**
+ * The lightbox's real court takes over from the copy in the air, not at the
+ * end. The copy is the CARD's drawing — cropped to the card's window, no zone
+ * labels, no % row, no controls — so swapping it for the stage on landing
+ * popped all of those in at once. Instead the stage rides under the copy,
+ * locked to it (`stageFollowing`), and the copy fades off it over
+ * `HANDOVER_FROM`–`HANDOVER_TO` of the move: what the lightbox adds fades in
+ * where it already sits, while the court is still arriving.
+ *
+ * Only for the shell's own stage (`data-court-stage`): the loading bar that
+ * stands in for it would replace the court with a bar mid-air.
+ */
+function handOver(
+  f: OpenFlight,
+  stageEl: Element,
+  stage: Rect,
+  from: Move,
+  to: Move,
+  duration: number,
+  copyOpacity: number,
+): void {
+  window.clearTimeout(f.stageTimer);
+  f.stageAnims.forEach((a) => a.cancel());
+  f.stageAnims = [];
+  if (f.stageEl) f.stageEl.style.transformOrigin = "";
+  f.stageEl = null;
+  if (!(stageEl instanceof HTMLElement) || !stageEl.hasAttribute(STAGE_ATTR))
+    return;
+  // The stage's animations start at the hand-over, not at take-off: ANY
+  // animation on the stage makes the browser paint the whole court then and
+  // there, and on a slow machine that paint held the main thread for the
+  // entire flight. Until `HANDOVER_FROM` the stage is hidden by the flying
+  // rule anyway (`globals.css`), so nothing needs to move it; from then on
+  // its animations run on the flight's own clock (`currentTime`), locked to
+  // the copy as if they had started with it. A re-aim already mid-fade
+  // starts them at once.
+  const startedAt = performance.now();
+  const start = () => {
+    if (flight !== f) return;
+    stageEl.style.transformOrigin = stageOrigin(to, stage);
+    f.stageEl = stageEl;
+    const timing: KeyframeAnimationOptions = {
+      duration,
+      easing: OPEN_EASE,
+      fill: "both",
+    };
+    f.stageAnims.push(
+      stageEl.animate(
+        [stageFollowing(from, to), stageFollowing(to, to)],
+        timing,
+      ),
+      // Shown the moment the copy starts to fade: under the copy until then,
+      // and hidden before it, when the stage's own box (wider than the
+      // card's) would spill past the copy's clip.
+      stageEl.animate(
+        [
+          { opacity: 0 },
+          { opacity: 0, offset: HANDOVER_FROM },
+          { opacity: 1, offset: Math.min(1, HANDOVER_FROM + 0.001) },
+          { opacity: 1 },
+        ],
+        { duration, fill: "both" },
+      ),
+    );
+    const elapsed = performance.now() - startedAt;
+    f.stageAnims.forEach((a) => (a.currentTime = elapsed));
+  };
+  if (copyOpacity < 1) start();
+  else f.stageTimer = window.setTimeout(start, duration * HANDOVER_FROM);
+  // A re-aim mid-fade (the season's court replacing its loading bar) goes on
+  // fading from where the copy is, over what is left of the new move.
+  f.ghost.root.animate(
+    copyOpacity < 1
+      ? [
+          { opacity: copyOpacity },
+          { opacity: 0, offset: HANDOVER_TO },
+          { opacity: 0 },
+        ]
+      : [
+          { opacity: 1 },
+          { opacity: 1, offset: HANDOVER_FROM },
+          { opacity: 0, offset: HANDOVER_TO },
+          { opacity: 0 },
+        ],
+    { duration, fill: "forwards" },
+  );
 }
 
 /** Whether a card's court is flying into the lightbox now. The shell reads
@@ -595,7 +804,8 @@ function setFlying(on: boolean): void {
 function launch(f: OpenFlight): boolean {
   const { box, court } = aimFor(f);
   const clipTo = insetOf(box, STAGE_RADIUS);
-  const moveTo = transformOnto(f.from.svg, f.from.content, court, f.from.exact);
+  const to = transformOnto(f.from.svg, f.from.content, court, f.from.exact);
+  const moveTo = moveCss(to);
   const key = `${clipTo}|${moveTo}`;
   if (key === f.aimed) return false;
   const elapsed = performance.now() - f.startedAt;
@@ -608,9 +818,14 @@ function launch(f: OpenFlight): boolean {
   const clipFrom = first
     ? insetOf(f.from.box, f.from.radius)
     : getComputedStyle(f.ghost.root).clipPath;
-  const moveFrom = first
-    ? `translate(${f.from.svg.x}px, ${f.from.svg.y}px) scale(1, 1)`
-    : getComputedStyle(f.ghost.art).transform;
+  const from = first
+    ? moveAt(f.from.svg)
+    : moveOf(getComputedStyle(f.ghost.art).transform, moveAt(f.from.svg));
+  // Mid-air, the copy may already be fading off the stage it was aimed at;
+  // it carries on from that opacity rather than snapping back to whole.
+  const opacityFrom = first
+    ? 1
+    : Number(getComputedStyle(f.ghost.root).opacity);
   f.ghost.root.getAnimations().forEach((a) => a.cancel());
   f.ghost.art.getAnimations().forEach((a) => a.cancel());
   const timing: KeyframeAnimationOptions = {
@@ -619,7 +834,12 @@ function launch(f: OpenFlight): boolean {
     fill: "forwards",
   };
   f.ghost.root.animate([{ clipPath: clipFrom }, { clipPath: clipTo }], timing);
-  f.ghost.art.animate([{ transform: moveFrom }, { transform: moveTo }], timing);
+  f.ghost.art.animate(
+    [{ transform: moveCss(from) }, { transform: moveTo }],
+    timing,
+  );
+  if (f.target !== null)
+    handOver(f, f.target, box, from, to, remaining, opacityFrom);
   f.aimed = key;
   if (first) f.startedAt = performance.now();
   f.endsAt = performance.now() + remaining;
@@ -664,7 +884,9 @@ function settle(f: OpenFlight): void {
   setFlying(false);
   releaseFrame(f);
   const ghost = f.ghost;
-  ghost.root.animate([{ opacity: 1 }, { opacity: 0 }], {
+  // From wherever the hand-over left it — usually already gone.
+  const opacity = Number(getComputedStyle(ghost.root).opacity);
+  ghost.root.animate([{ opacity }, { opacity: 0 }], {
     duration: SETTLE_MS,
     easing: "linear",
     fill: "forwards",
@@ -718,6 +940,8 @@ export function armCourtMorph(card: HTMLElement, cut: Cut): void {
   const from = {
     box,
     radius: cornerRadius(apronEl),
+    card: rectOf(card),
+    cardRadius: cornerRadius(card),
     svg: svgBox,
     ...anchorFor(svg, svgBox, cut),
   };
@@ -738,6 +962,9 @@ export function armCourtMorph(card: HTMLElement, cut: Cut): void {
     scrim: null,
     frameAnims: [],
     entered: new WeakSet(),
+    stageAnims: [],
+    stageEl: null,
+    stageTimer: 0,
   };
   flight = f;
   setFlying(true);
@@ -792,7 +1019,8 @@ export function runCourtMorphClose(
     ? card.querySelector<HTMLElement>("[data-viz-court-art]")
     : null;
   const svg = artEl?.querySelector<SVGSVGElement>("svg");
-  if (!stage || !artEl || !svg || source === null) return COURT_MORPH_CLOSE_MS;
+  if (!stage || !card || !artEl || !svg || source === null)
+    return COURT_MORPH_CLOSE_MS;
   const apronEl = apronBoxOf(artEl);
   const box = rectOf(apronEl);
   const svgBox = rectOf(svg);
@@ -818,35 +1046,58 @@ export function runCourtMorphClose(
     easing: COURT_MORPH_CLOSE_EASE,
     fill: "forwards",
   };
+  const home = transformOnto(svgBox, content, court, exact);
+  const atCard = moveAt(svgBox);
+  // The copy fades up over the stage while the two move as one (the stage
+  // locked under it, `stageFollowing`), so the swap shows no second court:
+  // only what the card does not draw — the zone labels, the % row, the
+  // controls — fades away, on the spot it sits.
   ghost.root.animate(
     [
       { clipPath: insetOf(stageBox, STAGE_RADIUS), opacity: 0 },
-      { opacity: 1, offset: 0.25 },
+      { opacity: 1, offset: CLOSE_HANDOVER_AT },
       { clipPath: insetOf(box, cornerRadius(apronEl)), opacity: 1 },
     ],
     timing,
   );
   ghost.art.animate(
+    [{ transform: moveCss(home) }, { transform: moveCss(atCard) }],
+    timing,
+  );
+  // The stage unmounts with the dialog, so its inline origin goes with it.
+  stage.style.transformOrigin = stageOrigin(home, stageBox);
+  stage.animate(
     [
-      { transform: transformOnto(svgBox, content, court, exact) },
-      { transform: `translate(${svgBox.x}px, ${svgBox.y}px) scale(1, 1)` },
+      { ...stageFollowing(home, home), opacity: 1 },
+      { opacity: 1, offset: CLOSE_HANDOVER_AT },
+      { opacity: 0, offset: Math.min(1, CLOSE_HANDOVER_AT + 0.001) },
+      { ...stageFollowing(atCard, home), opacity: 0 },
     ],
     timing,
   );
-  // The stage hands over to the copy as the copy fades up on it, so the
-  // court is never on screen twice while the box fades around the copy.
-  stage.animate(
-    [{ opacity: 1 }, { opacity: 0, offset: 0.25 }, { opacity: 0 }],
-    timing,
-  );
-  // The box closes back toward the card as it fades (the open, reversed).
+  // The box shrinks back into the whole card, opaque (the open, reversed):
+  // its rows go first so the box closes as a plain card, and it lets the
+  // real card show through only once it sits on it. The rows are hidden
+  // outright, not faded: an animation on each would make the browser paint
+  // them all (the points list too) as the close starts — the main-thread
+  // stall the open avoids (`handOver`). The dialog unmounts when the close
+  // ends, so nothing has to restore them.
   const frame = stage.closest<HTMLElement>(BOX_SELECTOR);
   if (frame !== null) {
+    frame
+      .querySelectorAll<HTMLElement>(ENTER_SELECTOR)
+      .forEach((el) => (el.style.visibility = "hidden"));
     frame.animate(
       [
-        { clipPath: BOX_OPEN_CLIP },
+        { clipPath: BOX_OPEN_CLIP, opacity: 1 },
+        { opacity: 1, offset: CLOSE_BOX_FADE_AT },
         {
-          clipPath: insetWithin(box, rectOf(frame), cornerRadius(apronEl)),
+          clipPath: insetWithin(
+            rectOf(card),
+            rectOf(frame),
+            cornerRadius(card),
+          ),
+          opacity: 0,
         },
       ],
       timing,

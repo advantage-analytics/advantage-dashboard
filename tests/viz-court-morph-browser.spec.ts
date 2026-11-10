@@ -94,6 +94,22 @@ async function traceAfter(
         const r = el.getBoundingClientRect();
         return { x: r.left, y: r.top, w: r.width, h: r.height };
       };
+      const resting = (el: Element | null | undefined) => {
+        if (
+          !(el instanceof HTMLElement) ||
+          getComputedStyle(el).transform === "none" ||
+          !(el.offsetParent instanceof HTMLElement)
+        )
+          return box(el);
+        const p = el.offsetParent;
+        const r = p.getBoundingClientRect();
+        return {
+          x: r.left + p.clientLeft + el.offsetLeft,
+          y: r.top + p.clientTop + el.offsetTop,
+          w: el.offsetWidth,
+          h: el.offsetHeight,
+        };
+      };
       const frame = () => {
         const dialog = document.querySelector<HTMLElement>(
           '[role="dialog"]:not([data-testid="lightbox-chunk-pending"])',
@@ -104,7 +120,9 @@ async function traceAfter(
           ),
           ghost: box(document.querySelector(`${ghostSel} > div`)),
           ghosts: document.querySelectorAll(ghostSel).length,
-          stage: box(
+          // Where the stage comes to rest: mid-flight it rides scaled under
+          // the copy (`handOver`), so its box on screen is not its own.
+          stage: resting(
             document.querySelector("[role=dialog] [data-court-morph-target]"),
           ),
           dialogOpacity: dialog
@@ -144,14 +162,21 @@ async function traceAfter(
   );
 }
 
-/** A frame whose copy has grown past the card but not past the stage —
- *  the copy part way through its flight. */
-const growing = (f: Frame) =>
-  f.ghosts === 1 &&
-  f.ghost !== null &&
-  f.card !== null &&
-  f.ghost.w > f.card.w * 1.05 &&
-  (f.stage === null || f.ghost.w < f.stage.w + 1);
+/** A frame whose copy has grown past the card but not yet to the size it
+ *  lands at — the copy part way through its flight. The landed size is the
+ *  trace's own widest copy, not the stage's width: the copy is the card's
+ *  whole art box, apron and all, so it can land wider than the stage, and a
+ *  stage-width cap left only the first frames or two of the flight to match
+ *  — which a slow runner's sampler missed. */
+const growingIn = (frames: Frame[]) => {
+  const landed = Math.max(0, ...frames.map((f) => f.ghost?.w ?? 0));
+  return (f: Frame) =>
+    f.ghosts === 1 &&
+    f.ghost !== null &&
+    f.card !== null &&
+    f.ghost.w > f.card.w * 1.05 &&
+    f.ghost.w < landed - 1;
+};
 
 const centre = (b: Box) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
 /** `v` lies between `a` and `b` (either order), with a pixel of slack. */
@@ -196,7 +221,7 @@ test.describe("the match report", () => {
     // (it aims at the stage's predicted rect meanwhile), so the frame need
     // not have a stage yet; it is checked against the stage it lands on.
     const opening = await traceAfter(page, { click: SERVE_CARD }, 900);
-    const mid = opening.find(growing);
+    const mid = opening.find(growingIn(opening));
     expect(mid, "a frame with the copy mid-flight").toBeDefined();
     expect(mid!.flying).toBe(true);
     const g = mid!.ghost!;
@@ -249,14 +274,16 @@ test.describe("the match report", () => {
     // the dialog fades.
     await dialog.getByRole("heading").first().focus();
     const closing = await traceAfter(page, { escape: true }, 600);
+    // Part way back: smaller than it landed at, still larger than the card.
+    // (Not "the dialog has started to fade": the box now stays opaque until
+    // it sits on the card, and fades only over the last 30%.)
+    const landedW = Math.max(0, ...opening.map((f) => f.ghost?.w ?? 0));
     const closingAt = closing.find(
       (f) =>
         f.ghosts === 1 &&
         f.ghost !== null &&
-        f.dialogOpacity !== null &&
-        f.dialogOpacity < 1 &&
-        f.ghost.w < s.w &&
-        f.ghost.w > c.w - 1,
+        f.ghost.w < landedW - 1 &&
+        f.ghost.w > c.w + 1,
     );
     expect(closingAt, "a frame with the copy shrinking").toBeDefined();
     const cg = closingAt!.ghost!;
@@ -422,7 +449,7 @@ test.describe("the match report", () => {
     const frames = await traceAfter(page, { click: SERVE_CARD }, 400);
     // It set off before there was a stage to aim at.
     expect(
-      frames.some((f) => growing(f) && f.stage === null),
+      frames.some((f) => growingIn(frames)(f) && f.stage === null),
       "a frame with the copy flying and no stage yet",
     ).toBe(true);
     await expect(

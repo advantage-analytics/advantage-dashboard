@@ -139,6 +139,12 @@ const UNSELECTED_OPACITY = 0.4;
 const MIN_READOUT_W = 168;
 /** The keyboard-only ring, outside the hover halo. */
 const FOCUS_RING_R = 7.6;
+/** A mark's hit area: its own radius and a little more for the hand, so the
+ *  readout only answers on the point itself. */
+const MARK_HIT_R = VIEWER_COURT.markRadius + 1.6;
+/** The hit area's screen-space margin (a non-scaling stroke, half of it
+ *  outside the radius): a few pixels however far the court is zoomed out. */
+const MARK_HIT_FLOOR_PX = 6;
 
 /** The handoff's own highlighted-box alpha (P2b's `fill-opacity="0.09"`). */
 const ZONE_HIGHLIGHT_OPACITY = 0.09;
@@ -390,6 +396,10 @@ export function LightboxCourt({
           height={VIEWER_COURT.artPx.h * z}
           viewBox={`${vb.minX} ${vb.minY} ${vb.w} ${vb.h}`}
           preserveAspectRatio="xMidYMid meet"
+          // The depth and contact bands run past the art to the stage's own
+          // edges (`viz-bands-overlay.tsx`, `BAND_BLEED`); the stage's
+          // `overflow-hidden` is what clips.
+          overflow="visible"
           role="group"
           aria-label={`${subjectName} — full court, ${dots.length} mark${dots.length === 1 ? "" : "s"}`}
           className="absolute top-0 left-0 block"
@@ -875,6 +885,7 @@ const MarkLayer = memo(function MarkLayer({
           <g
             key={dot.id}
             data-viz-mark={dot.id}
+            data-active={dot.id === activeId || undefined}
             // Final review #3: a roving tabindex — ONE tab stop for the whole
             // court, not one per mark. On `rallyPosition` that was 150-250
             // Tab presses before a keyboard user reached the View menu.
@@ -948,8 +959,27 @@ const MarkLayer = memo(function MarkLayer({
                 vectorEffect="non-scaling-stroke"
               />
             )}
-            <circle cx={x} cy={y} r={9} fill="transparent" />
-            <Mark dot={dot} x={x} y={y} fill={fill} />
+            {/* The hit area: the mark grown by a hair, so the readout comes
+                up over the point and not a mark's width off it (it was r 9
+                round a 2.2 mark, and answered 18px from its centre). */}
+            {/* Plus a 3px ring that does not scale (a transparent
+                non-scaling stroke still takes the pointer), so zoomed out
+                to Full court the target never shrinks to a pixel or two. */}
+            <circle
+              cx={x}
+              cy={y}
+              r={MARK_HIT_R}
+              fill="transparent"
+              stroke="transparent"
+              strokeWidth={MARK_HIT_FLOOR_PX}
+              vectorEffect="non-scaling-stroke"
+            />
+            {/* Grows a little while hovered or focused (`data-active`,
+                globals.css `[data-viz-mark-glyph]`): the point you are on
+                answers under the pointer as well as in the readout. */}
+            <g data-viz-mark-glyph="">
+              <Mark dot={dot} x={x} y={y} fill={fill} />
+            </g>
           </g>
         );
       })}
@@ -997,8 +1027,9 @@ function Mark({
   y: number;
   fill: string;
 }) {
-  // Hover changes nothing on the mark (the readout is the hover); a selected
-  // mark keeps its own size inside the ring.
+  // Drawn at its own size; the hover's slight growth is its wrapper's
+  // (`data-viz-mark-glyph`), and a selected mark keeps its size inside the
+  // ring.
   const stroke = "#000";
   const strokeWidth = VIEWER_COURT.markStroke;
   const r = VIEWER_COURT.markRadius;

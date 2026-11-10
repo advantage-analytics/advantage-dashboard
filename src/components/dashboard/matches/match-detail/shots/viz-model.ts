@@ -1563,6 +1563,13 @@ export interface VizStats {
   groups: StatGroup[];
   sentence: string | null;
   total: number;
+  /**
+   * How many of the pool landed in, for the cuts that land (serve, return
+   * and rally placement): the same two numbers the subtitle states, kept as
+   * numbers for the Statistics column's "Landed in" figure. Absent for the
+   * contact cuts and errors, which have no landing to count.
+   */
+  landed?: { count: number; of: number };
 }
 
 /**
@@ -1977,6 +1984,7 @@ export function computeVizStats(
       groups,
       sentence: buildSentence(groups, noun),
       total,
+      landed: { count: total - outOrNet, of: total },
     };
   }
 
@@ -2003,6 +2011,7 @@ export function computeVizStats(
       groups,
       sentence: buildSentence(groups, noun),
       total,
+      landed: { count: subtitleCount, of: total },
     };
   }
 
@@ -2036,6 +2045,7 @@ export function computeVizStats(
       groups,
       sentence: buildSentence(groups, "shots"),
       total,
+      landed: { count: eligible.length, of: total },
     };
   }
 

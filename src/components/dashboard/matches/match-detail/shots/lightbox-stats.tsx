@@ -32,12 +32,53 @@ function displayGroups(stats: VizStats, cut: Cut): StatGroup[] {
   }));
 }
 
+/** Points counted and won over every row of a group together. */
+function groupTotals(group: StatGroup): { count: number; won: number } {
+  return {
+    count: group.rows.reduce((n, r) => n + r.count, 0),
+    won: group.rows.reduce((n, r) => n + r.won, 0),
+  };
+}
+
 /** Won of every row together — the group's average, the bar's tick. */
 function groupAverage(group: StatGroup): number | null {
   if (group.rows.some((r) => r.share)) return null;
-  const count = group.rows.reduce((n, r) => n + r.count, 0);
-  const won = group.rows.reduce((n, r) => n + r.won, 0);
+  const { count, won } = groupTotals(group);
   return count === 0 ? null : Math.round((won / count) * 100);
+}
+
+interface Figure {
+  key: string;
+  label: string;
+  count: number;
+  of: number;
+}
+
+/**
+ * The two figures over the groups (overhaul canvas, `N1-Opened`): points
+ * won of the points the rows count, and how many landed in of all drawn.
+ * Points won reads off the model's first group (`computeVizStats`) — each
+ * of its groups splits the same pool, so any one sums to it; NOT the
+ * displayed groups, since the serve's Deuce / Ad split halves the pool — and
+ * is left out for the errors cut, where every row is a lost point
+ * (`share`). Landed in only for a cut that lands (`VizStats.landed`).
+ */
+function summaryFigures(stats: VizStats): Figure[] {
+  const figures: Figure[] = [];
+  const first = stats.groups.find((g) => g.rows.length > 0);
+  if (first && !first.rows.some((r) => r.share)) {
+    const { count: of, won } = groupTotals(first);
+    figures.push({ key: "won", label: "Points won", count: won, of });
+  }
+  if (stats.landed) {
+    figures.push({
+      key: "landed",
+      label: "Landed in",
+      count: stats.landed.count,
+      of: stats.landed.of,
+    });
+  }
+  return figures;
 }
 
 /** Where the row tooltip hangs: the row's box inside the dialog that
@@ -53,11 +94,19 @@ interface TipAnchor {
  * The lightbox's Statistics column (canvas "Statistics bar variations" A2,
  * S09/S16/S17): each group under its eyebrow with the average on the right
  * ("Average 63%" beside a sample of the tick); each row label · won of count
- * · %, over a 4px bar with the average's tick. The best row's % is 13/500
- * ink-900. The groups share the column's height evenly — 24px apart at
- * least, 56px at most, so on a tall screen they settle in the middle rather
- * than drifting apart — and a list taller than the column scrolls as one
- * stacked at 24px (`GroupSpacer`).
+ * · %, over a 4px bar with the average's tick — as drawn on the overhaul
+ * canvas (`N1-Opened`, statistics variation A2): the label 12px ink-600,
+ * ink-900 while the row is hovered, focused or kept; the group's best % 13px
+ * 500 ink-900 and the rest 13px ink-500; the tick 3px past the bar at 35%;
+ * the hover wash rounded 8px with 8px of room each side. Over the groups,
+ * the canvas's two figures (`summaryFigures`): "Points won · 14 of 44" and
+ * "Landed in · 44 of 44", each a 16px % over its label and a 4px bar,
+ * spread with the groups as the stack's first item. The stack starts 20px
+ * under the switch, as drawn, and its items spread down the column 24px
+ * apart at least and 56px at most; what is left over falls below it, never
+ * above (centred, it left a blank band over the first group that read as a
+ * failed render). A list taller than the column scrolls as one stacked at
+ * 24px (`GroupSpacer`).
  *
  * Every figure is the row's own (`computeVizStats`); the tick is this
  * match's average for the group — the "This match" benchmark, until a
@@ -98,6 +147,7 @@ export function LightboxStats({
     );
   }
   const groups = displayGroups(stats, cut);
+  const figures = summaryFigures(stats);
   // The tooltip's words, read off the rows as they are now — a click that
   // keeps the row turns its hint to "Click to show all again" in place.
   const tipGroup =
@@ -167,21 +217,64 @@ export function LightboxStats({
           tip.anchor.host,
         )}
       <GroupSpacer edge="top" />
+      {figures.length > 0 && (
+        <>
+          <div
+            data-stat-summary=""
+            className="grid grid-cols-2 gap-x-3 gap-y-4"
+          >
+            {figures.map((f) => {
+              const pct =
+                f.of === 0 ? null : Math.round((f.count / f.of) * 100);
+              return (
+                <p key={f.key} className="m-0 flex min-w-0 flex-col gap-0.5">
+                  <span className="sr-only">
+                    {f.label}: {pct === null ? "none yet" : `${pct}%`},{" "}
+                    {f.count} of {f.of}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="text-[16px] leading-[1.35] text-[var(--ink-900)] tabular-nums"
+                  >
+                    {pct === null ? "—" : `${pct}%`}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="text-micro text-[var(--ink-600)] tabular-nums"
+                  >
+                    {f.label} · {f.count} of {f.of}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="relative mt-1.5 block h-1 rounded-[2px] bg-[var(--ink-100)]"
+                  >
+                    {pct !== null && (
+                      <i
+                        className="absolute inset-y-0 left-0 rounded-[2px] bg-[var(--blue)]"
+                        style={{ width: `${pct}%` }}
+                      />
+                    )}
+                  </span>
+                </p>
+              );
+            })}
+          </div>
+          <GroupSpacer edge="between" />
+        </>
+      )}
       {groups.map((group, i) => {
         const average = groupAverage(group);
-        const counted = group.rows.filter(
-          (r) => r.count > 0 && r.winPct !== null,
-        );
-        const best = counted.length
-          ? counted.reduce((a, b) =>
-              (b.winPct ?? 0) > (a.winPct ?? 0) ? b : a,
-            )
-          : null;
+        // Every row at the group's top rate: tied rows read alike, so none
+        // looks better than its equal.
+        const rates = group.rows
+          .filter((r) => r.count > 0 && r.winPct !== null)
+          .map((r) => r.winPct!);
+        const bestPct = rates.length ? Math.max(...rates) : null;
         return (
           <Fragment key={group.key}>
             {i > 0 && <GroupSpacer edge="between" />}
             <section className="flex flex-col">
-              <div className="flex items-baseline gap-2 pb-1.5">
+              <div className="flex items-baseline gap-2 pb-1">
                 {group.label && (
                   <h3 className="m-0 text-[9px] font-normal tracking-[1.5px] text-[var(--ink-400)] uppercase">
                     {group.label}
@@ -203,7 +296,12 @@ export function LightboxStats({
                   <li key={row.key}>
                     <StatRowButton
                       row={row}
-                      best={best?.key === row.key && !row.share}
+                      best={
+                        bestPct !== null &&
+                        row.count > 0 &&
+                        row.winPct === bestPct &&
+                        !row.share
+                      }
                       average={average}
                       pressed={
                         pick?.group === group.key && pick.row === row.key
@@ -265,12 +363,10 @@ export function LightboxStats({
 }
 
 /**
- * The room around the groups, all growing alike so the groups spread over
- * the column's height (space-evenly). Between groups it is 24px at least and
- * 56px at most; once those cap, the top and bottom take what is left and the
- * stack sits centred. With no room to spare each holds its minimum — 20px
- * above, 24px between, nothing below — the stack the column always drew,
- * and it scrolls.
+ * The room around the groups: a fixed 20px above, 24–56px between (the
+ * between spacers and the bottom one grow alike, the between ones capped),
+ * and the rest below. With no room to spare each holds its minimum — 20px
+ * above, 24px between, nothing below — and the column scrolls.
  */
 function GroupSpacer({ edge }: { edge: "top" | "between" | "bottom" }) {
   return (
@@ -278,9 +374,10 @@ function GroupSpacer({ edge }: { edge: "top" | "between" | "bottom" }) {
       aria-hidden="true"
       data-stat-spacer={edge}
       className={cn(
-        "flex-1 shrink-0",
-        edge === "top" && "min-h-5",
-        edge === "between" && "max-h-14 min-h-6",
+        "shrink-0",
+        edge === "top" && "h-5",
+        edge === "between" && "max-h-14 min-h-6 flex-1",
+        edge === "bottom" && "flex-1",
       )}
     />
   );
@@ -295,6 +392,7 @@ function StatRowButton({
   onHover,
 }: {
   row: StatRow;
+  /** The group's best win rate: its % reads 13/500 ink-900, the rest grey. */
   best: boolean;
   average: number | null;
   pressed: boolean;
@@ -316,7 +414,7 @@ function StatRowButton({
       onFocus={(e) => onHover(e.currentTarget)}
       onBlur={() => onHover(null)}
       className={cn(
-        "-mx-2 flex w-[calc(100%+16px)] cursor-pointer flex-col items-stretch gap-[5px] rounded-[8px] px-2 pt-1.5 pb-2 text-left transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default",
+        "group -mx-2 flex w-[calc(100%+16px)] cursor-pointer flex-col items-stretch gap-[5px] rounded-[8px] px-2 pt-1.5 pb-2 text-left transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default",
         pressed
           ? "bg-[var(--surface-subtle)]"
           : "hover:bg-[var(--surface-page)]",
@@ -328,8 +426,10 @@ function StatRowButton({
       >
         <span
           className={cn(
-            "truncate text-[12px]",
-            best || pressed ? "text-[var(--ink-900)]" : "text-[var(--ink-700)]",
+            "truncate text-[12px] transition-colors duration-200",
+            pressed
+              ? "text-[var(--ink-900)]"
+              : "text-[var(--ink-600)] group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)]",
           )}
         >
           {row.label}
@@ -339,10 +439,10 @@ function StatRowButton({
         </span>
         <span
           className={cn(
-            "text-right tabular-nums",
+            "text-right text-[13px] tabular-nums",
             best
-              ? "text-[13px] font-medium text-[var(--ink-900)]"
-              : "text-[13px] text-[var(--ink-700)]",
+              ? "font-medium text-[var(--ink-900)]"
+              : "text-[var(--ink-500)]",
           )}
         >
           {pct === null ? "—" : `${pct}%`}
