@@ -22,7 +22,19 @@ export type { Step };
 
 /** Where a pre-filled value came from, for the "from …" provenance tag. */
 export type ValueSource =
-  "file" | "export" | "event" | "profile" | "history" | "roster" | "new";
+  | "file"
+  | "export"
+  | "event"
+  | "profile"
+  | "history"
+  | "roster"
+  | "new"
+  /**
+   * `opponentSource` only: the opponent was picked from the Teammates section
+   * — the program's own roster (`teammates.ts`). `opponentPlayerId` is then
+   * their `program_players.id`, and the "their team" keys are cleared.
+   */
+  | "teammate";
 
 /**
  * A program as the wizard's "their team" field carries it: the id the match
@@ -172,7 +184,10 @@ export interface FormData {
 
   /** Where `date`/`time` came from. Undefined when nothing set it. */
   dateSource?: ValueSource;
-  /** Where the opponent's name came from. Undefined for a typed name. */
+  /**
+   * Where the opponent's name came from. Undefined for a typed name;
+   * `"teammate"` for someone on this program's own roster.
+   */
   opponentSource?: ValueSource;
   /**
    * The opponent's pooled identity when a roster row was picked or a program

@@ -57,7 +57,7 @@ ready).
 
 ## T4 · Add the Teammates section to the opponent picker
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T2, T3
 - **files:** (guess) `DetailsStepContent.tsx` (opponent menu; `pickRoster` ~1356 is the model), `RosterMenu.tsx` (reuse `RosterRow`), `useUploadMatchWizard.ts` (roster already read through `program_roster_full` ~2093–2129), `types.ts` (`opponentSource`), `opponent-team.ts`, `src/components/dashboard/matches/opponent-team-field.tsx`, `src/components/ui/state-pill.tsx`; new `tests/upload-opponent-teammates.spec.ts`

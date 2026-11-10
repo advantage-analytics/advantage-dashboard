@@ -164,8 +164,51 @@ export function RosterMenuList({
   );
 }
 
+/**
+ * The opponent menu's Teammates section — the program's own roster (minus the
+ * match's subject), in this picker's row grammar. No pill and no "Teammate"
+ * on each row: the section label already says it. Rows follow the menu's
+ * typed term the way every other section does; the caller filters.
+ */
+export function TeammatesMenuSection({
+  label,
+  players,
+  chosenPlayerId,
+  onChoose,
+}: {
+  /** "Teammates · Cardinal · M". */
+  label: string;
+  players: readonly RosterMenuPlayer[];
+  chosenPlayerId: string | null;
+  onChoose: (player: RosterMenuPlayer) => void;
+}) {
+  if (players.length === 0) return null;
+  return (
+    <div data-menu-section="teammates" className="flex flex-col">
+      <span className="px-2.5 pt-1.5 pb-1 text-[11px] text-[var(--ink-400)]">
+        {label}
+      </span>
+      {players.map((player) => (
+        <RosterRow
+          key={player.playerId}
+          chosen={player.playerId === chosenPlayerId}
+          onChoose={() => onChoose(player)}
+          avatar={
+            <RowAvatar
+              initials={getInitials(player.name)}
+              dashed={!!player.invitedEmail && player.userId === null}
+            />
+          }
+          name={player.name}
+          meta={rosterMeta(player)}
+        />
+      ))}
+    </div>
+  );
+}
+
 /** One 38px row of the roster picker. */
-function RosterRow({
+export function RosterRow({
   chosen,
   onChoose,
   avatar,

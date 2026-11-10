@@ -38,3 +38,13 @@ is the runner's. Newest entries at the bottom.
 
 1. `buildMatchData` already writes `opponentPlayerId` to `opponent_player_id`, so a teammate pick reaches the DB before T5; a roster "safety arm" row without a real `program_players` id could break the FK on save — T5 should guard it.
 2. A restored draft keeps `opponentSource: "teammate"` without re-checking the roster.
+
+## T4 · Add the Teammates section to the opponent picker — done
+
+**gate:** re-run at the author's request after the blocked run. Stash 24f65723 applied; the provenance copy changed to "Teammate · From the roster" (source and spec), design drift back to seed. Mechanical: lint pass, typecheck pass, tests shard 1/2 4719 passed, shard 2/2 5118 passed (one shard-2 attempt killed by signal, exit 144, no failing test; re-run clean). Completion VERDICT: pass.
+**changed:** new `teammates.ts` (roster minus subject, term filter, played-list dedupe, `teammatesFirst`, `teammatePick`) and `OpponentMenu.tsx` (`OpponentMenuBody`, `OpponentReadBack` with the grey Teammate `StatePill`); `RosterMenu.tsx` exports `RosterRow` and adds `TeammatesMenuSection`; `types.ts` adds `"teammate"`; `DetailsStepContent.tsx` / `UploadWizardSteps.tsx` wire it and pass the teammate to `PracticeNotice`; new `tests/upload-opponent-teammates.spec.ts`.
+**follow-ups:**
+
+1. T5: a teammate pick already writes `opponent_player_id`; guard roster rows without a real `program_players` id (FK).
+2. A restored draft keeps `opponentSource: "teammate"` without re-checking the roster.
+3. `pickTeammate` writes fields through an `Object.entries` loop with a `keyof FormData` cast.

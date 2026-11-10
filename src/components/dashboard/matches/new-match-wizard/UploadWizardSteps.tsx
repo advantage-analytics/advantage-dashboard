@@ -9,6 +9,8 @@ import { isProgramStaff } from "@/lib/workspace/types";
 import { canSaveRosterStyle } from "./style-save-offer";
 import { AnimatedHeight } from "./AnimatedHeight";
 import { DetailsStepContent } from "./DetailsStepContent";
+import { workspaceLabel } from "./RosterMenu";
+import { teammateOptions } from "./teammates";
 import { EligibilityNotice } from "./EligibilityNotice";
 import { FileStepContent } from "./FileStepContent";
 import { ImportIdentityNotice } from "./ImportIdentityNotice";
@@ -449,6 +451,31 @@ export function MatchStep() {
     adminOwner,
   ]);
 
+  // The opponent menu's Teammates section: the program's roster minus whoever
+  // this match is for. A team workspace's only, and only with somebody in it.
+  // Stable for the same reason as `subject`.
+  const subjectPlayerId = subject.playerId;
+  const teammates = useMemo(() => {
+    if (workspaceKind !== "team") return null;
+    const players = teammateOptions(whoPlayed.roster, subjectPlayerId);
+    if (players.length === 0) return null;
+    const program =
+      workspaces.available.find(
+        (w) => w.kind === "team" && w.id === whoPlayed.programId,
+      ) ?? (workspaces.active.kind === "team" ? workspaces.active : null);
+    return {
+      label: program ? `Teammates · ${workspaceLabel(program)}` : "Teammates",
+      players,
+    };
+  }, [
+    workspaceKind,
+    whoPlayed.roster,
+    whoPlayed.programId,
+    subjectPlayerId,
+    workspaces.available,
+    workspaces.active,
+  ]);
+
   // Stable for the same reason as `subject`. Only while the File itself is
   // held: a restored draft brings back the form, not the video.
   const heldFile = isProcessingProvider ? (uploadedFile?.file ?? null) : null;
@@ -539,6 +566,7 @@ export function MatchStep() {
       isProcessingProvider={isProcessingProvider}
       workspaceKind={workspaceKind}
       subject={subject}
+      teammates={teammates}
       preset={preset}
       attachedLine={attachedLine}
       onAttach={attachLine}
