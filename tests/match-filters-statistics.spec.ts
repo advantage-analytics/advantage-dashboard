@@ -176,6 +176,9 @@ function renderStatistics(): string {
       [DETAIL_ID + "head-to-head-card"]: {
         HeadToHeadCard: marker("HeadToHeadCard"),
       },
+      [DETAIL_ID + "differential-card"]: {
+        DifferentialCard: marker("DifferentialCard"),
+      },
       [DETAIL_ID + "performance-tracker-chart"]: {
         PerformanceTrackerChart: marker("PerformanceTrackerChart"),
       },
@@ -226,6 +229,7 @@ test.describe("StatisticsView has no filters", () => {
     for (const part of [
       "Insight",
       "HeadToHeadCard",
+      "DifferentialCard",
       "PerformanceTrackerChart",
       "RallyLengthCard",
       "PointEndingsCard",

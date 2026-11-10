@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 import { watchableSegmentProps } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import { HOVER_DIMMED } from "@/components/dashboard/matches/match-detail/point-endings-body";
 import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import type { RallyLengthBand } from "@/components/dashboard/matches/match-detail/match-filters/model";
@@ -52,6 +53,13 @@ import { cn } from "@/lib/utils";
  * comes from the grid row, and the mosaic in turn claims whatever that leaves
  * after the header, labels and legend take their natural height.
  */
+
+/**
+ * The mosaic: at least 120px, growing with the card. The card shares the
+ * chart column's spare height with Net game (`statistics-view.tsx`), so it
+ * neither towers over the other charts nor shrinks to a strip.
+ */
+const RALLY_PLOT_H = "min-h-[120px] flex-1";
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
 
@@ -151,7 +159,7 @@ export function RallyLengthBody({
         <div className="flex min-h-0 flex-1 flex-col gap-2">
           <div
             aria-hidden="true"
-            className="min-h-24 flex-1 rounded-[var(--radius-cell)]"
+            className={cn(RALLY_PLOT_H, "rounded-[var(--radius-cell)]")}
             style={{ background: "var(--surface-subtle)" }}
           />
           <div className="flex">
@@ -198,7 +206,7 @@ export function RallyLengthBody({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2">
-        <div className="flex min-h-24 flex-1 items-stretch">
+        <div className={cn(RALLY_PLOT_H, "flex items-stretch")}>
           {visible.map((band, i) => {
             const width = pct(band.count, total);
             const youShare = pct(band.youWon, band.count);
@@ -217,14 +225,17 @@ export function RallyLengthBody({
                 key={band.key}
                 className={
                   watch
-                    ? "relative box-border flex cursor-pointer flex-col"
-                    : "relative box-border flex cursor-default flex-col"
+                    ? "relative box-border flex cursor-pointer flex-col transition-opacity duration-200 motion-reduce:transition-none"
+                    : "relative box-border flex cursor-default flex-col transition-opacity duration-200 motion-reduce:transition-none"
                 }
                 style={{
                   width: `${width}%`,
                   borderRight: isLast
                     ? undefined
                     : "2px solid var(--surface-card)",
+                  // While a band is hovered the others fade (`HOVER_DIMMED`).
+                  opacity:
+                    hovered !== null && hovered !== band.key ? HOVER_DIMMED : 1,
                 }}
                 tabIndex={0}
                 {...watchableSegmentProps(watch, label)}

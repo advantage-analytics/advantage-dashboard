@@ -7,6 +7,7 @@ import {
   noteIconCls,
   noteStripCls,
 } from "@/components/dashboard/matches/new-match-wizard/styles";
+import { DifferentialCard } from "@/components/dashboard/matches/match-detail/differential-card";
 import { HeadToHeadCard } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import { MatchReport } from "@/components/dashboard/matches/match-detail/match-report";
 import { NetGameCard } from "@/components/dashboard/matches/match-detail/net-game-card";
@@ -129,19 +130,20 @@ export function StatisticsView() {
           head-to-head first, the charts under it, both full width.
 
           Side by side, the two columns end on one line. The row stretches
-          (flex's default), and the chart column hands its slack to Rally
-          length, whose bars fill whatever height the card gets (the
-          landing page mockup's `.mb-chart .bands`). The height goes to the
-          chart, never to a card's empty surface: a stretched card with
-          top-aligned content reads worse than uneven columns. The
-          head-to-head card keeps its natural height; its slot stretches,
-          invisibly. */}
+          (flex's default); whichever column is shorter takes up the slack.
+          On the chart side Rally length (a mosaic of at least 120px) and Net
+          game split it evenly, so neither towers nor sits half empty; under
+          the head-to-head the Differential card spreads it between its rows.
+          The head-to-head card keeps its natural height. */}
       {hasPoints && (
         <StatisticsLobKeysProvider>
           <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row">
             {meta.statsPublished && (
-              <div className="min-w-0 flex-1">
+              // The differential sits under the head to head, below the
+              // Winners and Unforced errors rows it is computed from.
+              <div className="flex min-w-0 flex-1 flex-col gap-4 *:shrink-0">
                 <HeadToHeadCard />
+                <DifferentialCard isDerived={meta.isDerived} />
               </div>
             )}
 

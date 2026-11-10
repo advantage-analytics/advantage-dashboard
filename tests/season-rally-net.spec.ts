@@ -384,9 +384,11 @@ test.describe("SeasonNetGameCard", () => {
     expect(html).toContain(">Opponents<");
     expect(count(html, ">—<")).toBe(2);
     // Two empty tracks, the legend, one sentence.
-    expect(count(html, 'aria-hidden="true" class="h-2.5 w-full')).toBe(2);
-    expect(html).toContain(">Won<");
-    expect(html).toContain(">Lost<");
+    expect(count(html, 'aria-hidden="true" class="h-3.5 w-full')).toBe(2);
+    expect(html).toContain(">Winner<");
+    expect(html).toContain(">Own error<");
+    expect(html).not.toContain(">Won<");
+    expect(html).not.toContain(">Lost<");
     expect(count(html, "<p ")).toBe(1);
     expect(html).toContain(
       "Net points add up here once one of Chen&#x27;s matches is analyzed.",

@@ -475,7 +475,7 @@ test.describe("the row set", () => {
 
   test("with no matches every row is still there, with no value on either side", () => {
     const groups = foldSeasonRows([]);
-    expect(groups.map((g) => g.rows.length)).toEqual([7, 4, 9]);
+    expect(groups.map((g) => g.rows.length)).toEqual([7, 4, 10]);
     for (const r of groups.flatMap((g) => g.rows)) {
       expect(r.you).toEqual({ value: null, display: "", matches: 0 });
       expect(r.opp).toEqual({ value: null, display: "", matches: 0 });

@@ -63,6 +63,35 @@ import type {
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
 
+/**
+ * Opacity of every bar that is not the hovered one, on the Statistics cards —
+ * the Visualizations wall's own figure (`shots/wall-card.tsx`), so a hover
+ * reads the same on both tabs.
+ */
+export const HOVER_DIMMED = 0.4;
+
+/**
+ * The grow-in and hover fade every Statistics bar segment shares: width eases
+ * from 0 (opacity-only under reduced motion), and while another segment is
+ * hovered this one fades to `HOVER_DIMMED`. Spread onto a `motion.div`.
+ */
+export function segmentMotion(
+  share: number,
+  dimmed: boolean,
+  reduceMotion: boolean | null,
+) {
+  return {
+    initial: reduceMotion
+      ? { width: `${share}%`, opacity: 0 }
+      : { width: "0%", opacity: 1 },
+    animate: { width: `${share}%`, opacity: dimmed ? HOVER_DIMMED : 1 },
+    transition: {
+      width: { duration: reduceMotion ? 0 : 0.5, ease: EASE_CHART },
+      opacity: { duration: 0.2 },
+    },
+  };
+}
+
 export interface OutcomeMeta {
   key: OutcomeKey;
   label: string;
@@ -362,20 +391,11 @@ export function PointEndingsBody({
                         ? "var(--radius-cell)"
                         : undefined,
                     }}
-                    initial={
-                      shouldReduceMotion
-                        ? { width: `${share}%`, opacity: 0 }
-                        : { width: "0%" }
-                    }
-                    animate={
-                      shouldReduceMotion
-                        ? { width: `${share}%`, opacity: 1 }
-                        : { width: `${share}%` }
-                    }
-                    transition={{
-                      duration: shouldReduceMotion ? 0.2 : 0.5,
-                      ease: EASE_CHART,
-                    }}
+                    {...segmentMotion(
+                      share,
+                      hovered !== null && hovered !== id,
+                      shouldReduceMotion,
+                    )}
                     tabIndex={0}
                     {...watchableSegmentProps(watch, label)}
                     onPointerDown={(e) => {

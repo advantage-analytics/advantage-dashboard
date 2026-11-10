@@ -60,14 +60,14 @@ function byLabel(rows: H2HRow[], label: string): H2HRow {
 const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 
 test.describe("the row configuration", () => {
-  test("is twenty rows in three groups of seven, four and nine", () => {
+  test("is twenty-one rows in three groups of seven, four and ten", () => {
     expect(H2H_GROUPS.map((group) => group.title)).toEqual([
       "Serve",
       "Return",
       "Points",
     ]);
-    expect(H2H_GROUPS.map((group) => group.configs.length)).toEqual([7, 4, 9]);
-    expect(ALL_ROWS).toHaveLength(20);
+    expect(H2H_GROUPS.map((group) => group.configs.length)).toEqual([7, 4, 10]);
+    expect(ALL_ROWS).toHaveLength(21);
   });
 
   test("every label is sentence case", () => {
@@ -724,6 +724,7 @@ test.describe("errors until the split is judged", () => {
       expect(configs.map((c) => c.label)).toEqual([
         "Net point attempts",
         "Net points won",
+        "Approach attempts",
         "Approach points won",
         "Passed the net player",
         "Lob points won",
@@ -744,6 +745,7 @@ test.describe("errors until the split is judged", () => {
       expect(configs.map((c) => c.label)).toEqual([
         "Net point attempts",
         "Net points won",
+        "Approach attempts",
         "Approach points won",
         "Passed the net player",
         "Lob points won",
