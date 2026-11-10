@@ -1,16 +1,13 @@
 # R2 video storage — Phase 0 findings and plan
 
-**Status: Phase 0, 2026-11-09.** Nothing in this document is built. It records what was
-measured, what the spikes showed, and what needs a decision before Phase 1 starts. The
-brief is `r2-video-storage-prompt-v2.md`.
+**Status: Phase 1 built on this branch, 2026-11-09; not deployed.** Sections 1–3 record what
+Phase 0 measured. Section 4 is the design you chose after it, and section 6 is what this
+branch builds. The brief was `r2-video-storage-prompt-v2.md`.
 
-**Read this first: the copies to R2 cost Azure egress.** R2 has no server-side "copy from
-URL". Every byte moving from Azure to R2 streams out of Azure over the internet, and Azure
-bills that at the same $0.087/GB as a browser download. The design as briefed copies the
-original, the playback copy and the vendor's trimmed copy for every match: about 5 GB per
-match. The dashboard currently reads roughly 4.5 GB per analysed match. So copying
-everything uses up most of the saving (see [Cost](#cost)). Decision 1 under
-[Open questions](#open-questions) is the one that matters most.
+**The one-line version:** only the playback copy (and the sample) moves to R2. Originals
+stay in Azure for SplitStep and move to the Cold tier. R2 cannot pull from a URL, so every
+byte copied from Azure to R2 is billed as Azure egress. Copying anything people rarely
+watch costs about as much as it saves (§5).
 
 ## 1. Code map (verified)
 
@@ -203,118 +200,180 @@ Answered from Cloudflare's docs; the live script is ready.
   - Until it is confirmed, guard with a `HeadObject` before `CreateMultipartUpload` plus the per-object lease in §4. The copier is the only writer of `video/`-class keys in R2, so last-writer-wins on identical bytes is safe.
 - Multipart ETags are `md5-of-part-md5s-N`, not the object's MD5. Verify a copy by size plus a stored `x-amz-meta-content-md5` (Azure's `Content-MD5`, where set), or by recomputing part MD5s at the same part size.
 
-## 4. Target flow and data model
+## 4. Decided design (2026-11-09)
+
+Decided after Phase 0: **only the playback copy, and the sample clip, go to R2.** Originals
+stay in Azure and move to the Cold tier. The trimmed copy stays in Azure Hot for now. That
+drops these parts of the brief:
+
+- the original → R2 copy
+- deleting the Azure copy after 14 days
+- the R2 → Azure restage before resubmit, auto retry and reprocess
 
 ```
-upload ─▶ Azure videos/ ─▶ Event Grid ─▶ playback worker ─┬─▶ playback copy ──▶ R2 (Phase 1)
-                      │                                   └─▶ /api/webhooks/playback (records store)
-                      └─▶ SplitStep (Azure SAS, unchanged) ─▶ webhook ─▶ trimmed copy
-chain final + playback ready ─▶ copier (cron or Container Apps job) ─▶ R2 (original, trimmed)
-                              ─▶ Azure delete 14 days later (cleanup cron, lease)
-resubmit / auto retry / reprocess ─▶ restage R2 ─▶ Azure (Put Block From URL) ─▶ SAS ─▶ SplitStep
-readers: R2 if r2_verified_at, else Azure
+upload ─▶ Azure videos/ (Hot → Cold after 30 days) ─▶ SplitStep (Azure SAS, unchanged)
+              │
+              └─▶ Event Grid ─▶ playback worker ─▶ R2 playback/…  (R2_BUCKET set)
+                                               └▶ /api/webhooks/playback {store:"r2"}
+                                                    → processing_jobs.playback_store
+players: a ready copy with playback_store='r2' → HEAD + presigned GET on R2
+         anything else → Azure, exactly as before
 ```
 
-**Recommendation: one row per stored object, not per job column.** Two facts rule out the
-simpler options:
+**Why this split:** see §5. The playback copy is the file nearly every view reads, so
+moving it captures the saving for 1.4 GB of copy egress per match. Copying originals or
+trimmed copies would cost about as much egress as it saves.
 
-- Keys are shared across chains (27 of them) and the playback key is borrowed between jobs, so the same state would have to be kept in sync on several rows.
-- During the 14-day window an object lives in **both** stores, so a key-prefix rule cannot express where it is.
+### Originals → Azure Cold (applied by you, not by code)
 
-```sql
-create table public.video_objects (
-  object_key        text primary key,          -- same key in both stores
-  kind              text not null check (kind in ('original','playback','trimmed','attachment','sample')),
-  size_bytes        bigint not null,
-  content_md5       text,                      -- base64, from Azure Content-MD5 when present
-  r2_verified_at    timestamptz,               -- set only after size (+md5) match
-  r2_etag           text,
-  azure_present     boolean not null default true,
-  azure_expires_at  timestamptz,               -- chain final + 14 days; reset by restage
-  azure_deleted_at  timestamptz,
-  copy_lease_token  uuid, copy_lease_until timestamptz,   -- same pattern as match_video_claim_cleanup
-  copy_attempts     int not null default 0, copy_last_error text,
-  created_at timestamptz not null default now(), updated_at timestamptz not null default now()
-);
--- RLS on, no policies: service role only. Readers call a server loader, never the table.
+This is an Azure lifecycle-management rule on the storage account:
+
+- filter: `blobTypes: blockBlob`, `prefixMatch: advantage-videos/videos/`
+- action: `tierToCold` at `daysAfterModificationGreaterThan: 30`
+
+Cold blobs stay online, so SplitStep's SAS URL, resubmits and reprocess all work unchanged.
+Reads cost $0.01/GB and there is a 90-day early-delete charge. You apply this rule from your
+own terminal; this branch does not apply it. One way to do it:
+
+```bash
+az storage account management-policy create --account-name advantagedashboardca \
+  --resource-group advantage-dashboard --policy @policy.json
 ```
 
-- **Reading:** `choosePlaybackFile`'s `exists()` becomes "a `video_objects` row with `r2_verified_at` → R2 `HeadObject`; else Azure `exists()`". `mintPlaybackSas` gains an R2 twin with the same window arithmetic.
-- **Expiry:**
-  - `azure_expires_at = max(completed_at / failed-final time over the chain) + 14 days`. A chain is final when no job is `queued`/`processing`/`uploaded`, and either one completed or attempts reached the cap.
-  - Deletion also requires `r2_verified_at is not null` and no `label_sessions.status in ('labelling','submitted')` for the match.
-- **Attachments:** a `video_objects` row with `kind='attachment'` keyed by `final_blob_key`, made when the row goes `active`. The expiry sweep and `cleanup.ts` then delete from whichever store holds it.
+with `policy.json`:
+
+```json
+{
+  "rules": [
+    {
+      "enabled": true,
+      "name": "originals-to-cold",
+      "type": "Lifecycle",
+      "definition": {
+        "filters": {
+          "blobTypes": ["blockBlob"],
+          "prefixMatch": ["advantage-videos/videos/"]
+        },
+        "actions": {
+          "baseBlob": {
+            "tierToCold": { "daysAfterModificationGreaterThan": 30 }
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+`management-policy create` replaces any existing policy. The account has none today, but
+check with `az storage account management-policy show` first.
+
+### Data model
+
+One additive column, in `supabase/migrations/20261110040000_processing_jobs_playback_store.sql`
+(**not applied**; it is waiting for your review):
+
+- `processing_jobs.playback_store text check (playback_store in ('azure','r2'))`. Null means Azure.
+  - A per-object table was considered in Phase 0. It is not needed now: only the playback copy moves, and `applyPlaybackReport` already writes every job sharing an upload in one statement.
+  - The resubmit insert copies the store along with the key.
+- Trigger `processing_jobs_guard_playback_store`:
+  - It clears the store when the upload key changes, as `processing_jobs_guard_storage_keys` does for the copy.
+  - It refuses client writes. `authenticated` holds table-level UPDATE, so a column revoke would not bite.
+
+The app reads the column with a fallback: a read that fails with `42703` (column missing)
+retries without it. So the migration can go out before or after the code. Remove the
+fallback (`PLAYBACK_JOB_COLUMNS_BEFORE_STORE`) once the migration is everywhere.
 
 ## 5. Cost
 
-Prices: Azure bandwidth $0.087/GB after 100 GB/month free (account-wide); R2 storage
-$0.015/GB-month after 10 GB free, egress $0; Azure Hot LRS about $0.02/GB-month.
+Prices used:
+
+- Azure bandwidth: $0.087/GB after 100 GB/month free (account-wide).
+- R2 storage: $0.015/GB-month after 10 GB free; downloads $0.
+- Azure Hot LRS: about $0.02/GB-month.
+
+Azure → R2 copies are billed as Azure egress, because R2 cannot pull from a URL.
 
 **Per new analysed match**, using October's ~4.5 GB viewed per match:
 
-| Copy to R2                                        | Azure egress to copy | Viewing egress removed | Net per match    |
-| ------------------------------------------------- | -------------------- | ---------------------- | ---------------- |
-| Playback copy only (worker writes straight to R2) | 1.4 GB ($0.12)       | ~4.5 GB ($0.39)        | **saves ~$0.27** |
-| Playback + trimmed                                | 2.5 GB               | ~4.5 GB                | saves ~$0.17     |
-| Playback + trimmed + original (the brief)         | 5.0 GB ($0.43)       | ~4.5 GB                | **costs ~$0.04** |
-
-Notes on that table:
-
-- SplitStep downloads alone (~100–180 GB/month) already use most of the free 100 GB, so copy bytes are billed at the margin.
-- The vendor's trimmed copy currently comes in from the vendor for free (Azure pulls it). Streaming it from the vendor URL straight into R2, through a Container Apps job or a Cloudflare Worker, avoids that 1.1 GB of Azure egress per match.
-- **Originals are the expensive part.** They are viewed only as a fallback, yet copying them costs ~2.5 GB of egress each.
-  - The cheaper way to stop paying Hot storage for them is an Azure lifecycle rule that moves `videos/` blobs to **Cold** after 14 days of chain-final.
-  - Cold is about $0.0036/GB-month, has a $0.01/GB read charge and a 90-day early-delete charge, and **stays online**: SplitStep can still read it with the same SAS.
-  - That needs no restage and no R2 copy, and keeps the SplitStep contract byte-identical.
-
-**One-time migration (Phase 4):**
-
-- Copying all 263.8 GB, less the 5.9 GB orphan, is about $22 of Azure egress.
-- Copying only `playback/` (67.7 GB) is about $5.9 and captures nearly all of the viewing saving.
-- Spreading over months does not help while SplitStep uses up the free 100 GB.
+| Copy to R2                                | Azure egress to copy | Viewing egress removed | Net per match    |
+| ----------------------------------------- | -------------------- | ---------------------- | ---------------- |
+| **Playback copy only (decided)**          | 1.4 GB ($0.12)       | ~4.5 GB ($0.39)        | **saves ~$0.27** |
+| Playback + trimmed                        | 2.5 GB               | ~4.5 GB                | saves ~$0.17     |
+| Playback + trimmed + original (the brief) | 5.0 GB ($0.43)       | ~4.5 GB                | costs ~$0.04     |
 
 **After the change (October volumes):**
 
-- Azure storage drops from ~$5/month to under $1 for a 14-day window.
-- R2 storage starts at ~$4/month and grows ~$1–2.5/month each month.
-- Azure bandwidth, using the Oct 10–31 bytes (SplitStep 77 GB, CLI ~36 GB, 32 new matches):
-  - "Playback only" bills ~158 GB, about **$5** (today ~$13.6).
-  - "Copy everything" bills ~273 GB, about **$15**: no better than today.
+- **Bandwidth:** Azure bandwidth falls from ~$13.6 to about **$5**. SplitStep downloads, CLI downloads and the playback copy's upload to R2 remain.
+- **Originals in Cold:** ~$0.45/month for today's 124.6 GB, against ~$2.5 in Hot.
+- **R2 storage:** ~$1/month for today's 67.7 GB of playback copies, growing ~$0.7/month.
+- **Backfill:** copying today's `playback/` to R2 is 67.7 GB, about $5.9 of egress, once. It can be spread with `--limit`.
 
 The playback worker image on ACR (~$5/month) is unchanged.
 
-## 6. Risks
+## 6. Phase 1: what this branch builds
 
-1. **Copy egress outweighs the saving** if originals and trimmed copies are streamed out of Azure (§5).
-2. **Restage re-triggers the playback worker** through Event Grid `CopyBlob`/`PutBlockList` on `videos/` (Spike 1).
-3. **Shared keys:**
-   - Deleting or restaging per job row would race with chain siblings and with matches that share a key (`purge-match-storage` already skips those).
-   - The table keyed by object in §4 avoids this.
-4. **8 h label URLs** are embedded in HTML and never refresh. An R2 presign with a pinned date at 50,700 s is fine, but labelling sessions longer than 8 h will still break, exactly as they do today.
-5. **Revocation is unchanged.** As with Azure account-key SAS, a presigned R2 URL cannot be withdrawn before it expires; rotating the R2 token kills all of them. Use a **dedicated, object-read-only R2 token** for presigning, separate from the copier's write token.
-6. **Unverified R2 behaviours:**
-   - `response-cache-control` override
-   - `If-None-Match` on `CompleteMultipartUpload`
-   - Put Block From URL against a real R2 URL
-   - 8 GB restage time
-7. **Metrics gap:** Azure shows no egress before 10-10, and per-caller attribution relies on the `Authentication` split. Enable Storage diagnostic logs (StorageRead to Log Analytics; costs a little) for a month if exact attribution is wanted after Phase 1.
-8. **`ask-server.ts:623`** calls `getMatchVideo` just to test existence. Once both stores exist, make it a `video_objects` lookup rather than doubling the HEADs.
+| Piece                    | Where                                                                                                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R2 signing, HEAD, delete | `src/lib/services/video-storage/r2.ts`. SigV4 presign is hand-rolled and synchronous, checked byte-for-byte against `@smithy/signature-v4` in `tests/r2-presign.spec.ts`                          |
+| Store dispatch           | `src/lib/services/video-storage/stores.ts`: `mintStoredPlayback`, `storedObjectExists`, `mintSampleVideo`                                                                                         |
+| Chooser                  | `choosePlaybackFile` returns `store`, and its existence check takes the store. A borrowed copy keeps its maker's store                                                                            |
+| Readers                  | `getMatchVideo` / `getSharedMatchVideo` (match, share, admin, Ask), `loadJobVideo` (label console, 8 h) and the sample page and route                                                             |
+| Worker                   | `workers/playback/run.sh` uploads with `rclone` to R2 when `R2_BUCKET` is set and reports `store`. `deploy.sh` passes the R2 key pair as Container Apps **secrets**. The Dockerfile adds `rclone` |
+| Webhook                  | `playback-copy.ts`: `parsePlaybackReport` accepts `store` (`azure` when absent, refusing anything unknown). Every `ready` write sets `playback_store`                                             |
+| Resubmit                 | A child job inherits `playback_store` with the copy                                                                                                                                               |
+| Purge                    | Match and account delete also remove playback copies from R2                                                                                                                                      |
+| Backfill                 | `scripts/backfill-playback-to-r2.ts`. Dry run by default; `--apply`, `--limit`, `--sample`. Resumable. Checks every part's MD5 against R2's ETag and the final size. Never deletes the Azure copy |
+| Redaction                | `safeErrorMessage` also drops bare `sig=` / `X-Amz-Signature=` / `X-Amz-Credential=`                                                                                                              |
+| Config                   | `.env.example`: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `SAMPLE_VIDEO_STORE`. `@aws-sdk/client-s3` is in `serverExternalPackages`                               |
 
-## 7. Open questions
+Behaviour notes:
 
-1. **What goes to R2?**
-   - Recommended: the playback copy (and the sample), with trimmed streamed vendor → R2. Originals move to Azure **Cold** after 14 days instead of to R2.
-   - This drops the restage path entirely, keeps SplitStep byte-identical, and saves the most.
-   - The brief's decision was originals → R2 + delete Azure after 14 days. That works, but nets about $0 per match on bandwidth.
-2. If originals do go to R2: **who runs the copier?** A Container Apps job next to the playback worker reads Azure for free in-region, but its upload to R2 is still billed egress. A Vercel cron cannot stream 6 GB inside 300 s, though it can drive staged Put Block From URL the other way for restage.
-3. **Label console prefers the trimmed copy** (`vendor-copy`). Keep that? If label used the playback copy, trimmed would never need to be in R2.
-4. R2 bucket name, and whether to reuse the old `R2_*` keys or mint new scoped tokens (recommended: new tokens, one read-only for presign and one read-write for the copier and worker).
-5. The 5.92 GB orphan in `videos/`: delete it via `scripts/cleanup-orphan-storage.ts --apply` before migrating? It needs your OK.
+- Caching is unchanged:
+  - The R2 URL is pinned to the same six-hour window as the Azure SAS, so it is identical across page loads within a window.
+  - It carries `response-cache-control=private, no-cache`.
+  - The label console keeps its 8 h TTL; R2's ceiling is 7 days.
+- No CORS rule is needed: no `<video>` sets `crossOrigin`, and nothing reads a canvas back.
+- **Falling back is the default.** A copy marked R2 that R2 cannot confirm, for example on a deployment without R2 configured, is skipped, and the player plays the upload from Azure.
+- The Azure `playback/` copies stay where they are. Deleting them (~67.7 GB, ~$1.35/month Hot) is a separate, later step, after the backfill has run and playback from R2 is confirmed.
 
-## What's needed to finish the spikes
+### Rollout order
 
-- **R2:** an R2 API token pair (Object Read & Write, scoped to one bucket), the account ID and a bucket name, exported in a shell. `.env.local` has old `R2_*` keys, but the repo's secrets guard blocks reading them on purpose, and their bucket is unknown. Upload one real match video (> 5 GB for spike 3) to the bucket as `R2_TEST_KEY` / `R2_SRC_KEY`. Then:
-  - `spike2-presign.mjs`: range, seek, `304`, HEAD behaviour, and whether `response-cache-control` is honoured.
-  - `spike1-restage.mjs block` with `SRC_URL` set to a presigned R2 GET and `BYTES` set to the object size: the real 8 GB restage time.
-  - `spike3-r2-copy.mjs`: `UploadPartCopy` over 5 GB and the three no-overwrite guards.
-- **`az login`:** present (Owner + Storage Blob Data Contributor on the account). Nothing needed.
+1. **You:** create the R2 bucket (private) and two tokens scoped to it:
+   - the app's, Object Read & Write
+   - the worker's, Object Read & Write
+2. **You:** review and apply the migration.
+3. Set the four `R2_*` in Vercel (Production), and deploy this branch once it has merged through `splitstep-integration`.
+4. Rebuild and push the worker image, then run `deploy.sh` with the worker token's `R2_*`. New copies now land in R2.
+5. `npx tsx scripts/backfill-playback-to-r2.ts` (dry run), then `--apply --limit 3`. Check those matches play, then `--apply` the rest, and `--sample` with `SAMPLE_VIDEO_STORE=r2`.
+6. **You:** apply the Cold lifecycle rule above.
+7. After a few weeks: compare Azure egress (Metrics → Egress by API name and Authentication), then decide on deleting the Azure `playback/` copies.
+
+## 7. Risks
+
+1. **Unverified live R2 behaviour, until credentials are available:**
+   - whether `response-cache-control` is honoured
+   - range and seek in the film player, `/label` and the seek-lane preview
+   - rclone's upload from the worker
+2. **Revocation is unchanged.** As with an account-key SAS, a presigned URL cannot be withdrawn before it expires. Rotating the token kills all of them.
+3. **The 8 h label URL** is embedded in HTML and never refreshed, exactly as with Azure today.
+4. **Metrics gap:** Azure shows no egress before 10-10. Enable Storage diagnostic logs for a month if exact per-caller attribution is wanted.
+
+## 8. Follow-ups
+
+- **Label console uses the playback copy instead of trimmed.** `loadJobVideo` prefers `vendor-copy` while a job has no playback copy, but after the playback copy it already plays that. If nothing needs the vendor's cut, trimmed copies can go to Cold too.
+- Delete the Azure `playback/` copies once R2 playback is confirmed.
+- Remove `PLAYBACK_JOB_COLUMNS_BEFORE_STORE` and the 42703 fallbacks once the migration is everywhere.
+- Teach `scripts/cleanup-orphan-storage.ts` to sweep R2 `playback/`.
+- Stale text elsewhere:
+  - The `azure-sas.ts:26-28` header and the `azure-storage` skill's layout line.
+  - The 5.92 GB orphan in `videos/`.
+- Spike 1 (R2 → Azure restage) and spike 3 (R2 copy over 5 GB) are no longer needed under this design. Their scripts stay in the shared notes folder in case the restage path ever returns.
+
+## What's needed for the live checks
+
+An R2 API token pair, the account ID and the bucket name, exported in a shell, plus one
+playback copy in the bucket. Then:
+
+- `spike2-presign.mjs`: range, seek, `304`, and whether the cache-control header comes back.
+- Play one R2-backed match in the film player, `/label` and the seek-lane preview.
