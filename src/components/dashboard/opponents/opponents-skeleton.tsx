@@ -1,3 +1,5 @@
+"use client";
+
 import {
   PendingBar,
   PendingRegion,
@@ -18,13 +20,7 @@ import {
 } from "./opponents-table-layout";
 import { OpponentsTableHeader } from "./opponents-table-header";
 import { OpponentsToolbarStatic } from "./opponents-toolbar";
-
-/**
- * How many rows to hold open before anything has been counted. The opponent
- * count is only known once the matches have been read and grouped, which is
- * the read this skeleton is waiting on.
- */
-const PENDING_ROWS = 5;
+import { useRecalledOpponentsRows } from "./opponents-shape-memory";
 
 /**
  * The populated page's frame with the data blanked — the `Suspense` fallback
@@ -45,6 +41,9 @@ export function OpponentsSkeleton({
   scope?: OpponentsScope;
 }) {
   const team = scope === "team";
+  // The opponent count is only known once the matches have been read and
+  // grouped — the read this skeleton waits on — so it comes from memory.
+  const rows = useRecalledOpponentsRows(scope);
   return (
     <div className={OPPONENTS_PAGE_FRAME}>
       <div className={cn(OPPONENTS_PAGE_COLUMN, OPPONENTS_PAGE_GAP)}>
@@ -75,7 +74,7 @@ export function OpponentsSkeleton({
             >
               <OpponentsTableHeader scope={scope} />
               <div>
-                {Array.from({ length: PENDING_ROWS }, (_, row) => (
+                {Array.from({ length: rows }, (_, row) => (
                   <div
                     key={row}
                     className={cn(OPPONENTS_ROW_FRAME, OPPONENTS_ROW_BOX)}

@@ -21,6 +21,7 @@ import { formatResetDate } from "@/lib/data/usage-format";
 import { RosterView } from "@/components/dashboard/team/roster-view";
 import { RosterDayZeroPage } from "@/components/dashboard/team/roster-day-zero";
 import { PresenceReport } from "@/components/dashboard/presence-provider";
+import { RememberRosterShape } from "@/components/dashboard/team/roster-shape-memory";
 import { RosterHeaderButtons } from "@/components/dashboard/team/roster-header-buttons";
 import { JoinRequestsCard } from "@/components/dashboard/team/join-requests-card";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
@@ -458,6 +459,14 @@ async function RosterContent({
   return (
     <>
       {report}
+      {/* Teaches the loading skeleton this roster's size for the next visit. */}
+      <RememberRosterShape
+        workspaceId={active.id}
+        ranked={players.filter((m) => m.lineupSpot !== null).length}
+        benched={players.filter((m) => m.lineupSpot === null).length}
+        invites={roster.invites.length}
+        staffLine={staff.length > 0}
+      />
       <RosterView
         members={players}
         invites={roster.invites}

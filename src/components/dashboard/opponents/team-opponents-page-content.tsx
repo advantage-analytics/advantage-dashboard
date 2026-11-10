@@ -14,6 +14,7 @@ import {
   OPPONENTS_PAGE_FRAME,
   OPPONENTS_PAGE_GAP,
 } from "./opponents-table-layout";
+import { useRememberOpponentsRows } from "./opponents-shape-memory";
 import { OpponentsTitleRow } from "./opponents-title-row";
 import { OpponentsToolbar } from "./opponents-toolbar";
 import {
@@ -95,6 +96,9 @@ export function TeamOpponentsPageContent({
     () => applyOpponentCut(opponents, cut),
     [opponents, cut],
   );
+  // Teach the page's loading skeleton how many rows to hold open next visit.
+  useRememberOpponentsRows("team", opponents);
+
   const visibleKeys = useMemo(
     () => visibleOpponents.map((o) => o.key),
     [visibleOpponents],
