@@ -1108,6 +1108,8 @@ function buildShots(
 // Statistics: a port of calculate_match_stats + backfill_returns_in_and_net_points
 // ---------------------------------------------------------------------------
 
+const NOT_COMING_IN = new Set(["First Serve", "Second Serve", "Feed"]);
+
 function computeStats(
   slot: number,
   matchId: string,
@@ -1180,9 +1182,7 @@ function computeStats(
   const cameToNet = (p: PointRow) =>
     (shotsByPoint.get(p.id) ?? []).some((shot) => {
       if (shot.is_player1 !== isP1) return false;
-      if (["First Serve", "Second Serve", "Feed"].includes(shot.shot_type)) {
-        return false;
-      }
+      if (NOT_COMING_IN.has(shot.shot_type)) return false;
       const type = shot.shot_type.trim().toLowerCase();
       return type.includes("volley") || type === "overhead";
     });
