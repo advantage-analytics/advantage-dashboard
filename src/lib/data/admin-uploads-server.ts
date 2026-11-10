@@ -100,6 +100,12 @@ interface Attempt {
   error_code: string | null;
 }
 
+/** The job admin_uploads_private.video_outcome() last mirrored, if any. */
+function stateJobId(item: DbAdminUploadSubmissionItem): string | null {
+  const value = item.result?.stateJobId;
+  return typeof value === "string" ? value : null;
+}
+
 /** No server action: injectable dependencies are for server tests only. */
 export async function getAdminUploadHistory(
   input: { cursor?: string | null; pageSize?: number } = {},
@@ -219,8 +225,14 @@ export async function getAdminUploadHistory(
         "processing_jobs",
         "id, match_id, status, derivation_version, error_message, external_job_id",
         "id",
+        // The reserved job and, when a retry or reprocess has taken over,
+        // the job video_outcome() last mirrored (`result.stateJobId`).
         items.flatMap((i) =>
-          i.processing_job_id ? [i.processing_job_id] : [],
+          i.processing_job_id
+            ? [i.processing_job_id, stateJobId(i)].filter(
+                (jobId): jobId is string => jobId != null,
+              )
+            : [],
         ),
       ),
       byIds<{ match_id: string }>(
@@ -272,22 +284,33 @@ export async function getAdminUploadHistory(
             if (i.processing_job_id) {
               const job = jobMap.get(i.processing_job_id);
               if (job && job.match_id === i.match_id) {
+                // The state shown is the job speaking for the attempt now — a
+                // retry or reprocess of the reserved one once there is one.
+                const latest = jobMap.get(stateJobId(i) ?? "");
+                const shown =
+                  latest && latest.match_id === i.match_id ? latest : job;
                 const resolved = resolveAnalysisStatus(
-                  job.status,
-                  job.derivation_version,
+                  shown.status,
+                  shown.derivation_version,
                 );
                 if (resolved)
                   state = withStatsPublished(
                     resolved,
-                    published.has(job.match_id),
+                    published.has(shown.match_id),
                   );
-                error = job.error_message ?? error;
+                error = shown.error_message ?? error;
+                // A later job that has not ended unsuccessfully is the attempt
+                // carrying on, which the RPC refuses to abandon.
                 reconcile.abandon =
                   reconcilable &&
                   ["pending", "uploading", "uploaded", "failed"].includes(
                     job.status,
                   ) &&
-                  job.external_job_id == null;
+                  job.external_job_id == null &&
+                  (shown === job ||
+                    ["failed", "cancelled", "derivation_failed"].includes(
+                      shown.status,
+                    ));
               }
             } else if (i.match_file_id) {
               const attempt = attemptMap.get(`${s.operation_id}/${i.item_id}`);
