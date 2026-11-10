@@ -1,12 +1,9 @@
 /**
  * The momentum plot's frame and paths — the mirrored area the match report's
  * Performance tracker draws a match's won-point differential on
- * (`performance-tracker-chart.tsx`), and the team player profile's season
- * tracker draws a season's, one sample a match
- * (`team/player-profile/season-performance-tracker.tsx`). One viewBox, one
- * plot height, one midline and one way to turn a run of samples into the
- * line and the area under it, so the two charts stay the same chart at two
- * scopes. Pure: no React, no DOM.
+ * (`performance-tracker-chart.tsx`). One viewBox, one plot height, one
+ * midline and one way to turn a run of samples into the line and the area
+ * under it. Pure: no React, no DOM.
  */
 
 /** The viewBox's width; the SVG is stretched to the card. */

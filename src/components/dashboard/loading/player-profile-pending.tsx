@@ -207,8 +207,8 @@ function TitleRowPending({ view }: { view: ProfileView }) {
  * `profile-statistics-view.tsx`: the insight slot — the report's
  * `INSIGHT_SURFACE` with the real engine credit and no fold toggle, as
  * `ProfileInsightEmpty` draws it — then the report's widgets row: the season
- * Head to head beside the four charts, 1:1 from 720px of pane. The season
- * tracker draws no set labels.
+ * Head to head and Differential beside the four charts, 1:1 from 720px of
+ * pane, with Game profile where the report draws its tracker.
  */
 export function ProfileStatisticsPanePending() {
   return (
@@ -218,7 +218,7 @@ export function ProfileStatisticsPanePending() {
       innerClassName="flex flex-col gap-4"
     >
       <InsightPending toggle={false} />
-      <StatisticsRowPending setLabels={false} />
+      <StatisticsRowPending profile />
     </PendingRegion>
   );
 }

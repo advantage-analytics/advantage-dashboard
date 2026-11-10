@@ -7,33 +7,31 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import {
   seasonOutcomes,
-  seasonPerMatch,
   type SeasonMatch,
   type SeasonOutcomes,
-  type SeasonPerMatch,
 } from "@/lib/data/player-season";
 
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
- * The team player profile's season Performance tracker and How points ended
- * (design Q), rendered offline from the real components through
- * `createLoader()`: the tracker from `season-performance-tracker.tsx`, the
- * endings card from `season-point-endings-card.tsx` over the real
- * `PointEndingsBody` it shares with the match report. The samples and the
- * tallies come from the real season fold (`lib/data/player-season.ts`);
- * framer-motion is a stand-in that drops the animation props.
+ * The team player profile's season How points ended (design Q), rendered
+ * offline from the real component through `createLoader()`:
+ * `season-point-endings-card.tsx` over the real `PointEndingsBody` it shares
+ * with the match report. The tallies come from the real season fold
+ * (`lib/data/player-season.ts`); framer-motion is a stand-in that drops the
+ * animation props. (The season Performance tracker this file also pinned was
+ * replaced by the Game profile radar — `profile-statistics-view.spec.ts`.)
  *
- * What is pinned: one mark per analyzed match in date order, the readout's
- * words (opponent, "Won N of M points", the day), no break lines or set
- * labels; the endings card's two rows under the report's chrome with the
- * legend's Double faults entry and the Errors-vs-Unforced/Forced choice; and
- * both zero cases — the anatomy with a dash or an empty plot, the legend, one
- * sentence, never a `0` or a `0%`; nothing to click on either card.
+ * What is pinned: the endings card's two rows under the report's chrome with
+ * the legend's Double faults entry and the Errors-vs-Unforced/Forced choice;
+ * the zero case — the anatomy with a dash, the legend, one sentence, never a
+ * `0` or a `0%`; nothing to click; and that no season card reaches the
+ * report's film or context machinery.
  */
 
 const PROFILE = "src/components/dashboard/team/player-profile/";
-const TRACKER = PROFILE + "season-performance-tracker.tsx";
+const GAME_PROFILE = PROFILE + "season-game-profile-card.tsx";
+const DIFFERENTIAL = PROFILE + "season-differential-card.tsx";
 const ENDINGS = PROFILE + "season-point-endings-card.tsx";
 
 const passThrough = ({ children }: { children?: React.ReactNode }) =>
@@ -69,18 +67,6 @@ function loader() {
       },
     },
   });
-}
-
-function renderTracker(props: {
-  playerName: string;
-  perMatch: SeasonPerMatch[];
-}): string {
-  const { SeasonPerformanceTracker } = loader().load(TRACKER) as {
-    SeasonPerformanceTracker: React.ComponentType<typeof props>;
-  };
-  return renderToStaticMarkup(
-    React.createElement(SeasonPerformanceTracker, props),
-  );
 }
 
 function renderEndings(props: {
@@ -191,127 +177,6 @@ const C = (judged: boolean) =>
 const SEASON = [A, B, C(false)];
 
 const count = (html: string, needle: string) => html.split(needle).length - 1;
-
-/* ── The tracker ───────────────────────────────────────────────────────── */
-
-test.describe("SeasonPerformanceTracker", () => {
-  test("one mark per analyzed match, oldest first", () => {
-    const perMatch = seasonPerMatch(SEASON);
-    const html = renderTracker({ playerName: "Maya Chen", perMatch });
-    expect(html).toContain('data-testid="season-performance-tracker"');
-    expect(count(html, 'data-sample="')).toBe(SEASON.length);
-    // Aug 20 (c), Sep 12 (a), Oct 3 (b) — never the array's order.
-    expect(
-      [...html.matchAll(/data-sample="([^"]+)"/g)].map((m) => m[1]),
-    ).toEqual(["c", "a", "b"]);
-    // Each mark's fill reads the match: Chen lost more than she won against
-    // Okafor (1 of 4), won more against the other two.
-    const fills = [
-      ...html.matchAll(
-        /data-sample="([^"]+)"[^>]*background:var\((--viz-[a-z]+)\)/g,
-      ),
-    ].map((m) => [m[1], m[2]]);
-    expect(fills).toEqual([
-      ["c", "--viz-you"],
-      ["a", "--viz-opp"],
-      ["b", "--viz-you"],
-    ]);
-    expect(html).toContain(
-      'aria-label="Points won match by match across 3 analyzed matches. Chen above the midline, opponents below."',
-    );
-    // Two areas and two lines, clipped at the midline as the report's are.
-    expect(count(html, "<path")).toBe(4);
-    expect(count(html, "<clipPath")).toBe(2);
-  });
-
-  for (const n of [1, 2]) {
-    test(`${n} analyzed: ${n} mark${n === 1 ? "" : "s"}, the series still drawn`, () => {
-      const perMatch = seasonPerMatch(SEASON.slice(0, n));
-      const html = renderTracker({ playerName: "Maya Chen", perMatch });
-      expect(count(html, 'data-sample="')).toBe(n);
-      expect(html).not.toContain(
-        'data-testid="season-performance-tracker-empty"',
-      );
-      expect(html).toContain(
-        `across ${n} analyzed ${n === 1 ? "match" : "matches"}.`,
-      );
-    });
-  }
-
-  test("the readout names the opponent, the day and N of M points", () => {
-    const perMatch = seasonPerMatch(SEASON);
-    const { sampleReadout } = loader().load(TRACKER) as {
-      sampleReadout: typeof import("../src/components/dashboard/team/player-profile/season-performance-tracker").sampleReadout;
-    };
-    expect(sampleReadout(perMatch[0])).toEqual({
-      opponent: "Ivan Hale",
-      points: "Won 2 of 2 points",
-      date: "Aug 20, 2026",
-    });
-    expect(sampleReadout(perMatch[1])).toEqual({
-      opponent: "Sam Okafor",
-      points: "Won 1 of 4 points",
-      date: "Sep 12, 2026",
-    });
-    // No readable date: no date line, rather than a blank one.
-    expect(sampleReadout({ ...perMatch[2], date: null }).date).toBe("");
-
-    // The same words, one line a match, for a screen reader.
-    const html = renderTracker({ playerName: "Maya Chen", perMatch });
-    expect(html).toContain(
-      "<li>Aug 20, 2026, Ivan Hale, Won 2 of 2 points.</li>",
-    );
-    expect(html).toContain(
-      "<li>Sep 12, 2026, Sam Okafor, Won 1 of 4 points.</li>",
-    );
-    expect(html).toContain(
-      "<li>Oct 3, 2026, Dana Lee, Won 2 of 3 points.</li>",
-    );
-    // The dark readout is there to receive them (closed until a hover).
-    expect(html).toMatch(/rounded-\[12px\][^>]*style="[^"]*opacity:0/);
-  });
-
-  test("chrome: the report's eyebrow, the canvas micro, the legend; no breaks, sets or clicks", () => {
-    for (const perMatch of [[], seasonPerMatch(SEASON)]) {
-      const html = renderTracker({ playerName: "Maya Chen", perMatch });
-      expect(html).toContain(
-        '<span id="season-performance-tracker-heading" class="eyebrow">Performance tracker</span>',
-      );
-      expect(html).toContain(
-        'aria-labelledby="season-performance-tracker-heading"',
-      );
-      expect(html).toContain(">Points won, match by match<");
-      expect(html).toContain(">Chen ahead<");
-      expect(html).toContain(">Opponents ahead<");
-      expect(html).not.toContain("Maya Chen");
-      // A season has no sets and no breaks of serve.
-      expect(html).not.toContain("stroke-dasharray");
-      expect(html).not.toMatch(/>Set \d/);
-      expect(html).not.toContain("Break");
-      // Nothing to click: no film behind a season.
-      expect(html).not.toContain("<button");
-      expect(html).not.toContain("cursor-pointer");
-      expect(html).not.toContain("Watch");
-      expect(html).not.toContain("in Video");
-      expect(html).not.toContain("animate-pulse");
-    }
-  });
-
-  test("zero analyzed: the empty plot (midline alone), the legend, one sentence, no figure", () => {
-    const html = renderTracker({ playerName: "Maya Chen", perMatch: [] });
-    expect(html).toContain('data-testid="season-performance-tracker-empty"');
-    expect(count(html, "<line")).toBe(1);
-    expect(html).not.toContain("<path");
-    expect(html).not.toContain("data-sample");
-    expect(html).toContain(">Chen ahead<");
-    expect(html).toContain(
-      "Each analyzed match adds a mark: the points Chen won against the points lost.",
-    );
-    // Never a zero where nothing was measured.
-    expect(html).not.toMatch(/>\d[\d.]*%?</);
-    expect(html).not.toContain("<ul");
-  });
-});
 
 /* ── How points ended ──────────────────────────────────────────────────── */
 
@@ -445,7 +310,7 @@ test.describe("SeasonPointEndingsCard", () => {
 /* ── Scope ─────────────────────────────────────────────────────────────── */
 
 test("the season cards reach none of the report's film or context machinery", () => {
-  for (const file of [TRACKER, ENDINGS]) {
+  for (const file of [GAME_PROFILE, DIFFERENTIAL, ENDINGS]) {
     const source = readFileSync(file, "utf8");
     expect(source, file).not.toMatch(
       /watchCut|film-cut|useMatchReport|useMatchData|useMatchSides|useMatchFilters/,

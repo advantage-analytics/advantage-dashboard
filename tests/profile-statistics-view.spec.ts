@@ -15,8 +15,9 @@ import { createLoader } from "./fixtures/vm-modules";
  * — what `getPlayerSeason` returns for a player with nothing analysed yet.
  *
  * What is pinned: the insight slot first, then the widgets row with the
- * report's classes — Head to head on the left, the column Performance
- * tracker → How points ended → Rally length → Net game on the right; every
+ * report's classes — Head to head and its Differential on the left, the
+ * column Game profile → How points ended → Rally length → Net game on the
+ * right; the retired Performance tracker gone; every
  * card present in its own empty, dashes and no `0%`; the season insight copy
  * on `INSIGHT_SURFACE` with the engine mark; and that the page imports none
  * of the profile's retired KPI strip / Last match / Match history cards, and
@@ -41,8 +42,8 @@ const INSIGHT_SURFACE = (() => {
   return match[1];
 })();
 
-function render(): string {
-  const loader = createLoader({
+function loader() {
+  return createLoader({
     stubs: {
       "@/components/ui/tooltip": {
         Tooltip: passThrough,
@@ -76,7 +77,10 @@ function render(): string {
       },
     },
   });
-  const { ProfileStatisticsView } = loader.load(VIEW) as {
+}
+
+function render(): string {
+  const { ProfileStatisticsView } = loader().load(VIEW) as {
     ProfileStatisticsView: React.ComponentType<{
       playerId: string;
       playerName: string;
@@ -106,12 +110,13 @@ function render(): string {
 const count = (html: string, needle: string) => html.split(needle).length - 1;
 
 test.describe("profile Statistics tab — no analyzed matches", () => {
-  test("insight slot, then Head to head beside the four charts in order", () => {
+  test("insight slot, then Head to head + Differential beside the four charts in order", () => {
     const html = render();
     const order = [
       'data-testid="insight-empty"',
       'aria-labelledby="season-head-to-head-heading"',
-      'aria-labelledby="season-performance-tracker-heading"',
+      'aria-labelledby="season-differential-heading"',
+      'aria-labelledby="season-game-profile-heading"',
       'aria-labelledby="season-point-endings-heading"',
       'aria-labelledby="season-rally-length-heading"',
       'aria-labelledby="season-net-game-heading"',
@@ -129,21 +134,36 @@ test.describe("profile Statistics tab — no analyzed matches", () => {
     expect(html).toContain(
       'class="flex min-w-0 flex-1 flex-col gap-4 *:shrink-0"',
     );
-    // Head to head is the row's first column; the charts are the second.
+    // Head to head and the Differential are the row's first column; the
+    // charts are the second.
     const row = html.indexOf("@min-[720px]:flex-row");
-    const left = html.indexOf('class="min-w-0 flex-1"', row);
-    const right = html.indexOf("flex min-w-0 flex-1 flex-col gap-4", row);
+    const column = 'class="flex min-w-0 flex-1 flex-col gap-4 *:shrink-0"';
+    const left = html.indexOf(column, row);
+    const right = html.indexOf(column, left + 1);
     const h2h = html.indexOf("season-head-to-head-heading");
-    const tracker = html.indexOf("season-performance-tracker-heading");
+    const differential = html.indexOf("season-differential-heading");
+    const radar = html.indexOf("season-game-profile-heading");
     expect(left).toBeLessThan(h2h);
-    expect(h2h).toBeLessThan(right);
-    expect(right).toBeLessThan(tracker);
+    expect(h2h).toBeLessThan(differential);
+    expect(differential).toBeLessThan(right);
+    expect(right).toBeLessThan(radar);
+    // The tracker is retired.
+    expect(html).not.toContain("Performance tracker");
+    expect(html).not.toContain("season-performance-tracker");
+  });
+
+  test("the season head to head leaves off Lob and Drop shot points", () => {
+    const html = render();
+    expect(html).toContain("Approach points won");
+    expect(html).not.toContain("Lob points won");
+    expect(html).not.toContain("Drop shot points won");
   });
 
   test("every card draws its empty: dashes, never a 0%", () => {
     const html = render();
     for (const id of [
-      "season-performance-tracker-empty",
+      "season-differential-empty",
+      "season-game-profile-empty",
       "point-endings-empty",
       "rally-length-empty",
       "net-game-empty",
@@ -151,7 +171,8 @@ test.describe("profile Statistics tab — no analyzed matches", () => {
       expect(html, id).toContain(`data-testid="${id}"`);
     for (const eyebrow of [
       "Head to head",
-      "Performance tracker",
+      "Differential",
+      "Game profile",
       "How points ended",
       "Rally length",
       "Net game",
@@ -178,6 +199,93 @@ test.describe("profile Statistics tab — no analyzed matches", () => {
     // A status, not a finding: no toggle and no link.
     expect(insight).not.toContain("<button");
     expect(insight).not.toContain("<a ");
+  });
+});
+
+test.describe("Game profile, with matches", () => {
+  const VALUES = [57.4, 76, 44, 52, 73, null];
+  const profile = (lastFive: (number | null)[] | null) => ({
+    overall: [64, 71, 52, 44, 66, 45],
+    lastMatch: { values: VALUES, opponent: "Ana Ruiz", date: "2026-11-07" },
+    lastFive,
+  });
+  const renderCard = (lastFive: (number | null)[] | null) => {
+    const { SeasonGameProfileCard } = loader().load(
+      PROFILE + "season-game-profile-card.tsx",
+    ) as {
+      SeasonGameProfileCard: React.ComponentType<Record<string, unknown>>;
+    };
+    return renderToStaticMarkup(
+      React.createElement(SeasonGameProfileCard, {
+        playerName: "Maya Chen",
+        analyzed: lastFive ? 8 : 3,
+        profile: profile(lastFive),
+      }),
+    );
+  };
+
+  test("the last match, filled blue, over a solid overall outline", () => {
+    const html = renderCard(null);
+    expect(html).toContain('data-testid="season-game-profile"');
+    // Axis labels carry the blue shape's figure; an axis with no attempts is a dash.
+    expect(html).toContain("1st serve in 57%");
+    expect(html).toContain("BP converted —");
+    expect(html).toContain("Last match · vs Ruiz, Nov 7");
+    expect(html).toContain(">Overall<");
+    // Two solid shapes: nothing dashed anywhere on the card.
+    expect(html).not.toContain("stroke-dasharray");
+    expect(html).toMatch(
+      /data-testid="game-profile-overall"[^>]*fill="none"[^>]*stroke="var\(--viz-opp\)"/,
+    );
+    expect(html).toMatch(
+      /data-testid="game-profile-recent"[^>]*fill="var\(--viz-you\)" fill-opacity="0.14"/,
+    );
+    // Five matches or fewer: no swap.
+    expect(html).not.toContain("<button");
+  });
+
+  test("more than five matches: a labelled swap with a dark tooltip", () => {
+    const html = renderCard([61, 73, 50, 47, 69, 48]);
+    expect(html).toMatch(/<button[^>]*aria-label="Show last 5 matches"/);
+    expect(html).toContain('<span data-tip="">Show last 5 matches</span>');
+    // Before the swap the blue shape is still the last match.
+    expect(html).toContain(">Last match<");
+    expect(html).toContain("1st serve in 57%");
+  });
+});
+
+test.describe("Differential, with matches", () => {
+  test("per-match winners minus errors, signed to one decimal", () => {
+    const { SeasonDifferentialCard } = loader().load(
+      PROFILE + "season-differential-card.tsx",
+    ) as {
+      SeasonDifferentialCard: React.ComponentType<Record<string, unknown>>;
+    };
+    const tally = (winners: number, unforcedErrors: number) => ({
+      ...foldSeasonTallies([]).outcomes.you,
+      winners,
+      unforcedErrors,
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(SeasonDifferentialCard, {
+        playerName: "Maya Chen",
+        analyzed: 4,
+        outcomes: {
+          you: tally(40, 28),
+          opp: tally(30, 36),
+          errorSplitJudged: false,
+        },
+      }),
+    );
+    expect(html).toContain('data-testid="season-differential"');
+    expect(html).toContain("Winners minus errors, per match");
+    // 40−28 over 4 matches; 30−36 over 4.
+    expect(html).toContain(">+3.0<");
+    expect(html).toContain(">−1.5<");
+    expect(html).toContain(">10.0<");
+    expect(html).toContain(">7.0<");
+    expect(html).toContain(">Chen<");
+    expect(html).toContain(">Opponents<");
   });
 });
 
