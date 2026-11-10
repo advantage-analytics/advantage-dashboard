@@ -4,6 +4,8 @@ import type { MatchPoint } from "@/lib/data/match-points-server";
 import {
   buildPlayerInsightPrompt,
   buildSeasonEvidence,
+  resolvePlayerInsight,
+  seasonFigures,
   seasonInsightSignature,
 } from "@/lib/data/player-insight";
 import {
@@ -26,12 +28,15 @@ import { createLoader } from "./fixtures/vm-modules";
  * fold's own pooled rates and drops a clause the season has no figure for;
  * the cache signature follows the analyzed matches and their figures; the
  * prompt states every row with a figure under the player's name, leaves out
- * the rows with none, and carries the voice rules — one sentence, eight
- * words, no digits, third person. Then the route: every refusal is JSON
+ * the rows with none, lists the citable figures by key, and carries the voice
+ * rules — a claim of one sentence, eight words, no digits, third person, and
+ * a two-sentence description that cites figures only by key. The resolver
+ * fills keys from the fold and drops a description that types a digit or
+ * cites a key nobody listed. Then the route: every refusal is JSON
  * through `errorResponse()` and reaches neither the roster nor the model; a
  * body's program id is refused by name, never read; the roster is read for
- * the WORKSPACE's program; nothing analyzed is a 204; the stream is the
- * adapter's chunks with the prompt built from the season, and the season is
+ * the WORKSPACE's program; nothing analyzed is a 204; the body is the
+ * adapter's answer resolved over the season's figures, and the season is
  * loaded with no ball-paths file and no service-role client.
  */
 
@@ -264,10 +269,73 @@ test.describe("buildPlayerInsightPrompt", () => {
       "No greeting, no markdown",
       "NO exclamation marks",
       "If the sample is thin",
-      "Return the sentence alone, with no surrounding text.",
+      "LINE 2 — the description: exactly two sentences on the SAME subject",
+      'write "{F3}", never the number beside it',
+      "Return the two lines alone, separated by a single line break",
     ])
       expect(prompt, rule).toContain(rule);
     expect(prompt).toContain("deciding Maya's losses.");
+  });
+
+  test("lists every citable figure by key, the player's side before the opponents'", () => {
+    expect(prompt).toContain("  {F1} Matches analyzed: 2");
+    expect(prompt).toContain("{F2} Serve · Aces — Maya (per match): 4.0");
+    expect(prompt).toContain(
+      "{F3} Serve · Aces — their opponents' own figure (per match): 1.5",
+    );
+    expect(prompt).toContain("Points · Total points won — Maya: 53%");
+  });
+});
+
+/* ── Reading the answer ─────────────────────────────────────────────────── */
+
+test.describe("resolvePlayerInsight", () => {
+  const figures = seasonFigures(SEASON.analyzed, SEASON.groups, "Maya");
+  const key = (label: string) => figures.find((f) => f.label === label)!.key;
+  const won = key("Points · Total points won — Maya");
+  const lost = key("Points · Total points won — their opponents' own figure");
+
+  test("fills each key with the fold's display text, set tabular", () => {
+    const insight = resolvePlayerInsight(
+      `Maya wins the long exchanges.\nMaya takes {${won}} of points to the opponents' {${lost}}. Longer rallies favour building points from the baseline.`,
+      figures,
+    );
+    expect(insight!.claim).toBe("Maya wins the long exchanges.");
+    expect(insight!.description!.map((p) => p.text).join("")).toBe(
+      "Maya takes 53% of points to the opponents' 47%. Longer rallies favour building points from the baseline.",
+    );
+    expect(
+      insight!.description!.filter((p) => p.tabular).map((p) => p.text),
+    ).toEqual(["53%", "47%"]);
+  });
+
+  test("drops a description that types a digit, cites an unknown key or cites none", () => {
+    for (const description of [
+      "Maya takes 53% of points. Keep rallies long.",
+      "Maya takes {F999} of points. Keep rallies long.",
+      "Maya takes most points. Keep rallies long.",
+      `Maya takes {${won}} of points! Keep rallies long.`,
+    ]) {
+      const insight = resolvePlayerInsight(
+        `Maya wins the long exchanges.\n${description}`,
+        figures,
+      );
+      expect(insight, description).toEqual({
+        claim: "Maya wins the long exchanges.",
+        description: null,
+      });
+    }
+  });
+
+  test("no claim when it is empty or types a figure; labels and quotes are stripped", () => {
+    expect(resolvePlayerInsight("", figures)).toBeNull();
+    expect(
+      resolvePlayerInsight("Maya wins 53% of points.", figures),
+    ).toBeNull();
+    expect(resolvePlayerInsight(`Maya wins {${won}}.`, figures)).toBeNull();
+    expect(
+      resolvePlayerInsight('Claim: "Maya wins the long exchanges."', figures),
+    ).toEqual({ claim: "Maya wins the long exchanges.", description: null });
   });
 });
 
@@ -357,7 +425,8 @@ function loadRoute(
           if (scenario.llm === "throw") throw new Error("no provider");
           return (async function* () {
             yield "Second serves are ";
-            yield "deciding Maya's losses.";
+            yield "deciding Maya's losses.\nAcross {F1} ";
+            yield "analyzed matches the second serve sits short. Second serves need more depth.";
           })();
         },
       },
@@ -487,7 +556,7 @@ test.describe("/api/player-insight", () => {
     expect(calls.llm).toEqual([]);
   });
 
-  test("an analyzed season → the claim streams as text, from the prompt over the season, with no file read and no service role", async () => {
+  test("an analyzed season → the claim and its description as JSON, figures filled in, with no file read and no service role", async () => {
     const calls = newCalls();
     const POST = loadRoute(
       { workspace: TEAM_WORKSPACE, sides: SIDES, season: SEASON },
@@ -495,8 +564,16 @@ test.describe("/api/player-insight", () => {
     );
     const res = await POST(post({ playerId: PLAYER }));
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/plain");
-    expect(await res.text()).toBe("Second serves are deciding Maya's losses.");
+    expect(res.headers.get("content-type")).toContain("application/json");
+    const body = await res.json();
+    expect(body.claim).toBe("Second serves are deciding Maya's losses.");
+    expect(body.description).toEqual([
+      { text: "Across " },
+      { text: "2", tabular: true },
+      {
+        text: " analyzed matches the second serve sits short. Second serves need more depth.",
+      },
+    ]);
 
     // The season was loaded over the roster's own matches, and its one
     // service-role dependency was answered with "no file" for every match.
