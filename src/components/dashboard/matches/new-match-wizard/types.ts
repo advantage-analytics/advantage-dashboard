@@ -32,7 +32,9 @@ export type ValueSource =
   /**
    * `opponentSource` only: the opponent was picked from the Teammates section
    * — the program's own roster (`teammates.ts`). `opponentPlayerId` is then
-   * their `program_players.id`, and the "their team" keys are cleared.
+   * their roster row's id (`program_roster_full.player_id`), and the "their
+   * team" keys are cleared. The save takes it back through `teammateSeat()`
+   * rather than writing it as it stands.
    */
   | "teammate";
 
@@ -251,6 +253,14 @@ export interface MatchData {
    * The opponent's pooled identity, for aggregating an opponent profile across
    * every match against them. Read by nothing else, and in NO policy — unlike
    * `player2_id` directly above, which grants read access to this match.
+   *
+   * So an opponent's id goes here and `player2_id` stays null — except for a
+   * TEAMMATE, an opponent on the match's own program roster, who gets both:
+   * this column their `program_players` id, `player2_id` the id their own
+   * matches carry. Safe because the read access `player2_id` grants is access
+   * a program member already has; needed because the seat readers key on
+   * `player2_id` alone. `MatchMetadata.teammateSeatId` (`utils.ts`) has the
+   * long version.
    */
   opponent_player_id: string | null;
   /**

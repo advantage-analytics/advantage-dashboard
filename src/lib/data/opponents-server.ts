@@ -614,6 +614,12 @@ export const getOpponentPlayerProfile = cache(
     // everywhere else. NOT `player2_id` — that column is one arm of the `matches`
     // SELECT policy, so an opponent id there would hand them this match and both
     // players' statistics the day they claim the profile (20260823090000).
+    //
+    // One opponent is written to both columns: a TEAMMATE, in a practice set
+    // between two players of this program (`teammateSeat()` in the wizard's
+    // `teammates.ts`). `player2_id` is safe there because a program member
+    // already reads the program's matches — it adds their seat, not access —
+    // and this read is unchanged: it still finds them by `opponent_player_id`.
     const { data: matchRows } = await supabase
       .from("matches")
       .select(

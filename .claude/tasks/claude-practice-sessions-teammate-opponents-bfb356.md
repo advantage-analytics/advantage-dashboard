@@ -72,7 +72,7 @@ ready).
 
 ## T5 · Persist a teammate opponent in seat two
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T4
 - **files:** (guess) `src/components/dashboard/matches/new-match-wizard/utils.ts` (`buildMatchData`, `MatchMetadata` ~112–195), `useUploadMatchWizard.ts` (~3660–3840), `types.ts` (~228–240 doc comments), `src/lib/data/program-side.ts`, `src/lib/data/viewer-side.ts`, `src/lib/data/opponents-server.ts` (~614 comment), `docs/ui-revamp-guardrails.md`; new `tests/teammate-opponent-seat.spec.ts`

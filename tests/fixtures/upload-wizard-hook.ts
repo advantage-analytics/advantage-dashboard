@@ -7,6 +7,7 @@ import * as validation from "@/components/dashboard/matches/new-match-wizard/val
 import * as scoreState from "@/components/dashboard/matches/new-match-wizard/score-state";
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import * as opponentTeam from "@/components/dashboard/matches/new-match-wizard/opponent-team";
+import * as teammates from "@/components/dashboard/matches/new-match-wizard/teammates";
 import * as styleSaveOffer from "@/components/dashboard/matches/new-match-wizard/style-save-offer";
 import * as courtOptions from "@/components/dashboard/matches/new-match-wizard/court-options";
 import { buildMatchData } from "@/components/dashboard/matches/new-match-wizard/utils";
@@ -417,6 +418,7 @@ export function uploadWizardHarness(
     "./types": types,
     // Pure: whether the "their team" field is empty, for the line fallback.
     "./opponent-team": opponentTeam,
+    "./teammates": teammates,
     "./validation": validation,
     "./score-state": scoreState,
     "./court-options": courtOptions,

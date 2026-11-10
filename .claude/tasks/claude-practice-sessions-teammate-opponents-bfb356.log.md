@@ -48,3 +48,15 @@ is the runner's. Newest entries at the bottom.
 1. T5: a teammate pick already writes `opponent_player_id`; guard roster rows without a real `program_players` id (FK).
 2. A restored draft keeps `opponentSource: "teammate"` without re-checking the roster.
 3. `pickTeammate` writes fields through an `Object.entries` loop with a `keyof FormData` cast.
+
+## T5 · Persist a teammate opponent in seat two — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4724 passed, shard 2/2 5123 passed (suite run in two shards; a single full run gets killed mid-suite). Completion VERDICT: pass.
+**changed:** `teammates.ts` adds `teammateSeat()` / `rosterProfileId()`, which re-read the pick from the loaded roster at save time (null when the opponent was not a teammate pick, is no longer on the roster, is the subject, or the workspace is not a team); `utils.ts` `buildMatchData` writes `teammateSeatId` to `player2_id` (never equal to `player1_id`); `useUploadMatchWizard.ts` passes it and skips `contribute_opponent_player` for a teammate. A roster "safety arm" row (member with no profile, login id as `player_id`) is seated by login id with `opponent_player_id` left null, so the FK cannot fail. Comments in `utils.ts`, `types.ts`, `program-side.ts`, `viewer-side.ts`, `opponents-server.ts` and an exception note in `docs/ui-revamp-guardrails.md` §3.1 state the teammate exception. New `tests/teammate-opponent-seat.spec.ts`; `tests/fixtures/upload-wizard-hook.ts` registers the new import. No migration, no policy.
+**follow-ups:**
+
+1. The schedule-line update branch still writes no `player2_id`, so a teammate on a reused line row gets `opponent_player_id` but no seat.
+2. The database does not check `player2_id` against the roster (the insert policy is `created_by = auth.uid()`); a trigger arm mirroring the `player1_id` roster check would close it — needs a migration.
+3. Add `profileId` to `RosterPlayerOption` (the RPC returns `profile_id`) instead of inferring "no profile" from `playerId === userId`.
+4. Rename the guardrails note "A reviewed exception" once /pr-check's reviewers pass it.
+5. A live-DB spec proving the teammate can read the row through `player2_id` after insert.

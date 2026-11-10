@@ -6,8 +6,10 @@
  * offered, where the section sits, what a pick writes into the form and how
  * "People you've played" steps aside for someone already listed here.
  *
- * Form state only. What reaches `matches` for a teammate is the save's
- * business (`buildMatchData` in `utils.ts`).
+ * Form state, plus the one rule the save needs: `teammateSeat()`, which turns
+ * the picked teammate back into the two ids `matches` takes — re-read from the
+ * live roster, never trusted from the form. `buildMatchData` (`utils.ts`)
+ * writes them.
  */
 
 import { isPracticeMatch } from "@/lib/matches/match-type";
@@ -89,8 +91,77 @@ export function opponentIsTeammate(
 }
 
 /**
- * What picking a teammate writes. Their `program_players` id — the one
- * `matches.opponent_player_id`'s FK points at, never the claimed login — and
+ * The roster row's `program_players` id, or null when it has none.
+ *
+ * `program_roster_full` returns players from two arms (read off the live
+ * function, 2026-11-10). The ordinary one emits `pp.id` as `player_id` and
+ * `pp.claimed_by_user_id` as `user_id`: a profile id and a login id, which
+ * are different id spaces and never equal. The "safety arm" — a player-role
+ * member with no live profile row, "always empty after the backfill" — emits
+ * the member's LOGIN id as both. So a row whose two ids are equal has no
+ * profile, and its `playerId` must never reach a column whose foreign key
+ * points at `program_players` (`matches.opponent_player_id`): that insert
+ * fails, and the upload with it.
+ */
+export function rosterProfileId(
+  row: Pick<RosterPlayerOption, "playerId" | "userId">,
+): string | null {
+  return row.userId !== null && row.userId === row.playerId
+    ? null
+    : row.playerId;
+}
+
+/** The two ids a teammate opponent puts on the match row. */
+export interface TeammateSeat {
+  /**
+   * `matches.player2_id` — the id this teammate's own matches carry
+   * (`program_roster_full.player_id`), so every seat reader finds them in
+   * seat two exactly as it finds them in seat one of their own uploads.
+   */
+  seatId: string;
+  /**
+   * `matches.opponent_player_id` — their `program_players` id, or null for a
+   * safety-arm row, which has none (`rosterProfileId`).
+   */
+  profileId: string | null;
+}
+
+/**
+ * The teammate the form names, checked against the roster as it is NOW — or
+ * null, and the match saves as it would for a typed name.
+ *
+ * Null unless all of: the opponent was picked from Teammates; the id that
+ * travelled with the pick is still a row on this program's roster (a resumed
+ * draft can outlive an archive, a merge, or a switch of workspace); and that
+ * row is not the match's subject, under either of its ids — one person in
+ * both seats would turn every seat reader's answer into whichever seat it
+ * happens to test first.
+ *
+ * This is the only door into `player2_id`. That column is an arm of the
+ * `matches` SELECT policy, so what goes through must be a member of the
+ * program the match is filed under — someone the program arm of the same
+ * policy already lets read it — and never an id the form merely remembers.
+ */
+export function teammateSeat(
+  form: Pick<FormData, "opponentSource" | "opponentPlayerId">,
+  roster: readonly RosterPlayerOption[] | null | undefined,
+  subjectId: string | null | undefined,
+): TeammateSeat | null {
+  if (!opponentIsTeammate(form) || !form.opponentPlayerId || !roster) {
+    return null;
+  }
+  const row = roster.find((r) => r.playerId === form.opponentPlayerId);
+  if (!row) return null;
+  if (subjectId && (row.playerId === subjectId || row.userId === subjectId)) {
+    return null;
+  }
+  return { seatId: row.playerId, profileId: rosterProfileId(row) };
+}
+
+/**
+ * What picking a teammate writes. The roster row's id — for every row but a
+ * safety-arm one their `program_players` id, never the claimed login; the
+ * save re-reads it through `teammateSeat()` before any column takes it — and
  * their saved style from the roster row. Their team is this program, which
  * the "their team" field does not ask about, so its keys are cleared.
  */
