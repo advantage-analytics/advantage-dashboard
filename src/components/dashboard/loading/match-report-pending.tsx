@@ -324,12 +324,19 @@ const RADAR_H = 250;
 const RADAR_CY = 125;
 const RADAR_R = 92;
 
+/** Vertex `i` of the six-axis radar at `r` from the centre, "x,y". */
+function radarVertex(i: number, r: number): [string, string] {
+  const angle = -Math.PI / 2 + (i * Math.PI) / 3;
+  return [
+    (RADAR_W / 2 + Math.cos(angle) * r).toFixed(1),
+    (RADAR_CY + Math.sin(angle) * r).toFixed(1),
+  ];
+}
+
 function radarRing(share: number): string {
-  return Array.from({ length: 6 }, (_, i) => {
-    const angle = -Math.PI / 2 + (i * Math.PI) / 3;
-    const r = RADAR_R * share;
-    return `${(RADAR_W / 2 + Math.cos(angle) * r).toFixed(1)},${(RADAR_CY + Math.sin(angle) * r).toFixed(1)}`;
-  }).join(" ");
+  return Array.from({ length: 6 }, (_, i) =>
+    radarVertex(i, RADAR_R * share).join(","),
+  ).join(" ");
 }
 
 /**
@@ -364,14 +371,14 @@ function GameProfilePending() {
           />
         ))}
         {Array.from({ length: 6 }, (_, i) => {
-          const angle = -Math.PI / 2 + (i * Math.PI) / 3;
+          const [x2, y2] = radarVertex(i, RADAR_R);
           return (
             <line
               key={i}
               x1={RADAR_W / 2}
               y1={RADAR_CY}
-              x2={(RADAR_W / 2 + Math.cos(angle) * RADAR_R).toFixed(1)}
-              y2={(RADAR_CY + Math.sin(angle) * RADAR_R).toFixed(1)}
+              x2={x2}
+              y2={y2}
               stroke="var(--ink-200)"
               strokeWidth={1}
               vectorEffect="non-scaling-stroke"
