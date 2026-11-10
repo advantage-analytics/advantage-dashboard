@@ -632,6 +632,32 @@ export type SeasonAdvancedOptions = {
 };
 
 /**
+ * One match's `optionAvailability`, kept on its points array as the parts
+ * are (`seasonPartMemo`). It reads only the match — never the filters — yet
+ * walking every point of every match was three quarters of a profile filter
+ * click's fold (measured 2026-11-10: ~25 of ~35 ms over 24 matches of 190
+ * points), recomputed on each one.
+ */
+const availabilityMemo = new WeakMap<
+  readonly MatchPoint[],
+  Map<string, MatchFilterAvailability>
+>();
+
+function matchAvailability(m: SeasonVizMatch): MatchFilterAvailability {
+  const key = `${m.isPlayer1}|${m.isDerived}|${m.errorSplitJudged}`;
+  let memo = availabilityMemo.get(m.points);
+  const hit = memo?.get(key);
+  if (hit !== undefined) return hit;
+  const availability = optionAvailability(m.points, seasonMatchContext(m));
+  if (memo === undefined) {
+    memo = new Map();
+    availabilityMemo.set(m.points, memo);
+  }
+  memo.set(key, availability);
+  return availability;
+}
+
+/**
  * The Video tab's advanced options the season can produce: each match's
  * `optionAvailability` (its own points and context, as the report reads
  * them), united — an option is offered when any match has a point it
@@ -640,9 +666,7 @@ export type SeasonAdvancedOptions = {
 export function seasonAdvancedOptions(
   perMatch: readonly SeasonVizMatch[],
 ): SeasonAdvancedOptions {
-  const each = perMatch.map((m) =>
-    optionAvailability(m.points, seasonMatchContext(m)),
-  );
+  const each = perMatch.map(matchAvailability);
   const out = {} as Record<MatchFilterKey, unknown[]>;
   for (const key of MATCH_FILTER_KEYS) {
     const values = new Set<unknown>();
@@ -841,6 +865,20 @@ function seasonMatchPasses(
   if (ticks && applied.matches.length > 0)
     return applied.matches.includes(m.matchId);
   return true;
+}
+
+/**
+ * A mark's metres to the millimetre for the trip to the browser. Tracked
+ * positions arrive with 15–17 significant digits; the opened card ships every
+ * mark of the season on every filter click, and a millimetre is far under a
+ * pixel at any zoom the court allows.
+ */
+function toMillimetre(dot: VizDot): VizDot {
+  return {
+    ...dot,
+    lateralM: Math.round(dot.lateralM * 1000) / 1000,
+    depthM: Math.round(dot.depthM * 1000) / 1000,
+  };
 }
 
 /** One mark's `SeasonDotPoint`, read off its match's own point. */
@@ -1139,7 +1177,7 @@ export function buildSeasonLightbox(
     cut,
     chart: state.chart,
     filters,
-    result,
+    result: { ...result, dots: result.dots.map(toMillimetre) },
     stats,
     bandZones: bandZonesFor(cut, bands.bands, bands.unit, stats),
     subjectName,

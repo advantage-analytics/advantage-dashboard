@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -59,6 +59,10 @@ import { getSavedViews } from "@/lib/data/saved-views-server";
 import { seasonErrorSplitJudged } from "@/lib/data/player-season";
 import { getBandSettings } from "@/lib/data/viz-bands-server";
 import { getPreferences } from "@/lib/data/preferences-server";
+
+/** `getPreferences` once per request, so the early start above and the
+ *  Visualizations body share one read. */
+const requestPreferences = cache(getPreferences);
 import { askEntryHref } from "@/lib/services/ask/entry";
 
 /**
@@ -170,6 +174,22 @@ export default async function PlayerProfilePage({
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
+
+  // A Visualizations request starts its body's reads now, alongside the
+  // profile's own, instead of after them: every one is `cache()`d, so the
+  // body below awaits these same promises. On a filter click (each one is a
+  // round trip through this page) that takes a whole wave of reads off the
+  // critical path. `.catch` only marks the early promise handled; the body
+  // still sees, and throws, any failure.
+  if (parseProfileView(query[PROFILE_VIEW_PARAM]) === "visualizations") {
+    for (const early of [
+      getPlayerSeasonCourts(active.id, playerId),
+      getBandSettings(active.id),
+      requestPreferences(),
+      getSavedViews(active.id),
+    ])
+      early.catch(() => {});
+  }
 
   const [profile, roster, myPlayerIds, sides] = await Promise.all([
     getPlayerProfile(active.id, playerId),
@@ -462,7 +482,7 @@ async function ProfileVisualizationsBody({
   const [season, bandSettings, preferences, savedViews] = await Promise.all([
     getPlayerSeasonCourts(programId, playerId),
     getBandSettings(programId),
-    getPreferences(),
+    requestPreferences(),
     getSavedViews(programId),
   ]);
   if (!season) return null;
