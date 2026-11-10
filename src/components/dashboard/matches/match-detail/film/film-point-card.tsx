@@ -127,7 +127,11 @@ export const FilmPointCard = memo(function FilmPointCard({
       // Which point the card is on, in the DOM: the specs assert the card
       // follows the PLAYING point while the list is held (T22).
       data-point-id={point?.id}
-      className="surface-card flex min-h-0 flex-1 flex-col"
+      // No `min-h-0`: the card stops shrinking at its own content — the
+      // pinned rows plus the notes list's floor (see `Thread`) — and the
+      // pane scrolls from there, rather than the thread being squeezed away
+      // when the filter strip or a wrapped tag row takes the height.
+      className="surface-card flex flex-1 flex-col"
       style={{ padding: "10px 20px 14px" }}
     >
       <div className="flex h-7 shrink-0 items-center gap-1">
@@ -507,7 +511,7 @@ function Thread({ notes }: { notes: NotesThread }) {
   const shown = notes.notes.slice(hidden);
 
   return (
-    <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-[var(--border-hairline)] pt-3">
+    <div className="mt-4 flex flex-1 flex-col border-t border-[var(--border-hairline)] pt-3">
       {notes.status === "loading" ? (
         <PendingRegion label="notes" innerClassName="flex flex-col gap-3 py-1">
           {[0, 1].map((i) => (
@@ -534,25 +538,35 @@ function Thread({ notes }: { notes: NotesThread }) {
       ) : notes.notes.length === 0 ? (
         <EmptyThread />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto">
-          {hidden > 0 && (
-            <button
-              type="button"
-              onClick={() => setExpanded(true)}
-              className="w-fit cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-            >
-              Show {hidden} earlier {hidden === 1 ? "note" : "notes"}
-            </button>
-          )}
-          {shown.map((note) => (
-            <NoteRow
-              key={note.id}
-              note={note}
-              author={notes.authors.get(note.authorId) ?? null}
-              mine={note.authorId === notes.viewerId}
-              onDelete={() => notes.onDelete(note.id)}
-            />
-          ))}
+        // Side by side the list is out of flow inside a box with a floor of
+        // about a note and a half: the box takes whatever height the card
+        // has left and the notes scroll within it, but it never drops under
+        // the floor. Stacked, the card is content-height and the notes sit
+        // in flow, all of them showing.
+        <div className="relative flex-1 @min-[720px]:min-h-20">
+          <div
+            data-notes-list
+            className="flex flex-col gap-3.5 @min-[720px]:absolute @min-[720px]:inset-0 @min-[720px]:overflow-y-auto"
+          >
+            {hidden > 0 && (
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                className="w-fit cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+              >
+                Show {hidden} earlier {hidden === 1 ? "note" : "notes"}
+              </button>
+            )}
+            {shown.map((note) => (
+              <NoteRow
+                key={note.id}
+                note={note}
+                author={notes.authors.get(note.authorId) ?? null}
+                mine={note.authorId === notes.viewerId}
+                onDelete={() => notes.onDelete(note.id)}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

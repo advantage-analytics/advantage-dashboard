@@ -1198,7 +1198,12 @@ function FilmRoom({
       />
       <div
         ref={clockRef}
-        className="flex min-h-0 flex-1 flex-col gap-4 @min-[720px]:flex-row"
+        // Side by side the row may not shrink under the player column's
+        // content (`min-h-auto`): "This point" has a floor, and when the
+        // window is too short for it the row grows past the pane — which
+        // scrolls — and the point list, stretched to the row, grows with it,
+        // so the two columns always end on the same line.
+        className="flex min-h-0 flex-1 flex-col gap-4 @min-[720px]:min-h-auto @min-[720px]:flex-row"
       >
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 @max-[720px]:flex-none">
           {/* Above the player and right-aligned: maintenance for the person who
