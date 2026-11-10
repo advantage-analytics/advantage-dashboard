@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { NextRequest } from "next/server";
 
+import { REQUEST_PATH_HEADER } from "@/lib/auth/request-path-header";
 import { updateSession } from "@/lib/supabase/middleware";
 
 /**
@@ -101,5 +102,15 @@ test.describe("updateSession survives a malformed auth cookie", () => {
     const response = await updateSession(requestFor("/dashboard"));
     expect(response.status).toBe(200);
     expect(response.headers.get("location")).toBeNull();
+  });
+
+  test("the no-cookie skip still forwards the path the login gate reads", async () => {
+    // A signed-out visitor is exactly who the layout sends to `/login?next=…`,
+    // so skipping the refresh must not skip the header.
+    const response = await updateSession(requestFor("/admin/requests?id=abc"));
+    expect(response.cookies.getAll()).toEqual([]);
+    expect(
+      response.headers.get(`x-middleware-request-${REQUEST_PATH_HEADER}`),
+    ).toBe("/admin/requests?id=abc");
   });
 });

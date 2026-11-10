@@ -31,6 +31,14 @@ export async function updateSession(request: NextRequest) {
     `${request.nextUrl.pathname}${request.nextUrl.search}`,
   );
 
+  // No session cookie, nothing to refresh: signed-out visitors, bots and
+  // link-preview crawlers. Building the client and reading claims for them
+  // spent Vercel active CPU on every request (the proxy was 28% of the
+  // project's CPU in Oct–Nov 2026) to land on `{ data: null }` every time.
+  if (!hasAuthCookie(request)) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   });
@@ -95,4 +103,16 @@ export async function updateSession(request: NextRequest) {
   // copy the cookies onto it first (`res.cookies.setAll(...)`) or the browser
   // and server fall out of sync and the session terminates early.
   return supabaseResponse;
+}
+
+/**
+ * Whether the request carries a Supabase session cookie: `@supabase/ssr` names
+ * it `sb-<project-ref>-auth-token`, split into `.0`, `.1`… chunks when large.
+ * The PKCE `-code-verifier` cookie matches too, which only means one more
+ * harmless no-op refresh mid sign-in.
+ */
+function hasAuthCookie(request: NextRequest): boolean {
+  return request.cookies
+    .getAll()
+    .some(({ name }) => name.startsWith("sb-") && name.includes("-auth-token"));
 }
