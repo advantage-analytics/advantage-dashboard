@@ -270,8 +270,8 @@ check with `az storage account management-policy show` first.
 
 ### Data model
 
-One additive column, in `supabase/migrations/20261110040000_processing_jobs_playback_store.sql`
-(**not applied**; it is waiting for your review):
+One additive column, in `supabase/migrations/20261110043800_processing_jobs_playback_store.sql`
+(**applied to production 2026-11-10**, recorded as version 20261110043800):
 
 - `processing_jobs.playback_store text check (playback_store in ('azure','r2'))`. Null means Azure.
   - A per-object table was considered in Phase 0. It is not needed now: only the playback copy moves, and `applyPlaybackReport` already writes every job sharing an upload in one statement.
@@ -342,7 +342,7 @@ Behaviour notes:
 1. **You:** create the R2 bucket (private) and two tokens scoped to it:
    - the app's, Object Read & Write
    - the worker's, Object Read & Write
-2. **You:** review and apply the migration.
+2. ~~Review and apply the migration~~ — done 2026-11-10.
 3. Set the four `R2_*` in Vercel (Production), and deploy this branch once it has merged through `splitstep-integration`.
 4. Rebuild and push the worker image, then run `deploy.sh` with the worker token's `R2_*`. New copies now land in R2.
 5. `npx tsx scripts/backfill-playback-to-r2.ts` (dry run), then `--apply --limit 3`. Check those matches play, then `--apply` the rest, and `--sample` with `SAMPLE_VIDEO_STORE=r2`.

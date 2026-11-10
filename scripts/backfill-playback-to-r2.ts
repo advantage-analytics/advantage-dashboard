@@ -100,7 +100,7 @@ async function pendingKeys(db: ReturnType<typeof admin>): Promise<string[]> {
   if (error?.code === "42703") {
     throw new Error(
       "processing_jobs.playback_store does not exist yet: apply " +
-        "supabase/migrations/20261110040000_processing_jobs_playback_store.sql first",
+        "supabase/migrations/20261110043800_processing_jobs_playback_store.sql first",
     );
   }
   if (error) throw new Error(`Could not read jobs: ${error.message}`);

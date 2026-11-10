@@ -51,7 +51,6 @@ $$;
 
 revoke all on function public.processing_jobs_guard_playback_store() from public, anon, authenticated;
 
-drop trigger if exists processing_jobs_guard_playback_store on public.processing_jobs;
-create trigger processing_jobs_guard_playback_store
+create or replace trigger processing_jobs_guard_playback_store
   before insert or update on public.processing_jobs
   for each row execute function public.processing_jobs_guard_playback_store();
