@@ -121,8 +121,17 @@ export function VizStateProvider({
   children,
   errorSplitJudged: errorSplitJudgedProp,
   season = false,
+  writesInPlace,
 }: {
   children: ReactNode;
+  /**
+   * The season only: a change the host already holds the answer for, so the
+   * URL is written in place instead of asking the server again — the
+   * profile wall's You | Opponent once both sides' cards are in the browser
+   * (`profile-visualizations-view.tsx`). Every other season change still
+   * takes the round trip.
+   */
+  writesInPlace?: (prev: VizState, next: VizState) => boolean;
   /**
    * A player's season (`profile-visualizations-view.tsx`): the URL's
    * `?vopp=` / `?vm=` are read into `VizState.season`, as its Server
@@ -200,7 +209,8 @@ export function VizStateProvider({
 
   const setState = useCallback(
     (next: VizState | ((prev: VizState) => VizState)): void => {
-      const resolved = applyVizUpdate(intendedRef.current, next);
+      const prev = intendedRef.current;
+      const resolved = applyVizUpdate(prev, next);
       intendedRef.current = resolved;
 
       const q = vizStateQuery(searchParams, resolved);
@@ -208,7 +218,7 @@ export function VizStateProvider({
 
       setRenderedState(resolved);
       const href = q ? `${pathname}?${q}` : pathname;
-      if (season) {
+      if (season && !writesInPlace?.(prev, resolved)) {
         // The season's courts are folded on the server from the URL, so the
         // profile needs the round trip.
         router.replace(href, { scroll: false });
@@ -222,7 +232,7 @@ export function VizStateProvider({
         window.history.replaceState(null, "", href);
       }
     },
-    [pathname, router, searchParams, season],
+    [pathname, router, searchParams, season, writesInPlace],
   );
 
   const value = useMemo(

@@ -440,7 +440,8 @@ function wallDot({
   depthM,
   atNet,
 }: VizDot): VizDot {
-  return { id, outcome, shape, lateralM, depthM, atNet };
+  // To the millimetre, as the opened card's marks travel (`toMillimetre`).
+  return toMillimetre({ id, outcome, shape, lateralM, depthM, atNet });
 }
 
 /** One card over the season: each match computed with its own seat and

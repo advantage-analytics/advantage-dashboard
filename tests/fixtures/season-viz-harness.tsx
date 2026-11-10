@@ -164,6 +164,26 @@ function serverRender(query: string) {
     savedCards: buildSeasonViewCards(SEASON, SAVED_VIEWS, BANDS),
     lightbox: buildSeasonLightbox(SEASON, state, BANDS, NAMES, SAVED_VIEWS),
     errorSplitJudged,
+    // `?otherside=1`: the page's streamed other-side wall, landing a moment
+    // after the answer, as `page.tsx` sends it.
+    ...(LOAD_PARAMS.has("otherside")
+      ? {
+          otherSideCards: new Promise<ReturnType<typeof buildSeasonCards>>(
+            (resolve) =>
+              window.setTimeout(
+                () =>
+                  resolve(
+                    buildSeasonCards(
+                      SEASON,
+                      side === "you" ? "opponent" : "you",
+                      BANDS,
+                    ),
+                  ),
+                50,
+              ),
+          ),
+        }
+      : {}),
   };
 }
 

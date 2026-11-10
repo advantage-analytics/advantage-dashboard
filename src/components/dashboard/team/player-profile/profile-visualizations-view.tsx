@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, type MouseEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 
 import { LegendMark } from "@/components/dashboard/matches/match-detail/shots/legend-mark";
 import { LifecycleChip } from "@/components/dashboard/matches/match-detail/shots/lifecycle-chip";
@@ -11,6 +18,7 @@ import {
   type PlayerFilter,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import { VizStateProvider } from "@/components/dashboard/matches/match-detail/shots/viz-state-context";
+import type { VizState } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import type { WallCollection } from "@/components/dashboard/matches/match-detail/shots/viz-wall";
 import { WallCard } from "@/components/dashboard/matches/match-detail/shots/wall-card";
 import type {
@@ -68,6 +76,7 @@ export function ProfileVisualizationsView({
   lightbox,
   errorSplitJudged,
   saveView,
+  otherSideCards,
 }: {
   /** The player's full name — the cards' subject for "you". */
   playerName: string;
@@ -86,10 +95,63 @@ export function ProfileVisualizationsView({
   errorSplitJudged: boolean;
   /** What the opened card's "Save as view" needs; absent leaves it out. */
   saveView?: SeasonSaveView;
+  /** The wall's cards for the OTHER side, streamed after the page: once they
+   *  land, the wall's You | Opponent swaps sides in the browser. */
+  otherSideCards?: Promise<SeasonCard[]>;
 }) {
+  // Both sides' wall cards as they arrive: the server's for `side` with the
+  // page, the other side's from `otherSideCards` a moment later. A new
+  // server answer starts over from its own pair. Render-phase reset, as
+  // `SeasonVizBody` keeps its own wall state.
+  const [cache, setCache] = useState(() => ({
+    base: cards,
+    bySide: { [side]: cards } as Partial<Record<PlayerFilter, SeasonCard[]>>,
+  }));
+  if (cache.base !== cards)
+    setCache({ base: cards, bySide: { [side]: cards } });
+  useEffect(() => {
+    if (!otherSideCards) return;
+    let live = true;
+    otherSideCards.then(
+      (other) => {
+        if (!live) return;
+        setCache((c) =>
+          c.base === cards
+            ? { ...c, bySide: { ...c.bySide, [otherSide(side)]: other } }
+            : c,
+        );
+      },
+      // A failed stream just leaves the switch on its round trip.
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [otherSideCards, cards, side]);
+
+  // A wall-only You | Opponent switch whose side is already here writes the
+  // URL in place: the server would only answer with the cards we hold.
+  const ready = useRef(cache.bySide);
+  useEffect(() => {
+    ready.current = cache.bySide;
+  }, [cache.bySide]);
+  const writesInPlace = useCallback(
+    (prev: VizState, next: VizState) =>
+      prev.cut === null &&
+      next.cut === null &&
+      ready.current[next.filters.player] !== undefined &&
+      wallKey(prev) === wallKey(next),
+    [],
+  );
+
   return (
-    <VizStateProvider errorSplitJudged={errorSplitJudged} season>
+    <VizStateProvider
+      errorSplitJudged={errorSplitJudged}
+      season
+      writesInPlace={writesInPlace}
+    >
       <SeasonVizBody
+        cardsBySide={cache.bySide}
         playerName={playerName}
         firstName={firstName}
         analyzed={analyzed}
@@ -120,7 +182,10 @@ function SeasonVizBody({
   lightbox,
   errorSplitJudged,
   saveView,
+  cardsBySide,
 }: {
+  /** Each side's wall cards that are in the browser (`side`'s always). */
+  cardsBySide: Partial<Record<PlayerFilter, SeasonCard[]>>;
   playerName: string;
   firstName: string;
   analyzed: number;
@@ -156,9 +221,12 @@ function SeasonVizBody({
   // focus to when it closes. The wall keeps the cards it had instead, and
   // reads busy (`SeasonWall`) until the server's cards are its player's
   // again. Same render-phase update.
+  // The same rule over every side the browser holds: the server's side,
+  // and the other one once it has streamed in.
   const [shown, setShown] = useState(() => ({ side, cards }));
-  if (side === player && (shown.cards !== cards || shown.side !== side)) {
-    setShown({ side, cards });
+  const ready = cardsBySide[player];
+  if (ready && (shown.cards !== ready || shown.side !== player)) {
+    setShown({ side: player, cards: ready });
   }
 
   return (
@@ -171,7 +239,7 @@ function SeasonVizBody({
         cards={shown.cards}
         cardsSide={shown.side}
         savedCards={savedCards}
-        busy={analyzed > 0 && side !== player}
+        busy={analyzed > 0 && ready === undefined}
       />
       <SeasonVizLightbox
         data={lightbox}
@@ -459,4 +527,17 @@ function EmptyWall({ children }: { children: ReactNode }) {
       </p>
     </div>
   );
+}
+
+function otherSide(side: PlayerFilter): PlayerFilter {
+  return side === "you" ? "opponent" : "you";
+}
+
+/** A state without its player — two wall states that differ only in the
+ *  side share it. */
+function wallKey(state: VizState): string {
+  return JSON.stringify({
+    ...state,
+    filters: { ...state.filters, player: null },
+  });
 }

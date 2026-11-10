@@ -883,6 +883,46 @@ test("Matches: a row in Filters opens the Matches sheet; its Result, Opponent an
   expect(errors).toEqual([]);
 });
 
+test("with the other side streamed in, the wall's You | Opponent swaps at once: no server answer, the URL still follows", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  // A slow server (4s), so a switch that waited for it would show busy.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&otherside=1&delay=4000`,
+  );
+  const wall = page.getByRole("list", { name: "Default views" });
+  await expect(wall.getByRole("link").first()).toBeVisible();
+  const landed = await page.locator("main").getAttribute("data-landed");
+  // Let the streamed side land (50ms in the harness).
+  await page.waitForTimeout(300);
+  await wallPressed(page).waitFor();
+  await page
+    .locator('#root [role="group"][aria-label="Player"]')
+    .getByRole("button", { name: "Opponent" })
+    .click();
+  // The opponents' cards, at once and not busy — long before the 4s answer.
+  await expect(
+    wall.getByRole("link", { name: /, Opponents:/ }).first(),
+  ).toBeVisible({ timeout: 1_000 });
+  await expect(wallBusy(page)).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.get("player")).toBe("opponent");
+  // Nothing went back to the server for it.
+  await expect(page.locator("main")).toHaveAttribute(
+    "data-landed",
+    landed ?? "",
+  );
+  // And back to You, as fast.
+  await page
+    .locator('#root [role="group"][aria-label="Player"]')
+    .getByRole("button", { name: "You" })
+    .click();
+  await expect(
+    wall.getByRole("link", { name: /, Avery Kim:/ }).first(),
+  ).toBeVisible({ timeout: 1_000 });
+  await expect(wallBusy(page)).toHaveCount(0);
+});
+
 test("the Matches sheet throws its draft away on Esc, and its search only finds a row", async ({
   page,
 }) => {

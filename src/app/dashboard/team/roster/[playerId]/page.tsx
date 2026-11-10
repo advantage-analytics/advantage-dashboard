@@ -54,6 +54,7 @@ import {
   buildSeasonLightbox,
   buildSeasonViewCards,
   parseSeasonVizState,
+  type SeasonCard,
 } from "@/lib/data/player-season-viz";
 import { getSavedViews } from "@/lib/data/saved-views-server";
 import { seasonErrorSplitJudged } from "@/lib/data/player-season";
@@ -497,6 +498,25 @@ async function ProfileVisualizationsBody({
   // player is kept in the browser meanwhile (`profile-visualizations-view.tsx`)
   // and closing writes it back here, so the cards are recomputed for it.
   const side = state.filters.player;
+  // The other side's wall, streamed behind the page (a promise prop): the
+  // timer lets this answer go out first, and once it lands the wall's
+  // You | Opponent swaps sides in the browser with no round trip
+  // (`profile-visualizations-view.tsx`).
+  const otherSideCards = new Promise<SeasonCard[]>((resolve, reject) =>
+    setTimeout(() => {
+      try {
+        resolve(
+          buildSeasonCards(
+            season.perMatch,
+            side === "you" ? "opponent" : "you",
+            bands,
+          ),
+        );
+      } catch (error) {
+        reject(error);
+      }
+    }, 0),
+  );
   return (
     <ProfileViewWhen view="visualizations">
       <ProfileVisualizationsView
@@ -515,6 +535,7 @@ async function ProfileVisualizationsBody({
         )}
         errorSplitJudged={errorSplitJudged}
         saveView={{ savedViews, workspaceName }}
+        otherSideCards={otherSideCards}
       />
     </ProfileViewWhen>
   );

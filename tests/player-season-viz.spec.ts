@@ -1524,12 +1524,15 @@ test.describe("the Visualizations view, rendered", () => {
     expect(source).toMatch(
       /const player =\s*state\.cut === null \? state\.filters\.player : wallPlayer;/,
     );
+    // Any side the browser holds counts — the server's, or the other one
+    // once it has streamed in (`otherSideCards`).
+    expect(source).toContain("const ready = cardsBySide[player];");
     expect(source).toMatch(
-      /if \(side === player && \(shown\.cards !== cards \|\| shown\.side !== side\)\)/,
+      /if \(ready && \(shown\.cards !== ready \|\| shown\.side !== player\)\)/,
     );
     expect(source).toContain("cards={shown.cards}");
     expect(source).toContain("cardsSide={shown.side}");
-    expect(source).toContain("busy={analyzed > 0 && side !== player}");
+    expect(source).toContain("busy={analyzed > 0 && ready === undefined}");
   });
 
   test("the store reads ?verr= by the season's rule, as the server does: on an unjudged season Unforced opens on every error in the browser too", async () => {
