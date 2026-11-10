@@ -16,9 +16,9 @@ import { EMPTY_VIZ_FILTERS, type PlayerFilter } from "./viz-model";
 
 /**
  * The wall (canvas W5 + card D3): one toolbar strip — `Default | Saved` ·
- * `You | Opponent` · the legend — over four court-first cards in a 2×2 grid,
+ * `You | Opponent` · the legend — over five court-first cards in a two-column grid,
  * one player at a time. Which player is URL-backed (`?player=opponent` on the
- * wall, `viz-url.ts`), so a reload or Back lands on the same four cards.
+ * wall, `viz-url.ts`), so a reload or Back lands on the same five cards.
  *
  * Attribution (guardrails §4): `useMatchSides()` is the only place "you" is
  * resolved here; each card's subject is read straight off the side
@@ -47,7 +47,7 @@ export function VizWall({
   savedViewsBand?: ReactNode;
   collection: WallCollection;
   onCollectionChange: (collection: WallCollection) => void;
-  /** Which player's four cards — the wall's own, kept by `shots-tab.tsx`
+  /** Which player's five cards — the wall's own, kept by `shots-tab.tsx`
    *  while the lightbox owns `state.filters`. */
   player: PlayerFilter;
 }) {

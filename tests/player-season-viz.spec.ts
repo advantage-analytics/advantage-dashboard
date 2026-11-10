@@ -312,9 +312,11 @@ test.describe("buildSeasonCards", () => {
           expect(card.summary.countLabel).toBe(
             card.cut === "errors"
               ? `${card.summary.count} total`
-              : card.summary.count === card.summary.total
-                ? `${card.summary.count} in`
-                : `${card.summary.count} of ${card.summary.total} in`,
+              : card.cut === "returnContact"
+                ? `${card.summary.count} ${card.summary.count === 1 ? "return" : "returns"}`
+                : card.summary.count === card.summary.total
+                  ? `${card.summary.count} in`
+                  : `${card.summary.count} of ${card.summary.total} in`,
           );
           // What opening the card asks the URL for: the default cut, this side.
           const cut = defaultCutsFor(judged).find((c) => c.cut === card.cut)!;
@@ -380,11 +382,15 @@ test.describe("buildSeasonCards", () => {
   });
 
   test("the errors card follows the season's judged rule, as the Statistics tab's Errors row does", () => {
-    const judged = buildSeasonCards(JUDGED, "you", BANDS)[3];
+    const judged = buildSeasonCards(JUDGED, "you", BANDS).find(
+      (c) => c.cut === "errors",
+    )!;
     expect(judged.name).toBe("Unforced errors");
     expect(judged.state.filters.error).toEqual(["unforced"]);
 
-    const unjudged = buildSeasonCards(UNJUDGED, "you", BANDS)[3];
+    const unjudged = buildSeasonCards(UNJUDGED, "you", BANDS).find(
+      (c) => c.cut === "errors",
+    )!;
     expect(unjudged.name).toBe("Errors");
     expect(unjudged.state.filters.error).toEqual(["unforced", "forced"]);
     // A's forced error counts on the unjudged season's Errors card — more
@@ -397,9 +403,9 @@ test.describe("buildSeasonCards", () => {
     );
   });
 
-  test("no analyzed matches: four cards, every total 0, nothing counted", () => {
+  test("no analyzed matches: five cards, every total 0, nothing counted", () => {
     const cards = buildSeasonCards([], "you", BANDS);
-    expect(cards).toHaveLength(4);
+    expect(cards).toHaveLength(5);
     for (const card of cards) {
       expect(card.total).toBe(0);
       expect(card.dots).toEqual([]);

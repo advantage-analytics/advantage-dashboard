@@ -408,7 +408,7 @@ export function mergeVizStats(
 
 /* ── The wall ───────────────────────────────────────────────────────────── */
 
-/** One of the wall's cards over the season: a default card (one of four for
+/** One of the wall's cards over the season: a default card (one of five for
  *  one subject) or one of the workspace's saved views. */
 export interface SeasonCard {
   /** Stable key: `"you:serve"`, `"opponent:errors"`, `"view:<id>"`. */
@@ -494,7 +494,7 @@ function seasonCard(
 }
 
 /**
- * The wall's four cards for `side` over `perMatch` — the redesign's default
+ * The wall's five cards for `side` over `perMatch` — the redesign's default
  * cuts (`defaultCutsFor` by the season's judged rule), each match computed
  * with its own seat and context, then merged. In wall order.
  */
