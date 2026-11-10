@@ -13,13 +13,16 @@ import type {
  * `/api/player-insight` builds its prompt here, the profile page composes the
  * evidence here, and `tests/player-insight-prompt.spec.ts` pins both.
  *
- * The split is the Focus card's (`lib/ui/insight-evidence.ts`): the model
- * writes the CLAIM — one sentence, no digits — and this module writes the
- * EVIDENCE from the season fold's own figures (`foldSeasonRows`). The model
- * never types a number that is shown: a figure in the stream is a figure
- * nobody verified, so the prompt forbids them and the card prints only what
- * `buildSeasonEvidence` composed. Nothing here derives a statistic either; it
- * reads the rows the fold already finished.
+ * The card has the match report's anatomy (`report-insight-card.tsx`): a
+ * CLAIM — one sentence, no digits — and under it a DESCRIPTION on the same
+ * subject, two sentences that quote the figures the claim rests on. The model
+ * still never types a number that is shown. It cites a figure by its key
+ * (`{F3}`) from the table the prompt lists (`seasonFigures`), and
+ * `resolvePlayerInsight` swaps each key for the fold's own display text. A
+ * description with a bare digit, an unknown key or no key at all is dropped,
+ * and the card falls back to the computed line `buildSeasonEvidence` writes,
+ * so every figure on screen is one the fold produced. Nothing here derives a
+ * statistic either; it reads the rows the fold already finished.
  */
 
 /* ── Evidence ─────────────────────────────────────────────────────────── */
@@ -102,6 +105,53 @@ export function seasonInsightSignature(season: {
   return `${season.analyzed}:${ids}:${evidence}`;
 }
 
+/* ── Figures the description may cite ─────────────────────────────── */
+
+/** One citable figure: its key, what it names, and the fold's display text. */
+export interface SeasonFigure {
+  /** `F1`, `F2`… — the model writes `{F1}`, never the value. */
+  key: string;
+  /** "First serve in — Maya", "Aces — opponents (per match)". */
+  label: string;
+  /** The fold's display text, exactly as the Head to head card prints it. */
+  display: string;
+}
+
+/**
+ * Every figure the season has, keyed in a stable order: the analyzed count,
+ * then each Head to head row with a figure, the player's side before their
+ * opponents'. A side with no figure (`display === ""`) gets no key, so the
+ * model cannot cite a dash.
+ */
+export function seasonFigures(
+  analyzed: number,
+  groups: readonly SeasonGroup[],
+  firstName: string,
+): SeasonFigure[] {
+  const figures: SeasonFigure[] = [];
+  const add = (label: string, display: string) => {
+    if (display === "") return;
+    figures.push({ key: `F${figures.length + 1}`, label, display });
+  };
+  add("Matches analyzed", String(analyzed));
+  for (const group of groups) {
+    for (const row of group.rows) {
+      const unit = row.kind === "count" ? " (per match)" : "";
+      add(
+        `${group.title} · ${row.label} — ${firstName}${unit}`,
+        row.you.display,
+      );
+      // Whose figure it is, spelled out: "opponents" alone read as what the
+      // player conceded ("conceding 53% to opponents") in a live sample.
+      add(
+        `${group.title} · ${row.label} — their opponents' own figure${unit}`,
+        row.opp.display,
+      );
+    }
+  }
+  return figures;
+}
+
 /* ── The prompt ───────────────────────────────────────────────────────── */
 
 export interface PlayerInsightInput {
@@ -151,15 +201,21 @@ function groupsText(groups: readonly SeasonGroup[], firstName: string): string {
   return blocks.length > 0 ? blocks.join("\n") : "  No figures yet.";
 }
 
+function figuresText(figures: readonly SeasonFigure[]): string {
+  return figures.map((f) => `  {${f.key}} ${f.label}: ${f.display}`).join("\n");
+}
+
 /**
- * The system prompt for the profile's claim — `/api/home-insight`'s voice
- * rules over the season fold's figures. The rules are the product's, not
- * style: one sentence of at most eight words, a falsifiable claim, NO digits
- * (the evidence line carries every number), no cheerleading. Two things
- * differ from the personal card: the subject is a named player read about by
- * themself and their coaches, so the sentence is third person; and nobody
- * here knows the player's pronouns, so the sentence uses their first name or
- * "they".
+ * The system prompt for the profile's card — `/api/home-insight`'s voice
+ * rules over the season fold's figures, in the match report's two parts.
+ * The CLAIM's rules are the product's, not style: one sentence of at most
+ * eight words, a falsifiable claim, NO digits, no cheerleading. The
+ * DESCRIPTION (the report summary's description: same subject, figures, then
+ * what it means for training) cites figures only by key — `resolvePlayerInsight`
+ * fills them in and drops a description that types a digit itself. The
+ * subject is a named player read about by themself and their coaches, so both
+ * are third person; nobody here knows the player's pronouns, so they use the
+ * first name or "they".
  *
  * The figures are ALL-TIME — every match of theirs the program recorded
  * (`getPlayerMatchSides`), not one academic season — and the rail's "N
@@ -167,7 +223,8 @@ function groupsText(groups: readonly SeasonGroup[], firstName: string): string {
  */
 export function buildPlayerInsightPrompt(input: PlayerInsightInput): string {
   const { name, firstName, matchesPlayed, analyzed, groups, tallies } = input;
-  return `You write the claim line on the Advantage Intelligence card of a player's profile on Advantage, a tennis analytics platform for collegiate programs. The page is read by the player and by their coaching staff.
+  const figures = seasonFigures(analyzed, groups, firstName);
+  return `You write the Advantage Intelligence card on a player's profile on Advantage, a tennis analytics platform for collegiate programs. The page is read by the player and by their coaching staff.
 
 Player: ${name}
 Matches recorded: ${matchesPlayed}
@@ -177,20 +234,32 @@ Points won per analyzed match (oldest → newest): ${pointsWonLine(tallies.perMa
 Figures over every analyzed match on record — ${firstName} against their opponents. They span every season on record, not one, so never present them as a single season's. A count is the per-match average; a rate is pooled over every point of the analyzed matches.
 ${groupsText(groups, firstName)}
 
-Write ONE sentence: the single most important thing this data says about ${firstName}'s game across these matches.
+Citable figures — the ONLY way to put a number in your description is to write its key in braces, exactly as listed. The key is replaced by the figure shown beside it.
+${figuresText(figures)}
+
+Write TWO lines and nothing else.
+
+LINE 1 — the claim: ONE sentence, the single most important thing this data says about ${firstName}'s game across these matches.
+LINE 2 — the description: exactly two sentences on the SAME subject as the claim. The first backs the claim with one to three cited figures, usually ${firstName}'s against the opponents'. The second says what that means for ${firstName}'s training or match play, plainly and concretely.
 
 The rules below are the product's voice, not style preferences. Breaking one is a defect.
 
-- ONE sentence, at most 8 words. A headline, not a paragraph.
+- The claim is ONE sentence, at most 8 words. A headline, not a paragraph.
 - Make a falsifiable CLAIM about what the data shows — not advice, not encouragement.
   Good: "Second serves are deciding ${firstName}'s losses."
   Bad: "Keep working on that second serve!"
-- NO digits, percentages, counts or ordinals. A separate evidence line directly
-  beneath yours carries every number, computed from the database. A number you
-  write is a number nobody verified — so write none.
+- NO digits, percentages, counts or ordinals anywhere you type them, in either
+  line. The claim carries no figures at all. The description puts a figure in
+  ONLY by its key — write "{F3}", never the number beside it. A number you type
+  is a number nobody verified, and a description that types one is thrown away.
+- Cite a count figure as a per-match average ("{F5} aces per match"). Cite only
+  keys from the list; never invent one.
+- Both lines stay on one subject. No "but", "however" or "meanwhile" pivot to a
+  second area of the game.
 - About ${firstName}, in the third person, present tense. Call them ${firstName}
   or "they"; never a gendered pronoun.
-- No greeting, no markdown, no bullet points, no emoji, no quotation marks.
+- No greeting, no markdown, no bullet points, no emoji, no quotation marks, no
+  labels such as "Claim:".
 - NO exclamation marks. No cheerleading, praise, encouragement or motivation.
   Never "great start", "keep it up", "on a roll", "build on this". These
   readers are competitive athletes and their coaches reading a training-room
@@ -198,5 +267,94 @@ The rules below are the product's voice, not style preferences. Breaking one is 
 - If the sample is thin, say what is thin rather than inflating it — a claim
   drawn from one or two matches must read as provisional.
 
-Return the sentence alone, with no surrounding text.`;
+Return the two lines alone, separated by a single line break, with no surrounding text.`;
+}
+
+/* ── Reading the answer ───────────────────────────────────────────────── */
+
+/** What the card shows: the claim, and the description with its figures. */
+export interface PlayerInsight {
+  claim: string;
+  /** Figures set tabular; `null` when the description failed a check. */
+  description: EvidencePart[] | null;
+}
+
+/** The longest description kept, after its figures are filled in. */
+const DESCRIPTION_MAX_CHARS = 420;
+
+const KEY_PATTERN = /\{(F\d+)\}/g;
+
+/** Strip a label or wrapping quotes the model added despite the rules. */
+function cleanLine(line: string): string {
+  return line
+    .trim()
+    .replace(/^(claim|line\s*[12]|description)\s*[:—-]\s*/i, "")
+    .replace(/^["“”']+|["“”']+$/g, "")
+    .trim();
+}
+
+function sentenceCount(text: string): number {
+  return text.split(/(?<=[.?])\s+/).filter((s) => s.trim() !== "").length;
+}
+
+/**
+ * The description with every `{Fn}` swapped for the fold's display text, or
+ * `null` when it fails a check: a digit typed outside a key, a key the table
+ * does not hold, no key at all, an exclamation mark, more than three
+ * sentences, or longer than `DESCRIPTION_MAX_CHARS`.
+ */
+function resolveDescription(
+  raw: string,
+  figures: readonly SeasonFigure[],
+): EvidencePart[] | null {
+  if (raw === "" || raw.includes("!")) return null;
+  if (/\d/.test(raw.replace(KEY_PATTERN, ""))) return null;
+  const byKey = new Map(figures.map((f) => [f.key, f.display]));
+  const parts: EvidencePart[] = [];
+  let last = 0;
+  let cited = 0;
+  for (const m of raw.matchAll(KEY_PATTERN)) {
+    const display = byKey.get(m[1]);
+    if (display === undefined) return null;
+    if (m.index > last) parts.push({ text: raw.slice(last, m.index) });
+    parts.push({ text: display, tabular: true });
+    last = m.index + m[0].length;
+    cited += 1;
+  }
+  if (cited === 0) return null;
+  if (last < raw.length) parts.push({ text: raw.slice(last) });
+  const text = parts.map((p) => p.text).join("");
+  if (text.length > DESCRIPTION_MAX_CHARS || sentenceCount(text) > 3)
+    return null;
+  return parts;
+}
+
+/**
+ * The model's two lines as the card shows them (a one-line answer splits at
+ * its first sentence), or `null` when there is no claim to show — an empty
+ * answer, or a claim that typed a digit (a figure nobody verified, in the
+ * one line that must carry none). A description that
+ * fails its checks is dropped on its own: the claim stands, and the card
+ * prints the computed evidence line in its place.
+ */
+export function resolvePlayerInsight(
+  raw: string,
+  figures: readonly SeasonFigure[],
+): PlayerInsight | null {
+  let lines = raw
+    .split(/\r?\n/)
+    .map(cleanLine)
+    .filter((l) => l !== "");
+  // The model sometimes runs both parts into one line. The claim is its first
+  // sentence, so split there rather than read the whole answer as a claim
+  // (which would carry the description's keys and be refused).
+  if (lines.length === 1) {
+    const [first, ...rest] = lines[0].split(/(?<=[.?])\s+/);
+    lines = [first, rest.join(" ")];
+  }
+  const claim = lines[0] ?? "";
+  // A cited key carries a digit, so this also refuses a claim that cites one.
+  if (claim === "" || /\d/.test(claim)) return null;
+  const description = resolveDescription(lines.slice(1).join(" "), figures);
+  return { claim, description };
 }
