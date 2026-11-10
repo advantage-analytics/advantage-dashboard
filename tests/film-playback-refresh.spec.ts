@@ -4268,7 +4268,7 @@ test("an applied filter reads as one sentence in a strip ABOVE the list, never c
   await expect(list.locator("[data-point-id]")).toHaveCount(4);
 });
 
-test("Advanced filters… opens the 340px drawer over the list, counting the draft by the list's rule", async ({
+test("Advanced filters… opens the 340px sheet on the window's edge, counting the draft by the list's rule", async ({
   page,
 }) => {
   await open(page, "filters-drawer");
@@ -4290,6 +4290,20 @@ test("Advanced filters… opens the 340px drawer over the list, counting the dra
     list.getByRole("region", { name: "Advanced filters" }),
   ).toHaveCount(0);
   await expect.poll(async () => (await drawer.boundingBox())?.width).toBe(340);
+  // A modal sheet: the window's right edge and its whole height, over the
+  // icon rail and the header, which dim with the report.
+  const viewport = page.viewportSize()!;
+  const sheet = (await drawer.boundingBox())!;
+  expect(Math.round(sheet.x + sheet.width)).toBe(viewport.width);
+  expect(Math.round(sheet.y)).toBe(0);
+  expect(Math.round(sheet.height)).toBe(viewport.height);
+  const dim = (await page.getByTestId("filter-rail-scrim").boundingBox())!;
+  expect([dim.x, dim.y, dim.width, dim.height].map(Math.round)).toEqual([
+    0,
+    0,
+    viewport.width,
+    viewport.height,
+  ]);
   // Focus moves in on open.
   await expect
     .poll(() =>
@@ -4327,6 +4341,19 @@ test("Advanced filters… opens the 340px drawer over the list, counting the dra
   await menu.getByText("Advanced filters…").click();
   await expect(drawer).toBeVisible();
   await expect(scrim).toBeVisible();
+  // Tab stays in the sheet: the page behind it is covered.
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press("Tab");
+    expect(
+      await page.evaluate(
+        (sel) =>
+          document.querySelector(sel)?.contains(document.activeElement) ??
+          false,
+        FILTERS_DRAWER,
+      ),
+    ).toBe(true);
+  }
+  // The dim covers the icon rail too: a click at the window's corner.
   await scrim.click({ position: { x: 8, y: 8 } });
   await expect(drawer).toHaveCount(0);
   await expect(scrim).toHaveCount(0);

@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { MATCH_REPORT_FRAME_ID } from "@/components/dashboard/matches/match-detail/match-filters/rail-state";
 import {
   MatchReportProvider,
   useMatchReport,
@@ -48,21 +47,9 @@ export { MatchReportProvider };
  * `MatchReportFrame` and friends; client components can use either.
  */
 
-/**
- * `relative` + the id make this the Video tab's filters drawer's anchor: the
- * drawer portals here. See `match-filters/filter-rail.tsx`'s "Placement" note
- * for why (short-viewport overflow inside `#match-report-pane`, and why
- * `fixed` is no escape from it either).
- */
-
 export function MatchReportFrame({ children }: { children: ReactNode }) {
   return (
-    <div
-      id={MATCH_REPORT_FRAME_ID}
-      className="relative flex min-h-0 flex-1 items-stretch"
-    >
-      {children}
-    </div>
+    <div className="relative flex min-h-0 flex-1 items-stretch">{children}</div>
   );
 }
 

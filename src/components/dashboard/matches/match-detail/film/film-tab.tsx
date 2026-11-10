@@ -394,7 +394,7 @@ function FilmRoom({
     () => ({ you: sides.you.shortName, opponent: sides.opp.shortName }),
     [sides.you.shortName, sides.opp.shortName],
   );
-  // "Advanced filters…" opens the 340px filters drawer over the list column
+  // "Advanced filters…" opens the 340px filters sheet on the window's edge
   // (`FilterRail`, rendered at the end of this view). The room's own drawer
   // keeps its in-column panel.
   const filterRail = useFilterRailHost();

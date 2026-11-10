@@ -1055,7 +1055,7 @@ function focusInDrawer(page: Page) {
   );
 }
 
-test("the lightbox's Filters takes the float-menu surface, and its Advanced filters row closes it and opens the drawer inside the box", async ({
+test("the lightbox's Filters takes the float-menu surface, and its Advanced filters row closes it and opens the sheet over the box", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -1076,8 +1076,8 @@ test("the lightbox's Filters takes the float-menu surface, and its Advanced filt
   await expect(row).toContainText("Score, return, result…");
   await row.click();
 
-  // The popover closes; the drawer opens inside the box, flush right and
-  // the box's whole height, 340px once its slide has run.
+  // The popover closes; the drawer opens over the box, on the window's
+  // right edge and the window's whole height, 340px once its slide has run.
   await expect(panel).toHaveCount(0);
   const drawer = dialog.getByRole("complementary", {
     name: "Advanced filters",
@@ -1087,11 +1087,17 @@ test("the lightbox's Filters takes the float-menu surface, and its Advanced filt
   await expect
     .poll(async () => Math.round((await drawer.boundingBox())!.width))
     .toBe(340);
-  const box = (await dialog.boundingBox())!;
   const rail = (await drawer.boundingBox())!;
-  expect(Math.round(rail.x + rail.width)).toBe(Math.round(box.x + box.width));
-  expect(Math.round(rail.y)).toBe(Math.round(box.y));
-  expect(Math.round(rail.height)).toBe(Math.round(box.height));
+  expect(Math.round(rail.x + rail.width)).toBe(1512);
+  expect(Math.round(rail.y)).toBe(0);
+  expect(Math.round(rail.height)).toBe(982);
+  // The whole window dims, not just the box.
+  const scrim = (await dialog
+    .locator("[data-lightbox-drawer-scrim]")
+    .boundingBox())!;
+  expect([scrim.x, scrim.y, scrim.width, scrim.height].map(Math.round)).toEqual(
+    [0, 0, 1512, 982],
+  );
   await expect(
     drawer.getByRole("heading", { name: "Advanced filters" }),
   ).toBeVisible();
