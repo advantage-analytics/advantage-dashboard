@@ -4,13 +4,17 @@ import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import {
   foldSeasonRows,
   foldSeasonTallies,
+  GAME_PROFILE_AXES,
+  gameProfileValues,
   seasonErrorSplitJudged,
+  seasonGameProfile,
   seasonHasLobs,
   seasonNetGame,
   seasonOutcomes,
   seasonPerMatch,
   seasonRallyBands,
   seasonRowKind,
+  withoutSeasonShotKindRows,
   type SeasonGroup,
   type SeasonMatch,
   type SeasonRow,
@@ -1031,9 +1035,133 @@ test.describe("rally length", () => {
   });
 });
 
-test("foldSeasonTallies folds the four in one call", () => {
+test.describe("the season head to head card's rows", () => {
+  test("leave off Lob points won and Drop shot points won, as the match report does", () => {
+    const groups = foldSeasonRows(SEASON);
+    const trimmed = withoutSeasonShotKindRows(groups);
+    const labels = trimmed.flatMap((g) => g.rows.map((r) => r.label));
+    expect(labels).not.toContain("Lob points won");
+    expect(labels).not.toContain("Drop shot points won");
+    // Every other row is kept, in order, with its figures.
+    expect(labels).toEqual(
+      groups
+        .flatMap((g) => g.rows.map((r) => r.label))
+        .filter((l) => l !== "Lob points won" && l !== "Drop shot points won"),
+    );
+    expect(row(trimmed, "First serve in")).toEqual(
+      row(groups, "First serve in"),
+    );
+  });
+});
+
+test.describe("the game profile", () => {
+  /** A rate row's pooled made/attempts, read back off its `detail`. */
+  const pooled = (groups: SeasonGroup[], label: string) => {
+    const [made, attempts] = row(groups, label)
+      .you.detail!.split("/")
+      .map(Number);
+    return { made, attempts };
+  };
+
+  test("its overall axes are the season head to head's own rates", () => {
+    const groups = foldSeasonRows(SEASON);
+    const profile = seasonGameProfile(SEASON);
+    const single = [
+      [0, "First serve in"],
+      [1, "First serve points won"],
+      [2, "Second serve points won"],
+      [4, "Net points won"],
+      [5, "Break points converted"],
+    ] as const;
+    for (const [i, label] of single) {
+      expect(GAME_PROFILE_AXES[i].rows).toEqual([label]);
+      const value = row(groups, label).you.value;
+      if (value === null) expect(profile.overall[i]).toBeNull();
+      else expect(profile.overall[i], label).toBeCloseTo(value, 9);
+    }
+  });
+
+  test("Return won pools both return rows' made and attempts", () => {
+    const groups = foldSeasonRows(SEASON);
+    const first = pooled(groups, "First serve returns won");
+    const second = pooled(groups, "Second serve returns won");
+    expect(seasonGameProfile(SEASON).overall[3]).toBeCloseTo(
+      ((first.made + second.made) / (first.attempts + second.attempts)) * 100,
+      9,
+    );
+  });
+
+  test("the last match is the latest by day, with its opponent and date", () => {
+    // A (Oct 5) is after B (Sep 20), whatever order they arrive in.
+    const profile = seasonGameProfile([MATCH_A, MATCH_B]);
+    expect(profile.lastMatch).toEqual({
+      values: gameProfileValues([MATCH_A]),
+      opponent: "Ruiz",
+      date: "2026-10-05",
+    });
+    expect(seasonGameProfile([MATCH_B, MATCH_A])).toEqual(profile);
+  });
+
+  test("offers the last five only with more than five matches", () => {
+    expect(seasonGameProfile(SEASON).lastFive).toBeNull();
+    const dated = (m: SeasonMatch, id: string, day: number): SeasonMatch => ({
+      ...m,
+      matchId: id,
+      date: `2026-10-${String(day).padStart(2, "0")}`,
+    });
+    const five = [1, 2, 3, 4, 5].map((d) =>
+      dated(d % 2 ? MATCH_A : MATCH_B, `m${d}`, d),
+    );
+    expect(seasonGameProfile(five).lastFive).toBeNull();
+    // One older match: the last five are still m1–m5.
+    const six = [...five, { ...MATCH_B, matchId: "m0", date: "2026-09-01" }];
+    const profile = seasonGameProfile(six);
+    expect(profile.lastFive).toEqual(gameProfileValues(five));
+    expect(profile.overall).toEqual(gameProfileValues(six));
+  });
+
+  test("an undated match is never the last match while a dated one exists", () => {
+    const undated: SeasonMatch = {
+      ...MATCH_B,
+      matchId: "z",
+      date: null,
+      opponent: "Nodate",
+    };
+    const profile = seasonGameProfile([MATCH_A, undated, MATCH_B]);
+    // A (Oct 5) is the latest dated match, though compareSeasonMatches files
+    // the undated one last.
+    expect(profile.lastMatch).toMatchObject({
+      opponent: "Ruiz",
+      date: "2026-10-05",
+    });
+    // …and the undated one is the oldest, so it leaves the last five first.
+    const dated = [1, 2, 3, 4, 5].map((d) => ({
+      ...MATCH_A,
+      matchId: `d${d}`,
+      date: `2026-10-0${d}`,
+    }));
+    expect(seasonGameProfile([undated, ...dated]).lastFive).toEqual(
+      gameProfileValues(dated),
+    );
+    // With nothing dated, the undated match is all there is.
+    expect(seasonGameProfile([undated]).lastMatch).toMatchObject({
+      opponent: "Nodate",
+      date: null,
+    });
+  });
+
+  test("with no matches every axis is empty and there is no last match", () => {
+    const profile = seasonGameProfile([]);
+    expect(profile.overall).toEqual(GAME_PROFILE_AXES.map(() => null));
+    expect(profile.lastMatch).toBeNull();
+    expect(profile.lastFive).toBeNull();
+  });
+});
+
+test("foldSeasonTallies folds the five in one call", () => {
   const tallies = foldSeasonTallies(SEASON);
   expect(tallies.perMatch).toEqual(seasonPerMatch(SEASON));
+  expect(tallies.gameProfile).toEqual(seasonGameProfile(SEASON));
   expect(tallies.outcomes).toEqual(seasonOutcomes(SEASON));
   expect(tallies.netGame).toEqual(seasonNetGame(SEASON));
   expect(tallies.rallyBands).toEqual(seasonRallyBands(SEASON));

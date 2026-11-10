@@ -83,7 +83,7 @@ const pane = () =>
   renderToStaticMarkup(React.createElement(ProfileStatisticsPanePending));
 
 const CHART_EYEBROWS = [
-  "Performance tracker",
+  "Game profile",
   "How points ended",
   "Rally length",
   "Net game",
@@ -172,12 +172,32 @@ test("statistics pane: head-to-head group labels and the four chart eyebrows are
   expect([...at].sort((a, b) => a - b)).toEqual(at);
 });
 
+test("statistics pane: the Differential under the head to head, Game profile for the tracker", () => {
+  const html = pane();
+  const h2h = html.indexOf('<span class="eyebrow">Head to head</span>');
+  const differential = html.indexOf(
+    '<span class="eyebrow">Differential</span>',
+  );
+  const radar = html.indexOf('<span class="eyebrow">Game profile</span>');
+  expect(h2h).toBeGreaterThan(-1);
+  expect(differential).toBeGreaterThan(h2h);
+  expect(radar).toBeGreaterThan(differential);
+  expect(html).not.toContain("Performance tracker");
+  // The radar's frame — known chrome, drawn as the loaded card's own
+  // hairlines: four rings and six spokes, no pulse, no skeleton token.
+  expect(html.match(/<polygon/g)?.length).toBe(4);
+  expect(html.match(/<line /g)?.length).toBe(6);
+  expect(html.match(/stroke="var\(--ink-200\)"/g)?.length).toBe(10);
+  // The header is the loaded card's 28px, where its swap may land.
+  expect(html).toContain('class="flex items-center gap-2 h-7"');
+});
+
 test("statistics pane: T7's geometry — the 1:1 row, the chart column and no set labels", () => {
   const html = pane();
   expect(html).toContain("flex shrink-0 flex-col gap-4 @min-[720px]:flex-row");
   expect(html).toContain("flex min-w-0 flex-1 flex-col gap-4 *:shrink-0");
   expect(html).not.toContain("416px");
-  // The season tracker has no set-label row; the report's does.
+  // The profile has no tracker, so no set-label row; the report's does.
   const report = renderToStaticMarkup(
     React.createElement(StatisticsPanePending),
   );

@@ -1,21 +1,31 @@
 import type { SeasonEvidence } from "@/lib/data/player-insight";
-import type { SeasonGroup, SeasonTallies } from "@/lib/data/player-season";
+import {
+  withoutSeasonShotKindRows,
+  type SeasonGroup,
+  type SeasonTallies,
+} from "@/lib/data/player-season";
 import { ProfileInsightCard } from "@/components/dashboard/team/player-profile/profile-insight-card";
 import { ProfileInsightEmpty } from "@/components/dashboard/team/player-profile/profile-insight-empty";
+import { SeasonDifferentialCard } from "@/components/dashboard/team/player-profile/season-differential-card";
+import { SeasonGameProfileCard } from "@/components/dashboard/team/player-profile/season-game-profile-card";
 import { SeasonHeadToHeadCard } from "@/components/dashboard/team/player-profile/season-head-to-head-card";
 import { SeasonNetGameCard } from "@/components/dashboard/team/player-profile/season-net-game-card";
-import { SeasonPerformanceTracker } from "@/components/dashboard/team/player-profile/season-performance-tracker";
 import { SeasonPointEndingsCard } from "@/components/dashboard/team/player-profile/season-point-endings-card";
 import { SeasonRallyLengthCard } from "@/components/dashboard/team/player-profile/season-rally-length-card";
 
 /**
- * The player profile's Statistics tab (design Q): the match report's
- * Statistics view (`statistics-view.tsx`) over a season — the insight card
- * slot, then the widgets row, the season Head to head beside a column of the
- * four charts in the report's reading order (Performance tracker → How points
- * ended → Rally length → Net game). The row's classes are the report's: from
- * 720px of pane (the `@container` on `MatchReportPane`) the two columns split
- * 1:1, `flex-1 min-w-0` each; under it they stack, head to head first.
+ * The player profile's Statistics tab (design Q, reworked on the "Match page
+ * refinements" canvas, boards 9–10): the match report's Statistics view
+ * (`statistics-view.tsx`) over a season — the insight card slot, then the
+ * widgets row: the season Head to head (without the report's dropped Lob and
+ * Drop shot rows) and its Differential under it, beside a column of four
+ * charts — Game profile (the radar that replaced the season Performance
+ * tracker) → How points ended → Rally length → Net game. The row's classes
+ * are the report's: from 720px of pane (the `@container` on
+ * `MatchReportPane`) the two columns split 1:1, `flex-1 min-w-0` each; under
+ * it they stack, head to head first. Whichever column is shorter takes the
+ * row's slack — the Differential spreads it between its rows, Rally length
+ * and Net game share it on the chart side — so both columns end level.
  *
  * ── The insight slot ────────────────────────────────────────────────────────
  * With analyzed matches it is `ProfileInsightCard`: the season claim streams
@@ -36,7 +46,8 @@ import { SeasonRallyLengthCard } from "@/components/dashboard/team/player-profil
  * No hooks and no directive, so the page's Server Component renders it
  * directly; the cards it composes are the client modules. Takes the season's
  * folded figures, never `PlayerSeason.perMatch` — a season's points are
- * megabytes and must not reach the client payload.
+ * megabytes and must not reach the client payload. The Game profile gets
+ * its six values a shape, folded on the server (`seasonGameProfile`).
  */
 export function ProfileStatisticsView({
   playerId,
@@ -81,22 +92,28 @@ export function ProfileStatisticsView({
         <ProfileInsightEmpty firstName={firstName} />
       )}
 
-      {/* `statistics-view.tsx`'s row, class for class. The row stretches and
-          the chart column hands its slack to Rally length; `*:shrink-0` so
-          the column only ever gains height from the row, never gives it up. */}
+      {/* `statistics-view.tsx`'s row, class for class. The row stretches;
+          `*:shrink-0` so a column only ever gains height from the row, never
+          gives it up. */}
       <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row">
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-4 *:shrink-0">
           <SeasonHeadToHeadCard
             playerName={playerName}
             analyzed={analyzed}
-            groups={groups}
+            groups={withoutSeasonShotKindRows(groups)}
+          />
+          <SeasonDifferentialCard
+            playerName={playerName}
+            analyzed={analyzed}
+            outcomes={tallies.outcomes}
           />
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-4 *:shrink-0">
-          <SeasonPerformanceTracker
+          <SeasonGameProfileCard
             playerName={playerName}
-            perMatch={tallies.perMatch}
+            analyzed={analyzed}
+            profile={tallies.gameProfile}
           />
           <SeasonPointEndingsCard
             playerName={playerName}

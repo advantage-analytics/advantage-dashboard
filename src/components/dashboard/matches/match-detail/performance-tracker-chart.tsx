@@ -68,8 +68,7 @@ import { cn } from "@/lib/utils";
  */
 
 // The plot's frame — viewBox, plot height, midline, the series' padding and
-// the run → path builders — is `momentum-plot.ts`, shared with the team
-// player profile's season tracker so the two draw the same plot.
+// the run → path builders — is `momentum-plot.ts`.
 
 /**
  * Stroke of the momentum line and the break lines, in px, and the break

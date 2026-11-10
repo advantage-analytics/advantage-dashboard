@@ -1,5 +1,10 @@
 import type { MatchPoint } from "@/lib/data/match-points-server";
-import { compareMatchDays } from "@/lib/data/match-day";
+import { compareMatchDays, matchDay } from "@/lib/data/match-day";
+import {
+  GAME_PROFILE_AXES,
+  GAME_PROFILE_RECENT,
+  type GameProfileValues,
+} from "@/lib/data/game-profile-axes";
 import {
   buildStatRows,
   h2hGroups,
@@ -8,6 +13,7 @@ import {
   statDisplay,
   tallySide,
   withLobAvailability,
+  withoutShotKindRows,
   withPointRows,
   type DerivedSide,
   type H2HRowConfig,
@@ -35,8 +41,10 @@ import {
 /**
  * A player's season, folded from the match reports of their analyzed matches
  * — the team player profile's Statistics tab (design Q, the `CohesiveQ`
- * board): a season Head to head table on the left and, on the right, the
- * Performance tracker, How points ended, Rally length and Net game cards.
+ * board, reworked on the "Match page refinements" canvas, boards 9–10): a
+ * season Head to head table and its Differential on the left and, on the
+ * right, the Game profile radar, How points ended, Rally length and Net game
+ * cards.
  *
  * NOTHING HERE DERIVES A STATISTIC. Each match is run through the match
  * report's own calculators exactly as `HeadToHeadCard` runs them —
@@ -307,6 +315,36 @@ function finishRate(pool: Pool): SeasonValue {
 export function foldSeasonRows(
   matches: readonly SeasonMatchStats[],
 ): SeasonGroup[] {
+  const { shape, pools } = foldSeasonPools(matches);
+  return shape.map((group, gi) => ({
+    title: group.title,
+    rows: group.configs.map((config, ri) => {
+      const kind = seasonRowKind(config);
+      const finish = kind === "rate" ? finishRate : finishCount;
+      const you = finish(pools[gi][ri].you);
+      const opp = finish(pools[gi][ri].opp);
+      return {
+        label: config.label,
+        kind,
+        lowerIsBetter: config.lowerIsBetter,
+        note: config.note,
+        you,
+        opp,
+        leader: rowLeader(config, you.value, opp.value),
+      };
+    }),
+  }));
+}
+
+/**
+ * The season's row shape and, per row, both sides' pools — what
+ * `foldSeasonRows` finishes into figures and `seasonGameProfile` reads its
+ * rates from, so the radar and the table cannot disagree.
+ */
+function foldSeasonPools(matches: readonly SeasonMatchStats[]): {
+  shape: { title: string; configs: H2HRowConfig[] }[];
+  pools: { you: Pool; opp: Pool }[][];
+} {
   const judged = seasonErrorSplitJudged(matches);
   const anyLobs = matches.some((m) => m.lobKeys !== null);
 
@@ -374,30 +412,140 @@ export function foldSeasonRows(
     });
   }
 
-  return shape.map((group, gi) => ({
+  return { shape, pools };
+}
+
+/**
+ * The labels of the rows the match report leaves off its table
+ * (`withoutShotKindRows`: Lob points won, Drop shot points won), read off
+ * the report's own rule rather than retyped.
+ */
+const SHOT_KIND_ROW_LABELS: ReadonlySet<string> = (() => {
+  const all = h2hGroups(false, true);
+  const kept = new Set(
+    withoutShotKindRows(all).flatMap((g) => g.configs.map((c) => c.label)),
+  );
+  return new Set(
+    all
+      .flatMap((g) => g.configs.map((c) => c.label))
+      .filter((label) => !kept.has(label)),
+  );
+})();
+
+/**
+ * The season groups without Lob points won and Drop shot points won — the
+ * season Head to head card's rows, matching the match report's table
+ * (product decision, 2026-11-09: both read off shot kinds not accurate
+ * enough to publish). The fold keeps them for the insight evidence and Ask.
+ */
+export function withoutSeasonShotKindRows(
+  groups: readonly SeasonGroup[],
+): SeasonGroup[] {
+  return groups.map((group) => ({
     title: group.title,
-    rows: group.configs.map((config, ri) => {
-      const kind = seasonRowKind(config);
-      const finish = kind === "rate" ? finishRate : finishCount;
-      const you = finish(pools[gi][ri].you);
-      const opp = finish(pools[gi][ri].opp);
-      return {
-        label: config.label,
-        kind,
-        lowerIsBetter: config.lowerIsBetter,
-        note: config.note,
-        you,
-        opp,
-        leader: rowLeader(config, you.value, opp.value),
-      };
-    }),
+    rows: group.rows.filter((row) => !SHOT_KIND_ROW_LABELS.has(row.label)),
   }));
+}
+
+/* ── Game profile ───────────────────────────────────────────────────────── */
+
+// The axes, the shape type and the recent-match count live in a module with
+// no imports (`game-profile-axes.ts`), so the client card can read them
+// without pulling this fold and its calculators into its bundle.
+export {
+  GAME_PROFILE_AXES,
+  GAME_PROFILE_RECENT,
+  type GameProfileValues,
+} from "@/lib/data/game-profile-axes";
+
+export interface SeasonGameProfile {
+  /** The player's whole season — the slate outline. */
+  overall: GameProfileValues;
+  /**
+   * The latest dated analyzed match (`recentFormOrder`), `null` with none.
+   */
+  lastMatch: {
+    values: GameProfileValues;
+    opponent: string;
+    date: string | null;
+  } | null;
+  /**
+   * The last five analyzed matches pooled — only with more than five, else
+   * `null` and the card draws no swap.
+   */
+  lastFive: GameProfileValues | null;
+}
+
+/** The player's six rates over `matches`, pooled as the table's rate rows are. */
+export function gameProfileValues(
+  matches: readonly SeasonMatchStats[],
+): GameProfileValues {
+  const { shape, pools } = foldSeasonPools(matches);
+  const byLabel = new Map<string, Pool>();
+  shape.forEach((group, gi) =>
+    group.configs.forEach((config, ri) =>
+      byLabel.set(config.label, pools[gi][ri].you),
+    ),
+  );
+  return GAME_PROFILE_AXES.map((axis) => {
+    let made = 0;
+    let attempts = 0;
+    for (const label of axis.rows) {
+      const pool = byLabel.get(label);
+      if (!pool) {
+        // A renamed table row would otherwise draw the axis at zero with
+        // nothing on screen to say why.
+        throw new Error(`player-season: game profile row "${label}" missing`);
+      }
+      made += pool.made;
+      attempts += pool.attempts;
+    }
+    return attempts > 0 ? (made / attempts) * 100 : null;
+  });
+}
+
+/**
+ * The season oldest first for "recent form": `compareSeasonMatches` order,
+ * except a match with no readable date counts as the OLDEST, not the newest
+ * (where that comparator files it). Nothing says when an undated match was
+ * played, so it must never stand in as the last match while a dated one
+ * exists; with none dated it is all there is.
+ */
+function recentFormOrder(matches: readonly SeasonMatch[]): SeasonMatch[] {
+  const undated: SeasonMatch[] = [];
+  const dated: SeasonMatch[] = [];
+  for (const m of [...matches].sort(compareSeasonMatches)) {
+    (matchDay(m.date) === null ? undated : dated).push(m);
+  }
+  return [...undated, ...dated];
+}
+
+export function seasonGameProfile(
+  matches: readonly SeasonMatch[],
+): SeasonGameProfile {
+  const ordered = recentFormOrder(matches);
+  const last = ordered.at(-1);
+  return {
+    overall: gameProfileValues(ordered),
+    lastMatch: last
+      ? {
+          values: gameProfileValues([last]),
+          opponent: last.opponent,
+          date: last.date,
+        }
+      : null,
+    lastFive:
+      ordered.length > GAME_PROFILE_RECENT
+        ? gameProfileValues(ordered.slice(-GAME_PROFILE_RECENT))
+        : null,
+  };
 }
 
 /* ── The right column's tallies ─────────────────────────────────────────── */
 
 /**
- * One analyzed match for the Performance tracker: the points the player won
+ * One analyzed match, oldest first — what the insight card's evidence line
+ * and cache signature read (`player-insight.ts`): the points the player won
  * of the points played, counted from the points themselves (`tallySide`'s
  * `allPoints`), as the report's point-level cards count them.
  */
@@ -547,6 +695,8 @@ export function seasonRallyBands(
 /** Everything the profile's right column draws, folded once. */
 export interface SeasonTallies {
   perMatch: SeasonPerMatch[];
+  /** The Game profile radar (`seasonGameProfile`). */
+  gameProfile: SeasonGameProfile;
   outcomes: SeasonOutcomes;
   netGame: SeasonNetGame;
   rallyBands: SeasonRallyBands;
@@ -557,6 +707,7 @@ export function foldSeasonTallies(
 ): SeasonTallies {
   return {
     perMatch: seasonPerMatch(matches),
+    gameProfile: seasonGameProfile(matches),
     outcomes: seasonOutcomes(matches),
     netGame: seasonNetGame(matches),
     rallyBands: seasonRallyBands(matches),

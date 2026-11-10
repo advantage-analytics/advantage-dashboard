@@ -564,7 +564,9 @@ export function withLobAvailability(
  * The groups without the Lob points and Drop shot points rows: the match
  * report's table (product decision, 2026-11-09 — both read off shot kinds
  * that are not accurate enough to publish as a match figure). The team player
- * profile's season fold still draws them, so the rows stay configured.
+ * profile's season table leaves them off too (`withoutSeasonShotKindRows`),
+ * but its season fold still computes them for the insight evidence and Ask,
+ * so the rows stay configured.
  */
 export function withoutShotKindRows(
   groups: { title: string; configs: H2HRowConfig[] }[],

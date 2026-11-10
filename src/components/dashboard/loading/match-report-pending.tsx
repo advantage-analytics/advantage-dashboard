@@ -170,16 +170,16 @@ export const H2H_GROUP_SHAPE = [
 ] as const;
 
 /**
- * The rows the match report leaves off its own table (`withoutShotKindRows`:
- * Lob points won, Drop shot points won), both in the Points group. The team
- * player profile's season card draws them. Kept as a number so this chunk
- * does not import the row configs; `tests/differential-card.spec.ts` pins it
- * to the filter.
+ * The rows both the match report and the player profile's season card leave
+ * off the table (`withoutShotKindRows` / `withoutSeasonShotKindRows`: Lob
+ * points won, Drop shot points won), both in the Points group. Kept as a
+ * number so this chunk does not import the row configs;
+ * `tests/differential-card.spec.ts` pins it to the filter.
  *
- * The report's Points group then draws 8 rows, the count for a match whose
- * errors are not yet split forced/unforced (one Errors row). A judged match
+ * The Points group then draws 8 rows, the count for a season or match whose
+ * errors are not yet split forced/unforced (one Errors row). A judged one
  * draws 9 and grows by one row when it lands. The skeleton renders before the
- * match is known, and the two kinds are an even split of analysed matches
+ * data is known, and the two kinds are an even split of analysed matches
  * (48 judged, 47 not, 2026-11-09), so it is sized for the unjudged one: the
  * video-analysed matches, where new matches come from.
  */
@@ -189,14 +189,9 @@ export const REPORT_OMITTED_POINT_ROWS = 2;
  * `HeadToHeadTable`'s anatomy: the eyebrow and the group labels are known
  * chrome and render as text; the right micro, the two names and every row
  * are bars. Shared by the report and the player profile, whose season card
- * is the same table.
+ * is the same table with the same rows.
  */
-export function HeadToHeadPending({
-  report = false,
-}: {
-  /** The match report's table: two Points rows shorter than the season's. */
-  report?: boolean;
-}) {
+export function HeadToHeadPending() {
   return (
     <section
       aria-label="Head to head"
@@ -231,9 +226,7 @@ export function HeadToHeadPending({
           {Array.from(
             {
               length:
-                report && title === "Points"
-                  ? rows - REPORT_OMITTED_POINT_ROWS
-                  : rows,
+                title === "Points" ? rows - REPORT_OMITTED_POINT_ROWS : rows,
             },
             (_, row) => (
               <div key={row} className="flex min-h-[30px] items-center">
@@ -261,9 +254,12 @@ function ChartCardPending({
   gap,
   className,
   micro = true,
+  header = "h-4",
   children,
 }: {
   eyebrow: string;
+  /** The header row's height class — 28px on a card with an icon button there. */
+  header?: string;
   /** The right-hand caption bar; off for a card whose header has none. */
   micro?: boolean;
   padding: string;
@@ -278,7 +274,7 @@ function ChartCardPending({
       className={cn("surface-card flex flex-col", gap, className)}
       style={{ padding }}
     >
-      <div className="flex h-4 items-center gap-2">
+      <div className={cn("flex items-center gap-2", header)}>
         <span className="eyebrow">{eyebrow}</span>
         <div className="flex-1" />
         {micro && <PendingBar className="h-2.5 w-20" />}
@@ -320,48 +316,126 @@ const RALLY_BANDS_PENDING = [
   [20, 60],
 ] as const;
 
+/* The Game profile radar's frame (`season-game-profile-card.tsx`): its
+   viewBox, centre and radius, so the skeleton's rings sit where the loaded
+   ones land and the figure is exactly as tall. */
+const RADAR_W = 420;
+const RADAR_H = 250;
+const RADAR_CY = 125;
+const RADAR_R = 92;
+
+/** Vertex `i` of the six-axis radar at `r` from the centre, "x,y". */
+function radarVertex(i: number, r: number): [string, string] {
+  const angle = -Math.PI / 2 + (i * Math.PI) / 3;
+  return [
+    (RADAR_W / 2 + Math.cos(angle) * r).toFixed(1),
+    (RADAR_CY + Math.sin(angle) * r).toFixed(1),
+  ];
+}
+
+function radarRing(share: number): string {
+  return Array.from({ length: 6 }, (_, i) =>
+    radarVertex(i, RADAR_R * share).join(","),
+  ).join(" ");
+}
+
 /**
- * The chart column, in the loaded reading order — Performance tracker → How
- * points ended → Rally length → Net game (`statistics-view.tsx`,
+ * The player profile's "Game profile" card: the header at the loaded one's
+ * 28px (its swap button may land there), then the radar's four rings and six
+ * spokes. Those are known chrome — every state of the card draws them, empty
+ * included — so, like the eyebrows, they render as themselves (the loaded
+ * `--ink-200` hairlines, no pulse) at the loaded figure's size. Then the
+ * two-key legend as bars.
+ */
+function GameProfilePending() {
+  return (
+    <ChartCardPending
+      eyebrow="Game profile"
+      padding="16px 20px 14px"
+      gap="gap-2.5"
+      header="h-7"
+    >
+      <svg
+        aria-hidden="true"
+        viewBox={`0 0 ${RADAR_W} ${RADAR_H}`}
+        className="mx-auto block h-auto w-full max-w-[420px]"
+      >
+        {[0.25, 0.5, 0.75, 1].map((share) => (
+          <polygon
+            key={share}
+            points={radarRing(share)}
+            fill="none"
+            stroke="var(--ink-200)"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        {Array.from({ length: 6 }, (_, i) => {
+          const [x2, y2] = radarVertex(i, RADAR_R);
+          return (
+            <line
+              key={i}
+              x1={RADAR_W / 2}
+              y1={RADAR_CY}
+              x2={x2}
+              y2={y2}
+              stroke="var(--ink-200)"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+          );
+        })}
+      </svg>
+      <div className="flex h-[17px] items-center gap-3.5">
+        <PendingBar className="h-2.5 w-36" />
+        <PendingBar className="h-2.5 w-16" />
+      </div>
+    </ChartCardPending>
+  );
+}
+
+/**
+ * The chart column, in the loaded reading order — Performance tracker (the
+ * match report) or Game profile (the player profile) → How points ended →
+ * Rally length → Net game (`statistics-view.tsx`,
  * `profile-statistics-view.tsx`). Every eyebrow is real text. The column's
- * classes are the loaded one's, and Rally length and Net game share the column's slack
- * (`flex-1`) as its loaded card does, so the two columns end on one line.
- *
- * `setLabels`: the report's tracker draws a set-label row under its plot; a
- * season's draws none.
+ * classes are the loaded one's, and Rally length and Net game share the
+ * column's slack (`flex-1`) as its loaded card does, so the two columns end
+ * on one line.
  */
 export function ChartColumnPending({
-  setLabels = true,
+  profile = false,
 }: {
-  setLabels?: boolean;
+  /** The player profile's column: Game profile in the tracker's place. */
+  profile?: boolean;
 }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4 *:shrink-0">
-      {/* 104px figure — the KPI tiles' grey placeholder curve at the
-          tracker's size, so it reads as a line to come rather than a slab —
-          the set-label row on a match, then the legend row. */}
-      <ChartCardPending
-        eyebrow="Performance tracker"
-        padding="16px 20px 12px"
-        gap="gap-2.5"
-        // A match's tracker header is the eyebrow alone; a season's carries
-        // a caption on the right.
-        micro={!setLabels}
-      >
-        <PlaceholderMomentum />
-        {setLabels && (
+      {profile ? (
+        <GameProfilePending />
+      ) : (
+        // 104px figure — the KPI tiles' grey placeholder curve at the
+        // tracker's size, so it reads as a line to come rather than a slab —
+        // the set-label row, then the legend row.
+        <ChartCardPending
+          eyebrow="Performance tracker"
+          padding="16px 20px 12px"
+          gap="gap-2.5"
+          // The tracker's header is the eyebrow alone.
+          micro={false}
+        >
+          <PlaceholderMomentum />
           <div className="flex h-[15px] items-center justify-center">
             <PendingBar className="h-2.5 w-10" />
           </div>
-        )}
-        <div className="flex h-[15px] items-center gap-3.5">
-          <PendingBar className="h-2.5 w-20" />
-          <PendingBar className="h-2.5 w-20" />
-          {/* "Break of serve" — drawn on a match only (a season has no
-              breaks), under the same flag as the set labels. */}
-          {setLabels && <PendingBar className="h-2.5 w-24" />}
-        </div>
-      </ChartCardPending>
+          <div className="flex h-[15px] items-center gap-3.5">
+            <PendingBar className="h-2.5 w-20" />
+            <PendingBar className="h-2.5 w-20" />
+            {/* "Break of serve". */}
+            <PendingBar className="h-2.5 w-24" />
+          </div>
+        </ChartCardPending>
+      )}
       {/* Two name rows over a 10px track, then the legend — up to six
           entries (a judged match), wrapping as the loaded legend does. */}
       <ChartCardPending
@@ -493,9 +567,10 @@ export function InsightPending({ toggle = true }: { toggle?: boolean }) {
 }
 
 /**
- * `differential-card.tsx`: a name and a signed figure over one bar split at
- * zero, the two counts under it, then the two-key legend. `flex-1` as the
- * loaded card, so it takes the head-to-head column's slack the same way.
+ * `differential-card.tsx` (and the profile's `season-differential-card.tsx`,
+ * the same anatomy): a name and a signed figure over one bar split at zero,
+ * the two counts under it, then the two-key legend. `flex-1` as the loaded
+ * card, so it takes the head-to-head column's slack the same way.
  */
 function DifferentialPending() {
   return (
@@ -544,28 +619,25 @@ function DifferentialPending() {
 }
 
 /**
- * `statistics-view.tsx`'s widgets row: head-to-head and the chart column,
- * 1:1 from 720px of pane, stacked under it. The row stretches (no
- * `items-start`), as the loaded one does.
+ * `statistics-view.tsx`'s widgets row: head-to-head with the Differential
+ * under it, and the chart column, 1:1 from 720px of pane, stacked under it.
+ * The row stretches (no `items-start`), as the loaded one does.
+ * `profile-statistics-view.tsx` draws the same row with Game profile in the
+ * tracker's place.
  */
 export function StatisticsRowPending({
-  setLabels = true,
-  report = false,
+  profile = false,
 }: {
-  setLabels?: boolean;
-  /**
-   * The match report's row: its shorter head-to-head, with the Differential
-   * card under it (`statistics-view.tsx`). The player profile has neither.
-   */
-  report?: boolean;
+  /** The player profile's row (`ChartColumnPending`'s `profile`). */
+  profile?: boolean;
 }) {
   return (
     <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row">
       <div className="flex min-w-0 flex-1 flex-col gap-4 *:shrink-0">
-        <HeadToHeadPending report={report} />
-        {report && <DifferentialPending />}
+        <HeadToHeadPending />
+        <DifferentialPending />
       </div>
-      <ChartColumnPending setLabels={setLabels} />
+      <ChartColumnPending profile={profile} />
     </div>
   );
 }
@@ -579,7 +651,7 @@ export function StatisticsPanePending() {
       innerClassName="flex flex-col gap-4"
     >
       <InsightPending />
-      <StatisticsRowPending report />
+      <StatisticsRowPending />
     </PendingRegion>
   );
 }
