@@ -180,7 +180,7 @@ export function usePanZoom(
   // Seed the cut's 100% framing (`viewerInitialTransform`) on the first
   // measure and whenever the cut changes. A stage that only RESIZES (the
   // filter strip appearing over it, a window resize) re-fits only a court
-  // still at its 100% framing; a court the reader has zoomed or panned keeps
+  // still at its 100% framing or at Full court; a court the reader has zoomed or panned keeps
   // its zoom and the art point at the stage's centre, so a filter or chart
   // change never throws the reader's view away. A zero-sized stage (the
   // first render, before layout) would seed a degenerate transform, so it
@@ -195,17 +195,21 @@ export function usePanZoom(
       setT(viewerInitialTransform(cut, stage));
       return;
     }
-    const prevHome = viewerInitialTransform(cut, seeded.stage);
+    // A court still at one of its two framings — its 100% or Full court —
+    // re-fits that framing to the new stage; any other view keeps its zoom
+    // and the art point at the stage's centre.
     const t = tRef.current;
-    const atHome =
-      Math.abs(t.z / prevHome.z - 1) < 0.005 &&
-      Math.abs(t.px - prevHome.px) < 0.5 &&
-      Math.abs(t.py - prevHome.py) < 0.5;
-    setT(
-      atHome
-        ? viewerInitialTransform(cut, stage)
-        : centreOn(stageCentreArtPoint(t, seeded.stage), t.z, ART, stage),
-    );
+    const at = (a: PanZoom) =>
+      Math.abs(t.z / a.z - 1) < 0.005 &&
+      Math.abs(t.px - a.px) < 0.5 &&
+      Math.abs(t.py - a.py) < 0.5;
+    if (at(viewerInitialTransform(cut, seeded.stage))) {
+      setT(viewerInitialTransform(cut, stage));
+    } else if (at(viewerFullCourtTransform(seeded.stage))) {
+      setT(viewerFullCourtTransform(stage));
+    } else {
+      setT(centreOn(stageCentreArtPoint(t, seeded.stage), t.z, ART, stage));
+    }
   }, [cut, stage, cancelGlide]);
 
   const fit = useCallback(() => {

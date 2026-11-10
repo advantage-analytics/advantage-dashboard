@@ -305,6 +305,19 @@ test.describe("the match report", () => {
             ghosts: document.querySelectorAll(ghostSel).length,
             box: r ? { x: r.left, y: r.top, w: r.width, h: r.height } : null,
             clip: box ? getComputedStyle(box).clipPath : null,
+            // Where the box's reveal animation STARTS (its first clip-path
+            // keyframe): proof the box opens out of the card even when a
+            // starved sampler never lands inside the opening itself.
+            clipFrom: box
+              ? (box
+                  .getAnimations()
+                  .map(
+                    (a) =>
+                      ((a.effect as KeyframeEffect | null)?.getKeyframes()[0]
+                        ?.clipPath as string | undefined) ?? null,
+                  )
+                  .find((c) => c !== null) ?? null)
+              : null,
             boxOpacity: box ? Number(getComputedStyle(box).opacity) : null,
             scrim: scrim ? Number(getComputedStyle(scrim).opacity) : null,
             steps: [step(0), step(1), step(2)],
@@ -342,20 +355,27 @@ test.describe("the match report", () => {
         .exec(clip)
         ?.slice(1)
         .map(Number) ?? null;
-    const opening = shown.find((f) => {
-      const inset = f.clip ? parse(f.clip) : null;
-      // Not tied to the copy being on screen, or to the box's own fade:
-      // on a slow runner the box can mount after the court has landed and
-      // replay its opening on its own (`joinAt`), and a starved sampler may
-      // catch the clip only while the box is still fading in.
+    const partWay = (clip: string | null) => {
+      const inset = clip ? parse(clip) : null;
       return inset !== null && (inset[1] > 1 || inset[2] > 1);
-    });
+    };
+    // A sampled frame part way open, or else the reveal's own first
+    // keyframe (the opening ran between samples). Not tied to the copy
+    // being on screen or to the box's fade: on a slow runner the box can
+    // mount after the court has landed and replay its opening on the late
+    // timeline (`joinAt`).
+    const sampled = shown.find((f) => partWay(f.clip));
+    const openClip =
+      sampled?.clip ??
+      frames.frames.map((f) => f.clipFrom).find((c) => partWay(c)) ??
+      null;
+    const opening = sampled ?? (openClip ? shown[0] : undefined);
     expect(opening, "a frame with the box part way open").toBeDefined();
     // No flash: the first frame the box shows at all, it is already clipped
     // to the opening rect — never whole for a frame before the reveal.
     const first = shown.find((f) => f.boxOpacity! > 0)!;
     expect(first.clip).toMatch(/^inset\(/);
-    const [top, , , left] = parse(opening!.clip!)!;
+    const [top, , , left] = parse(openClip!)!;
     // The open edge's top-left lies between the card's and the box's.
     expect(opening!.box!.y + top).toBeLessThanOrEqual(card.y + 1);
     expect(opening!.box!.x + left).toBeLessThanOrEqual(card.x + 1);
