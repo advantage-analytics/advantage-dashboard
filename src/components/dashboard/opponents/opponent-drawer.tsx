@@ -191,15 +191,23 @@ export function OpponentDrawer({
                 {opponent.name}
               </Link>
             </h2>
-            {/* "Right-handed · Two-handed backhand" — a fact nobody recorded
-                is the one dash, never a guess. */}
+            {/* "Right-handed · Two-handed backhand". Half recorded keeps the
+                one dash for the missing half; nothing recorded is said once,
+                in words — "— · —" read as a rendering fault (the team
+                drawer's rule, `team-opponent-drawer.tsx`). */}
             <span className="text-[12px] text-[var(--ink-600)]">
-              {hand ?? <EmptyMark label="Hand not recorded" />}
-              {" · "}
-              {backhand ? (
-                `${backhand} backhand`
+              {hand || backhand ? (
+                <>
+                  {hand ?? <EmptyMark label="Hand not recorded" />}
+                  {" · "}
+                  {backhand ? (
+                    `${backhand} backhand`
+                  ) : (
+                    <EmptyMark label="Backhand not recorded" />
+                  )}
+                </>
               ) : (
-                <EmptyMark label="Backhand not recorded" />
+                "Style not recorded"
               )}
             </span>
             {/* The viewer's wins, then losses — the table's Record figure. */}
@@ -282,8 +290,12 @@ export function OpponentDrawer({
                 ) : (
                   <ResultMark won={match.won} />
                 )}
+                {/* A match filed with no event says so, muted, as the Matches
+                    drawer does — never a bare "Match", which names nothing. */}
                 <span className="truncate text-[12px] text-[var(--ink-900)]">
-                  {match.event ?? "Match"}
+                  {match.event ?? (
+                    <span style={{ color: "var(--ink-400)" }}>No event</span>
+                  )}
                 </span>
                 {sets.length > 0 ? (
                   <ScoreLine

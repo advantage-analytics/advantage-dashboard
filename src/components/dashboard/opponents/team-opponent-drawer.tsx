@@ -675,8 +675,12 @@ export function TeamOpponentDrawer({
                 ) : (
                   <span aria-hidden />
                 )}
+                {/* The event, or — when the match was filed with none — who of
+                    ours played it, the one fact a bare "Match" left out. */}
                 <span className="truncate text-[12px] text-[var(--ink-900)]">
-                  {match.event ?? "Match"}
+                  {match.event ?? player?.name ?? (
+                    <span style={{ color: "var(--ink-400)" }}>No event</span>
+                  )}
                 </span>
                 {sets.length > 0 ? (
                   <ScoreLine

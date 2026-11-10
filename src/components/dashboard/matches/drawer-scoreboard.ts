@@ -9,6 +9,7 @@ import {
   tiebreakOf,
   type ScoreLineSet,
 } from "@/lib/ui/score-format";
+import { capitalize } from "@/lib/utils";
 
 /**
  * The Matches drawer's scoreboard: the match report's `RailScoreboard`, fed
@@ -27,8 +28,9 @@ export function drawerScoreboardProps(
 ): RailScoreboardProps {
   // Display-only trim of the phantom trailing 0-0 sets (`playedSets`' doc).
   const sets = playedSets(match.score.sets as ScoreLineSet[]);
-  const word = formatScoreboardStatus(match.matchContext);
-  const status = word.charAt(0) + word.slice(1).toLowerCase();
+  const status = capitalize(
+    formatScoreboardStatus(match.matchContext).toLowerCase(),
+  );
   const format = [match.matchType, match.courtType?.toLowerCase()]
     .filter(Boolean)
     .join(" · ");
