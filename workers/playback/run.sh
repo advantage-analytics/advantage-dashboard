@@ -78,7 +78,8 @@ drain_r2_deletes() {
   [[ "$STORE" == r2 ]] || return 0
   local url="${CALLBACK_URL%/}/deletes" body keys deleted=() key
   sign() { printf '%s' "$1" | openssl dgst -sha256 -hmac "$PLAYBACK_CALLBACK_SECRET" -hex | awk '{print $NF}'; }
-  body='{"action":"claim"}'
+  # ts (epoch ms) is signed: the app refuses a request more than 10 min old.
+  body="$(jq -nc --argjson ts "$(($(date +%s) * 1000))" '{action:"claim", ts:$ts}')"
   keys="$(curl -fsS -X POST "$url" -H 'content-type: application/json' \
     -H "x-playback-signature: $(sign "$body")" --data "$body" --max-time 30 \
     | jq -r '.keys[]?')" || { log "r2 delete queue: claim failed"; return 0; }
@@ -86,13 +87,18 @@ drain_r2_deletes() {
   while IFS= read -r key; do
     [[ "$key" =~ ^playback/[^/]+/[^/]+/[^/]+\.mp4$ ]] || continue
     rclone deletefile "r2:$R2_BUCKET_VIDEOS/$key" --retries 3 -q 2>/dev/null || true
-    # Reported only when a listing confirms it is gone (absent already counts).
-    if ! rclone lsf "r2:$R2_BUCKET_VIDEOS/$key" 2>/dev/null | grep -q .; then
+    # Reported only when R2 answers that it is gone: an empty listing, or
+    # rclone's "not found" exits (3 directory, 4 file). Any other failure
+    # (network, auth) is not reported, so it costs the row no attempt.
+    local listing rc=0
+    listing="$(rclone lsf "r2:$R2_BUCKET_VIDEOS/$key" 2>/dev/null)" || rc=$?
+    if { (( rc == 0 )) && [[ -z "$listing" ]]; } || (( rc == 3 || rc == 4 )); then
       deleted+=("$key")
     fi
   done <<<"$keys"
   (( ${#deleted[@]} )) || return 0
-  body="$(printf '%s\n' "${deleted[@]}" | jq -Rnc '{action:"done", keys:[inputs]}')"
+  body="$(printf '%s\n' "${deleted[@]}" | jq -Rnc --argjson ts "$(($(date +%s) * 1000))" \
+    '{action:"done", keys:[inputs], ts:$ts}')"
   curl -fsS -X POST "$url" -H 'content-type: application/json' \
     -H "x-playback-signature: $(sign "$body")" --data "$body" -o /dev/null --max-time 60 \
     || log "r2 delete queue: report failed"

@@ -5,8 +5,11 @@ import { choosePlaybackFile } from "@/lib/data/match-video-choice";
 import type { AttachmentPurgeDeps } from "@/lib/services/match-video/purge";
 import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
 import {
+  MAX_DELETE_ATTEMPTS,
+  claimR2Deletes,
   confirmR2Deletes,
   isPlaybackCopyKey,
+  parseDrainRequest,
   queueR2Deletes,
 } from "@/lib/services/video-storage/delete-queue";
 import {
@@ -145,10 +148,52 @@ test("VIDEO_READ_STORE=azure: every signer signs Azure, sample included", () => 
 
 /* ------------------------------------------------------------ delete queue */
 
-function fakeQueueDb(rows: Map<string, Record<string, unknown>>) {
+function fakeQueueDb(
+  rows: Map<string, Record<string, unknown>>,
+  calls: { updates: number } = { updates: 0 },
+) {
+  const all = () => [...rows.values()];
   const db = {
     from() {
       return {
+        select() {
+          return {
+            async in(_c: string, keys: string[]) {
+              return {
+                data: all().filter((r) =>
+                  keys.includes(r.object_key as string),
+                ),
+                error: null,
+              };
+            },
+            lt(_c: string, max: number) {
+              const picked = all().filter((r) => (r.attempts as number) < max);
+              const page = {
+                order: () => page,
+                limit: async (n: number) => ({
+                  data: picked.slice(0, n),
+                  error: null,
+                }),
+              };
+              return page;
+            },
+            or(filter: string) {
+              const [, max, before] =
+                /attempts\.gte\.(\d+),queued_at\.lt\.(.+)$/.exec(filter) ?? [];
+              const picked = all().filter(
+                (r) =>
+                  (r.attempts as number) >= Number(max) ||
+                  String(r.queued_at) < before,
+              );
+              return {
+                limit: async (n: number) => ({
+                  data: picked.slice(0, n),
+                  error: null,
+                }),
+              };
+            },
+          };
+        },
         async upsert(values: Record<string, unknown>[]) {
           for (const v of values) {
             if (!rows.has(v.object_key as string)) {
@@ -158,6 +203,7 @@ function fakeQueueDb(rows: Map<string, Record<string, unknown>>) {
           return { error: null };
         },
         update(values: Record<string, unknown>) {
+          calls.updates += 1;
           return {
             async eq(_c: string, key: string) {
               Object.assign(rows.get(key) ?? {}, values);
@@ -214,6 +260,94 @@ test("a row leaves the queue only when the object is confirmed gone", async () =
   expect(result).toEqual({ removed: 1, remaining: 1 });
   expect([...rows.keys()]).toEqual([COPY]);
   expect(rows.get(COPY)?.last_error).toMatch(/still present/);
+  // Only a key still present after the drainer's delete costs an attempt.
+  expect(rows.get(COPY)?.attempts).toBe(2);
+});
+
+test("a HEAD that fails on our side costs the row no attempt", async () => {
+  const rows = new Map<string, Record<string, unknown>>([
+    [COPY, { object_key: COPY, attempts: 3 }],
+  ]);
+  const result = await confirmR2Deletes(fakeQueueDb(rows), [COPY], async () => {
+    throw new Error("R2 down");
+  });
+  expect(result).toEqual({ removed: 0, remaining: 1 });
+  expect(rows.get(COPY)?.attempts).toBe(3);
+});
+
+test("a claim is read-only, and stuck rows are reported", async () => {
+  const now = Date.UTC(2026, 10, 10);
+  const old = `playback/${UID}/${OTHER_MATCH}/original.mp4`;
+  const capped = `playback/${UID}/33333333-3333-4333-8333-333333333333/original.mp4`;
+  const rows = new Map<string, Record<string, unknown>>([
+    [
+      COPY,
+      { object_key: COPY, attempts: 0, queued_at: new Date(now).toISOString() },
+    ],
+    [
+      old,
+      {
+        object_key: old,
+        attempts: 1,
+        queued_at: new Date(now - 8 * 864e5).toISOString(),
+      },
+    ],
+    [
+      capped,
+      {
+        object_key: capped,
+        attempts: MAX_DELETE_ATTEMPTS,
+        queued_at: new Date(now).toISOString(),
+      },
+    ],
+  ]);
+  const calls = { updates: 0 };
+  const logged: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => logged.push(args);
+  let keys: string[];
+  try {
+    keys = await claimR2Deletes(fakeQueueDb(rows, calls), 50, now);
+    // A replayed claim changes nothing either.
+    await claimR2Deletes(fakeQueueDb(rows, calls), 50, now);
+  } finally {
+    console.error = original;
+  }
+  expect(keys.sort()).toEqual([COPY, old].sort());
+  expect(calls.updates).toBe(0);
+  expect(rows.get(COPY)?.attempts).toBe(0);
+  expect(String(logged[0]?.[0])).toMatch(/2 queued R2 deletion\(s\) stuck/);
+  expect(JSON.stringify(logged[0]?.[1])).toContain(capped);
+});
+
+test("drain requests are refused outside the ten-minute window", () => {
+  const now = Date.UTC(2026, 10, 10, 12);
+  expect(
+    parseDrainRequest({ action: "claim", ts: now - 9 * 60e3 }, now, 50),
+  ).toEqual({
+    action: "claim",
+  });
+  expect(
+    parseDrainRequest({ action: "claim", ts: now - 11 * 60e3 }, now, 50),
+  ).toBeNull();
+  expect(
+    parseDrainRequest({ action: "claim", ts: now + 11 * 60e3 }, now, 50),
+  ).toBeNull();
+  expect(parseDrainRequest({ action: "claim" }, now, 50)).toBeNull();
+  expect(
+    parseDrainRequest({ action: "done", keys: [COPY], ts: now }, now, 50),
+  ).toEqual({ action: "done", keys: [COPY] });
+  expect(
+    parseDrainRequest(
+      { action: "done", keys: new Array(51).fill(COPY), ts: now },
+      now,
+      50,
+    ),
+  ).toBeNull();
+  expect(
+    parseDrainRequest({ action: "done", keys: [1], ts: now }, now, 50),
+  ).toBeNull();
+  expect(parseDrainRequest({ action: "delete", ts: now }, now, 50)).toBeNull();
 });
 
 /* ------------------------------------------------------------------ purge */
@@ -329,4 +463,31 @@ test("no 'remain in R2' alarm for a copy that was never in R2", async () => {
     console.error = error;
   }
   expect(errors.some((e) => e.includes("remain in R2"))).toBe(false);
+});
+
+test("a deployment without R2 queues nothing for a copy never marked R2", async () => {
+  const queued: string[][] = [];
+  const caller = fakeCaller([purgeJob({ playback_store: null })]);
+  const [log, error] = [console.log, console.error];
+  console.log = () => {};
+  console.error = () => {};
+  try {
+    await withEnv(
+      { AZURE_STORAGE_ACCOUNT: undefined, R2_READ_ACCESS_KEY_ID: undefined },
+      () =>
+        purgeMatchStorage(caller, [MATCH], "match delete", {
+          attachments,
+          claimPurge,
+          sharedKeyReader: caller,
+          queueR2Deletes: async (keys) => {
+            queued.push(keys);
+            return { queued: keys.length, error: null };
+          },
+        }),
+    );
+  } finally {
+    console.log = log;
+    console.error = error;
+  }
+  expect(queued).toEqual([]);
 });

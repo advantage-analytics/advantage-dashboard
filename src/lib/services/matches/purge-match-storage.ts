@@ -13,6 +13,7 @@ import {
 } from "@/lib/services/splitstep/object-keys";
 import { deleteVideoBlob } from "@/lib/services/splitstep/video-url";
 import { queueR2Deletes } from "@/lib/services/video-storage/delete-queue";
+import { resolveR2Config } from "@/lib/services/video-storage/r2";
 import { MATCH_DATA_BUCKET } from "@/lib/services/upload/storage.service";
 
 export interface PurgeMatchStorageOptions {
@@ -390,7 +391,13 @@ export async function purgeMatchStorage(
             .filter((j) => j.playback_store === "r2")
             .map((j) => j.playback_object_key as string),
         );
-        if (r2Keys.length > 0) {
+        // Queued only where R2 is in use — this deployment reads it, or a row
+        // says a copy is there — so a deployment without R2 does not fill a
+        // queue nothing will drain.
+        if (
+          r2Keys.length > 0 &&
+          (markedR2.size > 0 || resolveR2Config("read").ok)
+        ) {
           const queue =
             options.queueR2Deletes ??
             (async (keys: string[], by: string) =>

@@ -355,6 +355,9 @@ Behaviour notes:
   - **Worker:** drains the queue at the start of every run through `POST /api/webhooks/playback/deletes`, signed like its reports.
   - **Manual:** `scripts/backfill-playback-to-r2.ts --drain-deletes [--apply]` drains it when no upload is coming.
   - **Safety:** a row is removed only after the app's own HEAD confirms the object is gone, and only `playback/…mp4` keys can be queued or deleted.
+  - **Attempts and alarms:** a claim is read-only. An attempt is counted only when a reported key is still present, and the worker reports only keys R2 says are gone. Rows with 10 attempts or more than 7 days old are logged as stuck on every claim.
+  - **Replay:** drain requests carry a signed `ts` and are refused more than 10 minutes from the server's clock.
+  - **Only where R2 is in use:** keys are queued only when the deployment has R2 configured or a row is marked R2.
 - **Same-key fallback.** A copy marked R2 that R2 can't confirm is looked for in Azure under the same key before the player falls back to the upload.
 - **Kill switch.** `VIDEO_READ_STORE=azure` stops every R2 read, sample included. A copy marked R2 is looked for in Azure, and otherwise the player falls back to the upload or the vendor copy.
 - **Logging.**
