@@ -2,18 +2,22 @@ import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { rosterPlayerName } from "@/lib/data/player-profile";
 import { getPlayerMatchSides } from "@/lib/data/player-profile-server";
-import { buildPlayerInsightPrompt } from "@/lib/data/player-insight";
+import {
+  buildPlayerInsightPrompt,
+  resolvePlayerInsight,
+  seasonFigures,
+} from "@/lib/data/player-insight";
 import {
   loadPlayerSeason,
   type PlayerSeason,
   type PlayerSeasonDeps,
 } from "@/lib/data/player-season-server";
 import { createLLMObservabilityContext, getLLMStream } from "@/lib/llm/adapter";
-import { textStreamResponse } from "@/lib/llm/stream-response";
 import { isUuid } from "@/lib/services/match-video/access";
 import {
   errorResponse,
   isPlainObject,
+  jsonResponse,
   readBoundedJson,
   transportError,
   type HttpResult,
@@ -28,12 +32,14 @@ export const dynamic = "force-dynamic";
  * Advantage Intelligence card (design Q), the profile's counterpart to
  * `/api/team-insight`.
  *
- * Same contract as the two Focus-card routes: one sentence, no digits,
- * streamed as plain text through `textStreamResponse()`; 204 when there is
- * nothing analyzed to make a claim about. The difference is the subject —
- * one player, named in the body — and so the refusals, which are JSON
- * through `errorResponse()` (`{ error, code, detail? }`) rather than the
- * older routes' bare text.
+ * The answer is the match report's two parts: a claim (one sentence, no
+ * digits) and a description that cites season figures by key. The model's
+ * text is read whole, not streamed, because the keys are filled in and
+ * checked before anything reaches the card (`resolvePlayerInsight`): the
+ * body is JSON `{ claim, description }`, where `description` is the line's
+ * parts (figures tabular) or `null` when it failed a check. 204 when there
+ * is nothing analyzed, or no usable claim came back. Refusals are JSON
+ * through `errorResponse()` (`{ error, code, detail? }`).
  *
  * ── Who may ask about whom ──────────────────────────────────────────────────
  * The program is the ACTIVE team workspace, read from the workspace cookie by
@@ -54,9 +60,10 @@ export const dynamic = "force-dynamic";
  * and the route touches nothing a signed-in member could not read themself.
  *
  * ── Who writes the figures ──────────────────────────────────────────────────
- * The model writes only the claim. The evidence line the card shows is
- * composed by the page from the same fold (`buildSeasonEvidence`), never from
- * this stream; the prompt forbids digits so the two cannot disagree.
+ * The model writes words and figure keys, never figures. Every number in the
+ * description is the fold's own display text, swapped in here; a description
+ * that typed a digit is dropped, and the card prints the line the page
+ * composed from the same fold (`buildSeasonEvidence`) instead.
  */
 
 /** The codes this route adds to the transport ones in `http.ts`. */
@@ -210,5 +217,18 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse(transportError("internal_error", "stream_open"));
   }
 
-  return textStreamResponse(iterable);
+  let answer = "";
+  try {
+    for await (const chunk of iterable) answer += chunk;
+  } catch (err) {
+    console.error("[player-insight] the model's stream failed", err);
+    return errorResponse(transportError("internal_error", "stream_read"));
+  }
+
+  const insight = resolvePlayerInsight(
+    answer,
+    seasonFigures(season.analyzed, season.groups, firstName),
+  );
+  if (!insight) return new Response(null, { status: 204 });
+  return jsonResponse(insight);
 }
