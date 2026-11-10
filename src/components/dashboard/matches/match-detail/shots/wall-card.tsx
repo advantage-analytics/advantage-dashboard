@@ -121,7 +121,11 @@ export function WallCard({
             chart="scatter"
             fill
             serveFrame={serve ? "throughNet" : "half"}
-            className="block h-full w-full"
+            // Absolutely placed so the box's 334:216 aspect alone sets the
+            // card's height: in flow, a return or errors court's own svg
+            // aspect (wider than the box's) grew the box under the 300px
+            // cap, and its card ended taller than the serve card beside it.
+            className="absolute inset-0 block h-full w-full"
           />
         </div>
       </div>

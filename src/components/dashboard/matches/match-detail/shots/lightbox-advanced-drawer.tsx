@@ -10,8 +10,8 @@ import { prefersReducedMotion } from "./use-reduced-motion";
 import { COUNT_NOUN, type LightboxAdvancedFilters } from "./lightbox-filters";
 import type { Cut, VizFilters, VizResult } from "./viz-model";
 
-/** The drawer's id — how the shell asks whether focus is inside it. */
-export const LIGHTBOX_ADVANCED_DRAWER_ID = "viz-advanced-drawer";
+/** The drawer's id — the specs find it by this. */
+const LIGHTBOX_ADVANCED_DRAWER_ID = "viz-advanced-drawer";
 
 /** What Tab may land on inside the drawer. */
 const TABBABLE =

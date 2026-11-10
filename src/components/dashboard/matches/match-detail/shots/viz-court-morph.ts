@@ -460,14 +460,14 @@ function joinAt(a: Animation, f: OpenFlight): Animation {
  * or row it has not seen yet is started.
  */
 function animateFrame(f: OpenFlight): void {
+  const timing: KeyframeAnimationOptions = {
+    duration: COURT_MORPH_OPEN_MS,
+    easing: OPEN_EASE,
+    fill: "both",
+  };
   const box = lastShown(BOX_SELECTOR);
   if (box !== null && box !== f.box) {
     f.box = box;
-    const timing: KeyframeAnimationOptions = {
-      duration: COURT_MORPH_OPEN_MS,
-      easing: OPEN_EASE,
-      fill: "both",
-    };
     f.frameAnims.push(
       joinAt(
         box.animate(
@@ -493,14 +493,7 @@ function animateFrame(f: OpenFlight): void {
   if (scrim !== null && scrim !== f.scrim) {
     f.scrim = scrim;
     f.frameAnims.push(
-      joinAt(
-        scrim.animate([{ opacity: 0 }, { opacity: 1 }], {
-          duration: COURT_MORPH_OPEN_MS,
-          easing: OPEN_EASE,
-          fill: "both",
-        }),
-        f,
-      ),
+      joinAt(scrim.animate([{ opacity: 0 }, { opacity: 1 }], timing), f),
     );
   }
   if (box === null) return;
