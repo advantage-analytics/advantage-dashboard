@@ -19,3 +19,12 @@ is the runner's. Newest entries at the bottom.
 
 1. Picking Tournament in the menu does not set `eventKind` or Round; only an event pick does. Decide whether the two should stay independent.
 2. A Practice value survives picking an "other" event; a tournament pick replaces it (unchanged behaviour).
+
+## T3 · Truncate opponent-menu rows and widen the menu to 360 — done
+
+**gate:** mechanical GATE PASS; completion VERDICT: pass.
+**changed:** new `OpponentMenuRow.tsx` (`OpponentMenuRow`, `OpponentNewRow`, `OPPONENT_MENU_WIDTH_CLS = "w-[360px]"`; `Avatar` and `NewRing` moved over unchanged); `DetailsStepContent.tsx` renders every opponent-menu row through it — name `min-w-0 truncate` in a `min-w-0` flex parent, meta `shrink-0 whitespace-nowrap` — and the menu is 360px in every branch; new `tests/upload-opponent-menu-rows.spec.ts` with a 60-character name.
+**follow-ups:**
+
+1. `RosterMenu.tsx`'s `RosterRow` uses the opposite grammar (nowrap name, truncating meta); decide whether the two menus should agree.
+2. The T2 and T3 specs each build their own popover/loader stubs; a shared fixture would trim that.

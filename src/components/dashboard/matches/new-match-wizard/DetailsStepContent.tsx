@@ -76,7 +76,6 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { advField } from "@/lib/ui/adv-field";
-import { getInitials } from "@/lib/data/match-utils";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { siteLabel, siteTitle, todayISO } from "@/lib/schedule/format";
 import { saveOpponentPlayer } from "@/lib/schedule/actions";
@@ -142,6 +141,11 @@ import {
   FloatMenuItem,
 } from "@/components/ui/float-menu";
 import { AnimatedHeight } from "./AnimatedHeight";
+import {
+  OPPONENT_MENU_WIDTH_CLS,
+  OpponentMenuRow,
+  OpponentNewRow,
+} from "./OpponentMenuRow";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
 import {
   bareMatchTiebreak,
@@ -334,30 +338,6 @@ function SectionHead({
       </span>
       <span className="text-micro">{micro}</span>
     </div>
-  );
-}
-
-/** The 22px avatar a menu row carries. */
-function Avatar({ name }: { name: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[10px] font-medium text-[var(--ink-700)]"
-    >
-      {getInitials(name)}
-    </span>
-  );
-}
-
-/** The dashed ring a "new" row wears — a place waiting for something real. */
-function NewRing() {
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--ink-300)]"
-    >
-      <Plus className="size-[11px] text-[var(--ink-500)]" strokeWidth={1.5} />
-    </span>
   );
 }
 
@@ -1845,10 +1825,7 @@ function DetailsStepContentImpl({
                     align="start"
                     sideOffset={6}
                     onOpenAutoFocus={(e) => e.preventDefault()}
-                    className={cn(
-                      floatMenuCls,
-                      inDual ? "w-[360px]" : "w-[320px]",
-                    )}
+                    className={cn(floatMenuCls, OPPONENT_MENU_WIDTH_CLS)}
                   >
                     {inDual ? (
                       <>
@@ -1861,23 +1838,19 @@ function DetailsStepContentImpl({
                         {rosterShown
                           .filter((p) => p.heldThisLine)
                           .map((p) => (
-                            <button
+                            <OpponentMenuRow
                               key={p.playerId}
-                              type="button"
-                              onClick={() => pickRoster(p)}
-                              className={floatMenuRowCls}
-                            >
-                              <Avatar name={p.name} />
-                              <span className="text-[12px] font-medium text-[var(--ink-900)]">
-                                {p.name}
-                              </span>
-                              <span className="text-[11px] text-[var(--ink-500)]">
-                                {p.classYear ? `${p.classYear} · ` : ""}
-                                {p.meetings === 0
-                                  ? "no matches vs us"
-                                  : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
-                              </span>
-                            </button>
+                              name={p.name}
+                              onPick={() => pickRoster(p)}
+                              meta={
+                                <>
+                                  {p.classYear ? `${p.classYear} · ` : ""}
+                                  {p.meetings === 0
+                                    ? "no matches vs us"
+                                    : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
+                                </>
+                              }
+                            />
                           ))}
                         {rosterShown.some((p) => !p.heldThisLine) && (
                           <span className={floatMenuLabelCls}>
@@ -1890,23 +1863,19 @@ function DetailsStepContentImpl({
                           .filter((p) => !p.heldThisLine)
                           .slice(0, 8)
                           .map((p) => (
-                            <button
+                            <OpponentMenuRow
                               key={p.playerId}
-                              type="button"
-                              onClick={() => pickRoster(p)}
-                              className={floatMenuRowCls}
-                            >
-                              <Avatar name={p.name} />
-                              <span className="text-[12px] font-medium text-[var(--ink-900)]">
-                                {p.name}
-                              </span>
-                              <span className="text-[11px] text-[var(--ink-500)]">
-                                {p.classYear ? `${p.classYear} · ` : ""}
-                                {p.meetings === 0
-                                  ? "no matches vs us"
-                                  : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
-                              </span>
-                            </button>
+                              name={p.name}
+                              onPick={() => pickRoster(p)}
+                              meta={
+                                <>
+                                  {p.classYear ? `${p.classYear} · ` : ""}
+                                  {p.meetings === 0
+                                    ? "no matches vs us"
+                                    : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
+                                </>
+                              }
+                            />
                           ))}
                       </>
                     ) : (
@@ -1917,22 +1886,18 @@ function DetailsStepContentImpl({
                           </span>
                         )}
                         {playedShown.map((p) => (
-                          <button
+                          <OpponentMenuRow
                             key={p.name}
-                            type="button"
-                            onClick={() => pickPlayed(p)}
-                            className={floatMenuRowCls}
-                          >
-                            <Avatar name={p.name} />
-                            <span className="text-[12px] font-medium text-[var(--ink-900)]">
-                              {p.name}
-                            </span>
-                            <span className="text-[11px] text-[var(--ink-500)]">
-                              {p.matches}{" "}
-                              {p.matches === 1 ? "match" : "matches"} · Last{" "}
-                              {formatMonthDay(p.lastDate)}
-                            </span>
-                          </button>
+                            name={p.name}
+                            onPick={() => pickPlayed(p)}
+                            meta={
+                              <>
+                                {p.matches}{" "}
+                                {p.matches === 1 ? "match" : "matches"} · Last{" "}
+                                {formatMonthDay(p.lastDate)}
+                              </>
+                            }
+                          />
                         ))}
                       </>
                     )}
@@ -1941,14 +1906,10 @@ function DetailsStepContentImpl({
                         {(playedShown.length > 0 || rosterShown.length > 0) && (
                           <span className={floatMenuDividerCls} />
                         )}
-                        <button
-                          type="button"
-                          onClick={() => void createOpponent(nameTerm.trim())}
-                          className={floatMenuRowCls}
-                        >
-                          <NewRing />
-                          <span className="min-w-0 truncate text-[12px] text-[var(--ink-700)]">
-                            {inDual ? (
+                        <OpponentNewRow
+                          onPick={() => void createOpponent(nameTerm.trim())}
+                          label={
+                            inDual ? (
                               <>
                                 New player for{" "}
                                 <span className="font-medium text-[var(--ink-900)]">
@@ -1962,13 +1923,10 @@ function DetailsStepContentImpl({
                                   &ldquo;{nameTerm.trim()}&rdquo;
                                 </span>
                               </>
-                            )}
-                          </span>
-                          <span className="flex-1" />
-                          <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
-                            {inDual ? "name only" : "only you see this name"}
-                          </span>
-                        </button>
+                            )
+                          }
+                          hint={inDual ? "name only" : "only you see this name"}
+                        />
                       </>
                     )}
                     {!nameTerm.trim() &&

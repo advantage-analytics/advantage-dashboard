@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Truncate opponent-menu rows and widen the menu to 360
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) `src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx` (~1840–1960, width class at ~1844), `RosterMenu.tsx` (`RosterRow`, for the grammar); a spec beside `tests/upload-player-details.spec.ts`
 - **routes:** /dashboard/matches/new
