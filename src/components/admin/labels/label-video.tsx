@@ -584,10 +584,7 @@ export const LabelVideoPlayer = forwardRef<
         {!ready && (
           <div
             data-label-video-pending=""
-            className={cn(
-              "pointer-events-none absolute inset-0",
-              square && "[&_*]:rounded-none",
-            )}
+            className="pointer-events-none absolute inset-0"
           >
             <FilmFramePending overlay />
           </div>

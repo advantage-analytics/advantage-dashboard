@@ -17,7 +17,6 @@ import {
 import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
 import { MatchReportMoreMenu } from "@/components/dashboard/matches/match-detail/report-more-menu";
 import { MatchReportInsight } from "@/components/dashboard/matches/match-detail/report-insight-card";
-import { cn } from "@/lib/utils";
 import { MATCH_REPORT_PANE_PAD } from "./match-report-layout";
 // Parts that live in their own files: one import line here and one entry in
 // the `MatchReport` object at the bottom. Those files read `useMatchReport`
@@ -143,28 +142,23 @@ export function MatchReportPane({ children }: { children: ReactNode }) {
  * pane-height, its content overflowed it, and the scroll ended flush against
  * the last card (measured 0px on an overflowing Statistics view, 24px without).
  *
- * `scrollsInside` is the one exception, for a view that owns its own
- * scroller: the Video view's point list scrolls inside its card, so the panel
- * takes `min-h-0` and stays pane-height — that is what hands the list a
- * height to scroll within. Nothing in that view overflows the panel, so the
- * pane's bottom padding still lands where it should.
+ * The Video view is no exception, though its point list scrolls inside its
+ * own card: side by side that list is out of flow and takes the row's height,
+ * so the panel's content is the player and "This point", which fit a normal
+ * window. On one too short for them the panel grows like any other and the
+ * pane scrolls, bottom padding included.
  */
 export function MatchReportWhen({
   view,
-  scrollsInside = false,
   children,
 }: {
   view: ReportView;
-  scrollsInside?: boolean;
   children: ReactNode;
 }) {
   const { state } = useMatchReport();
   if (state.view !== view) return null;
   return (
-    <div
-      role="tabpanel"
-      className={cn("flex flex-1 flex-col gap-4", scrollsInside && "min-h-0")}
-    >
+    <div role="tabpanel" className="flex flex-1 flex-col gap-4">
       {children}
     </div>
   );

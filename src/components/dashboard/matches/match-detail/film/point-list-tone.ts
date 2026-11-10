@@ -23,13 +23,17 @@ export type FilmListTone = "light" | "dark";
 /** The list's chrome: card, header strip, count and game headers. */
 export const LIST_TONE = {
   light: {
-    // `max-h-full min-h-0`: the card never runs past the column the film
-    // tab gives it — the rows scroll inside it (below) — but a short cut
-    // stays a short card rather than stretching to the column's height.
+    // `min-h-0 flex-1`: the card takes the column the film tab gives it
+    // and never runs past it — the rows scroll inside it (below). A short
+    // cut or an empty one keeps that full height (decided 2026-11-09,
+    // reversing "a short cut stays a short card"): the list's bottom edge
+    // stays level with "This point" and the card no longer jumps each time
+    // a filter changes the row count. Stacked, the column has no height of
+    // its own, so the card is still as tall as its rows.
     // No inner padding (canvas "Folded list v2"): the header strip and the
     // rows run edge to edge, as the room's drawer does; `overflow-hidden`
     // keeps a full-bleed row's wash inside the card's radius.
-    root: "surface-card flex max-h-full min-h-0 flex-col overflow-hidden",
+    root: "surface-card flex min-h-0 flex-1 flex-col overflow-hidden",
     rootStyle: undefined,
     header:
       "flex items-center gap-2 px-2.5 pt-[11px] pb-2 shadow-[inset_0_-1px_0_var(--border-hairline)]",

@@ -2608,7 +2608,7 @@ test("T22: the card's own Next point step button re-follows the list", async ({
  *
  * The harness mounts `FilmTab` with no `@container`, so the columns stack
  * and the list's card grows to its content: nothing to scroll. In the app
- * the tab's column bounds it (`max-h-full` inside a pane-height column);
+ * the tab's column bounds it (`flex-1` inside a pane-height column);
  * `boundShellList` gives the column that bound here, and `pad=12` makes the
  * rows outgrow it. The shell list now opens its own well under the displayed
  * point (canvas "W-E chat"), so a case that compares the list's heights
@@ -2637,7 +2637,7 @@ async function settledWellHeight(page: Page): Promise<number> {
 /**
  * Give the shell list's column a height, as the tab's side-by-side layout
  * does in the app. The column's outer box is a `shrink-0` flex item, so a
- * height on it holds; the card inside is `max-h-full`.
+ * height on it holds; the card inside is `min-h-0 flex-1`.
  */
 async function boundShellList(page: Page, px: number) {
   await page.evaluate(
@@ -3880,7 +3880,7 @@ test("the card reads the point in one line and opens an empty thread with a repl
   await expect(card.locator(".text-micro").first()).toContainText(
     "Set 1 · Game",
   );
-  await expect(card.getByText("No notes yet")).toBeVisible();
+  await expect(card.getByText("No notes on this point yet.")).toBeVisible();
   const reply = card.getByRole("textbox", { name: "Add a note on this point" });
   await expect(reply).toBeVisible();
   // Send stays off until there is something to send.
@@ -3908,7 +3908,7 @@ test("on a read-only report the card draws no bookmark, tags, thread or reply fi
   await expect(
     card.getByRole("button", { name: "Copy link to this point" }),
   ).toHaveCount(0);
-  await expect(card.getByText("No notes yet")).toHaveCount(0);
+  await expect(card.getByText("No notes on this point yet.")).toHaveCount(0);
 });
 
 /* -------------------------------------------------------------------------

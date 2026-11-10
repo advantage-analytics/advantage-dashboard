@@ -127,7 +127,11 @@ export const FilmPointCard = memo(function FilmPointCard({
       // Which point the card is on, in the DOM: the specs assert the card
       // follows the PLAYING point while the list is held (T22).
       data-point-id={point?.id}
-      className="surface-card flex min-h-0 flex-1 flex-col"
+      // No `min-h-0`: the card stops shrinking at its own content — the
+      // pinned rows plus the notes list's floor (see `Thread`) — and the
+      // pane scrolls from there, rather than the thread being squeezed away
+      // when the filter strip or a wrapped tag row takes the height.
+      className="surface-card flex flex-1 flex-col"
       style={{ padding: "10px 20px 14px" }}
     >
       <div className="flex h-7 shrink-0 items-center gap-1">
@@ -176,13 +180,24 @@ export const FilmPointCard = memo(function FilmPointCard({
       </div>
 
       {!point ? (
-        <NoPointYet onStart={onGoToFirst} />
+        <NoPointYet
+          onStart={onGoToFirst}
+          showTags={Boolean(tags)}
+          showNotes={Boolean(notes)}
+        />
       ) : (
         <>
           <PointSummary point={point} />
           {tags && <TagRow tags={tags} />}
           {notes && <Thread notes={notes} />}
-          {notes && <Composer key={point.id} onSend={notes.onSend} />}
+          {notes && (
+            <Composer
+              key={point.id}
+              onSend={notes.onSend}
+              // "Reply" only once there is something to reply to.
+              hasNotes={notes.notes.length > 0}
+            />
+          )}
         </>
       )}
     </section>
@@ -191,20 +206,31 @@ export const FilmPointCard = memo(function FilmPointCard({
 
 /**
  * Before the film reaches a point (the opening seconds, or a seek into dead
- * time): the card's own anatomy, empty — the winner's 30px mark slot as a
- * dashed outline, a title naming the state and one line saying what lands
- * here — plus the one way to make it appear (empty-and-loading.md, honest
- * zero). No action when the cut holds no point to start from.
+ * time): the card's own anatomy, empty (empty-and-loading.md, honest zero).
+ * The winner's 30px mark slot as a dashed outline, a title naming the state
+ * and one line saying what lands here, plus the one way to make it appear —
+ * no action when the cut holds no point to start from. Under them, where the
+ * card has tags and notes at all, their furniture drawn dimmed and inert:
+ * the tag slot, the thread's rule and the reply field. The card keeps the
+ * shape it has while a point plays instead of one row over a blank card.
  */
-function NoPointYet({ onStart }: { onStart?: () => void }) {
+function NoPointYet({
+  onStart,
+  showTags,
+  showNotes,
+}: {
+  onStart?: () => void;
+  showTags: boolean;
+  showNotes: boolean;
+}) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-1 flex-col">
       <div className="mt-2.5 flex shrink-0 items-center gap-3">
         <span
           aria-hidden="true"
           className="size-[30px] shrink-0 rounded-[var(--radius-button)] border border-dashed border-[var(--border-field)]"
         />
-        <span className="flex min-w-0 flex-col gap-px">
+        <span className="flex min-w-0 flex-1 flex-col gap-px">
           <span className="text-[13px] font-medium text-[var(--ink-900)]">
             No point playing
           </span>
@@ -217,41 +243,56 @@ function NoPointYet({ onStart }: { onStart?: () => void }) {
         <button
           type="button"
           onClick={onStart}
-          className="mt-3 w-fit cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          className="mt-3 w-fit shrink-0 cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
         >
           Go to the first point
         </button>
+      )}
+      {(showTags || showNotes) && (
+        <div
+          aria-hidden="true"
+          inert
+          data-point-card-outline
+          className="flex flex-1 flex-col opacity-50"
+        >
+          {showTags && (
+            <span
+              className={cn(
+                PILL,
+                "mt-3 w-fit cursor-default border border-dashed border-[var(--border-field)] text-[var(--ink-500)]",
+              )}
+            >
+              <Plus className="size-3" strokeWidth={1.5} />
+              Tag
+            </span>
+          )}
+          {showNotes && (
+            <>
+              <div className="mt-4 flex-1 border-t border-[var(--border-hairline)] @min-[720px]:min-h-20" />
+              <div className="mt-3 flex h-10 shrink-0 items-center rounded-[var(--radius-element)] border border-[var(--border-field)] pl-3 text-[12px] text-[var(--ink-500)]">
+                Notes open when a point plays
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
 /**
- * A point with no notes: centred in the thread's own space, a statement and
- * one line on what a note is for, and the one way to add one — which puts
- * the caret in the reply field below rather than opening a second composer.
+ * A point with no notes: one quiet line where the first note will sit. The
+ * reply field right under it does the asking ("Add a note on this point…"),
+ * so there is no second title, explanation or action here — the old "Add the
+ * first note" link only moved the caret to that field.
  */
 function EmptyThread() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-1.5 px-6 py-4 text-center">
-      <span className="text-[13px] text-[var(--ink-900)]">No notes yet</span>
-      <span className="max-w-[40ch] text-[11px] leading-[1.55] text-[var(--ink-500)]">
-        Write down what you saw on this point — it stays with the point for when
-        you watch it again.
-      </span>
-      <button
-        type="button"
-        onClick={() => document.getElementById(COMPOSER_ID)?.focus()}
-        className="mt-[3px] w-fit cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-      >
-        Add the first note
-      </button>
-    </div>
+    <p className="text-[12px] text-[var(--ink-500)]">
+      No notes on this point yet.
+    </p>
   );
 }
-
-/** The reply field's id, so the empty thread's action can put the caret in it. */
-const COMPOSER_ID = "film-point-note-input";
 
 function StepButton({
   direction,
@@ -374,7 +415,11 @@ function PointSummary({ point }: { point: MatchPoint }) {
           {winner.initials}
         </span>
       )}
-      <span className="flex min-w-0 flex-col gap-px">
+      {/* `flex-1`: the column takes the row's width rather than shrinking to
+          its longest line. Shrunk to fit, the `truncate` box was exactly the
+          text's width and clipped the last glyph ("2s") at a fractional
+          edge, with no ellipsis because nothing had overflowed. */}
+      <span className="flex min-w-0 flex-1 flex-col gap-px">
         <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
           {pointResultLabel(point, filterContext)}
         </span>
@@ -507,7 +552,7 @@ function Thread({ notes }: { notes: NotesThread }) {
   const shown = notes.notes.slice(hidden);
 
   return (
-    <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-[var(--border-hairline)] pt-3">
+    <div className="mt-4 flex flex-1 flex-col border-t border-[var(--border-hairline)] pt-3">
       {notes.status === "loading" ? (
         <PendingRegion label="notes" innerClassName="flex flex-col gap-3 py-1">
           {[0, 1].map((i) => (
@@ -534,25 +579,35 @@ function Thread({ notes }: { notes: NotesThread }) {
       ) : notes.notes.length === 0 ? (
         <EmptyThread />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto">
-          {hidden > 0 && (
-            <button
-              type="button"
-              onClick={() => setExpanded(true)}
-              className="w-fit cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-            >
-              Show {hidden} earlier {hidden === 1 ? "note" : "notes"}
-            </button>
-          )}
-          {shown.map((note) => (
-            <NoteRow
-              key={note.id}
-              note={note}
-              author={notes.authors.get(note.authorId) ?? null}
-              mine={note.authorId === notes.viewerId}
-              onDelete={() => notes.onDelete(note.id)}
-            />
-          ))}
+        // Side by side the list is out of flow inside a box with a floor of
+        // about a note and a half: the box takes whatever height the card
+        // has left and the notes scroll within it, but it never drops under
+        // the floor. Stacked, the card is content-height and the notes sit
+        // in flow, all of them showing.
+        <div className="relative flex-1 @min-[720px]:min-h-20">
+          <div
+            data-notes-list
+            className="flex flex-col gap-3.5 @min-[720px]:absolute @min-[720px]:inset-0 @min-[720px]:overflow-y-auto"
+          >
+            {hidden > 0 && (
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                className="w-fit cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+              >
+                Show {hidden} earlier {hidden === 1 ? "note" : "notes"}
+              </button>
+            )}
+            {shown.map((note) => (
+              <NoteRow
+                key={note.id}
+                note={note}
+                author={notes.authors.get(note.authorId) ?? null}
+                mine={note.authorId === notes.viewerId}
+                onDelete={() => notes.onDelete(note.id)}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -621,7 +676,13 @@ function NoteRow({
   );
 }
 
-function Composer({ onSend }: { onSend: (body: string) => Promise<boolean> }) {
+function Composer({
+  onSend,
+  hasNotes,
+}: {
+  onSend: (body: string) => Promise<boolean>;
+  hasNotes: boolean;
+}) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const ready = normalizeNoteBody(draft) !== null && !sending;
@@ -643,7 +704,6 @@ function Composer({ onSend }: { onSend: (body: string) => Promise<boolean> }) {
       className="mt-3 flex h-10 shrink-0 items-center gap-2 rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] pr-1.5 pl-3 transition-[border-color,box-shadow] duration-200 focus-within:border-[var(--field-ring)] focus-within:shadow-[var(--focus-ring-field)]"
     >
       <input
-        id={COMPOSER_ID}
         // The bordered form is the field and draws the ring; without this the
         // global field ring draws a second one inside it.
         data-focus-ring="none"
@@ -653,7 +713,7 @@ function Composer({ onSend }: { onSend: (body: string) => Promise<boolean> }) {
         // Space and the arrows drive the player everywhere else on the tab;
         // inside the field they are text.
         onKeyDown={(e) => e.stopPropagation()}
-        placeholder="Reply…"
+        placeholder={hasNotes ? "Reply…" : "Add a note on this point…"}
         aria-label="Add a note on this point"
         className="min-w-0 flex-1 bg-transparent text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-500)]"
       />

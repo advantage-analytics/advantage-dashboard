@@ -192,7 +192,7 @@ function SampleReport() {
                   <MatchReportWhen view="shots">
                     <ShotsTab />
                   </MatchReportWhen>
-                  <MatchReportWhen view="film" scrollsInside>
+                  <MatchReportWhen view="film">
                     <FilmTab video={video} entry={NO_FILM_ENTRY} unit="ft" />
                   </MatchReportWhen>
                 </MatchReportPane>
