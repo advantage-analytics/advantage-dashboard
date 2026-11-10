@@ -129,6 +129,12 @@ import { formatHoursMinutes } from "@/lib/format/duration";
 import { setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 import { FieldCaption } from "./FieldCaption";
+import {
+  MatchTypeCell,
+  PracticeNotice,
+  matchTypeForEventKind,
+  showsMatchTypeField,
+} from "./MatchTypeField";
 import { COURT_OPTIONS } from "./court-options";
 import {
   ChosenCheck,
@@ -2096,6 +2102,14 @@ function DetailsStepContentImpl({
       <div className="flex flex-col gap-[18px] border-t border-[var(--border-hairline)] pt-6">
         <SectionHead label="Context" micro={contextMicro} />
         <div className="grid grid-cols-3 gap-x-6 gap-y-5">
+          {/* First, before Event. A doubles line owns `matchType` — the
+              vendor path reads its "Doubles" — so the field steps aside. */}
+          {showsMatchTypeField(formData.matchType) && (
+            <MatchTypeCell
+              value={formData.matchType}
+              onChange={(v) => onInputChange("matchType", v)}
+            />
+          )}
           {fromLine ? (
             <ReadCell
               label="Event"
@@ -2140,11 +2154,7 @@ function DetailsStepContentImpl({
                 onInputChange("eventKind", kind);
                 onInputChange(
                   "matchType",
-                  kind === "tournament"
-                    ? "Tournament"
-                    : kind === "dual"
-                      ? "Dual Match"
-                      : (formData.matchType ?? ""),
+                  matchTypeForEventKind(kind, formData.matchType),
                 );
                 if (kind !== "tournament") onInputChange("round", "");
               }}
@@ -2252,6 +2262,11 @@ function DetailsStepContentImpl({
             onChange={(v) => onInputChange("playOnLets", v)}
           />
         </div>
+        {/* The player alone until an opponent can be a teammate; then both. */}
+        <PracticeNotice
+          matchType={formData.matchType}
+          profiles={[{ name: subject.name, isSelf: subject.isSelf }]}
+        />
       </div>
       {/* Video — what Save match is about to start. Only while the wizard
           holds the file: a restored draft keeps the form but not the File, and

@@ -10,3 +10,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The edit dialog could branch on `isPracticeMatch` once Practice behaviour lands.
+
+## T2 · Show Match type first under Context on wizard step 4 — done
+
+**gate:** mechanical GATE PASS; completion VERDICT: pass.
+**changed:** new `MatchTypeField.tsx` (`MatchTypeCell` underline MenuSelect with T1's options and "Not set", `PracticeNotice`, helpers `matchTypeFieldValue` / `showsMatchTypeField` / `matchTypeForEventKind`); `DetailsStepContent.tsx` puts Match type first in the Context grid (hidden for Doubles), routes `EventCell`'s pick through `matchTypeForEventKind`, and renders the Practice notice under Context naming the subject only; `WizardNotice.tsx` gains a grey `tone="note"`; new `tests/upload-details-match-type.spec.ts`. The notice takes a `profiles` list so T4 can add the teammate.
+**follow-ups:**
+
+1. Picking Tournament in the menu does not set `eventKind` or Round; only an event pick does. Decide whether the two should stay independent.
+2. A Practice value survives picking an "other" event; a tournament pick replaces it (unchanged behaviour).

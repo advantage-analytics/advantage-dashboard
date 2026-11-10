@@ -30,7 +30,7 @@ ready).
 
 ## T2 · Show Match type first under Context on wizard step 4
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess) `src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx` (Context section; `EventCell` `onPick` ~2138), `WizardNotice.tsx`; new `tests/upload-details-match-type.spec.ts` (pattern: `tests/upload-details-video-section.spec.ts`, `tests/wizard-event-default.spec.ts`)
