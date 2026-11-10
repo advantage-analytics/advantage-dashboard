@@ -276,14 +276,8 @@ export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
               watch,
               `${label}. ${row.name} ${count}, ${row.otherName} ${otherCount}.`,
             )}
-            onPointerDown={(e) => {
-              if (fingerTap.press(e, hovered === id)) setHovered(id);
-            }}
+            {...hoverTarget(id)}
             onClick={() => fingerTap.click(watch, () => setHovered(null))}
-            onMouseEnter={() => setHovered(id)}
-            onMouseLeave={() => setHovered(null)}
-            onFocus={() => setHovered(id)}
-            onBlur={() => setHovered(null)}
           >
             <SegmentTooltip
               open={hovered === id}
@@ -327,7 +321,7 @@ export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
                 <button
                   type="button"
                   aria-disabled="true"
-                  aria-label={`Differential, ${row.name}: ${row.winners} winners minus ${row.errors} ${errorNoun}s, ${signed(diff)}.`}
+                  aria-label={`Differential, ${row.name}: ${counted(row.winners, "winner")} minus ${counted(row.errors, errorNoun)}, ${signed(diff)}.`}
                   className={`tabular -mx-1.5 cursor-default rounded-[var(--radius-cell)] border-0 px-1.5 text-[13px] transition-colors ${EASE}`}
                   style={{
                     fontWeight: leads ? 500 : 400,
@@ -356,10 +350,10 @@ export function DifferentialCard({ isDerived }: { isDerived: boolean }) {
                   </span>
                   <span className="text-[10px] text-white/[0.64]">
                     {diff > 0
-                      ? "More winners than errors"
+                      ? `More winners than ${errorNoun}s`
                       : diff < 0
-                        ? "More errors than winners"
-                        : "As many winners as errors"}
+                        ? `More ${errorNoun}s than winners`
+                        : `As many winners as ${errorNoun}s`}
                   </span>
                 </ChartTooltip>
               </span>

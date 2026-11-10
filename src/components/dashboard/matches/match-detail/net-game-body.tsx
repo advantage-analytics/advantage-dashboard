@@ -58,6 +58,11 @@ import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 interface SegmentMeta<K extends string> {
   key: K;
   label: string;
+  /**
+   * Shorter legend text, so the four (or five) keys fit one row in a 390px
+   * card. The segment's readout and its Video title keep `label`.
+   */
+  legendLabel?: string;
   you: string;
   opp: string;
 }
@@ -75,6 +80,7 @@ const ENDINGS: SegmentMeta<NetEnding>[] = [
   {
     key: "opponent-error",
     label: "Opponent error",
+    legendLabel: "Their error",
     you: hatch("var(--viz-you)"),
     opp: hatch("var(--viz-opp)"),
   },
@@ -203,12 +209,14 @@ export function NetGameBody({
   const legend = (
     <div
       aria-hidden="true"
-      className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 pt-0.5"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-0.5"
     >
       {endings.map((e) => (
         <span key={e.key} className="inline-flex items-center gap-1.5">
           <LegendMark color={e.you} />
-          <span className="text-micro whitespace-nowrap">{e.label}</span>
+          <span className="text-micro whitespace-nowrap">
+            {e.legendLabel ?? e.label}
+          </span>
         </span>
       ))}
     </div>
