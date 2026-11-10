@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   type ReactNode,
@@ -48,6 +49,8 @@ import {
 import { bandKindFor } from "./cut-kinds";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
+import { filterRailReducer } from "../match-filters/rail-state";
+import { LightboxAdvancedDrawer } from "./lightbox-advanced-drawer";
 import { LightboxCourt, type CourtOutline } from "./lightbox-court";
 import {
   LegendFilter,
@@ -574,6 +577,39 @@ export function VizLightboxShell({
     return savedBandZones;
   }, [unit, savedBandZones, activeEditor]);
 
+  /* ── Advanced filters drawer ─────────────────────────────────────────── */
+
+  // The Filters popover's "Advanced filters" row closes the popover and
+  // opens a 340px drawer inside the box (`lightbox-advanced-drawer.tsx`),
+  // with the rest of the box dimmed and inert. The phases are the report
+  // rail's (`rail-state.ts`): the out animation keeps it drawn while
+  // `"closing"`. Focus goes back to the Filters trigger on every close —
+  // the trigger is the one way back in, and everything else was inert.
+  const [drawerPhase, dispatchDrawer] = useReducer(filterRailReducer, "closed");
+  const filtersTriggerRef = useRef<HTMLButtonElement>(null);
+  const drawerFocusBackRef = useRef(false);
+  const openAdvanced = useCallback(() => dispatchDrawer("toggle"), []);
+  const closeDrawer = useCallback(() => {
+    drawerFocusBackRef.current = true;
+    dispatchDrawer("close");
+  }, []);
+  const finishDrawer = useCallback(() => dispatchDrawer("closed"), []);
+  // After the commit that lifts `inert` from the box — an inert trigger
+  // cannot take focus.
+  useEffect(() => {
+    if (drawerPhase === "open" || !drawerFocusBackRef.current) return;
+    drawerFocusBackRef.current = false;
+    filtersTriggerRef.current?.focus({ preventScroll: true });
+  }, [drawerPhase]);
+  const advancedFilters = filterPanel?.advanced;
+  const drawerShown =
+    drawerPhase !== "closed" &&
+    advancedFilters !== undefined &&
+    !pending &&
+    !isDraft;
+  /** The drawer is up: the rest of the box is dimmed and inert. */
+  const drawerOpen = drawerShown && drawerPhase === "open";
+
   /* ── Closing ──────────────────────────────────────────────────────────── */
 
   // A close the reader asks for (Esc, Close, the scrim) plays out before the
@@ -679,10 +715,14 @@ export function VizLightboxShell({
 
   /* ── Esc ──────────────────────────────────────────────────────────────── */
 
-  // Esc steps back one layer at a time: the band editor, then a selected
-  // point, then the lightbox itself. Returns whether it stepped back short of
-  // closing.
+  // Esc steps back one layer at a time: the advanced filters drawer, the
+  // band editor, then a selected point, then the lightbox itself. Returns
+  // whether it stepped back short of closing.
   function escapeStep(): boolean {
+    if (drawerOpen) {
+      closeDrawer();
+      return true;
+    }
     if (editing) {
       exitEdit();
       return true;
@@ -869,6 +909,7 @@ export function VizLightboxShell({
                 after a card's court flies in (`viz-court-morph.ts`). */}
             <div
               data-lightbox-enter="0"
+              inert={drawerOpen}
               className="flex items-start gap-2.5 px-6 pt-6 pb-5"
             >
               <div className="flex min-w-0 flex-col gap-1">
@@ -907,6 +948,7 @@ export function VizLightboxShell({
               <LightboxBodyPending label={title} />
             ) : (
               <div
+                inert={drawerOpen}
                 className={cn(
                   "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 md:flex-row md:overflow-visible",
                   openedPending && "animate-in duration-200 fade-in-0",
@@ -954,6 +996,8 @@ export function VizLightboxShell({
                         errorSplitJudged={filterPanel.errorSplitJudged}
                         countWith={filterPanel.countWith}
                         advanced={filterPanel.advanced}
+                        onOpenAdvanced={openAdvanced}
+                        triggerRef={filtersTriggerRef}
                         season={filterPanel.season}
                       />
                     )}
@@ -1257,6 +1301,7 @@ export function VizLightboxShell({
             {footerActions ? (
               <div
                 data-lightbox-enter="2"
+                inert={drawerOpen}
                 className="mt-5 flex items-center gap-2.5 border-t border-[var(--border-hairline)] px-6 pt-4 pb-5"
               >
                 {footerActions.start}
@@ -1265,6 +1310,20 @@ export function VizLightboxShell({
               </div>
             ) : (
               <div aria-hidden="true" className="h-6 shrink-0" />
+            )}
+
+            {/* ── Advanced filters drawer ────────────────────────────── */}
+            {drawerShown && filterPanel && advancedFilters && (
+              <LightboxAdvancedDrawer
+                phase={drawerPhase}
+                onClose={closeDrawer}
+                onFinish={finishDrawer}
+                cut={cut}
+                filters={filters}
+                setFilters={filterPanel.onChange}
+                result={result}
+                advanced={advancedFilters}
+              />
             )}
           </TooltipProvider>
         </DialogPrimitive.Content>

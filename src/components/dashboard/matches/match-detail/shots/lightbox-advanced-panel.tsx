@@ -16,16 +16,17 @@ import { carryFilters, cutAvailability } from "./viz-url";
 
 /**
  * The Video tab's own `FiltersPanel` (Score / Serve / Return / Result /
- * Custom / Then — its catalog, wording and draft-then-Show), embedded in
- * the lightbox's Filters and editing `VizFilters.match`. Its options are the
- * ones this cut keeps for this court (`cutAvailability`), so Show never
- * writes a pick the carry rule then drops.
+ * Custom / Then — its catalog, wording and draft-then-Show), in the
+ * lightbox's "Advanced filters" drawer (`lightbox-advanced-drawer.tsx`) and
+ * editing `VizFilters.match`. Its options are the ones this cut keeps for
+ * this court (`cutAvailability`), so Show never writes a pick the carry
+ * rule then drops.
  *
  * A link's or saved view's pill groups the advanced filters can say exactly
  * (Rally, and the no-constraint Game and Result pairs) open folded into the
  * draft and are written back as advanced filters by Show
  * (`foldedMatchFilters` / `withFoldedFilters`). Set and Score never fold:
- * they are rows of the panel this slides from, which keeps owning them.
+ * they are rows of the Filters popover, which keeps owning them.
  */
 export function LightboxAdvancedPanel({
   cut,
@@ -34,7 +35,8 @@ export function LightboxAdvancedPanel({
   total,
   noun,
   advanced,
-  back,
+  onClose,
+  onCloseTooltipEscape,
 }: {
   cut: Cut;
   filters: VizFilters;
@@ -42,7 +44,10 @@ export function LightboxAdvancedPanel({
   total: number;
   noun: CountNoun;
   advanced: LightboxAdvancedFilters;
-  back: () => void;
+  /** The X, Show and Esc: back to the lightbox. */
+  onClose: () => void;
+  /** Esc while the X's tooltip holds the key. */
+  onCloseTooltipEscape: () => void;
 }) {
   const { availability, youName, oppName, count } = advanced;
   // Only the court player decides what the carry rule keeps, so the probe
@@ -77,7 +82,7 @@ export function LightboxAdvancedPanel({
     <FiltersPanel
       // Re-seeds the draft whenever the applied filters change.
       key={JSON.stringify(filters)}
-      embedded
+      title="Advanced filters"
       className="min-h-0 flex-1"
       filters={fold.match}
       availability={offered}
@@ -88,9 +93,10 @@ export function LightboxAdvancedPanel({
       noun={noun}
       onApply={(next) => {
         setFilters(applied(next));
-        back();
+        onClose();
       }}
-      onClose={back}
+      onClose={onClose}
+      onCloseTooltipEscape={onCloseTooltipEscape}
     />
   );
 }

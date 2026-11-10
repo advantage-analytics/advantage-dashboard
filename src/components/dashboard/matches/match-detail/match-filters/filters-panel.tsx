@@ -32,7 +32,9 @@ import {
  * Then — driven entirely by `model.ts`'s catalog (`MATCH_FILTER_SECTIONS`,
  * `MATCH_FILTER_OPTIONS`); no option label is declared here. The Video tab
  * hosts it twice: the report's 340px filters drawer (`filter-rail.tsx`) and
- * the fullscreen film room's points drawer (`film/film-advanced-panel.tsx`).
+ * the fullscreen film room's points drawer (`film/film-advanced-panel.tsx`);
+ * the Visualizations lightbox hosts it a third time, as "Advanced filters"
+ * in the 340px drawer inside its box (`shots/lightbox-advanced-drawer.tsx`).
  *
  * Anatomy (the approved "FilterRail" frame): a 48px header — the dropdown
  * trigger's own SlidersHorizontal + "Filters" look, and a close X; the
@@ -78,7 +80,8 @@ export function FiltersPanel({
   tone = "light",
   filmCut = null,
   noun,
-  embedded = false,
+  title = "Filters",
+  onCloseTooltipEscape,
 }: {
   /** The applied filters — the draft starts here. */
   filters: MatchFilters;
@@ -107,13 +110,14 @@ export function FiltersPanel({
   filmCut?: string | null;
   /** What `countFor` counts, when not points (the Visualizations tab). */
   noun?: CountNoun;
+  /** The header's word ("Advanced filters" in the Visualizations lightbox). */
+  title?: string;
   /**
-   * Inside another panel (the Visualizations lightbox's Filters, which slides
-   * to this with its own "Filters" back row): no header — the host's back row
-   * is the way out — rows on the host's 8px inset, and no "N of M" line,
-   * which the primary's "Show N serves" already says at that width.
+   * Esc while the close X's tooltip is up: the tooltip is the topmost layer
+   * then and takes the key, so a host whose own Esc runs through Radix (the
+   * lightbox's dialog) forwards it here to still close in one press.
    */
-  embedded?: boolean;
+  onCloseTooltipEscape?: () => void;
 }) {
   const titleId = useId();
   const names = { you: youName, opponent: oppName };
@@ -130,7 +134,7 @@ export function FiltersPanel({
     () => (countFor ? countFor(draft) : null),
     [countFor, draft],
   );
-  const pad = embedded ? "px-2" : "px-5";
+  const pad = "px-5";
 
   return (
     <section
@@ -141,32 +145,34 @@ export function FiltersPanel({
         className,
       )}
     >
-      {!embedded && (
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--border-hairline)] pr-2.5 pl-5">
-          <h2
-            id={titleId}
-            className="flex min-w-0 flex-1 items-center gap-1.5 text-[12px] font-medium"
-            style={{ color: "var(--ink-900)" }}
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--border-hairline)] pr-2.5 pl-5">
+        <h2
+          id={titleId}
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-[12px] font-medium"
+          style={{ color: "var(--ink-900)" }}
+        >
+          <SlidersHorizontal
+            className="size-[13px] shrink-0"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          {title}
+        </h2>
+        <ChromeTooltip
+          label="Close"
+          shortcut="Esc"
+          onEscapeKeyDown={onCloseTooltipEscape}
+        >
+          <button
+            type="button"
+            aria-label={`Close ${title.toLowerCase()}`}
+            onClick={onClose}
+            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
           >
-            <SlidersHorizontal
-              className="size-[13px] shrink-0"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            Filters
-          </h2>
-          <ChromeTooltip label="Close" shortcut="Esc">
-            <button
-              type="button"
-              aria-label="Close filters"
-              onClick={onClose}
-              className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
-            >
-              <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-            </button>
-          </ChromeTooltip>
-        </div>
-      )}
+            <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+          </button>
+        </ChromeTooltip>
+      </div>
 
       {filmCut && (
         // Read-only: no button, no aria-pressed. The strip's Clear is what
@@ -205,7 +211,7 @@ export function FiltersPanel({
       <div
         className={cn(
           "flex shrink-0 items-center gap-3 border-t border-[var(--border-hairline)]",
-          embedded ? "h-12 px-2" : "h-[60px] pr-4 pl-5",
+          "h-[60px] pr-4 pl-5",
         )}
       >
         <button
@@ -220,7 +226,7 @@ export function FiltersPanel({
         >
           Clear all
         </button>
-        {count === null || embedded ? (
+        {count === null ? (
           <span className="flex-1" />
         ) : (
           <span

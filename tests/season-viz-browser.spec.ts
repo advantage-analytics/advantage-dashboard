@@ -593,7 +593,7 @@ test("Saved, a view's link: the page opens on Saved with the view's court; a wor
   await expect(page.getByText("No saved views yet.")).toBeVisible();
 });
 
-test("Advanced filters on the season: the Video tab's panel without counts, and a Show reaches the server", async ({
+test("Advanced filters on the season: the drawer inside the box, the Video tab's panel without counts, and a Show reaches the server", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -604,13 +604,27 @@ test("Advanced filters on the season: the Video tab's panel without counts, and 
   await wall.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
   const serve = page.getByRole("dialog", { name: "All serves" });
   await expect(serve).toBeVisible({ timeout: 8_000 });
-  await serve.getByRole("button", { name: "Filters" }).click();
+  const trigger = serve.getByRole("button", { name: "Filters", exact: true });
+  await trigger.click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   await panel.getByRole("button", { name: /^Advanced filters/ }).click();
-  await expect(
-    panel.getByRole("button", { name: "Filters", exact: true }),
-  ).toBeVisible();
-  const sections = panel.locator("[data-section]");
+  // The popover closes and the drawer opens inside the box, focus in it.
+  await expect(panel).toHaveCount(0);
+  const drawer = serve.getByRole("complementary", {
+    name: "Advanced filters",
+  });
+  await expect(drawer).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .getElementById("viz-advanced-drawer")
+            ?.contains(document.activeElement) === true,
+      ),
+    )
+    .toBe(true);
+  const sections = drawer.locator("[data-section]");
   expect(await sections.count()).toBeGreaterThan(0);
   const header = sections.first().getByRole("button").first();
   // The accordion may open on its first section already.
@@ -622,12 +636,15 @@ test("Advanced filters on the season: the Video tab's panel without counts, and 
     .locator('button[aria-pressed="false"]')
     .first()
     .click();
-  // No count on the season: the primary names the noun alone.
-  const show = panel.getByRole("button", { name: "Show serves" });
+  // No count on the season: the primary names the noun alone, and the
+  // footer carries no "N of M" line.
+  const show = drawer.getByRole("button", { name: "Show serves" });
   await expect(show).toBeEnabled();
+  await expect(drawer).not.toContainText(/\d+ of \d+/);
   await show.click();
   await expect(page).toHaveURL(/[?&]vf=/);
-  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
+  await expect(trigger).toBeFocused();
   await expect(serve.locator("[data-viz-filter-strip]")).toBeVisible({
     timeout: 8_000,
   });
