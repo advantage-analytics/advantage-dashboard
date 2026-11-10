@@ -40,7 +40,7 @@ function groupTotals(group: StatGroup): { count: number; won: number } {
   };
 }
 
-/** Won of every row together — the group's average, the bar's tick. */
+/** Won of every row together — the group's average, for the row tooltip. */
 function groupAverage(group: StatGroup): number | null {
   if (group.rows.some((r) => r.share)) return null;
   const { count, won } = groupTotals(group);
@@ -92,12 +92,12 @@ interface TipAnchor {
 
 /**
  * The lightbox's Statistics column (canvas "Statistics bar variations" A2,
- * S09/S16/S17): each group under its eyebrow with the average on the right
- * ("Average 63%" beside a sample of the tick); each row label · won of count
- * · %, over a 4px bar with the average's tick — as drawn on the overhaul
+ * S09/S16/S17): each group under its eyebrow; each row label · won of count
+ * · %, over a 4px bar (no average tick or "Average N%" label since
+ * 2026-11-10, user decision; the row's tooltip still says it) — as on the overhaul
  * canvas (`N1-Opened`, statistics variation A2): the label 12px ink-600,
  * ink-900 while the row is hovered, focused or kept; the group's best % 13px
- * 500 ink-900 and the rest 13px ink-500; the tick 3px past the bar at 35%;
+ * 500 ink-900 and the rest 13px ink-500;
  * the hover wash rounded 8px with 8px of room each side. Over the groups,
  * the canvas's two figures (`summaryFigures`): "Points won · 14 of 44" and
  * "Landed in · 44 of 44", each a 16px % over its label and a 4px bar,
@@ -108,9 +108,7 @@ interface TipAnchor {
  * failed render). A list taller than the column scrolls as one stacked at
  * 24px (`GroupSpacer`).
  *
- * Every figure is the row's own (`computeVizStats`); the tick is this
- * match's average for the group — the "This match" benchmark, until a
- * cross-match one exists (plan phase 7). Hovering a row outlines its zone
+ * Every figure is the row's own (`computeVizStats`). Hovering a row outlines its zone
  * on the court; clicking keeps only its marks there and in Points
  * (`stat-cut.ts`), and clicking it again lets go. Hovering or focusing a
  * row also hangs the dark readout beside it (`statRowTooltip`), to its left
@@ -263,7 +261,6 @@ export function LightboxStats({
         </>
       )}
       {groups.map((group, i) => {
-        const average = groupAverage(group);
         // Every row at the group's top rate: tied rows read alike, so none
         // looks better than its equal.
         const rates = group.rows
@@ -280,16 +277,6 @@ export function LightboxStats({
                     {group.label}
                   </h3>
                 )}
-                <span className="flex-1" />
-                {average !== null && (
-                  <span className="text-micro inline-flex items-center gap-1.5 tabular-nums">
-                    <span
-                      aria-hidden="true"
-                      className="inline-block h-[9px] w-px bg-[var(--ink-900)] opacity-50"
-                    />
-                    Average {average}%
-                  </span>
-                )}
               </div>
               <ul className="m-0 flex list-none flex-col p-0">
                 {group.rows.map((row) => (
@@ -302,7 +289,6 @@ export function LightboxStats({
                         row.winPct === bestPct &&
                         !row.share
                       }
-                      average={average}
                       pressed={
                         pick?.group === group.key && pick.row === row.key
                       }
@@ -386,7 +372,6 @@ function GroupSpacer({ edge }: { edge: "top" | "between" | "bottom" }) {
 function StatRowButton({
   row,
   best,
-  average,
   pressed,
   onClick,
   onHover,
@@ -394,7 +379,6 @@ function StatRowButton({
   row: StatRow;
   /** The group's best win rate: its % reads 13/500 ink-900, the rest grey. */
   best: boolean;
-  average: number | null;
   pressed: boolean;
   onClick: () => void;
   /** The row's element while hovered or focused, `null` as it lets go. */
@@ -456,12 +440,6 @@ function StatRowButton({
           <i
             className="absolute inset-y-0 left-0 rounded-[2px] bg-[var(--blue)]"
             style={{ width: `${pct}%` }}
-          />
-        )}
-        {average !== null && (
-          <b
-            className="absolute -inset-y-[3px] w-px bg-[var(--ink-900)] opacity-35"
-            style={{ left: `${average}%` }}
           />
         )}
       </span>

@@ -274,14 +274,18 @@ test("the Filters panel is the Matches panel over the cut's own keys, and Clear 
   await expect(page).not.toHaveURL(/deuce/);
 });
 
-test("Statistics: rows over 4px bars with the average tick; hover outlines a zone, a click keeps only its marks", async ({
+test("Statistics: rows over 4px bars, no average tick; hover outlines a zone, a click keeps only its marks", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Statistics" }).click();
-  await expect(dialog.getByText(/^Average \d+%$/).first()).toBeVisible();
+  // No "Average N%" label in a group's header (2026-11-10).
+  await expect(
+    dialog.getByRole("button", { name: /% of \d+ points won$/ }).first(),
+  ).toBeVisible();
+  await expect(dialog.getByText(/^Average \d+%$/)).toHaveCount(0);
   const row = dialog
     .getByRole("button", { name: /% of \d+ points won$/ })
     .first();
@@ -366,7 +370,9 @@ test("a read-only host leaves out Save as view and, without video, Watch — and
     dialog.locator("[data-court-stage] [data-viz-mark]").first(),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Statistics" }).click();
-  await expect(dialog.getByText(/^Average \d+%$/).first()).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: /% of \d+ points won$/ }).first(),
+  ).toBeVisible();
 });
 
 /* ── Gate fixes (PR #684 review, round 2) ─────────────────────────────── */
