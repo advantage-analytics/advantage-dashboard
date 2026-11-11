@@ -156,7 +156,7 @@ ready).
 
 ## T11 · Keep practice out of the match-insight baseline
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `supabase/functions/generate-insights/index.ts` (baseline and previous-match reads, prompt ~659); `tests/generate-insights-prompt.spec.ts`, `tests/generate-insights-guards.spec.ts`
 - **done when:**

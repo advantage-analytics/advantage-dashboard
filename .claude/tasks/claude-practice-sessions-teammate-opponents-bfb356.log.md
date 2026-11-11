@@ -112,3 +112,11 @@ is the runner's. Newest entries at the bottom.
 4. The other worked examples (`ASK_PLAN_EXAMPLE_QUERY` / `_BASELINE` / `_REVIEW`, `ASK_TEAM_PLAN_EXAMPLE_PLAYER`) do not show the filter.
 5. Sample live planner output; retrieved thumbs-up examples predate the rule.
 6. `docs/ask-mcp-connector.md` could mention the rule.
+
+## T11 · Keep practice out of the match-insight baseline — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4749 passed, shard 2/2 5148 passed. Completion VERDICT: pass.
+**changed:** `supabase/functions/generate-insights/index.ts`: a local `isPracticeMatch` (trimmed, case-insensitive; comment points at `src/lib/matches/match-type.ts`); the history read selects `match_type` and drops practice before the baseline ids and the previous match are taken; the current match's `match_type` is read and a practice match's prompt gains "This match is a practice set: it does not count toward the player's record, so never call it a win or a loss that changes their record." Summary voice and generation config unchanged. `tests/generate-insights-prompt.spec.ts`: new practice assertions; its stub's `.in()` now returns only the requested stats rows (no existing assertion edited).
+**follow-ups:**
+
+1. **Not deployed:** the live function changes only after `deploy_edge_function` for `generate-insights` once merged.

@@ -424,6 +424,17 @@ function normalizedPersonName(name: string | null | undefined): string {
 }
 
 /**
+ * `isPracticeMatch` in `src/lib/matches/match-type.ts`, copied because this
+ * function deploys without `src/`. A practice set never counts toward the
+ * player's record, so it stays out of the comparison history. Practice alone,
+ * trimmed and in any case: `match_type` also holds the legacy "Singles",
+ * "Doubles" and "Dual" values, and those count.
+ */
+function isPracticeMatch(value: string | null | undefined): boolean {
+  return typeof value === "string" && value.trim().toLowerCase() === "practice";
+}
+
+/**
  * Whether a match's errors are split into unforced and forced. A Deno copy of
  * `errorSplitJudged` in `src/lib/data/error-split.ts`, which is the source of
  * the rule — change that one and copy it here:
@@ -532,11 +543,12 @@ serve(async (req) => {
     const { data: matchRow } = await supabase
       .from("matches")
       .select(
-        "player1_id, player1_name, date, program_id, created_by, source_provider, verified, verified_at, errors_judged_at",
+        "player1_id, player1_name, date, program_id, created_by, source_provider, verified, verified_at, errors_judged_at, match_type",
       )
       .eq("id", matchId)
       .single();
     const errorsJudged = errorSplitJudged(matchRow ?? null);
+    const isPractice = isPracticeMatch(matchRow?.match_type);
 
     // 3. Separate the players based on the boolean
     const player1Stats = presentErrors(
@@ -579,7 +591,7 @@ serve(async (req) => {
       ) {
         let historyQuery = supabase
           .from("matches")
-          .select("id, date, player1_name")
+          .select("id, date, player1_name, match_type")
           .eq("player1_id", userId)
           .lt("date", matchDate);
 
@@ -592,8 +604,12 @@ serve(async (req) => {
         const { data: accountMatches } = await historyQuery.order("date", {
           ascending: false,
         });
+        // A practice set is not part of the player's record, so it is neither
+        // their baseline nor their previous match.
         const priorMatches = accountMatches?.filter(
-          (m) => normalizedPersonName(m.player1_name) === playerName,
+          (m) =>
+            normalizedPersonName(m.player1_name) === playerName &&
+            !isPracticeMatch(m.match_type),
         );
 
         if (priorMatches && priorMatches.length > 0) {
@@ -733,6 +749,11 @@ serve(async (req) => {
           ? ""
           : `
       This match's errors were not judged by kind, so the 'errors' figure counts every error a player made: call them "errors" and never describe them as any kind of error.`
+      }${
+        isPractice
+          ? `
+      This match is a practice set: it does not count toward the player's record, so never call it a win or a loss that changes their record.`
+          : ""
       }
 
       Player 1 Stats: ${JSON.stringify(player1Stats || { note: "Stats unavailable" })}
