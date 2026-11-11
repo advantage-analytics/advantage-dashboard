@@ -203,3 +203,7 @@ is the runner's. Newest entries at the bottom.
 3. A seated teammate later removed from the roster keeps the seat (only changes are checked); decide whether roster removal clears `player2_id`.
 4. Both arms accept archived/merged `program_players` rows, like the existing `player1_id` arm.
 5. Check `ask_patch_match` (MCP `update_match`) never writes `player2_id`, or it will hit this trigger.
+
+## Deploy · migration and generate-insights — done (2026-11-11)
+
+**changed:** T19's migration renamed to `supabase/migrations/20261111165059_matches_player2_roster_check.sql` to match the version recorded on apply. Applied to the live project; re-read afterwards: `proacl` is `postgres` + `service_role`, the trigger's `UPDATE OF` includes `player2_id`, and both new `player2_id` blocks are in `pg_get_functiondef`. `generate-insights` deployed (version 38, `verify_jwt` on) from the branch file, so match insights now leave practice out of the baseline. T19 follow-up 1 is done.
