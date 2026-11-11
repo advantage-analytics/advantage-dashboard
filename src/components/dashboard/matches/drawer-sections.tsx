@@ -591,6 +591,8 @@ const forgetListeners = new Set<(matchId: string) => void>();
  */
 export function forgetMatchSnapshot(matchId: string): void {
   snapshotCache.delete(matchId);
+  pairCache.delete(pairKey(matchId, false));
+  pairCache.delete(pairKey(matchId, true));
   for (const listener of forgetListeners) listener(matchId);
 }
 
@@ -657,4 +659,240 @@ export function useMatchSnapshot(
 
   if (snapshotCache.has(matchId)) return snapshotCache.get(matchId);
   return loaded?.id === matchId ? loaded.snapshot : undefined;
+}
+
+/* ── Both sides: the Matches drawer's comparison ──────────────────────────── */
+
+/** One measure, both players, and who leads it (null on a tie or a gap). */
+export interface SnapshotFigure {
+  label: string;
+  you: string | null;
+  opp: string | null;
+  leader: "you" | "opp" | null;
+}
+
+/** The snapshot read from both seats: the row's side first, then the opponent's. */
+export interface SnapshotPair {
+  figures: SnapshotFigure[];
+  /** The row's own side alone — what the drawer draws when `opponent` is false. */
+  you: Snapshot;
+  /**
+   * Whether the opponent has any figure at all. Without one the second
+   * column would be four dashes, so the drawer draws the one-sided
+   * `SnapshotSection` instead.
+   */
+  opponent: boolean;
+}
+
+function numberOf(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Higher wins, unless `lowerWins`; a missing side or a tie names nobody. */
+function leaderOf(
+  you: number | null,
+  opp: number | null,
+  lowerWins = false,
+): "you" | "opp" | null {
+  if (you === null || opp === null || you === opp) return null;
+  return you > opp !== lowerWins ? "you" : "opp";
+}
+
+function conversion(row: SnapshotRow | null): number | null {
+  if (!row?.break_point_opportunities) return null;
+  if (row.break_points_converted === null) return null;
+  return row.break_points_converted / row.break_point_opportunities;
+}
+
+/**
+ * The four snapshot figures for both players, with the leader of each — the
+ * report's head-to-head reading cut to the drawer's four. Break points lead
+ * on conversion rate (3/7 beats 2/9), double faults on the lower count.
+ * Null when the row's own side has nothing: the drawer then draws no section,
+ * exactly as the one-sided snapshot does.
+ */
+export function toSnapshotPair(
+  you: SnapshotRow | null,
+  opp: SnapshotRow | null,
+): SnapshotPair | null {
+  const mine = toSnapshot(you);
+  if (!mine) return null;
+  const theirs = toSnapshot(opp);
+  return {
+    you: mine,
+    opponent: theirs !== null,
+    figures: [
+      {
+        label: "1st serve in",
+        you: mine.firstServeIn,
+        opp: theirs?.firstServeIn ?? null,
+        leader: leaderOf(
+          numberOf(you?.first_serve_pct),
+          numberOf(opp?.first_serve_pct),
+        ),
+      },
+      {
+        label: "1st serve won",
+        you: mine.firstServeWon,
+        opp: theirs?.firstServeWon ?? null,
+        leader: leaderOf(
+          numberOf(you?.first_serve_won_pct),
+          numberOf(opp?.first_serve_won_pct),
+        ),
+      },
+      {
+        label: "Break points won",
+        you: mine.breakPoints,
+        opp: theirs?.breakPoints ?? null,
+        leader: leaderOf(conversion(you), conversion(opp)),
+      },
+      {
+        label: "Double faults",
+        you: mine.doubleFaults,
+        opp: theirs?.doubleFaults ?? null,
+        leader: leaderOf(
+          numberOf(you?.double_faults),
+          numberOf(opp?.double_faults),
+          true,
+        ),
+      },
+    ],
+  };
+}
+
+/**
+ * Keyed by match AND side: which row is "you" depends on `turned`, and a team
+ * row's turn can change within a session (a claim, a merge, a roster edit
+ * and `router.refresh()`), so a pair split one way must never be served the
+ * other.
+ */
+const pairCache = new Map<string, SnapshotPair | null>();
+const pairKey = (matchId: string, turned: boolean) => `${matchId}:${turned}`;
+
+/**
+ * `useMatchSnapshot`, but both seats' rows in one read, for the Matches
+ * drawer's comparison. Same caching, same `pending` rule, same RLS: the row
+ * whose `is_player1` matches the side the list row reads from
+ * (`row.is_player1 === !turned`) is "you", the other is the opponent.
+ * `forgetMatchSnapshot` drops this cache too.
+ */
+export function useMatchSnapshotPair(
+  matchId: string,
+  pending = false,
+  /** `DisplayMatch.turned`: the row reads from seat two. */
+  turned = false,
+): SnapshotPair | null | undefined {
+  const [loaded, setLoaded] = useState<{
+    id: string;
+    pair: SnapshotPair | null;
+  } | null>(null);
+  const [revision, setRevision] = useState(0);
+
+  useEffect(() => {
+    const listener = (id: string) => {
+      if (id === matchId) setRevision((r) => r + 1);
+    };
+    forgetListeners.add(listener);
+    return () => {
+      forgetListeners.delete(listener);
+    };
+  }, [matchId]);
+
+  const key = pairKey(matchId, turned);
+
+  useEffect(() => {
+    if (pairCache.has(key)) return;
+    let cancelled = false;
+
+    createClient()
+      .from("match_stats_with_percentages")
+      .select(
+        "is_player1, first_serve_pct, first_serve_won_pct, break_points_converted, break_point_opportunities, double_faults",
+      )
+      .eq("match_id", matchId)
+      .then(({ data }) => {
+        const rows = (data ?? []) as (SnapshotRow & { is_player1: boolean })[];
+        const you = rows.find((row) => row.is_player1 === !turned) ?? null;
+        const opp = rows.find((row) => row.is_player1 === turned) ?? null;
+        const pair = toSnapshotPair(you, opp);
+        if (pair || !pending) pairCache.set(key, pair);
+        if (!cancelled) setLoaded({ id: key, pair });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [key, matchId, pending, revision, turned]);
+
+  if (pairCache.has(key)) return pairCache.get(key);
+  return loaded?.id === key ? loaded.pair : undefined;
+}
+
+/** The surname a comparison column is headed by. */
+function columnName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return parts[parts.length - 1] ?? name;
+}
+
+/**
+ * The drawer's snapshot as two columns — the match report's head-to-head
+ * table (`head-to-head-table.tsx`) at the drawer's four rows: surnames
+ * right-aligned over 64px columns under a hairline, 30px rows, the label at
+ * 12px ink-600, and each figure 13px tabular, the leader's in ink-900/500 and
+ * the other in ink-500. The row's own side is the first column.
+ */
+export function SnapshotComparison({
+  pair,
+  youName,
+  oppName,
+}: {
+  pair: SnapshotPair;
+  youName: string;
+  oppName: string;
+}) {
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center border-b border-[var(--border-hairline)] pb-[11px]">
+        <span className="eyebrow-sm min-w-0 flex-1">Snapshot</span>
+        <span className="flex w-16 shrink-0 justify-end truncate text-[12px] font-medium text-[var(--ink-900)]">
+          {columnName(youName)}
+        </span>
+        <span className="flex w-16 shrink-0 justify-end truncate text-[12px] font-medium text-[var(--ink-600)]">
+          {columnName(oppName)}
+        </span>
+      </div>
+      <dl className="flex flex-col pt-1">
+        {pair.figures.map((figure) => (
+          <div key={figure.label} className="flex min-h-[30px] items-center">
+            <dt className="min-w-0 flex-1 truncate pr-3 text-[12px] text-[var(--ink-600)]">
+              {figure.label}
+            </dt>
+            <Figure value={figure.you} lead={figure.leader === "you"} />
+            <Figure value={figure.opp} lead={figure.leader === "opp"} />
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function Figure({ value, lead }: { value: string | null; lead: boolean }) {
+  return (
+    <dd
+      className="tabular m-0 w-16 shrink-0 text-right text-[13px]"
+      style={{
+        fontWeight: lead ? 500 : 400,
+        color:
+          value === null
+            ? "var(--ink-400)"
+            : lead
+              ? "var(--ink-900)"
+              : "var(--ink-500)",
+      }}
+    >
+      {value ?? "—"}
+    </dd>
+  );
 }

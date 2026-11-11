@@ -211,8 +211,10 @@ const FILTER_GROUPS: {
     // other. The list shows the whole squad — every member reads the program's
     // matches, staff and player alike — and until now the only way to read one
     // person's season was to scroll.
-    // It reads `player1` because that is always the program's side of the row:
-    // `recordResult` and the upload wizard both put the opponent in `player2`.
+    // It reads `player1` because that is the program's side of the row —
+    // `recordResult` and the wizard store it there, and `toTeamSide` turns a
+    // row that does not — plus `player2` when that seat is a teammate too
+    // (`rosterNames`).
     key: "player",
     label: "Roster",
     teamOnly: true,
@@ -225,8 +227,10 @@ const FILTER_GROUPS: {
     getValues: (matches) => {
       const byName = new Map<string, string>();
       for (const m of matches) {
-        const key = normalizedPersonName(m.player1.name);
-        if (key && !byName.has(key)) byName.set(key, m.player1.name);
+        for (const name of rosterNames(m)) {
+          const key = normalizedPersonName(name);
+          if (key && !byName.has(key)) byName.set(key, name);
+        }
       }
       return [...byName.values()].sort((a, b) =>
         normalizedPersonName(a).localeCompare(normalizedPersonName(b)),
@@ -414,6 +418,18 @@ function noopSubscribe(): () => void {
 /** A match with no analysis job, or one that has finished, has a report to read. */
 function hasReadableReport(m: DisplayMatch) {
   return !m.analysis || isAnalysisReady(m.analysis.status);
+}
+
+/**
+ * The program's players on a team row, for the Roster facet: seat one —
+ * which `toTeamSide` makes the program's side — and seat two too when it is
+ * also on the roster (a match between teammates), so filtering by either
+ * teammate finds it whichever of them the viewer's turn put first.
+ */
+function rosterNames(m: DisplayMatch): string[] {
+  return m.player2.profileId
+    ? [m.player1.name, m.player2.name]
+    : [m.player1.name];
 }
 
 export function MatchesPageContent({
@@ -618,9 +634,10 @@ export function MatchesPageContent({
           case "backhand":
             return m.player2Backhand === filter.value;
           case "player":
-            return (
-              normalizedPersonName(m.player1.name) ===
-              normalizedPersonName(filter.value)
+            return rosterNames(m).some(
+              (name) =>
+                normalizedPersonName(name) ===
+                normalizedPersonName(filter.value),
             );
           default:
             return true;

@@ -301,19 +301,36 @@ selected, no chevrons, no gutter.
   a reader already looks. **A drawer header holds navigation, position and
   dismissal only** — anything that travels somewhere belongs in the body.
 
-- **The record's name wraps; it never truncates.** A 340px rail clips plenty
-  of real names at 22px, and the answer is two lines, not a tooltip — the
-  panel scrolls anyway, and a person's name in their own drawer is as
-  essential as this surface gets ("nothing essential lives only in a
-  tooltip", Empty State). The identity row is therefore `items-start`, so the
+- **The record's name wraps; it never truncates.** The name is 16/400 ink-900
+  (2026-11-10, design owner's call) — the player drawer's and the profile
+  rail's `PlayerIdentity`, and the match drawer's full-name title — and a
+  long one takes two lines, not a tooltip: the panel scrolls anyway, and a
+  person's name in their own drawer is as essential as this surface gets
+  ("nothing essential lives only in a tooltip", Empty State); a single
+  unbroken word breaks inside itself (`overflow-wrap:anywhere`) rather than
+  running out of the rail. The identity row is therefore `items-start`, so the
   avatar stays level with the first line rather than centring against a block
   that grew. The table row is the opposite case and truncates bare: 52px
   cannot give the height, and this drawer is the one click that shows the
-  name whole.
-- **Player body:** identity → six-match sparkline with a stat header → four
-  24px stat pills that switch the chart → three recent matches as record rows
-  (with chevrons — these navigate) → Upload. Upload is never event-level.
-  **With no measured figure the chart and the pills are absent, not empty.**
+  name whole. _Supersedes (2026-11-10): "A 340px rail clips plenty of real
+  names at 22px, and the answer is two lines, not a tooltip" — the drawer
+  name was `.text-title-lg` (24/300), larger than the same player's name on
+  their profile rail; one shared block at one size replaced both._
+- **Player body:** identity (`PlayerIdentity`: 40px avatar, the name with the
+  Coach-managed glyph and the viewer's `You` pill beside it, the facts line,
+  then Record + form and Plays — the profile rail's block, so a player reads
+  the same in both) → the four measures as one selector ABOVE the sparkline
+  they switch, each with its figure (`MeasureSelector`, shared with both
+  Opponents drawers) → the chart under a header that says only what the
+  selector does not (the full label, "Last N", the change; no date row — the
+  dates are the chart's hover and the list below) → four recent matches as
+  record rows (with chevrons — these navigate) → one footer button: Upload,
+  or "Open profile" for a viewer who cannot upload. Upload is never
+  event-level. _Supersedes (2026-11-10): "identity → six-match sparkline with
+  a stat header → four 24px stat pills that switch the chart → three recent
+  matches as record rows (with chevrons — these navigate) → Upload."_
+  **With no measured figure the selector and the chart are absent, not
+  empty.**
   Gate on "is there a value", never on "has matches" — a player whose only
   match is still analysing has a row and no numbers, which is the same
   nothing to chart. Left in, the header read "—", the sparkline drew empty
@@ -331,13 +348,26 @@ selected, no chevrons, no gutter.
   4×18px outcome ticks (singles · gap · doubles) → all nine lines at 36px as
   record rows ("Awaiting result" lines have no chevron; an unset line is a
   blue "+ Set line" row) → Enter results.
-- **Match body** (Matches page only): the match's name as the report link
-  ("Player vs Opponent" on a team, "vs Opponent" personal; wraps) over event ·
-  round → `ResultMark` + 16px score on a fixed 20px line (the tiebreak digit
-  must not raise the line box, or the glyph sits high) and a nowrap glyph row
-  (date · duration · surface) → the analysis state when there is one →
-  four snapshot figures once numbers exist, absent before → on a team match,
-  the scheduled line it counts toward, as one record row. **Footer: a ghost
+- **Match body** (Matches page only, 2026-11-10): both players' full names
+  as the report link (wraps), over one "date · event · round" line (a match
+  with no event says a muted "No event") → the match report's own
+  `RailScoreboard` (`bare`, via `drawer-scoreboard.ts`), so the drawer and the
+  page draw one scoreboard — absent while the match analyses → the analysis
+  state when there is one → the four snapshot figures for both players as
+  the report's head-to-head rows (`SnapshotComparison`: surnames over 64px
+  columns, the leader ink-900/500; break points lead on conversion rate,
+  double faults on the lower count), or the one-sided figures when the
+  opponent has none → the icon fact rows the match has (court · home/away ·
+  provider · on a team match its scheduled line, the one row with a
+  chevron); an empty fact is left out, never "Not specified". Seat one is the
+  side the row reads from — the viewer on a personal list, the program's
+  player on a team one (`toTeamSide`) — the seat the report calls "you".
+  _Supersedes (2026-11-10): "the match's name as the report link ("Player vs
+  Opponent" on a team, "vs Opponent" personal; wraps) over event · round →
+  `ResultMark` + 16px score on a fixed 20px line … and a nowrap glyph row
+  (date · duration · surface) → the analysis state when there is one → four
+  snapshot figures once numbers exist, absent before → on a team match, the
+  scheduled line it counts toward, as one record row."_ **Footer: a ghost
   "Open match" for every viewer, always**, with the one primary under it only
   when an action applies ("Try again" on a failed analysis, for its uploader).
   The ghost is keyed to nothing: gating it on a missing permission leaves a

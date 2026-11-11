@@ -1,5 +1,6 @@
 "use client";
 
+import { CoachManagedMark } from "@/components/ui/coach-managed-mark";
 import Link from "next/link";
 import { useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -587,8 +588,8 @@ function MemberRow({
       <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
 
       {/* One width for every row, so Record starts at the same x on each. The cell
-          shares its width with a "Coach-managed" pill; the name truncates
-          before it, never the pill. */}
+          shares its width with the Coach-managed glyph; the name truncates
+          before it, never the glyph. */}
       <span className={cn(COL.player, "flex items-center gap-2.5")}>
         <PlayerMark
           name={member.name}
@@ -625,10 +626,11 @@ function MemberRow({
           {/* Back after the Tb4 distillation dropped it: which rows have no
               login decides who can be invited to claim and whose video only
               staff can send, and a coach scans for it. Staff only — to a
-              teammate it says nothing they can act on. Grey, because `You`
-              and "New" are the only identity pills and neither is this. */}
+              teammate it says nothing they can act on. The glyph, not a
+              pill: it costs the row 14px instead of 88, and the name
+              truncates before it, never the glyph. */}
           {canManage && member.managedBy === "coach" && (
-            <StatePill className="shrink-0">Coach-managed</StatePill>
+            <CoachManagedMark focusable={false} />
           )}
         </span>
       </span>

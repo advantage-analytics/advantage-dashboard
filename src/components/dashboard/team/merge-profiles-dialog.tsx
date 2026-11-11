@@ -1,5 +1,6 @@
 "use client";
 
+import { CoachManagedGlyph } from "@/components/ui/coach-managed-mark";
 import { useEffect, useState, useTransition } from "react";
 import {
   BarChart3,
@@ -210,9 +211,17 @@ export function MergeProfilesDialog({
                     {member.name}
                   </span>
                   <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-600)]">
-                    {member.managedBy === "self"
-                      ? "Self-managed"
-                      : "Coach-managed"}{" "}
+                    {/* The words stay: Self- vs Coach-managed is exactly
+                        what is compared to choose which profile survives.
+                        The glyph joins them, silent, inside the radio. */}
+                    {member.managedBy === "self" ? (
+                      "Self-managed"
+                    ) : (
+                      <>
+                        <CoachManagedGlyph className="mr-1 inline align-[-2px]" />
+                        Coach-managed
+                      </>
+                    )}{" "}
                     · <span className="tabular">{member.matchesPlayed}</span>{" "}
                     {member.matchesPlayed === 1 ? "match" : "matches"}
                     <br />
