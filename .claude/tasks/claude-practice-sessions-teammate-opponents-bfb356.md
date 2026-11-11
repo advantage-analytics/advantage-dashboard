@@ -100,7 +100,7 @@ ready).
 
 ## T7 · Leave practice and teammates out of both Opponents pages
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess) `src/lib/data/opponents-load.ts` (`loadPersonalOpponents` ~150, `loadTeamOpponents` ~253, both column lists), `personal-opponents.ts`, `team-opponents.ts`, `opponents-server.ts` (`headToHeadRows` ~203, `opponentPlayerMatches`, `getOpponentsPlayed`, `getOpponentDetail`, `getOpponentPlayerProfile`); `tests/personal-opponents.spec.ts`, `tests/team-opponents.spec.ts`, `tests/team-opponent-scope.spec.ts`

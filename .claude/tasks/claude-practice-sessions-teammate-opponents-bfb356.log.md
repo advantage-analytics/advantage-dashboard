@@ -72,3 +72,12 @@ is the runner's. Newest entries at the bottom.
 3. `getPlayerAverageStats` has no caller in `src/`; possibly dead.
 4. The home-insight prompt's "Matches recorded: N" now means competitive matches; the wording could say so.
 5. The serves fallback's `limit(50)` would show an empty preview after 50+ consecutive practice rows.
+
+## T7 · Leave practice and teammates out of both Opponents pages — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4737 passed, shard 2/2 5136 passed. Completion VERDICT: pass.
+**changed:** `opponents-load.ts` selects `match_type` and drops practice (`competitiveOnly`, via `isPracticeMatch`) before the statistics read and grouping in both loaders, and passes `player2_id` to the team grouper; `team-opponents.ts` `groupTeamOpponents` skips any match whose `opponent_player_id` or `player2_id` resolves to the program's roster, whatever the match type, without counting it unattributed; `opponents-server.ts` `headToHeadRows` / `opponentPlayerMatches` drop practice and the detail / opponent-player reads select `match_type`. The MCP `opponent_scouting` tool inherits it through the shared loaders, nothing under `src/lib/services/mcp/` changed. New `tests/opponents-practice-excluded.spec.ts` (13 tests).
+**follow-ups:**
+
+1. `headToHeadRows` callers in `src/lib/schedule/actions.ts` (~250) and `src/lib/wizard/actions.ts` (~593) don't select `match_type`, so their prior-meeting counts still include practice; add the column, then make the field required.
+2. The teammate test reads player-role roster rows only; staff ids are not treated as teammates.

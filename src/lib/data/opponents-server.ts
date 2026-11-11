@@ -10,6 +10,7 @@ import {
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import type {
   ProgramSearchResult,
   ProgramStatus,
@@ -181,6 +182,14 @@ function toProgram(row: DbProgramRow, selfId: string): ConferenceProgram {
 interface OpponentAttributedRow {
   opponent_player_id: string | null;
   player2_name: string | null;
+  /**
+   * `matches.match_type`. A Practice row is never a meeting: practice does not
+   * count toward a head-to-head (product decision), so both helpers drop it.
+   * Optional only so the wizard's and the schedule's "prior meetings" reads,
+   * which do not select it yet, keep their row shapes; every read in this file
+   * selects it.
+   */
+  match_type?: string | null;
 }
 
 /**
@@ -199,6 +208,8 @@ interface OpponentAttributedRow {
  * A nameless row matches nobody. `normalizedPersonName` returns `""` for null,
  * and `"" === ""` would file a match with no opponent name under a roster
  * player with no name.
+ *
+ * A practice row matches nobody either — see `OpponentAttributedRow.match_type`.
  */
 export function headToHeadRows<T extends OpponentAttributedRow>(
   rows: T[],
@@ -209,6 +220,7 @@ export function headToHeadRows<T extends OpponentAttributedRow>(
     roster.map((p) => normalizedPersonName(p.name)).filter(Boolean),
   );
   return rows.filter((m) => {
+    if (isPracticeMatch(m.match_type)) return false;
     if (m.opponent_player_id) return rosterIds.has(m.opponent_player_id);
     const typed = normalizedPersonName(m.player2_name);
     return typed !== "" && rosterNames.has(typed);
@@ -221,7 +233,7 @@ export function headToHeadRows<T extends OpponentAttributedRow>(
  * The name fallback is confined to rows carrying no identity at all, so a match
  * explicitly attributed to somebody else can never be pulled in by a namesake.
  * Same normalization on both sides as `headToHeadRows`, and the same refusal to
- * let two blanks count as a match.
+ * let two blanks count as a match, and the same exclusion of practice.
  */
 export function opponentPlayerMatches<T extends OpponentAttributedRow>(
   rows: T[],
@@ -231,10 +243,11 @@ export function opponentPlayerMatches<T extends OpponentAttributedRow>(
   const wanted = normalizedPersonName(playerName);
   return rows.filter(
     (m) =>
-      m.opponent_player_id === playerId ||
-      (m.opponent_player_id === null &&
-        wanted !== "" &&
-        normalizedPersonName(m.player2_name) === wanted),
+      !isPracticeMatch(m.match_type) &&
+      (m.opponent_player_id === playerId ||
+        (m.opponent_player_id === null &&
+          wanted !== "" &&
+          normalizedPersonName(m.player2_name) === wanted)),
   );
 }
 
@@ -445,7 +458,7 @@ export const getOpponentDetail = cache(async function getOpponentDetail(
       }),
       supabase
         .from("matches")
-        .select("id, player2_name, score, date, opponent_player_id")
+        .select("id, player2_name, score, date, opponent_player_id, match_type")
         .eq("program_id", programId)
         .order("date", { ascending: false, nullsFirst: false }),
     ]);
@@ -532,6 +545,7 @@ export const getOpponentDetail = cache(async function getOpponentDetail(
       score: MatchScore | null;
       date: string;
       opponent_player_id: string | null;
+      match_type: string | null;
     }[],
     roster,
   ).map((m) => ({
@@ -620,10 +634,12 @@ export const getOpponentPlayerProfile = cache(
     // `teammates.ts`). `player2_id` is safe there because a program member
     // already reads the program's matches — it adds their seat, not access —
     // and this read is unchanged: it still finds them by `opponent_player_id`.
+    // That set is a practice, so `opponentPlayerMatches` drops it with every
+    // other practice row: nothing here is a meeting unless it was competitive.
     const { data: matchRows } = await supabase
       .from("matches")
       .select(
-        "id, opponent_player_id, player2_name, date, opponent_hand, opponent_backhand",
+        "id, opponent_player_id, player2_name, date, opponent_hand, opponent_backhand, match_type",
       )
       .eq("program_id", programId)
       .order("date", { ascending: false, nullsFirst: false });
@@ -636,6 +652,7 @@ export const getOpponentPlayerProfile = cache(
         date: string;
         opponent_hand: string | null;
         opponent_backhand: string | null;
+        match_type: string | null;
       }[],
       playerId,
       name,
