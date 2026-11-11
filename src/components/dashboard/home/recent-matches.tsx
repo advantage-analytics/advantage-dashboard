@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { ResultMark } from "@/components/dashboard/result-mark";
+import { EmptyMark } from "@/components/ui/empty-mark";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
   ANALYSIS_LABEL,
@@ -76,19 +78,36 @@ function StatCell({
   );
 }
 
-function MatchLink({ match }: { match: MatchRow }) {
+function MatchLink({
+  match,
+  practice = false,
+}: {
+  match: MatchRow;
+  /** A practice session decides nothing: no outcome glyph, no "def."/"l.". */
+  practice?: boolean;
+}) {
   return (
     <Link
       href={`/dashboard/matches/${match.id}`}
-      aria-label={`${match.won ? "Win" : "Loss"} vs ${match.opponentName}, ${formatScoreText(match.score)}`}
+      aria-label={`${practice ? "Practice" : match.won ? "Win" : "Loss"} vs ${match.opponentName}, ${formatScoreText(match.score)}`}
       className="-mx-3 flex min-h-[52px] items-center gap-4 rounded-[var(--radius-element)] px-3 py-[5px] transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:outline-none"
     >
-      <ResultMark won={match.won} className="shrink-0" />
+      {practice ? (
+        /* The em dash in the glyph's 14px slot, so a practice row's name and
+           score stay on the columns the decided rows beside it use. */
+        <span className="flex w-3.5 shrink-0 items-center">
+          <EmptyMark label="Practice, no result" />
+        </span>
+      ) : (
+        <ResultMark won={match.won} className="shrink-0" />
+      )}
 
       <span className="w-[170px] shrink-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
-        <span className="font-normal text-[var(--ink-600)]">
-          {match.won ? "def. " : "l. "}
-        </span>
+        {practice ? null : (
+          <span className="font-normal text-[var(--ink-600)]">
+            {match.won ? "def. " : "l. "}
+          </span>
+        )}
         {match.opponentName}
       </span>
 
@@ -187,23 +206,30 @@ const MatchRowItem = memo(function MatchRowItem({
   isNew,
   newIndex,
   baseDelay = 0,
+  practice = false,
 }: {
   match: MatchRow;
   isNew: boolean;
   newIndex: number;
   baseDelay?: number;
+  practice?: boolean;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const inFlight = !!match.analysisStatus;
   const link = inFlight ? (
     <InFlightLink match={match} />
   ) : (
-    <MatchLink match={match} />
+    <MatchLink match={match} practice={practice} />
   );
 
   if (!isNew) return link;
 
-  const tint = match.won ? "rgba(93,185,85,0.06)" : "rgba(229,24,55,0.06)";
+  // No win/loss wash for a row with no outcome.
+  const tint = practice
+    ? "transparent"
+    : match.won
+      ? "rgba(93,185,85,0.06)"
+      : "rgba(229,24,55,0.06)";
   const delay = baseDelay + newIndex * 0.08;
 
   return (
@@ -274,6 +300,7 @@ export default function RecentMatches({
     links[next]?.focus();
   }, []);
 
+  const isPractice = isPracticeMatch(event.matchType);
   const rowBaseDelay = isNewEvent ? 0.3 : 0;
   let newIndex = 0;
 
@@ -291,9 +318,11 @@ export default function RecentMatches({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE_OUT }}
       >
-        {event.tournamentName ? (
+        {event.tournamentName || isPractice ? (
+          // A practice session filed with no event is the occasion, not an
+          // absence: "Practice" in the name's own ink. A named event wins.
           <p className="text-[12px] font-medium text-[var(--ink-900)]">
-            {event.tournamentName}
+            {event.tournamentName || "Practice"}
           </p>
         ) : (
           <p
@@ -328,6 +357,7 @@ export default function RecentMatches({
               isNew={isNew}
               newIndex={staggerIdx}
               baseDelay={rowBaseDelay}
+              practice={isPractice}
             />
           );
         })}

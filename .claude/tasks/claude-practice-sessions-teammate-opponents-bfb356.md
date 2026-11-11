@@ -182,7 +182,7 @@ ready).
 
 ## T13 · Home recent matches: practice rows
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** (guess) `src/components/dashboard/home/recent-matches.tsx` (~295–310); a spec beside `tests/home-empty-loading.spec.ts`

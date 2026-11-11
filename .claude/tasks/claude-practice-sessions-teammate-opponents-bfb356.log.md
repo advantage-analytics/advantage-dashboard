@@ -133,3 +133,12 @@ is the runner's. Newest entries at the bottom.
 4. Sorting by Result still orders practice rows by their stored winner.
 5. `EmptyMark` draws the dash in `--ink-400`; the canvas had `--ink-300` (kept the shared primitive).
 6. The `?rosterPlayer=` cut does not turn a seat-two row to that player's side (the open part of blocked T9).
+
+## T13 · Home recent matches: practice rows — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4757 passed, shard 2/2 5156 passed. Completion VERDICT: pass. Widget-states: row rendering only — no loader, Suspense region or empty-state path changed.
+**changed:** `recent-matches.tsx` reads `isPracticeMatch(event.matchType)` once per group: a practice group with no event shows "Practice" in the event ink (a named event wins); its rows draw `EmptyMark` ("Practice, no result") in the result slot instead of `ResultMark`, drop the "def. / l." prefix and the win/loss tint, and say "Practice vs …" in the aria-label. New `tests/home-recent-practice-rows.spec.ts` (4 tests).
+**follow-ups:**
+
+1. `MatchRow` has no per-match type, so a group's practice flag comes from its first match; add a `practice` flag to `MatchRow` in `home-recent-data.ts` to make mixed groups exact.
+2. `MatchMetadataRow` still compares `matchType === "Practice"` literally; switch it to `isPracticeMatch`.
