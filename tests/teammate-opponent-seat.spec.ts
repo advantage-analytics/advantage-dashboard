@@ -405,9 +405,9 @@ test("a parsed file never renames a teammate opponent", () => {
   // The seat names the teammate; a re-parsed export's opponent name would
   // otherwise sit beside it in `player2_name`.
   const hook = read(`${WIZARD}/useUploadMatchWizard.ts`);
-  const start = hook.indexOf("opponentName:\n                  (eventOwns ||");
-  expect(start).toBeGreaterThan(-1);
-  expect(hook.slice(start, start + 200)).toContain(
-    'prev.opponentSource === "teammate"',
+  // The file's opponent name is taken only when nothing owns the name.
+  const owns = hook.match(
+    /opponentName:\s*\(eventOwns \|\|\s*prev\.opponentSource === "event" \|\|\s*prev\.opponentSource === "teammate"\) &&\s*prev\.opponentName\.trim\(\)\s*\? prev\.opponentName\s*: parseResult\.data\?\.opponentName/,
   );
+  expect(owns).not.toBeNull();
 });
