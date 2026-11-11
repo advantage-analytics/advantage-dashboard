@@ -173,7 +173,14 @@ master-detail split is retired; its detail is the peek drawer below.
    in words — plain phrases joined by middots, each starting with a capital
    ("Reid serving · Second serve · Break point", sentence case per segment,
    2026-09-30) · middot · "N of M" · one quiet "Clear filter" —
-   **never chips, never a badge**. Engaged trigger uses the nav-active
+   **never chips, never a badge**. Build it with `AppliedFilterStrip`
+   (`src/components/dashboard/shared/applied-filter-strip.tsx`) — the one
+   strip, behind Matches, Opponents, Schedule, the Video tab and the
+   Visualizations lightbox; never hand-copy its markup. It stays mounted and
+   **unfolds in / folds out** with the inline-row reveal
+   ([foundations.md › Standard Motions](foundations.md#standard-motions-framer-motion)),
+   so the table below eases rather than jumping by the strip's height; pass
+   the gap it sits in. It keeps its words through the fold. Engaged trigger uses the nav-active
    grammar (surface-subtle wash + ink-900, no border/dot/count). Lifecycle
    pills stay independent of the panel — a filter cut is not a lifecycle
    bucket. Pagination reads against the filtered set ("4 of 4 in this

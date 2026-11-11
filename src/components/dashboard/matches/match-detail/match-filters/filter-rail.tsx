@@ -81,6 +81,12 @@ interface FilterRailValue {
    * travels through context into a render.
    */
   registerTrigger: (element: HTMLButtonElement | null) => void;
+  /**
+   * Focus the registered trigger, if it is on the page; returns whether
+   * focus landed there. The applied strip's "Clear filter" hands focus back
+   * to it (`AppliedFilterStrip`'s `focusAfterClear`).
+   */
+  focusTrigger: () => boolean;
 }
 
 const FilterRailContext = createContext<FilterRailValue | null>(null);
@@ -97,6 +103,12 @@ export function FilterRailProvider({ children }: { children: ReactNode }) {
   const finish = useCallback(() => dispatch("closed"), []);
   const registerTrigger = useCallback((element: HTMLButtonElement | null) => {
     triggerRef.current = element;
+  }, []);
+  const focusTrigger = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger?.isConnected) return false;
+    trigger.focus({ preventScroll: true });
+    return document.activeElement === trigger;
   }, []);
   // Focus that was inside the rail goes back to the button that opened it,
   // rather than to <body> when the rail's subtree leaves the DOM. After the
@@ -124,8 +136,9 @@ export function FilterRailProvider({ children }: { children: ReactNode }) {
       reset,
       finish,
       registerTrigger,
+      focusTrigger,
     }),
-    [phase, toggle, close, reset, finish, registerTrigger],
+    [phase, toggle, close, reset, finish, registerTrigger, focusTrigger],
   );
 
   // State only: the drawer itself is `FilterRail`, which `FilmRoom` renders
@@ -142,6 +155,7 @@ const INERT: FilterRailValue = {
   reset: noop,
   finish: noop,
   registerTrigger: noop,
+  focusTrigger: () => false,
 };
 
 /** The rail's state. Without a provider (a harness, an offline spec): shut, and nothing opens it. */

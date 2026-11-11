@@ -82,7 +82,7 @@ import {
 } from "./court-geometry";
 import type { PanZoom } from "./pan-zoom";
 import { LIGHTBOX_BOX_CLASS } from "./lightbox-frame";
-import { prefersReducedMotion } from "./use-reduced-motion";
+import { prefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
 
 /** Open: the arrival curve and length (`animate.md`: 300–500ms for an
  *  overlay, ease-out-expo-like for arrivals). */

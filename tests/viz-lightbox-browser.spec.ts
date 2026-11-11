@@ -1705,7 +1705,7 @@ test("R7·2 · a stage that resizes keeps a zoomed, panned court: the filter str
   await expect
     .poll(async () => (await stage.boundingBox())!.height)
     .not.toBe(s.height);
-  // The strip unfolds (`.viz-filter-strip-reveal`), so the stage shrinks
+  // The strip unfolds (`.filter-strip-reveal`), so the stage shrinks
   // over a few frames: read it once it has come to rest.
   await expect
     .poll(() => page.evaluate(() => document.getAnimations().length))

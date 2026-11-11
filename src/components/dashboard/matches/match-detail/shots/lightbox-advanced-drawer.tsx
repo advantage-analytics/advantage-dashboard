@@ -13,7 +13,7 @@ import {
 } from "../match-filters/filter-sheet";
 import type { FilterRailPhase } from "../match-filters/rail-state";
 import { LightboxAdvancedPanel } from "./lightbox-advanced-panel";
-import { prefersReducedMotion } from "./use-reduced-motion";
+import { prefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
 import { COUNT_NOUN, type LightboxAdvancedFilters } from "./lightbox-filters";
 import type { Cut, VizFilters, VizResult } from "./viz-model";
 

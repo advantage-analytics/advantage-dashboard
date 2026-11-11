@@ -1199,6 +1199,7 @@ function FilmRoom({
         names={filmStripNames}
         shown={filteredPoints.length}
         total={points.length}
+        focusAfterClear={filterRail.focusTrigger}
       />
       <div
         ref={clockRef}
