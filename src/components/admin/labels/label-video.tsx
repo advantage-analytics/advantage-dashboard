@@ -566,13 +566,9 @@ export const LabelVideoPlayer = forwardRef<
           className="absolute inset-0"
         />
 
-        {/* The read-ahead: never shown, never played, same URL. No `src`
-            until the film is playable: the element opens its own connection
-            to storage, and Safari allows about six per host. Two per console
-            from the first second starved a newly opened one with a few
-            consoles and match pages up — header read, then "buffering"
-            forever. The read-ahead effect below aims it in the same commit
-            that gives it the URL. */}
+        {/* The read-ahead: never shown, never played, same URL. No `src` until
+            the film is playable: each element holds its own connection to
+            storage and Safari allows about six per host. */}
         <video
           ref={readAheadRef}
           src={ready ? video.url : undefined}

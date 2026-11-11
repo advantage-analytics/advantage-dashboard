@@ -303,9 +303,7 @@ test.describe("the player's film", () => {
     expect(live.slice(0, live.indexOf(">") + 1)).not.toContain("inert");
   });
 
-  // Each element holds its own connection to storage and Safari allows about
-  // six per host: a read-ahead loading from the first second starved newly
-  // opened consoles once a few were up.
+  // Safari allows about six connections per host, one per <video>.
   test("the read-ahead opens no connection until the film can play", () => {
     const pending = tag(render(), "data-label-video-read-ahead");
     expect(pending).not.toContain("src=");
