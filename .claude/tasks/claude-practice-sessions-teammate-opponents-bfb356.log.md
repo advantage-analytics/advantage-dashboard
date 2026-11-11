@@ -183,3 +183,11 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4775 passed, shard 2/2 5175 passed. Completion VERDICT: pass.
 **changed:** `OpponentAttributedRow.match_type` is now required (`string | null`); `opponentRosterForLine` (`src/lib/wizard/actions.ts`) and `opponentRosterForDual` (`src/lib/schedule/actions.ts`) select `match_type`, so their prior-meeting counts leave practice out; `tests/person-name-matching.spec.ts`'s `row` builder supplies it and a new test pins the drop. `headToHeadRows` / `opponentPlayerMatches` unchanged.
+
+## T18 · Shared report: Teammate pill and two-name notice — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4778 passed, shard 2/2 5177 passed. Completion VERDICT: pass.
+**changed:** `match-detail-server.ts` exports `resolveOpponentPlayerOnRoster`; `match-share-server.ts` calls it inside the existing `Promise.all` and sets `match.opponentIsTeammate` with the shared `opponentIsTeammate` rule, oriented by its own transform. No UI file changed. New `tests/match-share-practice.spec.ts` (5 tests).
+**follow-ups:**
+
+1. Eyes-on `/m/[token]` for a teammate practice at /pr-check (the spec pins the loader, not the share page wrapper).

@@ -248,7 +248,7 @@ ready).
 
 ## T18 · Shared report: Teammate pill and two-name notice
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/lib/data/match-share-server.ts` (`getSharedMatchData` ~609–712: the `Promise.all` and the `transformDbMatchToMatch` call), `src/lib/data/match-detail-server.ts` (`opponentIsTeammate` ~174; `resolveOpponentPlayerOnRoster` ~198 is not exported yet); new spec in the `serverLoader.load` style of `tests/match-report-practice.spec.ts`
 - **routes:** /m/[token]

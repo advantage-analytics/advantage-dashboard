@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { lazyAdminClient } from "@/lib/supabase/admin";
 import {
   MATCH_DETAIL_COLUMNS,
+  opponentIsTeammate,
   resolveAnalysedWindowSeconds,
+  resolveOpponentPlayerOnRoster,
   resolveRosterSeatIds,
   setSeatCrests,
   transformDbMatchToMatch,
@@ -658,6 +660,7 @@ export const getSharedMatchData = cache(
       bandSettings,
       videoAllowed,
       jobs,
+      opponentPlayerOnRoster,
     ] = await Promise.all([
       getMatchStatisticsFromSupabase(matchId, admin),
       getMatchPointsFromSupabase(matchId, admin, { includeBookmarks: false }),
@@ -686,6 +689,10 @@ export const getSharedMatchData = cache(
       // The job's state, read as the dashboard reads it — never reaped or
       // reconciled from here: an anonymous page view must not move a job.
       loadMatchAnalysis(admin, [matchId]),
+      // The Teammate pill and the two-name practice notice: an existence read
+      // on the match's own roster, spent only when `opponent_player_id` is not
+      // already a seat. Only the boolean leaves this loader.
+      resolveOpponentPlayerOnRoster(admin, dbRow),
     ]);
 
     // A failed points read is unknown, not zero points: same as every other
@@ -710,6 +717,14 @@ export const getSharedMatchData = cache(
       sharerIds,
       profiles,
       rosterIds,
+    );
+    // Oriented by the sharer's `isUserPlayer1` the transform just decided, as
+    // `loadMatchDetail` does for the dashboard.
+    match.opponentIsTeammate = opponentIsTeammate(
+      dbRow,
+      match.isUserPlayer1,
+      rosterIds,
+      opponentPlayerOnRoster,
     );
     setSeatCrests(match, dbRow, admin);
     // No "Unknown Event" on a public page: the facts line, the preview card

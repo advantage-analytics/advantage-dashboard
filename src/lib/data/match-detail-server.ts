@@ -194,7 +194,7 @@ export function opponentIsTeammate(
  * for the one case the seat roster read cannot answer: an id that is not
  * also a seat. Resolves to false without a round trip otherwise.
  */
-async function resolveOpponentPlayerOnRoster(
+export async function resolveOpponentPlayerOnRoster(
   supabase: SupabaseClient,
   row: Pick<
     DbMatch,
