@@ -191,3 +191,15 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Eyes-on `/m/[token]` for a teammate practice at /pr-check (the spec pins the loader, not the share page wrapper).
+
+## T19 · Check player2_id against the program roster — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4779 passed, shard 2/2 5186 passed (live-DB spec skipped against production by design). Completion VERDICT: pass (body diffed against live `pg_get_functiondef`: only the two new blocks differ).
+**changed:** new `supabase/migrations/20261111073000_matches_player2_roster_check.sql` — `create or replace` of `public.matches_block_client_regraft()` adding insert and update `player2_id` roster arms (same two `not exists` arms as `player1_id`, errcode 42501, program matches only) and `create or replace trigger` with `player2_id` in `UPDATE OF`; security definer, `search_path ''`, no grants. New `tests/matches-player2-roster-migration.spec.ts` (offline, 10 tests, incl. an md5 pin of the unchanged body) and `tests/matches-player2-roster-check.spec.ts` (live-DB, 7 tests); `tests/fixtures/live-db-specs.ts` registers it.
+**follow-ups:**
+
+1. **Not applied:** apply the migration to the live project after review, then re-read `pg_get_functiondef`, `pg_get_triggerdef` and `proacl` (ACL should stay `postgres` + `service_role`). Against a non-production target the live spec's refusal tests fail until it is applied there.
+2. The offline md5 pin goes stale when this function next changes; that migration must move or retire it.
+3. A seated teammate later removed from the roster keeps the seat (only changes are checked); decide whether roster removal clears `player2_id`.
+4. Both arms accept archived/merged `program_players` rows, like the existing `player1_id` arm.
+5. Check `ask_patch_match` (MCP `update_match`) never writes `player2_id`, or it will hit this trigger.

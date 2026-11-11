@@ -261,7 +261,7 @@ ready).
 
 ## T19 · Check player2_id against the program roster
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) new `supabase/migrations/<timestamp>_matches_player2_roster_check.sql`; a live-DB spec beside `tests/rls-workspace-isolation.spec.ts` / `tests/upload-eligibility.spec.ts` (both already exercise this trigger), using `tests/fixtures/live-db.ts`
 - **done when:**
