@@ -38,6 +38,7 @@ import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { advButton } from "@/lib/ui/adv-button";
 import { capitalize, cn } from "@/lib/utils";
 import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import {
   DRAWER_RAIL,
   DrawerScrim,
@@ -156,6 +157,10 @@ export function MatchDrawer({
   const schedule = useScheduleLink(match.id, scope);
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
+  const isPractice = isPracticeMatch(match.matchType);
+  // The Event fact's own name, if any; a practice session without one reads
+  // as practice rather than "No event" (the Matches list's Event cell).
+  const eventName = match.tournamentName || schedule?.name;
   const title = `${drawerSideName(match.player1.name)} vs ${drawerSideName(match.player2.name)}`;
   // This drawer's access-control clause is canManage: it decides who reads the
   // stopped step's body and note, and who gets its action.
@@ -239,6 +244,7 @@ export function MatchDrawer({
           title={title}
           won={match.score.winner === "player1"}
           sets={settled ? match.score.sets : []}
+          practice={isPractice}
         />
 
         <div className="flex min-w-0 flex-col gap-2">
@@ -271,10 +277,10 @@ export function MatchDrawer({
             </DrawerFact>
             <DrawerFact
               label="Event"
-              muted={!match.tournamentName && !schedule?.name}
+              muted={!eventName && !isPractice}
               icon={<Trophy />}
             >
-              {match.tournamentName || schedule?.name || "No event"}
+              {eventName || (isPractice ? "Practice" : "No event")}
               {match.round && (
                 <span className="ml-1 text-[11px] text-[var(--ink-500)]">
                   {match.round}

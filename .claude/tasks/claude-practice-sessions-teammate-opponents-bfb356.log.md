@@ -164,3 +164,12 @@ is the runner's. Newest entries at the bottom.
 1. The rail's "N matches" now excludes practice while the linked Matches list shows practice too; `practiceCount` is available if the rail should state the split.
 2. The `?rosterPlayer=` Matches cut does not turn a seat-two row to that player's side (needs a turn that keeps `id`/`profileId` and never flips an undecided score).
 3. `opponentOnRoster` is true for any roster id, staff included.
+
+## T15 · Match drawer: practice treatment — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4774 passed, shard 2/2 5174 passed. Completion VERDICT: pass. Widget-states: heading/fact rendering only; no loader, Suspense or empty-state path.
+**changed:** `drawer-sections.tsx` `DrawerHeading` gains optional `practice` (default false) and draws `EmptyMark` "Practice, no result" in place of `ResultMark`, `ScoreLine` kept; `match-drawer.tsx` tests `isPracticeMatch(match.matchType)`, passes it, and the Event fact reads "Practice" (not muted) when there is no event or schedule name. `event-line-drawer.tsx` untouched. New `tests/match-drawer-practice.spec.ts` (8 tests).
+**follow-ups:**
+
+1. The drawer's ⋯ menu label falls back to "A vs B" for a practice with no event; "Practice" might read better.
+2. The drawer still draws no Teammate pill (out of scope by the task).

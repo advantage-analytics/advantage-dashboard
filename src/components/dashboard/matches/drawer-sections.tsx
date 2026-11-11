@@ -20,6 +20,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { ScoreLineSet } from "@/lib/ui/score-format";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
+import { EmptyMark } from "@/components/ui/empty-mark";
 import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
 import {
   LABEL_INK,
@@ -140,6 +141,10 @@ export function ProviderFact({
  * The drawer's title — the abbreviated match name, linking to its report —
  * and, under it, the outcome and score. Pass no `sets` (an empty list) while
  * the match has no numbers to show; the score row is then absent.
+ *
+ * `practice` swaps the outcome glyph for the Matches list's em dash — a
+ * practice session decides nothing — and keeps the score beside it. Optional
+ * and off by default, so the schedule's line drawer draws as before.
  */
 export function DrawerHeading({
   href,
@@ -147,6 +152,7 @@ export function DrawerHeading({
   title,
   won,
   sets,
+  practice = false,
 }: {
   href: string;
   /** The link's accessible name — the full, unabbreviated match name. */
@@ -155,6 +161,8 @@ export function DrawerHeading({
   title: string;
   won: boolean | null;
   sets: ScoreLineSet[];
+  /** A practice session: no outcome to mark, so the em dash stands in. */
+  practice?: boolean;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-2.5">
@@ -169,7 +177,11 @@ export function DrawerHeading({
       </h2>
       {sets.length > 0 && (
         <div className="flex h-5 items-center gap-2">
-          <ResultMark won={won} />
+          {practice ? (
+            <EmptyMark label="Practice, no result" />
+          ) : (
+            <ResultMark won={won} />
+          )}
           <ScoreLine
             sets={sets}
             className="block text-[16px] leading-5 text-[var(--ink-900)] [&>span[aria-hidden=true]]:leading-[0]"

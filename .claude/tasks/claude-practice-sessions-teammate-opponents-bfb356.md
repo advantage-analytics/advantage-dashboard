@@ -210,7 +210,7 @@ ready).
 
 ## T15 · Match drawer: practice treatment
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/components/dashboard/matches/match-drawer.tsx` (`DrawerHeading` call ~236, Event `DrawerFact` ~272–283), `src/components/dashboard/matches/drawer-sections.tsx` (`DrawerHeading` ~150–180); `tests/drawer-sections.spec.ts` or a new spec beside `tests/matches-practice-rows.spec.ts`
 - **routes:** /dashboard/matches
