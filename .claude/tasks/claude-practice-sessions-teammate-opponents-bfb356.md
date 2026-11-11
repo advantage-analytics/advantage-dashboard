@@ -128,7 +128,7 @@ ready).
 
 ## T9 · Player profile: practice listed, never counted
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **needs:** T1, T5
 - **files:** (guess) `src/lib/data/player-profile-server.ts` (`readPlayerMatchSides` ~180, `getPlayerProfile` ~264), `player-profile.ts` (`seasonStrip`, `seasonKpis`, `dualRecordFrom`, `profileFormBar`, `kpiSeries`), `player-season-server.ts`, `player-season.ts`, `player-insight.ts`, `src/components/dashboard/team/player-profile/*` (match list, `profile-rail.tsx`); `tests/player-profile.spec.ts`, `tests/player-season-loader.spec.ts`, `tests/player-insight-prompt.spec.ts`

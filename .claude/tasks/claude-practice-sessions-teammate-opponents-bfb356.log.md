@@ -92,3 +92,10 @@ is the runner's. Newest entries at the bottom.
 2. `teamMatchRow` / `matchContext` have no caller in `src` since the Team Home redesign (cad6d131b); delete or wire back.
 3. Team Home "matches analyzed", "N new results" and `teamFirstReport` still count practice reports (reports, not records).
 4. If Edit match can relabel a dual line's match as Practice, decide whether the dual score and court record drop it (needs `match_type` on `EntryMatch`, kept in agreement).
+
+## T9 · Player profile: practice listed, never counted — blocked
+
+**gate:** mechanical PASS (lint, typecheck, tests shard 1/2 4748 passed, shard 2/2 5148 passed); completion VERDICT: needs-work — criterion 3 not met. The profile route `/dashboard/team/roster/[playerId]` renders no match list of its own any more (its only list is the rail's "N matches ›" link to `/dashboard/matches?rosterPlayer=<id>`), so the "Practice" label, the missing `ResultMark` and the seat-turned score were not built there; that rendering lives in T12's files (`event-cell.tsx`, `match-card-list.tsx`) and the `?rosterPlayer=` cut does not turn rows to the cut player's seat today. Criteria 1, 2 and 4 met.
+**stash:** b994913f8201418a94e8041ffac741d4d3db2a8d
+**changed (stashed):** `player-profile-server.ts` (`countedSides`, pure `profileResultsFrom` / `buildPlayerProfile`, `PlayerProfile.practiceCount`, `PlayerMatchSide.opponentOnRoster`; `matchesPlayed` excludes practice); `player-season-server.ts` (season loaders start from counted sides; `seasonOpponentCount` skips practice and teammates); `profile-rail.tsx` keeps the Matches link live while practice exists; comments in `player-insight.ts` and the route page; specs `player-profile`, `player-season-loader`, `player-insight-prompt`, `profile-rail`.
+**to unblock:** amend criterion 3 (or move it to T12) and re-run; T12 would need the `?rosterPlayer=` list to turn a seat-two row to that player's side (a turn that keeps `id`/`profileId` and does not flip an undecided score). Also fix a doc comment that points at a non-existent `tests/practice-excluded-from-profile.spec.ts`.
