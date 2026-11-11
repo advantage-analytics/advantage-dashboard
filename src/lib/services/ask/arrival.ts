@@ -18,6 +18,13 @@
  * form is refused, never run as nobody. The question spends nothing: there
  * is no reservation, and the `done` event's count is not read.
  *
+ * One match, never a record: the question is tagged with the match that
+ * arrived and nothing here counts a record, a season or a head-to-head. So a
+ * practice session gets its first answer like any match — it is the match
+ * asked about — and the rule that practice never counts toward a record
+ * (`ASK_PRACTICE_RULE`, `prompts.ts`) is the planner's to hold for every
+ * question that does count one.
+ *
  * Once per match (`notification_sends`, key `ask_arrival:<match>`): a
  * redelivered webhook or a resubmitted job must not put a second first
  * answer in the rail. Bounded by the caller's deadline through the model

@@ -1060,6 +1060,42 @@ looks like a real one — see §4.
 > flags come out wrong (§2's 2026-09-28 ad-scoring note) — attribution is
 > unaffected.
 
+> **An exception, added 2026-11-10: a teammate opponent takes seat two.** Every
+> opponent's identity goes to `matches.opponent_player_id` and `player2_id`
+> stays null, because `player2_id` is an arm of the `matches` SELECT policy
+> (migration `20260823090000`): an opponent's id there hands a rival the match
+> and both players' statistics the day they claim the profile. The one
+> opponent written to both is a **teammate** — picked from the Teammates
+> section of the opponent menu, a practice set between two players of the
+> program the match is filed under. `opponent_player_id` takes their
+> `program_players` id and `player2_id` the id their own matches carry
+> (`program_roster_full.player_id`).
+>
+> Why it is safe: a teammate is a program member, and the program arm of the
+> same policy already shows them the match — `player2_id` adds their seat, not
+> access. Why it is needed: every seat reader (`playerSeat` / `viewerSide` /
+> `youSeat`, `ask.my_side()`, the roster readers) keys on `player2_id` and
+> none reads `opponent_player_id`, so this is what puts the practice on the
+> teammate's own profile with the report turned to their side. No migration
+> and no policy change. Accepted with it: the teammate keeps read access to
+> that match after leaving the program.
+>
+> What holds it in: `teammateSeat()` (`new-match-wizard/teammates.ts`) is the
+> only source of the id, and it re-reads the live roster at save — the form's
+> remembered id is never written as it stands. A teammate the roster no longer
+> lists, or one who is the match's subject, saves as a typed name with both
+> columns null. A roster row with no `program_players` row (the RPC's safety
+> arm, whose id is a login) takes the seat but leaves `opponent_player_id`
+> null, since that column's foreign key would refuse it and fail the upload.
+> Only a team workspace's insert writes it: the fill of an existing line's
+> match never touches `player2_id`.
+>
+> What it never touches: `player1_id`, both names, the score, the format and
+> the camera answers are byte-for-byte what any other opponent saves
+> (`tests/teammate-opponent-seat.spec.ts` pins that), and `points`, `shots`
+> and `match_stats` stay keyed on the seat. A report is turned by seat at read
+> time; nothing is re-attributed.
+
 **The trim window is not cosmetic.** `videoStartSeconds`/`videoEndSeconds` become
 `billable_seconds`, which is what the 2-hour monthly cap is charged against, and
 the file that is uploaded: the browser cuts the video to that window before any

@@ -623,6 +623,7 @@ async function listTools(route: {
   return rpcResult<{
     tools: {
       name: string;
+      description?: string;
       annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
     }[];
   }>(
@@ -833,6 +834,10 @@ test.describe("POST /api/mcp · the auth ladder", () => {
     );
     expect(initialized.serverInfo.name).toBe("advantage-ask");
     expect(initialized.instructions).toContain("describe_views");
+    // Practice never counts: the rule a connected client is told up front.
+    expect(initialized.instructions).toContain(
+      "Practice never counts: a match whose match_type is practice (any case or padding) is left out of every record, win–loss count, head-to-head and season statistic unless the player asks about practice",
+    );
 
     const listed = await listTools(route);
     expect(listed.tools.map((tool) => tool.name).sort()).toEqual([
@@ -847,6 +852,20 @@ test.describe("POST /api/mcp · the auth ladder", () => {
       "search_programs",
       "update_match",
     ]);
+    // The three tools a record can be counted from each say practice is left
+    // out of it; the rule adds no tool.
+    expect(listed.tools).toHaveLength(10);
+    const described = (name: string) =>
+      listed.tools.find((tool) => tool.name === name)?.description ?? "";
+    expect(described("list_matches")).toContain(
+      "leave them out when counting a record or a win–loss from this list, unless the question is about practice",
+    );
+    expect(described("opponent_scouting")).toContain(
+      "practice never counts toward a record",
+    );
+    expect(described("run_query")).toContain(
+      "scope_sql leaves practice out (coalesce(lower(trim(match_type)), '') <> 'practice') unless the question asks about practice",
+    );
     // The Connectors Directory checks these against behaviour: `ask` saves the
     // exchange and spends a question, so it is a write like the match writes.
     const writes = listed.tools.filter(

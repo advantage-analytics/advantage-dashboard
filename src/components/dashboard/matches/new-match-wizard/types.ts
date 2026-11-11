@@ -22,7 +22,21 @@ export type { Step };
 
 /** Where a pre-filled value came from, for the "from …" provenance tag. */
 export type ValueSource =
-  "file" | "export" | "event" | "profile" | "history" | "roster" | "new";
+  | "file"
+  | "export"
+  | "event"
+  | "profile"
+  | "history"
+  | "roster"
+  | "new"
+  /**
+   * `opponentSource` only: the opponent was picked from the Teammates section
+   * — the program's own roster (`teammates.ts`). `opponentPlayerId` is then
+   * their roster row's id (`program_roster_full.player_id`), and the "their
+   * team" keys are cleared. The save takes it back through `teammateSeat()`
+   * rather than writing it as it stands.
+   */
+  | "teammate";
 
 /**
  * A program as the wizard's "their team" field carries it: the id the match
@@ -172,7 +186,10 @@ export interface FormData {
 
   /** Where `date`/`time` came from. Undefined when nothing set it. */
   dateSource?: ValueSource;
-  /** Where the opponent's name came from. Undefined for a typed name. */
+  /**
+   * Where the opponent's name came from. Undefined for a typed name;
+   * `"teammate"` for someone on this program's own roster.
+   */
   opponentSource?: ValueSource;
   /**
    * The opponent's pooled identity when a roster row was picked or a program
@@ -213,16 +230,22 @@ export interface UploadedFile {
 
 /** Winner/loser determination result */
 export interface WinnerLoserResult {
-  winner: {
-    id: string | null;
-    name: string;
-    scores: number[];
-  };
-  loser: {
-    id: string | null;
-    name: string;
-    scores: number[];
-  };
+  winner: WinnerLoserSide;
+  loser: WinnerLoserSide;
+}
+
+/** One side of `determineWinner`'s answer. */
+export interface WinnerLoserSide {
+  id: string | null;
+  name: string;
+  scores: number[];
+  /**
+   * Whether this side is the match's player (seat one). `determineWinner`
+   * always sets it; `buildMatchData` falls back to comparing names only when
+   * it is absent — names are not identity: two players of one roster can
+   * share a name, and a teammate opponent makes that easy to reach.
+   */
+  isPlayer?: boolean;
 }
 
 /** Match data structure for database insertion */
@@ -236,6 +259,14 @@ export interface MatchData {
    * The opponent's pooled identity, for aggregating an opponent profile across
    * every match against them. Read by nothing else, and in NO policy — unlike
    * `player2_id` directly above, which grants read access to this match.
+   *
+   * So an opponent's id goes here and `player2_id` stays null — except for a
+   * TEAMMATE, an opponent on the match's own program roster, who gets both:
+   * this column their `program_players` id, `player2_id` the id their own
+   * matches carry. Safe because the read access `player2_id` grants is access
+   * a program member already has; needed because the seat readers key on
+   * `player2_id` alone. `MatchMetadata.teammateSeatId` (`utils.ts`) has the
+   * long version.
    */
   opponent_player_id: string | null;
   /**

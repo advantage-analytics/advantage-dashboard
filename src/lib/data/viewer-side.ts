@@ -9,6 +9,14 @@
  * null in bulk (team schedule rows, doubles, scrubbed uploads), so "not seat
  * one" is not "seat two", it is "no evidence either way".
  *
+ * Who is ever IN seat two: a player entered there, and — the one opponent the
+ * upload wizard writes an id for — a teammate, in a practice set between two
+ * players of one program (`teammateSeat()` in `new-match-wizard/teammates.ts`).
+ * That row carries the subject's id in `player1_id` and the teammate's in
+ * `player2_id`, so asked about the teammate's ids this answers `player2` and
+ * their profile turns the report to their side. Any other opponent's id goes
+ * to `opponent_player_id`, which this never reads.
+ *
  * This is the two-id half of `viewerSide` below, pulled out so a caller that
  * has no viewer to speak of — a loader assembling one player's own history —
  * can ask only the seat question without tripping the uploader fallback, which

@@ -78,6 +78,18 @@ export interface Match {
    * uses it to keep the first-report tour to personal matches.
    */
   programId?: string | null;
+  /**
+   * A practice session (`isPracticeMatch` over `matches.match_type`). Set by
+   * `transformDbMatchToMatch`; absent reads as not practice. The report reads
+   * it to say "Practice" where the event and the result word would be.
+   */
+  isPractice?: boolean;
+  /**
+   * The opponent the report draws (the seat that is not "you") is on the
+   * match's own program roster — a teammate, not a rival. Set by the
+   * match-detail loader only (`opponentIsTeammate`); absent reads as false.
+   */
+  opponentIsTeammate?: boolean;
   player1: Player;
   player2: Player;
   score: MatchScore;

@@ -1,5 +1,5 @@
-import { TriangleAlert } from "lucide-react";
-import { noteIconCls, warningStripCls } from "./styles";
+import { Info, TriangleAlert } from "lucide-react";
+import { noteIconCls, noteStripCls, warningStripCls } from "./styles";
 
 /**
  * The wizard's warning register, announced.
@@ -19,15 +19,27 @@ import { noteIconCls, warningStripCls } from "./styles";
  *
  * Children lay out in a column with a 2-unit gap, so a notice carrying an
  * action row under its sentence needs no wrapper of its own.
+ *
+ * `tone="note"` is the grey register — a fact the person should know, not a
+ * question to answer (the Practice notice under Context). Same shell, same
+ * announcement; the strip and its glyph change together, so a grey strip
+ * never carries the warning triangle (`tests/notice-strips.spec.ts`).
  */
-export function WizardNotice({ children }: { children: React.ReactNode }) {
+export function WizardNotice({
+  children,
+  tone = "warning",
+}: {
+  children: React.ReactNode;
+  tone?: "warning" | "note";
+}) {
+  const Glyph = tone === "note" ? Info : TriangleAlert;
   return (
-    <div role="status" aria-live="polite" className={warningStripCls}>
-      <TriangleAlert
-        className={noteIconCls}
-        strokeWidth={1.5}
-        aria-hidden="true"
-      />
+    <div
+      role="status"
+      aria-live="polite"
+      className={tone === "note" ? noteStripCls : warningStripCls}
+    >
+      <Glyph className={noteIconCls} strokeWidth={1.5} aria-hidden="true" />
       <div className="flex min-w-0 flex-1 flex-col gap-2">{children}</div>
     </div>
   );

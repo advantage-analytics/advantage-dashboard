@@ -23,7 +23,7 @@ export function MatchesTitleRow({
   scope: "personal" | "team";
   /** Just enough per match to compute "N analyzed · M new" honestly. */
   canUpload?: boolean;
-  readyMatches?: { id: string; status?: AnalysisStatus }[];
+  readyMatches?: { id: string; status?: AnalysisStatus; practice?: boolean }[];
 }) {
   const [dateText, setDateText] = useState("");
   useEffect(() => {
@@ -44,16 +44,24 @@ export function MatchesTitleRow({
 
   // A team's line counts what the program has recorded, so a match still in
   // analysis or one that failed counts. A personal line counts what is analyzed.
-  const count =
-    scope === "team" ? (readyMatches ?? []).length : analyzedIds.length;
+  const counted =
+    scope === "team"
+      ? (readyMatches ?? [])
+      : (readyMatches ?? []).filter((m) => analyzedIds.includes(m.id));
+  const count = counted.length;
+  // Practice sessions are counted apart, so the line never passes them off as
+  // matches: "8 matches · 2 practice". With none, the line is unchanged.
+  const practice = counted.filter((m) => m.practice).length;
+  const played = count - practice;
+  const newTail = unseen.size > 0 ? ` · ${unseen.size} new` : "";
   const subline =
     count === 0
       ? scope === "team"
         ? "Nothing recorded yet."
         : "Nothing analyzed yet."
-      : `${count} ${scope === "team" ? "on the program" : "analyzed"}${
-          unseen.size > 0 ? ` · ${unseen.size} new` : ""
-        }`;
+      : practice > 0
+        ? `${played} ${played === 1 ? "match" : "matches"} · ${practice} practice${newTail}`
+        : `${count} ${scope === "team" ? "on the program" : "analyzed"}${newTail}`;
 
   return (
     <div className="flex items-end gap-2.5">

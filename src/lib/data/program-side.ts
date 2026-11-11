@@ -27,6 +27,19 @@
  *    cannot collide with it: opponent identities are written to
  *    `matches.opponent_player_id`, deliberately NOT to `player2_id`
  *    (`opponents-server.ts`), so a roster id in either column is one of ours.
+ *
+ *    **The one opponent who does sit in `player2_id` is a teammate** — a
+ *    practice set between two players on this roster, where the wizard writes
+ *    the opposing teammate's roster id to seat two (`teammateSeat()` in
+ *    `new-match-wizard/teammates.ts`; `MatchMetadata.teammateSeatId` says why
+ *    the access that column grants is safe for a program member). Both seats
+ *    are then ours and the sentence above still holds. Such a row answers
+ *    `player1`, because seat one is tested first and seat one is the SUBJECT:
+ *    the player the match was uploaded for, whose side `points`, `shots` and
+ *    `match_stats` call player one. That order is load-bearing — do not
+ *    reorder the two tests below. A reader that wants the teammate's side asks
+ *    about that one player (`playerSeat` / `youSeat` in `viewer-side.ts`), not
+ *    about the program.
  * 2. **The row is a line off this program's schedule.** `event_entry_id` says
  *    so, and what makes it evidence is a convention rather than a single
  *    writer — do not "verify" this clause by reading one function and stopping.
@@ -64,6 +77,8 @@ export function programSide(
   },
   rosterIds: ReadonlySet<string>,
 ): "player1" | "player2" | null {
+  // Seat one first: on a teammate-v-teammate row both ids are on the roster,
+  // and the program's side is the subject's (see clause 1).
   if (row.player1_id && rosterIds.has(row.player1_id)) return "player1";
   if (row.player2_id && rosterIds.has(row.player2_id)) return "player2";
   if (row.event_entry_id) return "player1";

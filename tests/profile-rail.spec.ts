@@ -77,6 +77,7 @@ function render(
     losses: 1,
     form: [{}, {}],
     managedBy: "player",
+    practiceCount: 0,
     ...props.profile,
   };
 
@@ -197,6 +198,24 @@ test("a long name wraps rather than truncating", () => {
     /<p class="[^"]*overflow-wrap:anywhere[^"]*">Maximiliana Fernández-Castellanos/,
   );
   expect(html).not.toMatch(/<p class="[^"]*\btruncate\b[^"]*">Maximiliana/);
+});
+
+test("Matches stays a link while there is practice to list, and never counts it", () => {
+  // Nothing but practice: "0 matches" is still the count, and still a door —
+  // the list is where practice is shown.
+  const practiceOnly = render({
+    matchesCount: 0,
+    opponentsCount: 0,
+    profile: { practiceCount: 2 },
+  });
+  expect(practiceOnly).toMatch(
+    /<a href="\/dashboard\/matches\?rosterPlayer=pp-1"[^>]*><span[^>]*>Matches<\/span><span[^>]*>0<\/span>/,
+  );
+  // Practice beside counted matches leaves the number alone.
+  const both = render({ matchesCount: 3, profile: { practiceCount: 2 } });
+  expect(both).toMatch(/>Matches<\/span><span[^>]*>3<\/span>/);
+  expect(both).not.toMatch(/>Matches<\/span><span[^>]*>5<\/span>/);
+  expect(both).not.toContain("ractice");
 });
 
 test("New match fills the footer only when the viewer can upload", () => {

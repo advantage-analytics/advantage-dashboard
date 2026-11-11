@@ -201,9 +201,8 @@ function startHomeResources(
   const wonCount = Promise.all([players, matches]).then(([ids, rows]) =>
     countViewerWins(rows as DbRecentMatch[], ids, userId),
   );
-  const serves = matches.then((rows) =>
-    loadHomeServes(supabase, userId, rows.slice(0, 4)),
-  );
+  // The whole list: the loader skips practice before cutting its window.
+  const serves = matches.then((rows) => loadHomeServes(supabase, userId, rows));
   const pins = getAskPins(null, userId);
   return {
     matches,

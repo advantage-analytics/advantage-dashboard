@@ -63,6 +63,14 @@ export interface TeamOpponentMatchInput extends Omit<
    * anywhere else.
    */
   player1_id: string | null;
+  /**
+   * `matches.player2_id`, exactly as stored. Null for every outside opponent
+   * (that column is an arm of the `matches` SELECT policy); a roster id only
+   * for a TEAMMATE, in a practice set between two players of this program —
+   * which is how `groupTeamOpponents` knows to leave the match out. Optional
+   * so a reader that never selected it reads as "no seat".
+   */
+  player2_id?: string | null;
   /** `matches.created_by` — who may edit the match from this page. */
   created_by: string | null;
   /** The directory program on the match; either/or with `opponent_school`. */
@@ -208,9 +216,22 @@ export function groupTeamOpponents(
   // also catches a claimed player's older rows, recorded under their login. An
   // id that resolves to nobody on the roster is not guessed at: the match is
   // left out and counted.
+  //
+  // A teammate is never an opponent (product decision): a match whose other
+  // side is somebody on this roster — by `opponent_player_id` or by a roster
+  // id in seat two, the two columns `teammateSeat()` writes — is intra-squad,
+  // forms no opponent row and is not counted as unattributed either, whatever
+  // its `match_type` says. Both ids go through `canonicalRosterIds`, so a
+  // claimed player's login is them too.
   const attributed: Attributed[] = [];
   let unattributed = 0;
   for (const source of inputs) {
+    if (
+      (source.opponent_player_id && canonical.has(source.opponent_player_id)) ||
+      (source.player2_id && canonical.has(source.player2_id))
+    ) {
+      continue;
+    }
     const rosterPlayerId = source.player1_id
       ? canonical.get(source.player1_id)
       : undefined;

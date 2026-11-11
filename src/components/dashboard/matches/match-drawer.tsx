@@ -38,6 +38,7 @@ import { providers } from "@/lib/providers";
 import { advButton } from "@/lib/ui/adv-button";
 import { capitalize, cn } from "@/lib/utils";
 import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import {
   DRAWER_RAIL,
   DrawerScrim,
@@ -160,7 +161,10 @@ export function MatchDrawer({
   const schedule = useScheduleLink(match.id, scope);
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
+  const isPractice = isPracticeMatch(match.matchType);
   const title = `${match.player1.name} vs ${match.player2.name}`;
+  // The event's own name, if any; a practice session without one reads as
+  // practice rather than "No event" (the Matches list's Event cell).
   const eventName = match.tournamentName || schedule?.name || null;
   const hasProvider = providers.some((p) => p.id === match.sourceProvider);
   const scheduled = SCHEDULE_ENABLED && isTeam && schedule ? schedule : null;
@@ -258,6 +262,8 @@ export function MatchDrawer({
             {" · "}
             {eventName ? (
               eventName
+            ) : isPractice ? (
+              "Practice"
             ) : (
               <span style={{ color: "var(--ink-400)" }}>No event</span>
             )}

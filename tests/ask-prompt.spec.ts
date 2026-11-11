@@ -44,6 +44,8 @@ import {
   ASK_ANSWER_EXAMPLE_ROWS,
   ASK_ERRORS_RULE,
   ASK_PLAN_ERRORS_RULE,
+  ASK_PRACTICE_FILTER,
+  ASK_PRACTICE_RULE,
   ASK_NO_ADVICE_SENTENCE,
   ASK_PLAN_EXAMPLE_BASELINE,
   ASK_PLAN_EXAMPLE_COMPARE,
@@ -2409,6 +2411,78 @@ test.describe("ASK_PLAN_REPLY_SCHEMA", () => {
       scope_sql: "select match_id from ask.matches",
       asks_for_advice: true,
     });
+  });
+});
+
+// ── Practice never counts ──────────────────────────────────────────────────
+
+test.describe("the plan prompts — practice never counts toward a record", () => {
+  test("both prompts state the rule once, in the fixed prefix: practice rows are left out of a record, a win–loss, a head-to-head and a season statistic unless the question asks about practice", () => {
+    for (const scope of [undefined, TEAM_SCOPE]) {
+      const prompt = buildPlanPrompt({ ...PLAN_INPUT, scope });
+      expect(prompt.split(ASK_PRACTICE_RULE)).toHaveLength(2);
+      const at = prompt.indexOf(ASK_PRACTICE_RULE);
+      expect(at).toBeGreaterThan(prompt.indexOf("### Rules for both"));
+      expect(at).toBeLessThan(prompt.indexOf("## Examples"));
+      expect(at).toBeLessThan(askPromptStaticPrefixLength(prompt));
+    }
+    // What is left out, of what.
+    expect(ASK_PRACTICE_RULE).toContain("match_type is practice");
+    expect(ASK_PRACTICE_RULE).toMatch(
+      /Leave those rows out of every record, win–loss count, head-to-head, .*and out of every statistic over a season/,
+    );
+    // The exception: a question about practice still reads the rows.
+    expect(ASK_PRACTICE_RULE).toContain(
+      "Keep practice rows only when the question asks about practice",
+    );
+    expect(ASK_PRACTICE_RULE).toContain('"how did my practice sets go"');
+    // Free text: trimmed and without case, as isPracticeMatch() reads it.
+    expect(ASK_PRACTICE_RULE).toContain("lower(trim(match_type)) = 'practice'");
+    expect(ASK_PRACTICE_RULE).toContain(ASK_PRACTICE_FILTER);
+    expect(ASK_PRACTICE_FILTER).toBe(
+      "coalesce(lower(trim(match_type)), '') <> 'practice'",
+    );
+  });
+
+  test("the filter and its opposite pass the guard, and the record example leaves practice out", () => {
+    const sql =
+      "select sum(case when m.i_won then 1 else 0 end) as wins, sum(case when m.i_won = false then 1 else 0 end) as losses from ask.matches m where m.match_id in (select match_id from scope)";
+    for (const scopeSql of [
+      `select match_id from ask.matches where ${ASK_PRACTICE_FILTER}`,
+      `select match_id from ask.matches where opponent_name ilike '%ortiz%' and ${ASK_PRACTICE_FILTER}`,
+      "select match_id from ask.matches where lower(trim(match_type)) = 'practice'",
+    ]) {
+      expect(checkAskSql({ scopeSql, sql }), scopeSql).toEqual({ ok: true });
+    }
+    expect(ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN.scope_sql).toBe(
+      `select match_id from ask.matches where ${ASK_PRACTICE_FILTER}`,
+    );
+  });
+
+  test("the match_type column says the same in every schema block, with the view's comment left as the migration has it", () => {
+    const column = ASK_SCHEMA.find(
+      (view) => view.view === "matches",
+    )?.columns.find((entry) => entry.name === "match_type");
+    expect(column?.meaning).toBe(
+      "Practice, Tournament or Dual Match; null when not recorded.",
+    );
+    expect(column?.rule).toMatch(
+      /left out of every record, win–loss count, head-to-head and season statistic unless the question asks about practice/,
+    );
+    expect(column?.rule).toContain("lower(trim(match_type)) = 'practice'");
+    for (const block of [
+      renderAskSchemaBlock(),
+      renderAskSchemaBlock("team"),
+      renderAskSchemaBlock("personal", { mcp: true }),
+    ]) {
+      expect(block).toContain(
+        `  match_type (text): ${column?.meaning} ${column?.rule}`,
+      );
+    }
+    // No other column carries a rule: the field is not a second meaning.
+    expect(
+      ASK_SCHEMA.flatMap((view) => view.columns).filter((entry) => entry.rule),
+    ).toHaveLength(1);
   });
 });
 

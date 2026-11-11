@@ -99,6 +99,7 @@ import {
   opponentTeamIsEmpty,
   opponentTeamUpdate,
 } from "./opponent-team";
+import { opponentIsTeammate, teammateSeat } from "./teammates";
 import {
   deleteMatchDraft,
   deleteMatchDraftsForMatch,
@@ -3111,8 +3112,12 @@ export function useUploadMatchWizard({
                   subjectOwnsName && prev.playerName.trim()
                     ? prev.playerName
                     : parseResult.data?.playerName || prev.playerName,
+                // A teammate pick owns the name as an event does: its seat
+                // (`teammateSeat()`) would otherwise sit under the file's name.
                 opponentName:
-                  (eventOwns || prev.opponentSource === "event") &&
+                  (eventOwns ||
+                    prev.opponentSource === "event" ||
+                    prev.opponentSource === "teammate") &&
                   prev.opponentName.trim()
                     ? prev.opponentName
                     : parseResult.data?.opponentName || prev.opponentName,
@@ -3657,12 +3662,31 @@ export function useUploadMatchWizard({
         // profile a data point, not the upload. The match is the record.
         // A row picked from the opponent's roster already IS an identity, and it
         // travelled with the click. Only a typed name goes through the RPC.
-        let opponentPlayerId: string | null = formData.opponentPlayerId ?? null;
+        //
+        // A TEAMMATE is the exception on both counts. Their id is re-read
+        // from the loaded roster (`teamRoster`), never taken as it stands
+        // from the form: a row the roster no longer lists, or the subject
+        // themselves, saves as a typed name. And where every other opponent
+        // stays out of `player2_id`, a teammate takes that seat
+        // (`MatchMetadata.teammateSeatId`). `profileId` is null for a
+        // safety-arm row, whose id is a login and would fail
+        // `opponent_player_id`'s foreign key — and the insert with it.
+        const viaTeammates = opponentIsTeammate(formData);
+        const teammate =
+          activeWorkspace.kind === "team"
+            ? teammateSeat(formData, teamRoster, playerUserId)
+            : null;
+        let opponentPlayerId: string | null = viaTeammates
+          ? (teammate?.profileId ?? null)
+          : (formData.opponentPlayerId ?? null);
         // The lookup below, kept so the team fallback further down does not
         // repeat it for the same key.
         let resolvedProgram: { key: string; id: string } | null = null;
+        // Never for a teammate: one the roster no longer vouches for is not
+        // thereby a player of whatever program the line names.
         if (
           !opponentPlayerId &&
+          !viaTeammates &&
           activeWorkspace.kind === "team" &&
           formData.opponentProgramKey
         ) {
@@ -3748,6 +3772,7 @@ export function useUploadMatchWizard({
           programId:
             activeWorkspace.kind === "team" ? activeWorkspace.id : null,
           opponentPlayerId,
+          teammateSeatId: teammate?.seatId ?? null,
           lineOpponentProgramId,
         };
 

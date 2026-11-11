@@ -31,6 +31,7 @@ import {
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { programSide } from "@/lib/data/program-side";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import { rosterMatchIds, type RosterIdRow } from "@/lib/data/roster-ids";
 import {
   seasonStrip,
@@ -229,7 +230,10 @@ export interface TeamMatchRow {
    * same point of view. See `programSide()`.
    */
   title: string;
-  /** "Big Sky dual · away", or the match type when there is no event. */
+  /**
+   * "Big Sky dual · away", or the match type when there is no event —
+   * "Practice" for a practice session, "Match" when nothing is stored.
+   */
   context: string;
   status: AnalysisStatus;
   /** The product's own word for the status — never a second vocabulary. */
@@ -247,10 +251,10 @@ export interface TeamMatchRow {
   /**
    * Did the PROGRAM's side win?
    *
-   * `null` covers three different silences, and all three must render the same
+   * `null` covers four different silences, and all four must render the same
    * way — without a `<ResultMark>`: no score recorded, a score that decides
-   * nothing (level sets), and a row whose side `programSide()` cannot
-   * establish. A row with no glyph is honest; a green check on a match the
+   * nothing (level sets), a practice session (`isPracticeMatch`), and a row
+   * whose side `programSide()` cannot establish. A row with no glyph is honest; a green check on a match the
    * program lost is the silent misattribution `docs/ui-revamp-guardrails.md`
    * exists to prevent, and nothing on screen would look broken.
    */
@@ -575,6 +579,8 @@ function matchContext(row: {
     (part): part is string => Boolean(part?.trim()),
   );
   if (parts.length > 0) return parts.join(" · ");
+  // A practice session says so in one spelling, whatever case it was stored in.
+  if (isPracticeMatch(row.match_type)) return "Practice";
   return row.match_type?.trim() || "Match";
 }
 
@@ -1142,6 +1148,12 @@ export interface DbSeasonMatch {
   score: MatchScore | null;
   date: string;
   source_provider: string | null;
+  /**
+   * Read so a practice session can be left out of the season strip
+   * (`isPracticeMatch`). Optional only so fixtures written before it need not
+   * state it; the season read always selects it.
+   */
+  match_type?: string | null;
 }
 
 /**
@@ -1224,7 +1236,11 @@ export function teamMatchRow(
     // string ("Final Score"), so `matchOutcome` is the shared rule the matches
     // list, the schedule and every player profile already ask.
     sets: scoreSetsFrom(score, { swap }),
-    won: side === null ? null : matchOutcome(score, side === "player1"),
+    // A practice session is listed, never marked: it has no result to show.
+    won:
+      side === null || isPracticeMatch(row.match_type)
+        ? null
+        : matchOutcome(score, side === "player1"),
     startedAt: analysis.startedAt,
   };
 }
@@ -1364,6 +1380,10 @@ export function teamSeasonKpis(
 
   const results: ProfileResult[] = [];
   for (const row of newestFirst) {
+    // Practice never feeds a season figure. A practice session is never on a
+    // dual lineup today, so the dual test below would drop it too — asked
+    // first and by name so that stays true if one is ever relabelled.
+    if (isPracticeMatch(row.match_type)) continue;
     if (!isAnalysisReady(analysisOf(row, jobs).status)) continue;
     const side = programSide(row, rosterIds);
     if (side === null) continue;
@@ -1667,7 +1687,7 @@ const getTeamHomeAnalytics = cache(async function getTeamHomeAnalytics(
     supabase
       .from("matches")
       .select(
-        "id, player1_name, player2_name, player1_id, player2_id, event_entry_id, score, date, source_provider",
+        "id, player1_name, player2_name, player1_id, player2_id, event_entry_id, score, date, source_provider, match_type",
       )
       .eq("program_id", programId)
       .order("date", { ascending: false, nullsFirst: false }),

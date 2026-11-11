@@ -126,6 +126,13 @@ function surname(name: string): string {
  *   live      Video view, a point under the film head
  *   untagged  no played sets on the match row
  *   final     everything else — the match as it ended
+ *
+ * A practice session (`match.isPractice`, canvas board 5) records no result
+ * worth a status word: the final eyebrow reads "Practice" and the caption
+ * "Practice set · {n} points tagged". The underlying status still decides
+ * which set is the open one. An opponent on the match's own program roster
+ * (`match.opponentIsTeammate`) carries the grey "Teammate" pill in every
+ * state — on the opponent's row, which `useMatchSides` already chose.
  */
 export function MatchReportScoreboard() {
   const { match, points } = useMatchData();
@@ -135,6 +142,7 @@ export function MatchReportScoreboard() {
 
   const youId = "you";
   const oppId = "opp";
+  const teammate = match.opponentIsTeammate === true;
   const format = [match.matchType, match.courtType?.toLowerCase()]
     .filter(Boolean)
     .join(" · ");
@@ -173,6 +181,7 @@ export function MatchReportScoreboard() {
           sets: opp.sets,
           points: opp.game,
           serving: opp.serving,
+          teammate,
         },
       ],
     };
@@ -212,6 +221,7 @@ export function MatchReportScoreboard() {
           (outcome, index) => outcome === side && completed(index),
         ),
         won: sets.length > 0 && (isYou ? match.won : !match.won),
+        teammate: !isYou && teammate,
       };
     };
 
@@ -227,10 +237,14 @@ export function MatchReportScoreboard() {
         points.length > 0
           ? `${points.length} point${points.length === 1 ? "" : "s"} tagged`
           : null;
-      const lead = status === "Final" ? "Match complete" : status;
+      const lead = match.isPractice
+        ? "Practice set"
+        : status === "Final"
+          ? "Match complete"
+          : status;
       props = {
         status: "final",
-        label: status,
+        label: match.isPractice ? "Practice" : status,
         duration,
         caption: [lead, tagged ?? format].filter(Boolean).join(" · "),
         players: [row("you"), row("opp")],

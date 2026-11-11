@@ -241,7 +241,8 @@ export default async function PlayerProfilePage({
 
   // `getPlayerSeason` folds the same list, so its `matchesPlayed` and
   // `opponentsCount` are these two numbers; reading them here keeps the rail
-  // off the season's critical path.
+  // off the season's critical path. Neither counts a practice session, and a
+  // teammate is never an opponent faced (`countedSides`, `seasonOpponentCount`).
   const matchesPlayed = profile.matchesPlayed;
   const opponentsCount = sides ? seasonOpponentCount(sides.own) : 0;
 

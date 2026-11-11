@@ -9,21 +9,41 @@ import {
   type ServeDot,
   type ServePointInput,
 } from "@/lib/data/serve-zones";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 
 export interface HomeServeData {
   dots: ServeDot[];
   matchCount: number;
 }
+
+/** How many of the newest competitive matches the Home preview plots. */
+export const HOME_SERVE_MATCHES = 4;
+
+/** The rows the preview needs: an id, and the type that says "practice". */
+export interface HomeServeMatch {
+  id: string;
+  match_type?: string | null;
+}
+
+/**
+ * The personal Home's serve-placement dots, over the newest
+ * `HOME_SERVE_MATCHES` matches.
+ *
+ * Practice is never season data (product decision, no opt-in), so a practice
+ * row is skipped BEFORE the window is cut: the preview covers the newest four
+ * competitive matches, not four rows of which some were practice. Pass the
+ * whole newest-first list as `initialMatches` — the window is cut here.
+ */
 export async function loadHomeServes(
   supabase: SupabaseClient,
   userId: string,
-  initialMatches?: { id: string }[],
+  initialMatches?: readonly HomeServeMatch[],
 ): Promise<HomeServeData> {
-  const { data: matches, error: matchError } = initialMatches
+  const { data: rows, error: matchError } = initialMatches
     ? { data: initialMatches, error: null }
     : await supabase
         .from("matches")
-        .select("id, player1_name, player2_name")
+        .select("id, match_type")
         .eq("created_by", userId)
         // AND no program. `/dashboard` is the personal home — same predicate as
         // the matches list (`matches/page.tsx`), for the same reason:
@@ -31,10 +51,14 @@ export async function loadHomeServes(
         // personal workspace.
         .is("program_id", null)
         .order("date", { ascending: false })
-        .limit(4);
+        // Room for practice rows ahead of the four competitive ones.
+        .limit(50);
 
   if (matchError) throw new Error(matchError.message);
-  if (!matches || matches.length === 0) return { dots: [], matchCount: 0 };
+  const matches = ((rows ?? []) as readonly HomeServeMatch[])
+    .filter((m) => !isPracticeMatch(m.match_type))
+    .slice(0, HOME_SERVE_MATCHES);
+  if (matches.length === 0) return { dots: [], matchCount: 0 };
   const matchIds = matches.map((m) => m.id);
 
   // Serve rows only: `pointToServeDot` reads just the played serve

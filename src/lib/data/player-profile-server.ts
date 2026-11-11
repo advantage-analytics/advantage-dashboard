@@ -20,6 +20,7 @@ import {
   rosterPlayerName,
 } from "@/lib/data/player-profile";
 import type { FormBar } from "@/lib/data/form-bar";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
 /**
@@ -56,6 +57,17 @@ import type { MemberRole } from "@/lib/data/team-settings-server";
  * The two loaders therefore fold the same matches from the same seats — a
  * match the record counts is a match the season may fold — and a page that
  * renders both pays for one roster RPC and one matches read.
+ *
+ * ── Practice is listed, never counted ───────────────────────────────────────
+ * `readPlayerMatchSides` returns a practice session like any other match, for
+ * BOTH seated players when the opponent is a teammate (`teammateSeat()` puts
+ * a roster id in seat two), each from their own seat — that is what keeps it
+ * on the Matches list the rail links to. Every figure is taken from
+ * `countedSides()` instead: the record, the form bar, the dual record, the
+ * line history, "N matches", and — through the same function — the whole
+ * season fold and the insight prompt (`player-season-server.ts`). Product
+ * decision, no opt-in: practice never counts toward win–loss, the season
+ * record, head-to-head or season statistics.
  */
 
 export interface PlayerProfile {
@@ -73,7 +85,17 @@ export interface PlayerProfile {
   hand: string | null;
   backhand: string | null;
   managedBy: "coach" | "self";
+  /**
+   * Their matches that count — every one the program recorded but practice
+   * sessions (`countedSides`). The rail's and the title's "N matches".
+   */
   matchesPlayed: number;
+  /**
+   * Their practice sessions: listed on the Matches page the rail links to,
+   * and in no figure here. The rail keeps that link alive on this count too,
+   * so a player with nothing but practice can still reach it.
+   */
+  practiceCount: number;
   wins: number;
   losses: number;
   duals: { wins: number; losses: number };
@@ -158,14 +180,39 @@ export interface PlayerMatchSide {
    * every match with it, never a normalised seat (guardrails §4).
    */
   isPlayer1: boolean;
+  /**
+   * The other side of this match is somebody on this program's roster — a
+   * roster id in the other seat, or in `opponent_player_id` (the two columns
+   * `teammateSeat()` writes), both through `canonicalRosterIds` so a claimed
+   * player's login is them too. The rule `groupTeamOpponents` uses: a
+   * teammate is never an opponent faced (`seasonOpponentCount`). Set by
+   * `readPlayerMatchSides`; absent on a hand-built side reads as false.
+   */
+  opponentOnRoster?: boolean;
 }
 
 /** Who this is and what they have played — what every profile surface starts from. */
 export interface PlayerMatchSides {
   /** Their `program_roster_full` row, the identity source. */
   roster: DbRosterFullRow;
-  /** Every match of theirs the program recorded, newest first, undated last. */
+  /**
+   * Every match of theirs the program recorded, newest first, undated last —
+   * practice sessions included. A reader that COUNTS anything takes
+   * `countedSides(own)`, never this list as it stands.
+   */
   own: PlayerMatchSide[];
+}
+
+/**
+ * The sides a figure may be computed from: every one but a practice session
+ * (`isPracticeMatch`, the one test for it). The profile's record and the
+ * season loaders both start here, so a match one of them counts is a match
+ * the other may count. Order is kept.
+ */
+export function countedSides<T extends PlayerMatchSide>(
+  sides: readonly T[],
+): T[] {
+  return sides.filter((side) => !isPracticeMatch(side.match.match_type));
 }
 
 /**
@@ -240,9 +287,22 @@ export async function readPlayerMatchSides(
   // Which side of each match is this player. The query already guarantees one
   // of the two ids is theirs; this decides which, and that answer picks their
   // statistics row, their opponent's name and their half of the insight.
-  const own = matches.flatMap((match) => {
+  // A teammate practice has a roster id in each seat, so it is found from
+  // either player's page and sided here as that player's own: seat one for the
+  // match's subject, seat two for the teammate.
+  const onRoster = (id: string | null) => id !== null && canonical.has(id);
+  const own = matches.flatMap((match): PlayerMatchSide[] => {
     const isPlayer1 = sideOf(match, canonical, playerId);
-    return isPlayer1 === null ? [] : [{ match, isPlayer1 }];
+    if (isPlayer1 === null) return [];
+    return [
+      {
+        match,
+        isPlayer1,
+        opponentOnRoster:
+          onRoster(isPlayer1 ? match.player2_id : match.player1_id) ||
+          onRoster(match.opponent_player_id),
+      },
+    ];
   });
 
   return { roster: row, own };
@@ -261,6 +321,76 @@ export const getPlayerMatchSides = cache(async function getPlayerMatchSides(
   return readPlayerMatchSides(supabase, programId, playerId);
 });
 
+/**
+ * This player's counted matches as the profile's arithmetic reads them, newest
+ * first — practice sessions left out (`countedSides`), each result and
+ * opponent name taken from the seat this player sat in.
+ */
+export function profileResultsFrom(
+  own: readonly PlayerMatchSide[],
+): ProfileResult[] {
+  return countedSides(own).map(({ match, isPlayer1 }) => ({
+    id: match.id,
+    date: match.date,
+    isPlayer1,
+    won: matchOutcome(match.score, isPlayer1),
+    entryId: match.event_entry_id,
+    opponentName:
+      (isPlayer1 ? match.player2_name : match.player1_name) ?? "Unknown",
+    score: match.score,
+    tournamentName: match.tournament_name,
+    stats: null,
+  }));
+}
+
+/**
+ * The profile, from rows already read. Pure, so a spec can hand it the same
+ * player with and without practice sessions and see that nothing but
+ * `practiceCount` moves (`tests/player-profile.spec.ts`).
+ */
+export function buildPlayerProfile(
+  row: DbRosterFullRow,
+  own: readonly PlayerMatchSide[],
+  entries: ReadonlyMap<string, ProfileEntry>,
+  events: ReadonlyMap<string, ProfileEvent>,
+): PlayerProfile {
+  const results = profileResultsFrom(own);
+
+  const duals = dualRecordFrom(results, entries, events);
+  const strip = seasonStrip(results, duals);
+  const { wins, losses } = strip;
+
+  const { name, firstName } = rosterPlayerName(row);
+
+  return {
+    playerId: row.player_id,
+    profileId: row.profile_id,
+    userId: row.user_id,
+    name,
+    firstName,
+    email: row.email,
+    role: row.role as MemberRole,
+    classYear: row.class_year,
+    lineupSpot: row.lineup_spot,
+    hand: row.hand ?? null,
+    backhand: row.backhand ?? null,
+    managedBy: row.managed_by === "coach" ? "coach" : "self",
+    matchesPlayed: results.length,
+    practiceCount: own.length - results.length,
+    wins,
+    losses,
+    duals,
+    // Reversed so the strip reads left to right in the order the season was
+    // played, which is how a coach reads a run of results out loud.
+    form: results
+      .filter((r) => r.won !== null)
+      .slice(0, RECENT_WINDOW)
+      .reverse()
+      .map(profileFormBar),
+    lines: lineHistoryFrom(results, entries),
+  };
+}
+
 export const getPlayerProfile = cache(async function getPlayerProfile(
   programId: string,
   playerId: string,
@@ -274,7 +404,8 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
   const entriesPromise = (async () => {
     const ids = [
       ...new Set(
-        own
+        // Counted matches only: a practice session is on no line.
+        countedSides(own)
           .map((r) => r.match.event_entry_id)
           .filter((id): id is string => id !== null),
       ),
@@ -320,49 +451,5 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
 
   const { entriesById: entries, eventsById: events } = await entriesPromise;
 
-  const results: ProfileResult[] = own.map(({ match, isPlayer1 }) => ({
-    id: match.id,
-    date: match.date,
-    isPlayer1,
-    won: matchOutcome(match.score, isPlayer1),
-    entryId: match.event_entry_id,
-    opponentName:
-      (isPlayer1 ? match.player2_name : match.player1_name) ?? "Unknown",
-    score: match.score,
-    tournamentName: match.tournament_name,
-    stats: null,
-  }));
-
-  const duals = dualRecordFrom(results, entries, events);
-  const strip = seasonStrip(results, duals);
-  const { wins, losses } = strip;
-
-  const { name, firstName } = rosterPlayerName(row);
-
-  return {
-    playerId: row.player_id,
-    profileId: row.profile_id,
-    userId: row.user_id,
-    name,
-    firstName,
-    email: row.email,
-    role: row.role as MemberRole,
-    classYear: row.class_year,
-    lineupSpot: row.lineup_spot,
-    hand: row.hand ?? null,
-    backhand: row.backhand ?? null,
-    managedBy: row.managed_by === "coach" ? "coach" : "self",
-    matchesPlayed: results.length,
-    wins,
-    losses,
-    duals,
-    // Reversed so the strip reads left to right in the order the season was
-    // played, which is how a coach reads a run of results out loud.
-    form: results
-      .filter((r) => r.won !== null)
-      .slice(0, RECENT_WINDOW)
-      .reverse()
-      .map(profileFormBar),
-    lines: lineHistoryFrom(results, entries),
-  };
+  return buildPlayerProfile(row, own, entries, events);
 });

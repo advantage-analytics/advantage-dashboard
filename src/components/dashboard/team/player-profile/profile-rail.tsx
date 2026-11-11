@@ -38,10 +38,12 @@ export function ProfileRail({
   /** This player's photo, or null to draw initials. */
   photoUrl: string | null;
   /**
-   * Every match of theirs the program recorded — the same number as the
-   * title's facts line (`PlayerSeason.matchesPlayed`), so the page shows one
-   * count. The Matches list it links to hides a match with no score
-   * (`transformDbMatch`), so its rows can read a little fewer.
+   * Every match of theirs the program recorded, practice sessions left out —
+   * the same number as the title's facts line (`PlayerSeason.matchesPlayed`),
+   * so the page shows one count. The Matches list it links to hides a match
+   * with no score (`transformDbMatch`), so its rows can read a little fewer;
+   * it also lists their practice sessions (`profile.practiceCount`), which
+   * this number never counts.
    */
   matchesCount: number;
   /** Distinct opponents across those matches. */
@@ -67,7 +69,9 @@ export function ProfileRail({
           name and would miss a match a teammate recorded first. Both take
           `profile.playerId`, never the URL's id — a claimed player's old
           links carry their login. A count of 0 is plain text: a link to an
-          empty list is a door to nothing. */}
+          empty list is a door to nothing. Matches stays a link while there
+          is practice to list, even at "0 matches": practice is never
+          counted, and the list is where it is shown. */}
       <div className="mx-6 mt-2.5 h-px bg-[var(--border-hairline)]" />
       <nav
         aria-label="More about this player"
@@ -76,6 +80,7 @@ export function ProfileRail({
         <RailRow
           label="Matches"
           count={matchesCount}
+          linked={matchesCount + profile.practiceCount > 0}
           href={`/dashboard/matches?${ROSTER_PLAYER_PARAM}=${encodeURIComponent(profile.playerId)}`}
         />
         <RailRow
@@ -108,13 +113,16 @@ function RailRow({
   label,
   href,
   count,
+  linked = count > 0,
 }: {
   label: string;
   href: string;
   /** What the row counts; 0 draws it as plain text, not a link. */
   count: number;
+  /** Whether the destination has rows; defaults to "the count is not 0". */
+  linked?: boolean;
 }) {
-  if (count === 0) {
+  if (!linked) {
     return (
       <span className={cn(RAIL_ROW, "text-[var(--ink-500)]")}>
         <span className="min-w-0 flex-1 truncate">{label}</span>

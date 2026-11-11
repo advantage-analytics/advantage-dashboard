@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { playerSeat } from "./viewer-side";
 import { totalErrors } from "./player-profile";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 
 /**
  * One row of `match_stats_with_percentages`, as `MATCH_STATS_VIEW_COLUMNS`
@@ -123,6 +124,27 @@ export interface SeatMatch {
   date: string | null;
   player1_id: string | null;
   player2_id: string | null;
+  /** Read only so practice can be left out — see `baselineMatches`. */
+  match_type?: string | null;
+}
+
+/**
+ * The matches a player's baseline and season line may be made of.
+ *
+ * Practice is never season or baseline data (product decision, no opt-in), so
+ * a practice match is dropped — except `keepMatchId`, the match a page is open
+ * on: a practice match's own report still loads its own statistics, and its
+ * KPI line still ends on it, against a baseline of competitive matches only.
+ *
+ * Pure, like `ownSeatRows`, so the rule is testable with plain objects.
+ */
+export function baselineMatches<T extends Pick<SeatMatch, "id" | "match_type">>(
+  matches: readonly T[],
+  keepMatchId?: string,
+): T[] {
+  return matches.filter(
+    (m) => m.id === keepMatchId || !isPracticeMatch(m.match_type),
+  );
 }
 
 /**
@@ -166,6 +188,8 @@ async function fetchPlayerStatRows(
   playerIds: readonly string[],
   columns: string,
   excludeMatchId?: string,
+  /** A practice match kept in the set anyway — the one the page is open on. */
+  keepMatchId?: string,
 ): Promise<PlayerStatRow[] | null> {
   if (playerIds.length === 0) return null;
 
@@ -176,13 +200,17 @@ async function fetchPlayerStatRows(
 
   let query = supabase
     .from("matches")
-    .select("id, date, player1_id, player2_id")
+    .select("id, date, player1_id, player2_id, match_type")
     .or(`player1_id.in.(${list}),player2_id.in.(${list})`);
   if (excludeMatchId) query = query.neq("id", excludeMatchId);
   const { data: matchRows } = await query;
 
   if (!matchRows?.length) return null;
-  const matches = matchRows as unknown as SeatMatch[];
+  const matches = baselineMatches(
+    matchRows as unknown as SeatMatch[],
+    keepMatchId,
+  );
+  if (!matches.length) return null;
 
   const { data: statRows } = await supabase
     .from("match_stats_with_percentages")
@@ -581,9 +609,13 @@ export async function getMatchKpiHistory(
 ): Promise<MatchKpiHistory | null> {
   // No `excludeMatchId`: this match has to be IN the set, because the series
   // ends on it. `buildKpiHistory` leaves it out of the baseline instead.
+  // `matchId` is kept even when it is a practice match: its own line ends on
+  // it, while its baseline is made of competitive matches only.
   const rows = await fetchPlayerStatRows(
     playerIds,
     KPI_KEYS.map((key) => KPI_COLUMN[key]).join(", "),
+    undefined,
+    matchId,
   );
 
   if (!rows?.length) return null;

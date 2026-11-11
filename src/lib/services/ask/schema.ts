@@ -41,6 +41,13 @@ export interface AskColumn {
   /** The view's `comment on column`, verbatim. */
   meaning: string;
   /**
+   * How to read the column, where the comment alone would mislead: printed
+   * after the meaning in every schema block (`renderAskSchemaBlock()`).
+   * Apart from `meaning` because that is the view's comment verbatim, and a
+   * rule added there would need a migration to match.
+   */
+  rule?: string;
+  /**
    * True for a column the view has but the planner is not shown. The three
    * composite ratings are opaque sums of percentages: shown, a small model
    * averages them and answers "serve rating 231.9", which no player can read.
@@ -285,6 +292,7 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "match_type",
         type: "text",
         meaning: "Practice, Tournament or Dual Match; null when not recorded.",
+        rule: "Free text: compare it trimmed and without case. A practice row (lower(trim(match_type)) = 'practice') is left out of every record, win–loss count, head-to-head and season statistic unless the question asks about practice.",
       },
       {
         name: "i_won",
