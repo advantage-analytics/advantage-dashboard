@@ -52,7 +52,8 @@ import { PendingBar, PendingRegion } from "./pending";
  * and 2×2 grid of `wall-card.tsx` cards).
  *
  * The rail mirrors `profile-rail.tsx`'s spacing — the player block's 18/13/20
- * padding and line heights, the switcher's 40px rows, the links' 13px lines,
+ * padding and line heights, the switcher's 40px rows, the Matches and
+ * Opponents rows (labels drawn, counts pending),
  * New match's 36px button — so nothing moves when the page lands. Conditional
  * lines the skeleton cannot know about (hand and backhand, the state pill)
  * are not drawn; New match is, since most viewers can record one.
@@ -66,10 +67,11 @@ const VIEW_ICONS: Record<ProfileView, LucideIcon> = {
 /* ── Rail ──────────────────────────────────────────────────────────────── */
 
 /**
- * `ProfilePlayerBlock`'s geometry: the 40px avatar beside the name (20px
- * line) and facts line (18px), then the Record row (the form strip's 28px
- * slot) under a 16px gap, its value on the name's edge. Plays is
- * conditional, so it is not drawn.
+ * `ProfilePlayerBlock`'s geometry (`PlayerIdentity`): the 40px avatar
+ * top-aligned beside the name (22px line, 1px down) and facts line (18px,
+ * 3px under it), then the Record row (the form strip's 28px slot) under a
+ * 16px gap, its value on the name's edge. Plays is conditional, so it is not
+ * drawn.
  */
 function PlayerBlockPending() {
   return (
@@ -78,10 +80,10 @@ function PlayerBlockPending() {
         className="flex flex-col gap-4 border-b border-[var(--border-hairline)]"
         style={{ padding: "18px 13px 20px" }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <PendingBar className="size-10 shrink-0 rounded-full" />
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <div className="flex h-5 items-center">
+          <div className="flex min-w-0 flex-1 flex-col gap-[3px] pt-px">
+            <div className="flex h-[22px] items-center">
               <PendingBar className="h-3 w-32" />
             </div>
             <div className="flex h-[18px] items-center">
@@ -134,18 +136,27 @@ function SwitcherPending({ active }: { active: ProfileView }) {
 
 /** The two quiet links on one 13px line ("12 matches ›  9 opponents ›"). */
 function RailLinksPending() {
+  // `profile-rail.tsx`'s hairline and its two 40px rows. The labels are chrome
+  // the page already knows, so they render as themselves; only the counts are
+  // arriving. Plain `div`s: nothing here is a link until the page lands.
   return (
-    <PendingRegion
-      label="player links"
-      innerClassName="flex flex-wrap items-center gap-x-5 gap-y-2 px-6 pt-5"
-    >
-      <div className="flex h-[19.5px] items-center">
-        <PendingBar className="h-2.5 w-16" />
-      </div>
-      <div className="flex h-[19.5px] items-center">
-        <PendingBar className="h-2.5 w-20" />
-      </div>
-    </PendingRegion>
+    <>
+      <div className="mx-6 mt-2.5 h-px bg-[var(--border-hairline)]" />
+      <PendingRegion
+        label="player links"
+        innerClassName="flex flex-col gap-0.5 px-3 pt-2.5"
+      >
+        {["Matches", "Opponents"].map((label) => (
+          <div
+            key={label}
+            className="flex h-10 items-center gap-2 px-3 text-[13px] text-[var(--nav-fg)]"
+          >
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+            <PendingBar className="h-2.5 w-4" />
+          </div>
+        ))}
+      </PendingRegion>
+    </>
   );
 }
 

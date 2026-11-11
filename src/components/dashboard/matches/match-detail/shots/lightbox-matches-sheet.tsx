@@ -24,7 +24,7 @@ import type {
   LightboxSeasonFilters,
   SeasonSheetMatch,
 } from "./lightbox-filters";
-import { prefersReducedMotion } from "./use-reduced-motion";
+import { prefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
 import {
   normalizeSeasonFilters,
   seasonMatchKept,

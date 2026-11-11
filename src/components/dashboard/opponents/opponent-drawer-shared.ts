@@ -1,7 +1,10 @@
 import type { NavLink } from "@/lib/dashboard/nav";
 import { askOpponentKey } from "@/lib/data/ask-tags";
 import { formatMatchDayCompact } from "@/lib/data/match-day";
-import { UNKNOWN_OPPONENT_NAME } from "@/lib/data/personal-opponents";
+import {
+  UNKNOWN_OPPONENT_NAME,
+  type PersonalOpponentMeasureKey,
+} from "@/lib/data/personal-opponents";
 
 /**
  * What the personal and the team opponent drawer both need and neither owns:
@@ -12,6 +15,21 @@ import { UNKNOWN_OPPONENT_NAME } from "@/lib/data/personal-opponents";
  * drawers cannot disagree about any of it. `opponent-drawer.tsx` held these
  * privately until the team drawer needed the same four answers.
  */
+
+/**
+ * The measure selector's short labels — its four 70px cells cut "First
+ * serve won" to "First serve…", which could be in or won. The roster drawer's
+ * measures carry their own (`pill`); these are the opponents' four, in the
+ * same voice ("1st won", "BP …"). The chart's header still names the
+ * selected measure in full.
+ */
+export const OPPONENT_MEASURE_PILL: Record<PersonalOpponentMeasureKey, string> =
+  {
+    total_points_won_pct: "Points won",
+    first_serve_won_pct: "1st won",
+    first_return_won_pct: "Return won",
+    break_points_converted_pct: "BP taken",
+  };
 
 /** How many recent matches a drawer lists; its chart plots all of `recent`. */
 export const RECENT_ROWS = 3;

@@ -721,29 +721,47 @@
   }
 }
 
-/* Visualizations lightbox: the filter strip unfolding over the court
-   (lightbox-filters.tsx, LightboxFilterStrip). grid-template-rows 0fr to
-   1fr opens it without animating height, and the -12px margin while closed
-   takes back the court column's own 12px gap, so the column opens by the
-   strip AND its gap together and the stage under it (flex-1) shrinks a
-   little every frame instead of 49px at once. 250ms on --ease-primary, the
-   film room's shot-well unfold. Reduced motion: no transition, it is simply
-   open or shut. ASCII only (see the block above). */
-.viz-filter-strip-reveal {
+/* The applied-filter strip, everywhere it is drawn (shared/
+   applied-filter-strip.tsx, AppliedFilterStrip: Matches, Opponents, Schedule,
+   the Video tab and the Visualizations lightbox). It moves like the
+   roster's "Not in the lineup" divider (team/roster-table.tsx, ROW_SLIDE /
+   DIVIDER_OUT): height and opacity together on --ease-out-expo, 220ms in and
+   a faster 160ms out - exits undercut arrivals, the eye is already back on
+   the rows. grid-template-rows 0fr to 1fr stands in for framer's height 0 to
+   auto. The host column's flex gap is --filter-strip-gap (set inline by the
+   strip), folded into a negative margin while closed, so whatever sits below
+   eases with the strip instead of jumping. The closed rule's transition runs
+   on the way out, the open rule's on the way in. Reduced motion: below.
+   ASCII only. */
+.filter-strip-reveal {
   display: grid;
   grid-template-rows: 0fr;
-  margin-top: -12px;
+  margin-top: calc(var(--filter-strip-gap, 0px) * -1);
+  opacity: 0;
   transition:
-    grid-template-rows 250ms var(--ease-primary),
-    margin-top 250ms var(--ease-primary);
+    grid-template-rows 160ms var(--ease-out-expo),
+    margin-top 160ms var(--ease-out-expo),
+    opacity 160ms var(--ease-out-expo);
 }
-.viz-filter-strip-reveal[data-open] {
+.filter-strip-reveal[data-open] {
   grid-template-rows: 1fr;
   margin-top: 0;
+  opacity: 1;
+  transition:
+    grid-template-rows 220ms var(--ease-out-expo),
+    margin-top 220ms var(--ease-out-expo),
+    opacity 220ms var(--ease-out-expo);
 }
+/* Reduced motion keeps the acknowledgement and drops the travel: the strip
+   and the content below snap to place, and only the strip's opacity eases
+   in (--duration-fast), so a filter landing still visibly answers. Shutting
+   is instant. Opacity-only, which DS foundations keep under reduced motion. */
 @media (prefers-reduced-motion: reduce) {
-  .viz-filter-strip-reveal {
+  .filter-strip-reveal {
     transition: none;
+  }
+  .filter-strip-reveal[data-open] {
+    transition: opacity var(--duration-fast) var(--ease-out-expo);
   }
 }
 

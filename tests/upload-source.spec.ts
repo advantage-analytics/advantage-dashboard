@@ -119,6 +119,15 @@ const stepModule = (() => {
       React.createElement("span", { "data-pill": "" }, children),
   };
 
+  // The Coach-managed glyph, silent in a menu row: a marked span.
+  const coachMark = {
+    CoachManagedGlyph: () =>
+      React.createElement("span", {
+        "data-icon": "UserRoundCog",
+        "aria-hidden": "true",
+      }),
+  };
+
   // `YouPill` is the REAL module, drawn through that stub: the word it puts
   // in the pill is product code, not this file's.
   const youPill: Record<string, unknown> = {};
@@ -333,6 +342,8 @@ const stepModule = (() => {
               if (dep === "@/lib/data/match-utils") return { getInitials };
               if (dep === "@/components/ui/state-pill") return statePill;
               if (dep === "@/components/ui/you-pill") return youPill;
+              if (dep === "@/components/ui/coach-managed-mark")
+                return coachMark;
               throw new Error(`unexpected import in the roster menu: ${dep}`);
             },
           },
@@ -678,8 +689,12 @@ test("the viewer's own roster row shows both the You pill and the check", () => 
   expect(mine.text).toContain("Riley Reproduction");
   expect(mine.text).toContain("Your own match");
 
-  // A coach-managed profile keeps its own pill and takes no check.
-  expect(options[1].pill).toBe("Coach-managed");
+  // A coach-managed profile carries the glyph after its name and says
+  // "Coach-managed" in its meta line — a menu row's hover means "choose", so
+  // no tooltip could explain the glyph. No pill, and no check.
+  expect(options[1].pill).toBeNull();
+  expect(options[1].html).toContain('data-icon="UserRoundCog"');
+  expect(options[1].text).toContain("Coach-managed");
   expect(options[1].check).toBe(false);
 
   // T12's rule still holds: no generic uploader row to misattribute to.

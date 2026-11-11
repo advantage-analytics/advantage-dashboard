@@ -1,5 +1,6 @@
 "use client";
 
+import { CoachManagedMark } from "@/components/ui/coach-managed-mark";
 import { useState } from "react";
 import {
   SettingsCard,
@@ -243,24 +244,19 @@ export function AdminRosterCard({
           )}
 
           <span className="flex min-w-0 items-center gap-2.5">
-            {/* Coach-managed is a border ring on the initials (Avatar +
-                StatePill, `reference/primitives.md`) — the canvas' `.av.ring`.
-                A claimed profile is unmarked. No photo: the loader reads
+            {/* Coach-managed is the product's glyph after the name
+                (`CoachManagedMark`), as on the roster — it replaced the ring
+                on the initials so admin reads like the product. A claimed
+                profile is unmarked. No photo: the loader reads
                 `program_players`, and an avatar lives on the account. */}
             <PersonAvatar
               initials={getInitials(player.name)}
-              className={cn(
-                "size-[26px] text-[9px]",
-                // `box-shadow`, not a border: an inset ring leaves the 26px
-                // box and the initials inside it exactly where a claimed row
-                // draws them, so the name column does not shift by a pixel
-                // between the two states. The canvas' `.av.ring`, verbatim.
-                !player.hasAccount && "shadow-[inset_0_0_0_1px_var(--ink-300)]",
-              )}
+              className="size-[26px] text-[9px]"
             />
             <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
               {player.name}
             </span>
+            {!player.hasAccount && <CoachManagedMark />}
           </span>
 
           {player.classYear === null ? (

@@ -32,7 +32,9 @@ import { playedSets } from "@/lib/ui/score-format";
 import { RECENT_MATCH_GRID } from "@/components/dashboard/team/player-drawer-layout";
 import { advButton } from "@/lib/ui/adv-button";
 import { capitalize, cn } from "@/lib/utils";
-import { formatDelta, getInitials } from "@/lib/data/match-utils";
+import { formatDelta } from "@/lib/data/match-utils";
+import { PlayerIdentity } from "@/components/dashboard/team/player-identity";
+import { opponentPlaysLabel } from "@/components/dashboard/opponents/opponent-style";
 import {
   archiveProgramPlayer,
   setMemberUploadEnabled,
@@ -46,9 +48,8 @@ import { profileHref } from "@/components/dashboard/team/roster-table";
 import { useClaimInvite } from "@/components/dashboard/team/roster-claim-invite";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 import {
+  MeasureSelector,
   Sparkline,
-  StatPill,
-  drawerPercent,
   type SparkPoint,
 } from "@/components/dashboard/shared/drawer-stat-chart";
 
@@ -56,12 +57,14 @@ import {
  * The roster's 340px player drawer — Platform Audit `Tb4`, spec'd in Updated
  * Design System `20a`/`20c`/`20f`.
  *
- * "Row distilled to what you compare, drawer keeps what you read." Identity →
- * one-line stat header with a six-match sparkline (hover any match for value,
- * opponent and date) → four stat pills that switch the chart — both only
- * where a figure exists, see `hasStats` → three recent
- * matches → full-width Upload. Header controls inset 20px to match the page
- * header; ‹ › step players, and the name below bridges to the page.
+ * "Row distilled to what you compare, drawer keeps what you read." Identity
+ * (`PlayerIdentity`, the profile rail's block: name, facts, Record + form,
+ * Plays) → the four measures as a selector, each with its figure → a
+ * one-line stat header over a six-match sparkline (hover any match for
+ * value, opponent and date) — both only where a figure exists, see
+ * `hasStats` → four recent matches → full-width Upload. Header controls
+ * inset 20px to match the page header; ‹ › step players, and the name below
+ * bridges to the page.
  *
  * ── Opening and closing (20f) ───────────────────────────────────────────────
  * The drawer slides in from the right edge over 200ms on `--ease-primary` and
@@ -103,24 +106,25 @@ const ICON_BUTTON =
  */
 const MENU_ROW_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
 
+/** Recent matches the drawer lists; "All N" opens the rest on the profile. */
+const RECENT_ROWS = 4;
+
 /** The drawer's `role="dialog"` carries this so the window key handler can tell it from a modal. */
 export const DRAWER_ATTR = "data-roster-drawer";
 
 /**
- * "#3 singles · Freshman" — the identity line under the name.
- *
- * Spot first, then year, the order `Tb4` draws ("#3 Singles · Freshman").
- * Handedness is in the frame and not in the schema, so it is not invented.
- * Staff get their role; a player with neither fact gets their address, and
- * "On the roster" is the floor.
+ * "Junior · Singles 2" — the facts under the name, in the profile rail's
+ * order and wording so the two blocks read alike. Staff get their role; a
+ * player with neither fact gets their address, and "On the roster" is the
+ * floor. Handedness is not here: it is the block's own Plays row.
  */
-function identityLine(member: RosterMember): string {
-  if (member.role !== "player") return capitalize(member.role);
+function identityFacts(member: RosterMember): string[] {
+  if (member.role !== "player") return [capitalize(member.role)];
   const parts: string[] = [];
-  if (member.lineupSpot !== null) parts.push(`#${member.lineupSpot} singles`);
   if (member.classYear) parts.push(member.classYear);
-  if (parts.length > 0) return parts.join(" · ");
-  return member.email ?? "On the roster";
+  if (member.lineupSpot !== null) parts.push(`Singles ${member.lineupSpot}`);
+  if (parts.length > 0) return parts;
+  return [member.email ?? "On the roster"];
 }
 
 /* ── The row menu, relocated ──────────────────────────────────────────────── */
@@ -500,65 +504,37 @@ export function PlayerDrawer({
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
-            {/* Identity */}
-            {/* `items-start`, not `items-center`: the avatar stays level with
-              the first line of a name that runs to two. */}
-            <div className="flex items-start gap-3.5">
-              <span
-                aria-hidden
-                className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[14px] font-medium text-[var(--ink-700)]"
-              >
-                {getInitials(member.name)}
-              </span>
-              <div className="flex min-w-0 flex-col gap-1">
-                {/* Ink at rest, blue on hover — the product's link affordance
-                  for a record's own name, the same one the roster row uses.
+            {/* Identity — the profile rail's block (`PlayerIdentity`), so a
+              player reads the same here and on their page. The name links to
+              the profile, ink at rest and blue on hover, and wraps rather
+              than truncating; Coach-managed is the glyph after it. */}
+            <PlayerIdentity
+              name={member.name}
+              href={profile}
+              photoUrl={member.avatarUrl}
+              facts={identityFacts(member)}
+              coachManaged={coachManaged}
+              markAlign="end"
+              wins={member.wins}
+              losses={member.losses}
+              form={member.form}
+              plays={
+                member.role === "player"
+                  ? opponentPlaysLabel(member.hand, member.backhand)
+                  : null
+              }
+            />
 
-                  It WRAPS rather than truncating. A 340px rail clips plenty
-                  of real names at 22px, and the fix for "I cannot read this"
-                  is never a tooltip: the design system's own rule is that
-                  nothing essential lives only in one, and a person's name in
-                  their own drawer is as essential as this panel gets. Two
-                  lines cost ~24px of a rail that scrolls anyway. A row in the
-                  table is the opposite case — fixed at 52px, it cannot give
-                  the height, so there the name truncates and `title` carries
-                  the rest. */}
-                <h2 className="text-title-lg min-w-0">
-                  <Link
-                    href={profile}
-                    /* No `title`. The name is fully readable now, and the
-                     native tooltip it needed drew in the OS's own style —
-                     a pale box here, a dark one there — inches from the
-                     header's real dark tooltips. Removing the truncation
-                     removed the reason for it. */
-                    className="block rounded-[var(--radius-cell)] [text-wrap:balance] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-                  >
-                    {member.name}
-                  </Link>
-                </h2>
-                <span className="text-[12px] text-[var(--ink-600)]">
-                  {identityLine(member)}
-                  {coachManaged && " · Coach-managed"}
-                </span>
-              </div>
-            </div>
-
-            {/* What "coach-managed" means, and the one thing to do about it.
-              The row carries the pill because a coach scans for it; here they
-              are reading one player, so the fact joins the identity line and
-              this well says what follows from it. A well inset in a card is
-              what `--surface-page` is for. The ⋯ menu used to tell a coach to
-              "invite them" with nothing to press — this is that sentence with
-              its link. Staff only: a teammate can do nothing with it. */}
+            {/* The one thing to do about a coach-managed profile. What the
+              state MEANS is the glyph's tooltip, for everyone; this well is
+              what follows from it, for staff only — a teammate can do nothing
+              with it — so the two never say the same sentence. A well inset
+              in a card is what `--surface-page` is for. */}
             {coachManaged && canManage && (
               <div className="flex flex-col items-start gap-2 rounded-[var(--radius-element)] bg-[var(--surface-page)] px-3.5 py-3">
                 <p className="text-[11px] leading-[1.6] text-[var(--ink-700)]">
-                  <strong className="font-medium text-[var(--ink-900)]">
-                    No login yet.
-                  </strong>{" "}
-                  Staff upload {firstName}&rsquo;s matches; the stats build the
-                  same. Invite {firstName} to claim this profile — every match
-                  stays, and no new seat is used.
+                  Invite {firstName} to claim this profile. Every match stays,
+                  and no new seat is used.
                 </p>
                 <button
                   type="button"
@@ -572,17 +548,25 @@ export function PlayerDrawer({
               </div>
             )}
 
-            {/* One-line stat header over the sparkline */}
+            {/* The trend, as one group: the four measures as a selector ABOVE
+              the chart they switch, each with its figure, so the choice comes
+              before the reading; then the chart. The selected figure is said
+              once, in the selector — the chart's header carries only what the
+              selector does not: the full label, the window, the change. The
+              per-match dates are the chart's hover and the list below, so no
+              date row. Only where there is a chart. */}
             {active && hasStats && (
-              <div className="flex flex-col gap-3.5">
-                <div className="flex items-baseline justify-between">
-                  <span className="text-[12px] text-[var(--ink-600)]">
-                    {active.label}
-                    {points.length > 0 && ` · Last ${points.length}`}
-                  </span>
-                  <span className="inline-flex items-baseline gap-1.5">
-                    <span className="tabular text-[16px] text-[var(--ink-900)]">
-                      {drawerPercent(active.value)}
+              <div className="flex flex-col gap-3">
+                <MeasureSelector
+                  measures={member.measures}
+                  activeKey={active.key}
+                  onSelect={setActiveKey}
+                />
+                <div className="flex flex-col gap-2.5 pt-1">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[12px] text-[var(--ink-600)]">
+                      {active.label}
+                      {points.length > 0 && ` · Last ${points.length}`}
                     </span>
                     {heroDelta && (
                       <span
@@ -592,37 +576,13 @@ export function PlayerDrawer({
                         {heroDelta.label}
                       </span>
                     )}
-                  </span>
-                </div>
-                <Sparkline label={active.label} points={points} />
-                <div className="flex justify-between">
-                  <span className="mono text-[10px] text-[var(--ink-400)]">
-                    {points[0]?.match.date ?? ""}
-                  </span>
-                  <span className="mono text-[10px] text-[var(--ink-400)]">
-                    {points.length > 1
-                      ? points[points.length - 1].match.date
-                      : ""}
-                  </span>
+                  </div>
+                  <Sparkline label={active.label} points={points} />
                 </div>
               </div>
             )}
 
-            {/* Four pills that switch the chart — only where there is a chart */}
-            {hasStats && (
-              <div className="flex flex-wrap gap-1.5 border-t border-[var(--border-hairline)] pt-4">
-                {member.measures.map((measure) => (
-                  <StatPill
-                    key={measure.key}
-                    measure={measure}
-                    selected={measure.key === active?.key}
-                    onSelect={() => setActiveKey(measure.key)}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Three recent matches — record rows, chevron, open the match page */}
+            {/* Recent matches — record rows, chevron, open the match page */}
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center pb-2">
                 <span className="eyebrow-sm flex-1">Recent matches</span>
@@ -645,7 +605,7 @@ export function PlayerDrawer({
                   one is analyzed.
                 </p>
               ) : (
-                member.recent.slice(0, 3).map((match) => (
+                member.recent.slice(0, RECENT_ROWS).map((match) => (
                   <Link
                     key={match.id}
                     href={`/dashboard/matches/${match.id}`}
@@ -687,16 +647,20 @@ export function PlayerDrawer({
               )}
             </div>
           </div>
+          {/* One button. The name and "All N" already open the profile, so
+            "Open profile" stands in only for a viewer who cannot upload —
+            the footer is never empty, and never holds two. */}
           <div className="flex shrink-0 flex-col gap-3 px-[22px] py-4">
-            <Link href={profile} className={cn(advButton("ghost"), "w-full")}>
-              Open profile
-            </Link>
-            {canUpload && (
+            {canUpload ? (
               <Link
                 href={`/dashboard/matches/new?player=${member.playerId}`}
                 className={cn(advButton("primary"), "w-full")}
               >
                 Upload for {firstName}
+              </Link>
+            ) : (
+              <Link href={profile} className={cn(advButton("ghost"), "w-full")}>
+                Open profile
               </Link>
             )}
           </div>
