@@ -30,8 +30,20 @@ import {
 import { matchOutcome } from "@/lib/data/match-utils";
 import {
   fromPlayerSide,
+  transformDbMatch,
+  type DbMatch,
   type DisplayMatch,
 } from "@/lib/data/matches-list-types";
+import {
+  buildPlayerProfile,
+  countedSides,
+  profileResultsFrom,
+  type DbPlayerMatchRow,
+  type DbRosterFullRow,
+  type PlayerMatchSide,
+} from "@/lib/data/player-profile-server";
+import { seasonStrip } from "@/lib/data/player-profile";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 
 /**
  * The player profile's arithmetic (Platform Audit `Te` / `Te2`).
@@ -673,5 +685,219 @@ test.describe("fromPlayerSide", () => {
     const turned = fromPlayerSide(match, false);
     expect(turned.player2Hand).toBeUndefined();
     expect(turned.player2Backhand).toBeUndefined();
+  });
+});
+
+/**
+ * Practice is listed, never counted (product decision, no opt-in).
+ *
+ * `readPlayerMatchSides` hands the profile every match, practice included —
+ * for both seated players when the opponent is a teammate
+ * (`tests/player-season-loader.spec.ts` pins that read). Everything the
+ * profile COUNTS starts from `countedSides`, so each assertion here builds
+ * the same player twice, with and without practice rows that would each move
+ * a figure, and expects nothing but `practiceCount` to differ.
+ */
+test.describe("practice on a player's profile: listed, never counted", () => {
+  const ROW: DbRosterFullRow = {
+    player_id: "p-ada",
+    profile_id: "p-ada",
+    user_id: null,
+    display_name: "Ada Okafor",
+    email: null,
+    role: "player",
+    class_year: "2027",
+    lineup_spot: 1,
+    managed_by: "coach",
+  };
+  const P1_WON = { player1: [6, 6], player2: [3, 4] };
+  const P1_LOST = { player1: [3, 4], player2: [6, 6] };
+
+  function side(
+    overrides: Partial<DbPlayerMatchRow> & { id: string },
+    isPlayer1 = true,
+  ): PlayerMatchSide {
+    return {
+      isPlayer1,
+      match: {
+        player1_id: "p-ada",
+        player2_id: null,
+        player1_name: "Ada Okafor",
+        player2_name: "Opponent",
+        score: P1_WON,
+        date: "2026-03-01T00:00:00+00:00",
+        tournament_name: null,
+        event_entry_id: null,
+        round: null,
+        result: null,
+        match_type: "Singles",
+        court_type: null,
+        verified: null,
+        verified_at: null,
+        errors_judged_at: null,
+        duration: null,
+        source_provider: null,
+        created_by: null,
+        opponent_player_id: null,
+        player_hand: null,
+        opponent_hand: null,
+        ...overrides,
+      },
+    };
+  }
+
+  // Newest first, as the loader hands them over: W (dual, S1), L, W.
+  const COUNTED = [
+    side({
+      id: "m-3",
+      date: "2026-03-20T00:00:00+00:00",
+      event_entry_id: "en-1",
+      match_type: "Dual Match",
+    }),
+    side({ id: "m-2", date: "2026-03-10T00:00:00+00:00", score: P1_LOST }),
+    side({ id: "m-1", match_type: "Tournament" }),
+  ];
+  // Three practice sessions, newest of all, every one a win that would lead
+  // the form bar: against a teammate from seat one, against a teammate from
+  // seat TWO (the teammate recorded it), and one filed on the dual's line.
+  const PRACTICE = [
+    side({
+      id: "p-3",
+      date: "2026-04-03T00:00:00+00:00",
+      match_type: "Practice",
+      event_entry_id: "en-1",
+    }),
+    side(
+      {
+        id: "p-2",
+        date: "2026-04-02T00:00:00+00:00",
+        match_type: " practice ",
+        player1_id: "p-bea",
+        player2_id: "p-ada",
+        player1_name: "Bea Lindqvist",
+        player2_name: "Ada Okafor",
+        opponent_player_id: "p-ada",
+        score: {
+          player1: [6, 6, 4],
+          player2: [7, 3, 6],
+          player1_tiebreaks: [3, null, null],
+          player2_tiebreaks: [7, null, null],
+        },
+      },
+      false,
+    ),
+    side({
+      id: "p-1",
+      date: "2026-04-01T00:00:00+00:00",
+      match_type: "PRACTICE",
+      player2_id: "p-bea",
+      player2_name: "Bea Lindqvist",
+      opponent_player_id: "p-bea",
+    }),
+  ];
+  const WITH_PRACTICE = [...PRACTICE, ...COUNTED];
+
+  const ENTRIES = new Map([["en-1", entry("en-1", "S1", "ev-1")]]);
+  const EVENTS = new Map([["ev-1", event("ev-1", "dual")]]);
+
+  test("the record, form bar, dual record and line history do not move", () => {
+    const without = buildPlayerProfile(ROW, COUNTED, ENTRIES, EVENTS);
+    const withPractice = buildPlayerProfile(
+      ROW,
+      WITH_PRACTICE,
+      ENTRIES,
+      EVENTS,
+    );
+
+    expect(withPractice).toEqual({ ...without, practiceCount: 3 });
+    // And the figures are the counted matches' own, not empty.
+    expect(without).toMatchObject({
+      matchesPlayed: 3,
+      practiceCount: 0,
+      wins: 2,
+      losses: 1,
+      duals: { wins: 1, losses: 0 },
+    });
+    expect(without.form.map((bar) => bar.match.id)).toEqual([
+      "m-1",
+      "m-2",
+      "m-3",
+    ]);
+    expect(without.lines).toMatchObject([{ slot: "S1", wins: 1, losses: 0 }]);
+  });
+
+  test("the KPI strip and every KPI series do not move", () => {
+    // The stats rows a season strip reads, one per match INCLUDING the
+    // practice ones, so a practice row that reached the strip would carry a
+    // figure with it.
+    const rates = new Map(
+      WITH_PRACTICE.map((s, i) => [s.match.id, 40 + i * 7] as const),
+    );
+    const strip = (own: readonly PlayerMatchSide[]) =>
+      seasonStrip(
+        profileResultsFrom(own).map((r) => ({
+          ...r,
+          stats: stats({
+            rates: { first_serve_pct: rates.get(r.id) ?? null },
+            breakPointsConverted: 2,
+            breakPointOpportunities: 5,
+          }),
+        })),
+        dualRecordFrom(profileResultsFrom(own), ENTRIES, EVENTS),
+      );
+
+    const without = strip(COUNTED);
+    const withPractice = strip(WITH_PRACTICE);
+    // Every tile: value, subtext, trend, sparkline and the hover chart's
+    // points (`kpiSeries`), plus the strip's own counts.
+    expect(withPractice).toEqual(without);
+    expect(without.matchesPlayed).toBe(3);
+    const firstServe = without.kpis.find((k) => k.key === "first_serve_pct");
+    expect(firstServe?.sparkline).toHaveLength(3);
+    expect(firstServe?.points).toHaveLength(3);
+    expect(without.kpis.find((k) => k.key === "record")?.value).toBe("2–1");
+  });
+
+  test("a profile with nothing but practice has no record at all", () => {
+    const profile = buildPlayerProfile(ROW, PRACTICE, ENTRIES, EVENTS);
+    expect(profile).toMatchObject({
+      matchesPlayed: 0,
+      practiceCount: 3,
+      wins: 0,
+      losses: 0,
+      duals: { wins: 0, losses: 0 },
+      form: [],
+      lines: [],
+    });
+  });
+
+  test("practice rows stay in the list, and the list row is turned to this player's seat", () => {
+    // Nothing is dropped from what the profile lists: the six rows are all
+    // still there, and `countedSides` is the only place practice leaves.
+    expect(WITH_PRACTICE.map((s) => s.match.id)).toHaveLength(6);
+    expect(countedSides(WITH_PRACTICE).map((s) => s.match.id)).toEqual([
+      "m-3",
+      "m-2",
+      "m-1",
+    ]);
+
+    // The teammate-recorded practice, as the Matches list's own row turned to
+    // Ada's seat (`fromPlayerSide` with the seat `readPlayerMatchSides` gave):
+    // her games first in every set, her tiebreak points with her set, and
+    // Bea named as the opponent. Stored 6-7(3) 6-3 4-6 from Bea's side.
+    const { match, isPlayer1 } = PRACTICE[1];
+    expect(isPracticeMatch(match.match_type)).toBe(true);
+    const row = transformDbMatch(match as unknown as DbMatch, "viewer");
+    expect(row).not.toBeNull();
+    const turned = fromPlayerSide(row!, isPlayer1);
+    expect(turned.player2.name).toBe("Bea Lindqvist");
+    expect(turned.player1.name).toBe("Ada Okafor");
+    expect(turned.score.sets).toEqual([
+      { player1: 7, player2: 6, player1Tiebreak: 7, player2Tiebreak: 3 },
+      { player1: 3, player2: 6, player1Tiebreak: null, player2Tiebreak: null },
+      { player1: 6, player2: 4, player1Tiebreak: null, player2Tiebreak: null },
+    ]);
+    // From seat one it is left exactly as stored.
+    expect(fromPlayerSide(row!, true)).toBe(row);
   });
 });

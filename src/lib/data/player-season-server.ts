@@ -34,6 +34,7 @@ import {
   UNKNOWN_OPPONENT_NAME,
 } from "@/lib/data/personal-opponents";
 import {
+  countedSides,
   getPlayerMatchSides,
   type DbPlayerMatchRow,
   type PlayerMatchSide,
@@ -46,6 +47,7 @@ import {
   type SeasonTallies,
 } from "@/lib/data/player-season";
 import type { SeasonVizMatch } from "@/lib/data/player-season-viz";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import { normalizePlayerHand } from "@/components/dashboard/matches/player-hands";
 import type { H2HStats } from "@/components/dashboard/matches/match-detail/head-to-head-rows";
 import { parseBallPathsFile } from "@/components/dashboard/matches/match-detail/film/film-ball";
@@ -67,6 +69,14 @@ import { lobShotKeys } from "@/components/dashboard/matches/match-detail/match-f
  * matches" on the rail and the matches in the season cannot be two sets.
  * Each match keeps its own seat all the way into the fold; nothing here
  * flips a point to a common side (guardrails §4).
+ *
+ * Practice sessions are in that list — the profile's Matches link lists them
+ * — and in nothing here: both loaders start from `countedSides()`, so a
+ * practice match is never asked about (no job, stats, points or file read)
+ * and `matchesPlayed`, `analyzed`, the Head to head rows, the cards and the
+ * courts are what they would be had it never been recorded. The insight
+ * route's prompt is built from this loader's result, so its "Matches
+ * recorded" and tallies leave practice out the same way.
  *
  * "Analyzed" is the match report's own gate plus points. The report draws a
  * match only when `matchPageKind` says `"report"` — never for a job still
@@ -144,8 +154,9 @@ export interface PlayerSeason {
    */
   analyzed: number;
   /**
-   * Every match of theirs the program recorded, analyzed or not — the title's
-   * and the rail's "N matches", the same count as `PlayerProfile.matchesPlayed`.
+   * Every match of theirs the program recorded, analyzed or not, practice
+   * sessions left out — the title's and the rail's "N matches", the same
+   * count as `PlayerProfile.matchesPlayed`.
    */
   matchesPlayed: number;
   /**
@@ -180,11 +191,18 @@ const isDerived = (match: Pick<DbPlayerMatchRow, "source_provider">) =>
  * put a number on the rail that the "N opponents ›" link's Faced-by page does
  * not show. A match naming no opponent groups under nobody there and counts
  * nobody here.
+ *
+ * Two more rows that page leaves out, and so does this: a practice session
+ * (`isPracticeMatch` — an opponent met only in practice is not an opponent
+ * faced), and any match whose other side is on this program's roster
+ * (`PlayerMatchSide.opponentOnRoster`) — a teammate is never an opponent,
+ * whatever the match type.
  */
 export function seasonOpponentCount(sides: readonly PlayerMatchSide[]): number {
   const keys = new Set<string>();
-  for (const { match, isPlayer1 } of sides) {
+  for (const { match, isPlayer1, opponentOnRoster } of sides) {
     if (!isPlayer1) continue;
+    if (opponentOnRoster || isPracticeMatch(match.match_type)) continue;
     const key = personalOpponentKey({
       isUserPlayer1: true,
       player1_name: match.player1_name,
@@ -440,7 +458,9 @@ async function readAnalyzedMatches(
 }
 
 /**
- * The season over `sides`, read through `supabase`. This is the whole fetch;
+ * The season over `sides` — every match of the player's, as
+ * `readPlayerMatchSides` returns them; practice is left out here — read
+ * through `supabase`. This is the whole fetch;
  * `getPlayerSeason` is the request-time wrapper that supplies the client,
  * the matches and the file reader.
  */
@@ -450,15 +470,17 @@ export async function loadPlayerSeason(
   deps: PlayerSeasonDeps,
   caching: SeasonPointsCaching | null = null,
 ): Promise<PlayerSeason> {
+  // Practice is dropped before anything is read (see "Which matches").
+  const counted = countedSides(sides);
   const perMatch = await readAnalyzedMatches(
     supabase,
-    sides,
+    counted,
     (matchId) => readLobKeys(deps, matchId),
     caching,
   );
   return {
     analyzed: perMatch.length,
-    matchesPlayed: sides.length,
+    matchesPlayed: counted.length,
     opponentsCount: seasonOpponentCount(sides),
     groups: foldSeasonRows(perMatch),
     tallies: foldSeasonTallies(perMatch),
@@ -494,10 +516,11 @@ export async function loadPlayerSeasonCourts(
   sides: readonly PlayerMatchSide[],
   caching: SeasonPointsCaching | null = null,
 ): Promise<PlayerSeasonCourts> {
-  const perMatch = await readAnalyzedMatches(supabase, sides, null, caching);
+  const counted = countedSides(sides);
+  const perMatch = await readAnalyzedMatches(supabase, counted, null, caching);
   return {
     analyzed: perMatch.length,
-    matchesPlayed: sides.length,
+    matchesPlayed: counted.length,
     // The day and the opponent ride along for the opened card's readout
     // ("vs Lee · Nov 3"); a match's video is read as Advantage
     // Intelligence's (`SeasonVizMatch.hasPlayableVideo`), since signing each

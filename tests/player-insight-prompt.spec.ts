@@ -11,6 +11,11 @@ import {
   foldSeasonTallies,
   type SeasonMatch,
 } from "@/lib/data/player-season";
+import {
+  countedSides,
+  type DbPlayerMatchRow,
+  type PlayerMatchSide,
+} from "@/lib/data/player-profile-server";
 import type { H2HStats } from "@/components/dashboard/matches/match-detail/head-to-head-rows";
 
 import { createLoader } from "./fixtures/vm-modules";
@@ -225,6 +230,70 @@ test.describe("buildPlayerInsightPrompt", () => {
     expect(prompt).toContain(
       "Points won per analyzed match (oldest → newest): 67% v Smith, 25% v Jones",
     );
+  });
+
+  test("Matches recorded and every tally leave practice out", () => {
+    // A practice set against a teammate, analyzed like any match and lopsided
+    // enough to move every figure if it were counted.
+    const PRACTICE = match({
+      id: "m-p",
+      date: "2026-04-01",
+      opponent: "Okafor",
+      isPlayer1: false,
+      points: [point("p1", false), point("p2", false), point("p3", false)],
+      you: { aces: 20, totalPointsWon: 90, totalPoints: 100 },
+      opp: { aces: 0, totalPointsWon: 10, totalPoints: 100 },
+    });
+    const analyzedById = new Map(
+      [MATCH_A, MATCH_B, PRACTICE].map((m) => [m.matchId, m]),
+    );
+    const side = (
+      id: string,
+      match_type: string | null,
+      isPlayer1 = true,
+    ): PlayerMatchSide => ({
+      match: { id, match_type } as DbPlayerMatchRow,
+      isPlayer1,
+    });
+    // What `loadPlayerSeason` does with a player's sides before it counts or
+    // folds anything (`countedSides`), then the prompt `/api/player-insight`
+    // builds from the result. `tests/player-season-loader.spec.ts` runs the
+    // same comparison through the loader's own reads.
+    const promptOver = (sides: PlayerMatchSide[]) => {
+      const counted = countedSides(sides);
+      const folded = season(
+        counted.flatMap((s) => analyzedById.get(s.match.id) ?? []),
+        counted.length,
+      );
+      return buildPlayerInsightPrompt({
+        name: "Maya Chen",
+        firstName: "Maya",
+        matchesPlayed: folded.matchesPlayed,
+        analyzed: folded.analyzed,
+        groups: folded.groups,
+        tallies: folded.tallies,
+      });
+    };
+
+    const recorded = [
+      side("m-a", "Tournament"),
+      side("m-b", "Dual Match", false),
+      side("m-c", "Singles"),
+    ];
+    const withPractice = promptOver([
+      ...recorded,
+      side("m-p", "Practice", false),
+      side("m-q", " practice "),
+    ]);
+
+    expect(withPractice).toBe(promptOver(recorded));
+    expect(withPractice).toBe(prompt);
+    expect(withPractice).toContain("Matches recorded: 3");
+    expect(withPractice).toContain(
+      "Matches analyzed (every figure below comes from these): 2",
+    );
+    expect(withPractice).not.toContain("Okafor");
+    expect(withPractice).toContain("  - Aces: Maya 4.0, opponents 1.5");
   });
 
   test("states the rows with a figure under the player's name, counts per match and rates pooled", () => {

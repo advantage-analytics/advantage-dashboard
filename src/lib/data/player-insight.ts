@@ -109,7 +109,10 @@ export interface PlayerInsightInput {
   name: string;
   /** Their given name — the word the sentence may call them by. */
   firstName: string;
-  /** Every match of theirs the program recorded, analyzed or not. */
+  /**
+   * Every match of theirs the program recorded, analyzed or not, practice
+   * sessions left out — `PlayerSeason.matchesPlayed`, never a raw row count.
+   */
   matchesPlayed: number;
   /** Matches with points — what every figure comes from. */
   analyzed: number;
@@ -164,6 +167,9 @@ function groupsText(groups: readonly SeasonGroup[], firstName: string): string {
  * The figures are ALL-TIME — every match of theirs the program recorded
  * (`getPlayerMatchSides`), not one academic season — and the rail's "N
  * matches" counts the same set, so the prompt never says "this season".
+ * Practice sessions are in none of them: the season loader drops them before
+ * it counts or folds anything (`countedSides`), so "Matches recorded" and
+ * every tally here are what they would be had the practice never been filmed.
  */
 export function buildPlayerInsightPrompt(input: PlayerInsightInput): string {
   const { name, firstName, matchesPlayed, analyzed, groups, tallies } = input;

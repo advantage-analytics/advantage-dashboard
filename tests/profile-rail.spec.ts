@@ -77,6 +77,7 @@ function render(
     losses: 1,
     form: [{}, {}],
     managedBy: "player",
+    practiceCount: 0,
     ...props.profile,
   };
 
@@ -177,6 +178,24 @@ test("a count of zero is plain text, not a link to an empty page", () => {
   const none = render({ matchesCount: 0, opponentsCount: 0 });
   expect(none).not.toContain("/dashboard/matches?");
   expect(none).toMatch(/<span[^>]*>0 matches<\/span>/);
+});
+
+test("Matches stays a link while there is practice to list, and never counts it", () => {
+  // Nothing but practice: "0 matches" is still the count, and still a door —
+  // the list is where practice is shown.
+  const practiceOnly = render({
+    matchesCount: 0,
+    opponentsCount: 0,
+    profile: { practiceCount: 2 },
+  });
+  expect(practiceOnly).toMatch(
+    /<a href="\/dashboard\/matches\?rosterPlayer=pp-1"[^>]*>0 matches</,
+  );
+  // Practice beside counted matches leaves the number alone.
+  const both = render({ matchesCount: 3, profile: { practiceCount: 2 } });
+  expect(both).toContain("3 matches");
+  expect(both).not.toContain("5 matches");
+  expect(both).not.toContain("ractice");
 });
 
 test("New match fills the footer only when the viewer can upload", () => {

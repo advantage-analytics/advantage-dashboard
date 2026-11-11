@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  countedSides,
   readPlayerMatchSides,
   type DbPlayerMatchRow,
   type PlayerMatchSide,
@@ -16,6 +17,7 @@ import {
   type PlayerSeasonDeps,
 } from "@/lib/data/player-season-server";
 import { foldSeasonRows, foldSeasonTallies } from "@/lib/data/player-season";
+import { buildPlayerInsightPrompt } from "@/lib/data/player-insight";
 import {
   buildSeasonCards,
   buildSeasonLightbox,
@@ -984,6 +986,242 @@ test("seasonOpponentCount keys like the Opponents page: stored id first, else th
   // A match naming nobody counts nobody.
   expect(seasonOpponentCount([side({ id: "6", player2_name: "  " })])).toBe(0);
   expect(seasonOpponentCount([])).toBe(0);
+});
+
+/* ── Practice: listed, never counted ─────────────────────────────────────── */
+
+/**
+ * Two practice sessions added to Ada's history, each with everything a
+ * counted match has — a decided score, both seats' stats rows, points, and a
+ * ball-paths file for the video one — so a practice row that leaked into a
+ * figure would move it:
+ *
+ *   m-p1  Ada seat 1 v Bea seat 2, a TEAMMATE practice (`teammateSeat()`:
+ *         Bea's roster id in `player2_id` and `opponent_player_id`), video
+ *   m-p2  Ada seat 1 v an outside hitting partner, typed " practice "
+ */
+const PRACTICE_MATCHES = [
+  matchRow({
+    id: "m-p1",
+    player2_id: "p-bea",
+    player2_name: "Bea Lindqvist",
+    opponent_player_id: "p-bea",
+    match_type: "Practice",
+    date: "2026-10-20T00:00:00+00:00",
+    source_provider: "splitstep",
+    verified: true,
+    verified_at: "2026-10-21T10:00:00Z",
+    errors_judged_at: "2026-10-21T11:00:00Z",
+  }),
+  matchRow({
+    id: "m-p2",
+    player2_name: "Zara Novak",
+    match_type: " practice ",
+    date: "2026-10-22T00:00:00+00:00",
+  }),
+];
+
+function practiceTables() {
+  const points = [...pointRows("m-p1", 5), ...pointRows("m-p2", 7)];
+  return fullTables({
+    matches: [...MATCHES, ...PRACTICE_MATCHES],
+    match_stats_with_percentages: [
+      ...STATS,
+      statRow("m-p1", true, 40),
+      statRow("m-p1", false, 41),
+      statRow("m-p2", true, 42),
+      statRow("m-p2", false, 43),
+    ],
+    points: [...POINTS, ...points],
+    shots: [...SHOTS, ...shotRows(points)],
+  });
+}
+
+async function sidesOf(playerId: string, tables = fullTables()) {
+  const { client, log } = fakeClient(tables, { program_roster_full: ROSTER });
+  const sides = await readPlayerMatchSides(client, PROGRAM, playerId);
+  if (!sides) throw new Error(`${playerId} is on the roster`);
+  return { client, log, sides };
+}
+
+/** Every read the loader made after the matches read, in order. */
+const seasonReads = (log: string[]) =>
+  log.filter((e) => !e.startsWith("matches.") && !e.startsWith("rpc:"));
+
+test("a teammate practice is returned for both seated players, each from their own seat", async () => {
+  const ada = await sidesOf("p-ada", practiceTables());
+  const bea = await sidesOf("p-bea", practiceTables());
+
+  const adaSide = ada.sides.own.find((s) => s.match.id === "m-p1");
+  const beaSide = bea.sides.own.find((s) => s.match.id === "m-p1");
+  // Ada recorded it, so she is seat one; Bea is the teammate in seat two.
+  expect(adaSide?.isPlayer1).toBe(true);
+  expect(beaSide?.isPlayer1).toBe(false);
+  // Each knows the other side is a teammate, not an opponent faced.
+  expect(adaSide?.opponentOnRoster).toBe(true);
+  expect(beaSide?.opponentOnRoster).toBe(true);
+
+  // Practice stays in the list both profiles start from: it is what the
+  // rail's Matches link lists. The outside practice is Ada's alone.
+  expect(ada.sides.own.map((s) => s.match.id)).toEqual([
+    "m-a",
+    "m-b",
+    "m-c",
+    "m-d",
+    "m-p1",
+    "m-p2",
+  ]);
+  expect(bea.sides.own.map((s) => s.match.id)).toEqual(["m-b", "m-e", "m-p1"]);
+  // An outside opponent is not on the roster; an intra-squad match is.
+  const flag = (id: string) =>
+    ada.sides.own.find((s) => s.match.id === id)?.opponentOnRoster;
+  expect(flag("m-a")).toBe(false);
+  expect(flag("m-p2")).toBe(false);
+  expect(flag("m-b")).toBe(true);
+
+  // And `countedSides` is the one place practice leaves.
+  expect(countedSides(ada.sides.own).map((s) => s.match.id)).toEqual([
+    "m-a",
+    "m-b",
+    "m-c",
+    "m-d",
+  ]);
+});
+
+for (const playerId of ["p-ada", "p-bea"]) {
+  test(`loadPlayerSeason is identical with and without practice rows (${playerId})`, async () => {
+    const files = {
+      "m-b": { ok: true as const, value: LOB_FILE },
+      "m-p1": { ok: true as const, value: LOB_FILE },
+    };
+    const base = await sidesOf(playerId);
+    const baseFiles = fakeBallPaths(files);
+    const without = await loadPlayerSeason(
+      base.client,
+      base.sides.own,
+      baseFiles.deps,
+    );
+
+    const added = await sidesOf(playerId, practiceTables());
+    expect(added.sides.own.length).toBeGreaterThan(base.sides.own.length);
+    const addedFiles = fakeBallPaths(files);
+    const withPractice = await loadPlayerSeason(
+      added.client,
+      added.sides.own,
+      addedFiles.deps,
+    );
+
+    // The whole season: analyzed, matchesPlayed, opponentsCount, the Head to
+    // head groups, the cards' tallies (point endings, rally length, net game,
+    // the per-match tracker) and the per-match points the courts read.
+    expect(withPractice).toEqual(without);
+    expect(without.analyzed).toBeGreaterThan(0);
+    expect(withPractice.perMatch.map((m) => m.matchId)).not.toContain("m-p1");
+    expect(withPractice.tallies.perMatch.map((m) => m.matchId)).not.toContain(
+      "m-p2",
+    );
+
+    // Not merely filtered after the fact: a practice match is never asked
+    // about — no job, stats, points or ball-paths read names it.
+    expect(seasonReads(added.log)).toEqual(seasonReads(base.log));
+    expect(added.log.some((e) => e.includes("m-p"))).toBe(false);
+    expect(addedFiles.asked).toEqual(baseFiles.asked);
+  });
+
+  test(`loadPlayerSeasonCourts is identical with and without practice rows (${playerId})`, async () => {
+    const base = await sidesOf(playerId);
+    const without = await loadPlayerSeasonCourts(base.client, base.sides.own);
+    const added = await sidesOf(playerId, practiceTables());
+    const withPractice = await loadPlayerSeasonCourts(
+      added.client,
+      added.sides.own,
+    );
+
+    expect(withPractice).toEqual(without);
+    expect(without.analyzed).toBeGreaterThan(0);
+    expect(seasonReads(added.log)).toEqual(seasonReads(base.log));
+    // So the wall's cards are the same cards.
+    const bands = { bands: DEFAULT_BANDS, unit: "ft" as const };
+    expect(buildSeasonCards(withPractice.perMatch, "you", bands)).toEqual(
+      buildSeasonCards(without.perMatch, "you", bands),
+    );
+  });
+}
+
+test("the insight prompt's Matches recorded and tallies leave practice out", async () => {
+  const promptFor = async (tables: ReturnType<typeof fullTables>) => {
+    const { client, sides } = await sidesOf("p-ada", tables);
+    const { deps } = fakeBallPaths({});
+    // What `/api/player-insight` does: the season, then the prompt from it.
+    const season = await loadPlayerSeason(client, sides.own, deps);
+    return buildPlayerInsightPrompt({
+      name: "Ada Okafor",
+      firstName: "Ada",
+      matchesPlayed: season.matchesPlayed,
+      analyzed: season.analyzed,
+      groups: season.groups,
+      tallies: season.tallies,
+    });
+  };
+
+  const without = await promptFor(fullTables());
+  const withPractice = await promptFor(practiceTables());
+
+  expect(withPractice).toBe(without);
+  // Six rows on file, four counted, three analyzed.
+  expect(withPractice).toContain("Matches recorded: 4");
+  expect(withPractice).toContain(
+    "Matches analyzed (every figure below comes from these): 3",
+  );
+  expect(withPractice).not.toContain("Zara Novak");
+});
+
+test("seasonOpponentCount never counts a practice partner or a teammate as an opponent faced", async () => {
+  // Through the read: Zara (practice only) and Bea (a teammate) add nobody.
+  const base = await sidesOf("p-ada");
+  const added = await sidesOf("p-ada", practiceTables());
+  expect(seasonOpponentCount(added.sides.own)).toBe(
+    seasonOpponentCount(base.sides.own),
+  );
+  expect(seasonOpponentCount(added.sides.own)).toBe(2);
+
+  const side = (
+    overrides: Partial<DbPlayerMatchRow> & { id: string },
+    opponentOnRoster = false,
+  ): PlayerMatchSide => ({
+    match: matchRow(overrides),
+    isPlayer1: true,
+    opponentOnRoster,
+  });
+  // Met only in practice: not an opponent faced, with or without a stored id.
+  expect(
+    seasonOpponentCount([
+      side({ id: "1", player2_name: "Zara Novak", match_type: "Practice" }),
+      side({
+        id: "2",
+        player2_name: "Yuki Abe",
+        opponent_player_id: "opp-2",
+        match_type: "PRACTICE",
+      }),
+    ]),
+  ).toBe(0);
+  // A teammate is never an opponent, whatever the match type says.
+  expect(
+    seasonOpponentCount([
+      side({ id: "3", player2_name: "Bea Lindqvist" }, true),
+      side(
+        { id: "4", player2_name: "Bea Lindqvist", match_type: "Dual Match" },
+        true,
+      ),
+    ]),
+  ).toBe(0);
+  // The same opponent in a counted match still counts once.
+  expect(
+    seasonOpponentCount([
+      side({ id: "5", player2_name: "Zara Novak", match_type: "Practice" }),
+      side({ id: "6", player2_name: "Zara Novak", match_type: "Tournament" }),
+    ]),
+  ).toBe(1);
 });
 
 /* ── Failing closed, and the empty season ────────────────────────────────── */

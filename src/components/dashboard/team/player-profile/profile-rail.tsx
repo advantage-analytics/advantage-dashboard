@@ -47,10 +47,12 @@ export function ProfileRail({
   /** This player's photo, or null to draw initials. */
   photoUrl: string | null;
   /**
-   * Every match of theirs the program recorded — the same number as the
-   * title's facts line (`PlayerSeason.matchesPlayed`), so the page shows one
-   * count. The Matches list it links to hides a match with no score
-   * (`transformDbMatch`), so its rows can read a little fewer.
+   * Every match of theirs the program recorded, practice sessions left out —
+   * the same number as the title's facts line (`PlayerSeason.matchesPlayed`),
+   * so the page shows one count. The Matches list it links to hides a match
+   * with no score (`transformDbMatch`), so its rows can read a little fewer;
+   * it also lists their practice sessions (`profile.practiceCount`), which
+   * this number never counts.
    */
   matchesCount: number;
   /** Distinct opponents across those matches. */
@@ -76,13 +78,16 @@ export function ProfileRail({
           recorded first. Both take
           `profile.playerId`, never the URL's id — a claimed player's old
           links carry their login. A count of 0 is plain text: a link to an
-          empty list is a door to nothing. */}
+          empty list is a door to nothing. Matches stays a link while there
+          is practice to list, even at "0 matches": practice is never
+          counted, and the list is where it is shown. */}
       <nav
         aria-label="More about this player"
         className="flex flex-wrap items-center gap-x-5 gap-y-2 px-6 pt-5"
       >
         <RailLink
           count={matchesCount}
+          linked={matchesCount + profile.practiceCount > 0}
           href={`/dashboard/matches?${ROSTER_PLAYER_PARAM}=${encodeURIComponent(profile.playerId)}`}
         >
           {countLabel(matchesCount, "match", "matches")}
@@ -113,14 +118,17 @@ export function ProfileRail({
 function RailLink({
   href,
   count,
+  linked = count > 0,
   children,
 }: {
   href: string;
   /** What the words count; 0 draws them as plain text, not a link. */
   count: number;
+  /** Whether the destination has rows; defaults to "the count is not 0". */
+  linked?: boolean;
   children: React.ReactNode;
 }) {
-  if (count === 0) {
+  if (!linked) {
     return (
       <span className="tabular text-[13px] text-[var(--ink-500)]">
         {children}

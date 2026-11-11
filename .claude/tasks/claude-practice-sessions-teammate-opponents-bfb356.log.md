@@ -154,3 +154,13 @@ is the runner's. Newest entries at the bottom.
 3. The untagged rail state on a practice match still reads "Not scored yet" with a "Practice · hard" caption (not covered by the canvas).
 4. On a practice match the facts line shows "Practice" even when an event was filed; the Matches list (T12) keeps the event name — make them agree.
 5. Run `pipeline-guardrails-reviewer` at /pr-check — this touches seat-dependent report rendering.
+
+## T9 · Player profile: practice listed, never counted — done
+
+**gate:** re-run after the author dropped criterion 3 on 2026-11-10 (the profile route renders no match list of its own). Stash b994913f applied on top of T10–T14; a doc comment repointed at `tests/player-profile.spec.ts`. Mechanical: lint pass, typecheck pass, tests shard 1/2 4770 passed, shard 2/2 5170 passed. Completion VERDICT: pass on criteria 1, 2 and 4. Widget-states: `profile-rail.tsx` changes only when the Matches link is live; no loader, Suspense or empty-state path.
+**changed:** `player-profile-server.ts` (`countedSides`, pure `profileResultsFrom` / `buildPlayerProfile`, `PlayerProfile.practiceCount`, `PlayerMatchSide.opponentOnRoster`; `matchesPlayed` excludes practice); `player-season-server.ts` (season loaders start from counted sides; `seasonOpponentCount` skips practice and teammates); `profile-rail.tsx` keeps the Matches link live while practice exists; comments in `player-insight.ts` and the route page; specs `player-profile`, `player-season-loader`, `player-insight-prompt`, `profile-rail`.
+**follow-ups:**
+
+1. The rail's "N matches" now excludes practice while the linked Matches list shows practice too; `practiceCount` is available if the rail should state the split.
+2. The `?rosterPlayer=` Matches cut does not turn a seat-two row to that player's side (needs a turn that keeps `id`/`profileId` and never flips an undecided score).
+3. `opponentOnRoster` is true for any roster id, staff included.

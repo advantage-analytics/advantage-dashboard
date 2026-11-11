@@ -128,7 +128,7 @@ ready).
 
 ## T9 · Player profile: practice listed, never counted
 
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **needs:** T1, T5
 - **files:** (guess) `src/lib/data/player-profile-server.ts` (`readPlayerMatchSides` ~180, `getPlayerProfile` ~264), `player-profile.ts` (`seasonStrip`, `seasonKpis`, `dualRecordFrom`, `profileFormBar`, `kpiSeries`), `player-season-server.ts`, `player-season.ts`, `player-insight.ts`, `src/components/dashboard/team/player-profile/*` (match list, `profile-rail.tsx`); `tests/player-profile.spec.ts`, `tests/player-season-loader.spec.ts`, `tests/player-insight-prompt.spec.ts`
@@ -136,7 +136,7 @@ ready).
 - **done when:**
   - [ ] `readPlayerMatchSides` returns a teammate practice for both seated players, with `isPlayer1` false for the player in seat two, asserted with a fixture
   - [ ] The profile's record, form bar, KPI strip and KPI series, and every season loader (`loadPlayerSeason`, `loadPlayerSeasonCourts`, season head-to-head, point endings, rally and net cards) produce identical output with and without added practice rows
-  - [ ] The profile's match list still shows practice rows, with "Practice" as the event label, no `ResultMark`, and the score printed from that profile player's side
+  - [ ] ~~The profile's match list still shows practice rows, with "Practice" as the event label, no `ResultMark`, and the score printed from that profile player's side~~ — dropped by the author 2026-11-10: the profile route renders no match list of its own (its only list is the rail's Matches link); the label and result treatment live on the Matches list (T12)
   - [ ] `buildPlayerInsightPrompt`'s "Matches recorded" figure and tallies exclude practice, pinned in `tests/player-insight-prompt.spec.ts`
 - **notes:** The canvas has no profile board; "their profiles list it under Practice" appears only in the notice copy. This draft keeps practice rows in the existing match list rather than inventing a section. `seasonOpponentCount` (`player-season-server.ts` ~184) must not count a teammate as an opponent faced.
 
