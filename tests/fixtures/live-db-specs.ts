@@ -34,6 +34,7 @@ export const LIVE_DB_SPECS = [
   "match-share-browser.spec.ts",
   "match-share-links-rls.spec.ts",
   "match-video-attachments-db.spec.ts",
+  "matches-player2-roster-check.spec.ts",
   "onboarding-flow-browser.spec.ts",
   "onboarding-intake-live.spec.ts",
   "pending-invites.spec.ts",

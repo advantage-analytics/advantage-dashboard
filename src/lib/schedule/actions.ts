@@ -221,7 +221,7 @@ export async function opponentRosterForDual(
     supabase.rpc("pooled_roster", { p_program_id: opponentProgramId }),
     supabase
       .from("matches")
-      .select("id, player2_name, opponent_player_id")
+      .select("id, player2_name, opponent_player_id, match_type")
       .eq("program_id", auth.programId),
   ]);
 
@@ -229,6 +229,7 @@ export async function opponentRosterForDual(
     id: string;
     player2_name: string | null;
     opponent_player_id: string | null;
+    match_type: string | null;
   }[];
 
   const candidates = (

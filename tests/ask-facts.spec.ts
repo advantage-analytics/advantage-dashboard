@@ -259,6 +259,45 @@ test.describe("computeAskFacts — rows in date order", () => {
       "i_won is true in 1 of the 3 rows and false in 1; 1 have no value.",
     ]);
   });
+
+  test("practice rows are left out of that count when the result says which rows are practice, and counted when every row is", () => {
+    // A run of results with one practice session in it: the record is over
+    // the two matches, and the statement says the third was left out.
+    expect(
+      comparisonFacts([
+        { played_on: "2026-06-04", match_type: "Tournament", i_won: true },
+        { played_on: "2026-07-09", match_type: " practice ", i_won: true },
+        { played_on: "2026-09-28", match_type: null, i_won: false },
+      ]),
+    ).toEqual([
+      "i_won is true in 1 of the 2 rows that are not practice and false in 1. The other 1 row is practice and is left out: practice never counts toward a record.",
+    ]);
+    // Two practice rows, in any case.
+    expect(
+      comparisonFacts([
+        { played_on: "2026-06-04", match_type: "Dual Match", i_won: false },
+        { played_on: "2026-07-09", match_type: "PRACTICE", i_won: true },
+        { played_on: "2026-09-28", match_type: "Practice", i_won: true },
+      ]),
+    ).toEqual([
+      "i_won is true in 0 of the 1 rows that are not practice and false in 1. The other 2 rows are practice and are left out: practice never counts toward a record.",
+    ]);
+    // "How did my practice sets go": every row is practice, so they are the
+    // question and are counted as they are.
+    expect(
+      comparisonFacts([
+        { played_on: "2026-06-04", match_type: "Practice", i_won: true },
+        { played_on: "2026-07-09", match_type: "practice", i_won: false },
+      ]),
+    ).toEqual(["i_won is true in 1 of the 2 rows and false in 1."]);
+    // Legacy types are not practice.
+    expect(
+      comparisonFacts([
+        { played_on: "2026-06-04", match_type: "Singles", i_won: true },
+        { played_on: "2026-07-09", match_type: "Doubles", i_won: false },
+      ]),
+    ).toEqual(["i_won is true in 1 of the 2 rows and false in 1."]);
+  });
 });
 
 test.describe("computeAskFacts — match counts", () => {

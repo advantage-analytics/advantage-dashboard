@@ -431,7 +431,24 @@ function hintActions(
       return [
         {
           label: lastCallAction(vendorCall),
-          run: () => onPatchShot(lastCallShotId, { result: vendorCall }),
+          // The vendor's call, chosen over the landing: the labeller's call
+          // now, so it outranks the landing it equals the seed of.
+          run: () =>
+            onPatchShot(lastCallShotId, {
+              result: vendorCall,
+              result_called: true,
+            }),
+        },
+      ];
+    }
+    case "last_ball_against_game": {
+      if (!onPatchShot) return [];
+      const { shotId, call } = mark.params;
+      return [
+        {
+          label: lastCallAction(call),
+          // The labeller's call: the ending and winner follow the write.
+          run: () => onPatchShot(shotId, { result: call, result_called: true }),
         },
       ];
     }
@@ -460,7 +477,10 @@ function hintActions(
                 label: removeAfterLabel(after.length),
                 run: () =>
                   marksOut
-                    ? onPatchShot(shotId, { result: "out" })
+                    ? onPatchShot(shotId, {
+                        result: "out",
+                        result_called: true,
+                      })
                     : onRemoveShotsAfter(point.id, shotId),
               },
             ]

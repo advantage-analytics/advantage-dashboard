@@ -93,6 +93,8 @@ export interface LabelShotRow {
   hitter: LabelSide | null;
   stroke: LabelStroke | null;
   result: LabelShotResult | null;
+  /** Absent from a read that did not ask for it; read as false. */
+  result_called?: boolean | null;
   spin: LabelSpin | null;
   contact_x: number | null;
   contact_y: number | null;
@@ -110,7 +112,7 @@ export interface LabelShotRow {
 }
 
 export const LABEL_SHOT_COLUMNS =
-  "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, spin, contact_x, contact_y, landing_x, landing_y, video_time, unclear, tags, site_removal, site_removal_restored_at, seed";
+  "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, result_called, spin, contact_x, contact_y, landing_x, landing_y, video_time, unclear, tags, site_removal, site_removal_restored_at, seed";
 
 export function toLabelShot(row: LabelShotRow): LabelShot {
   return {
@@ -124,6 +126,7 @@ export function toLabelShot(row: LabelShotRow): LabelShot {
     hitter: row.hitter,
     stroke: row.stroke,
     result: row.result,
+    resultCalled: row.result_called ?? false,
     spin: row.spin,
     contactX: row.contact_x,
     contactY: row.contact_y,

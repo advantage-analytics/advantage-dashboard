@@ -351,9 +351,9 @@ export const LabelVideoPlayer = forwardRef<
     checkReady();
   }, [settle, checkReady]);
 
-  // D, ⇧L and M — the keys the transport's tooltips name. Space and ← / →
+  // ⇧D, ⇧L and M — the keys the transport's tooltips name. Space and ← / →
   // are the console's (it owns the handle); these three are the player's own
-  // state. Loop takes ⇧ because plain L is the console's let. On the
+  // state. Loop and Skip dead time take ⇧: plain L and D are the console's. On the
   // console's terms: never from inside a control or an editor.
   useEffect(() => {
     if (!video) return;
@@ -367,7 +367,9 @@ export const LabelVideoPlayer = forwardRef<
         return;
       }
       const key = event.key.toLowerCase();
-      if (event.shiftKey !== (key === "l")) return;
+      // ⇧L loops and ⇧D skips dead time; plain L and D are the console's
+      // (let or lob, drop shot). M takes no ⇧.
+      if (event.shiftKey !== (key === "l" || key === "d")) return;
       if (key !== "d" && key !== "l" && key !== "m") return;
       const target = event.target as Element | null;
       if (target?.closest?.(KEY_OWNER_SELECTOR)) return;
@@ -564,10 +566,12 @@ export const LabelVideoPlayer = forwardRef<
           className="absolute inset-0"
         />
 
-        {/* The read-ahead: never shown, never played, same URL. */}
+        {/* The read-ahead: never shown, never played, same URL. No `src` until
+            the film is playable: each element holds its own connection to
+            storage and Safari allows about six per host. */}
         <video
           ref={readAheadRef}
-          src={video.url}
+          src={ready ? video.url : undefined}
           preload="auto"
           muted
           playsInline
@@ -582,10 +586,7 @@ export const LabelVideoPlayer = forwardRef<
         {!ready && (
           <div
             data-label-video-pending=""
-            className={cn(
-              "pointer-events-none absolute inset-0",
-              square && "[&_*]:rounded-none",
-            )}
+            className="pointer-events-none absolute inset-0"
           >
             <FilmFramePending overlay />
           </div>
@@ -637,6 +638,7 @@ export const LabelVideoPlayer = forwardRef<
           onStep={onStep ?? step}
           onToggleSaved={noop}
           onToggleSkipDeadTime={toggleSkipDeadTime}
+          skipDeadShortcut="⇧D"
           onCycleRate={cycleRate}
           onToggleLoop={toggleLoop}
           loopShortcut="⇧L"

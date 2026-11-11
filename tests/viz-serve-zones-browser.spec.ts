@@ -43,6 +43,13 @@ test.beforeAll(async () => {
         resolve: {
           extensions: [".tsx", ".ts", ".jsx", ".js"],
           alias: {
+            // The chart menu's band rows read the bands context, whose
+            // server action a plain bundle cannot load.
+            "@/lib/posthog-client$": resolve(
+              "tests/fixtures/posthog-client-off-mock.ts",
+            ),
+            "@/app/dashboard/matches/(detail)/[matchId]/viz-bands-actions":
+              resolve("tests/fixtures/viz-fullscreen-actions-browser-mock.ts"),
             "@": resolve("src"),
             "next/navigation": resolve(
               "tests/fixtures/viz-navigation-browser-mock.ts",
@@ -160,14 +167,15 @@ test("a mark pinned on Scatter does not stop the fullscreen zones answering on Z
   const fullscreen = page.getByTestId("fullscreen");
   const readout = fullscreen.locator("[data-viz-readout]");
   await fullscreen.locator('[data-viz-mark="p1-high-0-0"]').click();
-  await expect(readout).toContainText("Watch point");
+  // The lightbox readout carries no controls.
+  await expect(readout).toContainText("Point won");
+  await expect(readout.locator("button")).toHaveCount(0);
   await page.getByRole("button", { name: "Scatter", exact: true }).click();
   await page.getByRole("menuitemradio", { name: /Zones/ }).click();
   await expect(fullscreen.locator("[data-viz-mark]")).toHaveCount(0);
   await expect(readout).toHaveCount(0);
   await fullscreen.locator('[data-serve-zone-cell="deuce-wide"]').hover();
   await expect(readout).toContainText("deuce wide");
-  await expect(readout).not.toContainText("Watch point");
 });
 
 test("Zones with only faults keeps the six empty cells instead of falling back to scatter", async ({

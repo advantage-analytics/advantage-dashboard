@@ -1174,10 +1174,13 @@ test.describe("wizard: stale subjects return to selection, never to the uploader
   });
 
   test("missing draft subject — a team draft resumes on the picker", () => {
-    // The who-played answer is not persisted with a draft, so a resumed team
-    // draft lands where it is asked, not past it.
+    // A team draft whose saved player did not survive the roster re-check (or
+    // that never stored one) lands where who-played is asked, not past it.
     expect(draftResumeStep(true)).toBe("provider");
+    expect(draftResumeStep(true, false)).toBe("provider");
     expect(draftResumeStep(false)).toBe("file");
+    // A seeded subject answers the question, so the draft resumes on the file.
+    expect(draftResumeStep(true, true)).toBe("file");
     // And with nothing chosen, nothing passes.
     const result = refused(
       wizardUploadEligibility({
@@ -1759,6 +1762,111 @@ test.describe("wizard handlers: drafts and confirmations", () => {
     const personalDraft = uploadWizardHarness({ props: { draft } });
     await personalDraft.flush();
     expect(personalDraft.current.step).toBe("file");
+  });
+
+  test("a team draft whose saved player was re-checked resumes on the file step", async () => {
+    const subject = {
+      kind: "roster" as const,
+      playerId: "athlete",
+      name: "Player athlete",
+    };
+    const draft = {
+      id: "draft-2",
+      step: "match" as const,
+      stepCount: 3,
+      stepIndex: 2,
+      provider: "swing-vision",
+      // Saved before a roster rename: the roster's name must win.
+      formData: { ...DEFAULT_FORM_DATA, playerName: "Old Name" },
+      fileName: "old.csv",
+      preset: null,
+      attachedLine: null,
+      subject,
+      updatedAt: "2026-09-10T00:00:00.000Z",
+    };
+    // The page seeds `initialSubject` only after the roster lookup confirms it.
+    const h = uploadWizardHarness({
+      team: true,
+      props: { draft, initialSubject: subject },
+    });
+    await h.flush();
+    expect(h.current.step).toBe("file");
+    expect(h.current.whoPlayed.subject).toEqual(subject);
+    expect(h.current.formData.playerName).toBe("Player athlete");
+  });
+
+  test("a seed the draft never chose pre-fills For and still opens on the picker", async () => {
+    // An older draft resolved by its saved name, or a `?player=` link: the
+    // page seeds it, but it is a guess until the person confirms it.
+    const guessed = {
+      kind: "roster" as const,
+      playerId: "athlete",
+      name: "Player athlete",
+    };
+    const draft = {
+      id: "draft-3",
+      step: "match" as const,
+      stepCount: 3,
+      stepIndex: 2,
+      provider: "swing-vision",
+      formData: { ...DEFAULT_FORM_DATA, playerName: "Player athlete" },
+      fileName: "old.csv",
+      preset: null,
+      attachedLine: null,
+      updatedAt: "2026-09-10T00:00:00.000Z",
+    };
+    const h = uploadWizardHarness({
+      team: true,
+      props: { draft, initialSubject: guessed },
+    });
+    await h.flush();
+    expect(h.current.step).toBe("provider");
+    expect(h.current.whoPlayed.subject).toEqual(guessed);
+  });
+
+  test("a link naming another player clears what the draft answered for the first", async () => {
+    const saved = {
+      kind: "roster" as const,
+      playerId: "first",
+      name: "Player first",
+    };
+    const linked = {
+      kind: "roster" as const,
+      playerId: "second",
+      name: "Player second",
+    };
+    const draft = {
+      id: "draft-4",
+      step: "match" as const,
+      stepCount: 3,
+      stepIndex: 2,
+      provider: "swing-vision",
+      formData: {
+        ...DEFAULT_FORM_DATA,
+        playerName: "Player first",
+        playerHand: "left" as const,
+        opponentName: "Casey Opponent",
+        eventName: "Fall Classic",
+      },
+      fileName: "old.csv",
+      preset: null,
+      attachedLine: null,
+      subject: saved,
+      updatedAt: "2026-09-10T00:00:00.000Z",
+    };
+    const h = uploadWizardHarness({
+      team: true,
+      props: { draft, initialSubject: linked },
+    });
+    await h.flush();
+    expect(h.current.step).toBe("provider");
+    expect(h.current.whoPlayed.subject).toEqual(linked);
+    expect(h.current.formData.playerName).toBe("Player second");
+    // Answered for the first player: gone.
+    expect(h.current.formData.playerHand).toBeUndefined();
+    expect(h.current.formData.opponentName).toBe("");
+    // A fact about the match, whoever played it: kept.
+    expect(h.current.formData.eventName).toBe("Fall Classic");
   });
 
   test("changing the subject drops an import confirmation", async () => {

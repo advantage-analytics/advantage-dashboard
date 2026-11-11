@@ -47,6 +47,7 @@ import {
   orderLabelShots,
   type LabelPoint,
   type LabelShot,
+  type LabelSide,
 } from "./session";
 import {
   effectiveShotResult,
@@ -771,6 +772,51 @@ export function lastCallAnswer(
 }
 
 /**
+ * "Was the last ball out?" (or in) on a point of a locked game that does not
+ * add up: `gameWinner` is the side that game needs the point won by
+ * (game-boundary.ts `lockedGameNeeds`). Raised only when the point's last
+ * ball — the last live stroke, lets aside, as `deriveEnding` reads it — has a
+ * result, the strokes do not already give the point to `gameWinner`, and the
+ * opposite call on that ball would: In to Out for a ball the other side hit
+ * in, Out or Net to In for one `gameWinner` missed. A dragged boundary is the
+ * labeller's word, so the winner the game needs is likelier right than the
+ * call on the last ball. Null otherwise — a point the strokes already give to
+ * `gameWinner` is "Different ending?"'s, and one whose last ball settles
+ * nothing has no call to flip. Offered on a click, never applied: the answer
+ * writes the call (`result_called`), and the ending and winner follow it.
+ */
+export function lastBallAgainstGame(
+  point: Pick<LabelPoint, "winner" | "shots" | "ending">,
+  gameWinner: LabelSide,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "last_ball_against_game" }> | null {
+  if (isNonPointEnding(point.ending)) return null;
+  const now = deriveEnding(point, ghosts);
+  if (!now || now.winner === null || now.winner === gameWinner) return null;
+  const last = liveShotsInOrder(point, ghosts)
+    .filter((shot) => !isLetServe(shot))
+    .at(-1);
+  if (!last || last.result === null) return null;
+  const call: "in" | "out" = isMissedResult(last.result) ? "in" : "out";
+  const flipped = deriveEnding(
+    {
+      winner: point.winner,
+      shots: point.shots.map((shot) =>
+        shot.id === last.id ? { ...shot, result: call } : shot,
+      ),
+    },
+    ghosts,
+  );
+  if (flipped?.winner !== gameWinner) return null;
+  return {
+    code: "last_ball_against_game",
+    tier: "hint",
+    scope: "point",
+    params: { shotId: last.id, call, gameWinner },
+  };
+}
+
+/**
  * "Second serve?": a live serve typed `first_serve` that follows an earlier
  * live serve of the point whose ball missed — by structure the second serve,
  * however the vendor typed it. A let between them is replayed and changes
@@ -1092,6 +1138,7 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
     question: REVIEW_ITEM_QUESTION[4],
     codes: [
       "last_call_overruled",
+      "last_ball_against_game",
       "net_by_trajectory",
       "winner_disputed",
       "ending_suspect_line",
@@ -1228,8 +1275,9 @@ function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
  * never amber ("Serve replayed" moved the winner on 22% of its points, the
  * base rate, 2026-11-05); item 3 only for a double
  * fault in question or a point stopping on a faulted first serve; item 4
- * when a counted mark sits under it or the point's winner is the player its
- * strokes say lost; item 5 is always the score; item 6 only for "Game cut
+ * when a counted mark or "Was the last ball out?" for a locked game
+ * (`last_ball_against_game`) sits under it, or the point's winner is the
+ * player its strokes say lost; item 5 is always the score; item 6 only for "Game cut
  * differs" (unless it is on most of the match, `systemic`) or "Tiebreak
  * score, not 6–6" (the serve-side marks under it are data,
  * `DATA_MARK_CODES`); item 7 never. Like the
@@ -1262,7 +1310,10 @@ function reviewItemTone(
         ? "score"
         : "data";
     case 4:
+      // "Was the last ball out?" for a locked game moves the score: its
+      // answer hands the point to the other side.
       return members.some((member) => member.mark.tier === "count") ||
+        has("last_ball_against_game") ||
         (contradicted ?? pointWinnerContradicted(point, marks))
         ? "score"
         : "data";
@@ -1410,6 +1461,12 @@ export function reviewItemQuestion(
       if (mark.code === "last_call_overruled") {
         return lastCallQuestion(mark.params.vendorCall);
       }
+    }
+    const forGame = item.members.find(
+      ({ mark }) => mark.code === "last_ball_against_game",
+    )?.mark;
+    if (forGame?.code === "last_ball_against_game") {
+      return lastCallQuestion(forGame.params.call);
     }
   }
   return item.question;

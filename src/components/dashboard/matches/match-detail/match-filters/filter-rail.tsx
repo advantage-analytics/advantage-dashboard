@@ -19,37 +19,40 @@ import { FiltersPanel } from "./filters-panel";
 import { serializeMatchFilters, type MatchFilters } from "./model";
 import { useFiltersPanelData, useMatchFilters } from "./provider";
 import {
+  FILTER_SHEET_CLASS,
+  FILTER_SHEET_PANEL_CLASS,
+  FILTER_SHEET_SCRIM_CLASS,
+  filterSheetWidthClass,
+  inertPageBehind,
+  wrapTabInSheet,
+} from "./filter-sheet";
+import {
   escClosesRail,
   filterRailReducer,
-  MATCH_REPORT_FRAME_ID,
   type FilterRailPhase,
 } from "./rail-state";
 
 /**
- * The Video tab's filters drawer — `FiltersPanel` in a 340px panel that
- * OVERLAYS the point-list column: anchored to the report pane's right edge
- * (the frame's right edge), from just under the top header to the bottom,
- * above the page content. The video keeps its size and nothing reflows — the
- * film keeps playing beside every filter operation. White surface, hairline
- * left edge, `--shadow-dropdown`: the peek drawer's paint.
+ * The Video tab's filters drawer — `FiltersPanel` in the advanced-filters
+ * sheet (`filter-sheet.ts`): 340px on the window's right edge, its whole
+ * height, over the icon rail, the header and the report alike, all of which
+ * dim under the wash and close it on click. The panel holds a draft, so it is
+ * modal; nothing behind it is reachable while it is up. The video keeps its
+ * size and nothing reflows — the film keeps playing under the dim.
  *
  * ── Placement ───────────────────────────────────────────────────────────
  * `FilmRoom` (film/film-tab.tsx) renders `FilterRail`, which portals the
- * drawer into `MatchReportFrame` (`MATCH_REPORT_FRAME_ID`, `relative`, never
- * scrolls), so `absolute inset-y-0 right-0` is the frame's box: under the
- * header, to its bottom, flush right. It must not stay inside
- * `#match-report-pane`: that pane is the page's scroll container, and on a
- * short viewport (1366×600) the Video view does overflow it — a drawer
- * positioned there was laid out in the scrolled content, its header slid off
- * the top and it scrolled away with the cards. The pane's `@container` also
- * contains `fixed` descendants, so `fixed` is no way out either.
+ * sheet into <body>. It must not stay inside `#match-report-pane`: that pane
+ * is the page's scroll container and its `@container` contains `fixed`
+ * descendants, so a sheet there would be laid out in the scrolled content
+ * (on a short viewport, 1366×600, the Video view does overflow it) and
+ * would stop at the pane rather than covering the chrome.
  *
  * ── The shell ───────────────────────────────────────────────────────────
- * The roster's (`team/player-drawer.tsx`, `matches/match-drawer.tsx`
- * `PeekDrawerFrame`): the WIDTH animates (`roster-drawer-in` / `-out`, 200ms
- * `--ease-primary`) from the right edge, and the drawer leaves the DOM on the
- * out animation's end. A Framer inline width left an earlier rail invisible;
- * this is the CSS one on purpose.
+ * `filter-sheet.ts`, shared with the Visualizations lightbox: the WIDTH
+ * animates (`roster-drawer-in` / `-out`) and the sheet leaves the DOM on the
+ * out animation's end. A Framer inline width left an earlier rail
+ * invisible; this is the CSS one on purpose. Tab wraps inside it.
  *
  * ── Selection model ─────────────────────────────────────────────────────
  * `rail-state.ts`: "Advanced filters…" toggles (re-picking it closes), Esc,
@@ -78,6 +81,12 @@ interface FilterRailValue {
    * travels through context into a render.
    */
   registerTrigger: (element: HTMLButtonElement | null) => void;
+  /**
+   * Focus the registered trigger, if it is on the page; returns whether
+   * focus landed there. The applied strip's "Clear filter" hands focus back
+   * to it (`AppliedFilterStrip`'s `focusAfterClear`).
+   */
+  focusTrigger: () => boolean;
 }
 
 const FilterRailContext = createContext<FilterRailValue | null>(null);
@@ -95,15 +104,28 @@ export function FilterRailProvider({ children }: { children: ReactNode }) {
   const registerTrigger = useCallback((element: HTMLButtonElement | null) => {
     triggerRef.current = element;
   }, []);
+  const focusTrigger = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger?.isConnected) return false;
+    trigger.focus({ preventScroll: true });
+    return document.activeElement === trigger;
+  }, []);
   // Focus that was inside the rail goes back to the button that opened it,
-  // rather than to <body> when the rail's subtree leaves the DOM.
+  // rather than to <body> when the rail's subtree leaves the DOM. After the
+  // commit, not here: while the sheet is open the page behind it — the
+  // trigger included — is `inert` and cannot take focus; the shell lifts
+  // that in its effect cleanup, which runs before this effect.
+  const focusBackRef = useRef(false);
   const close = useCallback(() => {
     const rail = document.getElementById(FILTER_RAIL_ID);
-    if (rail?.contains(document.activeElement)) {
-      triggerRef.current?.focus({ preventScroll: true });
-    }
+    focusBackRef.current = rail?.contains(document.activeElement) ?? false;
     dispatch("close");
   }, []);
+  useEffect(() => {
+    if (phase === "open" || !focusBackRef.current) return;
+    focusBackRef.current = false;
+    triggerRef.current?.focus({ preventScroll: true });
+  }, [phase]);
 
   const value = useMemo<FilterRailValue>(
     () => ({
@@ -114,12 +136,13 @@ export function FilterRailProvider({ children }: { children: ReactNode }) {
       reset,
       finish,
       registerTrigger,
+      focusTrigger,
     }),
-    [phase, toggle, close, reset, finish, registerTrigger],
+    [phase, toggle, close, reset, finish, registerTrigger, focusTrigger],
   );
 
-  // State only: the drawer itself is `FilterRail`, which `FilmRoom` places
-  // where its absolute box resolves to the report pane.
+  // State only: the drawer itself is `FilterRail`, which `FilmRoom` renders
+  // and which portals to <body>.
   return <FilterRailContext value={value}>{children}</FilterRailContext>;
 }
 
@@ -132,6 +155,7 @@ const INERT: FilterRailValue = {
   reset: noop,
   finish: noop,
   registerTrigger: noop,
+  focusTrigger: () => false,
 };
 
 /** The rail's state. Without a provider (a harness, an offline spec): shut, and nothing opens it. */
@@ -169,18 +193,13 @@ export function FilterRail(props: FilterRailProps) {
   const rail = use(FilterRailContext);
   if (!rail || rail.phase === "closed") return null;
   const shell = <FilterRailShell rail={rail} {...props} />;
-  // Portalled into the report frame (relative, never scrolls) so the drawer
-  // pins to its right edge however far `#match-report-pane` has scrolled —
-  // positioned inside that pane it was laid out in the scrolled content and
-  // slid off with the cards. Only ever open after a click, so reading the
-  // DOM here never runs on the server. Context still flows through a portal.
-  // Without a host (no `MatchReportFrame` ancestor — an offline harness that
-  // mounts `FilmTab` on its own) it renders in place instead of vanishing.
-  const host =
-    typeof document === "undefined"
-      ? null
-      : document.getElementById(MATCH_REPORT_FRAME_ID);
-  return host ? createPortal(shell, host) : shell;
+  // Portalled to <body> so `fixed` is the window: inside
+  // `#match-report-pane` its `@container` would be the sheet's box. Only
+  // ever open after a click, so this never runs on the server. Context
+  // still flows through a portal.
+  return typeof document === "undefined"
+    ? shell
+    : createPortal(shell, document.body);
 }
 
 function FilterRailShell({
@@ -190,6 +209,19 @@ function FilterRailShell({
   const { phase, close, finish } = rail;
   const closing = phase === "closing";
   const panelRef = useRef<HTMLDivElement>(null);
+  const scrimRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  // Modal to assistive tech too: the page behind goes `inert` while the
+  // sheet is open and comes back the moment it starts closing, before the
+  // provider hands focus back to the trigger behind it.
+  useEffect(() => {
+    if (phase !== "open") return;
+    const keep = [scrimRef.current, sheetRef.current].filter(
+      (el): el is HTMLDivElement => el !== null,
+    );
+    return inertPageBehind(keep);
+  }, [phase]);
 
   const { filters, setFilters, filmRemainder } = useMatchFilters();
   const { availability, youName, oppName, total } = useFiltersPanelData();
@@ -224,43 +256,58 @@ function FilterRailShell({
   }, [phase, close]);
 
   return (
-    <aside
-      id={FILTER_RAIL_ID}
-      aria-label="Filters"
-      // Shrinking to nothing, it must not stay in the tab order.
-      inert={closing}
-      onAnimationEnd={(event) => {
-        if (event.animationName === "roster-drawer-out") finish();
-      }}
-      className={cn(
-        "absolute inset-y-0 right-0 z-30 overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none",
-        closing
-          ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
-          : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
-      )}
-    >
+    <>
+      {/* The dim: the whole window — icon rail, header and report — under
+          the sheet. The film keeps playing beneath it (a dim, not a pause)
+          and a click on it closes the drawer like the X. It fades with the
+          drawer's 200ms; closing, it lets clicks through at once, so the
+          page is usable before the fade ends. */}
       <div
-        ref={panelRef}
-        tabIndex={-1}
-        className="flex h-full w-[340px] flex-col outline-none"
+        ref={scrimRef}
+        aria-hidden
+        data-testid="filter-rail-scrim"
+        // Keep focus in the drawer through the press, so `close` sees it
+        // there and hands it back to the trigger rather than to <body>.
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={close}
+        className={cn(
+          FILTER_SHEET_SCRIM_CLASS,
+          closing && "pointer-events-none opacity-0",
+        )}
+      />
+      <div
+        ref={sheetRef}
+        id={FILTER_RAIL_ID}
+        aria-label="Filters"
+        aria-modal="true"
+        role="dialog"
+        // Shrinking to nothing, it must not stay in the tab order.
+        inert={closing}
+        onKeyDown={(event) => wrapTabInSheet(event, panelRef.current)}
+        onAnimationEnd={(event) => {
+          if (event.animationName === "roster-drawer-out") finish();
+        }}
+        className={cn(FILTER_SHEET_CLASS, filterSheetWidthClass(closing))}
       >
-        <FiltersPanel
-          key={serializeMatchFilters(filters)}
-          className="min-h-0 flex-1"
-          filters={filters}
-          availability={availability}
-          youName={youName}
-          oppName={oppName}
-          countFor={countFor}
-          total={total}
-          filmCut={filmRemainder?.label ?? null}
-          onApply={(next) => {
-            setFilters(next);
-            close();
-          }}
-          onClose={close}
-        />
+        <div ref={panelRef} tabIndex={-1} className={FILTER_SHEET_PANEL_CLASS}>
+          <FiltersPanel
+            key={serializeMatchFilters(filters)}
+            className="min-h-0 flex-1"
+            filters={filters}
+            availability={availability}
+            youName={youName}
+            oppName={oppName}
+            countFor={countFor}
+            total={total}
+            filmCut={filmRemainder?.label ?? null}
+            onApply={(next) => {
+              setFilters(next);
+              close();
+            }}
+            onClose={close}
+          />
+        </div>
       </div>
-    </aside>
+    </>
   );
 }

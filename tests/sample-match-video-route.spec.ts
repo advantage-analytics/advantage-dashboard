@@ -276,7 +276,7 @@ test("a ?key= query is ignored: neither the route nor the handler reads a reques
   }
   expect(route).toContain('export const runtime = "nodejs"');
   expect(route).toContain('export const dynamic = "force-dynamic"');
-  expect(route).toContain("mintSas: mintPlaybackSas");
+  expect(route).toContain("mintSas: mintSampleVideo");
 
   const handler = stripComments(readFileSync(HANDLER, "utf8"));
   for (const token of ["Request", "searchParams", "nextUrl", "headers"]) {

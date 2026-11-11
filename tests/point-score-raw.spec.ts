@@ -6,7 +6,7 @@ import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 /**
  * A minimal fake covering only what `getMatchPointsFromSupabase` calls with
  * `includeBookmarks: false` (so `point_bookmarks`/`matches` are never
- * touched): `points` select, and one empty page of `shots`.
+ * touched): `points` select, and one empty page of `shots` (read by `match_id`).
  */
 function fakeClient(pointsRows: Record<string, unknown>[]): SupabaseClient {
   const client = {
@@ -23,7 +23,7 @@ function fakeClient(pointsRows: Record<string, unknown>[]): SupabaseClient {
       if (table === "shots") {
         return {
           select: () => ({
-            in: () => ({
+            eq: () => ({
               order: () => ({
                 order: () => ({
                   order: () => ({

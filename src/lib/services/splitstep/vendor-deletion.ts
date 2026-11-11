@@ -10,7 +10,7 @@ import {
 /**
  * Mails SplitStep the matches users deleted since the last run, and stamps
  * them sent. Rows are written by the `matches_record_vendor_deletion_requests`
- * trigger (20261107180200_vendor_deletion_requests.sql).
+ * trigger (20261108085442_vendor_deletion_requests.sql).
  *
  * Until `SPLITSTEP_DELETION_EMAIL` is set the request goes to the internal
  * alerts inbox, to forward by hand. With it set, the alerts inbox is copied.

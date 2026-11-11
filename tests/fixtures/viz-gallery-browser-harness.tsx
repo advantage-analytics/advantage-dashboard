@@ -41,68 +41,44 @@ function Harness() {
     useState<WallCollection>("default");
   useEffect(() => {
     if (state.cut !== null && !state.draft) {
-      // Mirror ShotsTab's persisted wall selection across the focused branch.
+      // Mirror ShotsTab's persisted wall selection while a card is open.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setWallCollection(state.viewId ? "saved" : "default");
     }
   }, [state.cut, state.draft, state.viewId]);
-  const band = (
-    <SavedViewsBand
-      views={views}
-      workspaceRole="player"
-      workspaceKind="personal"
-      canSaveViews
-      variant={state.cut === null ? "wall" : "focused"}
-    />
-  );
   return (
     <main>
-      {state.cut === null ? (
-        <VizWall
-          savedViewsBand={band}
-          collection={wallCollection}
-          onCollectionChange={setWallCollection}
-        />
-      ) : (
-        <>
-          <section data-testid="focused">
-            <h1 id="viz-focused-heading" tabIndex={-1}>
-              Focused {state.viewId ?? `${state.filters.player}:${state.cut}`}
-            </h1>
-            <button
-              onClick={() =>
-                setState({
-                  cut: null,
-                  chart: "scatter",
-                  filters: EMPTY_VIZ_FILTERS,
-                  viewId: null,
-                })
-              }
-            >
-              Back to wall
-            </button>
-            <button
-              onClick={() =>
-                setState((previous) => ({
-                  ...previous,
-                  filters: { ...previous.filters, set: [2] },
-                }))
-              }
-            >
-              Filter set
-            </button>
-          </section>
-          {band}
-        </>
-      )}
-      {state.fullscreen && (
-        <section data-testid="fullscreen">
+      <VizWall
+        savedViewsBand={
+          <SavedViewsBand
+            views={views}
+            workspaceRole="player"
+            workspaceKind="personal"
+            canSaveViews
+          />
+        }
+        collection={wallCollection}
+        onCollectionChange={setWallCollection}
+        player={state.cut === null ? state.filters.player : "you"}
+      />
+      {/* A stand-in for the lightbox: the real one is
+          `viz-lightbox-browser.spec.ts`'s. */}
+      {state.cut !== null && (
+        <section data-testid="lightbox">
+          <h1>
+            Opened {state.viewId ?? `${state.filters.player}:${state.cut}`}
+          </h1>
           <button
             onClick={() =>
-              setState((previous) => ({ ...previous, fullscreen: false }))
+              setState({
+                cut: null,
+                chart: "scatter",
+                filters: EMPTY_VIZ_FILTERS,
+                viewId: null,
+              })
             }
           >
-            Exit fullscreen
+            Close
           </button>
         </section>
       )}

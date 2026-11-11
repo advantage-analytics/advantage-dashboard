@@ -282,45 +282,27 @@ test("?tour=1 opens the sample tour on the scoreboard, five steps long", async (
   ]);
 });
 
-test("the banner is pinned flush to the pane's top edge and spans it, scrolled or not", async ({
+test("the Sample match pill sits beside the page title on every view, with no banner above it and the way out in the title row", async ({
   page,
 }) => {
   await open(page);
-  const banner = page.locator("[data-sample-banner]");
-  await expect(banner).toContainText("Sample match");
-  await expect(banner).toContainText("not your data");
+  // The bar it replaced is gone; its way out moved into the title row.
+  await expect(page.locator("[data-sample-banner]")).toHaveCount(0);
+  const sendOwn = page.getByRole("link", { name: "Send your own match" });
 
-  const pane = page.locator("#match-report-pane");
-  // Flush: nothing of the report can show between the pane's top edge and
-  // the bar, and the bar runs the pane's full width (the pane is the scroll
-  // container, and a sticky child otherwise pins inside its padding).
-  const flush = async () => {
-    const [p, b] = await Promise.all([
-      pane.evaluate((el) => {
-        const r = el.getBoundingClientRect();
-        return { top: r.top, left: r.left, width: el.clientWidth };
-      }),
-      banner.boundingBox(),
-    ]);
-    return (
-      b !== null &&
-      Math.abs(b.y - p.top) <= 1 &&
-      Math.abs(b.x - p.left) <= 1 &&
-      Math.abs(b.width - p.width) <= 1
-    );
-  };
-  expect(await flush()).toBe(true);
-
-  const scrolled = await pane.evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-    return element.scrollTop;
-  });
-  // The Statistics view really overflows a 720px viewport.
-  expect(scrolled).toBeGreaterThan(0);
-  await expect.poll(flush).toBe(true);
+  // The fixture records an unreconciled fold; the sample does not say so.
   await expect(
-    page.getByRole("link", { name: "Send your own match" }),
-  ).toBeInViewport();
+    page.getByText("couldn't match every point", { exact: false }),
+  ).toHaveCount(0);
+
+  const title = page.locator("[data-sample-title]");
+  for (const view of ["Statistics", "Visualizations", "Video"] as const) {
+    if (view !== "Statistics") await selectView(page, view);
+    await expect(title.getByRole("heading", { level: 1 })).toHaveText(view);
+    await expect(title).toContainText("Sample match");
+    await expect(sendOwn).toHaveCount(1);
+    await expect(sendOwn).toHaveAttribute("href", "/dashboard/matches/new");
+  }
 });
 
 test("no Delete, Share, Compare or Review-score control on any view, and nothing asks /api/matches", async ({

@@ -26,8 +26,16 @@ export interface Size {
   h: number;
 }
 
-export const ZOOM_MIN = 0.55;
-export const ZOOM_MAX = 3.2;
+/**
+ * Absolute bounds on `z` (art px → stage px). The lightbox's 100% is the
+ * landing half fitted to the stage (`viewerInitialTransform`), roughly twice
+ * the whole-court fit, so the floor sits low enough for "Full court"
+ * (`viewerFullCourtTransform`) on a small stage and the ceiling high enough
+ * that the half-court 100% still has the old headroom above it — the glide's
+ * 150% included on a large screen. The per-stage floor is `minZoomFor`.
+ */
+export const ZOOM_MIN = 0.3;
+export const ZOOM_MAX = 6;
 export const WHEEL_STEP = 1.12;
 export const BUTTON_STEP = 1.2;
 export const KEY_PAN_PX = 40;
@@ -159,4 +167,116 @@ export function wheelDeltaPx(delta: number, deltaMode: number): number {
 /** `2.2` → `"220%"` — rounded, not truncated. */
 export function zoomPercentLabel(z: number): string {
   return `${Math.round(z * 100)}%`;
+}
+
+/* ── Glide (selecting a mark) ──────────────────────────────────────────── */
+
+/** How long a selected mark takes to glide to the stage's centre. */
+export const GLIDE_MS = 320;
+/** The glide's zoom floor, relative to the cut's 100%: below it the glide
+ *  also zooms in to it; at or above it the zoom is kept. */
+export const GLIDE_MIN_RELATIVE_ZOOM = 1.5;
+
+/**
+ * A CSS `cubic-bezier(x1, y1, x2, y2)` timing function as a plain
+ * `progress → eased progress` function (Newton's method on x, bisection as the
+ * fallback), so a requestAnimationFrame tween eases exactly as the same curve
+ * would in CSS.
+ */
+export function cubicBezier(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): (t: number) => number {
+  const cx = 3 * x1;
+  const bx = 3 * (x2 - x1) - cx;
+  const ax = 1 - cx - bx;
+  const cy = 3 * y1;
+  const by = 3 * (y2 - y1) - cy;
+  const ay = 1 - cy - by;
+  const sampleX = (s: number) => ((ax * s + bx) * s + cx) * s;
+  const sampleY = (s: number) => ((ay * s + by) * s + cy) * s;
+  const slopeX = (s: number) => (3 * ax * s + 2 * bx) * s + cx;
+  return (t: number) => {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    let s = t;
+    for (let i = 0; i < 8; i++) {
+      const err = sampleX(s) - t;
+      if (Math.abs(err) < 1e-6) return sampleY(s);
+      const d = slopeX(s);
+      if (Math.abs(d) < 1e-6) break;
+      s -= err / d;
+    }
+    let lo = 0;
+    let hi = 1;
+    s = t;
+    for (let i = 0; i < 30; i++) {
+      const x = sampleX(s);
+      if (Math.abs(x - t) < 1e-6) break;
+      if (x < t) lo = s;
+      else hi = s;
+      s = (lo + hi) / 2;
+    }
+    return sampleY(s);
+  };
+}
+
+/** The glide's ease-out, `cubic-bezier(0.16, 1, 0.3, 1)`. */
+export const glideEase = cubicBezier(0.16, 1, 0.3, 1);
+
+/** The art point at the stage's centre under `t`. */
+export function stageCentreArtPoint(
+  t: PanZoom,
+  stage: Size,
+): { x: number; y: number } {
+  return { x: (stage.w / 2 - t.px) / t.z, y: (stage.h / 2 - t.py) / t.z };
+}
+
+/**
+ * The transform that puts the art point `point` at the stage's centre at
+ * zoom `z` (clamped to the zoom range), then `clampPan`ned — near the art's
+ * edge the clamp may stop it a little short of dead centre.
+ */
+export function centreOn(
+  point: { x: number; y: number },
+  z: number,
+  art: Size,
+  stage: Size,
+): PanZoom {
+  const zz = clamp(z, ZOOM_MIN, ZOOM_MAX);
+  return clampPan(
+    { z: zz, px: stage.w / 2 - point.x * zz, py: stage.h / 2 - point.y * zz },
+    art,
+    stage,
+  );
+}
+
+/**
+ * One frame of a glide from `from` to `to` at eased progress `e` (0..1). The
+ * stage-centre's art point and the zoom travel together, so the court moves
+ * in one straight line toward the mark while the zoom eases in — rather than
+ * interpolating `px`/`py` directly, which curves when the zoom changes. `e = 1`
+ * is `to` exactly.
+ */
+export function glideFrame(
+  from: PanZoom,
+  to: PanZoom,
+  e: number,
+  art: Size,
+  stage: Size,
+): PanZoom {
+  if (e >= 1) return to;
+  if (e <= 0) return from;
+  const a = stageCentreArtPoint(from, stage);
+  const b = stageCentreArtPoint(to, stage);
+  const z = from.z + (to.z - from.z) * e;
+  const x = a.x + (b.x - a.x) * e;
+  const y = a.y + (b.y - a.y) * e;
+  return clampPan(
+    { z, px: stage.w / 2 - x * z, py: stage.h / 2 - y * z },
+    art,
+    stage,
+  );
 }

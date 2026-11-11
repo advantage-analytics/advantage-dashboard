@@ -89,14 +89,22 @@ export function determineWinner(
   }
 
   const playerWon = playerSetsWon > opponentSetsWon;
+  const player = {
+    id: playerUserId,
+    name: playerName,
+    scores: playerScoresNum,
+    isPlayer: true,
+  };
+  const opponent = {
+    id: null,
+    name: opponentName,
+    scores: opponentScoresNum,
+    isPlayer: false,
+  };
 
   return {
-    winner: playerWon
-      ? { id: playerUserId, name: playerName, scores: playerScoresNum }
-      : { id: null, name: opponentName, scores: opponentScoresNum },
-    loser: playerWon
-      ? { id: null, name: opponentName, scores: opponentScoresNum }
-      : { id: playerUserId, name: playerName, scores: playerScoresNum },
+    winner: playerWon ? player : opponent,
+    loser: playerWon ? opponent : player,
   };
 }
 
@@ -124,8 +132,37 @@ export interface MatchMetadata {
    * there would hand them this match — and, through `visible_match_ids()`, both
    * players' `match_stats` — the day they claim the profile. Migration
    * 20260823090000 carries the long version.
+   *
+   * The one exception is a TEAMMATE — see `teammateSeatId` below.
    */
   opponentPlayerId?: string | null;
+  /**
+   * Seat two's id, for an opponent who is on this program's own roster — a
+   * practice set between teammates. `teammateSeat()` (`teammates.ts`) is the
+   * only thing that may fill it, from the live roster; null or absent for
+   * every other opponent, and `player2_id` is then what it always was.
+   *
+   * Why the rule above does not apply. It keeps a RIVAL from reading the
+   * match by claiming a profile. A teammate is a member of the program the
+   * match is filed under, and the program arm of the same SELECT policy
+   * already shows them the match and its statistics; `player2_id` adds the
+   * seat, not the access. (It does keep that access after they leave the
+   * program — known and accepted.) The seat is what puts the practice on
+   * their own profile turned to their side: `playerSeat` / `viewerSide` /
+   * `youSeat`, `ask.my_side()` and the roster readers all key on this column
+   * and none reads `opponent_player_id` for a seat.
+   *
+   * It is the id the teammate's own matches carry
+   * (`program_roster_full.player_id`). `opponentPlayerId` carries the same
+   * person's `program_players` id — equal to this for every roster row but a
+   * safety-arm one, where it is null because there is no profile to point at.
+   *
+   * Nothing else moves: seat one, both names, the score and the camera
+   * answers are written as for any opponent, and `points`, `shots` and
+   * `match_stats` stay keyed on the seat. A report is turned, never
+   * re-attributed.
+   */
+  teammateSeatId?: string | null;
   /**
    * The program behind the dual line this match is filed under, already
    * resolved from the line's `opponentProgramKey`. Used only when the "their
@@ -150,8 +187,10 @@ export function buildMatchData(
   const validBestOf = [1, 3, 5];
   const bestOf = validBestOf.includes(bestOfValue) ? bestOfValue : 3;
 
-  // Determine if the player (playerName) won
-  const playerWon = formData.playerName === winner.name;
+  // Determine if the player (playerName) won — by the side
+  // `determineWinner` marked, not by name: equal names would otherwise put
+  // the player in seat two whenever the opponent won.
+  const playerWon = winner.isPlayer ?? formData.playerName === winner.name;
 
   // Use adjusted scores (respects numberOfSets when user reduced sets)
   const adjustedPlayerScores = getAdjustedScores(
@@ -183,12 +222,21 @@ export function buildMatchData(
     .slice(0, sets)
     .map((s) => s ?? 0);
 
+  const player1Id = playerWon ? winner.id : loser.id;
+  // A teammate opponent takes seat two (`MatchMetadata.teammateSeatId`).
+  // Never the id already in seat one: the caller rules that out, and this
+  // keeps it ruled out for any caller.
+  const teammateSeatId =
+    metadata.teammateSeatId && metadata.teammateSeatId !== player1Id
+      ? metadata.teammateSeatId
+      : null;
+
   return {
     id: matchId,
     // player1 is always playerName (Host Team), player2 is always opponentName (Guest Team)
-    player1_id: playerWon ? winner.id : loser.id,
+    player1_id: player1Id,
     player1_name: formData.playerName,
-    player2_id: playerWon ? loser.id : winner.id,
+    player2_id: teammateSeatId ?? (playerWon ? loser.id : winner.id),
     player2_name: formData.opponentName,
     opponent_player_id: metadata.opponentPlayerId ?? null,
     // Always both keys, null included: an upload that named no team writes

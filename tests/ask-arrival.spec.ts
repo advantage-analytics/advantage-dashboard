@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 import type { AskQuestionInput, AskRpcResult } from "@/lib/services/ask/ask";
@@ -346,6 +348,39 @@ test.describe("askOnArrival", () => {
     // Nothing reached the service-only functions by their user-side names.
     expect(rpc.some((c) => c.fn === "ask_save_exchange_ids")).toBe(false);
     expect(rpc.some((c) => c.fn === "ask_quota")).toBe(false);
+  });
+
+  test("a practice session is asked about as the one tagged match: no record or season figure is computed here for practice to count toward", async () => {
+    for (const matchType of ["Practice", " practice "]) {
+      const { client, rpc } = fakeAdmin({
+        match: matchRow({ match_type: matchType }),
+      });
+      const seen: { input?: AskQuestionInput } = {};
+      const result = await mod.askOnArrival(
+        { supabase: client, jobId: JOB, matchId: MATCH },
+        { ask: answered(seen), model: MODEL },
+      );
+      // Practice stays askable: the first answer is still written.
+      expect(result?.question).toBe("How did my match against Anna Lee go?");
+      // The scope is the practice match alone — the match asked about —
+      // never the player's other matches, so nothing is counted across them.
+      expect(seen.input?.tags.matchIds).toEqual([MATCH]);
+      expect(seen.input?.tags.saved).toHaveLength(1);
+      expect(seen.input?.conversation).toEqual([]);
+      // And the module itself runs no query: the three service-only Ask
+      // functions are never called from here.
+      expect(
+        rpc.some((call) =>
+          ["ask_run_query", "ask_run_team_query"].includes(call.fn),
+        ),
+      ).toBe(false);
+    }
+    // The module reads one match by id and no other: no record to exclude from.
+    const source = readFileSync("src/lib/services/ask/arrival.ts", "utf8");
+    expect(source.match(/\.from\("matches"\)/g)).toHaveLength(1);
+    expect(source).toContain('.eq("id", matchId)');
+    expect(source).not.toMatch(/\bi_won\b|\bwins\b|\blosses\b/);
+    expect(source).toContain("ASK_PRACTICE_RULE");
   });
 
   test("a claimed roster profile seats the uploader too", async () => {

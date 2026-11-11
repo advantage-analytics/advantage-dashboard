@@ -7,6 +7,7 @@ import {
   noteIconCls,
   noteStripCls,
 } from "@/components/dashboard/matches/new-match-wizard/styles";
+import { DifferentialCard } from "@/components/dashboard/matches/match-detail/differential-card";
 import { HeadToHeadCard } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import { MatchReport } from "@/components/dashboard/matches/match-detail/match-report";
 import { NetGameCard } from "@/components/dashboard/matches/match-detail/net-game-card";
@@ -18,6 +19,8 @@ import { StatisticsEmpty } from "@/components/dashboard/matches/match-detail/sta
 import { StatisticsLobKeysProvider } from "@/components/dashboard/matches/match-detail/statistics-lob-keys";
 import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { surnameLabels } from "@/lib/data/match-utils";
 import { cn } from "@/lib/utils";
 
 /**
@@ -81,10 +84,14 @@ import { cn } from "@/lib/utils";
  * drops its "checked against the final score" clause when both are true —
  * the two notices would otherwise say opposite things about the same points.
  * Jobs derived before T13 carry no `fold` key and never set this.
+ *
+ * A practice session (`match.isPractice`, canvas board 5) gets one more grey
+ * strip, directly above the insight card: it says the set counts toward
+ * nobody's record (`PracticeNotice`).
  */
 export function StatisticsView() {
   const { meta } = useMatchReport();
-  const { points } = useMatchData();
+  const { points, match } = useMatchData();
   const hasPoints = points.length > 0;
 
   if (meta.statsUnavailable) {
@@ -117,6 +124,10 @@ export function StatisticsView() {
         </div>
       )}
 
+      {match.isPractice && (
+        <PracticeNotice teammate={match.opponentIsTeammate === true} />
+      )}
+
       {hasPoints ? <MatchReport.Insight /> : <StatisticsEmpty />}
 
       {/* F1, revised 2026-11-06: from 720px of pane (the `@container` on
@@ -124,24 +135,25 @@ export function StatisticsView() {
           row 1:1 — `flex-1 min-w-0` each — rather than the chart column's
           old fixed 416px, which the fourth chart (Net game) outgrew. Kept
           over design board 2b's fixed 360px head-to-head by choice
-          (2026-11-07). Charts in reading order: who led, how the rallies
-          ran, the net game, how points ended. Under 720px the row stacks:
+          (2026-11-07). Charts in reading order: who led, how points
+          ended, how the rallies ran, the net game. Under 720px the row stacks:
           head-to-head first, the charts under it, both full width.
 
           Side by side, the two columns end on one line. The row stretches
-          (flex's default), and the chart column hands its slack to Rally
-          length, whose bars fill whatever height the card gets (the
-          landing page mockup's `.mb-chart .bands`). The height goes to the
-          chart, never to a card's empty surface: a stretched card with
-          top-aligned content reads worse than uneven columns. The
-          head-to-head card keeps its natural height; its slot stretches,
-          invisibly. */}
+          (flex's default); whichever column is shorter takes up the slack.
+          On the chart side Rally length (a mosaic of at least 120px) and Net
+          game split it evenly, so neither towers nor sits half empty; under
+          the head-to-head the Differential card spreads it between its rows.
+          The head-to-head card keeps its natural height. */}
       {hasPoints && (
         <StatisticsLobKeysProvider>
           <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row">
             {meta.statsPublished && (
-              <div className="min-w-0 flex-1">
+              // The differential sits under the head to head, below the
+              // Winners and Unforced errors rows it is computed from.
+              <div className="flex min-w-0 flex-1 flex-col gap-4 *:shrink-0">
                 <HeadToHeadCard />
+                <DifferentialCard isDerived={meta.isDerived} />
               </div>
             )}
 
@@ -149,14 +161,40 @@ export function StatisticsView() {
               never gives it up — a card squeezed below its content clips. */}
             <div className="flex min-w-0 flex-1 flex-col gap-4 *:shrink-0">
               <PerformanceTrackerChart />
+              <PointEndingsCard isDerived={meta.isDerived} />
               <RallyLengthCard />
               <NetGameCard />
-              <PointEndingsCard isDerived={meta.isDerived} />
             </div>
           </div>
         </StatisticsLobKeysProvider>
       )}
     </>
+  );
+}
+
+/**
+ * The practice notice (canvas board 5): the wizard's grey note strip, an Info
+ * glyph and a bold "Practice." lead. Names come from `useMatchSides()` — the
+ * report's one orientation, viewer first — as the last names the report
+ * prints (`surnameLabels`). Against a teammate both players are named and the
+ * second sentence says both can read it; against anyone else the player is
+ * named alone, since the opponent has no record here to keep it out of.
+ */
+function PracticeNotice({ teammate }: { teammate: boolean }) {
+  const sides = useMatchSides();
+  const [you, opp] = surnameLabels(sides.you.name, sides.opp.name);
+  return (
+    <div className={cn(noteStripCls, "shrink-0")} data-testid="practice-notice">
+      <Info aria-hidden className={`${noteIconCls} text-[var(--ink-400)]`} />
+      <span>
+        <strong className="font-semibold text-[var(--ink-900)]">
+          Practice.
+        </strong>{" "}
+        {teammate
+          ? `Not in ${you}'s or ${opp}'s record or season statistics. Both players see this report; their profiles list it under Practice.`
+          : `Not in ${you}'s record or season statistics.`}
+      </span>
+    </div>
   );
 }
 

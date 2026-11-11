@@ -40,11 +40,11 @@ import {
   setSavedViewShared,
 } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
 import { useVizBands } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
-import { CourtTile, TileFullscreenGlyph } from "./court-tile";
+import { CourtTile } from "./court-tile";
 import { ManageableSavedViewTile } from "./manageable-saved-view-tile";
 import { savedViewNamePool } from "./save-view-dialog";
 import { useVizState } from "./use-viz-state";
-import { usePrefersReducedMotion } from "./use-reduced-motion";
+import { usePrefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
 import type { VizState } from "./viz-url";
 import { activeFilterEntries, viewIdentityKey } from "./viz-url";
 import {
@@ -56,13 +56,6 @@ import {
   EMPTY_VIZ_FILTERS,
 } from "./viz-model";
 import { VIZ_TILE_GRID_CLASS } from "./viz-labels";
-import { buildDefaultTiles, type DefaultTile } from "./default-tiles";
-
-// M3: `variant="wall"` never renders a default tile (`viz-wall.tsx` builds
-// its own) — a shared, frozen empty array lets the `defaultTiles` memo below
-// skip `buildDefaultTiles`'s ten `computeViz` scans entirely on that variant
-// instead of running them for output nothing reads.
-const EMPTY_DEFAULT_TILES: readonly DefaultTile[] = Object.freeze([]);
 
 /**
  * Task 9 (P1a band + Part B Manage mode): every saved view the viewer can
@@ -93,7 +86,6 @@ export function SavedViewsBand({
   workspaceRole,
   workspaceKind,
   canSaveViews,
-  variant = "wall",
   readOnly = false,
 }: {
   /**
@@ -112,30 +104,13 @@ export function SavedViewsBand({
    * navigating `CourtTile` and "Manage views" never appears.
    */
   canSaveViews: boolean;
-  /**
-   * F4: `"wall"` (default) is the pre-existing grid — saved views only,
-   * absent with zero of them. `"focused"` is the focused view's "Views"
-   * grid — the SAME 3-column wrapping grid the wall draws
-   * (`VIZ_TILE_GRID_CLASS`, `viz-labels.tsx`), never a
-   * horizontally scrolling row (that shape shipped once in this file's
-   * history and was corrected: the design frame's "5 views" with three
-   * tiles visible meant a second grid ROW below the fold, not a scroll
-   * axis) — the six default tiles first, then saved views, then the dashed
-   * New-view tile — ALWAYS mounted, even with zero saved views. The
-   * container the grid lives in scrolls the page vertically, same as the
-   * wall; nothing in this variant scrolls horizontally. Both variants share
-   * every piece of Manage-mode state
-   * and every mutation handler in this file; only what gets rendered, and
-   * how, differs below.
-   */
-  variant?: "wall" | "focused";
 }) {
   const router = useRouter();
   const points = useVizPoints(useMatchData());
   const { bands, unit, contactHidden } = useVizBands();
   const { you, opp } = useMatchSides();
   const { context: matchCtx } = useMatchFilters();
-  const { state, hrefFor } = useVizState();
+  const { hrefFor } = useVizState();
   const [, startTransition] = useTransition();
 
   const manageHintId = useId();
@@ -320,53 +295,6 @@ export function SavedViewsBand({
     unit,
     contactHidden,
   ]);
-
-  // F4 (`variant="focused"` only, but computed unconditionally — hooks can't
-  // run conditionally): the same six default tiles the wall draws
-  // (`buildDefaultTiles`, shared with `viz-wall.tsx` so the two can never
-  // list a different set), keyed the same way `tileDataById` above is so a
-  // scroll, a focus move, or a Manage-mode reorder never re-triggers the
-  // O(points) scan inside it — only `points`/`you.isPlayer1`/the names/
-  // `hrefFor` changing does. M3: `variant="wall"` never reads this output
-  // (`viz-wall.tsx` already built its own default tiles for that render),
-  // so it's gated to the shared frozen empty array there instead of running
-  // `buildDefaultTiles`'s six scans for nothing.
-  const defaultTiles = useMemo(
-    () =>
-      variant === "focused"
-        ? buildDefaultTiles(
-            points,
-            {
-              you: { isPlayer1: you.isPlayer1, name: you.name },
-              opp: { isPlayer1: opp.isPlayer1, name: opp.name },
-            },
-            hrefFor,
-            matchCtx,
-          )
-        : EMPTY_DEFAULT_TILES,
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `opp.isPlayer1` is always `you.isPlayer1`'s inverse (same rule `viz-wall.tsx`'s own memo relies on), so it carries no information this dependency list doesn't already have
-    [points, you.isPlayer1, you.name, opp.name, hrefFor, variant, matchCtx],
-  );
-
-  // Mirrors `viz-wall.tsx`'s `EmptySubjectRow` rule: a subject with nothing
-  // drawable in any default cut loses its three tiles from the row entirely,
-  // rather than showing three empty courts.
-  const visibleDefaultTiles = useMemo(() => {
-    const bySubject = new Map<DefaultTile["subject"], DefaultTile[]>();
-    for (const tile of defaultTiles) {
-      const arr = bySubject.get(tile.subject) ?? [];
-      arr.push(tile);
-      bySubject.set(tile.subject, arr);
-    }
-    const result: DefaultTile[] = [];
-    for (const subject of ["you", "opponent"] as const) {
-      const arr = bySubject.get(subject) ?? [];
-      if (arr.length > 0 && !arr.every((t) => t.total === 0)) {
-        result.push(...arr);
-      }
-    }
-    return result;
-  }, [defaultTiles]);
 
   // FLIP: whenever the rendered order of tiles changes (a drag preview or a
   // keyboard move — never a mount, never under `prefers-reduced-motion`),
@@ -883,71 +811,14 @@ export function SavedViewsBand({
           filters: view.filters,
           viewId: view.id,
         }}
-        actionSlot={
-          <TileFullscreenGlyph
-            name={view.name}
-            tileState={{
-              cut: view.cut,
-              chart: view.chart,
-              filters: view.filters,
-              viewId: view.id,
-            }}
-          />
-        }
       />
     );
   }
 
-  // A focused court already presents the selected view at full size. Match
-  // the tile's navigation identity, so a saved view with the same cut/player
-  // as a default (or another saved view) remains available in the gallery.
-  // Filter edits keep the same tile selected; the URL's view id distinguishes
-  // saved records without changing their data or order.
-  const selectedKey = variant === "focused" ? viewIdentityKey(state) : null;
-  const galleryDefaultTiles = visibleDefaultTiles.filter(
-    (tile) => viewIdentityKey(tile.state) !== selectedKey,
-  );
-  const gallerySavedViews = optimisticViews.filter(
-    (view) =>
-      viewIdentityKey({
-        cut: view.cut,
-        chart: view.chart,
-        filters: view.filters,
-        viewId: view.id,
-      }) !== selectedKey,
-  );
-  const totalRowViews = galleryDefaultTiles.length + gallerySavedViews.length;
-
   return (
-    <div
-      className={
-        variant === "wall"
-          ? "flex flex-col gap-4"
-          : "mt-2 flex flex-col gap-4 border-t border-[var(--border-hairline)] pt-6"
-      }
-    >
-      {(variant === "focused" || manageMode || canManageAny) && (
-        <div
-          className={`flex items-center gap-3 ${variant === "wall" ? "justify-end" : "justify-between"}`}
-        >
-          {variant === "focused" ? (
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <h2
-                style={{
-                  fontSize: 24,
-                  fontWeight: 300,
-                  letterSpacing: "-0.3px",
-                  color: "var(--ink-900)",
-                }}
-              >
-                Views
-              </h2>
-              <span className="text-micro truncate">
-                {totalRowViews} view{totalRowViews === 1 ? "" : "s"} ·{" "}
-                {you.name} vs {opp.name}
-              </span>
-            </div>
-          ) : null}
+    <div className="flex flex-col gap-4">
+      {(manageMode || canManageAny) && (
+        <div className="flex items-center justify-end gap-3">
           {manageMode ? (
             <div className="flex shrink-0 items-center gap-3">
               <span id={manageHintId} className="text-micro whitespace-nowrap">
@@ -1011,80 +882,26 @@ export function SavedViewsBand({
         </div>
       )}
 
-      {variant === "focused" ? (
+      {visibility !== "status-only" && (
+        // Renders at `"hidden"` too (zero views, nothing pending) so the "Create
+        // view" tile stays reachable — `optimisticViews` is empty there,
+        // so the map below draws nothing and only the dashed tile shows.
         <div
           role="list"
-          // F5: `viz-vt-views-grid` only on the FOCUSED variant — the wall's
-          // own saved-views grid never carries it, so this name is never
-          // present in both the old and new snapshot of a wall→focused
-          // transition at once (which would pair them as an "update"
-          // instead of letting this grid stagger in as new content). See
-          // `globals.css`'s `::view-transition-new(.viz-vt-views-grid)
-          // :only-child` rule.
-          className={`${VIZ_TILE_GRID_CLASS} viz-vt-views-grid`}
+          aria-label="Saved views"
+          className={VIZ_TILE_GRID_CLASS}
         >
-          {galleryDefaultTiles.map((tile) => {
-            return (
-              <div key={tile.key} role="listitem">
-                <CourtTile
-                  playerName={tile.playerName}
-                  name={tile.name}
-                  pills={tile.pills}
-                  countLabel={tile.countLabel}
-                  cut={tile.cut}
-                  dots={tile.dots}
-                  chart={tile.chart}
-                  href={tile.href}
-                  navigateState={tile.state}
-                  actionSlot={
-                    <TileFullscreenGlyph
-                      name={tile.name}
-                      tileState={tile.state}
-                    />
-                  }
-                />
-              </div>
-            );
-          })}
-
-          {gallerySavedViews.map((view) => {
-            return (
-              <div key={view.id} role="listitem">
-                {renderSavedTile(view)}
-              </div>
-            );
-          })}
-
+          {optimisticViews.map((view) => (
+            <div key={view.id} role="listitem">
+              {renderSavedTile(view)}
+            </div>
+          ))}
           {canSaveViews && (
             <div role="listitem">
               <NewViewTile hrefFor={hrefFor} />
             </div>
           )}
         </div>
-      ) : (
-        visibility !== "status-only" && (
-          // M9: matches the focused variant's grid — one list, labelled the
-          // same way the focused Views grid's own tiles are grouped. Renders
-          // at `"hidden"` too (zero views, nothing pending) so the "Create
-          // view" tile stays reachable — `optimisticViews` is empty there,
-          // so the map below draws nothing and only the dashed tile shows.
-          <div
-            role="list"
-            aria-label="Saved views"
-            className={VIZ_TILE_GRID_CLASS}
-          >
-            {optimisticViews.map((view) => (
-              <div key={view.id} role="listitem">
-                {renderSavedTile(view)}
-              </div>
-            ))}
-            {canSaveViews && (
-              <div role="listitem">
-                <NewViewTile hrefFor={hrefFor} />
-              </div>
-            )}
-          </div>
-        )
       )}
     </div>
   );

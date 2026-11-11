@@ -1,5 +1,5 @@
 import type { ZoneKey, ZoneStats } from "@/lib/data/serve-zones";
-import type { Cut, VizDotMeta } from "./viz-model";
+import type { Cut, StatRow, VizDotMeta } from "./viz-model";
 import { formatSpeed, type DistanceUnit } from "@/lib/format/distance";
 import { pointScoreLabel } from "@/lib/ui/score-format";
 
@@ -140,6 +140,88 @@ export function buildReadout(
   return { title, lines, monoLine };
 }
 
+/**
+ * The lightbox's mark readout (canvas S04/S05): a header of the legend word
+ * and the point score, the shot, then where in the match it was. `where` is
+ * the caller's — the lightbox reads set, game and server off the point
+ * itself, the way the Video tab's point list prints them — so this stays a
+ * pure function of the dot. Every part is omitted when its field is missing.
+ */
+export interface MarkReadout {
+  /** "Ace" / "Point won" / "Point lost" / "Out" / "Error". */
+  title: string;
+  /** The point score ("30-15"), or `null` when none was stored. */
+  score: string | null;
+  /** The shot, its call and its speed when measured; `null` when none. */
+  shot: string | null;
+  /** "Set 2 · Game 5 · You serving", or `null`. */
+  where: string | null;
+  /** Which match the point is from — the season's "vs Lee · Nov 3" — or
+   *  `null` on a one-match court, where the match goes without saying. */
+  match: string | null;
+  /** The last line, under a hairline: what a click does here
+   *  (`markClickHint`). `null` draws no hint. */
+  hint: string | null;
+}
+
+/**
+ * The readout's last line: what clicking the mark does, said in the state
+ * the mark is in. The first click focuses (selects and glides), the second
+ * watches; a selected mark has spent its first click. A host that cannot
+ * play this point (no video, no clip) offers the focus alone, and a second
+ * click there does nothing.
+ */
+export function markClickHint(selected: boolean, canWatch: boolean): string {
+  if (!canWatch) return "Click to focus";
+  return selected
+    ? "Click again to watch"
+    : "Click to focus · Click again to watch";
+}
+
+export function buildMarkReadout(
+  meta: VizDotMeta,
+  outcome: "won" | "lost" | "miss",
+  cut: Cut,
+  unit: DistanceUnit,
+  where: string | null,
+  extra: { match?: string | null; hint?: string | null } = {},
+): MarkReadout {
+  const title = meta.isAce
+    ? "Ace"
+    : cut === "errors"
+      ? "Error"
+      : outcome === "miss"
+        ? "Out"
+        : outcome === "won"
+          ? "Point won"
+          : "Point lost";
+  const shot = shotPhrase(meta.shotType, cut);
+  const call = resultPhrase(meta.result);
+  const shotLine = meta.isAce
+    ? shot
+    : shot !== null && call !== null
+      ? `${shot}, ${lowerFirst(call)}`
+      : (shot ?? call);
+  const speed =
+    meta.speedMph !== null &&
+    Number.isFinite(meta.speedMph) &&
+    meta.speedMph > 0
+      ? formatSpeed(unit, meta.speedMph)
+      : null;
+  const score = (meta.pointScore ?? "").trim();
+  return {
+    title,
+    score: score === "" ? null : pointScoreLabel(score),
+    shot:
+      [shotLine, speed]
+        .filter((part) => part !== null && part !== "")
+        .join(" · ") || null,
+    where,
+    match: extra.match ?? null,
+    hint: extra.hint ?? null,
+  };
+}
+
 /** A serve zone's readout: the same sentence the zone's `aria-label` reads. */
 export function buildZoneReadout(
   zone: ZoneKey,
@@ -153,15 +235,67 @@ export function buildZoneReadout(
   };
 }
 
+/** What one of a cut's rows counts, singular and plural. */
+function rowNoun(cut: Cut, count: number): string {
+  const one =
+    cut === "serve"
+      ? "serve"
+      : cut === "returnPlacement" || cut === "returnContact"
+        ? "return"
+        : cut === "errors"
+          ? "error"
+          : "shot";
+  return count === 1 ? one : `${one}s`;
+}
+
+/**
+ * The hovered or focused row's readout, in the order it reads: what the row
+ * counts ("12 of 20 serves won", or on the errors cut's share rows "4 of 12
+ * errors"), the group's average when it has one, then what a click does —
+ * keep the row's marks, or, on the kept row, let them go. Pure, so
+ * `tests/viz-readout.spec.ts` pins the words; `lightbox-stats.tsx` draws them.
+ */
+export function statRowTooltip(
+  row: StatRow,
+  cut: Cut,
+  group: { average: number | null; total: number },
+  pressed: boolean,
+): { title: string; value: string | null; lines: string[]; hint: string } {
+  const lines = row.share
+    ? [`${row.count} of ${group.total} ${rowNoun(cut, group.total)}`]
+    : [`${row.won} of ${row.count} ${rowNoun(cut, row.count)} won`];
+  if (group.average !== null)
+    lines.push(`Average ${group.average}% across the court`);
+  // A rally cut's marks are shots, several to a point; every other cut's
+  // row counts one mark per point.
+  const kept =
+    cut === "rallyPlacement" || cut === "rallyPosition"
+      ? row.count === 1
+        ? "this shot"
+        : `these ${row.count} shots`
+      : row.count === 1
+        ? "this point"
+        : `these ${row.count} points`;
+  return {
+    title: row.label,
+    value: row.winPct === null ? null : `${row.winPct}%`,
+    lines,
+    hint: pressed ? "Click to show all again" : `Click to keep ${kept}`,
+  };
+}
+
 const READOUT_WIDTH = 220;
 const READOUT_GAP = 10;
 const READOUT_MARGIN = 8;
 /**
- * The tallest card the flip plans for: a title, two lines of which one wraps,
- * and "Watch point". Rather than measure on every hover, the flip uses the
- * worst case; it can flip a little early for a short card and never clips one.
+ * The tallest card the flip plans for: the title row (~18px with its 2px
+ * margin), the shot line wrapping to two (32), the where line (16), the
+ * season's match line wrapping to two (32), and the hint under its hairline
+ * (6 + 1 + 6 + 16), with the column's 2px gaps and 21px of padding — ~160.
+ * Rather than measure on every hover, the flip uses the worst case; it can
+ * flip a little early for a short card and never clips one.
  */
-const READOUT_MAX_HEIGHT = 132;
+const READOUT_MAX_HEIGHT = 160;
 
 export interface ReadoutPlacement {
   /** The card's horizontal centre, in stage px. */
@@ -180,6 +314,9 @@ export interface ReadoutPlacement {
 export function placeReadout(
   anchor: { x: number; y: number },
   stage: { w: number; h: number },
+  /** Px between the anchor and the card — the lightbox passes the selection
+   *  ring's own radius plus 8, so the card clears the ring. */
+  gap: number = READOUT_GAP,
 ): ReadoutPlacement {
   const width = Math.min(
     READOUT_WIDTH,
@@ -193,10 +330,10 @@ export function placeReadout(
     READOUT_MARGIN,
     Math.min(anchor.y, stage.h - READOUT_MARGIN),
   );
-  const below = y - READOUT_GAP - READOUT_MAX_HEIGHT < READOUT_MARGIN;
+  const below = y - gap - READOUT_MAX_HEIGHT < READOUT_MARGIN;
   return {
     left,
-    top: y + (below ? READOUT_GAP : -READOUT_GAP),
+    top: y + (below ? gap : -gap),
     width,
     below,
   };

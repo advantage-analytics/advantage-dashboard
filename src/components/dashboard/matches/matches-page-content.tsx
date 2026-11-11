@@ -13,7 +13,8 @@ import {
 import { createPortal } from "react-dom";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Filter as FilterIcon, GalleryHorizontalEnd } from "lucide-react";
+import { GalleryHorizontalEnd } from "lucide-react";
+import { AppliedFilterStrip } from "@/components/dashboard/shared/applied-filter-strip";
 import { EmptyMatches } from "./empty-matches";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
@@ -31,6 +32,11 @@ import {
 import { compareMatchDays } from "@/lib/data/match-day";
 import { matchesFilterGroups } from "@/lib/data/match-filters";
 import { normalizedPersonName } from "@/lib/data/person-name";
+import {
+  playedByRosterPlayer,
+  ROSTER_PLAYER_PARAM,
+  rosterPlayerCutName,
+} from "@/lib/data/roster-player-cut";
 import { providers } from "@/lib/providers";
 import { markReportSeen, useUnseenReportIds } from "@/lib/ui/seen-reports";
 import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
@@ -206,8 +212,10 @@ const FILTER_GROUPS: {
     // other. The list shows the whole squad — every member reads the program's
     // matches, staff and player alike — and until now the only way to read one
     // person's season was to scroll.
-    // It reads `player1` because that is always the program's side of the row:
-    // `recordResult` and the upload wizard both put the opponent in `player2`.
+    // It reads `player1` because that is the program's side of the row —
+    // `recordResult` and the wizard store it there, and `toTeamSide` turns a
+    // row that does not — plus `player2` when that seat is a teammate too
+    // (`rosterNames`).
     key: "player",
     label: "Roster",
     teamOnly: true,
@@ -220,8 +228,10 @@ const FILTER_GROUPS: {
     getValues: (matches) => {
       const byName = new Map<string, string>();
       for (const m of matches) {
-        const key = normalizedPersonName(m.player1.name);
-        if (key && !byName.has(key)) byName.set(key, m.player1.name);
+        for (const name of rosterNames(m)) {
+          const key = normalizedPersonName(name);
+          if (key && !byName.has(key)) byName.set(key, name);
+        }
       }
       return [...byName.values()].sort((a, b) =>
         normalizedPersonName(a).localeCompare(normalizedPersonName(b)),
@@ -411,6 +421,18 @@ function hasReadableReport(m: DisplayMatch) {
   return !m.analysis || isAnalysisReady(m.analysis.status);
 }
 
+/**
+ * The program's players on a team row, for the Roster facet: seat one —
+ * which `toTeamSide` makes the program's side — and seat two too when it is
+ * also on the roster (a match between teammates), so filtering by either
+ * teammate finds it whichever of them the viewer's turn put first.
+ */
+function rosterNames(m: DisplayMatch): string[] {
+  return m.player2.profileId
+    ? [m.player1.name, m.player2.name]
+    : [m.player1.name];
+}
+
 export function MatchesPageContent({
   matches: serverMatches,
   drafts: allDrafts = NO_DRAFTS,
@@ -501,6 +523,12 @@ export function MatchesPageContent({
   // states in words in the applied-filter strip, with the same "Clear filter"
   // as any other. It has no input of its own.
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
+  // The player profile's "N matches" link (`roster-player-cut.ts`): one
+  // roster player in either seat. Team list only; it has no panel control,
+  // so the applied strip is where it is stated and cleared.
+  const [rosterPlayer, setRosterPlayer] = useState<string | null>(() =>
+    scope === "team" ? searchParams.get(ROSTER_PLAYER_PARAM) || null : null,
+  );
   const [sortField, setSortField] = useState<SortField>(
     () => (searchParams.get("sort") as SortField) || "date",
   );
@@ -582,6 +610,10 @@ export function MatchesPageContent({
       );
     }
 
+    if (rosterPlayer) {
+      result = result.filter((m) => playedByRosterPlayer(m, rosterPlayer));
+    }
+
     // Alternatives within a facet, intersection across facets.
     result = result.filter((match) =>
       matchesFilterGroups(match, filters, (m, filter) => {
@@ -603,9 +635,10 @@ export function MatchesPageContent({
           case "backhand":
             return m.player2Backhand === filter.value;
           case "player":
-            return (
-              normalizedPersonName(m.player1.name) ===
-              normalizedPersonName(filter.value)
+            return rosterNames(m).some(
+              (name) =>
+                normalizedPersonName(name) ===
+                normalizedPersonName(filter.value),
             );
           default:
             return true;
@@ -625,7 +658,7 @@ export function MatchesPageContent({
     }
 
     return result;
-  }, [matches, search, filters, lifecycle, unseenIds, openedIds]);
+  }, [matches, search, rosterPlayer, filters, lifecycle, unseenIds, openedIds]);
 
   // A filtered view is its own screen (v3's Data Table law 8), so a draft stays
   // only if it answers the cut. It can answer the palette's `?q=` with what it
@@ -633,7 +666,9 @@ export function MatchesPageContent({
   // a lifecycle view: it has no result yet, no report to be new, and no analysis
   // in flight.
   const listedDrafts = useMemo(() => {
-    if (filters.length > 0 || lifecycle !== "all") return NO_DRAFTS;
+    if (filters.length > 0 || rosterPlayer || lifecycle !== "all") {
+      return NO_DRAFTS;
+    }
     if (!search.trim()) return drafts;
     const q = search.trim().toLowerCase();
     const person = normalizedPersonName(search);
@@ -643,7 +678,7 @@ export function MatchesPageContent({
         normalizedPersonName(d.playerName ?? "").includes(person) ||
         normalizedPersonName(d.opponentName ?? "").includes(person),
     );
-  }, [drafts, search, filters, lifecycle]);
+  }, [drafts, search, rosterPlayer, filters, lifecycle]);
 
   // Sort matches
   const sorted = useMemo(() => {
@@ -887,7 +922,7 @@ export function MatchesPageContent({
   // Reset page when filters/query/lifecycle change
   useEffect(() => {
     setPage(1);
-  }, [search, filters, lifecycle]);
+  }, [search, rosterPlayer, filters, lifecycle]);
 
   // Sync state to URL
   const isInitialMount = useRef(true);
@@ -898,6 +933,7 @@ export function MatchesPageContent({
     }
     const params = new URLSearchParams();
     if (search) params.set("q", search);
+    if (rosterPlayer) params.set(ROSTER_PLAYER_PARAM, rosterPlayer);
     if (sortField !== "date") params.set("sort", sortField);
     if (sortDir !== "desc") params.set("dir", sortDir);
     if (page > 1) params.set("page", String(page));
@@ -921,6 +957,7 @@ export function MatchesPageContent({
     );
   }, [
     search,
+    rosterPlayer,
     sortField,
     sortDir,
     page,
@@ -1047,11 +1084,16 @@ export function MatchesPageContent({
 
   // Whether the strip has anything to state. The palette's query is a cut the
   // same as any facet, and the strip is the one place it is visible.
-  const hasCut = filters.length > 0 || search.trim().length > 0;
+  const hasCut =
+    filters.length > 0 || search.trim().length > 0 || rosterPlayer !== null;
   const clearCut = () => {
     clearFilters();
     setSearch("");
+    setRosterPlayer(null);
   };
+  const rosterPlayerName = rosterPlayer
+    ? (rosterPlayerCutName(matches, rosterPlayer) ?? "this player")
+    : null;
 
   // A draft is a match in flight and keeps the list (v3's Data Table law 8).
   if (matches.length === 0 && drafts.length === 0) {
@@ -1093,44 +1135,29 @@ export function MatchesPageContent({
       </div>
 
       {/* Applied-filter strip — the panel closes on apply, this states the cut
-          in words. Never chips, never a badge (v3's Data Table law 6). */}
-      {hasCut && (
-        <div
-          className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-          style={{ background: "var(--surface-subtle)" }}
-        >
-          <FilterIcon
-            className="size-[13px] shrink-0"
-            strokeWidth={1.5}
-            style={{ color: "var(--ink-500)" }}
-            aria-hidden="true"
-          />
-          <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-            {[
-              ...(search.trim() ? [`Matching “${search.trim()}”`] : []),
-              ...(filters.length > 0 ? [describeFilters(filters)] : []),
-            ].join(" · ")}
-          </span>
-          <span
-            className="size-[3px] rounded-full"
-            style={{ background: "var(--ink-300)" }}
-            aria-hidden="true"
-          />
-          <span className="text-micro tabular">
-            {matches.length === 0
-              ? `${listedDrafts.length} of ${draftCount(drafts.length)}`
-              : `${sorted.length} of ${matches.length}${listedDraftsNote}`}
-          </span>
-          <div className="flex-1" />
-          <button
-            type="button"
-            onClick={clearCut}
-            className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-          >
-            Clear filter
-          </button>
-        </div>
-      )}
+          in words. Never chips, never a badge (v3's Data Table law 6). It
+          unfolds and folds in the column's 18px gap rather than popping, so
+          the table eases down and back up with it. */}
+      <AppliedFilterStrip
+        kind="matches"
+        gap={18}
+        sentence={
+          hasCut
+            ? [
+                ...(rosterPlayerName ? [`Played by ${rosterPlayerName}`] : []),
+                ...(search.trim() ? [`Matching “${search.trim()}”`] : []),
+                ...(filters.length > 0 ? [describeFilters(filters)] : []),
+              ].join(" · ")
+            : null
+        }
+        count={
+          matches.length === 0
+            ? `${listedDrafts.length} of ${draftCount(drafts.length)}`
+            : `${sorted.length} of ${matches.length}${listedDraftsNote}`
+        }
+        action="Clear filter"
+        onClear={clearCut}
+      />
 
       {/* Table / Grid */}
       <MatchesGrid
@@ -1153,7 +1180,7 @@ export function MatchesPageContent({
             {...emptyCutCopy({
               lifecycle,
               query: search.trim(),
-              hasFilters: filters.length > 0,
+              hasFilters: filters.length > 0 || rosterPlayer !== null,
               clearCut,
               showAll: () => {
                 clearCut();

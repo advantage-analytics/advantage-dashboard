@@ -14,6 +14,7 @@ import {
   OPPONENTS_PAGE_FRAME,
   OPPONENTS_PAGE_GAP,
 } from "./opponents-table-layout";
+import { useRememberOpponentsRows } from "./opponents-shape-memory";
 import { OpponentsTitleRow } from "./opponents-title-row";
 import { OpponentsToolbar } from "./opponents-toolbar";
 import {
@@ -21,10 +22,10 @@ import {
   describeOpponentFilters,
   emptyOpponentCut,
   hasOpponentFilters,
+  initialOpponentCut,
   NO_OPPONENT_FILTERS,
   opponentFacedByChoices,
   opponentProgramChoices,
-  RESTING_OPPONENT_CUT,
   teamOpponentsFooter,
   teamOpponentsSubline,
   type OpponentCut,
@@ -61,12 +62,17 @@ export function TeamOpponentsPageContent({
   opponents,
   totals,
   initialSelectedKey = null,
+  initialFacedBy = null,
 }: TeamOpponentsGrouping & {
   /** `?opponent=` from the URL, or null. Ignored unless it names a listed row. */
   initialSelectedKey?: string | null;
+  /**
+   * `?facedBy=` from the URL — one roster `playerId` or several. Seeds the
+   * Faced-by filter; ids the checklist does not offer are dropped
+   * (`initialOpponentCut`).
+   */
+  initialFacedBy?: string | readonly string[] | null;
 }) {
-  const [cut, setCut] = useState<OpponentCut>(RESTING_OPPONENT_CUT);
-
   const programChoices = useMemo(
     () => opponentProgramChoices(opponents),
     [opponents],
@@ -74,6 +80,11 @@ export function TeamOpponentsPageContent({
   const facedByChoices = useMemo(
     () => opponentFacedByChoices(opponents),
     [opponents],
+  );
+
+  // Read once, on mount: after that the cut is the toolbar's, not the URL's.
+  const [cut, setCut] = useState<OpponentCut>(() =>
+    initialOpponentCut({ facedBy: initialFacedBy }, facedByChoices),
   );
 
   /**
@@ -85,6 +96,9 @@ export function TeamOpponentsPageContent({
     () => applyOpponentCut(opponents, cut),
     [opponents, cut],
   );
+  // Teach the page's loading skeleton how many rows to hold open next visit.
+  useRememberOpponentsRows("team", opponents);
+
   const visibleKeys = useMemo(
     () => visibleOpponents.map((o) => o.key),
     [visibleOpponents],
@@ -156,17 +170,19 @@ export function TeamOpponentsPageContent({
           facedByChoices={facedByChoices}
         />
 
-        {filtered ? (
-          <OpponentsFilterStrip
-            description={describeOpponentFilters(cut.filters, {
-              programs: programChoices,
-              facedBy: facedByChoices,
-            })}
-            shown={shown}
-            inView={inView}
-            onClear={clearFilters}
-          />
-        ) : null}
+        <OpponentsFilterStrip
+          description={
+            filtered
+              ? describeOpponentFilters(cut.filters, {
+                  programs: programChoices,
+                  facedBy: facedByChoices,
+                })
+              : null
+          }
+          shown={shown}
+          inView={inView}
+          onClear={clearFilters}
+        />
 
         {/* A cut that leaves nothing keeps the card and its header row and
             says so in the body; the title row, chips and footer do not move. */}

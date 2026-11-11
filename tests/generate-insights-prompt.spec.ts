@@ -95,10 +95,19 @@ async function runWithReplies(
   let clock = 0;
 
   const from = (table: string) => {
-    let filteredById = false;
+    let filteredById: string[] | null = null;
     const resolve = (single = false) => {
       if (table === "match_stats_with_percentages") {
-        if (filteredById) return { data: db.priorStats ?? [], error: null };
+        if (filteredById) {
+          // Only the rows the function asked for, as `.in("match_id", …)` does.
+          const ids = filteredById;
+          return {
+            data: (db.priorStats ?? []).filter((r) =>
+              ids.includes(String(r.match_id)),
+            ),
+            error: null,
+          };
+        }
         return {
           data: db.stats ?? [{ is_player1: true }, { is_player1: false }],
           error: null,
@@ -116,8 +125,8 @@ async function runWithReplies(
       eq: () => query,
       is: () => query,
       lt: () => query,
-      in: () => {
-        filteredById = true;
+      in: (_field: string, ids: string[]) => {
+        filteredById = ids;
         return query;
       },
       order: () => query,
@@ -748,3 +757,89 @@ test("a SwingVision match is judged without being verified", async () => {
     '"unforced_errors":9',
   );
 });
+
+/**
+ * Practice never counts toward a player's record (T1's `isPracticeMatch`,
+ * restated in the edge function): a practice set is no one's baseline or
+ * previous match, and a practice set being summarised is named as one.
+ */
+const PRACTICE_HISTORY = {
+  priorMatches: [
+    // The newest prior match is a practice set; it must not be "previous".
+    {
+      id: "m-practice",
+      player1_name: "Ana Castillo",
+      match_type: " PRACTICE ",
+    },
+    { id: "m-prev", player1_name: "Ana Castillo", match_type: "Singles" },
+    { id: "m-older", player1_name: "Ana Castillo", match_type: "Tournament" },
+    { id: "m-drill", player1_name: "Ana Castillo", match_type: "practice" },
+  ],
+  priorStats: [
+    { match_id: "m-practice", unforced_errors: 40, forced_errors: 0 },
+    { match_id: "m-prev", unforced_errors: 10, forced_errors: 4 },
+    { match_id: "m-older", unforced_errors: 12, forced_errors: null },
+    { match_id: "m-drill", unforced_errors: 50, forced_errors: 0 },
+  ],
+};
+
+test("practice sets stay out of the baseline averages and the previous match", async () => {
+  const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+    match: { ...JUDGED_MATCH, match_type: "Tournament" },
+    stats: ERROR_STATS(9, 3),
+    ...PRACTICE_HISTORY,
+  });
+  const comparison = comparisonOf(requests[0].body.contents[0].parts[0].text);
+  // Two counted priors (legacy "Singles" counts): (14 + 12) / 2, not with 40 and 50.
+  expect(comparison).toContain("across 2 prior matches");
+  expect(comparison).toContain('"errors":13');
+  const previous = comparison.slice(
+    comparison.indexOf("Immediately previous match"),
+  );
+  expect(previous).toContain('"match_id":"m-prev"');
+  expect(comparison).not.toContain("m-practice");
+  expect(comparison).not.toContain("m-drill");
+  expect(comparison).not.toContain('"errors":40');
+  expect(comparison).not.toContain('"errors":50');
+});
+
+test("a player whose only earlier matches are practice gets no comparison", async () => {
+  const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+    match: JUDGED_MATCH,
+    stats: ERROR_STATS(9, 3),
+    priorMatches: [PRACTICE_HISTORY.priorMatches[0]],
+    priorStats: [PRACTICE_HISTORY.priorStats[0]],
+  });
+  expect(requests[0].body.contents[0].parts[0].text).not.toContain(
+    "Player 1 comparison context",
+  );
+});
+
+for (const matchType of ["Practice", "  practice "]) {
+  test(`a match typed ${JSON.stringify(matchType)} is summarised as a practice set that does not count`, async () => {
+    const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+      match: { ...JUDGED_MATCH, match_type: matchType },
+      stats: ERROR_STATS(9, 3),
+    });
+    const prompt = requests[0].body.contents[0].parts[0].text;
+    expect(prompt).toContain(
+      "This match is a practice set: it does not count toward the player's record",
+    );
+    // The settled voice is untouched by the practice line.
+    expect(fieldLine(prompt, "description")).toContain(
+      "under 350 characters together with it",
+    );
+  });
+}
+
+for (const matchType of ["Tournament", "Singles", "Dual", null]) {
+  test(`a match typed ${JSON.stringify(matchType)} is not called a practice set`, async () => {
+    const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
+      match: { ...JUDGED_MATCH, match_type: matchType },
+      stats: ERROR_STATS(9, 3),
+    });
+    expect(requests[0].body.contents[0].parts[0].text).not.toContain(
+      "practice set",
+    );
+  });
+}

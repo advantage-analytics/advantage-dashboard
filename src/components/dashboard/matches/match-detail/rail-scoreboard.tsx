@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { TIEBREAK_STYLE } from "@/components/dashboard/score-line";
+import { StatePill } from "@/components/ui/state-pill";
 
 /**
  * The rail scoreboard (H1 · B2, frames SB1–SB3): one widget, three states.
@@ -38,12 +39,17 @@ export interface RailScoreboardPlayer {
   points?: string | null;
   serving?: boolean;
   won?: boolean;
+  /**
+   * The opponent is on the match's own program roster: a grey outlined
+   * "Teammate" pill right after the name, before the winner check.
+   */
+  teammate?: boolean;
 }
 
 export interface RailScoreboardProps {
   players: [RailScoreboardPlayer, RailScoreboardPlayer];
   status: RailScoreboardStatus;
-  /** The status word in sentence case ("Playing", "Paused", "Final", "Retired"). */
+  /** The status word in sentence case ("Playing", "Paused", "Final", "Retired", "Practice"). */
   label: string;
   /** The film head, e.g. "41:12". Live only. */
   headTime?: string | null;
@@ -51,6 +57,12 @@ export interface RailScoreboardProps {
   duration?: string | null;
   /** Always one line; truncates rather than wraps. */
   caption: string;
+  /**
+   * Drop the rail's own inset (12px + 13px each side, 18px above) for a host
+   * that already pads its body — the Matches drawer, whose 22px inset the
+   * scoreboard then shares. The hairline under it stays.
+   */
+  bare?: boolean;
 }
 
 function Dash({ label }: { label: string }) {
@@ -69,6 +81,7 @@ export function RailScoreboard({
   headTime,
   duration,
   caption,
+  bare = false,
 }: RailScoreboardProps) {
   const clock =
     status === "live" ? headTime : status === "final" ? duration : null;
@@ -77,10 +90,15 @@ export function RailScoreboard({
   return (
     // No card of its own (F1, settled): the rail's head, set off from the view
     // switcher by a hairline that stops 12px short of each rail edge.
-    <div className="px-3" data-tour="scoreboard">
+    // The first-run tour finds the report's board by `data-tour`; a bare
+    // board lives elsewhere and must not answer to it.
+    <div
+      className={bare ? undefined : "px-3"}
+      data-tour={bare ? undefined : "scoreboard"}
+    >
       <div
         className="flex flex-col gap-[14px] border-b border-[var(--border-hairline)]"
-        style={{ padding: "18px 13px 20px" }}
+        style={{ padding: bare ? "0 0 20px" : "18px 13px 20px" }}
       >
         <div className="flex items-baseline gap-2">
           {/* `.text-micro` already paints ink-500, and is unlayered, so no
@@ -138,6 +156,12 @@ function ScoreRow({
       >
         {player.name}
       </span>
+      {/* The Matches list's grammar (T12): a fact about the row, grey. */}
+      {player.teammate ? (
+        <StatePill outline className="shrink-0">
+          Teammate
+        </StatePill>
+      ) : null}
       {status === "final" && player.won ? (
         <Check
           aria-label="Winner"

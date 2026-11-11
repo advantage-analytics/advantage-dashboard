@@ -36,11 +36,15 @@ const nextConfig: NextConfig = {
   // vendor's video SAS, so it must never be reachable from a client bundle.
   // The browser upload path deliberately does not use it — see
   // src/lib/services/upload/azure-block-upload.ts.
+  //
+  // @aws-sdk/client-s3 talks to Cloudflare R2 with the R2 token
+  // (src/lib/services/video-storage/r2.ts): server only, for the same reason.
   serverExternalPackages: [
     "exceljs",
     "@anthropic-ai/sdk",
     "openai",
     "@azure/storage-blob",
+    "@aws-sdk/client-s3",
   ],
   // `react-aria-components` is a 60-component barrel: importing `DatePicker`
   // from it pulls the whole export graph — 106 modules against the 25 the

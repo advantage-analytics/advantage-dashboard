@@ -16,6 +16,7 @@ import {
   OPPONENTS_PAGE_FRAME,
   OPPONENTS_PAGE_GAP,
 } from "./opponents-table-layout";
+import { useRememberOpponentsRows } from "./opponents-shape-memory";
 import { OpponentsTitleRow } from "./opponents-title-row";
 import { OpponentsToolbar } from "./opponents-toolbar";
 import {
@@ -74,6 +75,9 @@ export function OpponentsPageContent({
     () => applyOpponentCut(opponents, cut),
     [opponents, cut],
   );
+  // Teach the page's loading skeleton how many rows to hold open next visit.
+  useRememberOpponentsRows("personal", opponents);
+
   const visibleKeys = useMemo(
     () => visibleOpponents.map((o) => o.key),
     [visibleOpponents],
@@ -149,14 +153,12 @@ export function OpponentsPageContent({
           totalCount={inView}
         />
 
-        {filtered ? (
-          <OpponentsFilterStrip
-            description={describeOpponentFilters(cut.filters)}
-            shown={shown}
-            inView={inView}
-            onClear={clearFilters}
-          />
-        ) : null}
+        <OpponentsFilterStrip
+          description={filtered ? describeOpponentFilters(cut.filters) : null}
+          shown={shown}
+          inView={inView}
+          onClear={clearFilters}
+        />
 
         {/* A cut that leaves nothing keeps the card and its header row and
             says so in the body; the title row, chips and footer do not move. */}

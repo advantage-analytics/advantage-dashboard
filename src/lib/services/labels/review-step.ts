@@ -191,6 +191,7 @@ export function reviewItemThenLabel(item: ReviewItem): string {
       return has("last_landing_missing", "last_shot_unresolved") &&
         !has(
           "last_call_overruled",
+          "last_ball_against_game",
           "net_by_trajectory",
           "winner_disputed",
           "ending_suspect_line",
@@ -500,10 +501,13 @@ function dismissKeys(
 }
 
 /**
- * A result on `shot`, then the ending it leads to. An answer that only
- * confirms what the rows already hold changes nothing, so on its own it
- * would leave the question standing: `item`'s members are dismissed instead
- * (their stored keys), which closes it as the labeller meant.
+ * A result on `shot`, written as the labeller's call (`result_called`, so it
+ * outranks the landing even where it equals the vendor's seed), then the
+ * ending it leads to. An answer that only confirms what the rows already
+ * hold — the stored call, already read as the stroke's result — changes
+ * nothing, so on its own it would leave the question standing: `item`'s
+ * members are dismissed instead (their stored keys), which closes it as the
+ * labeller meant.
  */
 function resultWrites(
   point: LabelPoint,
@@ -513,13 +517,17 @@ function resultWrites(
   item?: ReviewItem,
 ): ReviewWrite[] {
   const ending = endingWriteFor(point, shotId, result, ghosts);
-  const stored = point.shots.find((shot) => shot.id === shotId)?.result;
-  if (item && stored === result && ending === null) {
+  const shot = point.shots.find((s) => s.id === shotId);
+  const holds =
+    shot !== undefined &&
+    shot.result === result &&
+    effectiveShotResult(shot) === result;
+  if (item && holds && ending === null) {
     const keys = dismissKeys(item);
     return keys.length > 0 ? [{ write: "dismiss", keys }] : [];
   }
   return [
-    { write: "shot", shotId, patch: { result } },
+    { write: "shot", shotId, patch: { result, result_called: true } },
     ...(ending ? [{ write: "point" as const, patch: ending }] : []),
   ];
 }
@@ -564,8 +572,15 @@ function lastBallAnswers(
     : null;
   const target = call?.shotId ?? last.id;
   const shank = landedOnOwnSide(last);
+  // A locked game that does not add up asks for the call that gives it the
+  // point (`lastBallAgainstGame`), after the vendor's own call.
+  const forGame = item.members.find(
+    (member) =>
+      member.state === "open" && member.mark.code === "last_ball_against_game",
+  )?.mark;
   const expected: "in" | "out" | "net" | null =
     call?.mark.params.vendorCall ??
+    (forGame?.code === "last_ball_against_game" ? forGame.params.call : null) ??
     (() => {
       const own = effectiveShotResult(last);
       return own === "in" || own === "out" || own === "net" ? own : null;
@@ -674,7 +689,11 @@ function afterPointEndAnswers(
       writes: [
         stored === "out" || stored === "net"
           ? { write: "removeAfter", shotId }
-          : { write: "shot", shotId, patch: { result: "out" } },
+          : {
+              write: "shot",
+              shotId,
+              patch: { result: "out", result_called: true },
+            },
       ],
     },
   ];

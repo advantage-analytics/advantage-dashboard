@@ -24,6 +24,7 @@ import {
   type TeamOpponentTotals,
 } from "@/lib/data/team-opponents";
 import { viewerSide } from "@/lib/data/viewer-side";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 
 /**
  * The two Opponents pages' reads, on a client the caller hands in.
@@ -85,10 +86,26 @@ interface DbOpponentMatch {
   opponent_player_id: string | null;
   opponent_hand: string | null;
   opponent_backhand: string | null;
+  match_type: string | null;
 }
 
 const PERSONAL_MATCH_COLUMNS =
-  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, tournament_name, score, opponent_player_id, opponent_hand, opponent_backhand";
+  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, tournament_name, score, opponent_player_id, opponent_hand, opponent_backhand, match_type";
+
+/**
+ * The rows an Opponents page may count: every one but a practice session.
+ *
+ * Practice never counts toward a win–loss record or a head-to-head (product
+ * decision, no opt-in), so it is dropped here — before the statistics read and
+ * before grouping — and an opponent met only in practice is never listed. Done
+ * in TypeScript rather than as a PostgREST filter because `match_type` is
+ * free text and `isPracticeMatch` is the one test for it.
+ */
+function competitiveOnly<T extends { match_type: string | null }>(
+  rows: readonly T[],
+): T[] {
+  return rows.filter((row) => !isPracticeMatch(row.match_type));
+}
 
 /** One side of one match; a `numeric` column arrives as a string. */
 interface DbStatRow {
@@ -163,7 +180,9 @@ export async function loadPersonalOpponents(
   if (matchError)
     throw new Error("Could not load personal opponents", { cause: matchError });
 
-  const matches = (matchRows ?? []) as unknown as DbOpponentMatch[];
+  const matches = competitiveOnly(
+    (matchRows ?? []) as unknown as DbOpponentMatch[],
+  );
   if (matches.length === 0) {
     return { opponents: [], totals: personalOpponentTotals([]), season };
   }
@@ -283,7 +302,9 @@ export async function loadTeamOpponents(
       cause: rosterError,
     });
 
-  const matches = (matchRows ?? []) as unknown as DbTeamOpponentMatch[];
+  const matches = competitiveOnly(
+    (matchRows ?? []) as unknown as DbTeamOpponentMatch[],
+  );
   if (matches.length === 0) {
     return { opponents: [], totals: teamOpponentTotals([]), season };
   }
@@ -294,7 +315,8 @@ export async function loadTeamOpponents(
     "Could not load team opponent statistics",
   );
 
-  // Players only, named by the shared fallback chain. Photos are keyed by
+  // Players only, named by the shared fallback chain. The same rows decide who
+  // is a teammate, and so never an opponent (`groupTeamOpponents`). Photos are keyed by
   // login, so an unclaimed coach-managed profile has none and draws initials.
   const roster: TeamOpponentRosterPlayer[] = rosterPlayerOptions(
     (rosterRows ?? []) as RosterFullRow[],
@@ -321,6 +343,7 @@ export async function loadTeamOpponents(
       id: match.id,
       date: match.date,
       player1_id: match.player1_id,
+      player2_id: match.player2_id,
       player1_name: match.player1_name,
       player2_name: match.player2_name,
       created_by: match.created_by,

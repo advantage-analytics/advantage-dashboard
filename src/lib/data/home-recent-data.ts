@@ -10,6 +10,7 @@ import { viewerSide } from "@/lib/data/viewer-side";
 // The shared rule: a stored winner (retired, defaulted) first, then sets.
 import { didUserWin } from "@/lib/data/match-utils";
 import { totalErrors } from "@/lib/data/player-profile";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import {
   formatMatchDayRelative,
   matchDay,
@@ -114,7 +115,12 @@ export interface MatchRow {
   analysisStatus?: AnalysisStatus;
 }
 
-/** Cheap record count from the base rows Personal Home already resolved. */
+/**
+ * Cheap record count from the base rows Personal Home already resolved.
+ *
+ * Practice never counts toward the record (product decision): a practice row
+ * is skipped here, though `loadRecentMatches` still lists it.
+ */
 export function countViewerWins(
   rows: readonly DbRecentMatch[],
   playerIds: readonly string[],
@@ -122,6 +128,7 @@ export function countViewerWins(
 ): number {
   let wins = 0;
   for (const row of rows) {
+    if (isPracticeMatch(row.match_type)) continue;
     const side = viewerSide(row, playerIds, viewerId, row.created_by);
     if (side && didUserWin(row.score, side === "player1")) wins += 1;
   }

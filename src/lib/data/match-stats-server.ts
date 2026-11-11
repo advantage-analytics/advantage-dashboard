@@ -8,8 +8,13 @@ import type {
 } from "./types";
 import { playerSeat } from "./viewer-side";
 import { totalErrors } from "./player-profile";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 
-interface DbMatchStatsView {
+/**
+ * One row of `match_stats_with_percentages`, as `MATCH_STATS_VIEW_COLUMNS`
+ * selects it: counts as numbers, percentages as numeric strings.
+ */
+export interface DbMatchStatsView {
   is_player1: boolean;
   aces: number | null;
   double_faults: number | null;
@@ -119,6 +124,27 @@ export interface SeatMatch {
   date: string | null;
   player1_id: string | null;
   player2_id: string | null;
+  /** Read only so practice can be left out — see `baselineMatches`. */
+  match_type?: string | null;
+}
+
+/**
+ * The matches a player's baseline and season line may be made of.
+ *
+ * Practice is never season or baseline data (product decision, no opt-in), so
+ * a practice match is dropped — except `keepMatchId`, the match a page is open
+ * on: a practice match's own report still loads its own statistics, and its
+ * KPI line still ends on it, against a baseline of competitive matches only.
+ *
+ * Pure, like `ownSeatRows`, so the rule is testable with plain objects.
+ */
+export function baselineMatches<T extends Pick<SeatMatch, "id" | "match_type">>(
+  matches: readonly T[],
+  keepMatchId?: string,
+): T[] {
+  return matches.filter(
+    (m) => m.id === keepMatchId || !isPracticeMatch(m.match_type),
+  );
 }
 
 /**
@@ -162,6 +188,8 @@ async function fetchPlayerStatRows(
   playerIds: readonly string[],
   columns: string,
   excludeMatchId?: string,
+  /** A practice match kept in the set anyway — the one the page is open on. */
+  keepMatchId?: string,
 ): Promise<PlayerStatRow[] | null> {
   if (playerIds.length === 0) return null;
 
@@ -172,13 +200,17 @@ async function fetchPlayerStatRows(
 
   let query = supabase
     .from("matches")
-    .select("id, date, player1_id, player2_id")
+    .select("id, date, player1_id, player2_id, match_type")
     .or(`player1_id.in.(${list}),player2_id.in.(${list})`);
   if (excludeMatchId) query = query.neq("id", excludeMatchId);
   const { data: matchRows } = await query;
 
   if (!matchRows?.length) return null;
-  const matches = matchRows as unknown as SeatMatch[];
+  const matches = baselineMatches(
+    matchRows as unknown as SeatMatch[],
+    keepMatchId,
+  );
+  if (!matches.length) return null;
 
   const { data: statRows } = await supabase
     .from("match_stats_with_percentages")
@@ -577,9 +609,13 @@ export async function getMatchKpiHistory(
 ): Promise<MatchKpiHistory | null> {
   // No `excludeMatchId`: this match has to be IN the set, because the series
   // ends on it. `buildKpiHistory` leaves it out of the baseline instead.
+  // `matchId` is kept even when it is a practice match: its own line ends on
+  // it, while its baseline is made of competitive matches only.
   const rows = await fetchPlayerStatRows(
     playerIds,
     KPI_KEYS.map((key) => KPI_COLUMN[key]).join(", "),
+    undefined,
+    matchId,
   );
 
   if (!rows?.length) return null;
@@ -588,6 +624,15 @@ export async function getMatchKpiHistory(
 }
 
 /* ── Single-match stats ────────────────────────────────── */
+
+/**
+ * The view's columns the report reads — one string, so the season loader
+ * (`player-season-server.ts`), which folds a player's matches through the
+ * report's own calculators, reads exactly the columns
+ * `transformToPlayerStats` expects and cannot drift from this read.
+ */
+export const MATCH_STATS_VIEW_COLUMNS =
+  "is_player1, aces, double_faults, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted, first_serve_points_won, second_serve_points_won, service_games_won, service_games_won_pct, first_return_points_won, second_return_points_won, return_games_won, first_return_in_pct, second_return_in_pct, first_returns_in, second_returns_in, first_return_won_pct, second_return_won_pct, return_games_won_pct, break_points_converted_pct, total_points, total_points_won, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct, serve_wide_pct, serve_body_pct, serve_t_pct, return_cross_court_pct, return_down_the_line_pct, return_middle_pct, return_contact_inside_pct, return_contact_middle_pct, return_contact_deep_pct, winners, unforced_errors, forced_errors, net_points_appearances, net_points_won, first_serves, first_serves_in, second_serves_in, service_games, break_points_faced, break_points_saved, break_point_opportunities, first_returns, second_returns, return_games, short_rally_won, short_rally_total, medium_rally_won, medium_rally_total, long_rally_won, long_rally_total";
 
 export async function getMatchStatisticsFromSupabase(
   matchId: string,
@@ -604,9 +649,7 @@ export async function getMatchStatisticsFromSupabase(
   const [statsResult, matchResult] = await Promise.all([
     supabase
       .from("match_stats_with_percentages")
-      .select(
-        "is_player1, aces, double_faults, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted, first_serve_points_won, second_serve_points_won, service_games_won, service_games_won_pct, first_return_points_won, second_return_points_won, return_games_won, first_return_in_pct, second_return_in_pct, first_returns_in, second_returns_in, first_return_won_pct, second_return_won_pct, return_games_won_pct, break_points_converted_pct, total_points, total_points_won, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct, serve_wide_pct, serve_body_pct, serve_t_pct, return_cross_court_pct, return_down_the_line_pct, return_middle_pct, return_contact_inside_pct, return_contact_middle_pct, return_contact_deep_pct, winners, unforced_errors, forced_errors, net_points_appearances, net_points_won, first_serves, first_serves_in, second_serves_in, service_games, break_points_faced, break_points_saved, break_point_opportunities, first_returns, second_returns, return_games, short_rally_won, short_rally_total, medium_rally_won, medium_rally_total, long_rally_won, long_rally_total",
-      )
+      .select(MATCH_STATS_VIEW_COLUMNS)
       .eq("match_id", matchId),
     supabase
       .from("matches")
@@ -780,7 +823,12 @@ function buildFractions(
   return result;
 }
 
-function transformToPlayerStats(
+/**
+ * One seat's view row as the report's `PlayerStatistics`; no row is the
+ * zeroed defaults. Exported for the season loader, which runs the same
+ * transform over every analyzed match of a player.
+ */
+export function transformToPlayerStats(
   row: DbMatchStatsView | undefined,
   tiebreaksWon: number,
 ): PlayerStatistics {

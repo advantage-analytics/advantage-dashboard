@@ -15,7 +15,7 @@
  */
 
 import { handleGetSampleVideo } from "@/lib/services/sample-match/video";
-import { mintPlaybackSas } from "@/lib/services/splitstep/video-url/azure-sas";
+import { mintSampleVideo } from "@/lib/services/video-storage/stores";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -23,5 +23,5 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const supabase = await createClient();
-  return handleGetSampleVideo({ supabase, mintSas: mintPlaybackSas });
+  return handleGetSampleVideo({ supabase, mintSas: mintSampleVideo });
 }

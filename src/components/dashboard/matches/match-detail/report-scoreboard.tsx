@@ -54,14 +54,13 @@ export function setOutcome(set: ScoreLineSet): "you" | "opp" | "level" {
 }
 
 /**
- * One row's cells — the SHARED derivation behind both scoreboards that draw a
- * match's two score rows: this file's rail row and the fullscreen court
- * viewer's slab row (`shots/viz-fullscreen.tsx`). Final review #10: the
- * viewer had hand-copied the lost-set dimming, the `isYou ? player1 :
- * player2` indexing and the tiebreak slot, and this is the one widget where
- * getting that indexing backwards looks entirely fine on screen while
- * attributing the score to the wrong player (docs/ui-revamp-guardrails.md
- * §4). One function, two renderers.
+ * One row's cells — the derivation behind this file's rail score rows, kept
+ * as one function (the fullscreen court viewer drew a second copy of these
+ * rows until the Visualizations lightbox replaced it). This is the one
+ * widget where getting the `isYou ? player1 : player2` indexing backwards
+ * looks entirely fine on screen while attributing the score to the wrong
+ * player (docs/ui-revamp-guardrails.md §4), so a new scoreboard takes its
+ * cells from here rather than re-deriving them.
  *
  * `sets` must already be you-first — the shape `useMatchSides().sets` hands
  * over. This function never looks at which id is which; it only applies
@@ -127,6 +126,13 @@ function surname(name: string): string {
  *   live      Video view, a point under the film head
  *   untagged  no played sets on the match row
  *   final     everything else — the match as it ended
+ *
+ * A practice session (`match.isPractice`, canvas board 5) records no result
+ * worth a status word: the final eyebrow reads "Practice" and the caption
+ * "Practice set · {n} points tagged". The underlying status still decides
+ * which set is the open one. An opponent on the match's own program roster
+ * (`match.opponentIsTeammate`) carries the grey "Teammate" pill in every
+ * state — on the opponent's row, which `useMatchSides` already chose.
  */
 export function MatchReportScoreboard() {
   const { match, points } = useMatchData();
@@ -136,6 +142,7 @@ export function MatchReportScoreboard() {
 
   const youId = "you";
   const oppId = "opp";
+  const teammate = match.opponentIsTeammate === true;
   const format = [match.matchType, match.courtType?.toLowerCase()]
     .filter(Boolean)
     .join(" · ");
@@ -174,6 +181,7 @@ export function MatchReportScoreboard() {
           sets: opp.sets,
           points: opp.game,
           serving: opp.serving,
+          teammate,
         },
       ],
     };
@@ -213,6 +221,7 @@ export function MatchReportScoreboard() {
           (outcome, index) => outcome === side && completed(index),
         ),
         won: sets.length > 0 && (isYou ? match.won : !match.won),
+        teammate: !isYou && teammate,
       };
     };
 
@@ -228,10 +237,14 @@ export function MatchReportScoreboard() {
         points.length > 0
           ? `${points.length} point${points.length === 1 ? "" : "s"} tagged`
           : null;
-      const lead = status === "Final" ? "Match complete" : status;
+      const lead = match.isPractice
+        ? "Practice set"
+        : status === "Final"
+          ? "Match complete"
+          : status;
       props = {
         status: "final",
-        label: status,
+        label: match.isPractice ? "Practice" : status,
         duration,
         caption: [lead, tagged ?? format].filter(Boolean).join(" · "),
         players: [row("you"), row("opp")],

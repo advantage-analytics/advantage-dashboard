@@ -322,6 +322,7 @@ interface ParentJob {
   resubmitted_from_job_id: string | null;
   playback_object_key: string | null;
   playback_status: string | null;
+  playback_store: string | null;
 }
 
 export async function resubmitJob(params: {
@@ -390,7 +391,7 @@ export async function resubmitJob(params: {
   const { data: parentRow, error: parentError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, created_by, status, error_category, error_code, error_step, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id, playback_object_key, playback_status",
+      "id, match_id, created_by, status, error_category, error_code, error_step, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id, playback_object_key, playback_status, playback_store",
     )
     .eq("id", jobId)
     .maybeSingle();
@@ -404,7 +405,7 @@ export async function resubmitJob(params: {
   // program, but nothing may spend quota on a departed person's behalf, so
   // the job reads as not found — the same answer the route gives for
   // "not yours".
-  const raw = parentRow as Omit<ParentJob, "created_by"> & {
+  const raw = parentRow as unknown as Omit<ParentJob, "created_by"> & {
     created_by: string | null;
   };
   if (!raw.created_by) {
@@ -813,10 +814,12 @@ export async function resubmitJob(params: {
       // child made after that never got one and played the raw file (Cj v
       // Summer). A ready copy comes along; one still processing reaches the
       // child through that same report.
+      // Its store comes too: a copy in R2 is not in Azure.
       ...(parent.playback_status === "ready" && parent.playback_object_key
         ? {
             playback_object_key: parent.playback_object_key,
             playback_status: "ready",
+            ...(parent.playback_store === "r2" ? { playback_store: "r2" } : {}),
           }
         : {}),
     })

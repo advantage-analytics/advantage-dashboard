@@ -10,6 +10,7 @@
 
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import { readPointScore } from "../film/film-score";
+import { netPathX } from "../net-crossing";
 import {
   countedShots,
   isFeedShotType,
@@ -195,7 +196,9 @@ export interface VizDotMeta {
  *
  * `atNet` is a POSITION fact, not a style one — "this ball
  * never crossed the net, so its real (hitter's-own-side) coordinates aren't
- * where it should be drawn; draw it at the net line instead" — deliberately
+ * where it should be drawn; draw it at the net line instead" — its
+ * `lateralM` then being where its contact → landing path meets the net
+ * (`netDotLateralM`) when that is known — deliberately
  * separate from `shape`/`outcome`. A netted ball draws with the SAME shape
  * and colour an ordinary miss of that cut already has (a grey circle on
  * serve; the cut's own forehand-circle/backhand-triangle on the two return
@@ -604,6 +607,29 @@ function contactMetrics(
   };
 }
 
+/**
+ * A net dot's DRAWN lateral, in the same "from behind the hitter" frame
+ * `classifyServePlacement`/`rallyLandingMetrics` use: where the shot's own
+ * contact → landing line meets the net (`netPathX`), mirrored at the high-y
+ * end exactly as those functions mirror the landing. `fallback` (the
+ * landing's own lateral) when the line never reaches the net — an imputed
+ * landing on the hitter's side, or no contact point.
+ *
+ * Drawing only: set on the dot after every verdict, filter and zone count
+ * has read the landing's own lateral, so no statistic moves.
+ */
+function netDotLateralM(
+  contactX: number | null | undefined,
+  contactY: number | null | undefined,
+  landingX: number | null | undefined,
+  landingY: number | null | undefined,
+  fallback: number,
+): number {
+  const x = netPathX(contactX, contactY, landingX, landingY);
+  if (x == null || contactY == null) return fallback;
+  return contactY > REAL_NET_Y ? -x : x;
+}
+
 export function pointToReturnDots(
   p: MatchPoint,
   subjectIsPlayer1: boolean,
@@ -664,7 +690,16 @@ export function pointToReturnDots(
       id: p.id,
       variant: "landing",
       shape,
-      lateralM: placement.lateralM,
+      lateralM:
+        placement.kind === "net"
+          ? netDotLateralM(
+              p.secondShotContactX,
+              p.secondShotContactY,
+              p.secondShotLandingX,
+              p.secondShotLandingY,
+              placement.lateralM,
+            )
+          : placement.lateralM,
       depthM: placement.depthPastNetM,
       atNet: placement.kind === "net",
     });
@@ -1078,7 +1113,16 @@ function rallyLandingMetrics(shot: MatchShot) {
     shot.result === "Out" ||
     Math.abs(lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS ||
     depthM > REAL_NET_Y + IN_COURT_EPS;
-  return { lateralM, depthM, atNet, miss };
+  // After `miss` has read the landing's own lateral: a net ball is drawn on
+  // its path at the net (`netDotLateralM`), which is position only.
+  return {
+    lateralM: atNet
+      ? netDotLateralM(shot.contactX, contactY, landingX, landingY, lateralM)
+      : lateralM,
+    depthM,
+    atNet,
+    miss,
+  };
 }
 
 /**
@@ -1372,7 +1416,18 @@ export function computeViz(
 
       dots.push({
         id: p.id,
-        lateralM: metrics.lateralM,
+        // A net serve is drawn on its own path at the net; zone stats and
+        // the side filters above read `metrics.lateralM`, untouched.
+        lateralM:
+          metrics.kind === "net" && serveShot
+            ? netDotLateralM(
+                serveShot.contactX,
+                serveShot.contactY,
+                serveShot.landingX,
+                serveShot.landingY,
+                metrics.lateralM,
+              )
+            : metrics.lateralM,
         depthM: metrics.depthPastNetM,
         // "in" reads the point's own result (won/lost/ace/doubleFault, same
         // classification `serve-zones.ts` uses); "out"/"net" always miss.
@@ -1508,6 +1563,13 @@ export interface VizStats {
   groups: StatGroup[];
   sentence: string | null;
   total: number;
+  /**
+   * How many of the pool landed in, for the cuts that land (serve, return
+   * and rally placement): the same two numbers the subtitle states, kept as
+   * numbers for the Statistics column's "Landed in" figure. Absent for the
+   * contact cuts and errors, which have no landing to count.
+   */
+  landed?: { count: number; of: number };
 }
 
 /**
@@ -1570,6 +1632,21 @@ function sortRows(rows: StatRow[]): StatRow[] {
     if (b.winPct !== a.winPct) return b.winPct - a.winPct;
     return rowTieBreak(a, b);
   });
+}
+
+/**
+ * The order `computeVizStats` gives a group's rows, for a caller that has
+ * summed rows from several matches and must put them back in it (the player
+ * profile's season fold, `lib/data/player-season-viz.ts`): share rows (the
+ * errors cut's, `errorStats`) by count, every other group by win rate
+ * (`sortRows`). `tests/player-season-viz.spec.ts` pins that one match merged
+ * with itself comes back in `computeVizStats`' own order.
+ */
+export function orderStatRows(rows: StatRow[]): StatRow[] {
+  if (rows.some((row) => row.share)) {
+    return [...rows].sort((a, b) => b.count - a.count || rowTieBreak(a, b));
+  }
+  return sortRows(rows);
 }
 
 /**
@@ -1907,6 +1984,7 @@ export function computeVizStats(
       groups,
       sentence: buildSentence(groups, noun),
       total,
+      landed: { count: total - outOrNet, of: total },
     };
   }
 
@@ -1933,6 +2011,7 @@ export function computeVizStats(
       groups,
       sentence: buildSentence(groups, noun),
       total,
+      landed: { count: subtitleCount, of: total },
     };
   }
 
@@ -1966,6 +2045,7 @@ export function computeVizStats(
       groups,
       sentence: buildSentence(groups, "shots"),
       total,
+      landed: { count: eligible.length, of: total },
     };
   }
 
@@ -2015,6 +2095,80 @@ export function computeVizStats(
 }
 
 /**
+ * How one error missed — the errors cut's Miss rows, one rule for the rows
+ * (`errorStats`) and the lightbox's row filter (`statRowKeyOf`).
+ */
+function errorMissKey(dot: VizDot): "net" | "long" | "wide" | "in" {
+  if (dot.atNet) return "net";
+  if (isServeShotType(dot.meta?.shotType ?? null)) {
+    // A double fault's serve missed the SERVICE BOX, not the court: past
+    // the service line is long, anything else out (a sideline, the wrong
+    // box) is wide. Never "landed in" — a fault is out by definition, and
+    // SwingVision imputes many fault landings onto the line itself.
+    return dot.depthM > SERVE_BOX_DEPTH_M + IN_COURT_EPS ? "long" : "wide";
+  }
+  if (dot.depthM > REAL_NET_Y + IN_COURT_EPS) return "long";
+  if (Math.abs(dot.lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS)
+    return "wide";
+  if (dot.meta?.result === "Out") {
+    // The tracker's call is the authority (as `rallyLandingMetrics`'s): an
+    // Out whose landing reads just inside — imputed onto a line — is out
+    // over whichever line it sits nearer.
+    const toBaseline = REAL_NET_Y - dot.depthM;
+    const toSideline = REAL_SINGLES_HALF_M - Math.abs(dot.lateralM);
+    return toBaseline <= toSideline ? "long" : "wide";
+  }
+  return "in";
+}
+
+/**
+ * Which row of `groupKey` one drawn mark counts toward, by the SAME rules
+ * `computeVizStats` buckets with — the lightbox's Statistics row filter
+ * keeps exactly the marks a row counted (pinned per row in
+ * `tests/stat-row-filter.spec.ts`). `null` when the mark is in none of the
+ * group's rows (an out/net return under Direction, say). Serve rows are not
+ * here: they are the Zone and Court filters' own points.
+ *
+ * `point` is the mark's source point (`meta.pointId`), needed only for a
+ * return's Direction (the side it was served to).
+ */
+export function statRowKeyOf(
+  cut: Cut,
+  groupKey: string,
+  dot: VizDot,
+  point: MatchPoint | undefined,
+  bands: BandSettings,
+): string | null {
+  if (cut === "errors") {
+    if (groupKey === "miss") return errorMissKey(dot);
+    if (groupKey === "stroke")
+      return (dot.meta?.stroke ?? "Other").toLowerCase();
+    return null;
+  }
+  if (cut === "returnPlacement" || cut === "rallyPlacement") {
+    if (!isPlacementRow(dot)) return null;
+    if (groupKey === "direction" && cut === "returnPlacement")
+      return directionKey(dot.lateralM, getPointSide(point?.pointScore));
+    if (groupKey === "depth") {
+      const rows = depthBandRows(bands, "ft");
+      if (rows.length === 0) return null;
+      return rows[makeDepthBucketer(bands)(dot.depthM)].key;
+    }
+    return null;
+  }
+  if (cut === "returnContact" || cut === "rallyPosition") {
+    if (groupKey === "depth") {
+      const rows = contactBandRows(bands, "ft");
+      return rows[makeContactBucketer(bands)(dot.depthM)].key;
+    }
+    if (groupKey === "stroke")
+      return dot.shape === "triangle" ? "backhand" : "forehand";
+    return null;
+  }
+  return null;
+}
+
+/**
  * The errors cut's two groups, each row a SHARE of the errors drawn
  * (`StatRow.share`): how the ball missed — into the net, long (past the
  * baseline), wide (past a sideline) — and the stroke that missed it. A ball
@@ -2040,26 +2194,11 @@ function errorStats(result: VizResult): StatGroup[] {
   let inCourt = 0;
   const strokes = new Map<string, number>();
   for (const dot of result.dots) {
-    if (dot.atNet) net++;
-    else if (isServeShotType(dot.meta?.shotType ?? null)) {
-      // A double fault's serve missed the SERVICE BOX, not the court: past
-      // the service line is long, anything else out (a sideline, the wrong
-      // box) is wide. Never "landed in" — a fault is out by definition, and
-      // SwingVision imputes many fault landings onto the line itself.
-      if (dot.depthM > SERVE_BOX_DEPTH_M + IN_COURT_EPS) long++;
-      else wide++;
-    } else if (dot.depthM > REAL_NET_Y + IN_COURT_EPS) long++;
-    else if (Math.abs(dot.lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS)
-      wide++;
-    else if (dot.meta?.result === "Out") {
-      // The tracker's call is the authority (as `rallyLandingMetrics`'s):
-      // an Out whose landing reads just inside — imputed onto a line — is
-      // out over whichever line it sits nearer.
-      const toBaseline = REAL_NET_Y - dot.depthM;
-      const toSideline = REAL_SINGLES_HALF_M - Math.abs(dot.lateralM);
-      if (toBaseline <= toSideline) long++;
-      else wide++;
-    } else inCourt++;
+    const miss = errorMissKey(dot);
+    if (miss === "net") net++;
+    else if (miss === "long") long++;
+    else if (miss === "wide") wide++;
+    else inCourt++;
     const stroke = dot.meta?.stroke ?? "Other";
     strokes.set(stroke, (strokes.get(stroke) ?? 0) + 1);
   }

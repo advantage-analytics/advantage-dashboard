@@ -9,6 +9,7 @@ import { verificationFor } from "@/lib/data/match-verification";
 import { DateField, type DateFieldHandle } from "@/components/ui/date-field";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { advButton } from "@/lib/ui/adv-button";
+import { MATCH_TYPE_OPTIONS } from "@/lib/matches/match-type";
 import {
   SettingsField,
   SettingsUnderlineInput,
@@ -230,9 +231,6 @@ function sameScore(a: MatchScore | null, b: MatchScore | null): boolean {
 
 const FORM_ID = "edit-match-form";
 const NOT_SET = "__not-set";
-const MATCH_TYPE_OPTIONS = ["Tournament", "Dual Match", "Practice"].map(
-  (t) => ({ value: t, label: t }),
-);
 /**
  * A stored surface as the upload wizard's Court field spells it, so an older
  * "hard" opens on the wizard's Hard rather than as a row of its own. Any other

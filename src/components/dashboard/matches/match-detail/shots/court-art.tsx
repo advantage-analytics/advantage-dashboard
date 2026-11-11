@@ -4,6 +4,8 @@ import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
 import {
   SERVE_COURT,
   SERVE_BACKGROUND_PATH,
+  SERVE_COURT_THROUGH_NET,
+  SERVE_THROUGH_NET_BACKGROUND_PATH,
   RETURN_COURT,
   RETURN_BACKGROUND_PATH,
   RETURN_DOT_R,
@@ -472,6 +474,20 @@ function HeatFilterDef({
  * `HeatLayer`'s own `useMemo` over its circle array has a stable `project`
  * identity to key on.
  */
+/** A serve mark that lands past the wall card's zoomed window, pinned ON
+ *  the window's edge (in the serve group's own units): the frame cuts it in
+ *  half, which reads as "beyond here" rather than as a landing spot. */
+function pinToServeWindowEdge(p: { cx: number; cy: number }): {
+  cx: number;
+  cy: number;
+} {
+  const edge = SERVE_COURT_THROUGH_NET.edgeGroup;
+  return {
+    cx: Math.min(Math.max(p.cx, edge.left), edge.right),
+    cy: Math.max(p.cy, edge.top),
+  };
+}
+
 const projectServeHeatDot = (d: VizDot) =>
   projectServeMetricDot({ lateralM: d.lateralM, depthPastNetM: d.depthM });
 const projectReturnPlacementHeatDot = (d: VizDot) =>
@@ -580,6 +596,7 @@ export function CourtArt({
   draft = false,
   markInteraction,
   zoneInteraction,
+  serveFrame = "half",
 }: {
   cut: Cut;
   dots: VizDot[];
@@ -627,6 +644,13 @@ export function CourtArt({
   markInteraction?: CourtMarkInteraction;
   /** The same for the Zones chart. */
   zoneInteraction?: CourtZoneInteraction;
+  /**
+   * Serve only. `"half"` (the default) stops at the net, the frame every
+   * tile and focused view draws. `"throughNet"` — the wall card — carries on
+   * past the net to the near service line (`SERVE_COURT_THROUGH_NET`), at the
+   * same scale, so the net sits inside the art rather than along its edge.
+   */
+  serveFrame?: "half" | "throughNet";
 }) {
   const clipId = useId();
   const showHeat = chart === "heat";
@@ -670,9 +694,22 @@ export function CourtArt({
         : projectReturnContactHeatDot;
 
   if (cut === "serve") {
+    const throughNet = serveFrame === "throughNet";
+    const serveBox = throughNet
+      ? SERVE_COURT_THROUGH_NET.viewBox
+      : SERVE_COURT.viewBox;
+    const backgroundPath = throughNet
+      ? SERVE_THROUGH_NET_BACKGROUND_PATH
+      : SERVE_BACKGROUND_PATH;
+    // How far down the court surface and its sidelines run: the net on the
+    // half court, the crop past the near service line through the net.
+    const courtBottomY = throughNet
+      ? SERVE_COURT_THROUGH_NET.cropY
+      : SERVE_COURT.netY;
     return (
       <svg
-        viewBox={`${SERVE_COURT.viewBox.minX} ${SERVE_COURT.viewBox.minY} ${SERVE_COURT.viewBox.w} ${SERVE_COURT.viewBox.h}`}
+        viewBox={`${serveBox.minX} ${serveBox.minY} ${serveBox.w} ${serveBox.h}`}
+        data-serve-frame={serveFrame}
         {...(fill ? { height: "100%" } : {})}
         width="100%"
         preserveAspectRatio="xMidYMid meet"
@@ -680,9 +717,9 @@ export function CourtArt({
         aria-label={ariaLabel}
         className={className}
       >
-        <path d={SERVE_BACKGROUND_PATH} fill={apronFill} />
+        <path d={backgroundPath} fill={apronFill} />
         <clipPath id={clipId}>
-          <path d={SERVE_BACKGROUND_PATH} />
+          <path d={backgroundPath} />
         </clipPath>
         {/* Clipped to the background path — the heat filter's own margin
             (`heatFilterRegionFor`) would otherwise bleed past the rounded
@@ -693,14 +730,14 @@ export function CourtArt({
               x={SERVE_COURT.doublesLeft}
               y={SERVE_COURT.baselineY}
               width={SERVE_COURT.doublesRight - SERVE_COURT.doublesLeft}
-              height={SERVE_COURT.netY - SERVE_COURT.baselineY}
+              height={courtBottomY - SERVE_COURT.baselineY}
               fill={courtFillColor}
             />
             <rect
               x={SERVE_COURT.singlesLeft}
               y={SERVE_COURT.baselineY}
               width={SERVE_COURT.singlesRight - SERVE_COURT.singlesLeft}
-              height={SERVE_COURT.netY - SERVE_COURT.baselineY}
+              height={courtBottomY - SERVE_COURT.baselineY}
               fill={courtFillColor}
             />
 
@@ -796,7 +833,7 @@ export function CourtArt({
               x1={SERVE_COURT.doublesLeft}
               y1={SERVE_COURT.baselineY}
               x2={SERVE_COURT.doublesLeft}
-              y2={SERVE_COURT.netY}
+              y2={courtBottomY}
               stroke={LINE_COLOR}
               strokeWidth={SERVE_COURT.lineWidth}
             />
@@ -804,7 +841,7 @@ export function CourtArt({
               x1={SERVE_COURT.doublesRight}
               y1={SERVE_COURT.baselineY}
               x2={SERVE_COURT.doublesRight}
-              y2={SERVE_COURT.netY}
+              y2={courtBottomY}
               stroke={LINE_COLOR}
               strokeWidth={SERVE_COURT.lineWidth}
             />
@@ -812,7 +849,7 @@ export function CourtArt({
               x1={SERVE_COURT.singlesLeft}
               y1={SERVE_COURT.baselineY}
               x2={SERVE_COURT.singlesLeft}
-              y2={SERVE_COURT.netY}
+              y2={courtBottomY}
               stroke={LINE_COLOR}
               strokeWidth={SERVE_COURT.lineWidth}
             />
@@ -820,7 +857,7 @@ export function CourtArt({
               x1={SERVE_COURT.singlesRight}
               y1={SERVE_COURT.baselineY}
               x2={SERVE_COURT.singlesRight}
-              y2={SERVE_COURT.netY}
+              y2={courtBottomY}
               stroke={LINE_COLOR}
               strokeWidth={SERVE_COURT.lineWidth}
             />
@@ -852,8 +889,32 @@ export function CourtArt({
               stroke={LINE_COLOR}
               strokeWidth={SERVE_COURT.lineWidth}
             />
-            {/* Net — bottom of the frame, extending past the doubles
-              sidelines as a physical net does. */}
+            {/* Through the net: the near service boxes — the near service
+              line and the centre service line down to it from the net. The
+              sidelines above already run on to the crop. */}
+            {throughNet && (
+              <>
+                <line
+                  x1={SERVE_COURT.singlesLeft}
+                  y1={SERVE_COURT_THROUGH_NET.nearServiceLineY}
+                  x2={SERVE_COURT.singlesRight}
+                  y2={SERVE_COURT_THROUGH_NET.nearServiceLineY}
+                  stroke={LINE_COLOR}
+                  strokeWidth={SERVE_COURT.lineWidth}
+                />
+                <line
+                  x1={SERVE_COURT.centerX}
+                  y1={SERVE_COURT.netY}
+                  x2={SERVE_COURT.centerX}
+                  y2={SERVE_COURT_THROUGH_NET.nearServiceLineY}
+                  stroke={LINE_COLOR}
+                  strokeWidth={SERVE_COURT.lineWidth}
+                />
+              </>
+            )}
+            {/* Net — the bottom of the half-court frame (the middle of the
+              through-net one), extending past the doubles sidelines as a
+              physical net does. */}
             <line
               x1={SERVE_COURT.netLineLeft}
               y1={SERVE_COURT.netY}
@@ -880,8 +941,15 @@ export function CourtArt({
                 // (`atNet`); it draws through the SAME glyph path below
                 // every other dot uses (an ordinary miss-coloured circle —
                 // an ace is always "in", so `d.shape` is never "star" here).
-                const { cx, cy } = atNetPosition(d.atNet, "serve", projected);
-                return (
+                const placed = atNetPosition(d.atNet, "serve", projected);
+                // The card's zoomed window (`SERVE_COURT_THROUGH_NET`) cuts
+                // off part of the back court: a mark beyond its edge is
+                // pinned on the edge, half cut by the frame, never dropped
+                // off the card.
+                const { cx, cy } = throughNet
+                  ? pinToServeWindowEdge(placed)
+                  : placed;
+                const mark = (
                   <CourtMark
                     key={d.id}
                     dot={d}
@@ -893,6 +961,20 @@ export function CourtArt({
                     count={dots.length}
                     interaction={markInteraction}
                   />
+                );
+                if (cx === placed.cx && cy === placed.cy) return mark;
+                // Pinned: the offset back to its true spot travels with it,
+                // so a reader of the pinned
+                // mark can find where the lightbox draws it.
+                return (
+                  <g
+                    key={d.id}
+                    data-viz-pinned=""
+                    data-viz-pinned-dx={placed.cx - cx}
+                    data-viz-pinned-dy={placed.cy - cy}
+                  >
+                    {mark}
+                  </g>
                 );
               })}
           </g>

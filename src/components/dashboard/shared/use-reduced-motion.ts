@@ -1,0 +1,43 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
+
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribeReducedMotion(onChange: () => void): () => void {
+  const mq = window.matchMedia(REDUCED_MOTION_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+function getReducedMotionSnapshot(): boolean {
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
+/** Non-hook read for event handlers and effects (SSR-safe). */
+export function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && getReducedMotionSnapshot();
+}
+
+function getReducedMotionServerSnapshot(): boolean {
+  return false;
+}
+
+/**
+ * `useSyncExternalStore` rather than an effect + `useState` — the same
+ * value, but read as React's own recommended way to subscribe to an
+ * external source of truth (the browser's media query), which sidesteps
+ * `react-hooks/set-state-in-effect` entirely instead of triggering it.
+ *
+ * Originally lived inline in `saved-views-band.tsx` (its reorder
+ * animation's own reduced-motion check); pulled out here, unchanged, so
+ * every viz motion (the lightbox's point glide) reads the SAME preference instead of standing up a
+ * second `useSyncExternalStore` that could drift from the first.
+ */
+export function usePrefersReducedMotion(): boolean {
+  return useSyncExternalStore(
+    subscribeReducedMotion,
+    getReducedMotionSnapshot,
+    getReducedMotionServerSnapshot,
+  );
+}

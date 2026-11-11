@@ -58,6 +58,8 @@ export interface FilmLocalFilters {
   savedOnly: boolean;
   /** Point numbers to narrow to; null or empty is no fourth layer at all. */
   pointSet?: readonly number[] | null;
+  /** The set's words (`?pnl=`), when its sender named it. */
+  pointSetLabel?: string | null;
 }
 
 export const NO_FILM_LOCAL_FILTERS: FilmLocalFilters = Object.freeze({
@@ -83,6 +85,8 @@ export interface FilmListFilters {
    * a Film tab (a fixture, the labelling console) has neither.
    */
   pointSet?: readonly number[] | null;
+  /** The set's words, when its sender named it ("First serves · To the T"). */
+  pointSetLabel?: string | null;
   setPointSet?: (next: readonly number[] | null) => void;
   /** Every layer at once — the strip's, the header's and the zero state's "Clear all". */
   clearAll: () => void;
@@ -329,6 +333,7 @@ export function filmListSentence(
     remainder: LandedFilmCut | null;
     savedOnly: boolean;
     pointSet?: readonly number[] | null;
+    pointSetLabel?: string | null;
   },
   names: PhraseNames,
 ): string {
@@ -354,8 +359,10 @@ export function filmListSentence(
         : midSentence(f.remainder.label, names);
     parts.push(`${label}, from Statistics`);
   }
-  // Layer 4 after the cut it narrows: "Second serve · 12 chosen points".
-  if (hasPointSet(f)) parts.push(pointSetPhrase(f.pointSet!.length));
+  // Layer 4 after the cut it narrows: "Second serve · 12 chosen points", or
+  // the set's own words when its sender named it ("First serves · To the T").
+  if (hasPointSet(f))
+    parts.push(f.pointSetLabel ?? pointSetPhrase(f.pointSet!.length));
   if (f.savedOnly) parts.push("saved");
   return parts.length === 0
     ? "All points"

@@ -8,8 +8,22 @@ import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
-import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
+import { PlaceholderMomentum } from "@/components/dashboard/shared/placeholder-momentum";
+import {
+  LegendDash,
+  LegendSwatch,
+} from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { readGameScore } from "@/components/dashboard/matches/match-detail/film/film-score";
+import {
+  CHART_H,
+  CHART_W,
+  MID,
+  PLOT_H,
+  momentumY,
+  runAreaPath,
+  runLinePath,
+  type PlotCoord,
+} from "@/components/dashboard/matches/match-detail/momentum-plot";
 import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
 import { isFingerPointer, useTouchReadout } from "@/hooks/use-touch-readout";
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -53,15 +67,26 @@ import { cn } from "@/lib/utils";
  * selected, so the first tap never jumps the page away.
  */
 
-const CHART_W = 1000;
-const CHART_H = 96;
-/** Rendered plot height in px; the viewBox is stretched to it. */
-const PLOT_H = 104;
+// The plot's frame — viewBox, plot height, midline, the series' padding and
+// the run → path builders — is `momentum-plot.ts`.
+
+/**
+ * Stroke of the momentum line and the break lines, in px, and the break
+ * lines' dash — the legend's "Break of serve" key draws the same two.
+ */
+const LINE_W = 1.5;
+const BREAK_DASH_ON = 4;
+const BREAK_DASH_OFF = 3;
+const BREAK_DASH = `${BREAK_DASH_ON} ${BREAK_DASH_OFF}`;
+/**
+ * A break line at rest. One step darker than the set boundaries' ink-200 was
+ * not enough: at ink-300 the dashes — and the legend key drawn from them —
+ * were hard to pick out on white.
+ */
+const BREAK_STROKE = "var(--ink-400)";
+
 /** Width of each break line's hover/click strip, in px. */
 const BREAK_HIT_W = 24;
-const MID = CHART_H / 2;
-/** Keeps the extreme of the series off the viewBox edge. */
-const Y_PAD = 6;
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
 
@@ -139,6 +164,7 @@ export function PerformanceTrackerChart() {
   const uid = rawId.replace(/:/g, "");
   const clipAbove = `mom-above-${uid}`;
   const clipBelow = `mom-below-${uid}`;
+  const clipReveal = `mom-reveal-${uid}`;
 
   const svgRef = useRef<SVGSVGElement>(null);
   // `target` outlives the hover so the readout keeps its text while it fades
@@ -199,15 +225,16 @@ export function PerformanceTrackerChart() {
 
     const maxAbs = Math.max(...samples.map((s) => Math.abs(s.diff)), 1);
     const x = (i: number) => (i / (samples.length - 1)) * CHART_W;
-    const y = (diff: number) => MID - (diff / maxAbs) * (MID - Y_PAD);
 
-    const coords = samples.map((s, i) => [x(i), y(s.diff)] as const);
+    const coords: PlotCoord[] = samples.map(
+      (s, i) => [x(i), momentumY(s.diff, maxAbs)] as const,
+    );
     // One run of vertices per set, so the line breaks between sets instead of
     // falling from where one set ended to where the next begins. A later set
     // starts on the midline under the previous set's last point, so its first
     // point reads as +1 or −1 from level. `coords` stays one entry per point:
     // hover and the break lines index it.
-    const runs: (readonly [number, number])[][] = [];
+    const runs: PlotCoord[][] = [];
     coords.forEach((coord, i) => {
       if (i === 0) {
         runs.push([coord]);
@@ -217,25 +244,10 @@ export function PerformanceTrackerChart() {
         runs[runs.length - 1].push(coord);
       }
     });
-    const linePath = runs
-      .map((run) =>
-        run.map(([cx, cy], k) => `${k ? "L" : "M"}${cx},${cy}`).join(" "),
-      )
-      .join(" ");
+    const linePath = runs.map(runLinePath).join(" ");
     // Each run closed straight down to the midline, so the fill sits between
     // the series and the line the clip paths split on and stops with its set.
-    const area = runs
-      .map((run) => {
-        const [x0] = run[0];
-        const [x1] = run[run.length - 1];
-        return [
-          `M${x0},${MID}`,
-          ...run.map(([cx, cy]) => `L${cx},${cy}`),
-          `L${x1},${MID}`,
-          "Z",
-        ].join(" ");
-      })
-      .join(" ");
+    const area = runs.map(runAreaPath).join(" ");
 
     const setBoundaries: number[] = [];
     for (let i = 1; i < samples.length; i += 1) {
@@ -291,22 +303,9 @@ export function PerformanceTrackerChart() {
           </span>
           <div className="flex-1" />
         </div>
-        <svg
-          viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-          preserveAspectRatio="none"
-          className="block w-full"
-          style={{ height: PLOT_H }}
-          aria-hidden="true"
-        >
-          <line
-            x1={0}
-            y1={MID}
-            x2={CHART_W}
-            y2={MID}
-            stroke="var(--ink-200)"
-            strokeWidth={1}
-          />
-        </svg>
+        {/* The KPI tiles' grey placeholder curve, at the plot's size: a
+            line lands here once there are points to draw it from. */}
+        <PlaceholderMomentum height={PLOT_H} />
         <p className="text-micro" style={{ color: "var(--ink-500)" }}>
           Momentum is drawn once at least two points are tagged.
         </p>
@@ -435,6 +434,26 @@ export function PerformanceTrackerChart() {
             <clipPath id={clipBelow}>
               <rect x={0} y={MID} width={CHART_W} height={MID} />
             </clipPath>
+            {/* The line's draw-in: a reveal sweeping left to right. Not
+                `pathLength` — under `non-scaling-stroke` (below) the dash it
+                animates is measured on screen, not along the path, so the
+                line ran ahead of its own animation. The rect is full width
+                as an attribute and grows by `scaleX` from its left edge:
+                animating `width` would set it as CSS, which a browser that
+                does not take CSS geometry on SVG would ignore, leaving a
+                zero-width clip and no line at all. */}
+            <clipPath id={clipReveal}>
+              <motion.rect
+                x={0}
+                y={0}
+                width={CHART_W}
+                height={CHART_H}
+                style={{ originX: 0 }}
+                initial={{ scaleX: shouldReduceMotion ? 1 : 0 }}
+                animate={{ scaleX: 1 }}
+                transition={lineTransition}
+              />
+            </clipPath>
           </defs>
 
           {/* `non-scaling-stroke`: the viewBox is stretched by
@@ -461,9 +480,9 @@ export function PerformanceTrackerChart() {
               y1={0}
               x2={geometry.coords[i][0]}
               y2={CHART_H}
-              stroke={hoveredBreak === i ? "var(--ink-700)" : "var(--ink-300)"}
-              strokeWidth={1.5}
-              strokeDasharray="4 3"
+              stroke={hoveredBreak === i ? "var(--ink-700)" : BREAK_STROKE}
+              strokeWidth={LINE_W}
+              strokeDasharray={BREAK_DASH}
               vectorEffect="non-scaling-stroke"
               style={{ transition: "stroke 150ms ease" }}
             />
@@ -479,7 +498,7 @@ export function PerformanceTrackerChart() {
           />
 
           {/* Geometry is static; the entrance animates only `opacity` (areas)
-              and `pathLength` (lines), the two numeric props that are safe to
+              and the reveal's `width` (lines), numeric props that are safe to
               interpolate — animating `d`/`points` makes framer-motion tween the
               attribute string and emit SVG parse warnings on every mount
               (shared/kpi-tile.tsx documents the same trap). */}
@@ -510,28 +529,36 @@ export function PerformanceTrackerChart() {
             }
           />
 
-          <motion.path
-            d={geometry.linePath}
-            fill="none"
-            stroke="var(--viz-you)"
-            strokeWidth={1.5}
-            strokeLinejoin="round"
-            clipPath={`url(#${clipAbove})`}
-            initial={shouldReduceMotion ? { opacity: 0 } : { pathLength: 0 }}
-            animate={shouldReduceMotion ? { opacity: 1 } : { pathLength: 1 }}
-            transition={lineTransition}
-          />
-          <motion.path
-            d={geometry.linePath}
-            fill="none"
-            stroke="var(--viz-opp)"
-            strokeWidth={1.5}
-            strokeLinejoin="round"
-            clipPath={`url(#${clipBelow})`}
-            initial={shouldReduceMotion ? { opacity: 0 } : { pathLength: 0 }}
-            animate={shouldReduceMotion ? { opacity: 1 } : { pathLength: 1 }}
-            transition={lineTransition}
-          />
+          <motion.g
+            clipPath={`url(#${clipReveal})`}
+            initial={shouldReduceMotion ? { opacity: 0 } : false}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2, ease: EASE_CHART }}
+          >
+            {/* `non-scaling-stroke`, as on the break lines: the 1000-unit
+              viewBox is squeezed to the card's width, which otherwise thins
+              every steep segment — a long match's many short, steep swings
+              drew well under 1px while a short match's gentle ones kept
+              nearly 2px. */}
+            <path
+              d={geometry.linePath}
+              fill="none"
+              stroke="var(--viz-you)"
+              strokeWidth={LINE_W}
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+              clipPath={`url(#${clipAbove})`}
+            />
+            <path
+              d={geometry.linePath}
+              fill="none"
+              stroke="var(--viz-opp)"
+              strokeWidth={LINE_W}
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+              clipPath={`url(#${clipBelow})`}
+            />
+          </motion.g>
 
           {hoverCoord && (
             <line
@@ -713,9 +740,21 @@ export function PerformanceTrackerChart() {
 
       {/* Which half is whose, as every chart card on the page keys it. The
           figure's aria-label already says so, so this row is for sight. */}
-      <div className="flex items-center gap-3.5" aria-hidden="true">
+      <div
+        className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5"
+        aria-hidden="true"
+      >
         <LegendSwatch color="var(--viz-you)" label={`${youName} ahead`} />
         <LegendSwatch color="var(--viz-opp)" label={`${oppName} ahead`} />
+        {breakIndices.length > 0 && (
+          <LegendDash
+            color={BREAK_STROKE}
+            label="Break of serve"
+            strokeWidth={LINE_W}
+            dash={BREAK_DASH_ON}
+            gap={BREAK_DASH_OFF}
+          />
+        )}
       </div>
     </section>
   );

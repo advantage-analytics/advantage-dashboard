@@ -12,6 +12,8 @@ import {
   resultsKeyUserSegment,
 } from "@/lib/services/splitstep/object-keys";
 import { deleteVideoBlob } from "@/lib/services/splitstep/video-url";
+import { queueR2Deletes } from "@/lib/services/video-storage/delete-queue";
+import { resolveR2Config } from "@/lib/services/video-storage/r2";
 import { MATCH_DATA_BUCKET } from "@/lib/services/upload/storage.service";
 
 export interface PurgeMatchStorageOptions {
@@ -40,6 +42,18 @@ export interface PurgeMatchStorageOptions {
    * read. Specs pass their fake.
    */
   sharedKeyReader?: SupabaseClient;
+  /**
+   * Queues R2 playback copies for deletion (`r2_pending_deletes`): the app
+   * holds only R2's read token, so a holder of the write token deletes them.
+   * Production writes through the service role; specs pass their fake.
+   */
+  queueR2Deletes?: (
+    keys: string[],
+    queuedBy: string,
+  ) => Promise<{
+    queued: number;
+    error: string | null;
+  }>;
 }
 
 /**
@@ -300,7 +314,7 @@ export async function purgeMatchStorage(
   const { data: jobs, error: jobsError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, created_by, video_object_key, trimmed_object_key, playback_object_key, results_object_key, players_object_key, trajectories_object_key, label_backup_keys",
+      "id, match_id, created_by, video_object_key, trimmed_object_key, playback_object_key, playback_store, results_object_key, players_object_key, trajectories_object_key, label_backup_keys",
     )
     .in("match_id", matchIds);
 
@@ -356,13 +370,72 @@ export async function purgeMatchStorage(
         }
         const blobNames = candidates.filter((k) => !kept.has(k));
 
-        const removed = await Promise.all(
+        // R2 first, and on its own: queueing must not depend on every Azure
+        // delete succeeding. The playback copy may be in R2 (the worker writes
+        // it there, the backfill copies older ones) whatever
+        // `playback_store` says — mid-backfill it is in both — so every
+        // unshared playback key is queued; deleting an absent object is a
+        // no-op. Only keys of rows marked R2 are worth an alarm if queueing
+        // fails.
+        const blobNameSet = new Set(blobNames);
+        const playbackRows = (jobs ?? []).filter(
+          (j) =>
+            j.playback_object_key &&
+            blobNameSet.has(j.playback_object_key as string),
+        );
+        const r2Keys = [
+          ...new Set(playbackRows.map((j) => j.playback_object_key as string)),
+        ];
+        const markedR2 = new Set(
+          playbackRows
+            .filter((j) => j.playback_store === "r2")
+            .map((j) => j.playback_object_key as string),
+        );
+        // Queued only where R2 is in use — this deployment reads it, or a row
+        // says a copy is there — so a deployment without R2 does not fill a
+        // queue nothing will drain.
+        if (
+          r2Keys.length > 0 &&
+          (markedR2.size > 0 || resolveR2Config("read").ok)
+        ) {
+          const queue =
+            options.queueR2Deletes ??
+            (async (keys: string[], by: string) =>
+              queueR2Deletes(createAdminClient(), keys, by));
+          const { queued, error } = await queue(r2Keys, label).catch(
+            (e: unknown) => ({
+              queued: 0,
+              error: (e as Error)?.message ?? "threw",
+            }),
+          );
+          if (error && markedR2.size > 0) {
+            console.error(
+              `[${label}] could not queue ${markedR2.size} R2 playback cop(ies) ` +
+                `for deletion — they remain in R2: ${error}`,
+            );
+          } else if (queued > 0) {
+            console.log(
+              `[${label}] queued ${queued} playback cop(ies) for R2 deletion`,
+            );
+          }
+        }
+
+        // One failed Azure delete must not hide the others' results.
+        const removed = await Promise.allSettled(
           blobNames.map((blobName) => deleteVideoBlob({ blobName })),
         );
-
-        const count = removed.filter((r) => r.deleted).length;
+        const count = removed.filter(
+          (r) => r.status === "fulfilled" && r.value.deleted,
+        ).length;
+        const failed = removed.filter((r) => r.status === "rejected").length;
         if (count > 0) {
           console.log(`[${label}] removed ${count} video blob(s)`);
+        }
+        if (failed > 0) {
+          console.error(
+            `[${label}] could not remove ${failed} video blob(s) — recover with ` +
+              `scripts/cleanup-orphan-storage.ts`,
+          );
         }
       } catch (err) {
         console.error(`[${label}] video cleanup threw:`, err);

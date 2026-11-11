@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import {
+  toTeamSide,
   toViewerSide,
   transformDbMatch,
   type DbMatch,
@@ -140,13 +141,17 @@ test.describe("toViewerSide", () => {
 });
 
 test.describe("wiring", () => {
-  test("only the personal scope of the list turns its rows", () => {
+  test("each scope turns its rows by its own rule", () => {
     const page = readFileSync(
       "src/app/dashboard/matches/(list)/page.tsx",
       "utf8",
     );
     expect(page).toMatch(
       /isTeam\s*\?\s*withRosterProfiles\([\s\S]*?\)\s*:\s*withViewerSide\(rows, user\.id, enrichMatches\(/,
+    );
+    // The team call hands its rows in, so `toTeamSide` can turn them.
+    expect(page).toMatch(
+      /withRosterProfiles\(\s*supabase,\s*workspace\.active\.id,\s*enrichMatches\(supabase, rows, user\),\s*rows,\s*\)/,
     );
   });
 
@@ -160,8 +165,55 @@ test.describe("wiring", () => {
       "utf8",
     );
     expect(drawer).toContain(
-      "useMatchSnapshot(match.id, inFlight, match.turned)",
+      "useMatchSnapshotPair(match.id, inFlight, match.turned)",
     );
+    // The one-sided read the schedule's drawer keeps, and the pair's
+    // "you" row: both pick the seat the list row reads from.
     expect(sections).toContain('.eq("is_player1", !turned)');
+    expect(sections).toContain("row.is_player1 === !turned");
+  });
+});
+
+test.describe("toTeamSide", () => {
+  const ATHLETE = "roster-athlete";
+  const TEAMMATE = "roster-teammate";
+  const roster = new Set([ATHLETE, TEAMMATE]);
+  const onRoster = (id: string) => roster.has(id);
+
+  function teamRow(overrides: Partial<Row> = {}): Row {
+    return row({ player1_id: "outsider", player2_id: ATHLETE, ...overrides });
+  }
+  function teamTurn(r: Row, mine: readonly string[] = []) {
+    return toTeamSide(display(r), r, mine, onRoster);
+  }
+
+  test("a roster player in seat two comes first, with the win and their score", () => {
+    const match = teamTurn(teamRow());
+    expect(match.turned).toBe(true);
+    expect(match.player1.name).toBe("Giacomo Revelli");
+    expect(match.player1.id).toBe(ATHLETE);
+    expect(match.player2.id).toBe("outsider");
+    expect(match.score.winner).toBe("player1");
+    expect(match.score.sets[0]).toMatchObject({ player1: 6, player2: 3 });
+  });
+
+  test("a roster player already in seat one stays as stored", () => {
+    const r = teamRow({ player1_id: ATHLETE, player2_id: "outsider" });
+    expect(teamTurn(r)).toEqual(display(r));
+  });
+
+  test("two teammates: seat one stays first", () => {
+    const r = teamRow({ player1_id: TEAMMATE, player2_id: ATHLETE });
+    expect(teamTurn(r).turned).toBeUndefined();
+  });
+
+  test("the viewer's own seat wins over a teammate's", () => {
+    const r = teamRow({ player1_id: TEAMMATE, player2_id: "me" });
+    expect(teamTurn(r, ["me"]).player1.id).toBe("me");
+  });
+
+  test("a row naming nobody on the team is left as written", () => {
+    const r = teamRow({ player1_id: null, player2_id: null });
+    expect(teamTurn(r)).toEqual(display(r));
   });
 });

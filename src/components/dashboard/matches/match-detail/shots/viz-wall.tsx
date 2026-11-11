@@ -4,26 +4,31 @@ import { useMemo, type ReactNode } from "react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
-import { CourtTile, TileFullscreenGlyph } from "./court-tile";
-import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
+import { WallCard } from "./wall-card";
+import { LifecycleChip } from "./lifecycle-chip";
+import { LegendMark } from "./legend-mark";
+import { useVizState } from "./use-viz-state";
 import { buildDefaultTiles } from "./default-tiles";
 import { useMatchFilters } from "../match-filters/provider";
-import { VIZ_TILE_GRID_CLASS } from "./viz-labels";
+import { useVizBands } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
+import { wallLegendItems } from "./viz-labels";
+import { EMPTY_VIZ_FILTERS, type PlayerFilter } from "./viz-model";
 
 /**
- * The wall switches between default cuts and saved views. Default cuts form
- * one gallery in subject order, without separate player/phase sections.
+ * The wall (canvas W5 + card D3): one toolbar strip — `Default | Saved` ·
+ * `You | Opponent` · the legend — over five court-first cards in a two-column grid,
+ * one player at a time. Which player is URL-backed (`?player=opponent` on the
+ * wall, `viz-url.ts`), so a reload or Back lands on the same five cards.
  *
  * Attribution (guardrails §4): `useMatchSides()` is the only place "you" is
- * resolved here; each tile's subject is read straight off the side
+ * resolved here; each card's subject is read straight off the side
  * (`side.isPlayer1`) and passed to `computeViz` (inside `buildDefaultTiles`),
- * never re-derived. Won/lost stays relative to the tile's own subject — on
- * an opponent tile green means the opponent won.
+ * never re-derived. Won/lost stays relative to the card's own subject — on
+ * an opponent card green means the opponent won.
  *
- * F4: the six tiles themselves come from `buildDefaultTiles` (`default-tiles.ts`)
- * — the same builder the focused view's Views grid uses (a wrapping grid
- * reached by scrolling the page, not a scrolling row) — so the wall and
- * that grid can never draw a different set of tiles.
+ * The cards come from `buildDefaultTiles` (`default-tiles.ts`), with the
+ * workspace's bands so each card's footer (`wall-summary.ts`) buckets rally
+ * depth exactly as the Statistics column does.
  */
 
 export type WallCollection = "default" | "saved";
@@ -32,6 +37,7 @@ export function VizWall({
   savedViewsBand,
   collection: requestedCollection,
   onCollectionChange,
+  player,
 }: {
   /**
    * The Saved collection's content. Absent (a read-only report with no saved
@@ -41,17 +47,17 @@ export function VizWall({
   savedViewsBand?: ReactNode;
   collection: WallCollection;
   onCollectionChange: (collection: WallCollection) => void;
+  /** Which player's five cards — the wall's own, kept by `shots-tab.tsx`
+   *  while the lightbox owns `state.filters`. */
+  player: PlayerFilter;
 }) {
   const points = useVizPoints(useMatchData());
   const { you, opp } = useMatchSides();
-  const { hrefFor } = useVizState();
-  // The errors tile's name, filter and error reading follow whether this
+  const { setState, hrefFor } = useVizState();
+  // The errors card's name, filter and error reading follow whether this
   // match's errors are judged (`defaultCutsFor`, `errorKindOf`).
   const { context: matchCtx } = useMatchFilters();
-
-  // F5: mirrors `viz-focused.tsx`'s identical fallback — see
-  // `useExternalSwapFadeIn`'s doc comment.
-  const fallbackFadeIn = useExternalSwapFadeIn();
+  const { bands, unit } = useVizBands();
 
   const hasSaved = savedViewsBand != null;
   const collection: WallCollection = hasSaved ? requestedCollection : "default";
@@ -69,76 +75,93 @@ export function VizWall({
         },
         hrefFor,
         matchCtx,
+        { bands, unit },
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above
-    [points, you.isPlayer1, you.name, opp.name, hrefFor, matchCtx],
+    [points, you.isPlayer1, you.name, opp.name, hrefFor, matchCtx, bands, unit],
   );
 
-  const visibleTiles = tiles.filter((tile) => tile.total > 0);
+  const visibleTiles = tiles.filter(
+    (tile) => tile.subject === player && tile.total > 0,
+  );
+
+  function choosePlayer(next: PlayerFilter) {
+    if (next === player) return;
+    setState((prev) => ({
+      ...prev,
+      cut: null,
+      filters: { ...EMPTY_VIZ_FILTERS, player: next },
+      viewId: null,
+    }));
+  }
 
   return (
-    <div
-      className={
-        fallbackFadeIn
-          ? "viz-crossfade-in @container flex flex-col gap-6"
-          : "@container flex flex-col gap-6"
-      }
-    >
-      {hasSaved && (
-        <div
-          className="flex flex-wrap items-center gap-2"
-          role="group"
-          aria-label="View"
-        >
-          {(["default", "saved"] as const).map((value) => {
-            const isActive = collection === value;
-            return (
-              <button
+    <div className="@container flex flex-col gap-[18px]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {hasSaved && (
+          <div className="flex gap-2" role="group" aria-label="View">
+            {(["default", "saved"] as const).map((value) => (
+              <LifecycleChip
                 key={value}
-                type="button"
-                aria-pressed={isActive}
+                pressed={collection === value}
                 onClick={() => onCollectionChange(value)}
-                className={`flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] px-[11px] text-[12px] transition-colors duration-200 motion-reduce:transition-none ${
-                  isActive ? "" : "hover:bg-[var(--surface-subtle)]"
-                }`}
-                style={{
-                  border: `1px solid var(${isActive ? "--border-medium" : "--border-hairline"})`,
-                  background: isActive ? "var(--surface-subtle)" : undefined,
-                  color: isActive ? "var(--ink-900)" : "var(--ink-600)",
-                  fontWeight: isActive ? 500 : 400,
-                }}
               >
                 {value === "default" ? "Default" : "Saved"}
-              </button>
-            );
-          })}
-        </div>
-      )}
+              </LifecycleChip>
+            ))}
+          </div>
+        )}
+        {collection === "default" && (
+          <>
+            {hasSaved && (
+              <span
+                aria-hidden="true"
+                className="h-4 w-px"
+                style={{ backgroundColor: "var(--border-medium)" }}
+              />
+            )}
+            <div className="flex gap-2" role="group" aria-label="Player">
+              {(["you", "opponent"] as const).map((value) => (
+                <LifecycleChip
+                  key={value}
+                  pressed={player === value}
+                  onClick={() => choosePlayer(value)}
+                >
+                  {value === "you" ? "You" : "Opponent"}
+                </LifecycleChip>
+              ))}
+            </div>
+            <div className="flex-1" />
+            <div
+              role="group"
+              aria-label="Legend"
+              className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px]"
+            >
+              {wallLegendItems().map((item) => (
+                <LegendMark key={item.key} item={item} />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
       {collection === "default" ? (
         visibleTiles.length > 0 ? (
           <div
             role="list"
             aria-label="Default views"
-            className={VIZ_TILE_GRID_CLASS}
+            className="grid grid-cols-1 items-start gap-4 @min-[640px]:grid-cols-2"
           >
             {visibleTiles.map((tile) => (
               <div key={tile.key} role="listitem">
-                <CourtTile
-                  playerName={tile.playerName}
+                <WallCard
                   name={tile.name}
-                  pills={tile.pills}
-                  countLabel={tile.countLabel}
+                  playerName={tile.playerName}
+                  possessive={tile.subject === "you" ? "your" : "their"}
                   cut={tile.cut}
                   dots={tile.dots}
-                  chart={tile.chart}
+                  summary={tile.summary!}
                   href={tile.href}
                   navigateState={tile.state}
-                  actionSlot={
-                    <TileFullscreenGlyph
-                      name={tile.name}
-                      tileState={tile.state}
-                    />
-                  }
                 />
               </div>
             ))}

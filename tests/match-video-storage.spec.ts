@@ -31,6 +31,7 @@ import {
   publishedBlobOf,
   stagedBlobOf,
 } from "@/lib/services/match-video/probe";
+import { PLAYBACK_SAS_WINDOW_SECONDS } from "@/lib/services/splitstep/video-url/azure-sas";
 
 /**
  * The storage adapter's two promises: the browser can never write the final
@@ -83,6 +84,7 @@ function signatureFor(url: URL, blobName: string): string {
       startsOn: new Date(url.searchParams.get("st")!),
       expiresOn: new Date(url.searchParams.get("se")!),
       protocol: SASProtocol.Https,
+      cacheControl: url.searchParams.get("rscc") ?? undefined,
     },
     credential(),
   ).signature;
@@ -337,7 +339,7 @@ test("upload signature is bound to the staged name — it does not verify for th
   expect(signatureFor(url, r.final_blob_key)).not.toBe(sig);
 });
 
-test("playback credential names the final key, read-only, thirty minutes", () => {
+test("playback credential names the final key, read-only, at least thirty minutes on a cache window", () => {
   const r = row();
   const before = Date.now();
   const minted = mintAttachmentPlaybackCredential(r);
@@ -350,8 +352,14 @@ test("playback credential names the final key, read-only, thirty minutes", () =>
   expect(url.searchParams.get("sp")).toBe("r");
   expect(url.searchParams.get("sr")).toBe("b");
   const expires = new Date(url.searchParams.get("se")!).getTime();
+  // Snapped to a window boundary so repeat loads reuse the URL (and the
+  // browser's cache): never less than the 30-minute TTL, never more than
+  // TTL + one window.
   expect(expires - before).toBeGreaterThanOrEqual(30 * 60 * 1000 - 1000);
-  expect(expires - before).toBeLessThanOrEqual(30 * 60 * 1000 + 5000);
+  expect(expires - before).toBeLessThanOrEqual(
+    (30 * 60 + PLAYBACK_SAS_WINDOW_SECONDS) * 1000 + 5000,
+  );
+  expect(expires % (PLAYBACK_SAS_WINDOW_SECONDS * 1000)).toBe(0);
 
   // And it verifies only for the final blob.
   const sig = url.searchParams.get("sig")!;

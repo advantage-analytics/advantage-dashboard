@@ -269,6 +269,37 @@ be. Doubles teams and existing users depend on it.
 > the RPCs and do not mention this follow-up write.
 > `src/lib/admin/uploads/opponent-team.ts`.
 
+> **A reviewed exception, added 2026-11-10: the `shots.match_id` backfill.**
+> Approved by the owner on 2026-11-10 and applied live as
+> `supabase/migrations/20261110191701_shots_match_id_rls.sql`. It added a new
+> column, `shots.match_id`, and filled it for every existing shot from its
+> point's `points.match_id` in one `UPDATE`, with the table's user triggers
+> off for that statement only (so it bumped no points version and rebuilt no
+> Ask facts). Allowed because it writes **only** the new column, a copy of a
+> value the row already implied through `point_id`: no column a statistic,
+> a score, a seat or a mark is read from changed, and no `points`, `matches`
+> or `match_stats` row was written. The Verified lock's trigger
+> (`zz_shots_guard_verified_match`) was among those switched off, which is
+> safe for the same reason. From then on a `BEFORE` trigger
+> (`shots_set_match_id`) sets the column from the point on every insert and
+> on any update naming `point_id` or `match_id`, ignoring what a writer sends,
+> and `points_carry_match_id_to_shots` moves a point's shots with it; neither
+> function is executable by `authenticated` or `anon`. That second trigger is
+> an ongoing write to existing `shots` rows, but only of `match_id` and only
+> when a point itself changes match; unlike the backfill it runs with the
+> table's triggers on (points version, Ask facts, the Verified lock). The
+> migration also made the column NOT NULL, added the index
+> `shots_match_point_shot_idx (match_id, point_id, shot_number, id)` that the
+> match's shots read uses, and granted `authenticated` SELECT on the column. The shots `SELECT`
+> policy now reads `match_id IN (visible_match_ids())`, the set the points and
+> match_stats policies already use; `visible_match_ids()`'s program route
+> became a `program_members` semi-join with the same rule (any membership row;
+> `role` is NOT NULL). Verified on 2026-11-10 in a rolled-back dry run and
+> again live: the same shots visible to the same coach before and after
+> (16,734, 1,124 on the test match), and every row's `match_id` equal to its
+> point's. Anything else that writes existing `shots` rows still needs its
+> own entry here.
+
 > **A reviewed exception, added 2026-10-28: the Verified lock on the
 > rebuild paths.** `jobs/[jobId]/rederive` (its `handler.ts` takes a required
 > `matchVerified` dependency) and `jobs/[jobId]/resubmit` refuse a match
@@ -1028,6 +1059,42 @@ looks like a real one — see §4.
 > vendor as `Ad:false` unless the coach changes the field, and its pressure
 > flags come out wrong (§2's 2026-09-28 ad-scoring note) — attribution is
 > unaffected.
+
+> **An exception, added 2026-11-10: a teammate opponent takes seat two.** Every
+> opponent's identity goes to `matches.opponent_player_id` and `player2_id`
+> stays null, because `player2_id` is an arm of the `matches` SELECT policy
+> (migration `20260823090000`): an opponent's id there hands a rival the match
+> and both players' statistics the day they claim the profile. The one
+> opponent written to both is a **teammate** — picked from the Teammates
+> section of the opponent menu, a practice set between two players of the
+> program the match is filed under. `opponent_player_id` takes their
+> `program_players` id and `player2_id` the id their own matches carry
+> (`program_roster_full.player_id`).
+>
+> Why it is safe: a teammate is a program member, and the program arm of the
+> same policy already shows them the match — `player2_id` adds their seat, not
+> access. Why it is needed: every seat reader (`playerSeat` / `viewerSide` /
+> `youSeat`, `ask.my_side()`, the roster readers) keys on `player2_id` and
+> none reads `opponent_player_id`, so this is what puts the practice on the
+> teammate's own profile with the report turned to their side. No migration
+> and no policy change. Accepted with it: the teammate keeps read access to
+> that match after leaving the program.
+>
+> What holds it in: `teammateSeat()` (`new-match-wizard/teammates.ts`) is the
+> only source of the id, and it re-reads the live roster at save — the form's
+> remembered id is never written as it stands. A teammate the roster no longer
+> lists, or one who is the match's subject, saves as a typed name with both
+> columns null. A roster row with no `program_players` row (the RPC's safety
+> arm, whose id is a login) takes the seat but leaves `opponent_player_id`
+> null, since that column's foreign key would refuse it and fail the upload.
+> Only a team workspace's insert writes it: the fill of an existing line's
+> match never touches `player2_id`.
+>
+> What it never touches: `player1_id`, both names, the score, the format and
+> the camera answers are byte-for-byte what any other opponent saves
+> (`tests/teammate-opponent-seat.spec.ts` pins that), and `points`, `shots`
+> and `match_stats` stay keyed on the seat. A report is turned by seat at read
+> time; nothing is re-attributed.
 
 **The trim window is not cosmetic.** `videoStartSeconds`/`videoEndSeconds` become
 `billable_seconds`, which is what the 2-hour monthly cap is charged against, and

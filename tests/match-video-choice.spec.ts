@@ -43,6 +43,7 @@ test("prefers our own upload, with no offset", async () => {
   );
   expect(choice).toEqual({
     blobName: "videos/u/m/original.mp4",
+    store: "azure",
     startTimeSeconds: 0,
     source: "upload",
   });
@@ -61,6 +62,7 @@ test("falls back to the vendor copy, offset by the trim start, when our file is 
   );
   expect(choice).toEqual({
     blobName: "trimmed/u/m/j.mp4",
+    store: "azure",
     startTimeSeconds: 15.136,
     source: "vendor-copy",
   });
@@ -121,6 +123,7 @@ test.describe('prefer "vendor-copy" (the labelling console)', () => {
     );
     expect(choice).toEqual({
       blobName: "trimmed/u/m/j.mp4",
+      store: "azure",
       startTimeSeconds: 15.136,
       source: "vendor-copy",
     });
@@ -134,6 +137,7 @@ test.describe('prefer "vendor-copy" (the labelling console)', () => {
     );
     expect(choice).toEqual({
       blobName: "videos/u/m/original.mp4",
+      store: "azure",
       startTimeSeconds: 0,
       source: "upload",
     });
@@ -171,6 +175,7 @@ test.describe("the playback copy", () => {
     for (const prefer of ["upload", "vendor-copy"] as const) {
       expect(await choosePlaybackFile([job], all, prefer)).toEqual({
         blobName: "playback/u/m/original.mp4",
+        store: "azure",
         startTimeSeconds: 0,
         source: "playback",
       });
@@ -204,8 +209,49 @@ test.describe("the playback copy", () => {
       await choosePlaybackFile([resubmitted, resubmitted, job], all),
     ).toEqual({
       blobName: "playback/u/m/original.mp4",
+      store: "azure",
       startTimeSeconds: 0,
       source: "playback",
+    });
+  });
+
+  test("a copy in R2 is checked and signed in R2; the others stay in Azure", async () => {
+    const asked: string[] = [];
+    const inR2 = { ...job, playback_store: "r2" };
+    const choice = await choosePlaybackFile([inR2], async (name, store) => {
+      asked.push(`${store}:${name}`);
+      return store === "r2" && name === "playback/u/m/original.mp4";
+    });
+    expect(choice).toEqual({
+      blobName: "playback/u/m/original.mp4",
+      store: "r2",
+      startTimeSeconds: 0,
+      source: "playback",
+    });
+    expect(asked).toEqual(["r2:playback/u/m/original.mp4"]);
+
+    // Not in R2 after all (a backfill not yet run, R2 down): the upload plays.
+    const fallback = await choosePlaybackFile([inR2], async (name, store) => {
+      asked.push(`${store}:${name}`);
+      return store === "azure" && name === "videos/u/m/original.mp4";
+    });
+    expect(fallback).toMatchObject({ store: "azure", source: "upload" });
+  });
+
+  test("a borrowed copy keeps the store of the job that made it", async () => {
+    const resubmitted = {
+      ...job,
+      playback_object_key: null,
+      playback_status: null,
+      playback_store: null,
+    };
+    const choice = await choosePlaybackFile(
+      [resubmitted, { ...job, playback_store: "r2" }],
+      async (name, store) => store === "r2" && name.startsWith("playback/"),
+    );
+    expect(choice).toMatchObject({
+      blobName: "playback/u/m/original.mp4",
+      store: "r2",
     });
   });
 
@@ -223,6 +269,7 @@ test.describe("the playback copy", () => {
       ),
     ).toEqual({
       blobName: "videos/u/m/second.mp4",
+      store: "azure",
       startTimeSeconds: 0,
       source: "upload",
     });

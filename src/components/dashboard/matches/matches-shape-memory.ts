@@ -1,67 +1,40 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import {
+  isCount,
+  rememberShape,
+  useRecalledShape,
+} from "@/components/dashboard/loading/shape-memory";
 import type { MatchesListShape } from "./match-list-layout";
 
 /**
- * The last list shape each workspace rendered, for the route's `loading.tsx`.
- *
- * That boundary shows before the server has counted anything, so it can only
- * draw the right number of rows from memory. Stored per device, so the common
- * path — open the app on Home, then click Matches — draws the real size the
- * first time. The server has no storage, so a hard load onto the route renders
- * the unknown shape and swaps at hydration (`getServerSnapshot`), rather than
- * failing to hydrate.
+ * The last list shape each workspace rendered, for the route's `loading.tsx`
+ * — `loading/shape-memory.ts` keyed to the Matches list. The first page's row
+ * count, whether the Date track needs the year, and whether a second page
+ * exists.
  */
-const KEY = "matches:list-shape:";
+const SURFACE = "matches";
 
-let cachedRaw: string | null = null;
-let cachedShape: MatchesListShape | undefined;
-
-function read(workspaceId: string): MatchesListShape | undefined {
-  let raw: string | null = null;
-  try {
-    raw = localStorage.getItem(KEY + workspaceId);
-  } catch {
-    return undefined;
-  }
-  if (raw === cachedRaw) return cachedShape;
-  cachedRaw = raw;
-  try {
-    const parsed = raw ? (JSON.parse(raw) as MatchesListShape) : undefined;
-    cachedShape =
-      parsed &&
-      Number.isInteger(parsed.rows) &&
-      parsed.rows > 0 &&
-      typeof parsed.needsYear === "boolean" &&
-      typeof parsed.paged === "boolean"
-        ? parsed
-        : undefined;
-  } catch {
-    cachedShape = undefined;
-  }
-  return cachedShape;
+function isMatchesShape(value: unknown): value is MatchesListShape {
+  const shape = value as MatchesListShape | null;
+  return (
+    !!shape &&
+    isCount(shape.rows) &&
+    shape.rows > 0 &&
+    typeof shape.needsYear === "boolean" &&
+    typeof shape.paged === "boolean"
+  );
 }
 
 export function rememberMatchesShape(
   workspaceId: string,
   shape: MatchesListShape,
 ): void {
-  try {
-    localStorage.setItem(KEY + workspaceId, JSON.stringify(shape));
-  } catch {
-    // Private mode or a full quota — the skeleton falls back to its default.
-  }
+  rememberShape(SURFACE, workspaceId, shape);
 }
-
-const noSubscription = () => () => {};
 
 export function useRecalledMatchesShape(
   workspaceId: string,
 ): MatchesListShape | undefined {
-  return useSyncExternalStore(
-    noSubscription,
-    () => read(workspaceId),
-    () => undefined,
-  );
+  return useRecalledShape(SURFACE, workspaceId, isMatchesShape);
 }

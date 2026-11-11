@@ -44,6 +44,7 @@ export function labelShot(
     hitter: "p1",
     stroke: null,
     result: null,
+    resultCalled: false,
     spin: null,
     contactX: null,
     contactY: null,

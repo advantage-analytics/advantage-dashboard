@@ -29,6 +29,7 @@ import {
 import {
   isNonPointEnding,
   type LabelPoint,
+  type LabelSide,
   type LabelStartScore,
 } from "./session";
 
@@ -227,9 +228,24 @@ export function lockedGameImbalance(
   adScoring: boolean,
   start: LabelStartScore | null = null,
 ): string[] {
+  return [...lockedGameNeeds(points, adScoring, start).keys()];
+}
+
+/**
+ * `lockedGameImbalance`'s points, each with the side its locked game needs it
+ * won by — the band's `winner` — in rail order. What "Was the last ball
+ * out?" reads (marks-state.ts `lastBallAgainstGame`): a doubted point whose
+ * last ball, called the other way, would hand it to that side.
+ */
+export function lockedGameNeeds(
+  points: readonly ImbalancePoint[],
+  adScoring: boolean,
+  start: LabelStartScore | null = null,
+): Map<string, LabelSide> {
+  const needs = new Map<string, LabelSide>();
   const locked = lockedGames(points);
-  if (locked.size === 0) return [];
-  const suspect = new Map<string, string | null>();
+  if (locked.size === 0) return needs;
+  const suspect = new Map<string, LabelSide>();
   for (const band of labelScores(points, adScoring, start).games) {
     const key = gameKey(band);
     if (!locked.has(key) || band.outcome.kind === "decided") continue;
@@ -237,14 +253,14 @@ export function lockedGameImbalance(
     if (band.winner === null) continue;
     suspect.set(key, band.winner);
   }
-  if (suspect.size === 0) return [];
-  const ids: string[] = [];
+  if (suspect.size === 0) return needs;
   for (const point of points) {
     if (point.status === "deleted" || isNonPointEnding(point.ending)) continue;
-    const key = gameKey(point);
-    if (!suspect.has(key)) continue;
-    const winner = suspect.get(key) ?? null;
-    if (!isCountedPoint(point) || point.winner !== winner) ids.push(point.id);
+    const winner = suspect.get(gameKey(point));
+    if (winner === undefined) continue;
+    if (!isCountedPoint(point) || point.winner !== winner) {
+      needs.set(point.id, winner);
+    }
   }
-  return ids;
+  return needs;
 }

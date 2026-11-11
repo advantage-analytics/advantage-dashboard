@@ -11,7 +11,7 @@ import {
   sampleMatchVideo,
 } from "@/lib/sample-match";
 import { mintSampleVideoCredential } from "@/lib/services/sample-match/video";
-import { mintPlaybackSas } from "@/lib/services/splitstep/video-url/azure-sas";
+import { mintSampleVideo } from "@/lib/services/video-storage/stores";
 import { NO_FILM_ENTRY } from "@/lib/match-video/film-entry";
 
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
@@ -30,7 +30,7 @@ import { resolveDefaultView } from "@/components/dashboard/matches/match-detail/
 import { MatchReportScoreboard } from "@/components/dashboard/matches/match-detail/report-scoreboard";
 import { MatchReportViewSwitcher } from "@/components/dashboard/matches/match-detail/report-view-switcher";
 import {
-  MatchReportTitle,
+  MatchReportTitleActions,
   MatchReportTitleRow,
 } from "@/components/dashboard/matches/match-detail/report-title-row";
 import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
@@ -43,7 +43,10 @@ import {
   VisualizationsPanePending,
 } from "@/components/dashboard/loading/match-report-pending";
 import { MatchReportSkeleton } from "@/components/dashboard/loading/match-report-skeleton";
-import { SampleBanner } from "@/components/dashboard/onboarding/sample-banner";
+import {
+  SampleSendOwnMatch,
+  SampleTitle,
+} from "@/components/dashboard/onboarding/sample-title";
 import { TourRunner } from "@/components/dashboard/onboarding/tour-runner";
 
 /**
@@ -65,12 +68,13 @@ import { TourRunner } from "@/components/dashboard/onboarding/tour-runner";
  *   own route. The analysis short-circuit, the reconcile-before-read and the
  *   failed-points throw have no equivalent: a static fixture is always a
  *   finished match with its points.
- * - **Chrome.** No Share footer, no title-row actions (Compare, the More
- *   menu with Review score and Delete): under `readOnly` each of those parts
- *   returns `null`, and `MatchReportTitleActions` would still draw its
- *   wrapper around nothing — so the cluster is left out, as `/m/[token]`
- *   leaves it out. No `MarkReportSeen` (no row to mark). `SampleBanner` sits
- *   at the top of the pane instead, so nobody mistakes this for their data.
+ * - **Chrome.** No Share footer and none of a real report's title-row
+ *   actions (Compare, the More menu with Review score and Delete): under
+ *   `readOnly` each of those parts returns `null`, so they are not mounted.
+ *   The cluster holds the sample's own way out instead,
+ *   `SampleSendOwnMatch`. No `MarkReportSeen` (no row to mark). `SampleTitle`
+ *   puts a "Sample match" pill beside the view's title, so nobody mistakes
+ *   this for their data.
  * - **Layout.** This static segment sits outside `(detail)`, so the detail
  *   layout's fixed-height box and `MatchDataProvider` are provided here. The
  *   `[matchId]` layout's status hint, its skeleton choice and
@@ -132,7 +136,7 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
   const data = sampleMatchData();
   const { match, statsResult, points, keyMoments, insights, kpiHistory } = data;
   // A playable first link, minted here as a real report's page mints one.
-  const video = sampleMatchVideo(mintSampleVideoCredential(mintPlaybackSas));
+  const video = sampleMatchVideo(mintSampleVideoCredential(mintSampleVideo));
 
   // The single attribution point (guardrails §4): every you/opp decision
   // routes through `getMatchSides`, keyed on `match.isUserPlayer1` — which
@@ -182,7 +186,11 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
               summary={summary}
               isDerived={isDerived}
               statsPublished={statsPublished}
-              foldUnreconciled={data.foldUnreconciled}
+              // No fold note, though the fixture records one: "couldn't match
+              // every point to the final score you entered" is about a score
+              // the viewer never entered, and it would be the first thing a
+              // new player reads about the analysis.
+              foldUnreconciled={false}
               hasPlayableVideo
               defaultView={resolveDefaultView(
                 preferences.matchReportOpensAt,
@@ -210,13 +218,14 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
                 </MatchReportRail>
 
                 <MatchReportPane>
-                  <SampleBanner />
-
                   <MatchReportTitleRow>
                     <div className="min-w-0">
-                      <MatchReportTitle />
+                      <SampleTitle />
                       <MatchReportFacts />
                     </div>
+                    <MatchReportTitleActions>
+                      <SampleSendOwnMatch />
+                    </MatchReportTitleActions>
                   </MatchReportTitleRow>
 
                   <MatchReportWhen view="statistics">
@@ -225,7 +234,7 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
                   <MatchReportWhen view="shots">
                     <ShotsTab />
                   </MatchReportWhen>
-                  <MatchReportWhen view="film" scrollsInside>
+                  <MatchReportWhen view="film">
                     {/* `NO_FILM_ENTRY`: no Add / Replace / Align for a clip
                         that is nobody's. Points come from `MatchDataProvider`. */}
                     <FilmTab

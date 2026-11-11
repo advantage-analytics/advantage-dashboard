@@ -1,31 +1,25 @@
 "use client";
 
-import { useState } from "react";
 import { MoveVertical } from "lucide-react";
 
 import {
-  FloatMenu,
   FloatMenuDivider,
   FloatMenuItem,
   FloatMenuLabel,
   FloatMenuNote,
 } from "@/components/ui/float-menu";
 import { formatDistanceValue } from "@/lib/format/distance";
-import {
-  depthPresets,
-  schemeLabel,
-  type DepthScheme,
-} from "@/lib/data/viz-bands";
+import { depthPresets, type DepthScheme } from "@/lib/data/viz-bands";
 import type { DistanceUnit } from "@/lib/format/distance";
 
 import { useVizBands } from "./viz-bands-context";
-import { VizMenuTrigger } from "./viz-labels";
 import type { Cut } from "./viz-model";
 import { bandKindFor } from "./cut-kinds";
 
 /**
- * The bands control in the fullscreen viewer's bottom slab (Phase 2B, Task
- * 3; spec Appendix P2l) — the trigger, and the preset menu behind it.
+ * The bands rows of the lightbox's chart menu (`chart-menu.tsx`) — once the
+ * fullscreen viewer's own bottom-slab menu (Phase 2B, Task 3; spec Appendix
+ * P2l), moved into the chart menu when the lightbox replaced the viewer.
  *
  * It only exists on the three return cuts: `returnPlacement` reads DEPTH
  * bands (where the return landed, far half), `returnContact`/`rallyPosition`
@@ -88,13 +82,21 @@ function contactDividersLabel(
   return `${side(c0)} · ${side(c1)}`.toUpperCase();
 }
 
-export function VizBandsMenu({
+/**
+ * The bands section: a label naming the band kind and its current setting,
+ * the scheme rows (depth) or the session-only "No bands" toggle (contact),
+ * "Edit bands…" and the note saying whose bands they are. Renders nothing on
+ * a cut without bands. `close` shuts the menu it sits in.
+ */
+export function VizBandsMenuRows({
   cut,
   onEdit,
+  close,
 }: {
   cut: Cut;
   /** Opens the band editor. Without it the "Edit bands…" row is disabled. */
   onEdit?: () => void;
+  close: () => void;
 }) {
   const {
     bands,
@@ -105,7 +107,6 @@ export function VizBandsMenu({
     toggleContactHidden,
     applyBands,
   } = useVizBands();
-  const [open, setOpen] = useState(false);
 
   const kind = bandKindFor(cut);
   if (kind === null) return null;
@@ -113,23 +114,19 @@ export function VizBandsMenu({
   const isDepth = kind === "depth";
   const label = isDepth ? "Depth bands" : "Contact bands";
 
-  // The mono slot on the trigger: the depth SCHEME's own short name, or —
-  // contact having no schemes — the two dividers it is actually cut at,
-  // which is the nearest equivalent fact. "OFF" when the shading is hidden,
-  // for both.
-  const monoLabel = isDepth
-    ? schemeLabel(bands.depthScheme)
-    : contactHidden
-      ? "OFF"
-      : contactDividersLabel(unit, bands.contactDividersFt);
+  // Depth names its setting with the chosen check on a scheme row; contact
+  // has no schemes, so its label carries the two dividers it is cut at.
+  const heading = isDepth
+    ? label
+    : `${label} · ${contactDividersLabel(unit, bands.contactDividersFt).toLowerCase()}`;
 
   function pickScheme(scheme: DepthScheme) {
-    setOpen(false);
+    close();
     applyBands({ ...bands, depthScheme: scheme });
   }
 
   function edit() {
-    setOpen(false);
+    close();
     onEdit?.();
   }
 
@@ -139,30 +136,8 @@ export function VizBandsMenu({
   const editDisabled = !canEdit || onEdit === undefined;
 
   return (
-    <FloatMenu
-      open={open}
-      onOpenChange={setOpen}
-      width={280}
-      side="top"
-      sideOffset={6}
-      align="start"
-      tone="dark"
-      label={label}
-      trigger={
-        <VizMenuTrigger
-          icon={MoveVertical}
-          label={label}
-          open={open}
-          tone="dark"
-          meta={
-            <span className="mono tabular shrink-0 text-[10px] text-white/50">
-              {monoLabel}
-            </span>
-          }
-        />
-      }
-    >
-      <FloatMenuLabel>{label}</FloatMenuLabel>
+    <>
+      <FloatMenuLabel>{heading}</FloatMenuLabel>
 
       {isDepth ? (
         <>
@@ -173,7 +148,6 @@ export function VizBandsMenu({
             disabled={!canEdit}
             onSelect={() => pickScheme("none")}
           />
-          <FloatMenuDivider />
           {depthPresets(unit).map((preset) => (
             <FloatMenuItem
               key={preset.scheme}
@@ -186,17 +160,16 @@ export function VizBandsMenu({
           ))}
         </>
       ) : (
-        // `menuitemradio`, deliberately: this is the contact menu's only
-        // option row, and a check is what says whether the shading is
-        // currently off. It is a SESSION toggle — it writes nothing, which
-        // is also why it stays live for a player who cannot edit the
-        // workspace's bands (see the file's own doc comment).
+        // `menuitemradio`, deliberately: a check is what says whether the
+        // shading is currently off. It is a SESSION toggle — it writes
+        // nothing, which is also why it stays live for a player who cannot
+        // edit the workspace's bands (see the file's own doc comment).
         <FloatMenuItem
           label="No bands"
           description="Just the contact points, no shading"
           chosen={contactHidden}
           onSelect={() => {
-            setOpen(false);
+            close();
             toggleContactHidden();
           }}
         />
@@ -230,6 +203,6 @@ export function VizBandsMenu({
             ? OWN_BANDS_NOTE
             : READ_ONLY_NOTE}
       </FloatMenuNote>
-    </FloatMenu>
+    </>
   );
 }

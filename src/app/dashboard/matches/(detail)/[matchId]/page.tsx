@@ -492,7 +492,7 @@ export default async function MatchDetailPage({
               <MatchReportWhen view="shots">
                 <ShotsTab />
               </MatchReportWhen>
-              <MatchReportWhen view="film" scrollsInside>
+              <MatchReportWhen view="film">
                 {/* `video` is the short-lived playback SAS, or null when there
                   is no file to serve. `entry` says which no-video case that
                   is — genuinely none, or a storage problem over a match that

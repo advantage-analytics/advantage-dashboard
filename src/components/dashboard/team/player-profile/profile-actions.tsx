@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { advButton } from "@/lib/ui/adv-button";
 import { EditPlayerDialog } from "@/components/dashboard/team/edit-player-dialog";
 import { mayRemoveStaffProfile } from "@/components/dashboard/team/staff-profile-rules";
 import { ROSTER_PATH } from "@/components/dashboard/team/roster-table";
@@ -28,7 +27,7 @@ const ICON_BUTTON =
   "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-button)] text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]";
 
 /**
- * The identity row's action slot: Ask, ⋯, then the primary.
+ * The pane title row's action slot (`MatchReportTitleActions`): Ask, then ⋯.
  *
  * Both quiet controls are the match report's own (`report-title-row.tsx`,
  * `report-more-menu.tsx`): borderless 32px icon buttons with a dark tooltip,
@@ -54,19 +53,13 @@ const ICON_BUTTON =
  *   on every page.
  * A teammate reading the page gets no menu: nothing here is theirs to edit.
  *
- * **New match** is the primary on both, gated by `canUploadForProgram` at
- * the page — the same predicate the upload wizard enforces, so this never
- * opens a door the next page closes. Absent rather than disabled: a button
- * that refuses on click is worse than no button. Its href carries `?player=`
- * so the wizard opens with this page's athlete already in its For field; the
- * wizard re-checks that id against the roster and still asks for the source.
+ * **New match** is not here: since design Q it is the rail's full-width
+ * primary, where the match report has Share (`profile-rail.tsx`).
  */
 export function ProfileActions({
   mode,
   member,
   roster,
-  canUpload,
-  newMatchHref,
   askHref = null,
   askSubject,
 }: {
@@ -82,9 +75,6 @@ export function ProfileActions({
    */
   member: RosterMember | null;
   roster: RosterMember[];
-  canUpload: boolean;
-  /** The wizard for this page's athlete — built once by the page. */
-  newMatchHref: string;
   /** The team's Ask page with this player tagged, or null to draw no link. */
   askHref?: string | null;
   /** The player's first name, for the tooltip's words; "your matches" on the viewer's own page. */
@@ -221,12 +211,6 @@ export function ProfileActions({
             </FloatMenu>
           </span>
         </ChromeTooltip>
-      )}
-
-      {canUpload && (
-        <Link href={newMatchHref} className={cn(advButton("primary"), "ml-2")}>
-          New match
-        </Link>
       )}
 
       {canEditPlayer && (

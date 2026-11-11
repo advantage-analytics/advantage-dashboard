@@ -308,9 +308,15 @@ test("both player rows share one grid, stacking only below sm", () => {
 });
 
 test("the opponent's editable name carries a visible edit affordance; the subject's locked name carries none", () => {
-  // The opponent's closed-state name button now shows a pencil.
-  const opponentButton = detailsSrc.slice(
-    detailsSrc.indexOf("Change the opponent, "),
+  // The opponent's closed-state name button now shows a pencil. It lives in
+  // `OpponentMenu.tsx`'s read-back, which the step renders.
+  expect(detailsSrc).toContain("<OpponentReadBack");
+  const readBackSrc = readFileSync(
+    resolve(process.cwd(), `${WIZARD}/OpponentMenu.tsx`),
+    "utf8",
+  );
+  const opponentButton = readBackSrc.slice(
+    readBackSrc.indexOf("Change the opponent, "),
   );
   expect(opponentButton.slice(0, 400)).toContain("<Pencil");
 

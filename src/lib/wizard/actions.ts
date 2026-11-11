@@ -549,7 +549,7 @@ export async function opponentRosterForLine(input: {
       supabase.rpc("pooled_roster", { p_program_id: opponentProgramId }),
       scope.client
         .from("matches")
-        .select("id, player2_name, opponent_player_id")
+        .select("id, player2_name, opponent_player_id, match_type")
         .eq("program_id", scope.programId),
       supabase.rpc("pooled_lineups", {
         p_opponent_program_id: opponentProgramId,
@@ -560,6 +560,7 @@ export async function opponentRosterForLine(input: {
     id: string;
     player2_name: string | null;
     opponent_player_id: string | null;
+    match_type: string | null;
   }[];
 
   // Who held this slot against US, by the names our own lineups recorded.

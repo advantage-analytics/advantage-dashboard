@@ -80,6 +80,7 @@ test.describe("court click placement", () => {
       landing_x: -2.1,
       landing_y: 3.49,
       result: "in",
+      result_called: false,
     });
 
     // The point's last stroke: the landing lets go rather than cycling
@@ -94,7 +95,12 @@ test.describe("court click placement", () => {
         placed,
         [],
       )!.patch,
-    ).toEqual({ contact_x: 0, contact_y: 1, result: "net" });
+    ).toEqual({
+      contact_x: 0,
+      contact_y: 1,
+      result: "net",
+      result_called: false,
+    });
   });
 
   test("the landing click's result follows the stroke being placed", () => {
@@ -226,6 +232,7 @@ test.describe("which half the court zooms to", () => {
       landing_x: 0.4,
       landing_y: 11.2,
       result: "net",
+      result_called: false,
     });
     // On to the next stroke's contact, unflipped, across from the hitter.
     expect(net.state).toEqual({
@@ -266,6 +273,7 @@ test.describe("which half the court zooms to", () => {
       landing_x: -9.28,
       landing_y: 26.78,
       result: "out",
+      result_called: false,
     });
 
     // Deep contact, in the run-off behind the near baseline.
@@ -422,6 +430,7 @@ test.describe("a typed position and a picked spin", () => {
       landing_x: 0.6,
       landing_y: 20,
       result: "out",
+      result_called: false,
     });
     // …and in for the return, whose contact is on the far side.
     const back = shots.find((shot) => shot.id === "s-return")!;

@@ -181,16 +181,22 @@ function signBlobUrl(params: {
   blobName: string;
   permissions: string;
   expiresOn: Date;
+  /** Defaults to now minus {@link CLOCK_SKEW_SECONDS}. */
+  startsOn?: Date;
+  /** Signed `rscc`: Azure answers with this `Cache-Control` header. */
+  cacheControl?: string;
 }): string {
-  const { config, blobName, permissions, expiresOn } = params;
+  const { config, blobName, permissions, startsOn, expiresOn, cacheControl } =
+    params;
 
   const sas = generateBlobSASQueryParameters(
     {
       containerName: config.container,
       blobName,
       permissions: BlobSASPermissions.parse(permissions),
-      startsOn: new Date(Date.now() - CLOCK_SKEW_SECONDS * 1000),
+      startsOn: startsOn ?? new Date(Date.now() - CLOCK_SKEW_SECONDS * 1000),
       expiresOn,
+      cacheControl,
       protocol: config.endpoint ? SASProtocol.HttpsAndHttp : SASProtocol.Https,
     },
     credentialFor(config),
@@ -228,11 +234,12 @@ export function mintUploadSas(params: {
 }
 
 /**
- * How long a playback URL stays good.
+ * The shortest a playback URL stays good.
  *
- * Minutes, not days, and it is the one SAS in this file whose short life costs
- * nothing: the page mints a fresh one on every load, so the only thing an
- * expiry breaks is a URL somebody copied out of devtools and sat on. Contrast
+ * A floor, not the whole life: {@link playbackSasWindow} snaps the expiry out
+ * to the next window boundary, so a URL can outlive this by up to a window
+ * (see there). Each load re-mints, so an expiry only breaks a URL somebody
+ * copied out of devtools and sat on, or a page left open past it. Contrast
  * `VENDOR_URL_TTL_SECONDS` at fourteen days, which is long because the vendor
  * fetches on their schedule and a dead link there is a dead job.
  *
@@ -241,6 +248,53 @@ export function mintUploadSas(params: {
  * expiry would look like the video breaking rather than a credential ending.
  */
 const PLAYBACK_SAS_TTL_SECONDS = 30 * 60;
+
+/**
+ * Playback URLs are minted on fixed windows so the same video gets the SAME
+ * URL for hours at a time.
+ *
+ * The browser's HTTP cache is keyed by URL. A SAS whose `st`/`se` follow the
+ * clock is a new URL on every page load, so a match watched twice was
+ * downloaded twice — at Azure egress prices (~$0.087/GB) on multi-gigabyte
+ * files. Snapping both ends to a window boundary makes every mint inside one
+ * window byte-identical (the signature is an HMAC over the same fields), and
+ * the signed `rscc` below tells the browser how to treat the bytes it keeps.
+ *
+ * The trade: a URL lives up to WINDOW + TTL + 5 min skew instead of TTL alone
+ * — about 6.6h for the 30-minute default, about 14.1h for the label console's
+ * 8h TTL. It is still read-only on one blob, and the floor is unchanged:
+ * every mint stays good for at least the requested TTL.
+ */
+export const PLAYBACK_SAS_WINDOW_SECONDS = 6 * 60 * 60;
+
+/**
+ * Signed into the playback SAS as `rscc`.
+ *
+ * `no-cache`, not a `max-age`: keep the bytes, but revalidate before reusing
+ * them. Blob names are fixed per match (`…/original.mp4`, and its playback
+ * copy is uploaded with `--overwrite`), so a re-upload rewrites the same name
+ * behind the same URL; a max-age would replay the old file against the new
+ * results. Revalidation of an unchanged blob is a `304` with no body, so the
+ * egress saving holds. Without an explicit header, Azure's `Last-Modified`
+ * would hand the browser a heuristic freshness of its own choosing.
+ */
+export const PLAYBACK_CACHE_CONTROL = "private, no-cache";
+
+/**
+ * `st` and `se` for a playback SAS minted at `nowMs`: `se` is the first window
+ * boundary at least `ttlSeconds` away, `st` is derived from `se` alone. Pure,
+ * so two mints in one window agree to the second.
+ */
+export function playbackSasWindow(
+  nowMs: number,
+  ttlSeconds: number,
+): { startsOn: Date; expiresOn: Date } {
+  const windowMs = PLAYBACK_SAS_WINDOW_SECONDS * 1000;
+  const ttlMs = ttlSeconds * 1000;
+  const expiresMs = Math.ceil((nowMs + ttlMs) / windowMs) * windowMs;
+  const startsMs = expiresMs - windowMs - ttlMs - CLOCK_SKEW_SECONDS * 1000;
+  return { startsOn: new Date(startsMs), expiresOn: new Date(expiresMs) };
+}
 
 /**
  * A read credential for one video, for a browser to play.
@@ -259,19 +313,34 @@ const PLAYBACK_SAS_TTL_SECONDS = 30 * 60;
 export function mintPlaybackSas(params: {
   blobName: string;
   ttlSeconds?: number;
+  /**
+   * Snap to {@link PLAYBACK_SAS_WINDOW_SECONDS} so the browser can cache the
+   * video (default). Pass `false` for a server-side read that should live
+   * exactly `ttlSeconds` and that no browser ever sees, such as a copy source.
+   */
+  stable?: boolean;
 }): { playbackUrl: string; expiresAt: Date } {
   const config = requireAzureStorageConfig();
   const ttlSeconds = params.ttlSeconds ?? PLAYBACK_SAS_TTL_SECONDS;
-  const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+
+  const stable = params.stable !== false;
+  const { startsOn, expiresOn } = stable
+    ? playbackSasWindow(Date.now(), ttlSeconds)
+    : {
+        startsOn: undefined,
+        expiresOn: new Date(Date.now() + ttlSeconds * 1000),
+      };
 
   return {
     playbackUrl: signBlobUrl({
       config,
       blobName: params.blobName,
       permissions: "r",
-      expiresOn: expiresAt,
+      startsOn,
+      expiresOn,
+      cacheControl: stable ? PLAYBACK_CACHE_CONTROL : undefined,
     }),
-    expiresAt,
+    expiresAt: expiresOn,
   };
 }
 

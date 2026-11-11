@@ -2,7 +2,7 @@
 
 Guardian Terms §8 requires emailing every guardian account **before** the change
 takes effect. Send this, wait the notice period you choose (suggest 14 days), then
-apply the `20261107180000_legal_versions_splitstep_training.sql` migration and deploy.
+apply the `20261108083956_legal_versions_splitstep_training.sql` migration and deploy.
 Guardians then agree again on the "Our terms have changed" screen, which they
 must pass before using the dashboard. Video submitted for analysis before the
 deploy may still be analyzed after it, so send this notice early enough that

@@ -76,7 +76,6 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { advField } from "@/lib/ui/adv-field";
-import { getInitials } from "@/lib/data/match-utils";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { siteLabel, siteTitle, todayISO } from "@/lib/schedule/format";
 import { saveOpponentPlayer } from "@/lib/schedule/actions";
@@ -129,6 +128,12 @@ import { formatHoursMinutes } from "@/lib/format/duration";
 import { setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 import { FieldCaption } from "./FieldCaption";
+import {
+  MatchTypeCell,
+  PracticeNotice,
+  matchTypeForEventKind,
+  showsMatchTypeField,
+} from "./MatchTypeField";
 import { COURT_OPTIONS } from "./court-options";
 import {
   ChosenCheck,
@@ -136,6 +141,16 @@ import {
   FloatMenuItem,
 } from "@/components/ui/float-menu";
 import { AnimatedHeight } from "./AnimatedHeight";
+import { OPPONENT_MENU_WIDTH_CLS } from "./OpponentMenuRow";
+import { OpponentMenuBody, OpponentReadBack } from "./OpponentMenu";
+import type { RosterMenuPlayer } from "./RosterMenu";
+import {
+  opponentIsTeammate,
+  playedWithoutTeammates,
+  teammatePick,
+  teammatesFirst,
+  teammatesMatching,
+} from "./teammates";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
 import {
   bareMatchTiebreak,
@@ -192,6 +207,16 @@ export interface DetailsStepContentProps {
      */
     canSaveStyle: boolean;
   };
+  /**
+   * The opponent menu's Teammates section: the program's active roster minus
+   * this match's subject, and its "Teammates · {program}" label. Null in a
+   * personal workspace and when nobody else is on the roster — the section is
+   * not drawn then.
+   */
+  teammates?: {
+    label: string;
+    players: readonly RosterMenuPlayer[];
+  } | null;
   /** The event line this flow started from, when it did. */
   preset: EventPreset | null;
   /** The schedule offer accepted with Attach, when one was. */
@@ -278,16 +303,6 @@ function formatDayShort(date: string): string {
   });
 }
 
-/** "Aug 22" for a history row. */
-function formatMonthDay(date: string): string {
-  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
-  if (!y || !m || !d) return date;
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-}
-
 /** The tournament mark from the design's assets, inline so it takes the ink colour. */
 function TournamentMark({ className }: { className?: string }) {
   return (
@@ -328,30 +343,6 @@ function SectionHead({
       </span>
       <span className="text-micro">{micro}</span>
     </div>
-  );
-}
-
-/** The 22px avatar a menu row carries. */
-function Avatar({ name }: { name: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[10px] font-medium text-[var(--ink-700)]"
-    >
-      {getInitials(name)}
-    </span>
-  );
-}
-
-/** The dashed ring a "new" row wears — a place waiting for something real. */
-function NewRing() {
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--ink-300)]"
-    >
-      <Plus className="size-[11px] text-[var(--ink-500)]" strokeWidth={1.5} />
-    </span>
   );
 }
 
@@ -968,6 +959,8 @@ function provenanceFor(
       return "from the lineup";
     case "roster":
       return ctx.school ? `from ${ctx.school}'s roster` : "from their roster";
+    case "teammate":
+      return "Teammate · From the roster";
     case "new":
       return ctx.saved && ctx.school
         ? `New · Saved to ${ctx.school}`
@@ -992,6 +985,7 @@ function DetailsStepContentImpl({
   isProcessingProvider,
   workspaceKind,
   subject,
+  teammates = null,
   preset,
   attachedLine,
   onAttach,
@@ -1380,6 +1374,18 @@ function DetailsStepContentImpl({
     [onInputChange, played, rememberTeam],
   );
 
+  // A teammate: their roster profile is the record, style included, and their
+  // team is this program — the "their team" field is not asked (`teammates.ts`).
+  const pickTeammate = useCallback(
+    (row: RosterMenuPlayer) => {
+      for (const [field, value] of Object.entries(teammatePick(row)))
+        onInputChange(field as keyof FormData, value);
+      setNamingOpponent(false);
+      setNameOpen(false);
+    },
+    [onInputChange],
+  );
+
   const createOpponent = useCallback(
     async (name: string) => {
       onInputChange("opponentName", name);
@@ -1436,13 +1442,19 @@ function DetailsStepContentImpl({
   // ---- Names for the menus
 
   const needle = normalizedPersonName(nameTerm);
-  const playedShown = useMemo(
-    () =>
-      (needle
-        ? played.filter((p) => normalizedPersonName(p.name).includes(needle))
-        : played
-      ).slice(0, 5),
-    [played, needle],
+  const teammatePlayers = teammates?.players;
+  // A teammate is listed once, under Teammates — never again as someone played.
+  const playedShown = useMemo(() => {
+    const others = playedWithoutTeammates(played, teammatePlayers ?? []);
+    return (
+      needle
+        ? others.filter((p) => normalizedPersonName(p.name).includes(needle))
+        : others
+    ).slice(0, 5);
+  }, [played, needle, teammatePlayers]);
+  const teammatesShown = useMemo(
+    () => teammatesMatching(teammatePlayers ?? [], needle),
+    [teammatePlayers, needle],
   );
   const rosterShown = useMemo(
     () =>
@@ -1453,7 +1465,9 @@ function DetailsStepContentImpl({
   );
   const exactKnown =
     playedShown.some((p) => normalizedPersonName(p.name) === needle) ||
-    rosterShown.some((p) => normalizedPersonName(p.name) === needle);
+    rosterShown.some((p) => normalizedPersonName(p.name) === needle) ||
+    teammatesShown.some((p) => normalizedPersonName(p.name) === needle);
+  const isTeammate = opponentIsTeammate(formData);
 
   // The name is read-only here: in a team flow with no line pinned it was
   // picked on step 1, and SubjectBar's "Not <name>?" is where it changes. Say
@@ -1822,10 +1836,14 @@ function DetailsStepContentImpl({
                         const hitRoster = rosterShown.find(
                           (p) => normalizedPersonName(p.name) === needle,
                         );
+                        const hitTeammate = teammatesShown.find(
+                          (p) => normalizedPersonName(p.name) === needle,
+                        );
                         const hitPlayed = playedShown.find(
                           (p) => normalizedPersonName(p.name) === needle,
                         );
                         if (hitRoster) pickRoster(hitRoster);
+                        else if (hitTeammate) pickTeammate(hitTeammate);
                         else if (hitPlayed) pickPlayed(hitPlayed);
                         else void createOpponent(term);
                       }}
@@ -1839,139 +1857,33 @@ function DetailsStepContentImpl({
                     align="start"
                     sideOffset={6}
                     onOpenAutoFocus={(e) => e.preventDefault()}
-                    className={cn(
-                      floatMenuCls,
-                      inDual ? "w-[360px]" : "w-[320px]",
-                    )}
+                    className={cn(floatMenuCls, OPPONENT_MENU_WIDTH_CLS)}
                   >
-                    {inDual ? (
-                      <>
-                        {rosterShown.some((p) => p.heldThisLine) && (
-                          <span className={floatMenuLabelCls}>
-                            {lineSchool}
-                            {lineSlot ? ` · ${lineSlot} last season` : ""}
-                          </span>
-                        )}
-                        {rosterShown
-                          .filter((p) => p.heldThisLine)
-                          .map((p) => (
-                            <button
-                              key={p.playerId}
-                              type="button"
-                              onClick={() => pickRoster(p)}
-                              className={floatMenuRowCls}
-                            >
-                              <Avatar name={p.name} />
-                              <span className="text-[12px] font-medium text-[var(--ink-900)]">
-                                {p.name}
-                              </span>
-                              <span className="text-[11px] text-[var(--ink-500)]">
-                                {p.classYear ? `${p.classYear} · ` : ""}
-                                {p.meetings === 0
-                                  ? "no matches vs us"
-                                  : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
-                              </span>
-                            </button>
-                          ))}
-                        {rosterShown.some((p) => !p.heldThisLine) && (
-                          <span className={floatMenuLabelCls}>
-                            {rosterShown.some((p) => p.heldThisLine)
-                              ? "Rest of their roster"
-                              : `${lineSchool}'s roster`}
-                          </span>
-                        )}
-                        {rosterShown
-                          .filter((p) => !p.heldThisLine)
-                          .slice(0, 8)
-                          .map((p) => (
-                            <button
-                              key={p.playerId}
-                              type="button"
-                              onClick={() => pickRoster(p)}
-                              className={floatMenuRowCls}
-                            >
-                              <Avatar name={p.name} />
-                              <span className="text-[12px] font-medium text-[var(--ink-900)]">
-                                {p.name}
-                              </span>
-                              <span className="text-[11px] text-[var(--ink-500)]">
-                                {p.classYear ? `${p.classYear} · ` : ""}
-                                {p.meetings === 0
-                                  ? "no matches vs us"
-                                  : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
-                              </span>
-                            </button>
-                          ))}
-                      </>
-                    ) : (
-                      <>
-                        {playedShown.length > 0 && (
-                          <span className={floatMenuLabelCls}>
-                            People you&apos;ve played
-                          </span>
-                        )}
-                        {playedShown.map((p) => (
-                          <button
-                            key={p.name}
-                            type="button"
-                            onClick={() => pickPlayed(p)}
-                            className={floatMenuRowCls}
-                          >
-                            <Avatar name={p.name} />
-                            <span className="text-[12px] font-medium text-[var(--ink-900)]">
-                              {p.name}
-                            </span>
-                            <span className="text-[11px] text-[var(--ink-500)]">
-                              {p.matches}{" "}
-                              {p.matches === 1 ? "match" : "matches"} · Last{" "}
-                              {formatMonthDay(p.lastDate)}
-                            </span>
-                          </button>
-                        ))}
-                      </>
-                    )}
-                    {nameTerm.trim() && !exactKnown && (
-                      <>
-                        {(playedShown.length > 0 || rosterShown.length > 0) && (
-                          <span className={floatMenuDividerCls} />
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => void createOpponent(nameTerm.trim())}
-                          className={floatMenuRowCls}
-                        >
-                          <NewRing />
-                          <span className="min-w-0 truncate text-[12px] text-[var(--ink-700)]">
-                            {inDual ? (
-                              <>
-                                New player for{" "}
-                                <span className="font-medium text-[var(--ink-900)]">
-                                  {lineSchool}
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                New opponent{" "}
-                                <span className="font-medium text-[var(--ink-900)]">
-                                  &ldquo;{nameTerm.trim()}&rdquo;
-                                </span>
-                              </>
-                            )}
-                          </span>
-                          <span className="flex-1" />
-                          <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
-                            {inDual ? "name only" : "only you see this name"}
-                          </span>
-                        </button>
-                      </>
-                    )}
-                    {!nameTerm.trim() &&
-                      playedShown.length === 0 &&
-                      rosterShown.length === 0 && (
-                        <span className={cn(floatMenuLabelCls, "pb-2")}>
-                          Type their name.
-                        </span>
+                    <OpponentMenuBody
+                      inDual={inDual}
+                      lineSchool={lineSchool}
+                      lineSlot={lineSlot}
+                      rosterShown={rosterShown}
+                      playedShown={playedShown}
+                      teammates={
+                        teammates
+                          ? { label: teammates.label, players: teammatesShown }
+                          : null
+                      }
+                      teammatesFirst={teammatesFirst(
+                        formData.matchType,
+                        inDual,
                       )}
+                      chosenTeammateId={
+                        isTeammate ? (formData.opponentPlayerId ?? null) : null
+                      }
+                      nameTerm={nameTerm.trim()}
+                      exactKnown={exactKnown}
+                      onPickRoster={pickRoster}
+                      onPickPlayed={pickPlayed}
+                      onPickTeammate={pickTeammate}
+                      onCreate={(name) => void createOpponent(name)}
+                    />
                   </PopoverContent>
                 </Popover>
                 {/* The selects beside it wait on the name; say so where the
@@ -1981,56 +1893,48 @@ function DetailsStepContentImpl({
                 </span>
               </span>
             ) : (
-              <span className="flex min-w-0 flex-col gap-0.5 sm:pt-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNameTerm(formData.opponentName);
-                    setNamingOpponent(true);
-                  }}
-                  aria-label={`Change the opponent, ${formData.opponentName}`}
-                  className="group inline-flex cursor-pointer items-center gap-1.5 text-left text-[13px] text-[var(--ink-900)]"
-                >
-                  <span className="truncate">{formData.opponentName}</span>
-                  <Pencil
-                    className="size-3 shrink-0 text-[var(--ink-400)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-700)]"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                </button>
-                {opponentProvenance && (
-                  <span className="text-micro whitespace-nowrap">
-                    {opponentProvenance}
-                  </span>
-                )}
-                {/* Their team — optional, a team workspace's question only,
-                    and under the name like everything else this row says
-                    beyond its three answers. */}
-                {teamFieldShown && (
-                  <OpponentTeamField
-                    className="mt-1"
-                    program={teamFromLine ? null : formData.opponentTeamProgram}
-                    school={
-                      teamFromLine
-                        ? lineTeamSchool
-                        : formData.opponentTeamSchool
-                    }
-                    source={teamFromLine ? "line" : formData.opponentTeamSource}
-                    opponentFirstName={firstNameOf(formData.opponentName)}
-                    onChange={(team) => {
-                      onInputChange(
-                        "opponentTeamProgram",
-                        team.program ?? undefined,
-                      );
-                      onInputChange(
-                        "opponentTeamSchool",
-                        team.school ?? undefined,
-                      );
-                      onInputChange("opponentTeamSource", team.source);
-                    }}
-                  />
-                )}
-              </span>
+              <OpponentReadBack
+                name={formData.opponentName}
+                provenance={opponentProvenance}
+                isTeammate={isTeammate}
+                onChange={() => {
+                  setNameTerm(formData.opponentName);
+                  setNamingOpponent(true);
+                }}
+                // Their team — optional, a team workspace's question only,
+                // and under the name like everything else this row says
+                // beyond its three answers. A teammate gets the pill instead.
+                teamField={
+                  teamFieldShown && (
+                    <OpponentTeamField
+                      className="mt-1"
+                      program={
+                        teamFromLine ? null : formData.opponentTeamProgram
+                      }
+                      school={
+                        teamFromLine
+                          ? lineTeamSchool
+                          : formData.opponentTeamSchool
+                      }
+                      source={
+                        teamFromLine ? "line" : formData.opponentTeamSource
+                      }
+                      opponentFirstName={firstNameOf(formData.opponentName)}
+                      onChange={(team) => {
+                        onInputChange(
+                          "opponentTeamProgram",
+                          team.program ?? undefined,
+                        );
+                        onInputChange(
+                          "opponentTeamSchool",
+                          team.school ?? undefined,
+                        );
+                        onInputChange("opponentTeamSource", team.source);
+                      }}
+                    />
+                  )
+                }
+              />
             )}
             <div className="flex flex-col gap-3 sm:contents">
               <Cell
@@ -2096,6 +2000,17 @@ function DetailsStepContentImpl({
       <div className="flex flex-col gap-[18px] border-t border-[var(--border-hairline)] pt-6">
         <SectionHead label="Context" micro={contextMicro} />
         <div className="grid grid-cols-3 gap-x-6 gap-y-5">
+          {/* First, before Event. A doubles line owns `matchType` — the
+              vendor path reads its "Doubles" — so the field steps aside.
+              The admin console's upload routes store Singles or Doubles
+              whatever is picked (`admin-file-submission.ts`,
+              `admin-video-submission.ts`), so it is not offered there. */}
+          {!admin && showsMatchTypeField(formData.matchType) && (
+            <MatchTypeCell
+              value={formData.matchType}
+              onChange={(v) => onInputChange("matchType", v)}
+            />
+          )}
           {fromLine ? (
             <ReadCell
               label="Event"
@@ -2140,11 +2055,7 @@ function DetailsStepContentImpl({
                 onInputChange("eventKind", kind);
                 onInputChange(
                   "matchType",
-                  kind === "tournament"
-                    ? "Tournament"
-                    : kind === "dual"
-                      ? "Dual Match"
-                      : (formData.matchType ?? ""),
+                  matchTypeForEventKind(kind, formData.matchType),
                 );
                 if (kind !== "tournament") onInputChange("round", "");
               }}
@@ -2252,6 +2163,19 @@ function DetailsStepContentImpl({
             onChange={(v) => onInputChange("playOnLets", v)}
           />
         </div>
+        {/* The player alone — and the teammate too when they are the
+            opponent, since the match is on both their profiles. */}
+        <PracticeNotice
+          matchType={formData.matchType}
+          profiles={
+            isTeammate
+              ? [
+                  { name: subject.name, isSelf: subject.isSelf },
+                  { name: formData.opponentName },
+                ]
+              : [{ name: subject.name, isSelf: subject.isSelf }]
+          }
+        />
       </div>
       {/* Video — what Save match is about to start. Only while the wizard
           holds the file: a restored draft keeps the form but not the File, and

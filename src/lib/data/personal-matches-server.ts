@@ -23,6 +23,13 @@ import type { MatchScore } from "@/lib/data/match-utils";
  * nullable precisely so "no program" means the personal workspace, and a
  * coach's program upload belongs to the program, not here.
  *
+ * ── Practice ────────────────────────────────────────────────────────────────
+ * Practice rows are returned like any other: the matches list, Recent matches
+ * and the activity heatmap all show them. The readers that make a record or a
+ * season figure out of these rows (`getOverallPerformance`,
+ * `getPersonalSeasonKpis`) each leave practice out through `isPracticeMatch`,
+ * which is why `match_type` is in the column list.
+ *
  * ── The column list ─────────────────────────────────────────────────────────
  * The union of what the two callers need, which is why it lives here rather
  * than in either of them. Extra columns cost one projection; a second query

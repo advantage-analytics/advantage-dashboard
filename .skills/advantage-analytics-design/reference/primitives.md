@@ -196,8 +196,13 @@ the sentence on a narrow column.
   the person should never have to remove a file to undo a click.
 
 **`Avatar` + `StatePill`** — profile ≠ account, and the avatar says which:
-self-managed = unmarked initials (default, no chip); coach-managed = border
-ring + grey pill; invited = dashed ring (no person yet, only an email);
+self-managed = unmarked initials (default, no chip); coach-managed = the
+`UserRoundCog` glyph, ink-400, straight after the name (`CoachManagedMark`,
+`ui/coach-managed-mark.tsx`: focusable, with the dark tooltip "Coach-managed ·
+No login yet · Staff upload their matches"; in a menu row, whose hover means
+"choose", the silent `CoachManagedGlyph` with "Coach-managed" in the row's
+own words) — _Supersedes (2026-11-10): "coach-managed = border ring + grey
+pill"_; invited = dashed ring (no person yet, only an email);
 "Claimed today" = a transition-receipt pill that decays after a session (a
 one-time acknowledgment, not a permanent state). State chips are 18px pill,
 10/500 ink-700 on surface-subtle — grey, never an outcome colour and never

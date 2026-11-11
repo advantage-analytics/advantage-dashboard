@@ -12,6 +12,7 @@ import {
   parseAuthorizationDetails,
   readAuthorizationId,
 } from "@/lib/auth/oauth-consent";
+import { ASK_PRACTICE_RULE } from "@/lib/services/ask/prompts";
 import {
   ASK_SIDE_REQUIRED_REASON,
   ASK_VIEWS,
@@ -231,6 +232,15 @@ test.describe("describeAskViews", () => {
     expect(personal).not.toContain("video_time");
     expect(personal).not.toContain("player_name");
     expect(personal).toBe(describeAskViews("personal"));
+  });
+
+  test("both scopes carry the practice rule: left out of a record, a win–loss, a head-to-head and a season statistic unless the question asks about practice", () => {
+    for (const text of [describeAskViews(), describeAskViews("team")]) {
+      expect(text.split(ASK_PRACTICE_RULE)).toHaveLength(2);
+      expect(text).toContain(
+        "A practice row (lower(trim(match_type)) = 'practice') is left out of every record, win–loss count, head-to-head and season statistic unless the question asks about practice.",
+      );
+    }
   });
 
   test("the team text carries the program scope's extra column", () => {

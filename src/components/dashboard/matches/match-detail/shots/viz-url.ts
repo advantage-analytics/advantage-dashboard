@@ -204,36 +204,159 @@ export interface VizState {
    */
   draft?: boolean;
   /**
-   * The fullscreen court viewer (`viz-fullscreen.tsx`), opened
-   * from a `data-viz-fullscreen-door` control on the focused view. Only
-   * meaningful alongside a `cut` — dropped on the wall exactly like `draft`
-   * (see `vizStateQuery`'s `cut === null` early return and `parseVizState`
-   * below). Optional rather than a required `false` everywhere, matching
-   * `draft`'s own convention: every call site that builds a real `VizState`
-   * literal without opening the viewer simply omits it, and `undefined`
-   * reads exactly like `false` everywhere this is checked (`=== true`,
-   * never a bare truthy test) — including the `toEqual` fixtures in
-   * `tests/viz-url.spec.ts`, which rely on a missing key and `{fullscreen:
-   * undefined}` comparing equal (`{fullscreen: false}` would not).
-   *
-   * Unlike `draft`, `applyVizUpdate` does not clear it on an ordinary
-   * filter/cut/chart change — the viewer reads the same `cut`/`chart`/
-   * `filters` the focused court does, so those changes are meant to apply
-   * live underneath it. But it is NOT unconditional: `applyVizUpdate` is
-   * also the one place `fullscreen` is dropped from the OUTPUT (mirroring
-   * `draft`'s own clearing) when the resolved state has `cut: null` (Back
-   * to wall — the viewer has no court to show) or `draft: true` (draft
-   * wins, same precedence `parseVizState` applies) — see that function's
-   * own doc comment. This is enforced in-memory, at `applyVizUpdate`
-   * itself, not only at the URL layer (`vizStateQuery`'s `cut === null`
-   * early return also never serializes it, but the provider renders from
-   * the in-memory `VizState`, not the URL, so relying on serialization
-   * alone would let "viewer open over the wall" exist as live state for a
-   * render or two). It is NOT part of `viewIdentityKey`/`sameView`:
-   * opening or closing the viewer is not a different court or a different
-   * view, only a different way of looking at the same one.
+   * The saved view an edited court came from (`?vfrom=`), while `viewId` is
+   * null: an edit drops `viewId` (the court is no longer exactly the view)
+   * but the lightbox still measures against the view — its title, the
+   * strip, the denominator and "Clear filter" all take its filters as the
+   * baseline. In the URL so it survives a remount (Watch → Video → Back) and
+   * a reload. Never set alongside `viewId` (that IS the baseline), on the
+   * wall or on a draft; `applyVizUpdate` keeps it moving: a saved or picked
+   * view replaces it, a new cut or the wall drops it. Optional and omitted
+   * when absent, like `draft`.
    */
-  fullscreen?: boolean;
+  editedFrom?: string;
+  /**
+   * The season page's own filters (`?vopp=`, `?vm=`) — which matches of a
+   * player's season the opened card is drawn over. Read only where the
+   * provider is a season's (`VizParseMatch.season`); the match report never
+   * parses them, and they are not `VizFilters`, so a saved view can never
+   * carry them. Omitted when neither is on, like `draft`.
+   */
+  season?: SeasonFilters;
+}
+
+/* ── Season filters ─────────────────────────────────────────────────────── */
+
+/** "Opponent plays": the opponent's hand, or a match that does not say. */
+export type OpponentHandFilter = "right" | "left" | "unknown";
+
+/** "Result": the player won or lost the match (a match whose score cannot
+ *  say is in neither). */
+export type SeasonResultFilter = "won" | "lost";
+
+/** "Surface", read off `matches.court_type` (`seasonSurfaceOf`). */
+export type SeasonSurface = "hard" | "clay" | "grass" | "unknown";
+
+/** The season's match filters, all chosen in the lightbox's Matches sheet:
+ *  the result, the opponent's hand and the surface (null = Any each), and
+ *  the ticked matches (none ticked = every match the other three keep). */
+export interface SeasonFilters {
+  opponentHand: OpponentHandFilter | null;
+  result?: SeasonResultFilter | null;
+  surface?: SeasonSurface | null;
+  matches: string[];
+}
+
+export const OPPONENT_HAND_FILTERS: readonly OpponentHandFilter[] = [
+  "right",
+  "left",
+  "unknown",
+];
+export const SEASON_RESULT_FILTERS: readonly SeasonResultFilter[] = [
+  "won",
+  "lost",
+];
+export const SEASON_SURFACES: readonly SeasonSurface[] = [
+  "hard",
+  "clay",
+  "grass",
+  "unknown",
+];
+
+/** A match row's free-text `court_type` as "Surface" reads it: "Outdoor Hard
+ *  Court", "Indoor Hard Court", "Hard" and "hard" are all hard; nothing
+ *  recognisable is unknown. */
+export function seasonSurfaceOf(
+  courtType: string | null | undefined,
+): SeasonSurface {
+  const t = (courtType ?? "").toLowerCase();
+  if (t.includes("clay")) return "clay";
+  if (t.includes("grass")) return "grass";
+  if (t.includes("hard")) return "hard";
+  return "unknown";
+}
+
+/** Whether `m` is kept by the match filters' result, hand and surface (the
+ *  ticks aside) — the one rule the season fold
+ *  (`player-season-viz.ts`) and the lightbox's Matches sheet draft share. */
+export function seasonMatchKept(
+  m: {
+    won: boolean | null;
+    hand: OpponentHandFilter;
+    surface: SeasonSurface;
+  },
+  filters: Pick<SeasonFilters, "opponentHand" | "result" | "surface">,
+): boolean {
+  if (filters.result === "won" && m.won !== true) return false;
+  if (filters.result === "lost" && m.won !== false) return false;
+  if (filters.opponentHand != null && m.hand !== filters.opponentHand)
+    return false;
+  if (filters.surface != null && m.surface !== filters.surface) return false;
+  return true;
+}
+
+/** The URL params the season's filters travel as. */
+export const SEASON_HAND_PARAM = "vopp";
+export const SEASON_RESULT_PARAM = "vres";
+export const SEASON_SURFACE_PARAM = "vsurf";
+export const SEASON_MATCH_PARAM = "vm";
+
+/** A match id as the URL may name one — a shape check only; the server
+ *  keeps the ids that are matches of this season. */
+const MATCH_ID_PATTERN = /^[\w-]{1,64}$/;
+
+/** `season` in canonical form (ids deduped and sorted), or `undefined` when
+ *  neither filter is on — the shape `VizState.season` is kept in. */
+export function normalizeSeasonFilters(
+  season: SeasonFilters | null | undefined,
+): SeasonFilters | undefined {
+  if (!season) return undefined;
+  const opponentHand = OPPONENT_HAND_FILTERS.includes(
+    season.opponentHand as OpponentHandFilter,
+  )
+    ? season.opponentHand
+    : null;
+  const result = SEASON_RESULT_FILTERS.includes(
+    season.result as SeasonResultFilter,
+  )
+    ? (season.result as SeasonResultFilter)
+    : null;
+  const surface = SEASON_SURFACES.includes(season.surface as SeasonSurface)
+    ? (season.surface as SeasonSurface)
+    : null;
+  const matches = [...new Set(season.matches)]
+    .filter((id) => MATCH_ID_PATTERN.test(id))
+    .sort();
+  if (
+    opponentHand === null &&
+    result === null &&
+    surface === null &&
+    matches.length === 0
+  )
+    return undefined;
+  return { opponentHand, result, surface, matches };
+}
+
+/** `state` without its season filters ("Clear filter", a closed card). */
+export function withoutSeasonFilters(state: VizState): VizState {
+  if (state.season === undefined) return state;
+  const next = { ...state };
+  delete next.season;
+  return next;
+}
+
+function parseSeasonFilters(
+  params: URLSearchParams,
+): SeasonFilters | undefined {
+  const hand = params.get(SEASON_HAND_PARAM);
+  return normalizeSeasonFilters({
+    opponentHand: OPPONENT_HAND_FILTERS.includes(hand as OpponentHandFilter)
+      ? (hand as OpponentHandFilter)
+      : null,
+    result: params.get(SEASON_RESULT_PARAM) as SeasonResultFilter | null,
+    surface: params.get(SEASON_SURFACE_PARAM) as SeasonSurface | null,
+    matches: params.getAll(SEASON_MATCH_PARAM),
+  });
 }
 
 /* ── Parse & serialize helper ──────────────────────────────────────────── */
@@ -333,6 +456,13 @@ const VIZ_KEYS = [
   "view",
   "vset",
   "draft",
+  "vfrom",
+  SEASON_HAND_PARAM,
+  SEASON_RESULT_PARAM,
+  SEASON_SURFACE_PARAM,
+  SEASON_MATCH_PARAM,
+  // Retired with the fullscreen viewer; still a viz key so an old
+  // `&fullscreen=1` link is cleaned off the URL by the next update.
   "fullscreen",
   VIZ_MATCH_FILTERS_PARAM,
   ...ORDER.map(paramFor),
@@ -389,37 +519,34 @@ export function canonicalSetValues(values: readonly number[]): number[] {
  * there's nothing here to do for those. Only touches the object when
  * `draft` was actually set, so the common (never-drafted) path returns
  * `resolved` unchanged rather than a new object every call.
- *
- * Also the one place `fullscreen` is dropped from the OUTPUT
- * — omitted, not set to `false` (same convention as `draft` itself; see
- * `VizState.fullscreen`'s doc comment) — when the resolved state has
- * `cut: null` (Back to wall: no court for the viewer to show) or
- * `draft: true` (draft wins, same precedence `parseVizState` applies to a
- * URL that somehow carries both). This runs BEFORE the draft-clearing
- * step below, so it sees `resolved.draft` as the caller left it, not the
- * `false` this function itself writes afterward. Only builds a new object
- * when there's actually a `fullscreen: true` to drop, so the common
- * (viewer-closed) path is untouched.
+
  */
 export function applyVizUpdate(
   prev: VizState,
   update: VizState | ((prev: VizState) => VizState),
 ): VizState {
   const resolved = typeof update === "function" ? update(prev) : update;
-
-  const withFullscreenRule =
-    resolved.fullscreen === true &&
-    (resolved.cut === null || resolved.draft === true)
-      ? omitFullscreen(resolved)
-      : resolved;
-
-  if (!withFullscreenRule.draft) return withFullscreenRule;
-  return { ...withFullscreenRule, draft: false };
+  const editedFrom = nextEditedFrom(prev, resolved);
+  if (!resolved.draft && resolved.editedFrom === editedFrom) return resolved;
+  const next: VizState = { ...resolved };
+  if (next.draft) next.draft = false;
+  if (editedFrom === undefined) delete next.editedFrom;
+  else next.editedFrom = editedFrom;
+  return next;
 }
 
-function omitFullscreen(state: VizState): VizState {
-  const { fullscreen: _fullscreen, ...rest } = state;
-  return rest;
+/**
+ * Where `editedFrom` goes on an update: nowhere on the wall, on a court that
+ * IS a saved view (`viewId` names the baseline itself), on a draft or on a
+ * new cut; otherwise the view the previous court was, or came from — so an
+ * edit to view V, and every edit after it, measures against V until another
+ * view is saved or picked.
+ */
+function nextEditedFrom(prev: VizState, next: VizState): string | undefined {
+  if (next.cut === null || next.viewId !== null || next.draft === true)
+    return undefined;
+  if (next.cut !== prev.cut) return undefined;
+  return next.editedFrom ?? prev.viewId ?? prev.editedFrom ?? undefined;
 }
 
 /**
@@ -455,14 +582,19 @@ export function reconcileVizState({
   intended: VizState;
   /** Passed straight to `parseVizState` for an external query. */
   match?: VizParseMatch;
-}): { state: VizState; ownQueries: string[] } {
+}): { state: VizState; ownQueries: string[]; external: boolean } {
   const idx = ownQueries.indexOf(urlQuery);
   if (idx !== -1) {
-    return { state: intended, ownQueries: ownQueries.slice(idx + 1) };
+    return {
+      state: intended,
+      ownQueries: ownQueries.slice(idx + 1),
+      external: false,
+    };
   }
   return {
     state: parseVizState(new URLSearchParams(urlQuery), match),
     ownQueries: [urlQuery],
+    external: true,
   };
 }
 
@@ -471,6 +603,9 @@ export interface VizParseMatch {
   /** `MatchFilterContext.errorSplitJudged === true` — pass a boolean, never
    *  the raw optional flag. */
   errorSplitJudged: boolean;
+  /** The season page: `?vopp=` and `?vm=` are read into `VizState.season`.
+   *  Omitted (the match report), they parse away. */
+  season?: boolean;
 }
 
 /**
@@ -522,7 +657,13 @@ export function parseVizState(
   // serialize or be saved — `carryFilters` is otherwise only ever applied
   // when switching cuts client-side, but garbage/hand-crafted params must be
   // held to the same rule.
-  const carried = cut === null ? rawFilters : carryFilters(rawFilters, cut);
+  // The wall keeps one filter: which player's four cards it shows
+  // (`?player=opponent`, the wall's You | Opponent switch). Every other key
+  // belongs to an opened card and parses away here.
+  const carried =
+    cut === null
+      ? { ...EMPTY_VIZ_FILTERS, player: rawFilters.player }
+      : carryFilters(rawFilters, cut);
   const filters =
     match === undefined
       ? carried
@@ -539,11 +680,12 @@ export function parseVizState(
   // without a `draft` key relies on that (`{}`'s missing key and `{draft:
   // undefined}` compare equal under `toEqual`; `{draft: false}` would not).
   const draft = cut !== null && params.get("draft") === "1";
-
-  // `fullscreen=1` only means anything alongside a real cut, same
-  // as `draft` — and draft wins when both are somehow present (the blank
-  // "Create view" prompt has no court behind it for the viewer to show).
-  const fullscreen = cut !== null && !draft && params.get("fullscreen") === "1";
+  const editedFrom =
+    cut !== null && viewId === null && !draft ? params.get("vfrom") : null;
+  const season =
+    cut !== null && match?.season === true
+      ? parseSeasonFilters(params)
+      : undefined;
 
   return {
     cut,
@@ -551,7 +693,8 @@ export function parseVizState(
     filters,
     viewId,
     ...(draft ? { draft: true } : {}),
-    ...(fullscreen ? { fullscreen: true } : {}),
+    ...(editedFrom ? { editedFrom } : {}),
+    ...(season ? { season } : {}),
   };
 }
 
@@ -571,8 +714,10 @@ export function vizStateQuery(
     next.delete(key);
   }
 
-  // If cut is null, we're done (the wall)
+  // The wall: only its You | Opponent switch serializes.
   if (state.cut === null) {
+    if (state.filters.player !== "you")
+      next.set("player", state.filters.player);
     return next.toString();
   }
 
@@ -588,17 +733,11 @@ export function vizStateQuery(
     next.set("draft", "1");
   }
 
-  // `fullscreen` only ever serializes alongside a real cut, for the
-  // same reason — the early `cut === null` return above means setting
-  // `cut: null` (Back to wall) drops it, whether or not a caller happened
-  // to carry `fullscreen: true` into that literal.
-  if (state.fullscreen === true) {
-    next.set("fullscreen", "1");
-  }
-
   // Serialize viewId if present
   if (state.viewId !== null) {
     next.set("view", state.viewId);
+  } else if (state.editedFrom !== undefined && state.draft !== true) {
+    next.set("vfrom", state.editedFrom);
   }
 
   // Serialize filters: only non-default keys that are in filterKeysFor(cut)
@@ -629,6 +768,17 @@ export function vizStateQuery(
   if (allowedKeys.has("match") && state.filters.match) {
     const match = serializeMatchFilters(state.filters.match);
     if (match) next.set(VIZ_MATCH_FILTERS_PARAM, match);
+  }
+
+  // The season's own filters, canonical (ids sorted) so one selection is
+  // one query string whatever order the ticks came in.
+  const season = normalizeSeasonFilters(state.season);
+  if (season) {
+    if (season.opponentHand !== null)
+      next.set(SEASON_HAND_PARAM, season.opponentHand);
+    if (season.result) next.set(SEASON_RESULT_PARAM, season.result);
+    if (season.surface) next.set(SEASON_SURFACE_PARAM, season.surface);
+    for (const id of season.matches) next.append(SEASON_MATCH_PARAM, id);
   }
 
   return next.toString();

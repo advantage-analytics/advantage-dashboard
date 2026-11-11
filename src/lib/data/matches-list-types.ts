@@ -31,6 +31,8 @@ export interface DbMatch {
   verified_at?: string | null;
   duration: number | null;
   source_provider?: string | null;
+  /** Seat two's id — an auth uid or a `program_players.id`, like `player1_id`. */
+  player2_id?: string | null;
 }
 
 export interface DisplayMatch {
@@ -68,7 +70,8 @@ export interface DisplayMatch {
      */
     profileId?: string | null;
   };
-  player2: { name: string };
+  /** `id` and `profileId` as on `player1`, for seat two. */
+  player2: { name: string; id?: string | null; profileId?: string | null };
   /**
    * Set by `fromPlayerSide`: player1 here is the row's seat TWO, so its own
    * `match_stats` row is `is_player1 = false`.
@@ -135,7 +138,7 @@ export function transformDbMatch(
     duration: formatMatchDuration(row.duration),
     sourceProvider: row.source_provider ?? undefined,
     player1: { name: row.player1_name, id: row.player1_id },
-    player2: { name: row.player2_name },
+    player2: { name: row.player2_name, id: row.player2_id ?? null },
     score: {
       sets,
       // The shared rule (a stored winner, then sets). A level score has always
@@ -189,6 +192,48 @@ export function fromPlayerSide(
       })),
     },
   };
+}
+
+/**
+ * A team list row turned so the program's player comes first — the seat the
+ * match page calls "you" (`youSeat`, `viewer-side.ts`), by the same test: the
+ * viewer's own seat wins, then a seat that is the program's (`onRoster`: the
+ * one rule in `roster-ids.ts`, which knows both of a claimed player's ids).
+ * The row and its drawer then always agree on whose figures lead, and the
+ * report agrees whenever either seat is ours (drawer redesign, 2026-11-10).
+ *
+ * The one deliberate difference: a row naming NEITHER seat is left as stored,
+ * where `youSeat` falls back to seat two. The list has always drawn those as
+ * written, and a coach's team list should not see legacy rows flip. Only a
+ * row whose seat two is provably ours turns.
+ *
+ * `fromPlayerSide` keeps names only (a personal row has no profile links); a
+ * team row's players carry their ids and roster profiles, so the whole
+ * player objects swap with them.
+ */
+export function toTeamSide(
+  match: DisplayMatch,
+  row: Pick<DbMatch, "score">,
+  myPlayerIds: readonly string[],
+  onRoster: (id: string) => boolean,
+): DisplayMatch {
+  const holds = (
+    id: string | null | undefined,
+    test: (id: string) => boolean,
+  ) => Boolean(id) && test(id as string);
+  const mine = (id: string) => myPlayerIds.includes(id);
+  const seat = holds(match.player1.id, mine)
+    ? "player1"
+    : holds(match.player2.id, mine)
+      ? "player2"
+      : holds(match.player1.id, onRoster)
+        ? "player1"
+        : holds(match.player2.id, onRoster)
+          ? "player2"
+          : null;
+  if (seat !== "player2") return match;
+  const turned = fromPlayerSide(match, false, scoreWinner(row.score) !== null);
+  return { ...turned, player1: match.player2, player2: match.player1 };
 }
 
 /**

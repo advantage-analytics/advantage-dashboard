@@ -2608,7 +2608,7 @@ test("T22: the card's own Next point step button re-follows the list", async ({
  *
  * The harness mounts `FilmTab` with no `@container`, so the columns stack
  * and the list's card grows to its content: nothing to scroll. In the app
- * the tab's column bounds it (`max-h-full` inside a pane-height column);
+ * the tab's column bounds it (`flex-1` inside a pane-height column);
  * `boundShellList` gives the column that bound here, and `pad=12` makes the
  * rows outgrow it. The shell list now opens its own well under the displayed
  * point (canvas "W-E chat"), so a case that compares the list's heights
@@ -2637,7 +2637,7 @@ async function settledWellHeight(page: Page): Promise<number> {
 /**
  * Give the shell list's column a height, as the tab's side-by-side layout
  * does in the app. The column's outer box is a `shrink-0` flex item, so a
- * height on it holds; the card inside is `max-h-full`.
+ * height on it holds; the card inside is `min-h-0 flex-1`.
  */
 async function boundShellList(page: Page, px: number) {
   await page.evaluate(
@@ -3880,7 +3880,7 @@ test("the card reads the point in one line and opens an empty thread with a repl
   await expect(card.locator(".text-micro").first()).toContainText(
     "Set 1 · Game",
   );
-  await expect(card.getByText("No notes yet")).toBeVisible();
+  await expect(card.getByText("No notes on this point yet.")).toBeVisible();
   const reply = card.getByRole("textbox", { name: "Add a note on this point" });
   await expect(reply).toBeVisible();
   // Send stays off until there is something to send.
@@ -3908,7 +3908,7 @@ test("on a read-only report the card draws no bookmark, tags, thread or reply fi
   await expect(
     card.getByRole("button", { name: "Copy link to this point" }),
   ).toHaveCount(0);
-  await expect(card.getByText("No notes yet")).toHaveCount(0);
+  await expect(card.getByText("No notes on this point yet.")).toHaveCount(0);
 });
 
 /* -------------------------------------------------------------------------
@@ -4268,7 +4268,7 @@ test("an applied filter reads as one sentence in a strip ABOVE the list, never c
   await expect(list.locator("[data-point-id]")).toHaveCount(4);
 });
 
-test("Advanced filters… opens the 340px drawer over the list, counting the draft by the list's rule", async ({
+test("Advanced filters… opens the 340px sheet on the window's edge, counting the draft by the list's rule", async ({
   page,
 }) => {
   await open(page, "filters-drawer");
@@ -4290,6 +4290,20 @@ test("Advanced filters… opens the 340px drawer over the list, counting the dra
     list.getByRole("region", { name: "Advanced filters" }),
   ).toHaveCount(0);
   await expect.poll(async () => (await drawer.boundingBox())?.width).toBe(340);
+  // A modal sheet: the window's right edge and its whole height, over the
+  // icon rail and the header, which dim with the report.
+  const viewport = page.viewportSize()!;
+  const sheet = (await drawer.boundingBox())!;
+  expect(Math.round(sheet.x + sheet.width)).toBe(viewport.width);
+  expect(Math.round(sheet.y)).toBe(0);
+  expect(Math.round(sheet.height)).toBe(viewport.height);
+  const dim = (await page.getByTestId("filter-rail-scrim").boundingBox())!;
+  expect([dim.x, dim.y, dim.width, dim.height].map(Math.round)).toEqual([
+    0,
+    0,
+    viewport.width,
+    viewport.height,
+  ]);
   // Focus moves in on open.
   await expect
     .poll(() =>
@@ -4301,16 +4315,25 @@ test("Advanced filters… opens the 340px drawer over the list, counting the dra
       ),
     )
     .toBe(true);
+  // Modal to assistive tech: a dialog, and the page behind it inert.
+  await expect(drawer).toHaveAttribute("role", "dialog");
+  await expect(drawer).toHaveAttribute("aria-modal", "true");
+  await expect(list).toHaveJSProperty("inert", false);
+  expect(
+    await list.evaluate((el) => el.closest("[inert]") !== null),
+    "the point list sits under an inert ancestor",
+  ).toBe(true);
   // The draft is the applied filters (none) under the saved toggle: 1 of 4.
   await expect(drawer).toContainText("1 of 4 points");
   await expect(
     drawer.getByRole("button", { name: "Show 1 point" }),
   ).toBeDisabled();
 
-  // Esc closes it and hands focus back to the trigger.
+  // Esc closes it and hands focus back to the trigger, the page live again.
   await page.keyboard.press("Escape");
   await expect(drawer).toHaveCount(0);
   await expect(trigger).toBeFocused();
+  await expect(page.locator("body > [inert]")).toHaveCount(0);
 
   // Re-picking "Advanced filters…" reopens it; the X closes it.
   await trigger.click();
@@ -4318,6 +4341,32 @@ test("Advanced filters… opens the 340px drawer over the list, counting the dra
   await expect(drawer).toBeVisible();
   await drawer.getByRole("button", { name: "Close filters" }).click();
   await expect(drawer).toHaveCount(0);
+
+  // The report dims behind the open drawer; a click on the dim closes it,
+  // and the dim leaves with it.
+  const scrim = page.getByTestId("filter-rail-scrim");
+  await expect(scrim).toHaveCount(0);
+  await trigger.click();
+  await menu.getByText("Advanced filters…").click();
+  await expect(drawer).toBeVisible();
+  await expect(scrim).toBeVisible();
+  // Tab stays in the sheet: the page behind it is covered.
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press("Tab");
+    expect(
+      await page.evaluate(
+        (sel) =>
+          document.querySelector(sel)?.contains(document.activeElement) ??
+          false,
+        FILTERS_DRAWER,
+      ),
+    ).toBe(true);
+  }
+  // The dim covers the icon rail too: a click at the window's corner.
+  await scrim.click({ position: { x: 8, y: 8 } });
+  await expect(drawer).toHaveCount(0);
+  await expect(scrim).toHaveCount(0);
+  await expect(trigger).toBeFocused();
 });
 
 test("before the first point the card says so and offers the first point", async ({

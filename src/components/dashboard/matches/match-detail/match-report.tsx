@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { MATCH_REPORT_FRAME_ID } from "@/components/dashboard/matches/match-detail/match-filters/rail-state";
 import {
   MatchReportProvider,
   useMatchReport,
@@ -17,8 +16,6 @@ import {
 import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
 import { MatchReportMoreMenu } from "@/components/dashboard/matches/match-detail/report-more-menu";
 import { MatchReportInsight } from "@/components/dashboard/matches/match-detail/report-insight-card";
-import { cn } from "@/lib/utils";
-import { MATCH_REPORT_PANE_PAD } from "./match-report-layout";
 // Parts that live in their own files: one import line here and one entry in
 // the `MatchReport` object at the bottom. Those files read `useMatchReport`
 // from `match-report-context.tsx`, never from this file, so adding one cannot
@@ -49,28 +46,26 @@ export { MatchReportProvider };
  * `MatchReportFrame` and friends; client components can use either.
  */
 
-/**
- * `relative` + the id make this the Video tab's filters drawer's anchor: the
- * drawer portals here. See `match-filters/filter-rail.tsx`'s "Placement" note
- * for why (short-viewport overflow inside `#match-report-pane`, and why
- * `fixed` is no escape from it either).
- */
-
 export function MatchReportFrame({ children }: { children: ReactNode }) {
   return (
-    <div
-      id={MATCH_REPORT_FRAME_ID}
-      className="relative flex min-h-0 flex-1 items-stretch"
-    >
-      {children}
-    </div>
+    <div className="relative flex min-h-0 flex-1 items-stretch">{children}</div>
   );
 }
 
-export function MatchReportRail({ children }: { children: ReactNode }) {
+/**
+ * `label` names the landmark: "Match summary" on the report, "Player summary"
+ * on the team player profile, which borrows this frame (design Q).
+ */
+export function MatchReportRail({
+  label = "Match summary",
+  children,
+}: {
+  label?: string;
+  children: ReactNode;
+}) {
   return (
     <aside
-      aria-label="Match summary"
+      aria-label={label}
       className="flex min-h-0 [flex:0_0_300px] flex-col overflow-y-auto border-r border-[var(--border-hairline)] bg-[var(--surface-card)]"
     >
       {children}
@@ -94,15 +89,12 @@ export function MatchReportRailFooter({ children }: { children: ReactNode }) {
  * not to the window. It is the only unnamed container inside the pane; name it
  * (`@container/report`) if a nested one ever appears.
  *
- * `id="match-report-pane"` (F4 fix round 2): this is the ONE scrollable
- * ancestor for every report view, including the Visualizations tab's
- * focused court — `viz-focused.tsx` reaches it by this id to reset scroll
- * to the top when the shown view changes (a click on a "Views" grid tile
- * far down the page must land on the big court, not leave the viewer
- * scrolled to where they clicked). A `ref` can't cross this boundary
- * cleanly since `ShotsTab` mounts several DOM levels below this div with no
- * shared context carrying a ref down; the id is the simplest correct
- * handle, matching this codebase's existing `document.getElementById(...)`
+ * `id="match-report-pane"`: this is the ONE scrollable ancestor for every
+ * report view, and the filters drawer (`filter-rail.tsx`) reaches it by this
+ * id. A `ref` can't cross this boundary cleanly since the views mount
+ * several DOM levels below this div with no shared context carrying a ref
+ * down; the id is the simplest correct handle, matching this codebase's
+ * existing `document.getElementById(...)`
  * pattern for cross-tree DOM reach (e.g. `matches-page-content.tsx`,
  * `static-schedule.tsx`).
  */
@@ -116,7 +108,7 @@ export function MatchReportPane({ children }: { children: ReactNode }) {
       // their hairline and shadow). F1 draws this pane on the grey page
       // ground; that was overruled after the build (spec › Decisions 1).
       style={{
-        padding: `${MATCH_REPORT_PANE_PAD.top}px ${MATCH_REPORT_PANE_PAD.x}px ${MATCH_REPORT_PANE_PAD.bottom}px`,
+        padding: "20px 56px 24px",
         background: "var(--surface-card)",
       }}
     >
@@ -136,28 +128,23 @@ export function MatchReportPane({ children }: { children: ReactNode }) {
  * pane-height, its content overflowed it, and the scroll ended flush against
  * the last card (measured 0px on an overflowing Statistics view, 24px without).
  *
- * `scrollsInside` is the one exception, for a view that owns its own
- * scroller: the Video view's point list scrolls inside its card, so the panel
- * takes `min-h-0` and stays pane-height — that is what hands the list a
- * height to scroll within. Nothing in that view overflows the panel, so the
- * pane's bottom padding still lands where it should.
+ * The Video view is no exception, though its point list scrolls inside its
+ * own card: side by side that list is out of flow and takes the row's height,
+ * so the panel's content is the player and "This point", which fit a normal
+ * window. On one too short for them the panel grows like any other and the
+ * pane scrolls, bottom padding included.
  */
 export function MatchReportWhen({
   view,
-  scrollsInside = false,
   children,
 }: {
   view: ReportView;
-  scrollsInside?: boolean;
   children: ReactNode;
 }) {
   const { state } = useMatchReport();
   if (state.view !== view) return null;
   return (
-    <div
-      role="tabpanel"
-      className={cn("flex flex-1 flex-col gap-4", scrollsInside && "min-h-0")}
-    >
+    <div role="tabpanel" className="flex flex-1 flex-col gap-4">
       {children}
     </div>
   );

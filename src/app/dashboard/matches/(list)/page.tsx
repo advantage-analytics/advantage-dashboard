@@ -9,6 +9,7 @@ import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canUploadForProgram } from "@/lib/workspace/types";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import {
   type DbMatch,
   type DisplayMatch,
@@ -118,11 +119,15 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
 
   // Start the slower reads once. Title counts and the list share their result;
   // the frame no longer waits for opponent profiles and analysis reconciliation.
+  // Both scopes turn their rows to "you": the viewer's own seat on a
+  // personal list, the program's player on a team one (`toTeamSide`) — the
+  // seat the match page calls "you", so row, drawer and report agree.
   const enriched = isTeam
     ? withRosterProfiles(
         supabase,
         workspace.active.id,
         enrichMatches(supabase, rows, user),
+        rows,
       )
     : withViewerSide(rows, user.id, enrichMatches(supabase, rows, user));
   const scope = isTeam ? "team" : "personal";
@@ -179,6 +184,7 @@ async function MatchesResolvedTitle({
   const readyMatches = (await enriched).map((m) => ({
     id: m.id,
     status: m.analysis?.status,
+    practice: isPracticeMatch(m.matchType),
   }));
   return (
     <MatchesTitleRow

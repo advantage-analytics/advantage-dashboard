@@ -251,6 +251,15 @@ export interface LabelShot {
   hitter: LabelSide | null;
   stroke: LabelStroke | null;
   result: LabelShotResult | null;
+  /**
+   * Whether `result` is the labeller's own call (`label_shots.result_called`):
+   * set by the Result menu's overrides, a review answer, N and L, cleared when
+   * an end is placed (`positionPatch`) and by Reset. A call set this way
+   * outranks the placed ends even when it equals the seed's
+   * (shot-derived.ts `effectiveShotResult`). Not a value field: it never
+   * moves the status and is not in `seed`.
+   */
+  resultCalled: boolean;
   /** The ball's spin as the vendor read it, lower-cased; null for `None`. */
   spin: LabelSpin | null;
   contactX: number | null;

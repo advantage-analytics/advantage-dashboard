@@ -19,11 +19,11 @@ import {
   choosePlaybackFile,
   type PlaybackJobRow,
 } from "@/lib/data/match-video-choice";
+import { resolveAzureStorageConfig } from "@/lib/services/splitstep/video-url/azure-sas";
 import {
-  mintPlaybackSas,
-  resolveAzureStorageConfig,
-  videoContainerClient,
-} from "@/lib/services/splitstep/video-url/azure-sas";
+  mintStoredPlayback,
+  storedObjectExists,
+} from "@/lib/services/video-storage/stores";
 import {
   orderLabelShots,
   type LabelPoint,
@@ -960,20 +960,18 @@ async function loadJobVideo(
   if (error) throw new Error(`Could not read the job: ${error.message}`);
   if (!job) return null;
 
-  const container = videoContainerClient();
   const choice = await choosePlaybackFile(
     [job],
-    (blobName) =>
-      container
-        .getBlockBlobClient(blobName)
-        .exists()
-        .catch(() => false),
+    storedObjectExists,
     "vendor-copy",
   );
   if (!choice) return null;
 
-  const { playbackUrl } = mintPlaybackSas({
-    blobName: choice.blobName,
+  // R2 or Azure, the link is signed once into the page and never refreshed,
+  // so the eight hours hold in both: R2's ceiling is seven days.
+  const { playbackUrl } = mintStoredPlayback({
+    key: choice.blobName,
+    store: choice.store,
     ttlSeconds: LABEL_PLAYBACK_TTL_SECONDS,
   });
   return { url: playbackUrl, startTimeSeconds: choice.startTimeSeconds };

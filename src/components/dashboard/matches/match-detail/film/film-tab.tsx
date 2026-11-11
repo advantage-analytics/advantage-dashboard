@@ -13,7 +13,9 @@ import { createClient } from "@/lib/supabase/client";
 import type { DistanceUnit } from "@/lib/format/distance";
 import {
   parsePointSet,
+  parsePointSetLabel,
   pointSetQuery,
+  POINT_SET_LABEL_PARAM,
   POINT_SET_PARAM,
 } from "@/lib/match-video/point-set";
 
@@ -303,6 +305,9 @@ function FilmRoom({
    * opens the same points.
    */
   const [pointSet, setPointSetState] = useState<readonly number[] | null>(null);
+  // The set's words, from `?pnl=` beside `?pn=`; any change to the set
+  // drops them (`setPointSet`, `pointSetQuery`).
+  const [pointSetLabel, setPointSetLabel] = useState<string | null>(null);
   const writePointSetParam = useCallback((next: readonly number[] | null) => {
     const current = window.location.search.replace(/^\?/, "");
     const after = pointSetQuery(current, next);
@@ -316,6 +321,7 @@ function FilmRoom({
   const setPointSet = useCallback(
     (next: readonly number[] | null) => {
       setPointSetState(next && next.length > 0 ? next : null);
+      setPointSetLabel(null);
       writePointSetParam(next);
     },
     [writePointSetParam],
@@ -366,10 +372,20 @@ function FilmRoom({
       savedOnly,
       setSavedOnly,
       pointSet,
+      pointSetLabel,
       setPointSet,
       clearAll,
     }),
-    [shared, setShared, remainder, savedOnly, pointSet, setPointSet, clearAll],
+    [
+      shared,
+      setShared,
+      remainder,
+      savedOnly,
+      pointSet,
+      pointSetLabel,
+      setPointSet,
+      clearAll,
+    ],
   );
   // Stable across a playback tick (`currentTime` re-renders this component
   // ~4x/second) so `FilmFilterStrip`'s own `memo` actually skips re-rendering
@@ -378,7 +394,7 @@ function FilmRoom({
     () => ({ you: sides.you.shortName, opponent: sides.opp.shortName }),
     [sides.you.shortName, sides.opp.shortName],
   );
-  // "Advanced filters…" opens the 340px filters drawer over the list column
+  // "Advanced filters…" opens the 340px filters sheet on the window's edge
   // (`FilterRail`, rendered at the end of this view). The room's own drawer
   // keeps its in-column panel.
   const filterRail = useFilterRailHost();
@@ -1074,14 +1090,16 @@ function FilmRoom({
     latestLayers.current = { shared, remainder };
   });
   const pointSetParam = searchParams?.get(POINT_SET_PARAM) ?? null;
+  const pointSetLabelParam = searchParams?.get(POINT_SET_LABEL_PARAM) ?? null;
   useEffect(() => {
     const numbers = parsePointSet(pointSetParam);
     if (!numbers) return;
     // The URL arriving is the external event; this runs once per value.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPointSetState(numbers);
+    setPointSetLabel(parsePointSetLabel(pointSetLabelParam));
     setLanding({ ...latestLayers.current });
-  }, [pointSetParam]);
+  }, [pointSetParam, pointSetLabelParam]);
 
   /** Door one: the report player's maximize control, from wherever it is. */
   const enterRoom = useCallback(() => {
@@ -1145,17 +1163,21 @@ function FilmRoom({
     // under it, the point list beside them in a fixed 320px column (the
     // room's own panel width) running the pane's full height, so finding a
     // point, watching it and reading its shots happen side by side. The view
-    // takes the pane's height (`min-h-0 flex-1`, handed down by `When
-    // scrollsInside`); the list column is a stretched flex item with no
-    // content height of its own — its card is absolutely positioned inside
-    // it — so it inherits that height and its rows scroll within the card.
+    // fills the pane's height (`flex-1`); the list column is a stretched
+    // flex item with no content height of its own — its card is absolutely
+    // positioned inside it — so it inherits that height and its rows scroll
+    // within the card.
     // Under 720px of pane (the `@container` breakpoint `statistics-view.tsx`
     // stacks at) the columns stack and the list takes what is left. Stacked,
     // the player column keeps its content height (`flex-none`): as a
     // shrinkable `flex-1` beside a list hundreds of rows tall it was squeezed
     // to nothing, and "This point" with it (0–20px at 1024×768). The pane
     // (`@container … overflow-y-auto`) scrolls what no longer fits.
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    // No `min-h-0` here, on the row below or on the panel above
+    // (`MatchReportWhen`): the three fill the pane and grow together when
+    // the window is too short for their content, which keeps the pane's
+    // bottom padding under the last card at every width.
+    <div className="flex flex-1 flex-col gap-4">
       {/* SwingVision Add video T10 (canvas frame ExpiryNotice): full width,
           above the player and the point list, in the last 30 days before an
           unwatched attachment expires. Keyed on the attachment so a
@@ -1177,10 +1199,16 @@ function FilmRoom({
         names={filmStripNames}
         shown={filteredPoints.length}
         total={points.length}
+        focusAfterClear={filterRail.focusTrigger}
       />
       <div
         ref={clockRef}
-        className="flex min-h-0 flex-1 flex-col gap-4 @min-[720px]:flex-row"
+        // The row never shrinks under the player column's content: "This
+        // point" has a floor, and when the window is too short for it the
+        // row grows past the pane — which scrolls — and the point list,
+        // stretched to the row, grows with it, so the two columns always
+        // end on the same line.
+        className="flex flex-1 flex-col gap-4 @min-[720px]:flex-row"
       >
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 @max-[720px]:flex-none">
           {/* Above the player and right-aligned: maintenance for the person who

@@ -1111,7 +1111,12 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
       "ft",
     );
     // Compared UNSORTED: the rows' order is part of what must not change.
-    expect(stats).toEqual(EXPECTED_PLACEMENT);
+    // `landed` is newer than this snapshot (the Statistics column's "Landed
+    // in" figure): checked on its own, everything else byte for byte.
+    const { landed, ...rest } = stats;
+    expect(rest).toEqual(EXPECTED_PLACEMENT);
+    expect(landed?.of).toBe(stats.total);
+    expect(landed!.count).toBeLessThanOrEqual(stats.total);
   });
 
   test("regression: returnContact with DEFAULT_BANDS is byte-identical to the pre-Phase-2B output, row ORDER included", () => {

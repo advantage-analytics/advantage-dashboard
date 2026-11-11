@@ -24,12 +24,14 @@ export const config = {
    *   itself by signature. Those handlers already gate on signature or bearer
    *   secret; this is latency and a failure mode with nothing bought for it.
    * - `_next/*` and `favicon.ico`, which Next serves without app code.
-   * - static image files, for the same reason.
+   * - static image, font and media files, `robots.txt` and `sitemap.xml`, for
+   *   the same reason. Every matched request is a billed middleware
+   *   invocation, and these reach the proxy with no app code behind them.
    *
    * The rest of `/api` stays matched: those routes are called by the browser
    * with cookies attached, and they read the session like any page does.
    */
   matcher: [
-    "/((?!api/webhooks|api/cron|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!api/webhooks|api/cron|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|otf|mp4|webm)$).*)",
   ],
 };

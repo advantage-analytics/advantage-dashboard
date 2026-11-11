@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { FormStrip } from "@/components/dashboard/shared/form-strip";
+import { STRETCHED } from "@/lib/ui/stretched-link";
 import {
   DayZeroShape,
   GHOST_OPACITY,
@@ -16,7 +17,8 @@ import type { TopMover } from "@/lib/data/team-movers";
  * Who changed the most, and in what. The ranking is `lib/data/team-movers.ts`
  * over the Roster page's own per-player measures; this file draws seven rows
  * of it and adds no arithmetic. A row is a link into the player's profile —
- * where the same measure is drawn in full.
+ * where the same measure is drawn in full — except its form bars, which each
+ * open their own match.
  *
  * **Two groups.** Players whose latest match moved against their earlier
  * ones come first. Players on their first match with stats sit under a
@@ -96,15 +98,27 @@ export function TopMovers({
   );
 }
 
+/**
+ * The row opens the player's profile through a stretched link on the name
+ * (its `::after` covers the row), so the form bars can sit above it and open
+ * their own match — a second anchor nested inside one would be invalid. Only
+ * the bars take the pointer; the gaps between them fall through to the row.
+ */
 function Row({ mover }: { mover: TopMover }) {
   return (
-    <Link href={`/dashboard/team/roster/${mover.playerId}`} className={ROW}>
+    <div
+      className={`relative ${ROW} [&:has([data-own-hover]:hover)]:bg-transparent`}
+    >
       <InitialsAvatar name={mover.name} photoUrl={mover.avatarUrl} />
-      <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+      <Link
+        href={`/dashboard/team/roster/${mover.playerId}`}
+        data-focus-ring="none"
+        className={`min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)] ${STRETCHED}`}
+      >
         {mover.name}
-      </span>
-      <span className="flex items-center">
-        <FormStrip bars={mover.form} empty={null} linked={false} />
+      </Link>
+      <span className="relative z-10 flex items-center">
+        <FormStrip bars={mover.form} empty={null} touchTaps />
       </span>
       <span className="grid grid-cols-[1fr_44px_40px] items-baseline gap-2.5">
         <span className="text-micro whitespace-nowrap">{mover.metric}</span>
@@ -113,7 +127,7 @@ function Row({ mover }: { mover: TopMover }) {
         </span>
         <Delta delta={mover.delta} />
       </span>
-    </Link>
+    </div>
   );
 }
 

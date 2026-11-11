@@ -32,7 +32,9 @@ import {
  * Then — driven entirely by `model.ts`'s catalog (`MATCH_FILTER_SECTIONS`,
  * `MATCH_FILTER_OPTIONS`); no option label is declared here. The Video tab
  * hosts it twice: the report's 340px filters drawer (`filter-rail.tsx`) and
- * the fullscreen film room's points drawer (`film/film-advanced-panel.tsx`).
+ * the fullscreen film room's points drawer (`film/film-advanced-panel.tsx`);
+ * the Visualizations lightbox hosts it a third time, as "Advanced filters"
+ * in the 340px drawer inside its box (`shots/lightbox-advanced-drawer.tsx`).
  *
  * Anatomy (the approved "FilterRail" frame): a 48px header — the dropdown
  * trigger's own SlidersHorizontal + "Filters" look, and a close X; the
@@ -78,6 +80,8 @@ export function FiltersPanel({
   tone = "light",
   filmCut = null,
   noun,
+  title = "Filters",
+  onCloseTooltipEscape,
 }: {
   /** The applied filters — the draft starts here. */
   filters: MatchFilters;
@@ -88,8 +92,10 @@ export function FiltersPanel({
   onApply: (next: MatchFilters) => void;
   /** The header's X: close without touching the applied filters. */
   onClose: () => void;
-  /** How many points the list would show under `draft`. */
-  countFor: (draft: MatchFilters) => number;
+  /** How many points the list would show under `draft`. Omitted (a host
+   *  with no points in the browser — the season's lightbox), the footer
+   *  states no count and the primary reads "Show serves". */
+  countFor?: (draft: MatchFilters) => number;
   /** Every point on the match — the count's denominator. */
   total: number;
   className?: string;
@@ -104,6 +110,14 @@ export function FiltersPanel({
   filmCut?: string | null;
   /** What `countFor` counts, when not points (the Visualizations tab). */
   noun?: CountNoun;
+  /** The header's word ("Advanced filters" in the Visualizations lightbox). */
+  title?: string;
+  /**
+   * Esc while the close X's tooltip is up: the tooltip is the topmost layer
+   * then and takes the key, so a host whose own Esc runs through Radix (the
+   * lightbox's dialog) forwards it here to still close in one press.
+   */
+  onCloseTooltipEscape?: () => void;
 }) {
   const titleId = useId();
   const names = { you: youName, opponent: oppName };
@@ -116,7 +130,11 @@ export function FiltersPanel({
   // `countFor` re-filters the whole match, so it only reruns when the draft
   // itself changes — not on every render (e.g. the accordion opening/closing
   // while the film keeps playing behind the panel).
-  const count = useMemo(() => countFor(draft), [countFor, draft]);
+  const count = useMemo(
+    () => (countFor ? countFor(draft) : null),
+    [countFor, draft],
+  );
+  const pad = "px-5";
 
   return (
     <section
@@ -138,12 +156,16 @@ export function FiltersPanel({
             strokeWidth={1.5}
             aria-hidden="true"
           />
-          Filters
+          {title}
         </h2>
-        <ChromeTooltip label="Close" shortcut="Esc">
+        <ChromeTooltip
+          label="Close"
+          shortcut="Esc"
+          onEscapeKeyDown={onCloseTooltipEscape}
+        >
           <button
             type="button"
-            aria-label="Close filters"
+            aria-label={`Close ${title.toLowerCase()}`}
             onClick={onClose}
             className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
           >
@@ -165,7 +187,7 @@ export function FiltersPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {sections.length === 0 ? (
-          <p className="text-body-sm px-5 py-4">
+          <p className={cn("text-body-sm py-4", pad)}>
             No filterable points in this match.
           </p>
         ) : (
@@ -180,6 +202,7 @@ export function FiltersPanel({
               summary={sectionSummary(draft, section.id, names)}
               draft={draft}
               onToggleOption={actions.toggle}
+              pad={pad}
             />
           ))
         )}
@@ -198,20 +221,26 @@ export function FiltersPanel({
         >
           Clear all
         </button>
-        <span
-          aria-live="polite"
-          className="min-w-0 flex-1 text-right text-[11px] whitespace-nowrap tabular-nums"
-          style={{ color: "var(--ink-500)" }}
-        >
-          {draftCountLine(count, total, noun)}
-        </span>
+        {count === null ? (
+          <span className="flex-1" />
+        ) : (
+          <span
+            aria-live="polite"
+            className="min-w-0 flex-1 text-right text-[11px] whitespace-nowrap tabular-nums"
+            style={{ color: "var(--ink-500)" }}
+          >
+            {draftCountLine(count, total, noun)}
+          </span>
+        )}
         <button
           type="button"
           onClick={actions.apply}
           disabled={!canApply(draft, filters)}
           className={cn(advButton("primary", "sm"), "whitespace-nowrap")}
         >
-          {showPointsLabel(count, noun)}
+          {count === null
+            ? `Show ${noun?.many ?? "points"}`
+            : showPointsLabel(count, noun)}
         </button>
       </div>
     </section>
@@ -225,6 +254,7 @@ function FilterSection({
   summary,
   draft,
   onToggleOption,
+  pad,
 }: {
   section: PanelSection;
   open: boolean;
@@ -233,6 +263,8 @@ function FilterSection({
   summary: string | null;
   draft: MatchFilters;
   onToggleOption: (group: PanelGroup["group"], value: unknown) => void;
+  /** The rows' side inset — the drawer's 20px, or the host's own. */
+  pad: string;
 }) {
   const bodyId = useId();
   return (
@@ -245,7 +277,10 @@ function FilterSection({
         aria-expanded={open}
         aria-controls={bodyId}
         onClick={onToggleOpen}
-        className="flex h-11 w-full cursor-pointer items-center gap-2 px-5 text-left focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        className={cn(
+          "flex h-11 w-full cursor-pointer items-center gap-2 text-left focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+          pad,
+        )}
       >
         <span
           className="shrink-0 text-[12px] font-medium"
@@ -270,7 +305,11 @@ function FilterSection({
           aria-hidden="true"
         />
       </button>
-      <div id={bodyId} hidden={!open} className="flex flex-col gap-4 px-5 pb-4">
+      <div
+        id={bodyId}
+        hidden={!open}
+        className={cn("flex flex-col gap-4 pb-4", pad)}
+      >
         {section.id === "custom" && (
           <p className="text-micro">
             One shot in the rally has to match every choice here.

@@ -20,10 +20,11 @@ import type { StatRow, VizBandZones } from "./viz-model";
  *
  * Translucent white bands across the half the cut lives in, alternating
  * `fill-opacity` .11 / .04 / .11 so adjacent bands separate without any of
- * them reading as a highlight. They span the FULL viewBox width (93 → 427),
- * which is wider than the doubles court — P2k's "into the apron both sides":
- * a band is a property of the COURT's depth, not of the lines, and stopping
- * at the sideline would have made it look like a zone.
+ * them reading as a highlight. They run past the art on both sides
+ * (`BAND_BLEED`, the court's `<svg>` draws `overflow: visible`) to the
+ * stage's own edges — P2k's "into the apron both sides": a band is a
+ * property of the COURT's depth, not of the lines, and stopping at the
+ * sideline, or at the art's edge, would have made it look like a zone.
  *
  * ## Where the numbers come from
  *
@@ -58,14 +59,28 @@ import type { StatRow, VizBandZones } from "./viz-model";
 /** P2k's own type scale, in viewBox units — SVG `font-size` attributes that
  *  scale with the art, not CSS type (see `viz-fullscreen-court.tsx`'s note on
  *  why `check-design-drift.mjs` does not police these). */
-const BAND_LABEL_SIZE = 6.2;
+const BAND_LABEL_SIZE = 5.6;
+const BAND_LABEL_TRACKING = 0.4;
 const BAND_RATE_SIZE = 6.4;
 const BAND_COUNT_SIZE = 6.2;
 
-/** The frame's own gutters: the caps label hangs off the left edge of the
- *  viewBox, the rate off the right. */
-const BAND_LABEL_X = 97;
-const BAND_RATE_X = 423;
+/**
+ * The labels live on the green, never on the court, and on one line: the
+ * caps label ends just outside the left doubles sideline and runs leftward
+ * across the apron (and past the art, which draws `overflow: visible`); the
+ * rate starts just outside the right one. A label used to start at the
+ * viewBox's left gutter and run on, so "DEEP · 0–4 M" crossed the alley
+ * onto the blue.
+ */
+const BAND_LABEL_GAP = 4;
+const BAND_LABEL_X = VIEWER_COURT.doubles.x - BAND_LABEL_GAP;
+const BAND_RATE_X =
+  VIEWER_COURT.doubles.x + VIEWER_COURT.doubles.w + BAND_LABEL_GAP;
+
+/** How far the wash runs past the art on each side: the stage shows apron
+ *  beyond the art's own box whenever it is wider than the court, and a wash
+ *  that stopped there read as a box drawn on the green. */
+const BAND_BLEED = 600;
 
 /** How far below a band's top edge its label sits, and the height below
  *  which the label centres in the band instead (a thin band would otherwise
@@ -84,7 +99,7 @@ function bandOpacity(index: number): number {
 }
 
 /**
- * The caps line at a band's left edge — "DEEP · 0–13 FT".
+ * The caps line at a band's left edge — "DEEP · 0–13 FT", never wrapped.
  *
  * A CONTACT row's `label` and `rangeLabel` are the same sentence (its label
  * IS its range — "0–5 ft behind"), so printing both would read "0–5 FT
@@ -141,8 +156,8 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
   if (rows.length !== edges.length - 1) return null;
 
   const maxCount = Math.max(0, ...(statRows ?? []).map((row) => row.count));
-  const left = VIEWER_COURT.viewBox.minX;
-  const width = VIEWER_COURT.viewBox.w;
+  const left = VIEWER_COURT.viewBox.minX - BAND_BLEED;
+  const width = VIEWER_COURT.viewBox.w + 2 * BAND_BLEED;
 
   return (
     <g
@@ -156,6 +171,7 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
         const height = bottom - top;
         if (height < BAND_MIN_H) return null;
 
+        const caps = editing ? bandEditingLabel(row) : bandCaps(row);
         const labelY =
           height >= BAND_LABEL_MIN_H
             ? top + BAND_LABEL_INSET
@@ -164,7 +180,6 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
         const stat = statRows?.find((r) => r.key === row.key) ?? null;
         const hasRate =
           !editing && stat !== null && stat.count > 0 && stat.winPct !== null;
-        const caps = editing ? bandEditingLabel(row) : bandCaps(row);
 
         return (
           <g
@@ -188,11 +203,12 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
             <text
               x={BAND_LABEL_X}
               y={labelY}
+              textAnchor="end"
               fill={LINE_COLOR}
               fillOpacity={0.72}
               fontFamily="var(--font-mono)"
               fontSize={BAND_LABEL_SIZE}
-              letterSpacing={0.6}
+              letterSpacing={BAND_LABEL_TRACKING}
             >
               {caps}
             </text>
@@ -200,7 +216,6 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
               <text
                 x={BAND_RATE_X}
                 y={labelY}
-                textAnchor="end"
                 fill={LINE_COLOR}
                 fillOpacity={0.8}
                 fontFamily="var(--font-sans)"

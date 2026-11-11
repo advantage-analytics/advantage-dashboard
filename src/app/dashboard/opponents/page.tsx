@@ -4,12 +4,23 @@ import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { OpponentsDayZero } from "@/components/dashboard/opponents/opponents-day-zero";
 import { OpponentsPageContent } from "@/components/dashboard/opponents/opponents-page-content";
 import { OpponentsSkeleton } from "@/components/dashboard/opponents/opponents-skeleton";
+import { RememberOpponentsDayZero } from "@/components/dashboard/opponents/opponents-shape-memory";
 import { TeamOpponentsPageContent } from "@/components/dashboard/opponents/team-opponents-page-content";
 import { getPersonalOpponents } from "@/lib/data/personal-opponents-server";
 import { getTeamOpponents } from "@/lib/data/team-opponents-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 export const metadata = { title: "Opponents" };
+
+/**
+ * `?opponent=<group key>` opens that row's drawer on either page.
+ * `?facedBy=<roster playerId>` (once or repeated) seeds the team page's
+ * Faced-by filter; the personal page has no such facet and ignores it.
+ */
+type OpponentsSearchParams = {
+  opponent?: string | string[];
+  facedBy?: string | string[];
+};
 
 /**
  * One route, two products, decided by the active workspace's kind.
@@ -41,7 +52,7 @@ export const metadata = { title: "Opponents" };
 export default async function OpponentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ opponent?: string | string[] }>;
+  searchParams: Promise<OpponentsSearchParams>;
 }) {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
@@ -84,14 +95,19 @@ async function PersonalOpponents({
   searchParams,
 }: {
   userId: string;
-  searchParams: Promise<{ opponent?: string | string[] }>;
+  searchParams: Promise<OpponentsSearchParams>;
 }) {
   const [{ opponents, totals }, { opponent }] = await Promise.all([
     getPersonalOpponents(userId),
     searchParams,
   ]);
   if (opponents.length === 0) {
-    return <OpponentsDayZero unnamedMatches={totals.unnamed} />;
+    return (
+      <>
+        <RememberOpponentsDayZero scope="personal" unnamed={totals.unnamed} />
+        <OpponentsDayZero unnamedMatches={totals.unnamed} />
+      </>
+    );
   }
   return (
     <OpponentsPageContent
@@ -116,20 +132,27 @@ async function TeamOpponents({
 }: {
   programId: string;
   viewerId: string;
-  searchParams: Promise<{ opponent?: string | string[] }>;
+  searchParams: Promise<OpponentsSearchParams>;
 }) {
-  const [{ opponents, totals }, { opponent }] = await Promise.all([
+  const [{ opponents, totals }, { opponent, facedBy }] = await Promise.all([
     getTeamOpponents(programId, viewerId),
     searchParams,
   ]);
   if (opponents.length === 0) {
-    return <OpponentsDayZero scope="team" />;
+    return (
+      <>
+        <RememberOpponentsDayZero scope="team" />
+        <OpponentsDayZero scope="team" />
+      </>
+    );
   }
   return (
     <TeamOpponentsPageContent
       opponents={opponents}
       totals={totals}
       initialSelectedKey={typeof opponent === "string" ? opponent : null}
+      // A profile's "N opponents" link lands already cut to that player.
+      initialFacedBy={facedBy ?? null}
     />
   );
 }

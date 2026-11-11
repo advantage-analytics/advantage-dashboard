@@ -4,7 +4,8 @@ How to connect a real model to the features that call one through the adapter
 at `src/lib/llm/adapter.ts`:
 
 - the Focus card's claim line on personal Home (`/api/home-insight`) and Team
-  Home (`/api/team-insight`);
+  Home (`/api/team-insight`), and the season claim on a team player's profile
+  (`/api/player-insight`, the Statistics tab's Advantage Intelligence card);
 - **Ask** (`/api/ask`, `/dashboard/ask`, `/dashboard/team/ask`): the model
   writes the SQL for a question and then the prose over the rows it returned,
   two calls on the common path and up to five with retries
@@ -117,7 +118,7 @@ prompt or reply text leaves the server; only model, tokens, cost and latency).
 What the adapter adds so the events can be read:
 
 - **`$ai_span_name`** names the call: `home.insight`, `team.insight`,
-  `ask.plan`, `ask.pattern`, `ask.answer`. Pass it as `getLLMStream()`'s
+  `player.insight`, `ask.plan`, `ask.pattern`, `ask.answer`. Pass it as `getLLMStream()`'s
   `options.span`.
 - **One trace per request.** `createLLMObservabilityContext()` is created
   once per request and shared by every call in it, so an Ask question's plan,

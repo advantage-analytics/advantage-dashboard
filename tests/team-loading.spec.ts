@@ -56,7 +56,9 @@ function route(
   runInNewContext(
     ts.transpileModule(
       readFileSync(
-        resolve(`src/app/dashboard/team/${name ? name + "/" : ""}page.tsx`),
+        resolve(
+          `src/app/dashboard/team/${name ? name + "/(list)/" : "(home)/"}page.tsx`,
+        ),
         "utf8",
       ),
       {
