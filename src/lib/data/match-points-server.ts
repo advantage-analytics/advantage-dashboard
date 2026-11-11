@@ -237,6 +237,8 @@ async function fetchSavedByPointId(
           }
           return (matchRow?.program_id as string | null | undefined) ?? null;
         })();
+  // Handled here too: the bookmark read may return before awaiting it.
+  programIdPromise.catch(() => {});
 
   const { data: bookmarksData, error: bookmarksError } = await supabase
     .from("point_bookmarks")

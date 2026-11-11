@@ -331,8 +331,11 @@ export function LightboxMatchesSheet({
     draft.ticked.length > 0;
 
   // A month heading carries its year only when the season spans more than
-  // one; within one year the month alone reads cleaner.
-  const years = new Set(matches.map((m) => m.date?.slice(0, 4) ?? ""));
+  // one; within one year the month alone reads cleaner. Undated matches
+  // have their own heading and do not count as a year.
+  const years = new Set(
+    matches.flatMap((m) => (m.date ? [m.date.slice(0, 4)] : [])),
+  );
   const monthOf = (date: string | null) =>
     date ? formatMatchDayMonth(date, { year: years.size > 1 }) : "Undated";
 
