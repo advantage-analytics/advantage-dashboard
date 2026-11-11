@@ -99,3 +99,16 @@ is the runner's. Newest entries at the bottom.
 **stash:** b994913f8201418a94e8041ffac741d4d3db2a8d
 **changed (stashed):** `player-profile-server.ts` (`countedSides`, pure `profileResultsFrom` / `buildPlayerProfile`, `PlayerProfile.practiceCount`, `PlayerMatchSide.opponentOnRoster`; `matchesPlayed` excludes practice); `player-season-server.ts` (season loaders start from counted sides; `seasonOpponentCount` skips practice and teammates); `profile-rail.tsx` keeps the Matches link live while practice exists; comments in `player-insight.ts` and the route page; specs `player-profile`, `player-season-loader`, `player-insight-prompt`, `profile-rail`.
 **to unblock:** amend criterion 3 (or move it to T12) and re-run; T12 would need the `?rosterPlayer=` list to turn a seat-two row to that player's side (a turn that keeps `id`/`profileId` and does not flip an undecided score). Also fix a doc comment that points at a non-existent `tests/practice-excluded-from-profile.spec.ts`.
+
+## T10 · Teach Ask and the MCP tools that practice never counts — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4745 passed, shard 2/2 5144 passed. Completion VERDICT: pass.
+**changed:** `prompts.ts` adds `ASK_PRACTICE_RULE` / `ASK_PRACTICE_FILTER` (`coalesce(lower(trim(match_type)), '') <> 'practice'`, which passes `checkAskSql`) to "Rules for both" in the personal and team plan prompts, and the team record example carries the filter; `schema.ts` puts the rule on `matches.match_type` through a new `AskColumn.rule` field rendered beside the meaning (the meaning must stay the migration comment verbatim, pinned by `tests/ask-prompt.spec.ts`); `facts.ts` `booleanStatements` counts non-practice rows when rows are mixed and says how many it left out; `arrival.ts` comment only (it computes no record); MCP `INSTRUCTIONS`, the `list_matches` / `opponent_scouting` / `run_query` descriptions and `describe_views` state the rule; still ten tools. Specs: `ask-prompt`, `ask-facts`, `ask-arrival`, `mcp-auth`, `mcp-route`. No migration, RPC or `database.ts` change.
+**follow-ups:**
+
+1. Existing bug: both plan prompts tell the planner to write `match_type is distinct from 'Doubles'`, which the SQL guard's parser refuses.
+2. Re-run `scripts/ask-examples-seed.ts` so the seeded record example in `ask_examples` carries the practice filter (writes to the DB — not run).
+3. The app's own fixed Ask queries (`compare.ts` baseline, `review.ts` all-matches side, `ask.ts` `ASK_ALL_MATCHES_SCOPE`) still include practice — a separate server-side change.
+4. The other worked examples (`ASK_PLAN_EXAMPLE_QUERY` / `_BASELINE` / `_REVIEW`, `ASK_TEAM_PLAN_EXAMPLE_PLAYER`) do not show the filter.
+5. Sample live planner output; retrieved thumbs-up examples predate the rule.
+6. `docs/ask-mcp-connector.md` could mention the rule.

@@ -142,7 +142,7 @@ ready).
 
 ## T10 · Teach Ask and the MCP tools that practice never counts
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** (guess) `src/lib/services/ask/prompts.ts` (rules block ~1471–1476), `schema.ts` (`match_type` meaning ~285), `facts.ts`, `arrival.ts`, `examples.ts`, `src/lib/services/mcp/server.ts` (`INSTRUCTIONS` ~175 and the `list_matches` / `describe_views` descriptions); `tests/ask-prompt.spec.ts`, `tests/ask-facts.spec.ts`, `tests/ask-arrival.spec.ts`, `tests/ask-views-parity.spec.ts`

@@ -559,7 +559,10 @@ export function renderAskSchemaBlock(
             (team || !column.teamOnly) &&
             (mcp || !column.mcpOnly),
         )
-        .map((column) => `  ${column.name} (${column.type}): ${column.meaning}`)
+        .map(
+          (column) =>
+            `  ${column.name} (${column.type}): ${column.meaning}${column.rule ? ` ${column.rule}` : ""}`,
+        )
         .join("\n")}`,
   ).join("\n\n");
 }
@@ -820,6 +823,7 @@ For these questions you write NO sql. The app runs its own fixed query over the 
 - ask.match_stats has two rows per match: side = 'me' (the viewer) and side = 'opponent'. Every sum over it MUST name side — filter side = 'me' for the player's own numbers, side = 'opponent' for the other player's, or sum with case when side = … — otherwise the two rows are added together and the query is refused.
 - ask.match_stats has no date and no opponent. For a period or an opponent, join ask.matches on match_id.
 - ask.matches.i_won is null when the result is unknown. Null is not a loss: count wins with i_won and losses with i_won = false.
+${ASK_PRACTICE_RULE}
 - ask.points.game_number restarts at 1 in every set. A game is identified by set_number and game_number together.
 - ask.points.is_pressure_point is never true. For pressure, use is_break_point, is_set_point and is_match_point.
 - How many sets a match went to is read from ask.matches.score_text, one entry per set: length(score_text) - length(replace(score_text, ',', '')) + 1. A three-set match is one where that is 3. Never count sets from ask.points: not every match has points recorded.
@@ -943,6 +947,23 @@ ${JSON.stringify(oneLine(headline))}`;
  */
 export const ASK_ERRORS_RULE =
   "- ERRORS UNTIL JUDGED. unforced_errors is only the unforced ones where somebody judged the split and every error everywhere else, so name its figure by what forced_errors shows for the matches that figure covers. forced_errors non-null for every match it covers: unforced errors is correct. Any forced_errors null in what it covers: errors, never unforced errors. No forced_errors beside it, so the split cannot be told: neither word is safe, so call it errors counted as unforced, which is true either way. A column named errors is always errors. This outranks the name a column is given anywhere else.";
+
+/**
+ * How a query leaves practice out: trimmed and without case, the test
+ * `isPracticeMatch()` (`src/lib/matches/match-type.ts`) makes in TypeScript.
+ * `coalesce` keeps a match with no type, which a bare `<>` would drop; `is
+ * distinct from` would say the same but the guard's parser refuses it.
+ */
+export const ASK_PRACTICE_FILTER =
+  "coalesce(lower(trim(match_type)), '') <> 'practice'";
+
+/**
+ * Practice never counts — the rule the Opponents pages, the records and the
+ * season readers hold (`isPracticeMatch()`), stated once for both plan
+ * prompts and for `describe_views`. A default, not a wall: the rows stay in
+ * the views, and a question about practice reads them.
+ */
+export const ASK_PRACTICE_RULE = `- PRACTICE NEVER COUNTS. A row of ask.matches whose match_type is practice is a practice session, not a match played for a result. match_type is free text, so compare it trimmed and without case: lower(trim(match_type)) = 'practice'. Leave those rows out of every record, win–loss count, head-to-head, streak or run of results, and out of every statistic over a season: scope_sql adds ${ASK_PRACTICE_FILTER}, also when the question names no other filter (coalesce keeps the matches with no match type, which <> alone would drop; never write is distinct from, which is refused). Keep practice rows only when the question asks about practice ("how did my practice sets go", "my record in practice": scope_sql filters lower(trim(match_type)) = 'practice'), when it sets practice beside matches (one row per group), or for a tagged match, whose id stays exactly as given. An example without the filter does not change this.`;
 
 /**
  * Keeps ASK_ERRORS_RULE's third case rare: the planner returns the count that
@@ -1269,7 +1290,8 @@ export const MAX_ASK_TEAM_BREAKDOWN_ROWS = 12;
  * first. Passes `checkAskSql`.
  */
 export const ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN: AskPlanQuery = {
-  scope_sql: "select match_id from ask.matches",
+  // A record: practice is left out of it (`ASK_PRACTICE_RULE`).
+  scope_sql: `select match_id from ask.matches where ${ASK_PRACTICE_FILTER}`,
   sql: `select m.player_name, sum(case when m.i_won then 1 else 0 end) as wins, sum(case when m.i_won = false then 1 else 0 end) as losses, count(*) as player_matches from ask.matches m where m.match_id in (select match_id from scope) and m.player_name is not null group by m.player_name order by wins desc nulls last limit ${MAX_ASK_TEAM_BREAKDOWN_ROWS}`,
   asks_for_advice: false,
   state: {
@@ -1470,6 +1492,7 @@ For these questions you write NO sql. The app runs its own fixed query over the 
 - ask.match_stats has two rows per match: side = 'me' (the program's player) and side = 'opponent'. Every sum over it MUST name side — filter side = 'me' for the program's own numbers, side = 'opponent' for the opponents', or sum with case when side = … — otherwise the two rows are added together and the query is refused.
 - ask.match_stats, ask.points, ask.shots and ask.point_plays have no date, no opponent and no player name. For a period, an opponent or a player, join ask.matches on match_id.
 - ask.matches.i_won is null when the result is unknown. Null is not a loss: count wins with i_won and losses with i_won = false.
+${ASK_PRACTICE_RULE}
 - Doubles matches are in ask.matches too: match_type is 'Doubles' and player_name names both partners. They have a score and a result but NO statistics (has_stats is false, and no rows in the other three views). A record may count them; a statistic cannot. For a singles-only record filter match_type is distinct from 'Doubles'; for a doubles question filter match_type ilike '%doubles%'.
 - A match with has_stats false has a result but no statistics. It did not have zero of anything: leave it out of a statistic rather than counting it as zero.
 - ask.points.game_number restarts at 1 in every set. A game is identified by set_number and game_number together.

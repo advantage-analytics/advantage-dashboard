@@ -1,3 +1,4 @@
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import type { AskRow } from "@/lib/services/ask/answer-render";
 import { askMeasure } from "@/lib/services/ask/measures";
 
@@ -1068,18 +1069,42 @@ export function comparisonFacts(rows: readonly AskRow[]): string[] {
   );
 }
 
-/** How many rows a true-or-false column is true and false in: a record cannot be misread as "won all". */
+/** Whether a result row is a practice session, by its own `match_type` column. */
+function isPracticeRow(row: AskRow): boolean {
+  const type = row.match_type;
+  return isPracticeMatch(typeof type === "string" ? type : null);
+}
+
+/**
+ * How many rows a true-or-false column is true and false in: a record cannot
+ * be misread as "won all".
+ *
+ * Practice never counts toward a record (`ASK_PRACTICE_RULE`). So where the
+ * rows say which of them are practice (`match_type`) and only some are, the
+ * count is over the others and says how many were left out. Rows that are
+ * all practice are a question about practice, and are counted as they are.
+ */
 function booleanStatements(rows: readonly AskRow[]): string[] {
   const first = rows[0];
   if (!first) return [];
+  const played = rows.filter((row) => !isPracticeRow(row));
+  const practice = rows.length - played.length;
+  const mixed = practice > 0 && played.length > 0;
+  const counted = mixed ? played : rows;
   return Object.keys(first)
     .filter((column) => rows.some((row) => typeof row[column] === "boolean"))
     .slice(0, 2)
     .map((column) => {
-      const yes = rows.filter((row) => row[column] === true).length;
-      const no = rows.filter((row) => row[column] === false).length;
-      const unknown = rows.length - yes - no;
-      return `${column} is true in ${yes} of the ${rows.length} rows and false in ${no}${unknown > 0 ? `; ${unknown} have no value` : ""}.`;
+      const yes = counted.filter((row) => row[column] === true).length;
+      const no = counted.filter((row) => row[column] === false).length;
+      const unknown = counted.length - yes - no;
+      const of = mixed
+        ? `${counted.length} rows that are not practice`
+        : `${counted.length} rows`;
+      const left = mixed
+        ? ` The other ${practice} ${practice === 1 ? "row is" : "rows are"} practice and ${practice === 1 ? "is" : "are"} left out: practice never counts toward a record.`
+        : "";
+      return `${column} is true in ${yes} of the ${of} and false in ${no}${unknown > 0 ? `; ${unknown} have no value` : ""}.${left}`;
     });
 }
 

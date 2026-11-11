@@ -5,6 +5,7 @@ import {
   SCOPE_NAME,
 } from "@/lib/services/ask/sql-guard";
 import {
+  ASK_PRACTICE_RULE,
   renderAskPercentageBlock,
   renderAskSchemaBlock,
 } from "@/lib/services/ask/prompts";
@@ -65,6 +66,7 @@ ${renderAskPercentageBlock()}
 - Only these relations, with the ask. prefix: ${views} — plus ${SCOPE_NAME} and the query's own CTEs. Columns not listed above do not exist for you.
 - run_query takes two strings. scope_sql is one SELECT that returns the single column match_id — the matches the question is about; its default is "select match_id from ask.matches". sql must read ${SCOPE_NAME}, which holds scope_sql's rows: join ${SCOPE_NAME} on match_id, or filter with match_id in (select match_id from ${SCOPE_NAME}).
 - ${ASK_SIDE_REQUIRED_REASON}
+${ASK_PRACTICE_RULE}
 - Functions allowed: ${functions}. Nothing schema-qualified.
 - At most ${MCP_QUERY_ROW_CAP} rows come back. Aggregate; do not return one row per point or per shot.
 - The data is read-only and the viewer is fixed by the server: a query cannot name another player, and every row is one the signed-in user may see in the app.`;
