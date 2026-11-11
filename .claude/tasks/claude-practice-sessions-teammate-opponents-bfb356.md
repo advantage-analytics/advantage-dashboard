@@ -114,7 +114,7 @@ ready).
 
 ## T8 · Leave practice out of Team Home and roster records
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess) `src/lib/data/team-home-server.ts` (season read ~1654–1690, `teamSeasonKpis` ~1339, `teamMatchRow` ~1207, row type ~572), `team-court-record.ts` (`courtRecordFrom` ~139), `team-roster-server.ts` (match read ~399, wins tally ~532), `src/app/api/team-insight/route.ts`; `tests/team-court-record.spec.ts`, `tests/team-home-week.spec.ts`

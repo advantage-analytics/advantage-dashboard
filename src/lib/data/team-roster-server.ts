@@ -14,6 +14,7 @@ import { ROSTER_DRAWER_MEASURES } from "@/lib/data/player-measures";
 import { canonicalRosterIds } from "@/lib/data/roster-ids";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { playerFormBar, type FormBar } from "@/lib/data/form-bar";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
@@ -195,7 +196,9 @@ export interface RosterMember {
   /**
    * Decided matches, each way. The Record column — "4–1" — is what a coach
    * ranks the list by (Platform Audit `Tb4`), and it was already counted for
-   * the profile page; the roster just stopped throwing it away.
+   * the profile page; the roster just stopped throwing it away. Practice
+   * sessions are in neither, nor in `form`, `recent` or `measures`; they do
+   * count in `matchesPlayed` and can be `lastMatch` (`rosterRecordFrom`).
    */
   wins: number;
   losses: number;
@@ -273,7 +276,7 @@ interface DbRosterRow {
   claimed_at: string | null;
 }
 
-interface DbMatchRow {
+export interface DbMatchRow {
   id: string;
   player1_id: string | null;
   player2_id: string | null;
@@ -282,6 +285,8 @@ interface DbMatchRow {
   score: MatchScore | null;
   date: string | null;
   tournament_name: string | null;
+  /** Only to recognise a practice session (`isPracticeMatch`). */
+  match_type: string | null;
 }
 
 /**
@@ -315,10 +320,13 @@ function isToday(iso: string | null, now: Date, timeZone: string): boolean {
 }
 
 /** One match as it bears on one of the two people who played it. */
-interface MemberResult {
+export interface MemberResult {
   match: DbMatchRow;
   isPlayer1: boolean;
+  /** Always null for a practice session: it has no result to mark. */
   won: boolean | null;
+  /** A practice session — listed, never counted. */
+  practice: boolean;
   /** This side's drawer measures, keyed like `RosterRecentMatch.values`. */
   values: Record<string, number | null>;
 }
@@ -338,6 +346,104 @@ const DRAWER_WINDOW = 6;
 /** No stats for a side: every drawer measure null, in one object. */
 function emptyValues(): Record<string, number | null> {
   return Object.fromEntries(ROSTER_DRAWER_MEASURES.map((m) => [m.key, null]));
+}
+
+/**
+ * Every program match, filed under each roster member who played it.
+ *
+ * `matches` newest first, and each member's list keeps that order. A practice
+ * session is filed like any other match — it is still a match the member
+ * played, and `matchesPlayed` and the "Last match" cell list it — but with
+ * `won: null` and `practice: true`, so `rosterRecordFrom` can leave it out of
+ * everything that counts. A teammate practice carries roster ids in BOTH
+ * seats (T5); each player gets it once, and a match whose two seats resolve
+ * to the same member is filed once, not twice.
+ *
+ * Exported for `tests/practice-excluded-from-team.spec.ts`. Pure: no I/O.
+ */
+export function memberResultsByPlayer(
+  matches: readonly DbMatchRow[],
+  canonical: ReadonlyMap<string, string>,
+  valuesByPlayer: ReadonlyMap<string, Record<string, number | null>>,
+): Map<string, MemberResult[]> {
+  const resultsByMember = new Map<string, MemberResult[]>();
+  for (const match of matches) {
+    const practice = isPracticeMatch(match.match_type);
+    const filed = new Set<string>();
+    for (const [rawId, isPlayer1] of [
+      [match.player1_id, true],
+      [match.player2_id, false],
+    ] as const) {
+      if (!rawId) continue;
+      const userId = canonical.get(rawId) ?? rawId;
+      if (filed.has(userId)) continue;
+      filed.add(userId);
+      const list = resultsByMember.get(userId) ?? [];
+      list.push({
+        match,
+        isPlayer1,
+        won: practice ? null : matchOutcome(match.score, isPlayer1),
+        practice,
+        values:
+          valuesByPlayer.get(statKey(match.id, isPlayer1)) ?? emptyValues(),
+      });
+      resultsByMember.set(userId, list);
+    }
+  }
+  return resultsByMember;
+}
+
+/**
+ * What one member's matches add up to on the roster: the Record column, the
+ * form strip, and the drawer's windows (which also feed Team Home's movers).
+ *
+ * **Practice never counts** — not as a win or a loss, not as a form slot, not
+ * in the measures. Filtering here, once, keeps the four from disagreeing about
+ * which matches they read.
+ *
+ * Exported for `tests/practice-excluded-from-team.spec.ts`. Pure: no I/O.
+ */
+export function rosterRecordFrom(results: readonly MemberResult[]): {
+  wins: number;
+  losses: number;
+  form: FormBar[];
+  recentResults: MemberResult[];
+  earlierResults: MemberResult[];
+} {
+  const counted = results.filter((r) => !r.practice);
+  let wins = 0;
+  let losses = 0;
+  for (const result of counted) {
+    if (result.won === true) wins++;
+    else if (result.won === false) losses++;
+  }
+  return {
+    wins,
+    losses,
+    // Reversed so the strip reads left to right in the order the season was
+    // played, which is how a coach reads a run of results out loud. Windowed
+    // over every counted match, not the decided ones — an unscored match still
+    // takes its slot in the strip (as `"pending"`), rather than vanishing and
+    // letting an older, already-settled match slide in to replace it.
+    form: counted
+      .slice(0, FORM_WINDOW)
+      .reverse()
+      .map((r) =>
+        playerFormBar({
+          id: r.match.id,
+          date: r.match.date,
+          score: r.match.score,
+          isPlayer1: r.isPlayer1,
+          won: r.won,
+          event: r.match.tournament_name,
+          opponent: r.isPlayer1 ? r.match.player2_name : r.match.player1_name,
+        }),
+      ),
+    // Newest first, so the first slice is what the drawer plots and the rest
+    // is the season it is measured against.
+    recentResults: counted.slice(0, DRAWER_WINDOW),
+    earlierResults: counted.slice(DRAWER_WINDOW),
+  };
 }
 
 /**
@@ -398,7 +504,7 @@ export const getRosterData = cache(async function getRosterData(
       const { data, error } = await supabase
         .from("matches")
         .select(
-          "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name",
+          "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, match_type",
         )
         .eq("program_id", programId)
         // `nullsFirst` is not a detail here: Postgres puts NULLs first on a
@@ -480,25 +586,11 @@ export const getRosterData = cache(async function getRosterData(
   // pre-claim matches counted on this page and went unattributed on that one.
   const canonical = canonicalRosterIds(rows);
 
-  const resultsByMember = new Map<string, MemberResult[]>();
-  for (const match of matches) {
-    for (const [rawId, isPlayer1] of [
-      [match.player1_id, true],
-      [match.player2_id, false],
-    ] as const) {
-      if (!rawId) continue;
-      const userId = canonical.get(rawId) ?? rawId;
-      const list = resultsByMember.get(userId) ?? [];
-      list.push({
-        match,
-        isPlayer1,
-        won: matchOutcome(match.score, isPlayer1),
-        values:
-          valuesByPlayer.get(statKey(match.id, isPlayer1)) ?? emptyValues(),
-      });
-      resultsByMember.set(userId, list);
-    }
-  }
+  const resultsByMember = memberResultsByPlayer(
+    matches,
+    canonical,
+    valuesByPlayer,
+  );
 
   // The newest match a member has may still be analyzing — a video the coach
   // uploaded that has not come back. One batched read of `processing_jobs`,
@@ -528,18 +620,9 @@ export const getRosterData = cache(async function getRosterData(
   const members: RosterMember[] = rows.map((row) => {
     const results = resultsByMember.get(row.player_id) ?? [];
 
-    const decided = results.filter((r) => r.won !== null);
-    let wins = 0;
-    let losses = 0;
-    for (const result of decided) {
-      if (result.won) wins++;
-      else losses++;
-    }
-
-    // `results` is newest first, so the first slice is what the drawer plots
-    // and the rest is the season it is measured against.
-    const recentResults = results.slice(0, DRAWER_WINDOW);
-    const earlierResults = results.slice(DRAWER_WINDOW);
+    // Practice is in `results` (it is listed) and out of all of these.
+    const { wins, losses, form, recentResults, earlierResults } =
+      rosterRecordFrom(results);
     const measures: RosterMeasure[] = ROSTER_DRAWER_MEASURES.map((measure) => {
       // Whole points: this sits beside a set score, and "63.4%" claims a
       // precision a six-match window does not have.
@@ -588,25 +671,7 @@ export const getRosterData = cache(async function getRosterData(
       matchesPlayed: results.length,
       wins,
       losses,
-      // Reversed so the strip reads left to right in the order the season was
-      // played, which is how a coach reads a run of results out loud. Windowed
-      // over `results`, not `decided` — an unscored match still takes its slot
-      // in the strip (as `"pending"`), rather than vanishing and letting an
-      // older, already-settled match slide in to replace it.
-      form: results
-        .slice(0, FORM_WINDOW)
-        .reverse()
-        .map((r) =>
-          playerFormBar({
-            id: r.match.id,
-            date: r.match.date,
-            score: r.match.score,
-            isPlayer1: r.isPlayer1,
-            won: r.won,
-            event: r.match.tournament_name,
-            opponent: r.isPlayer1 ? r.match.player2_name : r.match.player1_name,
-          }),
-        ),
+      form,
       lastMatch: latest
         ? {
             opponent: shortName(

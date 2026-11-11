@@ -81,3 +81,14 @@ is the runner's. Newest entries at the bottom.
 
 1. `headToHeadRows` callers in `src/lib/schedule/actions.ts` (~250) and `src/lib/wizard/actions.ts` (~593) don't select `match_type`, so their prior-meeting counts still include practice; add the column, then make the field required.
 2. The teammate test reads player-role roster rows only; staff ids are not treated as teammates.
+
+## T8 · Leave practice out of Team Home and roster records — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4742 passed, shard 2/2 5141 passed. Completion VERDICT: pass.
+**changed:** `team-home-server.ts`: the season read selects `match_type`; `teamSeasonKpis` skips practice (even one relabelled onto a dual line); `teamMatchRow` gives practice `won: null` and `matchContext` says "Practice". `team-roster-server.ts`: the match read selects `match_type`; new pure `memberResultsByPlayer` (files a practice per seated member, once even when both seats resolve to one member) and `rosterRecordFrom` (wins, losses, form, drawer windows from competitive rows), so the drawer measures and `topMovers` (read by `/api/team-insight`) exclude practice. `courtRecordFrom` and the dual record unchanged — the schedule reader attaches only matches on a line, pinned in the spec. New `tests/practice-excluded-from-team.spec.ts` (10 tests).
+**follow-ups:**
+
+1. Roster `matchesPlayed` and "Last match" still include practice (it is still a match played; `matchesPlayed` also drives the invite dialog's "Their N matches…"). "Last match" skipping practice is a one-line change in `getRosterData` if wanted.
+2. `teamMatchRow` / `matchContext` have no caller in `src` since the Team Home redesign (cad6d131b); delete or wire back.
+3. Team Home "matches analyzed", "N new results" and `teamFirstReport` still count practice reports (reports, not records).
+4. If Edit match can relabel a dual line's match as Practice, decide whether the dual score and court record drop it (needs `match_type` on `EntryMatch`, kept in agreement).
