@@ -195,7 +195,7 @@ ready).
 
 ## T14 · Match report: Practice rail, Teammate pill, notice
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess, run `trace-route` on `/dashboard/matches/[matchId]` first) `src/components/dashboard/matches/match-detail/rail-scoreboard.tsx`, `report-scoreboard.tsx` (~138), `report-title-row.tsx`, `report-facts.tsx`, `report-insight-card.tsx`, `match-report.tsx`, `src/lib/data/match-detail-server.ts` (~204, select ~494); a harness spec in the style of the existing match-detail specs

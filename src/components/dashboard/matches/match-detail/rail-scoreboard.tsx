@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { TIEBREAK_STYLE } from "@/components/dashboard/score-line";
+import { StatePill } from "@/components/ui/state-pill";
 
 /**
  * The rail scoreboard (H1 · B2, frames SB1–SB3): one widget, three states.
@@ -38,12 +39,17 @@ export interface RailScoreboardPlayer {
   points?: string | null;
   serving?: boolean;
   won?: boolean;
+  /**
+   * The opponent is on the match's own program roster: a grey outlined
+   * "Teammate" pill right after the name, before the winner check.
+   */
+  teammate?: boolean;
 }
 
 export interface RailScoreboardProps {
   players: [RailScoreboardPlayer, RailScoreboardPlayer];
   status: RailScoreboardStatus;
-  /** The status word in sentence case ("Playing", "Paused", "Final", "Retired"). */
+  /** The status word in sentence case ("Playing", "Paused", "Final", "Retired", "Practice"). */
   label: string;
   /** The film head, e.g. "41:12". Live only. */
   headTime?: string | null;
@@ -138,6 +144,12 @@ function ScoreRow({
       >
         {player.name}
       </span>
+      {/* The Matches list's grammar (T12): a fact about the row, grey. */}
+      {player.teammate ? (
+        <StatePill outline className="shrink-0">
+          Teammate
+        </StatePill>
+      ) : null}
       {status === "final" && player.won ? (
         <Check
           aria-label="Winner"

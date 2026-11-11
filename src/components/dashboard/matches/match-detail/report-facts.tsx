@@ -81,7 +81,9 @@ export function MatchReportFacts() {
 
       {/* The two asset icons carry their own stroke colour; an <img> cannot
           take `currentColor`, so they draw as `match-rail.tsx` drew them. */}
-      {match.tournamentName ? (
+      {/* A practice session's event item reads "Practice" (canvas board 5),
+          in the event's own slot and icon, in place of any event name. */}
+      {match.isPractice || match.tournamentName ? (
         <Fact
           truncate
           icon={
@@ -95,7 +97,7 @@ export function MatchReportFacts() {
             />
           }
         >
-          {match.tournamentName}
+          {match.isPractice ? "Practice" : match.tournamentName}
         </Fact>
       ) : null}
 

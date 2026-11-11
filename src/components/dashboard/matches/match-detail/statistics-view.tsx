@@ -19,6 +19,8 @@ import { StatisticsEmpty } from "@/components/dashboard/matches/match-detail/sta
 import { StatisticsLobKeysProvider } from "@/components/dashboard/matches/match-detail/statistics-lob-keys";
 import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { surnameLabels } from "@/lib/data/match-utils";
 import { cn } from "@/lib/utils";
 
 /**
@@ -82,10 +84,14 @@ import { cn } from "@/lib/utils";
  * drops its "checked against the final score" clause when both are true —
  * the two notices would otherwise say opposite things about the same points.
  * Jobs derived before T13 carry no `fold` key and never set this.
+ *
+ * A practice session (`match.isPractice`, canvas board 5) gets one more grey
+ * strip, directly above the insight card: it says the set counts toward
+ * nobody's record (`PracticeNotice`).
  */
 export function StatisticsView() {
   const { meta } = useMatchReport();
-  const { points } = useMatchData();
+  const { points, match } = useMatchData();
   const hasPoints = points.length > 0;
 
   if (meta.statsUnavailable) {
@@ -116,6 +122,10 @@ export function StatisticsView() {
         <div className="shrink-0">
           <UnpublishedStatsNotice foldUnreconciled={meta.foldUnreconciled} />
         </div>
+      )}
+
+      {match.isPractice && (
+        <PracticeNotice teammate={match.opponentIsTeammate === true} />
       )}
 
       {hasPoints ? <MatchReport.Insight /> : <StatisticsEmpty />}
@@ -159,6 +169,32 @@ export function StatisticsView() {
         </StatisticsLobKeysProvider>
       )}
     </>
+  );
+}
+
+/**
+ * The practice notice (canvas board 5): the wizard's grey note strip, an Info
+ * glyph and a bold "Practice." lead. Names come from `useMatchSides()` — the
+ * report's one orientation, viewer first — as the last names the report
+ * prints (`surnameLabels`). Against a teammate both players are named and the
+ * second sentence says both can read it; against anyone else the player is
+ * named alone, since the opponent has no record here to keep it out of.
+ */
+function PracticeNotice({ teammate }: { teammate: boolean }) {
+  const sides = useMatchSides();
+  const [you, opp] = surnameLabels(sides.you.name, sides.opp.name);
+  return (
+    <div className={cn(noteStripCls, "shrink-0")} data-testid="practice-notice">
+      <Info aria-hidden className={`${noteIconCls} text-[var(--ink-400)]`} />
+      <span>
+        <strong className="font-semibold text-[var(--ink-900)]">
+          Practice.
+        </strong>{" "}
+        {teammate
+          ? `Not in ${you}'s or ${opp}'s record or season statistics. Both players see this report; their profiles list it under Practice.`
+          : `Not in ${you}'s record or season statistics.`}
+      </span>
+    </div>
   );
 }
 

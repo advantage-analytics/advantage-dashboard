@@ -142,3 +142,15 @@ is the runner's. Newest entries at the bottom.
 
 1. `MatchRow` has no per-match type, so a group's practice flag comes from its first match; add a `practice` flag to `MatchRow` in `home-recent-data.ts` to make mixed groups exact.
 2. `MatchMetadataRow` still compares `matchType === "Practice"` literally; switch it to `isPracticeMatch`.
+
+## T14 · Match report: Practice rail, Teammate pill, notice — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4764 passed, shard 2/2 5163 passed. Completion VERDICT: pass. Widget-states: rendering plus one read inside the existing `Promise.all`; no Suspense region or empty-state path changed.
+**changed:** `match-detail-server.ts` selects `opponent_player_id`, sets `match.isPractice` (via `isPracticeMatch`) and `match.opponentIsTeammate` (new pure `opponentIsTeammate`, oriented by the existing `youSeat` result; one `program_players` read only when `opponent_player_id` is set and not a seat id); `types.ts` adds the two optional `Match` fields (on `match`, not top-level, because the sample-match JSON is typed against the loader's shape); `rail-scoreboard.tsx` draws an outlined grey `StatePill` "Teammate" after the opponent's name; `report-scoreboard.tsx` eyebrow "Practice" and caption "Practice set · {n} points tagged"; `report-facts.tsx` event item reads "Practice"; `statistics-view.tsx` `PracticeNotice` (grey note strip) directly above the insight card, two-name copy for a teammate and one name otherwise. `page.tsx` untouched. New `tests/match-report-practice.spec.ts` (14 tests).
+**follow-ups:**
+
+1. The public share page (`match-share-server.ts`) gets `isPractice` but never sets `opponentIsTeammate` — shared practice links show no Teammate pill and the one-name notice.
+2. `resolveRosterSeatIds` checks `program_players.id` only; `canonicalRosterIds` would also catch a teammate seated by an older claimed user id.
+3. The untagged rail state on a practice match still reads "Not scored yet" with a "Practice · hard" caption (not covered by the canvas).
+4. On a practice match the facts line shows "Practice" even when an event was filed; the Matches list (T12) keeps the event name — make them agree.
+5. Run `pipeline-guardrails-reviewer` at /pr-check — this touches seat-dependent report rendering.

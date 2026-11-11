@@ -19,6 +19,7 @@ import { verificationFor } from "@/lib/data/match-verification";
 import { errorSplitJudged } from "@/lib/data/error-split";
 import { seatCrestUrls, type MatchCrestEmbeds } from "@/lib/data/match-crests";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 
 export interface DbMatch extends MatchCrestEmbeds {
   id: string;
@@ -41,6 +42,12 @@ export interface DbMatch extends MatchCrestEmbeds {
   } | null;
   result: string | null;
   match_type: string | null;
+  /**
+   * The opponent's `program_players` id, when the upload named one — a
+   * rival's on their own program, or a teammate's on this one
+   * (`opponentIsTeammate`). Never a seat: see `program-side.ts`.
+   */
+  opponent_player_id?: string | null;
   court_type: string | null;
   event_entry_id: string | null;
   verified: boolean | null;
@@ -149,6 +156,63 @@ export async function resolveRosterSeatIds(
   return (data ?? []).map((player) => player.id as string);
 }
 
+/**
+ * Whether the opponent the report draws — the seat that is NOT "you" — is a
+ * teammate: a player on the match's own program roster.
+ *
+ * Read off the roster, never off `opponent_player_id` alone: that column holds
+ * a rival's `program_players` id too (their own program's), and it is null for
+ * a teammate the wizard seated without one. So the answer is the opponent's
+ * seat id on this roster, or `opponent_player_id` on this roster
+ * (`opponentPlayerOnRoster`, asked by `resolveOpponentPlayerOnRoster` when the
+ * id is not already a seat). A personal match has no roster and no teammate.
+ *
+ * `isUserPlayer1` is `resolveYouSide`'s answer — the report's one orientation
+ * (`youSeat`). On a teammate practice opened by the teammate in seat two, the
+ * opponent is seat one, the program's own subject, and still a teammate.
+ */
+export function opponentIsTeammate(
+  row: Pick<
+    DbMatch,
+    "program_id" | "player1_id" | "player2_id" | "opponent_player_id"
+  >,
+  isUserPlayer1: boolean,
+  rosterIds: readonly string[],
+  opponentPlayerOnRoster = false,
+): boolean {
+  if (!row.program_id) return false;
+  const opponentSeatId = isUserPlayer1 ? row.player2_id : row.player1_id;
+  if (opponentSeatId && rosterIds.includes(opponentSeatId)) return true;
+  if (row.opponent_player_id && rosterIds.includes(row.opponent_player_id)) {
+    return true;
+  }
+  return opponentPlayerOnRoster;
+}
+
+/**
+ * Whether `opponent_player_id` names a player on the match's own program,
+ * for the one case the seat roster read cannot answer: an id that is not
+ * also a seat. Resolves to false without a round trip otherwise.
+ */
+async function resolveOpponentPlayerOnRoster(
+  supabase: SupabaseClient,
+  row: Pick<
+    DbMatch,
+    "program_id" | "player1_id" | "player2_id" | "opponent_player_id"
+  >,
+): Promise<boolean> {
+  const id = row.opponent_player_id;
+  if (!row.program_id || !id) return false;
+  if (id === row.player1_id || id === row.player2_id) return false;
+  const { data } = await supabase
+    .from("program_players")
+    .select("id")
+    .eq("program_id", row.program_id)
+    .eq("id", id)
+    .maybeSingle();
+  return data != null;
+}
+
 export function transformDbMatchToMatch(
   row: DbMatch,
   /**
@@ -202,6 +266,7 @@ export function transformDbMatchToMatch(
     tournamentName: row.tournament_name,
     date: formatMatchDayLong(row.date),
     matchType: row.match_type ?? "Match",
+    isPractice: isPracticeMatch(row.match_type),
     courtType: row.court_type ?? undefined,
     verification,
     sourceProvider: row.source_provider ?? undefined,
@@ -491,7 +556,7 @@ async function resolveFoldUnreconciled(dbRow: DbMatch): Promise<boolean> {
  * points at `programs` twice, and PostgREST refuses an ambiguous one.
  */
 export const MATCH_DETAIL_COLUMNS =
-  "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, verified_at, errors_judged_at, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights, program:programs!matches_program_id_fkey(crest_path), opponent_program:programs!matches_opponent_program_id_fkey(crest_path)";
+  "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, opponent_player_id, court_type, event_entry_id, verified, verified_at, errors_judged_at, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights, program:programs!matches_program_id_fkey(crest_path), opponent_program:programs!matches_opponent_program_id_fkey(crest_path)";
 
 /**
  * How `loadMatchDetail` orients and scopes one read. The cached export below
@@ -570,6 +635,7 @@ export async function loadMatchDetail(
     profileResult,
     windowSeconds,
     foldUnreconciled,
+    opponentPlayerOnRoster,
   ] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId, supabase),
     getMatchPointsFromSupabase(matchId, supabase),
@@ -603,6 +669,9 @@ export async function loadMatchDetail(
     resolveAnalysedWindowSeconds(dbRow),
     // Same wave, same reason as `windowSeconds` above.
     resolveFoldUnreconciled(dbRow),
+    // Same wave: only a rival or an unseated teammate named by
+    // `opponent_player_id` spends the read (`opponentIsTeammate`).
+    resolveOpponentPlayerOnRoster(supabase, dbRow),
   ]);
 
   const profiles = new Map<string, PlayerProfile>();
@@ -616,12 +685,21 @@ export async function loadMatchDetail(
   // `getMyPlayerIds` is `cache()`d and already resolved inside the batch above,
   // so this is a map lookup rather than a second round trip.
   const myPlayerIds = await options.myPlayerIds();
+  const rosterIds = await rosterIdsPromise;
   const match = transformDbMatchToMatch(
     dbRow,
     myPlayerIds,
     profiles,
-    await rosterIdsPromise,
+    rosterIds,
     options.youSeat,
+  );
+  // Oriented by the same `isUserPlayer1` the transform just decided — the
+  // report's one orientation path — so the pill lands on the row it draws.
+  match.opponentIsTeammate = opponentIsTeammate(
+    dbRow,
+    match.isUserPlayer1,
+    rosterIds,
+    opponentPlayerOnRoster,
   );
   setSeatCrests(match, dbRow, supabase);
   match.eventId = eventId;
@@ -649,6 +727,10 @@ export async function loadMatchDetail(
     // (spec 2026-09-15 match report › Decisions 4).
     insights: dbRow.insights ?? null,
     kpiHistory,
+    // `match.isPractice` and `match.opponentIsTeammate` carry the practice
+    // facts: on `match`, not beside it, because that is what reaches the
+    // report's client components through `MatchDataProvider` — and the
+    // committed sample fixture (`src/lib/sample-match`) keeps this shape.
     foldUnreconciled,
   };
 }
