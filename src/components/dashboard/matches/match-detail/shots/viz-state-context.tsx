@@ -121,8 +121,17 @@ export function VizStateProvider({
   children,
   errorSplitJudged: errorSplitJudgedProp,
   season = false,
+  writesInPlace,
 }: {
   children: ReactNode;
+  /**
+   * The season only: a change the host already holds the answer for, so the
+   * URL is written in place instead of asking the server again — the
+   * profile wall's You | Opponent once both sides' cards are in the browser
+   * (`profile-visualizations-view.tsx`). Every other season change still
+   * takes the round trip.
+   */
+  writesInPlace?: (prev: VizState, next: VizState) => boolean;
   /**
    * A player's season (`profile-visualizations-view.tsx`): the URL's
    * `?vopp=` / `?vm=` are read into `VizState.season`, as its Server
@@ -200,16 +209,30 @@ export function VizStateProvider({
 
   const setState = useCallback(
     (next: VizState | ((prev: VizState) => VizState)): void => {
-      const resolved = applyVizUpdate(intendedRef.current, next);
+      const prev = intendedRef.current;
+      const resolved = applyVizUpdate(prev, next);
       intendedRef.current = resolved;
 
       const q = vizStateQuery(searchParams, resolved);
       ownQueriesRef.current = [...ownQueriesRef.current, q];
 
       setRenderedState(resolved);
-      router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+      const href = q ? `${pathname}?${q}` : pathname;
+      if (season && !writesInPlace?.(prev, resolved)) {
+        // The season's courts are folded on the server from the URL, so the
+        // profile needs the round trip.
+        router.replace(href, { scroll: false });
+      } else {
+        // The match report computes every court in the browser from
+        // `useMatchData()`; the page's Server Component reads no viz key.
+        // `router.replace` would re-run the whole report on the server (the
+        // match, its points and shots, video signing, reconcile) on every
+        // click for nothing, so the URL is written in place. Next keeps
+        // `useSearchParams` in step with the native history API.
+        window.history.replaceState(null, "", href);
+      }
     },
-    [pathname, router, searchParams],
+    [pathname, router, searchParams, season, writesInPlace],
   );
 
   const value = useMemo(

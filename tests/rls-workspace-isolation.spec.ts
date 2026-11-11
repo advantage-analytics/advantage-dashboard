@@ -18,9 +18,9 @@ import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
  * with a match filed under `program_id = A`. Nothing about B — not its staff,
  * not a rostered player on another program, not the shared athlete
  * in the middle — may pull that A-filed match into B's view. The policies that
- * enforce it are the `matches` SELECT policy and the `visible_match_ids()` /
- * `visible_point_ids()` helpers that `match_stats`, `points` and `shots`
- * delegate to; `match_files` is stricter still (uploader-only). The write side
+ * enforce it are the `matches` SELECT policy and the `visible_match_ids()`
+ * helper that `match_stats`, `points` and `shots` delegate to (`shots` on its
+ * trigger-kept `match_id`, `20261110191701_shots_match_id_rls.sql`); `match_files` is stricter still (uploader-only). The write side
  * is the `matches` INSERT/UPDATE policies plus the
  * `matches_block_client_regraft` trigger, whose 42501 refusal is asserted on
  * here as the *expected* outcome, not a crash.

@@ -12,7 +12,7 @@ import { CutMenu } from "./cut-menu";
 import { defaultCutsFor } from "./default-cuts";
 import { isPlayable, pointsBehind } from "./lightbox-points";
 import { LightboxPointList } from "./lightbox-point-list";
-import { SaveViewDialog } from "./save-view-dialog";
+import { SaveAsViewButton } from "./save-as-view-button";
 import { shotsWriteAccess } from "./shots-write-access";
 import { serveRowDotIds, statPickDotIds, type StatPick } from "./stat-cut";
 import { useVizState } from "./use-viz-state";
@@ -104,9 +104,7 @@ export function VizLightbox({
   } = useVizView();
   const { receipt, canEdit, applyBands } = useVizBands();
   const canSaveViews = allowSaveView && shotsWriteAccess(meta).canSaveViews;
-  const saveAnchorRef = useRef<HTMLButtonElement>(null);
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const errorSplitJudged = useErrorSplitJudged();
   // The court's filters as the URL would read them: a store pick (a saved
   // view from the menu or the band) keeps a view's raw Error type, while a
@@ -523,31 +521,17 @@ export function VizLightbox({
         const playable = matched.filter(isPlayable).slice(0, MAX_POINT_SET);
         return {
           start: canSaveViews && (
-            <>
-              <button
-                ref={saveAnchorRef}
-                type="button"
-                onClick={() => setSaveDialogOpen(true)}
-                className="cursor-pointer text-[12px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
-              >
-                Save as view
-              </button>
-              <SaveViewDialog
-                open={saveDialogOpen}
-                onOpenChange={setSaveDialogOpen}
-                anchorRef={saveAnchorRef}
-                cut={cut}
-                chart={state.chart}
-                filters={state.filters}
-                savedViews={meta.savedViews}
-                workspaceKind={meta.workspaceKind}
-                workspaceName={meta.workspaceName}
-                side="top"
-                onSaved={(view) =>
-                  setState((prev) => ({ ...prev, viewId: view.id }))
-                }
-              />
-            </>
+            <SaveAsViewButton
+              cut={cut}
+              chart={state.chart}
+              filters={state.filters}
+              savedViews={meta.savedViews}
+              workspaceKind={meta.workspaceKind}
+              workspaceName={meta.workspaceName}
+              onSaved={(view) =>
+                setState((prev) => ({ ...prev, viewId: view.id }))
+              }
+            />
           ),
           end: canWatch && onWatchPoints && (
             <button

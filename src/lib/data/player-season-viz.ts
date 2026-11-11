@@ -44,9 +44,13 @@ import {
   normalizeSeasonFilters,
   parseVizState,
   sameFilterValue,
+  seasonMatchKept,
+  seasonSurfaceOf,
   vizStateQuery,
   type OpponentHandFilter,
   type SeasonFilters,
+  type SeasonResultFilter,
+  type SeasonSurface,
   type VizState,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { compareMatchDays } from "@/lib/data/match-day";
@@ -117,6 +121,13 @@ export interface SeasonVizMatch {
    *  null / omitted when the match does not say — "Opponent plays" reads it
    *  as Unknown. */
   opponentHand?: "right" | "left" | null;
+  /** Won from the player's seat, null / omitted where the score cannot say
+   *  — the Matches sheet's Result reads it, and its row's mark. */
+  won?: boolean | null;
+  /** The score from the player's seat, for the Matches sheet's row. */
+  score?: string | null;
+  /** `matches.court_type`, raw — "Surface" reads it (`seasonSurfaceOf`). */
+  courtType?: string | null;
 }
 
 /** The workspace's bands and the viewer's unit — every Depth row and band
@@ -159,7 +170,59 @@ interface SeasonPart {
   stats: VizStats;
 }
 
+/**
+ * Each match's computed parts, kept on its points array. A season's points
+ * come from the process's points cache (`season-points-cache.ts`) as the
+ * SAME array on every request until that match's version changes, so a
+ * profile click that recomputes the wall's cards, the saved views' and the
+ * opened card's finds every match it has already folded under the same cut,
+ * filters, chart and bands here instead of running `computeViz` again. A
+ * new version is a new array, so a changed match misses on its own, and the
+ * entry goes when the cache lets the array go (`WeakMap`). Parts are only
+ * read after this: the merges build fresh objects.
+ */
+const seasonPartMemo = new WeakMap<
+  readonly MatchPoint[],
+  Map<string, SeasonPart>
+>();
+/** Parts kept per match — the wall's cards, a handful of saved views and an
+ *  opened card's recent filters. Oldest first out. */
+const SEASON_PART_MEMO_MAX = 48;
+
 function seasonPart(
+  m: SeasonVizMatch,
+  cut: Cut,
+  filters: VizFilters,
+  chart: Chart,
+  bands: SeasonVizBands,
+): SeasonPart {
+  const key = JSON.stringify([
+    m.isPlayer1,
+    m.isDerived,
+    m.errorSplitJudged,
+    cut,
+    chart,
+    filters,
+    bands.bands,
+    bands.unit,
+  ]);
+  let memo = seasonPartMemo.get(m.points);
+  const hit = memo?.get(key);
+  if (hit !== undefined) return hit;
+  const part = computeSeasonPart(m, cut, filters, chart, bands);
+  if (memo === undefined) {
+    memo = new Map();
+    seasonPartMemo.set(m.points, memo);
+  }
+  if (memo.size >= SEASON_PART_MEMO_MAX) {
+    const oldest = memo.keys().next().value;
+    if (oldest !== undefined) memo.delete(oldest);
+  }
+  memo.set(key, part);
+  return part;
+}
+
+function computeSeasonPart(
   m: SeasonVizMatch,
   cut: Cut,
   filters: VizFilters,
@@ -345,7 +408,7 @@ export function mergeVizStats(
 
 /* ── The wall ───────────────────────────────────────────────────────────── */
 
-/** One of the wall's cards over the season: a default card (one of four for
+/** One of the wall's cards over the season: a default card (one of five for
  *  one subject) or one of the workspace's saved views. */
 export interface SeasonCard {
   /** Stable key: `"you:serve"`, `"opponent:errors"`, `"view:<id>"`. */
@@ -377,7 +440,8 @@ function wallDot({
   depthM,
   atNet,
 }: VizDot): VizDot {
-  return { id, outcome, shape, lateralM, depthM, atNet };
+  // To the millimetre, as the opened card's marks travel (`toMillimetre`).
+  return toMillimetre({ id, outcome, shape, lateralM, depthM, atNet });
 }
 
 /** One card over the season: each match computed with its own seat and
@@ -430,7 +494,7 @@ function seasonCard(
 }
 
 /**
- * The wall's four cards for `side` over `perMatch` — the redesign's default
+ * The wall's five cards for `side` over `perMatch` — the redesign's default
  * cuts (`defaultCutsFor` by the season's judged rule), each match computed
  * with its own seat and context, then merged. In wall order.
  */
@@ -569,6 +633,32 @@ export type SeasonAdvancedOptions = {
 };
 
 /**
+ * One match's `optionAvailability`, kept on its points array as the parts
+ * are (`seasonPartMemo`). It reads only the match — never the filters — yet
+ * walking every point of every match was three quarters of a profile filter
+ * click's fold (measured 2026-11-10: ~25 of ~35 ms over 24 matches of 190
+ * points), recomputed on each one.
+ */
+const availabilityMemo = new WeakMap<
+  readonly MatchPoint[],
+  Map<string, MatchFilterAvailability>
+>();
+
+function matchAvailability(m: SeasonVizMatch): MatchFilterAvailability {
+  const key = `${m.isPlayer1}|${m.isDerived}|${m.errorSplitJudged}`;
+  let memo = availabilityMemo.get(m.points);
+  const hit = memo?.get(key);
+  if (hit !== undefined) return hit;
+  const availability = optionAvailability(m.points, seasonMatchContext(m));
+  if (memo === undefined) {
+    memo = new Map();
+    availabilityMemo.set(m.points, memo);
+  }
+  memo.set(key, availability);
+  return availability;
+}
+
+/**
  * The Video tab's advanced options the season can produce: each match's
  * `optionAvailability` (its own points and context, as the report reads
  * them), united — an option is offered when any match has a point it
@@ -577,9 +667,7 @@ export type SeasonAdvancedOptions = {
 export function seasonAdvancedOptions(
   perMatch: readonly SeasonVizMatch[],
 ): SeasonAdvancedOptions {
-  const each = perMatch.map((m) =>
-    optionAvailability(m.points, seasonMatchContext(m)),
-  );
+  const each = perMatch.map(matchAvailability);
   const out = {} as Record<MatchFilterKey, unknown[]>;
   for (const key of MATCH_FILTER_KEYS) {
     const values = new Set<unknown>();
@@ -690,25 +778,44 @@ export interface SeasonMatchOption {
   opponentName: string;
   /** `YYYY-MM-DD`, or null. */
   date: string | null;
-  /** The marks this match alone adds to the court under every other live
-   *  filter (its hand included) — the checklist's count. */
+  /** The marks this match adds to the court under the live shot filters,
+   *  whatever the match filters say — the Matches sheet sums the ones its
+   *  draft keeps for "Show N serves". */
   count: number;
+  /** Won from the player's seat; null where the score cannot say. */
+  won: boolean | null;
+  /** The score from the player's seat, or null. */
+  score: string | null;
+  hand: OpponentHandFilter;
+  surface: SeasonSurface;
 }
 
-/** The season-only groups of the Filters panel, computed here. */
+/** The Matches sheet's rows, computed here. The sheet counts its own menus'
+ *  options in the browser, over these rows. */
 export interface SeasonFilterOptions {
-  /** The court's mark count under each "Opponent plays" choice, over the
-   *  ticked matches (`any`: no hand filter). */
-  handCounts: Record<OpponentHandFilter | "any", number>;
   /** Every analyzed match, newest first (`compareMatchDays`). */
   matches: SeasonMatchOption[];
 }
 
 /** The strip's words for "Opponent plays". */
 export const OPPONENT_HAND_PHRASE: Record<OpponentHandFilter, string> = {
-  right: "Righties",
-  left: "Lefties",
-  unknown: "Opponent's hand unknown",
+  // The Matches sheet's own menu words (`lightbox-matches-sheet.tsx`), so the
+  // strip, the panel's Matches row and the menu name one filter one way.
+  right: "Right-handed",
+  left: "Left-handed",
+  unknown: "Hand unknown",
+};
+
+/** The strip's words for "Result" and "Surface". */
+export const SEASON_RESULT_PHRASE: Record<SeasonResultFilter, string> = {
+  won: "Won",
+  lost: "Lost",
+};
+export const SEASON_SURFACE_PHRASE: Record<SeasonSurface, string> = {
+  hard: "Hard",
+  clay: "Clay",
+  grass: "Grass",
+  unknown: "Surface unknown",
 };
 
 /** A match's opponent hand as "Opponent plays" reads it. */
@@ -732,6 +839,8 @@ export function appliedSeasonFilters(
   const known = new Set(perMatch.map((m) => m.matchId));
   return {
     opponentHand: season?.opponentHand ?? null,
+    result: season?.result ?? null,
+    surface: season?.surface ?? null,
     matches: (season?.matches ?? []).filter((id) => known.has(id)),
   };
 }
@@ -744,14 +853,33 @@ function seasonMatchPasses(
   { hand = true, ticks = true }: { hand?: boolean; ticks?: boolean } = {},
 ): boolean {
   if (
-    hand &&
-    applied.opponentHand !== null &&
-    opponentHandOf(m) !== applied.opponentHand
+    !seasonMatchKept(
+      {
+        won: m.won ?? null,
+        hand: opponentHandOf(m),
+        surface: seasonSurfaceOf(m.courtType),
+      },
+      { ...applied, opponentHand: hand ? applied.opponentHand : null },
+    )
   )
     return false;
   if (ticks && applied.matches.length > 0)
     return applied.matches.includes(m.matchId);
   return true;
+}
+
+/**
+ * A mark's metres to the millimetre for the trip to the browser. Tracked
+ * positions arrive with 15–17 significant digits; the opened card ships every
+ * mark of the season on every filter click, and a millimetre is far under a
+ * pixel at any zoom the court allows.
+ */
+function toMillimetre(dot: VizDot): VizDot {
+  return {
+    ...dot,
+    lateralM: Math.round(dot.lateralM * 1000) / 1000,
+    depthM: Math.round(dot.depthM * 1000) / 1000,
+  };
 }
 
 /** One mark's `SeasonDotPoint`, read off its match's own point. */
@@ -858,7 +986,10 @@ export function buildSeasonLightbox(
   // `dotPoints` name.
   const applied = appliedSeasonFilters(perMatch, state.season);
   const seasonActive =
-    applied.opponentHand !== null || applied.matches.length > 0;
+    applied.opponentHand !== null ||
+    applied.result != null ||
+    applied.surface != null ||
+    applied.matches.length > 0;
   const allParts = perMatch.map((m) =>
     seasonPart(m, cut, filters, state.chart, bands),
   );
@@ -1000,36 +1131,29 @@ export function buildSeasonLightbox(
         !(onCard && baseline !== null && baseline.keys.includes(entry.key)),
     )
     .map((entry) => entry.label);
-  // The season's own filters close the sentence: "Lefties · 2 matches".
+  // The season's own filters close the sentence: "Won · Lefties · Clay ·
+  // 2 matches".
+  if (applied.result != null)
+    filterPhrases.push(SEASON_RESULT_PHRASE[applied.result]);
   if (applied.opponentHand !== null)
     filterPhrases.push(OPPONENT_HAND_PHRASE[applied.opponentHand]);
+  if (applied.surface != null)
+    filterPhrases.push(SEASON_SURFACE_PHRASE[applied.surface]);
   if (applied.matches.length > 0)
     filterPhrases.push(
       `${applied.matches.length} ${applied.matches.length === 1 ? "match" : "matches"}`,
     );
 
-  // The two season-only groups' counts: each option over every other live
-  // filter, summed from the parts already computed.
-  const handCounts: Record<OpponentHandFilter | "any", number> = {
-    any: 0,
-    right: 0,
-    left: 0,
-    unknown: 0,
-  };
-  perMatch.forEach((m, i) => {
-    if (!seasonMatchPasses(m, applied, { hand: false })) return;
-    const n = allParts[i].result.count;
-    handCounts.any += n;
-    handCounts[opponentHandOf(m)] += n;
-  });
   const matchOptions: SeasonMatchOption[] = perMatch
     .map((m, i) => ({
       id: m.matchId,
       opponentName: m.opponent ?? "Opponent",
       date: m.date ?? null,
-      count: seasonMatchPasses(m, applied, { ticks: false })
-        ? allParts[i].result.count
-        : 0,
+      count: allParts[i].result.count,
+      won: m.won ?? null,
+      score: m.score ?? null,
+      hand: opponentHandOf(m),
+      surface: seasonSurfaceOf(m.courtType),
     }))
     .sort((a, b) => compareMatchDays(b.date, a.date));
 
@@ -1040,7 +1164,7 @@ export function buildSeasonLightbox(
     cut,
     chart: state.chart,
     filters,
-    result,
+    result: { ...result, dots: result.dots.map(toMillimetre) },
     stats,
     bandZones: bandZonesFor(cut, bands.bands, bands.unit, stats),
     subjectName,
@@ -1083,7 +1207,7 @@ export function buildSeasonLightbox(
       );
     }),
     season: normalizeSeasonFilters(state.season) ?? null,
-    seasonOptions: { handCounts, matches: matchOptions },
+    seasonOptions: { matches: matchOptions },
   };
 }
 

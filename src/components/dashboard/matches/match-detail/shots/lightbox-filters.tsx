@@ -22,49 +22,73 @@ import {
 } from "./viz-model";
 import {
   errorOptionsFor,
-  normalizeSeasonFilters,
   OPTIONS,
+  seasonMatchKept,
   type OpponentHandFilter,
   type SeasonFilters,
+  type SeasonSurface,
 } from "./viz-url";
+import { matchesMenuValueLabel } from "./lightbox-matches-sheet";
 
 /* ── Filters panel ─────────────────────────────────────────────────────── */
 
-type PanelKey =
-  | "ball"
-  | "court"
-  | "set"
-  | "zone"
-  | "pressure"
-  | "error"
-  // The season's own groups ("Opponent plays", "Matches").
-  | "vopp"
-  | "vm";
+type PanelKey = "ball" | "court" | "set" | "zone" | "pressure" | "error";
+
+/** One of a season's matches, as the Matches sheet lists it. */
+export interface SeasonSheetMatch {
+  id: string;
+  opponentName: string;
+  /** `YYYY-MM-DD`, or null. */
+  date: string | null;
+  /** The marks it adds to the court under the live shot filters —
+   *  counted on the server. */
+  count: number;
+  /** Won from the player's seat; null where the score cannot say. */
+  won: boolean | null;
+  /** The score from the player's seat, or null. */
+  score: string | null;
+  hand: OpponentHandFilter;
+  surface: SeasonSurface;
+}
 
 /**
- * A player's season only (`season-viz-lightbox.tsx`): "Opponent plays" and
- * "Matches", which narrow the court to some of the season's matches. Never
- * passed by the match report — one match has one opponent.
+ * A player's season only (`season-viz-lightbox.tsx`): which of its matches
+ * the court is drawn over — result, opponent's hand, surface and ticked
+ * matches, all chosen in the Matches sheet (`lightbox-matches-sheet.tsx`),
+ * which the panel's "Matches" row opens. Never passed by the match report:
+ * one match is one match.
  */
 export interface LightboxSeasonFilters {
   /** The live selection (`VizState.season`), or none. */
   value: SeasonFilters | undefined;
   onChange: (next: SeasonFilters | undefined) => void;
-  /** The checklist's rows, newest first: "vs Lee", its short date and the
-   *  marks it adds to the court — counted on the server. */
-  matches: readonly {
-    id: string;
-    label: string;
-    detail: string | null;
-    count: number;
-  }[];
+  /** Every analyzed match, newest first. */
+  matches: readonly SeasonSheetMatch[];
 }
 
-const OPPONENT_HAND_OPTIONS: { value: OpponentHandFilter; label: string }[] = [
-  { value: "right", label: "Right" },
-  { value: "left", label: "Left" },
-  { value: "unknown", label: "Unknown" },
-];
+/** The Matches row's quiet line: "All 24", or what narrows it and how many
+ *  it leaves ("Won · Left-handed · 4 of 24"). */
+export function matchesRowSummary(season: LightboxSeasonFilters): string {
+  const { value, matches } = season;
+  const words = [
+    value?.result ? matchesMenuValueLabel("result", value.result) : null,
+    value?.opponentHand
+      ? matchesMenuValueLabel("hand", value.opponentHand)
+      : null,
+    value?.surface ? matchesMenuValueLabel("surface", value.surface) : null,
+  ].filter((w): w is string => w !== null);
+  const kept = matches.filter((m) =>
+    seasonMatchKept(m, {
+      result: value?.result ?? null,
+      opponentHand: value?.opponentHand ?? null,
+      surface: value?.surface ?? null,
+    }),
+  );
+  const ticked = kept.filter((m) => value?.matches.includes(m.id));
+  const n = ticked.length > 0 ? ticked.length : kept.length;
+  if (words.length === 0 && n === matches.length) return `All ${n}`;
+  return [...words, `${n} of ${matches.length}`].join(" · ");
+}
 
 const NOUN: Record<VizResult["noun"], { singular: string; plural: string }> = {
   serves: { singular: "serve", plural: "serves" },
@@ -119,6 +143,7 @@ export function LightboxFilterPanel({
   countWith,
   advanced,
   onOpenAdvanced,
+  onOpenMatches,
   triggerRef,
   season,
 }: {
@@ -148,9 +173,11 @@ export function LightboxFilterPanel({
   onOpenAdvanced?: () => void;
   /** The Filters trigger — the drawer hands focus back to it on close. */
   triggerRef?: Ref<HTMLButtonElement>;
-  /** The season's "Opponent plays" and "Matches", above Advanced filters.
-   *  Omitted (the match report), neither is drawn. */
+  /** The season's matches: a "Matches" row above Advanced filters, which
+   *  closes this popover and opens the Matches sheet (`onOpenMatches`).
+   *  Omitted (the match report), no such row. */
   season?: LightboxSeasonFilters;
+  onOpenMatches?: () => void;
 }) {
   const keys = new Set(filterKeysFor(cut));
   const errorOptions = errorOptionsFor(errorSplitJudged);
@@ -228,44 +255,7 @@ export function LightboxFilterPanel({
       },
     });
 
-  if (season) {
-    sections.push({
-      label: "Opponent plays",
-      segmented: [
-        {
-          key: "vopp",
-          options: [{ value: null, label: "Any" }, ...OPPONENT_HAND_OPTIONS],
-        },
-      ],
-    });
-    if (season.matches.length > 0) {
-      const byId = new Map(season.matches.map((m) => [m.id, m]));
-      sections.push({
-        label: "Matches",
-        checklist: {
-          key: "vm",
-          values: season.matches.map((m) => m.id),
-          displayValue: (id) => byId.get(id)?.label ?? id,
-          detail: (id) => byId.get(id)?.detail ?? null,
-          count: (id) => byId.get(id)?.count ?? 0,
-        },
-      });
-    }
-  }
-
-  const seasonValue = season?.value;
-  function setSeason(patch: Partial<SeasonFilters>) {
-    season?.onChange(
-      normalizeSeasonFilters({
-        opponentHand: seasonValue?.opponentHand ?? null,
-        matches: seasonValue?.matches ?? [],
-        ...patch,
-      }),
-    );
-  }
-
   function isChecklistActive(key: PanelKey, value: string): boolean {
-    if (key === "vm") return seasonValue?.matches.includes(value) === true;
     if (key === "error") {
       const option = errorOptions[Number(value)];
       return option.values.every((v) => filters.error.includes(v));
@@ -276,15 +266,6 @@ export function LightboxFilterPanel({
   }
 
   function toggleChecklist(key: PanelKey, value: string) {
-    if (key === "vm") {
-      const current = seasonValue?.matches ?? [];
-      setSeason({
-        matches: current.includes(value)
-          ? current.filter((id) => id !== value)
-          : [...current, value],
-      });
-      return;
-    }
     if (key === "error") {
       const option = errorOptions[Number(value)];
       const on = isChecklistActive(key, value);
@@ -302,7 +283,6 @@ export function LightboxFilterPanel({
   }
 
   function segmentedValue(key: PanelKey): string | null {
-    if (key === "vopp") return seasonValue?.opponentHand ?? null;
     const current = filters[key as keyof VizFilters] as readonly (
       string | number
     )[];
@@ -310,10 +290,6 @@ export function LightboxFilterPanel({
   }
 
   function selectSegment(key: PanelKey, value: string | null) {
-    if (key === "vopp") {
-      setSeason({ opponentHand: value as OpponentHandFilter | null });
-      return;
-    }
     const next =
       value === null ? [] : key === "set" ? [Number(value)] : [value];
     setFilters({ ...filters, [key]: next } as VizFilters);
@@ -335,15 +311,26 @@ export function LightboxFilterPanel({
       noun={NOUN[result.noun]}
       surface="menu"
       triggerRef={triggerRef}
-      footRow={
-        advanced && onOpenAdvanced && keys.has("match")
-          ? {
-              label: "Advanced filters",
-              summary: advancedSummary(filters.match ?? EMPTY_MATCH_FILTERS),
-              onSelect: onOpenAdvanced,
-            }
-          : undefined
-      }
+      footRows={[
+        ...(season && onOpenMatches && season.matches.length > 0
+          ? [
+              {
+                label: "Matches",
+                summary: matchesRowSummary(season),
+                onSelect: onOpenMatches,
+              },
+            ]
+          : []),
+        ...(advanced && onOpenAdvanced && keys.has("match")
+          ? [
+              {
+                label: "Advanced filters",
+                summary: advancedSummary(filters.match ?? EMPTY_MATCH_FILTERS),
+                onSelect: onOpenAdvanced,
+              },
+            ]
+          : []),
+      ]}
     />
   );
 }

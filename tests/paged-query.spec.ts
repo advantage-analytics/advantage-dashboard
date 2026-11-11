@@ -227,6 +227,7 @@ test("getMatchPointsFromSupabase returns null with one console.error when the po
   expect(result).toBeNull();
   expect(errors).toHaveLength(1);
   expect(errors[0]).toEqual(["Failed to fetch points:", "points read failed"]);
-  // Stops before the shots read.
-  expect(shotRanges).toEqual([]);
+  // The shots are read by match id alongside the points, so their first page
+  // has gone out, but nothing of it reaches the answer.
+  expect(shotRanges.length).toBeGreaterThanOrEqual(1);
 });

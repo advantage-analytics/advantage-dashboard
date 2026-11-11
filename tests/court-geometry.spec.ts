@@ -36,7 +36,6 @@ import {
   viewerFullCourtTransform,
   viewerLandingHalf,
   VIEWER_LANDING_FRAME,
-  VIEWER_SERVE_DROP,
   lateralToViewBoxX,
   viewerBandY,
   viewerBandEdges,
@@ -1220,15 +1219,14 @@ test.describe("viewerInitialTransform", () => {
         );
         const t = viewerInitialTransform(cut, s);
         expect(t.z).toBeCloseTo(halfZ, 6);
-        // The serve sits VIEWER_SERVE_DROP higher, at the same zoom.
-        const drop = cut === "serve" ? VIEWER_SERVE_DROP : 0;
-        const bottom = viewerArtPoint(0, half.minY + half.h + drop);
+        // Every landing cut, the serve too, puts the frame's bottom on the stage's.
+        const bottom = viewerArtPoint(0, half.minY + half.h);
         expect(t.py + bottom.y * t.z).toBeCloseTo(s.h, 4);
         const net = viewerArtPoint(VIEWER_COURT.centreX, VIEWER_COURT.netY);
         // The net is inside the stage, within the gutter (net line + zone labels) of its bottom edge.
         const netStageY = t.py + net.y * t.z;
         expect(netStageY).toBeLessThan(s.h);
-        expect(s.h - netStageY).toBeLessThan(80 + drop * pxPerUnit * t.z);
+        expect(s.h - netStageY).toBeLessThan(80);
         // The far side's DEUCE COURT / AD COURT labels stay on stage.
         const sideLabel = viewerArtPoint(0, VIEWER_COURT.farBaselineY - 15);
         expect(t.py + sideLabel.y * t.z).toBeGreaterThanOrEqual(0);

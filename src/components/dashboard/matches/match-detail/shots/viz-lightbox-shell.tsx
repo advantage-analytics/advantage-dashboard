@@ -51,8 +51,10 @@ import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
 import { filterRailReducer } from "../match-filters/rail-state";
 import { LightboxAdvancedDrawer } from "./lightbox-advanced-drawer";
+import { LightboxMatchesSheet } from "./lightbox-matches-sheet";
 import { LightboxCourt, type CourtOutline } from "./lightbox-court";
 import {
+  COUNT_NOUN,
   LegendFilter,
   LightboxFilterPanel,
   type LightboxAdvancedFilters,
@@ -69,17 +71,11 @@ import {
 import {
   LIGHTBOX_BOX_CLASS,
   LIGHTBOX_CLOSE_CLASS,
-  LIGHTBOX_ENTER_CLASS,
   LIGHTBOX_OVERLAY_CLASS,
 } from "./lightbox-frame";
 import { LightboxStats } from "./lightbox-stats";
 import { GLIDE_MIN_RELATIVE_ZOOM, KEY_PAN_PX } from "./pan-zoom";
 import type { StatPick } from "./stat-cut";
-import {
-  COURT_MORPH_CLOSE_EASE,
-  isCourtMorphOpening,
-  runCourtMorphClose,
-} from "./viz-court-morph";
 import { usePanZoom } from "./use-pan-zoom";
 import type { BandReceipt, BandSaveOutcome } from "./viz-bands-context";
 import {
@@ -183,8 +179,8 @@ export interface VizLightboxShellProps {
     countWith: (patch: Partial<VizFilters>) => number;
     /** The "Advanced filters" row (`filters.match`). Omitted, not drawn. */
     advanced?: LightboxAdvancedFilters;
-    /** A season's "Opponent plays" and "Matches". Omitted (the match
-     *  report), not drawn. */
+    /** A season's match filters: the panel's "Matches" row and the sheet
+     *  it opens. Omitted (the match report), not drawn. */
     season?: LightboxSeasonFilters;
   };
   /** The control row's menus (view, chart). `enterBandEdit` opens the band
@@ -225,13 +221,10 @@ export interface VizLightboxShellProps {
    * passes empties.
    */
   pending?: boolean;
-  /**
-   * `false` skips the enter fade on the scrim and the box: the dialog is
-   * replacing a frame already on screen (the season's chunk-load frame,
-   * `LightboxChunkPending`), not appearing over the page.
-   */
-  appear?: boolean;
 }
+
+/** The close's fade, on the scrim and the box alike. */
+const LIGHTBOX_CLOSE_MS = 150;
 
 /** The legend's picks, worded for the strip. */
 const LEGEND_WORD: Record<LegendPick, string> = {
@@ -286,7 +279,6 @@ export function VizLightboxShell({
   footer,
   draft,
   pending = false,
-  appear = true,
 }: VizLightboxShellProps) {
   const isDraft = draft !== undefined;
   const canEdit = bandEditor?.canEdit === true;
@@ -587,9 +579,22 @@ export function VizLightboxShell({
   // `"closing"`. Focus goes back to the Filters trigger on every close —
   // the trigger is the one way back in, and everything else was inert.
   const [drawerPhase, dispatchDrawer] = useReducer(filterRailReducer, "closed");
+  // Which sheet the slot holds: Advanced filters, or a season's Matches
+  // (`lightbox-matches-sheet.tsx`). Both open from a Filters popover row and
+  // share the phases, the dimming and the way back.
+  const [drawerKind, setDrawerKind] = useState<"advanced" | "matches">(
+    "advanced",
+  );
   const filtersTriggerRef = useRef<HTMLButtonElement>(null);
   const drawerFocusBackRef = useRef(false);
-  const openAdvanced = useCallback(() => dispatchDrawer("toggle"), []);
+  const openAdvanced = useCallback(() => {
+    setDrawerKind("advanced");
+    dispatchDrawer("toggle");
+  }, []);
+  const openMatches = useCallback(() => {
+    setDrawerKind("matches");
+    dispatchDrawer("toggle");
+  }, []);
   const closeDrawer = useCallback(() => {
     drawerFocusBackRef.current = true;
     dispatchDrawer("close");
@@ -603,9 +608,12 @@ export function VizLightboxShell({
     filtersTriggerRef.current?.focus({ preventScroll: true });
   }, [drawerPhase]);
   const advancedFilters = filterPanel?.advanced;
+  const seasonFilters = filterPanel?.season;
   const drawerShown =
     drawerPhase !== "closed" &&
-    advancedFilters !== undefined &&
+    (drawerKind === "advanced"
+      ? advancedFilters !== undefined
+      : seasonFilters !== undefined) &&
     !pending &&
     !isDraft;
   /** The drawer is up: the rest of the box is dimmed and inert. */
@@ -613,12 +621,10 @@ export function VizLightboxShell({
 
   /* ── Closing ──────────────────────────────────────────────────────────── */
 
-  // A close the reader asks for (Esc, Close, the scrim) plays out before the
-  // host drops the lightbox: the court shrinks back into the card it came
-  // from (`viz-court-morph.ts`) while the scrim and the box fade, then
-  // `onClose`. The ref guards a second Esc or click in that window; the
-  // state draws the fade. A close the host makes itself (the URL losing its
-  // cut) unmounts at once, as before.
+  // A close the reader asks for (Esc, Close, the scrim) fades the scrim and
+  // the box out before the host drops the lightbox, then `onClose`. The ref
+  // guards a second Esc or click in that window; the state draws the fade.
+  // A close the host makes itself (the URL losing its cut) unmounts at once.
   const closingRef = useRef(false);
   const closeTimerRef = useRef<number | null>(null);
   const [closingMs, setClosingMs] = useState<number | null>(null);
@@ -633,15 +639,10 @@ export function VizLightboxShell({
   function requestClose() {
     if (closingRef.current) return;
     closingRef.current = true;
-    const stage =
-      contentRef.current?.querySelector<HTMLElement>(
-        "[data-court-morph-target]",
-      ) ?? null;
-    const ms = runCourtMorphClose(
-      stage,
-      cut,
-      stage !== null && stage === stageEl ? pz.t : null,
-    );
+    const ms =
+      typeof document === "undefined" || document.visibilityState !== "visible"
+        ? 0
+        : LIGHTBOX_CLOSE_MS;
     if (ms <= 0) {
       onClose();
       return;
@@ -655,20 +656,13 @@ export function VizLightboxShell({
   const exitStyle = closing
     ? {
         animationDuration: `${closingMs}ms`,
-        animationTimingFunction: COURT_MORPH_CLOSE_EASE,
+        animationTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)",
       }
     : undefined;
   const exitClass = "animate-out fade-out-0 fill-mode-forwards";
-  // Opened by a card whose court is flying in: the flight draws the frame's
-  // entrance (the box opening out of the card, the scrim with it, the rows
-  // after — `viz-court-morph.ts`), so the plain fade-in stays off. Read once,
-  // on mount: the flight ends long before anything re-renders this.
-  const [morphing] = useState(isCourtMorphOpening);
-  const enterClass = appear && !closing && !morphing && LIGHTBOX_ENTER_CLASS;
-
-  // A lightbox opened on its loading frame (the season's court on its way)
-  // fades its body in when the court lands, rather than cutting to it.
-  const [openedPending] = useState(pending);
+  // Opening draws no animation (user decision, 2026-11-10): a card's
+  // lightbox is simply there on the click, and a season court that lands
+  // after its loading frame cuts straight to the body.
 
   // Focus goes back to whatever opened the lightbox — the card, a saved
   // view's tile — when it is still on the page.
@@ -869,11 +863,7 @@ export function VizLightboxShell({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay
           data-lightbox-scrim=""
-          className={cn(
-            LIGHTBOX_OVERLAY_CLASS,
-            enterClass,
-            closing && exitClass,
-          )}
+          className={cn(LIGHTBOX_OVERLAY_CLASS, closing && exitClass)}
           style={exitStyle}
         />
         <DialogPrimitive.Content
@@ -895,7 +885,7 @@ export function VizLightboxShell({
             }
           }}
           data-lightbox-box=""
-          className={cn(LIGHTBOX_BOX_CLASS, enterClass, closing && exitClass)}
+          className={cn(LIGHTBOX_BOX_CLASS, closing && exitClass)}
           style={exitStyle}
         >
           <TooltipProvider>
@@ -906,10 +896,7 @@ export function VizLightboxShell({
             </div>
 
             {/* ── Header ─────────────────────────────────────────────── */}
-            {/* `data-lightbox-enter`: the order the frame's rows rise in
-                after a card's court flies in (`viz-court-morph.ts`). */}
             <div
-              data-lightbox-enter="0"
               inert={drawerOpen}
               className="flex items-start gap-2.5 px-6 pt-6 pb-5"
             >
@@ -950,17 +937,11 @@ export function VizLightboxShell({
             ) : (
               <div
                 inert={drawerOpen}
-                className={cn(
-                  "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 md:flex-row md:overflow-visible",
-                  openedPending && "animate-in duration-200 fade-in-0",
-                )}
+                className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 md:flex-row md:overflow-visible"
               >
                 {/* Court column */}
                 <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
-                  <div
-                    data-lightbox-enter="1"
-                    className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3"
-                  >
+                  <div className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
                     {player && (
                       <div
                         className="flex gap-1.5"
@@ -998,6 +979,7 @@ export function VizLightboxShell({
                         countWith={filterPanel.countWith}
                         advanced={filterPanel.advanced}
                         onOpenAdvanced={openAdvanced}
+                        onOpenMatches={openMatches}
                         triggerRef={filtersTriggerRef}
                         season={filterPanel.season}
                       />
@@ -1025,7 +1007,6 @@ export function VizLightboxShell({
                   <div
                     ref={setStageEl}
                     data-court-stage=""
-                    data-court-morph-target=""
                     className={cn(
                       "relative h-[420px] shrink-0 overflow-hidden rounded-[10px] select-none md:h-auto md:min-h-[360px] md:flex-1 md:shrink",
                       editing
@@ -1183,7 +1164,7 @@ export function VizLightboxShell({
                   </div>
 
                   {!isDraft && (
-                    <div data-lightbox-enter="1">
+                    <div>
                       {chart === "scatter" ? (
                         <LegendFilter
                           items={legend}
@@ -1221,10 +1202,7 @@ export function VizLightboxShell({
                 </div>
 
                 {/* Right column */}
-                <div
-                  data-lightbox-enter="2"
-                  className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]"
-                >
+                <div className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]">
                   <div className="flex min-h-7 items-center gap-1.5 border-b border-[var(--border-hairline)] pb-3">
                     <div
                       className="flex gap-1.5"
@@ -1306,7 +1284,6 @@ export function VizLightboxShell({
                 empty bar. */}
             {footerActions ? (
               <div
-                data-lightbox-enter="2"
                 inert={drawerOpen}
                 className="mt-5 flex items-center gap-2.5 border-t border-[var(--border-hairline)] px-6 pt-4 pb-5"
               >
@@ -1319,18 +1296,30 @@ export function VizLightboxShell({
             )}
 
             {/* ── Advanced filters drawer ────────────────────────────── */}
-            {drawerShown && filterPanel && advancedFilters && (
-              <LightboxAdvancedDrawer
+            {drawerShown && drawerKind === "matches" && seasonFilters && (
+              <LightboxMatchesSheet
                 phase={drawerPhase}
                 onClose={closeDrawer}
                 onFinish={finishDrawer}
-                cut={cut}
-                filters={filters}
-                setFilters={filterPanel.onChange}
-                result={result}
-                advanced={advancedFilters}
+                season={seasonFilters}
+                noun={COUNT_NOUN[result.noun]}
               />
             )}
+            {drawerShown &&
+              drawerKind === "advanced" &&
+              filterPanel &&
+              advancedFilters && (
+                <LightboxAdvancedDrawer
+                  phase={drawerPhase}
+                  onClose={closeDrawer}
+                  onFinish={finishDrawer}
+                  cut={cut}
+                  filters={filters}
+                  setFilters={filterPanel.onChange}
+                  result={result}
+                  advanced={advancedFilters}
+                />
+              )}
           </TooltipProvider>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>

@@ -230,10 +230,20 @@ export interface VizState {
 /** "Opponent plays": the opponent's hand, or a match that does not say. */
 export type OpponentHandFilter = "right" | "left" | "unknown";
 
-/** The season's two filters: one hand (null = Any) and the ticked matches
- *  (none ticked = every match). */
+/** "Result": the player won or lost the match (a match whose score cannot
+ *  say is in neither). */
+export type SeasonResultFilter = "won" | "lost";
+
+/** "Surface", read off `matches.court_type` (`seasonSurfaceOf`). */
+export type SeasonSurface = "hard" | "clay" | "grass" | "unknown";
+
+/** The season's match filters, all chosen in the lightbox's Matches sheet:
+ *  the result, the opponent's hand and the surface (null = Any each), and
+ *  the ticked matches (none ticked = every match the other three keep). */
 export interface SeasonFilters {
   opponentHand: OpponentHandFilter | null;
+  result?: SeasonResultFilter | null;
+  surface?: SeasonSurface | null;
   matches: string[];
 }
 
@@ -242,9 +252,53 @@ export const OPPONENT_HAND_FILTERS: readonly OpponentHandFilter[] = [
   "left",
   "unknown",
 ];
+export const SEASON_RESULT_FILTERS: readonly SeasonResultFilter[] = [
+  "won",
+  "lost",
+];
+export const SEASON_SURFACES: readonly SeasonSurface[] = [
+  "hard",
+  "clay",
+  "grass",
+  "unknown",
+];
+
+/** A match row's free-text `court_type` as "Surface" reads it: "Outdoor Hard
+ *  Court", "Indoor Hard Court", "Hard" and "hard" are all hard; nothing
+ *  recognisable is unknown. */
+export function seasonSurfaceOf(
+  courtType: string | null | undefined,
+): SeasonSurface {
+  const t = (courtType ?? "").toLowerCase();
+  if (t.includes("clay")) return "clay";
+  if (t.includes("grass")) return "grass";
+  if (t.includes("hard")) return "hard";
+  return "unknown";
+}
+
+/** Whether `m` is kept by the match filters' result, hand and surface (the
+ *  ticks aside) — the one rule the season fold
+ *  (`player-season-viz.ts`) and the lightbox's Matches sheet draft share. */
+export function seasonMatchKept(
+  m: {
+    won: boolean | null;
+    hand: OpponentHandFilter;
+    surface: SeasonSurface;
+  },
+  filters: Pick<SeasonFilters, "opponentHand" | "result" | "surface">,
+): boolean {
+  if (filters.result === "won" && m.won !== true) return false;
+  if (filters.result === "lost" && m.won !== false) return false;
+  if (filters.opponentHand != null && m.hand !== filters.opponentHand)
+    return false;
+  if (filters.surface != null && m.surface !== filters.surface) return false;
+  return true;
+}
 
 /** The URL params the season's filters travel as. */
 export const SEASON_HAND_PARAM = "vopp";
+export const SEASON_RESULT_PARAM = "vres";
+export const SEASON_SURFACE_PARAM = "vsurf";
 export const SEASON_MATCH_PARAM = "vm";
 
 /** A match id as the URL may name one — a shape check only; the server
@@ -262,11 +316,25 @@ export function normalizeSeasonFilters(
   )
     ? season.opponentHand
     : null;
+  const result = SEASON_RESULT_FILTERS.includes(
+    season.result as SeasonResultFilter,
+  )
+    ? (season.result as SeasonResultFilter)
+    : null;
+  const surface = SEASON_SURFACES.includes(season.surface as SeasonSurface)
+    ? (season.surface as SeasonSurface)
+    : null;
   const matches = [...new Set(season.matches)]
     .filter((id) => MATCH_ID_PATTERN.test(id))
     .sort();
-  if (opponentHand === null && matches.length === 0) return undefined;
-  return { opponentHand, matches };
+  if (
+    opponentHand === null &&
+    result === null &&
+    surface === null &&
+    matches.length === 0
+  )
+    return undefined;
+  return { opponentHand, result, surface, matches };
 }
 
 /** `state` without its season filters ("Clear filter", a closed card). */
@@ -285,6 +353,8 @@ function parseSeasonFilters(
     opponentHand: OPPONENT_HAND_FILTERS.includes(hand as OpponentHandFilter)
       ? (hand as OpponentHandFilter)
       : null,
+    result: params.get(SEASON_RESULT_PARAM) as SeasonResultFilter | null,
+    surface: params.get(SEASON_SURFACE_PARAM) as SeasonSurface | null,
     matches: params.getAll(SEASON_MATCH_PARAM),
   });
 }
@@ -388,6 +458,8 @@ const VIZ_KEYS = [
   "draft",
   "vfrom",
   SEASON_HAND_PARAM,
+  SEASON_RESULT_PARAM,
+  SEASON_SURFACE_PARAM,
   SEASON_MATCH_PARAM,
   // Retired with the fullscreen viewer; still a viz key so an old
   // `&fullscreen=1` link is cleaned off the URL by the next update.
@@ -704,6 +776,8 @@ export function vizStateQuery(
   if (season) {
     if (season.opponentHand !== null)
       next.set(SEASON_HAND_PARAM, season.opponentHand);
+    if (season.result) next.set(SEASON_RESULT_PARAM, season.result);
+    if (season.surface) next.set(SEASON_SURFACE_PARAM, season.surface);
     for (const id of season.matches) next.append(SEASON_MATCH_PARAM, id);
   }
 

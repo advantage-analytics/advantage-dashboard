@@ -59,7 +59,6 @@ test("the shell renders from plain props with no providers: court, legend filter
       .getByRole("group", { name: "Right panel" })
       .getByRole("button", { name: "Points", exact: true }),
   ).toHaveCount(0);
-  await expect(dialog.getByText(/^Average \d+%$/).first()).toBeVisible();
   const row = dialog
     .getByRole("button", { name: /% of \d+ points won$/ })
     .first();

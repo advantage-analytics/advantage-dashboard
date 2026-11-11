@@ -903,6 +903,8 @@ test.describe("season filters", () => {
     );
     expect(parseVizState(params, SEASON_PARSE).season).toEqual({
       opponentHand: "left",
+      result: null,
+      surface: null,
       matches: ["aa22", "bb11"],
     });
     // The report: no flag, no season.
@@ -930,7 +932,75 @@ test.describe("season filters", () => {
         new URLSearchParams("cut=serve&vopp=unknown&vm=bad%20id!"),
         SEASON_PARSE,
       ).season,
-    ).toEqual({ opponentHand: "unknown", matches: [] });
+    ).toEqual({
+      opponentHand: "unknown",
+      result: null,
+      surface: null,
+      matches: [],
+    });
+    // An unknown result or surface reads as Any, like an unknown hand.
+    expect(
+      parseVizState(
+        new URLSearchParams("cut=serve&vres=drew&vsurf=carpet"),
+        SEASON_PARSE,
+      ),
+    ).not.toHaveProperty("season");
+  });
+
+  test("?vres= and ?vsurf= read into state.season, write back, and are viz keys the report cleans off", async () => {
+    const { parseVizState, vizStateQuery } =
+      await import("@/components/dashboard/matches/match-detail/shots/viz-url");
+    const params = new URLSearchParams("cut=serve&vres=won&vsurf=clay");
+    const season = parseVizState(params, SEASON_PARSE).season;
+    expect(season).toEqual({
+      opponentHand: null,
+      result: "won",
+      surface: "clay",
+      matches: [],
+    });
+    const q = new URLSearchParams(
+      vizStateQuery(new URLSearchParams(), {
+        cut: "serve",
+        chart: "scatter",
+        filters: EMPTY_VIZ_FILTERS,
+        viewId: null,
+        season,
+      }),
+    );
+    expect(q.get("vres")).toBe("won");
+    expect(q.get("vsurf")).toBe("clay");
+    const cleaned = new URLSearchParams(
+      vizStateQuery(new URLSearchParams("tab=shots&vres=lost&vsurf=hard"), {
+        cut: "serve",
+        chart: "scatter",
+        filters: EMPTY_VIZ_FILTERS,
+        viewId: null,
+      }),
+    );
+    expect(cleaned.has("vres")).toBe(false);
+    expect(cleaned.has("vsurf")).toBe(false);
+  });
+
+  test("seasonSurfaceOf reads the stored court types; seasonMatchKept applies result, hand and surface", async () => {
+    const { seasonSurfaceOf, seasonMatchKept } =
+      await import("@/components/dashboard/matches/match-detail/shots/viz-url");
+    expect(seasonSurfaceOf("Outdoor Hard Court")).toBe("hard");
+    expect(seasonSurfaceOf("Indoor Hard Court")).toBe("hard");
+    expect(seasonSurfaceOf("hard")).toBe("hard");
+    expect(seasonSurfaceOf("Clay Court")).toBe("clay");
+    expect(seasonSurfaceOf(null)).toBe("unknown");
+    expect(seasonSurfaceOf("Carpet")).toBe("unknown");
+    const m = { won: true, hand: "left" as const, surface: "clay" as const };
+    const any = { opponentHand: null, result: null, surface: null };
+    expect(seasonMatchKept(m, any)).toBe(true);
+    expect(seasonMatchKept(m, { ...any, result: "won" })).toBe(true);
+    expect(seasonMatchKept(m, { ...any, result: "lost" })).toBe(false);
+    expect(seasonMatchKept(m, { ...any, opponentHand: "right" })).toBe(false);
+    expect(seasonMatchKept(m, { ...any, surface: "hard" })).toBe(false);
+    // A match whose score cannot say is in neither result.
+    const unscored = { ...m, won: null };
+    expect(seasonMatchKept(unscored, { ...any, result: "won" })).toBe(false);
+    expect(seasonMatchKept(unscored, { ...any, result: "lost" })).toBe(false);
   });
 
   test("vizStateQuery writes them sorted, round-trips, and every viz write cleans them off (the report never keeps one)", async () => {
@@ -950,7 +1020,12 @@ test.describe("season filters", () => {
     expect(params.get("tab")).toBe("visualizations");
     expect(parseVizState(params, SEASON_PARSE)).toEqual({
       ...state,
-      season: { opponentHand: "right", matches: ["aa", "cc"] },
+      season: {
+        opponentHand: "right",
+        result: null,
+        surface: null,
+        matches: ["aa", "cc"],
+      },
     });
     // A state without a season (the report's every write) drops stray keys.
     const cleaned = new URLSearchParams(

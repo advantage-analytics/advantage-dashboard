@@ -93,14 +93,13 @@ const serveOuterToGroupY = (y: number) =>
   SERVE_GROUP_ORIGIN_Y + (y - SERVE_GROUP_TRANSLATE_Y) / SERVE_GROUP_SCALE;
 const SERVE_NEAR_SERVICE_Y =
   SERVE_COURT.netY + (SERVE_COURT.netY - SERVE_COURT.serviceLineY); // 355.5
-// The window, in outer units: from behind the far baseline (29.45) —
-// about 13 units of apron, so the baseline and its centre mark read as the
-// court's far end — down to a strip of the near service boxes below the net
-// (211.35). Its width follows from the card's 334:216 aspect, centred on
-// the court. (It used to start at 50, 60% of the way back from the service
-// line, with the far baseline out of frame.)
-const SERVE_THROUGH_NET_TOP = 16;
-const SERVE_THROUGH_NET_BOTTOM = 232;
+// The window, in outer units: from behind the far baseline (≈22.65) —
+// about 17 units of apron, so the court sits lower in the card with air
+// above its far end (user ask, 2026-11-10; it was under 7) — down to a strip
+// past the net (211.35) wide enough for the net line and a net ball's mark. Its
+// width follows from the card's 334:216 aspect, centred on the court.
+const SERVE_THROUGH_NET_TOP = 6;
+const SERVE_THROUGH_NET_BOTTOM = 222;
 const SERVE_THROUGH_NET_H = SERVE_THROUGH_NET_BOTTOM - SERVE_THROUGH_NET_TOP;
 const SERVE_THROUGH_NET_W =
   (SERVE_THROUGH_NET_H * SERVE_COURT.viewBox.w) / SERVE_COURT.viewBox.h;
@@ -126,7 +125,7 @@ export const SERVE_COURT_THROUGH_NET = {
   /** The net's height in the outer viewBox — inside the art, not its edge. */
   netOuterY: serveGroupToOuterY(SERVE_COURT.netY), // 211.35
   serviceLineOuterY: serveGroupToOuterY(SERVE_COURT.serviceLineY), // ≈109.8
-  baselineOuterY: serveGroupToOuterY(SERVE_COURT.baselineY), // ≈29.45
+  baselineOuterY: serveGroupToOuterY(SERVE_COURT.baselineY), // ≈22.65
 } as const;
 
 /** The window itself — the card's art region rounds its top corners. */
@@ -405,8 +404,7 @@ function serveViewBoxToLogicalY(viewBoxY: number): number {
 /**
  * A rect in a serve frame's own viewBox → the same rect in pre-transform
  * (logical) units, which are `VIEWER_COURT`'s: the lightbox's far half IS
- * `SERVE_COURT`'s logical box. The card-to-lightbox court morph
- * (`viz-court-morph.ts`) lands a card's serve court on the lightbox's with it.
+ * `SERVE_COURT`'s logical box.
  */
 export function serveViewBoxRectToViewer(r: {
   x: number;
@@ -1336,17 +1334,6 @@ export const VIEWER_LANDING_FRAME = {
   h: VIEWER_COURT.netY + VIEWER_NET_GUTTER - VIEWER_COURT.courtFrame.minY,
 } as const;
 
-/**
- * How far (viewBox units) the serve's 100% sits higher than the other landing
- * cuts': the window slides this far toward the near side at the same zoom, so
- * the court rides up the stage — most of the empty apron behind the far
- * baseline goes, the DEUCE COURT / AD COURT labels (`COURT_SIDE_LABEL_Y`,
- * 9 above the baseline) keep a few units of air above them, and the space
- * opens past the net instead, toward the near service boxes the wall's serve
- * card carries on into.
- */
-export const VIEWER_SERVE_DROP = 20;
-
 /** `frame`'s fit scale on `stage`, clamped to the zoom range. */
 function frameFitZ(
   frame: { w: number; h: number },
@@ -1397,9 +1384,8 @@ export function viewerFullCourtTransform(stage: Size): PanZoom {
  * half), `VIEWER_LANDING_FRAME` fitted to the stage, horizontally centred,
  * with the net (and its small gutter) along the stage's BOTTOM edge — on a
  * stage taller than the half, the extra shows the far apron above, never the
- * empty near half. `"serve"` alone sits `VIEWER_SERVE_DROP` higher at the
- * same zoom, so a little of the court past the net shows instead of the far
- * apron. The whole court is a zoom-out away (`viewerFullCourtTransform`).
+ * empty near half. The serve sits as low as the other landing cuts (user
+ * decision, 2026-11-10: it used to ride 20 units higher). The whole court is a zoom-out away (`viewerFullCourtTransform`).
  *
  * `"returnContact"`/`"rallyPosition"` (contact/rally cuts), unchanged: the
  * useful content is only the NEAR half, so start zoomed in
@@ -1421,8 +1407,7 @@ export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
   if (viewerLandingHalf(cut) !== null) {
     const frame = VIEWER_LANDING_FRAME;
     const z = frameFitZ(frame, stage);
-    const drop = cut === "serve" ? VIEWER_SERVE_DROP : 0;
-    const bottom = viewerArtPoint(0, frame.minY + frame.h + drop);
+    const bottom = viewerArtPoint(0, frame.minY + frame.h);
     return clampPan(
       { z, px: stage.w / 2 - centre.x * z, py: stage.h - bottom.y * z },
       art,
