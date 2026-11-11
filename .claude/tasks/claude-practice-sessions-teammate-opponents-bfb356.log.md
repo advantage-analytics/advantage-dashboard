@@ -120,3 +120,16 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. **Not deployed:** the live function changes only after `deploy_edge_function` for `generate-insights` once merged.
+
+## T12 · Matches list: practice rows — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4755 passed, shard 2/2 5154 passed; design-drift counts unchanged. Completion VERDICT: pass. Widget-states: row rendering only — no Suspense region, loader, `return null` or empty-state path changed; an unmeasured practice result renders `—`.
+**changed:** `event-cell.tsx` gains a `practice` prop ("Practice" in the cell's ink when there is no event name; a named event still wins); `match-card-list.tsx` tests `isPracticeMatch(match.matchType)`, draws the draft row's `EmptyMark` dash instead of `ResultMark`, and in the team scope puts an outlined grey `StatePill` "Teammate" after the opponent when both seats resolve to roster profiles; `matches-title-row.tsx` reads "{n} matches · {k} practice" when the counted set holds practice, unchanged otherwise; `(list)/page.tsx` passes the practice flag into `readyMatches`. No new view pill; `matches-page-content.tsx` untouched. New `tests/matches-practice-rows.spec.ts` (12 tests).
+**follow-ups:**
+
+1. The match drawer (`match-drawer.tsx` → `DrawerHeading`) still shows a `ResultMark` and "No event" for a practice match.
+2. The below-`lg` card layout (`match-card-gallery.tsx`) has no practice or teammate treatment.
+3. A teammate row with a folded draft shows two pills (Draft and Teammate), against StatePill's one-per-row note.
+4. Sorting by Result still orders practice rows by their stored winner.
+5. `EmptyMark` draws the dash in `--ink-400`; the canvas had `--ink-300` (kept the shared primitive).
+6. The `?rosterPlayer=` cut does not turn a seat-two row to that player's side (the open part of blocked T9).

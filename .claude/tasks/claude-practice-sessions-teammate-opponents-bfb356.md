@@ -167,7 +167,7 @@ ready).
 
 ## T12 · Matches list: practice rows
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess, run `trace-route` on `/dashboard/matches` first) `src/components/dashboard/matches/event-cell.tsx`, `match-line.tsx`, `match-card-list.tsx`, `matches-title-row.tsx`, `drawer-sections.tsx`, `src/lib/data/matches-list-types.ts` (~133), `matches-page-server.ts` (`withRosterProfiles`); `tests/matches-row-state.spec.ts`, `tests/matches-list-grouping.spec.ts`

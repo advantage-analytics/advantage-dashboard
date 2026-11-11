@@ -9,6 +9,7 @@ import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canUploadForProgram } from "@/lib/workspace/types";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import {
   type DbMatch,
   type DisplayMatch,
@@ -179,6 +180,7 @@ async function MatchesResolvedTitle({
   const readyMatches = (await enriched).map((m) => ({
     id: m.id,
     status: m.analysis?.status,
+    practice: isPracticeMatch(m.matchType),
   }));
   return (
     <MatchesTitleRow

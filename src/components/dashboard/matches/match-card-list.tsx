@@ -9,6 +9,8 @@ import {
 } from "./match-list-layout";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { ResultMark } from "@/components/dashboard/result-mark";
+import { EmptyMark } from "@/components/ui/empty-mark";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { PlayerMark } from "@/components/ui/player-mark";
@@ -116,6 +118,15 @@ export function MatchCardList({
   const isWin = match.score.winner === "player1";
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
+  // A practice session records no result: its Result cell is the em dash, its
+  // empty Event cell reads "Practice".
+  const isPractice = isPracticeMatch(match.matchType);
+  // Both seats resolve to this roster (`withRosterProfiles`, team scope only):
+  // the opponent is a teammate, not a rival.
+  const isTeammate =
+    isTeam &&
+    Boolean(match.player1.profileId) &&
+    Boolean(match.player2.profileId);
   const { viewer, active } = useWorkspace();
   const playerId = match.player1.id ?? null;
   const isViewerRow =
@@ -210,6 +221,12 @@ export function MatchCardList({
         >
           {match.player2.name}
         </span>
+        {/* The Draft pill's outlined grammar: a fact about the row, grey. */}
+        {isTeammate && (
+          <StatePill outline className="shrink-0">
+            Teammate
+          </StatePill>
+        )}
         {unseen && (
           <>
             <span
@@ -224,8 +241,13 @@ export function MatchCardList({
       </span>
 
       {/* Result — the outcome glyph, flush left under its heading, ahead of
-          the score it belongs to. */}
-      <ResultMark won={isWin} className="justify-self-start" />
+          the score it belongs to. A practice session decides nothing, so it
+          draws the draft row's dash instead. */}
+      {isPractice ? (
+        <EmptyMark label="Practice, no result" />
+      ) : (
+        <ResultMark won={isWin} className="justify-self-start" />
+      )}
 
       {/* Score — flush left in its fixed track, one precision, tabular, so
           every row's numbers start at the same x. */}
@@ -239,6 +261,7 @@ export function MatchCardList({
       <EventCell
         name={match.tournamentName}
         round={match.round}
+        practice={isPractice}
         hidden={compact}
       />
 
