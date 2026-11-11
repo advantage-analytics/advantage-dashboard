@@ -207,3 +207,67 @@ ready).
   - [ ] `getMatchDetailData` exposes whether the match is practice and whether the opponent is a teammate; `page.tsx`'s still-analysing short-circuit is unchanged
   - [ ] A spec renders the report for a practice-teammate fixture and a tournament fixture and asserts the rail text, the pill and the notice in each
 - **notes:** Canvas board 5. Notice copy: "**Practice.** Not in {A}'s or {B}'s record or season statistics. Both players see this report; their profiles list it under Practice." When the opponent is not a teammate, name the player alone and drop the second sentence. The report already turns to the viewer's seat through `youSeat` (`viewer-side.ts`); do not add a second orientation path. Read `docs/ui-revamp-guardrails.md` §3.3 first.
+
+## T15 · Match drawer: practice treatment
+
+- **status:** todo
+- **model:** opus
+- **files:** (guess) `src/components/dashboard/matches/match-drawer.tsx` (`DrawerHeading` call ~236, Event `DrawerFact` ~272–283), `src/components/dashboard/matches/drawer-sections.tsx` (`DrawerHeading` ~150–180); `tests/drawer-sections.spec.ts` or a new spec beside `tests/matches-practice-rows.spec.ts`
+- **routes:** /dashboard/matches
+- **done when:**
+  - [ ] For a practice match the drawer heading renders no `ResultMark`; an `EmptyMark` labelled "Practice, no result" takes its place and the `ScoreLine` still renders
+  - [ ] For a practice match with no event name and no schedule name the Event fact reads "Practice" and is not muted; a practice match with a named event keeps the event name
+  - [ ] Practice is tested with `isPracticeMatch(match.matchType)`; the diff adds no `"Practice"` comparison literal
+  - [ ] Whatever `DrawerHeading` gains is optional and defaults to today's rendering, and `src/components/dashboard/schedule/event-line-drawer.tsx` is not in the diff
+  - [ ] A spec renders the drawer for one practice match and one tournament match and asserts the mark and the Event fact in each
+- **notes:** Same grammar as T12 (`match-card-list.tsx` ~246) and T13. `DrawerHeading` is shared with the schedule's `event-line-drawer.tsx` (~328), which is why the new prop must be optional. "No event" lives in `match-drawer.tsx`'s Event fact, not in `DrawerHeading`. `matchType` falls back to the string `"Match"` (`matches-list-types.ts` ~133). The drawer draws no Teammate pill today and this task does not add one.
+
+## T16 · Matches list: Draft pill wins over Teammate
+
+- **status:** todo
+- **model:** sonnet
+- **files:** (guess) `src/components/dashboard/matches/match-card-list.tsx` (`isTeammate` ~126, `draftPill` ~137, Teammate pill ~225); `tests/matches-practice-rows.spec.ts`
+- **routes:** /dashboard/matches
+- **done when:**
+  - [ ] A team-scope row with `hasDraft` true and both seats on the roster renders the "Draft" `StatePill` and no "Teammate" `StatePill`
+  - [ ] The same row with `hasDraft` false still renders the "Teammate" `StatePill` (T12's behaviour unchanged)
+  - [ ] `tests/matches-practice-rows.spec.ts` gains a test that renders a teammate practice row with a folded draft and asserts exactly one `StatePill` on the row, reading "Draft"
+- **notes:** StatePill's rule is max one per row (`src/components/ui/state-pill.tsx` header). `hasDraft` comes from `matches-grid.tsx` (~199, `foldedDrafts`). Checked: `match-card-gallery.tsx` and `match-drawer.tsx` draw neither pill, so there is nothing to change there.
+
+## T17 · Require match_type on prior-meeting counts
+
+- **status:** todo
+- **model:** sonnet
+- **files:** (guess) `src/lib/data/opponents-server.ts` (`OpponentAttributedRow` ~182–193), `src/lib/wizard/actions.ts` (`opponentRosterForLine` select ~553, cast ~560, count ~593), `src/lib/schedule/actions.ts` (`opponentRosterForDual` select ~225, cast ~229, count ~250), `tests/person-name-matching.spec.ts` (`row` builder ~92)
+- **done when:**
+  - [ ] `OpponentAttributedRow.match_type` is declared `match_type: string | null` with no `?`, and the "Optional only so the wizard's and the schedule's…" sentence is gone from its doc comment
+  - [ ] The `matches` select in `opponentRosterForLine` and in `opponentRosterForDual` each include `match_type`, and each row cast carries `match_type: string | null`
+  - [ ] `tests/person-name-matching.spec.ts`'s `row` builder supplies `match_type`, and a test there asserts `headToHeadRows` drops a row whose `match_type` is `" practice "` and keeps the same row with `"Tournament"`
+  - [ ] `headToHeadRows` and `opponentPlayerMatches` bodies are unchanged
+- **notes:** T7 follow-up 1. The filter already exists (`isPracticeMatch` at ~223 and ~246); the two callers simply never hand it the column, so their counts still include practice. Making the field required turns a future forgotten select into a typecheck failure. `/dashboard/team/schedule` is behind `SCHEDULE_ENABLED`, so the schedule arm has no page to open; the wizard arm is the opponent roster on `/dashboard/matches/new`.
+
+## T18 · Shared report: Teammate pill and two-name notice
+
+- **status:** todo
+- **model:** opus
+- **files:** (guess) `src/lib/data/match-share-server.ts` (`getSharedMatchData` ~609–712: the `Promise.all` and the `transformDbMatchToMatch` call), `src/lib/data/match-detail-server.ts` (`opponentIsTeammate` ~174; `resolveOpponentPlayerOnRoster` ~198 is not exported yet); new spec in the `serverLoader.load` style of `tests/match-report-practice.spec.ts`
+- **routes:** /m/[token]
+- **done when:**
+  - [ ] `getSharedMatchData` sets `match.opponentIsTeammate` by calling `opponentIsTeammate` from `match-detail-server.ts` with the `isUserPlayer1` its own `transformDbMatchToMatch` call decided and the `rosterIds` it already reads; no second implementation of the rule is added
+  - [ ] An `opponent_player_id` that is not a seat id is resolved through `resolveOpponentPlayerOnRoster` (exported for this) inside the existing `Promise.all`, not in a later round trip
+  - [ ] A spec drives the shared loader and asserts `match.opponentIsTeammate` is true for a teammate practice, false for a practice against a non-roster opponent, and false for a personal match
+  - [ ] No file under `src/components/dashboard/matches/match-detail/` and nothing in `src/app/m/[token]/` is in the diff
+- **notes:** T14 follow-up 1. The share page already renders `MatchReportScoreboard` and `StatisticsView`, and both already read `match.opponentIsTeammate` (`report-scoreboard.tsx` ~145, `statistics-view.tsx` ~128), so setting the flag is the whole fix. `match.isPractice` is already set inside `transformDbMatchToMatch` (~269), and `MATCH_DETAIL_COLUMNS` already selects `opponent_player_id`. The page is oriented by the sharer (`resolveSharerIds`), not a viewer. The loader uses the service-role client on a public route: add only the one `program_players` existence read, and return nothing new beyond the boolean. Read `docs/ui-revamp-guardrails.md` §3.3 first. No spec loads `match-share-server.ts` offline today, so the spec needs a stub for `lazyAdminClient`.
+
+## T19 · Check player2_id against the program roster
+
+- **status:** todo
+- **model:** fable
+- **files:** (guess) new `supabase/migrations/<timestamp>_matches_player2_roster_check.sql`; a live-DB spec beside `tests/rls-workspace-isolation.spec.ts` / `tests/upload-eligibility.spec.ts` (both already exercise this trigger), using `tests/fixtures/live-db.ts`
+- **done when:**
+  - [ ] A new migration `create or replace`s `public.matches_block_client_regraft()` so a client insert with `program_id` and `player2_id` both set is refused with errcode `42501` unless `player2_id` is a `program_players.id` of that program or a `program_members.user_id` of that program — the same two `not exists` arms the function uses for `player1_id`
+  - [ ] The same function refuses a client update where `player2_id` is distinct from the old value and fails that test, and the migration recreates trigger `matches_block_client_regraft` with `player2_id` added to its `UPDATE OF` column list
+  - [ ] The function stays `security definer` with `set search_path to ''`, keeps its early return for non-client roles, and the migration contains no `grant execute` to `anon` or `authenticated`
+  - [ ] Every other branch of the function body is unchanged from the live definition, and a match with `program_id` null is not checked
+  - [ ] A live-DB spec asserts: insert with an off-roster `player2_id` is refused with `42501`; insert with a roster teammate's id succeeds; updating `player2_id` to an off-roster id is refused
+- **notes:** T5 follow-up 2. Read the live DB through the Supabase MCP: the existing check is not a policy, it is the `player1_id` arm inside trigger function `public.matches_block_client_regraft()` (INSERT branch and the `new.player1_id is distinct from old.player1_id` UPDATE branch). The trigger today fires on `INSERT OR UPDATE OF program_id, event_entry_id, player1_id, source_provider, analysis_method, round`, so without the column-list change an update of `player2_id` alone never reaches the function. Start the body from `pg_get_functiondef` on the live function, not from `supabase/migrations/20261027024447_matches_verification_guard.sql` — the repo runs behind the live schema. Why it matters: the read policy lets anyone whose id is in `player2_id` read the match, while the insert and update policies only test `created_by = auth.uid()`. Live data on 2026-11-10: 0 of 49 program matches have `player2_id` set, so there is nothing to backfill and no existing row fails the check. T5's "safety arm" seats a member by login id, which the `program_members` arm covers. `create or replace` keeps the function's grants (currently `service_role` and `postgres` only); a `drop` + `create` would reset them. Live-DB specs skip against production unless `LIVE_DB_ALLOW_PROD=1` — never set that in the gate. Applying the migration to the live project is the author's step after review, outside the diff.
