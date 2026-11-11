@@ -60,3 +60,15 @@ is the runner's. Newest entries at the bottom.
 3. Add `profileId` to `RosterPlayerOption` (the RPC returns `profile_id`) instead of inferring "no profile" from `playerId === userId`.
 4. Rename the guardrails note "A reviewed exception" once /pr-check's reviewers pass it.
 5. A live-DB spec proving the teammate can read the row through `player2_id` after insert.
+
+## T6 · Leave practice out of personal record and season readers — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4730 passed, shard 2/2 5130 passed. Completion VERDICT: pass.
+**changed:** `countViewerWins` skips practice; new pure `buildPersonalSeasonKpis` (season strip) and `buildOverallPerformance` (records, matchCount, win rate, form, KPI cards, ratings — `/api/home-insight` reads these) work from competitive rows only; `loadHomeServes` filters practice before cutting its four-match window (fallback query selects `match_type`, limit 50; `(home)/page.tsx` passes the full list); `match-stats-server.ts` `baselineMatches` drops practice from `getPlayerAverageStats` / `getMatchKpiHistory` baselines but keeps the open match; every exclusion uses `isPracticeMatch`. New `tests/practice-excluded-from-record.spec.ts` (13 tests).
+**follow-ups:**
+
+1. `analyzedMatchCount` ("N matches analyzed") still counts practice reports; the Focus card footer shows it next to evidence that now excludes practice — decide whether it needs a competitive-only count.
+2. The Recent card header "N matches · W won" and `SeasonTitle`'s count take N from every row (practice included) while W excludes practice.
+3. `getPlayerAverageStats` has no caller in `src/`; possibly dead.
+4. The home-insight prompt's "Matches recorded: N" now means competitive matches; the wording could say so.
+5. The serves fallback's `limit(50)` would show an empty preview after 50+ consecutive practice rows.

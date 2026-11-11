@@ -3,6 +3,8 @@ import { matchOutcome, shortName } from "@/lib/data/match-utils";
 import { getPersonalMatchData } from "@/lib/data/personal-matches-server";
 import { statKey } from "@/lib/data/aggregate";
 import { getMyPlayerIds, playerSide } from "@/lib/data/player-identity-server";
+import { isPracticeMatch } from "@/lib/matches/match-type";
+import type { DbPersonalMatch } from "@/lib/data/personal-matches-server";
 import {
   seasonStrip,
   statRowsByKey,
@@ -43,8 +45,25 @@ export const getPersonalSeasonKpis = cache(async function getPersonalSeasonKpis(
     getPersonalMatchData(userId),
     getMyPlayerIds(),
   ]);
+  return buildPersonalSeasonKpis(matches, statRows, myPlayerIds, userId);
+});
 
+/**
+ * The strip from rows already read — pure, so a spec can hand it fixtures.
+ *
+ * Practice never counts toward the record or the season figures (product
+ * decision, no opt-in): a practice row and its stat rows are left out here,
+ * while the match itself is still listed and its own report still shows its
+ * own statistics.
+ */
+export function buildPersonalSeasonKpis(
+  matches: readonly DbPersonalMatch[],
+  statRows: readonly Record<string, unknown>[],
+  myPlayerIds: readonly string[],
+  userId: string,
+): PersonalSeasonKpis {
   const own = matches.flatMap((match) => {
+    if (isPracticeMatch(match.match_type)) return [];
     const side = playerSide(match, myPlayerIds, userId);
     return side === null ? [] : [{ match, isPlayer1: side === "player1" }];
   });
@@ -69,4 +88,4 @@ export const getPersonalSeasonKpis = cache(async function getPersonalSeasonKpis(
   }));
 
   return seasonStrip(results);
-});
+}

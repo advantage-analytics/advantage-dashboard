@@ -86,7 +86,7 @@ ready).
 
 ## T6 · Leave practice out of personal record and season readers
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess) `src/lib/data/home-recent-data.ts` (`countViewerWins` ~118), `personal-kpis-server.ts`, `personal-matches-server.ts` (`getPersonalMatchData`), `performance-server.ts` (`getOverallPerformance` ~864, feeds `/api/home-insight`), `home-serve-data.ts`, `match-stats-server.ts` (`getPlayerAverageStats` ~300, `getMatchKpiHistory` ~570); specs beside `tests/personal-home-scope.spec.ts`, `tests/home-serve-data.spec.ts`

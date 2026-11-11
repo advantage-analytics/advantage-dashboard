@@ -7,6 +7,7 @@ import { totalErrors } from "@/lib/data/player-profile";
 import { viewerSide } from "./viewer-side";
 import { scoreWinner } from "./match-utils";
 import { matchDay, utcToday } from "./match-day";
+import { isPracticeMatch } from "@/lib/matches/match-type";
 
 /** Did player1 take this match? The shared rule; level sets are not a win. */
 function player1Took(score: NonNullable<DbMatch["score"]>): boolean {
@@ -121,6 +122,8 @@ interface DbMatch {
   player2_id: string | null;
   player1_name: string | null;
   player2_name: string | null;
+  /** Practice is read here only to be left out — see `buildOverallPerformance`. */
+  match_type?: string | null;
   score: {
     player1: number[];
     player2: number[];
@@ -873,21 +876,70 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
   // tell "I was player two" from "this is not my match at all".
   const [{ matches: personalMatches, stats: personalStats }, myPlayerIds] =
     await Promise.all([getPersonalMatchData(user.id), getMyPlayerIds()]);
-  const matches = personalMatches;
 
-  if (matches.length === 0) return DEFAULT_PERFORMANCE;
+  return buildOverallPerformance(
+    personalMatches as unknown as DbMatch[],
+    personalStats,
+    myPlayerIds,
+    user.id,
+  );
+}
 
-  const typedMatches = matches as unknown as DbMatch[];
-  const overall = calculateWinLoss(typedMatches, myPlayerIds, user.id);
-  const last30 = calculateWinLoss(typedMatches, myPlayerIds, user.id, 30);
-  const last7 = calculateWinLoss(typedMatches, myPlayerIds, user.id, 7);
+/**
+ * The performance model from rows already read — pure, so a spec can hand it
+ * fixtures.
+ *
+ * Practice never counts toward the record or the season statistics (product
+ * decision, no opt-in). Every figure here — the records, `matchCount`, the KPI
+ * cards, the form and the win-rate line that `/api/home-insight` quotes — is
+ * drawn from the competitive rows alone. The one exception is
+ * `analyzedMatchCount`, which counts reports that exist ("N matches analyzed"
+ * in the season title) and so still counts a practice match's report.
+ */
+export function buildOverallPerformance(
+  allMatches: readonly DbMatch[],
+  personalStats: readonly Record<string, unknown>[],
+  myPlayerIds: readonly string[],
+  viewerId: string,
+): OverallPerformanceData {
+  if (allMatches.length === 0) return DEFAULT_PERFORMANCE;
+  const typedStats = personalStats as unknown as DbMatchStats[];
+
+  // A match is analysed when a stats row exists for the side the viewer played.
+  // Keyed by match id, not counted per row, so a match that somehow carries
+  // both sides' rows for the viewer still counts once. Over every match,
+  // practice included: a practice report is still a report.
+  const seatById = new Map<string, boolean>();
+  for (const m of allMatches) {
+    const side = viewerSide(m, myPlayerIds, viewerId);
+    if (side !== null) seatById.set(m.id, side === "player1");
+  }
+  const analyzedMatchIds = new Set<string>();
+  for (const stat of typedStats) {
+    if (seatById.get(stat.match_id) === stat.is_player1) {
+      analyzedMatchIds.add(stat.match_id);
+    }
+  }
+
+  // Competitive rows only from here on.
+  const typedMatches = allMatches.filter((m) => !isPracticeMatch(m.match_type));
+  if (typedMatches.length === 0) {
+    return {
+      ...DEFAULT_PERFORMANCE,
+      analyzedMatchCount: analyzedMatchIds.size,
+    };
+  }
+
+  const overall = calculateWinLoss(typedMatches, myPlayerIds, viewerId);
+  const last30 = calculateWinLoss(typedMatches, myPlayerIds, viewerId, 30);
+  const last7 = calculateWinLoss(typedMatches, myPlayerIds, viewerId, 7);
 
   const matchPlayerMap = new Map<string, boolean>();
   const matchMetaMap = new Map<string, { date: string; opponent: string }>();
-  for (const m of matches) {
+  for (const m of typedMatches) {
     // A match that is not the viewer's at all stays out of the map entirely, so
     // the stat loops below skip it rather than reading the wrong side's row.
-    const side = viewerSide(m, myPlayerIds, user.id);
+    const side = viewerSide(m, myPlayerIds, viewerId);
     if (side === null) continue;
     const isP1 = side === "player1";
     matchPlayerMap.set(m.id, isP1);
@@ -897,25 +949,14 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
     });
   }
 
-  const typedStats = personalStats as unknown as DbMatchStats[];
-  const orderedMatchIds = matches.map((m) => m.id);
+  const orderedMatchIds = typedMatches.map((m) => m.id);
 
-  const ratings = calculateAverageRating(typedStats, user.id, matchPlayerMap);
+  const ratings = calculateAverageRating(typedStats, viewerId, matchPlayerMap);
   const recentPerf = calculateRecentPerformance(
     typedStats,
     matchPlayerMap,
     orderedMatchIds,
   );
-
-  // A match is analysed when a stats row exists for the side the viewer played.
-  // Keyed by match id, not counted per row, so a match that somehow carries
-  // both sides' rows for the viewer still counts once.
-  const analyzedMatchIds = new Set<string>();
-  for (const stat of typedStats) {
-    if (matchPlayerMap.get(stat.match_id) === stat.is_player1) {
-      analyzedMatchIds.add(stat.match_id);
-    }
-  }
 
   return {
     views: [
@@ -939,12 +980,12 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
       orderedMatchIds,
       matchMetaMap,
     ),
-    winRate: calculateWinRateSparkline(typedMatches, myPlayerIds, user.id),
-    form: calculateForm(typedMatches, myPlayerIds, user.id, 5),
+    winRate: calculateWinRateSparkline(typedMatches, myPlayerIds, viewerId),
+    form: calculateForm(typedMatches, myPlayerIds, viewerId, 5),
     matchCount: typedMatches.length,
     analyzedMatchCount: analyzedMatchIds.size,
     wonCount: overall.wins,
-    heatmap: calculateHeatmap(typedMatches, myPlayerIds, user.id),
+    heatmap: calculateHeatmap(typedMatches, myPlayerIds, viewerId),
     performanceProfile: calculatePerformanceProfile(
       typedStats,
       matchPlayerMap,
