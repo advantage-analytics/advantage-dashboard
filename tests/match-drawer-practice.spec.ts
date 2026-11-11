@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -10,16 +12,16 @@ import {
 import { createLoader, marker } from "./fixtures/vm-modules";
 
 /**
- * T15 — the Matches peek drawer's practice treatment. The real `MatchDrawer`
- * (and the shared `DrawerHeading` / `DrawerFact` it draws) renders offline
- * through `fixtures/vm-modules`; the network, the ⋯ menu and the scrim are
- * stubbed, and `ResultMark` / `ScoreLine` are markers so each is asserted by
- * presence.
+ * T15 — the Matches peek drawer's practice treatment, on the drawer as
+ * redesigned upstream: a title line ("A vs B") over one where-and-when line
+ * (date · event · round), then the match report's own `RailScoreboard`. The
+ * real `MatchDrawer` renders offline through `fixtures/vm-modules`; the
+ * network, the ⋯ menu and the scrim are stubbed.
  *
- * Same grammar as the list rows (`matches-practice-rows.spec.ts`): a practice
- * heading draws the em dash labelled "Practice, no result" where the outcome
- * glyph would be, with the score still beside it, and its Event fact reads
- * "Practice" in the fact's ordinary ink when no event names it.
+ * Same wording as the list rows (`matches-practice-rows.spec.ts`): with no
+ * event to name, a practice reads "Practice" in the line's ordinary ink
+ * where any other match reads the muted "No event". A named event wins. The
+ * board keeps its winner check, as the match report does for practice (T14).
  */
 
 const ROW: DbMatch = {
@@ -103,70 +105,67 @@ const drawer = (m: DisplayMatch) =>
     }),
   );
 
-/** The Event fact's `<dd>`: its class (ink) and its text. */
-function eventFact(html: string): { className: string; text: string } {
+/** The where-and-when line under the title: its inner HTML. */
+function whereLine(html: string): string {
   const m = html.match(
-    /<span class="sr-only">Event<\/span>[\s\S]*?<\/dt><dd class="([^"]*)">([\s\S]*?)<\/dd>/,
+    /<p class="tabular text-\[12px\] leading-\[18px\] text-\[var\(--ink-600\)\]">([\s\S]*?)<\/p>/,
   );
-  if (!m) throw new Error("no Event fact");
-  return { className: m[1], text: m[2].replace(/<[^>]+>/g, "") };
+  if (!m) throw new Error("no where-and-when line");
+  return m[1];
 }
 
-test.describe("practice match", () => {
-  test("the heading draws the labelled em dash, no ResultMark, and keeps the ScoreLine", () => {
-    const html = drawer(match());
-    expect(html).toMatch(
-      /<span aria-hidden="true"[^>]*>—<\/span><span class="sr-only">Practice, no result<\/span><span data-component="ScoreLine">/,
-    );
-    expect(html).not.toContain('data-component="ResultMark"');
-  });
+const MUTED_NO_EVENT = '<span style="color:var(--ink-400)">No event</span>';
 
-  test("no event and no schedule name: the Event fact reads 'Practice', not muted", () => {
-    const fact = eventFact(drawer(match()));
-    expect(fact.text).toBe("Practice");
-    expect(fact.className).toContain("text-[var(--ink-700)]");
-    expect(fact.className).not.toContain("text-[var(--ink-600)]");
+test.describe("practice match", () => {
+  test("no event and no schedule name: the line reads 'Practice' in its own ink", () => {
+    const line = whereLine(drawer(match()));
+    expect(line).toContain("Practice");
+    expect(line).not.toContain("No event");
+    expect(line).not.toContain("ink-400");
   });
 
   test("a named event keeps the event name", () => {
-    const fact = eventFact(drawer(match({ tournament_name: "Fall Ladder" })));
-    expect(fact.text).toBe("Fall Ladder");
+    const line = whereLine(drawer(match({ tournament_name: "Fall Ladder" })));
+    expect(line).toContain("Fall Ladder");
+    expect(line).not.toContain("Practice");
   });
 
   test("practice is recognised through isPracticeMatch, any case", () => {
-    expect(eventFact(drawer(match({ match_type: " practice " }))).text).toBe(
-      "Practice",
-    );
+    const line = whereLine(drawer(match({ match_type: " practice " })));
+    expect(line).toContain("Practice");
+    expect(line).not.toContain("No event");
   });
 });
 
 test.describe("tournament match", () => {
-  const tournament = (o: Partial<DbMatch> = {}) =>
-    drawer(match({ match_type: "Tournament", ...o }));
+  test("no event: the line reads the muted 'No event'", () => {
+    const line = whereLine(drawer(match({ match_type: "Tournament" })));
+    expect(line).toContain(MUTED_NO_EVENT);
+    expect(line).not.toContain("Practice");
+  });
 
-  test("the heading keeps its ResultMark beside the ScoreLine, no em dash", () => {
-    const html = tournament();
-    expect(html).toContain(
-      '<span data-component="ResultMark"></span><span data-component="ScoreLine">',
+  test("a named event reads its name", () => {
+    const line = whereLine(
+      drawer(
+        match({ match_type: "Tournament", tournament_name: "Fall Ladder" }),
+      ),
     );
-    expect(html).not.toContain("Practice, no result");
-  });
-
-  test("no event: the Event fact reads the muted 'No event'", () => {
-    const fact = eventFact(tournament());
-    expect(fact.text).toBe("No event");
-    expect(fact.className).toContain("text-[var(--ink-600)]");
-  });
-
-  test("a named event reads its name in the fact's ink", () => {
-    const fact = eventFact(tournament({ tournament_name: "Fall Open" }));
-    expect(fact.text).toBe("Fall Open");
-    expect(fact.className).toContain("text-[var(--ink-700)]");
+    expect(line).toContain("Fall Ladder");
+    expect(line).not.toContain("No event");
   });
 
   test("a null match_type falls back to 'Match' — not practice", () => {
-    expect(eventFact(drawer(match({ match_type: null }))).text).toBe(
-      "No event",
-    );
+    const line = whereLine(drawer(match({ match_type: null })));
+    expect(line).toContain(MUTED_NO_EVENT);
+    expect(line).not.toContain("Practice");
   });
+});
+
+test("the drawer tests practice through isPracticeMatch, never a literal", () => {
+  const src = readFileSync(
+    "src/components/dashboard/matches/match-drawer.tsx",
+    "utf8",
+  );
+  expect(src).toContain("isPracticeMatch(match.matchType)");
+  expect(src).not.toMatch(/===\s*["']Practice["']/i);
 });

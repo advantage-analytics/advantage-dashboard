@@ -48,7 +48,7 @@ const PLAYER_KEYS: ReadonlySet<MatchFilterKey> = new Set([
   "thenPlayer",
 ]);
 
-function otherPlayer(side: PlayerSide): PlayerSide {
+export function otherPlayer(side: PlayerSide): PlayerSide {
   return side === "you" ? "opponent" : "you";
 }
 

@@ -16,7 +16,7 @@
  */
 
 import { ChosenCheck } from "@/components/ui/float-menu";
-import { StatePill } from "@/components/ui/state-pill";
+import { CoachManagedGlyph } from "@/components/ui/coach-managed-mark";
 import { YouPill } from "@/components/ui/you-pill";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/data/match-utils";
@@ -126,6 +126,11 @@ export function RosterMenuList({
           const isYou =
             player.userId === viewerId ||
             (myPlayerId !== null && player.playerId === myPlayerId);
+          const coachManaged =
+            !isYou &&
+            !invited &&
+            player.managedBy === "coach" &&
+            player.userId === null;
           return (
             <RosterRow
               key={player.playerId}
@@ -138,24 +143,25 @@ export function RosterMenuList({
                 />
               }
               name={player.name}
+              // Roster state travels with the person: a profile a coach still
+              // runs carries the Coach-managed glyph after the name. A menu
+              // row's hover means "choose", so no tooltip can explain it —
+              // the meta line says it in words instead, and the glyph is
+              // silent.
+              nameMark={coachManaged ? <CoachManagedGlyph /> : null}
               meta={
                 isYou
                   ? "Your own match"
                   : invited
                     ? `Invited · ${player.invitedEmail}`
-                    : rosterMeta(player)
+                    : [
+                        rosterMeta(player),
+                        coachManaged ? "Coach-managed" : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
               }
-              trailing={
-                // Roster state travels with the person: a profile a coach
-                // still runs carries the grey pill.
-                isYou ? (
-                  <YouPill />
-                ) : !invited &&
-                  player.managedBy === "coach" &&
-                  player.userId === null ? (
-                  <StatePill>Coach-managed</StatePill>
-                ) : null
-              }
+              trailing={isYou ? <YouPill /> : null}
             />
           );
         })
@@ -214,6 +220,7 @@ export function RosterRow({
   avatar,
   name,
   meta,
+  nameMark,
   trailing,
 }: {
   chosen: boolean;
@@ -221,6 +228,8 @@ export function RosterRow({
   avatar: React.ReactNode;
   name: string;
   meta: string;
+  /** A glyph straight after the name — the Coach-managed mark. */
+  nameMark?: React.ReactNode;
   trailing?: React.ReactNode;
 }) {
   return (
@@ -239,6 +248,7 @@ export function RosterRow({
       <span className="text-[12px] font-medium whitespace-nowrap text-[var(--ink-900)]">
         {name}
       </span>
+      {nameMark}
       {meta && (
         <span className="min-w-0 truncate text-[11px] text-[var(--ink-500)]">
           {meta}
@@ -248,7 +258,7 @@ export function RosterRow({
       {trailing}
       {/* The chosen row is marked the way every menu in the app marks one —
           `ChosenCheck` at the right edge, no persistent fill. It sits after
-          the You / Coach-managed pill so the two read as different facts: who
+          the You pill so the two read as different facts: who
           this is, then what is picked. */}
       <ChosenCheck chosen={chosen} />
     </button>

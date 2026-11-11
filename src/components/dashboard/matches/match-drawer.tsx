@@ -5,12 +5,10 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import {
   Calendar,
-  Clock,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   MapPin,
-  Trophy,
   X,
 } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
@@ -25,16 +23,18 @@ import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/m
 import {
   DrawerAnalysisSteps,
   DrawerFact,
-  DrawerHeading,
   DrawerRecoveryAction,
   ProviderFact,
+  SnapshotComparison,
   SnapshotSection,
-  drawerSideName,
   forgetMatchSnapshot,
-  useMatchSnapshot,
+  useMatchSnapshotPair,
 } from "./drawer-sections";
 import { drawerAnalysisStepsView } from "./match-detail/analysis-steps";
-import { formatMatchDayShortYear } from "@/lib/data/match-day";
+import { RailScoreboard } from "./match-detail/rail-scoreboard";
+import { drawerScoreboardProps } from "./drawer-scoreboard";
+import { formatMatchDayMedium } from "@/lib/data/match-day";
+import { providers } from "@/lib/providers";
 import { advButton } from "@/lib/ui/adv-button";
 import { capitalize, cn } from "@/lib/utils";
 import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
@@ -85,10 +85,14 @@ export function forgetMatchDetails(matchId: string): void {
  * The shell is `PeekDrawerFrame`, shared with a draft's drawer; the header's
  * ⋯ is the uploader's Edit · Delete — the only place a match row's actions live.
  *
- * Body, top to bottom: the abbreviated match name links to its report, followed
- * by the outcome and score; compact icon-and-value metadata rows; the compact
- * Analysis steps (`DrawerAnalysisSteps`) when there are any; four snapshot figures once numbers exist — absent,
- * not empty, before that; and on a team match, its scheduled line.
+ * Body, top to bottom: both players' full names, linking to the report, over
+ * one "date · event · round" line; the report's own `RailScoreboard`
+ * (`drawer-scoreboard.ts`) once the match is settled; the compact Analysis
+ * steps (`DrawerAnalysisSteps`) when there are any; the four snapshot figures
+ * for both players (`SnapshotComparison`) once numbers exist — absent, not
+ * empty, before that; the icon fact rows the match has (court, home/away,
+ * provider — an empty one is left out); and on a team match, its scheduled
+ * line.
  *
  * ── The footer ─────────────────────────────────────────────────────────────
  * A blue "View match" for everyone, always — so a player, or a coach whose
@@ -153,15 +157,17 @@ export function MatchDrawer({
   const status = match.analysis?.status;
   const inFlight = status ? isInFlight(status) : false;
   const failed = status ? isAnalysisFailed(status) : false;
-  const snapshot = useMatchSnapshot(match.id, inFlight, match.turned);
+  const snapshot = useMatchSnapshotPair(match.id, inFlight, match.turned);
   const schedule = useScheduleLink(match.id, scope);
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
   const isPractice = isPracticeMatch(match.matchType);
-  // The Event fact's own name, if any; a practice session without one reads
-  // as practice rather than "No event" (the Matches list's Event cell).
-  const eventName = match.tournamentName || schedule?.name;
-  const title = `${drawerSideName(match.player1.name)} vs ${drawerSideName(match.player2.name)}`;
+  const title = `${match.player1.name} vs ${match.player2.name}`;
+  // The event's own name, if any; a practice session without one reads as
+  // practice rather than "No event" (the Matches list's Event cell).
+  const eventName = match.tournamentName || schedule?.name || null;
+  const hasProvider = providers.some((p) => p.id === match.sourceProvider);
+  const scheduled = SCHEDULE_ENABLED && isTeam && schedule ? schedule : null;
   // This drawer's access-control clause is canManage: it decides who reads the
   // stopped step's body and note, and who gets its action.
   const canAct = match.canManage !== false;
@@ -238,63 +244,36 @@ export function MatchDrawer({
       }
     >
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
-        <DrawerHeading
-          href={href}
-          label={`${match.player1.name} vs ${match.player2.name}`}
-          title={title}
-          won={match.score.winner === "player1"}
-          sets={settled ? match.score.sets : []}
-          practice={isPractice}
-        />
-
-        <div className="flex min-w-0 flex-col gap-2">
-          <dl className="flex min-w-0 flex-col gap-0.5 text-left">
-            <DrawerFact label="Date" icon={<Calendar />}>
-              <span className="tabular">
-                {formatMatchDayShortYear(match.date)}
-              </span>
-            </DrawerFact>
-            <DrawerFact
-              label="Court"
-              muted={!match.courtType}
-              icon={
-                <Image
-                  src="/icons/tennis-court-icon.svg"
-                  alt=""
-                  width={16}
-                  height={16}
-                />
-              }
+        {/* The record's name — both players in full, wrapping rather than
+            truncating — linking to the report, then where and when in one
+            line. A match with no event says so, muted, rather than leaving a
+            reader to wonder (`tests/match-no-event.spec.ts`). */}
+        <div className="flex min-w-0 flex-col gap-1">
+          <h2 className="text-[16px] leading-[22px] font-normal [text-wrap:balance] [overflow-wrap:anywhere]">
+            <Link
+              href={href}
+              className="rounded-[var(--radius-cell)] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >
-              {match.courtType ? capitalize(match.courtType) : "Not specified"}
-            </DrawerFact>
-            <DrawerFact
-              label="Home/Away"
-              muted={!schedule?.site}
-              icon={<MapPin />}
-            >
-              {schedule?.site ? capitalize(schedule.site) : "Not specified"}
-            </DrawerFact>
-            <DrawerFact
-              label="Event"
-              muted={!eventName && !isPractice}
-              icon={<Trophy />}
-            >
-              {eventName || (isPractice ? "Practice" : "No event")}
-              {match.round && (
-                <span className="ml-1 text-[11px] text-[var(--ink-500)]">
-                  {match.round}
-                </span>
-              )}
-            </DrawerFact>
-            {match.duration && (
-              <DrawerFact label="Duration" icon={<Clock />}>
-                <span className="tabular">{match.duration}</span>
-              </DrawerFact>
+              {match.player1.name} vs {match.player2.name}
+            </Link>
+          </h2>
+          <p className="tabular text-[12px] leading-[18px] text-[var(--ink-600)]">
+            {formatMatchDayMedium(match.date)}
+            {" · "}
+            {eventName ? (
+              eventName
+            ) : isPractice ? (
+              "Practice"
+            ) : (
+              <span style={{ color: "var(--ink-400)" }}>No event</span>
             )}
-            <ProviderFact providerId={match.sourceProvider} />
-          </dl>
+            {match.round && ` · ${match.round}`}
+          </p>
         </div>
+
+        {/* The match report's own scoreboard, so the drawer and the page
+            agree; absent, not zeroed, while the match analyses. */}
+        {settled && <RailScoreboard {...drawerScoreboardProps(match)} />}
 
         <DrawerAnalysisSteps
           analysis={match.analysis}
@@ -302,31 +281,74 @@ export function MatchDrawer({
           canAct={canAct}
         />
 
-        {settled && snapshot && <SnapshotSection snapshot={snapshot} />}
+        {/* Both players side by side — or, when the opponent has no
+            figures at all, the one-sided snapshot rather than a column of
+            dashes. */}
+        {settled &&
+          snapshot &&
+          (snapshot.opponent ? (
+            <SnapshotComparison
+              pair={snapshot}
+              youName={match.player1.name}
+              oppName={match.player2.name}
+            />
+          ) : (
+            <SnapshotSection snapshot={snapshot.you} />
+          ))}
 
-        {/* The line's site and event name still fill the facts above; only
+        {/* The facts the line above does not carry, each drawn only when the
+            match has it — an empty fact is left out, never "Not specified".
+            Date, event and duration live in the title line and the board.
+            On a team match the scheduled line is one more fact, the only one
+            that travels: it opens the event, so it carries the chevron. Only
             the way into the Schedule closes while it is a coming-soon page
             (`lib/schedule/availability.ts`). */}
-        {SCHEDULE_ENABLED && isTeam && schedule && (
-          <div className="flex flex-col gap-0.5">
-            <span className="eyebrow-sm pb-2">Schedule</span>
-            <Link
-              href={`/dashboard/team/schedule/${schedule.eventId}`}
-              className="-mx-2 grid h-10 grid-cols-[minmax(0,1fr)_max-content_12px] items-center gap-2.5 rounded-[var(--radius-element)] px-2 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              <span className="truncate text-[12px] text-[var(--ink-900)]">
-                {schedule.name}
-              </span>
-              <span className="mono text-[10px] text-[var(--ink-400)]">
-                {schedule.slot}
-              </span>
-              <ChevronRight
-                className="size-3 text-[var(--ink-300)]"
-                strokeWidth={1.5}
-                aria-hidden
-              />
-            </Link>
-          </div>
+        {(match.courtType || schedule?.site || hasProvider || scheduled) && (
+          <dl className="flex min-w-0 flex-col gap-0.5 text-left">
+            {match.courtType && (
+              <DrawerFact
+                label="Court"
+                icon={
+                  <Image
+                    src="/icons/tennis-court-icon.svg"
+                    alt=""
+                    width={16}
+                    height={16}
+                  />
+                }
+              >
+                {capitalize(match.courtType)}
+              </DrawerFact>
+            )}
+            {schedule?.site && (
+              <DrawerFact label="Home/Away" icon={<MapPin />}>
+                {capitalize(schedule.site)}
+              </DrawerFact>
+            )}
+            <ProviderFact providerId={match.sourceProvider} />
+            {scheduled && (
+              <DrawerFact label="Scheduled" icon={<Calendar />}>
+                <Link
+                  href={`/dashboard/team/schedule/${scheduled.eventId}`}
+                  className="-mx-1.5 -my-0.5 flex min-w-0 items-center gap-2 rounded-[var(--radius-cell)] px-1.5 py-0.5 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {scheduled.name}
+                  </span>
+                  {scheduled.slot && (
+                    <span className="mono shrink-0 text-[10px] text-[var(--ink-400)]">
+                      {scheduled.slot}
+                    </span>
+                  )}
+                  <ChevronRight
+                    className="size-3 shrink-0 text-[var(--ink-300)]"
+                    strokeWidth={1.5}
+                    aria-hidden
+                  />
+                </Link>
+              </DrawerFact>
+            )}
+          </dl>
         )}
       </div>
     </PeekDrawerFrame>

@@ -65,6 +65,9 @@ const HANDS_SEASON: SeasonVizMatch[] = [
     date: "2026-11-03",
     opponent: "Jordan Lee",
     opponentHand: "right",
+    won: true,
+    score: "6–3, 6–4",
+    courtType: "Outdoor Hard Court",
   },
   {
     matchId: "m-2",
@@ -79,6 +82,9 @@ const HANDS_SEASON: SeasonVizMatch[] = [
     date: "2026-10-20",
     opponent: "Sam Ortiz",
     opponentHand: "left",
+    won: false,
+    score: "4–6, 6–7",
+    courtType: "Clay Court",
   },
   {
     matchId: "m-3",
@@ -92,6 +98,9 @@ const HANDS_SEASON: SeasonVizMatch[] = [
     date: "2026-10-06",
     opponent: "Riley Park",
     opponentHand: null,
+    won: true,
+    score: "7–5, 6–2",
+    courtType: "Indoor Hard Court",
   },
 ];
 const SEASON: SeasonVizMatch[] = LOAD_PARAMS.has("empty")
@@ -155,6 +164,27 @@ function serverRender(query: string) {
     savedCards: buildSeasonViewCards(SEASON, SAVED_VIEWS, BANDS),
     lightbox: buildSeasonLightbox(SEASON, state, BANDS, NAMES, SAVED_VIEWS),
     errorSplitJudged,
+    // `?otherside=1`: the page's streamed other-side wall, landing a moment
+    // after the answer, as `page.tsx` sends it.
+    // On the wall only, as `page.tsx` streams it.
+    ...(LOAD_PARAMS.has("otherside") && state.cut === null
+      ? {
+          otherSideCards: new Promise<ReturnType<typeof buildSeasonCards>>(
+            (resolve) =>
+              window.setTimeout(
+                () =>
+                  resolve(
+                    buildSeasonCards(
+                      SEASON,
+                      side === "you" ? "opponent" : "you",
+                      BANDS,
+                    ),
+                  ),
+                50,
+              ),
+          ),
+        }
+      : {}),
   };
 }
 

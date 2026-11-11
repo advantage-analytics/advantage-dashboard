@@ -28,7 +28,7 @@ import {
   type PanZoom,
   type Size,
 } from "./pan-zoom";
-import { prefersReducedMotion } from "./use-reduced-motion";
+import { prefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
 import type { Cut } from "./viz-model";
 
 /**
@@ -161,10 +161,9 @@ export function usePanZoom(
   useLayoutEffect(() => {
     const el = stageRef.current;
     if (!el) return;
-    // The stage's own layout size, never its size on screen: the court morph
-    // scales the stage while it rides in under the card's court
-    // (`viz-court-morph.ts`, `handOver`), and a resize measured mid-flight
-    // would seed the 100% framing for a stage a fraction of its size. The
+    // The stage's own layout size, never its size on screen: a transform on
+    // an ancestor would otherwise seed the 100% framing for a stage a
+    // fraction of its size. The
     // fractional on-screen rect is kept whenever it agrees with the layout
     // size (no transform), as before.
     const measure = () => {

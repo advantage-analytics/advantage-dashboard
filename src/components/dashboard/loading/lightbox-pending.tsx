@@ -73,41 +73,25 @@ export function LightboxBodyPending({ label }: { label: string }) {
       innerClassName="flex min-h-0 flex-1 flex-col gap-6 overflow-hidden px-6 md:flex-row"
     >
       <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
-        {/* `data-lightbox-enter`: the rows rise in, in this order, after a
-            card's court flies in (`viz-court-morph.ts`) — as the shell's. */}
-        <div
-          data-lightbox-enter="1"
-          className="flex min-h-7 items-center gap-2 border-b border-[var(--border-hairline)] pb-3"
-        >
+        <div className="flex min-h-7 items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
           <div className="flex gap-1.5">
             <PendingBar className="h-[26px] w-[50px] rounded-[var(--radius-pill)]" />
             <PendingBar className="h-[26px] w-[82px] rounded-[var(--radius-pill)]" />
           </div>
           <PendingBar className="h-[26px] w-[72px] rounded-[var(--radius-pill)]" />
         </div>
-        {/* The court's stand-in: what a card's court grows into while the
-            court is on its way (`viz-court-morph.ts`). */}
-        <div
-          data-court-morph-target=""
-          className="flex h-[420px] w-full shrink-0 md:h-auto md:min-h-[360px] md:flex-1 md:shrink"
-        >
+        <div className="flex h-[420px] w-full shrink-0 md:h-auto md:min-h-[360px] md:flex-1 md:shrink">
           <PendingBar className="h-full w-full rounded-[10px]" />
         </div>
         {/* The legend row: 24px, the landed legend's on every chart. */}
-        <div
-          data-lightbox-enter="1"
-          className="flex h-6 items-center gap-x-[14px]"
-        >
+        <div className="flex h-6 items-center gap-x-[14px]">
           <PendingBar className="h-2.5 w-10" />
           <PendingBar className="h-2.5 w-10" />
           <PendingBar className="h-2.5 w-12" />
           <PendingBar className="h-2.5 w-14" />
         </div>
       </div>
-      <div
-        data-lightbox-enter="2"
-        className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]"
-      >
+      <div className="flex w-full shrink-0 flex-col md:ml-auto md:min-h-0 md:w-[340px]">
         <div className="flex min-h-7 items-center border-b border-[var(--border-hairline)] pb-3">
           <PendingBar className="h-[26px] w-[78px] rounded-[var(--radius-pill)]" />
         </div>
@@ -141,9 +125,8 @@ const LAYERS =
 const OPEN_STATES = ["open", "delayed-open", "instant-open"];
 
 /**
- * The frame before the shell's chunk has loaded (see above). The scrim does
- * not fade in — the shell takes its place in the same spot without a fade
- * of its own (`appear={false}`), so the hand-off is still.
+ * The frame before the shell's chunk has loaded (see above). Nothing fades
+ * in — the shell takes its place in the same spot, so the hand-off is still.
  */
 export function LightboxChunkPending({
   label,
@@ -210,10 +193,7 @@ export function LightboxChunkPending({
         className={LIGHTBOX_BOX_CLASS}
       >
         <TooltipProvider>
-          <div
-            data-lightbox-enter="0"
-            className="flex items-start gap-2.5 px-6 pt-6 pb-5"
-          >
+          <div className="flex items-start gap-2.5 px-6 pt-6 pb-5">
             <div aria-hidden="true" className="flex min-w-0 flex-col gap-1">
               <span className="flex h-[22px] items-center">
                 <PendingBar className="h-3 w-36" />

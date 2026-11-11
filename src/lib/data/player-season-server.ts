@@ -11,6 +11,7 @@ import {
 import { statKey } from "@/lib/data/aggregate";
 import { errorSplitJudged } from "@/lib/data/error-split";
 import { matchDay } from "@/lib/data/match-day";
+import { buildScoreString, matchOutcome } from "@/lib/data/match-utils";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import {
   cachedPointsReader,
@@ -433,6 +434,11 @@ async function readAnalyzedMatches(
       opponentHand: normalizePlayerHand(
         isPlayer1 ? match.opponent_hand : match.player_hand,
       ),
+      // The Matches sheet's row and its Result / Surface menus, from the
+      // player's seat (guardrails §4).
+      won: matchOutcome(match.score, isPlayer1),
+      score: buildScoreString(match.score, isPlayer1) || null,
+      courtType: match.court_type,
       points,
       isPlayer1,
       isDerived: isDerived(match),
@@ -535,6 +541,9 @@ export async function loadPlayerSeasonCourts(
         date,
         opponent,
         opponentHand,
+        won,
+        score,
+        courtType,
       }) => ({
         matchId,
         points,
@@ -544,6 +553,9 @@ export async function loadPlayerSeasonCourts(
         date,
         opponent,
         opponentHand,
+        won,
+        score,
+        courtType,
       }),
     ),
   };

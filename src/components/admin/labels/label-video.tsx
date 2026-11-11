@@ -566,10 +566,12 @@ export const LabelVideoPlayer = forwardRef<
           className="absolute inset-0"
         />
 
-        {/* The read-ahead: never shown, never played, same URL. */}
+        {/* The read-ahead: never shown, never played, same URL. No `src` until
+            the film is playable: each element holds its own connection to
+            storage and Safari allows about six per host. */}
         <video
           ref={readAheadRef}
-          src={video.url}
+          src={ready ? video.url : undefined}
           preload="auto"
           muted
           playsInline

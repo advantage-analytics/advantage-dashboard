@@ -28,12 +28,13 @@ import { SeasonRallyLengthCard } from "@/components/dashboard/team/player-profil
  * and Net game share it on the chart side — so both columns end level.
  *
  * ── The insight slot ────────────────────────────────────────────────────────
- * With analyzed matches it is `ProfileInsightCard`: the season claim streams
- * in from `/api/player-insight` over an evidence line the page composed from
- * the same fold (`buildSeasonEvidence`), so every figure on the card is the
- * server's. With none it is `ProfileInsightEmpty`, saying so — the card is
- * never asked for a player with nothing analyzed, because there is nothing
- * for a claim to be about.
+ * With analyzed matches it is `ProfileInsightCard`: the season claim and its
+ * description come from `/api/player-insight`, whose figures the server
+ * fills in from the fold, with the evidence line the page composed from the
+ * same fold (`buildSeasonEvidence`) as the fallback, so every figure on the
+ * card is the server's. With none it is `ProfileInsightEmpty`, saying so —
+ * the card is never asked for a player with nothing analyzed, because there
+ * is nothing for a claim to be about.
  *
  * ── No analyzed matches ─────────────────────────────────────────────────────
  * Unlike the report, which withholds its row for a match with no points, this

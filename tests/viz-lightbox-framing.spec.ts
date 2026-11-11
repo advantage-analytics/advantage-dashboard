@@ -45,12 +45,13 @@ test.describe("serve wall card: through the net", () => {
     expect(SERVE_COURT_THROUGH_NET.netOuterY).toBeGreaterThan(
       SERVE_COURT_THROUGH_NET.serviceLineOuterY,
     );
-    // The far baseline is in frame, with a little apron behind it.
+    // The far baseline is in frame, with apron behind it: the court sits low
+    // in the card.
     expect(SERVE_COURT_THROUGH_NET.baselineOuterY).toBeGreaterThan(
-      box.minY + 5,
+      box.minY + 15,
     );
-    // The net sits inside the art with a strip of the near boxes below it.
-    expect(bottom - SERVE_COURT_THROUGH_NET.netOuterY).toBeGreaterThan(20);
+    // The net sits inside the art with a strip of the near court below it.
+    expect(bottom - SERVE_COURT_THROUGH_NET.netOuterY).toBeGreaterThan(8);
     // The court surface runs past the window, so the frame edge cuts it.
     expect(117 + 0.85 * (SERVE_COURT_THROUGH_NET.cropY - 125)).toBeGreaterThan(
       bottom,

@@ -209,6 +209,9 @@ type FloatMenuItemBase = {
   icon?: React.ReactNode;
   /** A trailing glyph for a row that opens something (a chevron); no chosen state. */
   trailing?: React.ReactNode;
+  /** A quiet 11px figure before the right-edge check — how many an option
+   *  leaves (the lightbox's Matches sheet). */
+  meta?: React.ReactNode;
   className?: string;
   /**
    * Merged onto the DESCRIPTION line only. A narrow escape hatch, added for
@@ -243,6 +246,7 @@ export function FloatMenuItem({
   onSelect,
   icon,
   trailing,
+  meta,
   className,
   descriptionClassName,
 }: FloatMenuItemProps) {
@@ -326,6 +330,16 @@ export function FloatMenuItem({
           </span>
         ) : null}
       </span>
+      {meta != null && meta !== false ? (
+        <span
+          className={cn(
+            "mt-[1px] shrink-0 text-[11px] tabular-nums",
+            dark ? "text-white/50" : "text-[var(--ink-500)]",
+          )}
+        >
+          {meta}
+        </span>
+      ) : null}
       {/* Pinned to the label's line, not centred on a two-line row. */}
       {trailing ? (
         <span

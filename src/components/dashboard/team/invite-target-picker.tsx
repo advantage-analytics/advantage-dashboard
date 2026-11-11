@@ -1,8 +1,8 @@
 "use client";
 
+import { CoachManagedGlyph } from "@/components/ui/coach-managed-mark";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { ChosenCheck } from "@/components/ui/float-menu";
-import { StatePill } from "@/components/ui/state-pill";
 import { getInitials } from "@/lib/data/match-utils";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 
@@ -102,7 +102,12 @@ export function InviteTargetPicker({
             <span className="text-[13px] font-medium text-[var(--ink-900)]">
               {selected.name}
             </span>
-            <StatePill>Coach-managed</StatePill>
+            {/* Inside the field's button, so the silent glyph — a focusable
+                mark inside a button is invalid — with its name for readers.
+                Every profile this picker offers is coach-managed; the glyph
+                keeps the roster's mark on the one chosen. */}
+            <CoachManagedGlyph size={14} />
+            <span className="sr-only">Coach-managed</span>
           </>
         ) : (
           <span className="text-[13px] text-[var(--ink-400)]">

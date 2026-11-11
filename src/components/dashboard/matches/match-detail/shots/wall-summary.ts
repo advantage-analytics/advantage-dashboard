@@ -69,6 +69,9 @@ function segmentOf(row: StatRow): WallSegment {
   };
 }
 
+/** `contactBandRows`' keys, inside the baseline to furthest behind it. */
+const CONTACT_ORDER = ["inside", "near", "far"];
+
 function inOrder(rows: StatRow[], order: string[]): StatRow[] {
   const rank = (key: string) => {
     const i = order.indexOf(key);
@@ -82,7 +85,7 @@ function groupRows(stats: VizStats, key: string): StatRow[] {
 }
 
 /**
- * The wall card's footer for one of the four default cuts. `depthRows` is
+ * The wall card's footer for one of the five default cuts. `depthRows` is
  * `depthBandRows(bands, unit)` — the workspace's own band order (deep to
  * short), used only to order the rally card's segments.
  */
@@ -114,6 +117,12 @@ export function wallSummaryFor(
     );
     keyLead = "Went";
     unit = "returns";
+  } else if (cut === "returnContact") {
+    // Where the returner struck it: the contact bands, inside the baseline
+    // to furthest behind it, in that order (`contactBandRows`' fixed keys).
+    segments = inOrder(groupRows(stats, "depth"), CONTACT_ORDER).map(segmentOf);
+    keyLead = "Struck";
+    unit = "returns";
   } else if (cut === "errors") {
     segments = inOrder(groupRows(stats, "miss"), MISS_ORDER).map(segmentOf);
     keyLead = "Missed";
@@ -137,6 +146,9 @@ export function wallSummaryFor(
   // (Net, Long, Wide, and Landed in when any read in), so "N total" and the
   // segments can never disagree.
   if (cut === "errors") countLabel = `${count} total`;
+  // Every return has a contact point, in or not: a count, never "in".
+  else if (cut === "returnContact")
+    countLabel = `${count} ${count === 1 ? "return" : "returns"}`;
   else if (count === total) countLabel = `${count} in`;
   else countLabel = `${count} of ${total} in`;
 

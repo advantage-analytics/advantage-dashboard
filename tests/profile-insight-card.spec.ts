@@ -11,8 +11,8 @@ import { createLoader } from "./fixtures/vm-modules";
 /**
  * The team player profile's season insight card (`profile-insight-card.tsx`)
  * and its empty state, rendered offline from the real modules through
- * `createLoader()`. The server render is the card's first paint: the claim
- * has not streamed, so the claim slot holds the skeleton and the evidence
+ * `createLoader()`. The server render is the card's first paint: the answer
+ * has not arrived, so the claim slot holds the skeleton and the evidence
  * line — composed on the server, handed in as props — is already there.
  *
  * What is pinned: the report's insight anatomy (`INSIGHT_SURFACE`, the

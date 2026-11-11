@@ -7,10 +7,14 @@ import {
 import {
   type DbMatch,
   type DisplayMatch,
+  toTeamSide,
   toViewerSide,
   transformDbMatch,
 } from "@/lib/data/matches-list-types";
-import { getMyPlayerIdsOrThrow } from "@/lib/data/player-identity-server";
+import {
+  getMyPlayerIds,
+  getMyPlayerIdsOrThrow,
+} from "@/lib/data/player-identity-server";
 import { canonicalRosterIds, type RosterIdRow } from "@/lib/data/roster-ids";
 
 export async function enrichMatches(
@@ -119,15 +123,43 @@ export async function withViewerSide(
  * onto the one profile (`canonicalRosterIds`); an id the roster no longer
  * holds — an archived player, whose matches keep their old id — resolves to
  * null rather than to a link that 404s. A failed roster read links nobody.
+ *
+ * Given the stored `rows`, it also turns each row so the program's player
+ * comes first (`toTeamSide`): the viewer's own player ids, then the
+ * program's one answer to "is this id ours?" (`canonicalRosterIds`, both of
+ * a claimed player's ids — `roster-ids.ts`). A turned row's opponent is the
+ * stored seat one, so its hand is read for the Opponent facets.
  */
 export async function withRosterProfiles(
   supabase: SupabaseClient,
   programId: string,
   matches: Promise<DisplayMatch[]>,
+  rows?: readonly Pick<DbMatch, "id" | "score" | "player1_id">[],
 ): Promise<DisplayMatch[]> {
-  const [list, roster] = await Promise.all([
+  // A turned row's opponent sat in seat one, whose hand the list's enrichment
+  // never read (it reads seat two's). Read seat one's hands alongside the
+  // rest — not after the turn — so "Opponent: left-handed" does not quietly
+  // drop turned rows and the list pays no second round trip.
+  const seatOneIds = [
+    ...new Set(
+      (rows ?? [])
+        .map((row) => row.player1_id)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+  const [list, roster, myPlayerIds, seatOneHands] = await Promise.all([
     matches,
     supabase.rpc("program_roster_full", { p_program_id: programId }),
+    // Never fatal: a failed read only means the viewer's own seat is not
+    // preferred over a teammate's, and the roster test still turns the row.
+    rows ? getMyPlayerIds() : Promise.resolve([] as string[]),
+    seatOneIds.length > 0
+      ? supabase
+          .from("users")
+          .select("id, hand, backhand")
+          .in("id", seatOneIds)
+          .then(({ data }) => data ?? [])
+      : Promise.resolve([]),
   ]);
   if (roster.error) {
     // Degrades to "links nobody" — the list still renders — but a
@@ -140,9 +172,34 @@ export async function withRosterProfiles(
   const canonical = canonicalRosterIds((roster.data ?? []) as RosterIdRow[]);
   const profileOf = (id: string | null | undefined) =>
     id ? (canonical.get(id) ?? null) : null;
-  return list.map((match) => ({
-    ...match,
-    player1: { ...match.player1, profileId: profileOf(match.player1.id) },
-    player2: { ...match.player2, profileId: profileOf(match.player2.id) },
-  }));
+  const byId = new Map((rows ?? []).map((row) => [row.id, row]));
+
+  const oriented = list.map((match) => {
+    const linked: DisplayMatch = {
+      ...match,
+      player1: { ...match.player1, profileId: profileOf(match.player1.id) },
+      player2: { ...match.player2, profileId: profileOf(match.player2.id) },
+    };
+    const row = byId.get(match.id);
+    return row
+      ? toTeamSide(linked, row, myPlayerIds, (id) => canonical.has(id))
+      : linked;
+  });
+
+  const handOf = new Map(
+    seatOneHands.map((h) => [
+      h.id as string,
+      { hand: h.hand as string | null, backhand: h.backhand as string | null },
+    ]),
+  );
+  return oriented.map((m) => {
+    const opp = m.turned && m.player2.id ? handOf.get(m.player2.id) : null;
+    return opp
+      ? {
+          ...m,
+          player2Hand: opp.hand ?? undefined,
+          player2Backhand: opp.backhand ?? undefined,
+        }
+      : m;
+  });
 }

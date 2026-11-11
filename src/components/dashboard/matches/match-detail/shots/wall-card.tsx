@@ -10,7 +10,6 @@ import type { VizState } from "./viz-url";
 import { viewIdentityKey } from "./viz-url";
 import { useVizState } from "./use-viz-state";
 import { courtTileDomId } from "./viz-court-transition";
-import { armCourtMorph } from "./viz-court-morph";
 import {
   wallSegmentReadout,
   type WallSegment,
@@ -90,8 +89,6 @@ export function WallCard({
   function handleClick(e: MouseEvent<HTMLAnchorElement>): void {
     if (!isPlainLeftClick(e)) return;
     e.preventDefault();
-    // Its court starts for the lightbox's now (`viz-court-morph.ts`).
-    armCourtMorph(e.currentTarget, cut);
     setState(navigateState);
   }
 

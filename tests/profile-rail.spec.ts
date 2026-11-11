@@ -155,29 +155,49 @@ test("?tab=visualizations selects the second row", () => {
   );
 });
 
-test("the links carry what each page filters by, and pluralise", () => {
+test("the rows carry what each page filters by, with their counts", () => {
   const html = render();
   // Matches by roster id in either seat (`?rosterPlayer=`), never the
   // `?player=` name facet, which reads seat one only.
-  expect(html).toContain('href="/dashboard/matches?rosterPlayer=pp-1"');
+  expect(html).toMatch(
+    /<a href="\/dashboard\/matches\?rosterPlayer=pp-1"[^>]*>.*?>Matches<.*?>12<.*?<\/a>/,
+  );
   expect(html).not.toContain("matches?player=");
-  expect(html).toContain("12 matches");
-  expect(html).toContain('href="/dashboard/opponents?facedBy=pp-1"');
-  expect(html).toContain("9 opponents");
-  const one = render({ matchesCount: 1, opponentsCount: 1 });
-  expect(one).toContain("1 match<");
-  expect(one).toContain("1 opponent<");
+  expect(html).toMatch(
+    /<a href="\/dashboard\/opponents\?facedBy=pp-1"[^>]*>.*?>Opponents<.*?>9<.*?<\/a>/,
+  );
 });
 
 test("a count of zero is plain text, not a link to an empty page", () => {
   const html = render({ matchesCount: 3, opponentsCount: 0 });
   expect(html).toContain('href="/dashboard/matches?rosterPlayer=pp-1"');
   expect(html).not.toContain("facedBy=");
-  expect(html).toMatch(/<span[^>]*>0 opponents<\/span>/);
+  expect(html).toMatch(
+    /<span[^>]*><span[^>]*>Opponents<\/span><span[^>]*>0<\/span><\/span>/,
+  );
 
   const none = render({ matchesCount: 0, opponentsCount: 0 });
   expect(none).not.toContain("/dashboard/matches?");
-  expect(none).toMatch(/<span[^>]*>0 matches<\/span>/);
+  expect(none).toMatch(
+    /<span[^>]*><span[^>]*>Matches<\/span><span[^>]*>0<\/span><\/span>/,
+  );
+});
+
+test("Coach-managed is a named glyph after the name, not a pill", () => {
+  const managed = render({ profile: { managedBy: "coach" } });
+  expect(managed).toMatch(
+    /Maya Chen<span role="img" aria-label="Coach-managed" tabindex="0"/,
+  );
+});
+
+test("a long name wraps rather than truncating", () => {
+  const html = render({
+    profile: { name: "Maximiliana Fernández-Castellanos" },
+  });
+  expect(html).toMatch(
+    /<p class="[^"]*overflow-wrap:anywhere[^"]*">Maximiliana Fernández-Castellanos/,
+  );
+  expect(html).not.toMatch(/<p class="[^"]*\btruncate\b[^"]*">Maximiliana/);
 });
 
 test("Matches stays a link while there is practice to list, and never counts it", () => {
@@ -189,12 +209,12 @@ test("Matches stays a link while there is practice to list, and never counts it"
     profile: { practiceCount: 2 },
   });
   expect(practiceOnly).toMatch(
-    /<a href="\/dashboard\/matches\?rosterPlayer=pp-1"[^>]*>0 matches</,
+    /<a href="\/dashboard\/matches\?rosterPlayer=pp-1"[^>]*><span[^>]*>Matches<\/span><span[^>]*>0<\/span>/,
   );
   // Practice beside counted matches leaves the number alone.
   const both = render({ matchesCount: 3, profile: { practiceCount: 2 } });
-  expect(both).toContain("3 matches");
-  expect(both).not.toContain("5 matches");
+  expect(both).toMatch(/>Matches<\/span><span[^>]*>3<\/span>/);
+  expect(both).not.toMatch(/>Matches<\/span><span[^>]*>5<\/span>/);
   expect(both).not.toContain("ractice");
 });
 

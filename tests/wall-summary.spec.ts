@@ -35,34 +35,38 @@ const href = (s: Parameters<typeof vizStateQuery>[1]) =>
   vizStateQuery(new URLSearchParams(), s);
 const BANDS = { bands: DEFAULT_BANDS, unit: "ft" as const };
 
-test("the wall has four cuts, in order, one per card", () => {
+test("the wall has five cuts, in order, one per card", () => {
   expect(DEFAULT_CUTS.map((c) => [c.cut, c.name])).toEqual([
     ["serve", "All serves"],
     ["returnPlacement", "Returns"],
+    ["returnContact", "Return contact"],
     ["rallyPlacement", "Rally shots"],
     ["errors", "Unforced errors"],
   ]);
   expect(defaultCutsFor(false).map((c) => c.name)).toEqual([
     "All serves",
     "Returns",
+    "Return contact",
     "Rally shots",
     "Errors",
   ]);
   // All serves holds no filter (first and second); the errors cut keeps
   // errorsJudgedIn's rule.
   expect(DEFAULT_CUTS[0].filters).toEqual({});
-  expect(DEFAULT_CUTS[3].filters).toEqual({ error: ["unforced"] });
+  expect(DEFAULT_CUTS[4].filters).toEqual({ error: ["unforced"] });
 });
 
-test("eight tiles, four per player, each with a summary when bands are passed", () => {
+test("ten tiles, five per player, each with a summary when bands are passed", () => {
   const tiles = buildDefaultTiles(POINTS, SIDES, href, undefined, BANDS);
   expect(tiles.map((t) => t.key)).toEqual([
     "you:serve",
     "you:returnPlacement",
+    "you:returnContact",
     "you:rallyPlacement",
     "you:errors",
     "opponent:serve",
     "opponent:returnPlacement",
+    "opponent:returnContact",
     "opponent:rallyPlacement",
     "opponent:errors",
   ]);
@@ -116,7 +120,19 @@ test("every card's split bar sums to its count, and its count to computeViz/comp
       )!;
       expect(summary.count).toBe(group.rows.reduce((n, r) => n + r.count, 0));
     }
-    if (tile.cut !== "errors") {
+    if (tile.cut === "returnContact") {
+      // Every return has a contact point: a count, never "in", and the
+      // bands in order from inside the baseline to furthest behind it.
+      expect(summary.countLabel).toBe(
+        `${summary.count} ${summary.count === 1 ? "return" : "returns"}`,
+      );
+      expect(summary.keyLead).toBe("Struck");
+      expect(summary.segments.map((seg) => seg.key)).toEqual([
+        "inside",
+        "near",
+        "far",
+      ]);
+    } else if (tile.cut !== "errors") {
       expect(summary.countLabel).toBe(
         summary.count === summary.total
           ? `${summary.count} in`

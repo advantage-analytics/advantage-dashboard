@@ -11,15 +11,9 @@
 export const LIGHTBOX_OVERLAY_CLASS =
   "fixed inset-0 z-50 bg-[rgba(13,13,13,0.4)]";
 
-/** The enter fade, on the scrim and the box alike. The shell leaves it off
- *  when it replaces a frame already on screen (`appear`). */
-export const LIGHTBOX_ENTER_CLASS =
-  "data-[state=open]:animate-in data-[state=open]:fade-in-0";
-
 /** The box, centred in the viewport on both axes. `inset-0 m-auto` centres
- *  a fixed box of known size without a transform, so `transform` stays free
- *  and the box's layout rect is its rect on screen (the court morph measures
- *  it, `viz-court-morph.ts`). The height keeps the old top-anchored budget —
+ *  a fixed box of known size without a transform, so `transform` stays free.
+ *  The height keeps the old top-anchored budget —
  *  `clamp(16px,10dvh,96px)` plus 32px of the viewport — now split evenly
  *  above and below, so a small viewport still fits with the same margins.
  *

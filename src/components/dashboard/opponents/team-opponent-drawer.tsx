@@ -12,7 +12,7 @@ import { ScoreLine } from "@/components/dashboard/score-line";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import {
   Sparkline,
-  StatPill,
+  MeasureSelector,
   drawerPercent,
   type SparkPoint,
 } from "@/components/dashboard/shared/drawer-stat-chart";
@@ -42,6 +42,7 @@ import {
   type TeamChoice,
 } from "./add-opponent-team";
 import {
+  OPPONENT_MEASURE_PILL,
   RECENT_ROWS,
   askAboutOpponentHref,
   opponentDrawerFooter,
@@ -593,17 +594,25 @@ export function TeamOpponentDrawer({
           )}
         </div>
 
-        {/* One-line stat header, the sparkline, and the four pills that switch
-            it — only where the chosen scope has a figure. */}
+        {/* The trend, as one group — the roster drawer's: the four measures as
+            one selector ABOVE the chart they switch, each with its figure,
+            then the chart under a header that says only what the selector
+            does not (the full label, the change). The per-match dates are the
+            chart's hover and the list below. Only where a figure exists. */}
         {hasStats && (
-          <div className="flex flex-col gap-3.5">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-[12px] text-[var(--ink-600)]">
-                {statLabel}
-              </span>
-              <span className="inline-flex items-baseline gap-1.5">
-                <span className="tabular text-[16px] text-[var(--ink-900)]">
-                  {drawerPercent(active.value)}
+          <div className="flex flex-col gap-3">
+            <MeasureSelector
+              measures={scope.measures.map((m) => ({
+                ...m,
+                pill: OPPONENT_MEASURE_PILL[m.key],
+              }))}
+              activeKey={active.key}
+              onSelect={setActiveKey}
+            />
+            <div className="flex flex-col gap-2.5 pt-1">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[12px] text-[var(--ink-600)]">
+                  {statLabel}
                 </span>
                 {heroDelta && (
                   <span
@@ -613,26 +622,8 @@ export function TeamOpponentDrawer({
                     {heroDelta.label}
                   </span>
                 )}
-              </span>
-            </div>
-            <Sparkline label={statLabel} points={points} />
-            <div className="flex justify-between">
-              <span className="mono text-[10px] text-[var(--ink-400)]">
-                {points[0]?.match.date ?? ""}
-              </span>
-              <span className="mono text-[10px] text-[var(--ink-400)]">
-                {points.length > 1 ? points[points.length - 1].match.date : ""}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5 border-t border-[var(--border-hairline)] pt-4">
-              {scope.measures.map((measure) => (
-                <StatPill
-                  key={measure.key}
-                  measure={{ ...measure, pill: measure.label }}
-                  selected={measure.key === active.key}
-                  onSelect={() => setActiveKey(measure.key)}
-                />
-              ))}
+              </div>
+              <Sparkline label={statLabel} points={points} />
             </div>
           </div>
         )}
@@ -684,8 +675,12 @@ export function TeamOpponentDrawer({
                 ) : (
                   <span aria-hidden />
                 )}
+                {/* The event, or — when the match was filed with none — who of
+                    ours played it, the one fact a bare "Match" left out. */}
                 <span className="truncate text-[12px] text-[var(--ink-900)]">
-                  {match.event ?? "Match"}
+                  {match.event ?? player?.name ?? (
+                    <span style={{ color: "var(--ink-400)" }}>No event</span>
+                  )}
                 </span>
                 {sets.length > 0 ? (
                   <ScoreLine

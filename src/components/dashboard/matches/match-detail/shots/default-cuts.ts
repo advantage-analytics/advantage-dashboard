@@ -1,8 +1,9 @@
 /**
- * Default cuts for the Visualizations tab: the wall's four court-first cards
- * (canvas W5), in order — All serves, Returns, Rally shots, Unforced
- * errors. `name` is the card's title and the lightbox's. Return contact is
- * no longer a card of its own; it stays a cut (the chart menu, saved views).
+ * Default cuts for the Visualizations tab: the wall's five court-first cards
+ * (canvas W5), in order — All serves, Returns, Return contact, Rally shots,
+ * Unforced errors. `name` is the card's title and the lightbox's. Return
+ * contact is a card again (user ask, 2026-11-10; the wall had dropped it to
+ * four on 2026-11-08).
  *
  * Pure TypeScript; no React, no "use client".
  */
@@ -36,6 +37,13 @@ export const DEFAULT_CUTS: DefaultCut[] = [
     cut: "returnPlacement",
     chart: "scatter",
     name: "Returns",
+    filters: {},
+    pills: ["All strokes", "Deuce + Ad"],
+  },
+  {
+    cut: "returnContact",
+    chart: "scatter",
+    name: "Return contact",
     filters: {},
     pills: ["All strokes", "Deuce + Ad"],
   },

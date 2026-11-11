@@ -160,6 +160,9 @@ export interface RosterMember {
   classYear: string | null;
   /** Their line in the lineup, or null where the program has never set one. */
   lineupSpot: number | null;
+  /** Raw saved hand and backhand ("right", "two-handed"), as the profile reads them. */
+  hand: string | null;
+  backhand: string | null;
   /** "Aug 20" — when the row appeared, which is what the invite picker shows. */
   addedOn: string;
   /**
@@ -271,6 +274,9 @@ interface DbRosterRow {
   class_year: string | null;
   lineup_spot: number | null;
   managed_by: string;
+  /** `coalesce(users.hand, program_players.hand)` — the claimed player's own once claimed. */
+  hand?: string | null;
+  backhand?: string | null;
   upload_enabled: boolean;
   joined_at: string;
   claimed_at: string | null;
@@ -663,6 +669,8 @@ export const getRosterData = cache(async function getRosterData(
       uploadEnabled: row.upload_enabled,
       classYear: row.class_year,
       lineupSpot: row.lineup_spot,
+      hand: row.hand ?? null,
+      backhand: row.backhand ?? null,
       addedOn: shortDate(row.joined_at),
       claimedToday: isToday(row.claimed_at, now, timeZone),
       // Filled in below, once every row is known.

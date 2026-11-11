@@ -312,9 +312,11 @@ test.describe("buildSeasonCards", () => {
           expect(card.summary.countLabel).toBe(
             card.cut === "errors"
               ? `${card.summary.count} total`
-              : card.summary.count === card.summary.total
-                ? `${card.summary.count} in`
-                : `${card.summary.count} of ${card.summary.total} in`,
+              : card.cut === "returnContact"
+                ? `${card.summary.count} ${card.summary.count === 1 ? "return" : "returns"}`
+                : card.summary.count === card.summary.total
+                  ? `${card.summary.count} in`
+                  : `${card.summary.count} of ${card.summary.total} in`,
           );
           // What opening the card asks the URL for: the default cut, this side.
           const cut = defaultCutsFor(judged).find((c) => c.cut === card.cut)!;
@@ -380,11 +382,15 @@ test.describe("buildSeasonCards", () => {
   });
 
   test("the errors card follows the season's judged rule, as the Statistics tab's Errors row does", () => {
-    const judged = buildSeasonCards(JUDGED, "you", BANDS)[3];
+    const judged = buildSeasonCards(JUDGED, "you", BANDS).find(
+      (c) => c.cut === "errors",
+    )!;
     expect(judged.name).toBe("Unforced errors");
     expect(judged.state.filters.error).toEqual(["unforced"]);
 
-    const unjudged = buildSeasonCards(UNJUDGED, "you", BANDS)[3];
+    const unjudged = buildSeasonCards(UNJUDGED, "you", BANDS).find(
+      (c) => c.cut === "errors",
+    )!;
     expect(unjudged.name).toBe("Errors");
     expect(unjudged.state.filters.error).toEqual(["unforced", "forced"]);
     // A's forced error counts on the unjudged season's Errors card — more
@@ -397,9 +403,9 @@ test.describe("buildSeasonCards", () => {
     );
   });
 
-  test("no analyzed matches: four cards, every total 0, nothing counted", () => {
+  test("no analyzed matches: five cards, every total 0, nothing counted", () => {
     const cards = buildSeasonCards([], "you", BANDS);
-    expect(cards).toHaveLength(4);
+    expect(cards).toHaveLength(5);
     for (const card of cards) {
       expect(card.total).toBe(0);
       expect(card.dots).toEqual([]);
@@ -772,7 +778,6 @@ type ShellProps = Record<string, unknown> & {
   onClose: () => void;
   player?: { value: string; onChange: (player: "you" | "opponent") => void };
   pending?: boolean;
-  appear?: boolean;
 };
 
 /**
@@ -797,6 +802,7 @@ async function renderView(
     savedCards?: SeasonCard[];
     lightbox: SeasonLightboxData | null;
     errorSplitJudged?: boolean;
+    saveView?: { savedViews: unknown[]; workspaceName: string };
   },
   query: string,
 ) {
@@ -844,6 +850,16 @@ async function renderView(
       "@/components/ui/tooltip": { TooltipProvider: fragment },
       "@/components/dashboard/shared/chrome-tooltip": {
         ChromeTooltip: fragment,
+      },
+      // The Save popover reaches the server action module; the button's
+      // props are what is read here.
+      "@/components/dashboard/matches/match-detail/shots/save-as-view-button": {
+        SaveAsViewButton: (p: Record<string, unknown>) =>
+          React.createElement("button", {
+            "data-testid": "save-as-view",
+            "data-cut": p.cut,
+            "data-workspace": p.workspaceName,
+          }),
       },
     },
   });
@@ -1236,13 +1252,11 @@ test.describe("the Visualizations view, rendered", () => {
 
     // With the chunk: the shell itself, `pending`, over an empty court — the
     // one dialog that will show the court when the answer lands, so the
-    // opener it records is the card. Its chunk was here when this opening
-    // began (the warm-up pass loaded it), so it enters with its fade.
+    // opener it records is the card.
     expect(first.html).not.toContain("lightbox-chunk-pending");
     expect(first.shellProps).toHaveLength(1);
     const shell = first.shellProps[0];
     expect(shell.pending).toBe(true);
-    expect(shell.appear).toBe(true);
     expect(shell.cut).toBe("serve");
     expect(shell.title).toBe("Serve placement");
     expect(shell.result.dots).toEqual([]);
@@ -1516,12 +1530,15 @@ test.describe("the Visualizations view, rendered", () => {
     expect(source).toMatch(
       /const player =\s*state\.cut === null \? state\.filters\.player : wallPlayer;/,
     );
+    // Any side the browser holds counts — the server's, or the other one
+    // once it has streamed in (`otherSideCards`).
+    expect(source).toContain("const ready = cardsBySide[player];");
     expect(source).toMatch(
-      /if \(side === player && \(shown\.cards !== cards \|\| shown\.side !== side\)\)/,
+      /if \(ready && \(shown\.cards !== ready \|\| shown\.side !== player\)\)/,
     );
     expect(source).toContain("cards={shown.cards}");
     expect(source).toContain("cardsSide={shown.side}");
-    expect(source).toContain("busy={analyzed > 0 && side !== player}");
+    expect(source).toContain("busy={analyzed > 0 && ready === undefined}");
   });
 
   test("the store reads ?verr= by the season's rule, as the server does: on an unjudged season Unforced opens on every error in the browser too", async () => {
@@ -1574,12 +1591,56 @@ test.describe("the Visualizations view, rendered", () => {
     expect(b.shellProps[0].filters).toEqual(judged.filters);
   });
 
+  test('with `saveView`, the opened card\'s footer is "Save as view" for its cut, in the team workspace', async () => {
+    const state = parseVizState(new URLSearchParams("cut=serve"), {
+      errorSplitJudged: true,
+    });
+    const cards = buildSeasonCards(JUDGED, "you", BANDS);
+    const lightbox = buildSeasonLightbox(JUDGED, state, BANDS, NAMES)!;
+    const { shellProps } = await renderView(
+      {
+        analyzed: 2,
+        side: "you",
+        cards,
+        lightbox,
+        saveView: { savedViews: [], workspaceName: "Test U" },
+      },
+      "tab=visualizations&cut=serve",
+    );
+    const footer = shellProps[0].footer as (args: unknown) => {
+      start: React.ReactElement<Record<string, unknown>>;
+      end: unknown;
+    };
+    expect(typeof footer).toBe("function");
+    const { start, end } = footer({ matched: [], phrases: [] });
+    expect(end).toBeNull();
+    // The button loads with the opened card (`React.lazy`), so the footer is
+    // a Suspense boundary whose fallback reads "Save as view" while it
+    // loads, around the button with this card's cut and workspace.
+    const boundary = start as React.ReactElement<{
+      fallback: React.ReactElement;
+      children: React.ReactElement<Record<string, unknown>>;
+    }>;
+    expect(renderToStaticMarkup(boundary.props.fallback)).toContain(
+      "Save as view",
+    );
+    expect(boundary.props.children.props).toMatchObject({
+      cut: "serve",
+      workspaceKind: "team",
+      workspaceName: "Test U",
+    });
+    // No season filter on: no "not part of a view" note.
+    expect(boundary.props.children.props.note).toBeUndefined();
+  });
+
   test("the container's source names no point: no MatchPoint, no points prop, none of the omitted slots", () => {
     const source = readFileSync(CONTAINER, "utf8");
     expect(source).not.toContain("MatchPoint");
     expect(source).not.toMatch(/\bpoints\b/);
-    for (const slot of ["pointList", "footer", "bandEditor", "draft"])
+    for (const slot of ["pointList", "bandEditor", "draft"])
       expect(source).not.toMatch(new RegExp(`\\b${slot}=`));
+    // The one write, "Save as view", is the footer's, and only with `saveView`.
+    expect(source).toMatch(/footer=\{\s*saveView/);
     // Every change goes through the URL store.
     expect(source).toContain("useVizState");
     expect(source).toContain("setState(");
@@ -1605,7 +1666,6 @@ test.describe("the Visualizations view, rendered", () => {
     expect(source).toContain("key={opening.id}");
     expect(source).toMatch(/id: opening\.id \+ 1/);
     expect(source).toContain("pending={pending}");
-    expect(source).toContain("appear={opening.shellReady}");
   });
   test("Saved: the workspace's views over the season in the wall's grid, each a link to its view; none says so", async () => {
     const savedCards = buildSeasonViewCards(JUDGED, SAVED_VIEWS, BANDS);
@@ -2021,11 +2081,15 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
     )!;
     const each = HANDS.map((m) => count(m, "cut=serve"));
     expect(data.result.count).toBe(sum(each));
-    expect(data.seasonOptions.handCounts).toEqual({
-      any: sum(each),
-      right: each[0],
-      left: each[1],
-      unknown: each[2],
+    // Each row carries its match's hand, for the sheet's Opponent menu.
+    expect(
+      Object.fromEntries(
+        data.seasonOptions.matches.map((m) => [m.id, [m.count, m.hand]]),
+      ),
+    ).toEqual({
+      a: [each[0], "right"],
+      b: [each[1], "left"],
+      d: [each[2], "unknown"],
     });
     // Newest first, by match day.
     expect(data.seasonOptions.matches.map((m) => m.id)).toEqual([
@@ -2047,7 +2111,7 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
     expect(data.hasFilters).toBe(false);
   });
 
-  test("Lefties: the court is the lefty's match alone, named in the strip; matches of another hand count 0", () => {
+  test("Lefties: the court is the lefty's match alone, named in the strip; every match row keeps its own count for the sheet to sum", () => {
     const state = seasonState("cut=serve&ball=first&vopp=left");
     const data = buildSeasonLightbox(HANDS, state, BANDS, NAMES)!;
     const part = partFor(B, "serve", state.filters);
@@ -2059,23 +2123,27 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
     // Every mark names B — index 1 into `matches`, which stays the season.
     expect(new Set(data.dotPoints.map((ref) => ref[0]))).toEqual(new Set([1]));
     expect(data.matches.map((m) => m.id)).toEqual(["a", "b", "d"]);
-    expect(data.filterPhrases).toEqual(["1st", "Lefties"]);
+    expect(data.filterPhrases).toEqual(["1st", "Left-handed"]);
     expect(data.subtitle).toContain("1 match ·");
     expect(data.panelActive).toBe(true);
     expect(data.hasFilters).toBe(true);
-    expect(data.season).toEqual({ opponentHand: "left", matches: [] });
+    expect(data.season).toEqual({
+      opponentHand: "left",
+      result: null,
+      surface: null,
+      matches: [],
+    });
+    // The Matches sheet filters its own draft in the browser, so a row's
+    // count is its match under the shot filters, whatever the match filters
+    // keep; each row also says the hand the sheet filters on.
     const byId = Object.fromEntries(
-      data.seasonOptions.matches.map((m) => [m.id, m.count]),
+      data.seasonOptions.matches.map((m) => [m.id, [m.count, m.hand]]),
     );
     expect(byId).toEqual({
-      b: count(B, "cut=serve&ball=first"),
-      a: 0,
-      d: 0,
+      b: [count(B, "cut=serve&ball=first"), "left"],
+      a: [count(A, "cut=serve&ball=first"), "right"],
+      d: [count(D, "cut=serve&ball=first"), "unknown"],
     });
-    // The hand counts read every other live filter (the first serves).
-    expect(data.seasonOptions.handCounts.right).toBe(
-      count(HANDS[0], "cut=serve&ball=first"),
-    );
     // Statistics and the option counts are the lefty's alone too.
     expect(data.stats.total).toBe(part.result.count);
     expect(data.optionCounts[optionCountKey({ zone: ["t"] })]).toBe(
@@ -2098,7 +2166,7 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
       NAMES,
     )!;
     expect(data.result.count).toBe(count(D, "cut=rallyPlacement"));
-    expect(data.filterPhrases).toEqual(["Opponent's hand unknown"]);
+    expect(data.filterPhrases).toEqual(["Hand unknown"]);
   });
 
   test("two ticked matches: the court is their sum, the strip says '2 matches', and an id outside the season is ignored", () => {
@@ -2114,15 +2182,49 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
     // container's signature still finds it.
     expect(data.season).toEqual({
       opponentHand: null,
+      result: null,
+      surface: null,
       matches: ["a", "d", "ffff"],
     });
-    // The hand counts are over the ticked matches; a match row is itself
-    // alone, ticked or not.
-    expect(data.seasonOptions.handCounts.any).toBe(sum(expected));
-    expect(data.seasonOptions.handCounts.left).toBe(0);
+    // A match row is itself alone, ticked or not.
     expect(data.seasonOptions.matches.find((m) => m.id === "b")!.count).toBe(
       count(B, "cut=errors&verr=unforced"),
     );
+  });
+
+  test("Result and Surface: the court keeps the won clay matches, the strip names both, and each row carries its result, score and surface", () => {
+    const SCORED: SeasonVizMatch[] = [
+      { ...HANDS[0], won: true, score: "6–3, 6–4", courtType: "Clay Court" },
+      { ...HANDS[1], won: false, score: "4–6, 3–6", courtType: "Clay Court" },
+      { ...HANDS[2], won: true, score: null, courtType: "Outdoor Hard Court" },
+    ];
+    const data = buildSeasonLightbox(
+      SCORED,
+      seasonState("cut=serve&vres=won&vsurf=clay"),
+      BANDS,
+      NAMES,
+    )!;
+    expect(data.result.count).toBe(count(SCORED[0], "cut=serve"));
+    expect(data.filterPhrases).toEqual(["Won", "Clay"]);
+    expect(data.subtitle).toContain("1 match ·");
+    expect(data.season).toEqual({
+      opponentHand: null,
+      result: "won",
+      surface: "clay",
+      matches: [],
+    });
+    const a = data.seasonOptions.matches.find((m) => m.id === "a")!;
+    expect(a).toMatchObject({ won: true, score: "6–3, 6–4", surface: "clay" });
+    const d = data.seasonOptions.matches.find((m) => m.id === "d")!;
+    expect(d).toMatchObject({ won: true, score: null, surface: "hard" });
+    // A match with no stored result is in neither Won nor Lost.
+    const unscored = buildSeasonLightbox(
+      [{ ...SCORED[0], won: null }],
+      seasonState("cut=serve&vres=lost"),
+      BANDS,
+      NAMES,
+    )!;
+    expect(unscored.result.count).toBe(0);
   });
 
   test("only ids outside the season: no filter at all, as if none were ticked", () => {

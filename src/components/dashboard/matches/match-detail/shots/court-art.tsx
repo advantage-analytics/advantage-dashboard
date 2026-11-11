@@ -964,8 +964,8 @@ export function CourtArt({
                 );
                 if (cx === placed.cx && cy === placed.cy) return mark;
                 // Pinned: the offset back to its true spot travels with it,
-                // so the card-to-lightbox flight (`viz-court-morph.ts`) can
-                // carry the mark to where the lightbox draws it.
+                // so a reader of the pinned
+                // mark can find where the lightbox draws it.
                 return (
                   <g
                     key={d.id}

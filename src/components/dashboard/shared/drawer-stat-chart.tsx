@@ -225,46 +225,72 @@ export function Sparkline({
   );
 }
 
-/* ── Stat pills ───────────────────────────────────────────────────────────── */
+/* ── Measure selector ─────────────────────────────────────────────────────── */
 
 /**
- * One of the four. `20c`: 19f pill anatomy — the selected one carries
- * `--border-medium` + `--surface-subtle`, the rest a hairline on nothing.
- * The frame draws them 26px tall, so 26 it is.
+ * The drawers' four measures as one selector ABOVE the sparkline they switch
+ * — the roster drawer's, shared with both opponent drawers so every drawer
+ * with a trend reads the same way (drawer redesign, 2026-11-10). Each cell
+ * carries its figure, so the choice comes before the reading and the chart's
+ * header need not repeat the number. The selected cell takes the neutral
+ * wash; the rest wash only on hover. A long label truncates here because the
+ * chart's header beneath names the selected measure in full.
  */
-export function StatPill({
-  measure,
-  selected,
+export function MeasureSelector<Key extends string>({
+  measures,
+  activeKey,
   onSelect,
 }: {
-  /** The pill's short label, its figure, and the trend it prints beside it. */
-  measure: { pill: string; value: number | null; trend: number | null };
-  selected: boolean;
-  onSelect: () => void;
+  /** `pill` is the short label; `label` is used where there is none. */
+  measures: readonly {
+    key: Key;
+    label: string;
+    pill?: string;
+    value: number | null;
+  }[];
+  activeKey: Key | undefined;
+  onSelect: (key: Key) => void;
 }) {
-  const delta = measure.trend === null ? null : formatDelta(measure.trend);
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onSelect}
-      className={cn(
-        "inline-flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[var(--radius-pill)] border px-2.5 text-[11px] text-[var(--ink-600)]",
-        "transition-colors duration-[var(--duration-hover)] ease-[var(--ease-primary)] hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-        selected
-          ? "border-[var(--border-medium)] bg-[var(--surface-subtle)]"
-          : "border-[var(--border-hairline)] bg-transparent",
-      )}
+    <div
+      role="group"
+      aria-label="Measure"
+      className="-mx-2 grid grid-cols-4 gap-0.5"
     >
-      {measure.pill}
-      <span className="tabular text-[var(--ink-900)]">
-        {drawerPercent(measure.value)}
-      </span>
-      {delta && (
-        <span className="tabular font-medium" style={{ color: delta.color }}>
-          {delta.label}
-        </span>
-      )}
-    </button>
+      {measures.map((measure) => {
+        const selected = measure.key === activeKey;
+        return (
+          <button
+            key={measure.key}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onSelect(measure.key)}
+            className={cn(
+              "flex min-w-0 cursor-pointer flex-col items-start gap-0.5 rounded-[var(--radius-element)] px-2 pt-2 pb-[7px] text-left transition-colors duration-[var(--duration-hover)] ease-[var(--ease-primary)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+              selected
+                ? "bg-[var(--surface-subtle)]"
+                : "hover:bg-[var(--surface-muted)]",
+            )}
+          >
+            <span
+              className={cn(
+                "max-w-full truncate text-[10px]",
+                selected ? "text-[var(--ink-700)]" : "text-[var(--ink-600)]",
+              )}
+            >
+              {measure.pill ?? measure.label}
+            </span>
+            <span
+              className={cn(
+                "tabular text-[14px]",
+                selected ? "text-[var(--ink-900)]" : "text-[var(--ink-700)]",
+              )}
+            >
+              {drawerPercent(measure.value)}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }

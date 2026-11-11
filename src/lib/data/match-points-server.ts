@@ -210,12 +210,35 @@ async function fetchSavedByPointId(
   supabase: SupabaseClient,
   matchId: string,
   pointIds: string[],
+  /** The match's program when the caller already holds its row; `undefined`
+   *  reads it here. */
+  knownProgramId?: string | null,
 ): Promise<Map<string, { userId: string; name: string | null }[]>> {
   const savedByPointId = new Map<
     string,
     { userId: string; name: string | null }[]
   >();
   if (pointIds.length === 0) return savedByPointId;
+
+  // The program lookup is independent of the bookmarks, so it starts with
+  // them rather than after them.
+  const programIdPromise: Promise<string | null> =
+    knownProgramId !== undefined
+      ? Promise.resolve(knownProgramId)
+      : (async () => {
+          const { data: matchRow, error: matchError } = await supabase
+            .from("matches")
+            .select("program_id")
+            .eq("id", matchId)
+            .maybeSingle();
+          if (matchError) {
+            console.error("Failed to fetch match program:", matchError.message);
+            return null;
+          }
+          return (matchRow?.program_id as string | null | undefined) ?? null;
+        })();
+  // Handled here too: the bookmark read may return before awaiting it.
+  programIdPromise.catch(() => {});
 
   const { data: bookmarksData, error: bookmarksError } = await supabase
     .from("point_bookmarks")
@@ -236,18 +259,11 @@ async function fetchSavedByPointId(
   // The badge that will render these names is out of scope here (T5 only
   // adds the data) — existing readers keep using `saved`.
   const nameByUserId = new Map<string, string | null>();
-  const { data: matchRow, error: matchError } = await supabase
-    .from("matches")
-    .select("program_id")
-    .eq("id", matchId)
-    .maybeSingle();
-
-  if (matchError) {
-    console.error("Failed to fetch match program:", matchError.message);
-  } else if (matchRow?.program_id) {
+  const programId = await programIdPromise;
+  if (programId) {
     const { data: roster, error: rosterError } = await supabase.rpc(
       "program_roster_full",
-      { p_program_id: matchRow.program_id },
+      { p_program_id: programId },
     );
     if (rosterError) {
       console.error("Failed to fetch program roster:", rosterError.message);
@@ -299,12 +315,48 @@ export async function getMatchPointsFromSupabase(
      * no business seeing who saved what.
      */
     includeBookmarks?: boolean;
+    /**
+     * The match's `program_id` when the caller already read the row
+     * (`match-detail-server.ts`), so the bookmarks' names skip a re-read.
+     */
+    programId?: string | null;
   } = {},
 ): Promise<MatchPoint[] | null> {
   const supabase = client ?? (await createClient());
-  const { includeBookmarks = true } = options;
+  const { includeBookmarks = true, programId } = options;
 
-  // Fetch points first
+  // The match's shots, in pages, started alongside the points: they are read
+  // by `shots.match_id` (trigger-kept from the shot's point,
+  // `20261110191701_shots_match_id_rls.sql`) on its own index, so they need
+  // no point ids — one query a match instead of an `in.(…)` list per chunk,
+  // and no burst of requests when a season reads several matches at once.
+  // PostgREST caps a response at 1000 rows, and a full three-set match passes
+  // that — a single request silently dropped the tail of the match, which
+  // the film room's shot feed shows row by row. The order is total (point,
+  // shot number, id) so pages never overlap or skip.
+  //
+  // Fail-closed, like `supabaseAttachmentSourceRows`: an error on any page
+  // returns `null` ("no answer") rather than points carrying half their shots.
+  // A point with its shots cut off reads as a short rally and relabels its
+  // serve, return and last shot — a wrong answer that looks like a right one.
+  const shotsRead = fetchAllPages<DbShot>(async (from, to) => {
+    const { data, error } = await supabase
+      .from("shots")
+      .select(
+        "id, point_id, shot_number, is_player1, shot_type, spin_type, speed_mph, video_time, bounce_video_time, zone, result, contact_x, contact_y, landing_x, landing_y",
+      )
+      .eq("match_id", matchId)
+      .order("point_id", { ascending: true })
+      .order("shot_number", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to);
+    // The helper stops at the first error, so this logs exactly once.
+    if (error) console.error("Failed to fetch shots:", error.message);
+    return { data: data as DbShot[] | null, error };
+  });
+  // Handled here too: a match with no points returns before awaiting it.
+  shotsRead.catch(() => {});
+
   const { data: pointsData, error: pointsError } = await supabase
     .from("points")
     .select(
@@ -324,37 +376,17 @@ export async function getMatchPointsFromSupabase(
   const points = pointsData as DbPoint[];
   const pointIds = points.map((p) => p.id);
 
-  // Fetch shots for these points, in pages. PostgREST caps a response at 1000
-  // rows by default, and a full three-set match passes that — a single request
-  // silently dropped the tail of the match, which the film room's shot feed
-  // shows row by row. The order is total (point, shot number, id) so pages
-  // never overlap or skip.
-  //
-  // Fail-closed, like `supabaseAttachmentSourceRows`: an error on any page
-  // returns `null` ("no answer") rather than points carrying half their shots.
-  // A point with its shots cut off reads as a short rally and relabels its
-  // serve, return and last shot — a wrong answer that looks like a right one.
-  const shots = await fetchAllPages<DbShot>(async (from, to) => {
-    const { data, error } = await supabase
-      .from("shots")
-      .select(
-        "id, point_id, shot_number, is_player1, shot_type, spin_type, speed_mph, video_time, bounce_video_time, zone, result, contact_x, contact_y, landing_x, landing_y",
-      )
-      .in("point_id", pointIds)
-      .order("point_id", { ascending: true })
-      .order("shot_number", { ascending: true })
-      .order("id", { ascending: true })
-      .range(from, to);
-    // The helper stops at the first error, so this logs exactly once.
-    if (error) console.error("Failed to fetch shots:", error.message);
-    return { data: data as DbShot[] | null, error };
-  });
+  // Who bookmarked each point, workspace-wide (see fetchSavedByPointId),
+  // read while the shots finish.
+  const [shots, savedByPointId] = await Promise.all([
+    shotsRead,
+    includeBookmarks
+      ? fetchSavedByPointId(supabase, matchId, pointIds, programId)
+      : Promise.resolve(
+          new Map<string, { userId: string; name: string | null }[]>(),
+        ),
+  ]);
   if (!shots) return null;
-
-  // Who bookmarked each point, workspace-wide (see fetchSavedByPointId).
-  const savedByPointId = includeBookmarks
-    ? await fetchSavedByPointId(supabase, matchId, pointIds)
-    : new Map<string, { userId: string; name: string | null }[]>();
 
   // Group shots by point_id
   const shotsByPointId = new Map<string, DbShot[]>();

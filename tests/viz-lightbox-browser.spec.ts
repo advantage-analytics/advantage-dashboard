@@ -274,14 +274,18 @@ test("the Filters panel is the Matches panel over the cut's own keys, and Clear 
   await expect(page).not.toHaveURL(/deuce/);
 });
 
-test("Statistics: rows over 4px bars with the average tick; hover outlines a zone, a click keeps only its marks", async ({
+test("Statistics: rows over 4px bars, no average tick; hover outlines a zone, a click keeps only its marks", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Statistics" }).click();
-  await expect(dialog.getByText(/^Average \d+%$/).first()).toBeVisible();
+  // No "Average N%" label in a group's header (2026-11-10).
+  await expect(
+    dialog.getByRole("button", { name: /% of \d+ points won$/ }).first(),
+  ).toBeVisible();
+  await expect(dialog.getByText(/^Average \d+%$/)).toHaveCount(0);
   const row = dialog
     .getByRole("button", { name: /% of \d+ points won$/ })
     .first();
@@ -366,7 +370,9 @@ test("a read-only host leaves out Save as view and, without video, Watch — and
     dialog.locator("[data-court-stage] [data-viz-mark]").first(),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Statistics" }).click();
-  await expect(dialog.getByText(/^Average \d+%$/).first()).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: /% of \d+ points won$/ }).first(),
+  ).toBeVisible();
 });
 
 /* ── Gate fixes (PR #684 review, round 2) ─────────────────────────────── */
@@ -1275,9 +1281,8 @@ test("a landing cut opens at 100% on the far half, net along the stage's bottom;
     const netArtY = ((236 + 117) / 706) * 1258;
     const netStageY = home.py + netArtY * home.z;
     expect(netStageY).toBeLessThan(s.height);
-    // The serve sits VIEWER_SERVE_DROP (20 units) higher, so its net is a
-    // little further up; the other landing cuts keep the net at the edge.
-    expect(s.height - netStageY).toBeLessThan(cut === "serve" ? 130 : 80);
+    // Every landing cut, the serve too, keeps the net at the edge.
+    expect(s.height - netStageY).toBeLessThan(80);
 
     const full = dialog.getByRole("button", { name: "Full court" });
     await expect(full).toBeEnabled();
@@ -1705,7 +1710,7 @@ test("R7·2 · a stage that resizes keeps a zoomed, panned court: the filter str
   await expect
     .poll(async () => (await stage.boundingBox())!.height)
     .not.toBe(s.height);
-  // The strip unfolds (`.viz-filter-strip-reveal`), so the stage shrinks
+  // The strip unfolds (`.filter-strip-reveal`), so the stage shrinks
   // over a few frames: read it once it has come to rest.
   await expect
     .poll(() => page.evaluate(() => document.getAnimations().length))

@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -54,12 +54,18 @@ import {
   buildSeasonLightbox,
   buildSeasonViewCards,
   parseSeasonVizState,
+  type SeasonCard,
 } from "@/lib/data/player-season-viz";
 import { getSavedViews } from "@/lib/data/saved-views-server";
 import { seasonErrorSplitJudged } from "@/lib/data/player-season";
 import { getBandSettings } from "@/lib/data/viz-bands-server";
 import { getPreferences } from "@/lib/data/preferences-server";
 import { askEntryHref } from "@/lib/services/ask/entry";
+import { otherPlayer } from "@/components/dashboard/matches/match-detail/match-filters/panel-draft";
+
+/** `getPreferences` once per request, so the early start above and the
+ *  Visualizations body share one read. */
+const requestPreferences = cache(getPreferences);
 
 /**
  * One player's page — Platform Audit `Te` (their own) and `Te2` (a coach's
@@ -170,6 +176,22 @@ export default async function PlayerProfilePage({
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
+
+  // A Visualizations request starts its body's reads now, alongside the
+  // profile's own, instead of after them: every one is `cache()`d, so the
+  // body below awaits these same promises. On a filter click (each one is a
+  // round trip through this page) that takes a whole wave of reads off the
+  // critical path. `.catch` only marks the early promise handled; the body
+  // still sees, and throws, any failure.
+  if (parseProfileView(query[PROFILE_VIEW_PARAM]) === "visualizations") {
+    for (const early of [
+      getPlayerSeasonCourts(active.id, playerId),
+      getBandSettings(active.id),
+      requestPreferences(),
+      getSavedViews(active.id),
+    ])
+      early.catch(() => {});
+  }
 
   const [profile, roster, myPlayerIds, sides] = await Promise.all([
     getPlayerProfile(active.id, playerId),
@@ -351,6 +373,7 @@ export default async function PlayerProfilePage({
                       playerId={playerId}
                       playerName={profile.name}
                       firstName={profile.firstName}
+                      workspaceName={active.name}
                       query={query}
                     />
                   </Suspense>
@@ -448,18 +471,21 @@ async function ProfileVisualizationsBody({
   playerId,
   playerName,
   firstName,
+  workspaceName,
   query,
 }: {
   programId: string;
   playerId: string;
   playerName: string;
   firstName: string;
+  /** The program's name, for the Save dialog's "Share with team" row. */
+  workspaceName: string;
   query: Record<string, string | string[] | undefined>;
 }) {
   const [season, bandSettings, preferences, savedViews] = await Promise.all([
     getPlayerSeasonCourts(programId, playerId),
     getBandSettings(programId),
-    getPreferences(),
+    requestPreferences(),
     getSavedViews(programId),
   ]);
   if (!season) return null;
@@ -474,6 +500,28 @@ async function ProfileVisualizationsBody({
   // player is kept in the browser meanwhile (`profile-visualizations-view.tsx`)
   // and closing writes it back here, so the cards are recomputed for it.
   const side = state.filters.player;
+  // The other side's wall, streamed behind the page (a promise prop): the
+  // timer lets this answer go out first, and once it lands the wall's
+  // You | Opponent swaps sides in the browser with no round trip
+  // (`profile-visualizations-view.tsx`).
+  // Only on the wall: while a card is open the wall is hidden and every
+  // filter click is a round trip, so streaming the other side there would
+  // ship a whole second wall per click for nothing. Closing the card
+  // re-renders the wall, and the stream comes with it.
+  const otherSideCards =
+    state.cut === null
+      ? new Promise<SeasonCard[]>((resolve, reject) =>
+          setTimeout(() => {
+            try {
+              resolve(
+                buildSeasonCards(season.perMatch, otherPlayer(side), bands),
+              );
+            } catch (error) {
+              reject(error);
+            }
+          }, 0),
+        )
+      : undefined;
   return (
     <ProfileViewWhen view="visualizations">
       <ProfileVisualizationsView
@@ -491,6 +539,8 @@ async function ProfileVisualizationsBody({
           savedViews,
         )}
         errorSplitJudged={errorSplitJudged}
+        saveView={{ savedViews, workspaceName }}
+        otherSideCards={otherSideCards}
       />
     </ProfileViewWhen>
   );

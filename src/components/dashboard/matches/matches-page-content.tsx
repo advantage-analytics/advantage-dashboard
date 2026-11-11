@@ -13,7 +13,8 @@ import {
 import { createPortal } from "react-dom";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Filter as FilterIcon, GalleryHorizontalEnd } from "lucide-react";
+import { GalleryHorizontalEnd } from "lucide-react";
+import { AppliedFilterStrip } from "@/components/dashboard/shared/applied-filter-strip";
 import { EmptyMatches } from "./empty-matches";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
@@ -211,8 +212,10 @@ const FILTER_GROUPS: {
     // other. The list shows the whole squad — every member reads the program's
     // matches, staff and player alike — and until now the only way to read one
     // person's season was to scroll.
-    // It reads `player1` because that is always the program's side of the row:
-    // `recordResult` and the upload wizard both put the opponent in `player2`.
+    // It reads `player1` because that is the program's side of the row —
+    // `recordResult` and the wizard store it there, and `toTeamSide` turns a
+    // row that does not — plus `player2` when that seat is a teammate too
+    // (`rosterNames`).
     key: "player",
     label: "Roster",
     teamOnly: true,
@@ -225,8 +228,10 @@ const FILTER_GROUPS: {
     getValues: (matches) => {
       const byName = new Map<string, string>();
       for (const m of matches) {
-        const key = normalizedPersonName(m.player1.name);
-        if (key && !byName.has(key)) byName.set(key, m.player1.name);
+        for (const name of rosterNames(m)) {
+          const key = normalizedPersonName(name);
+          if (key && !byName.has(key)) byName.set(key, name);
+        }
       }
       return [...byName.values()].sort((a, b) =>
         normalizedPersonName(a).localeCompare(normalizedPersonName(b)),
@@ -414,6 +419,18 @@ function noopSubscribe(): () => void {
 /** A match with no analysis job, or one that has finished, has a report to read. */
 function hasReadableReport(m: DisplayMatch) {
   return !m.analysis || isAnalysisReady(m.analysis.status);
+}
+
+/**
+ * The program's players on a team row, for the Roster facet: seat one —
+ * which `toTeamSide` makes the program's side — and seat two too when it is
+ * also on the roster (a match between teammates), so filtering by either
+ * teammate finds it whichever of them the viewer's turn put first.
+ */
+function rosterNames(m: DisplayMatch): string[] {
+  return m.player2.profileId
+    ? [m.player1.name, m.player2.name]
+    : [m.player1.name];
 }
 
 export function MatchesPageContent({
@@ -618,9 +635,10 @@ export function MatchesPageContent({
           case "backhand":
             return m.player2Backhand === filter.value;
           case "player":
-            return (
-              normalizedPersonName(m.player1.name) ===
-              normalizedPersonName(filter.value)
+            return rosterNames(m).some(
+              (name) =>
+                normalizedPersonName(name) ===
+                normalizedPersonName(filter.value),
             );
           default:
             return true;
@@ -1117,45 +1135,29 @@ export function MatchesPageContent({
       </div>
 
       {/* Applied-filter strip — the panel closes on apply, this states the cut
-          in words. Never chips, never a badge (v3's Data Table law 6). */}
-      {hasCut && (
-        <div
-          className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-          style={{ background: "var(--surface-subtle)" }}
-        >
-          <FilterIcon
-            className="size-[13px] shrink-0"
-            strokeWidth={1.5}
-            style={{ color: "var(--ink-500)" }}
-            aria-hidden="true"
-          />
-          <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-            {[
-              ...(rosterPlayerName ? [`Played by ${rosterPlayerName}`] : []),
-              ...(search.trim() ? [`Matching “${search.trim()}”`] : []),
-              ...(filters.length > 0 ? [describeFilters(filters)] : []),
-            ].join(" · ")}
-          </span>
-          <span
-            className="size-[3px] rounded-full"
-            style={{ background: "var(--ink-300)" }}
-            aria-hidden="true"
-          />
-          <span className="text-micro tabular">
-            {matches.length === 0
-              ? `${listedDrafts.length} of ${draftCount(drafts.length)}`
-              : `${sorted.length} of ${matches.length}${listedDraftsNote}`}
-          </span>
-          <div className="flex-1" />
-          <button
-            type="button"
-            onClick={clearCut}
-            className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-          >
-            Clear filter
-          </button>
-        </div>
-      )}
+          in words. Never chips, never a badge (v3's Data Table law 6). It
+          unfolds and folds in the column's 18px gap rather than popping, so
+          the table eases down and back up with it. */}
+      <AppliedFilterStrip
+        kind="matches"
+        gap={18}
+        sentence={
+          hasCut
+            ? [
+                ...(rosterPlayerName ? [`Played by ${rosterPlayerName}`] : []),
+                ...(search.trim() ? [`Matching “${search.trim()}”`] : []),
+                ...(filters.length > 0 ? [describeFilters(filters)] : []),
+              ].join(" · ")
+            : null
+        }
+        count={
+          matches.length === 0
+            ? `${listedDrafts.length} of ${draftCount(drafts.length)}`
+            : `${sorted.length} of ${matches.length}${listedDraftsNote}`
+        }
+        action="Clear filter"
+        onClear={clearCut}
+      />
 
       {/* Table / Grid */}
       <MatchesGrid

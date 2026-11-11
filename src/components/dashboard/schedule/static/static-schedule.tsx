@@ -3,7 +3,7 @@ import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScheduleTitleRow } from "@/components/dashboard/team/list-page-heading";
-import { Calendar, Filter as FilterIcon } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import {
   MatchesFilterPanel,
@@ -15,6 +15,7 @@ import {
 } from "@/components/dashboard/schedule/static/event-drawer";
 import { ScheduleDayZeroPage } from "./schedule-day-zero";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
+import { AppliedFilterStrip } from "@/components/dashboard/shared/applied-filter-strip";
 import { Chip } from "./chip";
 import {
   ScheduleTable,
@@ -439,40 +440,16 @@ export function StaticSchedule({
         </div>
 
         {/* The panel closes on apply; this states the cut in words. Never
-            chips, never a badge — v3's Data Table law 6. */}
-        {hasFacets ? (
-          <div
-            className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-            style={{ background: "var(--surface-subtle)" }}
-          >
-            <FilterIcon
-              className="size-[13px] shrink-0"
-              strokeWidth={1.5}
-              style={{ color: "var(--ink-500)" }}
-              aria-hidden="true"
-            />
-            <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-              {describeCut(facets)}
-            </span>
-            <span
-              className="size-[3px] rounded-full"
-              style={{ background: "var(--ink-300)" }}
-              aria-hidden="true"
-            />
-            <span className="text-micro tabular">
-              {visible.length} of {rows.length}
-            </span>
-            <div className="flex-1" />
-            <button
-              type="button"
-              onClick={() => applyCut({ facets: { kind: null, site: null } })}
-              className="text-[11px] font-medium whitespace-nowrap"
-              style={{ color: "var(--blue)" }}
-            >
-              Clear filter
-            </button>
-          </div>
-        ) : null}
+            chips, never a badge — v3's Data Table law 6. Always mounted, so
+            it unfolds and folds rather than popping (`AppliedFilterStrip`). */}
+        <AppliedFilterStrip
+          kind="schedule"
+          gap={18}
+          sentence={hasFacets ? describeCut(facets) : null}
+          count={`${visible.length} of ${rows.length}`}
+          action="Clear filter"
+          onClear={() => applyCut({ facets: { kind: null, site: null } })}
+        />
 
         {/* A cut that leaves nothing keeps the table — headers and card —
             and says so in its body, rather than trading the card for a line
