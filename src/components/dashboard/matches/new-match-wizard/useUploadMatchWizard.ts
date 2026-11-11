@@ -3112,8 +3112,12 @@ export function useUploadMatchWizard({
                   subjectOwnsName && prev.playerName.trim()
                     ? prev.playerName
                     : parseResult.data?.playerName || prev.playerName,
+                // A teammate pick owns the name as an event does: its seat
+                // (`teammateSeat()`) would otherwise sit under the file's name.
                 opponentName:
-                  (eventOwns || prev.opponentSource === "event") &&
+                  (eventOwns ||
+                    prev.opponentSource === "event" ||
+                    prev.opponentSource === "teammate") &&
                   prev.opponentName.trim()
                     ? prev.opponentName
                     : parseResult.data?.opponentName || prev.opponentName,

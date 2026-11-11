@@ -230,16 +230,22 @@ export interface UploadedFile {
 
 /** Winner/loser determination result */
 export interface WinnerLoserResult {
-  winner: {
-    id: string | null;
-    name: string;
-    scores: number[];
-  };
-  loser: {
-    id: string | null;
-    name: string;
-    scores: number[];
-  };
+  winner: WinnerLoserSide;
+  loser: WinnerLoserSide;
+}
+
+/** One side of `determineWinner`'s answer. */
+export interface WinnerLoserSide {
+  id: string | null;
+  name: string;
+  scores: number[];
+  /**
+   * Whether this side is the match's player (seat one). `determineWinner`
+   * always sets it; `buildMatchData` falls back to comparing names only when
+   * it is absent — names are not identity: two players of one roster can
+   * share a name, and a teammate opponent makes that easy to reach.
+   */
+  isPlayer?: boolean;
 }
 
 /** Match data structure for database insertion */

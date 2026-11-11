@@ -2001,8 +2001,11 @@ function DetailsStepContentImpl({
         <SectionHead label="Context" micro={contextMicro} />
         <div className="grid grid-cols-3 gap-x-6 gap-y-5">
           {/* First, before Event. A doubles line owns `matchType` — the
-              vendor path reads its "Doubles" — so the field steps aside. */}
-          {showsMatchTypeField(formData.matchType) && (
+              vendor path reads its "Doubles" — so the field steps aside.
+              The admin console's upload routes store Singles or Doubles
+              whatever is picked (`admin-file-submission.ts`,
+              `admin-video-submission.ts`), so it is not offered there. */}
+          {!admin && showsMatchTypeField(formData.matchType) && (
             <MatchTypeCell
               value={formData.matchType}
               onChange={(v) => onInputChange("matchType", v)}

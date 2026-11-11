@@ -89,14 +89,22 @@ export function determineWinner(
   }
 
   const playerWon = playerSetsWon > opponentSetsWon;
+  const player = {
+    id: playerUserId,
+    name: playerName,
+    scores: playerScoresNum,
+    isPlayer: true,
+  };
+  const opponent = {
+    id: null,
+    name: opponentName,
+    scores: opponentScoresNum,
+    isPlayer: false,
+  };
 
   return {
-    winner: playerWon
-      ? { id: playerUserId, name: playerName, scores: playerScoresNum }
-      : { id: null, name: opponentName, scores: opponentScoresNum },
-    loser: playerWon
-      ? { id: null, name: opponentName, scores: opponentScoresNum }
-      : { id: playerUserId, name: playerName, scores: playerScoresNum },
+    winner: playerWon ? player : opponent,
+    loser: playerWon ? opponent : player,
   };
 }
 
@@ -179,8 +187,10 @@ export function buildMatchData(
   const validBestOf = [1, 3, 5];
   const bestOf = validBestOf.includes(bestOfValue) ? bestOfValue : 3;
 
-  // Determine if the player (playerName) won
-  const playerWon = formData.playerName === winner.name;
+  // Determine if the player (playerName) won — by the side
+  // `determineWinner` marked, not by name: equal names would otherwise put
+  // the player in seat two whenever the opponent won.
+  const playerWon = winner.isPlayer ?? formData.playerName === winner.name;
 
   // Use adjusted scores (respects numberOfSets when user reduced sets)
   const adjustedPlayerScores = getAdjustedScores(

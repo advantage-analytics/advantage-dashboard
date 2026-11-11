@@ -368,3 +368,46 @@ test("every comment that forbids an opponent id in player2_id states the teammat
   const guardrails = read("docs/ui-revamp-guardrails.md");
   expect(guardrails).toContain("a teammate opponent takes seat two");
 });
+
+test("two players with one name: the subject keeps seat one whoever won", () => {
+  // Two roster players can share a name, and nothing clears the opponent's
+  // name when the subject changes. `buildMatchData` must not find the player
+  // by name, or an opponent win seats the subject in seat two.
+  const twin = person("pp-ace2", ACE.name, "u-ace2");
+  const roster = [ACE, twin];
+  for (const [p, o] of [
+    [
+      [6, 6, null],
+      [2, 2, null],
+    ],
+    [
+      [2, 2, null],
+      [6, 6, null],
+    ],
+  ] as const) {
+    const form: FormData = {
+      ...BASE,
+      ...teammatePick(twin),
+      playerName: ACE.name,
+      playerScores: [...p],
+      opponentScores: [...o],
+      playerTiebreaks: [null, null, null],
+      opponentTiebreaks: [null, null, null],
+    };
+    const row = saved(form, roster);
+    expect(row.player1_id).toBe(ACE.playerId);
+    expect(row.player2_id).toBe(twin.playerId);
+    expect(row.score.player1).toEqual([...p].slice(0, 2));
+  }
+});
+
+test("a parsed file never renames a teammate opponent", () => {
+  // The seat names the teammate; a re-parsed export's opponent name would
+  // otherwise sit beside it in `player2_name`.
+  const hook = read(`${WIZARD}/useUploadMatchWizard.ts`);
+  const start = hook.indexOf("opponentName:\n                  (eventOwns ||");
+  expect(start).toBeGreaterThan(-1);
+  expect(hook.slice(start, start + 200)).toContain(
+    'prev.opponentSource === "teammate"',
+  );
+});

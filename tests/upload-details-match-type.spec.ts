@@ -184,12 +184,14 @@ const grid = details.indexOf(
 );
 const videoStart = details.indexOf("{isProcessingProvider && video && (");
 
-test("Match type is the Context grid's first cell, before Event, behind the Doubles gate", () => {
+test("Match type is the Context grid's first cell, before Event, behind the admin and Doubles gates", () => {
   expect(contextStart).toBeGreaterThan(-1);
   expect(grid).toBeGreaterThan(contextStart);
   const cell = details.indexOf("<MatchTypeCell", grid);
   const gate = details.indexOf(
-    "showsMatchTypeField(formData.matchType) && (",
+    // Not in the admin console: its upload routes store Singles or Doubles
+    // whatever is picked, so a Practice answer there would be lost.
+    "!admin && showsMatchTypeField(formData.matchType) && (",
     grid,
   );
   const firstEvent = details.indexOf('label="Event"', grid);
