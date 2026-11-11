@@ -173,3 +173,8 @@ is the runner's. Newest entries at the bottom.
 
 1. The drawer's ⋯ menu label falls back to "A vs B" for a practice with no event; "Practice" might read better.
 2. The drawer still draws no Teammate pill (out of scope by the task).
+
+## T16 · Matches list: Draft pill wins over Teammate — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4775 passed, shard 2/2 5174 passed. Completion VERDICT: pass. Widget-states: pill choice on a row only.
+**changed:** `match-card-list.tsx` `isTeammate` also requires `!hasDraft`, so a teammate row with a folded draft shows only the Draft pill; `tests/matches-practice-rows.spec.ts` gains a test asserting exactly one outline pill reading "Draft", and "Teammate" without the draft.

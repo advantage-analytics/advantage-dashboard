@@ -155,6 +155,25 @@ test.describe("Teammate pill", () => {
     );
   });
 
+  test("a teammate row with a folded draft draws exactly one pill, reading Draft", () => {
+    const m = both(match(), "prof-1", "prof-2");
+    const html = renderToStaticMarkup(
+      React.createElement(MatchCardList, {
+        match: m,
+        scope: "team",
+        hasDraft: true,
+      }),
+    );
+    expect(
+      html.match(/box-shadow:inset 0 0 0 1px var\(--ink-200\)/g),
+    ).toHaveLength(1);
+    expect(html).toContain(">Draft<");
+    expect(html).not.toContain("Teammate");
+    // Without the draft the Teammate pill is unchanged.
+    expect(row(m, "team")).toContain(">Teammate<");
+    expect(row(m, "team")).not.toContain(">Draft<");
+  });
+
   test("personal scope never draws it, even with both profiles", () => {
     expect(row(both(match(), "prof-1", "prof-2"), "personal")).not.toContain(
       "Teammate",

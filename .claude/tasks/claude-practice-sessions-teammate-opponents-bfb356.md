@@ -224,7 +224,7 @@ ready).
 
 ## T16 · Matches list: Draft pill wins over Teammate
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) `src/components/dashboard/matches/match-card-list.tsx` (`isTeammate` ~126, `draftPill` ~137, Teammate pill ~225); `tests/matches-practice-rows.spec.ts`
 - **routes:** /dashboard/matches

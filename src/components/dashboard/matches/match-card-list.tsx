@@ -122,9 +122,11 @@ export function MatchCardList({
   // empty Event cell reads "Practice".
   const isPractice = isPracticeMatch(match.matchType);
   // Both seats resolve to this roster (`withRosterProfiles`, team scope only):
-  // the opponent is a teammate, not a rival.
+  // the opponent is a teammate, not a rival. A folded draft's "Draft" pill wins:
+  // StatePill allows one pill per row.
   const isTeammate =
     isTeam &&
+    !hasDraft &&
     Boolean(match.player1.profileId) &&
     Boolean(match.player2.profileId);
   const { viewer, active } = useWorkspace();
