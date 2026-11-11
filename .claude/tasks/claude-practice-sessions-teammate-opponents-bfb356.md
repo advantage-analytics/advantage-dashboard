@@ -236,7 +236,7 @@ ready).
 
 ## T17 · Require match_type on prior-meeting counts
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) `src/lib/data/opponents-server.ts` (`OpponentAttributedRow` ~182–193), `src/lib/wizard/actions.ts` (`opponentRosterForLine` select ~553, cast ~560, count ~593), `src/lib/schedule/actions.ts` (`opponentRosterForDual` select ~225, cast ~229, count ~250), `tests/person-name-matching.spec.ts` (`row` builder ~92)
 - **done when:**

@@ -185,11 +185,9 @@ interface OpponentAttributedRow {
   /**
    * `matches.match_type`. A Practice row is never a meeting: practice does not
    * count toward a head-to-head (product decision), so both helpers drop it.
-   * Optional only so the wizard's and the schedule's "prior meetings" reads,
-   * which do not select it yet, keep their row shapes; every read in this file
-   * selects it.
+   * Required so a read that forgets to select it fails to typecheck.
    */
-  match_type?: string | null;
+  match_type: string | null;
 }
 
 /**

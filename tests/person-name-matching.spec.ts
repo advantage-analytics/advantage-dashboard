@@ -93,10 +93,12 @@ const row = (
   id: string,
   name: string | null,
   opponentId: string | null = null,
+  matchType: string | null = "Tournament",
 ) => ({
   id,
   player2_name: name,
   opponent_player_id: opponentId,
+  match_type: matchType,
 });
 
 test.describe("headToHeadRows", () => {
@@ -158,6 +160,19 @@ test.describe("headToHeadRows", () => {
       [{ id: "p-nameless", name: "" }],
     );
     expect(kept).toEqual([]);
+  });
+
+  test("a practice row is dropped, the same row as a tournament is kept", () => {
+    const roster = [{ id: "p1", name: "Ana Castillo" }];
+    expect(
+      headToHeadRows([row("m1", "Ana Castillo", null, " practice ")], roster),
+    ).toEqual([]);
+    expect(
+      headToHeadRows(
+        [row("m1", "Ana Castillo", null, "Tournament")],
+        roster,
+      ).map((m) => m.id),
+    ).toEqual(["m1"]);
   });
 });
 

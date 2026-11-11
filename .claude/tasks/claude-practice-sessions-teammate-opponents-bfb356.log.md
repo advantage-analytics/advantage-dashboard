@@ -178,3 +178,8 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4775 passed, shard 2/2 5174 passed. Completion VERDICT: pass. Widget-states: pill choice on a row only.
 **changed:** `match-card-list.tsx` `isTeammate` also requires `!hasDraft`, so a teammate row with a folded draft shows only the Draft pill; `tests/matches-practice-rows.spec.ts` gains a test asserting exactly one outline pill reading "Draft", and "Teammate" without the draft.
+
+## T17 · Require match_type on prior-meeting counts — done
+
+**gate:** mechanical: lint pass, typecheck pass, tests shard 1/2 4775 passed, shard 2/2 5175 passed. Completion VERDICT: pass.
+**changed:** `OpponentAttributedRow.match_type` is now required (`string | null`); `opponentRosterForLine` (`src/lib/wizard/actions.ts`) and `opponentRosterForDual` (`src/lib/schedule/actions.ts`) select `match_type`, so their prior-meeting counts leave practice out; `tests/person-name-matching.spec.ts`'s `row` builder supplies it and a new test pins the drop. `headToHeadRows` / `opponentPlayerMatches` unchanged.
