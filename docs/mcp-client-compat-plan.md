@@ -1,11 +1,50 @@
-# MCP client compatibility and new tools — Phase 0 findings and plan
+# MCP client compatibility and new tools — findings, plan and status
 
-**Point-in-time (2026-11-12). No product code has changed.** This is the
-Phase 0 report for making `/api/mcp` ([`ask-mcp-connector.md`](ask-mcp-connector.md))
-work in Claude, Claude Code, ChatGPT, the Gemini app and Cursor, plus the
-scope for three additions: visualization links, video filtering with watch
-links, and the statistics the views do not yet carry. Phase 1 waits for
-approval.
+**Point-in-time (2026-11-12).** Phase 0 findings (§1–§10, as written before
+any change) and what has been done since (§0).
+
+## 0. Status after Phase 1
+
+**Done in the Supabase dashboard**
+
+- JWT signing moved to ES256; the HS256 secret kept as a previous key.
+- "Verify JWT with legacy secret" turned off on the three Edge Functions,
+  before the rotation. The rotation dialog named them: with ES256 user tokens
+  the gateway would have refused `/api/upload`'s call to `process-match`,
+  and that route logs the failure without failing the upload.
+- **ChatGPT now signs in**: its token exchange answered 200 at 20:23 UTC
+  where three earlier attempts answered 500, and it lists the ten tools then
+  in production.
+
+**Done in code (this branch, not deployed)**
+
+| Plan item                     | Outcome                                                                                                                                 |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| F2 scope in the 401 challenge | **Dropped.** The key rotation fixed ChatGPT; this would only have added risk for Claude                                                 |
+| F3 Gemini callback            | Allowed as a strict one-segment pattern. Still unconfirmed against a real registration                                                  |
+| F4 `openWorldHint`            | `false` on every tool, with `destructiveHint: false`                                                                                    |
+| F5 schemas                    | No `anyOf`, `format`, `default` or null types. `update_match` empties a field through `clear` instead of null — **an interface change** |
+| F6 tracking                   | `client` and `client_agent` on `mcp_tool_call`; new `mcp_auth_failed`                                                                   |
+| F7 tests                      | Schema subset, names and titles, annotations, the Gemini callback and its look-alikes, both new tools                                   |
+| Edge Function setting         | Pinned in `supabase/config.toml` and stated in `AGENTS.md`                                                                              |
+| `open_visualization`          | Built: a link to one card, for a match or a team player's season                                                                        |
+| `find_points`                 | Built: a Video-tab link by filters, by exact rally length, or by point numbers                                                          |
+
+**Not done**
+
+- `get_player_season` and the net-game breakdown in `get_match`. The season
+  loaders call `program_roster_full` as a POST, which the connector's write
+  guard refuses, and lobs come from the ball-paths files that only the
+  service role reads — a fourth service-role use `AGENTS.md` rules out for
+  this route. Needs a decision before it is built.
+- Recorded request fixtures per client, and the "same five questions"
+  comparison: both need each app connected to this branch.
+- Refresh-token rotation and PKCE tests: both are Supabase Auth's behaviour,
+  not this repo's code.
+- The landing page's Gemini tab copy (§11) is drafted; the other repo is
+  untouched.
+- **Live verification in ChatGPT, Gemini and Cursor of this branch.** Only
+  Claude Code has run tools, against production's older build.
 
 ## 1. Results today
 
@@ -232,3 +271,37 @@ custom-URL path has been used by real coaches.
 3. A personal profile page does not exist. Is a team-player link enough for
    now?
 4. Which rally bands are right: 5–9 / 10+ or 5–8 / 9+?
+
+## 11. Landing page: Gemini tab copy
+
+For `advantage-landing`, `src/app/mcp/content.tsx`. Not yet checked against a
+real connection — confirm the menu names when Gemini is first connected.
+
+**Tab label**: Gemini
+
+**Before you start**: Custom apps in Gemini are available in the US, to
+people 18 or over, on a personal Google account (not a work or school one),
+with Gemini set to English and Keep Activity turned on.
+
+**Steps**
+
+1. Open [gemini.google.com](https://gemini.google.com) on a computer.
+2. Go to **Settings → Connected Apps → Add a custom app**.
+3. Paste `https://app.advantage-analytics.com/api/mcp` and continue.
+4. Sign in to Advantage when the window opens, check it names the account
+   you expect, and press **Allow**.
+5. Ask Gemini about your matches. Once added on the web, Advantage also
+   works in the Gemini mobile app.
+
+**Good to know**: Gemini asks you to confirm before it changes anything —
+fixing a match's details, starting an upload, or asking Advantage a question
+that uses one of your monthly questions.
+
+**Troubleshooting**
+
+- _"This app can't connect to Advantage"_ on the Allow page: contact us; the
+  app's return address is not one we recognise yet.
+- _No "Add a custom app" option_: check the account is a personal one, in the
+  US, and that Keep Activity is on.
+- _It stops working after a while_: remove the app in Connected Apps and add
+  it again.
