@@ -226,7 +226,14 @@ test("the console runs the fix by itself, once, after any cut still to run", () 
     "if (!autoFixes || !operations || cutPending || gameFixPending) return null;",
   );
   expect(source).toContain("`${session.id}:serve-fix`,");
-  expect(source).toContain("setGameServer(serveFix.game, serveFix.server);");
-  expect(source).toContain("void switchPlayersByEnd(serveFix.pointIds, true);");
-  expect(source).toContain("await patchShot(shotId, { hitter: server });");
+  expect(source).toContain(
+    "return setGameServer(serveFix.game, serveFix.server) ?? true;",
+  );
+  expect(source).toContain(
+    "switchPlayersByEnd(serveFix.pointIds, true)?.then(",
+  );
+  // Every serve must save for the fix to count as done.
+  expect(source).toContain(
+    "if (!(await patchShot(shotId, { hitter: server }))) return false;",
+  );
 });

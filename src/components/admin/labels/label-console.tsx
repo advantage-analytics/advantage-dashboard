@@ -237,6 +237,7 @@ import {
   type PlacementState,
   type PlacementTarget,
 } from "./court-placement";
+import { keepAutoFixKey, readTriedKeys } from "./auto-fix-keys";
 import { LabelBlackRail } from "./label-black-rail";
 import { strokeChangePatch } from "./label-black-shot-row";
 import { LabelBlackView } from "./label-black-view";
@@ -399,56 +400,21 @@ const PENDING_POINT_PREFIX = "pending-point-";
 /**
  * Run `run` once for each `key`, when `ready`: the console's own fixes, which
  * must never be tried twice in a visit — a fix the labeller undid, or one the
- * server refused, stays undone. A key whose write landed is kept for the
- * browser under `storageKey`, so a reload does not try it again either; one
- * whose write failed (a dropped connection) is forgotten with the visit, and
- * the next one tries it again. `busy` and `failed` are the console's save
- * line: writes in flight, and whether the last one to settle was refused.
- * Answers whether `key` is still to run.
+ * server refused, stays undone. `run` answers whether its own write settled
+ * (true also where it had nothing to send); what the browser then keeps under
+ * `storageKey` is auto-fix-keys.ts's rule. Answers whether `key` is still to
+ * run.
  */
 function useOncePerKey(
   storageKey: string,
   key: string | null,
   ready: boolean,
-  run: () => void,
-  busy: boolean,
-  failed: boolean,
+  run: () => Promise<boolean> | boolean,
 ): boolean {
   const name = `label-auto-fix:${storageKey}`;
-  // The key just run, until its write settles.
-  const [awaiting, setAwaiting] = useState<string | null>(null);
-  useEffect(() => {
-    if (awaiting === null || busy) return;
-    if (!failed) {
-      try {
-        const parsed: unknown = JSON.parse(
-          window.localStorage.getItem(name) ?? "[]",
-        );
-        const kept = Array.isArray(parsed)
-          ? parsed.filter((k): k is string => typeof k === "string")
-          : [];
-        if (!kept.includes(awaiting)) kept.push(awaiting);
-        window.localStorage.setItem(
-          name,
-          JSON.stringify(kept.slice(-AUTO_FIX_KEYS_KEPT)),
-        );
-      } catch {
-        // Kept for the visit only.
-      }
-    }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAwaiting(null);
-  }, [awaiting, busy, failed, name]);
   const [tried, setTried] = useState<ReadonlySet<string>>(() => {
     try {
-      const parsed: unknown = JSON.parse(
-        window.localStorage.getItem(name) ?? "[]",
-      );
-      return new Set(
-        Array.isArray(parsed)
-          ? parsed.filter((k): k is string => typeof k === "string")
-          : [],
-      );
+      return new Set(readTriedKeys(window.localStorage, name));
     } catch {
       // No storage (private window, server render): the visit's own set.
       return new Set<string>();
@@ -458,20 +424,21 @@ function useOncePerKey(
   useEffect(() => {
     if (!pending || !ready || key === null) return;
     // The key is marked in the same pass that runs it: that is the "once".
-    // `run` starts its write in this pass too, so the render that sees
-    // `awaiting` sees `busy` with it.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTried(new Set(tried).add(key));
-    setAwaiting(key);
-    run();
+    const keepKey = (settled: boolean) => {
+      try {
+        keepAutoFixKey(window.localStorage, name, key, settled);
+      } catch {
+        // No storage: kept for the visit only.
+      }
+    };
+    void Promise.resolve(run()).then(keepKey, () => keepKey(false));
     // `run` reads the rows `key` was found on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending, ready, key, name]);
   return pending;
 }
-
-/** How many tried keys a session keeps in the browser. */
-const AUTO_FIX_KEYS_KEPT = 200;
 
 /**
  * The add-shot slot a flag jump landed on (`ReviewStep.target.slot`): the
@@ -1419,8 +1386,7 @@ export function LabelConsole({
             })
           : [];
       if (followers.length === 0 || !applied || !onSaveShot) {
-        await writeShot(points, shotId, patch);
-        return;
+        return (await writeShot(points, shotId, patch)) !== null;
       }
       const writes = [{ shotId, patch }, ...followers];
       const answers = Promise.all(
@@ -1432,7 +1398,7 @@ export function LabelConsole({
               onSaveShot(write.shotId, write.patch),
             ),
       );
-      await Promise.all([
+      const [own] = await Promise.all([
         writeShot(
           points,
           shotId,
@@ -1448,6 +1414,7 @@ export function LabelConsole({
           ),
         ),
       ]);
+      return own !== null;
     },
     [points, writeShot, marks, onSaveShot, onSaveShots],
   );
@@ -1878,7 +1845,7 @@ export function LabelConsole({
     );
     const revert = (rows: LabelPoint[]) =>
       applyShotSwaps(takeFields(rows, before, GAME_SHIFT_FIELDS), shotsBefore);
-    void runOperation(
+    return runOperation(
       (rows) => applyShotSwaps(applyGameShift(rows, plan.writes), plan.shots),
       call,
       (rows, result) =>
@@ -1887,7 +1854,7 @@ export function LabelConsole({
           result.shots,
         ),
       revert,
-    );
+    ).then((result) => result !== null);
   }
 
   /**
@@ -1904,7 +1871,7 @@ export function LabelConsole({
       startScore,
     );
     if ("error" in plan) return refuse(plan.error);
-    runGameShift(plan, () =>
+    return runGameShift(plan, () =>
       operations.shiftGameOverflow(session.id, fromPointId),
     );
   }
@@ -1950,14 +1917,12 @@ export function LabelConsole({
   // its labeller did, nor on a session labelled without marks; and not after
   // an Undo or Redo until the labeller's next own write, so ⌘Z is never
   // answered by the console putting the same thing back.
-  // Nor by an admin looking in on a session assigned to a labeller.
+  // Nor by someone looking in on a session assigned to another labeller.
   const autoFixes =
     editable &&
     session.kind !== "practice" &&
     liveMarks !== null &&
-    (labeller || !session.assigned);
-  const saveBusy = saveStatus.pending > 0;
-  const saveFailed = saveStatus.last.kind === "error";
+    !session.assignedToOther;
   const rowsSettled =
     saveStatus.pending === 0 &&
     fieldSaves === 0 &&
@@ -1988,13 +1953,15 @@ export function LabelConsole({
     `${session.id}:game-fix`,
     gameFix ? autoGameFixKey(gameFix) : null,
     rowsSettled,
+    // A plan refused here has nothing to send: settled, as far as a retry goes.
     () => {
-      if (!gameFix) return;
-      if (gameFix.kind === "shift") shiftGameOverflow(gameFix.fromPointId);
-      else pullGamePoints(gameFix.gameKey);
+      if (!gameFix) return true;
+      return (
+        (gameFix.kind === "shift"
+          ? shiftGameOverflow(gameFix.fromPointId)
+          : pullGamePoints(gameFix.gameKey)) ?? true
+      );
     },
-    saveBusy,
-    saveFailed,
   );
 
   // A set that reached its entered score with games still filed under it
@@ -2029,12 +1996,12 @@ export function LabelConsole({
     setCutPlan ? setCutKey(setCutPlan.cut) : null,
     rowsSettled,
     () => {
-      if (!setCutPlan || !cutSetAction) return;
+      if (!setCutPlan || !cutSetAction) return true;
       const { setNumber } = setCutPlan.cut;
-      runGameShift(setCutPlan, () => cutSetAction(session.id, setNumber));
+      return runGameShift(setCutPlan, () =>
+        cutSetAction(session.id, setNumber),
+      );
     },
-    saveBusy,
-    saveFailed,
   );
 
   // One player serves every point of an ordinary game (game-serve-fix.ts): a
@@ -2051,24 +2018,28 @@ export function LabelConsole({
     serveFix ? gameServeFixKey(serveFix) : null,
     rowsSettled,
     () => {
-      if (!serveFix) return;
+      if (!serveFix) return true;
       if (serveFix.kind === "server") {
-        setGameServer(serveFix.game, serveFix.server);
-      } else if (serveFix.kind === "switch") {
+        return setGameServer(serveFix.game, serveFix.server) ?? true;
+      }
+      if (serveFix.kind === "switch") {
         // Only where the rows as stored still contradict the server: a
         // second tab that already switched them is not switched back.
-        void switchPlayersByEnd(serveFix.pointIds, true);
-      } else {
-        const { shotIds, server } = serveFix;
-        void (async () => {
-          for (const shotId of shotIds) {
-            await patchShot(shotId, { hitter: server });
-          }
-        })();
+        return (
+          switchPlayersByEnd(serveFix.pointIds, true)?.then(
+            (result) => result !== null,
+          ) ?? true
+        );
       }
+      const { shotIds, server } = serveFix;
+      return (async () => {
+        // Every serve, or the fix is not done: one that failed is tried again.
+        for (const shotId of shotIds) {
+          if (!(await patchShot(shotId, { hitter: server }))) return false;
+        }
+        return true;
+      })();
     },
-    saveBusy,
-    saveFailed,
   );
 
   /**
@@ -2088,7 +2059,9 @@ export function LabelConsole({
     );
     if ("error" in plan) return refuse(plan.error);
     if ("kind" in plan) return refuse(GAME_PULL_ADD_POINT);
-    runGameShift(plan, () => operations.pullGamePoints(session.id, gameKey));
+    return runGameShift(plan, () =>
+      operations.pullGamePoints(session.id, gameKey),
+    );
   }
 
   /**
@@ -2822,7 +2795,7 @@ export function LabelConsole({
     const shotsBefore = shotSwapsOf(
       [...before.values()].flatMap((point) => point.shots),
     );
-    void runOperation(
+    return runOperation(
       (rows) => applyShotSwaps(applyGameWrites(rows, plan.writes), plan.shots),
       call,
       (rows, result) =>
@@ -2839,7 +2812,7 @@ export function LabelConsole({
           takeFields(rows, before, GAME_WRITE_FIELDS),
           shotsBefore,
         ),
-    );
+    ).then((result) => result !== null);
   }
 
   /** `rows`: the rows to plan from, when an edit has only just landed on them. */
@@ -2849,7 +2822,7 @@ export function LabelConsole({
     rows: readonly LabelPoint[] = points,
   ) {
     if (!operations) return;
-    runGameOperation(
+    return runGameOperation(
       planGameServer(rows, game, server),
       () => operations.setGameServer(session.id, game, server),
       rows,

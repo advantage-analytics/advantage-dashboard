@@ -152,10 +152,8 @@ test("the console runs it first, once per fix, with the slot's own operations", 
     "utf8",
   );
   expect(source).toContain("const gameFixPending = useOncePerKey(");
-  expect(source).toContain(
-    'if (gameFix.kind === "shift") shiftGameOverflow(gameFix.fromPointId);',
-  );
-  expect(source).toContain("else pullGamePoints(gameFix.gameKey);");
+  expect(source).toContain("? shiftGameOverflow(gameFix.fromPointId)");
+  expect(source).toContain(": pullGamePoints(gameFix.gameKey)) ?? true");
   // The set cut and the server fix wait for it.
   expect(source).toContain(
     "if (!autoFixes || !cutSetAction || gameFixPending) return null;",

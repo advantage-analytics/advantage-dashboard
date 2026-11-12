@@ -808,6 +808,14 @@ function midpoint(a: number | null, b: number | null): number | null {
 }
 
 /**
+ * The share of the rows a proposal places that must sit on its cut for the
+ * session to read as seeded on it. A session seeded on the vendor's cut
+ * agrees on far fewer; one seeded on the proposal misses only the rallies a
+ * later proposal moved.
+ */
+const SEEDED_ON_PROPOSAL_SHARE = 0.9;
+
+/**
  * Build the marks for one session.
  *
  * `points` is the session's rows in `point_index` order, tombstones included. A
@@ -861,28 +869,29 @@ export function buildLabelMarks(
     : () => false;
 
   // Whether the session was seeded on the proposal's cut (seed-proposal.ts):
-  // every row the proposal places sits where it put it. Asked of the session,
-  // not the row — a session seeded on the vendor's cut keeps the flag on a row
-  // that happens to agree.
+  // nearly every row the proposal places sits where it put it. Asked of the
+  // session first — a session seeded on the vendor's cut keeps the flag on a
+  // row that happens to agree — and then of each row, so a proposal that has
+  // since moved a rally (a newer vendor file) flags that row alone.
+  const rowOnProposal = new Set<string>();
   let placed = 0;
-  let sessionOnProposal = true;
   for (const point of transcript.points) {
     const pointId = pointIdByRally.get(point.rally_id);
     const to = proposed.get(point.rally_id);
     if (pointId === undefined || !to) continue;
     placed += 1;
     if (
-      !seededOnProposal(
+      seededOnProposal(
         seedByPoint.get(pointId) ?? null,
         to,
         inProposedTiebreak(point.rally_id),
       )
     ) {
-      sessionOnProposal = false;
-      break;
+      rowOnProposal.add(pointId);
     }
   }
-  if (placed === 0) sessionOnProposal = false;
+  const sessionOnProposal =
+    placed > 0 && rowOnProposal.size >= placed * SEEDED_ON_PROPOSAL_SHARE;
 
   const marks: LabelMarks = {
     points: {},
@@ -923,6 +932,7 @@ export function buildLabelMarks(
     const to = proposed.get(point.rally_id) ?? null;
     const onProposal =
       sessionOnProposal &&
+      rowOnProposal.has(pointId) &&
       to !== null &&
       // Half of a proposed merge is still two rows: that stays asked.
       to.mergedWith === null;

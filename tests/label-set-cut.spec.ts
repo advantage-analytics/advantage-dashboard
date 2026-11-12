@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import {
+  AUTO_FIX_KEYS_KEPT,
+  keepAutoFixKey,
+  readTriedKeys,
+} from "@/components/admin/labels/auto-fix-keys";
 import { readFileSync } from "node:fs";
 
 import { applyGameShift } from "@/lib/services/labels/game-shift";
@@ -212,14 +217,15 @@ test.describe("the console and the server", () => {
 
   test("the console runs the cut by itself, once per cut, on settled rows", () => {
     expect(consoleSource).toContain("const cutPending = useOncePerKey(");
-    expect(consoleSource).toContain(
-      "runGameShift(setCutPlan, () => cutSetAction(session.id, setNumber));",
-    );
+    expect(consoleSource).toContain("return runGameShift(setCutPlan, () =>");
+    expect(consoleSource).toContain("cutSetAction(session.id, setNumber),");
     // Once per key, kept across a reload.
     expect(consoleSource).toContain(
       "const pending = key !== null && !tried.has(key);",
     );
-    expect(consoleSource).toContain("window.localStorage.setItem(");
+    expect(consoleSource).toContain(
+      "keepAutoFixKey(window.localStorage, name, key, settled);",
+    );
     // Settled rows: nothing saving, no undo or redo, no confirm open, and not
     // straight after an Undo or Redo.
     for (const guard of [
@@ -233,17 +239,48 @@ test.describe("the console and the server", () => {
     }
     expect(consoleSource.match(/setAutoHeld\(true\);/g)).toHaveLength(2);
     // Not on a practice copy, nor on a session labelled without marks.
-    // Nor by an admin on a session assigned to a labeller.
+    // Nor by anyone on a session assigned to another labeller.
     for (const gate of [
       'session.kind !== "practice" &&',
       "liveMarks !== null &&",
-      "(labeller || !session.assigned);",
+      "!session.assignedToOther;",
     ]) {
       expect(consoleSource).toContain(gate);
     }
-    // A key is kept for the browser only once its write has landed.
-    expect(consoleSource).toContain("if (awaiting === null || busy) return;");
-    expect(consoleSource).toContain("if (!failed) {");
+    // Each fix answers for its own write, not the console's save line.
+    expect(consoleSource).toContain(
+      "void Promise.resolve(run()).then(keepKey, () => keepKey(false));",
+    );
+  });
+
+  test("a fix that settled is kept; one that failed gets one more visit, then is kept", () => {
+    const data = new Map<string, string>();
+    const store = {
+      getItem: (name: string) => data.get(name) ?? null,
+      setItem: (name: string, value: string) => void data.set(name, value),
+    };
+    const name = "label-auto-fix:s:set-cut";
+    keepAutoFixKey(store, name, "1:g7", true);
+    expect(readTriedKeys(store, name)).toEqual(["1:g7"]);
+
+    // A dropped connection: not kept, so the next visit tries it again.
+    keepAutoFixKey(store, name, "2:g16", false);
+    expect(readTriedKeys(store, name)).toEqual(["1:g7"]);
+    expect(readTriedKeys(store, `${name}:failed`)).toEqual(["2:g16"]);
+    // Failed again on that visit: kept, so it stops asking.
+    keepAutoFixKey(store, name, "2:g16", false);
+    expect(readTriedKeys(store, name)).toEqual(["1:g7", "2:g16"]);
+
+    // Twice the same key is one entry, and the list is capped.
+    keepAutoFixKey(store, name, "1:g7", true);
+    expect(readTriedKeys(store, name)).toHaveLength(2);
+    for (let i = 0; i < AUTO_FIX_KEYS_KEPT + 5; i += 1) {
+      keepAutoFixKey(store, name, `k${i}`, true);
+    }
+    expect(readTriedKeys(store, name)).toHaveLength(AUTO_FIX_KEYS_KEPT);
+    // Anything that is not a list of strings reads as empty.
+    data.set(name, '{"a":1}');
+    expect(readTriedKeys(store, name)).toEqual([]);
   });
 
   test("the server re-plans on the rows as read and refuses another set's cut", () => {

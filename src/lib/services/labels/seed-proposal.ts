@@ -39,21 +39,18 @@ import {
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
 import type { LabelPointSeed, LabelShotSeed, LabelSide } from "./seed";
-
-const other = (side: LabelSide): LabelSide => (side === "p1" ? "p2" : "p1");
-
-const isServe = (shot: LabelShotSeed) =>
-  shot.stroke === "first_serve" || shot.stroke === "second_serve";
+import { isServeStroke, opponent } from "./session";
 
 /** The stroke that says who served: the last live serve, else the first hitter. */
 function servingShot(shots: readonly LabelShotSeed[]): LabelShotSeed | null {
   const live = shots.filter((shot) => shot.site_removal === null);
-  return live.findLast(isServe) ?? live[0] ?? null;
+  return live.findLast((shot) => isServeStroke(shot.stroke)) ?? live[0] ?? null;
 }
 
 /** Every hitter, the winner and who ended it, flipped; in the seed too. */
 function switchPlayers(point: LabelPointSeed): LabelPointSeed {
-  const flip = (side: LabelSide | null) => (side === null ? null : other(side));
+  const flip = (side: LabelSide | null) =>
+    side === null ? null : opponent(side);
   const winner = flip(point.winner);
   const ended_by = flip(point.ended_by);
   return {
@@ -62,7 +59,7 @@ function switchPlayers(point: LabelPointSeed): LabelPointSeed {
     ended_by,
     seed: { ...point.seed, winner, ended_by },
     shots: point.shots.map((shot) => {
-      const hitter = other(shot.hitter);
+      const hitter = opponent(shot.hitter);
       return { ...shot, hitter, seed: { ...shot.seed, hitter } };
     }),
   };

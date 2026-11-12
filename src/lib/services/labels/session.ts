@@ -485,11 +485,11 @@ export interface LabelSession {
    */
   enteredHands?: Record<LabelSide, "right" | "left" | null>;
   /**
-   * Whether the session is assigned to a labeller
-   * (`label_sessions.assigned_to`). An admin looking in on one is a reader of
+   * Whether the session is assigned to a labeller other than the viewer
+   * (`label_sessions.assigned_to`). Whoever looks in on one is a reader of
    * someone else's work: the console makes no fix of its own there.
    */
-  assigned?: boolean;
+  assignedToOther?: boolean;
   /** In `point_index` order. */
   points: LabelPoint[];
 }

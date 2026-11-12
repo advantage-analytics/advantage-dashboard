@@ -503,8 +503,10 @@ export async function getLabelSession(
   // The marks' transcript and the video need only the job id, so both run
   // beside the row reads; the marks' join waits for the built points. A failure
   // is held here and logged by `joinMarks`, never thrown.
-  const read = await readLabelSessionRows(db, sessionId, (row) =>
-    Promise.all([
+  let assignedTo: string | null = null;
+  const read = await readLabelSessionRows(db, sessionId, (row) => {
+    assignedTo = row.assigned_to ?? null;
+    return Promise.all([
       row.marks_enabled && row.job_id
         ? deps.buildMarks(db, row.job_id).then(
             (join) => ({ join }),
@@ -522,10 +524,13 @@ export async function getLabelSession(
         });
         return null;
       }),
-    ]),
-  );
+    ]);
+  });
   if (!read) return { ok: false, reason: "not-found" };
   const [marksFetch, video] = read.beside;
+  // Whoever opens it, by either route: someone else's work to this viewer.
+  read.session.assignedToOther =
+    assignedTo !== null && assignedTo !== viewer.id;
 
   return {
     ok: true,
@@ -931,7 +936,6 @@ export function buildLabelSession(
     startScore: parseLabelStartScore(session.start_score ?? null),
     matchScore: parseMatchScore(match?.score ?? null),
     bestOf: readBestOf(match?.format),
-    assigned: session.assigned_to != null,
     points,
   };
 }
