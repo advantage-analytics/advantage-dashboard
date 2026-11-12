@@ -432,13 +432,21 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
       .map((shot) => shot.videoTime)
       .filter((t): t is number => t !== null);
 
-    let serveIndex = -1;
-    played.forEach((shot, i) => {
-      if (isServeStroke(shot.stroke)) serveIndex = i;
-    });
+    const serveIndex = countedServeIndex(played, server);
     if (played.length > 0 && serveIndex === -1) {
       warnings.push(`${at}: no serve`);
     }
+    played.forEach((shot, i) => {
+      if (
+        isServeStroke(shot.stroke) &&
+        shot.hitter !== null &&
+        shot.hitter !== server
+      ) {
+        warnings.push(
+          `${at}: stroke ${i + 1} is a serve by ${shot.hitter}, but ${server} is serving`,
+        );
+      }
+    });
     // With no serve the first stroke stands in for it, rather than the
     // derivation's numbering starting at 2.
     const from = Math.max(serveIndex, 0);
@@ -716,4 +724,24 @@ export function expectedStats(
     games: servedGames.size,
     ...stats,
   };
+}
+
+/**
+ * Where a point's numbering starts: its last serve hit by the server, the
+ * serve that counted. A serve typed on the receiver is never that serve — a
+ * mid-rally overhead left as a "second serve" once numbered the seven strokes
+ * before it 0 (Emon van Loben Sels v Eli Stephenson, point 120) — unless the
+ * server hit none at all, where the point's server is what is wrong and its
+ * last serve stands, as before. -1 with no serve.
+ */
+export function countedServeIndex(
+  played: readonly Pick<LabelShot, "stroke" | "hitter">[],
+  server: LabelSide,
+): number {
+  const lastServe = (own: boolean) =>
+    played.findLastIndex(
+      (shot) => isServeStroke(shot.stroke) && (!own || shot.hitter === server),
+    );
+  const byServer = lastServe(true);
+  return byServer !== -1 ? byServer : lastServe(false);
 }
