@@ -391,7 +391,7 @@ function boot() {
           url: `/fixtures/${file}?cred=initial`,
           expiresAt: new Date(Date.now() + ttl).toISOString(),
           startTimeSeconds: 0,
-          source: "upload",
+          source: "vendor-copy",
           attachment: null,
         };
 

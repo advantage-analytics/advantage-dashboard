@@ -12,23 +12,25 @@
  * - `video_object_key` — OUR file: the athlete's upload, which since September
  *   2026 is cut to the selected window in the browser before upload. It keeps
  *   the original bitrate and the audio. Preferred whenever the blob exists.
- * - `trimmed_object_key` — the vendor's re-encode of the window. NEVER played
- *   any more (retired 2026-11-12): it was the last-resort fallback, but every
- *   job's upload is kept and has a playback copy, and the old copies are being
- *   deleted (`scripts/delete-trimmed-copies.ts`). The column is still read by
- *   the purge, which deletes any blob a row still names.
+ * - `trimmed_object_key` — the vendor's re-encode of the window, about 2 Mbps,
+ *   once copied into our container by the webhook. No longer copied (retired
+ *   2026-11-12) and the old copies are being deleted
+ *   (`scripts/delete-trimmed-copies.ts`), which keeps any a job without a
+ *   playback copy still plays. So it stays the LAST resort, checked for
+ *   existence like every other file, and a nulled column skips it. It can be
+ *   silent.
  *
  * The playback copy may live in R2 (`playback_store = 'r2'`, since November
- * 2026) and is checked and signed there; the upload is always in Azure.
+ * 2026) and is checked and signed there; the other two are always in Azure.
  *
  * ── The clock ───────────────────────────────────────────────────────────────
  * `points.video_time` is seconds into the file the vendor analysed, plus the
  * job's `start_time_seconds` (added at ingest). So:
- * our file starts where the vendor's analysis clock starts from — for a cut
- * upload the window is [0, length] and for an uncut original the window is
- * original-relative like `video_time` — so the offset is 0, for the upload and
- * its playback copy alike. (The vendor's re-encode started at
- * `start_time_seconds`; it is no longer played.)
+ * - our file starts where the vendor's analysis clock starts from — for a cut
+ *   upload the window is [0, length] and for an uncut original the window is
+ *   original-relative like `video_time` — so the offset is 0;
+ * - the vendor's re-encode starts at `start_time_seconds`, so that is the
+ *   offset to subtract.
  */
 
 import {
@@ -38,8 +40,7 @@ import {
 
 export interface PlaybackJobRow {
   video_object_key: string | null;
-  /** The vendor's re-encode: never played (retired 2026-11-12); ignored. */
-  trimmed_object_key?: string | null;
+  trimmed_object_key: string | null;
   start_time_seconds: number | string | null;
   /** Absent on a loader that does not read them: no copy. */
   playback_object_key?: string | null;
@@ -50,7 +51,7 @@ export interface PlaybackJobRow {
 
 /** The columns `choosePlaybackFile` reads, for a loader's select. */
 export const PLAYBACK_JOB_COLUMNS =
-  "video_object_key, start_time_seconds, playback_object_key, playback_status, playback_store";
+  "video_object_key, trimmed_object_key, start_time_seconds, playback_object_key, playback_status, playback_store";
 
 export interface PlaybackChoice {
   blobName: string;
@@ -58,19 +59,24 @@ export interface PlaybackChoice {
   store: VideoStore;
   /** Seconds to subtract from `points.video_time` to seek in this file. */
   startTimeSeconds: number;
-  source: "playback" | "upload";
+  source: "playback" | "upload" | "vendor-copy";
 }
 
 /**
  * @param jobs The match's jobs, NEWEST FIRST — a resubmitted match's newest
  *   job is the analysis the page is showing.
- *
- * The order, for each job: its ready playback copy (in R2, then Azure), then
- * its upload. The vendor's trimmed copy is never played (retired 2026-11-12).
+ * @param prefer Which file to try after a ready playback copy, which always
+ *   wins. `"upload"` (the default) is the rule above. `"vendor-copy"` is the
+ *   admin labelling console's while a job has no copy yet: an upload that
+ *   skipped the browser re-encode can run 8–20 Mbps, more than a link to the
+ *   Canada East container carries, where the vendor's runs near 2. The vendor
+ *   copy is checked for existence too, since older jobs and missed copies have
+ *   no blob, and our upload is the fallback.
  */
 export async function choosePlaybackFile(
   jobs: PlaybackJobRow[],
   blobExists: (blobName: string, store: VideoStore) => Promise<boolean>,
+  prefer: PlaybackChoice["source"] = "upload",
 ): Promise<PlaybackChoice | null> {
   for (const job of jobs) {
     const copy = playbackCopyFor(job, jobs);
@@ -92,6 +98,16 @@ export async function choosePlaybackFile(
         }
       }
     }
+    const vendorCopy = job.trimmed_object_key
+      ? vendorCopyChoice(job.trimmed_object_key, job.start_time_seconds)
+      : null;
+    if (
+      prefer === "vendor-copy" &&
+      vendorCopy &&
+      (await blobExists(vendorCopy.blobName, "azure"))
+    ) {
+      return vendorCopy;
+    }
     if (
       job.video_object_key &&
       (await blobExists(job.video_object_key, "azure"))
@@ -102,6 +118,16 @@ export async function choosePlaybackFile(
         startTimeSeconds: 0,
         source: "upload",
       };
+    }
+    // Last resort, and only if the blob is really there: copies are no longer
+    // made (retired 2026-11-12) and the old ones are being deleted, so a row
+    // can still name one that is gone — never hand out a dead link for it.
+    if (
+      prefer === "upload" &&
+      vendorCopy &&
+      (await blobExists(vendorCopy.blobName, "azure"))
+    ) {
+      return vendorCopy;
     }
   }
   return null;
@@ -136,6 +162,19 @@ function readyCopy(
   return {
     key: row.playback_object_key,
     store: storeOf(row.playback_store),
+  };
+}
+
+function vendorCopyChoice(
+  blobName: string,
+  startTimeSeconds: PlaybackJobRow["start_time_seconds"],
+): PlaybackChoice {
+  const start = Number(startTimeSeconds ?? 0);
+  return {
+    blobName,
+    store: "azure",
+    startTimeSeconds: Number.isFinite(start) && start > 0 ? start : 0,
+    source: "vendor-copy",
   };
 }
 

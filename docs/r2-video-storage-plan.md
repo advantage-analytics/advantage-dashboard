@@ -369,7 +369,7 @@ Behaviour notes:
 ### Trimmed copy retired (2026-11-12)
 
 - The SplitStep webhook and the `archive-vendor-files` cron no longer copy the vendor's trimmed video into Azure.
-- No player falls back to it. The order is now: the playback copy (R2, then Azure), then the upload.
+- It stays the last-resort fallback, behind the playback copy (R2, then Azure) and the upload, so the 6 jobs with no playback copy keep playing exactly as before. Like every other file it is checked for existence first, so a row naming a deleted blob never yields a dead link, and a nulled column simply skips the step.
 - `purgeMatchStorage` still deletes any `trimmed_object_key` a row names.
 - `scripts/delete-trimmed-copies.ts` removes the ~70 GB already in `trimmed/`:
   - It is a dry run by default.
