@@ -32,3 +32,15 @@ test("the purge still deletes a trimmed copy a row names", () => {
     "j.trimmed_object_key",
   );
 });
+
+test("the deletion script reads every job row, paged and ordered, before deciding", () => {
+  // PostgREST caps a response at 1,000 rows. An unpaged read would let the
+  // hold-back miss a job that still plays a trimmed copy.
+  const script = code("scripts/delete-trimmed-copies.ts");
+  expect(script).toMatch(/readAllPages<JobRow>\(/);
+  expect(script).toMatch(/\.order\("id", \{ ascending: true \}\)/);
+  // It only ever deletes under trimmed/, checked again per delete.
+  expect(script).toMatch(/if \(!key\.startsWith\(PREFIX\)\) throw/);
+  // A delete counts only when Azure says it deleted something.
+  expect(script).toMatch(/if \(succeeded\) deleted \+= 1;/);
+});

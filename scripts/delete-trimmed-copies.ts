@@ -21,7 +21,8 @@
  *   an upload a browser cannot play). Give those jobs a playback copy first.
  * - The row is nulled only after the delete succeeds (or the blob is already
  *   gone), so a failure part way leaves both in step. Resumable: rerun it.
- * - Turn on blob soft delete first, so a mistake can be undone for 7 days.
+ * - Blob soft delete is on for the account (14 days), so a mistake can be
+ *   undone; check it still is before running `--apply`.
  *
  * Env (the shell wins over .env.local): NEXT_PUBLIC_SUPABASE_URL,
  * SUPABASE_SERVICE_ROLE_KEY, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY,
@@ -31,6 +32,7 @@ import { readFileSync } from "node:fs";
 
 import { createClient } from "@supabase/supabase-js";
 
+import { readAllPages } from "../src/lib/data/admin-range-read";
 import { videoContainerClient } from "../src/lib/services/splitstep/video-url";
 
 // Minimal .env.local loader (no dotenv dependency), as the other scripts.
@@ -85,12 +87,17 @@ async function main() {
   for await (const blob of container.listBlobsFlat({ prefix: PREFIX })) {
     blobs.set(blob.name, blob.properties.contentLength ?? 0);
   }
-  const { data, error } = await db
-    .from("processing_jobs")
-    .select("id, trimmed_object_key, playback_object_key, playback_status")
-    .not("trimmed_object_key", "is", null);
-  if (error) throw new Error(`Could not read jobs: ${error.message}`);
-  const rows = (data ?? []) as JobRow[];
+  // Every row, paged: PostgREST caps a response at 1,000 rows, and a row the
+  // hold-back never saw could let a blob a job still plays be deleted.
+  // Ordered by id so the pages neither skip nor repeat a row.
+  const rows = await readAllPages<JobRow>(
+    db
+      .from("processing_jobs")
+      .select("id, trimmed_object_key, playback_object_key, playback_status")
+      .not("trimmed_object_key", "is", null)
+      .order("id", { ascending: true }),
+    "Could not read jobs",
+  );
   const rowsByKey = new Map<string, JobRow[]>();
   for (const row of rows) {
     const named = rowsByKey.get(row.trimmed_object_key);
@@ -160,8 +167,10 @@ async function main() {
   for (const { key, inAzure } of batch) {
     if (!key.startsWith(PREFIX)) throw new Error(`refusing ${key}`); // belt and braces
     if (inAzure) {
-      await container.getBlockBlobClient(key).deleteIfExists();
-      deleted += 1;
+      const { succeeded } = await container
+        .getBlockBlobClient(key)
+        .deleteIfExists();
+      if (succeeded) deleted += 1;
     }
     const { data: updated, error: updateError } = await db
       .from("processing_jobs")
