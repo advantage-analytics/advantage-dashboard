@@ -17,10 +17,7 @@ import {
   resolveR2Config,
   type R2Config,
 } from "@/lib/services/video-storage/r2";
-import {
-  mintStoredPlayback,
-  storeOf,
-} from "@/lib/services/video-storage/stores";
+import { storeOf } from "@/lib/services/video-storage/stores";
 
 /**
  * R2 read URLs for the playback copy (docs/r2-video-storage-plan.md). They
@@ -214,7 +211,7 @@ test("the label console's eight hours fit inside R2's ceiling", () => {
   });
 });
 
-test("an R2 mint without R2 configured throws instead of signing a broken URL", () => {
+test("the R2 signer itself throws without R2 configured, never signing a broken URL", () => {
   const previous = { ...process.env };
   try {
     for (const name of [
@@ -225,9 +222,7 @@ test("an R2 mint without R2 configured throws instead of signing a broken URL", 
     ]) {
       delete process.env[name];
     }
-    expect(() => mintStoredPlayback({ key: KEY, store: "r2" })).toThrow(
-      /R2 is not configured/,
-    );
+    expect(() => mintR2Playback({ key: KEY })).toThrow(/R2 is not configured/);
   } finally {
     process.env = previous;
   }

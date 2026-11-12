@@ -78,16 +78,33 @@ export const R2_PRESIGN_MAX_SECONDS = 7 * 24 * 60 * 60;
 
 const PLAYBACK_TTL_SECONDS = 30 * 60;
 
+/**
+ * An `R2_*` value as pasted into a dashboard: surrounding whitespace (a
+ * trailing newline) and one pair of matching quotes are not part of it.
+ * Without this, `R2_ACCOUNT_ID="…"` or a value with a newline fails the
+ * account-ID check and every R2 read quietly becomes an Azure read.
+ */
+export function cleanEnvValue(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  let value = raw.trim();
+  const quoted = /^(["'])([\s\S]*)\1$/.exec(value);
+  if (quoted) value = quoted[2].trim();
+  return value === "" ? undefined : value;
+}
+
 export function resolveR2Config(
   access: R2Access = "read",
 ): { ok: true; config: R2Config } | { ok: false; missing: string } {
   const [, , keyName, secretName] = R2_ENV_VARS[access];
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const bucket = process.env.R2_BUCKET_VIDEOS;
-  const accessKeyId = process.env[keyName];
-  const secretAccessKey = process.env[secretName];
-  if (!accountId || !/^[0-9a-f]{32}$/i.test(accountId))
-    return { ok: false, missing: "R2_ACCOUNT_ID" };
+  const accountId = cleanEnvValue(process.env.R2_ACCOUNT_ID);
+  const bucket = cleanEnvValue(process.env.R2_BUCKET_VIDEOS);
+  const accessKeyId = cleanEnvValue(process.env[keyName]);
+  const secretAccessKey = cleanEnvValue(process.env[secretName]);
+  if (!accountId) return { ok: false, missing: "R2_ACCOUNT_ID" };
+  // The format check runs on the cleaned value. The reason names the
+  // variable and the rule, never the value.
+  if (!/^[0-9a-f]{32}$/i.test(accountId))
+    return { ok: false, missing: "R2_ACCOUNT_ID (not 32 hex characters)" };
   if (!bucket) return { ok: false, missing: "R2_BUCKET_VIDEOS" };
   if (!accessKeyId) return { ok: false, missing: keyName };
   if (!secretAccessKey) return { ok: false, missing: secretName };
