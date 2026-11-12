@@ -453,8 +453,6 @@ const LAST_BALL_QUESTIONS: ReadonlySet<LabelMarkCode> = new Set([
   "net_by_trajectory",
 ]);
 
-export { ACCEPT_KEY } from "./label-black-parts";
-
 /**
  * The hint the accept key answers: the one with an answer under the selected
  * stroke, else the first with an answer down the rally (one about no stroke

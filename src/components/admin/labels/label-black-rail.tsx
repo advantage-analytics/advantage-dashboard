@@ -1,6 +1,5 @@
 "use client";
 
-import { acceptedHint, pointHints } from "./label-black-mark";
 import {
   Fragment,
   useCallback,
@@ -84,6 +83,7 @@ import { cn } from "@/lib/utils";
 import { LabelFollowPill } from "./label-follow-pill";
 import { useRowInView } from "./use-row-in-view";
 import { LabelFlagSummary } from "./label-flag-summary";
+import { acceptedHint, pointHints } from "./label-black-mark";
 import { BlackTextAction, gameSlot } from "./label-black-parts";
 import {
   dropBeforePoint,

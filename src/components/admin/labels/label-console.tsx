@@ -295,12 +295,8 @@ import {
   sessionScoreMismatch,
 } from "@/lib/services/labels/set-scores";
 import { planSetCut, setCutKey } from "@/lib/services/labels/set-cut";
-import {
-  ACCEPT_KEY,
-  acceptedHint,
-  firstHintAction,
-  pointHints,
-} from "./label-black-mark";
+import { acceptedHint, firstHintAction, pointHints } from "./label-black-mark";
+import { ACCEPT_KEY } from "./label-black-parts";
 import {
   autoGameFix,
   autoGameFixKey,
