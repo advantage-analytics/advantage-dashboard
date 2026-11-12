@@ -2,8 +2,8 @@
  * `GET /api/cron/archive-vendor-files` — the daily second chance for vendor
  * files a webhook delivery failed to keep: the players and trajectories JSON,
  * while their 7-day urls are still live. (The vendor's trimmed video is no
- * longer kept — retired 2026-11-12.) The sweep
- * itself is `archiveMissingVendorFiles` (vendor-archive.ts), the same one
+ * longer kept — retired 2026-11-12.) The sweep itself is
+ * `archiveMissingVendorFiles` (vendor-archive.ts), the same one
  * scripts/splitstep-archive-vendor-files.ts runs by hand.
  *
  * Scheduled by `vercel.json` and called with `Authorization: Bearer

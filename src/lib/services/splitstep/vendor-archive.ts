@@ -141,9 +141,9 @@ export interface SweepLine {
 /**
  * Every completed job's vendor files that a delivery failed to keep, kept now
  * while their urls are live — the players and trajectories files into
- * `match-results`. Soonest expiry first, and it
- * stops starting downloads once `deadline` is near, so a bounded caller (the
- * daily cron) gets the most urgent ones and the rest the next day.
+ * `match-results`. Soonest expiry first, and it stops starting downloads once
+ * `deadline` is near, so a bounded caller (the daily cron) gets the most
+ * urgent ones and the rest the next day.
  *
  * `write: false` only reports. The webhook's own copy is the first line; this
  * is the second, shared by the cron and scripts/splitstep-archive-vendor-files.ts.

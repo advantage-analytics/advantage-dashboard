@@ -93,10 +93,9 @@ async function main() {
   const rows = (data ?? []) as JobRow[];
   const rowsByKey = new Map<string, JobRow[]>();
   for (const row of rows) {
-    rowsByKey.set(row.trimmed_object_key, [
-      ...(rowsByKey.get(row.trimmed_object_key) ?? []),
-      row,
-    ]);
+    const named = rowsByKey.get(row.trimmed_object_key);
+    if (named) named.push(row);
+    else rowsByKey.set(row.trimmed_object_key, [row]);
   }
 
   // Every key this run would touch: the blobs, and keys rows name whose blob
