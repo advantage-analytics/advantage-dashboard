@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   cleanEnvValue,
+  objectExistsFrom,
   resolveR2Config,
 } from "@/lib/services/video-storage/r2";
 import {
@@ -152,4 +153,61 @@ test("with R2 configured nothing is warned", async () => {
     ),
   );
   expect(warnings).toEqual([]);
+});
+
+/* ------------------------------------------------- what "not there" means */
+
+const s3Error = (name: string, status: number) =>
+  Object.assign(new Error(name), {
+    name,
+    $metadata: { httpStatusCode: status },
+  });
+
+test("only a genuinely missing object reads as absent", async () => {
+  await expect(
+    objectExistsFrom(async () => {
+      throw s3Error("NoSuchKey", 404);
+    }),
+  ).resolves.toBe(false);
+});
+
+test("a wrong bucket is an error, not 'absent' (production, 2026-11-10)", async () => {
+  // R2_BUCKET_VIDEOS held the Azure container's name: every copy read as
+  // missing, and nothing was logged.
+  await expect(
+    objectExistsFrom(async () => {
+      throw s3Error("NoSuchBucket", 404);
+    }),
+  ).rejects.toMatchObject({ name: "NoSuchBucket" });
+  // Any 404 without NoSuchKey — the shape a HEAD gives — is an error too.
+  await expect(
+    objectExistsFrom(async () => {
+      throw s3Error("NotFound", 404);
+    }),
+  ).rejects.toMatchObject({ name: "NotFound" });
+  await expect(
+    objectExistsFrom(async () => {
+      throw s3Error("AccessDenied", 403);
+    }),
+  ).rejects.toMatchObject({ name: "AccessDenied" });
+});
+
+test("a found object, or an empty one (416), is there, and its body is released", async () => {
+  let released = false;
+  await expect(
+    objectExistsFrom(async () => ({
+      Body: {
+        transformToByteArray: async () => {
+          released = true;
+          return new Uint8Array(1);
+        },
+      },
+    })),
+  ).resolves.toBe(true);
+  expect(released).toBe(true);
+  await expect(
+    objectExistsFrom(async () => {
+      throw s3Error("InvalidRange", 416);
+    }),
+  ).resolves.toBe(true);
 });

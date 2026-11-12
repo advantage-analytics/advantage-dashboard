@@ -80,8 +80,9 @@ export function mintStoredPlayback(params: {
 /**
  * Whether the object is there. Any failure reads as absent, so the player
  * falls through to the next file instead of showing nothing — but an R2
- * failure other than "not found" (a revoked token, an outage) is logged, by
- * key and status only, so a quiet return to Azure egress has a cause on record.
+ * failure other than a missing object (a wrong bucket, a revoked token, an
+ * outage) is logged, by key, status and error name only, so a quiet return to
+ * Azure egress has a cause on record.
  */
 export async function storedObjectExists(
   key: string,
@@ -101,7 +102,7 @@ export async function storedObjectExists(
         name?: string;
         $metadata?: { httpStatusCode?: number };
       };
-      console.error(`${LOG} R2 HEAD failed; reading from Azure instead`, {
+      console.error(`${LOG} R2 lookup failed; reading from Azure instead`, {
         key,
         status: e?.$metadata?.httpStatusCode ?? null,
         name: e?.name ?? null,

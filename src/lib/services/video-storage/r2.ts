@@ -32,7 +32,7 @@ import { createHash, createHmac } from "node:crypto";
 
 import {
   DeleteObjectCommand,
-  HeadObjectCommand,
+  GetObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 
@@ -265,27 +265,69 @@ export function r2Client(config: R2Config = requireR2Config()): S3Client {
   return client;
 }
 
+/**
+ * A 404 from a HEAD. Ambiguous by nature: a HEAD answer has no body, so the
+ * SDK names a missing bucket `NotFound` too. Fine for the backfill script,
+ * whose next write fails loudly on a wrong bucket; the app's existence check
+ * uses {@link r2ObjectExists}, which can tell the two apart.
+ */
 export function isNotFound(error: unknown): boolean {
   const e = error as { name?: string; $metadata?: { httpStatusCode?: number } };
   return e?.name === "NotFound" || e?.$metadata?.httpStatusCode === 404;
 }
 
+type S3Error = {
+  name?: string;
+  Code?: string;
+  $metadata?: { httpStatusCode?: number };
+};
+
 /**
- * Whether an object is there: a HEAD through the SDK. A presigned GET URL
- * cannot answer this — its signature is for GET only, and R2 refuses HEAD.
- * Any other failure throws; callers that treat "unknown" as "absent" catch.
+ * The answer to a one-byte ranged GET, as "is the object there". Only a
+ * genuine missing object is `false`: `NoSuchKey`, by name. Every other
+ * failure throws — above all `NoSuchBucket`, a 404 too, which is what a
+ * wrong `R2_BUCKET_VIDEOS` looks like (production, 2026-11-10: the Azure
+ * container's name, so every copy read as missing and nothing was logged).
+ * A 416 means the object exists but is empty.
+ */
+export async function objectExistsFrom(
+  get: () => Promise<{
+    Body?: { transformToByteArray?: () => Promise<unknown> };
+  }>,
+): Promise<boolean> {
+  try {
+    const response = await get();
+    await response.Body?.transformToByteArray?.(); // release the 1-byte body
+    return true;
+  } catch (error) {
+    const e = error as S3Error;
+    const code = e?.name ?? e?.Code;
+    if (code === "NoSuchKey") return false;
+    if (code === "InvalidRange" || e?.$metadata?.httpStatusCode === 416) {
+      return true;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Whether an object is there, with the READ pair. A GET of one byte rather
+ * than a HEAD: a HEAD's 404 has no body, so a missing bucket and a missing
+ * key look the same, and a wrong bucket name would read as "every copy is
+ * gone" — silently. (A presigned GET URL cannot answer this either: its
+ * signature is for one method, and the browser needs no HEAD.)
  */
 export async function r2ObjectExists(key: string): Promise<boolean> {
   const config = requireR2Config();
-  try {
-    await r2Client(config).send(
-      new HeadObjectCommand({ Bucket: config.bucket, Key: key }),
-    );
-    return true;
-  } catch (error) {
-    if (isNotFound(error)) return false;
-    throw error;
-  }
+  return objectExistsFrom(() =>
+    r2Client(config).send(
+      new GetObjectCommand({
+        Bucket: config.bucket,
+        Key: key,
+        Range: "bytes=0-0",
+      }),
+    ),
+  );
 }
 
 /**
