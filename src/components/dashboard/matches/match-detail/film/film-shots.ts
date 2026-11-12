@@ -290,9 +290,15 @@ export function rallyNumbering(
   shots: readonly MatchShot[] | undefined,
 ): RallyNumbering {
   const list = shots ?? [];
-  const lastServe = list.findLastIndex((s) =>
-    isServeRow(s.shotType?.trim() ?? ""),
+  const isServe = (s: MatchShot) => isServeRow(s.shotType?.trim() ?? "");
+  // The last serve at or before the serve that counted (shot_number 0 or 1).
+  // A serve-typed row stored later is a rally stroke mistyped as a serve (a
+  // receiver's overhead on a hand-labelled point): starting there printed the
+  // whole rally before it as 1. Any last serve row when none is numbered so.
+  const counted = list.findLastIndex(
+    (s) => isServe(s) && (s.shotNumber ?? 0) <= 1,
   );
+  const lastServe = counted !== -1 ? counted : list.findLastIndex(isServe);
   // No serve: the rally is every shot, and it starts at the first one.
   const start = Math.max(lastServe, 0);
   const numbers = new Map<string, number>();
@@ -305,7 +311,10 @@ export function rallyNumbering(
   // the time. Stored order is only the fallback (one serve, or bare "Serve").
   const secondServe = countedShots(list, (s) => s.shotNumber).find((s) => {
     const type = s.shotType?.trim() ?? "";
-    return isServeRow(type) && /second|2nd/i.test(type);
+    // Never a serve-typed row stored past the counted serve (see above).
+    return (
+      isServeRow(type) && /second|2nd/i.test(type) && (s.shotNumber ?? 0) <= 1
+    );
   });
   return {
     numbers,

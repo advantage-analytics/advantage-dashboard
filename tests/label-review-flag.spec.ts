@@ -1096,6 +1096,18 @@ test.describe("reviewItemTarget", () => {
     expect(target(itemOf(3, sample("first_serve_fault_alone")))).toEqual(
       at("d", "landing"),
     );
+    expect(
+      target(
+        itemOf(
+          3,
+          mark("serve_by_receiver", {
+            shotId: "b",
+            hitter: "p1",
+            server: "p2",
+          }),
+        ),
+      ),
+    ).toEqual(at("b", null));
     // The last second serve, not the last stroke.
     const seconds = rally(
       ["b", { stroke: "second_serve" }],

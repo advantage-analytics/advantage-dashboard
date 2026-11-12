@@ -55,7 +55,11 @@ import {
   endingContradictsWinner,
   publishEnding,
 } from "./ending-derived";
-import { inServeLandingMiss, playedOnResult } from "./shot-derived";
+import {
+  inServeLandingMiss,
+  isServeByReceiver,
+  playedOnResult,
+} from "./shot-derived";
 import { filledLanding, landingTakesContact } from "./volley-link";
 import { gameKey, labelScores, type LabelGameBand } from "./score";
 import { labelSetScores } from "./set-scores";
@@ -437,11 +441,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
       warnings.push(`${at}: no serve`);
     }
     played.forEach((shot, i) => {
-      if (
-        isServeStroke(shot.stroke) &&
-        shot.hitter !== null &&
-        shot.hitter !== server
-      ) {
+      if (isServeByReceiver(shot, server)) {
         warnings.push(
           `${at}: stroke ${i + 1} is a serve by ${shot.hitter}, but ${server} is serving`,
         );
@@ -732,7 +732,10 @@ export function expectedStats(
  * mid-rally overhead left as a "second serve" once numbered the seven strokes
  * before it 0 (Emon van Loben Sels v Eli Stephenson, point 120) — unless the
  * server hit none at all, where the point's server is what is wrong and its
- * last serve stands, as before. -1 with no serve.
+ * last serve stands, as before. A serve that directly follows the server's
+ * is still the service, whoever it is typed on: a second serve with the
+ * wrong hitter stays the counted serve, so a faulted first serve is never
+ * numbered 1. -1 with no serve.
  */
 export function countedServeIndex(
   played: readonly Pick<LabelShot, "stroke" | "hitter">[],
@@ -743,5 +746,8 @@ export function countedServeIndex(
       (shot) => isServeStroke(shot.stroke) && (!own || shot.hitter === server),
     );
   const byServer = lastServe(true);
-  return byServer !== -1 ? byServer : lastServe(false);
+  if (byServer === -1) return lastServe(false);
+  let at = byServer;
+  while (isServeStroke(played[at + 1]?.stroke)) at += 1;
+  return at;
 }

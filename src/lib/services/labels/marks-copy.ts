@@ -400,7 +400,7 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       return "A let that was played, or two points in one rally.";
     case "serve_by_receiver": {
       const { hitter, server } = mark.params;
-      return `${names[hitter]} is typed as hitting a serve, but ${names[server]} is serving this point. Mid-rally it is most often an overhead: retype the shot. If ${names[hitter]} did serve, change the server.`;
+      return `${names[hitter]} is typed as hitting a serve, but ${names[server]} is serving this point. If it is a rally shot, retype it: mid-rally it is most often an overhead. If the serve is ${names[server]}’s, change who hit it. If ${names[hitter]} did serve, change the server.`;
     }
     case "placement_missing": {
       const { stroke, missing } = mark.params;

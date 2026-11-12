@@ -228,6 +228,9 @@ test.describe("mark copy", () => {
     expect(markHover(sample("serve_after_serve_in"), names)).toBe(
       "A let that was played, or two points in one rally.",
     );
+    expect(markHover(sample("serve_by_receiver"), names)).toBe(
+      `${names.p1} is typed as hitting a serve, but ${names.p2} is serving this point. If it is a rally shot, retype it: mid-rally it is most often an overhead. If the serve is ${names.p2}’s, change who hit it. If ${names.p1} did serve, change the server.`,
+    );
   });
 
   test("a hint's words on the line: the label, and for “Point ended here” the count after it", () => {

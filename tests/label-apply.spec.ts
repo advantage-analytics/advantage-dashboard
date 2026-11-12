@@ -831,6 +831,18 @@ test.describe("a serve typed on the receiver", () => {
         "p1",
       ),
     ).toBe(0);
+    // A second serve typed on the wrong hitter is still the service: the
+    // faulted first serve is never the counted one.
+    expect(
+      countedServeIndex(
+        strokes(
+          ["p1", "first_serve"],
+          ["p2", "second_serve"],
+          ["p2", "backhand"],
+        ),
+        "p1",
+      ),
+    ).toBe(1);
     expect(countedServeIndex(strokes(["p1", "forehand"]), "p1")).toBe(-1);
   });
 });

@@ -52,6 +52,7 @@ import {
 import {
   effectiveShotResult,
   inServeLandingMiss,
+  isServeByReceiver,
   type ResultReadableShot,
 } from "./shot-derived";
 import {
@@ -517,10 +518,7 @@ export function serveByReceiver(
 ): Extract<LabelMark, { code: "serve_by_receiver" }> | null {
   const server = point.server ?? null;
   if (server === null || isNonPointEnding(point.ending ?? null)) return null;
-  const wrong = (shot: LabelShot) =>
-    isServeStroke(shot.stroke) &&
-    shot.hitter !== null &&
-    shot.hitter !== server;
+  const wrong = (shot: LabelShot) => isServeByReceiver(shot, server);
   // Cheap exit before the sort.
   if (!point.shots.some(wrong)) return null;
   const shot = liveShotsInOrder(point, ghosts).find(wrong);
