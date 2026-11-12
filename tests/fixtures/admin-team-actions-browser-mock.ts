@@ -111,3 +111,12 @@ export async function loadMoreAdminTeams() {
   await answer();
   return { rows: [], nextCursor: null };
 }
+
+// Settings › Usage's month stepper, for `tests/program-usage-card.spec.ts`.
+export async function loadProgramUsage(
+  _programId: string,
+  billingMonth: string,
+) {
+  await answer();
+  return { usedSeconds: 1800, capSeconds: 270000, billingMonth, lines: [] };
+}

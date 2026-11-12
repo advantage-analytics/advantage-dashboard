@@ -19,6 +19,10 @@ import {
 import { cn } from "@/lib/utils";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 import { teamLabel, type Workspace } from "@/lib/workspace/types";
+import { actionRejectedWith } from "@/lib/ui/action-rejected";
+
+/** A read, so "whether the change was saved" would mean nothing here. */
+const LOAD_MONTH_ERROR = "Couldn't load that month. Try again.";
 
 /**
  * The program's shared hours, one month at a time.
@@ -42,13 +46,26 @@ export function ProgramUsageCard({
   currentMonth: string;
 }) {
   const [usage, setUsage] = useState(initial);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const step = (months: number) => {
-    const next = shiftBillingMonth(usage.billingMonth, months);
-    if (next > currentMonth) return;
+    const month = shiftBillingMonth(usage.billingMonth, months);
+    if (month > currentMonth) return;
     startTransition(async () => {
-      setUsage(await loadProgramUsage(program.id, next));
+      // A rejection inside a transition is thrown to the error boundary, and
+      // there is none below the root here: one month-step would swap the whole
+      // app for the global error screen. The month on screen is still good, so
+      // it stays, with the reason beside it.
+      const next = await loadProgramUsage(program.id, month).catch(
+        actionRejectedWith(LOAD_MONTH_ERROR),
+      );
+      if ("ok" in next) {
+        setLoadError(next.error);
+        return;
+      }
+      setLoadError(null);
+      setUsage(next);
     });
   };
 
@@ -104,6 +121,12 @@ export function ProgramUsageCard({
           </span>
         </span>
       </SettingsCardTitle>
+
+      {loadError && (
+        <p role="alert" className="text-[12px] text-[var(--danger)]">
+          {loadError}
+        </p>
+      )}
 
       <div className="flex items-center gap-3">
         <div className="h-1.5 flex-1 overflow-hidden rounded-[3px] bg-[var(--ink-100)]">
