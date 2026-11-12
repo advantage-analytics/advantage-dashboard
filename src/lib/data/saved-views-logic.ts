@@ -458,7 +458,7 @@ export function bandVisibility(
 
 /** One row of the ⋯ tile menu, in the order `manage-tile-menu.tsx` draws them. */
 export type ManageMenuRowKind =
-  "rename" | "duplicate" | "share" | "unshare" | "delete";
+  "rename" | "duplicate" | "share" | "unshare" | "reorder" | "delete";
 
 /**
  * Which rows the ⋯ menu draws for `view`, given the workspace it's in and
@@ -476,17 +476,24 @@ export type ManageMenuRowKind =
  * else's PRIVATE view too — a staff member should not be offered to
  * publish a teammate's still-private view to the whole roster. A personal
  * workspace never shows either row: there is no one else to share with.
+ * "Reorder…" shows only where the caller can enter reorder mode (`reorder`):
+ * a wall card's menu does, the open view's does not — there is no wall under
+ * it to drag on.
  * Delete is always last, after a divider `manage-tile-menu.tsx` draws
  * itself (this function returns rows only, not the divider).
  */
 export function manageMenuRows(
   view: { mine: boolean; shared: boolean },
-  { workspaceKind }: { workspaceKind: WorkspaceKind; role: ProgramRole },
+  {
+    workspaceKind,
+    reorder = false,
+  }: { workspaceKind: WorkspaceKind; role: ProgramRole; reorder?: boolean },
 ): ManageMenuRowKind[] {
   const rows: ManageMenuRowKind[] = ["rename", "duplicate"];
   if (workspaceKind === "team" && view.mine) {
     rows.push(view.shared ? "unshare" : "share");
   }
+  if (reorder) rows.push("reorder");
   rows.push("delete");
   return rows;
 }

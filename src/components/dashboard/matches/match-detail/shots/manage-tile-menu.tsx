@@ -1,7 +1,14 @@
 "use client";
 
 import { Fragment, type ReactElement } from "react";
-import { Copy, Lock, Pencil, Trash2, Users } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Copy,
+  Lock,
+  Pencil,
+  Trash2,
+  Users,
+} from "lucide-react";
 import {
   FloatMenu,
   FloatMenuDivider,
@@ -18,6 +25,7 @@ const ROW_LABEL: Record<ManageMenuRowKind, string> = {
   duplicate: "Duplicate",
   share: "Share with team",
   unshare: "Make private",
+  reorder: "Reorder…",
   delete: "Delete view",
 };
 
@@ -26,11 +34,15 @@ const ROW_ICON: Record<ManageMenuRowKind, ReactElement> = {
   duplicate: <Copy className="size-3" strokeWidth={1.5} aria-hidden="true" />,
   share: <Users className="size-3" strokeWidth={1.5} aria-hidden="true" />,
   unshare: <Lock className="size-3" strokeWidth={1.5} aria-hidden="true" />,
+  reorder: (
+    <ArrowLeftRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
+  ),
   delete: <Trash2 className="size-3" strokeWidth={1.5} aria-hidden="true" />,
 };
 
 /**
- * The ⋯ tile menu (Task 9 Part B, Manage mode). Which rows it draws comes
+ * A saved view's ⋯ menu — on its wall card and beside its name in the open
+ * view. Which rows it draws comes
  * straight from the pure `manageMenuRows` (`saved-views-logic.ts`) — this
  * component only supplies each row's label/icon and wires it to a handler.
  * Built on `ui/float-menu.tsx` per the design system's one-dropdown rule;
@@ -52,6 +64,7 @@ export function ManageTileMenu({
   onDuplicate,
   onShare,
   onUnshare,
+  onReorder,
   onDelete,
 }: {
   viewName: string;
@@ -65,9 +78,15 @@ export function ManageTileMenu({
   onDuplicate: () => void;
   onShare: () => void;
   onUnshare: () => void;
+  /** Enters reorder mode. Omitted (the open view), the row is not drawn. */
+  onReorder?: () => void;
   onDelete: () => void;
 }) {
-  const rows = manageMenuRows(view, { workspaceKind, role });
+  const rows = manageMenuRows(view, {
+    workspaceKind,
+    role,
+    reorder: onReorder !== undefined,
+  });
 
   function handlerFor(kind: ManageMenuRowKind): () => void {
     switch (kind) {
@@ -79,6 +98,8 @@ export function ManageTileMenu({
         return onShare;
       case "unshare":
         return onUnshare;
+      case "reorder":
+        return onReorder ?? (() => {});
       case "delete":
         return onDelete;
     }

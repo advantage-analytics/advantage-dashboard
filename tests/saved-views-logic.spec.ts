@@ -505,6 +505,24 @@ test("manageMenuRows: staff managing a teammate's shared view gets no share/unsh
   ).toEqual(["rename", "duplicate", "delete"]);
 });
 
+test("manageMenuRows: a wall card's menu adds Reorder just before Delete", () => {
+  expect(
+    manageMenuRows(
+      { mine: true, shared: false },
+      { workspaceKind: "team", role: "player", reorder: true },
+    ),
+  ).toEqual(["rename", "duplicate", "share", "reorder", "delete"]);
+});
+
+test("manageMenuRows: without reorder (the open view) there is no Reorder row", () => {
+  expect(
+    manageMenuRows(
+      { mine: true, shared: false },
+      { workspaceKind: "personal", role: "owner", reorder: false },
+    ),
+  ).toEqual(["rename", "duplicate", "delete"]);
+});
+
 /* ── applyIdOrder ───────────────────────────────────────────────────────── */
 
 interface Item {

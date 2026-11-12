@@ -703,6 +703,8 @@ test("R3·3 · Watch → Video → Back keeps the wall's player and collection",
   );
   // An edited saved view (no `view=` left in its URL) still closes on Saved.
   await page.getByRole("button", { name: "Saved", exact: true }).click();
+  // The Saved wall shows one player's views: "Saved serve" is one of yours.
+  await page.getByRole("button", { name: "You", exact: true }).click();
   await page.getByRole("link", { name: /Saved serve/ }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Opponent" }).click();

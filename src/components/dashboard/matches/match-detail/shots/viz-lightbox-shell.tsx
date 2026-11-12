@@ -158,6 +158,8 @@ export interface VizLightboxShellProps {
 
   /* ── Words ───────────────────────────────────────────────────────────── */
   title: string;
+  /** Sits right after the title, on its row — an open saved view's ⋯. */
+  titleAccessory?: ReactNode;
   subtitle: string;
   /** The strip's sentence for the filters (the shell adds the legend's and a
    *  Statistics row's pick). Empty: no strip unless a pick is on. */
@@ -266,6 +268,7 @@ export function VizLightboxShell({
   matchFor,
   watch,
   title,
+  titleAccessory,
   subtitle,
   filterPhrases,
   panelActive,
@@ -901,13 +904,16 @@ export function VizLightboxShell({
               className="flex items-start gap-2.5 px-6 pt-6 pb-5"
             >
               <div className="flex min-w-0 flex-col gap-1">
-                <DialogPrimitive.Title
-                  ref={titleRef}
-                  tabIndex={-1}
-                  className="m-0 truncate text-[16px] leading-[1.4] font-medium text-[var(--ink-900)] outline-none"
-                >
-                  {pending ? <LightboxTitlePending label={title} /> : title}
-                </DialogPrimitive.Title>
+                <div className="flex min-w-0 items-center gap-2">
+                  <DialogPrimitive.Title
+                    ref={titleRef}
+                    tabIndex={-1}
+                    className="m-0 truncate text-[16px] leading-[1.4] font-medium text-[var(--ink-900)] outline-none"
+                  >
+                    {pending ? <LightboxTitlePending label={title} /> : title}
+                  </DialogPrimitive.Title>
+                  {!pending && titleAccessory}
+                </div>
                 <p
                   id="viz-lightbox-subtitle"
                   className="m-0 text-[12px] text-[var(--ink-600)]"

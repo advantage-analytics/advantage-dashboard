@@ -13,7 +13,10 @@ import {
   VizStateProvider,
 } from "@/components/dashboard/matches/match-detail/shots/viz-state-context";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
-import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shots/saved-views-band";
+import {
+  SavedViewsBand,
+  type SavedViewRequest,
+} from "@/components/dashboard/matches/match-detail/shots/saved-views-band";
 import { VizBandsProvider } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
 import { shotsWriteAccess } from "@/components/dashboard/matches/match-detail/shots/shots-write-access";
 import { VizEmpty } from "@/components/dashboard/matches/match-detail/shots/viz-empty";
@@ -147,6 +150,11 @@ function ShotsTabBody() {
     });
   }
 
+  // What the open view's ⋯ asked for, handed to the Saved wall's band — the
+  // one place saved views are changed, so a rename or a delete from the
+  // lightbox lands exactly as one from a card (optimistic, with its Undo).
+  const [viewRequest, setViewRequest] = useState<SavedViewRequest | null>(null);
+
   // Before anything else, so no URL can reach an empty court.
   if (points.length === 0) return <VizEmpty />;
 
@@ -168,6 +176,8 @@ function ShotsTabBody() {
               workspaceKind={meta.workspaceKind}
               canSaveViews={canSaveViews}
               readOnly={meta.readOnly}
+              player={wallPlayer}
+              request={viewRequest}
             />
           )
         }
@@ -180,6 +190,9 @@ function ShotsTabBody() {
           key={`${opening.count}:${visit.count}`}
           wallPlayer={wallPlayer}
           onWatchPoints={actions.watchPointSet}
+          onViewAction={(action) =>
+            setViewRequest((prev) => ({ ...action, n: (prev?.n ?? 0) + 1 }))
+          }
         />
       )}
     </>

@@ -17,7 +17,8 @@ import { EMPTY_VIZ_FILTERS, type PlayerFilter } from "./viz-model";
 /**
  * The wall (canvas W5 + card D3): one toolbar strip — `Default | Saved` ·
  * `You | Opponent` · the legend — over five court-first cards in a two-column grid,
- * one player at a time. Which player is URL-backed (`?player=opponent` on the
+ * one player at a time. The Saved collection sits under the same strip and
+ * shows that player's saved views as the same cards. Which player is URL-backed (`?player=opponent` on the
  * wall, `viz-url.ts`), so a reload or Back lands on the same five cards.
  *
  * Attribution (guardrails §4): `useMatchSides()` is the only place "you" is
@@ -111,38 +112,36 @@ export function VizWall({
             ))}
           </div>
         )}
-        {collection === "default" && (
-          <>
-            {hasSaved && (
-              <span
-                aria-hidden="true"
-                className="h-4 w-px"
-                style={{ backgroundColor: "var(--border-medium)" }}
-              />
-            )}
-            <div className="flex gap-2" role="group" aria-label="Player">
-              {(["you", "opponent"] as const).map((value) => (
-                <LifecycleChip
-                  key={value}
-                  pressed={player === value}
-                  onClick={() => choosePlayer(value)}
-                >
-                  {value === "you" ? "You" : "Opponent"}
-                </LifecycleChip>
-              ))}
-            </div>
-            <div className="flex-1" />
-            <div
-              role="group"
-              aria-label="Legend"
-              className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px]"
-            >
-              {wallLegendItems().map((item) => (
-                <LegendMark key={item.key} item={item} />
-              ))}
-            </div>
-          </>
+        {/* The same strip on both collections: the Saved wall filters its
+            views by the same You | Opponent and reads the same marks. */}
+        {hasSaved && (
+          <span
+            aria-hidden="true"
+            className="h-4 w-px"
+            style={{ backgroundColor: "var(--border-medium)" }}
+          />
         )}
+        <div className="flex gap-2" role="group" aria-label="Player">
+          {(["you", "opponent"] as const).map((value) => (
+            <LifecycleChip
+              key={value}
+              pressed={player === value}
+              onClick={() => choosePlayer(value)}
+            >
+              {value === "you" ? "You" : "Opponent"}
+            </LifecycleChip>
+          ))}
+        </div>
+        <div className="flex-1" />
+        <div
+          role="group"
+          aria-label="Legend"
+          className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px]"
+        >
+          {wallLegendItems().map((item) => (
+            <LegendMark key={item.key} item={item} />
+          ))}
+        </div>
       </div>
       {collection === "default" ? (
         visibleTiles.length > 0 ? (

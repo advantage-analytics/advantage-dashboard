@@ -55,6 +55,7 @@ function Harness() {
             workspaceRole="player"
             workspaceKind="personal"
             canSaveViews
+            player={state.cut === null ? state.filters.player : "you"}
           />
         }
         collection={wallCollection}
