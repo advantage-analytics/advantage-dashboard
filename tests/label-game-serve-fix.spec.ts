@@ -227,6 +227,6 @@ test("the console runs the fix by itself, once, after any cut still to run", () 
   );
   expect(source).toContain("`${session.id}:serve-fix`,");
   expect(source).toContain("setGameServer(serveFix.game, serveFix.server);");
-  expect(source).toContain("void switchPlayersByEnd(serveFix.pointIds);");
+  expect(source).toContain("void switchPlayersByEnd(serveFix.pointIds, true);");
   expect(source).toContain("await patchShot(shotId, { hitter: server });");
 });

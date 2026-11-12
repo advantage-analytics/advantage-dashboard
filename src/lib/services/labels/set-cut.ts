@@ -61,13 +61,18 @@ export function setCut(
   );
   // A set still to be folded at 6–6 has its tiebreak cut into ordinary games
   // by the vendor: a piece of it can read as the game that makes 7–6.
-  const folding = new Set(
-    tiebreakFolds(points, adScoring, matchTiebreakSet, start).map(
-      (fold) => fold.setNumber,
-    ),
-  );
+  // Read only once a set reaches its score: most passes find no cut at all.
+  let folding: Set<number> | null = null;
+  const toFold = (setNumber: number) => {
+    folding ??= new Set(
+      tiebreakFolds(points, adScoring, matchTiebreakSet, start).map(
+        (fold) => fold.setNumber,
+      ),
+    );
+    return folding.has(setNumber);
+  };
   for (const setNumber of sets) {
-    if (setNumber === matchTiebreakSet || folding.has(setNumber)) continue;
+    if (setNumber === matchTiebreakSet) continue;
     const want = entered[setNumber - 1];
     if (!want) continue;
     const [want1 = 0, want2 = 0] = want;
@@ -83,7 +88,7 @@ export function setCut(
       if (tally[0] > want1 || tally[1] > want2) break;
       if (tally[0] !== want1 || tally[1] !== want2) continue;
       const after = bands.slice(i + 1);
-      if (after.length === 0) break;
+      if (after.length === 0 || toFold(setNumber)) break;
       return { setNumber, gameKeys: after.map((b) => gameKey(b)) };
     }
   }

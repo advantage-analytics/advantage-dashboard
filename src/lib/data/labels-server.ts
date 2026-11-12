@@ -475,6 +475,8 @@ interface DbSessionRow {
   video_ends_early?: boolean | null;
   /** jsonb object parsed by `parseLabelStartScore` (session-fields.ts); null until set. */
   start_score?: unknown;
+  /** The labeller the session is assigned to; null or absent when nobody. */
+  assigned_to?: string | null;
 }
 
 /**
@@ -547,7 +549,7 @@ export async function readLabelSessionRows<T = undefined>(
   const { data: session, error: sessionError } = await db
     .from("label_sessions")
     .select(
-      "id, job_id, match_id, status, derivation_version, kind, practice_set_number, ad_scoring, marks_enabled, final_score, video_ends_early, start_score",
+      "id, job_id, match_id, status, derivation_version, kind, practice_set_number, ad_scoring, marks_enabled, final_score, video_ends_early, start_score, assigned_to",
     )
     .eq("id", sessionId)
     .maybeSingle<Omit<DbSessionRow, "kind"> & { kind?: string | null }>();
@@ -929,6 +931,7 @@ export function buildLabelSession(
     startScore: parseLabelStartScore(session.start_score ?? null),
     matchScore: parseMatchScore(match?.score ?? null),
     bestOf: readBestOf(match?.format),
+    assigned: session.assigned_to != null,
     points,
   };
 }

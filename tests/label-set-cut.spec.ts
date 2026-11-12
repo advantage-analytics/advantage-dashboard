@@ -233,9 +233,17 @@ test.describe("the console and the server", () => {
     }
     expect(consoleSource.match(/setAutoHeld\(true\);/g)).toHaveLength(2);
     // Not on a practice copy, nor on a session labelled without marks.
-    expect(consoleSource).toContain(
-      'editable && session.kind !== "practice" && liveMarks !== null;',
-    );
+    // Nor by an admin on a session assigned to a labeller.
+    for (const gate of [
+      'session.kind !== "practice" &&',
+      "liveMarks !== null &&",
+      "(labeller || !session.assigned);",
+    ]) {
+      expect(consoleSource).toContain(gate);
+    }
+    // A key is kept for the browser only once its write has landed.
+    expect(consoleSource).toContain("if (awaiting === null || busy) return;");
+    expect(consoleSource).toContain("if (!failed) {");
   });
 
   test("the server re-plans on the rows as read and refuses another set's cut", () => {

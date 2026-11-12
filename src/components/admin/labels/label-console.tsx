@@ -398,18 +398,47 @@ const PENDING_POINT_PREFIX = "pending-point-";
 
 /**
  * Run `run` once for each `key`, when `ready`: the console's own fixes, which
- * must never be tried twice — a fix the labeller undid, or one the server
- * refused, stays undone. The keys tried are kept for the browser under
- * `storageKey`, so a reload does not try them again either; where storage is
- * blocked they last the visit. Answers whether `key` is still to run.
+ * must never be tried twice in a visit — a fix the labeller undid, or one the
+ * server refused, stays undone. A key whose write landed is kept for the
+ * browser under `storageKey`, so a reload does not try it again either; one
+ * whose write failed (a dropped connection) is forgotten with the visit, and
+ * the next one tries it again. `busy` and `failed` are the console's save
+ * line: writes in flight, and whether the last one to settle was refused.
+ * Answers whether `key` is still to run.
  */
 function useOncePerKey(
   storageKey: string,
   key: string | null,
   ready: boolean,
   run: () => void,
+  busy: boolean,
+  failed: boolean,
 ): boolean {
   const name = `label-auto-fix:${storageKey}`;
+  // The key just run, until its write settles.
+  const [awaiting, setAwaiting] = useState<string | null>(null);
+  useEffect(() => {
+    if (awaiting === null || busy) return;
+    if (!failed) {
+      try {
+        const parsed: unknown = JSON.parse(
+          window.localStorage.getItem(name) ?? "[]",
+        );
+        const kept = Array.isArray(parsed)
+          ? parsed.filter((k): k is string => typeof k === "string")
+          : [];
+        if (!kept.includes(awaiting)) kept.push(awaiting);
+        window.localStorage.setItem(
+          name,
+          JSON.stringify(kept.slice(-AUTO_FIX_KEYS_KEPT)),
+        );
+      } catch {
+        // Kept for the visit only.
+      }
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAwaiting(null);
+  }, [awaiting, busy, failed, name]);
   const [tried, setTried] = useState<ReadonlySet<string>>(() => {
     try {
       const parsed: unknown = JSON.parse(
@@ -428,18 +457,12 @@ function useOncePerKey(
   const pending = key !== null && !tried.has(key);
   useEffect(() => {
     if (!pending || !ready || key === null) return;
-    const next = new Set(tried).add(key);
     // The key is marked in the same pass that runs it: that is the "once".
+    // `run` starts its write in this pass too, so the render that sees
+    // `awaiting` sees `busy` with it.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTried(next);
-    try {
-      window.localStorage.setItem(
-        name,
-        JSON.stringify([...next].slice(-AUTO_FIX_KEYS_KEPT)),
-      );
-    } catch {
-      // Kept for the visit only.
-    }
+    setTried(new Set(tried).add(key));
+    setAwaiting(key);
     run();
     // `run` reads the rows `key` was found on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1483,6 +1506,7 @@ export function LabelConsole({
       return;
     }
     setPlacement(NO_PLACEMENT);
+    setPlacedEnd(null);
     setPoints((rows) =>
       applyUndoDiff(rows, result.changed, result.removedPointIds),
     );
@@ -1531,6 +1555,7 @@ export function LabelConsole({
       return;
     }
     setPlacement(NO_PLACEMENT);
+    setPlacedEnd(null);
     setPoints((rows) =>
       applyUndoDiff(rows, result.changed, result.removedPointIds),
     );
@@ -1925,8 +1950,14 @@ export function LabelConsole({
   // its labeller did, nor on a session labelled without marks; and not after
   // an Undo or Redo until the labeller's next own write, so ⌘Z is never
   // answered by the console putting the same thing back.
+  // Nor by an admin looking in on a session assigned to a labeller.
   const autoFixes =
-    editable && session.kind !== "practice" && liveMarks !== null;
+    editable &&
+    session.kind !== "practice" &&
+    liveMarks !== null &&
+    (labeller || !session.assigned);
+  const saveBusy = saveStatus.pending > 0;
+  const saveFailed = saveStatus.last.kind === "error";
   const rowsSettled =
     saveStatus.pending === 0 &&
     fieldSaves === 0 &&
@@ -1962,6 +1993,8 @@ export function LabelConsole({
       if (gameFix.kind === "shift") shiftGameOverflow(gameFix.fromPointId);
       else pullGamePoints(gameFix.gameKey);
     },
+    saveBusy,
+    saveFailed,
   );
 
   // A set that reached its entered score with games still filed under it
@@ -2000,6 +2033,8 @@ export function LabelConsole({
       const { setNumber } = setCutPlan.cut;
       runGameShift(setCutPlan, () => cutSetAction(session.id, setNumber));
     },
+    saveBusy,
+    saveFailed,
   );
 
   // One player serves every point of an ordinary game (game-serve-fix.ts): a
@@ -2020,7 +2055,9 @@ export function LabelConsole({
       if (serveFix.kind === "server") {
         setGameServer(serveFix.game, serveFix.server);
       } else if (serveFix.kind === "switch") {
-        void switchPlayersByEnd(serveFix.pointIds);
+        // Only where the rows as stored still contradict the server: a
+        // second tab that already switched them is not switched back.
+        void switchPlayersByEnd(serveFix.pointIds, true);
       } else {
         const { shotIds, server } = serveFix;
         void (async () => {
@@ -2030,6 +2067,8 @@ export function LabelConsole({
         })();
       }
     },
+    saveBusy,
+    saveFailed,
   );
 
   /**
@@ -2151,7 +2190,10 @@ export function LabelConsole({
    * points whose strokes sit at the other player's end, as one write and one
    * ⌘Z.
    */
-  function switchPlayersByEnd(pointIds: readonly string[]) {
+  function switchPlayersByEnd(
+    pointIds: readonly string[],
+    onlyIfContradicts = false,
+  ) {
     const run = operations?.switchPlayersByEnd;
     if (!run) return;
     const befores = new Map<string, LabelPoint>();
@@ -2186,7 +2228,7 @@ export function LabelConsole({
           }),
           shots,
         ),
-      () => run([...plans.keys()]),
+      () => run([...plans.keys()], onlyIfContradicts),
       (rows, result) => {
         const saved = new Map(result.points.map((p) => [p.pointId, p]));
         const unsaved = [...plans.keys()].filter((id) => !saved.has(id));
@@ -4973,6 +5015,8 @@ export interface LabelConsoleOperations {
    */
   switchPlayersByEnd?: (
     pointIds: string[],
+    /** The console's own fix: leave a point that no longer contradicts. */
+    onlyIfContradicts?: boolean,
   ) => Promise<LabelPlayersSwitchResult>;
   /** Writes `final_score` and `video_ends_early` on `label_sessions` only. */
   updateSessionFields: (

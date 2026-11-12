@@ -517,9 +517,11 @@ export async function switchLabelPointPlayersAction(
  */
 export async function switchLabelPointsPlayersAction(
   pointIds: string[],
+  /** The console's own fix: skip a point already switched elsewhere. */
+  onlyIfContradicts = false,
 ): Promise<LabelPlayersSwitchResult> {
   return withLabelOp("Switch players by court end", () =>
-    switchLabelPointsPlayers(pointIds),
+    switchLabelPointsPlayers(pointIds, undefined, onlyIfContradicts === true),
   );
 }
 

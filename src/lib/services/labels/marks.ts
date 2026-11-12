@@ -860,6 +860,30 @@ export function buildLabelMarks(
     ? proposedTiebreakRallies(transcript.segmentation)
     : () => false;
 
+  // Whether the session was seeded on the proposal's cut (seed-proposal.ts):
+  // every row the proposal places sits where it put it. Asked of the session,
+  // not the row — a session seeded on the vendor's cut keeps the flag on a row
+  // that happens to agree.
+  let placed = 0;
+  let sessionOnProposal = true;
+  for (const point of transcript.points) {
+    const pointId = pointIdByRally.get(point.rally_id);
+    const to = proposed.get(point.rally_id);
+    if (pointId === undefined || !to) continue;
+    placed += 1;
+    if (
+      !seededOnProposal(
+        seedByPoint.get(pointId) ?? null,
+        to,
+        inProposedTiebreak(point.rally_id),
+      )
+    ) {
+      sessionOnProposal = false;
+      break;
+    }
+  }
+  if (placed === 0) sessionOnProposal = false;
+
   const marks: LabelMarks = {
     points: {},
     shots: {},
@@ -898,14 +922,10 @@ export function buildLabelMarks(
     // the flag was raised against the vendor's rows, which it never held.
     const to = proposed.get(point.rally_id) ?? null;
     const onProposal =
+      sessionOnProposal &&
       to !== null &&
       // Half of a proposed merge is still two rows: that stays asked.
-      to.mergedWith === null &&
-      seededOnProposal(
-        seedByPoint.get(pointId) ?? null,
-        to,
-        inProposedTiebreak(point.rally_id),
-      );
+      to.mergedWith === null;
     push(
       marks.points,
       pointId,

@@ -270,7 +270,9 @@ test("only a new session is seeded on the proposal; the marks drop Game cut diff
     expect(readFileSync(file, "utf8")).not.toContain("applyProposedCut");
   }
   const marks = readFileSync("src/lib/services/labels/marks.ts", "utf8");
-  expect(marks).toContain("to.mergedWith === null &&");
+  // Asked of the session, so one seeded on the vendor's cut keeps the flag.
+  expect(marks).toContain("sessionOnProposal &&");
+  expect(marks).toContain("to.mergedWith === null;");
   expect(marks).toContain(
     "!onProposal || m.code !== POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS",
   );

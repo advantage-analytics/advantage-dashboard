@@ -28,7 +28,11 @@ import {
   writeShotSwaps,
   type LabelOpResult,
 } from "./operations-session";
-import { planPlayerSwitch, type ShotSwapWrite } from "./player-swap";
+import {
+  planPlayerSwitch,
+  rowsContradictServer,
+  type ShotSwapWrite,
+} from "./player-swap";
 import type { LabelPointStatus, LabelSide } from "./session";
 
 export type LabelPlayerSwitchResult = LabelOpResult<{
@@ -43,7 +47,14 @@ export type LabelPlayerSwitchResult = LabelOpResult<{
 export async function writeLabelPlayerSwitch(params: {
   supabase: AdminClient;
   pointId: unknown;
-}): Promise<LabelPlayerSwitchResult> {
+  /**
+   * The console's own switch (game-serve-fix.ts): flip only while the point's
+   * rows still contradict its server. A switch is its own inverse, so two
+   * consoles that both find the same point would otherwise put it back; the
+   * second one finds nothing left to switch and answers `skipped`.
+   */
+  onlyIfContradicts?: boolean;
+}): Promise<LabelPlayerSwitchResult | { skipped: true }> {
   const { supabase } = params;
   const pointId = normaliseId(params.pointId);
   if (!pointId) return { error: "Invalid point id." };
@@ -53,6 +64,12 @@ export async function writeLabelPlayerSwitch(params: {
   const owned = await readShotsOfPoints(supabase, [pointId]);
   if ("error" in owned) return owned;
 
+  if (
+    params.onlyIfContradicts &&
+    !rowsContradictServer({ server: read.row.server, shots: owned.shots })
+  ) {
+    return { skipped: true };
+  }
   const plan = planPlayerSwitch({
     status: read.row.status,
     server: read.row.server,
@@ -97,7 +114,11 @@ export function switchLabelPointPlayers(
 ): Promise<LabelPlayerSwitchResult> {
   return gated(
     deps,
-    (supabase) => writeLabelPlayerSwitch({ supabase, pointId }),
+    async (supabase) => {
+      const one = await writeLabelPlayerSwitch({ supabase, pointId });
+      // Never skipped without `onlyIfContradicts`; said for the type.
+      return "skipped" in one ? { error: "Nothing to switch." } : one;
+    },
     "switch the point's players",
     { pointId: targetId(pointId) },
   );
@@ -133,6 +154,8 @@ export type LabelPlayersSwitchResult = LabelOpResult<{
 export async function writeLabelPlayersSwitch(params: {
   supabase: AdminClient;
   pointIds: unknown;
+  /** See `writeLabelPlayerSwitch`: a point that no longer contradicts is left out. */
+  onlyIfContradicts?: boolean;
 }): Promise<LabelPlayersSwitchResult> {
   const { supabase } = params;
   const raw = Array.isArray(params.pointIds) ? params.pointIds : null;
@@ -146,7 +169,14 @@ export async function writeLabelPlayersSwitch(params: {
   const points: Extract<LabelPlayersSwitchResult, { ok: true }>["points"] = [];
   const shots: ShotSwapWrite[] = [];
   for (const pointId of ids as string[]) {
-    const one = await writeLabelPlayerSwitch({ supabase, pointId });
+    const one = await writeLabelPlayerSwitch({
+      supabase,
+      pointId,
+      onlyIfContradicts: params.onlyIfContradicts,
+    });
+    // Already switched elsewhere: not written, and not listed, so the console
+    // puts its optimistic flip of that point back.
+    if ("skipped" in one) continue;
     if ("error" in one) {
       if (points.length === 0) return one;
       return {
@@ -172,10 +202,12 @@ export async function writeLabelPlayersSwitch(params: {
 export function switchLabelPointsPlayers(
   pointIds: unknown,
   deps: LabelWriteDependencies = defaultLabelWriteDependencies,
+  onlyIfContradicts = false,
 ): Promise<LabelPlayersSwitchResult> {
   return gated(
     deps,
-    (supabase) => writeLabelPlayersSwitch({ supabase, pointIds }),
+    (supabase) =>
+      writeLabelPlayersSwitch({ supabase, pointIds, onlyIfContradicts }),
     "switch the players",
     { pointIds: targetIds(pointIds) },
   );
