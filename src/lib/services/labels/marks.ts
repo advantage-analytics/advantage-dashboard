@@ -92,6 +92,8 @@ export const LABEL_ONLY_FLAGS = {
   FIRST_SERVE_FAULT_ALONE: "first_serve_fault_alone",
   /** A serve right after a serve that was in: a played let, or two points. */
   SERVE_AFTER_SERVE_IN: "serve_after_serve_in",
+  /** A stroke typed as a serve whose hitter is not the point's server. */
+  SERVE_BY_RECEIVER: "serve_by_receiver",
   /** One of a point's first four or last two strokes lacks its coordinates. */
   PLACEMENT_MISSING: "placement_missing",
   /**
@@ -185,6 +187,12 @@ export const LABEL_ONLY_FLAGS = {
  * the labelled point at all, 16% with the rally going on past it) and 15% of
  * 84 untracked ones. So it is asked, in the grey list, with its own words.
  *
+ * 2026-11-11: `serve_by_receiver` is new and counted. Emon van Loben Sels v
+ * Eli Stephenson point 120 published a receiver's overhead as the counted
+ * serve (the vendor had cut the rally in two there and the points were
+ * combined), which numbered the seven strokes before it 0. Nine live points
+ * of four complete sessions had a serve by the non-server that day.
+ *
  * 2026-11-06: `net_by_trajectory` is new and counted ("Into the net?"). It
  * only fires on a file from the November 2026 ball model, whose flights run
  * past the bounce (flags.ts). On 10 reprocessed matches it fired 17 times
@@ -206,6 +214,7 @@ export const LABEL_MARK_META = {
     tier: "count",
     scope: "point",
   },
+  [LABEL_ONLY_FLAGS.SERVE_BY_RECEIVER]: { tier: "count", scope: "point" },
   [POINT_FLAGS.WINNER_GUESSED]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_SHOT_UNTRACKED]: { tier: "count", scope: "point" },
@@ -350,6 +359,8 @@ export interface LabelMarkParams {
   serve_in_landing_out: { shotId: string; landing: "out" | "net" };
   /** The serve that follows a serve in play — where "Split here" cuts. */
   serve_after_serve_in: { shotId: string };
+  /** The stroke typed as a serve, who hit it, and the point's server. */
+  serve_by_receiver: { shotId: string; hitter: LabelSide; server: LabelSide };
   /** The stroke to place, and what the gap costs: see `markHover`. */
   placement_missing: {
     shotId: string;

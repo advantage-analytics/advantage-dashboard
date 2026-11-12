@@ -38,6 +38,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   first_serve_fault_alone: "Fault, no second serve",
   serve_in_landing_out: "Serve in, landing outside the box",
   serve_after_serve_in: "Serve after a serve in play",
+  serve_by_receiver: "Serve by the receiver",
   placement_missing: "No placement",
   pick_winner: "Pick the winner",
   last_call_overruled: "Was the last ball in?",
@@ -409,6 +410,10 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
         : "The serve counts as in, but its landing is outside the service box. It publishes as in with no placement: place the bounce in the box to count where it went.";
     case "serve_after_serve_in":
       return "A let that was played, or two points in one rally.";
+    case "serve_by_receiver": {
+      const { hitter, server } = mark.params;
+      return `${names[hitter]} is typed as hitting a serve, but ${names[server]} is serving this point. If it is a rally shot, retype it: mid-rally it is most often an overhead. If the serve is ${names[server]}’s, change who hit it. If ${names[hitter]} did serve, change the server.`;
+    }
     case "placement_missing": {
       const { stroke, missing } = mark.params;
       const gap = PLACEMENT_GAP_WORDS[missing];

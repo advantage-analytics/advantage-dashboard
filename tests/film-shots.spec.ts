@@ -343,6 +343,19 @@ test("rally numbers: a SplitStep faulted first serve, the played serve and the r
   expect(numbersOf(untimedServe)).toEqual([1, 1, 2, 3]);
 });
 
+test("rally numbers: a rally stroke mistyped as a serve does not restart the count", () => {
+  // A receiver's overhead left typed as a second serve, published at its
+  // place in the rally: the count starts at the serve that counted.
+  const mistyped = [
+    shot("c1", 1, { shotType: "First Serve", shotNumber: 1 }),
+    shot("c2", 2, { shotType: "Forehand", shotNumber: 2 }),
+    shot("c3", 3, { shotType: "Second Serve", shotNumber: 3 }),
+    shot("c4", 4, { shotType: "Backhand", shotNumber: 4 }),
+  ];
+  expect(numbersOf(mistyped)).toEqual([1, 2, 3, 4]);
+  expect(rallyNumbering(mistyped)).toMatchObject({ count: 4, openerId: "c1" });
+});
+
 test("rally numbers: SwingVision's two serves both at shot_number 1", () => {
   const swingvision = [
     shot("b1", 1, { shotType: "First Serve", shotNumber: 1 }),

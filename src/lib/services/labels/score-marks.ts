@@ -34,8 +34,9 @@
  *
  * `withLiveScoreMarks` also runs `liveRowMarks`, the other `count` marks
  * read off the rows: "Ending can't be read" (`lastShotUnresolved`) and
- * "Fault, no second serve" (`firstServeFaultAlone`, both marks-state.ts) on
- * a point whose strokes it is handed.
+ * "Fault, no second serve" (`firstServeFaultAlone`) and "Serve by the
+ * receiver" (`serveByReceiver`, all marks-state.ts) on a point whose strokes
+ * it is handed.
  */
 
 import {
@@ -49,6 +50,7 @@ import {
   firstServeFaultAlone,
   lastBallAgainstGame,
   lastShotUnresolved,
+  serveByReceiver,
 } from "./marks-state";
 import { gameDecided, gameKey, isCountedPoint, labelScores } from "./score";
 import {
@@ -296,12 +298,13 @@ export function liveScoreMarks(
 
 /** A point `liveRowMarks` can read: its strokes, when the caller has them. */
 export type RowMarkPoint = Pick<LabelPoint, "id" | "status"> &
-  Partial<Pick<LabelPoint, "shots" | "ending">>;
+  Partial<Pick<LabelPoint, "shots" | "ending" | "server">>;
 
 /**
  * "Ending can't be read" on every live point whose last stroke has neither a
  * landing nor a result, and "Fault, no second serve" on one that stops on a
- * missed first serve, by point id. A point handed without its strokes (the
+ * missed first serve, and "Serve by the receiver" on one with a serve its
+ * server did not hit, by point id. A point handed without its strokes (the
  * scorecard's seeded rows) raises nothing. Ghosts are not strokes here, as in
  * the console.
  */
@@ -314,6 +317,10 @@ export function liveRowMarks(
     const own = [
       lastShotUnresolved({ shots: point.shots }, true),
       firstServeFaultAlone({ shots: point.shots, ending: point.ending }, true),
+      serveByReceiver(
+        { shots: point.shots, ending: point.ending, server: point.server },
+        true,
+      ),
     ].filter((mark): mark is NonNullable<typeof mark> => mark !== null);
     if (own.length > 0) out[point.id] = own;
   }

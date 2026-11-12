@@ -1044,6 +1044,7 @@ test.describe("the three tiers", () => {
       "score_side_mismatch",
       "second_serve_called_out",
       "segment_proposal_differs",
+      "serve_by_receiver",
       "service_court_repeat",
       "tiebreak_score_off_six_all",
       "winner_disputed",

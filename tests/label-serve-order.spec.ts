@@ -14,6 +14,7 @@ import { planServeHitterFollow } from "@/lib/services/labels/serve-hitter";
 import { completeWarnings } from "@/lib/services/labels/session-status";
 import {
   firstServeFaultAlone,
+  serveByReceiver,
   markState,
   serveInLandingOut,
 } from "@/lib/services/labels/marks-state";
@@ -668,5 +669,69 @@ test("a lone serve with a winner: the confirm names the winner, not shots that a
   ).toMatchObject({
     title: "Kim served point 1, switch who won it?",
     description: "Who won point 1 changes with it.",
+  });
+});
+
+test.describe("a serve hit by the player who is not serving", () => {
+  const hit = (
+    id: string,
+    hitter: "p1" | "p2",
+    stroke: LabelStroke,
+    videoTime: number,
+  ) => ({ ...shot(id, hitter, stroke, videoTime), result: "in" }) as LabelShot;
+  // p2 serves; p1's overhead, six strokes in, was left typed as a serve.
+  const rally = (overhead: LabelStroke): LabelShot[] => [
+    hit("a", "p2", "first_serve", 1),
+    hit("b", "p1", "forehand", 2),
+    hit("c", "p2", "forehand", 3),
+    hit("d", "p1", overhead, 4),
+    hit("e", "p2", "backhand", 5),
+  ];
+
+  test("flagged at the stroke, with who hit it and who serves", () => {
+    expect(
+      serveByReceiver({ shots: rally("second_serve"), server: "p2" }, true),
+    ).toEqual({
+      code: "serve_by_receiver",
+      tier: "count",
+      scope: "point",
+      params: { shotId: "d", hitter: "p1", server: "p2" },
+    });
+  });
+
+  test("not once it is retyped, the server is changed, or it is deleted; nor on a non-point or with no server", () => {
+    const mark = (
+      shots: LabelShot[],
+      server: "p1" | "p2" | null,
+      ending: LabelPoint["ending"] = null,
+    ) => serveByReceiver({ shots, server, ending }, true);
+    expect(mark(rally("overhead"), "p2")).toBeNull();
+    expect(mark([hit("a", "p1", "first_serve", 1)], "p1")).toBeNull();
+    expect(
+      mark(
+        rally("second_serve").map((s) =>
+          s.id === "d" ? ({ ...s, status: "deleted" } as LabelShot) : s,
+        ),
+        "p2",
+      ),
+    ).toBeNull();
+    expect(mark(rally("second_serve"), "p2", "not_a_point")).toBeNull();
+    expect(mark(rally("second_serve"), null)).toBeNull();
+  });
+
+  test("counted with the row marks, and open until the rows change", () => {
+    const row = {
+      id: "p1",
+      status: "edited" as const,
+      ending: null,
+      server: "p2" as const,
+      shots: rally("second_serve"),
+    };
+    const [mark] = liveRowMarks([row]).p1;
+    expect(mark).toMatchObject({ code: "serve_by_receiver", tier: "count" });
+    expect(
+      markState(mark, { ...row, checkedAt: null, dismissed: [] } as never),
+    ).toBe("open");
+    expect(liveRowMarks([{ ...row, shots: rally("overhead") }])).toEqual({});
   });
 });

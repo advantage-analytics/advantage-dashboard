@@ -22,6 +22,27 @@ export { storeOf, type VideoStore };
 
 const LOG = "[video-storage]";
 
+let warnedUnconfigured = false;
+
+/**
+ * A row says a copy is in R2, but this deployment cannot read R2: say so,
+ * once per process, naming the variable and never its value. Without it, a
+ * bad Vercel value turns every R2 read into an Azure read with nothing in
+ * the logs (found in production 2026-11-10).
+ */
+function warnR2Unconfigured(missing: string): void {
+  if (warnedUnconfigured) return;
+  warnedUnconfigured = true;
+  console.warn(
+    `${LOG} R2 is not configured (${missing}); reading from Azure instead`,
+  );
+}
+
+/** Specs only: forget the once-per-process warning. */
+export function resetR2ConfigWarningForTests(): void {
+  warnedUnconfigured = false;
+}
+
 /**
  * The store the sample clip is read from. `SAMPLE_VIDEO_STORE=r2` once
  * `sample/match-v1.mp4` has been copied there; Azure otherwise, and always
@@ -32,8 +53,9 @@ export function sampleVideoStore(): VideoStore {
 }
 
 /**
- * A read URL for a browser, in the given store. Throws when unconfigured.
- * The kill switch holds here too: no R2 URL is minted while it is on.
+ * A read URL for a browser, in the given store. The kill switch holds here
+ * too: no R2 URL is minted while it is on. An R2 request on a deployment
+ * that cannot read R2 is signed in Azure, with a one-time warning.
  */
 export function mintStoredPlayback(params: {
   key: string;
@@ -41,7 +63,13 @@ export function mintStoredPlayback(params: {
   ttlSeconds?: number;
 }): { playbackUrl: string; expiresAt: Date } {
   if (params.store === "r2" && !r2ReadsDisabled()) {
-    return mintR2Playback({ key: params.key, ttlSeconds: params.ttlSeconds });
+    const r2 = resolveR2Config();
+    if (r2.ok) {
+      return mintR2Playback({ key: params.key, ttlSeconds: params.ttlSeconds });
+    }
+    // Only the sample reaches here unconfigured (match loaders confirm the
+    // copy first): sign the same key in Azure rather than fail.
+    warnR2Unconfigured(r2.missing);
   }
   return mintPlaybackSas({
     blobName: params.key,
@@ -52,15 +80,21 @@ export function mintStoredPlayback(params: {
 /**
  * Whether the object is there. Any failure reads as absent, so the player
  * falls through to the next file instead of showing nothing — but an R2
- * failure other than "not found" (a revoked token, an outage) is logged, by
- * key and status only, so a quiet return to Azure egress has a cause on record.
+ * failure other than a missing object (a wrong bucket, a revoked token, an
+ * outage) is logged, by key, status and error name only, so a quiet return to
+ * Azure egress has a cause on record.
  */
 export async function storedObjectExists(
   key: string,
   store: VideoStore,
 ): Promise<boolean> {
   if (store === "r2") {
-    if (r2ReadsDisabled() || !resolveR2Config().ok) return false;
+    if (r2ReadsDisabled()) return false;
+    const r2 = resolveR2Config();
+    if (!r2.ok) {
+      warnR2Unconfigured(r2.missing);
+      return false;
+    }
     try {
       return await r2ObjectExists(key);
     } catch (error) {
@@ -68,7 +102,7 @@ export async function storedObjectExists(
         name?: string;
         $metadata?: { httpStatusCode?: number };
       };
-      console.error(`${LOG} R2 HEAD failed; reading from Azure instead`, {
+      console.error(`${LOG} R2 lookup failed; reading from Azure instead`, {
         key,
         status: e?.$metadata?.httpStatusCode ?? null,
         name: e?.name ?? null,

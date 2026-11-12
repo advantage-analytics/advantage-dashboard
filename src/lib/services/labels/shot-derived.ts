@@ -24,6 +24,7 @@ import {
   isServeStroke,
   type LabelPoint,
   type LabelShot,
+  type LabelSide,
 } from "./session";
 
 /**
@@ -350,4 +351,17 @@ export function positionPatch(
   const result = deriveShotResult({ ...shot, ...placed });
   // The ends now say the call, so it stops being the labeller's own.
   return result === null ? placed : { ...placed, result, result_called: false };
+}
+
+/**
+ * A stroke typed as a serve whose hitter is set and is not the point's
+ * server: what "Serve by the receiver" marks and the publish warns of.
+ */
+export function isServeByReceiver(
+  shot: Pick<LabelShot, "stroke" | "hitter">,
+  server: LabelSide,
+): boolean {
+  return (
+    isServeStroke(shot.stroke) && shot.hitter !== null && shot.hitter !== server
+  );
 }
