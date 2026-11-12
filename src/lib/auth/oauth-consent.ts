@@ -50,6 +50,7 @@ export const MISSING_AUTHORIZATION_ERROR =
  *   - ChatGPT's connector callback — the fixed legacy one here, and the
  *     per-app `https://chatgpt.com/connector/oauth/{callback_id}` its
  *     current apps register, matched by `CHATGPT_APP_CALLBACK` below;
+ *   - the Gemini app's callback, matched by `GEMINI_APP_CALLBACK` below;
  *   - Cursor Cloud's callback. Cursor desktop listens on a loopback
  *     address (`http://localhost:8787/callback` by default), which the
  *     loopback rule covers. Its older `cursor://anysphere.cursor-mcp/…`
@@ -77,13 +78,24 @@ export const CONNECTOR_REDIRECT_URIS: readonly string[] = [
 const CHATGPT_APP_CALLBACK =
   /^https:\/\/chatgpt\.com\/connector\/oauth\/[A-Za-z0-9_-]+$/;
 
+/**
+ * The Gemini app's callback (Connected Apps → Add a custom app): one path
+ * segment under `/r/` or `/a/` on Google's OAuth redirect host, nothing
+ * else. Google's guide prints these as `/r/*` and `/a/*`
+ * (developers.google.com/connected-apps/mcp/oauth); the sandbox and test
+ * hosts it also lists are Google's own environments and are not allowed.
+ */
+const GEMINI_APP_CALLBACK =
+  /^https:\/\/oauth-redirect\.googleusercontent\.com\/[ra]\/[A-Za-z0-9_-]+$/;
+
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** True when `uri` is one of `CONNECTOR_REDIRECT_URIS`, ChatGPT's per-app callback, or a loopback http callback. */
+/** True when `uri` is one of `CONNECTOR_REDIRECT_URIS`, ChatGPT's per-app callback, the Gemini app's, or a loopback http callback. */
 export function isConnectorRedirectUri(uri: string | null): boolean {
   if (!uri) return false;
   if (CONNECTOR_REDIRECT_URIS.includes(uri)) return true;
   if (CHATGPT_APP_CALLBACK.test(uri)) return true;
+  if (GEMINI_APP_CALLBACK.test(uri)) return true;
   let url: URL;
   try {
     url = new URL(uri);
@@ -118,7 +130,7 @@ export function goesToConnector(details: OAuthAuthorizationDetails): boolean {
 
 /** The sentence a client outside the allow-list is turned away with. */
 export const UNKNOWN_CLIENT_ERROR =
-  "This app can't connect to Advantage. Advantage connects to Claude (claude.ai, Claude Desktop and Claude Code), ChatGPT and Cursor.";
+  "This app can't connect to Advantage. Advantage connects to Claude (claude.ai, Claude Desktop and Claude Code), ChatGPT, Gemini and Cursor.";
 
 /** The consent page's own path with the id, for the sign-in round trip. */
 export function consentPath(authorizationId: string): string {

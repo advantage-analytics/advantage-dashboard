@@ -23,6 +23,7 @@ import {
   authorizationServerMetadataUrl,
   isJwtShaped,
   MAX_BEARER_TOKEN_LENGTH,
+  mcpClientFromUserAgent,
   mcpResourceUrl,
   protectedResourceMetadata,
   readBearerToken,
@@ -254,7 +255,7 @@ test.describe("describeAskViews", () => {
 // ── The consent page's parsing ─────────────────────────────────────────────
 
 test.describe("the consent page", () => {
-  test("offers Allow only to Claude's, ChatGPT's and Cursor's callbacks and a loopback one", () => {
+  test("offers Allow only to Claude's, ChatGPT's, Gemini's and Cursor's callbacks and a loopback one", () => {
     expect(
       isConnectorRedirectUri("https://claude.ai/api/mcp/auth_callback"),
     ).toBe(true);
@@ -281,6 +282,30 @@ test.describe("the consent page", () => {
     );
     expect(isConnectorRedirectUri("http://127.0.0.1:8080/callback")).toBe(true);
     expect(isConnectorRedirectUri("http://[::1]:8080/callback")).toBe(true);
+
+    // The Gemini app: one segment under /r/ or /a/ on Google's redirect host.
+    expect(
+      isConnectorRedirectUri(
+        "https://oauth-redirect.googleusercontent.com/r/abc_12-XY",
+      ),
+    ).toBe(true);
+    expect(
+      isConnectorRedirectUri(
+        "https://oauth-redirect.googleusercontent.com/a/abc_12-XY",
+      ),
+    ).toBe(true);
+    for (const lookalike of [
+      "https://oauth-redirect.googleusercontent.com/r/",
+      "https://oauth-redirect.googleusercontent.com/r/a/b",
+      "https://oauth-redirect.googleusercontent.com/x/abc",
+      "https://oauth-redirect.googleusercontent.com/r/abc?next=x",
+      "https://oauth-redirect-sandbox.googleusercontent.com/r/abc",
+      "https://evil.googleusercontent.com/r/abc",
+      "https://oauth-redirect.googleusercontent.com.evil.example/r/abc",
+      "http://oauth-redirect.googleusercontent.com/r/abc",
+    ]) {
+      expect(isConnectorRedirectUri(lookalike), lookalike).toBe(false);
+    }
 
     expect(isConnectorRedirectUri(null)).toBe(false);
     expect(isConnectorRedirectUri("not a url")).toBe(false);
@@ -969,5 +994,30 @@ test.describe("the connector's read-only guard", () => {
         /if \(jwtClientId\(token\) !== null\) \{\s*return \{\s*status: 403,/,
       );
     }
+  });
+});
+
+test.describe("which app is calling", () => {
+  test("is read from the User-Agent for reporting, with the product token kept for apps not yet known", () => {
+    expect(mcpClientFromUserAgent("claude-code/2.1.300 (cli)")).toEqual({
+      client: "claude_code",
+      agent: "claude-code",
+    });
+    expect(mcpClientFromUserAgent("Claude-User/1.0").client).toBe("claude");
+    expect(mcpClientFromUserAgent("openai-mcp/1.0.0").client).toBe("chatgpt");
+    expect(mcpClientFromUserAgent("Cursor/3.2 (darwin)").client).toBe("cursor");
+    expect(mcpClientFromUserAgent("Google-Gemini-Apps").client).toBe("gemini");
+    expect(mcpClientFromUserAgent("SomeNewApp/9 extra words")).toEqual({
+      client: "other",
+      agent: "SomeNewApp",
+    });
+    expect(mcpClientFromUserAgent(null)).toEqual({
+      client: "other",
+      agent: null,
+    });
+    // Never the whole header: a long or odd one is cut to its product token.
+    expect(mcpClientFromUserAgent(`${"x".repeat(200)}/1`).agent).toHaveLength(
+      40,
+    );
   });
 });

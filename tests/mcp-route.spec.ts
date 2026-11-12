@@ -3,9 +3,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
+import { parseMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { GenderedSquad } from "@/lib/data/squad";
 import type { AskDatabase } from "@/lib/services/ask/ask";
 import { renderAskSchemaBlock } from "@/lib/services/ask/prompts";
+import { checkAskSql } from "@/lib/services/ask/sql-guard";
 import {
   ASK_NEEDS_SESSION_MESSAGE,
   type McpCaller,
@@ -529,6 +531,7 @@ function fakes(state: World) {
     stubs,
     globals: {
       URL,
+      URLSearchParams,
       Request,
       Response,
       Headers,
@@ -810,7 +813,7 @@ test.describe("POST /api/mcp · the auth ladder", () => {
     expect(calls.rpc).toEqual([]);
   });
 
-  test("a good token: initialize names the server, and the ten tools are listed", async () => {
+  test("a good token: initialize names the server, and the twelve tools are listed", async () => {
     const { route, calls } = loadRoute(world());
     const initialized = await rpcResult<{
       serverInfo: { name: string };
@@ -843,9 +846,11 @@ test.describe("POST /api/mcp · the auth ladder", () => {
     expect(listed.tools.map((tool) => tool.name).sort()).toEqual([
       "ask",
       "describe_views",
+      "find_points",
       "get_match",
       "list_matches",
       "list_workspaces",
+      "open_visualization",
       "opponent_scouting",
       "prepare_video_upload",
       "run_query",
@@ -854,7 +859,7 @@ test.describe("POST /api/mcp · the auth ladder", () => {
     ]);
     // The three tools a record can be counted from each say practice is left
     // out of it; the rule adds no tool.
-    expect(listed.tools).toHaveLength(10);
+    expect(listed.tools).toHaveLength(12);
     const described = (name: string) =>
       listed.tools.find((tool) => tool.name === name)?.description ?? "";
     expect(described("list_matches")).toContain(
@@ -1202,7 +1207,7 @@ test.describe("POST /api/mcp · update_match", () => {
       tournament_name: "Fall Open",
       date: "2026-09-14",
       opponent_hand: "left",
-      court_type: null,
+      clear: ["court_type"],
     });
     expect(result.isError).toBeUndefined();
     const structured = result.structuredContent as Record<string, unknown>;
@@ -1298,6 +1303,7 @@ test.describe("POST /api/mcp · update_match", () => {
     };
     expect(Object.keys(tool.inputSchema.properties).sort()).toEqual([
       "allow_team_mismatch",
+      "clear",
       "court_type",
       "date",
       "match_id",
@@ -1472,18 +1478,18 @@ test.describe("POST /api/mcp · the opponent's school", () => {
     ).toEqual([]);
   });
 
-  test("null on the id clears the link alone; null on the school clears either", async () => {
+  test("clearing the id clears the link alone; clearing the school clears either", async () => {
     const { route, calls } = loadRoute(world());
     await callTool(route, "update_match", {
       match_id: MATCH_A,
-      opponent_program_id: null,
+      clear: ["opponent_program_id"],
     });
     expect(patchOf(calls)).toEqual({ opponent_program_id: null });
 
     const { route: second, calls: secondCalls } = loadRoute(world());
     await callTool(second, "update_match", {
       match_id: MATCH_A,
-      opponent_school: null,
+      clear: ["opponent_school"],
     });
     expect(patchOf(secondCalls)).toEqual({
       opponent_program_id: null,
@@ -1936,6 +1942,314 @@ test.describe("POST /api/mcp · ask", () => {
 });
 
 // ── The personal-access-token path, over an in-memory transport ─────────────
+
+/**
+ * The JSON Schema every listed app reads. Claude takes the whole draft; the
+ * Gemini app advises against `anyOf` / `oneOf`, Copilot Studio drops a tool
+ * with a `$ref` input and truncates a multi-type `type`, and unknown string
+ * `format`s are refused by some readers. Validation stays in zod on the
+ * server; what is emitted is held to the narrow subset.
+ */
+const BANNED_SCHEMA_KEYS = [
+  "anyOf",
+  "oneOf",
+  "allOf",
+  "not",
+  "$ref",
+  "$defs",
+  "definitions",
+  "format",
+  "default",
+  "additionalProperties",
+  "nullable",
+];
+
+function schemaFaults(node: unknown, path: string): string[] {
+  if (Array.isArray(node)) {
+    return node.flatMap((item, index) =>
+      schemaFaults(item, `${path}[${index}]`),
+    );
+  }
+  if (typeof node !== "object" || node === null) return [];
+  const record = node as Record<string, unknown>;
+  const faults: string[] = [];
+  for (const key of BANNED_SCHEMA_KEYS) {
+    if (key in record) faults.push(`${path}.${key}`);
+  }
+  if (Array.isArray(record.type)) faults.push(`${path}.type is a list`);
+  if (record.type === "null") faults.push(`${path}.type is null`);
+  for (const [key, value] of Object.entries(record)) {
+    // A property may be NAMED like a keyword (`default`); its schema is what is walked.
+    if (key === "properties" && typeof value === "object" && value !== null) {
+      for (const [name, schema] of Object.entries(value)) {
+        faults.push(...schemaFaults(schema, `${path}.properties.${name}`));
+      }
+    } else if (key === "items") {
+      faults.push(...schemaFaults(value, `${path}.items`));
+    }
+  }
+  return faults;
+}
+
+test.describe("POST /api/mcp · what every listed app can read", () => {
+  type Listed = {
+    name: string;
+    title?: string;
+    inputSchema: { type?: string; properties?: Record<string, unknown> };
+    annotations?: Record<string, unknown>;
+  };
+  async function tools(): Promise<Listed[]> {
+    const { route } = loadRoute(world());
+    return (await listTools(route)).tools as unknown as Listed[];
+  }
+
+  test("every input schema stays inside the strictest app's subset", async () => {
+    const faults = (await tools()).flatMap((tool) =>
+      schemaFaults(tool.inputSchema, tool.name),
+    );
+    expect(faults).toEqual([]);
+  });
+
+  test("every tool has a short ASCII name, a title and an object schema", async () => {
+    for (const tool of await tools()) {
+      expect(tool.name, tool.name).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+      expect((tool.title ?? "").trim(), tool.name).not.toBe("");
+      expect(tool.inputSchema.type, tool.name).toBe("object");
+    }
+  });
+
+  test("every tool says it is closed-world and not destructive; the reads say read-only, the three writes do not", async () => {
+    const listed = await tools();
+    for (const tool of listed) {
+      expect(tool.annotations?.openWorldHint, tool.name).toBe(false);
+      expect(tool.annotations?.destructiveHint, tool.name).toBe(false);
+      expect(typeof tool.annotations?.readOnlyHint, tool.name).toBe("boolean");
+    }
+    expect(
+      listed
+        .filter((tool) => tool.annotations?.readOnlyHint === true)
+        .map((tool) => tool.name)
+        .sort(),
+    ).toEqual([
+      "describe_views",
+      "find_points",
+      "get_match",
+      "list_matches",
+      "list_workspaces",
+      "open_visualization",
+      "opponent_scouting",
+      "run_query",
+      "search_programs",
+    ]);
+  });
+
+  test("update_match refuses a field that is both set and cleared", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      round: "Final",
+      clear: ["round"],
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/^invalid_field: /);
+    expect(userCalls(calls).some((call) => call.fn === "ask_patch_match")).toBe(
+      false,
+    );
+  });
+});
+
+test.describe("POST /api/mcp · open_visualization", () => {
+  test("a match's chart: the tab's own query, with a filter the chart lacks left out and named", async () => {
+    const { route } = loadRoute(world());
+    const result = await callTool(route, "open_visualization", {
+      match_id: MATCH_A,
+      cut: "errors",
+      player: "opponent",
+      pressure: ["break_points"],
+      serve_zone: ["wide"],
+      surface: "clay",
+    });
+    expect(result.isError).toBeUndefined();
+    const structured = result.structuredContent as {
+      url: string;
+      ignored: string[];
+      target: string;
+    };
+    const url = new URL(structured.url);
+    expect(url.pathname).toBe(`/dashboard/matches/${MATCH_A}`);
+    expect(url.searchParams.get("tab")).toBe("shots");
+    expect(url.searchParams.get("cut")).toBe("errors");
+    expect(url.searchParams.get("player")).toBe("opponent");
+    expect(url.searchParams.getAll("pressure")).toEqual(["break"]);
+    expect(url.searchParams.has("zone")).toBe(false);
+    expect(url.searchParams.has("vsurf")).toBe(false);
+    expect(structured.ignored.sort()).toEqual(["serve_zone", "surface"]);
+    expect(structured.target).toBe("match");
+  });
+
+  test("a team player's season: the profile's Visualizations tab, with the season's own filters", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await callTool(route, "open_visualization", {
+      player_id: MATCH_B,
+      program_id: PROGRAM_ID,
+      cut: "serves",
+      chart: "zones",
+      serve_number: ["second"],
+      opponent_hand: "left",
+    });
+    expect(result.isError).toBeUndefined();
+    const structured = result.structuredContent as {
+      url: string;
+      note: string;
+    };
+    const url = new URL(structured.url);
+    expect(url.pathname).toBe(`/dashboard/team/roster/${MATCH_B}`);
+    expect(url.searchParams.get("tab")).toBe("visualizations");
+    expect(url.searchParams.get("cut")).toBe("serve");
+    expect(url.searchParams.get("chart")).toBe("zones");
+    expect(url.searchParams.getAll("ball")).toEqual(["second"]);
+    expect(url.searchParams.get("vopp")).toBe("left");
+    expect(structured.note).toContain("Westbrook College");
+    // A link, not a read: nothing is queried for a player's season.
+    expect(serviceCalls(calls)).toEqual([]);
+  });
+
+  test("refusals: neither or both targets, a season without a program, a chart the card lacks, a match out of scope", async () => {
+    const { route } = loadRoute(world());
+    for (const args of [
+      { cut: "serves" },
+      { cut: "serves", match_id: MATCH_A, player_id: MATCH_B },
+      { cut: "serves", player_id: MATCH_B },
+      { cut: "errors", chart: "zones", match_id: MATCH_A },
+    ]) {
+      const result = await callTool(route, "open_visualization", args);
+      expect(result.isError, JSON.stringify(args)).toBe(true);
+      expect(textOf(result)).toMatch(/^invalid_field: /);
+    }
+    const { route: empty } = loadRoute(
+      world({
+        rpc: {
+          ...world().rpc,
+          ask_run_query: () => ({
+            data: { matches: [], rows: [] },
+            error: null,
+          }),
+        },
+      }),
+    );
+    const missing = await callTool(empty, "open_visualization", {
+      match_id: MATCH_B,
+      cut: "serves",
+    });
+    expect(textOf(missing)).toMatch(/^match_not_found: /);
+  });
+});
+
+test.describe("POST /api/mcp · find_points", () => {
+  /** The match row for the first query, the point numbers for the second. */
+  function pointsWorld(numbers: number[]) {
+    return world({
+      rpc: {
+        ...world().rpc,
+        ask_run_query: (args: unknown) => {
+          const sql = (args as { sql: string }).sql;
+          return sql.includes("from ask.points")
+            ? { data: { matches: [], rows: [{ numbers }] }, error: null }
+            : {
+                data: {
+                  matches: [],
+                  rows: [{ match_id: MATCH_A, source: "video" }],
+                },
+                error: null,
+              };
+        },
+      },
+    });
+  }
+
+  test("filters alone: the Video tab's own filter string, and no point is read", async () => {
+    const { route, calls } = loadRoute(pointsWorld([]));
+    const result = await callTool(route, "find_points", {
+      match_id: MATCH_A,
+      situation: ["break_point"],
+      server: "me",
+      last_shot: ["forehand"],
+      ending: ["winner"],
+    });
+    expect(result.isError).toBeUndefined();
+    const structured = result.structuredContent as {
+      url: string;
+      point_count: number | null;
+      point_numbers: number[] | null;
+      filters_applied_by_the_tab: boolean;
+    };
+    const url = new URL(structured.url);
+    expect(url.pathname).toBe(`/dashboard/matches/${MATCH_A}`);
+    expect(url.searchParams.get("tab")).toBe("film");
+    expect(url.searchParams.has("pn")).toBe(false);
+    // Read back through the tab's own parser: the link means what was asked.
+    const parsed = parseMatchFilters(url.searchParams.get("f"));
+    expect(parsed.scoreType).toEqual(["breakpoint"]);
+    expect(parsed.server).toBe("you");
+    expect(parsed.resultShot).toEqual(["Forehand"]);
+    expect(parsed.resultEnding).toEqual(["winner"]);
+    expect(structured.point_count).toBeNull();
+    expect(structured.point_numbers).toBeNull();
+    expect(structured.filters_applied_by_the_tab).toBe(true);
+    expect(serviceCalls(calls)).toHaveLength(1);
+  });
+
+  test("a rally range: the points are read from ask.points for this match and listed in the link", async () => {
+    const { route, calls } = loadRoute(pointsWorld([31, 4, 12]));
+    const result = await callTool(route, "find_points", {
+      match_id: MATCH_A,
+      rally_min: 9,
+      rally_max: 20,
+    });
+    const structured = result.structuredContent as {
+      url: string;
+      point_count: number;
+      point_numbers: number[];
+      truncated: boolean;
+    };
+    expect(structured.point_numbers).toEqual([4, 12, 31]);
+    expect(structured.point_count).toBe(3);
+    expect(structured.truncated).toBe(false);
+    expect(new URL(structured.url).searchParams.get("pn")).toBe("4,12,31");
+
+    const query = serviceCalls(calls)[1].args as {
+      sql: string;
+      scope_sql: string;
+    };
+    expect(query.scope_sql).toBe(
+      `select match_id from ask.matches where match_id = '${MATCH_A}'`,
+    );
+    expect(query.sql).toContain("p.rally_length >= 9");
+    expect(query.sql).toContain("p.rally_length <= 20");
+    // The connector's own SQL passes the same guard a caller's does.
+    expect(checkAskSql({ scopeSql: query.scope_sql, sql: query.sql }).ok).toBe(
+      true,
+    );
+  });
+
+  test("no point fits: no link; an upside-down range is refused before anything is read", async () => {
+    const { route } = loadRoute(pointsWorld([]));
+    const none = await callTool(route, "find_points", {
+      match_id: MATCH_A,
+      point_numbers: [3, 5],
+    });
+    expect(none.structuredContent).toMatchObject({ url: null, point_count: 0 });
+
+    const { route: second, calls } = loadRoute(pointsWorld([1]));
+    const upside = await callTool(second, "find_points", {
+      match_id: MATCH_A,
+      rally_min: 8,
+      rally_max: 3,
+    });
+    expect(textOf(upside)).toMatch(/^invalid_field: /);
+    expect(serviceCalls(calls)).toEqual([]);
+  });
+});
 
 test.describe("createAskMcpServer · a token caller", () => {
   async function connect(caller: McpCaller, state: World) {

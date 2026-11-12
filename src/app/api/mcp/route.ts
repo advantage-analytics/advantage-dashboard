@@ -49,6 +49,7 @@ import {
 import { askAdapterModel, askStageModels } from "@/lib/services/ask/model";
 import {
   isJwtShaped,
+  mcpClientFromUserAgent,
   MCP_SCOPES,
   readBearerToken,
   wwwAuthenticate,
@@ -117,12 +118,34 @@ function methodNotAllowed(): Response {
 export async function POST(request: Request): Promise<Response> {
   const origin = mcpOrigin(request.headers);
 
+  const calling = mcpClientFromUserAgent(request.headers.get("user-agent"));
+  const posthog = getPostHogServerClient();
+  // A token that was sent and refused: an app whose sign-in has lapsed or
+  // broken. No user is known, so the event is anonymous, and it carries the
+  // app and the reason only — never the token.
+  const refused = (reason: "malformed" | "not_verified"): Response => {
+    if (posthog) {
+      posthog.capture({
+        distinctId: "mcp_anonymous",
+        event: "mcp_auth_failed",
+        properties: {
+          reason,
+          client: calling.client,
+          client_agent: calling.agent,
+          $process_person_profile: false,
+        },
+      });
+      flushPostHogAfterResponse(posthog);
+    }
+    return unauthorized(origin, true);
+  };
+
   const token = readBearerToken(request.headers.get("authorization"));
   if (!token) return unauthorized(origin, false);
   // Junk never costs a round trip to Supabase Auth.
-  if (!isJwtShaped(token)) return unauthorized(origin, true);
+  if (!isJwtShaped(token)) return refused("malformed");
   const verified = await verifyBearerUser(token);
-  if (!verified) return unauthorized(origin, true);
+  if (!verified) return refused("not_verified");
   const { client, user } = verified;
 
   // The three server-only functions need the service role (`database.ts`).
@@ -145,8 +168,8 @@ export async function POST(request: Request): Promise<Response> {
   const userRpc: AskRpcClient = { rpc: (fn, args) => client.rpc(fn, args) };
   const db = createAskDatabase({ user: userRpc, service, viewerId: user.id });
 
-  const posthog = getPostHogServerClient();
   const context: AskMcpContext = {
+    client: calling,
     caller: { kind: "session", userId: user.id },
     db,
     reads: createMcpUserReads(client, user.id),

@@ -165,3 +165,48 @@ export function wwwAuthenticate(input: {
   parts.push(`resource_metadata="${resourceMetadataUrl(input.origin)}"`);
   return parts.join(", ");
 }
+
+/** The apps the connector is set up for, as the `client` property of its product events. */
+export type McpClientName =
+  | "claude"
+  | "claude_code"
+  | "chatgpt"
+  | "gemini"
+  | "cursor"
+  | "le_chat"
+  | "other";
+
+/** Checked in order: `claude-code` before `claude`. */
+const CLIENT_AGENT_MARKS: readonly (readonly [string, McpClientName])[] = [
+  ["claude-code", "claude_code"],
+  ["claude", "claude"],
+  ["anthropic", "claude"],
+  ["openai", "chatgpt"],
+  ["chatgpt", "chatgpt"],
+  ["cursor", "cursor"],
+  ["gemini", "gemini"],
+  ["google", "gemini"],
+  ["mistral", "le_chat"],
+];
+
+/**
+ * Which app is calling, read from the request's `User-Agent`. A best guess
+ * for reporting and nothing else: a caller can send any header, so no
+ * decision may rest on it. A stateless request carries no `initialize`
+ * `clientInfo`, and the token's `client_id` is a registration id, not a
+ * name, so the header is what there is. `agent` is the header's product
+ * token (the part before the first `/` or space, at most 40 safe
+ * characters) so an app this table does not know yet shows up by name
+ * rather than only as `other`.
+ */
+export function mcpClientFromUserAgent(header: string | null): {
+  client: McpClientName;
+  agent: string | null;
+} {
+  const value = (header ?? "").trim();
+  if (value === "") return { client: "other", agent: null };
+  const lower = value.toLowerCase();
+  const mark = CLIENT_AGENT_MARKS.find(([needle]) => lower.includes(needle));
+  const product = /^[A-Za-z0-9._-]{1,40}/.exec(value)?.[0] ?? null;
+  return { client: mark ? mark[1] : "other", agent: product };
+}
