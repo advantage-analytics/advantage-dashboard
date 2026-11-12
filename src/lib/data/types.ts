@@ -95,6 +95,15 @@ export interface Match {
   score: MatchScore;
   won: boolean;
   isUserPlayer1: boolean;
+  /**
+   * The "you" seat is the viewer's own: one of their ids sits in it. False
+   * (or absent) when the report is merely turned to a player — a coach or a
+   * teammate reading a roster player's match, an admin, the share link — and
+   * the viewer is reading ABOUT them. Orientation is `isUserPlayer1`'s job
+   * and never this one's; this only picks the voice of prose addressed to
+   * the player (`insight-voice.ts`). Set by `transformDbMatchToMatch`.
+   */
+  viewerIsYou?: boolean;
 }
 
 export interface UpcomingMatch {

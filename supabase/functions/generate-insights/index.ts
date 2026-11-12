@@ -173,7 +173,74 @@ type PlayerSummary = {
   headline?: string;
   description?: string;
   summary?: string;
+  observer_headline?: string;
+  observer_description?: string;
+  observer_summary?: string;
 };
+
+/**
+ * The observer voice: the same headline and description written ABOUT the
+ * player, for a reader who is not them — a coach or teammate opening the
+ * report, anyone sent its share link. The app shows it wherever the viewer is
+ * not the player the summary speaks to (`src/lib/data/insight-voice.ts`).
+ *
+ * The model never writes a name. It writes these two tokens and the app fills
+ * them with the names on the match when it draws the card, so the prompt
+ * stays name-free and a renamed player or opponent is never stale in prose.
+ */
+const PLAYER_TOKEN = "[PLAYER]";
+const OPPONENT_TOKEN = "[OPPONENT]";
+const SECOND_PERSON = /\b(?:you|your|yours|yourself)\b/i;
+/** A name says nothing about pronouns, so the observer voice uses "they". */
+const GENDERED_PRONOUN = /\b(?:he|she|him|his|her|hers|himself|herself)\b/i;
+const ANY_TOKEN = /\[[^\]]*\]/g;
+
+/** The figures a text quotes, in order of size, to compare two wordings. */
+function figuresIn(text: string): string {
+  return (text.match(/\d+(?:\.\d+)?/g) ?? []).sort().join(",");
+}
+
+/**
+ * What stops a player's observer headline and description from standing in
+ * for their summary on a page the player is not reading, or null. The card's
+ * rules are the summary's own, checked with the tokens read as names; on top
+ * of them: nobody is addressed, nobody is "he" or "she", the player is named,
+ * and the figures are the ones the player's own description quotes.
+ */
+function observerProblem(player: PlayerSummary | undefined): string | null {
+  const headline = player?.observer_headline?.trim() ?? "";
+  const description = player?.observer_description?.trim() ?? "";
+  if (!headline || !description) {
+    return "an observer headline or description is missing";
+  }
+  const text = `${headline} ${description}`;
+  if (SECOND_PERSON.test(text)) return 'an observer text says "you" or "your"';
+  if (GENDERED_PRONOUN.test(text)) {
+    return 'an observer text says "he" or "she" instead of "they"';
+  }
+  if (!text.includes(PLAYER_TOKEN)) {
+    return `an observer text never writes ${PLAYER_TOKEN}`;
+  }
+  const strayToken = (text.match(ANY_TOKEN) ?? []).find(
+    (token) => token !== PLAYER_TOKEN && token !== OPPONENT_TOKEN,
+  );
+  if (strayToken) return `an observer text writes ${strayToken}`;
+  if (figuresIn(description) !== figuresIn(player?.description ?? "")) {
+    return "an observer description quotes different figures from the description";
+  }
+  const named = (part: string) =>
+    part.replaceAll(PLAYER_TOKEN, "Avery").replaceAll(OPPONENT_TOKEN, "Blake");
+  const problem = playerSummaryProblem({
+    headline: named(headline),
+    description: named(description),
+  });
+  return problem ? `the observer text: ${problem}` : null;
+}
+
+/** A player's summary problem, else their observer text's. */
+function playerProblem(player: PlayerSummary | undefined): string | null {
+  return playerSummaryProblem(player) ?? observerProblem(player);
+}
 
 /**
  * What stops one player's headline and description from reading as the
@@ -217,7 +284,7 @@ function playerSummaryProblem(
 function summaryProblems(insights: Record<string, PlayerSummary>): string[] {
   const problems: string[] = [];
   for (const key of PLAYER_KEYS) {
-    const problem = playerSummaryProblem(insights?.[key]);
+    const problem = playerProblem(insights?.[key]);
     if (problem) problems.push(`${key}: ${problem}`);
   }
   return problems;
@@ -226,7 +293,9 @@ function summaryProblems(insights: Record<string, PlayerSummary>): string[] {
 /**
  * Per player, the retry's answer only where it fixed what the first answer
  * got wrong. A player the first answer already got right keeps it, and a
- * retry that is no better never replaces it.
+ * retry that is no better never replaces it. A player is taken whole, never
+ * the summary from one answer and the observer text from the other: the two
+ * voices must say the same thing.
  */
 function keepBetter(
   first: Record<string, PlayerSummary>,
@@ -235,8 +304,8 @@ function keepBetter(
   const kept = { ...first };
   for (const key of PLAYER_KEYS) {
     if (
-      playerSummaryProblem(first?.[key]) !== null &&
-      playerSummaryProblem(retried?.[key]) === null
+      playerProblem(first?.[key]) !== null &&
+      playerProblem(retried?.[key]) === null
     ) {
       kept[key] = retried[key];
     }
@@ -266,7 +335,31 @@ function dropLabelledSummaries(insights: Record<string, PlayerSummary>) {
   }
 }
 
-/** Writes each player's `summary` as headline + description. */
+/**
+ * An observer text that still breaks a rule is not saved, and one whose
+ * summary was dropped goes with it. Unlike the summary, a flawed one does not
+ * beat none: its whole job is to not say "you" to a stranger, and the app
+ * falls back by page when it is missing (`insight-voice.ts`).
+ */
+function dropUnusableObserverTexts(insights: Record<string, PlayerSummary>) {
+  for (const key of PLAYER_KEYS) {
+    const player = insights?.[key];
+    if (!player) continue;
+    const problem = player.headline
+      ? observerProblem(player)
+      : "its summary was not saved";
+    if (problem) {
+      if (player.observer_headline || player.observer_description) {
+        console.warn(`${key}: observer text not saved: ${problem}`);
+      }
+      delete player.observer_headline;
+      delete player.observer_description;
+    }
+    delete player.observer_summary;
+  }
+}
+
+/** Writes each player's `summary` (and `observer_summary`) as headline + description. */
 function composeSummaries(insights: Record<string, PlayerSummary>) {
   for (const key of PLAYER_KEYS) {
     const player = insights?.[key];
@@ -275,6 +368,15 @@ function composeSummaries(insights: Record<string, PlayerSummary>) {
       .map((part) => part?.trim())
       .filter(Boolean);
     if (parts.length > 0) player.summary = parts.join(" ");
+    const observerParts = [
+      player.observer_headline,
+      player.observer_description,
+    ]
+      .map((part) => part?.trim())
+      .filter(Boolean);
+    if (observerParts.length === 2) {
+      player.observer_summary = observerParts.join(" ");
+    }
   }
 }
 
@@ -710,14 +812,27 @@ serve(async (req) => {
         focus: { type: "STRING" },
         headline: { type: "STRING" },
         description: { type: "STRING" },
+        observer_headline: { type: "STRING" },
+        observer_description: { type: "STRING" },
         strengths: { type: "ARRAY", items: insightItemSchema },
         weaknesses: { type: "ARRAY", items: insightItemSchema },
       },
-      required: ["focus", "headline", "description", "strengths", "weaknesses"],
+      required: [
+        "focus",
+        "headline",
+        "description",
+        "observer_headline",
+        "observer_description",
+        "strengths",
+        "weaknesses",
+      ],
+      // The observer pair follows the pair it rewords.
       propertyOrdering: [
         "focus",
         "headline",
         "description",
+        "observer_headline",
+        "observer_description",
         "strengths",
         "weaknesses",
       ],
@@ -741,10 +856,11 @@ serve(async (req) => {
       - a 'focus': the one part of their game this match's summary is about, named as the statistic (e.g. "second-serve points won"). Choose it first; the headline and description are both about it and nothing else.
       - a 'headline': one sentence, under ${HEADLINE_MAX_CHARS} characters, with no figures, speaking directly to the player: the single most important takeaway from this match about the focus, in plain words.
       - a 'description': exactly two sentences, longer than the headline and under ${SUMMARY_MAX_CHARS} characters together with it. Quote the one or two percentages from THIS match that prove the headline inline, rounded to the nearest whole number and written as digits with a percent sign (e.g. 73.5 becomes "you won 74% of first-serve points"), then, in the second sentence, say what to work on to build on it or fix it. Stay on the focus: no second topic, and no closing "but" that turns to another part of their game. Do not greet them, do not use markdown headers or bullet points, and do not list stats one after another — weave those figures into a flowing observation.
+      - an 'observer_headline' and an 'observer_description': the headline and the description again, saying the same thing with the same figures, reworded for a reader who is not the player (their coach, a teammate, someone sent the report). Write ${PLAYER_TOKEN} for the player and ${OPPONENT_TOKEN} for the other player, exactly like that with the square brackets and never a real name: "you won" becomes "${PLAYER_TOKEN} won", "your serve" becomes "${PLAYER_TOKEN}'s serve", "your opponent" becomes "${OPPONENT_TOKEN}". Never write "you" or "your" in them, and never "he", "she", "his" or "her": once ${PLAYER_TOKEN} is named, write "they" and "their". The advice becomes what ${PLAYER_TOKEN} should work on. The same length rules apply.
 
       Crucially, contextualize their performances against each other. If Player 1 dominated at the net, factor that into Player 2's weaknesses.
       Keep everything encouraging and actionable for college athletes.
-      Speak to each player as "you"; never write "we", "us", "our" or "let's" — there is no coach speaking. Call the other player "your opponent", never "Player 1" or "Player 2".${
+      In the headline and description, speak to each player as "you"; never write "we", "us", "our" or "let's" — there is no coach speaking. Call the other player "your opponent", never "Player 1" or "Player 2".${
         errorsJudged
           ? ""
           : `
@@ -779,7 +895,7 @@ serve(async (req) => {
         const retried = await generateInsights(
           geminiUrl,
           request(`${prompt}
-      A previous answer was rejected because ${problems.join("; ")}. Follow the headline and description rules exactly.`),
+      A previous answer was rejected because ${problems.join("; ")}. Follow the headline, description and observer rules exactly.`),
           AbortSignal.timeout(remainingMs - DB_WRITE_MARGIN_MS),
         );
         insightsJSON = keepBetter(insightsJSON, retried);
@@ -804,6 +920,7 @@ serve(async (req) => {
       latency: (Date.now() - generationStartedAt) / 1000,
     });
     dropLabelledSummaries(insightsJSON);
+    dropUnusableObserverTexts(insightsJSON);
     composeSummaries(insightsJSON);
 
     // 7. Update the 'matches' table directly

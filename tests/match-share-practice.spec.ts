@@ -146,7 +146,11 @@ const loader = createLoader({
     },
     "@/lib/data/teams-server": { PROGRAM_CRESTS_BUCKET: "crests" },
     "@/components/dashboard/matches/match-detail/use-match-sides": {
-      getMatchSides: () => ({ pick: () => null }),
+      getMatchSides: () => ({
+        pick: () => null,
+        you: { name: "" },
+        opp: { name: "" },
+      }),
     },
     "@/lib/data/member-avatars-server": {
       getMemberAvatarUrls: async () => ({}),

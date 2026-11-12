@@ -43,6 +43,9 @@ type PlayerReply = {
   headline?: string;
   description?: string;
   summary?: string;
+  observer_headline?: string;
+  observer_description?: string;
+  observer_summary?: string;
 };
 type Reply = { player1?: PlayerReply; player2?: PlayerReply };
 /** A scripted Gemini turn: an answer, or `null` for a refused call. */
@@ -66,12 +69,18 @@ const GOOD_REPLY: Reply = {
     headline: "Your second serve held firm under pressure.",
     description:
       "You won 67% of second-serve points and saved 70% of break points, so keep trusting that kick serve when the score gets tight.",
+    observer_headline: "[PLAYER]'s second serve held firm under pressure.",
+    observer_description:
+      "[PLAYER] won 67% of second-serve points and saved 70% of break points against [OPPONENT], so they should keep trusting that kick serve when the score gets tight.",
   },
   player2: {
     focus: "first-serve points won",
     headline: "Your first serve set up your best tennis.",
     description:
       "You won 66% of first-serve points, so build your service games around landing more first serves in the deuce court.",
+    observer_headline: "[PLAYER]'s first serve set up their best tennis.",
+    observer_description:
+      "[PLAYER] won 66% of first-serve points, so they should build their service games around landing more first serves in the deuce court.",
   },
 };
 
@@ -296,6 +305,8 @@ test("the generation config and model are the ones the prompt was tuned for", as
           "focus",
           "headline",
           "description",
+          "observer_headline",
+          "observer_description",
           "strengths",
           "weaknesses",
         ],
@@ -304,6 +315,8 @@ test("the generation config and model are the ones the prompt was tuned for", as
           "focus",
           "headline",
           "description",
+          "observer_headline",
+          "observer_description",
           "strengths",
           "weaknesses",
         ],
@@ -439,6 +452,8 @@ test('naming the US Open is not mistaken for a coach\'s "us"', async () => {
       ...GOOD_REPLY.player1,
       description:
         "You won 67% of second-serve points in a US Open qualifier, so keep trusting your kick serve.",
+      observer_description:
+        "[PLAYER] won 67% of second-serve points in a US Open qualifier, so they should keep trusting their kick serve.",
     },
   };
   const { requests } = await runWithReplies([reply]);
@@ -843,3 +858,147 @@ for (const matchType of ["Tournament", "Singles", "Dual", null]) {
     );
   });
 }
+
+/** GOOD_REPLY with player1's observer pair replaced. */
+function withObserver(observer: Partial<PlayerReply>): Reply {
+  return { ...GOOD_REPLY, player1: { ...GOOD_REPLY.player1, ...observer } };
+}
+
+test("the prompt asks for the summary again in the observer voice, with tokens for the names", async () => {
+  const { body } = await captureGeminiRequest();
+  const prompt = body.contents[0].parts[0].text;
+  const line =
+    prompt
+      .split("\n")
+      .find((l) =>
+        l.includes("- an 'observer_headline' and an 'observer_description':"),
+      ) ?? "";
+  expect(line).toContain("[PLAYER]");
+  expect(line).toContain("[OPPONENT]");
+  expect(line).toContain("never a real name");
+  expect(line).toContain('"they" and "their"');
+  // "you" is the headline's and description's voice, not every field's.
+  expect(prompt).toContain(
+    'In the headline and description, speak to each player as "you"',
+  );
+});
+
+test("the observer summary is composed beside the summary, tokens intact", async () => {
+  const { saved } = await runWithReplies([GOOD_REPLY]);
+  for (const key of ["player1", "player2"] as const) {
+    expect(saved?.[key]?.observer_summary).toBe(
+      `${GOOD_REPLY[key]!.observer_headline} ${GOOD_REPLY[key]!.observer_description}`,
+    );
+  }
+});
+
+for (const [label, observer, problem] of [
+  [
+    'says "your"',
+    {
+      observer_description:
+        "[PLAYER] won 67% of second-serve points and saved 70% of break points, so keep trusting your kick serve.",
+    },
+    'an observer text says "you" or "your"',
+  ],
+  [
+    'says "his"',
+    { observer_headline: "[PLAYER] held firm behind his second serve." },
+    'an observer text says "he" or "she" instead of "they"',
+  ],
+  [
+    "never names the player",
+    {
+      observer_headline: "The second serve held firm under pressure.",
+      observer_description:
+        "The server won 67% of second-serve points and saved 70% of break points, so the kick serve is worth trusting when the score gets tight.",
+    },
+    "an observer text never writes [PLAYER]",
+  ],
+  [
+    "invents a token",
+    { observer_headline: "[NAME]'s second serve held firm for [PLAYER]." },
+    "an observer text writes [NAME]",
+  ],
+  [
+    "quotes another figure",
+    {
+      observer_description:
+        "[PLAYER] won 68% of second-serve points and saved 70% of break points, so they should keep trusting that kick serve.",
+    },
+    "an observer description quotes different figures from the description",
+  ],
+  [
+    "puts a figure in its headline",
+    { observer_headline: "[PLAYER] won 67% of second-serve points." },
+    "the observer text: a headline quotes a figure",
+  ],
+] as const) {
+  test(`an observer text that ${label} is asked for again`, async () => {
+    const { requests, saved } = await runWithReplies([
+      withObserver(observer),
+      GOOD_REPLY,
+    ]);
+    expect(requests).toHaveLength(2);
+    expect(requests[1].body.contents[0].parts[0].text).toContain(
+      `player1: ${problem}`,
+    );
+    expect(saved?.player1?.observer_summary).toBe(
+      `${GOOD_REPLY.player1!.observer_headline} ${GOOD_REPLY.player1!.observer_description}`,
+    );
+  });
+}
+
+test("an observer text still off after the retry is dropped, and the summary is kept", async () => {
+  const bad = withObserver({
+    observer_headline: "Your second serve held firm for [PLAYER].",
+  });
+  const { requests, saved } = await runWithReplies([bad]);
+  expect(requests).toHaveLength(2);
+  expect(saved?.player1?.observer_headline).toBeUndefined();
+  expect(saved?.player1?.observer_description).toBeUndefined();
+  expect(saved?.player1?.observer_summary).toBeUndefined();
+  expect(saved?.player1?.summary).toBe(
+    `${GOOD_REPLY.player1!.headline} ${GOOD_REPLY.player1!.description}`,
+  );
+  // The other player's observer text is untouched.
+  expect(saved?.player2?.observer_summary).toBeTruthy();
+});
+
+test("a summary that is not saved takes its observer text with it", async () => {
+  const labelled: Reply = {
+    ...GOOD_REPLY,
+    player2: {
+      ...GOOD_REPLY.player2,
+      description:
+        "As Player 1 pressed, you won 66% of first-serve points, so keep landing that first serve.",
+    },
+  };
+  const { saved } = await runWithReplies([labelled]);
+  expect(saved?.player2?.summary).toBeUndefined();
+  expect(saved?.player2?.observer_summary).toBeUndefined();
+  expect(saved?.player2?.observer_headline).toBeUndefined();
+});
+
+test("a retry is taken whole: the summary and its observer text come from one answer", async () => {
+  const first = withObserver({
+    observer_headline: "Your second serve held firm for [PLAYER].",
+  });
+  const retried: Reply = {
+    ...GOOD_REPLY,
+    player1: {
+      focus: "break points saved",
+      headline: "Your nerve on break points decided this match.",
+      description:
+        "You saved 70% of break points, so keep going to your kick serve when the game is on the line.",
+      observer_headline: "[PLAYER]'s nerve on break points decided this match.",
+      observer_description:
+        "[PLAYER] saved 70% of break points, so they should keep going to their kick serve when the game is on the line.",
+    },
+  };
+  const { saved } = await runWithReplies([first, retried]);
+  expect(saved?.player1?.headline).toBe(retried.player1!.headline);
+  expect(saved?.player1?.observer_headline).toBe(
+    retried.player1!.observer_headline,
+  );
+});

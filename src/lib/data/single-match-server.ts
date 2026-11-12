@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { insightSummaryFor } from "@/lib/data/insight-voice";
 import { createClient } from "@/lib/supabase/server";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import type { AnalysisStatus } from "@/lib/data/match-analysis";
@@ -52,7 +53,9 @@ interface DbRow {
   score: { player1: number[]; player2: number[] } | null;
   match_type: string | null;
   court_type: string | null;
-  insights: { player1?: { summary?: string } } | null;
+  insights: {
+    player1?: { summary?: string; observer_summary?: string };
+  } | null;
 }
 
 export const getTeamSingleMatch = cache(async function getTeamSingleMatch(
@@ -95,6 +98,11 @@ export const getTeamSingleMatch = cache(async function getTeamSingleMatch(
     score: row.score,
     status: analysis?.status ?? "manual",
     hasVideo: analysis !== undefined,
-    summary: row.insights?.player1?.summary ?? null,
+    // A team page about the player in seat one, so the wording written
+    // about them where the match has it (`insight-voice.ts`).
+    summary: insightSummaryFor(row.insights?.player1, "observer", {
+      you: row.player1_name,
+      opp: row.player2_name,
+    }),
   };
 });

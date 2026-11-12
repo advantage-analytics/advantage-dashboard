@@ -25,6 +25,7 @@ import { StatisticsView } from "@/components/dashboard/matches/match-detail/stat
 import { MatchFiltersProvider } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { MATCH_FILTERS_PARAM } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { insightSummaryFor } from "@/lib/data/insight-voice";
 import {
   FilmPanePending,
   MatchReportPending,
@@ -168,7 +169,11 @@ export default async function AdminMatchReportPage({
   const p2 = statsResult?.statistics?.player2Stats;
   const statsPublished = Boolean(p1 && p2);
   const userInsights = sides.pick(insights?.player1, insights?.player2);
-  const summary = userInsights?.summary?.trim() || null;
+  // An admin reads about the player, whoever they are (`insight-voice.ts`).
+  const summary = insightSummaryFor(userInsights, "observer", {
+    you: sides.you.name,
+    opp: sides.opp.name,
+  });
   const views: readonly ReportView[] = [
     "statistics",
     "shots",

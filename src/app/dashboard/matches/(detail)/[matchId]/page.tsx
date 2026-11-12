@@ -62,6 +62,7 @@ import {
   VisualizationsPanePending,
 } from "@/components/dashboard/loading/match-report-pending";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { insightSummaryFor } from "@/lib/data/insight-voice";
 import { playedSets } from "@/lib/ui/score-format";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMatchFilmEntry } from "@/lib/data/match-film-entry-server";
@@ -233,7 +234,16 @@ export default async function MatchDetailPage({
   // reaches the report as `meta.summary` and is drawn by the Statistics view's
   // insight card and nowhere else; a match with no stored insight gets no
   // card, never a stand-in paragraph (spec › Decisions 4).
-  const summary = userInsights?.summary?.trim() || null;
+  //
+  // Spoken to the player only when the viewer IS the player. A coach, staff
+  // or a third teammate reading a roster player's match gets the same
+  // summary written about them, by name (`insight-voice.ts`); a match
+  // summarised before that wording existed keeps the old one.
+  const summary = insightSummaryFor(
+    userInsights,
+    match.viewerIsYou ? "player" : "observer",
+    { you: sides.you.name, opp: sides.opp.name },
+  );
 
   const p1 = statsResult?.statistics?.player1Stats;
   const p2 = statsResult?.statistics?.player2Stats;

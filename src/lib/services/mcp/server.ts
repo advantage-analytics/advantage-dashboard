@@ -400,7 +400,27 @@ function orientInsights(
   const record = asRecord(insights);
   if (!record) return null;
   const other = seat === "player1" ? "player2" : "player1";
-  return { me: record[seat] ?? null, opponent: record[other] ?? null };
+  return {
+    me: withoutObserverText(record[seat]),
+    opponent: withoutObserverText(record[other]),
+  };
+}
+
+/**
+ * One side's insights without the observer wording (`insight-voice.ts`). It
+ * is the summary again with `[PLAYER]` / `[OPPONENT]` tokens for the report
+ * to fill; a caller reading the match already has the summary itself.
+ */
+function withoutObserverText(side: unknown): unknown {
+  const record = asRecord(side);
+  if (!record) return side ?? null;
+  const {
+    observer_headline: _headline,
+    observer_description: _description,
+    observer_summary: _summary,
+    ...rest
+  } = record;
+  return rest;
 }
 
 function text(content: string): CallToolResult {
