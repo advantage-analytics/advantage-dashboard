@@ -68,6 +68,34 @@ test("falls back to the vendor copy, offset by the trim start, when our file is 
   });
 });
 
+test("a vendor copy whose blob was deleted is never handed out (copies retired 2026-11-12)", async () => {
+  const job = {
+    video_object_key: "videos/u/m/original.mp4",
+    trimmed_object_key: "trimmed/u/m/j.mp4",
+    start_time_seconds: "15.136",
+  };
+  const asked: string[] = [];
+  const choice = await choosePlaybackFile([job], async (name) => {
+    asked.push(name);
+    return false; // the upload is gone and the trimmed blob was deleted
+  });
+  expect(choice).toBeNull();
+  expect(asked).toEqual(["videos/u/m/original.mp4", "trimmed/u/m/j.mp4"]);
+
+  // After the deletion script nulls the column, the step is simply skipped.
+  asked.length = 0;
+  expect(
+    await choosePlaybackFile(
+      [{ ...job, trimmed_object_key: null }],
+      async (name) => {
+        asked.push(name);
+        return false;
+      },
+    ),
+  ).toBeNull();
+  expect(asked).toEqual(["videos/u/m/original.mp4"]);
+});
+
 test("the newest job wins, and a job with nothing playable is skipped", async () => {
   const choice = await choosePlaybackFile(
     [

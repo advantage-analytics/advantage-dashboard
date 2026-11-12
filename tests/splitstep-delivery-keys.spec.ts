@@ -11,14 +11,14 @@ import { selectDeliveryStorageKeys } from "@/lib/services/splitstep/delivery-sto
  *
  * The load-bearing case is the retained match: a team match whose uploader
  * deleted their account mid-processing keeps its `match_id` but loses
- * `created_by` (set null by `release_my_account_from_programs()`). Its trimmed
- * video is still attributable via `match_id` and deletable via
- * `purgeMatchStorage`, so it MUST get a key rather than being skipped —
- * otherwise the retained match ends with stats but no video.
+ * `created_by` (set null by `release_my_account_from_programs()`). Its files
+ * are still attributable via `match_id` and deletable via `purgeMatchStorage`,
+ * so they MUST get keys under the match. (The vendor's trimmed video got a key
+ * here too until it stopped being kept, 2026-11-12.)
  */
 
 test.describe("selectDeliveryStorageKeys", () => {
-  test("a fully attributed completion keys both assets under the uploader", () => {
+  test("a fully attributed completion keys every file under the uploader", () => {
     const keys = selectDeliveryStorageKeys({
       jobId: "job-1",
       createdBy: "user-1",
@@ -35,15 +35,13 @@ test.describe("selectDeliveryStorageKeys", () => {
     expect(keys.trajectoriesKey).toBe(
       "results/user-1/match-1/job-1.trajectories.json",
     );
-    expect(keys.trimmedKey).toBe("trimmed/user-1/match-1/job-1.mp4");
   });
 
-  test("a retained match whose uploader left keys both assets under former-member", () => {
+  test("a retained match whose uploader left keys every file under former-member", () => {
     // created_by is null (the account was deleted mid-processing) but match_id
-    // survives. Both keys must still be produced — the trimmed video is the
-    // regression this helper exists to prevent — and match_id stays the THIRD
-    // path segment, so cleanup-orphan-storage.ts still attributes it and
-    // purgeMatchStorage still deletes it.
+    // survives. Every key must still be produced, and match_id stays the
+    // THIRD path segment, so cleanup-orphan-storage.ts still attributes the
+    // files and purgeMatchStorage still deletes them.
     const keys = selectDeliveryStorageKeys({
       jobId: "job-2",
       createdBy: null,
@@ -59,12 +57,10 @@ test.describe("selectDeliveryStorageKeys", () => {
     expect(keys.trajectoriesKey).toBe(
       "results/former-member/match-2/job-2.trajectories.json",
     );
-    expect(keys.trimmedKey).toBe("trimmed/former-member/match-2/job-2.mp4");
   });
 
-  test("an unmatched delivery keeps results under an orphan key and skips the video", () => {
-    // No job matched: the results JSON is small and worth keeping under any key,
-    // but a multi-GB video with nothing to attribute it to gets no key at all.
+  test("an unmatched delivery keeps its files under orphan keys", () => {
+    // No job matched: the JSON files are worth keeping under any key.
     const keys = selectDeliveryStorageKeys({
       jobId: null,
       createdBy: null,
@@ -76,7 +72,6 @@ test.describe("selectDeliveryStorageKeys", () => {
     expect(keys.resultsKey).toBe("orphaned/ext-3/del-3.json");
     expect(keys.playersKey).toBe("orphaned/ext-3/del-3.players.json");
     expect(keys.trajectoriesKey).toBe("orphaned/ext-3/del-3.trajectories.json");
-    expect(keys.trimmedKey).toBeNull();
   });
 
   test("an unmatched delivery with no external job id falls back to unknown", () => {
@@ -89,7 +84,6 @@ test.describe("selectDeliveryStorageKeys", () => {
     });
 
     expect(keys.resultsKey).toBe("orphaned/unknown/del-4.json");
-    expect(keys.trimmedKey).toBeNull();
   });
 });
 
