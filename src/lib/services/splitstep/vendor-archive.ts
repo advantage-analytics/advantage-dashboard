@@ -1,6 +1,5 @@
 /**
- * Keep the vendor's per-frame files and its trimmed video — everything a
- * completion links to — before the 7-day SAS urls expire.
+ * Keep the vendor's per-frame files before the 7-day SAS urls expire.
  *
  * Shared by the webhook and by scripts/splitstep-archive-vendor-files.ts, the
  * recovery path for a job whose copy missed while its urls are still live.
@@ -18,16 +17,15 @@
  * it back on every derive, and plain keeps that path unchanged.
  *
  * ── The trimmed video ────────────────────────────────────────────────────────
- * Copied server-side into our Azure container (`trimmed_object_key`), Azure
- * pulling from the vendor's SAS, so no byte passes through this function — a
- * trimmed match is 1–1.5 GB. Playback still prefers the athlete's own upload
- * (match-video-choice.ts); the copy is the fallback and the archive.
+ * No longer kept (retired 2026-11-12, docs/r2-video-storage-plan.md). It was
+ * copied into our Azure container as a fallback, but playback reads the
+ * athlete's own upload and its playback copy, so nothing needed it.
+ * `scripts/delete-trimmed-copies.ts` removes the copies made before.
  */
 
 import { gunzipSync, gzipSync } from "node:zlib";
 
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { videoContainerClient } from "./video-url/azure-sas";
 import { RESULTS_BUCKET } from "./config";
 import { selectDeliveryStorageKeys } from "./delivery-storage-keys";
 import { isAllowedResultUrl, resultUrlHostname } from "./result-url-policy";
@@ -135,15 +133,15 @@ const SWEEP_WINDOW_MS = 8 * 24 * 60 * 60 * 1000;
 /** One vendor file the sweep looked at, for the caller to log. Never a url. */
 export interface SweepLine {
   jobId: string;
-  kind: "players" | "trajectories" | "trimmed_video";
-  outcome: "expired" | "missing" | "stored" | "copying" | "failed" | "skipped";
+  kind: "players" | "trajectories";
+  outcome: "expired" | "missing" | "stored" | "failed" | "skipped";
   detail: string;
 }
 
 /**
  * Every completed job's vendor files that a delivery failed to keep, kept now
  * while their urls are live — the players and trajectories files into
- * `match-results`, the trimmed video into Azure. Soonest expiry first, and it
+ * `match-results`. Soonest expiry first, and it
  * stops starting downloads once `deadline` is near, so a bounded caller (the
  * daily cron) gets the most urgent ones and the rest the next day.
  *
@@ -165,15 +163,14 @@ export async function archiveMissingVendorFiles(params: {
   let query = supabase
     .from("processing_jobs")
     .select(
-      "id, created_by, match_id, external_job_id, players_url, players_object_key, trajectories_url, trajectories_object_key, trimmed_video_url, trimmed_object_key",
+      "id, created_by, match_id, external_job_id, players_url, players_object_key, trajectories_url, trajectories_object_key",
     )
     .eq("status", "completed")
     // A SAS url lives 7 days: older jobs have nothing left to fetch.
     .gte("completed_at", new Date(now - SWEEP_WINDOW_MS).toISOString())
     .or(
       "and(players_url.not.is.null,players_object_key.is.null)," +
-        "and(trajectories_url.not.is.null,trajectories_object_key.is.null)," +
-        "and(trimmed_video_url.not.is.null,trimmed_object_key.is.null)",
+        "and(trajectories_url.not.is.null,trajectories_object_key.is.null)",
     );
   if (jobId) query = query.eq("id", jobId);
   const { data: jobs, error } = await query;
@@ -200,12 +197,6 @@ export async function archiveMissingVendorFiles(params: {
         stored: job.trajectories_object_key,
         key: keys.trajectoriesKey,
       },
-      {
-        kind: "trimmed_video" as const,
-        url: job.trimmed_video_url,
-        stored: job.trimmed_object_key,
-        key: keys.trimmedKey,
-      },
     ];
     return all
       .filter((f): f is typeof f & { url: string } => !!f.url && !f.stored)
@@ -230,20 +221,6 @@ export async function archiveMissingVendorFiles(params: {
     }
     if (!file.key) {
       line("skipped", "no key: the match cannot be named");
-      continue;
-    }
-
-    // A copy is one Start Copy request — Azure moves the bytes — so only the
-    // JSON downloads are charged against the deadline.
-    if (file.kind === "trimmed_video") {
-      const copied = await archiveTrimmedVideo({
-        supabase,
-        jobId: file.jobId,
-        sourceUrl: file.url,
-        blobName: file.key,
-      });
-      if (copied.ok) line("copying", `${copied.copyStatus} → ${file.key}`);
-      else line("failed", copied.error);
       continue;
     }
 
@@ -278,75 +255,4 @@ export async function archiveMissingVendorFiles(params: {
     }
   }
   return lines;
-}
-
-/** What Azure reports for a copy. `pending` is the normal answer for a big one. */
-export type BlobCopyStatus = "pending" | "success" | "aborted" | "failed";
-
-/**
- * Start copying the vendor's trimmed video into our container.
- *
- * `beginCopyFromURL` is Azure's async Copy Blob: Azure pulls from the SAS and
- * this returns after the Start Copy request, almost always `pending`. Never
- * `syncCopyFromURL`, which caps at 256 MiB — under every real match. A blob
- * already at the key is left alone (`ifNoneMatch: "*"`), so a redelivery or a
- * re-run never restarts a finished copy.
- */
-export async function startTrimmedVideoCopy(params: {
-  blobName: string;
-  sourceUrl: string;
-}): Promise<{ copyStatus: BlobCopyStatus }> {
-  if (!isAllowedResultUrl(params.sourceUrl)) {
-    throw new Error(
-      `result url host not allowed: ${resultUrlHostname(params.sourceUrl)}`,
-    );
-  }
-  const poller = await videoContainerClient()
-    .getBlockBlobClient(params.blobName)
-    .beginCopyFromURL(params.sourceUrl, { conditions: { ifNoneMatch: "*" } });
-  const result = poller.getResult();
-  return { copyStatus: (result?.copyStatus as BlobCopyStatus) ?? "pending" };
-}
-
-/**
- * Start the trimmed-video copy and record its key on the job, through the
- * same `record_splitstep_trimmed_copy` the webhook used before the copy was
- * retired. Recorded when the copy is accepted, not when it finishes: the key
- * is what tells a later delivery not to start a second one.
- */
-export async function archiveTrimmedVideo(params: {
-  supabase: Admin;
-  jobId: string;
-  sourceUrl: string;
-  blobName: string;
-}): Promise<
-  { ok: true; copyStatus: BlobCopyStatus } | { ok: false; error: string }
-> {
-  const { supabase, jobId, sourceUrl, blobName } = params;
-  const record = async (copyStatus: BlobCopyStatus) => {
-    const { error } = await supabase.rpc("record_splitstep_trimmed_copy", {
-      p_job_id: jobId,
-      p_trimmed_object_key: blobName,
-    });
-    return error
-      ? {
-          ok: false as const,
-          error: `copy started but the key was NOT recorded: ${error.message}`,
-        }
-      : { ok: true as const, copyStatus };
-  };
-  try {
-    const { copyStatus } = await startTrimmedVideoCopy({ blobName, sourceUrl });
-    return await record(copyStatus);
-  } catch (err) {
-    // A blob already at the key: an earlier copy got there, and only its key
-    // went unrecorded. Azure refuses `ifNoneMatch: "*"` with 409
-    // BlobAlreadyExists or 412 ConditionNotMet depending on the operation.
-    const status = (err as { statusCode?: number }).statusCode;
-    if (status === 409 || status === 412) return record("success");
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
 }

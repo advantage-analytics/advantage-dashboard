@@ -209,7 +209,7 @@ test.describe("the refresh contract", () => {
       url: "https://blob.example/trimmed.mp4",
       expiresAt: new Date(T0 + TTL).toISOString(),
       startTimeSeconds: 15.136,
-      source: "vendor-copy",
+      source: "upload",
       attachment: null,
     };
 

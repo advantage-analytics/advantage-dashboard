@@ -408,7 +408,7 @@ function supabaseProviderVideo(
       .from("processing_jobs")
       .select(PLAYBACK_JOB_COLUMNS)
       .eq("match_id", matchId)
-      .or("video_object_key.not.is.null,trimmed_object_key.not.is.null")
+      .not("video_object_key", "is", null)
       .order("created_at", { ascending: false })
       .limit(JOBS_CONSIDERED)
       .returns<PlaybackJobRow[]>();

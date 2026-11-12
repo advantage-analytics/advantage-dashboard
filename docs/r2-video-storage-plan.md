@@ -366,6 +366,17 @@ Behaviour notes:
   - The "remain in R2" alarm fires only for rows marked R2.
 - **Cleanup.** The missing-column fallbacks are gone (the column is live), and the chooser reuses `storeOf()`.
 
+### Trimmed copy retired (2026-11-12)
+
+- The SplitStep webhook and the `archive-vendor-files` cron no longer copy the vendor's trimmed video into Azure.
+- No player falls back to it. The order is now: the playback copy (R2, then Azure), then the upload.
+- `purgeMatchStorage` still deletes any `trimmed_object_key` a row names.
+- `scripts/delete-trimmed-copies.ts` removes the ~70 GB already in `trimmed/`:
+  - It is a dry run by default.
+  - It holds back any copy whose job has no ready playback copy.
+  - Run `--apply` only after this code is in production.
+- Blob soft delete is already on for the account (14 days).
+
 ## 7. Risks
 
 1. **Delete latency.** A deleted match's R2 copy stays until the queue drains, at the next worker run or a manual `--drain-deletes`.

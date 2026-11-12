@@ -49,7 +49,8 @@ test("prefers our own upload, with no offset", async () => {
   });
 });
 
-test("falls back to the vendor copy, offset by the trim start, when our file is gone", async () => {
+test("the vendor's trimmed copy is never played or even checked (retired 2026-11-12)", async () => {
+  const asked: string[] = [];
   const choice = await choosePlaybackFile(
     [
       {
@@ -58,14 +59,13 @@ test("falls back to the vendor copy, offset by the trim start, when our file is 
         start_time_seconds: "15.136",
       },
     ],
-    exists("trimmed/u/m/j.mp4"),
+    async (name) => {
+      asked.push(name);
+      return name === "trimmed/u/m/j.mp4"; // only the vendor copy is left
+    },
   );
-  expect(choice).toEqual({
-    blobName: "trimmed/u/m/j.mp4",
-    store: "azure",
-    startTimeSeconds: 15.136,
-    source: "vendor-copy",
-  });
+  expect(choice).toBeNull();
+  expect(asked).toEqual(["videos/u/m/original.mp4"]);
 });
 
 test("the newest job wins, and a job with nothing playable is skipped", async () => {
@@ -108,55 +108,6 @@ test("no files at all is no video", async () => {
   ).toBeNull();
 });
 
-test.describe('prefer "vendor-copy" (the labelling console)', () => {
-  const job = {
-    video_object_key: "videos/u/m/original.mp4",
-    trimmed_object_key: "trimmed/u/m/j.mp4",
-    start_time_seconds: "15.136",
-  };
-
-  test("plays the vendor copy, offset by the trim start, when both exist", async () => {
-    const choice = await choosePlaybackFile(
-      [job],
-      exists("videos/u/m/original.mp4", "trimmed/u/m/j.mp4"),
-      "vendor-copy",
-    );
-    expect(choice).toEqual({
-      blobName: "trimmed/u/m/j.mp4",
-      store: "azure",
-      startTimeSeconds: 15.136,
-      source: "vendor-copy",
-    });
-  });
-
-  test("falls back to our upload, with no offset, when the copy's blob is missing", async () => {
-    const choice = await choosePlaybackFile(
-      [job],
-      exists("videos/u/m/original.mp4"),
-      "vendor-copy",
-    );
-    expect(choice).toEqual({
-      blobName: "videos/u/m/original.mp4",
-      store: "azure",
-      startTimeSeconds: 0,
-      source: "upload",
-    });
-  });
-
-  test("falls back to our upload when the job never got a copy", async () => {
-    const choice = await choosePlaybackFile(
-      [{ ...job, trimmed_object_key: null }],
-      exists("videos/u/m/original.mp4"),
-      "vendor-copy",
-    );
-    expect(choice?.source).toBe("upload");
-  });
-
-  test("neither file stored is no video", async () => {
-    expect(await choosePlaybackFile([job], exists(), "vendor-copy")).toBeNull();
-  });
-});
-
 test.describe("the playback copy", () => {
   const job = {
     video_object_key: "videos/u/m/original.mp4",
@@ -171,25 +122,26 @@ test.describe("the playback copy", () => {
     "playback/u/m/original.mp4",
   );
 
-  test("a ready copy wins for every player, with no offset", async () => {
-    for (const prefer of ["upload", "vendor-copy"] as const) {
-      expect(await choosePlaybackFile([job], all, prefer)).toEqual({
-        blobName: "playback/u/m/original.mp4",
-        store: "azure",
-        startTimeSeconds: 0,
-        source: "playback",
-      });
-    }
+  test("a ready copy wins, with no offset", async () => {
+    expect(await choosePlaybackFile([job], all)).toEqual({
+      blobName: "playback/u/m/original.mp4",
+      store: "azure",
+      startTimeSeconds: 0,
+      source: "playback",
+    });
   });
 
-  test("a copy still processing, failed or missing plays what it did before", async () => {
+  test("a copy still processing, failed or missing plays the upload", async () => {
     for (const playback_status of ["processing", "failed", null]) {
       const choice = await choosePlaybackFile(
         [{ ...job, playback_status }],
         all,
-        "vendor-copy",
       );
-      expect(choice?.source).toBe("vendor-copy");
+      expect(choice).toMatchObject({
+        blobName: "videos/u/m/original.mp4",
+        source: "upload",
+        startTimeSeconds: 0,
+      });
     }
     const gone = await choosePlaybackFile(
       [job],
@@ -656,21 +608,21 @@ test("a match with no attachment falls through to the Advantage Intelligence pat
   expect(calls).not.toContain("mintPlayback");
 });
 
-test("the legacy offset still reaches MatchVideo untouched", async () => {
-  // The vendor re-encode case, end to end through the loader: the job's trim
-  // start is the film clock's zero and the loader must not round, clamp or
+test("a provider offset still reaches MatchVideo untouched", async () => {
+  // End to end through the loader: whatever offset the provider lineage
+  // reports is the film clock's zero, and the loader must not round, clamp or
   // zero it on the way out.
   const { deps } = harness();
   deps.loadProviderVideo = async () => ({
     url: "https://blob.example/trimmed/u/m/j.mp4?sig=z",
     expiresAt: "2026-01-01T00:30:00.000Z",
     startTimeSeconds: 15.136,
-    source: "vendor-copy",
+    source: "upload",
     attachment: null,
   });
   const video = await resolveMatchVideo(OTHER_MATCH_ID, deps);
   expect(video?.startTimeSeconds).toBe(15.136);
-  expect(video?.source).toBe("vendor-copy");
+  expect(video?.source).toBe("upload");
 });
 
 test("the loader writes nothing — no imported row is rewritten and no provenance renamed", async () => {

@@ -1,7 +1,8 @@
 /**
  * `GET /api/cron/archive-vendor-files` — the daily second chance for vendor
- * files a webhook delivery failed to keep: the players and trajectories JSON
- * and the trimmed video, while their 7-day urls are still live. The sweep
+ * files a webhook delivery failed to keep: the players and trajectories JSON,
+ * while their 7-day urls are still live. (The vendor's trimmed video is no
+ * longer kept — retired 2026-11-12.) The sweep
  * itself is `archiveMissingVendorFiles` (vendor-archive.ts), the same one
  * scripts/splitstep-archive-vendor-files.ts runs by hand.
  *
@@ -51,11 +52,10 @@ export async function GET(request: Request) {
       line.outcome === "failed" ? pipelineLog.error : pipelineLog.info;
     log(`[archive-vendor-files] ${line.kind} ${line.outcome}`, { ...line });
   }
-  const tally = (outcome: string) =>
+  const tally = (outcome: (typeof lines)[number]["outcome"]) =>
     lines.filter((l) => l.outcome === outcome).length;
   return NextResponse.json({
     stored: tally("stored"),
-    copying: tally("copying"),
     failed: tally("failed"),
     skipped: tally("skipped"),
   });
