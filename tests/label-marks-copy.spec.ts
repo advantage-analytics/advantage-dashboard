@@ -76,6 +76,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   first_serve_fault_alone: {},
   serve_in_landing_out: { shotId: "s-1", landing: "out" },
   serve_after_serve_in: { shotId: "s-2" },
+  serve_by_receiver: { shotId: "s-8", hitter: "p1", server: "p2" },
   placement_missing: { shotId: "s-1", stroke: "serve", missing: "landing" },
   pick_winner: {},
   net_hit_contradicts_height: {},
@@ -148,6 +149,7 @@ test.describe("mark copy", () => {
       first_serve_fault_alone: "Fault, no second serve",
       serve_in_landing_out: "Serve in, landing outside the box",
       serve_after_serve_in: "Serve after a serve in play",
+      serve_by_receiver: "Serve by the receiver",
       placement_missing: "No placement",
       pick_winner: "Pick the winner",
       last_call_overruled: "Was the last ball in?",
@@ -225,6 +227,9 @@ test.describe("mark copy", () => {
     );
     expect(markHover(sample("serve_after_serve_in"), names)).toBe(
       "A let that was played, or two points in one rally.",
+    );
+    expect(markHover(sample("serve_by_receiver"), names)).toBe(
+      `${names.p1} is typed as hitting a serve, but ${names.p2} is serving this point. If it is a rally shot, retype it: mid-rally it is most often an overhead. If the serve is ${names.p2}’s, change who hit it. If ${names.p1} did serve, change the server.`,
     );
   });
 

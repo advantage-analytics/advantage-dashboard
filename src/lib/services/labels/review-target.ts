@@ -72,6 +72,7 @@ export function memberShotId(
     case "second_serve_as_first":
     case "serve_after_serve_in":
     case "serve_in_landing_out":
+    case "serve_by_receiver":
     case "placement_missing":
       return mark.params.shotId;
     default:
@@ -100,7 +101,7 @@ const ENDING_ONLY: ReadonlySet<LabelMarkCode> = new Set([
  *   last), a serve replayed
  *   after one in at the first stroke; no end.
  * - 3: "Serve in, landing outside the box" at its serve, on the landing;
- *   "Second serve?" at its serve, no end; "Fault, no second serve" at the last
+ *   "Second serve?" and "Serve by the receiver" at their serve, no end; "Fault, no second serve" at the last
  *   stroke and a second serve called out at the last second serve, on the
  *   landing.
  * - 4: the last ball's call at the stroke `lastCallAnswer` names (else the
@@ -157,6 +158,7 @@ function memberTarget(
     case "shot_after_point_end":
     case "serve_after_serve_in":
     case "second_serve_as_first":
+    case "serve_by_receiver":
       return [memberShotId(member, point, marks), null];
     case "reserve_after_in":
       return [first, null];

@@ -52,6 +52,7 @@ import {
 import {
   effectiveShotResult,
   inServeLandingMiss,
+  isServeByReceiver,
   type ResultReadableShot,
 } from "./shot-derived";
 import {
@@ -225,7 +226,10 @@ export function markState(
   // Read off the rows as they stand, so while it is there it is still true:
   // an edit that leaves the point stopping on a missed first serve has not
   // settled it.
-  if (mark.code === "first_serve_fault_alone") {
+  if (
+    mark.code === "first_serve_fault_alone" ||
+    mark.code === "serve_by_receiver"
+  ) {
     return checked ? "checked-as-is" : "open";
   }
 
@@ -493,6 +497,37 @@ export function firstServeFaultAlone(
     tier: "count",
     scope: "point",
     params: {},
+  };
+}
+
+/**
+ * "Serve by the receiver": a live stroke typed as a serve whose hitter is not
+ * the point's server — a mid-rally overhead the vendor read as a serve (the
+ * rally it cut in two there then combined back), or a point whose server is
+ * wrong. A `count` mark, raised live by score-marks.ts; gone once the stroke
+ * is retyped, its hitter changed or the server corrected. The first such
+ * stroke in video order. Nothing on a non-point, or while the server or the
+ * hitter is not set. Published as it stands the stroke would be a second
+ * serve for the wrong player; `countedServeIndex` (apply.ts) no longer lets
+ * it be the serve the rally is numbered from.
+ */
+export function serveByReceiver(
+  point: Pick<LabelPoint, "shots"> &
+    Partial<Pick<LabelPoint, "ending" | "server">>,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "serve_by_receiver" }> | null {
+  const server = point.server ?? null;
+  if (server === null || isNonPointEnding(point.ending ?? null)) return null;
+  const wrong = (shot: LabelShot) => isServeByReceiver(shot, server);
+  // Cheap exit before the sort.
+  if (!point.shots.some(wrong)) return null;
+  const shot = liveShotsInOrder(point, ghosts).find(wrong);
+  if (!shot || shot.hitter === null) return null;
+  return {
+    code: "serve_by_receiver",
+    tier: "count",
+    scope: "point",
+    params: { shotId: shot.id, hitter: shot.hitter, server },
   };
 }
 
@@ -1129,6 +1164,7 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
     codes: [
       "second_serve_as_first",
       "first_serve_fault_alone",
+      "serve_by_receiver",
       "second_serve_called_out",
       "serve_in_landing_out",
     ],
@@ -1306,7 +1342,11 @@ function reviewItemTone(
     case 2:
       return "data";
     case 3:
-      return has("second_serve_called_out", "first_serve_fault_alone")
+      return has(
+        "second_serve_called_out",
+        "first_serve_fault_alone",
+        "serve_by_receiver",
+      )
         ? "score"
         : "data";
     case 4:
