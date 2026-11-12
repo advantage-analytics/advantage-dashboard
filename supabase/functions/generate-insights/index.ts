@@ -243,6 +243,17 @@ function playerProblem(player: PlayerSummary | undefined): string | null {
 }
 
 /**
+ * How far a player's answer is from usable: 2 when the summary itself breaks
+ * a rule, 1 when only the observer text does, 0 when both stand. The summary
+ * outranks the observer text because every reader has the summary and only
+ * some have the other, which is dropped when it is off.
+ */
+function playerFaults(player: PlayerSummary | undefined): 0 | 1 | 2 {
+  if (playerSummaryProblem(player) !== null) return 2;
+  return observerProblem(player) !== null ? 1 : 0;
+}
+
+/**
  * What stops one player's headline and description from reading as the
  * card's two lines, or null. A headline must be one sentence the card's
  * splitter ends at: closing punctuation, no sentence break inside it, and a
@@ -293,9 +304,10 @@ function summaryProblems(insights: Record<string, PlayerSummary>): string[] {
 /**
  * Per player, the retry's answer only where it fixed what the first answer
  * got wrong. A player the first answer already got right keeps it, and a
- * retry that is no better never replaces it. A player is taken whole, never
- * the summary from one answer and the observer text from the other: the two
- * voices must say the same thing.
+ * retry that is no better never replaces it. A retry that fixed the summary
+ * is taken even when its observer text is off (that text is then dropped). A
+ * player is taken whole, never the summary from one answer and the observer
+ * text from the other: the two voices must say the same thing.
  */
 function keepBetter(
   first: Record<string, PlayerSummary>,
@@ -303,10 +315,7 @@ function keepBetter(
 ): Record<string, PlayerSummary> {
   const kept = { ...first };
   for (const key of PLAYER_KEYS) {
-    if (
-      playerProblem(first?.[key]) !== null &&
-      playerProblem(retried?.[key]) === null
-    ) {
+    if (playerFaults(retried?.[key]) < playerFaults(first?.[key])) {
       kept[key] = retried[key];
     }
   }

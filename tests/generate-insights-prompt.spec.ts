@@ -1002,3 +1002,18 @@ test("a retry is taken whole: the summary and its observer text come from one an
     retried.player1!.observer_headline,
   );
 });
+
+test("a retry that fixed the summary is taken even when its observer text is off", async () => {
+  const first: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
+  };
+  const retried = withObserver({
+    observer_headline: "Your second serve held firm for [PLAYER].",
+  });
+  const { saved } = await runWithReplies([first, retried]);
+  // The clean headline replaces the one quoting a figure…
+  expect(saved?.player1?.headline).toBe(GOOD_REPLY.player1!.headline);
+  // …and the observer text that says "your" is dropped, not saved.
+  expect(saved?.player1?.observer_summary).toBeUndefined();
+});

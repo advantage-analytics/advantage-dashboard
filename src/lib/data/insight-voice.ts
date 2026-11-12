@@ -35,8 +35,13 @@ export interface InsightSummaryFields {
   observer_summary?: string | null;
 }
 
-const PLAYER_TOKEN = "[PLAYER]";
-const OPPONENT_TOKEN = "[OPPONENT]";
+/**
+ * The tokens `generate-insights` writes where the names go. The function
+ * deploys without `src/`, so it holds its own copy;
+ * `tests/insight-voice.spec.ts` keeps the two the same.
+ */
+export const PLAYER_TOKEN = "[PLAYER]";
+export const OPPONENT_TOKEN = "[OPPONENT]";
 
 /**
  * A name in place of every `token`, with its first letter raised where it
@@ -46,16 +51,10 @@ const OPPONENT_TOKEN = "[OPPONENT]";
  * evidence.
  */
 function fill(text: string, token: string, name: string): string {
-  let out = "";
-  let from = 0;
-  for (;;) {
-    const at = text.indexOf(token, from);
-    if (at === -1) return out + text.slice(from);
-    out += text.slice(from, at);
-    const opensSentence = /(?:^|[.!?]\s+)$/.test(out);
-    out += opensSentence ? name.charAt(0).toUpperCase() + name.slice(1) : name;
-    from = at + token.length;
-  }
+  const raised = name.charAt(0).toUpperCase() + name.slice(1);
+  return text.replaceAll(token, (_match, at: number) =>
+    /(?:^|[.!?]\s+)$/.test(text.slice(0, at)) ? raised : name,
+  );
 }
 
 /**

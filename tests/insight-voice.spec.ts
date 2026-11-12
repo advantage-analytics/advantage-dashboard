@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { splitInsight } from "../src/components/dashboard/matches/match-detail/insight-text";
 import {
   insightSummaryFor,
   observerSummary,
+  OPPONENT_TOKEN,
+  PLAYER_TOKEN,
 } from "../src/lib/data/insight-voice";
 import { transformDbMatchToMatch } from "../src/lib/data/match-detail-server";
 
@@ -154,4 +157,17 @@ test("a pinned seat has no viewer in it", () => {
       "player1",
     ),
   ).toEqual([true, false]);
+});
+
+test("the edge function writes the same two tokens the app fills in", () => {
+  const source = readFileSync(
+    "supabase/functions/generate-insights/index.ts",
+    "utf8",
+  );
+  expect(source).toContain(
+    `const PLAYER_TOKEN = ${JSON.stringify(PLAYER_TOKEN)};`,
+  );
+  expect(source).toContain(
+    `const OPPONENT_TOKEN = ${JSON.stringify(OPPONENT_TOKEN)};`,
+  );
 });
