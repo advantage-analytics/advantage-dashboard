@@ -12,6 +12,7 @@ import {
   applyPointCombine,
   combineNeighbour,
   rallyInPlay,
+  SERVE_REPLAY_GAP,
   combineRetypeError,
   combineServeRetypes,
   deadBetweenServes,
@@ -102,9 +103,10 @@ test.describe("planPointCombine", () => {
       // The fixture's two points each open on a first serve: joined, the
       // later one is the second.
       retyped: [{ shotId: "s-ace", patch: { stroke: "second_serve" } }],
-      // Point 1's serve was called in and played: nothing between the serves
-      // is cleared.
-      cleared: [],
+      // Point 2's serve comes 15 s after point 1's last stroke: the point was
+      // served again, so what was hit after the first serve was hit at a
+      // dead ball (`SERVE_REPLAY_GAP`).
+      cleared: ["s-return", "s-added"],
     };
     // From either side, the same plan.
     expect(planPointCombine(points(), P2, "above")).toEqual({
@@ -179,7 +181,9 @@ test.describe("across a game", () => {
     shots: shots.map((shot, i) => ({
       ...shot,
       status: "kept" as const,
-      videoTime: pointIndex * 10 + i,
+      // Four seconds a point: neighbours sit a second apart, under
+      // `SERVE_REPLAY_GAP`, and a point two rows on comes six seconds later.
+      videoTime: pointIndex * 4 + i,
       eventId: pointIndex * 10 + i,
     })),
   });
@@ -209,6 +213,28 @@ test.describe("across a game", () => {
       { shotId: "l2", patch: { hitter: "p1" } },
     ]);
     expect(plan.write.kept.ended_by).toBe("p1");
+  });
+
+  test("a serve five seconds or more after the last stroke was served again: it stays a serve, and the strokes between go", () => {
+    const earlier = part("e", 0, 1, [
+      { id: "e1", stroke: "first_serve", hitter: "p1", result: "in" },
+      { id: "e2", stroke: "forehand", hitter: "p2", result: "in" },
+      { id: "e3", stroke: "backhand", hitter: "p1", result: "in" },
+    ]);
+    // Two rows on: six seconds after e3, in the same game.
+    const later = part("l", 2, 1, [
+      { id: "l1", stroke: "first_serve", hitter: "p1", result: "in" },
+      { id: "l2", stroke: "forehand", hitter: "p2", result: "out" },
+    ]);
+    const plan = planPointCombine([earlier, later], "l", "above");
+    if ("error" in plan) throw new Error(plan.error);
+    // No overhead: the two serves are the first and the second.
+    expect(plan.write.retyped).toEqual([
+      { shotId: "l1", patch: { stroke: "second_serve" } },
+    ]);
+    expect(plan.write.cleared).toEqual(["e2", "e3"]);
+    // The first serve keeps its call: a fault or a let is the labeller's.
+    expect(SERVE_REPLAY_GAP).toBe(5);
   });
 
   test("a fault with one or two swings after it is no rally: the later serve is the second serve, by the server", () => {
@@ -605,9 +631,10 @@ test.describe("the console's rows", () => {
     // the second serve now, an edit off its seed.
     expect(kept.shots.map((s) => [s.stroke, s.status])).toEqual([
       ["first_serve", "kept"],
-      ["backhand", "edited"],
+      // Hit between the two serves: cleared with the combine.
+      ["backhand", "deleted"],
       ["forehand", "deleted"],
-      ["forehand", "added"],
+      ["forehand", "deleted"],
       ["second_serve", "edited"],
     ]);
     expect(kept).toMatchObject({
@@ -1314,9 +1341,9 @@ test("a render of the console with a combined point writes nothing and draws the
   expect(black).toContain("Combined into the point above");
   expect(black).toContain('aria-label="Undo delete point 3"');
   expect(black).not.toContain('aria-label="Undo delete point 2"');
-  // The kept point's well holds the moved ace as its fifth stroke, the
-  // second serve now.
-  expect(black).toContain('aria-label="Shot 4 stroke: Second serve"');
+  // The kept point's well holds the moved ace right after the first serve
+  // (the strokes between them cleared), the second serve now.
+  expect(black).toContain('aria-label="Shot 2 stroke: Second serve"');
   const light = renderToStaticMarkup(
     React.createElement(LabelConsole, {
       session,
@@ -1397,7 +1424,7 @@ test.describe("deadBetweenServes: swings between a fault or a let and the next s
     }
   });
 
-  test("a serve called in, or not called, clears nothing; nor does another player's serve", () => {
+  test("a serve called in, or not called, clears nothing unless it was served again; nor does another player's serve", () => {
     for (const result of ["in", null]) {
       expect(
         deadBetweenServes([
@@ -1406,6 +1433,14 @@ test.describe("deadBetweenServes: swings between a fault or a let and the next s
           shot("s2", "second_serve", 6),
         ]),
       ).toEqual([]);
+      // Five seconds after the stroke before it: served again.
+      expect(
+        deadBetweenServes([
+          shot("s1", "first_serve", 1, { result }),
+          shot("r", "forehand", 2),
+          shot("s2", "second_serve", 7),
+        ]),
+      ).toEqual(["r"]);
     }
     expect(
       deadBetweenServes([

@@ -30,6 +30,7 @@ import {
 } from "./marks";
 import {
   lastCallQuestion,
+  placementQuestion,
   markHover,
   markLabel,
   REVIEW_ITEM_QUESTION,
@@ -53,6 +54,7 @@ import {
   effectiveShotResult,
   inServeLandingMiss,
   isServeByReceiver,
+  pastNet,
   type ResultReadableShot,
 } from "./shot-derived";
 import {
@@ -413,6 +415,41 @@ function landingMissingOn(shot: LabelShot): boolean {
 export function contactMissingOn(shot: LabelShot): boolean {
   if (shot.contactX !== null && shot.contactY !== null) return false;
   return !shot.unclear.some((f) => f === "contact_x" || f === "contact_y");
+}
+
+/** A last ball called in that came down this close past the net is asked. */
+export const NEAR_NET_M = 1;
+
+/**
+ * "Into the net?", read off the rows: the point's last live stroke, a rally
+ * ball called in, came down within `NEAR_NET_M` past the net. Measured
+ * 2026-11-11 on the checked points of every hand-label session: such a ball
+ * was labelled Net about four times in five (17 of 21 across old and new
+ * vendor files), against 13% for one that landed one to two metres past and
+ * 39% for one down on the hitter's own side — so only this band is asked, and
+ * it is asked, never written: twenty strokes are too few to overrule a call
+ * unseen. Null for a serve, a let, a ball not called in, and any other
+ * landing.
+ */
+export function lastBallNearNet(
+  point: Pick<LabelPoint, "shots">,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "net_by_trajectory" }> | null {
+  const last = liveShotsInOrder(point, ghosts).at(-1);
+  if (!last || isServeStroke(last.stroke)) return null;
+  // A call the labeller made is theirs: only the landing's own reading asks.
+  // Stored in and read in: a ball stored as a miss whose landing reads in
+  // is "Different ending?"'s to ask, not a second question about the net.
+  if (last.resultCalled || last.result !== "in") return null;
+  if (effectiveShotResult(last) !== "in") return null;
+  const depth = pastNet(last);
+  if (depth === null || depth >= NEAR_NET_M) return null;
+  return {
+    code: "net_by_trajectory",
+    tier: "hint",
+    scope: "point",
+    params: { by: "landing" },
+  };
 }
 
 /**
@@ -942,6 +979,11 @@ export function openHintMarks(
     serveAfterServeIn(point, ghosts),
     serveInLandingOut(point, ghosts),
     placementMissing(point, ghosts),
+    // Not twice: the derivation's own "Into the net?" already asks.
+    own.some((mark) => mark.code === "net_by_trajectory") ||
+    count.some((mark) => mark.code === "net_by_trajectory")
+      ? null
+      : lastBallNearNet(point, ghosts),
   ];
   return [
     ...(lastCall
@@ -1491,7 +1533,8 @@ export function foldReviewItems(
 /**
  * The words an item is asked in: its question, but item 4 as the vendor
  * called the last ball ("Was the last ball out?") where `last_call_overruled`
- * is one of its members.
+ * is one of its members, and item 7 as "Contact point" where its open stroke
+ * has a landing and only the contact is missing.
  */
 export function reviewItemQuestion(
   item: Pick<ReviewItem, "id" | "question" | "members">,
@@ -1507,6 +1550,15 @@ export function reviewItemQuestion(
     )?.mark;
     if (forGame?.code === "last_ball_against_game") {
       return lastCallQuestion(forGame.params.call);
+    }
+  }
+  if (item.id === PLACEMENT_ITEM) {
+    const gap = item.members.find(
+      ({ mark, state }) =>
+        mark.code === "placement_missing" && state === "open",
+    )?.mark;
+    if (gap?.code === "placement_missing") {
+      return placementQuestion(gap.params.missing);
     }
   }
   return item.question;

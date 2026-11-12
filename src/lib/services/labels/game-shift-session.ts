@@ -16,8 +16,13 @@
 
 import { planTiebreakFold, tiebreakFolds } from "./tiebreak-fold";
 import { readAllPages } from "@/lib/data/admin-range-read";
-import { parseMatchScore, readBestOf } from "@/lib/data/labels-server";
-import { matchTiebreakSet } from "./set-scores";
+import {
+  parseFinalScore,
+  parseMatchScore,
+  readBestOf,
+} from "@/lib/data/labels-server";
+import { enteredScore, matchTiebreakSet } from "./set-scores";
+import { NO_SET_CUT, planSetCut } from "./set-cut";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   readJobAdScoring,
@@ -99,6 +104,10 @@ interface ShiftSessionRow {
   match_id: string | null;
   /** jsonb, read by `parseLabelStartScore`; null: the video starts at 0–0. */
   start_score?: unknown;
+  /** jsonb, read by `parseFinalScore`: the score for a match with none. */
+  final_score?: unknown;
+  /** False on a session labelled without the site's marks. */
+  marks_enabled?: boolean | null;
 }
 
 /** The match row the fold reads: the entered score and the format. */
@@ -181,13 +190,20 @@ async function runGamePlan(
     adScoring: boolean,
     matchTiebreakSet: number | null,
     start: LabelStartScore | null,
+    /**
+     * The score the labels answer to (`enteredScore`); null on a session
+     * labelled without marks, which is not held against it.
+     */
+    entered: number[][] | null,
   ) => GamePlan,
   failed: string,
 ): Promise<LabelGameShiftResult> {
   // One read of the session: its gate and what its scoring resolves from.
   const { data: session, error: sessionError } = await supabase
     .from("label_sessions")
-    .select("status, ad_scoring, job_id, match_id, start_score")
+    .select(
+      "status, ad_scoring, job_id, match_id, start_score, final_score, marks_enabled",
+    )
     .eq("id", sessionId)
     .maybeSingle<ShiftSessionRow>();
   if (sessionError) {
@@ -225,12 +241,17 @@ async function runGamePlan(
     job.data?.ad_scoring,
     readFormatAdScoring(match.data?.format),
   );
+  const matchScore = parseMatchScore(match.data?.score ?? null);
   const tiebreakSet = matchTiebreakSet(
-    parseMatchScore(match.data?.score ?? null),
+    matchScore,
     readBestOf(match.data?.format),
   );
   // Where the video starts in the match, as the console counts from it.
   const start = parseLabelStartScore(session.start_score ?? null);
+  const entered =
+    session.marks_enabled === true
+      ? enteredScore(parseFinalScore(session.final_score ?? null), matchScore)
+      : null;
 
   // The plan with no shots yet says whether any point moves under a new
   // server. Only then are shots read — the whole session's, not the moved
@@ -241,7 +262,7 @@ async function runGamePlan(
     ...toGamePoint(row),
     shots: [],
   }));
-  const dry = plan(shiftPoints, adScoring, tiebreakSet, start);
+  const dry = plan(shiftPoints, adScoring, tiebreakSet, start, entered);
   if ("error" in dry) return dry;
   const byId = new Map(shiftPoints.map((point) => [point.id, point]));
   const switching = dry.writes.some(
@@ -252,7 +273,7 @@ async function runGamePlan(
     const owned = await readShotsOfSession(supabase, sessionId);
     if ("error" in owned) return owned;
     shiftPoints = withShots(shiftPoints, owned.shots);
-    const full = plan(shiftPoints, adScoring, tiebreakSet, start);
+    const full = plan(shiftPoints, adScoring, tiebreakSet, start, entered);
     if ("error" in full) return full;
     planned = full;
   }
@@ -331,6 +352,40 @@ export async function writeLabelGameSplit(params: {
   );
 }
 
+/**
+ * Move the games filed after a set's end into the next set (set-cut.ts),
+ * planned on the rows as they stand now. `setNumber` is the set the console
+ * saw as over: a cut of any other set is refused, so a stale tab never moves
+ * games the labeller was not shown. Never throws.
+ */
+export async function writeLabelSetCut(params: {
+  supabase: AdminClient;
+  sessionId: unknown;
+  setNumber: unknown;
+}): Promise<LabelGameShiftResult> {
+  const sessionId = normaliseId(params.sessionId);
+  if (!sessionId) return { error: "Invalid session id." };
+  const setNumber = setNumberOf(params.setNumber);
+  if (setNumber === null) return { error: "Invalid set." };
+  return runGamePlan(
+    params.supabase,
+    sessionId,
+    (points, adScoring, tiebreakSet, start, entered) => {
+      const plan = planSetCut(points, adScoring, entered, tiebreakSet, start);
+      if ("error" in plan) return plan;
+      return plan.cut.setNumber === setNumber ? plan : { error: NO_SET_CUT };
+    },
+    "Could not start the next set",
+  );
+}
+
+/** A set number as an action hands it over: a whole number, 1 or more. */
+function setNumberOf(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1
+    ? value
+    : null;
+}
+
 /** The match's entered score beside its format, when the session has a match. */
 async function readMatchScore(
   supabase: AdminClient,
@@ -358,14 +413,8 @@ export async function writeLabelTiebreakFold(params: {
 }): Promise<LabelGameShiftResult> {
   const sessionId = normaliseId(params.sessionId);
   if (!sessionId) return { error: "Invalid session id." };
-  const { setNumber } = params;
-  if (
-    typeof setNumber !== "number" ||
-    !Number.isInteger(setNumber) ||
-    setNumber < 1
-  ) {
-    return { error: "Invalid set." };
-  }
+  const setNumber = setNumberOf(params.setNumber);
+  if (setNumber === null) return { error: "Invalid set." };
   return runGamePlan(
     params.supabase,
     sessionId,
@@ -454,6 +503,19 @@ export function foldLabelTiebreak(
     deps,
     (supabase) => writeLabelTiebreakFold({ supabase, sessionId, setNumber }),
     "make the tiebreak",
+    { sessionId: targetId(sessionId) },
+  );
+}
+
+export function cutLabelSet(
+  sessionId: unknown,
+  setNumber: unknown,
+  deps: LabelWriteDependencies = defaultLabelWriteDependencies,
+): Promise<LabelGameShiftResult> {
+  return gated(
+    deps,
+    (supabase) => writeLabelSetCut({ supabase, sessionId, setNumber }),
+    "start the next set",
     { sessionId: targetId(sessionId) },
   );
 }

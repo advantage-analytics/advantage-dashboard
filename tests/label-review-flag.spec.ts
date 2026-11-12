@@ -14,7 +14,7 @@ import {
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
 import { REVIEW_ITEM_QUESTION } from "@/lib/services/labels/marks-copy";
-import { openFlags } from "@/lib/services/labels/flag-nav";
+import { flagStopLabel, openFlags } from "@/lib/services/labels/flag-nav";
 import {
   greyJumpFirstItem,
   openReviewItems,
@@ -287,6 +287,36 @@ test.describe("a placement gap beside an amber question", () => {
     expect(reviewChip(reviewFlag(gapped, none, [gapped])!)!.text).toBe(
       REVIEW_ITEM_QUESTION[7],
     );
+  });
+
+  test("a stroke missing only its contact is asked as Contact point", () => {
+    const hitOnly = wonOnForehand({
+      shots: [
+        forehand({
+          id: "a",
+          eventId: 8,
+          videoTime: 1,
+          contactX: null,
+          contactY: null,
+          landingX: 2,
+          landingY: 20,
+        }),
+        forehand({
+          id: "b",
+          eventId: 9,
+          videoTime: 2,
+          landingX: 2,
+          landingY: 20,
+        }),
+      ],
+    });
+    const none = marksOf({});
+    expect(reviewChip(reviewFlag(hitOnly, none, [hitOnly])!)!.text).toBe(
+      "Contact point",
+    );
+    expect(openFlags([hitOnly], none).map(flagStopLabel)).toEqual([
+      "Contact point",
+    ]);
   });
 });
 

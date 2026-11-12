@@ -10,7 +10,8 @@ export type TreeElement = React.ReactElement<
 /**
  * The first element under `node` whose props satisfy `pred`. A function
  * component named in `enter` (or every one, for "all") is called on the way
- * down; any other is walked through its children, since a component that
+ * down, a memoised one by the name of the function it wraps; any other is
+ * walked through its children, since a component that
  * uses hooks cannot be called outside a render.
  */
 export function findWhere(
@@ -28,12 +29,21 @@ export function findWhere(
   if (!React.isValidElement(node)) return null;
   const element = node as TreeElement;
   if (pred(element.props)) return element;
-  if (
-    typeof element.type === "function" &&
-    (enter === "all" || enter.includes(element.type.name))
-  ) {
-    const render = element.type as (props: Props) => React.ReactNode;
-    return findWhere(render(element.props), pred, enter);
+  // A memoised component is entered through `memo`, by the name of the
+  // function it wraps.
+  const memoised = (element.type as { type?: unknown } | null)?.type;
+  const render =
+    typeof element.type === "function"
+      ? element.type
+      : typeof element.type === "object" && typeof memoised === "function"
+        ? memoised
+        : null;
+  if (render && (enter === "all" || enter.includes(render.name))) {
+    return findWhere(
+      (render as (props: Props) => React.ReactNode)(element.props),
+      pred,
+      enter,
+    );
   }
   return findWhere(element.props.children, pred, enter);
 }

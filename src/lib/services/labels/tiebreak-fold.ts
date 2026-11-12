@@ -30,7 +30,7 @@
  * Pure: game-operations-session.ts writes the plan, the console runs it.
  */
 
-import { labelPointFields, labelPointStatusAfterChange } from "./edit";
+import { livePointStatusAfter } from "./edit";
 import {
   gameFirstServer,
   rotateServers,
@@ -45,12 +45,7 @@ import {
   tiebreakDecided,
   type ScorablePoint,
 } from "./score";
-import type {
-  LabelGameType,
-  LabelPointStatus,
-  LabelSide,
-  LabelStartScore,
-} from "./session";
+import type { LabelGameType, LabelSide, LabelStartScore } from "./session";
 
 /** The two tiebreaks a fold can make. */
 export type TiebreakFoldType = Exclude<LabelGameType, "game">;
@@ -213,10 +208,7 @@ export function planTiebreakFold(
       ...(moves ? { game_number: fold.game.gameNumber } : {}),
       ...swap?.point,
     };
-    const status = labelPointStatusAfterChange(
-      { ...labelPointFields(point), status: point.status, seed: point.seed },
-      change,
-    ) as Exclude<LabelPointStatus, "deleted">;
+    const status = livePointStatusAfter(point, change);
     return {
       id: point.id,
       set_number: fold.game.setNumber,

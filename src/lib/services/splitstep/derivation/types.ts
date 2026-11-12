@@ -170,6 +170,13 @@ export interface SplitStepStroke {
    * `bounce_source`. Absent otherwise, and always on older files.
    */
   ballUntracked?: boolean;
+  /**
+   * True when that file says the ball's flight could not be fitted off this
+   * stroke but a bounce was still found (`ball_fit_ok` false with a
+   * `bounce_source`): a ball seen, not tracked well. Absent otherwise, and
+   * always on older files.
+   */
+  ballFitPoor?: boolean;
 }
 
 /** Strokes of one point, in play order, as segmented by the vendor. */

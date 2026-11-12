@@ -612,17 +612,19 @@ test.describe("end-of-point answers", () => {
     ]);
   });
 
-  test("the replay runs from about three strokes before the last through the last", () => {
+  test("the replay starts at the stroke the question is about and runs through the last", () => {
+    // A disputed winner asks about the last ball: the film goes straight to it.
     expect(step(rally(), disputed())?.replay).toEqual({
-      fromShotId: "a",
+      fromShotId: "d",
       toShotId: "d",
     });
-    const five = rally();
-    five.shots.push(stroke("e", 5));
-    expect(step(five, disputed())?.replay).toEqual({
-      fromShotId: "b",
-      toShotId: "e",
-    });
+    // A line call asks about the ball before the winner.
+    const line = step(
+      rally(),
+      marksOf({ [POINT]: [mark("ending_suspect_line", {})] }),
+    );
+    expect(line?.target.shotId).toBe("c");
+    expect(line?.replay).toEqual({ fromShotId: "c", toShotId: "d" });
     // Not an ending question: no replay.
     expect(
       step(rally(), marksOf({ [POINT]: [mark("pick_winner", {})] }))?.replay,

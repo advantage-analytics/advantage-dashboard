@@ -202,9 +202,11 @@ export function normalizeStroke(
     lineConfidence: num(raw.line_confidence),
     // Only a file with the fit columns can say this, so the key is set only
     // when it does: older files parse exactly as before.
-    ...(raw.ball_fit_ok === false && str(raw.bounce_source) === null
-      ? { ballUntracked: true }
-      : {}),
+    ...(raw.ball_fit_ok !== false
+      ? {}
+      : str(raw.bounce_source) === null
+        ? { ballUntracked: true }
+        : { ballFitPoor: true }),
   };
 }
 

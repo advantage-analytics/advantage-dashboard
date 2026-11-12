@@ -186,15 +186,6 @@ export function toCourtInWindow(
   };
 }
 
-/**
- * A half's window in the art's SVG frame, as `[x, y, width, height]`.
- */
-export function halfCourtFrame(
-  half: CourtHalf,
-): [number, number, number, number] {
-  return courtWindowFrame(halfTopY(half));
-}
-
 /** The zoomed art's `viewBox`: `-10.085 11.046 20.17 16.224` for `near`. */
 export function halfCourtViewBox(half: CourtHalf): string {
   return courtWindowViewBox(halfTopY(half));

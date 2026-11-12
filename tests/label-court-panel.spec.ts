@@ -3,6 +3,9 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+  NO_PLACEMENT,
+  estimateEnd,
+  estimateLabel,
   flipPlacement,
   setPlacementTarget,
   startPlacement,
@@ -40,6 +43,7 @@ type PanelProps = {
   info?: PointInfo | null;
   notice?: string | null;
   onEstimate?: (estimate: boolean) => void;
+  placedEnd?: { shotId: string; target: "contact" | "landing" } | null;
   landingOnly?: boolean;
   onLandingLink?: () => void;
 };
@@ -551,6 +555,54 @@ test.describe("the slid court and the estimate", () => {
     expect(render({ onEstimate: () => {} })).not.toContain(
       "data-court-estimate-box",
     );
+  });
+
+  test("after a click the box speaks for the end just placed, not the one the court moved on to", () => {
+    // The return's contact was just placed; the court is now on its landing.
+    const point = returnWith({ unclear: ["contact_x", "contact_y"] });
+    const moved = setPlacementTarget(
+      startPlacement("s-return", "far"),
+      "landing",
+      null,
+    );
+    const html = render({
+      point,
+      placement: moved,
+      placedEnd: { shotId: "s-return", target: "contact" },
+      onEstimate: () => {},
+    });
+    expect(html).toContain('data-court-estimate-placed=""');
+    expect(html).toMatch(/Off screen, so shot \d+’s contact is an estimate</);
+    // The contact is the estimate, though the landing is being placed.
+    expect(tagOf(html, 'type="checkbox"')).toContain('checked=""');
+    // The point's last landing placed: the court lets go, the box stays.
+    const letGo = render({
+      point,
+      placedEnd: { shotId: "s-return", target: "landing" },
+      onEstimate: () => {},
+    });
+    expect(letGo).toMatch(/Off screen, so shot \d+’s landing is an estimate</);
+    expect(letGo).not.toContain("data-court-legend");
+  });
+
+  test("`estimateEnd`: the placed end while its stroke is live, else the armed one", () => {
+    const armed = startPlacement("b", "near");
+    expect(estimateEnd(armed, null, ["a", "b"])).toEqual({
+      shotId: "b",
+      target: "contact",
+      placed: false,
+    });
+    expect(
+      estimateEnd(armed, { shotId: "a", target: "landing" }, ["a", "b"]),
+    ).toEqual({ shotId: "a", target: "landing", placed: true });
+    // A placed stroke of another point, or one since deleted, is let go.
+    expect(
+      estimateEnd(armed, { shotId: "z", target: "landing" }, ["a", "b"]),
+    ).toMatchObject({ shotId: "b", placed: false });
+    expect(estimateEnd(NO_PLACEMENT, null, ["a"])).toBeNull();
+    expect(
+      estimateLabel({ shotId: "a", target: "contact", placed: false }, 3),
+    ).toBe("Off screen, so this is an estimate");
   });
 });
 

@@ -484,6 +484,12 @@ export interface LabelSession {
    * sessions built without the match.
    */
   enteredHands?: Record<LabelSide, "right" | "left" | null>;
+  /**
+   * Whether the session is assigned to a labeller other than the viewer
+   * (`label_sessions.assigned_to`). Whoever looks in on one is a reader of
+   * someone else's work: the console makes no fix of its own there.
+   */
+  assignedToOther?: boolean;
   /** In `point_index` order. */
   points: LabelPoint[];
 }

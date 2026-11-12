@@ -27,9 +27,9 @@ import {
   rotateServers,
   type GameServerPoint,
 } from "./game-operations";
+import { liveRows, rowsByGame } from "./game-shift";
 import type { LabelGame } from "./operations";
 import { servingShot } from "./player-swap";
-import { gameKey } from "./score";
 import { opponent, type LabelGameType, type LabelSide } from "./session";
 
 export interface TiebreakServeOff {
@@ -59,17 +59,8 @@ export interface TiebreakServeOrder {
 export function tiebreakServeOrders(
   points: readonly GameServerPoint[],
 ): TiebreakServeOrder[] {
-  const games = new Map<string, GameServerPoint[]>();
-  for (const point of [...points].sort((a, b) => a.pointIndex - b.pointIndex)) {
-    if (point.status === "deleted") continue;
-    if (point.setNumber === null || point.gameNumber === null) continue;
-    const key = gameKey(point);
-    const rows = games.get(key);
-    if (rows) rows.push(point);
-    else games.set(key, [point]);
-  }
   const orders: TiebreakServeOrder[] = [];
-  for (const live of games.values()) {
+  for (const live of rowsByGame(liveRows(points)).values()) {
     const type = gameTypeOf(live);
     if (type === "game") continue;
     const first = orderFirstServer(live, type);

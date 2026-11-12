@@ -18,8 +18,7 @@
  */
 
 import {
-  labelPointFields,
-  labelPointStatusAfterChange,
+  livePointStatusAfter,
   labelShotStatusAfterPatch,
   type LabelShotValues,
 } from "./edit";
@@ -82,14 +81,17 @@ export interface PlayerSwap {
   shots: ShotSwapWrite[];
 }
 
+/** A point's live strokes in video order: what says who hit what. */
+export function liveSwapShots<T extends SwapShot>(shots: readonly T[]): T[] {
+  return orderLabelShots(shots).filter((shot) => shot.status !== "deleted");
+}
+
 /**
  * The stroke that says who served the point: its last live serve in video
  * order, else its first live stroke with a hitter. Null when it has neither.
  */
 export function servingShot<T extends SwapShot>(shots: readonly T[]): T | null {
-  const live = orderLabelShots(shots).filter(
-    (shot) => shot.status !== "deleted",
-  );
+  const live = liveSwapShots(shots);
   let serve: T | null = null;
   for (const shot of live) {
     if (isServeStroke(shot.stroke)) {
@@ -195,14 +197,9 @@ export function planPlayerSwitch(point: SwitchablePoint): PlannedPlayerSwitch {
     return { error: "This point has no shot with a player to switch." };
   }
   const flip = planPlayerFlip(point);
-  const status = labelPointStatusAfterChange(
-    { ...labelPointFields(point), status: point.status, seed: point.seed },
-    flip.point,
-  );
   return {
     ok: true,
-    // Only a live point gets here, so the rule never hands back `deleted`.
-    write: { ...flip.point, status: status as PlayerSwitchWrite["status"] },
+    write: { ...flip.point, status: livePointStatusAfter(point, flip.point) },
     shots: flip.shots,
   };
 }

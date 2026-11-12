@@ -664,7 +664,7 @@ test.describe("mark point checked", () => {
   test("the tick marks and unmarks through the console", () => {
     const pressTick = (pointId: string) => {
       const { tree, asked } = pointRowTree(pointId);
-      const tick = findByProp(tree, "data-check-row")!;
+      const tick = findByProp(tree, "data-check-row", ["PointRowBody"])!;
       (tick.props.onClick as (event: unknown) => void)({
         stopPropagation() {},
         // The tick marks its own element for the check's answer.

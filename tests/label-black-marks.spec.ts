@@ -588,8 +588,9 @@ test.describe("the hints read off the rows, with their answers", () => {
 
   test("the ending the strokes add up to is item 4's answer; a stroke's hint keeps its row under the stroke, and the panel asks its item", () => {
     const html = renderWell(stale(), marksOf(stale(), []));
-    // No row of its own, and never an item of its own.
-    expect(html).not.toContain('data-point-hint="ending_stale"');
+    // A row under the last ball with its one answer (so Y can take it), and
+    // never an item of its own.
+    expect(html).toContain('data-point-hint="ending_stale"');
     expect(chips(html)).toHaveLength(0);
     const item = review(stale(), marksOf(stale(), []))!;
     expect(item.id).toBe(4);
@@ -658,8 +659,10 @@ test.describe("the hints read off the rows, with their answers", () => {
     });
     const marks = marksOf(point, [call, mark("ending_suspect_line", {})]);
     const html = renderWell(point, marks, { onSelectShot: () => {} });
-    // Asked in the court panel, not under the last ball.
-    expect(html).not.toContain('data-point-hint="last_call_overruled"');
+    // Asked under the last ball too, with its one-click answer, so a point
+    // the labeller opened themself (no flag jump, no court-panel step) has it.
+    expect(html).toContain('data-point-hint="last_call_overruled"');
+    expect(html).toContain("Yes, make it out");
     // With its contact placed, the step asks how the last ball ended.
     const placed = {
       ...point,
