@@ -22,6 +22,7 @@ import {
   type MatchPoint,
 } from "@/lib/data/match-points-server";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { insightSummaryFor } from "@/lib/data/insight-voice";
 import { formatMatchDuration } from "@/lib/format/duration";
 import { matchPageUrl, matchShareUrl } from "@/lib/data/match-share-url";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
@@ -399,7 +400,11 @@ export interface SharedMatchData {
    * when that workspace never saved any, or the link has no visualizations.
    */
   bandSettings: BandSettings;
-  /** The sharer's insight summary, already `sides.pick`ed; null when none. */
+  /**
+   * The insight summary for the side the page is turned to, in the observer
+   * voice (`insight-voice.ts`): written about the player, by name. Null when
+   * the match has none, or only the wording that says "you".
+   */
   summary: string | null;
   /**
    * The person who shared it. Null when their account is gone
@@ -741,7 +746,15 @@ export const getSharedMatchData = cache(
       dbRow.insights?.player1,
       dbRow.insights?.player2,
     );
-    const summary = insight?.summary?.trim() || null;
+    // Always the observer voice, for the sharer too: the page is one URL
+    // read signed out. A match summarised before that voice existed shows no
+    // summary here rather than "you" spoken to a stranger.
+    const summary = insightSummaryFor(
+      insight,
+      "observer",
+      { you: sides.you.name, opp: sides.opp.name },
+      "none",
+    );
 
     const winner = sharedMatchWinner(dbRow.score, match.matchContext);
 

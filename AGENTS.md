@@ -180,6 +180,13 @@ and dropped the statistics — don't lengthen it without sampling live output fi
 `tests/generate-insights-prompt.spec.ts` pins the wording. The function runs from what is
 deployed, not from git: a prompt change needs `deploy_edge_function` too.
 
+Each summary is written twice: `summary` speaks to the player ("You won…"), and
+`observer_summary` says the same thing about them with `[PLAYER]` / `[OPPONENT]` tokens
+the app fills with the match's names. Only the player the report is turned to reads
+"you"; a coach, a teammate, an admin and every share-link reader get the observer voice.
+`src/lib/data/insight-voice.ts` is the one place that picks, keyed on `match.viewerIsYou`
+— never show `summary` to a reader without going through it.
+
 Product mail renders through `src/lib/services/email/shell.ts` and sends via Resend;
 auth mail is Supabase's own, in `supabase/email-templates/*.html`. `shell.ts` is a
 hand-copy of that markup — change one and you must change the other. Read

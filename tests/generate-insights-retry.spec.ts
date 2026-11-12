@@ -13,6 +13,9 @@ const PLAYER = {
   headline: "Your first serve carried the match.",
   description:
     "You won 74% of first-serve points, so keep building your service games around it.",
+  observer_headline: "[PLAYER]'s first serve carried the match.",
+  observer_description:
+    "[PLAYER] won 74% of first-serve points, so they should keep building their service games around it.",
 };
 const REVIEW = JSON.stringify({ player1: PLAYER, player2: PLAYER });
 
