@@ -64,12 +64,19 @@ import {
 } from "@/lib/services/labels/suggestions";
 import { courtPair } from "./label-black-format";
 import {
+  AcceptKeyChip,
   AMBER_SUGGESTION_INK,
   RAIL_PRESS,
   BlackTextAction,
   BlackUndoButton,
 } from "./label-black-parts";
-import { PencilMark, pointHints, type PointHint } from "./label-black-mark";
+import {
+  PencilMark,
+  acceptedHint,
+  firstHintAction,
+  pointHints,
+  type PointHint,
+} from "./label-black-mark";
 import { directionWords, positionWords } from "./shot-position-words";
 import {
   EditableCell,
@@ -85,7 +92,6 @@ import {
   formatCourtPoint,
   formatFileTime,
   isFault,
-  parseCourtPoint,
   parseFileTime,
   sideOptions,
   placementLabel,
@@ -311,6 +317,10 @@ export function BlackShotsWell({
   const live = new Set(
     point.shots.filter((s) => s.status !== "deleted").map((s) => s.id),
   );
+  // The row Y answers, marked with the key (`acceptedHint`).
+  const accepted = edit.editable
+    ? acceptedHint(hints, point, edit.selectedShotId)
+    : null;
   const hintLineAfter = (shotId: string) => {
     for (const hint of hints) {
       if (hint.afterShotId !== shotId) continue;
@@ -321,6 +331,7 @@ export function BlackShotsWell({
           point={point}
           edit={edit}
           arrive={arrive()}
+          accepted={hint === accepted}
         />,
       );
     }
@@ -1300,14 +1311,18 @@ function BlackEndedSuggestion({
   point,
   edit,
   arrive,
+  accepted = false,
 }: {
   hint: PointHint;
   point: LabelPoint;
   edit: EditContext;
   arrive?: number;
+  /** The row the accept key answers: its first answer wears the key. */
+  accepted?: boolean;
 }) {
   const arrival = rowArrival(arrive);
   const operations = edit.editable ? edit.operations : undefined;
+  const first = accepted ? firstHintAction(hint) : null;
   // "Shot placement" can't move the score, so it never wears the amber.
   const grey = hint.code === "placement_missing";
   // Split first, as the tray orders it; then the removal.
@@ -1359,6 +1374,7 @@ function BlackEndedSuggestion({
           }}
         >
           {action.label}
+          {action === first ? <AcceptKeyChip /> : null}
         </BlackTextAction>
       ))}
       {operations && hint.dismissKey ? (

@@ -15,7 +15,6 @@ import {
   endsPointWhenMissed,
   isLiveShot,
   isMissedResult,
-  isServeStroke,
   opponent,
   orderLabelShots,
   type LabelPoint,
@@ -25,9 +24,9 @@ import {
   type LabelSide,
 } from "./session";
 import {
-  labelPointFields,
-  labelPointStatusAfterChange,
+  livePointStatusAfter,
   type LabelShotPatch,
+  type LivePointStatus,
 } from "./edit";
 import {
   planPlayerSwap,
@@ -58,7 +57,6 @@ export function isLabelDeleteReason(
 }
 
 type LiveShotStatus = Exclude<LabelShotStatus, "deleted">;
-type LivePointStatus = Exclude<LabelPointStatus, "deleted">;
 
 export interface ShotDeleteWrite {
   status: "deleted";
@@ -615,15 +613,11 @@ export function planPointMove(
     ...(switches ? { server: destinationServer } : {}),
     ...(swap ? swap.point : {}),
   };
-  const status = labelPointStatusAfterChange(
-    { ...labelPointFields(point), status: point.status, seed: point.seed },
-    change,
-  );
-  // `status` can only be live here: a tombstone was refused above.
+  // A tombstone was refused above, so the point is live.
   const write: PointMoveWrite = {
     set_number: to.setNumber,
     game_number: to.gameNumber,
-    status: status as LivePointStatus,
+    status: livePointStatusAfter(point, change),
   };
   if (switches) write.server = destinationServer;
   if (swap) {

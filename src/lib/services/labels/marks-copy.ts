@@ -218,7 +218,18 @@ export const REVIEW_ITEM_QUESTION = {
   7: "Shot placement",
 } as const;
 
+/**
+ * Item 7 by what its stroke is missing. A stroke with its landing placed has
+ * its placement; only where it was hit is unknown, so the flag says that.
+ */
+export function placementQuestion(missing: PlacementGap): string {
+  return missing === "contact" ? "Contact point" : REVIEW_ITEM_QUESTION[7];
+}
+
 /** The action a live hint offers, by code; the rest offer none. */
+/** "Into the net?"'s yes. */
+export const MAKE_IT_NET_ACTION = "Yes, make it net";
+
 export const HINT_ACTION_LABEL = {
   second_serve_as_first: "Make it a second serve",
   shot_after_point_end: "Split here",
@@ -278,11 +289,6 @@ export function thinTrackingDetail(missing: number, serves: number): string {
 
 /** The chip's name: what is wrong. */
 export const SCORE_MISMATCH_LABEL = "Score doesn’t add up";
-
-/** The chip's words: the labelled pair, then the entered one. */
-export function scoreMismatchText(labelled: string, entered: string): string {
-  return `${labelled} · entered ${entered}`;
-}
 
 /** The chip's hover sentence. */
 export function scoreMismatchDetail(
@@ -369,8 +375,14 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       return `This game doesn’t add up where you set its start: ${names[gameWinner]} should win this point. If the last ball was ${call}, the point goes to ${names[gameWinner]}.`;
     }
     case "last_shot_untracked":
+      if (mark.params.fit === "poor") {
+        return "The ball off the last shot was not tracked well. About four times in ten the point really ends on another shot: this one is a swing at a dead ball to delete, or the rally went on past it.";
+      }
       return "No ball was tracked off the last shot. Most often it isn’t a shot at all, just a swing at a dead ball: delete it, and the point ends on the shot before.";
     case "net_by_trajectory":
+      if (mark.params.by === "landing") {
+        return "The last ball is called in but came down within a metre of the net. About four times in five that is a ball into the net: watch it, and make it net if it stayed on this side.";
+      }
       return "The ball crossed the net barely above the tape, but nothing calls it a net ball. Watch the net: if the ball hit it and stayed on this side, change the result to net.";
     case "pick_winner":
       return "The score, the last shot and the next serve don’t agree on who won. Watch the clip and choose.";

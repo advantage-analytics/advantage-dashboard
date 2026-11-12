@@ -563,16 +563,22 @@ export async function readLabelSessionRows<T = undefined>(
     kind: session.kind === "practice" ? "practice" : "analyst",
   };
 
-  const [extra, matchResult, jobResult, pointRows, shotRows] =
+  const matchRead = db
+    .from("matches")
+    .select(
+      "id, player1_name, player2_name, score, format, player_hand, opponent_hand, player1_id, player2_id, opponent_player_id",
+    )
+    .eq("id", row.match_id)
+    .maybeSingle<DbMatch>()
+    // A real promise: the builder would send the query once per `then`.
+    .then((read) => read);
+  const [extra, matchResult, enteredHands, jobResult, pointRows, shotRows] =
     await Promise.all([
       beside?.(row) as Promise<T>,
-      db
-        .from("matches")
-        .select(
-          "id, player1_name, player2_name, score, format, player_hand, opponent_hand, player1_id, player2_id, opponent_player_id",
-        )
-        .eq("id", row.match_id)
-        .maybeSingle<DbMatch>(),
+      matchRead,
+      // The hands need the match row alone, so they are read as soon as it
+      // lands, beside the points and shots rather than after them.
+      matchRead.then((read) => readEnteredHands(db, read.data ?? null)),
       // The job's scoring is only the fallback for a session that has not
       // set its own; a session whose job is gone has nothing to fall back to.
       readJobAdScoring(db, row),
@@ -609,7 +615,7 @@ export async function readLabelSessionRows<T = undefined>(
     shotRows,
     jobResult.data ?? null,
   );
-  built.enteredHands = await readEnteredHands(db, match);
+  built.enteredHands = enteredHands;
   return { session: built, beside: extra };
 }
 

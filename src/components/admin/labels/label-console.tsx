@@ -225,7 +225,9 @@ import type { CourtPoint } from "./court-geometry";
 import {
   tiebreakHitterHalf,
   NO_PLACEMENT,
+  estimateEnd,
   estimatePatch,
+  type PlacedEnd,
   flipPlacement,
   hitterHalf,
   nextPlacement,
@@ -288,8 +290,24 @@ import {
 } from "@/lib/services/labels/flag-nav";
 import {
   matchTiebreakSet,
+  enteredScore,
   sessionScoreMismatch,
 } from "@/lib/services/labels/set-scores";
+import { planSetCut, setCutKey } from "@/lib/services/labels/set-cut";
+import {
+  ACCEPT_KEY,
+  acceptedHint,
+  firstHintAction,
+  pointHints,
+} from "./label-black-mark";
+import {
+  autoGameFix,
+  autoGameFixKey,
+} from "@/lib/services/labels/game-auto-shift";
+import {
+  gameServeFix,
+  gameServeFixKey,
+} from "@/lib/services/labels/game-serve-fix";
 import {
   planTiebreakFold,
   tiebreakFolds,
@@ -377,6 +395,60 @@ export function escapeLeavesField(target: EventTarget | null): boolean {
 }
 /** A point row whose insert is still in flight (`insertPoint`), likewise. */
 const PENDING_POINT_PREFIX = "pending-point-";
+
+/**
+ * Run `run` once for each `key`, when `ready`: the console's own fixes, which
+ * must never be tried twice — a fix the labeller undid, or one the server
+ * refused, stays undone. The keys tried are kept for the browser under
+ * `storageKey`, so a reload does not try them again either; where storage is
+ * blocked they last the visit. Answers whether `key` is still to run.
+ */
+function useOncePerKey(
+  storageKey: string,
+  key: string | null,
+  ready: boolean,
+  run: () => void,
+): boolean {
+  const name = `label-auto-fix:${storageKey}`;
+  const [tried, setTried] = useState<ReadonlySet<string>>(() => {
+    try {
+      const parsed: unknown = JSON.parse(
+        window.localStorage.getItem(name) ?? "[]",
+      );
+      return new Set(
+        Array.isArray(parsed)
+          ? parsed.filter((k): k is string => typeof k === "string")
+          : [],
+      );
+    } catch {
+      // No storage (private window, server render): the visit's own set.
+      return new Set<string>();
+    }
+  });
+  const pending = key !== null && !tried.has(key);
+  useEffect(() => {
+    if (!pending || !ready || key === null) return;
+    const next = new Set(tried).add(key);
+    // The key is marked in the same pass that runs it: that is the "once".
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTried(next);
+    try {
+      window.localStorage.setItem(
+        name,
+        JSON.stringify([...next].slice(-AUTO_FIX_KEYS_KEPT)),
+      );
+    } catch {
+      // Kept for the visit only.
+    }
+    run();
+    // `run` reads the rows `key` was found on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, ready, key, name]);
+  return pending;
+}
+
+/** How many tried keys a session keeps in the browser. */
+const AUTO_FIX_KEYS_KEPT = 200;
 
 /**
  * The add-shot slot a flag jump landed on (`ReviewStep.target.slot`): the
@@ -744,6 +816,9 @@ export function LabelConsole({
     INITIAL_SAVE_STATUS,
   );
   const [confirm, setConfirm] = useState<LabelConfirm | null>(initialConfirm);
+  // The end the last court click placed: what "Off screen, so this is an
+  // estimate" speaks for until the labeller picks another stroke or end.
+  const [placedEnd, setPlacedEnd] = useState<PlacedEnd | null>(null);
   // The site-removed strokes the rail shows as their struck-through row.
   const [openGhosts, setOpenGhosts] = useState<ReadonlySet<string>>(
     () => new Set(initialOpenGhostIds ?? []),
@@ -1001,6 +1076,9 @@ export function LabelConsole({
     { seek = true, review = false }: { seek?: boolean; review?: boolean } = {},
   ) {
     if (!review) setReviewMode(false);
+    // A stroke the labeller chose themself: the estimate box is that one's.
+    // A review step's own landing keeps it on the end just placed.
+    if (!review) setPlacedEnd(null);
     if (seek) cancelReplay();
     setArmedSlot(null);
     // Already selected: a position cell switches the court's end and nothing
@@ -1412,6 +1490,7 @@ export function LabelConsole({
     // After the success above, which counts as a write settling.
     setUndoEmpty(result.undone === null || result.remaining === 0);
     setRedoable(result.redoable);
+    setAutoHeld(true);
   }
 
   // Redo: what the last undos took back, newest first, while no other change
@@ -1425,6 +1504,12 @@ export function LabelConsole({
   const [fieldSaves, setFieldSaves] = useState(0);
   if (redoable > 0 && saveStatus.pending > fieldSaves && !undoing && !redoing) {
     setRedoable(0);
+  }
+  // The console's own fixes (below) wait after an Undo or Redo for the
+  // labeller's next write to the rows, read off the same count.
+  const [autoHeld, setAutoHeld] = useState(false);
+  if (autoHeld && saveStatus.pending > fieldSaves && !undoing && !redoing) {
+    setAutoHeld(false);
   }
   const canRedo =
     editable &&
@@ -1452,6 +1537,7 @@ export function LabelConsole({
     dispatchSave({ type: "success", at: Date.now() });
     setRedoable(result.remaining);
     if (result.redone !== null) setUndoEmpty(false);
+    setAutoHeld(true);
   }
 
   async function addAllMissingShots() {
@@ -1834,6 +1920,118 @@ export function LabelConsole({
     runGameShift(plan, () => fold_(session.id, setNumber));
   }
 
+  // The console's two writes of its own, each on settled rows and each tried
+  // once (`useOncePerKey`). Never on a practice copy, which is graded on what
+  // its labeller did, nor on a session labelled without marks; and not after
+  // an Undo or Redo until the labeller's next own write, so ⌘Z is never
+  // answered by the console putting the same thing back.
+  const autoFixes =
+    editable && session.kind !== "practice" && liveMarks !== null;
+  const rowsSettled =
+    saveStatus.pending === 0 &&
+    fieldSaves === 0 &&
+    !undoing &&
+    !redoing &&
+    !statusSaving &&
+    !confirm &&
+    !autoHeld;
+
+  // A game whose checked points run past its end, or stop short of it
+  // (game-auto-shift.ts): the rows move to the game the score says, with the
+  // slot's own two operations. First, since a set is counted off its games.
+  const gameFix = useMemo(
+    () =>
+      autoFixes && operations
+        ? autoGameFix(points, adScoring, matchTiebreakSetNumber, startScore)
+        : null,
+    [
+      autoFixes,
+      operations,
+      points,
+      adScoring,
+      matchTiebreakSetNumber,
+      startScore,
+    ],
+  );
+  const gameFixPending = useOncePerKey(
+    `${session.id}:game-fix`,
+    gameFix ? autoGameFixKey(gameFix) : null,
+    rowsSettled,
+    () => {
+      if (!gameFix) return;
+      if (gameFix.kind === "shift") shiftGameOverflow(gameFix.fromPointId);
+      else pullGamePoints(gameFix.gameKey);
+    },
+  );
+
+  // A set that reached its entered score with games still filed under it
+  // (set-cut.ts): those games move to the next set, one set a pass, so a cut
+  // cascades down the match.
+  const cutSetAction = operations?.cutSet;
+  const setCutPlan = useMemo(() => {
+    if (!autoFixes || !cutSetAction || gameFixPending) return null;
+    const plan = planSetCut(
+      points,
+      adScoring,
+      enteredScore(sessionFields.finalScore, session.matchScore),
+      matchTiebreakSetNumber,
+      startScore,
+      scores.games,
+    );
+    return "error" in plan ? null : plan;
+  }, [
+    gameFixPending,
+    autoFixes,
+    cutSetAction,
+    points,
+    scores,
+    adScoring,
+    sessionFields.finalScore,
+    session.matchScore,
+    matchTiebreakSetNumber,
+    startScore,
+  ]);
+  const cutPending = useOncePerKey(
+    `${session.id}:set-cut`,
+    setCutPlan ? setCutKey(setCutPlan.cut) : null,
+    rowsSettled,
+    () => {
+      if (!setCutPlan || !cutSetAction) return;
+      const { setNumber } = setCutPlan.cut;
+      runGameShift(setCutPlan, () => cutSetAction(session.id, setNumber));
+    },
+  );
+
+  // One player serves every point of an ordinary game (game-serve-fix.ts): a
+  // game whose rows say otherwise is put right — the game's server given to
+  // every point, a point hit the other way round switched as a whole, a serve
+  // alone given to the wrong player handed back. After any cut still to run.
+  const serveFix = useMemo(() => {
+    if (!autoFixes || !operations || cutPending || gameFixPending) return null;
+    if (points.some((p) => p.id.startsWith(PENDING_POINT_PREFIX))) return null;
+    return gameServeFix(points);
+  }, [autoFixes, operations, cutPending, gameFixPending, points]);
+  useOncePerKey(
+    `${session.id}:serve-fix`,
+    serveFix ? gameServeFixKey(serveFix) : null,
+    rowsSettled,
+    () => {
+      if (!serveFix) return;
+      if (serveFix.kind === "server") {
+        setGameServer(serveFix.game, serveFix.server);
+      } else if (serveFix.kind === "switch") {
+        void switchPlayersByEnd(serveFix.pointIds);
+      } else {
+        const { shotIds, server } = serveFix;
+        void (async () => {
+          for (const shotId of shotIds) {
+            await patchShot(shotId, { hitter: server });
+          }
+        })();
+      }
+    },
+  );
+
   /**
    * The mirror of `shiftGameOverflow`: a game left unfinished pulls the next
    * game's first rows in until it is decided (`planGamePull`). A plan that says
@@ -2083,8 +2281,8 @@ export function LabelConsole({
    * the rail's "Missing shot?" row, or the lone first serve's second serve
    * — with nothing selected and nothing written until the labeller takes
    * the step's "Add the shot"; a step with no target opens the point at its
-   * first stroke. An end-of-point question (`step.replay`) plays the last
-   * strokes through the last ball and pauses just after it, the court armed
+   * first stroke. An end-of-point question (`step.replay`) plays from the
+   * stroke it asks about through the last ball and pauses just after it, the court armed
    * on that ball's landing throughout, so one click answers; the replay's
    * seek is the only one made (`selectShot`'s is skipped).
    */
@@ -3000,6 +3198,11 @@ export function LabelConsole({
   const letKey = useRef<() => boolean>(() => false);
   const tagKey = useRef<(key: string) => boolean>(() => false);
   const netKey = useRef<() => boolean>(() => false);
+  // Y: the open point's suggestion, answered (label-black-mark.tsx
+  // `acceptedHint`) — or, at an armed "Missing shot?" slot, the shot added.
+  const acceptKey = useRef<() => boolean>(() => false);
+  // The rail's answer for the row between points at the open one.
+  const acceptRow = useRef<(() => void) | null>(null);
   const resetShotKey = useRef<() => boolean>(() => false);
   const resetPointKey = useRef<() => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
@@ -3558,8 +3761,55 @@ export function LabelConsole({
       requestPatchShot(shot.id, patch);
       return true;
     };
+    acceptKey.current = () => {
+      if (!operable || confirm || !expanded) return false;
+      // The slot a flag jump armed: its "Add shot".
+      if (
+        armedSlot &&
+        armedSlot.pointId === expanded.id &&
+        placement.shotId === null
+      ) {
+        return addShotKey.current();
+      }
+      const hint = acceptedHint(
+        pointHints(expanded, liveMarks, names, {
+          onPatchPoint: railHandlers.patchPoint,
+          onPatchShot: railHandlers.patchShot,
+          onRemoveShotsAfter: railHandlers.removeShotsAfter,
+          operations: rowOperations,
+        }),
+        expanded,
+        placement.shotId,
+      );
+      const action = hint ? firstHintAction(hint) : null;
+      if (action) {
+        action.run();
+        return true;
+      }
+      // Nothing on the point itself: the row between points the rail marked.
+      const row = acceptRow.current;
+      if (!row) return false;
+      row();
+      return true;
+    };
     strokeKey.current = (key) => {
       if (!operable || confirm) return false;
+      // At a "Missing shot?" slot nothing is selected, and the stroke before
+      // the gap is often the one with no spin: the vendor lost the ball off
+      // it, which is also why the next stroke is missing. A spin key there
+      // is that stroke's, and the slot stays armed for "Add shot".
+      const before =
+        armedSlot &&
+        placement.shotId === null &&
+        expanded?.id === armedSlot.pointId &&
+        /^[1-4]$/.test(key)
+          ? findShot(points, armedSlot.afterShotId)
+          : null;
+      if (before && before.status !== "deleted") {
+        const spin = strokeKeyChange(key, before);
+        if (spin) requestPatchShot(before.id, spin);
+        return true;
+      }
       const shot = keyShot();
       if (!shot) return false;
       const owner = points.find((p) => p.shots.some((s) => s.id === shot.id));
@@ -3734,15 +3984,18 @@ export function LabelConsole({
                         ? () => letKey.current()
                         : isNetKey(key) && !event.shiftKey
                           ? () => netKey.current()
-                          : shotTagForKey(key) && !event.shiftKey
-                            ? () => tagKey.current(key)
-                            : lower === "r"
-                              ? event.shiftKey
-                                ? () => resetPointKey.current()
-                                : () => resetShotKey.current()
-                              : key === "Delete" || key === "Backspace"
-                                ? () => deleteShotKey.current()
-                                : null;
+                          : lower === ACCEPT_KEY.toLowerCase() &&
+                              !event.shiftKey
+                            ? () => acceptKey.current()
+                            : shotTagForKey(key) && !event.shiftKey
+                              ? () => tagKey.current(key)
+                              : lower === "r"
+                                ? event.shiftKey
+                                  ? () => resetPointKey.current()
+                                  : () => resetShotKey.current()
+                                : key === "Delete" || key === "Backspace"
+                                  ? () => deleteShotKey.current()
+                                  : null;
       if (
         consoleKey &&
         !event.metaKey &&
@@ -3939,6 +4192,7 @@ export function LabelConsole({
         : null,
     );
     setPlacement(next.state);
+    setPlacedEnd({ shotId: shot.id, target: placement.target });
     void patchShot(shot.id, patch, { landingOnly });
   }
 
@@ -3971,6 +4225,7 @@ export function LabelConsole({
     const shot =
       placement.shotId === null ? null : findShot(points, placement.shotId);
     setPlacement(setPlacementTarget(placement, target, shot?.contactY ?? null));
+    setPlacedEnd(null);
   }
 
   // The same player, court panel and rail in both layouts, every callback
@@ -4078,8 +4333,9 @@ export function LabelConsole({
   // rows (the optimistic apply, in the same commit as the click), the open
   // point's step is read again. Another question still open on the point
   // lands straight away (`landOnStep`: its stroke or slot, the court armed,
-  // its replay); nothing open stays on the corrected point — the next
-  // flagged point is `]`'s to reach, never the console's own. Never from a
+  // its replay); nothing open stays on the corrected point, the court back
+  // on the whole point with no stroke selected — the next flagged point is
+  // `]`'s to reach, never the console's own. Never from a
   // refresh the labeller did not cause (`pendingAdvance` is null then),
   // never once they have selected something of their own (review mode off),
   // and never under a confirm or an open menu.
@@ -4104,6 +4360,12 @@ export function LabelConsole({
       return;
     }
     if (verdict === "advance") landOnStepRef.current(expanded, step);
+    // Nothing left to ask on the point: the court lets go of the stroke the
+    // last answer placed (or moved on to) and shows the whole point.
+    else {
+      setArmedSlot(null);
+      setPlacement(NO_PLACEMENT);
+    }
     // `step` and `expanded` move with `stepKey`; the key is the comparison.
     // `points` is here for a forced advance, whose key does not move.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4112,13 +4374,22 @@ export function LabelConsole({
   if (armedSlot && armedSlot.pointId !== currentPointId) setArmedSlot(null);
   // "Off screen, so this is an estimate": the placed end's two names in the
   // stroke's `unclear`, through the rail's shot edit.
+  // It speaks for the end the last click placed (`placedEnd`), since the
+  // court has moved on by the time the labeller can say so; else for the end
+  // being placed.
   function setEstimate(estimate: boolean) {
-    const shot =
-      placement.shotId === null ? null : findShot(points, placement.shotId);
-    if (!shot) return;
+    const end = expanded
+      ? estimateEnd(
+          placement,
+          placedEnd,
+          liveShotsInOrder(expanded, drawsGhosts(liveMarks)).map((s) => s.id),
+        )
+      : null;
+    const shot = end ? findShot(points, end.shotId) : null;
+    if (!end || !shot) return;
     railHandlers.patchShot(
       shot.id,
-      estimatePatch(shot.unclear, placement.target, estimate),
+      estimatePatch(shot.unclear, end.target, estimate),
     );
   }
   // One line about the open point for the left panel while the film runs.
@@ -4158,6 +4429,7 @@ export function LabelConsole({
       ghosts={drawsGhosts(liveMarks)}
       info={pointInfo}
       onEstimate={courtEditable ? setEstimate : undefined}
+      placedEnd={placedEnd}
       clock={clock}
       notice={
         placementNoticeState &&
@@ -4218,6 +4490,7 @@ export function LabelConsole({
       onRedo={editable && operations?.redo ? () => void redoNext() : undefined}
       canRedo={canRedo}
       onShowShortcuts={fullScreen ? () => setShortcutsOpen(true) : undefined}
+      acceptRowRef={acceptRow}
       missingShots={missingShotAdds.length}
       onAddMissingShots={
         editable && operations?.addMissingShots
@@ -4672,6 +4945,11 @@ export interface LabelConsoleOperations {
   ) => Promise<LabelGameShiftResult>;
   /** Makes set `setNumber`'s game after 6–6 a tiebreak. Same answer. */
   foldTiebreak?: (
+    sessionId: string,
+    setNumber: number,
+  ) => Promise<LabelGameShiftResult>;
+  /** Moves the games after set `setNumber`'s end into the next set. Same answer. */
+  cutSet?: (
     sessionId: string,
     setNumber: number,
   ) => Promise<LabelGameShiftResult>;

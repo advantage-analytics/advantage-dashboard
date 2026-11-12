@@ -3,6 +3,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { railAmber } from "./label-rail-tone";
 
@@ -12,6 +13,27 @@ import { railAmber } from "./label-rail-tone";
  * Tailwind class an ink has to be a whole literal so the class is generated;
  * those live in the class constants below.
  */
+
+/** The key that takes a suggestion's answer, on the row and in the sheet. */
+export const ACCEPT_KEY = "Y";
+
+/**
+ * The key on the answer Y takes: drawn on the one suggestion row the accept
+ * key would answer, so what the key does is on screen before it is pressed.
+ */
+export function AcceptKeyChip() {
+  return (
+    <Kbd
+      size="sm"
+      variant="flat"
+      mono
+      data-accept-key=""
+      className="ml-1.5 bg-white/[0.08] text-white/60 shadow-none"
+    >
+      {ACCEPT_KEY}
+    </Kbd>
+  );
+}
 
 /**
  * A rail control's pressed state: the button dips to 0.96 under the pointer,

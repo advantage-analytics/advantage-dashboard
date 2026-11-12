@@ -9,6 +9,7 @@ import type {
 } from "@/lib/services/labels/marks";
 import {
   HINT_ACTION_LABEL,
+  MAKE_IT_NET_ACTION,
   hintLabel,
   lastCallAction,
   lastCallUnplacedHover,
@@ -21,6 +22,7 @@ import {
   endingContradiction,
   endingStale,
   hoverLine,
+  lastBallNearNet,
   lastCallAnswer,
   lastLandingMissing,
   missingPointAdded,
@@ -40,7 +42,12 @@ import {
   type MarkTone,
   type ReviewItem,
 } from "@/lib/services/labels/marks-state";
-import { isMissedResult, type LabelPoint } from "@/lib/services/labels/session";
+import {
+  isLetServe,
+  isMissedResult,
+  liveShotsInOrder,
+  type LabelPoint,
+} from "@/lib/services/labels/session";
 import {
   hintDismissKey,
   isSuggestionKey,
@@ -343,6 +350,14 @@ export function pointHints(
     placementMissing(point, ghosts),
   ];
   const { hints: own, count } = pointRowMarkList(point, marks);
+  // "Into the net?" off the landing, unless the derivation already asks it.
+  if (![...own, ...count].some((mark) => mark.code === "net_by_trajectory")) {
+    live.push(lastBallNearNet(point, ghosts));
+  }
+  // The ball the last-ball answers are written to.
+  const lastBallId = liveShotsInOrder(point, ghosts)
+    .filter((shot) => !isLetServe(shot))
+    .at(-1)?.id;
   // "Was the last ball in?" is a counted mark; its answer is offered (in the
   // court panel's current item) until the labeller changes the last ball's
   // result.
@@ -356,14 +371,31 @@ export function pointHints(
       : own),
     ...live.filter((mark): mark is LabelMark => mark !== null),
   ];
+  // "Different ending?" sits under the last ball too, with its one answer —
+  // unless that ball is already asked about: its call settles the ending.
+  const lastBallAsked = hints.some((mark) =>
+    LAST_BALL_QUESTIONS.has(mark.code),
+  );
   return hints.flatMap((mark) => {
     // "Point ended here" is a suggestion: once dismissed it is not drawn.
     const ended =
       mark.code === "shot_after_point_end" ? mark.params.shotId : undefined;
     const key = strokeHintKey(mark);
     // A draft stroke has no id to store yet: no Dismiss until it lands.
-    const actions = hintActions(mark, point, edit, lastCall?.shotId);
-    const afterShotId = ended ?? hintShotId(mark);
+    const actions = hintActions(
+      mark,
+      point,
+      edit,
+      lastCall?.shotId,
+      lastBallId,
+    );
+    const afterShotId =
+      ended ??
+      (mark.code === "ending_stale"
+        ? lastBallAsked
+          ? undefined
+          : lastBallId
+        : hintShotId(mark, lastCall?.shotId, lastBallId));
     // Every hint drawn as a question (a row of its own: one with an answer,
     // or about one stroke) can be answered "no": Dismiss stores its code.
     const asked = actions.length > 0 || afterShotId !== undefined;
@@ -384,9 +416,26 @@ export function pointHints(
   });
 }
 
-/** The stroke a hint asks about, for the hints that name one. */
-function hintShotId(mark: LabelMark): string | undefined {
+/**
+ * The stroke a hint asks about, for the hints that name one: its row sits
+ * under that stroke in the well. The two last-ball questions sit under the
+ * ball they would re-call, so "Yes, make it out" is one click on a point the
+ * labeller opened themself — until 2026-11-11 they were asked only in the
+ * court panel after a flag jump, and an opened point showed the chip with no
+ * answer anywhere.
+ */
+function hintShotId(
+  mark: LabelMark,
+  lastCallShotId?: string,
+  lastBallId?: string,
+): string | undefined {
   switch (mark.code) {
+    case "net_by_trajectory":
+      return lastBallId;
+    case "last_call_overruled":
+      return lastCallShotId;
+    case "last_ball_against_game":
+      return mark.params.shotId;
     case "second_serve_as_first":
     case "serve_after_serve_in":
     case "serve_in_landing_out":
@@ -395,6 +444,53 @@ function hintShotId(mark: LabelMark): string | undefined {
     default:
       return undefined;
   }
+}
+
+/** The hints that ask about the last ball's call. */
+const LAST_BALL_QUESTIONS: ReadonlySet<LabelMarkCode> = new Set([
+  "last_call_overruled",
+  "last_ball_against_game",
+  "net_by_trajectory",
+]);
+
+export { ACCEPT_KEY } from "./label-black-parts";
+
+/**
+ * The hint the accept key answers: the one with an answer under the selected
+ * stroke, else the first with an answer down the rally (one about no stroke
+ * last). Null with none. The well marks that row with the key, so what Y will
+ * do is always on screen.
+ */
+export function acceptedHint(
+  hints: readonly PointHint[],
+  point: Pick<LabelPoint, "shots">,
+  selectedShotId: string | null,
+): PointHint | null {
+  // Only a hint drawn as a row: Y never does what is not on screen.
+  const answerable = hints.filter(
+    (hint) => hint.actions.length > 0 && hint.afterShotId !== undefined,
+  );
+  const selected = answerable.find(
+    (hint) => selectedShotId !== null && hint.afterShotId === selectedShotId,
+  );
+  if (selected) return selected;
+  const order = new Map(point.shots.map((shot, i) => [shot.id, i]));
+  const at = (hint: PointHint) =>
+    (hint.afterShotId === undefined
+      ? undefined
+      : order.get(hint.afterShotId)) ?? Infinity;
+  return answerable.toSorted((a, b) => at(a) - at(b))[0] ?? null;
+}
+
+/** A hint's first answer as its row orders them: a split before the rest. */
+export function firstHintAction(hint: PointHint): PointHintAction | null {
+  return (
+    hint.actions.find(
+      (action) => action.label === HINT_ACTION_LABEL.shot_after_point_end,
+    ) ??
+    hint.actions[0] ??
+    null
+  );
 }
 
 /**
@@ -408,6 +504,7 @@ function hintActions(
   point: LabelPoint,
   edit: HintEdit | undefined,
   lastCallShotId?: string,
+  lastBallId?: string,
 ): PointHintAction[] {
   if (!edit) return [];
   const { onPatchPoint, onPatchShot, onRemoveShotsAfter, operations } = edit;
@@ -438,6 +535,17 @@ function hintActions(
               result: vendorCall,
               result_called: true,
             }),
+        },
+      ];
+    }
+    case "net_by_trajectory": {
+      if (!onPatchShot || !lastBallId) return [];
+      return [
+        {
+          label: MAKE_IT_NET_ACTION,
+          // The labeller's call, as the N key and the Result menu write it.
+          run: () =>
+            onPatchShot(lastBallId, { result: "net", result_called: true }),
         },
       ];
     }

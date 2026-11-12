@@ -70,6 +70,7 @@ import {
   type LabelInsertPointResult,
 } from "@/lib/services/labels/point-insert-session";
 import {
+  cutLabelSet,
   foldLabelTiebreak,
   pullLabelGamePoints,
   shiftLabelGameOverflow,
@@ -429,6 +430,17 @@ export async function pullLabelGamePointsAction(
   return withLabelOp("Pull points into game", () =>
     pullLabelGamePoints(sessionId, gameKey),
   );
+}
+
+/**
+ * A set that reached its entered score with games still filed under it: move
+ * those games into the next set (set-cut.ts). The console calls it by itself.
+ */
+export async function cutLabelSetAction(
+  sessionId: string,
+  setNumber: number,
+): Promise<LabelGameShiftResult> {
+  return withLabelOp("Start next set", () => cutLabelSet(sessionId, setNumber));
 }
 
 /**

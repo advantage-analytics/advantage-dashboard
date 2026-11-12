@@ -26,18 +26,15 @@ import {
   opponent,
   type LabelGameType,
   type LabelPoint,
-  type LabelPointStatus,
   type LabelSide,
 } from "./session";
-import { labelPointFields, labelPointStatusAfterChange } from "./edit";
+import { livePointStatusAfter, type LivePointStatus } from "./edit";
 import type { LabelGame } from "./operations";
 import {
   planPlayerSwap,
   type ShotSwapWrite,
   type SwapShot,
 } from "./player-swap";
-
-type LivePointStatus = Exclude<LabelPointStatus, "deleted">;
 
 /** What a game operation reads of a point. A `LabelPoint` satisfies it. */
 export type GamePoint = Pick<
@@ -163,22 +160,6 @@ export function rotateServers(
   return servers as LabelSide[];
 }
 
-function statusAfterChange(
-  point: GamePoint,
-  change: {
-    server: LabelSide;
-    winner?: LabelSide | null;
-    ended_by?: LabelSide | null;
-  },
-): LivePointStatus {
-  const status = labelPointStatusAfterChange(
-    { ...labelPointFields(point), status: point.status, seed: point.seed },
-    change,
-  );
-  // Only live points reach here, so the rule never hands back `deleted`.
-  return status as LivePointStatus;
-}
-
 /**
  * Give game `game` the server `server`: one write per live point. In an
  * ordinary game every point gets `server`; in a tiebreak `server` is who serves
@@ -203,7 +184,10 @@ export function planGameServer(
     return {
       id: point.id,
       server: servers[i],
-      status: statusAfterChange(point, { server: servers[i], ...swap?.point }),
+      status: livePointStatusAfter(point, {
+        server: servers[i],
+        ...swap?.point,
+      }),
       ...(swap
         ? { winner: swap.point.winner, ended_by: swap.point.ended_by }
         : {}),
@@ -237,7 +221,7 @@ export function planGameType(
       id: point.id,
       server: servers[i],
       game_type: type,
-      status: statusAfterChange(point, { server: servers[i] }),
+      status: livePointStatusAfter(point, { server: servers[i] }),
     })),
     shots: [],
   };

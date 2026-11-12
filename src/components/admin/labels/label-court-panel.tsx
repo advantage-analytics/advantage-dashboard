@@ -19,7 +19,10 @@ import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
 import {
   courtSlide,
+  estimateEnd,
+  estimateLabel,
   isEstimate,
+  type PlacedEnd,
   placementPrompt,
   type CourtSlide,
   type PlacementState,
@@ -223,6 +226,7 @@ export function LabelCourtPanel({
   landingOnly = false,
   onLandingLink,
   onEstimate,
+  placedEnd = null,
   clock,
   onPlace,
   onSelectShot,
@@ -256,10 +260,13 @@ export function LabelCourtPanel({
   /** The link's toggle (volley-link.ts). Absent: never drawn. */
   onLandingLink?: () => void;
   /**
-   * "Off screen, so this is an estimate" on the end being placed. Absent:
+   * "Off screen, so this is an estimate" on the end just placed, else the
+   * one being placed (court-placement.ts `estimateEnd`). Absent:
    * the box is not drawn.
    */
   onEstimate?: (estimate: boolean) => void;
+  /** The end the last court click placed, which the box then speaks for. */
+  placedEnd?: PlacedEnd | null;
   /** The console's video clock (analysis seconds): what the marks follow. */
   clock: VideoClock;
   /** A click on the zoomed half, in metres. */
@@ -354,17 +361,29 @@ export function LabelCourtPanel({
     nextStroke,
   ]);
 
+  // The box speaks for the end just placed, else the one being placed
+  // (`estimateEnd`): after a click the court has already moved on.
+  const live = point && editable ? liveShots(point, ghosts) : NO_SHOTS;
+  const boxEnd = onEstimate
+    ? estimateEnd(
+        placement,
+        placedEnd,
+        live.map((shot) => shot.id),
+      )
+    : null;
+  const boxAt = boxEnd ? live.findIndex((s) => s.id === boxEnd.shotId) : -1;
   const estimate =
-    placing && selected && onEstimate ? (
+    boxEnd && boxAt !== -1 && onEstimate ? (
       <label
         data-court-estimate-box=""
+        data-court-estimate-placed={boxEnd.placed ? "" : undefined}
         className="flex min-w-0 cursor-pointer items-center gap-[7px] text-[11px] text-white/70"
       >
         <Checkbox
-          checked={isEstimate(selected.unclear, placement.target)}
+          checked={isEstimate(live[boxAt].unclear, boxEnd.target)}
           onChange={onEstimate}
         />
-        <span className="truncate">Off screen, so this is an estimate</span>
+        <span className="truncate">{estimateLabel(boxEnd, boxAt + 1)}</span>
       </label>
     ) : null;
 
@@ -398,6 +417,12 @@ export function LabelCourtPanel({
           >
             {estimate}
           </CourtEndControls>
+        ) : estimate ? (
+          // The point's last landing placed: the court has let go, and the
+          // box for that landing stands where the legend would.
+          <span className="flex w-full items-center justify-center">
+            {estimate}
+          </span>
         ) : (
           <span
             data-court-legend=""

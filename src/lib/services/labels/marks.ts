@@ -22,6 +22,7 @@
  * `hidden` (omitted unless `hidden: true`, which only the scorecard asks for).
  */
 
+import { proposedTiebreakRallies, seededOnProposal } from "./seed-proposal";
 import {
   lastStrokeWinner,
   POINT_FLAGS,
@@ -176,6 +177,14 @@ export const LABEL_ONLY_FLAGS = {
  * the new file, 59% on the 21 old-model sessions, against 56% / 55% — barely
  * above base) and `ending_suspect_line` (80% / 73%, above base).
  *
+ * 2026-11-11: `last_shot_untracked` also fires where the last rally ball's
+ * flight could not be fitted but a bounce was found (`ballFitPoor`). On the
+ * 17 finished sessions whose match was re-run on the new ball model, the
+ * pre-fill's last rally ball was the labelled point's last stroke on 78% of
+ * 1,666 well-fitted balls, 60% of 325 poorly fitted ones (24% not a stroke of
+ * the labelled point at all, 16% with the rally going on past it) and 15% of
+ * 84 untracked ones. So it is asked, in the grey list, with its own words.
+ *
  * 2026-11-06: `net_by_trajectory` is new and counted ("Into the net?"). It
  * only fires on a file from the November 2026 ball model, whose flights run
  * past the bounce (flags.ts). On 10 reprocessed matches it fired 17 times
@@ -291,8 +300,11 @@ export interface LabelMarkParams {
    * which stroke that ball was — the answer is written to that stroke only.
    */
   last_call_overruled: { vendorCall: "in" | "out" | "net"; eventId: number };
-  /** The vendor stroke the point ends on, whose ball was not tracked. */
-  last_shot_untracked: { eventId: number };
+  /**
+   * The vendor stroke the point ends on, whose ball was not tracked — or,
+   * with `fit: "poor"`, was seen bouncing but not tracked well.
+   */
+  last_shot_untracked: { eventId: number; fit?: "poor" };
   /**
    * The last ball (`shotId`), the call that would hand the point to the side
    * its locked game needs (`gameWinner`), and that side.
@@ -302,7 +314,12 @@ export interface LabelMarkParams {
     call: "in" | "out";
     gameWinner: LabelSide;
   };
-  net_by_trajectory: NoParams;
+  /**
+   * `by: "landing"` when the console raised it off the rows (marks-state.ts
+   * `lastBallNearNet`): the last ball, called in, down within a metre of the
+   * net. Absent on the derivation's own, read off the flight.
+   */
+  net_by_trajectory: { by?: "landing" };
   shot_after_point_end: {
     /** The last live stroke that lands out or in the net. */
     shotId: string;
@@ -433,6 +450,14 @@ export interface LabelMarks {
 /** What `buildLabelMarks` reads off a session's rows. */
 export type MarkablePoint = Pick<LabelPoint, "id" | "vendorRallyIds"> & {
   shots: Pick<LabelShot, "id" | "eventId">[];
+  /**
+   * The row's frozen seed, when the caller has it: a row seeded on the
+   * segmenter's cut (seed-proposal.ts) carries no "Game cut differs".
+   */
+  seed?: Pick<
+    NonNullable<LabelPoint["seed"]>,
+    "set_number" | "game_number" | "server"
+  > | null;
 };
 
 const SERVE_SHOT_TYPES = new Set(["First Serve", "Second Serve"]);
@@ -604,9 +629,15 @@ function pointMarks(
     ? rally?.strokes.find((stroke) => stroke.eventId === last.event_id)
     : undefined;
   // A serve is never asked: deleting the point's only serve is no fix.
-  if (called?.ballUntracked && called.strokeType !== "serve") {
+  if (
+    (called?.ballUntracked || called?.ballFitPoor) &&
+    called.strokeType !== "serve"
+  ) {
     marks.push(
-      mark(LABEL_ONLY_FLAGS.LAST_SHOT_UNTRACKED, { eventId: called.eventId }),
+      mark(LABEL_ONLY_FLAGS.LAST_SHOT_UNTRACKED, {
+        eventId: called.eventId,
+        ...(called.ballUntracked ? {} : { fit: "poor" as const }),
+      }),
     );
   }
   if (last && called) {
@@ -796,7 +827,9 @@ export function buildLabelMarks(
 ): LabelMarks {
   const pointIdByRally = new Map<number, string>();
   const shotIdByEvent = new Map<number, string>();
+  const seedByPoint = new Map<string, MarkablePoint["seed"]>();
   points.forEach((point) => {
+    seedByPoint.set(point.id, point.seed ?? null);
     for (const rallyId of point.vendorRallyIds) {
       if (!pointIdByRally.has(rallyId)) pointIdByRally.set(rallyId, point.id);
     }
@@ -822,6 +855,10 @@ export function buildLabelMarks(
         transcript.points.map((point) => point.rally_id),
       )
     : new Map<number, ProposedPoint>();
+
+  const inProposedTiebreak = transcript.segmentation
+    ? proposedTiebreakRallies(transcript.segmentation)
+    : () => false;
 
   const marks: LabelMarks = {
     points: {},
@@ -857,6 +894,18 @@ export function buildLabelMarks(
       player1Label,
     );
 
+    // A session seeded on the proposal's cut has nothing to differ from:
+    // the flag was raised against the vendor's rows, which it never held.
+    const to = proposed.get(point.rally_id) ?? null;
+    const onProposal =
+      to !== null &&
+      // Half of a proposed merge is still two rows: that stays asked.
+      to.mergedWith === null &&
+      seededOnProposal(
+        seedByPoint.get(pointId) ?? null,
+        to,
+        inProposedTiebreak(point.rally_id),
+      );
     push(
       marks.points,
       pointId,
@@ -865,7 +914,9 @@ export function buildLabelMarks(
         rally,
         settledById.get(point.rally_id),
         sideOf,
-        proposed.get(point.rally_id) ?? null,
+        to,
+      ).filter(
+        (m) => !onProposal || m.code !== POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS,
       ),
     );
 

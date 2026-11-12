@@ -1780,7 +1780,10 @@ test.describe("the isn't-finished slot", () => {
     ).toBe("Pull 1 point from game 2");
     const button = findWhere(tree, (p) => "data-game-underflow-action" in p);
     expect(button?.props["data-game-underflow-action"]).toBe("pull");
-    expect(button?.props.children).toBe("Move here");
+    // The label, with no accept key beside it: this row is not the open point's.
+    expect([button?.props.children].flat().filter(Boolean)).toEqual([
+      "Move here",
+    ]);
     let stopped = 0;
     (button!.props.onClick as (e: unknown) => void)({
       stopPropagation: () => (stopped += 1),
@@ -1799,7 +1802,10 @@ test.describe("the isn't-finished slot", () => {
       findWhere(add, (p) => "data-game-underflow-detail" in p)?.props.children,
     ).toBe("A point may be missing");
     const addButton = findWhere(add, (p) => "data-game-underflow-action" in p);
-    expect(addButton?.props.children).toBe("Add point");
+    // The label, with no accept key beside it: this row is not the open point's.
+    expect([addButton?.props.children].flat().filter(Boolean)).toEqual([
+      "Add point",
+    ]);
     (addButton!.props.onClick as (e: unknown) => void)({
       stopPropagation: () => {},
     });

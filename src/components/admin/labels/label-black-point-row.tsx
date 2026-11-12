@@ -60,13 +60,19 @@ import {
   pointSentence,
   withoutGhosts,
 } from "./label-black-format";
-import { MarkChip, PencilMark, pointRowMarks } from "./label-black-mark";
+import {
+  MarkChip,
+  PencilMark,
+  pointRowMarks,
+  type MarkChipProps,
+} from "./label-black-mark";
 import { LabelErrorChip } from "./label-error-marking";
 import type { SideNames } from "./label-format";
 import { PointMenu } from "./label-point-menu";
 import { isCombinedTombstone } from "@/lib/services/labels/point-combine";
 import {
   AMBER_SLOT_ICON_INK,
+  AcceptKeyChip,
   BLACK_SLOT,
   RAIL_PRESS,
   BlackTextAction,
@@ -170,6 +176,7 @@ export const BlackPointRow = memo(function BlackPointRow({
   playingWindow = null,
   score,
   edit,
+  rowEdit,
   marks = null,
   errorToMark = false,
   onToggle,
@@ -182,6 +189,11 @@ export const BlackPointRow = memo(function BlackPointRow({
   playingWindow?: PlayingWindow | null;
   score: string | null;
   edit: EditContext;
+  /**
+   * The rail's stable context for the drawn row (`PointRowBody`): the same
+   * object through edits and selections. Absent, `edit` stands in.
+   */
+  rowEdit?: EditContext;
   /** The session's marks. Null draws no chip at all. */
   marks?: LabelMarks | null;
   /** The rail is asking for this point's error (`errorStops`): its blue chip. */
@@ -190,9 +202,6 @@ export const BlackPointRow = memo(function BlackPointRow({
   children?: React.ReactNode;
 }) {
   const { operations, names } = edit;
-  const tone = edit.tone ?? "dark";
-  const number = point.pointIndex + 1;
-  const checked = point.checkedAt !== null;
   // The point as the rail reads it: without the strokes the site removed while
   // the well draws them as ghosts, so the sentence, the deciding stroke and the
   // rally count say what the rally is now.
@@ -210,6 +219,100 @@ export const BlackPointRow = memo(function BlackPointRow({
   // ONE pencil: with marks it also counts a removed stroke the labeller put
   // back, the row's own rule when not.
   const changed = marks ? pointChanged(point) : pointChangedByYou(point);
+
+  // The chip is a fresh object each time it is read: the body compares it
+  // by what it says (`flagKey`), so the same chip never re-renders the row.
+  const flag = rowMarks?.flag ?? null;
+  const flagKey = JSON.stringify(flag);
+  const canReset =
+    changed &&
+    Boolean(operations) &&
+    pointResetScope(point, sharesVendorRally(point, edit.points)) !== null;
+
+  return (
+    <PointRowBody
+      point={point}
+      open={open}
+      playing={playing}
+      playingWindow={playingWindow}
+      score={score}
+      edit={rowEdit ?? edit}
+      ghosts={drawsGhosts(marks)}
+      errorToMark={errorToMark}
+      onToggle={onToggle}
+      fresh={fresh}
+      sentence={sentence}
+      detail={detail}
+      flag={flag}
+      flagKey={flagKey}
+      changed={changed}
+      canReset={canReset}
+    >
+      {children}
+    </PointRowBody>
+  );
+});
+
+interface PointRowBodyProps {
+  point: LabelPoint;
+  open: boolean;
+  playing: boolean;
+  playingWindow: PlayingWindow | null;
+  score: string | null;
+  edit: EditContext;
+  ghosts: boolean;
+  errorToMark: boolean;
+  onToggle?: (pointId: string) => void;
+  fresh: boolean;
+  sentence: string;
+  detail: string;
+  flag: MarkChipProps | null;
+  /** `flag`, spelled out: what the row is compared by in its place. */
+  flagKey: string;
+  changed: boolean;
+  canReset: boolean;
+  children?: React.ReactNode;
+}
+
+/** Every prop by identity, but the chip by what it says. */
+function sameRowBody(a: PointRowBodyProps, b: PointRowBodyProps): boolean {
+  for (const key of Object.keys(b) as (keyof PointRowBodyProps)[]) {
+    if (key === "flag") continue;
+    if (!Object.is(a[key], b[key])) return false;
+  }
+  return Object.keys(a).length === Object.keys(b).length;
+}
+
+/**
+ * The row as it is drawn. `BlackPointRow` reads what the row says off the
+ * session — its sentence, its chip, whether it can be reset — and hands this
+ * the answers, so an edit to another point, which changes the session's rows
+ * and marks but none of these, re-renders no menus, tooltips or cells here.
+ * `edit` is the rail's stable context (`rowEdit`): the session's rows are
+ * read through it only once the point's menu is open.
+ */
+const PointRowBody = memo(function PointRowBody({
+  point,
+  open,
+  playing,
+  playingWindow,
+  score,
+  edit,
+  ghosts,
+  errorToMark,
+  onToggle,
+  fresh,
+  sentence,
+  detail,
+  flag,
+  changed,
+  canReset,
+  children,
+}: PointRowBodyProps) {
+  const { operations } = edit;
+  const tone = edit.tone ?? "dark";
+  const number = point.pointIndex + 1;
+  const checked = point.checkedAt !== null;
   const slide = pointRowSlide(Boolean(operations), playing);
 
   return (
@@ -282,12 +385,11 @@ export const BlackPointRow = memo(function BlackPointRow({
           className={cn("inline-flex items-center gap-2", slide)}
         >
           {errorToMark ? <LabelErrorChip /> : null}
-          {rowMarks?.flag ? <MarkChip {...rowMarks.flag} /> : null}
+          {flag ? <MarkChip {...flag} /> : null}
           {changed ? (
             <PencilMark
               reset={
-                operations &&
-                pointResetScope(point, sharesVendorRally(point, edit.points))
+                operations && canReset
                   ? {
                       label: `Reset point ${number}`,
                       onClick: () => operations.onAskResetPoint(point.id),
@@ -337,7 +439,7 @@ export const BlackPointRow = memo(function BlackPointRow({
               edit={edit}
               operations={operations}
               menu={tone}
-              ghosts={drawsGhosts(marks)}
+              ghosts={ghosts}
             />
           ) : null}
         </span>
@@ -399,7 +501,7 @@ export const BlackPointRow = memo(function BlackPointRow({
       {open ? <div data-shots-for={point.id}>{children}</div> : null}
     </>
   );
-});
+}, sameRowBody);
 
 /** The second line's ink. */
 const DETAIL_INK = railInk(0.45);
@@ -486,21 +588,25 @@ export function openPointSuggestions(
 
 /**
  * A suggested point: two points of a game were served from the same side, so
- * one is probably missing between them. A dashed amber slot between their rows
- * with three answers: "Add point" (`onInsertPoint` before the flagged point),
- * "{b} was a let" (`ending: let_replayed`; the score stands) and "Dismiss". The
- * two lines truncate; the answers never shrink or wrap.
+ * one is probably missing between them — or, more often, the two are one
+ * point the vendor cut (a fault filed apart from its second serve). A dashed
+ * amber slot between their rows that leads with "Combine {a} and {b}"
+ * (`onCombinePoints` on the earlier, below), then "Add point" (`onInsertPoint`
+ * before the flagged point), "{a} was a let" (`ending: let_replayed`; the
+ * score stands) and "Dismiss". The two lines truncate; the answers never
+ * shrink or wrap.
  *
- * When the earlier point reads as a replayed serve (`replayGap`), the pair is
- * one point rather than two with one missing: the slot says so and leads with
- * "Combine {a} and {b}" (`onCombinePoints` on the earlier, below), then "Add
- * point" and "Dismiss".
+ * When the earlier point reads as a replayed serve (`replayGap`), the slot
+ * says so in its title and drops "{a} was a let": combining is that answer.
  */
 export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
   suggestion,
   point,
   edit,
+  acceptKey = false,
 }: {
+  /** The row the accept key (Y) answers: its answer wears the key. */
+  acceptKey?: boolean;
   suggestion: PointSuggestion;
   /** The flagged point — the second of the pair, whose row follows the slot. */
   point: LabelPoint;
@@ -552,7 +658,7 @@ export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
           data-point-suggestion-actions=""
           className="flex shrink-0 items-center justify-end gap-[14px]"
         >
-          {replay && before ? (
+          {before ? (
             <BlackTextAction
               ink="amber"
               data-point-suggestion-combine=""
@@ -563,10 +669,11 @@ export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
               }}
             >
               Combine {a} and {b}
+              {acceptKey ? <AcceptKeyChip /> : null}
             </BlackTextAction>
           ) : null}
           <BlackTextAction
-            ink={replay ? "quiet" : "amber"}
+            ink={before ? "quiet" : "amber"}
             data-point-suggestion-add=""
             aria-label={`Add a point between points ${a} and ${b}`}
             onClick={(event) => {
@@ -575,6 +682,7 @@ export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
             }}
           >
             Add point
+            {acceptKey && !before ? <AcceptKeyChip /> : null}
           </BlackTextAction>
           {replay ? null : (
             <BlackTextAction
@@ -625,7 +733,10 @@ export const BlackGameOverflow = memo(function BlackGameOverflow({
   summary,
   point,
   edit,
+  acceptKey = false,
 }: {
+  /** The row the accept key (Y) answers: its answer wears the key. */
+  acceptKey?: boolean;
   overflow: GameOverflow;
   /** `planGameShift` from the first leftover; null when it cannot be planned. */
   summary: GameShiftSummary | null;
@@ -669,6 +780,7 @@ export const BlackGameOverflow = memo(function BlackGameOverflow({
       }}
     >
       {move}
+      {acceptKey ? <AcceptKeyChip /> : null}
     </BlackTextAction>
   );
   return gameSlot({
@@ -695,7 +807,10 @@ export const BlackTiebreakFold = memo(function BlackTiebreakFold({
   fold,
   points,
   edit,
+  acceptKey = false,
 }: {
+  /** The row the accept key (Y) answers: its answer wears the key. */
+  acceptKey?: boolean;
   fold: TiebreakFold;
   points: readonly LabelPoint[];
   edit: EditContext;
@@ -729,6 +844,7 @@ export const BlackTiebreakFold = memo(function BlackTiebreakFold({
       }}
     >
       {label}
+      {acceptKey ? <AcceptKeyChip /> : null}
     </BlackTextAction>
   );
   return gameSlot({
@@ -754,7 +870,10 @@ export const BlackTiebreakServe = memo(function BlackTiebreakServe({
   order,
   names,
   onFix,
+  acceptKey = false,
 }: {
+  /** The row the accept key (Y) answers: its answer wears the key. */
+  acceptKey?: boolean;
   order: TiebreakServeOrder;
   names: SideNames;
   /** The console's fix; absent, the slot only reads. */
@@ -784,6 +903,7 @@ export const BlackTiebreakServe = memo(function BlackTiebreakServe({
         }}
       >
         {label}
+        {acceptKey ? <AcceptKeyChip /> : null}
       </BlackTextAction>
     ) : null,
     actionLabel: label,
@@ -800,7 +920,10 @@ export const BlackTiebreakServe = memo(function BlackTiebreakServe({
 export const BlackCourtEndSwap = memo(function BlackCourtEndSwap({
   swap,
   onSwitch,
+  acceptKey = false,
 }: {
+  /** The row the accept key (Y) answers: its answer wears the key. */
+  acceptKey?: boolean;
   swap: CourtEndSwap;
   /** The console's switch; absent, the slot only reads. */
   onSwitch?: (pointIds: readonly string[]) => void;
@@ -825,6 +948,7 @@ export const BlackCourtEndSwap = memo(function BlackCourtEndSwap({
         }}
       >
         {label}
+        {acceptKey ? <AcceptKeyChip /> : null}
       </BlackTextAction>
     ) : null,
     actionLabel: label,
@@ -845,7 +969,10 @@ export const BlackGameServeRepeat = memo(function BlackGameServeRepeat({
   repeat,
   names,
   onSetGameServer,
+  acceptKey = false,
 }: {
+  /** The row the accept key (Y) answers: its answer wears the key. */
+  acceptKey?: boolean;
   repeat: GameServeRepeat;
   names: SideNames;
   /** The console's server change; absent, the slot only reads. */
@@ -874,6 +1001,7 @@ export const BlackGameServeRepeat = memo(function BlackGameServeRepeat({
         }}
       >
         {label}
+        {acceptKey ? <AcceptKeyChip /> : null}
       </BlackTextAction>
     ) : null,
     actionLabel: label,

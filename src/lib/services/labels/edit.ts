@@ -779,6 +779,26 @@ export function labelShotValues(shot: LabelShot): LabelShotValues {
   };
 }
 
+/** A live point's status: never `deleted`. */
+export type LivePointStatus = Exclude<LabelPointStatus, "deleted">;
+
+/**
+ * `labelPointStatusAfterChange` for a live point read as the console's row:
+ * the status `change` leaves it with, measured against its seed. Only live
+ * points are moved, re-served or switched, so the rule never hands back
+ * `deleted`.
+ */
+export function livePointStatusAfter(
+  point: Parameters<typeof labelPointFields>[0] &
+    Pick<LabelPoint, "status" | "seed">,
+  change: Partial<LabelPointFields>,
+): LivePointStatus {
+  return labelPointStatusAfterChange(
+    { ...labelPointFields(point), status: point.status, seed: point.seed },
+    change,
+  ) as LivePointStatus;
+}
+
 /** A console point's fields the status is measured on, keyed by column. */
 export function labelPointFields(
   point: Pick<

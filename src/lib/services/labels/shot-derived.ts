@@ -152,6 +152,17 @@ export function landedOnOwnSide(shot: ShotEnds): boolean {
 }
 
 /**
+ * How far PAST the net a ball came down, in metres: positive on the far side
+ * from where it was hit. Null while either end is missing, and for a ball
+ * that did not clear (`landedOnOwnSide`).
+ */
+export function pastNet(shot: ShotEnds): number | null {
+  if (shot.contactY == null || shot.landingY == null) return null;
+  if (landedOnOwnSide(shot)) return null;
+  return Math.abs(shot.landingY - NET_Y);
+}
+
+/**
  * How far short of the net a ball that `landedOnOwnSide` came down, in
  * metres to the centimetre; null for any other landing, or one not placed.
  */

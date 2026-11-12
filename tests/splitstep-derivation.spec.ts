@@ -209,6 +209,16 @@ test.describe("parse layer", () => {
     expect(parseStrokes(clean).strokes.some((s) => "ballUntracked" in s)).toBe(
       false,
     );
+    // No fit, but the detector found a bounce: seen, not tracked well.
+    expect(parseStrokes(rows).strokes.map((s) => s.ballFitPoor)).toEqual([
+      undefined,
+      true,
+      undefined,
+      undefined,
+    ]);
+    expect(parseStrokes(clean).strokes.some((s) => "ballFitPoor" in s)).toBe(
+      false,
+    );
   });
 
   test("rejects a payload that is not an array", () => {

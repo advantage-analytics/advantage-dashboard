@@ -150,6 +150,11 @@ export function addedPointBetween(
  * between. Settled 2026-10-26 after "Add the missing shot" was asked on a
  * double-fault point with three dead-ball hits after it.
  *
+ * Nothing is missing between two serves either: where the pair's first
+ * stroke is a serve and the next live stroke is one too, the slot is `done`.
+ * Settled 2026-11-11: an overhead retyped as the second serve still asked
+ * for a stroke between it and the first serve out.
+ *
  * A `missing_point` is `done` once the flagged point's ending is
  * `let_replayed` — the second serve from that side was the same point played
  * again, so nothing is missing — or once a live added point sits between the
@@ -183,6 +188,17 @@ export function suggestionState(
       const at = live.findIndex((shot) => shot.eventId === after);
       const ended = doubleFaultAt(live, point.ending);
       if (at !== -1 && ended !== null && at >= ended) return "done";
+      // A serve with a serve right after it: a fault and its second serve,
+      // or a let and its replay. Both are the server's, by the rules, so the
+      // same player twice is what should be there.
+      if (
+        at !== -1 &&
+        isServeStroke(live[at].stroke ?? null) &&
+        live[at + 1] !== undefined &&
+        isServeStroke(live[at + 1].stroke ?? null)
+      ) {
+        return "done";
+      }
       if (
         at !== -1 &&
         isMissedResult(effectiveShotResult(live[at])) &&

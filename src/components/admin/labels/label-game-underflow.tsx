@@ -14,6 +14,7 @@ import type {
   LabelStartScore,
 } from "@/lib/services/labels/session";
 import {
+  AcceptKeyChip,
   BlackTextAction,
   gameSlot,
   playersSwitchDetail,
@@ -93,7 +94,10 @@ export const BlackGameUnderflow = memo(function BlackGameUnderflow({
   slot,
   onPull,
   onAddPoint,
+  acceptKey = false,
 }: {
+  /** The row the accept key (Y) answers: its answer wears the key. */
+  acceptKey?: boolean;
   slot: UnderflowSlot;
   /** Pull the next game's leading points into the game named by its key. */
   onPull?: (gameKey: string) => void;
@@ -127,6 +131,7 @@ export const BlackGameUnderflow = memo(function BlackGameUnderflow({
       }}
     >
       {words.action}
+      {acceptKey ? <AcceptKeyChip /> : null}
     </BlackTextAction>
   ) : null;
   return gameSlot({

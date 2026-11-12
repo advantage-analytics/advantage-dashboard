@@ -332,6 +332,17 @@ const slotAfter = (
 });
 const FOUR_SLOTS = [slotAfter(5, "s5"), slotAfter(6, "s6"), slotAfter(7, "s7")];
 
+test("nothing is missing between two serves, however long the rally after them", () => {
+  // The same four strokes the test below leaves open, with the pair's two
+  // retyped as a first and a second serve: the same player twice is right.
+  const point = fourInARow();
+  expect(suggestionState(FOUR_SLOTS[0], point)).toBe("open");
+  point.shots[1] = { ...point.shots[1], stroke: "first_serve" };
+  expect(suggestionState(FOUR_SLOTS[0], point)).toBe("open");
+  point.shots[2] = { ...point.shots[2], stroke: "second_serve" };
+  expect(suggestionState(FOUR_SLOTS[0], point)).toBe("done");
+});
+
 test.describe("a point with several open slots", () => {
   test("a mis-tracked bounce three strokes before the end answers nothing", () => {
     const point = fourInARow();

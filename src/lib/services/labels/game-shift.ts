@@ -39,14 +39,17 @@
  * is locked answers `add_point`.
  */
 
-import { labelPointFields, labelPointStatusAfterChange } from "./edit";
+import { livePointStatusAfter, type LivePointStatus } from "./edit";
 import { lockedGames } from "./game-boundary";
-import { gameFirstServer, type GamePoint } from "./game-operations";
+import {
+  gameFirstServer,
+  type GamePoint,
+  type GameServerPoint,
+} from "./game-operations";
 import {
   planPlayerSwap,
   type PlayerSwap,
   type ShotSwapWrite,
-  type SwapShot,
 } from "./player-swap";
 import {
   gameDecided,
@@ -63,9 +66,8 @@ import {
   type LabelStartScore,
 } from "./session";
 
-type LivePointStatus = Exclude<GamePoint["status"], "deleted">;
-
-export type ShiftPoint = GamePoint & { shots: readonly SwapShot[] };
+/** A point and its strokes, as a move reads it: game-operations.ts's. */
+export type ShiftPoint = GameServerPoint;
 
 /**
  * One ordinary game with rows sitting past the row that decided it. The
@@ -319,7 +321,7 @@ function openGameAfter(
  * that server is new and the rows contradict it, and the status the whole
  * change implies.
  */
-function shiftWrite(
+export function shiftWrite(
   point: ShiftPoint,
   to: Destination,
 ): { write: GameShiftWrite; swap: PlayerSwap | null } {
@@ -331,18 +333,13 @@ function shiftWrite(
     server,
     ...(swap ? swap.point : {}),
   };
-  const status = labelPointStatusAfterChange(
-    { ...labelPointFields(point), status: point.status, seed: point.seed },
-    change,
-  );
   const write: GameShiftWrite = {
     id: point.id,
     set_number: to.setNumber,
     game_number: to.gameNumber,
     server,
     game_type: to.gameType,
-    // Only live points are ever moved, so the rule never hands back `deleted`.
-    status: status as LivePointStatus,
+    status: livePointStatusAfter(point, change),
   };
   if (swap) {
     write.winner = swap.point.winner;
@@ -592,7 +589,7 @@ export function applyGameShift<
 // ── A game that ends short ─────────────────────────────────────────────────
 
 /** The live rows with a set and a game, in `point_index` order. */
-function liveRows<T extends GamePoint>(points: readonly T[]): T[] {
+export function liveRows<T extends GamePoint>(points: readonly T[]): T[] {
   return points
     .filter(
       (p) =>
@@ -602,7 +599,9 @@ function liveRows<T extends GamePoint>(points: readonly T[]): T[] {
 }
 
 /** `live` grouped by game, each in `point_index` order. */
-function rowsByGame<T extends GamePoint>(live: readonly T[]): Map<string, T[]> {
+export function rowsByGame<T extends GamePoint>(
+  live: readonly T[],
+): Map<string, T[]> {
   const byGame = new Map<string, T[]>();
   for (const point of live) {
     const key = gameKey(point);

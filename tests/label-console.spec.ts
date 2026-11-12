@@ -1528,9 +1528,13 @@ test.describe("a review answer's writes go through the console's own handlers", 
   test("the console asks no questions itself: no answers are wired; the estimate box still writes unclear", () => {
     expect(consoleSource).not.toContain("answerReview");
     expect(consoleSource).not.toContain("runReviewAnswer");
-    // The estimate box writes `unclear` through the rail's shot edit.
+    // The estimate box writes `unclear` through the rail's shot edit, for
+    // the end the last click placed (`estimateEnd`).
     expect(consoleSource).toContain(
-      "estimatePatch(shot.unclear, placement.target, estimate)",
+      "setPlacedEnd({ shotId: shot.id, target: placement.target });",
+    );
+    expect(consoleSource).toContain(
+      "estimatePatch(shot.unclear, end.target, estimate)",
     );
     // The old view-model is gone.
     expect(consoleSource).not.toContain("courtReview");
@@ -1886,4 +1890,20 @@ test.describe("Mark complete with errors still unmarked", () => {
     expect(source).toContain("disabled={pending || confirmDisabled}");
     expect(source).toMatch(/if \(!confirmDisabled\) onConfirm\(\);/);
   });
+});
+
+test("a point with nothing left to ask shows the whole court; a spin key at a missing-shot slot is the stroke before it", () => {
+  const source = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+  // Auto-advance's "done": no stroke selected, no slot armed, so the court
+  // panel draws the whole point rather than the half the last click left.
+  expect(source).toMatch(
+    /if \(verdict === "advance"\) landOnStepRef\.current\(expanded, step\);[\s\S]{0,260}else \{\s+setArmedSlot\(null\);\s+setPlacement\(NO_PLACEMENT\);\s+\}/,
+  );
+  // 1–4 with a slot armed and nothing selected: the stroke the slot follows.
+  expect(source).toContain("? findShot(points, armedSlot.afterShotId)");
+  expect(source).toContain("const spin = strokeKeyChange(key, before);");
+  expect(source).toContain("if (spin) requestPatchShot(before.id, spin);");
 });

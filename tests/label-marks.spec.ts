@@ -734,12 +734,26 @@ test.describe("the labels-only flags", () => {
     // A serve the point ends on is never asked: deleting it is no fix.
     const ace = rallyOf(4, [["B", "serve"]]);
     ace.strokes[0].ballUntracked = true;
+    // Seen bouncing but not fitted: the same question, with its own words.
+    const poor = rallyOf(5, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+    ]);
+    poor.strokes[1].ballFitPoor = true;
     const marks = allMarksFor(
-      [untracked, midRally, oldFile, ace],
-      ["A", "B", "A", "B"],
+      [untracked, midRally, oldFile, ace, poor],
+      ["A", "B", "A", "B", "A"],
     );
     const of = (id: string) =>
       (marks.points[id] ?? []).filter((m) => m.code === "last_shot_untracked");
+    expect(of("p5")).toEqual([
+      {
+        code: "last_shot_untracked",
+        tier: "count",
+        scope: "point",
+        params: { eventId: poor.strokes[1].eventId, fit: "poor" },
+      },
+    ]);
     expect(of("p1")).toEqual([
       {
         code: "last_shot_untracked",
