@@ -58,6 +58,7 @@ export async function serveHarness(
             "@/components/admin/teams-actions$": ACTIONS,
             "@/app/admin/seen-actions$": ACTIONS,
             "@/components/dashboard/settings/team-actions$": ACTIONS,
+            "@/components/dashboard/settings/usage-actions$": ACTIONS,
             // By file: `add-self-dialog` reaches this one with a relative import.
             [resolve("src/components/dashboard/team/roster-actions.ts")]:
               ACTIONS,
