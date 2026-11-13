@@ -244,28 +244,3 @@ export async function readConferenceTeams(
     status: row.status,
   }));
 }
-
-/**
- * The More menu's line under "Conferences": "137 conferences · 14 missing
- * details". Missing details is `isMissingDetails` — no short name, website
- * or division. Service role, head counts only; the caller (the admin layout)
- * has already run `requireAdminOrNotFound()`. A failed read returns null, so
- * the menu prints no line rather than a wrong one.
- */
-export async function conferencesNavSub(): Promise<string | null> {
-  const admin = createAdminClient();
-  const [all, missing] = await Promise.all([
-    admin.from("conferences").select("id", { count: "exact", head: true }),
-    admin
-      .from("conferences")
-      .select("id", { count: "exact", head: true })
-      .or("short_name.is.null,website.is.null,division.is.null"),
-  ]);
-  if (all.error || missing.error || all.count == null) return null;
-  const total = all.count;
-  const head = `${total.toLocaleString("en-US")} ${total === 1 ? "conference" : "conferences"}`;
-  const gaps = missing.count ?? 0;
-  return gaps > 0
-    ? `${head} · ${gaps.toLocaleString("en-US")} missing details`
-    : head;
-}

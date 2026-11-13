@@ -1,11 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown } from "lucide-react";
-import { FloatMenu } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 import { AdminAccountMenu } from "@/components/admin/admin-account-menu";
 import { AdminSearch } from "@/components/admin/admin-search";
@@ -19,47 +16,32 @@ import { AdminSearch } from "@/components/admin/admin-search";
  * divider before the area's name, the ghost Search trigger that says the word
  * "Search", and the 26px account circle at the right edge.
  *
- * Six tabs and a More menu (Admin Console canvas, "updated" boards, plus the
- * Player Messaging canvas's Messages tab): Today · Matches · Teams · Requests
- * · Labels · Messages · More. More holds the four surfaces an
- * admin visits less often — Conferences, Pilots, Outreach, Ask — each with a
- * one-line description and its count. On one of those four pages the More
- * button carries that page's name and the active wash, so the header still
- * says where you are.
+ * Four tabs: Today · Labels · Matches · Teams. Requests, Messages and Ask are
+ * reached from Today's rows; those three plus Conferences, Pilots, Outreach and
+ * the Pay report are also in the account menu, so they stay reachable when
+ * Today is empty.
  *
- * **Counts are plain text in the label**, "Requests · 3", never a numeric
+ * **Counts are plain text in the label**, "Matches · 3", never a numeric
  * badge: the design system bans numeric badges anywhere in the chrome. Zero
- * prints nothing — "Requests · 0" is a sentence about nothing.
+ * prints nothing — "Matches · 0" is a sentence about nothing.
  *
  * Nav active is the neutral wash (`--surface-subtle` + `--ink-900`), never
  * blue: blue is reserved for actions, and being where you already are is not
  * one.
  */
-const TABS = [
+export const ADMIN_TABS = [
   { href: "/admin", label: "Today", key: "today" },
+  { href: "/admin/labels", label: "Labels", key: "labels" },
   { href: "/admin/matches", label: "Matches", key: "matches" },
   { href: "/admin/teams", label: "Teams", key: "teams" },
-  { href: "/admin/requests", label: "Requests", key: "requests" },
-  { href: "/admin/labels", label: "Labels", key: "labels" },
-  { href: "/admin/messages", label: "Messages", key: "messages" },
 ] as const;
 
-const MORE = [
-  { href: "/admin/conferences", label: "Conferences", key: "conferences" },
-  { href: "/admin/pilots", label: "Pilots", key: "pilots" },
-  { href: "/admin/outreach", label: "Outreach", key: "outreach" },
-  { href: "/admin/ask", label: "Ask", key: "ask" },
-] as const;
-
-type TabKey = (typeof TABS)[number]["key"];
-type MoreKey = (typeof MORE)[number]["key"];
+type TabKey = (typeof ADMIN_TABS)[number]["key"];
 
 /** What the header prints beside each destination, computed on the server. */
 export interface AdminNavCounts {
-  /** Counts on the six tabs; absent or 0 prints nothing. */
+  /** Counts on the tabs; absent or 0 prints nothing. */
   tabs: Partial<Record<TabKey, number>>;
-  /** Each More row's count and its one-line description. */
-  more: Partial<Record<MoreKey, { count?: number; sub?: string }>>;
 }
 
 function withCount(label: string, count: number | undefined): string {
@@ -90,15 +72,6 @@ export function AdminHeader({
   };
 }) {
   const pathname = usePathname();
-  const [moreOpen, setMoreOpen] = useState(false);
-  const activeMore = MORE.find((item) => isActive(pathname, item.href));
-  const moreTotal = MORE.reduce(
-    (sum, item) => sum + (nav.more[item.key]?.count ?? 0),
-    0,
-  );
-  const moreLabel = activeMore
-    ? activeMore.label
-    : withCount("More", moreTotal);
 
   return (
     <header className="sticky top-0 z-30 grid h-[var(--header-h)] shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-[var(--surface-card)] px-6">
@@ -125,7 +98,7 @@ export function AdminHeader({
 
       {/* The destinations */}
       <nav aria-label="Admin" className="flex items-center gap-1">
-        {TABS.map((tab) => {
+        {ADMIN_TABS.map((tab) => {
           const active = isActive(pathname, tab.href);
           return (
             <Link
@@ -138,71 +111,6 @@ export function AdminHeader({
             </Link>
           );
         })}
-
-        <FloatMenu
-          open={moreOpen}
-          onOpenChange={setMoreOpen}
-          label="More"
-          align="end"
-          sideOffset={6}
-          width={240}
-          trigger={
-            <button
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded={moreOpen}
-              aria-current={activeMore ? "page" : undefined}
-              className={cn(
-                TAB_CLASS,
-                "cursor-pointer gap-1",
-                activeMore || moreOpen ? TAB_ON : TAB_OFF,
-                !activeMore && "font-normal",
-              )}
-            >
-              {moreLabel}
-              <ChevronDown
-                className={cn(
-                  "size-3 transition-transform duration-200",
-                  moreOpen && "rotate-180",
-                )}
-                strokeWidth={1.8}
-                aria-hidden="true"
-              />
-            </button>
-          }
-        >
-          {MORE.map((item) => {
-            const entry = nav.more[item.key];
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                role="menuitem"
-                aria-current={
-                  isActive(pathname, item.href) ? "page" : undefined
-                }
-                onClick={() => setMoreOpen(false)}
-                className="flex min-h-10 items-center gap-2.5 rounded-[7px] px-2.5 py-[5px] transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none"
-              >
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-[13px] text-[var(--ink-900)]">
-                    {item.label}
-                  </span>
-                  {entry?.sub ? (
-                    <span className="truncate text-[11px] text-[var(--ink-600)]">
-                      {entry.sub}
-                    </span>
-                  ) : null}
-                </span>
-                {entry?.count ? (
-                  <span className="text-[12px] font-medium text-[var(--ink-700)] tabular-nums">
-                    {entry.count}
-                  </span>
-                ) : null}
-              </Link>
-            );
-          })}
-        </FloatMenu>
       </nav>
 
       {/* Search · account */}

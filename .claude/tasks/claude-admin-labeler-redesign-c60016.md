@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Cut the admin header to four tabs
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** guess — src/components/admin/admin-header.tsx, src/lib/data/admin-nav-server.ts, tests/admin-shell-nav.spec.ts

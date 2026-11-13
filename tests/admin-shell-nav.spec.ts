@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { ADMIN_TABS } from "@/components/admin/admin-header";
 import { ADMIN_MENU_LINKS } from "@/components/admin/admin-account-menu";
 
 /**
@@ -15,5 +16,14 @@ test("admin account menu links, in order", () => {
     ["Pilots", "/admin/pilots"],
     ["Outreach", "/admin/outreach"],
     ["Pay report", "/admin/labels/pay"],
+  ]);
+});
+
+test("admin header tabs, in order", () => {
+  expect(ADMIN_TABS.map((t) => [t.label, t.href])).toEqual([
+    ["Today", "/admin"],
+    ["Labels", "/admin/labels"],
+    ["Matches", "/admin/matches"],
+    ["Teams", "/admin/teams"],
   ]);
 });

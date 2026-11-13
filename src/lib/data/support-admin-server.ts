@@ -212,32 +212,6 @@ export async function getSupportThreadForAdmin(
   };
 }
 
-/**
- * The admin nav's Messages count: threads waiting on staff, i.e. whose last
- * message is the player's (`waitingOn() === "you"`). Read-only. Answers 0 on
- * a read error — a nav badge must not take the console down.
- */
-export async function countMessagesForNav(): Promise<number> {
-  await requireAdminOrNotFound();
-  const { data, error } = await createAdminClient()
-    .from("support_threads")
-    .select("last_player_message_at, last_staff_message_at")
-    .not("last_player_message_at", "is", null);
-  if (error) return 0;
-  return (
-    (data ?? []) as {
-      last_player_message_at: string | null;
-      last_staff_message_at: string | null;
-    }[]
-  ).filter(
-    (row) =>
-      waitingOn({
-        lastPlayerMessageAt: row.last_player_message_at,
-        lastStaffMessageAt: row.last_staff_message_at,
-      }) === "you",
-  ).length;
-}
-
 /** Staff opened the thread: stamp `staff_read_at`. */
 export async function markStaffRead(threadId: string): Promise<void> {
   await requireAdminOrNotFound();
