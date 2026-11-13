@@ -14,10 +14,12 @@ export type SavedViewAction =
   | { kind: "duplicate" | "share" | "unshare" | "delete"; id: string };
 
 /**
- * The ⋯ beside an open saved view's name (`viz-lightbox.tsx`'s
- * `titleAccessory`): the wall card's own menu without "Reorder…" — there is
- * no wall under the lightbox to drag on — and the same Rename popover, hung
- * under the title row so the field sits where the name is.
+ * An open saved view's ⋯, in the lightbox header beside the close
+ * (`viz-lightbox.tsx`'s `headerAction`): the wall card's own menu without
+ * "Reorder…" — there is no wall under the lightbox to drag on. Its place is
+ * fixed whatever the name's length, and its menu opens over the header's own
+ * space. The Rename popover still hangs under the view's NAME, since that is
+ * what it edits.
  *
  * It mutates nothing itself. Every choice goes up as a `SavedViewAction`,
  * and the Saved wall's band runs it (`saved-views-band.tsx`), so a rename,
@@ -41,8 +43,8 @@ export function SavedViewTitleMenu({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
-  // The title row (the button's parent): the popover hangs from its left
-  // edge, under the name.
+  // The lightbox's title (`data-lightbox-title`): the Rename popover hangs
+  // from its left edge, under the name.
   const rowRef = useRef<HTMLElement | null>(null);
 
   return (
@@ -63,12 +65,17 @@ export function SavedViewTitleMenu({
           <button
             type="button"
             ref={(el) => {
-              rowRef.current = el?.parentElement ?? null;
+              rowRef.current =
+                el
+                  ?.closest("[data-lightbox-box]")
+                  ?.querySelector<HTMLElement>("[data-lightbox-title]") ?? null;
             }}
             aria-label={`Manage "${name}"`}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
-            className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full text-[var(--ink-600)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] aria-expanded:bg-[var(--surface-subtle)] aria-expanded:text-[var(--ink-900)]"
+            // The dialog's own chrome icon button (the close's shape): a
+            // rounded square, never a circle.
+            className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none aria-expanded:bg-[var(--surface-subtle)] aria-expanded:text-[var(--ink-900)] touch:hit-area"
           >
             <MoreHorizontal
               className="size-3.5"

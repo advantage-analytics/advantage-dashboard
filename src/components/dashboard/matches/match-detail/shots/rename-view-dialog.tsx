@@ -92,6 +92,21 @@ export function RenameViewDialog({
         sideOffset={6}
         role="dialog"
         aria-label="Rename view"
+        // A virtual anchor gives Radix no trigger to return focus to; send
+        // it to the anchor's own ⋯ (or the anchor) rather than <body>.
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          const anchor = anchorRef.current;
+          const target =
+            anchor instanceof HTMLButtonElement
+              ? anchor
+              : (anchor
+                  ?.closest("[data-lightbox-box]")
+                  ?.querySelector<HTMLElement>(
+                    "button[aria-haspopup=menu][aria-label^=Manage]",
+                  ) ?? anchor);
+          target?.focus();
+        }}
         className="w-[340px] rounded-[12px] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-4 shadow-[var(--shadow-dropdown)]"
         onOpenAutoFocus={(e) => {
           e.preventDefault();

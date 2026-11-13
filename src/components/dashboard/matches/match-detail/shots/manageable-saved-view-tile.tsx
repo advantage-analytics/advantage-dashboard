@@ -50,11 +50,11 @@ export interface SavedViewCardData {
 export function ManageableSavedViewTile({
   view,
   data,
-  reorderMode,
+  reorderMode = false,
   hintId,
   workspaceKind,
   workspaceRole,
-  isDragging,
+  isDragging = false,
   menuOpen,
   onMenuOpenChange,
   renameOpen,
@@ -76,12 +76,13 @@ export function ManageableSavedViewTile({
 }: {
   view: SavedViewRow;
   data: SavedViewCardData;
-  reorderMode: boolean;
+  /** Omitted (the season page, which has no reorder mode): always at rest. */
+  reorderMode?: boolean;
   /** The reorder hint's id — a static card is `aria-describedby` it. */
-  hintId: string;
+  hintId?: string;
   workspaceKind: WorkspaceKind;
   workspaceRole: ProgramRole;
-  isDragging: boolean;
+  isDragging?: boolean;
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
   renameOpen: boolean;
@@ -89,18 +90,19 @@ export function ManageableSavedViewTile({
   /** Names the new one must not collide with (`savedViewNamePool`). */
   renamePool: readonly string[];
   onRename: (name: string) => void;
-  onRegisterTileEl: (el: HTMLDivElement | null) => void;
-  onRegisterMenuTriggerEl: (el: HTMLButtonElement | null) => void;
+  onRegisterTileEl?: (el: HTMLDivElement | null) => void;
+  onRegisterMenuTriggerEl?: (el: HTMLButtonElement | null) => void;
   onStartRename: () => void;
   onDuplicate: () => void;
   onShare: () => void;
   onUnshare: () => void;
-  onReorder: () => void;
+  /** Enters reorder mode. Omitted, the menu has no "Reorder…" row. */
+  onReorder?: () => void;
   onDelete: () => void;
-  onPointerDownTile: (e: ReactPointerEvent<HTMLDivElement>) => void;
-  onPointerMoveTile: (e: ReactPointerEvent<HTMLDivElement>) => void;
-  onPointerEndTile: (e: ReactPointerEvent<HTMLDivElement>) => void;
-  onKeyDownTile: (e: ReactKeyboardEvent<HTMLDivElement>) => void;
+  onPointerDownTile?: (e: ReactPointerEvent<HTMLDivElement>) => void;
+  onPointerMoveTile?: (e: ReactPointerEvent<HTMLDivElement>) => void;
+  onPointerEndTile?: (e: ReactPointerEvent<HTMLDivElement>) => void;
+  onKeyDownTile?: (e: ReactKeyboardEvent<HTMLDivElement>) => void;
 }) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const adornment = view.shared ? <SharedGlyph /> : undefined;
@@ -187,12 +189,12 @@ export function ManageableSavedViewTile({
               type="button"
               ref={(el) => {
                 triggerRef.current = el;
-                onRegisterMenuTriggerEl(el);
+                onRegisterMenuTriggerEl?.(el);
               }}
               aria-label={`Manage "${view.name}"`}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              className="flex size-6 cursor-pointer items-center justify-center rounded-full text-white"
+              className="flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
               style={{ backgroundColor: "rgba(13,13,13,.72)" }}
             >
               <MoreHorizontal

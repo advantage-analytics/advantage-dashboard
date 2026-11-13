@@ -2,7 +2,11 @@ import { cache, Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
+import {
+  canUploadForProgram,
+  isProgramStaff,
+  type ProgramRole,
+} from "@/lib/workspace/types";
 import {
   getPlayerMatchSides,
   getPlayerProfile,
@@ -374,6 +378,7 @@ export default async function PlayerProfilePage({
                       playerName={profile.name}
                       firstName={profile.firstName}
                       workspaceName={active.name}
+                      workspaceRole={active.role}
                       query={query}
                     />
                   </Suspense>
@@ -472,6 +477,7 @@ async function ProfileVisualizationsBody({
   playerName,
   firstName,
   workspaceName,
+  workspaceRole,
   query,
 }: {
   programId: string;
@@ -480,6 +486,8 @@ async function ProfileVisualizationsBody({
   firstName: string;
   /** The program's name, for the Save dialog's "Share with team" row. */
   workspaceName: string;
+  /** The viewer's role in the program: who may rename or delete a view. */
+  workspaceRole: ProgramRole;
   query: Record<string, string | string[] | undefined>;
 }) {
   const [season, bandSettings, preferences, savedViews] = await Promise.all([
@@ -539,7 +547,7 @@ async function ProfileVisualizationsBody({
           savedViews,
         )}
         errorSplitJudged={errorSplitJudged}
-        saveView={{ savedViews, workspaceName }}
+        saveView={{ savedViews, workspaceName, workspaceRole }}
         otherSideCards={otherSideCards}
       />
     </ProfileViewWhen>

@@ -29,6 +29,9 @@ import {
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { ChartMenu } from "@/components/dashboard/matches/match-detail/shots/chart-menu";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
+import { canManageSavedView } from "@/lib/data/saved-views-logic";
+import type { ProgramRole } from "@/lib/workspace/types";
+import type { SeasonSavedViewActions } from "./use-season-saved-views";
 import type { LightboxSeasonFilters } from "@/components/dashboard/matches/match-detail/shots/lightbox-filters";
 import type { StatPick } from "@/components/dashboard/matches/match-detail/shots/stat-cut";
 import {
@@ -43,6 +46,8 @@ import {
   type SeasonLightboxData,
 } from "@/lib/data/player-season-viz";
 import { useMounted } from "@/lib/ui/use-mounted";
+import { advButton } from "@/lib/ui/adv-button";
+import { cn } from "@/lib/utils";
 import { formatMatchDayShort } from "@/lib/data/match-day";
 import { pointSetQuery } from "@/lib/match-video/point-set";
 
@@ -138,13 +143,13 @@ const LazySaveAsViewButton = lazy(() =>
   ),
 );
 
-/** The footer's "Save as view" while its chunk loads: the same blue words,
- *  inert, so the footer does not shift when the button lands. */
+/** The footer's "Save as view" while its chunk loads: the same outline
+ *  button, inert, so the footer does not shift when the real one lands. */
 function SaveAsViewPending() {
   return (
     <span
       aria-hidden="true"
-      className="text-[12px] font-medium text-[var(--blue)] opacity-60"
+      className={cn(advButton("outline", "sm"), "opacity-60")}
     >
       Save as view
     </span>
@@ -156,7 +161,17 @@ function SaveAsViewPending() {
 export interface SeasonSaveView {
   savedViews: SavedViewRow[];
   workspaceName: string;
+  /** The viewer's role in the program: who may rename or delete a view. */
+  workspaceRole: ProgramRole;
 }
+
+/** The open saved view's ⋯ beside the close, in its own chunk like "Save as
+ *  view": a card that is not a saved view never asks for it. */
+const LazySavedViewTitleMenu = lazy(() =>
+  import("@/components/dashboard/matches/match-detail/shots/saved-view-title-menu").then(
+    (m) => ({ default: m.SavedViewTitleMenu }),
+  ),
+);
 
 type ShellModule =
   typeof import("@/components/dashboard/matches/match-detail/shots/viz-lightbox-shell");
@@ -258,6 +273,7 @@ export function SeasonVizLightbox({
   analyzed,
   errorSplitJudged,
   saveView,
+  manage,
 }: {
   /** The server's answer for the URL it last rendered; `null` on the wall
    *  and until the first answer for an opened card lands. */
@@ -273,6 +289,8 @@ export function SeasonVizLightbox({
   errorSplitJudged: boolean;
   /** The footer's "Save as view"; absent draws no footer. */
   saveView?: SeasonSaveView;
+  /** Rename, duplicate, share and delete for the open saved view. */
+  manage?: SeasonSavedViewActions;
 }) {
   const { state, setState } = useVizState();
   const mounted = useMounted();
@@ -436,6 +454,17 @@ export function SeasonVizLightbox({
       : emptyCourt(cut, state.chart, state.filters, data);
   const pending = court !== data;
 
+  // The saved view the court IS (not one it was edited from), when the
+  // viewer may manage it: it gets the ⋯ beside its name.
+  const openView =
+    state.viewId !== null && saveView && manage
+      ? (saveView.savedViews.find(
+          (v) =>
+            v.id === state.viewId &&
+            canManageSavedView(v, saveView.workspaceRole),
+        ) ?? null)
+      : null;
+
   const countWith = (patch: Partial<VizFilters>): number =>
     court.optionCounts[optionCountKey(patch)] ?? 0;
 
@@ -517,7 +546,29 @@ export function SeasonVizLightbox({
                 },
               }
         }
-        title={court.title}
+        title={
+          openView !== null && manage?.names[openView.id] !== undefined
+            ? manage.names[openView.id]
+            : court.title
+        }
+        headerAction={
+          openView !== null && manage && saveView ? (
+            <Suspense fallback={null}>
+              <LazySavedViewTitleMenu
+                view={openView}
+                name={manage.names[openView.id] ?? openView.name}
+                savedViews={saveView.savedViews}
+                workspaceKind="team"
+                workspaceRole={saveView.workspaceRole}
+                onAction={(action) => {
+                  // The view is gone: back to the wall, where its Undo is.
+                  if (action.kind === "delete") close();
+                  manage.run(action, openView);
+                }}
+              />
+            </Suspense>
+          ) : undefined
+        }
         subtitle={court.subtitle}
         filterPhrases={court.filterPhrases}
         panelActive={court.panelActive}
@@ -536,7 +587,7 @@ export function SeasonVizLightbox({
         footer={
           saveView
             ? () => ({
-                start: (
+                end: (
                   <Suspense fallback={<SaveAsViewPending />}>
                     <LazySaveAsViewButton
                       cut={court.cut}
@@ -559,7 +610,6 @@ export function SeasonVizLightbox({
                     />
                   </Suspense>
                 ),
-                end: null,
               })
             : undefined
         }

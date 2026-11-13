@@ -505,7 +505,7 @@ export function VizLightbox({
         },
       }}
       title={title}
-      titleAccessory={
+      headerAction={
         canManageOpenView && savedView !== null ? (
           <SavedViewTitleMenu
             view={savedView}
@@ -566,37 +566,42 @@ export function VizLightbox({
         // promises more than the list will show.
         const playable = matched.filter(isPlayable).slice(0, MAX_POINT_SET);
         return {
-          start: canSaveViews && (
-            <SaveAsViewButton
-              cut={cut}
-              chart={state.chart}
-              filters={state.filters}
-              savedViews={meta.savedViews}
-              workspaceKind={meta.workspaceKind}
-              workspaceName={meta.workspaceName}
-              onSaved={(view) =>
-                setState((prev) => ({ ...prev, viewId: view.id }))
-              }
-            />
-          ),
-          end: canWatch && onWatchPoints && (
-            <button
-              type="button"
-              disabled={playable.length === 0}
-              onClick={() =>
-                onWatchPoints(
-                  playable.map((p) => p.pointNumber),
-                  // The Video tab's strip names the set in the lightbox's
-                  // own words (`watchLabel`).
-                  watchLabel(sentence),
-                )
-              }
-              className={advButton("primary", "sm")}
-            >
-              {playable.length === 0
-                ? "Watch points"
-                : `Watch these ${playable.length} ${playable.length === 1 ? "point" : "points"}`}
-            </button>
+          // One group, right: the secondary beside the primary.
+          end: (
+            <>
+              {canSaveViews && (
+                <SaveAsViewButton
+                  cut={cut}
+                  chart={state.chart}
+                  filters={state.filters}
+                  savedViews={meta.savedViews}
+                  workspaceKind={meta.workspaceKind}
+                  workspaceName={meta.workspaceName}
+                  onSaved={(view) =>
+                    setState((prev) => ({ ...prev, viewId: view.id }))
+                  }
+                />
+              )}
+              {canWatch && onWatchPoints && (
+                <button
+                  type="button"
+                  disabled={playable.length === 0}
+                  onClick={() =>
+                    onWatchPoints(
+                      playable.map((p) => p.pointNumber),
+                      // The Video tab's strip names the set in the lightbox's
+                      // own words (`watchLabel`).
+                      watchLabel(sentence),
+                    )
+                  }
+                  className={advButton("primary", "sm")}
+                >
+                  {playable.length === 0
+                    ? "Watch points"
+                    : `Watch these ${playable.length} ${playable.length === 1 ? "point" : "points"}`}
+                </button>
+              )}
+            </>
           ),
         };
       }}

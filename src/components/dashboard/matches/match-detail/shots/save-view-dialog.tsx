@@ -112,6 +112,7 @@ export function SaveViewDialog({
   onSaved,
   tone = "light",
   side = "bottom",
+  align = "start",
   names,
   note,
 }: {
@@ -127,6 +128,8 @@ export function SaveViewDialog({
   onSaved: (view: SavedView) => void;
   tone?: FloatMenuTone;
   side?: "top" | "bottom";
+  /** Which edge of the anchor the popover lines up with. */
+  align?: "start" | "end";
   /** The two sides' names for the dark tone's prefilled name. The dialog
    *  reads no match context of its own, so the player profile can draw it. */
   names?: PhraseNames;
@@ -268,11 +271,19 @@ export function SaveViewDialog({
         virtualRef={anchorRef as unknown as React.RefObject<HTMLButtonElement>}
       />
       <PopoverContent
-        align="start"
+        align={align}
         side={side}
         sideOffset={6}
         role="dialog"
         aria-label="Save this view"
+        // The popover hangs from a virtual anchor, so Radix has no trigger
+        // to hand focus back to: without this it falls to <body> on close,
+        // outside the lightbox's focus scope, and the next menu opened there
+        // is dismissed as the scope pulls focus back in.
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          anchorRef.current?.focus();
+        }}
         className={cn(
           "w-[332px] rounded-[12px] p-4",
           dark

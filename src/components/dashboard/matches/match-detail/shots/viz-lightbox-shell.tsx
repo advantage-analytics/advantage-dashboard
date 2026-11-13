@@ -158,8 +158,9 @@ export interface VizLightboxShellProps {
 
   /* ── Words ───────────────────────────────────────────────────────────── */
   title: string;
-  /** Sits right after the title, on its row — an open saved view's ⋯. */
-  titleAccessory?: ReactNode;
+  /** The header's own action, immediately left of the close — an open saved
+   *  view's ⋯. */
+  headerAction?: ReactNode;
   subtitle: string;
   /** The strip's sentence for the filters (the shell adds the legend's and a
    *  Statistics row's pick). Empty: no strip unless a pick is on. */
@@ -268,7 +269,7 @@ export function VizLightboxShell({
   matchFor,
   watch,
   title,
-  titleAccessory,
+  headerAction,
   subtitle,
   filterPhrases,
   panelActive,
@@ -908,12 +909,12 @@ export function VizLightboxShell({
                 <div className="flex min-w-0 items-center gap-2">
                   <DialogPrimitive.Title
                     ref={titleRef}
+                    data-lightbox-title=""
                     tabIndex={-1}
                     className="m-0 truncate text-[16px] leading-[1.4] font-medium text-[var(--ink-900)] outline-none"
                   >
                     {pending ? <LightboxTitlePending label={title} /> : title}
                   </DialogPrimitive.Title>
-                  {!pending && titleAccessory}
                 </div>
                 <p
                   id="viz-lightbox-subtitle"
@@ -923,19 +924,23 @@ export function VizLightboxShell({
                 </p>
               </div>
               <span className="flex-1" />
-              <ChromeTooltip
-                label="Close"
-                shortcut="Esc"
-                align="end"
-                onEscapeKeyDown={escapeFromTooltip}
-              >
-                <DialogPrimitive.Close
-                  aria-label="Close"
-                  className={LIGHTBOX_CLOSE_CLASS}
+              {/* The header's chrome, one cluster: the view's ⋯, then close. */}
+              <div className="flex shrink-0 items-center gap-1">
+                {!pending && headerAction}
+                <ChromeTooltip
+                  label="Close"
+                  shortcut="Esc"
+                  align="end"
+                  onEscapeKeyDown={escapeFromTooltip}
                 >
-                  <X className="size-3.5" strokeWidth={1.5} aria-hidden />
-                </DialogPrimitive.Close>
-              </ChromeTooltip>
+                  <DialogPrimitive.Close
+                    aria-label="Close"
+                    className={LIGHTBOX_CLOSE_CLASS}
+                  >
+                    <X className="size-3.5" strokeWidth={1.5} aria-hidden />
+                  </DialogPrimitive.Close>
+                </ChromeTooltip>
+              </div>
             </div>
 
             {/* ── Body ───────────────────────────────────────────────── */}

@@ -27,7 +27,14 @@ import type {
   SeasonLightboxData,
 } from "@/lib/data/player-season-viz";
 import { cn } from "@/lib/utils";
+import { ManageableSavedViewTile } from "@/components/dashboard/matches/match-detail/shots/manageable-saved-view-tile";
+import { savedViewNamePool } from "@/components/dashboard/matches/match-detail/shots/save-view-dialog";
+import { canManageSavedView } from "@/lib/data/saved-views-logic";
 import { SeasonVizLightbox, type SeasonSaveView } from "./season-viz-lightbox";
+import {
+  useSeasonSavedViews,
+  type SeasonSavedViewActions,
+} from "./use-season-saved-views";
 
 /**
  * The player profile's Visualizations tab (design Q): the match report's
@@ -63,9 +70,11 @@ import { SeasonVizLightbox, type SeasonSaveView } from "./season-viz-lightbox";
  * Saved: the workspace's saved views (`saved_views` — the viewer's private
  * ones and the program's shared ones), each drawn over the season as a
  * `WallCard` in the same grid (`savedCards`, `buildSeasonViewCards`), each
- * for its own stored player. Read-only: they are created, renamed, shared
- * and reordered on the match report, and the season lightbox keeps nothing,
- * so there is no "Create view" tile and no Manage mode here.
+ * for its own stored player. A view the viewer may manage carries the match
+ * report's ⋯ on its card and beside its name when open: Rename…, Duplicate,
+ * sharing and Delete view (`use-season-saved-views.ts`). Views are still
+ * created from an opened card's "Save as view" and reordered on a match
+ * report, so there is no "Create view" card and no reorder mode here.
  */
 export function ProfileVisualizationsView({
   playerName,
@@ -198,6 +207,8 @@ function SeasonVizBody({
   saveView?: SeasonSaveView;
 }) {
   const { state } = useVizState();
+  // One set of saved-view actions for the wall's cards and the open view.
+  const manage = useSeasonSavedViews();
 
   // The wall's own player, as `shots-tab.tsx` keeps it. On the wall it is
   // the store's (so the chip reads pressed the instant it is clicked); while
@@ -241,6 +252,8 @@ function SeasonVizBody({
         cardsSide={shown.side}
         savedCards={savedCards}
         busy={analyzed > 0 && ready === undefined}
+        saveView={saveView}
+        manage={manage}
       />
       <SeasonVizLightbox
         data={lightbox}
@@ -248,6 +261,7 @@ function SeasonVizBody({
         analyzed={analyzed}
         errorSplitJudged={errorSplitJudged}
         saveView={saveView}
+        manage={manage}
       />
     </>
   );
@@ -262,7 +276,12 @@ function SeasonWall({
   cardsSide,
   savedCards,
   busy,
+  saveView,
+  manage,
 }: {
+  /** The workspace's views and the viewer's role; absent, Saved is read-only. */
+  saveView?: SeasonSaveView;
+  manage: SeasonSavedViewActions;
   playerName: string;
   firstName: string;
   analyzed: number;
@@ -419,6 +438,8 @@ function SeasonWall({
         </>
       ) : (
         <SavedWall
+          saveView={saveView}
+          manage={manage}
           savedCards={savedCards}
           playerName={playerName}
           firstName={firstName}
@@ -440,60 +461,155 @@ function SavedWall({
   playerName,
   firstName,
   analyzed,
+  saveView,
+  manage,
 }: {
   savedCards: SeasonCard[];
   playerName: string;
   firstName: string;
   analyzed: number;
+  saveView?: SeasonSaveView;
+  manage: SeasonSavedViewActions;
 }) {
   const { hrefFor } = useVizState();
-  const visible = savedCards.filter((card) => card.total > 0);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
 
-  if (savedCards.length === 0) {
-    return (
+  // A deleted view leaves at once; the server's cards follow on refresh.
+  const cards = savedCards.filter(
+    (card) => !manage.removed.has(viewIdOf(card)),
+  );
+  const visible = cards.filter((card) => card.total > 0);
+
+  let body: ReactNode;
+  if (cards.length === 0) {
+    body = (
       <EmptyWall>
         No saved views yet. Save one from a match&rsquo;s Visualizations tab and
         it shows here over {firstName}&rsquo;s season.
       </EmptyWall>
     );
-  }
-  if (analyzed === 0) {
-    return (
+  } else if (analyzed === 0) {
+    body = (
       <EmptyWall>
         No analyzed matches yet. Saved views are drawn from the points in{" "}
         {firstName}&rsquo;s matches, as each one is analysed.
       </EmptyWall>
     );
-  }
-  if (visible.length === 0) {
-    return (
+  } else if (visible.length === 0) {
+    body = (
       <EmptyWall>
         None of the saved views has anything in {firstName}&rsquo;s matches yet.
       </EmptyWall>
     );
+  } else {
+    body = (
+      <div
+        role="list"
+        aria-label="Saved views"
+        className="grid grid-cols-1 items-start gap-4 @min-[640px]:grid-cols-2"
+      >
+        {visible.map((card) => {
+          const id = viewIdOf(card);
+          const view = saveView?.savedViews.find((v) => v.id === id);
+          const subjectName = card.subject === "you" ? playerName : "Opponents";
+          const possessive = card.subject === "you" ? "your" : "their";
+          const href = hrefFor(card.state);
+          const name = manage.names[id] ?? card.name;
+          return (
+            <div key={card.key} role="listitem">
+              {view &&
+              saveView &&
+              canManageSavedView(view, saveView.workspaceRole) ? (
+                <ManageableSavedViewTile
+                  view={{ ...view, name }}
+                  data={{
+                    subjectName,
+                    possessive,
+                    cut: card.cut,
+                    dots: card.dots,
+                    summary: card.summary,
+                    href,
+                    state: card.state,
+                  }}
+                  workspaceKind="team"
+                  workspaceRole={saveView.workspaceRole}
+                  menuOpen={openMenuId === id}
+                  onMenuOpenChange={(open) => {
+                    setOpenMenuId(open ? id : null);
+                    if (open) setRenamingId(null);
+                  }}
+                  renameOpen={renamingId === id}
+                  onRenameOpenChange={(open) => setRenamingId(open ? id : null)}
+                  renamePool={savedViewNamePool(saveView.savedViews, {
+                    shared: view.shared,
+                    excludeId: id,
+                  })}
+                  onRename={(next) =>
+                    manage.run({ kind: "rename", id, name: next }, view)
+                  }
+                  onStartRename={() => {
+                    setOpenMenuId(null);
+                    setRenamingId(id);
+                  }}
+                  onDuplicate={() =>
+                    manage.run({ kind: "duplicate", id }, view)
+                  }
+                  onShare={() => manage.run({ kind: "share", id }, view)}
+                  onUnshare={() => manage.run({ kind: "unshare", id }, view)}
+                  onDelete={() => manage.run({ kind: "delete", id }, view)}
+                />
+              ) : (
+                <WallCard
+                  name={name}
+                  playerName={subjectName}
+                  possessive={possessive}
+                  cut={card.cut}
+                  dots={card.dots}
+                  summary={card.summary}
+                  href={href}
+                  navigateState={card.state}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
   }
+
   return (
-    <div
-      role="list"
-      aria-label="Saved views"
-      className="grid grid-cols-1 items-start gap-4 @min-[640px]:grid-cols-2"
-    >
-      {visible.map((card) => (
-        <div key={card.key} role="listitem">
-          <WallCard
-            name={card.name}
-            playerName={card.subject === "you" ? playerName : "Opponents"}
-            possessive={card.subject === "you" ? "your" : "their"}
-            cut={card.cut}
-            dots={card.dots}
-            summary={card.summary}
-            href={hrefFor(card.state)}
-            navigateState={card.state}
-          />
+    <div className="flex flex-col gap-4">
+      {manage.status !== null && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="text-micro flex items-center gap-1.5"
+        >
+          <span>{manage.status.text}</span>
+          {manage.status.undo && (
+            <button
+              type="button"
+              onClick={() => {
+                const undo = manage.status?.undo;
+                manage.dismissStatus();
+                undo?.();
+              }}
+              className="cursor-pointer font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+            >
+              Undo
+            </button>
+          )}
         </div>
-      ))}
+      )}
+      {body}
     </div>
   );
+}
+
+/** A saved card's view id — its key is `"view:<id>"` (`SeasonCard.key`). */
+function viewIdOf(card: SeasonCard): string {
+  return card.key.startsWith("view:") ? card.key.slice("view:".length) : "";
 }
 
 /** A card's activation while the wall is busy: nothing opens (see `stale`). */
