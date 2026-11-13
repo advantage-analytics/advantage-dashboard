@@ -48,7 +48,10 @@ import {
 } from "@/lib/services/ask/database";
 import { askAdapterModel, askStageModels } from "@/lib/services/ask/model";
 import {
+  createAuthFailureGate,
   isJwtShaped,
+  jwtLooksExpired,
+  mcpClientFromUserAgent,
   MCP_SCOPES,
   readBearerToken,
   wwwAuthenticate,
@@ -79,6 +82,14 @@ export const maxDuration = 60;
 const MAX_BODY_BYTES = 64 * 1024;
 
 const NO_STORE = "private, no-store";
+
+/** One per server instance: the 401 path's own cap on `mcp_auth_failed` (`auth.ts`). */
+const authFailureGate = createAuthFailureGate();
+
+/** The caller's address as Vercel reports it, for the gate's per-caller count only; never sent anywhere. */
+function callerAddress(headers: Headers): string {
+  return headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
 
 /**
  * The 401. `errorResponse()`'s body shape, so the sentence is where every
@@ -117,12 +128,41 @@ function methodNotAllowed(): Response {
 export async function POST(request: Request): Promise<Response> {
   const origin = mcpOrigin(request.headers);
 
+  const calling = mcpClientFromUserAgent(request.headers.get("user-agent"));
+  const posthog = getPostHogServerClient();
+  // A token Supabase Auth refused, which was not simply past its expiry: an
+  // app whose sign-in has broken. No user is known, so the event is
+  // anonymous, and it carries the app only — never the token. Nothing is
+  // sent for junk or for an expired token (every client's routine cue to
+  // refresh), and what is sent is capped (`createAuthFailureGate`), because
+  // anyone can reach this line without signing in.
+  const refused = (report: boolean): Response => {
+    if (
+      report &&
+      posthog &&
+      authFailureGate.allow(callerAddress(request.headers), Date.now())
+    ) {
+      posthog.capture({
+        distinctId: "mcp_anonymous",
+        event: "mcp_auth_failed",
+        properties: {
+          reason: "not_verified",
+          client: calling.client,
+          client_agent: calling.agent,
+          $process_person_profile: false,
+        },
+      });
+      flushPostHogAfterResponse(posthog);
+    }
+    return unauthorized(origin, true);
+  };
+
   const token = readBearerToken(request.headers.get("authorization"));
   if (!token) return unauthorized(origin, false);
   // Junk never costs a round trip to Supabase Auth.
-  if (!isJwtShaped(token)) return unauthorized(origin, true);
+  if (!isJwtShaped(token)) return refused(false);
   const verified = await verifyBearerUser(token);
-  if (!verified) return unauthorized(origin, true);
+  if (!verified) return refused(!jwtLooksExpired(token, Date.now()));
   const { client, user } = verified;
 
   // The three server-only functions need the service role (`database.ts`).
@@ -145,8 +185,8 @@ export async function POST(request: Request): Promise<Response> {
   const userRpc: AskRpcClient = { rpc: (fn, args) => client.rpc(fn, args) };
   const db = createAskDatabase({ user: userRpc, service, viewerId: user.id });
 
-  const posthog = getPostHogServerClient();
   const context: AskMcpContext = {
+    client: calling,
     caller: { kind: "session", userId: user.id },
     db,
     reads: createMcpUserReads(client, user.id),

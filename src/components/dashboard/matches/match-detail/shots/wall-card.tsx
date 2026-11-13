@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { APRON_FILL, CourtArt } from "./court-art";
@@ -67,8 +67,13 @@ export function WallCard({
   summary,
   href,
   navigateState,
+  as = "link",
+  ariaDescribedBy,
+  nameAdornment,
 }: {
   name: string;
+  /** A small glyph after the name — a saved view's "shared with team" mark. */
+  nameAdornment?: ReactNode;
   playerName: string;
   /** "your" / "their" — the errors readout's "43% of your unforced errors". */
   possessive: string;
@@ -77,6 +82,14 @@ export function WallCard({
   summary: WallSummary;
   href: string;
   navigateState: VizState;
+  /**
+   * `"static"`: the same card as a focusable `<div role="group">`, not a
+   * link — a saved view while the Saved wall is in reorder mode, where the
+   * card is dragged and a click must not open it.
+   */
+  as?: "link" | "static";
+  /** Describes a static card: the reorder hint. */
+  ariaDescribedBy?: string;
 }) {
   const { setState } = useVizState();
   const ownKey = viewIdentityKey(navigateState);
@@ -92,14 +105,9 @@ export function WallCard({
     setState(navigateState);
   }
 
-  return (
-    <Link
-      href={href}
-      id={domId}
-      onClick={handleClick}
-      aria-label={`${name}, ${playerName}: ${summary.countLabel}`}
-      className={CARD_CLASS}
-    >
+  const label = `${name}, ${playerName}: ${summary.countLabel}`;
+  const body = (
+    <>
       <div
         className="flex w-full flex-1 flex-col justify-center overflow-hidden rounded-t-[var(--radius-card)]"
         style={{ backgroundColor: APRON_FILL }}
@@ -134,6 +142,7 @@ export function WallCard({
           >
             {name}
           </h3>
+          {nameAdornment}
           <span
             className="shrink-0 text-[11px] whitespace-nowrap tabular-nums"
             style={{ color: "var(--ink-600)" }}
@@ -172,6 +181,33 @@ export function WallCard({
           ))}
         </div>
       </div>
+    </>
+  );
+
+  if (as === "static") {
+    return (
+      <div
+        id={domId}
+        tabIndex={0}
+        role="group"
+        aria-label={label}
+        aria-describedby={ariaDescribedBy}
+        className={CARD_CLASS}
+      >
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={href}
+      id={domId}
+      onClick={handleClick}
+      aria-label={label}
+      className={CARD_CLASS}
+    >
+      {body}
     </Link>
   );
 }

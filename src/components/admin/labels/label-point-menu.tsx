@@ -243,8 +243,9 @@ export function PointMenu({
   };
   const iconInk = menu === "dark" ? "text-white/50" : "text-[var(--ink-500)]";
   const iconClass = cn("size-3", iconInk);
+  // Only while open, as the actions are: it scans the session's rows.
   const now =
-    point.setNumber !== null && point.gameNumber !== null
+    open && point.setNumber !== null && point.gameNumber !== null
       ? `Now in set ${point.setNumber} · game ${gameInSetOf(edit.points, { setNumber: point.setNumber, gameNumber: point.gameNumber })}`
       : undefined;
   // "Switch players": first of all when the rows contradict the server,

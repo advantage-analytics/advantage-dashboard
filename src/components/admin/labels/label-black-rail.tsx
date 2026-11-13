@@ -3,7 +3,9 @@
 import {
   Fragment,
   useCallback,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type FocusEvent,
   type RefObject,
@@ -39,7 +41,6 @@ import {
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import {
   SCORE_MISMATCH_ANSWERS,
-  SCORE_MISMATCH_LABEL,
   THIN_TRACKING_LABEL,
   findGapDescription,
   scoreMismatchDetail,
@@ -82,6 +83,7 @@ import { cn } from "@/lib/utils";
 import { LabelFollowPill } from "./label-follow-pill";
 import { useRowInView } from "./use-row-in-view";
 import { LabelFlagSummary } from "./label-flag-summary";
+import { acceptedHint, pointHints } from "./label-black-mark";
 import { BlackTextAction, gameSlot } from "./label-black-parts";
 import {
   dropBeforePoint,
@@ -171,6 +173,7 @@ export function LabelBlackRail({
   onUndo,
   onRedo,
   onShowShortcuts,
+  acceptRowRef,
   missingShots = 0,
   onAddMissingShots,
   canUndo = false,
@@ -251,6 +254,12 @@ export function LabelBlackRail({
    * button before Undo. Absent, there is no button.
    */
   onShowShortcuts?: () => void;
+  /**
+   * Where the rail leaves the accept key's answer for the row between points
+   * at the open point (`acceptRow`), or null with none: the console's Y calls
+   * it once the point's own suggestions have none to take.
+   */
+  acceptRowRef?: { current: (() => void) | null };
   /** Open "Missing shot?" slots "Add shot" can fill; with the handler, "Add all". */
   missingShots?: number;
   onAddMissingShots?: () => void;
@@ -411,20 +420,35 @@ export function LabelBlackRail({
   // The chip's arithmetic, over the same rows as the scoreboard: only with
   // marks built, not once the labeller has said the video ends early, and only
   // on a disagreement.
-  const mismatch =
-    marks !== null
-      ? sessionScoreMismatch({
-          points,
-          games: scores.games,
-          finalScore,
-          matchScore,
-          videoEndsEarly,
-          startScore,
-        })
-      : null;
+  const hasMarks = marks !== null;
+  const mismatch = useMemo(
+    () =>
+      hasMarks
+        ? sessionScoreMismatch({
+            points,
+            games: scores.games,
+            finalScore,
+            matchScore,
+            videoEndsEarly,
+            startScore,
+          })
+        : null,
+    [
+      hasMarks,
+      points,
+      scores,
+      finalScore,
+      matchScore,
+      videoEndsEarly,
+      startScore,
+    ],
+  );
   // The mismatch as a flag of its own: counted, jumped to, and a slot after
   // the set's last point (`BlackSetScoreSlot`).
-  const setScoreStop = scoreStop(mismatch, points);
+  const setScoreStop = useMemo(
+    () => scoreStop(mismatch, points),
+    [mismatch, points],
+  );
   // The header's open flags, over every live row, as the row's chip reads
   // them: one per point, or one in each list for a placement gap beside an
   // amber question (`openFlags`). None on the marks-off session.
@@ -507,6 +531,75 @@ export function LabelBlackRail({
       points,
       hands,
       pointScores,
+      adScoring,
+      matchTiebreakSet,
+      startScore,
+      playOnLets,
+      tone,
+      fileOffset,
+      shotKinds,
+    ],
+  );
+  // The drawn rows' context (`PointRowBody`): the same object through every
+  // edit and selection, so a memoised row is not re-rendered by a change to
+  // another point. What moves — the rows, the scores, the selection — is
+  // read through it from the last commit, which is when a row's menu opens.
+  const latestEdit = useRef(edit);
+  useLayoutEffect(() => {
+    latestEdit.current = edit;
+  });
+  const rowEdit = useMemo<EditContext>(
+    () => ({
+      editable,
+      names,
+      onSelectShot,
+      onExitReview,
+      onPatchPoint,
+      onPatchShot,
+      operations: editable ? operations : undefined,
+      onRemoveShotsAfter: editable ? onRemoveShotsAfter : undefined,
+      onRestoreShots: editable ? onRestoreShots : undefined,
+      onToggleGhost,
+      adScoring,
+      matchTiebreakSet,
+      startScore,
+      playOnLets,
+      tone,
+      fileOffset,
+      shotKinds,
+      get selectedShotId() {
+        return latestEdit.current.selectedShotId;
+      },
+      get armedSlotAfterShotId() {
+        return latestEdit.current.armedSlotAfterShotId;
+      },
+      get errorAskedShotId() {
+        return latestEdit.current.errorAskedShotId;
+      },
+      get openGhostIds() {
+        return latestEdit.current.openGhostIds;
+      },
+      get points() {
+        return latestEdit.current.points;
+      },
+      get hands() {
+        return latestEdit.current.hands;
+      },
+      get scores() {
+        return latestEdit.current.scores;
+      },
+    }),
+    [
+      editable,
+      names,
+      onSelectShot,
+      onExitReview,
+      onPatchPoint,
+      onPatchShot,
+      operations,
+      onRemoveShotsAfter,
+      onRestoreShots,
+      onToggleGhost,
       adScoring,
       matchTiebreakSet,
       startScore,
@@ -645,6 +738,113 @@ export function LabelBlackRail({
         : NO_LOCKED,
     [editable, points, scores, adScoring, startScore],
   );
+  // The row between points the accept key (Y) answers: the first one drawn
+  // at the open point, with its lead answer — a tiebreak to make, a point to
+  // combine, leftovers to move, a serve order, a court end, a server, then
+  // the short game after it. None while the point's own well has an answer
+  // to take (`acceptedHint`) or a missing-shot slot is armed: those come
+  // first. The row wears the key, and the console calls `run`.
+  const acceptRow = useMemo((): {
+    kind:
+      | "fold"
+      | "point"
+      | "overflow"
+      | "serve-order"
+      | "court-end"
+      | "serve-repeat"
+      | "short";
+    run: () => void;
+  } | null => {
+    if (!editable || expandedPointId === null || armedSlotAfterShotId) {
+      return null;
+    }
+    const id = expandedPointId;
+    const point = points.find((p) => p.id === id);
+    if (!point || point.status === "deleted") return null;
+    if (
+      acceptedHint(pointHints(point, marks, names, edit), point, selectedShotId)
+    ) {
+      return null;
+    }
+    const fold = foldBefore.get(id);
+    const makeTiebreak = operations?.onFoldTiebreak;
+    if (fold && makeTiebreak) {
+      return { kind: "fold", run: () => makeTiebreak(fold.setNumber) };
+    }
+    const slot = slotBefore.get(id);
+    if (slot && operations) {
+      const before = points.find((p) => p.id === slot.beforePointId);
+      return {
+        kind: "point",
+        run: () =>
+          before
+            ? operations.onCombinePoints(before.id, "below")
+            : operations.onInsertPoint(id),
+      };
+    }
+    if (overflowBefore.get(id) && operations) {
+      return {
+        kind: "overflow",
+        run: () => operations.onShiftGameOverflow(id),
+      };
+    }
+    const order = serveOrderBefore.get(id);
+    if (order && onFixTiebreakServe) {
+      return { kind: "serve-order", run: () => onFixTiebreakServe(order.game) };
+    }
+    const courtEnd = courtEndBefore.get(id);
+    if (courtEnd && onSwitchPlayersByEnd) {
+      return {
+        kind: "court-end",
+        run: () => onSwitchPlayersByEnd(courtEnd.pointIds),
+      };
+    }
+    const repeat = serveRepeatBefore.get(id);
+    if (repeat && onSetGameServer) {
+      return {
+        kind: "serve-repeat",
+        run: () => onSetGameServer(repeat.game, repeat.expected),
+      };
+    }
+    const short = underflowAfter.get(id);
+    if (short) {
+      const pulls = "ok" in short.plan;
+      const run = pulls
+        ? onPullGame && (() => onPullGame(gameKey(short.underflow)))
+        : onAddPoint && (() => onAddPoint(short.underflow.lastPointId));
+      if (run) return { kind: "short", run };
+    }
+    return null;
+  }, [
+    editable,
+    expandedPointId,
+    armedSlotAfterShotId,
+    points,
+    marks,
+    names,
+    edit,
+    selectedShotId,
+    operations,
+    foldBefore,
+    slotBefore,
+    overflowBefore,
+    serveOrderBefore,
+    courtEndBefore,
+    serveRepeatBefore,
+    underflowAfter,
+    onFixTiebreakServe,
+    onSwitchPlayersByEnd,
+    onSetGameServer,
+    onPullGame,
+    onAddPoint,
+  ]);
+  useLayoutEffect(() => {
+    if (!acceptRowRef) return;
+    acceptRowRef.current = acceptRow?.run ?? null;
+    return () => {
+      acceptRowRef.current = null;
+    };
+  }, [acceptRowRef, acceptRow]);
   // "Check N points": one cursor per game for the rail's life, each click the
   // next doubted point through the console's flag jump (`onGoToPoint`).
   const [stepCheck] = useState(checkStepper);
@@ -1038,6 +1238,7 @@ export function LabelBlackRail({
                 const short = underflowAfter.get(point.id);
                 const locked = lockedAt.get(point.id);
                 const open = point.id === expandedPointId;
+                const accepts = open ? acceptRow?.kind : undefined;
                 return (
                   <Fragment key={point.id}>
                     {bandDrag?.before === point.id ? (
@@ -1087,6 +1288,7 @@ export function LabelBlackRail({
                         fold={fold}
                         points={points}
                         edit={edit}
+                        acceptKey={accepts === "fold"}
                       />
                     ) : null}
                     {slot ? (
@@ -1094,6 +1296,7 @@ export function LabelBlackRail({
                         suggestion={slot}
                         point={point}
                         edit={edit}
+                        acceptKey={accepts === "point"}
                       />
                     ) : null}
                     {overflow ? (
@@ -1102,6 +1305,7 @@ export function LabelBlackRail({
                         summary={overflow.summary}
                         point={point}
                         edit={edit}
+                        acceptKey={accepts === "overflow"}
                       />
                     ) : null}
                     {serveOrder ? (
@@ -1109,12 +1313,14 @@ export function LabelBlackRail({
                         order={serveOrder}
                         names={names}
                         onFix={onFixTiebreakServe}
+                        acceptKey={accepts === "serve-order"}
                       />
                     ) : null}
                     {courtEnd ? (
                       <BlackCourtEndSwap
                         swap={courtEnd}
                         onSwitch={onSwitchPlayersByEnd}
+                        acceptKey={accepts === "court-end"}
                       />
                     ) : null}
                     {serveRepeat ? (
@@ -1122,6 +1328,7 @@ export function LabelBlackRail({
                         repeat={serveRepeat}
                         names={names}
                         onSetGameServer={onSetGameServer}
+                        acceptKey={accepts === "serve-repeat"}
                       />
                     ) : null}
                     <BlackPointRow
@@ -1134,6 +1341,7 @@ export function LabelBlackRail({
                       score={scores.points.get(point.id)?.scoreBefore ?? null}
                       onToggle={onTogglePoint}
                       edit={edit}
+                      rowEdit={rowEdit}
                       marks={marks}
                       errorToMark={errorPointIds?.has(point.id) ?? false}
                     >
@@ -1157,6 +1365,7 @@ export function LabelBlackRail({
                         slot={short}
                         onPull={onPullGame}
                         onAddPoint={onAddPoint}
+                        acceptKey={accepts === "short"}
                       />
                     ) : null}
                     {mismatch && setScoreStop?.pointId === point.id

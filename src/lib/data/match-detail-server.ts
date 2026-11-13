@@ -9,7 +9,7 @@ import {
   type MatchKpiHistory,
 } from "@/lib/data/match-stats-server";
 import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
-import { youSeat } from "@/lib/data/viewer-side";
+import { playerSeat, youSeat } from "@/lib/data/viewer-side";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import { formatMatchDayLong } from "@/lib/data/match-day";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
@@ -64,11 +64,14 @@ export interface DbMatch extends MatchCrestEmbeds {
   insights: {
     player1?: {
       summary?: string;
+      /** The summary written about the player (`insight-voice.ts`). */
+      observer_summary?: string;
       strengths?: Array<{ name: string; value: number; description: string }>;
       weaknesses?: Array<{ name: string; value: number; description: string }>;
     };
     player2?: {
       summary?: string;
+      observer_summary?: string;
       strengths?: Array<{ name: string; value: number; description: string }>;
       weaknesses?: Array<{ name: string; value: number; description: string }>;
     };
@@ -123,11 +126,15 @@ function resolveYouSide(
   rosterIds: readonly string[],
   /** A seat pinned by the caller (`LoadMatchDetailOptions.youSeat`). */
   pinnedSeat?: "player1" | "player2",
-): { isUserPlayer1: boolean; playerId: string | null } {
-  const isUserPlayer1 =
-    (pinnedSeat ?? youSeat(row, myPlayerIds, rosterIds)) === "player1";
+): { isUserPlayer1: boolean; playerId: string | null; viewerIsYou: boolean } {
+  const seat = pinnedSeat ?? youSeat(row, myPlayerIds, rosterIds);
+  const isUserPlayer1 = seat === "player1";
   return {
     isUserPlayer1,
+    // Only an id of the viewer's own, sitting in that seat, makes "you" the
+    // viewer. The roster step and the seat-two fallback turn the report to a
+    // player the viewer is reading ABOUT, and a pinned seat has no viewer.
+    viewerIsYou: !pinnedSeat && playerSeat(row, myPlayerIds) === seat,
     playerId: isUserPlayer1 ? row.player1_id : row.player2_id,
   };
 }
@@ -237,7 +244,7 @@ export function transformDbMatchToMatch(
   const winner = scoreWinner(row.score) ?? "player2";
   const verification = verificationFor(row);
   const finalScore = sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
-  const { isUserPlayer1 } = resolveYouSide(
+  const { isUserPlayer1, viewerIsYou } = resolveYouSide(
     row,
     playerIds,
     rosterIds,
@@ -294,6 +301,7 @@ export function transformDbMatchToMatch(
     score: { sets, winner, finalScore },
     won: userWon,
     isUserPlayer1,
+    viewerIsYou,
   };
 }
 

@@ -114,7 +114,7 @@ export interface ReviewStep {
   answers: ReviewAnswer[];
   /** "Then: add the second serve" — what follows this step, or null. */
   then: string | null;
-  /** About three live strokes before the last through the last; item 4 only. */
+  /** The stroke asked about through the last; item 4 only. */
   replay: ReviewReplay | null;
 }
 
@@ -805,14 +805,26 @@ function stepAnswers(
   return answers;
 }
 
-/** About three live strokes before the last, through the last. */
-export const REPLAY_SHOTS_BEFORE_LAST = 3;
-
-function stepReplay(point: LabelPoint, ghosts: boolean): ReviewReplay | null {
+/**
+ * The film an end-of-point question plays: from the stroke the question is
+ * about (`target.shotId`, else the last) through the last. Until 2026-11-11
+ * it started three strokes before the last, and the labeller sat through
+ * balls nobody was asking about.
+ */
+function stepReplay(
+  point: LabelPoint,
+  target: ReviewTarget,
+  ghosts: boolean,
+): ReviewReplay | null {
   const live = liveShotsInOrder(point, ghosts);
   const last = live.at(-1);
   if (!last) return null;
-  const from = live[Math.max(0, live.length - 1 - REPLAY_SHOTS_BEFORE_LAST)];
+  const at = live.findIndex((shot) => shot.id === target.shotId);
+  // A stroke with no time cannot start a replay: the nearest timed stroke
+  // before it does.
+  const from =
+    live.slice(0, at + 1).findLast((shot) => shot.videoTime !== null) ??
+    (at === -1 ? last : live[at]);
   return { fromShotId: from.id, toShotId: last.id };
 }
 
@@ -864,7 +876,7 @@ export function reviewStep(
       open.length === 1,
     ),
     then: stepThen(item, open[1]),
-    replay: item.id === 4 ? stepReplay(point, ghosts) : null,
+    replay: item.id === 4 ? stepReplay(point, target, ghosts) : null,
   };
 }
 

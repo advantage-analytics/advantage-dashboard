@@ -193,8 +193,13 @@
  * November 2026 ball model, line-calls.ts `pastBounce`), with no net call and
  * a bounce past the net. No result, winner, game or score moves; only
  * `points.flags` gains the code, and only on new-model files.
+ * 0.8.12 (2026-11-11) reads the November 2026 ball model's `ball_fit_ok`
+ * false WITH a `bounce_source` into `ballFitPoor` (parse.ts), beside
+ * `ballUntracked`, for the label console's "Was the last shot real?" mark.
+ * No published row reads it; the bump is what rebuilds the console's cached
+ * rallies so the field is there.
  */
-export const DERIVATION_VERSION = "0.8.11-unreconciled";
+export const DERIVATION_VERSION = "0.8.12-unreconciled";
 
 export type {
   RawSplitStepStroke,

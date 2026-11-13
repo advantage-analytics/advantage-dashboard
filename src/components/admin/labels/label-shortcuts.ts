@@ -105,6 +105,11 @@ export const LABEL_SHORTCUT_GROUPS: readonly LabelShortcutGroup[] = [
         action: "Net",
         note: "Calls the shot Net. Again for where it landed",
       },
+      {
+        keys: ["Y"],
+        action: "Accept the suggestion",
+        note: "The answer marked Y: on the open point, or on the row between points beside it. At a missing-shot row, adds the shot",
+      },
       { keys: ["L"], action: "Let", note: "On a serve. Again to undo" },
       {
         keys: ["G"],

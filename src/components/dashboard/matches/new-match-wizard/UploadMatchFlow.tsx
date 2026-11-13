@@ -17,7 +17,14 @@
 
 import { AdminFileSubmissionStatus } from "./AdminFileSubmissionStatus";
 import { useAdminWizardMode } from "./admin-mode";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { ProviderId } from "@/lib/services/upload";
 import { followServerPreset, type EventPreset, type MatchDraft } from "./types";
 import type { RosterSubject, VideoUploadEvent } from "./useUploadMatchWizard";
@@ -61,6 +68,7 @@ import {
   trackUploadCompleted,
   trackUploadFailed,
   trackUploadStarted,
+  trackUploadStepViewed,
 } from "./upload-analytics";
 
 /** Where the flow returns to when it is dismissed or finished. */
@@ -168,8 +176,11 @@ export function UploadMatchFlow({
   }, []);
 
   // One `upload_started` per wizard run — the first visit and each
-  // "Upload another", which bumps `runId`.
-  useEffect(() => {
+  // "Upload another", which bumps `runId`. A layout effect because the step
+  // view below is sent from a child's effect, and a child's effects run before
+  // its parent's: as a plain effect this would start the clock after the
+  // first step had already been timed against the previous run's.
+  useLayoutEffect(() => {
     trackUploadStarted(initialProvider ?? null);
   }, [runId, initialProvider]);
 
@@ -348,6 +359,8 @@ function UploadWizardPage() {
       isProcessingProvider,
       startOver,
       resetImportPlayerAnswer,
+      selectedProvider,
+      uploadedFile,
       paywall,
       closeAddHours,
       handleCreditsAdded,
@@ -368,6 +381,24 @@ function UploadWizardPage() {
     meta: { contentRef, exitHref, preset, onSwitchPreset, workspaceKind },
   } = useUploadWizard();
   const { active: workspace } = useWorkspace();
+
+  // Where a visitor who never finishes got to. `trackUploadStepViewed` sends
+  // one view per step and source, so the file arriving sends nothing: that is
+  // `video_selected`'s to report.
+  const stepNumber = stepOrder.indexOf(step) + 1;
+  const stepCount = stepOrder.length;
+  const fileAttached = uploadedFile != null;
+  useEffect(() => {
+    // A source change can leave `step` outside the new order for one render.
+    if (stepNumber === 0) return;
+    trackUploadStepViewed({
+      step,
+      stepNumber,
+      stepCount,
+      provider: selectedProvider,
+      fileAttached,
+    });
+  }, [step, stepNumber, stepCount, selectedProvider, fileAttached]);
 
   // "Not Marcus?" on step 2 (stepOrder[1]) goes straight back to step 1, where
   // the For field is — no dialog, nothing was set up for the player yet. On the

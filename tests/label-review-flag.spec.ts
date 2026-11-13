@@ -14,7 +14,7 @@ import {
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
 import { REVIEW_ITEM_QUESTION } from "@/lib/services/labels/marks-copy";
-import { openFlags } from "@/lib/services/labels/flag-nav";
+import { flagStopLabel, openFlags } from "@/lib/services/labels/flag-nav";
 import {
   greyJumpFirstItem,
   openReviewItems,
@@ -79,6 +79,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   first_serve_fault_alone: {},
   serve_in_landing_out: { shotId: "s1", landing: "out" },
   serve_after_serve_in: { shotId: "s1" },
+  serve_by_receiver: { shotId: "s1", hitter: "p1", server: "p2" },
   placement_missing: { shotId: "s1", stroke: "serve", missing: "landing" },
   pick_winner: {},
   net_hit_contradicts_height: {},
@@ -287,6 +288,36 @@ test.describe("a placement gap beside an amber question", () => {
       REVIEW_ITEM_QUESTION[7],
     );
   });
+
+  test("a stroke missing only its contact is asked as Contact point", () => {
+    const hitOnly = wonOnForehand({
+      shots: [
+        forehand({
+          id: "a",
+          eventId: 8,
+          videoTime: 1,
+          contactX: null,
+          contactY: null,
+          landingX: 2,
+          landingY: 20,
+        }),
+        forehand({
+          id: "b",
+          eventId: 9,
+          videoTime: 2,
+          landingX: 2,
+          landingY: 20,
+        }),
+      ],
+    });
+    const none = marksOf({});
+    expect(reviewChip(reviewFlag(hitOnly, none, [hitOnly])!)!.text).toBe(
+      "Contact point",
+    );
+    expect(openFlags([hitOnly], none).map(flagStopLabel)).toEqual([
+      "Contact point",
+    ]);
+  });
 });
 
 test.describe("the item table", () => {
@@ -306,6 +337,7 @@ test.describe("the item table", () => {
       [
         "second_serve_as_first",
         "first_serve_fault_alone",
+        "serve_by_receiver",
         "second_serve_called_out",
         "serve_in_landing_out",
       ],
@@ -477,11 +509,12 @@ test.describe("tone", () => {
     ).toBe("data");
   });
 
-  test("item 3 is amber only for a double fault in question or a fault alone", () => {
+  test("item 3 is amber only for a double fault in question, a fault alone or a serve by the receiver", () => {
     expect(tone(flagOf([sample("second_serve_as_first")]), 3)).toBe("data");
     expect(tone(flagOf([sample("serve_in_landing_out")]), 3)).toBe("data");
     expect(tone(flagOf([sample("second_serve_called_out")]), 3)).toBe("score");
     expect(tone(flagOf([sample("first_serve_fault_alone")]), 3)).toBe("score");
+    expect(tone(flagOf([sample("serve_by_receiver")]), 3)).toBe("score");
   });
 
   test("item 4 is amber with a counted member or a contradicted winner, else grey", () => {
@@ -1093,6 +1126,18 @@ test.describe("reviewItemTarget", () => {
     expect(target(itemOf(3, sample("first_serve_fault_alone")))).toEqual(
       at("d", "landing"),
     );
+    expect(
+      target(
+        itemOf(
+          3,
+          mark("serve_by_receiver", {
+            shotId: "b",
+            hitter: "p1",
+            server: "p2",
+          }),
+        ),
+      ),
+    ).toEqual(at("b", null));
     // The last second serve, not the last stroke.
     const seconds = rally(
       ["b", { stroke: "second_serve" }],

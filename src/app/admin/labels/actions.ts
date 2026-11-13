@@ -57,6 +57,7 @@ import {
   type LabelInsertPointResult,
 } from "@/lib/services/labels/point-insert-session";
 import {
+  cutLabelSet,
   foldLabelTiebreak,
   pullLabelGamePoints,
   shiftLabelGameOverflow,
@@ -438,6 +439,17 @@ export async function pullLabelGamePointsAction(
 }
 
 /**
+ * A set that reached its entered score with games still filed under it: move
+ * those games into the next set (set-cut.ts). The console calls it by itself.
+ */
+export async function cutLabelSetAction(
+  sessionId: string,
+  setNumber: number,
+): Promise<LabelGameShiftResult> {
+  return withLabelOp("Start next set", () => cutLabelSet(sessionId, setNumber));
+}
+
+/**
  * The tiebreak at 6–6: make set `setNumber`'s next game a tiebreak, fold the
  * vendor's split games into it and set its 1-2-2 serve order.
  */
@@ -505,9 +517,11 @@ export async function switchLabelPointPlayersAction(
  */
 export async function switchLabelPointsPlayersAction(
   pointIds: string[],
+  /** The console's own fix: skip a point already switched elsewhere. */
+  onlyIfContradicts = false,
 ): Promise<LabelPlayersSwitchResult> {
   return withLabelOp("Switch players by court end", () =>
-    switchLabelPointsPlayers(pointIds),
+    switchLabelPointsPlayers(pointIds, undefined, onlyIfContradicts === true),
   );
 }
 

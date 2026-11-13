@@ -4,6 +4,7 @@ import {
   HAND_LABELLED_FLAG,
   OFF_VIDEO_FLAG,
   buildAppliedRows,
+  countedServeIndex,
   expectedStats,
   letsLeftOutLine,
   pointInsertRow,
@@ -785,5 +786,63 @@ test.describe("buildAppliedRows with a start score", () => {
         start: null,
       }),
     ).toEqual(build());
+  });
+});
+
+test.describe("a serve typed on the receiver", () => {
+  // p1 serves; p2's overhead, three strokes in, was left typed as a serve.
+  const point = () =>
+    pt(0, "p1", "winner", (p) => [
+      shot(p, "p1", "first_serve", "in"),
+      shot(p, "p2", "forehand", "in"),
+      shot(p, "p1", "forehand", "in"),
+      shot(p, "p2", "second_serve", "in"),
+      shot(p, "p1", "overhead", "in"),
+    ]);
+
+  test("the rally is numbered from the server's serve, and the confirm names the stroke", () => {
+    const { points, problems, warnings } = build([point()]);
+    expect(problems).toEqual([]);
+    expect(warnings).toEqual([
+      "point 1: stroke 4 is a serve by p2, but p1 is serving",
+    ]);
+    expect(points[0].shots.map((s) => s.shot_number)).toEqual([1, 2, 3, 4, 5]);
+    expect(points[0].rally_length).toBe(5);
+  });
+
+  test("countedServeIndex: the server's last serve; any last serve when the server hit none; -1 with none", () => {
+    const strokes = (...rows: [LabelSide, LabelStroke][]) =>
+      rows.map(([hitter, stroke]) => ({ hitter, stroke }));
+    expect(
+      countedServeIndex(
+        strokes(
+          ["p1", "first_serve"],
+          ["p1", "second_serve"],
+          ["p2", "backhand"],
+          ["p2", "second_serve"],
+        ),
+        "p1",
+      ),
+    ).toBe(1);
+    // The point's server is what is wrong: its serve still opens the rally.
+    expect(
+      countedServeIndex(
+        strokes(["p2", "first_serve"], ["p1", "forehand"]),
+        "p1",
+      ),
+    ).toBe(0);
+    // A second serve typed on the wrong hitter is still the service: the
+    // faulted first serve is never the counted one.
+    expect(
+      countedServeIndex(
+        strokes(
+          ["p1", "first_serve"],
+          ["p2", "second_serve"],
+          ["p2", "backhand"],
+        ),
+        "p1",
+      ),
+    ).toBe(1);
+    expect(countedServeIndex(strokes(["p1", "forehand"]), "p1")).toBe(-1);
   });
 });

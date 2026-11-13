@@ -37,12 +37,6 @@ export interface SessionScoringRow {
   job_id: string | null;
 }
 
-/** The one column of the session's match the fallback reads. */
-export interface MatchScoringRow {
-  /** `matches.format` (jsonb), read by `readFormatAdScoring`. */
-  format: unknown;
-}
-
 /** `matches.format.ad_scoring` when it is a boolean; null otherwise. */
 export function readFormatAdScoring(format: unknown): boolean | null {
   if (!format || typeof format !== "object") return null;
@@ -75,29 +69,6 @@ export async function readJobAdScoring(
     .select("ad_scoring")
     .eq("id", session.job_id)
     .maybeSingle<JobScoringRow>();
-}
-
-/**
- * The match's `format`, read only when it may be the fallback: a session
- * that has set its own scoring never reads it. Read beside the job's (not
- * after it), so a job that turns out to say nothing costs no extra round
- * trip. The caller decides what a read error means to it.
- */
-export async function readMatchAdScoring(
-  db: AdminClient,
-  session: { ad_scoring: boolean | null; match_id: string | null },
-): Promise<{
-  data: MatchScoringRow | null;
-  error: { message: string } | null;
-}> {
-  if (session.ad_scoring !== null || !session.match_id) {
-    return { data: null, error: null };
-  }
-  return db
-    .from("matches")
-    .select("format")
-    .eq("id", session.match_id)
-    .maybeSingle<MatchScoringRow>();
 }
 
 /**

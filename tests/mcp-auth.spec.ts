@@ -19,10 +19,13 @@ import {
 } from "@/lib/services/ask/sql-guard";
 import {
   ASK_NEEDS_SESSION_MESSAGE,
+  createAuthFailureGate,
   assertAskAllowed,
   authorizationServerMetadataUrl,
   isJwtShaped,
   MAX_BEARER_TOKEN_LENGTH,
+  jwtLooksExpired,
+  mcpClientFromUserAgent,
   mcpResourceUrl,
   protectedResourceMetadata,
   readBearerToken,
@@ -254,7 +257,7 @@ test.describe("describeAskViews", () => {
 // ── The consent page's parsing ─────────────────────────────────────────────
 
 test.describe("the consent page", () => {
-  test("offers Allow only to Claude's, ChatGPT's and Cursor's callbacks and a loopback one", () => {
+  test("offers Allow only to Claude's, ChatGPT's, Gemini's and Cursor's callbacks and a loopback one", () => {
     expect(
       isConnectorRedirectUri("https://claude.ai/api/mcp/auth_callback"),
     ).toBe(true);
@@ -281,6 +284,30 @@ test.describe("the consent page", () => {
     );
     expect(isConnectorRedirectUri("http://127.0.0.1:8080/callback")).toBe(true);
     expect(isConnectorRedirectUri("http://[::1]:8080/callback")).toBe(true);
+
+    // The Gemini app: one segment under /r/ or /a/ on Google's redirect host.
+    expect(
+      isConnectorRedirectUri(
+        "https://oauth-redirect.googleusercontent.com/r/abc_12-XY",
+      ),
+    ).toBe(true);
+    expect(
+      isConnectorRedirectUri(
+        "https://oauth-redirect.googleusercontent.com/a/abc_12-XY",
+      ),
+    ).toBe(true);
+    for (const lookalike of [
+      "https://oauth-redirect.googleusercontent.com/r/",
+      "https://oauth-redirect.googleusercontent.com/r/a/b",
+      "https://oauth-redirect.googleusercontent.com/x/abc",
+      "https://oauth-redirect.googleusercontent.com/r/abc?next=x",
+      "https://oauth-redirect-sandbox.googleusercontent.com/r/abc",
+      "https://evil.googleusercontent.com/r/abc",
+      "https://oauth-redirect.googleusercontent.com.evil.example/r/abc",
+      "http://oauth-redirect.googleusercontent.com/r/abc",
+    ]) {
+      expect(isConnectorRedirectUri(lookalike), lookalike).toBe(false);
+    }
 
     expect(isConnectorRedirectUri(null)).toBe(false);
     expect(isConnectorRedirectUri("not a url")).toBe(false);
@@ -734,6 +761,57 @@ test.describe("createMcpUserReads", () => {
     ).toBeNull();
   });
 
+  test("roster(): the program's players by name and id, as a GET — never its staff, an email or a login id", async () => {
+    const { client, filters } = fakeClient({
+      program_roster_full: {
+        data: [
+          {
+            player_id: "pp-1",
+            profile_id: "pp-1",
+            user_id: "login-1",
+            display_name: "Sam Okafor",
+            email: "sam@example.test",
+            role: "player",
+            class_year: "Junior",
+          },
+          // A coach: their login id sits in player_id.
+          {
+            player_id: "login-coach",
+            profile_id: null,
+            user_id: "login-coach",
+            display_name: "Dana Ruiz",
+            email: "dana@example.test",
+            role: "coach",
+            class_year: null,
+          },
+          // A member playing with no profile row yet is still a player.
+          {
+            player_id: "login-2",
+            profile_id: null,
+            user_id: "login-2",
+            display_name: null,
+            email: "new@example.test",
+            role: "player",
+            class_year: null,
+          },
+        ],
+        error: null,
+      },
+    });
+    expect(
+      await createMcpUserReads(client, USER_ID).roster(PROGRAM_ID),
+    ).toEqual([
+      { player_id: "pp-1", name: "Sam Okafor", class_year: "Junior" },
+      { player_id: "login-2", name: null, class_year: null },
+    ]);
+    expect(
+      filters.filter((f) => f.op === "rpc").map((f) => [f.table, f.args[1]]),
+    ).toEqual([["program_roster_full", true]]);
+    expect(await createMcpUserReads(client, USER_ID).roster("nope")).toEqual(
+      [],
+    );
+  });
+
   test("ownMatch(): the creator's own row with what the patch rules decide from; a match they did not create is null", async () => {
     const { client, filters } = fakeClient({
       matches: {
@@ -969,5 +1047,72 @@ test.describe("the connector's read-only guard", () => {
         /if \(jwtClientId\(token\) !== null\) \{\s*return \{\s*status: 403,/,
       );
     }
+  });
+});
+
+test.describe("which app is calling", () => {
+  test("is read from the User-Agent for reporting, with the product token kept for apps not yet known", () => {
+    expect(mcpClientFromUserAgent("claude-code/2.1.300 (cli)")).toEqual({
+      client: "claude_code",
+      agent: "claude-code",
+    });
+    expect(mcpClientFromUserAgent("Claude-User/1.0").client).toBe("claude");
+    expect(mcpClientFromUserAgent("openai-mcp/1.0.0").client).toBe("chatgpt");
+    expect(mcpClientFromUserAgent("Cursor/3.2 (darwin)").client).toBe("cursor");
+    expect(mcpClientFromUserAgent("Google-Gemini-Apps").client).toBe("gemini");
+    // "google" alone is not the Gemini app: any Google-run fetcher says it.
+    expect(mcpClientFromUserAgent("Google-Cloud-Functions/1.0").client).toBe(
+      "other",
+    );
+    expect(mcpClientFromUserAgent("SomeNewApp/9 extra words")).toEqual({
+      client: "other",
+      agent: "SomeNewApp",
+    });
+    expect(mcpClientFromUserAgent(null)).toEqual({
+      client: "other",
+      agent: null,
+    });
+    // Never the whole header: a long or odd one is cut to its product token.
+    expect(mcpClientFromUserAgent(`${"x".repeat(200)}/1`).agent).toHaveLength(
+      40,
+    );
+  });
+});
+
+test.describe("a refused token's expiry", () => {
+  const tokenWith = (payload: unknown) =>
+    `h.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.s`;
+  const NOW = 1_800_000_000_000;
+
+  test("is read from the token's own exp, to tell a routine refresh from a broken sign-in", () => {
+    expect(jwtLooksExpired(tokenWith({ exp: NOW / 1000 - 1 }), NOW)).toBe(true);
+    expect(jwtLooksExpired(tokenWith({ exp: NOW / 1000 + 60 }), NOW)).toBe(
+      false,
+    );
+    // No readable exp is not "expired": that refusal is worth reporting.
+    expect(jwtLooksExpired(tokenWith({}), NOW)).toBe(false);
+    expect(jwtLooksExpired(tokenWith({ exp: "soon" }), NOW)).toBe(false);
+    expect(jwtLooksExpired("a.b.c", NOW)).toBe(false);
+    expect(jwtLooksExpired("junk", NOW)).toBe(false);
+  });
+});
+
+test.describe("the cap on auth-failure events", () => {
+  test("a few per caller and a total per window, so one address cannot hide the others' failures", () => {
+    const gate = createAuthFailureGate({
+      perCaller: 2,
+      total: 3,
+      windowMs: 1000,
+    });
+    expect(gate.allow("a", 0)).toBe(true);
+    expect(gate.allow("a", 1)).toBe(true);
+    // One address has spent its own allowance, not everyone's.
+    expect(gate.allow("a", 2)).toBe(false);
+    expect(gate.allow("b", 3)).toBe(true);
+    // The total holds however many addresses there are.
+    expect(gate.allow("c", 4)).toBe(false);
+    // A new window starts both counts again.
+    expect(gate.allow("a", 1000)).toBe(true);
+    expect(gate.allow("c", 1001)).toBe(true);
   });
 });

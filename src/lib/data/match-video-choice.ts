@@ -13,9 +13,12 @@
  *   2026 is cut to the selected window in the browser before upload. It keeps
  *   the original bitrate and the audio. Preferred whenever the blob exists.
  * - `trimmed_object_key` — the vendor's re-encode of the window, about 2 Mbps,
- *   copied into our container by the webhook (`vendor-archive.ts`) before the
- *   vendor's 7-day link expires. Older jobs, and any whose copy missed, have
- *   none. It can be silent.
+ *   once copied into our container by the webhook. No longer copied (retired
+ *   2026-11-12) and the old copies are being deleted
+ *   (`scripts/delete-trimmed-copies.ts`), which keeps any a job without a
+ *   playback copy still plays. So it stays the LAST resort, checked for
+ *   existence like every other file, and a nulled column skips it. It can be
+ *   silent.
  *
  * The playback copy may live in R2 (`playback_store = 'r2'`, since November
  * 2026) and is checked and signed there; the other two are always in Azure.
@@ -116,7 +119,16 @@ export async function choosePlaybackFile(
         source: "upload",
       };
     }
-    if (prefer === "upload" && vendorCopy) return vendorCopy;
+    // Last resort, and only if the blob is really there: copies are no longer
+    // made (retired 2026-11-12) and the old ones are being deleted, so a row
+    // can still name one that is gone — never hand out a dead link for it.
+    if (
+      prefer === "upload" &&
+      vendorCopy &&
+      (await blobExists(vendorCopy.blobName, "azure"))
+    ) {
+      return vendorCopy;
+    }
   }
   return null;
 }

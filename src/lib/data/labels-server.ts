@@ -475,6 +475,8 @@ interface DbSessionRow {
   video_ends_early?: boolean | null;
   /** jsonb object parsed by `parseLabelStartScore` (session-fields.ts); null until set. */
   start_score?: unknown;
+  /** The labeller the session is assigned to; null or absent when nobody. */
+  assigned_to?: string | null;
 }
 
 /**
@@ -520,10 +522,17 @@ export async function getLabelSession(
         });
         return null;
       }),
-    ]),
+    ]).then(([marksFetch, video]) => ({
+      marksFetch,
+      video,
+      assignedTo: row.assigned_to ?? null,
+    })),
   );
   if (!read) return { ok: false, reason: "not-found" };
-  const [marksFetch, video] = read.beside;
+  const { marksFetch, video, assignedTo } = read.beside;
+  // Whoever opens it, by either route: someone else's work to this viewer.
+  read.session.assignedToOther =
+    assignedTo !== null && assignedTo !== viewer.id;
 
   return {
     ok: true,
@@ -547,7 +556,7 @@ export async function readLabelSessionRows<T = undefined>(
   const { data: session, error: sessionError } = await db
     .from("label_sessions")
     .select(
-      "id, job_id, match_id, status, derivation_version, kind, practice_set_number, ad_scoring, marks_enabled, final_score, video_ends_early, start_score",
+      "id, job_id, match_id, status, derivation_version, kind, practice_set_number, ad_scoring, marks_enabled, final_score, video_ends_early, start_score, assigned_to",
     )
     .eq("id", sessionId)
     .maybeSingle<Omit<DbSessionRow, "kind"> & { kind?: string | null }>();
@@ -563,16 +572,22 @@ export async function readLabelSessionRows<T = undefined>(
     kind: session.kind === "practice" ? "practice" : "analyst",
   };
 
-  const [extra, matchResult, jobResult, pointRows, shotRows] =
+  const matchRead = db
+    .from("matches")
+    .select(
+      "id, player1_name, player2_name, score, format, player_hand, opponent_hand, player1_id, player2_id, opponent_player_id",
+    )
+    .eq("id", row.match_id)
+    .maybeSingle<DbMatch>()
+    // A real promise: the builder would send the query once per `then`.
+    .then((read) => read);
+  const [extra, matchResult, enteredHands, jobResult, pointRows, shotRows] =
     await Promise.all([
       beside?.(row) as Promise<T>,
-      db
-        .from("matches")
-        .select(
-          "id, player1_name, player2_name, score, format, player_hand, opponent_hand, player1_id, player2_id, opponent_player_id",
-        )
-        .eq("id", row.match_id)
-        .maybeSingle<DbMatch>(),
+      matchRead,
+      // The hands need the match row alone, so they are read as soon as it
+      // lands, beside the points and shots rather than after them.
+      matchRead.then((read) => readEnteredHands(db, read.data ?? null)),
       // The job's scoring is only the fallback for a session that has not
       // set its own; a session whose job is gone has nothing to fall back to.
       readJobAdScoring(db, row),
@@ -609,7 +624,7 @@ export async function readLabelSessionRows<T = undefined>(
     shotRows,
     jobResult.data ?? null,
   );
-  built.enteredHands = await readEnteredHands(db, match);
+  built.enteredHands = enteredHands;
   return { session: built, beside: extra };
 }
 

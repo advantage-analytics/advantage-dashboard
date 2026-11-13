@@ -159,6 +159,7 @@ export function openingMarkRows(
         ? []
         : [point.vendorRallyIds[0]],
     shots: point.shots,
+    seed: point.seed,
   }));
 }
 

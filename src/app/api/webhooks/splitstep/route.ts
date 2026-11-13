@@ -37,10 +37,11 @@
  *     work the user actually sees has finished. A miss is recoverable by hand
  *     from the url on the job row for a week.
  *   • `trimmed_video_url` — their trimmed, re-encoded video. Recorded on the job
- *     row and NOT downloaded: it is a lower-bitrate copy that arrived without an
+ *     row and NOT kept: it is a lower-bitrate copy that arrived without an
  *     audio track. The video we keep is the athlete's own upload, cut to the
- *     selected window in the browser before upload (lib/video/trim.ts), and it
- *     is never deleted when the job completes.
+ *     selected window in the browser before upload (lib/video/trim.ts), plus
+ *     the playback worker's copy of it. Copying the vendor's into our
+ *     container was retired 2026-11-12 (docs/r2-video-storage-plan.md).
  *
  * Nothing slow happens before the response. The vendor confirmed a 30s
  * connection timeout and NO retry policy, which makes their timeout the hard
@@ -80,10 +81,7 @@ import { gradeResults } from "@/lib/services/splitstep/grade-results";
 import { secureResults } from "@/lib/services/splitstep/secure-results";
 import { deriveAndPublish } from "@/lib/services/splitstep/derive-and-publish";
 import { deriveAndStoreBallPaths } from "@/lib/services/splitstep/ball-paths-store";
-import {
-  archiveTrimmedVideo,
-  archiveVendorJson,
-} from "@/lib/services/splitstep/vendor-archive";
+import { archiveVendorJson } from "@/lib/services/splitstep/vendor-archive";
 import {
   notifyAnalysisOutcome,
   notifyUnreadableWebhook,
@@ -261,7 +259,6 @@ export async function POST(request: NextRequest) {
     job_status: string | null;
     results_object_key: string | null;
     already_stored: boolean;
-    trimmed_object_key: string | null;
     players_object_key: string | null;
     trajectories_object_key: string | null;
   };
@@ -339,28 +336,25 @@ export async function POST(request: NextRequest) {
     const deliveryId = record.delivery_id;
     const jobId = record.matched_job_id;
 
-    // Four independent assets with four independent guards — everything the
+    // Three independent assets with three independent guards — everything the
     // completion links to is kept, for whatever is built on it later. Gating
     // them all on `already_stored`, which is only ever about the strokes JSON,
     // would mean a download that failed once never got another chance, on a
     // url that expires. A miss here is retried daily by the
     // archive-vendor-files cron while the url lives.
     //
-    // The trimmed video is a lower-bitrate re-encode without audio; playback
-    // prefers the athlete's own upload (match-video-choice.ts), so our copy is
-    // the archive and the fallback, never the first choice.
+    // The vendor's trimmed video is no longer copied (retired 2026-11-12):
+    // playback reads the athlete's upload and its playback copy, and nothing
+    // ever needed the vendor's lower-bitrate re-encode.
     const strokesUrl = record.already_stored ? null : payload.strokesUrl;
     const playersUrl = record.players_object_key ? null : payload.playersUrl;
     const trajectoriesUrl = record.trajectories_object_key
       ? null
       : payload.trajectoriesUrl;
-    const trimmedVideoUrl = record.trimmed_object_key
-      ? null
-      : payload.trimmedVideoUrl;
 
     // Pick this delivery's storage keys. The retain/orphan policy and its full
     // rationale live in selectDeliveryStorageKeys.
-    const { resultsKey, playersKey, trajectoriesKey, trimmedKey } =
+    const { resultsKey, playersKey, trajectoriesKey } =
       selectDeliveryStorageKeys({
         jobId,
         createdBy: record.created_by,
@@ -369,30 +363,8 @@ export async function POST(request: NextRequest) {
         deliveryId,
       });
 
-    if (strokesUrl || playersUrl || trajectoriesUrl || trimmedVideoUrl) {
+    if (strokesUrl || playersUrl || trajectoriesUrl) {
       after(async () => {
-        // The trimmed video first: one Start Copy request, and Azure moves the
-        // bytes on its own clock, so nothing below waits on it.
-        if (trimmedVideoUrl && trimmedKey && jobId) {
-          const copied = await archiveTrimmedVideo({
-            supabase,
-            jobId,
-            sourceUrl: trimmedVideoUrl,
-            blobName: trimmedKey,
-          });
-          if (copied.ok) {
-            pipelineLog.info(`${LOG} trimmed video copy ${copied.copyStatus}`, {
-              jobId,
-              blobName: trimmedKey,
-            });
-          } else {
-            pipelineLog.error(
-              `${LOG} trimmed video copy FAILED — the archive-vendor-files cron retries while the url lives`,
-              { jobId, error: copied.error },
-            );
-          }
-        }
-
         // The players file, started now and awaited last. It is 30–80 MB, so
         // it runs beside derivation on its own clock instead of in whatever
         // is left after it — the old order lost it on 10 of 14 jobs.

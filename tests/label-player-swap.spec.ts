@@ -856,6 +856,46 @@ test.describe("writeLabelPlayersSwitch (Switch N points)", () => {
     ).toEqual([POINT_ID, OTHER_ID]);
   });
 
+  test("onlyIfContradicts: a point whose serve is already its server's is left unwritten and unlisted", async () => {
+    // What a second tab finds after the first one made the same fix.
+    const agreeing = fakeClient({
+      point: pointRow,
+      shots: [
+        shotRow("s1", {
+          hitter: pointRow.server,
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+      ],
+    });
+    expect(
+      await writeLabelPlayersSwitch({
+        supabase: agreeing.supabase,
+        pointIds: [POINT_ID],
+        onlyIfContradicts: true,
+      }),
+    ).toEqual({ ok: true, points: [], shots: [], stopped: null });
+    expect(agreeing.calls.filter((c) => c.op === "update")).toEqual([]);
+
+    const contradicting = fakeClient({
+      point: pointRow,
+      shots: [
+        shotRow("s1", {
+          hitter: pointRow.server === "p1" ? "p2" : "p1",
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+      ],
+    });
+    const result = await writeLabelPlayersSwitch({
+      supabase: contradicting.supabase,
+      pointIds: [POINT_ID],
+      onlyIfContradicts: true,
+    });
+    if (!("ok" in result)) throw new Error(result.error);
+    expect(result.points.map((p) => p.pointId)).toEqual([POINT_ID]);
+  });
+
   test("a refusal part way answers the points already written and why it stopped; bad ids write nothing", async () => {
     let reads = 0;
     const fake = fakeLabelClient((call) => {

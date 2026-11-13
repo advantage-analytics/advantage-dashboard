@@ -24,6 +24,7 @@ import {
   isServeStroke,
   type LabelPoint,
   type LabelShot,
+  type LabelSide,
 } from "./session";
 
 /**
@@ -149,6 +150,17 @@ export function landedOnOwnSide(shot: ShotEnds): boolean {
     return false;
   }
   return didNotClearNet(contactY, landingY);
+}
+
+/**
+ * How far PAST the net a ball came down, in metres: positive on the far side
+ * from where it was hit. Null while either end is missing, and for a ball
+ * that did not clear (`landedOnOwnSide`).
+ */
+export function pastNet(shot: ShotEnds): number | null {
+  if (shot.contactY == null || shot.landingY == null) return null;
+  if (landedOnOwnSide(shot)) return null;
+  return Math.abs(shot.landingY - NET_Y);
 }
 
 /**
@@ -339,4 +351,17 @@ export function positionPatch(
   const result = deriveShotResult({ ...shot, ...placed });
   // The ends now say the call, so it stops being the labeller's own.
   return result === null ? placed : { ...placed, result, result_called: false };
+}
+
+/**
+ * A stroke typed as a serve whose hitter is set and is not the point's
+ * server: what "Serve by the receiver" marks and the publish warns of.
+ */
+export function isServeByReceiver(
+  shot: Pick<LabelShot, "stroke" | "hitter">,
+  server: LabelSide,
+): boolean {
+  return (
+    isServeStroke(shot.stroke) && shot.hitter !== null && shot.hitter !== server
+  );
 }

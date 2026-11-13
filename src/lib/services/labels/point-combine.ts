@@ -9,7 +9,9 @@
  * later part's leading "serve" was a stroke of that rally the vendor read as a
  * serve: it becomes an overhead, by whoever's turn it was. A fault with one or
  * two swings at the dead ball after it is not a rally in play: the later serve
- * stays a serve (and becomes the second serve, below).
+ * stays a serve (and becomes the second serve, below). Nor is a later serve
+ * hit five seconds or more after the last stroke (`SERVE_REPLAY_GAP`): the
+ * point was served again, whatever the earlier serve was called.
  *
  * The earlier point is kept. Every shot row of the later one (tombstones
  * included) takes its id in one update, statuses untouched. It takes the later
@@ -37,7 +39,8 @@
  * every combined point labelled by 2026-10-28: after a serve out, in the net
  * or a let, labellers deleted 31 of the 33 strokes before the next serve
  * (the other 2 were ghosts); after a serve called in they kept 16 of 28, so
- * a serve called in clears nothing. The seed removes those swings
+ * a serve called in clears nothing by itself — only when the next serve comes
+ * `SERVE_REPLAY_GAP` after the stroke before it. The seed removes those swings
  * inside one vendor rally (`hit_after_fault`), but a combine joins two
  * rallies after it, so the swings at the fault end up live. A ghost — a
  * stroke the site already removed — is left as it is.
@@ -164,14 +167,40 @@ export interface PointCombinePlan {
  * The live strokes that are not serves between a serve called out, in the
  * net or a let and the same server's next serve, in video order: swings at
  * a fault, or at a let, before the serve that followed. A ghost is not
- * live. A serve with no hitter pairs with any; a serve called in, or not
- * called, clears nothing.
+ * live. A serve with no hitter pairs with any. A serve called in, or not
+ * called, clears nothing — unless the next serve comes `SERVE_REPLAY_GAP`
+ * after the stroke before it: then the point was served again, and what was
+ * hit between the two serves was hit at a dead ball.
  */
 const DEAD_AFTER: ReadonlySet<LabelShotResult | null> = new Set([
   "out",
   "net",
   "let",
 ]);
+
+/**
+ * Seconds: a serve this long after the stroke before it was served again,
+ * whatever the earlier serve was called. Nobody takes five seconds between
+ * two balls of a rally. Measured 2026-11-11 on every complete session's
+ * points holding two seeded serves with strokes between them, the earlier
+ * called in: at 5 s or more the later one stayed a serve on 52 of 52 and
+ * labellers deleted 58 of the 71 strokes between; under 5 s it was a rally
+ * stroke on 11 of 13 and they deleted 2 of 59. The earlier serve ended a
+ * fault on 24, a let on 12.
+ */
+export const SERVE_REPLAY_GAP = 5;
+
+/** Whether `serve` comes `SERVE_REPLAY_GAP` or more after `previous`. */
+function servedAgain(
+  previous: CombinableShot | undefined,
+  serve: CombinableShot,
+): boolean {
+  return (
+    previous?.videoTime != null &&
+    serve.videoTime != null &&
+    serve.videoTime - previous.videoTime >= SERVE_REPLAY_GAP
+  );
+}
 
 export function deadBetweenServes(shots: readonly CombinableShot[]): string[] {
   const live = orderLabelShots(
@@ -192,14 +221,15 @@ export function deadBetweenServes(shots: readonly CombinableShot[]): string[] {
   const dead: string[] = [];
   let serve: CombinableShot | null = null;
   let between: string[] = [];
-  for (const shot of live) {
+  for (const [i, shot] of live.entries()) {
     if (!isServeStroke(shot.stroke)) {
       if (serve) between.push(shot.id);
       continue;
     }
     const replayed =
       serve !== null &&
-      DEAD_AFTER.has(serve.result ?? null) &&
+      (DEAD_AFTER.has(serve.result ?? null) ||
+        servedAgain(live[i - 1], shot)) &&
       (serve.hitter == null ||
         shot.hitter == null ||
         serve.hitter === shot.hitter);
@@ -372,8 +402,15 @@ export function combineCarryOver(
     }
   }
   const lead = liveStrokes(later)[0];
-  if (lead && isServeStroke(lead.stroke) && rallyInPlay(earlier)) {
-    const last = liveStrokes(earlier).at(-1);
+  const last = liveStrokes(earlier).at(-1);
+  // Served again (`SERVE_REPLAY_GAP`): a serve, whatever the earlier part
+  // reads as — its strokes after the serve go instead (`deadBetweenServes`).
+  if (
+    lead &&
+    isServeStroke(lead.stroke) &&
+    rallyInPlay(earlier) &&
+    !servedAgain(last, lead)
+  ) {
     const turn = other(last?.hitter);
     patches.set(lead.id, {
       ...patches.get(lead.id),

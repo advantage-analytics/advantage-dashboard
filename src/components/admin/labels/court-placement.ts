@@ -377,6 +377,44 @@ export function endFields(
     : ["landing_x", "landing_y"];
 }
 
+/** One end of one stroke: what the last court click placed. */
+export interface PlacedEnd {
+  shotId: string;
+  target: PlacementTarget;
+}
+
+/**
+ * The end "Off screen, so this is an estimate" speaks for: the end the last
+ * click placed (`placed`), while its stroke is still a live one of the open
+ * point — the labeller sees the ball was off screen as they click it, and by
+ * then the court has moved on to the next end or let go. With nothing placed
+ * yet it is the end the next click places, so the box can be ticked first.
+ * Null with neither.
+ */
+export function estimateEnd(
+  placement: PlacementState,
+  placed: PlacedEnd | null,
+  liveShotIds: readonly string[],
+): (PlacedEnd & { placed: boolean }) | null {
+  if (placed && liveShotIds.includes(placed.shotId)) {
+    return { ...placed, placed: true };
+  }
+  if (placement.shotId === null || !liveShotIds.includes(placement.shotId)) {
+    return null;
+  }
+  return { shotId: placement.shotId, target: placement.target, placed: false };
+}
+
+/** The box's words: the end just placed is named, the armed one is not. */
+export function estimateLabel(
+  end: PlacedEnd & { placed: boolean },
+  shotNumber: number | null,
+): string {
+  return end.placed && shotNumber !== null
+    ? `Off screen, so shot ${shotNumber}’s ${end.target} is an estimate`
+    : "Off screen, so this is an estimate";
+}
+
 /** Whether `unclear` calls `target`'s position an estimate (either name). */
 export function isEstimate(
   unclear: readonly string[],

@@ -472,7 +472,10 @@ test.describe("the black point row", () => {
       edit,
     });
     // The pencil is `PencilMark`'s, so that component is entered.
-    const pencil = findByProp(tree, "data-reset-pencil", ["PencilMark"]);
+    const pencil = findByProp(tree, "data-reset-pencil", [
+      "PointRowBody",
+      "PencilMark",
+    ]);
     expect(pencil).not.toBeNull();
     expect(pencil!.props["aria-label"]).toBe("Reset point 1");
     (pencil!.props.onClick as (e: unknown) => void)({
@@ -490,7 +493,7 @@ test.describe("the black point row", () => {
         edit,
       }),
       "data-reset-pencil",
-      ["PencilMark"],
+      ["PointRowBody", "PencilMark"],
     );
     expect(shotsOnly!.props["aria-label"]).toBe("Reset point 1");
 

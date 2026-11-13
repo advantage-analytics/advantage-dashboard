@@ -6,6 +6,7 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
 import { advButton } from "@/lib/ui/adv-button";
 import { MAX_POINT_SET } from "@/lib/match-video/point-set";
 import { depthBandRows } from "@/lib/data/viz-bands";
+import { canManageSavedView } from "@/lib/data/saved-views-logic";
 
 import { ChartMenu } from "./chart-menu";
 import { CutMenu } from "./cut-menu";
@@ -13,6 +14,10 @@ import { defaultCutsFor } from "./default-cuts";
 import { isPlayable, pointsBehind } from "./lightbox-points";
 import { LightboxPointList } from "./lightbox-point-list";
 import { SaveAsViewButton } from "./save-as-view-button";
+import {
+  SavedViewTitleMenu,
+  type SavedViewAction,
+} from "./saved-view-title-menu";
 import { shotsWriteAccess } from "./shots-write-access";
 import { serveRowDotIds, statPickDotIds, type StatPick } from "./stat-cut";
 import { useVizState } from "./use-viz-state";
@@ -74,6 +79,8 @@ export function VizLightbox({
   wallPlayer,
   onWatchPoints,
   allowSaveView = true,
+  onViewAction,
+  viewActionFailure = null,
 }: {
   /** The wall's own You | Opponent, which closing restores — a player
    *  switched inside the lightbox does not leak onto the wall. */
@@ -83,6 +90,11 @@ export function VizLightbox({
   /** "Save as view". `false` leaves it out whatever the viewer may write;
    *  `true` (default) still needs `shotsWriteAccess(meta).canSaveViews`. */
   allowSaveView?: boolean;
+  /** The open saved view's ⋯ (rename, duplicate, share, delete), run by the
+   *  Saved wall's band. Omitted, there is no ⋯ beside the name. */
+  onViewAction?: (action: SavedViewAction) => void;
+  /** The last `onViewAction` the server refused (numbered per ask). */
+  viewActionFailure?: { n: number; message: string } | null;
 }) {
   const { state, setState } = useVizState();
   const { meta } = useMatchReport();
@@ -105,6 +117,22 @@ export function VizLightbox({
   const { receipt, canEdit, applyBands } = useVizBands();
   const canSaveViews = allowSaveView && shotsWriteAccess(meta).canSaveViews;
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  // A rename from the title's ⋯: the Saved wall's band saves it, and the
+  // name shows here at once, until the refreshed view carries it.
+  const [renamed, setRenamed] = useState<{ id: string; name: string } | null>(
+    null,
+  );
+  // A refusal that arrived since this lightbox last asked for something:
+  // said under the title (the wall's own line is behind the scrim), and a
+  // rename it refused is taken back. Render-phase, as the wall's player is.
+  const [failureSeen, setFailureSeen] = useState(viewActionFailure?.n ?? 0);
+  const [failureShown, setFailureShown] = useState<string | null>(null);
+  if (viewActionFailure && viewActionFailure.n !== failureSeen) {
+    setFailureSeen(viewActionFailure.n);
+    setFailureShown(viewActionFailure.message);
+    setRenamed(null);
+  }
+
   const errorSplitJudged = useErrorSplitJudged();
   // The court's filters as the URL would read them: a store pick (a saved
   // view from the menu or the band) keeps a view's raw Error type, while a
@@ -357,16 +385,37 @@ export function VizLightbox({
     });
   }
 
+  const nameOf = (view: { id: string; name: string }) =>
+    renamed !== null && renamed.id === view.id ? renamed.name : view.name;
+  const canManageOpenView =
+    savedView !== null &&
+    onViewAction !== undefined &&
+    canSaveViews &&
+    canManageSavedView(savedView, meta.workspaceRole);
+
+  function handleViewAction(action: SavedViewAction) {
+    setFailureShown(null);
+    if (action.kind === "rename")
+      setRenamed({ id: action.id, name: action.name });
+    // The view is gone: back to the wall, where its Undo line shows.
+    if (action.kind === "delete") close();
+    onViewAction?.(action);
+  }
+
   const title = isDraft
     ? "New view"
     : baseline !== null && (onCard || baseline.view !== null)
       ? // A saved view keeps its name while edited: the strip names every
         // change from it, and Clear goes back to it.
-        baseline.name
-      : (savedView?.name ?? CUT_LABEL[cut]);
+        baseline.view !== null
+        ? nameOf({ id: baseline.view.id, name: baseline.name })
+        : baseline.name
+      : savedView !== null
+        ? nameOf(savedView)
+        : CUT_LABEL[cut];
   const subjectWord = state.filters.player === "you" ? "You" : "Opponent";
   const subtitle = isDraft
-    ? "Pick a chart and filters, then save it as a view."
+    ? "Pick a chart and filters, then save it to reuse on any match."
     : `${CUT_LABEL[cut]} · ${subjectWord} · ${lightboxCountLine(
         cut,
         result,
@@ -471,6 +520,22 @@ export function VizLightbox({
         },
       }}
       title={title}
+      notice={failureShown ?? undefined}
+      headerAction={
+        canManageOpenView && savedView !== null
+          ? ({ onTooltipEscape }) => (
+              <SavedViewTitleMenu
+                onTooltipEscape={onTooltipEscape}
+                view={savedView}
+                name={nameOf(savedView)}
+                savedViews={meta.savedViews}
+                workspaceKind={meta.workspaceKind}
+                workspaceRole={meta.workspaceRole}
+                onAction={handleViewAction}
+              />
+            )
+          : undefined
+      }
       subtitle={subtitle}
       filterPhrases={phrases}
       panelActive={panelActive}
@@ -520,37 +585,42 @@ export function VizLightbox({
         // promises more than the list will show.
         const playable = matched.filter(isPlayable).slice(0, MAX_POINT_SET);
         return {
-          start: canSaveViews && (
-            <SaveAsViewButton
-              cut={cut}
-              chart={state.chart}
-              filters={state.filters}
-              savedViews={meta.savedViews}
-              workspaceKind={meta.workspaceKind}
-              workspaceName={meta.workspaceName}
-              onSaved={(view) =>
-                setState((prev) => ({ ...prev, viewId: view.id }))
-              }
-            />
-          ),
-          end: canWatch && onWatchPoints && (
-            <button
-              type="button"
-              disabled={playable.length === 0}
-              onClick={() =>
-                onWatchPoints(
-                  playable.map((p) => p.pointNumber),
-                  // The Video tab's strip names the set in the lightbox's
-                  // own words (`watchLabel`).
-                  watchLabel(sentence),
-                )
-              }
-              className={advButton("primary", "sm")}
-            >
-              {playable.length === 0
-                ? "Watch points"
-                : `Watch these ${playable.length} ${playable.length === 1 ? "point" : "points"}`}
-            </button>
+          // One group, right: the secondary beside the primary.
+          end: (
+            <>
+              {canSaveViews && (
+                <SaveAsViewButton
+                  cut={cut}
+                  chart={state.chart}
+                  filters={state.filters}
+                  savedViews={meta.savedViews}
+                  workspaceKind={meta.workspaceKind}
+                  workspaceName={meta.workspaceName}
+                  onSaved={(view) =>
+                    setState((prev) => ({ ...prev, viewId: view.id }))
+                  }
+                />
+              )}
+              {canWatch && onWatchPoints && (
+                <button
+                  type="button"
+                  disabled={playable.length === 0}
+                  onClick={() =>
+                    onWatchPoints(
+                      playable.map((p) => p.pointNumber),
+                      // The Video tab's strip names the set in the lightbox's
+                      // own words (`watchLabel`).
+                      watchLabel(sentence),
+                    )
+                  }
+                  className={advButton("primary", "sm")}
+                >
+                  {playable.length === 0
+                    ? "Watch points"
+                    : `Watch these ${playable.length} ${playable.length === 1 ? "point" : "points"}`}
+                </button>
+              )}
+            </>
           ),
         };
       }}

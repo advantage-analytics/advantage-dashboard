@@ -31,7 +31,12 @@ import {
 } from "./ending-session";
 import { planShotDelete } from "./operations";
 import { targetId } from "./label-actor";
-import { gated, normaliseId, type LabelOpResult } from "./operations-session";
+import {
+  gated,
+  normaliseId,
+  withShots,
+  type LabelOpResult,
+} from "./operations-session";
 import {
   CLEARED_REASON,
   isCombineDirection,
@@ -125,14 +130,8 @@ export async function writeLabelPointCombine(params: {
     dry.write.removedId,
   ]);
   if ("error" in read) return read;
-  const shotsOf = (id: string) =>
-    read.shots.filter((shot) => shot.labelPointId === id);
   const plan = planPointCombine(
-    points.map((p) =>
-      p.id === dry.write.keptId || p.id === dry.write.removedId
-        ? { ...p, shots: shotsOf(p.id) }
-        : p,
-    ),
+    withShots(points, read.shots),
     pointId,
     direction,
   );

@@ -30,6 +30,7 @@ import {
 } from "./marks";
 import {
   lastCallQuestion,
+  placementQuestion,
   markHover,
   markLabel,
   REVIEW_ITEM_QUESTION,
@@ -52,6 +53,8 @@ import {
 import {
   effectiveShotResult,
   inServeLandingMiss,
+  isServeByReceiver,
+  pastNet,
   type ResultReadableShot,
 } from "./shot-derived";
 import {
@@ -225,7 +228,10 @@ export function markState(
   // Read off the rows as they stand, so while it is there it is still true:
   // an edit that leaves the point stopping on a missed first serve has not
   // settled it.
-  if (mark.code === "first_serve_fault_alone") {
+  if (
+    mark.code === "first_serve_fault_alone" ||
+    mark.code === "serve_by_receiver"
+  ) {
     return checked ? "checked-as-is" : "open";
   }
 
@@ -411,6 +417,41 @@ export function contactMissingOn(shot: LabelShot): boolean {
   return !shot.unclear.some((f) => f === "contact_x" || f === "contact_y");
 }
 
+/** A last ball called in that came down this close past the net is asked. */
+export const NEAR_NET_M = 1;
+
+/**
+ * "Into the net?", read off the rows: the point's last live stroke, a rally
+ * ball called in, came down within `NEAR_NET_M` past the net. Measured
+ * 2026-11-11 on the checked points of every hand-label session: such a ball
+ * was labelled Net about four times in five (17 of 21 across old and new
+ * vendor files), against 13% for one that landed one to two metres past and
+ * 39% for one down on the hitter's own side — so only this band is asked, and
+ * it is asked, never written: twenty strokes are too few to overrule a call
+ * unseen. Null for a serve, a let, a ball not called in, and any other
+ * landing.
+ */
+export function lastBallNearNet(
+  point: Pick<LabelPoint, "shots">,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "net_by_trajectory" }> | null {
+  const last = liveShotsInOrder(point, ghosts).at(-1);
+  if (!last || isServeStroke(last.stroke)) return null;
+  // A call the labeller made is theirs: only the landing's own reading asks.
+  // Stored in and read in: a ball stored as a miss whose landing reads in
+  // is "Different ending?"'s to ask, not a second question about the net.
+  if (last.resultCalled || last.result !== "in") return null;
+  if (effectiveShotResult(last) !== "in") return null;
+  const depth = pastNet(last);
+  if (depth === null || depth >= NEAR_NET_M) return null;
+  return {
+    code: "net_by_trajectory",
+    tier: "hint",
+    scope: "point",
+    params: { by: "landing" },
+  };
+}
+
 /**
  * "No landing on the last shot": the point's last live stroke has no landing
  * placed and the labeller has not marked it unclear. The result is derived
@@ -493,6 +534,37 @@ export function firstServeFaultAlone(
     tier: "count",
     scope: "point",
     params: {},
+  };
+}
+
+/**
+ * "Serve by the receiver": a live stroke typed as a serve whose hitter is not
+ * the point's server — a mid-rally overhead the vendor read as a serve (the
+ * rally it cut in two there then combined back), or a point whose server is
+ * wrong. A `count` mark, raised live by score-marks.ts; gone once the stroke
+ * is retyped, its hitter changed or the server corrected. The first such
+ * stroke in video order. Nothing on a non-point, or while the server or the
+ * hitter is not set. Published as it stands the stroke would be a second
+ * serve for the wrong player; `countedServeIndex` (apply.ts) no longer lets
+ * it be the serve the rally is numbered from.
+ */
+export function serveByReceiver(
+  point: Pick<LabelPoint, "shots"> &
+    Partial<Pick<LabelPoint, "ending" | "server">>,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "serve_by_receiver" }> | null {
+  const server = point.server ?? null;
+  if (server === null || isNonPointEnding(point.ending ?? null)) return null;
+  const wrong = (shot: LabelShot) => isServeByReceiver(shot, server);
+  // Cheap exit before the sort.
+  if (!point.shots.some(wrong)) return null;
+  const shot = liveShotsInOrder(point, ghosts).find(wrong);
+  if (!shot || shot.hitter === null) return null;
+  return {
+    code: "serve_by_receiver",
+    tier: "count",
+    scope: "point",
+    params: { shotId: shot.id, hitter: shot.hitter, server },
   };
 }
 
@@ -907,6 +979,11 @@ export function openHintMarks(
     serveAfterServeIn(point, ghosts),
     serveInLandingOut(point, ghosts),
     placementMissing(point, ghosts),
+    // Not twice: the derivation's own "Into the net?" already asks.
+    own.some((mark) => mark.code === "net_by_trajectory") ||
+    count.some((mark) => mark.code === "net_by_trajectory")
+      ? null
+      : lastBallNearNet(point, ghosts),
   ];
   return [
     ...(lastCall
@@ -1129,6 +1206,7 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
     codes: [
       "second_serve_as_first",
       "first_serve_fault_alone",
+      "serve_by_receiver",
       "second_serve_called_out",
       "serve_in_landing_out",
     ],
@@ -1306,7 +1384,11 @@ function reviewItemTone(
     case 2:
       return "data";
     case 3:
-      return has("second_serve_called_out", "first_serve_fault_alone")
+      return has(
+        "second_serve_called_out",
+        "first_serve_fault_alone",
+        "serve_by_receiver",
+      )
         ? "score"
         : "data";
     case 4:
@@ -1451,7 +1533,8 @@ export function foldReviewItems(
 /**
  * The words an item is asked in: its question, but item 4 as the vendor
  * called the last ball ("Was the last ball out?") where `last_call_overruled`
- * is one of its members.
+ * is one of its members, and item 7 as "Contact point" where its open stroke
+ * has a landing and only the contact is missing.
  */
 export function reviewItemQuestion(
   item: Pick<ReviewItem, "id" | "question" | "members">,
@@ -1467,6 +1550,15 @@ export function reviewItemQuestion(
     )?.mark;
     if (forGame?.code === "last_ball_against_game") {
       return lastCallQuestion(forGame.params.call);
+    }
+  }
+  if (item.id === PLACEMENT_ITEM) {
+    const gap = item.members.find(
+      ({ mark, state }) =>
+        mark.code === "placement_missing" && state === "open",
+    )?.mark;
+    if (gap?.code === "placement_missing") {
+      return placementQuestion(gap.params.missing);
     }
   }
   return item.question;

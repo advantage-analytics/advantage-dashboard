@@ -13,7 +13,10 @@ import {
   VizStateProvider,
 } from "@/components/dashboard/matches/match-detail/shots/viz-state-context";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
-import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shots/saved-views-band";
+import {
+  SavedViewsBand,
+  type SavedViewRequest,
+} from "@/components/dashboard/matches/match-detail/shots/saved-views-band";
 import { VizBandsProvider } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
 import { shotsWriteAccess } from "@/components/dashboard/matches/match-detail/shots/shots-write-access";
 import { VizEmpty } from "@/components/dashboard/matches/match-detail/shots/viz-empty";
@@ -94,7 +97,15 @@ function ShotsTabBody() {
   // keeps the player it showed when the card opened, and closing goes back
   // to it.
   const [wallPlayer, setWallPlayer] = useState<PlayerFilter>(() =>
-    state.cut === null ? state.filters.player : (remembered?.player ?? "you"),
+    state.cut === null
+      ? state.filters.player
+      : (remembered?.player ??
+        // A hard load of a saved view's link closes onto the Saved wall,
+        // which lists one player's views: the view's own, so the card it
+        // came from is there.
+        (state.viewId !== null || state.editedFrom !== undefined
+          ? state.filters.player
+          : "you")),
   );
   if (state.cut === null && state.filters.player !== wallPlayer) {
     setWallPlayer(state.filters.player);
@@ -147,6 +158,17 @@ function ShotsTabBody() {
     });
   }
 
+  // What the open view's ⋯ asked for, handed to the Saved wall's band — the
+  // one place saved views are changed, so a rename or a delete from the
+  // lightbox lands exactly as one from a card (optimistic, with its Undo).
+  const [viewRequest, setViewRequest] = useState<SavedViewRequest | null>(null);
+
+  // A request the server refused: the open view says so itself.
+  const [viewFailure, setViewFailure] = useState<{
+    n: number;
+    message: string;
+  } | null>(null);
+
   // Before anything else, so no URL can reach an empty court.
   if (points.length === 0) return <VizEmpty />;
 
@@ -168,6 +190,9 @@ function ShotsTabBody() {
               workspaceKind={meta.workspaceKind}
               canSaveViews={canSaveViews}
               readOnly={meta.readOnly}
+              player={wallPlayer}
+              request={viewRequest}
+              onRequestFailed={setViewFailure}
             />
           )
         }
@@ -180,6 +205,10 @@ function ShotsTabBody() {
           key={`${opening.count}:${visit.count}`}
           wallPlayer={wallPlayer}
           onWatchPoints={actions.watchPointSet}
+          viewActionFailure={viewFailure}
+          onViewAction={(action) =>
+            setViewRequest((prev) => ({ ...action, n: (prev?.n ?? 0) + 1 }))
+          }
         />
       )}
     </>
