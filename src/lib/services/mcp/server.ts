@@ -473,6 +473,31 @@ const CLEARABLE_MATCH_FIELDS = [
   "opponent_backhand",
 ] as const;
 
+/**
+ * The roster players a season link's `player_id` or `player_name` names. An
+ * id is exact. A name that is somebody's whole name is them alone, so "Sam
+ * Lee" is not made ambiguous by "Sam Leeson"; otherwise it is everyone the
+ * text appears in.
+ */
+function seasonPlayersNamed<
+  T extends { player_id: string; name: string | null },
+>(
+  roster: readonly T[],
+  playerId: string | undefined,
+  playerName: string | undefined,
+): T[] {
+  if (playerId !== undefined) {
+    const id = playerId.toLowerCase();
+    return roster.filter((player) => player.player_id === id);
+  }
+  const needle = (playerName ?? "").trim().toLowerCase();
+  const nameOf = (player: T) => (player.name ?? "").trim().toLowerCase();
+  const exact = roster.filter((player) => nameOf(player) === needle);
+  return exact.length > 0
+    ? exact
+    : roster.filter((player) => nameOf(player).includes(needle));
+}
+
 /** The read tools' descriptions, shared by the connector and Ask's agent mode. */
 const READ_TOOL_DESCRIPTIONS = {
   list_matches:
@@ -1465,12 +1490,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           null;
         if (scope.kind === "team" && match_id === undefined) {
           const roster = await context.reads.roster(scope.programId);
-          const needle = player_name?.toLowerCase();
-          const found = roster.filter((player) =>
-            player_id !== undefined
-              ? player.player_id === player_id.toLowerCase()
-              : (player.name ?? "").toLowerCase().includes(needle as string),
-          );
+          const found = seasonPlayersNamed(roster, player_id, player_name);
           if (found.length !== 1) {
             const listed = roster
               .slice(0, 60)

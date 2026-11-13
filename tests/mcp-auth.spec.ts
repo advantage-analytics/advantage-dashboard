@@ -761,6 +761,57 @@ test.describe("createMcpUserReads", () => {
     ).toBeNull();
   });
 
+  test("roster(): the program's players by name and id, as a GET — never its staff, an email or a login id", async () => {
+    const { client, filters } = fakeClient({
+      program_roster_full: {
+        data: [
+          {
+            player_id: "pp-1",
+            profile_id: "pp-1",
+            user_id: "login-1",
+            display_name: "Sam Okafor",
+            email: "sam@example.test",
+            role: "player",
+            class_year: "Junior",
+          },
+          // A coach: their login id sits in player_id.
+          {
+            player_id: "login-coach",
+            profile_id: null,
+            user_id: "login-coach",
+            display_name: "Dana Ruiz",
+            email: "dana@example.test",
+            role: "coach",
+            class_year: null,
+          },
+          // A member playing with no profile row yet is still a player.
+          {
+            player_id: "login-2",
+            profile_id: null,
+            user_id: "login-2",
+            display_name: null,
+            email: "new@example.test",
+            role: "player",
+            class_year: null,
+          },
+        ],
+        error: null,
+      },
+    });
+    expect(
+      await createMcpUserReads(client, USER_ID).roster(PROGRAM_ID),
+    ).toEqual([
+      { player_id: "pp-1", name: "Sam Okafor", class_year: "Junior" },
+      { player_id: "login-2", name: null, class_year: null },
+    ]);
+    expect(
+      filters.filter((f) => f.op === "rpc").map((f) => [f.table, f.args[1]]),
+    ).toEqual([["program_roster_full", true]]);
+    expect(await createMcpUserReads(client, USER_ID).roster("nope")).toEqual(
+      [],
+    );
+  });
+
   test("ownMatch(): the creator's own row with what the patch rules decide from; a match they did not create is null", async () => {
     const { client, filters } = fakeClient({
       matches: {

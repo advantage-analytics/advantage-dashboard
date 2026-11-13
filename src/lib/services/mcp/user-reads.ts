@@ -130,7 +130,7 @@ export interface McpRosterPlayer {
 
 export interface McpUserReads {
   program(programId: string): Promise<McpProgram | null>;
-  /** The program's roster, as any member may read it. */
+  /** The program's roster players (never its staff), as any member may read them. */
   roster(programId: string): Promise<McpRosterPlayer[]>;
   /** The program's men's or women's squad; null for co-ed or unsaid. */
   programSquad(programId: string): Promise<GenderedSquad | null>;
@@ -203,8 +203,12 @@ export function createMcpUserReads(
         { get: true },
       );
       if (error) throw new Error("Could not load the roster", { cause: error });
+      // Players only. The function also answers the program's staff, with
+      // their login id in `player_id`: not somebody with a season to open,
+      // and a login id is not for a third-party app's transcript. A coach
+      // who also plays keeps their player row and loses the staff one.
       return ((data ?? []) as Record<string, unknown>[]).flatMap((row) =>
-        typeof row.player_id === "string"
+        typeof row.player_id === "string" && row.role === "player"
           ? [
               {
                 player_id: row.player_id,

@@ -79,6 +79,11 @@ const ROSTER = [
     name: "Lena Voss",
     class_year: "Senior",
   },
+  {
+    player_id: "bbbb0000-0000-4000-8000-000000000004",
+    name: "Lena Vossberg",
+    class_year: null,
+  },
 ];
 
 /** What `ask_run_query` answers: two matches in scope and one aggregate row. */
@@ -2176,7 +2181,7 @@ test.describe("POST /api/mcp · open_visualization", () => {
   test("a season by name: one roster player is linked; none or several answer the roster to choose from; an id off the roster is refused", async () => {
     const { route } = loadRoute(world());
     const byName = await callTool(route, "open_visualization", {
-      player_name: "lena",
+      player_name: " Lena Voss ",
       program_id: PROGRAM_ID,
       cut: "serves",
     });
@@ -2185,6 +2190,7 @@ test.describe("POST /api/mcp · open_visualization", () => {
       url: string;
       player: { player_id: string; name: string };
     };
+    // "lena" alone would fit two players; a whole name is that player alone.
     expect(linked.player.name).toBe("Lena Voss");
     expect(new URL(linked.url).pathname).toBe(
       `/dashboard/team/roster/${linked.player.player_id}`,
@@ -2192,6 +2198,7 @@ test.describe("POST /api/mcp · open_visualization", () => {
 
     for (const args of [
       { player_name: "sam" },
+      { player_name: "lena" },
       { player_name: "nobody" },
       { player_id: MATCH_A },
     ]) {
