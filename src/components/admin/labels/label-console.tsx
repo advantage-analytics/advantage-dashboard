@@ -2292,9 +2292,9 @@ export function LabelConsole({
    * the rail's "Missing shot?" row, or the lone first serve's second serve
    * — with nothing selected and nothing written until the labeller takes
    * the step's "Add the shot"; a step with no target opens the point at its
-   * first stroke. An end-of-point question (`step.replay`) plays from the
-   * stroke it asks about through the last ball and pauses just after it, the court armed
-   * on that ball's landing throughout, so one click answers; the replay's
+   * first stroke. An end-of-point question (`step.replay`) plays the
+   * last ball and pauses just after it, the court armed on the landing of
+   * the ball it asks about throughout, so one click answers; the replay's
    * seek is the only one made (`selectShot`'s is skipped).
    */
   function landOnStep(point: LabelPoint, step: ReviewStep | null) {

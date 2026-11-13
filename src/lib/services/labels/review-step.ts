@@ -806,25 +806,20 @@ function stepAnswers(
 }
 
 /**
- * The film an end-of-point question plays: from the stroke the question is
- * about (`target.shotId`, else the last) through the last. Until 2026-11-11
- * it started three strokes before the last, and the labeller sat through
- * balls nobody was asking about.
+ * The film an end-of-point question plays: the last ball, whichever stroke
+ * the question is about — a line call's court still opens on the ball before
+ * the winner, but the film goes to the last shot as every other question's
+ * does. Until 2026-11-11 it started three strokes before the last, and until
+ * 2026-11-13 at the stroke asked about; either way the labeller sat through
+ * balls on the way to the ending.
  */
-function stepReplay(
-  point: LabelPoint,
-  target: ReviewTarget,
-  ghosts: boolean,
-): ReviewReplay | null {
+function stepReplay(point: LabelPoint, ghosts: boolean): ReviewReplay | null {
   const live = liveShotsInOrder(point, ghosts);
   const last = live.at(-1);
   if (!last) return null;
-  const at = live.findIndex((shot) => shot.id === target.shotId);
   // A stroke with no time cannot start a replay: the nearest timed stroke
   // before it does.
-  const from =
-    live.slice(0, at + 1).findLast((shot) => shot.videoTime !== null) ??
-    (at === -1 ? last : live[at]);
+  const from = live.findLast((shot) => shot.videoTime !== null) ?? last;
   return { fromShotId: from.id, toShotId: last.id };
 }
 
@@ -876,7 +871,7 @@ export function reviewStep(
       open.length === 1,
     ),
     then: stepThen(item, open[1]),
-    replay: item.id === 4 ? stepReplay(point, target, ghosts) : null,
+    replay: item.id === 4 ? stepReplay(point, ghosts) : null,
   };
 }
 
