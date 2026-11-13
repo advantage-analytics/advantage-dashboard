@@ -24,7 +24,7 @@ import { useVizState } from "./use-viz-state";
 import { useVizView } from "./use-viz-view";
 import { useVizBands } from "./viz-bands-context";
 import { CUT_LABEL } from "./viz-labels";
-import { useMatchPlayerChipLabels } from "./player-chips";
+import { useMatchPlayerChipLabels } from "./use-match-player-chip-labels";
 import { VizLightboxShell } from "./viz-lightbox-shell";
 import {
   EMPTY_VIZ_FILTERS,

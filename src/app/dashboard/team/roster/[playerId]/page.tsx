@@ -1,4 +1,5 @@
 import { cache, Suspense } from "react";
+import { seasonPlayerChipLabels } from "@/components/dashboard/matches/match-detail/shots/player-chip-labels";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -512,6 +513,9 @@ async function ProfileVisualizationsBody({
   // player is kept in the browser meanwhile (`profile-visualizations-view.tsx`)
   // and closing writes it back here, so the cards are recomputed for it.
   const side = state.filters.player;
+  // The player switch's two words, and the subject word of an opened card's
+  // subtitle: "You" only when the viewer is this player.
+  const chipLabels = seasonPlayerChipLabels(playerName, isSelf);
   // The other side's wall, streamed behind the page (a promise prop): the
   // timer lets this answer go out first, and once it lands the wall's
   // You | Opponent swaps sides in the browser with no round trip
@@ -539,7 +543,7 @@ async function ProfileVisualizationsBody({
       <ProfileVisualizationsView
         playerName={playerName}
         firstName={firstName}
-        isSelf={isSelf}
+        chipLabels={chipLabels}
         analyzed={season.analyzed}
         side={side}
         cards={buildSeasonCards(season.perMatch, side, bands)}
@@ -550,6 +554,7 @@ async function ProfileVisualizationsBody({
           bands,
           { you: playerName, opponent: "Opponents" },
           savedViews,
+          chipLabels,
         )}
         errorSplitJudged={errorSplitJudged}
         saveView={{ savedViews, workspaceName, workspaceRole }}

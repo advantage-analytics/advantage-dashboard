@@ -34,7 +34,8 @@ const match = {
   player2: { name: "Blake Rivera", school: "East" },
   isUserPlayer1: true,
   // The player reading their own report: the player switch says "You".
-  viewerIsYou: true,
+  // `?observer=1` is anyone else (a coach, a share link): two surnames.
+  viewerIsYou: !window.location.search.includes("observer=1"),
   score: {
     sets: [{ player1: 6, player2: 4 }],
     winner: "player1",

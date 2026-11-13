@@ -6,7 +6,8 @@ import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { WallCard } from "./wall-card";
 import { LifecycleChip } from "./lifecycle-chip";
-import { PlayerChips, useMatchPlayerChipLabels } from "./player-chips";
+import { PlayerChips } from "./player-chips";
+import { useMatchPlayerChipLabels } from "./use-match-player-chip-labels";
 import { LegendMark } from "./legend-mark";
 import { useVizState } from "./use-viz-state";
 import { buildDefaultTiles } from "./default-tiles";

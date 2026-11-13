@@ -49,7 +49,8 @@ import {
 import { bandKindFor } from "./cut-kinds";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
-import { PlayerChips, type PlayerChipLabels } from "./player-chips";
+import type { PlayerChipLabels } from "./player-chip-labels";
+import { PlayerChips } from "./player-chips";
 import { filterRailReducer } from "../match-filters/rail-state";
 import { LightboxAdvancedDrawer } from "./lightbox-advanced-drawer";
 import { LightboxMatchesSheet } from "./lightbox-matches-sheet";

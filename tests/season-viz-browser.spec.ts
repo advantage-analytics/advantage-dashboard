@@ -676,7 +676,7 @@ test('a season mark names its match — "vs Jordan Lee · Nov 3" and where in it
     "vs Jordan Lee · Nov 3",
   );
   await expect(readout).toContainText(
-    /Set \d+ · Game \d+ · (Avery Kim|Jordan Lee) serving/,
+    /Set \d+ · Game \d+ · (Kim|Jordan Lee) serving/,
   );
   await expect(readout.locator("[data-viz-readout-hint]")).toHaveText(
     "Click to focus",

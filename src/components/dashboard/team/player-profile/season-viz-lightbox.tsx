@@ -1,6 +1,6 @@
 "use client";
 
-import type { PlayerChipLabels } from "@/components/dashboard/matches/match-detail/shots/player-chips";
+import type { PlayerChipLabels } from "@/components/dashboard/matches/match-detail/shots/player-chip-labels";
 import {
   lazy,
   Suspense,
@@ -317,7 +317,6 @@ export function SeasonVizLightbox({
     return { byDot, byPoint };
   }, [dotPoints, resultDots]);
   const seasonMatches = data?.matches ?? null;
-  const playerName = data?.names.you ?? "";
   // The readout's "Set 1 · Game 4 · Maya Chen serving", as the report's.
   const whereFor = useCallback(
     (pointId: string): string | null => {
@@ -329,11 +328,11 @@ export function SeasonVizLightbox({
       if (gameNumber > 0) parts.push(`Game ${gameNumber}`);
       if (server !== -1)
         parts.push(
-          `${server === 1 ? playerName : (seasonMatches?.[m]?.opponentName ?? "Opponent")} serving`,
+          `${server === 1 ? playerLabels.you : (seasonMatches?.[m]?.opponentName ?? "Opponent")} serving`,
         );
       return parts.length > 0 ? parts.join(" · ") : null;
     },
-    [refs, playerName, seasonMatches],
+    [refs, playerLabels.you, seasonMatches],
   );
   // "vs Lee · Nov 3" — the calendar day, read as one (`match-day.ts`).
   const matchFor = useCallback(

@@ -11,11 +11,8 @@ import {
 
 import { LegendMark } from "@/components/dashboard/matches/match-detail/shots/legend-mark";
 import { LifecycleChip } from "@/components/dashboard/matches/match-detail/shots/lifecycle-chip";
-import {
-  PlayerChips,
-  seasonPlayerChipLabels,
-  type PlayerChipLabels,
-} from "@/components/dashboard/matches/match-detail/shots/player-chips";
+import type { PlayerChipLabels } from "@/components/dashboard/matches/match-detail/shots/player-chip-labels";
+import { PlayerChips } from "@/components/dashboard/matches/match-detail/shots/player-chips";
 import { useVizState } from "@/components/dashboard/matches/match-detail/shots/use-viz-state";
 import { wallLegendItems } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import {
@@ -87,7 +84,7 @@ import {
 export function ProfileVisualizationsView({
   playerName,
   firstName,
-  isSelf = false,
+  chipLabels,
   analyzed,
   side,
   cards,
@@ -101,9 +98,9 @@ export function ProfileVisualizationsView({
   playerName: string;
   /** Their given name, for the empty sentences. */
   firstName: string;
-  /** The viewer is this player: the player switch says "You". Everyone
-   *  else reads their name (`player-chips.tsx`). */
-  isSelf?: boolean;
+  /** The player switch's two words (`seasonPlayerChipLabels`): "You" only
+   *  when the viewer is this player, else their surname. */
+  chipLabels: PlayerChipLabels;
   /** Matches with points — the season's size; `0` draws the empty wall. */
   analyzed: number;
   /** The side the server computed `cards` for (`?player=`). */
@@ -173,7 +170,7 @@ export function ProfileVisualizationsView({
       writesInPlace={writesInPlace}
     >
       <SeasonVizBody
-        chipLabels={seasonPlayerChipLabels(playerName, isSelf)}
+        chipLabels={chipLabels}
         cardsBySide={cache.bySide}
         playerName={playerName}
         firstName={firstName}

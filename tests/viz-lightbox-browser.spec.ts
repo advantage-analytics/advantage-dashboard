@@ -46,6 +46,26 @@ test("a wall card opens the lightbox over the wall, and Esc puts focus back on t
   expect(errors).toEqual([]);
 });
 
+test("a reader who is not the player sees two surnames, never You: the wall's chips, the card's chips and its subtitle", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&observer=1`);
+  const wallChips = page.locator('[role="group"][aria-label="Player"] button');
+  await expect(wallChips).toHaveText(["Kim", "Rivera"]);
+  await expect(page.getByRole("button", { name: "You" })).toHaveCount(0);
+  await expect(wallChips.first()).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  await expect(dialog).toContainText("Serve placement · Kim ·");
+  await expect(
+    dialog.locator('[role="group"][aria-label="Player"] button'),
+  ).toHaveText(["Kim", "Rivera"]);
+  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await expect(page).toHaveURL(/player=opponent/);
+  await expect(dialog).toContainText("Serve placement · Rivera ·");
+});
+
 test("a player switched inside the lightbox does not leak onto the wall", async ({
   page,
 }) => {

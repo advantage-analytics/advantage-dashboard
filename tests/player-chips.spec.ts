@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   matchPlayerChipLabels,
   seasonPlayerChipLabels,
-} from "@/components/dashboard/matches/match-detail/shots/player-chips";
+} from "@/components/dashboard/matches/match-detail/shots/player-chip-labels";
 
 /**
  * The Visualizations player switch says "You" only to the player the charts
