@@ -71,6 +71,7 @@ export function memberShotId(
     case "shot_after_point_end":
     case "second_serve_as_first":
     case "serve_after_serve_in":
+    case "serves_from_both_sides":
     case "serve_in_landing_out":
     case "serve_by_receiver":
     case "placement_missing":
@@ -166,6 +167,7 @@ function memberTarget(
     case "same_player_consecutive":
     case "shot_after_point_end":
     case "serve_after_serve_in":
+    case "serves_from_both_sides":
     case "second_serve_as_first":
     case "serve_by_receiver":
       return [memberShotId(member, point, marks), null];

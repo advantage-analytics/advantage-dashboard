@@ -261,7 +261,9 @@ export function liveShotsAfter(
  * the return after it was a swing at a dead ball. Nothing when the patch
  * carries no `result` (a court click with one end still missing), when the
  * ball was a miss already, when the stroke is a first serve (the second
- * serve follows that fault), or with three or more strokes after.
+ * serve follows that fault), or with three or more strokes after — unless the
+ * patch is the labeller's own call (`result_called`), which takes every
+ * stroke after it however many there are.
  */
 export function deadBallsAfterMiss(
   shots: readonly LabelShot[],
@@ -276,6 +278,10 @@ export function deadBallsAfterMiss(
   const shot = shots.find((s) => s.id === shotId);
   if (!shot || !endsPointWhenMissed(shot.stroke)) return [];
   const after = liveShotsAfter(shots, shotId, ghosts);
+  // A call the labeller made outright (N, the Result menu's override, a
+  // hint's yes) says the point ended on this ball: everything after it goes.
+  // A miss the coordinates alone read — a court click — keeps the cap.
+  if (patch.result_called === true) return after;
   return after.length > 0 && after.length <= DEAD_BALLS_REMOVED_WITH_MISS
     ? after
     : [];

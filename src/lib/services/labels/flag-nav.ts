@@ -21,6 +21,7 @@ import { setBreakLabel, setBreakSuspects } from "./set-break";
 import { tiebreakFolds } from "./tiebreak-fold";
 import { tiebreakServeOrders, type TiebreakServeOrder } from "./tiebreak-serve";
 import { foldedPointIds, gameServeRepeats } from "./game-serve-order";
+import { sessionCourtEndSwaps } from "./court-end";
 
 /** The header's two lists: amber for what can move the score, grey for data. */
 export type FlagList = "score" | "data";
@@ -128,6 +129,36 @@ export function errorAfterAnswer<F extends Pick<OpenFlag, "pointId">>(
     pointId,
     1,
   );
+}
+
+/**
+ * "Players at the wrong end" as stops (court-end.ts): one per game the rail
+ * draws that slot on — never a game "Same server two games in a row" already
+ * stands for (`sessionCourtEndSwaps`' `serveRepeats`). Apart from
+ * `slotStops` because it leans on the entered score, which that never reads.
+ */
+export function courtEndStops(
+  input: Omit<Parameters<typeof sessionCourtEndSwaps>[0], "serveRepeats"> & {
+    points: readonly LabelPoint[];
+    adScoring: boolean;
+    matchTiebreakSet: number | null;
+  },
+): { pointId: string; pointNumber: number; label: string }[] {
+  const { adScoring, matchTiebreakSet, ...session } = input;
+  const folds = tiebreakFolds(
+    input.points,
+    adScoring,
+    matchTiebreakSet,
+    input.startScore,
+  );
+  return sessionCourtEndSwaps({
+    ...session,
+    serveRepeats: gameServeRepeats(input.points, foldedPointIds(folds)),
+  }).map((swap) => ({
+    pointId: swap.pointId,
+    pointNumber: swap.pointNumber,
+    label: "Players at the wrong end",
+  }));
 }
 
 /**

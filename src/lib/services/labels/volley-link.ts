@@ -17,6 +17,9 @@
  * - The stroke changed to an air stroke: the previous stroke's stored landing
  *   becomes its contact or, when it has no contact, its contact becomes that
  *   landing.
+ * - The same change after a ball the vendor's bounce reads out or net (a lob
+ *   before an overhead): that ball was played, so its landing goes to the
+ *   contact and its call to In. A miss the labeller called is left alone.
  * - An air stroke's contact was set: the previous stroke's stored landing
  *   follows it, unless the two were already apart.
  * - A landing was set and the next stroke is an air stroke: that stroke's
@@ -42,7 +45,7 @@ import {
   type LabelShot,
   type LiveOrderableShot,
 } from "./session";
-import { deriveShotResult } from "./shot-derived";
+import { deriveShotResult, labellerCall } from "./shot-derived";
 
 /** A volley or an overhead: the ball is hit before it bounces. */
 export function isAirStroke(stroke: LabelShot["stroke"] | undefined): boolean {
@@ -333,6 +336,37 @@ export function volleyLinkWrites({
       if (contact && landing)
         writes.push(...follow(previous, "landing", contact));
       else if (landing) writes.push(...follow(shot, "contact", landing));
+    }
+  }
+
+  // The stroke became an air stroke and the ball before it is stored out or
+  // in the net by the vendor's bounce — the usual case before an overhead,
+  // whose lob never bounced, so the bounce the vendor predicted lies past the
+  // baseline. That ball was met in the air: its landing goes to the contact
+  // and its call to In, as one follower write, and the two are linked from
+  // then on. A miss the labeller called stands (`labellerCall`): they said
+  // the ball reached nobody.
+  if (
+    previous &&
+    "stroke" in patch &&
+    isAirStroke(shot.stroke) &&
+    !isAirStroke(before.stroke) &&
+    !isServeStroke(previous.stroke) &&
+    isMissedResult(previous.result) &&
+    !labellerCall(previous) &&
+    (previous.hitter === null || previous.hitter !== shot.hitter)
+  ) {
+    const contact = placeOf(shot, "contact");
+    if (contact) {
+      writes.push({
+        shotId: previous.id,
+        patch: {
+          landing_x: contact.x,
+          landing_y: contact.y,
+          result: "in",
+          result_called: false,
+        },
+      });
     }
   }
 

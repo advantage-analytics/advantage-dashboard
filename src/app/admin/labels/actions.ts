@@ -57,6 +57,7 @@ import {
   type LabelInsertPointResult,
 } from "@/lib/services/labels/point-insert-session";
 import {
+  combineLabelGames,
   cutLabelSet,
   foldLabelTiebreak,
   pullLabelGamePoints,
@@ -435,6 +436,21 @@ export async function pullLabelGamePointsAction(
 ): Promise<LabelGameShiftResult> {
   return withLabelOp("Pull points into game", () =>
     pullLabelGamePoints(sessionId, gameKey),
+  );
+}
+
+/**
+ * Combine the game `gameKey` (`"set·game"`) with the game above or below it:
+ * the lower game's points all join the upper (game-shift.ts
+ * `planGameCombine`). The band's menu asks for it.
+ */
+export async function combineLabelGamesAction(
+  sessionId: string,
+  gameKey: string,
+  direction: "above" | "below",
+): Promise<LabelGameShiftResult> {
+  return withLabelOp("Combine games", () =>
+    combineLabelGames(sessionId, gameKey, direction),
   );
 }
 

@@ -5,7 +5,9 @@
  * (game-shift.ts `planGameSplit`) takes the session's highest number plus one,
  * wherever it sits. A game missing between them is no repeat: an even, upward
  * gap in their numbers that no other game of the set fills (off the video,
- * or deleted). Ordinary games only — a tiebreak keeps its own one-then-two
+ * or deleted) — and that no live point was seeded in: a game whose points
+ * the labeller moved into the games beside it (two games made one) was on
+ * the video, and the games around it must still alternate. Ordinary games only — a tiebreak keeps its own one-then-two
  * order (tiebreak-serve.ts) — and only within a set: who serves a set's first
  * game hangs on the set before it, a tiebreak or a break off the video. The
  * points a tiebreak fold would take are left out too (`skipPointIds`,
@@ -91,6 +93,16 @@ export function gameServeRepeats(
     else games.set(point.gameNumber, [point]);
   }
 
+  // The games the video held as it was seeded, wherever their points sit
+  // now: a number the labeller emptied by moving its points into the games
+  // beside it is no game missing from the video.
+  const seeded = new Set<number>();
+  for (const point of points) {
+    if (point.status === "deleted") continue;
+    const number = point.seed?.game_number;
+    if (typeof number === "number") seeded.add(number);
+  }
+
   const repeats: GameServeRepeat[] = [];
   for (const [setNumber, byNumber] of sets) {
     // In row order: the points went in by `point_index`, so each game's
@@ -104,7 +116,7 @@ export function gameServeRepeats(
         ordinary: gameTypeOf(live) === "game",
       }),
     );
-    const numbers = new Set(byNumber.keys());
+    const numbers = new Set([...byNumber.keys(), ...seeded]);
     // A game flagged as the later of one pair is not flagged again as the
     // earlier of the next: its fix changes both pairs.
     const flagged = new Set<string>();

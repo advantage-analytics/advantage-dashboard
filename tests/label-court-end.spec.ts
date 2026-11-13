@@ -3,10 +3,13 @@ import { expect, test } from "@playwright/test";
 import {
   courtEndSwapReason,
   courtEndSwaps,
+  sessionCourtEndSwaps,
+  trustedLockedGames,
   settledSetNumbers,
   type CourtEndPoint,
   type CourtEndShot,
 } from "@/lib/services/labels/court-end";
+import { labelScores } from "@/lib/services/labels/score";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
 
 // Players at each other's end (court-end.ts): each stroke's end, turned by
@@ -122,6 +125,54 @@ test.describe("players at the wrong end", () => {
     expect(courtEndSwaps(locked, UNSETTLED).map((s) => s.gameInSet)).toEqual([
       3,
     ]);
+  });
+
+  test("a game flagged for its server gets no wrong-end slot: the server fix switches its players too", () => {
+    const rows = setOne({ swappedGame3: [0, 1, 2], lockGame3: true });
+    type Session = Parameters<typeof sessionCourtEndSwaps>[0];
+    const points = rows as unknown as Session["points"];
+    const session: Session = {
+      points,
+      // Every game decided on its last row: the count before game 3 is sound.
+      games: labelScores(points, false).games.map((band) => ({
+        ...band,
+        outcome: {
+          kind: "decided" as const,
+          winner: "p1" as const,
+          score: "4–0",
+        },
+      })),
+      finalScore: null,
+      matchScore: null,
+      videoEndsEarly: null,
+      startScore: null,
+    };
+    const [swap] = sessionCourtEndSwaps(session);
+    expect(swap.gameInSet).toBe(3);
+    // The same game flagged "Same server two games in a row": one slot.
+    expect(
+      sessionCourtEndSwaps({ ...session, serveRepeats: [{ game: swap.game }] }),
+    ).toEqual([]);
+    // …and none while a game before it in the set is not decided on its
+    // last row: the count of games names the end, and it is not sound yet.
+    const games = session.games.map((band, i) =>
+      i === 0
+        ? { ...band, outcome: { kind: "unfinished" as const, score: "30–15" } }
+        : band,
+    );
+    expect(sessionCourtEndSwaps({ ...session, games })).toEqual([]);
+    expect([...trustedLockedGames(games, new Set())]).toEqual([
+      `${games[0].setNumber}·${games[0].gameNumber}`,
+    ]);
+    // A repeat on another game leaves this one's slot.
+    expect(
+      sessionCourtEndSwaps({
+        ...session,
+        serveRepeats: [
+          { game: { ...swap.game, gameNumber: swap.game.gameNumber + 1 } },
+        ],
+      }),
+    ).toHaveLength(1);
   });
 
   test("a hitter the labeller gave stands: the point is theirs", () => {

@@ -74,7 +74,9 @@ function underflowWords(slot: UnderflowSlot): {
   const { underflow, plan } = slot;
   const title = `Game ${underflow.gameInSet} isn’t finished at ${underflow.score}`;
   if ("ok" in plan) {
-    const n = plan.summary.points;
+    // The rows this game takes, not the cascade's total: the labeller counts
+    // what lands in the game the slot sits under.
+    const n = plan.summary.first;
     return {
       title,
       reason: `Pull ${n} ${n === 1 ? "point" : "points"} from game ${plan.summary.fromGame.gameInSet}`,
@@ -111,8 +113,9 @@ export const BlackGameUnderflow = memo(function BlackGameUnderflow({
   // and any pulled point whose players switch with its server.
   const details: string[] = [];
   if ("ok" in plan && plan.summary.games > 1) {
+    const onward = plan.summary.points - plan.summary.first;
     details.push(
-      `Pulls ${plan.summary.points} points across ${plan.summary.games} games`,
+      `Game ${plan.summary.fromGame.gameInSet} is then short and takes ${onward} from the game after it`,
     );
   }
   if ("ok" in plan && plan.summary.swapped > 0) {

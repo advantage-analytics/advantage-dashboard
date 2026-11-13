@@ -92,6 +92,8 @@ export const LABEL_ONLY_FLAGS = {
   FIRST_SERVE_FAULT_ALONE: "first_serve_fault_alone",
   /** A serve right after a serve that was in: a played let, or two points. */
   SERVE_AFTER_SERVE_IN: "serve_after_serve_in",
+  /** Two serves by one player from different sides of the centre mark. */
+  SERVES_FROM_BOTH_SIDES: "serves_from_both_sides",
   /** A stroke typed as a serve whose hitter is not the point's server. */
   SERVE_BY_RECEIVER: "serve_by_receiver",
   /** One of a point's first four or last two strokes lacks its coordinates. */
@@ -238,6 +240,7 @@ export const LABEL_MARK_META = {
   [LABEL_ONLY_FLAGS.SECOND_SERVE_AS_FIRST]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.LAST_LANDING_MISSING]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_AFTER_SERVE_IN]: { tier: "hint", scope: "shot" },
+  [LABEL_ONLY_FLAGS.SERVES_FROM_BOTH_SIDES]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.SERVE_IN_LANDING_OUT]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.PLACEMENT_MISSING]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "count", scope: "point" },
@@ -362,6 +365,8 @@ export interface LabelMarkParams {
   serve_in_landing_out: { shotId: string; landing: "out" | "net" };
   /** The serve that follows a serve in play — where "Split here" cuts. */
   serve_after_serve_in: { shotId: string };
+  /** The later of the two serves: where the second point starts. */
+  serves_from_both_sides: { shotId: string };
   /** The stroke typed as a serve, who hit it, and the point's server. */
   serve_by_receiver: { shotId: string; hitter: LabelSide; server: LabelSide };
   /** The stroke to place, and what the gap costs: see `markHover`. */

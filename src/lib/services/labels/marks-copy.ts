@@ -38,6 +38,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   first_serve_fault_alone: "Fault, no second serve",
   serve_in_landing_out: "Serve in, landing outside the box",
   serve_after_serve_in: "Serve after a serve in play",
+  serves_from_both_sides: "Serves from both sides",
   serve_by_receiver: "Serve by the receiver",
   placement_missing: "No placement",
   pick_winner: "Pick the winner",
@@ -235,6 +236,7 @@ export const HINT_ACTION_LABEL = {
   second_serve_as_first: "Make it a second serve",
   shot_after_point_end: "Split here",
   serve_after_serve_in: "Split here",
+  serves_from_both_sides: "Split here",
 } as const;
 
 /** "Was the last ball in?"'s answer: the vendor's own call on that ball. */
@@ -412,6 +414,8 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
         : "The serve counts as in, but its landing is outside the service box. It publishes as in with no placement: place the bounce in the box to count where it went.";
     case "serve_after_serve_in":
       return "A let that was played, or two points in one rally.";
+    case "serves_from_both_sides":
+      return "The same player serves from the deuce side and from the ad side in this point. A server only changes sides for a new point, so this is most often two points in one: split at the second of them.";
     case "serve_by_receiver": {
       const { hitter, server } = mark.params;
       return `${names[hitter]} is typed as hitting a serve, but ${names[server]} is serving this point. If it is a rally shot, retype it: mid-rally it is most often an overhead. If the serve is ${names[server]}’s, change who hit it. If ${names[hitter]} did serve, change the server.`;

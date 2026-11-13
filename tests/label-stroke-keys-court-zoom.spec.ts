@@ -371,7 +371,18 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     // A shot key acts on the open point's stroke: a selection left in
     // another point gives way to the open point's first.
     expect(source).toMatch(
-      /const keyShot = \(\s*accept: \(shot: LabelShot\) => boolean = \(\) => true,\s*\): LabelShot \| null =>/,
+      /const keyShot = \(\s*accept: \(shot: LabelShot\) => boolean = \(\) => true,\s*unselected: "first" \| "last" = "first",\s*\): LabelShot \| null =>/,
+    );
+    // N ends a point: with no stroke selected it takes the last one, and a
+    // split lets go of the stroke it was asked from so that N reaches it.
+    expect(source).toContain(
+      'const shot = keyShot((s) => netKeyPatch(s) !== null, "last");',
+    );
+    expect(source).toContain(
+      ') ?? (unselected === "last" ? strokes.at(-1) : strokes[0]);',
+    );
+    expect(source).toContain(
+      "if (anchor.shots.some((shot) => shot.id === placement.shotId)) {",
     );
     expect(source).toContain(
       "if (kept && expanded.shots.some((shot) => shot.id === kept.id))",

@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { lockedGameNeeds } from "@/lib/services/labels/game-boundary";
-import type { LabelMarks } from "@/lib/services/labels/marks";
+import type { LabelMark, LabelMarks } from "@/lib/services/labels/marks";
 import {
   drawsGhosts,
   lastBallAgainstGame,
+  withoutRepeatedLastCall,
   reviewFlag,
   reviewItemQuestion,
 } from "@/lib/services/labels/marks-state";
@@ -170,6 +171,54 @@ test.describe("Was the last ball out? for a locked game", () => {
       ending: "let_replayed" as const,
     };
     expect(lastBallAgainstGame(let_, "p1", true)).toBeNull();
+  });
+
+  test("never against a call the labeller made: answering “Was the last ball out?” is not asked back as in", () => {
+    // Lee's last ball, called out by the labeller (a hint's yes, the Result
+    // menu): the game needs Lee, and the opposite call would give it — but
+    // the labeller has just said what the ball did.
+    const error = rally("c", 2, "p1", "out");
+    const called = {
+      ...error,
+      shots: error.shots.map((shot) =>
+        shot.id === "c-s3" ? { ...shot, resultCalled: true } : shot,
+      ),
+    };
+    expect(lastBallAgainstGame(error, "p1", true)).not.toBeNull();
+    expect(lastBallAgainstGame(called, "p1", true)).toBeNull();
+  });
+
+  test("asked once where the vendor's call already asks the same of the same ball", () => {
+    const forGame = (call: "in" | "out"): LabelMark => ({
+      code: "last_ball_against_game",
+      tier: "hint",
+      scope: "point",
+      params: { shotId: "c-s4", call, gameWinner: "p1" },
+    });
+    const lastCall = (vendorCall: "in" | "out", shotId = "c-s4") => ({
+      mark: {
+        code: "last_call_overruled" as const,
+        tier: "count" as const,
+        scope: "point" as const,
+        params: { vendorCall, eventId: 4 },
+      },
+      shotId,
+    });
+    // The same call on the same ball: one question.
+    expect(withoutRepeatedLastCall([forGame("out")], lastCall("out"))).toEqual(
+      [],
+    );
+    // Opposite calls disagree, another ball is another question, and with
+    // no vendor question the game's stands alone.
+    expect(withoutRepeatedLastCall([forGame("out")], lastCall("in"))).toEqual([
+      forGame("out"),
+    ]);
+    expect(
+      withoutRepeatedLastCall([forGame("out")], lastCall("out", "c-s3")),
+    ).toEqual([forGame("out")]);
+    expect(withoutRepeatedLastCall([forGame("out")], null)).toEqual([
+      forGame("out"),
+    ]);
   });
 
   test("the live marks carry it on the doubted point only, and only while the game is locked", () => {

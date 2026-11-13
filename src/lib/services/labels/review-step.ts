@@ -740,7 +740,10 @@ function stepAnswers(
     }
     case 3: {
       for (const { mark } of openMembers(item)) {
-        if (mark.code === "serve_after_serve_in") {
+        if (
+          mark.code === "serve_after_serve_in" ||
+          mark.code === "serves_from_both_sides"
+        ) {
           answers.push({
             id: "split",
             label: SPLIT_ANSWER,

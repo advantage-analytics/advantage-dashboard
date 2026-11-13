@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 
 import { labelConfirmCopy } from "@/components/admin/labels/label-confirm";
 import {
-  dropBeforePoint,
+  gameDropPoints,
+  nearestGameDrop,
   planGameBoundary,
 } from "@/lib/services/labels/game-boundary";
 import {
@@ -426,9 +427,30 @@ test.describe("a game's header dragged to where the game starts", () => {
         unlockPointIds: [],
       },
     });
-    expect(dropBeforePoint(withGap, "p2", false)).toBe("p4");
-    expect(dropBeforePoint(withGap, "p2", true)).toBe("p2");
-    expect(dropBeforePoint(withGap, "p7", false)).toBeNull();
+    // The positions the header can land on: only those that move something,
+    // and never a deleted row.
+    const drops = gameDropPoints(withGap, game2);
+    expect(drops.has("p2")).toBe(true);
+    expect(drops.has("p3")).toBe(false);
+    for (const id of drops) {
+      const plan = planGameBoundary(withGap, game2, id);
+      expect("ok" in plan && plan.write.pointIds.length > 0).toBe(true);
+    }
+    // The line goes to the position nearest the cursor: through a tall open
+    // point (p2's rows run from 100 to 700) it stays on p2 until the cursor
+    // is nearer p4, and holds on the last one when the cursor goes past it.
+    const gaps = [
+      { pointId: "p2", y: 100 },
+      { pointId: "p4", y: 700 },
+      { pointId: "p5", y: 744 },
+    ];
+    expect(nearestGameDrop(gaps, 120)).toBe("p2");
+    expect(nearestGameDrop(gaps, 399)).toBe("p2");
+    expect(nearestGameDrop(gaps, 401)).toBe("p4");
+    expect(nearestGameDrop(gaps, 730)).toBe("p5");
+    expect(nearestGameDrop(gaps, 2000)).toBe("p5");
+    expect(nearestGameDrop(gaps, -50)).toBe("p2");
+    expect(nearestGameDrop([], 100)).toBeNull();
   });
 
   test("the dragged game's lock: its new first point takes it, its old first lets go", () => {

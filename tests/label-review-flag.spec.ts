@@ -79,6 +79,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   first_serve_fault_alone: {},
   serve_in_landing_out: { shotId: "s1", landing: "out" },
   serve_after_serve_in: { shotId: "s1" },
+  serves_from_both_sides: { shotId: "s1" },
   serve_by_receiver: { shotId: "s1", hitter: "p1", server: "p2" },
   placement_missing: { shotId: "s1", stroke: "serve", missing: "landing" },
   pick_winner: {},
@@ -336,6 +337,7 @@ test.describe("the item table", () => {
         "second_serve_called_out",
         "serve_in_landing_out",
         "serve_after_serve_in",
+        "serves_from_both_sides",
         "reserve_after_in",
       ],
       [
@@ -512,6 +514,8 @@ test.describe("tone", () => {
     expect(tone(flagOf([sample("second_serve_called_out")]), 3)).toBe("score");
     expect(tone(flagOf([sample("first_serve_fault_alone")]), 3)).toBe("score");
     expect(tone(flagOf([sample("serve_by_receiver")]), 3)).toBe("score");
+    // Two points in one rally is a point missing from the score.
+    expect(tone(flagOf([sample("serves_from_both_sides")]), 3)).toBe("score");
   });
 
   test("item 4 is amber with a counted member or a contradicted winner, else grey", () => {

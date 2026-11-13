@@ -306,6 +306,22 @@ test.describe("dead balls after a ball marked out", () => {
     expect(deadBallsAfterMiss(more(2), "s-return", back, out, true)).toEqual(
       [],
     );
+    // The labeller's own call (N, a Result override, a hint's yes) ends the
+    // point there: every stroke after it goes, however many.
+    const called = { result: "net" as const, result_called: true };
+    expect(
+      deadBallsAfterMiss(more(2), "s-return", back, called, true),
+    ).toHaveLength(3);
+    expect(
+      deadBallsAfterMiss(more(5), "s-return", back, called, true),
+    ).toHaveLength(6);
+    // Still nothing after a first serve, or on a ball already a miss.
+    expect(
+      deadBallsAfterMiss(more(5), "s-serve", { result: "in" }, called, true),
+    ).toEqual([]);
+    expect(
+      deadBallsAfterMiss(more(5), "s-return", { result: "out" }, called, true),
+    ).toEqual([]);
   });
 
   test("a second serve newly out or in the net is a double fault: the strokes after it go and the ending follows; a first serve's fault takes nothing", () => {

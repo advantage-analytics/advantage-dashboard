@@ -9,6 +9,7 @@ import {
   pointEndedEarly,
   secondServeAsFirst,
   serveAfterServeIn,
+  servesFromBothSides,
   thinTracking,
 } from "@/lib/services/labels/marks-state";
 import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
@@ -992,5 +993,77 @@ test.describe("thinTracking", () => {
   test("an ordinary share, or too few serves to say, is nothing", () => {
     expect(thinTracking(match(100, 19), true)).toBeNull();
     expect(thinTracking(match(19, 10), true)).toBeNull();
+  });
+});
+
+test.describe("servesFromBothSides", () => {
+  const serve = (
+    id: string,
+    contactX: number | null,
+    over: Partial<LabelShot> = {},
+  ) =>
+    stroke(
+      id,
+      { x: 0, y: 14 },
+      {
+        stroke: "first_serve",
+        hitter: "p1",
+        contactX,
+        result: "out",
+        ...over,
+      },
+    );
+
+  test("one player serving from the deuce side, then from the ad side: split at the later serve", () => {
+    const hint = servesFromBothSides(
+      {
+        shots: [
+          serve("a", 1.25),
+          serve("b", -0.7, { stroke: "second_serve" }),
+          stroke("c", IN, { hitter: "p2" }),
+        ],
+      },
+      true,
+    );
+    expect(hint).toEqual({
+      code: "serves_from_both_sides",
+      tier: "hint",
+      scope: "shot",
+      params: { shotId: "b" },
+    });
+    expect(hintLabel(hint!)).toBe("Serves from both sides");
+    expect(markHover(hint!, NAMES)).toBe(
+      "The same player serves from the deuce side and from the ad side in this point. A server only changes sides for a new point, so this is most often two points in one: split at the second of them.",
+    );
+    // With a rally between them too.
+    expect(
+      servesFromBothSides(
+        {
+          shots: [
+            serve("a", 1.25, { result: "in" }),
+            stroke("b", IN, { hitter: "p2" }),
+            serve("c", -0.7),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "c" });
+  });
+
+  test("nothing from the same side, near the centre mark, unplaced, by two players, or where the serve-after-a-serve-in hint asks", () => {
+    const none = (shots: LabelShot[]) =>
+      expect(servesFromBothSides({ shots }, true)).toBeNull();
+    none([serve("a", 1.25), serve("b", 0.7, { stroke: "second_serve" })]);
+    // Within the dead zone the side is not read.
+    none([serve("a", 1.25), serve("b", -0.05)]);
+    none([serve("a", 0.05), serve("b", -0.7)]);
+    none([serve("a", null), serve("b", -0.7)]);
+    none([serve("a", 1.25), serve("b", -0.7, { hitter: "p2" })]);
+    // A deleted serve is no serve of the point.
+    none([serve("a", 1.25), serve("b", -0.7, { status: "deleted" })]);
+    // Straight after a serve stored in: that hint asks, with the same split.
+    const shots = [serve("a", 1.25, { result: "in" }), serve("b", -0.7)];
+    expect(serveAfterServeIn({ shots }, true)?.params).toEqual({ shotId: "b" });
+    none(shots);
   });
 });
