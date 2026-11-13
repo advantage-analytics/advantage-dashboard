@@ -17,14 +17,7 @@
 
 /** A card the page can render on its own behind a `?view=`. */
 export type TeamCardId =
-  | "requests"
-  | "people"
-  | "roster"
-  | "contacts"
-  | "schedule"
-  | "pilot"
-  | "usage"
-  | "activity";
+  "people" | "contacts" | "schedule" | "pilot" | "usage" | "activity";
 
 export type TeamViewId =
   "overview" | "people" | "schedule" | "usage" | "activity";
@@ -40,22 +33,14 @@ export interface TeamView {
   readonly cards: readonly TeamCardId[];
 }
 
-/**
- * The People section as the default view draws it: join requests first, then
- * the members, then the roster. Merged into one list by a later task (T13).
- */
-export const TEAM_PEOPLE_CARDS = [
-  "requests",
-  "people",
-  "roster",
-] as const satisfies readonly TeamCardId[];
-
 export const TEAM_VIEWS: readonly TeamView[] = [
   { id: "overview", label: "Overview", cards: [] },
   {
     id: "people",
     label: "People",
-    cards: [...TEAM_PEOPLE_CARDS, "contacts"],
+    // The one People list (join requests, members and roster players,
+    // invitations), then Contacts, which the default view has no place for.
+    cards: ["people", "contacts"],
   },
   { id: "schedule", label: "Schedule & results", cards: ["schedule"] },
   { id: "usage", label: "Usage", cards: ["pilot", "usage"] },

@@ -181,7 +181,7 @@ ready).
 
 ## T13 · Team detail: one People list
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T12
 - **files:** guess — src/components/admin/admin-people-card.tsx, src/components/admin/admin-requests-card.tsx, src/components/admin/admin-roster-card.tsx, src/lib/data/admin-team-roster.ts, tests/admin-people-card.spec.ts, tests/admin-team-roster.spec.ts

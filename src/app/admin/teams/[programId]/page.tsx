@@ -7,16 +7,13 @@ import { activityLabel } from "@/components/admin/admin-activity-labels";
 import { AdminConferenceCard } from "@/components/admin/admin-conference-card";
 import { AdminContactsCard } from "@/components/admin/admin-contacts-card";
 import { AdminDetailsCard } from "@/components/admin/admin-details-card";
-import { AdminPeopleCard } from "@/components/admin/admin-people-card";
-import { AdminRequestsCard } from "@/components/admin/admin-requests-card";
-import { AdminRosterCard } from "@/components/admin/admin-roster-card";
+import { AdminPeopleList } from "@/components/admin/admin-people-card";
 import { AdminScheduleCard } from "@/components/admin/admin-schedule-card";
 import { AdminUsageCard } from "@/components/admin/admin-usage-card";
 import { PilotUsageCard } from "@/components/admin/pilot-usage-card";
 import { TeamLatestMatches } from "@/components/admin/team-latest-matches";
 import { TeamPageHeader } from "@/components/admin/team-page-header";
 import {
-  TEAM_PEOPLE_CARDS,
   teamViewFrom,
   teamViewHref,
   teamViewTitle,
@@ -64,13 +61,14 @@ export async function generateMetadata({
  * The default view reads top to bottom: the header (crest upload, name,
  * facts, this month's hours with `Add hours`), Details (one row of facts, one
  * `Edit details`, the two join links, and the Conference card with its own
- * `Change` control), People, the three latest matches with a link to Matches
+ * `Change` control), People (one list: join requests, then members and
+ * roster players together, then invitations), the three latest matches with a link to Matches
  * filtered to this workspace, and a link to the activity log. No pill row and
  * no rail: "keep it quiet" and "pages sit centred" are the owner's words.
  *
  * The cards the artboard has no place for stay behind `?view=`
  * (`team-sections.ts`): `schedule`, `usage` (Pilot + Usage — where `Add
- * hours` goes), `activity`, and `people` (the People cards plus Contacts).
+ * hours` goes), `activity`, and `people` (the People list plus Contacts).
  * Each renders alone under the header with a link back. `roster` and any
  * unknown value are the default — the old `/admin/teams/<id>/<slug>` routes
  * still redirect to `?view=<slug>` (`next.config.ts`), so every slug lands.
@@ -109,29 +107,17 @@ export default async function AdminTeamPage({
   /** Each card a view can show, built only when that view asks for it. */
   const card = (id: TeamCardId): React.ReactNode => {
     switch (id) {
-      case "requests":
-        return (
-          <AdminRequestsCard
-            joinRequests={data.joinRequests}
-            claim={data.claim}
-          />
-        );
       case "people":
         return (
-          <AdminPeopleCard
+          <AdminPeopleList
             programId={programId}
             programName={data.program.schoolName}
+            joinRequests={data.joinRequests}
             members={data.members}
+            roster={data.roster}
             invites={data.invites}
             seats={data.seats}
-          />
-        );
-      case "roster":
-        return (
-          <AdminRosterCard
-            programId={programId}
-            roster={data.roster}
-            seats={data.seats}
+            claim={data.claim}
           />
         );
       case "contacts":
@@ -200,9 +186,13 @@ export default async function AdminTeamPage({
             />
             Back to {data.program.schoolName}
           </Link>
-          <h2 className="text-[14px] font-medium text-[var(--ink-900)]">
-            {view.label}
-          </h2>
+          {/* The People list carries its own "People" header, with its two
+              actions; a second one above it would say the word twice. */}
+          {view.cards[0] !== "people" && (
+            <h2 className="text-[14px] font-medium text-[var(--ink-900)]">
+              {view.label}
+            </h2>
+          )}
           {view.cards.map((id) => (
             <section key={id} id={id} className="scroll-mt-16">
               {card(id)}
@@ -248,23 +238,9 @@ export default async function AdminTeamPage({
         </div>
       </section>
 
-      <section
-        id="people"
-        aria-labelledby="team-people"
-        className="flex flex-col gap-3"
-      >
-        <h2
-          id="team-people"
-          className="text-[14px] font-medium text-[var(--ink-900)]"
-        >
-          People
-        </h2>
-        <div className="flex flex-col gap-6">
-          {TEAM_PEOPLE_CARDS.map((id) => (
-            <div key={id}>{card(id)}</div>
-          ))}
-        </div>
-      </section>
+      <div id="people" className="scroll-mt-16">
+        {card("people")}
+      </div>
 
       <TeamLatestMatches
         programId={programId}

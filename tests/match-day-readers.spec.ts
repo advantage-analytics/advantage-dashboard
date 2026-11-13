@@ -17,8 +17,7 @@ import { expect, test } from "@playwright/test";
  *   formatShortDate(match.date)
  *
  * It is a text check, so it is deliberately narrow: only a `.date` member
- * passed straight in, only in the trees where `.date` means a match's date
- * (plus the one admin card that prints one). Comments are ignored. A real
+ * passed straight in, only in the trees where `.date` means a match's date. Comments are ignored. A real
  * moment kept in a field called `date` would trip it — name the field for
  * what it is (`createdAt`, `updatedAt`) rather than adding it to `ALLOWED`.
  */
@@ -30,7 +29,6 @@ const SCANNED = [
   "src/components/dashboard",
   "src/app/dashboard",
   "src/app/m",
-  "src/components/admin/admin-roster-card.tsx",
 ];
 
 /**

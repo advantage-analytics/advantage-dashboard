@@ -69,10 +69,22 @@ const CASES: { name: string; run: (page: Page) => Promise<Locator> }[] = [
     },
   },
   {
-    name: "Invite someone",
+    name: "Invite people",
     run: async (page) => {
-      await page.getByRole("button", { name: "Invite someone" }).click();
+      await page.getByRole("button", { name: "Invite people" }).click();
       await page.getByPlaceholder("name@school.edu").fill("new@example.com");
+      await page.getByRole("button", { name: "Invite", exact: true }).click();
+      return page.locator("body");
+    },
+  },
+  {
+    name: "Invite a roster player with no account",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Invite Nora Noaccount" }).click();
+      // The profile's own address is already in the field.
+      await expect(page.getByPlaceholder("name@school.edu")).toHaveValue(
+        "nora@example.com",
+      );
       await page.getByRole("button", { name: "Invite", exact: true }).click();
       return page.locator("body");
     },
@@ -119,16 +131,16 @@ const CASES: { name: string; run: (page: Page) => Promise<Locator> }[] = [
     },
   },
   {
-    name: "Send invite on a request",
+    name: "Approve a request",
     run: async (page) => {
-      await page.getByRole("button", { name: "Send invite" }).click();
+      await page.getByRole("button", { name: "Approve" }).click();
       return page.locator("body");
     },
   },
   {
     name: "Add player",
     run: async (page) => {
-      await page.getByRole("button", { name: "Add player" }).first().click();
+      await page.getByRole("button", { name: "Add player" }).click();
       const dialog = dialogOf(page);
       await dialog.getByLabel("First name").fill("Ana");
       await dialog.getByLabel("Last name").fill("Ruiz");

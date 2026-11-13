@@ -154,3 +154,17 @@ is the runner's. Newest entries at the bottom.
 2. `team-latest-matches.tsx` imports `MatchStatus` and `UploadedAt` from the large `matches-page-content.tsx`; a small shared module would trim the team page's bundle.
 3. Details dropped the Program key fact (it is inside the coach link).
 4. Non-default views still render the full header, hours bar included, above their card.
+
+## T13 · Team detail: one People list — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** the team page's People section is one `AdminPeopleList` built by the pure `adminPeopleRows` (`src/lib/data/admin-team-people.ts`): join requests first with Approve and Decline (`adminResolveJoinRequest`), then staff, roster players and unrostered members with a linked player folded into one row, then pending invites with Resend and Revoke. "No account · Invite" is the only account state printed; "Add player" and "Invite people" sit in the header; role menu, Transfer ownership and the upload switch stay on member rows. The Requests and Roster cards and the roster table layout are deleted. `tests/admin-team-people.spec.ts` replaces `admin-people-card.spec.ts`; the write harness covers Approve and inviting a roster player.
+
+**follow-ups:**
+
+1. Move each member row's Transfer ownership and upload switch into a "⋯" menu; the rows are busier than the artboard.
+2. Fold a pending invite into its unclaimed profile's row instead of showing both.
+3. The artboard's "Show 10 more" truncation for a long roster is not built.
+4. The header meta adds seats used to the artboard's count line; confirm it is wanted.
+5. Rename `admin-people-card.tsx`; it is no longer a card. The roster loader still computes `matchCount` and `lastMatch` that nothing shows.

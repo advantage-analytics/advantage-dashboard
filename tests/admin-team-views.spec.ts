@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  TEAM_PEOPLE_CARDS,
   TEAM_VIEWS,
   teamViewFrom,
   teamViewHref,
@@ -24,19 +23,10 @@ test.describe("admin team views", () => {
   });
 
   test("each other view names its own cards", () => {
-    expect(teamViewFrom("people").cards).toEqual([
-      "requests",
-      "people",
-      "roster",
-      "contacts",
-    ]);
+    expect(teamViewFrom("people").cards).toEqual(["people", "contacts"]);
     expect(teamViewFrom("schedule").cards).toEqual(["schedule"]);
     expect(teamViewFrom("usage").cards).toEqual(["pilot", "usage"]);
     expect(teamViewFrom("activity").cards).toEqual(["activity"]);
-  });
-
-  test("the default People section is today's three cards, Contacts aside", () => {
-    expect(TEAM_PEOPLE_CARDS).toEqual(["requests", "people", "roster"]);
   });
 
   test("every old sub-route slug lands on a view", () => {
