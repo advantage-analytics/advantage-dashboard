@@ -139,6 +139,21 @@ async function readUsedSeconds(
   return used;
 }
 
+/**
+ * How many accounts are pilot individuals — the "Pilot players" pill's count
+ * on Admin › Teams while the Programs view is showing, so that view need not
+ * run `listAdminPilots()` (and record a look at the Pilots list) for a number.
+ * A failed count is null, which the pill prints as no number.
+ */
+export async function countAdminPilots(): Promise<number | null> {
+  await requireAdminOrNotFound();
+  const { count, error } = await createAdminClient()
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .eq("individual_pilot", true);
+  return error ? null : (count ?? 0);
+}
+
 export async function listAdminPilots(): Promise<AdminPilotRow[]> {
   const admin = await requireAdminOrNotFound();
   const db = createAdminClient();

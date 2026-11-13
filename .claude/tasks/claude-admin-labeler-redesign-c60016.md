@@ -139,7 +139,7 @@ ready).
 
 ## T10 · Teams list: Pilot players view
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T9
 - **files:** guess — src/components/admin/teams-page-content.tsx, src/app/admin/teams/page.tsx, src/components/admin/pilots-page-content.tsx, src/lib/data/admin-pilots-server.ts

@@ -115,3 +115,16 @@ is the runner's. Newest entries at the bottom.
 2. `listAdminTeams` now runs the usage query for the upload wizard's team picker too, which never shows hours.
 3. `countAdminTeamViews` still counts four views; the page reads two.
 4. Claim-pending and suspended programs lose their status line once they have a squad or division.
+
+## T10 · Teams list: Pilot players view — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Teams' toolbar has two view pills, Programs and Pilot players, each with its count. `/admin/teams?view=pilots` renders `PilotsTable` (extracted to `src/components/admin/pilots/pilots-table.tsx` and shared with the Pilots page) from `listAdminPilots()`, loaded for that view only; other views use the new `countAdminPilots()` head count. The old `?view=` values still resolve. The Teams test harness gained stubs for the pilot actions.
+
+**follow-ups:**
+
+1. The Pilot players empty state has no Add pilot action; link it to `/admin/pilots`.
+2. No spec covers the Teams harness with `view: "pilots"`.
+3. Opening the Pilot players view records a look at the "teams" surface too, clearing its New dots.
+4. `countAdminPilots` is a second query on every Programs-view load.

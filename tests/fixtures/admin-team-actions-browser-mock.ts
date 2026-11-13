@@ -98,6 +98,11 @@ export const saveClaimNote = answer;
 export const resolveRequest = answer;
 export const seedLabelSessionAction = answer;
 export const createProgram = answer;
+// The pilot rows' writes, reached through `PilotsTable` on the Teams page.
+export const setVideoHours = answer;
+export const removeIndividualPilot = answer;
+export const addIndividualPilot = answer;
+export const previewAccount = answer;
 export const markAdminRowSeen = async () => {};
 export const conferenceOptionsFor = async () => [];
 export const adminSearchTeams = async () => [];
