@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Put the pages leaving the tab row into the admin account menu
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** guess — src/components/admin/admin-account-menu.tsx, tests/admin-shell-nav.spec.ts (new)
 - **routes:** /admin
