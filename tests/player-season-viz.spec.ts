@@ -1697,9 +1697,14 @@ test.describe("the Visualizations view, rendered", () => {
     expect(html).toContain('aria-label="Saved views"');
     expect(html).not.toContain('aria-label="Default views"');
     expect(html).not.toContain("Saved views live on the match report");
-    for (const card of savedCards.filter((c) => c.total > 0)) {
-      expect(html).toContain(card.name);
-      expect(html).toContain(`view=${card.state.viewId}`);
+    // The wall lists one player's views, the You | Opponent chip's: here
+    // "you". The other side's stay off it until the chip is switched.
+    const drawable = savedCards.filter((c) => c.total > 0);
+    expect(drawable.some((c) => c.subject === "you")).toBe(true);
+    for (const card of drawable) {
+      const shown = card.subject === "you";
+      expect(html.includes(`view=${card.state.viewId}`)).toBe(shown);
+      if (shown) expect(html).toContain(card.name);
     }
     expect(html).toContain("Second serves, Maya Chen");
 

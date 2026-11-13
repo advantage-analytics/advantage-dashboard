@@ -28,8 +28,11 @@ import type {
 } from "@/lib/data/player-season-viz";
 import { cn } from "@/lib/utils";
 import { ManageableSavedViewTile } from "@/components/dashboard/matches/match-detail/shots/manageable-saved-view-tile";
-import { savedViewNamePool } from "@/components/dashboard/matches/match-detail/shots/save-view-dialog";
-import { canManageSavedView } from "@/lib/data/saved-views-logic";
+import { SavedViewsStatusLine } from "@/components/dashboard/matches/match-detail/shots/saved-views-status-line";
+import {
+  canManageSavedView,
+  savedViewNamePool,
+} from "@/lib/data/saved-views-logic";
 import { SeasonVizLightbox, type SeasonSaveView } from "./season-viz-lightbox";
 import {
   useSeasonSavedViews,
@@ -349,36 +352,36 @@ function SeasonWall({
             </LifecycleChip>
           ))}
         </div>
-        {collection === "default" && (
-          <>
-            <span
-              aria-hidden="true"
-              className="h-4 w-px"
-              style={{ backgroundColor: "var(--border-medium)" }}
-            />
-            <div className="flex gap-2" role="group" aria-label="Player">
-              {(["you", "opponent"] as const).map((value) => (
-                <LifecycleChip
-                  key={value}
-                  pressed={player === value}
-                  onClick={() => choosePlayer(value)}
-                >
-                  {value === "you" ? "You" : "Opponent"}
-                </LifecycleChip>
-              ))}
-            </div>
-            <div className="flex-1" />
-            <div
-              role="group"
-              aria-label="Legend"
-              className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px]"
-            >
-              {wallLegendItems().map((item) => (
-                <LegendMark key={item.key} item={item} />
-              ))}
-            </div>
-          </>
-        )}
+        {/* One strip for both collections, as on the match report: Saved
+            lists the same player's views and reads the same marks. */}
+        <>
+          <span
+            aria-hidden="true"
+            className="h-4 w-px"
+            style={{ backgroundColor: "var(--border-medium)" }}
+          />
+          <div className="flex gap-2" role="group" aria-label="Player">
+            {(["you", "opponent"] as const).map((value) => (
+              <LifecycleChip
+                key={value}
+                pressed={player === value}
+                onClick={() => choosePlayer(value)}
+              >
+                {value === "you" ? "You" : "Opponent"}
+              </LifecycleChip>
+            ))}
+          </div>
+          <div className="flex-1" />
+          <div
+            role="group"
+            aria-label="Legend"
+            className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px]"
+          >
+            {wallLegendItems().map((item) => (
+              <LegendMark key={item.key} item={item} />
+            ))}
+          </div>
+        </>
       </div>
       {collection === "default" ? (
         <>
@@ -441,6 +444,7 @@ function SeasonWall({
           saveView={saveView}
           manage={manage}
           savedCards={savedCards}
+          player={player}
           playerName={playerName}
           firstName={firstName}
           analyzed={analyzed}
@@ -458,6 +462,7 @@ function SeasonWall({
  */
 function SavedWall({
   savedCards,
+  player,
   playerName,
   firstName,
   analyzed,
@@ -465,6 +470,8 @@ function SavedWall({
   manage,
 }: {
   savedCards: SeasonCard[];
+  /** The wall's You | Opponent: only that player's saved views are drawn. */
+  player: PlayerFilter;
   playerName: string;
   firstName: string;
   analyzed: number;
@@ -477,7 +484,7 @@ function SavedWall({
 
   // A deleted view leaves at once; the server's cards follow on refresh.
   const cards = savedCards.filter(
-    (card) => !manage.removed.has(viewIdOf(card)),
+    (card) => card.subject === player && !manage.removed.has(viewIdOf(card)),
   );
   const visible = cards.filter((card) => card.total > 0);
 
@@ -581,26 +588,10 @@ function SavedWall({
   return (
     <div className="flex flex-col gap-4">
       {manage.status !== null && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="text-micro flex items-center gap-1.5"
-        >
-          <span>{manage.status.text}</span>
-          {manage.status.undo && (
-            <button
-              type="button"
-              onClick={() => {
-                const undo = manage.status?.undo;
-                manage.dismissStatus();
-                undo?.();
-              }}
-              className="cursor-pointer font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-            >
-              Undo
-            </button>
-          )}
-        </div>
+        <SavedViewsStatusLine
+          status={manage.status}
+          onDismiss={manage.dismissStatus}
+        />
       )}
       {body}
     </div>

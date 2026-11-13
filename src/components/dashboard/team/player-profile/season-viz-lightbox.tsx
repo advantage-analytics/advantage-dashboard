@@ -569,6 +569,13 @@ export function SeasonVizLightbox({
             </Suspense>
           ) : undefined
         }
+        // A change to the open view the server refused: the wall's own line
+        // is behind the scrim, so it is said here.
+        notice={
+          openView !== null && manage?.status && !manage.status.undo
+            ? manage.status.text
+            : undefined
+        }
         subtitle={court.subtitle}
         filterPhrases={court.filterPhrases}
         panelActive={court.panelActive}

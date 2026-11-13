@@ -36,8 +36,8 @@ export interface SeasonSavedViewActions {
  * edit in place: a rename shows through `names` and a delete through
  * `removed` until `router.refresh()` brings the server's cards, and a
  * refused change is undone and said in `status`. Delete offers Undo for the
- * viewer's own view only, as the report does (`restoreSavedView` would
- * refuse anything else).
+ * viewer's own view only, as the report does (the `deleted.mine` check
+ * below; the server does not refuse a restore of anyone else's).
  */
 export function useSeasonSavedViews(): SeasonSavedViewActions {
   const router = useRouter();

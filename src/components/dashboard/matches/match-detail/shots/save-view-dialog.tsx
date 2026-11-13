@@ -17,6 +17,7 @@ import { advButton } from "@/lib/ui/adv-button";
 import type { FloatMenuTone } from "@/components/ui/float-menu";
 import {
   hasDuplicateViewName,
+  savedViewNamePool,
   savedViewScopeLine,
 } from "@/lib/data/saved-views-logic";
 import { createSavedView } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
@@ -77,26 +78,6 @@ export function suggestedViewName(
     { errorSplitJudged },
   )[0];
   return first ? `${CUT_LABEL[cut]} · ${first.label}` : CUT_LABEL[cut];
-}
-
-/**
- * The pool of existing names a candidate must not collide with, scoped the
- * same way `hasDuplicateViewName`'s caller always scopes it: the workspace's
- * shared names, or the viewer's own private ones. Shared by this dialog (a
- * brand-new view, nothing to exclude) and `saved-views-band.tsx`'s rename
- * flow (`excludeId` leaves the view being renamed out of its own pool).
- */
-export function savedViewNamePool(
-  views: readonly SavedViewRow[],
-  opts: { shared: boolean; excludeId?: string },
-): string[] {
-  return views
-    .filter(
-      (v) =>
-        (opts.excludeId === undefined || v.id !== opts.excludeId) &&
-        (opts.shared ? v.shared : !v.shared && v.mine),
-    )
-    .map((v) => v.name);
 }
 
 export function SaveViewDialog({

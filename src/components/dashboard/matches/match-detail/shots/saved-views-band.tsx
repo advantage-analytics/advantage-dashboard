@@ -27,6 +27,7 @@ import {
   mergeManageableOrder,
   moveItem,
   nextFocusId,
+  savedViewNamePool,
   tileDataKey,
 } from "@/lib/data/saved-views-logic";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
@@ -44,9 +45,9 @@ import {
   ManageableSavedViewTile,
   type SavedViewCardData,
 } from "./manageable-saved-view-tile";
+import { SavedViewsStatusLine } from "./saved-views-status-line";
 import { WallCard } from "./wall-card";
 import { wallSummaryFor } from "./wall-summary";
-import { savedViewNamePool } from "./save-view-dialog";
 import type { SavedViewAction } from "./saved-view-title-menu";
 import { useVizState } from "./use-viz-state";
 import { usePrefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
@@ -94,6 +95,7 @@ export function SavedViewsBand({
   readOnly = false,
   player,
   request = null,
+  onRequestFailed,
 }: {
   /**
    * The public share page: the focused "Views" grid keeps its default tiles
@@ -119,6 +121,12 @@ export function SavedViewsBand({
    * for a delete made here.
    */
   request?: SavedViewRequest | null;
+  /**
+   * A `request` the server refused, with the sentence to show. The wall's
+   * own status line sits under the lightbox's scrim, so whoever asked (the
+   * open view) says it where the reader is looking.
+   */
+  onRequestFailed?: (failure: { n: number; message: string }) => void;
 }) {
   const router = useRouter();
   const points = useVizPoints(useMatchData());
@@ -142,6 +150,7 @@ export function SavedViewsBand({
   const tileElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const menuTriggerElsRef = useRef<Map<string, HTMLButtonElement>>(new Map());
   const doneButtonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   // Latest `optimisticViews.length`, kept current by an effect below so the
   // `setStatusMessage` expiry timer can read the count AT EXPIRY without
   // closing over a stale value from when the timer was scheduled.
@@ -280,8 +289,10 @@ export function SavedViewsBand({
   );
   const tileDataById = useMemo(() => {
     const map = new Map<string, ReturnType<typeof tileDataFor>>();
+    // Only the wall's player's cards draw; the other side computes on demand
+    // when `player` flips (`player` is a dependency below).
     for (const view of optimisticViews) {
-      map.set(view.id, tileDataFor(view));
+      if (view.filters.player === player) map.set(view.id, tileDataFor(view));
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `viewsKey` already captures every view's id/cut/filters, order-independent; including `optimisticViews`/`tileDataFor` directly would recompute on every reorder, defeating the memo
@@ -292,6 +303,7 @@ export function SavedViewsBand({
     opp.name,
     hrefFor,
     viewsKey,
+    player,
     matchCtx,
     bands,
     unit,
@@ -388,8 +400,16 @@ export function SavedViewsBand({
   }
 
   function focusAfterRemoval(removedId: string) {
-    const nextId = nextFocusId(manageableIds, removedId);
-    const nextEl = nextId ? menuTriggerElsRef.current.get(nextId) : undefined;
+    // Among the cards on screen: the other player's views are not mounted.
+    // With none left, the wall's first link ("Create view") takes focus
+    // rather than letting it fall to the page.
+    const nextId = nextFocusId(visibleManageableIds, removedId);
+    const nextEl =
+      (nextId ? menuTriggerElsRef.current.get(nextId) : undefined) ??
+      (manageMode
+        ? undefined
+        : (listRef.current?.querySelector<HTMLElement>("a[href]") ??
+          undefined));
     (nextEl ?? doneButtonRef.current)?.focus();
   }
 
@@ -408,7 +428,11 @@ export function SavedViewsBand({
   }
 
   /** The dialog has already refused an empty, unchanged or taken name. */
-  function commitRename(view: SavedViewRow, name: string) {
+  function commitRename(
+    view: SavedViewRow,
+    name: string,
+    onFail?: (message: string) => void,
+  ) {
     const previousName = view.name;
     setOptimisticViews((prev) =>
       prev.map((v) => (v.id === view.id ? { ...v, name } : v)),
@@ -423,11 +447,12 @@ export function SavedViewsBand({
             v.id === view.id ? { ...v, name: previousName } : v,
           ),
         );
-        setStatusMessage(
+        const message =
           result.error === "duplicate_name"
             ? `A view called “${name}” already exists.`
-            : "Couldn't save that change",
-        );
+            : "Couldn't save that change";
+        setStatusMessage(message);
+        onFail?.(message);
         return;
       }
       router.refresh();
@@ -436,18 +461,22 @@ export function SavedViewsBand({
 
   /* ── Duplicate ──────────────────────────────────────────────────────── */
 
-  function handleDuplicate(view: SavedViewRow) {
+  function handleDuplicate(
+    view: SavedViewRow,
+    onFail?: (message: string) => void,
+  ) {
     startTransition(async () => {
       const result = await duplicateSavedView(view.id);
       if (!result.ok) {
-        setStatusMessage(
-          // I3: the constraint permitting this cut/chart combination is
-          // committed but not yet applied to the live database — no
-          // "Try again", a retry can't succeed either.
+        // I3: the constraint permitting this cut/chart combination is
+        // committed but not yet applied to the live database — no
+        // "Try again", a retry can't succeed either.
+        const message =
           result.error === "unsupported_cut_chart"
             ? "This kind of view can't be saved yet."
-            : "Couldn't save that change",
-        );
+            : "Couldn't save that change";
+        setStatusMessage(message);
+        onFail?.(message);
         return;
       }
       router.refresh();
@@ -456,7 +485,7 @@ export function SavedViewsBand({
 
   /* ── Share / un-share ──────────────────────────────────────────────── */
 
-  function handleShare(view: SavedViewRow) {
+  function handleShare(view: SavedViewRow, onFail?: (message: string) => void) {
     setOptimisticViews((prev) =>
       prev.map((v) => (v.id === view.id ? { ...v, shared: true } : v)),
     );
@@ -466,18 +495,22 @@ export function SavedViewsBand({
         setOptimisticViews((prev) =>
           prev.map((v) => (v.id === view.id ? { ...v, shared: false } : v)),
         );
-        setStatusMessage(
+        const message =
           result.error === "duplicate_name"
             ? `A shared view is already called "${view.name}". Rename yours first.`
-            : "Couldn't save that change",
-        );
+            : "Couldn't save that change";
+        setStatusMessage(message);
+        onFail?.(message);
         return;
       }
       router.refresh();
     });
   }
 
-  function handleUnshare(view: SavedViewRow) {
+  function handleUnshare(
+    view: SavedViewRow,
+    onFail?: (message: string) => void,
+  ) {
     setOptimisticViews((prev) =>
       prev.map((v) => (v.id === view.id ? { ...v, shared: false } : v)),
     );
@@ -488,6 +521,7 @@ export function SavedViewsBand({
           prev.map((v) => (v.id === view.id ? { ...v, shared: true } : v)),
         );
         setStatusMessage("Couldn't save that change");
+        onFail?.("Couldn't save that change");
         return;
       }
       router.refresh();
@@ -512,8 +546,9 @@ export function SavedViewsBand({
       }
       const deleted = result.data;
       // Undo only ever restores the caller's OWN view — `restoreSavedView`
-      // refuses anything else server-side (transferring a shared view's
-      // ownership to whoever clicked Undo would be a bug, not a convenience).
+      // is only offered for one the caller owns (`deleted.mine`):
+      // transferring a shared view's ownership to whoever clicked Undo would be
+      // a bug, not a convenience.
       // A staff delete of a teammate's shared view gets the fact with no
       // offer to undo it.
       setStatusMessage(
@@ -739,11 +774,13 @@ export function SavedViewsBand({
     handledRequestRef.current = request.n;
     const view = optimisticViews.find((v) => v.id === request.id);
     if (!view || !canManage(view)) return;
+    const n = request.n;
+    const failed = (message: string) => onRequestFailed?.({ n, message });
     // eslint-disable-next-line react-hooks/set-state-in-effect -- external ask (the open view's ⋯ menu), not a render-derivable value
-    if (request.kind === "rename") commitRename(view, request.name);
-    else if (request.kind === "duplicate") handleDuplicate(view);
-    else if (request.kind === "share") handleShare(view);
-    else if (request.kind === "unshare") handleUnshare(view);
+    if (request.kind === "rename") commitRename(view, request.name, failed);
+    else if (request.kind === "duplicate") handleDuplicate(view, failed);
+    else if (request.kind === "share") handleShare(view, failed);
+    else if (request.kind === "unshare") handleUnshare(view, failed);
     else handleDelete(view);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the request alone; the handlers read current state when it fires
   }, [request]);
@@ -827,26 +864,10 @@ export function SavedViewsBand({
           hide a live status or Undo line — it stays until it expires or Undo
           is pressed. */}
       {status !== null && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="text-micro flex items-center gap-1.5"
-        >
-          <span>{status.text}</span>
-          {status.undo && (
-            <button
-              type="button"
-              onClick={() => {
-                const undo = status.undo;
-                setStatus(null);
-                undo?.();
-              }}
-              className="cursor-pointer font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-            >
-              Undo
-            </button>
-          )}
-        </div>
+        <SavedViewsStatusLine
+          status={status}
+          onDismiss={() => setStatus(null)}
+        />
       )}
 
       {visibility !== "status-only" && (
@@ -854,6 +875,7 @@ export function SavedViewsBand({
         // view" stays reachable. The Default wall's own grid; rows stretch,
         // so the dashed card beside a saved one is exactly its height.
         <div
+          ref={listRef}
           role="list"
           aria-label="Saved views"
           className="grid grid-cols-1 gap-4 @min-[640px]:grid-cols-2"

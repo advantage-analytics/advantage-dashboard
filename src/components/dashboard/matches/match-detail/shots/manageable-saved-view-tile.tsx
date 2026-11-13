@@ -9,6 +9,7 @@ import { MoreHorizontal } from "lucide-react";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 import { cn } from "@/lib/utils";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { ManageTileMenu } from "./manage-tile-menu";
 import { RenameViewDialog } from "./rename-view-dialog";
 import { SharedGlyph } from "./saved-views-band";
@@ -171,40 +172,44 @@ export function ManageableSavedViewTile({
             : "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 touch:opacity-100",
         )}
       >
-        <ManageTileMenu
-          viewName={view.name}
-          view={view}
-          workspaceKind={workspaceKind}
-          role={workspaceRole}
-          open={menuOpen}
-          onOpenChange={onMenuOpenChange}
-          onRename={onStartRename}
-          onDuplicate={onDuplicate}
-          onShare={onShare}
-          onUnshare={onUnshare}
-          onReorder={onReorder}
-          onDelete={onDelete}
-          trigger={
-            <button
-              type="button"
-              ref={(el) => {
-                triggerRef.current = el;
-                onRegisterMenuTriggerEl?.(el);
-              }}
-              aria-label={`Manage "${view.name}"`}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              className="flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
-              style={{ backgroundColor: "rgba(13,13,13,.72)" }}
-            >
-              <MoreHorizontal
-                className="size-3.5"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-            </button>
-          }
-        />
+        <ChromeTooltip label="View options" align="end" hidden={pinned}>
+          <span className="inline-flex">
+            <ManageTileMenu
+              viewName={view.name}
+              view={view}
+              workspaceKind={workspaceKind}
+              role={workspaceRole}
+              open={menuOpen}
+              onOpenChange={onMenuOpenChange}
+              onRename={onStartRename}
+              onDuplicate={onDuplicate}
+              onShare={onShare}
+              onUnshare={onUnshare}
+              onReorder={onReorder}
+              onDelete={onDelete}
+              trigger={
+                <button
+                  type="button"
+                  ref={(el) => {
+                    triggerRef.current = el;
+                    onRegisterMenuTriggerEl?.(el);
+                  }}
+                  aria-label={`Manage "${view.name}"`}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  className="flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
+                  style={{ backgroundColor: "rgba(13,13,13,.72)" }}
+                >
+                  <MoreHorizontal
+                    className="size-3.5"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </button>
+              }
+            />
+          </span>
+        </ChromeTooltip>
       </div>
       <RenameViewDialog
         open={renameOpen}

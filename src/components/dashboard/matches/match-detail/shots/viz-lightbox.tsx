@@ -80,6 +80,7 @@ export function VizLightbox({
   onWatchPoints,
   allowSaveView = true,
   onViewAction,
+  viewActionFailure = null,
 }: {
   /** The wall's own You | Opponent, which closing restores — a player
    *  switched inside the lightbox does not leak onto the wall. */
@@ -92,6 +93,8 @@ export function VizLightbox({
   /** The open saved view's ⋯ (rename, duplicate, share, delete), run by the
    *  Saved wall's band. Omitted, there is no ⋯ beside the name. */
   onViewAction?: (action: SavedViewAction) => void;
+  /** The last `onViewAction` the server refused (numbered per ask). */
+  viewActionFailure?: { n: number; message: string } | null;
 }) {
   const { state, setState } = useVizState();
   const { meta } = useMatchReport();
@@ -119,6 +122,17 @@ export function VizLightbox({
   const [renamed, setRenamed] = useState<{ id: string; name: string } | null>(
     null,
   );
+  // A refusal that arrived since this lightbox last asked for something:
+  // said under the title (the wall's own line is behind the scrim), and a
+  // rename it refused is taken back. Render-phase, as the wall's player is.
+  const [failureSeen, setFailureSeen] = useState(viewActionFailure?.n ?? 0);
+  const [failureShown, setFailureShown] = useState<string | null>(null);
+  if (viewActionFailure && viewActionFailure.n !== failureSeen) {
+    setFailureSeen(viewActionFailure.n);
+    setFailureShown(viewActionFailure.message);
+    setRenamed(null);
+  }
+
   const errorSplitJudged = useErrorSplitJudged();
   // The court's filters as the URL would read them: a store pick (a saved
   // view from the menu or the band) keeps a view's raw Error type, while a
@@ -380,6 +394,7 @@ export function VizLightbox({
     canManageSavedView(savedView, meta.workspaceRole);
 
   function handleViewAction(action: SavedViewAction) {
+    setFailureShown(null);
     if (action.kind === "rename")
       setRenamed({ id: action.id, name: action.name });
     // The view is gone: back to the wall, where its Undo line shows.
@@ -505,6 +520,7 @@ export function VizLightbox({
         },
       }}
       title={title}
+      notice={failureShown ?? undefined}
       headerAction={
         canManageOpenView && savedView !== null ? (
           <SavedViewTitleMenu

@@ -161,6 +161,8 @@ export interface VizLightboxShellProps {
   /** The header's own action, immediately left of the close — an open saved
    *  view's ⋯. */
   headerAction?: ReactNode;
+  /** One line under the subtitle: a change to the view the server refused. */
+  notice?: string;
   subtitle: string;
   /** The strip's sentence for the filters (the shell adds the legend's and a
    *  Statistics row's pick). Empty: no strip unless a pick is on. */
@@ -270,6 +272,7 @@ export function VizLightboxShell({
   watch,
   title,
   headerAction,
+  notice,
   subtitle,
   filterPhrases,
   panelActive,
@@ -922,6 +925,14 @@ export function VizLightboxShell({
                 >
                   {pending ? <LightboxSubtitlePending /> : subtitle}
                 </p>
+                {notice && !pending && (
+                  <p
+                    role="alert"
+                    className="m-0 text-[11px] text-[var(--error)]"
+                  >
+                    {notice}
+                  </p>
+                )}
               </div>
               <span className="flex-1" />
               {/* The header's chrome, one cluster: the view's ⋯, then close. */}
