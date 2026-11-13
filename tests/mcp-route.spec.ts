@@ -66,6 +66,21 @@ const LIMIT_ERROR = {
   message: "ask_limit_reached: 20 questions this month, resets on 2026-11-01",
 };
 
+/** The program's roster as `reads.roster()` answers it. */
+const ROSTER = [
+  { player_id: MATCH_B, name: "Sam Okafor", class_year: "Junior" },
+  {
+    player_id: "bbbb0000-0000-4000-8000-000000000002",
+    name: "Samir Patel",
+    class_year: null,
+  },
+  {
+    player_id: "bbbb0000-0000-4000-8000-000000000003",
+    name: "Lena Voss",
+    class_year: "Senior",
+  },
+];
+
 /** What `ask_run_query` answers: two matches in scope and one aggregate row. */
 const QUERY_ANSWER = {
   matches: [
@@ -401,6 +416,10 @@ function fakeReads(state: World, calls: Calls, userId: string): McpUserReads {
           program.school_name.toLowerCase().includes(query.toLowerCase()) &&
           (!team || program.team === team),
       );
+    },
+    roster: async (programId) => {
+      calls.reads.push(`roster:${programId}`);
+      return ROSTER;
     },
     programs: async () => {
       calls.reads.push(`programs:${userId}`);
@@ -1497,6 +1516,19 @@ test.describe("POST /api/mcp · the opponent's school", () => {
     });
   });
 
+  test("clearing typed school text beside a new link is the link alone", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      opponent_program_id: HARVARD_MENS.id,
+      clear: ["opponent_school"],
+    });
+    expect(result.isError).toBeUndefined();
+    expect(patchOf(calls)).toMatchObject({
+      opponent_program_id: HARVARD_MENS.id,
+    });
+  });
+
   test("clearing the school and the link together is one request, not a refusal", async () => {
     const { route, calls } = loadRoute(world());
     const result = await callTool(route, "update_match", {
@@ -2136,8 +2168,43 @@ test.describe("POST /api/mcp · open_visualization", () => {
     expect(url.searchParams.getAll("ball")).toEqual(["second"]);
     expect(url.searchParams.get("vopp")).toBe("left");
     expect(structured.note).toContain("Westbrook College");
-    // A link, not a read: nothing is queried for a player's season.
+    // The roster is read as the caller; nothing goes to the service role.
     expect(serviceCalls(calls)).toEqual([]);
+    expect(calls.reads).toContain(`roster:${PROGRAM_ID}`);
+  });
+
+  test("a season by name: one roster player is linked; none or several answer the roster to choose from; an id off the roster is refused", async () => {
+    const { route } = loadRoute(world());
+    const byName = await callTool(route, "open_visualization", {
+      player_name: "lena",
+      program_id: PROGRAM_ID,
+      cut: "serves",
+    });
+    expect(byName.isError).toBeUndefined();
+    const linked = byName.structuredContent as {
+      url: string;
+      player: { player_id: string; name: string };
+    };
+    expect(linked.player.name).toBe("Lena Voss");
+    expect(new URL(linked.url).pathname).toBe(
+      `/dashboard/team/roster/${linked.player.player_id}`,
+    );
+
+    for (const args of [
+      { player_name: "sam" },
+      { player_name: "nobody" },
+      { player_id: MATCH_A },
+    ]) {
+      const result = await callTool(route, "open_visualization", {
+        ...args,
+        program_id: PROGRAM_ID,
+        cut: "serves",
+      });
+      expect(result.isError, JSON.stringify(args)).toBe(true);
+      expect(textOf(result)).toMatch(/^player_not_found: /);
+      // The way out is in the refusal: every player with their id, no email.
+      expect(textOf(result)).toContain(`Lena Voss (${ROSTER[2].player_id})`);
+    }
   });
 
   test("refusals: neither or both targets, a season without a program, a chart the card lacks, a match out of scope", async () => {
@@ -2269,6 +2336,18 @@ test.describe("POST /api/mcp · find_points", () => {
       url: null,
       has_video: "no",
       point_numbers: [4, 9],
+      point_count: 2,
+    });
+    // A list sent with filters is not a count on this path either.
+    const { route: again } = loadRoute(pointsWorld([4, 9], null));
+    const narrowed = await callTool(again, "find_points", {
+      match_id: MATCH_A,
+      rally_min: 9,
+      outcome: "won",
+    });
+    expect(narrowed.structuredContent).toMatchObject({
+      url: null,
+      point_count: null,
     });
 
     const { route: imported } = loadRoute(pointsWorld([], "swingvision"));
@@ -2301,8 +2380,9 @@ test.describe("POST /api/mcp · find_points", () => {
     };
     expect(out.point_numbers).toEqual([2, 30, 35]);
     expect(out.point_count).toBeNull();
-    expect(out.has_video).toBe("yes");
+    expect(out.has_video).toBe("likely");
     expect(out.note).toContain("do not report its length as a count");
+    expect(out.note).toContain("retention period");
   });
 
   test("no point fits: no link; an upside-down range is refused before anything is read", async () => {

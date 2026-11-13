@@ -19,6 +19,7 @@ import {
 } from "@/lib/services/ask/sql-guard";
 import {
   ASK_NEEDS_SESSION_MESSAGE,
+  createAuthFailureGate,
   assertAskAllowed,
   authorizationServerMetadataUrl,
   isJwtShaped,
@@ -1042,5 +1043,25 @@ test.describe("a refused token's expiry", () => {
     expect(jwtLooksExpired(tokenWith({ exp: "soon" }), NOW)).toBe(false);
     expect(jwtLooksExpired("a.b.c", NOW)).toBe(false);
     expect(jwtLooksExpired("junk", NOW)).toBe(false);
+  });
+});
+
+test.describe("the cap on auth-failure events", () => {
+  test("a few per caller and a total per window, so one address cannot hide the others' failures", () => {
+    const gate = createAuthFailureGate({
+      perCaller: 2,
+      total: 3,
+      windowMs: 1000,
+    });
+    expect(gate.allow("a", 0)).toBe(true);
+    expect(gate.allow("a", 1)).toBe(true);
+    // One address has spent its own allowance, not everyone's.
+    expect(gate.allow("a", 2)).toBe(false);
+    expect(gate.allow("b", 3)).toBe(true);
+    // The total holds however many addresses there are.
+    expect(gate.allow("c", 4)).toBe(false);
+    // A new window starts both counts again.
+    expect(gate.allow("a", 1000)).toBe(true);
+    expect(gate.allow("c", 1001)).toBe(true);
   });
 });

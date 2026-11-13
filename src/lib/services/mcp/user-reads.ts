@@ -121,8 +121,17 @@ export interface McpProgramSearch {
   limit: number;
 }
 
+/** One roster player as `open_visualization` names them: never an email. */
+export interface McpRosterPlayer {
+  player_id: string;
+  name: string | null;
+  class_year: string | null;
+}
+
 export interface McpUserReads {
   program(programId: string): Promise<McpProgram | null>;
+  /** The program's roster, as any member may read it. */
+  roster(programId: string): Promise<McpRosterPlayer[]>;
   /** The program's men's or women's squad; null for co-ed or unsaid. */
   programSquad(programId: string): Promise<GenderedSquad | null>;
   directoryProgram(programId: string): Promise<McpDirectoryProgram | null>;
@@ -182,6 +191,33 @@ export function createMcpUserReads(
       const program = row ? one(row.programs) : null;
       if (!program) return null;
       return { id: program.id, name: program.school_name };
+    },
+
+    async roster(programId) {
+      if (!isUuid(programId)) return [];
+      // A GET, so the `client_id` write guard lets it through like the
+      // other roster reads here.
+      const { data, error } = await client.rpc(
+        "program_roster_full",
+        { p_program_id: programId },
+        { get: true },
+      );
+      if (error) throw new Error("Could not load the roster", { cause: error });
+      return ((data ?? []) as Record<string, unknown>[]).flatMap((row) =>
+        typeof row.player_id === "string"
+          ? [
+              {
+                player_id: row.player_id,
+                name:
+                  typeof row.display_name === "string"
+                    ? row.display_name
+                    : null,
+                class_year:
+                  typeof row.class_year === "string" ? row.class_year : null,
+              },
+            ]
+          : [],
+      );
     },
 
     async programSquad(programId) {

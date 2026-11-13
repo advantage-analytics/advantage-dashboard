@@ -48,6 +48,7 @@ import {
 } from "@/lib/services/ask/database";
 import { askAdapterModel, askStageModels } from "@/lib/services/ask/model";
 import {
+  createAuthFailureGate,
   isJwtShaped,
   jwtLooksExpired,
   mcpClientFromUserAgent,
@@ -82,24 +83,12 @@ const MAX_BODY_BYTES = 64 * 1024;
 
 const NO_STORE = "private, no-store";
 
-/** At most this many `mcp_auth_failed` events per window, per server instance. */
-const AUTH_FAILURE_EVENTS_PER_WINDOW = 20;
-const AUTH_FAILURE_WINDOW_MS = 5 * 60_000;
-let authFailureWindow = { startedAt: 0, sent: 0 };
+/** One per server instance: the 401 path's own cap on `mcp_auth_failed` (`auth.ts`). */
+const authFailureGate = createAuthFailureGate();
 
-/**
- * Whether one more `mcp_auth_failed` may be sent. The 401 path needs no
- * sign-in, so without a cap a loop of bad tokens would be a loop of product
- * events. A few per window is all a report of "an app's sign-in is broken"
- * needs; the cap is per instance, which is as soft as the call window's.
- */
-function allowAuthFailureEvent(now: number): boolean {
-  if (now - authFailureWindow.startedAt >= AUTH_FAILURE_WINDOW_MS) {
-    authFailureWindow = { startedAt: now, sent: 0 };
-  }
-  if (authFailureWindow.sent >= AUTH_FAILURE_EVENTS_PER_WINDOW) return false;
-  authFailureWindow.sent += 1;
-  return true;
+/** The caller's address as Vercel reports it, for the gate's per-caller count only; never sent anywhere. */
+function callerAddress(headers: Headers): string {
+  return headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
 
 /**
@@ -145,10 +134,14 @@ export async function POST(request: Request): Promise<Response> {
   // app whose sign-in has broken. No user is known, so the event is
   // anonymous, and it carries the app only — never the token. Nothing is
   // sent for junk or for an expired token (every client's routine cue to
-  // refresh), and what is sent is capped (`allowAuthFailureEvent`), because
+  // refresh), and what is sent is capped (`createAuthFailureGate`), because
   // anyone can reach this line without signing in.
   const refused = (report: boolean): Response => {
-    if (report && posthog && allowAuthFailureEvent(Date.now())) {
+    if (
+      report &&
+      posthog &&
+      authFailureGate.allow(callerAddress(request.headers), Date.now())
+    ) {
       posthog.capture({
         distinctId: "mcp_anonymous",
         event: "mcp_auth_failed",

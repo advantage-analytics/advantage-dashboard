@@ -104,6 +104,40 @@ export function jwtLooksExpired(token: string, nowMs: number): boolean {
   }
 }
 
+/**
+ * The cap on `mcp_auth_failed` events. The 401 path needs no sign-in, so
+ * without one a loop of bad tokens is a loop of product events. Two limits
+ * per window: a few per caller, so one address cannot spend the allowance
+ * and hide every other app's failures, and a total, so many addresses
+ * cannot flood either. Per server instance, like the call window
+ * (`rate-limit.ts`): soft by construction, which is enough for a report
+ * that an app's sign-in is broken. Pure: the clock is the caller's.
+ */
+export function createAuthFailureGate(
+  options: { perCaller?: number; total?: number; windowMs?: number } = {},
+): { allow(caller: string, nowMs: number): boolean } {
+  const perCaller = options.perCaller ?? 3;
+  const total = options.total ?? 60;
+  const windowMs = options.windowMs ?? 5 * 60_000;
+  let startedAt = 0;
+  let sent = 0;
+  let byCaller = new Map<string, number>();
+  return {
+    allow(caller, nowMs) {
+      if (nowMs - startedAt >= windowMs) {
+        startedAt = nowMs;
+        sent = 0;
+        byCaller = new Map();
+      }
+      const mine = byCaller.get(caller) ?? 0;
+      if (sent >= total || mine >= perCaller) return false;
+      sent += 1;
+      byCaller.set(caller, mine + 1);
+      return true;
+    },
+  };
+}
+
 /** The URL's origin with no path, or the string as given when it is not a URL. */
 function originOf(url: string): string {
   try {

@@ -50,10 +50,14 @@ export const VISUALIZATION_CUTS = {
 
 export type VisualizationCutName = keyof typeof VISUALIZATION_CUTS;
 
-export const VISUALIZATION_CUT_NAMES = Object.keys(VISUALIZATION_CUTS) as [
-  VisualizationCutName,
-  ...VisualizationCutName[],
-];
+/** A map's keys as the non-empty tuple `z.enum` takes. */
+function keysOf<T extends Record<string, unknown>>(
+  map: T,
+): [keyof T & string, ...(keyof T & string)[]] {
+  return Object.keys(map) as [keyof T & string, ...(keyof T & string)[]];
+}
+
+export const VISUALIZATION_CUT_NAMES = keysOf(VISUALIZATION_CUTS);
 
 export const VISUALIZATION_CHARTS = ["scatter", "zones", "heat"] as const;
 
@@ -67,14 +71,8 @@ const ERRORS = {
   double_fault: "doubleFault",
 } as const;
 
-export const VISUALIZATION_PRESSURE = Object.keys(PRESSURE) as [
-  keyof typeof PRESSURE,
-  ...(keyof typeof PRESSURE)[],
-];
-export const VISUALIZATION_ERRORS = Object.keys(ERRORS) as [
-  keyof typeof ERRORS,
-  ...(keyof typeof ERRORS)[],
-];
+export const VISUALIZATION_PRESSURE = keysOf(PRESSURE);
+export const VISUALIZATION_ERRORS = keysOf(ERRORS);
 
 /** `open_visualization`'s filters, as the tool takes them. */
 export interface VisualizationArgs {
@@ -232,12 +230,6 @@ const LAST_SHOT = {
   overhead: "Overhead",
 } as const;
 const MISSED = { out: "Out", net: "Net" } as const;
-
-function keysOf<T extends Record<string, unknown>>(
-  map: T,
-): [keyof T & string, ...(keyof T & string)[]] {
-  return Object.keys(map) as [keyof T & string, ...(keyof T & string)[]];
-}
 
 export const POINT_SITUATIONS = keysOf(SITUATION);
 export const POINT_SERVE_ZONES = keysOf(SERVE_ZONE);

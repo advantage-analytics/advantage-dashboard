@@ -1107,9 +1107,13 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         }
         // Clearing the school clears the link with it (`resolveOpponentTeam`),
         // so naming both is one request, not the either/or a value is held to.
+        // Linking a program replaces typed school text (`normalizeMatchPatch`),
+        // so clearing the text beside a new link is the link alone.
         if ("opponent_school" in body && body.opponent_school === null) {
           if (body.opponent_program_id === null)
             delete body.opponent_program_id;
+          else if (typeof body.opponent_program_id === "string")
+            delete body.opponent_school;
         }
         if (Object.keys(body).length === 0) {
           throw refusal(
@@ -1353,13 +1357,22 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     {
       title: "Open a visualization",
       description:
-        "A link that opens one court chart in the app with filters already applied — nothing is saved to the account. Pass match_id for a match's Visualizations tab, or player_id with program_id for a team roster player's season (a player_id comes from opponent_scouting's faced_by or a match's roster player; there is no season page for a personal workspace, so use match_id there). cut picks the chart: serves (where serves landed), return_placement, return_contact (where returns were struck), rally_placement, rally_position, or errors. Every filter is optional and narrows the shots drawn; values in one filter are either/or. A filter the chosen chart does not have is left out and named in ignored. A team player's link opens only while that team is the person's active workspace in the app. Give the person the url to open; the figures themselves come from get_match or run_query.",
+        "A link that opens one court chart in the app with filters already applied — nothing is saved to the account. Pass match_id for a match's Visualizations tab, or player_id with program_id for a team roster player's season (or player_name in place of the id: it is matched against the program's roster, and a name that fits no one or several players is answered with the roster's names and ids to choose from; there is no season page for a personal workspace, so use match_id there). cut picks the chart: serves (where serves landed), return_placement, return_contact (where returns were struck), rally_placement, rally_position, or errors. Every filter is optional and narrows the shots drawn; values in one filter are either/or. A filter the chosen chart does not have is left out and named in ignored. A team player's link opens only while that team is the person's active workspace in the app. Give the person the url to open; the figures themselves come from get_match or run_query.",
       inputSchema: {
         match_id: UUID().optional().describe("A match id from list_matches."),
         player_id: UUID()
           .optional()
           .describe(
             "A team roster player's id, for their season. Needs program_id. Not with match_id.",
+          ),
+        player_name: z
+          .string()
+          .trim()
+          .min(1)
+          .max(120)
+          .optional()
+          .describe(
+            "A team roster player's name or part of it, for their season, when their id is not known. Needs program_id. Not with match_id or player_id.",
           ),
         program_id: PROGRAM_ID,
         cut: z.enum(VISUALIZATION_CUT_NAMES).describe("Which chart to open."),
@@ -1426,26 +1439,59 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     },
     guarded(
       "open_visualization",
-      async ({ match_id, player_id, program_id, ...args }) => {
-        if ((match_id === undefined) === (player_id === undefined)) {
+      async ({ match_id, player_id, player_name, program_id, ...args }) => {
+        const targets = [match_id, player_id, player_name].filter(
+          (value) => value !== undefined,
+        ).length;
+        if (targets !== 1) {
           throw refusal(
             "invalid_field",
-            "Pass match_id for a match or player_id for a team player's season, one of the two.",
+            "Pass match_id for a match, or player_id or player_name for a team player's season: exactly one of the three.",
           );
         }
         const scope = await resolveScope(program_id);
         const team = scope.kind === "team";
-        if (player_id !== undefined && !team) {
+        if (match_id === undefined && !team) {
           throw refusal(
             "invalid_field",
             "A player's season needs program_id: season visualizations exist for team roster players only. In a personal workspace, pass match_id. (program_id)",
           );
         }
         if (match_id !== undefined) await matchInScope(scope, match_id);
+        // A season link names a player on this program's roster, read as the
+        // caller: an id from anywhere else is refused, and a name is how an
+        // id is found when no other tool has given one.
+        let seasonPlayer: { player_id: string; name: string | null } | null =
+          null;
+        if (scope.kind === "team" && match_id === undefined) {
+          const roster = await context.reads.roster(scope.programId);
+          const needle = player_name?.toLowerCase();
+          const found = roster.filter((player) =>
+            player_id !== undefined
+              ? player.player_id === player_id.toLowerCase()
+              : (player.name ?? "").toLowerCase().includes(needle as string),
+          );
+          if (found.length !== 1) {
+            const listed = roster
+              .slice(0, 60)
+              .map(
+                (player) => `${player.name ?? "Unnamed"} (${player.player_id})`,
+              )
+              .join("; ");
+            throw refusal(
+              "player_not_found",
+              `${found.length === 0 ? "No player" : "More than one player"} on ${scope.programName}'s roster fits. The roster: ${listed || "nobody yet"}.`,
+            );
+          }
+          seasonPlayer = found[0];
+        }
         const link = visualizationLink(
           match_id !== undefined
             ? { kind: "match", matchId: match_id }
-            : { kind: "player", playerId: player_id as string },
+            : {
+                kind: "player",
+                playerId: (seasonPlayer as { player_id: string }).player_id,
+              },
           args,
         );
         if (!link.ok) throw refusal("invalid_field", link.reason);
@@ -1456,8 +1502,12 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           cut: args.cut,
           url: link.url,
           ignored: link.ignored,
-          ...(player_id !== undefined
+          ...(seasonPlayer
             ? {
+                player: {
+                  player_id: seasonPlayer.player_id,
+                  name: seasonPlayer.name,
+                },
                 note: `Opens while ${scope.kind === "team" ? scope.programName : "the team"} is the active workspace in the app; otherwise the app shows the home page.`,
               }
             : {}),
@@ -1471,7 +1521,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     "find_points",
     {
       title: "Find points to watch",
-      description: `A link that plays chosen points of one match in its Video tab. Two ways to choose, which combine: filters the tab applies itself (the set, the situation, who served and where, how the return and the point ended), and a point list — pass rally_min and/or rally_max to pick points by how many shots the rally had (the serve counts as one), or point_numbers from a run_query over ask.points for anything the filters do not cover. The answer has the url to give the person, and for a point list the numbers and how many there are; with filters alone the tab does the choosing, so count them with run_query if a number is needed. At most ${MAX_POINT_SET} points fit in one link. has_video says whether there is one to play: yes for an analysed match, unknown for a SwingVision import (it has video only when one was attached in the app), and no — with no url — for a match entered by hand.`,
+      description: `A link that plays chosen points of one match in its Video tab. Two ways to choose, which combine: filters the tab applies itself (the set, the situation, who served and where, how the return and the point ended), and a point list — pass rally_min and/or rally_max to pick points by how many shots the rally had (the serve counts as one), or point_numbers from a run_query over ask.points for anything the filters do not cover. The answer has the url to give the person, and for a point list the numbers and how many there are; with filters alone the tab does the choosing, so count them with run_query if a number is needed. At most ${MAX_POINT_SET} points fit in one link. has_video says whether there is one to play: likely for an analysed match (its video is kept until the retention period ends), unknown for a SwingVision import (it has video only when one was attached in the app), and no — with no url — for a match entered by hand.`,
       inputSchema: {
         match_id: UUID().describe("A match id from list_matches."),
         program_id: PROGRAM_ID,
@@ -1611,6 +1661,11 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         // one it was analysed from; a SwingVision import has one only when
         // it was attached in the app; a match entered by hand has none.
         const source = row.source ?? null;
+        const shown = numbers ? numbers.slice(0, MAX_POINT_SET) : null;
+        const link = videoLink(match_id, filters, numbers);
+        const filtered = link.filters !== "";
+        // A list sent with filters is not a count: the filters narrow it.
+        const pointCount = shown && !filtered ? shown.length : null;
         if (source === null) {
           return json({
             scope: scope.kind,
@@ -1619,18 +1674,16 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
             source,
             url: null,
             has_video: "no",
-            point_count: numbers
-              ? Math.min(numbers.length, MAX_POINT_SET)
-              : null,
-            point_numbers: numbers ? numbers.slice(0, MAX_POINT_SET) : null,
+            point_count: pointCount,
+            point_numbers: shown,
             note: "This match was entered by hand and has no video to watch.",
           });
         }
-        const link = videoLink(match_id, filters, numbers);
-        const filtered = link.filters !== "";
         const notes = [
           ...(source === "video"
-            ? []
+            ? [
+                "An analysed match keeps its video only until its retention period ends; an old match may have none left to play.",
+              ]
             : [
                 "A SwingVision match has video only when one was attached in the app; without it the link has nothing to play.",
               ]),
@@ -1646,13 +1699,9 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           match_id,
           source,
           url: link.url,
-          has_video: source === "video" ? "yes" : "unknown",
-          // Counted only for a point list alone: the tab applies the filters.
-          point_count:
-            numbers !== null && !filtered
-              ? Math.min(numbers.length, MAX_POINT_SET)
-              : null,
-          point_numbers: numbers ? numbers.slice(0, MAX_POINT_SET) : null,
+          has_video: source === "video" ? "likely" : "unknown",
+          point_count: pointCount,
+          point_numbers: shown,
           truncated: link.truncated,
           filters_applied_by_the_tab: filtered,
           ...(notes.length > 0 ? { note: notes.join(" ") } : {}),
