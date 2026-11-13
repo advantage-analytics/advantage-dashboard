@@ -5,8 +5,11 @@ import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 
 /**
  * Admin › Matches — every match on Advantage, personal and team, newest upload
- * first, with its analysis status and 30-day views. Replaces the retired
- * Uploads tab (`/admin/uploads` redirects here).
+ * first, one line each: workspace, analysis status, video hours. Replaces the
+ * retired Uploads tab (`/admin/uploads` redirects here).
+ *
+ * `?program=<programId|personal>` opens the Program filter on that workspace
+ * (the team page's "All N in Matches" link); `?id=` opens a row's drawer.
  *
  * `force-dynamic`: every read is service-role and per-request, gated on the
  * current session's `is_admin`, and this render records the admin's look.
@@ -38,6 +41,7 @@ export default async function AdminMatchesPage({
       rows={rows}
       total={total}
       initialSelectedId={one(params.id)}
+      initialProgram={one(params.program)}
     />
   );
 }

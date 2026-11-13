@@ -97,7 +97,7 @@ ready).
 
 ## T7 · Matches screen: one-line rows and the progress panel
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** guess — src/components/admin/matches/matches-page-content.tsx, src/components/admin/matches/match-peek-drawer.tsx, src/components/admin/admin-cells.tsx, src/app/admin/matches/page.tsx

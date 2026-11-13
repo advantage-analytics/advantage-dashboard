@@ -76,3 +76,16 @@ is the runner's. Newest entries at the bottom.
 1. `videoSeconds` can be 0 when a job has neither a trimmed span nor billable seconds; T7 decides whether 0 shows as "—".
 2. Being labelled has no moment; `label_sessions.started_at` and `submitted_at` exist if the panel wants one.
 3. A cancelled job has no mark of its own in the steps.
+
+## T7 · Matches screen: one-line rows and the progress panel — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** the Matches table is five columns (Match, Workspace, Status, Video, Uploaded) with one-line rows: players, `WorkspaceCell` (crest and program, or the owner's avatar and "Personal"), one status mark with its words, video hours ("—" when 0 or null), one upload time. `MatchPeekDrawer` lists the steps from `matchProgressSteps(row)` with a sub-line each and keeps the match id, Open report and the Labels link. `page.tsx` reads `?program=` as the Program filter's initial value. `AdminAvatar` gains a 16px size.
+
+**follow-ups:**
+
+1. Write the Program filter back to `?program=` so a filtered view can be shared.
+2. `MatchStatus` repeats `RowLifecycle`'s branches; one shared "status to mark and words" helper would stop them drifting.
+3. The loader still fetches 30-day views for every row though only the drawer shows them.
+4. Search still matches `row.event` with the Event column gone.
