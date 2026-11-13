@@ -21,8 +21,8 @@ export interface SeasonSavedViewActions {
   names: Readonly<Record<string, string>>;
   /** Views deleted here and not yet gone from the server's cards. */
   removed: ReadonlySet<string>;
-  /** The line above the Saved cards: what just happened, and its Undo. */
-  /** `failed`: a change the server refused, as opposed to one that landed
+  /** The line above the Saved cards: what just happened, and its Undo.
+   *  `failed`: a change the server refused, as opposed to one that landed
    *  ("Deleted …") — the open view repeats only the refusals. */
   status: { text: string; undo?: () => void; failed?: boolean } | null;
   dismissStatus: () => void;
