@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -16,7 +17,8 @@ import {
   type ResolveResult,
 } from "@/app/admin/today-actions";
 import { AdminPage } from "@/components/admin/admin-page";
-import { AgeText } from "@/components/admin/admin-cells";
+import { AgeText, RowChevron } from "@/components/admin/admin-cells";
+import { TEXT_ACTION } from "@/components/admin/admin-people-card";
 import { useStartLabelling } from "@/components/admin/labels/start-labelling-button";
 import { ResubmitButton } from "@/components/admin/matches/resubmit-button";
 import {
@@ -38,23 +40,33 @@ import type {
  * list of what needs an admin, longest wait first — Kind · What · Waiting and
  * a trailing track of the row's own actions (`TodayItem.actions`).
  *
- * No drawer and no filter pills: the title is a link to the item, and each
- * row's buttons do the work in place — Approve a claim, open a label session,
- * Resubmit a failed analysis, Reply, Add hours. The kinds with no natural end (a dead analysis, a flagged
- * match, Ask feedback) keep a "Resolve" that opens the note form under the row,
- * so nothing sits on Today forever. There is no Resolved view; a resolved row
- * simply stops coming back from the loader.
+ * No drawer and no filter pills: the whole row opens the item (a record row,
+ * Data Table law 3 — trailing chevron), and its buttons do the work in place:
+ * Approve or Decline a claim, start a label session, Resubmit a failed
+ * analysis. A link action that only goes where the row goes is not drawn —
+ * the row is that link. The kinds with no natural end (a dead analysis, a
+ * flagged match, Ask feedback) close with a quiet "Resolve" text action after
+ * the buttons, which opens the note form under the row, so nothing sits on
+ * Today forever. There is no Resolved view; a resolved row simply stops
+ * coming back from the loader.
  *
- * The page sits centred in its column, as every stripped admin page does.
+ * The page runs the full width of `AdminPage`'s column, as Matches and Teams
+ * do (the owner, 2026-11-13).
  */
 
 const CARD =
   "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
-/** Centred, not pushed to the left edge — the artboard's 1040px main less its gutters. */
-const COLUMN = "mx-auto w-full max-w-[928px]";
-/** Kind · What · Waiting · actions — the header, every row and the skeleton share it. */
+/**
+ * Kind · What · Waiting · actions · chevron — the header, every row and the
+ * skeleton share it. Only What flexes; the actions track is fixed at the
+ * widest pair a row carries ("Start labelling" + "Resolve", "Approve" +
+ * "Decline"), so Waiting sits at one x whatever a row offers.
+ */
 const GRID =
-  "grid grid-cols-[140px_minmax(0,1fr)_72px_188px] items-center gap-x-4";
+  "grid grid-cols-[140px_minmax(0,1fr)_72px_200px_13px] items-center gap-x-4";
+
+/** A click on one of these inside a row is that control's, not the row's. */
+const ROW_CONTROLS = "a, button, input, textarea, select, label";
 
 export function TodayPageContent({
   items: waiting,
@@ -163,7 +175,7 @@ export function TodayPageContent({
 
   return (
     <AdminPage>
-      <div className={COLUMN}>
+      <div>
         <h1 className="text-display">Today</h1>
         <p className="text-body-sm mt-[9px]">{lede(items.length, freshNow)}</p>
 
@@ -224,7 +236,7 @@ function lede(total: number, fresh: number): string {
     : `${head}.`;
 }
 
-/** Kind · What · Waiting, and an unlabelled track over the row actions. */
+/** Kind · What · Waiting, and unlabelled tracks over the actions and chevron. */
 function HeaderRow() {
   return (
     <div
@@ -237,17 +249,25 @@ function HeaderRow() {
       <span className="eyebrow-sm">What</span>
       <span className="eyebrow-sm">Waiting</span>
       <span aria-hidden="true" />
+      <span aria-hidden="true" />
     </div>
   );
 }
 
-/** Where the title goes: the item's own link, else the row's first link action. */
+/**
+ * Where the row and its title go. An "Open" action names the place the item
+ * is dealt with (the Requests or Matches drawer), so the row goes there and
+ * no "Open" button is drawn; otherwise the item's own link, else the row's
+ * first link action.
+ */
 function titleHref(item: TodayItem): string | null {
-  if (item.link) return item.link.href;
-  const first = item.actions.find(
+  const links = item.actions.filter(
     (a): a is Extract<TodayAction, { type: "link" }> => a.type === "link",
   );
-  return first?.href ?? null;
+  const open = links.find((a) => a.label === "Open");
+  if (open) return open.href;
+  if (item.link) return item.link.href;
+  return links[0]?.href ?? null;
 }
 
 function TodayRow({
@@ -271,6 +291,32 @@ function TodayRow({
   const labelling = useStartLabelling(labelAction?.startLabellingJobId ?? "");
   const rowError = approveError ?? labelling.error;
   const href = titleHref(item);
+  const router = useRouter();
+  // The row is the link to `href`; a link action that goes there too would
+  // be a second door to the same room.
+  const actions = item.actions.filter(
+    (action) => action.type !== "link" || action.href !== href,
+  );
+  const buttons = actions.filter((action) => action.type !== "resolve");
+  const resolveAction = actions.find((action) => action.type === "resolve");
+
+  /**
+   * The row's own click: anywhere that is not one of its controls opens
+   * `href`, as the title does (⌘/Ctrl-click opens a new tab). Not an anchor
+   * around the row — buttons may not nest in a link — so the keyboard path
+   * is the title, a real `<Link>`, which is the row's first stop.
+   */
+  const openRow = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!href) return;
+    const target = event.target as HTMLElement;
+    if (target.closest(ROW_CONTROLS)) return;
+    onTouch();
+    if (event.metaKey || event.ctrlKey) {
+      window.open(href, "_blank", "noopener");
+    } else {
+      router.push(href);
+    }
+  };
 
   const approve = (claimId: string) => {
     onTouch();
@@ -289,8 +335,17 @@ function TodayRow({
   );
 
   return (
-    <div className="py-2">
-      <div className={cn(GRID, "min-h-[44px]")}>
+    <div>
+      {/* Not focusable itself: the title link is the keyboard's way in. */}
+      <div
+        onClick={openRow}
+        className={cn(
+          GRID,
+          "-mx-4 min-h-[60px] rounded-[var(--radius-element)] px-4 py-2",
+          href &&
+            "cursor-pointer transition-colors duration-[var(--duration-fast)] focus-within:bg-[var(--surface-muted)] hover:bg-[var(--surface-muted)]",
+        )}
+      >
         <span className="truncate text-[12px] text-[var(--ink-600)]">
           {item.need}
         </span>
@@ -300,7 +355,7 @@ function TodayRow({
               <Link
                 href={href}
                 onClick={onTouch}
-                className="min-w-0 truncate rounded-[var(--radius-element)] hover:underline"
+                className="min-w-0 truncate rounded-[var(--radius-element)]"
               >
                 {title}
               </Link>
@@ -328,73 +383,80 @@ function TodayRow({
               : "text-[var(--ink-600)]",
           )}
         />
-        <span className="flex items-start justify-end gap-1.5">
-          {item.actions.map((action) => {
-            const key = `${action.type}:${action.label}`;
-            switch (action.type) {
-              case "link":
-                return (
-                  <Link
-                    key={key}
-                    href={action.href}
-                    onClick={onTouch}
-                    className={advButton("outline", "sm")}
-                  >
-                    {action.label}
-                  </Link>
-                );
-              case "approve":
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    disabled={approving}
-                    onClick={() => approve(action.claimId)}
-                    className={advButton("outline", "sm")}
-                  >
-                    {approving ? "Approving…" : action.label}
-                  </button>
-                );
-              case "label":
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    disabled={labelling.isPending}
-                    onClick={() => {
-                      onTouch();
-                      labelling.start();
-                    }}
-                    className={advButton("outline", "sm")}
-                  >
-                    {labelling.isPending ? "Opening…" : action.label}
-                  </button>
-                );
-              case "resubmit":
-                // The Matches screen's own button: its pending label, its
-                // refusal sentence under it, and the refresh on success.
-                return (
-                  <span key={key} onClickCapture={onTouch}>
-                    <ResubmitButton jobId={action.jobId} align="end" />
-                  </span>
-                );
-              case "resolve":
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    aria-expanded={resolving}
-                    onClick={() => {
-                      onTouch();
-                      setResolving((open) => !open);
-                    }}
-                    className={advButton("outline", "sm")}
-                  >
-                    {action.label}
-                  </button>
-                );
-            }
-          })}
+        <span className="flex items-center justify-end gap-3">
+          {buttons.length > 0 ? (
+            <span className="flex items-start justify-end gap-1.5">
+              {buttons.map((action) => {
+                const key = `${action.type}:${action.label}`;
+                switch (action.type) {
+                  case "link":
+                    return (
+                      <Link
+                        key={key}
+                        href={action.href}
+                        onClick={onTouch}
+                        className={advButton("outline", "sm")}
+                      >
+                        {action.label}
+                      </Link>
+                    );
+                  case "approve":
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        disabled={approving}
+                        onClick={() => approve(action.claimId)}
+                        className={advButton("outline", "sm")}
+                      >
+                        {approving ? "Approving…" : action.label}
+                      </button>
+                    );
+                  case "label":
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        disabled={labelling.isPending}
+                        onClick={() => {
+                          onTouch();
+                          labelling.start();
+                        }}
+                        className={advButton("outline", "sm")}
+                      >
+                        {/* "Open" in `todayActions`, which the row's own link
+                        now is; the button is what starts the session. */}
+                        {labelling.isPending ? "Opening…" : "Start labelling"}
+                      </button>
+                    );
+                  case "resubmit":
+                    // The Matches screen's own button: its pending label, its
+                    // refusal sentence under it, and the refresh on success.
+                    return (
+                      <span key={key} onClickCapture={onTouch}>
+                        <ResubmitButton jobId={action.jobId} align="end" />
+                      </span>
+                    );
+                }
+              })}
+            </span>
+          ) : null}
+          {resolveAction ? (
+            <button
+              type="button"
+              aria-expanded={resolving}
+              onClick={() => {
+                onTouch();
+                setResolving((open) => !open);
+              }}
+              className={TEXT_ACTION}
+            >
+              {resolveAction.label}
+            </button>
+          ) : null}
+        </span>
+        <span className="flex items-center">
+          {href ? <RowChevron /> : null}
         </span>
       </div>
       {rowError ? (
@@ -519,7 +581,7 @@ function PipelineLine({ pipeline }: { pipeline: TodayPipeline }) {
 export function TodayPageSkeleton() {
   return (
     <AdminPage>
-      <div className={COLUMN}>
+      <div>
         <h1 className="text-display">Today</h1>
         <PendingBar className="mt-[13px] h-3 w-72" />
         <div className={cn(CARD, "mt-6")}>
@@ -527,7 +589,7 @@ export function TodayPageSkeleton() {
             <HeaderRow />
             <PendingRegion label="what is waiting on you">
               {Array.from({ length: 4 }, (_, i) => (
-                <div key={i} className={cn(GRID, "min-h-[44px] py-2")}>
+                <div key={i} className={cn(GRID, "min-h-[60px] py-2")}>
                   <PendingBar className="h-3 w-20" />
                   <span className="flex flex-col gap-1.5">
                     <PendingBar className="h-3 w-48" />
@@ -537,6 +599,7 @@ export function TodayPageSkeleton() {
                   <span className="flex justify-end gap-1.5">
                     <PendingBar className="h-8 w-16 rounded-[var(--radius-element)]" />
                   </span>
+                  <span aria-hidden="true" />
                 </div>
               ))}
             </PendingRegion>

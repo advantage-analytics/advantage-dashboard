@@ -94,7 +94,20 @@ createRoot(document.getElementById("root")!).render(
         />
         <TeamHeaderActions program={program} />
       </div>
-      <AdminDetailsCard program={program} playerLink={null} coachLink={null} />
+      <AdminDetailsCard
+        program={program}
+        playerLink={null}
+        coachLink={null}
+        conference={
+          <AdminConferenceCard
+            variant="fact"
+            programId={PROGRAM_ID}
+            conference={null}
+            currentLabel={null}
+            options={["Ivy League"]}
+          />
+        }
+      />
       <AdminPeopleList
         programId={PROGRAM_ID}
         programName={SCHOOL}
@@ -107,12 +120,6 @@ createRoot(document.getElementById("root")!).render(
         invites={[invite]}
         seats={seats}
         claim={null}
-      />
-      <AdminConferenceCard
-        programId={PROGRAM_ID}
-        conference={null}
-        currentLabel={null}
-        options={["Ivy League"]}
       />
     </div>
   </HarnessBoundary>,

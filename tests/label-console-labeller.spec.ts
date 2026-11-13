@@ -214,6 +214,9 @@ test.describe("viewerKind=admin", () => {
    * The admin header for the fixture's labelling session, as it rendered
    * before `viewerKind` existed (captured from the commit before it). Byte
    * for byte: the labeller work must not move a thing in the admin's header.
+   * Changed on purpose since, for the admin alone: "N of M points checked"
+   * left its meta (the body counts flags left). The header's wrapper is the
+   * labeller's again: both run the full width of the admin page (2026-11-13).
    */
   const BEFORE = [
     `<div data-console-header="" class="flex shrink-0 items-end justify-between gap-8">`,
@@ -231,10 +234,6 @@ test.describe("viewerKind=admin", () => {
     `<span aria-hidden="true" class="size-[26px] rounded-[8px] text-[9px] font-medium tracking-[0.2px] text-[var(--ink-600)] flex flex-none items-center justify-center overflow-hidden bg-[var(--surface-subtle)] leading-none whitespace-nowrap">DW`,
     `</span>`,
     `<span>Dartmouth College · Women’s`,
-    `</span>`,
-    `<span aria-hidden="true">·`,
-    `</span>`,
-    `<span class="tabular">1 of 3 points checked`,
     `</span>`,
     `<span aria-hidden="true">·`,
     `</span>`,
@@ -279,7 +278,7 @@ test.describe("viewerKind=admin", () => {
     );
     const header = divAt(html, "data-console-header");
     expect(header).toContain("data-session-submitted");
-    expect(text(header)).toContain("· Submitted for review");
+    expect(text(header)).toContain("Submitted for review · derivation");
     expect(header).toContain("data-reopen-session");
     expect(header).toContain("data-mark-complete");
     expect(header).not.toContain("data-submit-review");

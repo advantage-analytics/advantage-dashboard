@@ -16,12 +16,20 @@ import type { AdminTeamJoinLink } from "@/lib/data/admin-team-links";
  *
  * Not a card: the artboard draws Details as a plain section under a heading,
  * so the page stays quiet ("too cluttered and busy" was the owner's verdict
- * on the last one). The facts wrap as a grid rather than a ledger of rows.
+ * on the last one). The facts wrap as a grid rather than a ledger of rows:
+ * columns capped at 240px and packed from the left, so at full width they sit
+ * side by side as one compact group instead of spreading across the page,
+ * and the links below take two of those columns each, on the same left edge.
  *
  * **One editor.** `Edit details` opens `AdminTeamDetailsDialog`, the one form
  * behind the program's record — the header no longer carries a second button
- * for it. The conference has its own control in the Conference card that
- * `page.tsx` seats beneath this section.
+ * for it. The conference is the first fact, but it is not this form's: the
+ * page passes `AdminConferenceCard variant="fact"` in through `conference`,
+ * with its own `Change` control and its own action.
+ *
+ * **Only facts with something to say.** The schedule policy is not shown —
+ * the schedule is switched off (`SCHEDULE_ENABLED`) — and the staff page is
+ * left out when the program has none, rather than printing a lone dash.
  *
  * **Two links, two doors.** The player link (`/join/<token>`) comes from the
  * loader's `joinLink` and is worded for its mode; it is omitted when the
@@ -33,25 +41,32 @@ export function AdminDetailsCard({
   program,
   playerLink,
   coachLink,
+  conference,
 }: {
   program: AdminTeamProgram;
   /** The live player join link, or null for none. */
   playerLink: AdminTeamJoinLink | null;
   /** The absolute `/claim/<programKey>` URL, or null for no key. */
   coachLink: string | null;
+  /**
+   * The Conference fact — `AdminConferenceCard variant="fact"` — drawn first
+   * in the row. A `<div>` of `<dt>`/`<dd>`, since it sits in this `<dl>`.
+   */
+  conference?: React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
 
   const facts: { label: string; value: React.ReactNode }[] = [
     { label: "Time zone", value: timeZoneLabel(program.timeZone) },
     { label: "Who can upload", value: uploadPolicyLabel(program.uploadPolicy) },
-    {
-      label: "Who edits the schedule",
-      value: uploadPolicyLabel(program.eventsPolicy),
-    },
     { label: "Roster", value: program.rosterPublic ? "Public" : "Private" },
-    { label: "Staff page", value: <StaffPageValue program={program} /> },
   ];
+  if (program.staffPageUrl) {
+    facts.push({
+      label: "Staff page",
+      value: <StaffPageValue url={program.staffPageUrl} />,
+    });
+  }
 
   const links: { label: string; url: string; copyLabel: string }[] = [];
   if (playerLink) {
@@ -84,7 +99,8 @@ export function AdminDetailsCard({
         </button>
       </div>
 
-      <dl className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-x-8 gap-y-4">
+      <dl className="grid grid-cols-[repeat(auto-fill,minmax(160px,240px))] gap-x-8 gap-y-4">
+        {conference}
         {facts.map((fact) => (
           <div key={fact.label} className="min-w-0">
             <dt className="text-[12px] text-[var(--ink-600)]">{fact.label}</dt>
@@ -96,7 +112,7 @@ export function AdminDetailsCard({
       </dl>
 
       {links.length > 0 && (
-        <dl className="mt-1 grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-x-8 gap-y-4">
+        <dl className="mt-1 grid grid-cols-[repeat(auto-fill,minmax(260px,512px))] gap-x-8 gap-y-4">
           {links.map((link) => (
             <div key={link.label} className="min-w-0">
               <dt className="text-[12px] text-[var(--ink-600)]">
@@ -171,10 +187,7 @@ function CopyText({ value, label }: { value: string; label: string }) {
  * a bare domain typed without a scheme, or a `javascript:`/`data:` value an
  * admin typed into the free-text field — prints as plain text, never a link.
  */
-function StaffPageValue({ program }: { program: AdminTeamProgram }) {
-  const url = program.staffPageUrl;
-  if (!url) return <>—</>;
-
+function StaffPageValue({ url }: { url: string }) {
   const host = hostnameOf(url);
   if (!host) return <>{url}</>;
 

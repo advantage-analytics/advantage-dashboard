@@ -4,13 +4,12 @@ import { AdminPage } from "@/components/admin/admin-page";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
 
 /**
- * The Admin › Teams detail frame — the centred column the page sits in.
+ * The Admin › Teams detail frame — the column the page sits in.
  *
- * "Pages sit centred in their column. Not pushed to the left edge, not
- * stretched edge to edge" (the owner, `2026-11-12-admin-strip/README.md`):
- * the column is Today's 928px — the artboard's 1040px main less its gutters —
- * centred inside `AdminPage`'s padding, its blocks 40px apart as the artboard
- * stacks them. The header is the page's own (`page.tsx`), since it carries
+ * It runs the full width of `AdminPage`'s padded column, as the Matches and
+ * Teams lists do ("pages run the full width of the admin page", the owner,
+ * 2026-11-13, `2026-11-12-admin-strip/README.md`), its blocks 40px apart as
+ * the artboard stacks them. The header is the page's own (`page.tsx`), since it carries
  * this month's hours and sits above every view.
  *
  * `getAdminTeam()` is `cache()`d, so this and the page beneath it share one
@@ -33,9 +32,7 @@ export default async function AdminTeamLayout({
 
   return (
     <AdminPage>
-      <div className="mx-auto flex w-full max-w-[928px] flex-col gap-10">
-        {children}
-      </div>
+      <div className="flex w-full flex-col gap-10">{children}</div>
     </AdminPage>
   );
 }

@@ -61,9 +61,12 @@ export function resubmittableJobId(
   return row.bucket === "failed" && row.failedJobId ? row.failedJobId : null;
 }
 
-/** The 30-day views sentence; "—" when the count is not measured. */
-export function viewsSentence(views: number | null): string {
-  if (views === null) return "—";
+/**
+ * The 30-day views sentence; null when the count is not measured, so the
+ * drawer says nothing rather than printing a lone dash.
+ */
+export function viewsSentence(views: number | null): string | null {
+  if (views === null) return null;
   if (views === 0) return "No views yet";
   return `${views.toLocaleString("en-US")} ${views === 1 ? "view" : "views"} in the last 30 days · admin views not counted`;
 }
@@ -103,6 +106,7 @@ export function MatchPeekDrawer({
 }) {
   const title = `${row.player} vs ${row.opponent}`;
   const failedJobId = resubmittableJobId(row);
+  const views = viewsSentence(row.views);
   return (
     <PeekDrawerFrame
       kind="Match"
@@ -161,9 +165,9 @@ export function MatchPeekDrawer({
           <CopyButton value={row.id} label="Copy match id" />
         </div>
 
-        <p className="m-0 text-[13px] text-[var(--ink-700)]">
-          {viewsSentence(row.views)}
-        </p>
+        {views && (
+          <p className="m-0 text-[13px] text-[var(--ink-700)]">{views}</p>
+        )}
       </div>
     </PeekDrawerFrame>
   );

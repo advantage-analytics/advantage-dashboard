@@ -33,6 +33,7 @@ function load() {
       program: AdminTeamProgram;
       playerLink: AdminTeamJoinLink | null;
       coachLink: string | null;
+      conference?: React.ReactNode;
     }>;
   };
 }
@@ -42,6 +43,7 @@ function html(
   links: {
     playerLink?: AdminTeamJoinLink | null;
     coachLink?: string | null;
+    conference?: React.ReactNode;
   } = {},
 ): string {
   const { AdminDetailsCard } = load();
@@ -50,6 +52,7 @@ function html(
       program,
       playerLink: links.playerLink ?? null,
       coachLink: links.coachLink ?? null,
+      conference: links.conference,
     }),
   );
 }
@@ -108,13 +111,7 @@ test.describe("AdminDetailsCard", () => {
     expect(out).toContain("Details");
     expect(out.match(/Edit details/g)).toHaveLength(1);
 
-    const order = [
-      "Time zone",
-      "Who can upload",
-      "Who edits the schedule",
-      "Roster",
-      "Staff page",
-    ];
+    const order = ["Time zone", "Who can upload", "Roster", "Staff page"];
     let cursor = -1;
     for (const label of order) {
       const at = out.indexOf(label);
@@ -125,8 +122,10 @@ test.describe("AdminDetailsCard", () => {
     expect(out).toContain("dartmouthsports.com");
     expect(out).toContain("Eastern");
     expect(out).toContain("Everyone on the team");
-    expect(out).toContain("All staff");
     expect(out).toContain("Private");
+    // The schedule is switched off, so who edits it is not a fact.
+    expect(out).not.toContain("Who edits the schedule");
+    expect(out).not.toContain("All staff");
 
     expect(markup).toContain(
       'href="https://dartmouthsports.com/sports/wten/coaches"',
@@ -140,18 +139,34 @@ test.describe("AdminDetailsCard", () => {
     expect(out).not.toContain("Private");
   });
 
-  test("upload and events policies map through uploadPolicyLabel, not a literal", () => {
+  test("the upload policy maps through uploadPolicyLabel, not a literal", () => {
     const out = text(
       html({ ...BASE, uploadPolicy: "owner_coaches", eventsPolicy: "owner" }),
     );
     expect(out).toContain("Owner and coaches");
-    expect(out).toContain("Owner only");
+    expect(out).not.toContain("Owner only");
   });
 
-  test("a null staff page prints an em dash", () => {
+  test("no staff page leaves the fact out rather than printing a dash", () => {
     const out = text(html({ ...BASE, staffPageUrl: null }));
-    expect(out).toContain("—");
+    expect(out).not.toContain("Staff page");
+    expect(out).not.toContain("—");
     expect(out).not.toContain("null");
+  });
+
+  test("the conference slot is drawn first in the facts row", () => {
+    const markup = html(BASE, {
+      conference: React.createElement(
+        "div",
+        { id: "conference" },
+        React.createElement("dt", null, "Conference"),
+        React.createElement("dd", null, "Ivy League"),
+      ),
+    });
+    const out = text(markup);
+    expect(out.indexOf("Conference")).toBeGreaterThan(-1);
+    expect(out.indexOf("Conference")).toBeLessThan(out.indexOf("Time zone"));
+    expect(markup).toMatch(/<dl[^>]*><div id="conference">/);
   });
 
   test("both links print with a Copy each, worded for the player link's mode", () => {

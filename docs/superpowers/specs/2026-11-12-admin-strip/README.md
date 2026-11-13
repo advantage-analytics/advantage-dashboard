@@ -30,13 +30,14 @@ accident. Do not start them from this file alone.
 | Today | `AdminToday.dc.html` | One list of what needs the admin. Each row carries its own action (Check, Approve and Decline, Resubmit, Reply, Open, Add hours); the title opens the item. Sorted longest wait first, with a "Waiting" column. No filter pills and no Resolved view; kinds with no natural end keep a "Resolve" action on the row. Support messages join the list (the loader does not read them today). |
 | Matches | `AdminMatches.dc.html` | One line per match: players, Workspace (crest + program, or avatar + "Personal"), one status mark + words, video hours, uploaded. Status pills plus a workspace filter. A row opens a side panel with the progress steps (Uploaded, Sent for analysis, Results landed, Being labelled, Published, Checked) and the match id. A failed analysis has Resubmit, on the row and on Today. |
 | Teams | `AdminTeams.dc.html` | Crest, facts line, members, video hours used with a bar, owner. Two views: Programs and Pilot players (the Pilots page's list moves here). |
-| Team detail | `TeamDetail.dc.html` | One centred column, no section pills, no side rail: header (crest upload, name, facts, hours bar with Add hours), Details as a row of facts with one Edit details button and the two join links with Copy, one People list (join requests first with Approve and Decline, then members and roster players together, "No account · Invite" as the only account state shown), Add player and Invite people, the three latest matches with a link to Matches filtered to this workspace, a link to the activity log. |
-| Match overview | `MatchOverview.dc.html` | One centred column: header, a progress line counted in flags, the publish checklist as the body (each row opens the first point, set or game it concerns), upload details collapsed to one row. Left to check, Statistics from the labels and the Score card are removed. The "Every point checked" check is removed: the owner works until the flags are resolved, not every point. |
+| Team detail | `TeamDetail.dc.html` | One full-width column, no section pills, no side rail: header (crest upload, name, facts, hours bar with Add hours), Details as a row of facts with one Edit details button and the two join links with Copy, one People list (join requests first with Approve and Decline, then members and roster players together, "No account · Invite" as the only account state shown), Add player and Invite people, the three latest matches with a link to Matches filtered to this workspace, a link to the activity log. |
+| Match overview | `MatchOverview.dc.html` | One full-width column: header, a progress line counted in flags, the publish checklist as the body (each row opens the first point, set or game it concerns), upload details collapsed to one row. Left to check, Statistics from the labels and the Score card are removed. The "Every point checked" check is removed: the owner works until the flags are resolved, not every point. |
 
 ### Things the owner said in so many words
 
-- Pages sit centred in their column. Not pushed to the left edge, not stretched
-  edge to edge.
+- Pages run the full width of the admin page, like Matches and Teams; decided
+  2026-11-13 after seeing the built pages. (This replaces the earlier "pages
+  sit centred in their column" wording.)
 - On the team page they use, and want visible: uploading the crest, inviting
   people, adding players, and seeing and editing the details and the conference.
 - "Too cluttered and busy" was the verdict on a team page with a link on every

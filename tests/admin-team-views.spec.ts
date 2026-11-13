@@ -8,7 +8,7 @@ import {
 } from "@/components/admin/team-sections";
 
 /**
- * Admin › Teams detail — one centred column (T12). The default view is the
+ * Admin › Teams detail — one full-width column (T12; full width 2026-11-13). The default view is the
  * composed page; `?view=` shows the cards the artboard has no place for, one
  * view at a time. `next.config.ts` redirects the five old sub-routes to
  * `?view=<slug>` (`tests/admin-routes.spec.ts`), so every slug must land.

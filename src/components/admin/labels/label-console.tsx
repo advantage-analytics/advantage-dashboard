@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -4608,6 +4609,9 @@ export function LabelConsole({
       {fullScreen ? null : (
         <div
           data-console-header=""
+          // Full width for both audiences: the admin's overview body runs the
+          // full width of the admin page (label-dashboard.tsx, the owner,
+          // 2026-11-13), so its header shares the body's left and right edge.
           className="flex shrink-0 items-end justify-between gap-8"
         >
           {labeller ? (
@@ -4638,33 +4642,45 @@ export function LabelConsole({
                 <h1 className="text-display truncate">
                   {session.player1Name} vs {session.player2Name}
                 </h1>
+                {/* No "N of M points checked": the overview's body counts
+                    the work in flags left, and the two read as rivals. The
+                    header only draws on the overview (not full screen). */}
                 <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--ink-600)]">
-                  {upload?.program ? (
-                    <>
-                      <ProgramCrest
-                        name={upload.program}
-                        crestUrl={upload.programCrestUrl}
-                        size={26}
-                      />
-                      <span>{upload.program}</span>
-                      <span aria-hidden="true">·</span>
-                    </>
-                  ) : null}
-                  <span className="tabular">
-                    {checked} of {total} points checked
-                  </span>
-                  {status === "complete" ? (
-                    <span data-session-complete="">· Complete</span>
-                  ) : null}
-                  {status === "submitted" ? (
-                    <span data-session-submitted="">
-                      · Submitted for review
-                    </span>
-                  ) : null}
-                  <span aria-hidden="true">·</span>
-                  <span className="mono text-[11px] text-[var(--ink-500)]">
-                    derivation {session.derivationVersion}
-                  </span>
+                  {[
+                    upload?.program ? (
+                      <Fragment key="program">
+                        <ProgramCrest
+                          name={upload.program}
+                          crestUrl={upload.programCrestUrl}
+                          size={26}
+                        />
+                        <span>{upload.program}</span>
+                      </Fragment>
+                    ) : null,
+                    status === "complete" ? (
+                      <span key="complete" data-session-complete="">
+                        Complete
+                      </span>
+                    ) : null,
+                    status === "submitted" ? (
+                      <span key="submitted" data-session-submitted="">
+                        Submitted for review
+                      </span>
+                    ) : null,
+                    <span
+                      key="derivation"
+                      className="mono text-[11px] text-[var(--ink-500)]"
+                    >
+                      derivation {session.derivationVersion}
+                    </span>,
+                  ]
+                    .filter((item) => item !== null)
+                    .map((item, at) => (
+                      <Fragment key={at}>
+                        {at > 0 ? <span aria-hidden="true">·</span> : null}
+                        {item}
+                      </Fragment>
+                    ))}
                 </p>
               </div>
             </div>

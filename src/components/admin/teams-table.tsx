@@ -78,7 +78,7 @@ export function TeamsTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[840px] px-6 pt-0.5 pb-1.5">
+      <div className="min-w-[920px] px-6 pt-0.5 pb-1.5">
         <div
           className={cn(
             ROW,
@@ -251,7 +251,7 @@ function TeamRow({
         <VideoHours row={row} />
       </div>
 
-      {/* Owner — avatar and name, the one fluid cell. */}
+      {/* Owner — avatar and name, a fixed track. */}
       <span className={cn(COL.owner, "flex min-w-0 items-center gap-2")}>
         {row.ownerName ? (
           <>

@@ -50,7 +50,8 @@ import { cn } from "@/lib/utils";
  * here — there is no film, no court and no editable row — so the page answers
  * the questions asked before and after a labelling sitting.
  *
- * The admin's page is one centred column (2026-11-12, MatchOverview.dc.html):
+ * The admin's page is one column across the full width of the admin page
+ * (2026-11-12, MatchOverview.dc.html; full width since 2026-11-13):
  *
  *   a progress line counted in flags ("N flags left")
  *   the publish checklist as the body, each open row naming the set, point
@@ -188,8 +189,10 @@ export function LabelDashboard(props: LabelDashboardProps) {
         data-label-dashboard=""
         className="-mr-14 flex min-h-0 flex-1 flex-col overflow-y-auto pr-14 pb-10"
       >
-        <div className="mx-auto flex w-full max-w-[880px] flex-col gap-7">
-          <FlagsLeft {...widget} />
+        <div className="flex w-full flex-col gap-7">
+          {/* A complete session reads "Published": flags still counted
+              above it would read as a contradiction. */}
+          {props.complete ? null : <FlagsLeft {...widget} />}
           <AdminChecklist {...widget} />
           <UploadDetails {...widget} />
         </div>

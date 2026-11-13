@@ -138,12 +138,16 @@ test("the admin's overview is one column: flags left, the publish checklist, the
     upload,
     ...SAVES,
   } as ConsoleProps);
-  // One centred column: the flags left, the checklist as the body, and the
+  // One full-width column: the flags left, the checklist as the body, and the
   // upload's inputs. No Left to check, no statistics and no Score card.
   expect(
     [...html.matchAll(/data-dashboard-card="([^"]*)"/g)].map((m) => m[1]),
   ).toEqual(["Progress", "Before you publish", "Entered at upload"]);
-  expect(html).toMatch(/data-label-dashboard=""[^>]*>\s*<div class="mx-auto /);
+  // Full width, like Matches and Teams: no centred max-width column.
+  expect(html).toMatch(
+    /data-label-dashboard=""[^>]*>\s*<div class="flex w-full flex-col gap-7">/,
+  );
+  expect(html).not.toContain("max-w-[880px]");
   // No design switch any more: one layout.
   expect(html).not.toContain("data-dashboard-design");
   // The inputs, as entered: the side that decides who every stroke is by,
@@ -511,10 +515,10 @@ test.describe("editing (T6)", () => {
       initialLayoutMode: "overview",
       ...SAVES,
     });
-    expect(text(overview)).toContain("· Complete");
+    expect(text(overview)).toContain("Complete · derivation 0.3.2");
   });
 
-  test("the header carries the progress and the save line, and no Save button", () => {
+  test("the header carries the match and the save line, and no Save button", () => {
     const html = render({
       session: labelSessionFixture(),
       video: null,
@@ -523,7 +527,17 @@ test.describe("editing (T6)", () => {
     });
     const out = text(html);
     expect(out).toContain("Jordan Lee vs Elena Vargas");
-    expect(out).toContain("1 of 3 points checked");
+    // The body counts the work in flags left; the admin's header no longer
+    // counts points checked beside it.
+    const header = html.slice(
+      html.indexOf("data-console-header"),
+      html.indexOf("data-label-dashboard"),
+    );
+    expect(text(header)).not.toContain("points checked");
+    // The header runs full width with the body, sharing its edges.
+    expect(header).toMatch(
+      /^data-console-header="" class="flex shrink-0 items-end justify-between gap-8">/,
+    );
     expect(out).toContain("derivation 0.3.2");
     expect(html).toContain('data-save-status="idle"');
     expect(html).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*\bSave\b/);
@@ -1956,7 +1970,7 @@ test.describe("the admin's overview, read off the design fixture", () => {
    * and set 1 no longer matches the record. Its own marks hold a flag that
    * can move the score on point 39 and wrong data from point 35.
    */
-  const page = (audience?: "admin" | "labeller") => {
+  const page = (audience?: "admin" | "labeller", complete = false) => {
     const { points: all, marks } = fixtureMatch();
     const game3 = all.filter((p) => p.gameNumber === 3);
     const cut = game3[game3.length - 1];
@@ -1979,7 +1993,7 @@ test.describe("the admin's overview, read off the design fixture", () => {
           warnings: [
             "Point 12 has no strokes and no winner, so it is left out",
           ],
-          complete: false,
+          complete,
           upload: UPLOAD,
           onOpen: () => {},
         }),
@@ -2029,6 +2043,15 @@ test.describe("the admin's overview, read off the design fixture", () => {
     );
     expect(line).not.toContain('role="img"');
     expect(text(html)).not.toContain("points checked");
+  });
+
+  test("a complete session reads Published, with no flags-left line above it", () => {
+    const { html } = page("admin", true);
+    expect(html).not.toContain("data-flags-left");
+    expect(html).not.toContain('data-dashboard-card="Progress"');
+    const out = text(html);
+    expect(out).not.toMatch(/flags? left/);
+    expect(out).toContain("Published");
   });
 
   test("the labeller's overview keeps its cards and Every point checked", () => {

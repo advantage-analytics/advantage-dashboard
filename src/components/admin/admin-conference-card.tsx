@@ -49,14 +49,16 @@ export const CONFERENCE_SIBLINGS_SHOWN = 3;
  * body already says which conference this is, and the current conference is
  * left out of the menu since picking it would do nothing.
  *
- * `#conference` is the header's `⋯ › Change conference` anchor (T10); the
- * `<section id>` around this card is `page.tsx`'s, not this file's.
+ * `#conference` is the header's `⋯ › Change conference` anchor (T10). The
+ * team page seats the `fact` variant, which carries that id itself; around
+ * the `card` variant the id is the caller's, not this file's.
  */
 export function AdminConferenceCard({
   programId,
   conference,
   currentLabel,
   options,
+  variant = "card",
 }: {
   programId: string;
   conference: AdminTeamConference | null;
@@ -64,6 +66,16 @@ export function AdminConferenceCard({
   currentLabel: string | null;
   /** `conferenceOptionsFor(division)` — conference labels. */
   options: readonly string[];
+  /**
+   * `card` (default) is the bordered card with the mark, counts and
+   * siblings. `fact` is one more fact in the team page's Details row
+   * (`AdminDetailsCard`): the label "Conference", the name, and the same
+   * `Change` / `Set conference` menu inline beside it as a text control. It
+   * renders a `<div>` of `<dt>`/`<dd>`, so it must sit inside a `<dl>`, and
+   * it carries `id="conference"` itself — the header's
+   * `⋯ › Change conference` anchor.
+   */
+  variant?: "card" | "fact";
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -95,31 +107,55 @@ export function AdminConferenceCard({
 
   const actionLabel = conference ? "Change" : "Set conference";
 
+  const control = (
+    <MenuSelect
+      label={conference ? "Change conference" : "Set conference"}
+      variant="text"
+      value={undefined}
+      placeholder={pending ? "Saving…" : actionLabel}
+      options={choices}
+      onChange={move}
+      disabled={pending || choices.length === 0}
+      scroll
+      width={280}
+      // The placeholder span carries the empty-field ink; the head's
+      // text action is blue, so the child rule overrides it. As a fact the
+      // trigger drops its 28px box so the row keeps the other facts' height.
+      className={cn(
+        TEXT_ACTION,
+        "[&>span]:text-[var(--blue)] hover:[&>span]:text-[var(--blue-hover)] [&>svg]:text-[var(--blue)]",
+        variant === "fact" && "h-auto",
+      )}
+    />
+  );
+
+  if (variant === "fact") {
+    return (
+      <div id="conference" className="min-w-0 scroll-mt-16">
+        <dt className="text-[12px] text-[var(--ink-600)]">Conference</dt>
+        <dd className="mt-0.5 flex min-w-0 items-center gap-2.5 text-[13px]">
+          <span
+            className={cn(
+              "min-w-0 truncate",
+              conference ? "text-[var(--ink-900)]" : "text-[var(--ink-500)]",
+            )}
+          >
+            {conference ? conference.name : "No conference yet"}
+          </span>
+          {control}
+        </dd>
+        {error && (
+          <dd className="mt-2">
+            <DialogProblem message={error} />
+          </dd>
+        )}
+      </div>
+    );
+  }
+
   return (
     <SettingsCard className="gap-0 bg-[var(--surface-card)] py-6">
-      <SettingsCardTitle
-        trailing={
-          <MenuSelect
-            label={conference ? "Change conference" : "Set conference"}
-            variant="text"
-            value={undefined}
-            placeholder={pending ? "Saving…" : actionLabel}
-            options={choices}
-            onChange={move}
-            disabled={pending || choices.length === 0}
-            scroll
-            width={280}
-            // The placeholder span carries the empty-field ink; the head's
-            // text action is blue, so the child rule overrides it.
-            className={cn(
-              TEXT_ACTION,
-              "[&>span]:text-[var(--blue)] hover:[&>span]:text-[var(--blue-hover)] [&>svg]:text-[var(--blue)]",
-            )}
-          />
-        }
-      >
-        Conference
-      </SettingsCardTitle>
+      <SettingsCardTitle trailing={control}>Conference</SettingsCardTitle>
 
       {error && (
         <div className="mt-3">

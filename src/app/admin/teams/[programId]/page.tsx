@@ -55,16 +55,17 @@ export async function generateMetadata({
 }
 
 /**
- * The Admin › Teams detail page — one program, in one centred column
+ * The Admin › Teams detail page — one program, in one full-width column
  * (`docs/superpowers/specs/2026-11-12-admin-strip/TeamDetail.dc.html`).
  *
  * The default view reads top to bottom: the header (crest upload, name,
- * facts, this month's hours with `Add hours`), Details (one row of facts, one
- * `Edit details`, the two join links, and the Conference card with its own
- * `Change` control), People (one list: join requests, then members and
+ * facts, this month's hours with `Add hours`), Details (one row of facts —
+ * the conference first, with its own `Change` control — one `Edit details`
+ * and the two join links), People (one list: join requests, then members and
  * roster players together, then invitations), the three latest matches with a link to Matches
  * filtered to this workspace, and a link to the activity log. No pill row and
- * no rail: "keep it quiet" and "pages sit centred" are the owner's words.
+ * no rail: "keep it quiet" is the owner's word, and the column runs the full
+ * width of the admin page like Matches and Teams (decided 2026-11-13).
  *
  * The cards the artboard has no place for stay behind `?view=`
  * (`team-sections.ts`): `schedule`, `usage` (Pilot + Usage — where `Add
@@ -203,10 +204,10 @@ export default async function AdminTeamPage({
     );
   }
 
-  // The Conference card's `Change` menu — the create dialog's own list, for
+  // The Conference fact's `Change` menu — the create dialog's own list, for
   // the program's division (or the conference's, when the program row has
   // none). Read here rather than on open so the menu is never empty for a
-  // beat while it loads. Only the default view shows the card.
+  // beat while it loads. Only the default view shows it.
   const conferenceOptions = await conferenceOptionsFor(
     data.program.division ?? data.conference?.division ?? null,
   );
@@ -226,16 +227,18 @@ export default async function AdminTeamPage({
           program={data.program}
           playerLink={data.joinLink}
           coachLink={coachLink}
+          // One more fact in the row; it carries `id="conference"`, the
+          // header's `⋯ › Change conference` anchor.
+          conference={
+            <AdminConferenceCard
+              variant="fact"
+              programId={programId}
+              conference={data.conference}
+              currentLabel={data.program.conference}
+              options={conferenceOptions}
+            />
+          }
         />
-        {/* `#conference` is the header's `⋯ › Change conference` anchor. */}
-        <div id="conference" className="scroll-mt-16">
-          <AdminConferenceCard
-            programId={programId}
-            conference={data.conference}
-            currentLabel={data.program.conference}
-            options={conferenceOptions}
-          />
-        </div>
       </section>
 
       <div id="people" className="scroll-mt-16">

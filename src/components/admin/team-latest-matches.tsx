@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
+import { TEAM_LIST_GRID } from "@/components/admin/admin-people-card";
 import {
   MatchStatus,
   UploadedAt,
@@ -19,6 +20,10 @@ import type { AdminTeamLatestMatch } from "@/lib/data/admin-team-links";
  * The status and the time are Admin › Matches' own `MatchStatus` and
  * `UploadedAt`, so one match reads the same on both screens. Each row opens
  * that match's drawer on Matches (`?id=`), inside the same workspace filter.
+ *
+ * Rows sit on the People list's tracks (`TEAM_LIST_GRID`), the players
+ * spanning its face and name tracks, so the status lines up under the roles
+ * and the time under the row actions.
  */
 export function TeamLatestMatches({
   programId,
@@ -73,9 +78,9 @@ export function TeamLatestMatches({
             >
               <Link
                 href={`${allHref}&id=${encodeURIComponent(match.id)}`}
-                className="grid min-h-11 grid-cols-[minmax(0,1fr)_minmax(160px,0.5fr)_96px] items-center gap-x-3.5 px-4 py-1.5 transition-colors duration-200 hover:bg-[var(--surface-subtle)]"
+                className={`${TEAM_LIST_GRID} min-h-11 px-4 py-1.5 transition-colors duration-200 hover:bg-[var(--surface-subtle)]`}
               >
-                <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+                <span className="col-span-2 min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
                   {match.player} vs {match.opponent}
                 </span>
                 <span className="flex min-w-0 overflow-hidden">

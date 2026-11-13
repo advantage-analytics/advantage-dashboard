@@ -131,16 +131,24 @@ export function AdminCardNote({ message }: { message: string | null }) {
 }
 
 /**
- * The four columns every row shares — face, name, role, actions — so a
- * request, a member, a profile and an invitation line up as one list.
+ * The team page's list tracks — face · name · role or status · trailing — the
+ * People list and Latest matches both draw, so their columns line up down the
+ * page. The name grows to a 360px cap and the role (or a match's status)
+ * follows it at once in a fixed track, so the two read as one fact rather
+ * than as the two ends of the row; the trailing cell takes what is left and
+ * sits flush right. Latest matches has no face: its name spans the first two
+ * tracks.
  */
-const ROW =
-  "grid min-h-11 grid-cols-[26px_minmax(0,1fr)_minmax(100px,0.5fr)_minmax(160px,auto)] items-center gap-x-3.5 border-t border-[var(--border-hairline)] px-4 py-1.5 first:border-t-0";
+export const TEAM_LIST_GRID =
+  "grid grid-cols-[26px_minmax(0,360px)_180px_1fr] items-center gap-x-3.5";
+
+/** One row of the People list, on the shared tracks. */
+const ROW = `${TEAM_LIST_GRID} min-h-11 border-t border-[var(--border-hairline)] px-4 py-1.5 first:border-t-0`;
 
 const NAME = "truncate text-[13px] font-medium text-[var(--ink-900)]";
 const SUB = "truncate text-[11px] text-[var(--ink-500)]";
 const ROLE = "truncate text-[12px] text-[var(--ink-500)]";
-const ACTIONS = "flex items-center justify-end gap-2.5";
+const ACTIONS = "flex items-center justify-end gap-3";
 
 function Face({ name, photoUrl }: { name: string; photoUrl?: string | null }) {
   return (
@@ -470,7 +478,7 @@ export function AdminPeopleList({
                       <span className={SUB}>{member.email}</span>
                     </span>
                     {options.length > 0 ? (
-                      <span>
+                      <span className="flex min-w-0">
                         <RoleMenu
                           programId={programId}
                           userId={member.userId}

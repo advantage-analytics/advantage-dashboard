@@ -66,8 +66,16 @@ type View = "all" | "uploading" | "analyzing" | "failed";
 
 const PAGE = 50;
 
+/**
+ * Match · Workspace · Status · Video · Uploaded. Match and Workspace share the
+ * flexible width evenly — both are names, and a full program name ("University
+ * of California, Los Angeles Women's Tennis") fits whole at 1440. Status is
+ * fixed at its widest content, "Verified by Advantage" or "Failed" with
+ * Resubmit beside it, so the marks start at one x and spare width never
+ * pools after the status words.
+ */
 const GRID =
-  "grid grid-cols-[minmax(220px,1.4fr)_minmax(150px,1fr)_minmax(150px,1.2fr)_64px_96px] items-center gap-4";
+  "grid grid-cols-[minmax(180px,1fr)_minmax(160px,1fr)_200px_64px_96px] items-center gap-4";
 
 const COLUMNS = ["Match", "Workspace", "Status", "Video", "Uploaded"] as const;
 
@@ -401,7 +409,7 @@ export function MatchesPageContent({
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-        <div className="min-w-[800px] px-6 pt-0.5 pb-1.5">
+        <div className="min-w-[820px] px-6 pt-0.5 pb-1.5">
           <div
             className={cn(
               GRID,

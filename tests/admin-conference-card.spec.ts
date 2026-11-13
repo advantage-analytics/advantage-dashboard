@@ -24,6 +24,7 @@ type CardProps = {
   conference: AdminTeamConference | null;
   currentLabel: string | null;
   options: readonly string[];
+  variant?: "card" | "fact";
 };
 
 function load() {
@@ -138,6 +139,25 @@ test.describe("AdminConferenceCard", () => {
     expect(out).toContain("No conference yet");
     expect(out).toContain("Set conference");
     expect(out).not.toContain("null");
+    expect(out).not.toMatch(/\bChange\b/);
+  });
+
+  test("as a fact: the label, the name and Change inline, with the anchor id", () => {
+    const markup = html({ ...BASE, conference: IVY, variant: "fact" });
+    const out = text(markup);
+    expect(markup).toMatch(/^<div id="conference"[^>]*><dt/);
+    expect(out).toContain("Conference Ivy League Change");
+    // The card's body — mark, counts, siblings — stays with the card.
+    expect(out).not.toContain("16 teams");
+    expect(out).not.toContain("Harvard");
+    expect(markup).toContain('aria-label="Change conference"');
+  });
+
+  test("as a fact with no conference: No conference yet and Set conference", () => {
+    const out = text(
+      html({ ...BASE, currentLabel: null, conference: null, variant: "fact" }),
+    );
+    expect(out).toContain("Conference No conference yet Set conference");
     expect(out).not.toMatch(/\bChange\b/);
   });
 
