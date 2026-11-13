@@ -4,7 +4,10 @@ import { createContext, use, type ReactNode } from "react";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
-import { useLobShotKeys } from "@/components/dashboard/matches/match-detail/film/use-ball-paths";
+import {
+  useBallPathsRoute,
+  useLobShotKeys,
+} from "@/components/dashboard/matches/match-detail/film/use-ball-paths";
 
 /**
  * The match's lob shots for the Statistics view's cards — the head-to-head
@@ -16,6 +19,8 @@ import { useLobShotKeys } from "@/components/dashboard/matches/match-detail/film
  * cache) and hands the keys down here, so the two cards cannot read different
  * answers. Only an Advantage Intelligence match has a file, and never on a
  * read-only mount (a share link, the sample): the route asks for a session.
+ * The admin report is the one read-only mount that reads it, from its own
+ * route (`useBallPathsRoute`).
  *
  * `null` — no provider, no file, not loaded yet — is "unknown", never "no
  * lobs": the Lob row draws a dash with no cut, and the Net game card leaves
@@ -30,9 +35,11 @@ export function StatisticsLobKeysProvider({
 }) {
   const { match } = useMatchData();
   const { meta } = useMatchReport();
+  const route = useBallPathsRoute(meta.readOnly);
   const lobKeys = useLobShotKeys({
     matchId: match.id,
-    enabled: meta.isDerived && !meta.readOnly,
+    enabled: meta.isDerived && route.allowed,
+    endpoint: route.endpoint,
   });
   return <LobKeysContext value={lobKeys}>{children}</LobKeysContext>;
 }

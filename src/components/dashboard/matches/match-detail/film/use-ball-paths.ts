@@ -9,6 +9,7 @@ import {
   parseBallPathsFile,
   type FilmBallPath,
 } from "./film-ball";
+import { useBallPathsEndpoint } from "./ball-paths-endpoint";
 import type { FilmClock } from "./film-timeline";
 import { lobShotKeys } from "../match-filters/net-game";
 
@@ -58,6 +59,26 @@ function cachedFile(matchId: string): BallPathsFile | null {
 }
 
 /**
+ * Whether this mount may read the ball-paths file, and from where.
+ *
+ * The match's own route asks the reader's session whether they can see the
+ * match, so a read-only mount (a share link, the sample) does not ask. The
+ * admin report is read-only as well, but names a route of its own
+ * (`MatchReportProvider ballPathsEndpoint`, read through `ball-paths-endpoint.ts`),
+ * and with one a read-only mount reads from that. `endpoint` is `undefined`
+ * for the match's own route. With no report provider (a harness) only
+ * `readOnly` decides, as it always did.
+ */
+export function useBallPathsRoute(readOnly: boolean): {
+  allowed: boolean;
+  endpoint: string | undefined;
+} {
+  const named = useBallPathsEndpoint();
+  if (!readOnly) return { allowed: true, endpoint: undefined };
+  return { allowed: named !== null, endpoint: named ?? undefined };
+}
+
+/**
  * The match's raw ball-paths file (source-video clock), or `null` until it
  * lands and on every failure path — the silent fetch the header describes.
  * `useBallPaths` puts it on the film clock; `useLobShotKeys` reads lobs off
@@ -66,9 +87,12 @@ function cachedFile(matchId: string): BallPathsFile | null {
 export function useBallPathsFile({
   matchId,
   enabled,
+  endpoint,
 }: {
   matchId: string;
   enabled: boolean;
+  /** See {@link useBallPathsRoute}. Omitted: the match's own route. */
+  endpoint?: string;
 }): BallPathsFile | null {
   // A file still cached when this mount starts is held for the mount's
   // life, so it cannot expire under a view that already drew it.
@@ -95,9 +119,10 @@ export function useBallPathsFile({
 
     void (async () => {
       try {
-        const response = await fetch(`/api/matches/${matchId}/ball-paths`, {
-          signal: controller.signal,
-        });
+        const response = await fetch(
+          endpoint ?? `/api/matches/${matchId}/ball-paths`,
+          { signal: controller.signal },
+        );
         if (!response.ok) {
           settled = true;
           return;
@@ -123,6 +148,9 @@ export function useBallPathsFile({
       // paths for good. A request that already landed keeps its claim.
       if (!settled) requested.current = null;
     };
+    // `endpoint` is fixed for a mount's life (the page names it), so it is
+    // read here without re-running the request when its identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, matchId]);
 
   if (loaded && loaded.matchId === matchId) return loaded.file;
@@ -132,13 +160,15 @@ export function useBallPathsFile({
 export function useBallPaths({
   matchId,
   enabled,
+  endpoint,
   clock,
 }: {
   matchId: string;
   enabled: boolean;
+  endpoint?: string;
   clock: FilmClock;
 }): readonly FilmBallPath[] {
-  const file = useBallPathsFile({ matchId, enabled });
+  const file = useBallPathsFile({ matchId, enabled, endpoint });
 
   // Depended on by value rather than by object identity: the clock's numbers
   // change far more rarely than the object holding them, and re-deriving a
@@ -162,11 +192,13 @@ export function useBallPaths({
 export function useLobShotKeys({
   matchId,
   enabled,
+  endpoint,
 }: {
   matchId: string;
   enabled: boolean;
+  endpoint?: string;
 }): ReadonlySet<number> | null {
-  const file = useBallPathsFile({ matchId, enabled });
+  const file = useBallPathsFile({ matchId, enabled, endpoint });
   return useMemo(
     () => (file && file.strokes.length > 0 ? lobShotKeys(file) : null),
     [file],

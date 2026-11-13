@@ -53,8 +53,11 @@ const isServeOrFeed = (shot: Pick<MatchShot, "shotType">) =>
  * (`!cameToNet`). N is the side's first shot passing `isNetShot` — the shot
  * that made `cameToNet` true.
  *
- * - `serve-volley` — the side served and N is its first shot after the serve:
- *   no earlier shot of theirs other than a serve (or a pre-serve feed).
+ * - `serve-volley` — the side served, N is its first shot after the serve (no
+ *   earlier shot of theirs other than a serve or a pre-serve feed) AND N is a
+ *   volley by type (product decision, 2026-11-13). A server's first ball
+ *   struck inside the service line as a groundstroke, or an overhead, is not
+ *   one: it is read by the two rules below like any other net shot.
  * - `drawn-in` — the opponent's ball the side struck just before N landed
  *   within `DRAWN_IN_DEPTH_M` of the net. That ball is the opponent's shot
  *   immediately before the side's last shot before N; when the side has no
@@ -70,8 +73,13 @@ export function netEntryOf(
   const n = shots.findIndex((s) => s.isPlayer1 === isPlayer1 && isNetShot(s));
   if (n < 0) return null;
 
+  const nType = (shots[n].shotType ?? "").toLowerCase();
   const ownBefore = shots.slice(0, n).filter((s) => s.isPlayer1 === isPlayer1);
-  if (point.serverIsPlayer1 === isPlayer1 && ownBefore.every(isServeOrFeed)) {
+  if (
+    point.serverIsPlayer1 === isPlayer1 &&
+    nType.includes("volley") &&
+    ownBefore.every(isServeOrFeed)
+  ) {
     return "serve-volley";
   }
 
@@ -89,7 +97,6 @@ export function netEntryOf(
   // N itself a groundstroke struck inside the net zone: the ball it answered
   // is what pulled the side forward — a drop shot they ran onto is "drawn in"
   // even when their previous shot was answered by a deep ball.
-  const nType = (shots[n].shotType ?? "").toLowerCase();
   if (
     !nType.includes("volley") &&
     nType !== "overhead" &&
