@@ -2,11 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  CountPills,
-  FilterDivider,
-  FilterMenuPill,
-} from "@/components/admin/admin-cells";
+import { FilterMenuPill } from "@/components/admin/admin-cells";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
 import { TeamsTable } from "@/components/admin/teams-table";
 import {
@@ -38,13 +34,14 @@ import type {
  * names, and putting a cursor chain in the address bar would make the back
  * button undo one page at a time), and which row's approve popover is open.
  *
- * ## Teams2's toolbar
+ * ## The toolbar
  *
- * View pills with their counts as text ("On Advantage · 9"), a hairline, then
- * one pill menu per facet — Division and Conference — whose trigger names the
- * current value, so the cut reads off the toolbar and no strip restates it. A
- * view is not a filter (law 7): switching one never clears the other, and
- * the pill counts are taken under the current facets.
+ * One pill menu per facet — Division and Conference — whose trigger names the
+ * current value, so the cut reads off the toolbar and no strip restates it.
+ * AdminTeams (T9) took away the In pilot, Needs review and Whole directory
+ * pills: the page lists the programs on Advantage, and a program that is not
+ * is reached through the header's search, as the footnote says. `?view=` still
+ * names any of the loader's four views, so an old link keeps working.
  *
  * ## New since you last looked
  *
@@ -52,13 +49,6 @@ import type {
  * keyed on program id against `claimed_at`) and passes ids only. Opening a
  * row calls `markAdminRowSeen` and clears its dot here at once.
  */
-
-const VIEW_OPTIONS: { value: AdminTeamsView; label: string }[] = [
-  { value: "on_advantage", label: "On Advantage" },
-  { value: "in_pilot", label: "In pilot" },
-  { value: "needs_review", label: "Needs review" },
-  { value: "all", label: "Whole directory" },
-];
 
 /**
  * Both sorts `listAdminTeams` actually supports, and no more.
@@ -260,6 +250,7 @@ export function TeamsPageContent({
   ];
 
   const total = viewCounts[view];
+  const onAdvantage = viewCounts.on_advantage;
 
   return (
     <div className="flex flex-col gap-4">
@@ -267,25 +258,18 @@ export function TeamsPageContent({
       <div className="flex flex-wrap items-end gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-display">Teams</h1>
-          <p className="text-body-sm mt-[9px]">
-            Every program in the directory.
+          <p className="text-body-sm mt-[9px] tabular-nums">
+            {onAdvantage != null
+              ? `${onAdvantage.toLocaleString("en-US")} ${onAdvantage === 1 ? "program is" : "programs are"} on Advantage.`
+              : "Programs on Advantage."}
             {joinedCount > 0 && ` ${joinedCount} joined since you last looked.`}
           </p>
         </div>
         <CreateTeamButton />
       </div>
 
-      {/* Views, a divider, then one pill menu per facet. */}
+      {/* One pill menu per facet, then sort. */}
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <CountPills
-          options={VIEW_OPTIONS.map((option) => ({
-            ...option,
-            count: viewCounts[option.value],
-          }))}
-          value={view}
-          onChange={(next) => pushCut({ view: next })}
-        />
-        <FilterDivider />
         <FilterMenuPill<string>
           label="Division"
           width={220}
@@ -338,10 +322,7 @@ export function TeamsPageContent({
           emptyAction={
             hasCut
               ? { label: "Clear filters", onClick: clearFilters }
-              : {
-                  label: "Show the whole directory",
-                  onClick: () => pushCut({ view: "all" }),
-                }
+              : undefined
           }
           onApprove={openApprove}
           freshIds={fresh}
@@ -387,12 +368,16 @@ export function TeamsPageContent({
         </div>
       )}
 
+      <p className="text-[12px] text-[var(--ink-600)]">
+        Programs that are not on Advantage yet only appear in search.
+        Conferences are in the account menu.
+      </p>
+
       <ApprovePilotPopover
         target={approving}
         onClose={() => setApproving(null)}
-        // The decided row's Plan cell is now wrong on screen — the server page
-        // re-renders and the chip becomes a `PilotPill` (approve) or an em
-        // dash (decline).
+        // The decided row is now wrong on screen — the server page re-renders,
+        // the chip goes, and an approved program's facts line gains "Pilot".
         onDecided={() => router.refresh()}
       />
     </div>

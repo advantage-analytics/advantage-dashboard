@@ -102,3 +102,16 @@ is the runner's. Newest entries at the bottom.
 2. Success refreshes twice (the action's `revalidatePath` and `router.refresh()`).
 3. A refusal sentence under the button makes the one-line rows taller; check it on screen.
 4. `jobDrafts`' failed-or-stuck choice of `failedJobId` has no test (it reads the database).
+
+## T9 · Teams list: program rows with the video-hours bar — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `AdminTeamRow` gains `videoUsedSeconds` and `videoCapSeconds` from one batched usage read by the team page's rule (null on a failed read). `TEAMS_COLUMNS` is Program, Members, Video hours this month, Owner; squad, division and "Pilot" print as a facts line under the name; the hours cell reuses `HoursMeter` with "X of Y h", or "—". The In pilot, Needs review and Whole directory pills are gone; the Approve chip moves into the Program cell. New `tests/admin-teams-columns.spec.ts`.
+
+**follow-ups:**
+
+1. The batched usage query is under Supabase's row cap and could undercount a very busy month; a grouped-sum RPC removes the risk.
+2. `listAdminTeams` now runs the usage query for the upload wizard's team picker too, which never shows hours.
+3. `countAdminTeamViews` still counts four views; the page reads two.
+4. Claim-pending and suspended programs lose their status line once they have a squad or division.

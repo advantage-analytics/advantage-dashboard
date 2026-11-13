@@ -125,7 +125,7 @@ ready).
 
 ## T9 · Teams list: program rows with the video-hours bar
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** guess — src/lib/data/admin-teams-server.ts, src/components/admin/teams-table.tsx, src/components/admin/teams-table-layout.ts, src/components/admin/teams-page-content.tsx, src/app/admin/teams/page.tsx, tests/admin-teams-cursor.spec.ts
 - **routes:** /admin/teams

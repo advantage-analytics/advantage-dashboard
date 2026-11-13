@@ -4,7 +4,6 @@ import Link from "next/link";
 import { GalleryHorizontalEnd } from "lucide-react";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import { EmptyMark } from "@/components/ui/empty-mark";
-import { PilotPill } from "@/components/admin/plan-pills";
 import { ApproveChip } from "@/components/admin/approve-chip";
 import {
   AdminAvatar,
@@ -16,7 +15,17 @@ import {
   TableEmptyBody,
   type TableEmptyAction,
 } from "@/components/dashboard/shared/table-empty-body";
+import {
+  HOURS_FILL,
+  HoursMeter,
+} from "@/components/dashboard/settings/teams/program-hours-summary";
 import { cn } from "@/lib/utils";
+import { squadLabel } from "@/lib/data/squad";
+import {
+  formatHoursShort,
+  hoursSeverity,
+  usageFraction,
+} from "@/lib/data/usage-format";
 import type { AdminTeamRow } from "@/lib/data/admin-teams-server";
 import { COL, ROW, TEAMS_COLUMNS } from "@/components/admin/teams-table-layout";
 
@@ -29,6 +38,11 @@ import { COL, ROW, TEAMS_COLUMNS } from "@/components/admin/teams-table-layout";
  * this table's rows are **record rows** (Data Table law 3): clicking one is a
  * full navigation to `/admin/teams/[id]`, not a peek, so every row carries a
  * trailing chevron and none of the drawer machinery the roster needs.
+ *
+ * AdminTeams's row (T9): crest, name over one facts line (squad · division ·
+ * Pilot), members, this month's video hours as a bar with "X of Y h", owner.
+ * Division, Conference, State and Plan stopped being columns; the facets the
+ * toolbar still filters on read off the facts line instead.
  *
  * `ApproveChip`, when a row's plan is `'approve'`, is a real `<button>`
  * nested inside the row's `Link` — the one place this table needs a click
@@ -64,7 +78,7 @@ export function TeamsTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[960px] px-6 pt-0.5 pb-1.5">
+      <div className="min-w-[840px] px-6 pt-0.5 pb-1.5">
         <div
           className={cn(
             ROW,
@@ -126,7 +140,7 @@ function sinceLabel(at: string): string {
   });
 }
 
-/** Line 2 of the Team cell. */
+/** Where the program stands, for a row with no facts to print. */
 function teamStatusLine(row: AdminTeamRow): string {
   if (row.status === "active") {
     return row.claimedAt
@@ -136,6 +150,20 @@ function teamStatusLine(row: AdminTeamRow): string {
   if (row.status === "claim_pending") return "Claim pending";
   if (row.status === "suspended") return "Suspended";
   return "In the directory, not on Advantage";
+}
+
+/**
+ * Line 2 of the Program cell — "Men's · D-I · Pilot". Squad, division and
+ * whether the program is in the pilot, each only when known; a row that knows
+ * none of the three says where it stands instead of drawing an empty line.
+ */
+export function teamFactsLine(row: AdminTeamRow): string {
+  const facts = [
+    squadLabel(row.team),
+    row.division,
+    row.plan === "pilot" ? "Pilot" : null,
+  ].filter((fact): fact is string => Boolean(fact));
+  return facts.length > 0 ? facts.join(" · ") : teamStatusLine(row);
 }
 
 function TeamRow({
@@ -163,13 +191,14 @@ function TeamRow({
         "focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
       )}
     >
-      {/* Team — 32px crest (New dot on its corner), name over status. */}
-      <span className={cn(COL.team, "flex min-w-0 items-center gap-3")}>
+      {/* Program — 32px crest (New dot on its corner), name over facts, and
+          the Approve chip when a claim is waiting on a decision. */}
+      <span className={cn(COL.program, "flex min-w-0 items-center gap-3")}>
         <span className="relative inline-flex shrink-0">
           <ProgramCrest name={row.name} crestUrl={row.crestUrl} size={32} />
           {fresh ? <NewDot /> : null}
         </span>
-        <span className="flex min-w-0 flex-col gap-1">
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex min-w-0 items-baseline gap-1.5">
             <span className="truncate text-[13px] leading-none font-medium text-[var(--ink-900)]">
               {row.name}
@@ -177,37 +206,33 @@ function TeamRow({
             {fresh ? <NewLabel /> : null}
           </span>
           <span className="truncate text-[12px] leading-none text-[var(--ink-600)]">
-            {teamStatusLine(row)}
+            {teamFactsLine(row)}
           </span>
         </span>
+        {row.plan === "approve" ? (
+          <span className="flex shrink-0 items-center">
+            {/* The one control in this row that must NOT navigate. A wrapping
+                `<span onClick={stopPropagation}>` does not work here: React
+                dispatches the click button → span → outer anchor, so
+                `stopPropagation()` on the span only halts further bubbling —
+                it runs *after* the anchor's own `onClick` (where `next/link`
+                calls `preventDefault()`) would have needed to run. Without
+                that `preventDefault()`, the browser still performs the
+                anchor's default navigation. So the guard has to live in
+                `ApproveChip`'s own `onClick`, called directly on its
+                `<button>`. */}
+            <ApproveChip
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onApprove?.(row);
+              }}
+            />
+          </span>
+        ) : null}
       </span>
 
-      {/* Division */}
-      <span
-        className={cn(
-          COL.division,
-          "truncate text-[12px] text-[var(--ink-700)]",
-        )}
-      >
-        {row.division ?? <EmptyMark label="No division set" />}
-      </span>
-
-      {/* Conference */}
-      <span
-        className={cn(
-          COL.conference,
-          "truncate text-[12px] text-[var(--ink-700)]",
-        )}
-      >
-        {row.conference ?? <EmptyMark label="No conference set" />}
-      </span>
-
-      {/* State */}
-      <span className={cn(COL.state, "text-[12px] text-[var(--ink-700)]")}>
-        {row.state ?? <EmptyMark label="No state set" />}
-      </span>
-
-      {/* Members — the one measure compared down its column, flush right. */}
+      {/* Members — the one count compared down its column, flush right. */}
       <span
         className={cn(
           COL.members,
@@ -221,33 +246,12 @@ function TeamRow({
         )}
       </span>
 
-      {/* Plan — fixed-width cell so Owner starts at the same x on every row. */}
-      <span className={cn(COL.plan, "flex items-center")}>
-        {row.plan === "pilot" ? (
-          <PilotPill />
-        ) : row.plan === "approve" ? (
-          // The one control in this row that must NOT navigate. A wrapping
-          // `<span onClick={stopPropagation}>` does not work here: React
-          // dispatches the click button → span → outer anchor, so
-          // `stopPropagation()` on the span only halts further bubbling —
-          // it runs *after* the anchor's own `onClick` (where `next/link`
-          // calls `preventDefault()`) would have needed to run. Without that
-          // `preventDefault()`, the browser still performs the anchor's
-          // default navigation. So the guard has to live in `ApproveChip`'s
-          // own `onClick`, called directly on its `<button>`.
-          <ApproveChip
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onApprove?.(row);
-            }}
-          />
-        ) : (
-          <EmptyMark label="No plan yet" />
-        )}
-      </span>
+      {/* Video hours this month — bar, then "X of Y h". */}
+      <div className={cn(COL.hours, "flex min-w-0 items-center gap-2.5")}>
+        <VideoHours row={row} />
+      </div>
 
-      {/* Owner — avatar and name, the second fluid cell. */}
+      {/* Owner — avatar and name, the one fluid cell. */}
       <span className={cn(COL.owner, "flex min-w-0 items-center gap-2")}>
         {row.ownerName ? (
           <>
@@ -269,5 +273,46 @@ function TeamRow({
         <RowChevron />
       </span>
     </Link>
+  );
+}
+
+/**
+ * The hours cell: the program page's own `HoursMeter`, so the list and the
+ * team page draw one bar, and "X of Y h" in `formatHoursShort`'s one-decimal
+ * hours. Severity rides the fill (blue, amber from 80%, red at the cap) and
+ * the figure steps from ink-600 to a medium ink-900 with it, so the state is never colour alone.
+ * Null values — the usage read failed — draw the dash and no bar: an empty
+ * bar would claim the program has used nothing.
+ */
+function VideoHours({ row }: { row: AdminTeamRow }) {
+  const used = row.videoUsedSeconds;
+  const cap = row.videoCapSeconds;
+  if (used == null || cap == null) {
+    return <EmptyMark label="Video hours unavailable" />;
+  }
+  const fraction = usageFraction(used, cap);
+  const severity = hoursSeverity(fraction);
+  return (
+    <>
+      <div className="min-w-0 flex-1">
+        <HoursMeter
+          usedSeconds={used}
+          capSeconds={cap}
+          fraction={fraction}
+          fill={HOURS_FILL[severity]}
+          label={`${row.name} video hours this month`}
+        />
+      </div>
+      <span
+        className={cn(
+          "tabular shrink-0 text-[12px] whitespace-nowrap",
+          severity === "ok"
+            ? "text-[var(--ink-600)]"
+            : "font-medium text-[var(--ink-900)]",
+        )}
+      >
+        {formatHoursShort(used)} of {formatHoursShort(cap)} h
+      </span>
+    </>
   );
 }
