@@ -268,6 +268,28 @@ test.describe("players at the wrong end", () => {
     expect(swap.pointIds).toEqual(["set1-g13-p7"]);
   });
 
+  test("a replayed let is no point of the six: the ends change after six PLAYED points", () => {
+    // Ten rows of a tiebreak, two of them lets that were replayed, so the
+    // players change ends before the ninth row — the seventh played point —
+    // not before the seventh row.
+    const tiebreak = { gameType: "tiebreak" as const };
+    const rows = [
+      ...game(1, 13, 12, 6, { ...tiebreak, count: 6 }),
+      ...game(1, 13, 18, 6, { ...tiebreak, count: 2 }),
+      ...game(1, 13, 20, 7, { ...tiebreak, count: 2 }),
+    ].map((point, k) => ({
+      ...point,
+      id: `tb-${k + 1}`,
+      ending: k === 1 || k === 4 ? ("let_replayed" as const) : null,
+    }));
+    expect(courtEndSwaps([...setOne(), ...rows], SETTLED)).toEqual([]);
+    // Counted as points, the same rows read as two points at the wrong end:
+    // what the slot said before, against the serve order, which skips lets.
+    const counted = rows.map((point) => ({ ...point, ending: null }));
+    const [swap] = courtEndSwaps([...setOne(), ...counted], SETTLED);
+    expect(swap.pointIds).toEqual(["tb-7", "tb-8"]);
+  });
+
   test("a start score moves the changeovers: the video's first game is game 2", () => {
     // One game already played: the video's first game is played after a
     // change of end, so p1 is far there.

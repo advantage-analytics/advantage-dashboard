@@ -131,6 +131,31 @@ test.describe("planShotReset: a let only on a serve", () => {
 });
 
 test.describe("planPointReset", () => {
+  test("a point moved to another game stays in it: its set, game and that game's server are kept, and it is still edited", () => {
+    // Seeded in one game, moved by a boundary, a combine or a set join: the
+    // winner and ending go back, but not where the point sits — putting the
+    // seeded game back would score one row against a game elsewhere.
+    const moved = planPointReset({
+      status: "edited",
+      seed: POINT_SEED,
+      shots: [],
+      setNumber: (POINT_SEED.set_number ?? 1) + 1,
+      gameNumber: (POINT_SEED.game_number ?? 1) + 7,
+      server: POINT_SEED.server === "p1" ? "p2" : "p1",
+    });
+    expect(moved).toEqual({
+      ok: true,
+      write: {
+        ...POINT_SEED,
+        set_number: (POINT_SEED.set_number ?? 1) + 1,
+        game_number: (POINT_SEED.game_number ?? 1) + 7,
+        server: POINT_SEED.server === "p1" ? "p2" : "p1",
+        status: "edited",
+      },
+      shots: [],
+    });
+  });
+
   test("writes the point's own seeded fields, and unchanged", () => {
     const plan = planPointReset({
       status: "edited",
@@ -142,6 +167,17 @@ test.describe("planPointReset", () => {
       write: { ...POINT_SEED, status: "unchanged" },
       shots: [],
     });
+    // In the game it was seeded in, its set, game and server go back too.
+    expect(
+      planPointReset({
+        status: "edited",
+        seed: POINT_SEED,
+        shots: [],
+        setNumber: POINT_SEED.set_number,
+        gameNumber: POINT_SEED.game_number,
+        server: "p2",
+      }),
+    ).toEqual(plan);
     // Never the note, the checked mark, the game type or a stroke's other
     // values.
     if ("error" in plan) throw new Error(plan.error);

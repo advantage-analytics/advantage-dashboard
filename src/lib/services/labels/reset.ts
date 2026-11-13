@@ -44,9 +44,13 @@ export type ShotResetWrite = LabelShotSeedValues & {
   result_called: false;
 };
 
-/** The columns a point reset writes: its seed (less the game type), and `unchanged`. */
+/**
+ * The columns a point reset writes: its seed (less the game type), and
+ * `unchanged` — or, for a point that sits in another game than it was seeded
+ * in, the game it sits in now and `edited` (see `planPointReset`).
+ */
 export type PointResetWrite = Omit<LabelPointSeedValues, "game_type"> & {
-  status: "unchanged";
+  status: "unchanged" | "edited";
 };
 
 /** The whole point reset: its own columns, and each stroke whose hitter goes back. */
@@ -88,7 +92,8 @@ export function planShotReset(current: {
 }
 
 /**
- * Reset a point's own fields to its seed — see {@link planShotReset} — and
+ * Reset a point's own fields to its seed — see {@link planShotReset} — less
+ * its place in the match when it has been moved to another game — and
  * each of its strokes' hitter to the stroke's seed. A stroke already hit by
  * its seeded hitter, or with no seed, gets no write; one that goes back
  * takes the status a hitter patch gives it (`planShotHitter`), a tombstone
@@ -98,6 +103,13 @@ export function planPointReset(current: {
   status: LabelPointStatus;
   seed: LabelPointSeedValues | null;
   shots: readonly SwapShot[];
+  /**
+   * Where the point sits now. A point moved to another game than its seed's
+   * — a boundary dragged, games combined, a set cut or joined — stays there.
+   */
+  setNumber?: number | null;
+  gameNumber?: number | null;
+  server?: LabelPointSeedValues["server"];
 }): PlannedPointReset {
   if (current.status === "deleted") {
     return { error: "Restore this point before resetting it." };
@@ -119,6 +131,30 @@ export function planPointReset(current: {
   // The seeded game type is for the opening scorecard, never a value Reset
   // puts back: a game's type is set for the whole game by its own operation.
   const { game_type: _gameType, ...values } = current.seed;
+  // Which game a point belongs to is the game's to say, not the point's:
+  // the labeller moved it there with a game operation, and putting its
+  // seeded set and game back would lift it out of the game its neighbours
+  // are in — one row scored against a game elsewhere in the match. So a
+  // moved point keeps its set, its game and that game's server, and is
+  // still `edited`: it differs from its seed by where it sits.
+  const { setNumber, gameNumber } = current;
+  const moved =
+    setNumber != null &&
+    gameNumber != null &&
+    (setNumber !== values.set_number || gameNumber !== values.game_number);
+  if (moved) {
+    return {
+      ok: true,
+      write: {
+        ...values,
+        set_number: setNumber,
+        game_number: gameNumber,
+        server: current.server ?? values.server,
+        status: "edited",
+      },
+      shots,
+    };
+  }
   return { ok: true, write: { ...values, status: "unchanged" }, shots };
 }
 

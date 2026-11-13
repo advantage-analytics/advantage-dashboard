@@ -42,6 +42,7 @@ import type { LabelGame } from "./operations";
 import { gameKey, type LabelGameBand, type ScorablePoint } from "./score";
 import {
   isLiveShot,
+  isNonPointEnding,
   type LabelPoint,
   type LabelShot,
   type LabelSide,
@@ -71,7 +72,9 @@ export type CourtEndPoint = Pick<
   | "gameNumber"
   | "gameType"
   | "gameStartLocked"
-> & { shots: readonly CourtEndShot[] };
+> &
+  // A replayed let is no point of a tiebreak's six (`playedBefore`).
+  Partial<Pick<LabelPoint, "ending">> & { shots: readonly CourtEndShot[] };
 
 export type CourtEndShot = Pick<
   SwapShot,
@@ -138,13 +141,18 @@ export function courtEndSwaps(
       const pointsBefore =
         tiebreak && i === 0 && start ? start.points[0] + start.points[1] : 0;
       const changes = Math.floor((gamesBefore + gameInSet) / 2);
+      // A tiebreak changes ends every six POINTS: a let that was replayed
+      // is not one, so it and the point after it sit at the same end — as
+      // the serve order counts them (game-operations.ts `rotateServers`).
+      const played = playedBefore(live);
       return {
         game: { setNumber, gameNumber },
         gameInSet,
         live,
         turned: live.map((_, k) =>
           tiebreak
-            ? changes + Math.floor((pointsBefore + k) / TIEBREAK_CHANGE_EVERY)
+            ? changes +
+              Math.floor((pointsBefore + played[k]) / TIEBREAK_CHANGE_EVERY)
             : changes,
         ),
       };
@@ -188,7 +196,7 @@ export function courtEndSwaps(
                 ? {
                     games: setGames,
                     tiebreakPoints:
-                      last.live.length +
+                      last.live.filter(isPlayedPoint).length +
                       (games.length === 1 && start
                         ? start.points[0] + start.points[1]
                         : 0),
@@ -224,6 +232,21 @@ export function courtEndSwaps(
     }
   }
   return swaps.sort((a, b) => a.pointNumber - b.pointNumber);
+}
+
+/** A point that counts toward a tiebreak's six: not a replayed let or a non-point. */
+function isPlayedPoint(point: CourtEndPoint): boolean {
+  return !isNonPointEnding(point.ending ?? null);
+}
+
+/** For each of `live`, how many played points come before it in the game. */
+function playedBefore(live: readonly CourtEndPoint[]): number[] {
+  let played = 0;
+  return live.map((point) => {
+    const before = played;
+    if (isPlayedPoint(point)) played += 1;
+    return before;
+  });
 }
 
 /**

@@ -52,6 +52,7 @@ import {
   type LabelSide,
 } from "./session";
 import {
+  deriveShotResult,
   effectiveShotResult,
   labellerCall,
   inServeLandingMiss,
@@ -936,7 +937,9 @@ export function lastCallAnswer(
  * opposite call on that ball would: In to Out for a ball the other side hit
  * in, Out or Net to In for one `gameWinner` missed. A dragged boundary is the
  * labeller's word, so the winner the game needs is likelier right than the
- * call on the last ball — unless that call is the labeller's own. Null otherwise — a point the strokes already give to
+ * call on the last ball — unless that call is the labeller's own, or the
+ * ball's coordinates read the same as its stored call (2026-11-13: asked only
+ * where the landing and the call disagree). Null otherwise — a point the strokes already give to
  * `gameWinner` is "Different ending?"'s, and one whose last ball settles
  * nothing has no call to flip. Offered on a click, never applied: the answer
  * writes the call (`result_called`), and the ending and winner follow it.
@@ -958,6 +961,18 @@ export function lastBallAgainstGame(
   // opposite straight after only invites them to undo it. The band's "Check
   // N points" still says the game does not add up.
   if (labellerCall(last)) return null;
+  // Only where the ball's own coordinates read differently from its stored
+  // call: with the landing and the call agreeing there is nothing on the
+  // court to doubt, and a ball with an end unplaced has no reading to
+  // disagree. The band's "Check N points" covers the game either way.
+  const read = deriveShotResult({
+    stroke: last.stroke,
+    contact_x: last.contactX,
+    contact_y: last.contactY,
+    landing_x: last.landingX,
+    landing_y: last.landingY,
+  });
+  if (read === null || read === last.result) return null;
   const call: "in" | "out" = isMissedResult(last.result) ? "in" : "out";
   const flipped = deriveEnding(
     {

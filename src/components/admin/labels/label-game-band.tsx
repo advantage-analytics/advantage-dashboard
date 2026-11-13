@@ -15,7 +15,10 @@ import {
   gameTypeOf,
   livePointsOfGame,
 } from "@/lib/services/labels/game-operations";
-import type { GameCombineDirection } from "@/lib/services/labels/game-shift";
+import type {
+  GameCombineDirection,
+  GameCombineOption,
+} from "@/lib/services/labels/game-shift";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
   gameKey,
@@ -139,7 +142,7 @@ export interface GameBandMenuAction {
  */
 export function gameBandCombineActions(
   game: LabelGame,
-  combine: { above?: number; below?: number } | undefined,
+  combine: GameCombineOption | undefined,
   onCombineGames:
     ((gameKey: string, direction: GameCombineDirection) => void) | undefined,
 ): GameBandMenuAction[] {
@@ -277,7 +280,7 @@ export const LabelGameBand = memo(function LabelGameBand({
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
   /** The neighbours this game can be combined with; absent, none. */
-  combine?: { above?: number; below?: number };
+  combine?: GameCombineOption;
   /** Present with `combine`: the game menu offers the combine actions. */
   onCombineGames?: (gameKey: string, direction: GameCombineDirection) => void;
   /**
@@ -446,13 +449,13 @@ export const LabelGameBand = memo(function LabelGameBand({
   );
 });
 
+const NO_ACTIONS: readonly GameBandMenuAction[] = [];
+
 /**
  * One of the band's triggers and its menu. The trigger is 22px tall for the
  * pointer and takes 14px of the band (`-my-1`), so a band with menus is exactly
  * as tall as one without.
  */
-const NO_ACTIONS: readonly GameBandMenuAction[] = [];
-
 function BandMenu({
   kind,
   name,

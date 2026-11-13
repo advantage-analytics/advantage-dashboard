@@ -810,10 +810,16 @@ export function planGamePullFrom(
   };
 }
 
-// ── Combine a game with the one above it ────────────────────────────────────
+// ── Combine a game with the one above or below it ────────────────────────────────────
 
 /** Which neighbour a game is combined with, as the band's menu names it. */
 export type GameCombineDirection = "above" | "below";
+
+/** The neighbours a game can be combined with, by their place in the set. */
+export interface GameCombineOption {
+  above?: number;
+  below?: number;
+}
 
 export interface GameCombineSummary {
   /** Rows that change game. */
@@ -929,8 +935,8 @@ export function planGameCombine(
  */
 export function gameCombineOptions(
   bands: readonly LabelGameBand[],
-): Map<string, { above?: number; below?: number }> {
-  const options = new Map<string, { above?: number; below?: number }>();
+): Map<string, GameCombineOption> {
+  const options = new Map<string, GameCombineOption>();
   const pair = (a: LabelGameBand | undefined, b: LabelGameBand) =>
     a !== undefined &&
     a.setNumber === b.setNumber &&

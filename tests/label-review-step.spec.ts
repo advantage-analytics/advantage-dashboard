@@ -772,3 +772,35 @@ test.describe("the shank reading", () => {
     expect(landedOnOwnSide({})).toBe(false);
   });
 });
+
+test.describe("the serves item's split", () => {
+  test("one Split here, at the earliest serve the two serve checks name", () => {
+    // A serve in play, a second serve straight after it from the same side,
+    // then a third from the other side: "Serve after a serve in play" names
+    // the second and "Serves from both sides" the third.
+    const serve = (id: string, n: number, contactX: number) =>
+      stroke(id, n, {
+        hitter: "p1",
+        stroke: "first_serve",
+        contactX,
+        contactY: 1,
+        landingX: -2,
+        landingY: 17,
+      });
+    const point = labelPoint(POINT, 0, {
+      winner: "p2",
+      ending: "winner",
+      endedBy: "p2",
+      shots: [
+        serve("a", 1, 1.2),
+        serve("b", 3, 1.2),
+        serve("c", 5, -1.2),
+        stroke("d", 6),
+      ],
+    });
+    const s = step(point);
+    const splits = s!.answers.filter((a) => a.label === "Split here");
+    expect(splits).toHaveLength(1);
+    expect(splits[0].writes).toEqual([{ write: "split", shotId: "b" }]);
+  });
+});

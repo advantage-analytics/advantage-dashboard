@@ -56,8 +56,35 @@ function rally(
   index: number,
   lastHitter: LabelSide,
   lastResult: LabelShot["result"],
+  /**
+   * How the last ball's coordinates read against its stored call: `against`
+   * (the default — a landing that reads the other way, which is when the
+   * game asks), `with` it, or `none` placed.
+   */
+  landing: "against" | "with" | "none" = "against",
 ): LabelPoint {
   const t = index * 10;
+  // Lee hits from the near baseline, Vargas from the far one; a ball lands
+  // deep in the other half, or a metre past its baseline.
+  const reads = (result: "in" | "out") =>
+    lastHitter === "p1"
+      ? {
+          contactX: 0,
+          contactY: 1,
+          landingX: 0,
+          landingY: result === "in" ? 20 : 25,
+        }
+      : {
+          contactX: 0,
+          contactY: 22,
+          landingX: 0,
+          landingY: result === "in" ? 3 : -1.5,
+        };
+  const missedCall = lastResult === "out" || lastResult === "net";
+  const ends =
+    landing === "none" || lastResult === null
+      ? {}
+      : reads((landing === "with") === missedCall ? "out" : "in");
   const shots: LabelShot[] = [
     labelShot(`${id}-s1`, id, {
       hitter: "p1",
@@ -76,6 +103,7 @@ function rally(
       stroke: "backhand",
       result: lastHitter === "p1" ? lastResult : "in",
       videoTime: t + 2,
+      ...(lastHitter === "p1" ? ends : {}),
     }),
     ...(lastHitter === "p2"
       ? [
@@ -84,6 +112,7 @@ function rally(
             stroke: "forehand",
             result: lastResult,
             videoTime: t + 3,
+            ...ends,
           }),
         ]
       : []),
@@ -171,6 +200,25 @@ test.describe("Was the last ball out? for a locked game", () => {
       ending: "let_replayed" as const,
     };
     expect(lastBallAgainstGame(let_, "p1", true)).toBeNull();
+  });
+
+  test("only where the landing reads differently from the call: agreeing, or unplaced, it is not asked", () => {
+    // Vargas's winner stored in: the game needs Lee, and asks whether it was
+    // out only where the ball's own landing reads out.
+    expect(
+      lastBallAgainstGame(rally("c", 2, "p2", "in", "against"), "p1", true)
+        ?.params.call,
+    ).toBe("out");
+    expect(
+      lastBallAgainstGame(rally("c", 2, "p2", "in", "with"), "p1", true),
+    ).toBeNull();
+    expect(
+      lastBallAgainstGame(rally("c", 2, "p2", "in", "none"), "p1", true),
+    ).toBeNull();
+    // Lee's error stored out with a landing that reads out too: not asked.
+    expect(
+      lastBallAgainstGame(rally("c", 2, "p1", "out", "with"), "p1", true),
+    ).toBeNull();
   });
 
   test("never against a call the labeller made: answering “Was the last ball out?” is not asked back as in", () => {

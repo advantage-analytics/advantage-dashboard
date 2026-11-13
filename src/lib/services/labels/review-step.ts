@@ -739,18 +739,27 @@ function stepAnswers(
       break;
     }
     case 3: {
-      for (const { mark } of openMembers(item)) {
-        if (
+      // One "Split here", at the earliest serve either check names: two
+      // answers with one label would not say which shot each splits at, and
+      // the later one is asked again on the point the split leaves.
+      const inOrder = liveShotsInOrder(point, ghosts).map((shot) => shot.id);
+      const splitAt = openMembers(item)
+        .flatMap(({ mark }) =>
           mark.code === "serve_after_serve_in" ||
           mark.code === "serves_from_both_sides"
-        ) {
-          answers.push({
-            id: "split",
-            label: SPLIT_ANSWER,
-            kind: "plain",
-            writes: [{ write: "split", shotId: mark.params.shotId }],
-          });
-        }
+            ? [mark.params.shotId]
+            : [],
+        )
+        .sort((a, b) => inOrder.indexOf(a) - inOrder.indexOf(b))[0];
+      if (splitAt !== undefined) {
+        answers.push({
+          id: "split",
+          label: SPLIT_ANSWER,
+          kind: "plain",
+          writes: [{ write: "split", shotId: splitAt }],
+        });
+      }
+      for (const { mark } of openMembers(item)) {
         if (mark.code === "second_serve_as_first") {
           answers.push({
             id: "second-serve",
