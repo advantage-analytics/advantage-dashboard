@@ -187,6 +187,17 @@ export interface MatchReportMeta {
    */
   playbackEndpoint: string | null;
   /**
+   * Where a read-only mount reads the match's ball-paths file. The match's own
+   * `/api/matches/${matchId}/ball-paths` asks the reader's session whether
+   * they can see the match, so a read-only mount — a share link, the sample —
+   * does not ask at all and its lob figures are a dash. The admin report is
+   * read-only too, but its reader is signed in and gated by `is_admin`, so it
+   * names `/admin/matches/${matchId}/ball-paths` here and the file is read
+   * from that. `null` — the default — leaves a read-only mount without one;
+   * a mount that is not read-only always uses the match's own route.
+   */
+  ballPathsEndpoint: string | null;
+  /**
    * The views this report offers, in rail order. All three under
    * `/dashboard`; on `/m/[token]` only what the link carries. The rail
    * switcher draws these rows and `?tab=` cannot open anything else.
@@ -230,6 +241,7 @@ export interface MatchReportProviderProps extends Omit<
   | "readOnly"
   | "sample"
   | "playbackEndpoint"
+  | "ballPathsEndpoint"
   | "statsUnavailable"
   | "foldUnreconciled"
   | "views"
@@ -246,6 +258,14 @@ export interface MatchReportProviderProps extends Omit<
   sample?: boolean;
   /** See `MatchReportMeta.playbackEndpoint`. Defaults to `null`. */
   playbackEndpoint?: string | null;
+  /** See `MatchReportMeta.ballPathsEndpoint`. Defaults to `null`. */
+  ballPathsEndpoint?: string | null;
+  /**
+   * Whether opening this report sends `match_viewed`. Defaults to `true`. The
+   * admin report passes `false`: it is read-only, and a read-only report's
+   * view is sent as a `share_link` one, which an admin's visit is not.
+   */
+  recordView?: boolean;
   /**
    * The view a URL without `?tab=` opens at — the reader's "Match report opens
    * at" preference, resolved in `page.tsx`. An explicit `?tab=` still wins.
@@ -272,6 +292,8 @@ export function MatchReportProvider({
   readOnly = false,
   sample = false,
   playbackEndpoint = null,
+  ballPathsEndpoint = null,
+  recordView = true,
   views = ALL_REPORT_VIEWS,
   defaultView = "statistics",
   children,
@@ -282,7 +304,8 @@ export function MatchReportProvider({
   const view = parseReportView(searchParams.get("tab"), defaultView, views);
 
   // One `match_viewed` per match and tab shown. The sample match is a demo,
-  // not a report anyone chose to open, so it is left out. The source is read
+  // not a report anyone chose to open, so it is left out; so is a mount that
+  // asks not to be counted (`recordView`, the admin report). The source is read
   // once per match, on arrival: a later tab switch must not report the
   // report itself as where the visit came from.
   const viewSourceRef = useRef<{
@@ -290,7 +313,7 @@ export function MatchReportProvider({
     source: MatchViewSource | null;
   } | null>(null);
   useEffect(() => {
-    if (sample) return;
+    if (sample || !recordView) return;
     if (viewSourceRef.current?.matchId !== matchId) {
       viewSourceRef.current = {
         matchId,
@@ -302,7 +325,7 @@ export function MatchReportProvider({
       tab: view,
       source: viewSourceRef.current.source,
     });
-  }, [matchId, view, readOnly, sample, pathname]);
+  }, [matchId, view, readOnly, sample, recordView, pathname]);
 
   // Collapse is only this visit's state; every visit opens expanded.
   const [insight, setInsight] = useState<InsightStatus>("expanded");
@@ -412,6 +435,7 @@ export function MatchReportProvider({
       readOnly,
       sample,
       playbackEndpoint,
+      ballPathsEndpoint,
       views,
     }),
     [
@@ -432,6 +456,7 @@ export function MatchReportProvider({
       readOnly,
       sample,
       playbackEndpoint,
+      ballPathsEndpoint,
       views,
     ],
   );
