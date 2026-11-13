@@ -71,3 +71,23 @@ test("a real failure is reported, and the next good step clears the sentence", a
   expect(await boundaryErrors(page)).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test("a deploy that retired the action says to reload, not to try again", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  await openHarness(page, harness.origin, errors);
+  await failActionsWith(page, "stale");
+
+  await page.getByRole("button", { name: "Previous month" }).click();
+
+  // No retry from this tab can work, so the sentence must not offer one.
+  await expect(page.getByRole("alert")).toHaveText(
+    "This page is out of date. Reload it and try again.",
+  );
+  await expect(page.getByText("Nov 2026")).toBeVisible();
+  expect(await boundaryErrors(page)).toEqual([]);
+  expect(errors).toEqual([]);
+  // Every open tab meets a deploy; it is not a failure to report.
+  expect(await capturedExceptions(page)).toEqual([]);
+});

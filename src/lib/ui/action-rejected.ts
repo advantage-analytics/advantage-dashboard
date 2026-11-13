@@ -91,10 +91,15 @@ export function actionRejectedMessage(error: unknown): {
  * "whether the change was saved" means nothing, or the second half of a write
  * that must say which half landed. Navigation still rethrows and a real failure
  * is still reported.
+ *
+ * A deploy that retired the action keeps `STALE_PAGE`: the caller's sentence
+ * usually says to try again, and no retry from that tab can ever succeed.
  */
 export function actionRejectedWith(sentence: string) {
   return (error: unknown): { ok: false; error: string } => {
-    actionRejected(error);
-    return { ok: false, error: sentence };
+    const refusal = actionRejected(error);
+    return refusal.error === STALE_PAGE
+      ? refusal
+      : { ok: false, error: sentence };
   };
 }
