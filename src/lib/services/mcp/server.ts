@@ -1,5 +1,5 @@
 /**
- * The Ask MCP server: ten tools over the signed-in user's own match data,
+ * The Ask MCP server: twelve tools over the signed-in user's own match data,
  * for a Claude of their own (claude.ai, Claude Desktop, Claude Code) to
  * call (docs/ask-mcp-connector.md; docs/ask-improvement-roadmap.md, slice 3).
  *
@@ -113,6 +113,21 @@ import {
   type RateLimiter,
 } from "@/lib/services/mcp/rate-limit";
 import { matchPageUrl, matchShareUrl } from "@/lib/data/match-share-url";
+import {
+  POINT_LAST_SHOTS,
+  POINT_MISSES,
+  POINT_RETURN_STROKES,
+  POINT_SERVE_RESULTS,
+  POINT_SERVE_ZONES,
+  POINT_SITUATIONS,
+  videoLink,
+  VISUALIZATION_CHARTS,
+  VISUALIZATION_CUT_NAMES,
+  VISUALIZATION_ERRORS,
+  VISUALIZATION_PRESSURE,
+  visualizationLink,
+} from "@/lib/services/mcp/links";
+import { MAX_POINT_SET } from "@/lib/match-video/point-set";
 import { roundKindFor } from "@/lib/matches/round-options";
 import { siteUrl } from "@/lib/site-url";
 import {
@@ -159,6 +174,8 @@ export interface AskMcpContext {
     event: string,
     properties: Record<string, string | number | boolean | null>,
   ) => void;
+  /** Which app is calling, for the product events only (`mcpClientFromUserAgent`). */
+  client?: { client: string; agent: string | null };
   now?: () => Date;
 }
 
@@ -173,7 +190,7 @@ const MAX_SQL_LENGTH = 20_000;
 /** How many of the scope's matches a query result lists back. */
 const MAX_LISTED_SOURCES = 100;
 
-const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarising one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, and ask to have Advantage answer a whole question (it saves the exchange to the player's Ask history and spends one of their monthly questions). Two more tools write: update_match fixes a match's details (never its score), and prepare_video_upload saves a draft and returns the link where the player picks the video and finishes — confirm what the player wants before calling either. Before setting an opponent's school, call search_programs and pass the program's id to update_match as opponent_program_id; send opponent_school text only for a school the directory does not hold. Practice never counts: a match whose match_type is practice (any case or padding) is left out of every record, win–loss count, head-to-head and season statistic unless the player asks about practice — opponent_scouting already leaves practice out, and a record you count from list_matches or run_query must too. Every number you report must come from a tool result; the views hold nobody else's data, except the matches of teams the player belongs to.`;
+const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarising one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, open_visualization for a link to one court chart of a match (or of a team player's season) with filters applied, find_points for a link that plays chosen points of a match in its Video tab (by situation, serve, how the point ended, or how long the rally was), and ask to have Advantage answer a whole question (it saves the exchange to the player's Ask history and spends one of their monthly questions). Two more tools write: update_match fixes a match's details (never its score), and prepare_video_upload saves a draft and returns the link where the player picks the video and finishes — confirm what the player wants before calling either. Before setting an opponent's school, call search_programs and pass the program's id to update_match as opponent_program_id; send opponent_school text only for a school the directory does not hold. Practice never counts: a match whose match_type is practice (any case or padding) is left out of every record, win–loss count, head-to-head and season statistic unless the player asks about practice — opponent_scouting already leaves practice out, and a record you count from list_matches or run_query must too. Every number you report must come from a tool result; the views hold nobody else's data, except the matches of teams the player belongs to.`;
 
 const PROGRAM_NOT_FOUND =
   "That program isn't in the directory. Find its id with search_programs.";
@@ -244,7 +261,7 @@ const MATCH_ROW_COLUMNS = [
 
 /** `scope_sql` for one match: the view decides whether the caller may see it. */
 function oneMatchScope(matchId: string): string {
-  // `matchId` is a uuid by the time it gets here (`z.string().uuid()`), so
+  // `matchId` is a uuid by the time it gets here (`UUID()`), so
   // the literal cannot carry anything but a uuid.
   return `select match_id from ask.matches where match_id = '${matchId}'`;
 }
@@ -434,13 +451,72 @@ function json(structured: Row, summary?: string): CallToolResult {
   };
 }
 
-const PROGRAM_ID = z
-  .string()
-  .uuid()
+/**
+ * Every tool reads the app's own data and nothing on the open web. Said
+ * outright because the MCP default for `openWorldHint` is true: ChatGPT
+ * lists the hint as required, and the Gemini app asks for a confirmation on
+ * any tool that leaves it true.
+ */
+const READ_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+const UUID_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/**
+ * A uuid as every client's schema reader takes it: a string with one short
+ * pattern. zod's own `.uuid()` emits `format: "uuid"` beside a
+ * 150-character pattern, and the Gemini app and Copilot Studio accept a
+ * narrower JSON Schema than Claude does.
+ */
+const UUID = () => z.string().regex(UUID_PATTERN, "must be a uuid");
+
+const PROGRAM_ID = UUID()
   .optional()
   .describe(
     "A program's id, to read that program's matches as a member of it. Omit for the player's own matches.",
   );
+
+/** The `update_match` fields a caller may empty, by the names the tool takes them under. */
+const CLEARABLE_MATCH_FIELDS = [
+  "tournament_name",
+  "round",
+  "match_type",
+  "court_type",
+  "opponent_school",
+  "opponent_program_id",
+  "opponent_hand",
+  "opponent_backhand",
+] as const;
+
+/**
+ * The roster players a season link's `player_id` or `player_name` names. An
+ * id is exact. A name that is somebody's whole name is them alone, so "Sam
+ * Lee" is not made ambiguous by "Sam Leeson"; otherwise it is everyone the
+ * text appears in.
+ */
+function seasonPlayersNamed<
+  T extends { player_id: string; name: string | null },
+>(
+  roster: readonly T[],
+  playerId: string | undefined,
+  playerName: string | undefined,
+): T[] {
+  if (playerId !== undefined) {
+    const id = playerId.toLowerCase();
+    return roster.filter((player) => player.player_id === id);
+  }
+  const needle = (playerName ?? "").trim().toLowerCase();
+  const nameOf = (player: T) => (player.name ?? "").trim().toLowerCase();
+  const exact = roster.filter((player) => nameOf(player) === needle);
+  return exact.length > 0
+    ? exact
+    : roster.filter((player) => nameOf(player).includes(needle));
+}
 
 /** The read tools' descriptions, shared by the connector and Ask's agent mode. */
 const READ_TOOL_DESCRIPTIONS = {
@@ -526,6 +602,26 @@ export function askReadHandlers(deps: AskReadDeps) {
     };
   }
 
+  /** The match's row, read through the view: a match outside the scope has no row. */
+  async function matchInScope(scope: AskScope, matchId: string): Promise<Row> {
+    const team = scope.kind === "team";
+    const { rows } = await runAskQuery(
+      scope,
+      oneMatchScope(matchId),
+      matchRowSql(team),
+    );
+    const row = rows[0];
+    if (!row) {
+      throw refusal(
+        "match_not_found",
+        team
+          ? "This match is not in the program's matches."
+          : "This match is not in your matches.",
+      );
+    }
+    return row;
+  }
+
   // ── list_matches ───────────────────────────────────────────────────────
   async function listMatches({
     program_id,
@@ -577,21 +673,7 @@ export function askReadHandlers(deps: AskReadDeps) {
   }): Promise<CallToolResult> {
     const scope = await resolveScope(program_id);
     const team = scope.kind === "team";
-    // The view decides visibility: a match outside the scope has no row.
-    const { rows } = await runAskQuery(
-      scope,
-      oneMatchScope(match_id),
-      matchRowSql(team),
-    );
-    const row = rows[0];
-    if (!row) {
-      throw refusal(
-        "match_not_found",
-        team
-          ? "This match is not in the program's matches."
-          : "This match is not in your matches.",
-      );
-    }
+    const row = await matchInScope(scope, match_id);
     const [{ rows: statRows }, report] = await Promise.all([
       row.has_stats === true
         ? runAskQuery(scope, oneMatchScope(match_id), MATCH_STATS_SQL)
@@ -697,6 +779,7 @@ export function askReadHandlers(deps: AskReadDeps) {
   return {
     resolveScope,
     runAskQuery,
+    matchInScope,
     listMatches,
     listWorkspaces,
     getMatch,
@@ -718,7 +801,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     reads: context.reads,
     userId: context.caller.userId,
   });
-  const { resolveScope, runAskQuery } = read;
+  const { resolveScope, runAskQuery, matchInScope } = read;
 
   // ── The guard every tool runs under ────────────────────────────────────
   // The two limits first, then the tool; one `mcp_tool_call` event however
@@ -778,6 +861,8 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           ok,
           error_code: code,
           auth: context.caller.kind,
+          client: context.client?.client ?? "other",
+          client_agent: context.client?.agent ?? null,
         });
       }
     };
@@ -790,7 +875,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       title: "List matches",
       description: READ_TOOL_DESCRIPTIONS.list_matches,
       inputSchema: { program_id: PROGRAM_ID },
-      annotations: { readOnlyHint: true, idempotentHint: true },
+      annotations: READ_ONLY,
     },
     guarded("list_matches", read.listMatches),
   );
@@ -803,7 +888,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       description:
         "The caller's workspaces: their personal one (their own matches, the default scope) and every program they belong to, with their role in it (owner, coach, staff or player). A program's id is the program_id the other tools take; call this first when a team or program is mentioned.",
       inputSchema: {},
-      annotations: { readOnlyHint: true, idempotentHint: true },
+      annotations: READ_ONLY,
     },
     guarded("list_workspaces", read.listWorkspaces),
   );
@@ -815,10 +900,10 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       title: "Get a match report",
       description: READ_TOOL_DESCRIPTIONS.get_match,
       inputSchema: {
-        match_id: z.string().uuid().describe("A match id from list_matches."),
+        match_id: UUID().describe("A match id from list_matches."),
         program_id: PROGRAM_ID,
       },
-      annotations: { readOnlyHint: true, idempotentHint: true },
+      annotations: READ_ONLY,
     },
     guarded("get_match", read.getMatch),
   );
@@ -841,7 +926,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           ),
         program_id: PROGRAM_ID,
       },
-      annotations: { readOnlyHint: true, idempotentHint: true },
+      annotations: READ_ONLY,
     },
     guarded("opponent_scouting", read.opponentScouting),
   );
@@ -882,7 +967,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           .optional()
           .describe("At most this many programs; 10 when omitted."),
       },
-      annotations: { readOnlyHint: true, idempotentHint: true },
+      annotations: READ_ONLY,
     },
     guarded(
       "search_programs",
@@ -972,36 +1057,32 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     {
       title: "Update a match's details",
       description:
-        "Change the details of a match the player created: the opponent's name, tournament, round, date (YYYY-MM-DD), match type, court surface, the opponent's school, hand and backhand. Only the fields passed change; pass null to clear one. Prefer `opponent_program_id` from `search_programs`. Use `opponent_school` text only for schools that are not in the directory. Text that is exactly one program's name for the scope's team is linked instead and answered as linked_program; any other text is saved as typed and answered with candidates to retry by id. The score, the format and who played are never changed here — they are edited on the match page, where a score change can rebuild the statistics. A match on a scheduled event takes its tournament, date, round, type and surface from the event and refuses them (field_locked).",
+        "Change the details of a match the player created: the opponent's name, tournament, round, date (YYYY-MM-DD), match type, court surface, the opponent's school, hand and backhand. Only the fields passed change; to empty a field, name it in clear. Prefer `opponent_program_id` from `search_programs`. Use `opponent_school` text only for schools that are not in the directory. Text that is exactly one program's name for the scope's team is linked instead and answered as linked_program; any other text is saved as typed and answered with candidates to retry by id. The score, the format and who played are never changed here — they are edited on the match page, where a score change can rebuild the statistics. A match on a scheduled event takes its tournament, date, round, type and surface from the event and refuses them (field_locked).",
       inputSchema: {
-        match_id: z.string().uuid().describe("A match id from list_matches."),
+        match_id: UUID().describe("A match id from list_matches."),
         program_id: PROGRAM_ID,
         opponent_name: z.string().trim().min(1).max(120).optional(),
-        tournament_name: z.string().trim().max(120).nullable().optional(),
-        round: z.string().trim().max(40).nullable().optional(),
+        tournament_name: z.string().trim().max(120).optional(),
+        round: z.string().trim().max(40).optional(),
         date: z
           .string()
           .regex(/^\d{4}-\d{2}-\d{2}$/)
           .optional()
           .describe("The day the match was played, YYYY-MM-DD."),
-        match_type: z.string().trim().max(60).nullable().optional(),
-        court_type: z.string().trim().max(60).nullable().optional(),
+        match_type: z.string().trim().max(60).optional(),
+        court_type: z.string().trim().max(60).optional(),
         opponent_school: z
           .string()
           .trim()
           .max(OPPONENT_SCHOOL_MAX)
-          .nullable()
           .optional()
           .describe(
-            "A school not in the directory: a high school, club or foreign school. Null clears the school. Not with opponent_program_id.",
+            "A school not in the directory: a high school, club or foreign school. Not with opponent_program_id.",
           ),
-        opponent_program_id: z
-          .string()
-          .uuid()
-          .nullable()
+        opponent_program_id: UUID()
           .optional()
           .describe(
-            "The opponent's program, from search_programs. Null clears the link. Not with opponent_school.",
+            "The opponent's program, from search_programs. Not with opponent_school.",
           ),
         allow_team_mismatch: z
           .boolean()
@@ -1009,18 +1090,32 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           .describe(
             "Link opponent_program_id even though its team differs from the scope program's team.",
           ),
-        opponent_hand: z.enum(HANDS).nullable().optional(),
-        opponent_backhand: z.enum(BACKHANDS).nullable().optional(),
+        opponent_hand: z.enum(HANDS).optional(),
+        opponent_backhand: z.enum(BACKHANDS).optional(),
+        clear: z
+          .array(z.enum(CLEARABLE_MATCH_FIELDS))
+          .max(CLEARABLE_MATCH_FIELDS.length)
+          .optional()
+          .describe(
+            "Fields to empty, by name. A field cannot be both set and cleared in one call.",
+          ),
       },
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
+        openWorldHint: false,
         idempotentHint: true,
       },
     },
     guarded(
       "update_match",
-      async ({ match_id, program_id, allow_team_mismatch, ...fields }) => {
+      async ({
+        match_id,
+        program_id,
+        allow_team_mismatch,
+        clear,
+        ...fields
+      }) => {
         const scope = await resolveScope(program_id);
         const team = scope.kind === "team";
         const stored = await context.reads.ownMatch(match_id);
@@ -1043,6 +1138,27 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         for (const [key, value] of Object.entries(sent)) {
           if (value === undefined) continue;
           body[key === "opponent_name" ? "player2_name" : key] = value;
+        }
+        // `clear` is how a field is emptied: the schema carries no nulls,
+        // which the stricter clients' schema readers do not take.
+        for (const field of clear ?? []) {
+          if (field in body) {
+            throw refusal(
+              "invalid_field",
+              `Set ${field} or clear it, not both. (${field})`,
+            );
+          }
+          body[field] = null;
+        }
+        // Clearing the school clears the link with it (`resolveOpponentTeam`),
+        // so naming both is one request, not the either/or a value is held to.
+        // Linking a program replaces typed school text (`normalizeMatchPatch`),
+        // so clearing the text beside a new link is the link alone.
+        if ("opponent_school" in body && body.opponent_school === null) {
+          if (body.opponent_program_id === null)
+            delete body.opponent_program_id;
+          else if (typeof body.opponent_program_id === "string")
+            delete body.opponent_school;
         }
         if (Object.keys(body).length === 0) {
           throw refusal(
@@ -1141,7 +1257,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
               ...PrefillProvider[],
             ],
           )
-          .default("advantage_intelligence")
+          .optional()
           .describe(
             "advantage_intelligence (default): a video to analyse. swingvision: a SwingVision .xlsx export.",
           ),
@@ -1172,6 +1288,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
+        openWorldHint: false,
         idempotentHint: false,
       },
     },
@@ -1179,7 +1296,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       "prepare_video_upload",
       async ({
         program_id,
-        provider,
+        provider = "advantage_intelligence",
         opponent_name,
         date,
         score,
@@ -1273,6 +1390,366 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     ),
   );
 
+  // ── open_visualization ─────────────────────────────────────────────────
+  const SETS = z
+    .array(z.number().int().min(1).max(5))
+    .max(5)
+    .optional()
+    .describe("Set numbers, counting from 1. Omit for every set.");
+
+  server.registerTool(
+    "open_visualization",
+    {
+      title: "Open a visualization",
+      description:
+        "A link that opens one court chart in the app with filters already applied — nothing is saved to the account. Pass match_id for a match's Visualizations tab, or player_id with program_id for a team roster player's season (or player_name in place of the id: it is matched against the program's roster, and a name that fits no one or several players is answered with the roster's names and ids to choose from; there is no season page for a personal workspace, so use match_id there). cut picks the chart: serves (where serves landed), return_placement, return_contact (where returns were struck), rally_placement, rally_position, or errors. Every filter is optional and narrows the shots drawn; values in one filter are either/or. A filter the chosen chart does not have is left out and named in ignored. A team player's link opens only while that team is the person's active workspace in the app. Give the person the url to open; the figures themselves come from get_match or run_query.",
+      inputSchema: {
+        match_id: UUID().optional().describe("A match id from list_matches."),
+        player_id: UUID()
+          .optional()
+          .describe(
+            "A team roster player's id, for their season. Needs program_id. Not with match_id.",
+          ),
+        player_name: z
+          .string()
+          .trim()
+          .min(1)
+          .max(120)
+          .optional()
+          .describe(
+            "A team roster player's name or part of it, for their season, when their id is not known. Needs program_id. Not with match_id or player_id.",
+          ),
+        program_id: PROGRAM_ID,
+        cut: z.enum(VISUALIZATION_CUT_NAMES).describe("Which chart to open."),
+        chart: z
+          .enum(VISUALIZATION_CHARTS)
+          .optional()
+          .describe(
+            "scatter (default, every ball), zones (counts per zone) or heat. errors has no zones chart.",
+          ),
+        player: z
+          .enum(["me", "opponent"])
+          .optional()
+          .describe("Whose shots are drawn. Default me."),
+        sets: SETS,
+        game: z
+          .array(z.enum(["serving", "returning"]))
+          .max(2)
+          .optional(),
+        serve_number: z
+          .array(z.enum(["first", "second"]))
+          .max(2)
+          .optional(),
+        court: z
+          .array(z.enum(["deuce", "ad"]))
+          .max(2)
+          .optional(),
+        serve_zone: z
+          .array(z.enum(["t", "body", "wide"]))
+          .max(3)
+          .optional()
+          .describe("serves only."),
+        pressure: z.array(z.enum(VISUALIZATION_PRESSURE)).max(2).optional(),
+        result: z
+          .array(z.enum(["won", "lost", "ace"]))
+          .max(3)
+          .optional()
+          .describe("How the point went for the player; ace is serves only."),
+        rally: z
+          .array(z.enum(["short", "medium", "long"]))
+          .max(3)
+          .optional()
+          .describe(
+            "Rally length as the app's charts band it: short 1–4 shots, medium 5–8, long 9 or more. Not the 5–9 and 10+ bands of ask.match_stats.",
+          ),
+        error: z
+          .array(z.enum(VISUALIZATION_ERRORS))
+          .max(3)
+          .optional()
+          .describe("errors only."),
+        opponent_hand: z
+          .enum(["right", "left", "unknown"])
+          .optional()
+          .describe("A player's season only: matches against this hand."),
+        season_result: z
+          .enum(["won", "lost"])
+          .optional()
+          .describe("A player's season only: matches they won or lost."),
+        surface: z
+          .enum(["hard", "clay", "grass", "unknown"])
+          .optional()
+          .describe("A player's season only."),
+      },
+      annotations: READ_ONLY,
+    },
+    guarded(
+      "open_visualization",
+      async ({ match_id, player_id, player_name, program_id, ...args }) => {
+        const targets = [match_id, player_id, player_name].filter(
+          (value) => value !== undefined,
+        ).length;
+        if (targets !== 1) {
+          throw refusal(
+            "invalid_field",
+            "Pass match_id for a match, or player_id or player_name for a team player's season: exactly one of the three.",
+          );
+        }
+        const scope = await resolveScope(program_id);
+        const team = scope.kind === "team";
+        if (match_id === undefined && !team) {
+          throw refusal(
+            "invalid_field",
+            "A player's season needs program_id: season visualizations exist for team roster players only. In a personal workspace, pass match_id. (program_id)",
+          );
+        }
+        if (match_id !== undefined) await matchInScope(scope, match_id);
+        // A season link names a player on this program's roster, read as the
+        // caller: an id from anywhere else is refused, and a name is how an
+        // id is found when no other tool has given one.
+        let seasonPlayer: { player_id: string; name: string | null } | null =
+          null;
+        if (scope.kind === "team" && match_id === undefined) {
+          const roster = await context.reads.roster(scope.programId);
+          const found = seasonPlayersNamed(roster, player_id, player_name);
+          if (found.length !== 1) {
+            const listed = roster
+              .slice(0, 60)
+              .map(
+                (player) => `${player.name ?? "Unnamed"} (${player.player_id})`,
+              )
+              .join("; ");
+            throw refusal(
+              "player_not_found",
+              `${found.length === 0 ? "No player" : "More than one player"} on ${scope.programName}'s roster fits. The roster: ${listed || "nobody yet"}.`,
+            );
+          }
+          seasonPlayer = found[0];
+        }
+        const link = visualizationLink(
+          match_id !== undefined
+            ? { kind: "match", matchId: match_id }
+            : {
+                kind: "player",
+                playerId: (seasonPlayer as { player_id: string }).player_id,
+              },
+          args,
+        );
+        if (!link.ok) throw refusal("invalid_field", link.reason);
+        return json({
+          scope: scope.kind,
+          program_id: team ? scope.programId : null,
+          target: match_id !== undefined ? "match" : "player_season",
+          cut: args.cut,
+          url: link.url,
+          ignored: link.ignored,
+          ...(seasonPlayer
+            ? {
+                player: {
+                  player_id: seasonPlayer.player_id,
+                  name: seasonPlayer.name,
+                },
+                note: `Opens while ${scope.kind === "team" ? scope.programName : "the team"} is the active workspace in the app; otherwise the app shows the home page.`,
+              }
+            : {}),
+        });
+      },
+    ),
+  );
+
+  // ── find_points ────────────────────────────────────────────────────────
+  server.registerTool(
+    "find_points",
+    {
+      title: "Find points to watch",
+      description: `A link that plays chosen points of one match in its Video tab. Two ways to choose, which combine: filters the tab applies itself (the set, the situation, who served and where, how the return and the point ended), and a point list — pass rally_min and/or rally_max to pick points by how many shots the rally had (the serve counts as one), or point_numbers from a run_query over ask.points for anything the filters do not cover. The answer has the url to give the person, and for a point list the numbers and how many there are; with filters alone the tab does the choosing, so count them with run_query if a number is needed. At most ${MAX_POINT_SET} points fit in one link. has_video says whether there is one to play: likely for an analysed match (its video is kept until the retention period ends), unknown for a SwingVision import (it has video only when one was attached in the app), and no — with no url — for a match entered by hand.`,
+      inputSchema: {
+        match_id: UUID().describe("A match id from list_matches."),
+        program_id: PROGRAM_ID,
+        sets: SETS,
+        situation: z
+          .array(z.enum(POINT_SITUATIONS))
+          .max(POINT_SITUATIONS.length)
+          .optional()
+          .describe(
+            "pressure is any break, set or match point. Either/or within the list.",
+          ),
+        server: z.enum(["me", "opponent"]).optional().describe("Who served."),
+        court: z.enum(["deuce", "ad"]).optional(),
+        serve_number: z
+          .array(z.enum(["first", "second"]))
+          .max(2)
+          .optional(),
+        serve_zone: z.array(z.enum(POINT_SERVE_ZONES)).max(3).optional(),
+        serve_result: z
+          .array(z.enum(POINT_SERVE_RESULTS))
+          .max(POINT_SERVE_RESULTS.length)
+          .optional(),
+        return_stroke: z.array(z.enum(POINT_RETURN_STROKES)).max(2).optional(),
+        outcome: z
+          .enum(["won", "lost"])
+          .optional()
+          .describe("Points the player won or lost."),
+        last_shot_by: z
+          .enum(["me", "opponent"])
+          .optional()
+          .describe("Who hit the point's last shot."),
+        last_shot: z
+          .array(z.enum(POINT_LAST_SHOTS))
+          .max(POINT_LAST_SHOTS.length)
+          .optional()
+          .describe("The stroke the point ended on."),
+        ending: z
+          .array(z.enum(["winner", "error"]))
+          .max(2)
+          .optional()
+          .describe("Whether the point ended on a winner or an error."),
+        missed: z
+          .array(z.enum(POINT_MISSES))
+          .max(2)
+          .optional()
+          .describe("Where the last shot missed."),
+        rally_min: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Fewest shots in the rally, the serve included."),
+        rally_max: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Most shots in the rally, the serve included."),
+        point_numbers: z
+          .array(z.number().int().min(1).max(2000))
+          .max(MAX_POINT_SET)
+          .optional()
+          .describe("ask.points.point_number values to play."),
+      },
+      annotations: READ_ONLY,
+    },
+    guarded(
+      "find_points",
+      async ({
+        match_id,
+        program_id,
+        rally_min,
+        rally_max,
+        point_numbers,
+        ...filters
+      }) => {
+        if (
+          rally_min !== undefined &&
+          rally_max !== undefined &&
+          rally_min > rally_max
+        ) {
+          throw refusal(
+            "invalid_field",
+            "rally_min is larger than rally_max. (rally_min)",
+          );
+        }
+        const scope = await resolveScope(program_id);
+        const team = scope.kind === "team";
+        const row = await matchInScope(scope, match_id);
+
+        // A point list only when the caller asked for one: the rally range
+        // and the numbers are read from ask.points, so a number that is not
+        // a point of this match never reaches the link. Every value in the
+        // SQL is an integer the schema already held to a range.
+        const listed =
+          rally_min !== undefined ||
+          rally_max !== undefined ||
+          (point_numbers?.length ?? 0) > 0;
+        let numbers: number[] | null = null;
+        if (listed) {
+          const conditions = [
+            ...(rally_min !== undefined
+              ? [`p.rally_length >= ${rally_min}`]
+              : []),
+            ...(rally_max !== undefined
+              ? [`p.rally_length <= ${rally_max}`]
+              : []),
+            ...(point_numbers && point_numbers.length > 0
+              ? [`p.point_number in (${point_numbers.join(", ")})`]
+              : []),
+          ];
+          const { rows: found } = await runAskQuery(
+            scope,
+            oneMatchScope(match_id),
+            `select array_agg(p.point_number) as numbers from ask.points p join scope on scope.match_id = p.match_id where ${conditions.join(" and ")}`,
+          );
+          const cell = found[0]?.numbers;
+          numbers = (Array.isArray(cell) ? cell : [])
+            .filter((value): value is number => Number.isInteger(value))
+            .sort((a, b) => a - b);
+        }
+
+        if (numbers !== null && numbers.length === 0) {
+          return json({
+            scope: scope.kind,
+            program_id: team ? scope.programId : null,
+            match_id,
+            url: null,
+            point_count: 0,
+            point_numbers: [],
+            note: "No point of this match fits. Nothing to watch.",
+          });
+        }
+        // What the views can say about a video: an analysed match has the
+        // one it was analysed from; a SwingVision import has one only when
+        // it was attached in the app; a match entered by hand has none.
+        const source = row.source ?? null;
+        const shown = numbers ? numbers.slice(0, MAX_POINT_SET) : null;
+        const link = videoLink(match_id, filters, numbers);
+        const filtered = link.filters !== "";
+        // A list sent with filters is not a count: the filters narrow it.
+        const pointCount = shown && !filtered ? shown.length : null;
+        if (source === null) {
+          return json({
+            scope: scope.kind,
+            program_id: team ? scope.programId : null,
+            match_id,
+            source,
+            url: null,
+            has_video: "no",
+            point_count: pointCount,
+            point_numbers: shown,
+            note: "This match was entered by hand and has no video to watch.",
+          });
+        }
+        const notes = [
+          ...(source === "video"
+            ? [
+                "An analysed match keeps its video only until its retention period ends; an old match may have none left to play.",
+              ]
+            : [
+                "A SwingVision match has video only when one was attached in the app; without it the link has nothing to play.",
+              ]),
+          ...(numbers !== null && filtered
+            ? [
+                "The tab also applies the filters to this list, so fewer points may play than point_numbers holds: do not report its length as a count.",
+              ]
+            : []),
+        ];
+        return json({
+          scope: scope.kind,
+          program_id: team ? scope.programId : null,
+          match_id,
+          source,
+          url: link.url,
+          has_video: source === "video" ? "likely" : "unknown",
+          point_count: pointCount,
+          point_numbers: shown,
+          truncated: link.truncated,
+          filters_applied_by_the_tab: filtered,
+          ...(notes.length > 0 ? { note: notes.join(" ") } : {}),
+        });
+      },
+    ),
+  );
+
   // ── describe_views ─────────────────────────────────────────────────────
   server.registerTool(
     "describe_views",
@@ -1287,7 +1764,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
             "personal (default) for the player's own matches; team when querying with a program_id, where ask.matches also carries player_name.",
           ),
       },
-      annotations: { readOnlyHint: true, idempotentHint: true },
+      annotations: READ_ONLY,
     },
     guarded("describe_views", read.describeViews),
   );
@@ -1314,7 +1791,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           ),
         program_id: PROGRAM_ID,
       },
-      annotations: { readOnlyHint: true, idempotentHint: true },
+      annotations: READ_ONLY,
     },
     guarded("run_query", read.runQuery),
   );
@@ -1332,15 +1809,13 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           .max(MAX_ASK_QUESTION_LENGTH)
           .describe("The question, in the player's own words."),
         program_id: PROGRAM_ID,
-        conversation_id: z
-          .string()
-          .uuid()
+        conversation_id: UUID()
           .optional()
           .describe(
             "The conversation to continue, from an earlier answer's conversation_id.",
           ),
         match_ids: z
-          .array(z.string().uuid())
+          .array(UUID())
           .max(MAX_ASK_TAGS)
           .optional()
           .describe(
@@ -1350,6 +1825,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
+        openWorldHint: false,
         idempotentHint: false,
       },
     },

@@ -82,6 +82,62 @@ export function isJwtShaped(token: string): boolean {
   );
 }
 
+/**
+ * Whether a JWT-shaped token's own `exp` is in the past. Decodes only, and
+ * trusts nothing: used after Supabase Auth has already refused the token,
+ * to tell a routine expiry (every client's cue to refresh) from a token
+ * that is refused for another reason. A token with no readable `exp` is not
+ * "expired". Pure, and never throws.
+ */
+export function jwtLooksExpired(token: string, nowMs: number): boolean {
+  try {
+    const payload: unknown = JSON.parse(
+      Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"),
+    );
+    const exp =
+      typeof payload === "object" && payload !== null
+        ? (payload as { exp?: unknown }).exp
+        : undefined;
+    return typeof exp === "number" && exp * 1000 <= nowMs;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The cap on `mcp_auth_failed` events. The 401 path needs no sign-in, so
+ * without one a loop of bad tokens is a loop of product events. Two limits
+ * per window: a few per caller, so one address cannot spend the allowance
+ * and hide every other app's failures, and a total, so many addresses
+ * cannot flood either. Per server instance, like the call window
+ * (`rate-limit.ts`): soft by construction, which is enough for a report
+ * that an app's sign-in is broken. Pure: the clock is the caller's.
+ */
+export function createAuthFailureGate(
+  options: { perCaller?: number; total?: number; windowMs?: number } = {},
+): { allow(caller: string, nowMs: number): boolean } {
+  const perCaller = options.perCaller ?? 3;
+  const total = options.total ?? 60;
+  const windowMs = options.windowMs ?? 5 * 60_000;
+  let startedAt = 0;
+  let sent = 0;
+  let byCaller = new Map<string, number>();
+  return {
+    allow(caller, nowMs) {
+      if (nowMs - startedAt >= windowMs) {
+        startedAt = nowMs;
+        sent = 0;
+        byCaller = new Map();
+      }
+      const mine = byCaller.get(caller) ?? 0;
+      if (sent >= total || mine >= perCaller) return false;
+      sent += 1;
+      byCaller.set(caller, mine + 1);
+      return true;
+    },
+  };
+}
+
 /** The URL's origin with no path, or the string as given when it is not a URL. */
 function originOf(url: string): string {
   try {
@@ -164,4 +220,48 @@ export function wwwAuthenticate(input: {
   }
   parts.push(`resource_metadata="${resourceMetadataUrl(input.origin)}"`);
   return parts.join(", ");
+}
+
+/** The apps the connector is set up for, as the `client` property of its product events. */
+export type McpClientName =
+  | "claude"
+  | "claude_code"
+  | "chatgpt"
+  | "gemini"
+  | "cursor"
+  | "le_chat"
+  | "other";
+
+/** Checked in order: `claude-code` before `claude`. */
+const CLIENT_AGENT_MARKS: readonly (readonly [string, McpClientName])[] = [
+  ["claude-code", "claude_code"],
+  ["claude", "claude"],
+  ["anthropic", "claude"],
+  ["openai", "chatgpt"],
+  ["chatgpt", "chatgpt"],
+  ["cursor", "cursor"],
+  ["gemini", "gemini"],
+  ["mistral", "le_chat"],
+];
+
+/**
+ * Which app is calling, read from the request's `User-Agent`. A best guess
+ * for reporting and nothing else: a caller can send any header, so no
+ * decision may rest on it. A stateless request carries no `initialize`
+ * `clientInfo`, and the token's `client_id` is a registration id, not a
+ * name, so the header is what there is. `agent` is the header's product
+ * token (the part before the first `/` or space, at most 40 safe
+ * characters) so an app this table does not know yet shows up by name
+ * rather than only as `other`.
+ */
+export function mcpClientFromUserAgent(header: string | null): {
+  client: McpClientName;
+  agent: string | null;
+} {
+  const value = (header ?? "").trim();
+  if (value === "") return { client: "other", agent: null };
+  const lower = value.toLowerCase();
+  const mark = CLIENT_AGENT_MARKS.find(([needle]) => lower.includes(needle));
+  const product = /^[A-Za-z0-9._-]{1,40}/.exec(value)?.[0] ?? null;
+  return { client: mark ? mark[1] : "other", agent: product };
 }

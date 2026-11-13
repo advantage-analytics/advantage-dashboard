@@ -76,3 +76,19 @@ enabled = false
 
 [analytics]
 enabled = false
+
+# The deployed Edge Functions authorise callers themselves (`authorizeCaller`
+# in each: the service-role key, or a user token Supabase Auth confirms), so
+# the gateway's own check is off. It verifies against the legacy HS256 secret,
+# and since 2026-11-12 user tokens are signed with an ES256 key
+# (docs/ask-mcp-connector.md §2): with it on, every signed-in caller is
+# refused before the function runs. A deploy that leaves these out — or an MCP
+# `deploy_edge_function` without `verify_jwt: false` — turns it back on.
+[functions.process-match]
+verify_jwt = false
+
+[functions.generate-key-moments]
+verify_jwt = false
+
+[functions.generate-insights]
+verify_jwt = false

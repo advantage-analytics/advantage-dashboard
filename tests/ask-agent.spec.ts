@@ -638,6 +638,7 @@ test.describe("agent mode falling back", () => {
 function fakeReads(): McpUserReads {
   return {
     program: async (id) => (id === PROGRAM ? { id, name: "ZZ Test" } : null),
+    roster: async () => [],
     programSquad: async () => null,
     directoryProgram: async () => null,
     programsNamed: async () => [],
