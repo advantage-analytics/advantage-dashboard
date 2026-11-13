@@ -380,8 +380,6 @@ export function pointEndedEarly(
 ): Extract<LabelMark, { code: "shot_after_point_end" }> | null {
   const live = liveShotsInOrder(point, ghosts);
   if (live.length < 2) return null;
-  const ordered = orderLabelShots(point.shots);
-  const dismissed = new Set(point.dismissed ?? []);
   // The question at `live[i]`, unless it is settled: the labeller has looked
   // at this stroke or one after it — dismissed the question there, or
   // edited, added or deleted a stroke after it.
@@ -390,6 +388,8 @@ export function pointEndedEarly(
     called: boolean,
   ): Extract<LabelMark, { code: "shot_after_point_end" }> | null => {
     const shot = live[i];
+    const ordered = orderLabelShots(point.shots);
+    const dismissed = new Set(point.dismissed ?? []);
     const at = ordered.findIndex((s) => s.id === shot.id);
     const settled =
       dismissed.has(pointEndedKey(shot.id)) ||

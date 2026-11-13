@@ -385,10 +385,13 @@ test.describe("A adds a shot, C switches contact and landing", () => {
       "if (anchor.shots.some((shot) => shot.id === placement.shotId)) {",
     );
     // N again takes the call back, and the strokes that call removed with it.
-    expect(source).toContain('if (patch.result !== "net") {');
+    // Only where the call given back leaves the ball in play, and only after
+    // the call's own write has landed: each settles the point's ending.
+    expect(source).toContain("owner && !isMissedResult(patch.result)");
     expect(source).toContain(
-      "if (owner && run.length > 0) restoreShots(owner.id, run);",
+      "void patchShot(shot.id, patch).then((saved) => {",
     );
+    expect(source).toContain("if (saved) restoreShots(owner.id, run);");
     expect(source).toContain(
       "if (kept && expanded.shots.some((shot) => shot.id === kept.id))",
     );

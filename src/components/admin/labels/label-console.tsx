@@ -15,6 +15,7 @@ import {
 } from "react";
 import {
   labelProgress,
+  isMissedResult,
   liveShotsInOrder,
   orderLabelShots,
   type LabelErrorKind,
@@ -3804,14 +3805,24 @@ export function LabelConsole({
       const shot = keyShot((s) => netKeyPatch(s) !== null, "last");
       const patch = shot && netKeyPatch(shot);
       if (!shot || !patch) return false;
-      requestPatchShot(shot.id, patch);
-      // N again takes the call back: the strokes the call removed come back
-      // with it, where they are all that follows this one (`deadBallRun`).
-      if (patch.result !== "net") {
-        const owner = pointOfShot(points, shot.id);
-        const run = owner ? deadBallRun(owner.shots, shot.id) : [];
-        if (owner && run.length > 0) restoreShots(owner.id, run);
+      // N again takes the call back. Where that leaves the ball in play (its
+      // landing reads in, or nothing is placed), the strokes the call removed
+      // come back with it, when they are all that follows (`deadBallRun`) —
+      // after the call's own write has landed, since each of the two settles
+      // the point's ending. Given back to Out, the ball is still a miss and
+      // nothing returns.
+      const owner = pointOfShot(points, shot.id);
+      const run =
+        owner && !isMissedResult(patch.result)
+          ? deadBallRun(owner.shots, shot.id, drawsGhosts(marks))
+          : [];
+      if (!owner || run.length === 0) {
+        requestPatchShot(shot.id, patch);
+        return true;
       }
+      void patchShot(shot.id, patch).then((saved) => {
+        if (saved) restoreShots(owner.id, run);
+      });
       return true;
     };
     // G / D / P toggle the selected rally stroke's kind (`tagKeyPatch`):

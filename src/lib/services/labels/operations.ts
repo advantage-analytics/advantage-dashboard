@@ -346,15 +346,21 @@ export function suggestedDeleteReason(
  * dead-ball tombstone (`dead_ball_after_point`, or `dead_ball_after_fault`
  * behind a double fault). Empty when a live stroke or a tombstone with
  * another reason follows: then what came after was not that call's alone.
+ * `ghosts` is the console's own flag (`isLiveShot`).
  */
 export function deadBallRun(
   shots: readonly LabelShot[],
   shotId: string,
+  ghosts: boolean,
 ): string[] {
   const ordered = orderLabelShots(shots);
   const at = ordered.findIndex((shot) => shot.id === shotId);
   if (at === -1) return [];
-  const after = ordered.slice(at + 1);
+  // A ghost the site removed is no stroke while the session draws ghosts:
+  // it neither counts as following the ball nor is it put back.
+  const after = ordered
+    .slice(at + 1)
+    .filter((shot) => shot.status === "deleted" || isLiveShot(shot, ghosts));
   const dead = after.every(
     (shot) =>
       shot.status === "deleted" &&

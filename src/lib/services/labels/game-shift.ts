@@ -912,13 +912,12 @@ export function planGameCombine(
   const swaps = new Map<string, PlayerSwap | null>();
   for (const point of moved) {
     const { write, swap } = shiftWrite(point, to);
-    writes.push(write);
-    swaps.set(point.id, swap);
     // The lower game is gone, and its lock with it: left on, it would make
     // the upper game a locked one the moment this row became its first. No
     // moved row is the upper game's first, so each lets go — written whether
     // or not it held one, since the server's rows do not carry the lock.
-    writes[writes.length - 1] = { ...write, game_start_locked: false };
+    writes.push({ ...write, game_start_locked: false });
+    swaps.set(point.id, swap);
   }
   const { shots, swapped } = flippedShots(swaps);
   const ref = (band: LabelGameBand): GameShiftGameRef => ({

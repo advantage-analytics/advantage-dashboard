@@ -294,22 +294,40 @@ test.describe("dead balls after a ball marked out", () => {
       });
     // Everything after the ball is a dead-ball tombstone: all of it.
     expect(
-      deadBallRun([row("a", 1), row("b", 2), dead("c", 3), dead("d", 4)], "b"),
+      deadBallRun(
+        [row("a", 1), row("b", 2), dead("c", 3), dead("d", 4)],
+        "b",
+        true,
+      ),
     ).toEqual(["c", "d"]);
     // A live stroke after it, or one deleted for another reason: nothing —
     // what follows was not that call's alone.
     expect(
-      deadBallRun([row("a", 1), row("b", 2), dead("c", 3), row("d", 4)], "b"),
+      deadBallRun(
+        [row("a", 1), row("b", 2), dead("c", 3), row("d", 4)],
+        "b",
+        true,
+      ),
     ).toEqual([]);
     expect(
       deadBallRun(
         [row("a", 1), row("b", 2), dead("c", 3, "not_a_stroke")],
         "b",
+        true,
       ),
     ).toEqual([]);
     // The last stroke, or one not in the point: nothing to put back.
-    expect(deadBallRun([row("a", 1), row("b", 2)], "b")).toEqual([]);
-    expect(deadBallRun([row("a", 1)], "nope")).toEqual([]);
+    expect(deadBallRun([row("a", 1), row("b", 2)], "b", true)).toEqual([]);
+    expect(deadBallRun([row("a", 1)], "nope", true)).toEqual([]);
+    // A ghost the site removed is no stroke with marks on: it neither blocks
+    // the run nor comes back with it. With marks off it is a live stroke.
+    const ghost = row("g", 5, {
+      siteRemoval: "hit_after_fault" as LabelShot["siteRemoval"],
+      siteRemovalRestoredAt: null,
+    });
+    const withGhost = [row("a", 1), row("b", 2), dead("c", 3), ghost];
+    expect(deadBallRun(withGhost, "b", true)).toEqual(["c"]);
+    expect(deadBallRun(withGhost, "b", false)).toEqual([]);
   });
 
   test("the live strokes after one, in video order; a tombstone or an unknown stroke counts for nothing", () => {
