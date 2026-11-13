@@ -340,6 +340,30 @@ export function suggestedDeleteReason(
     : null;
 }
 
+/**
+ * The strokes a miss call on `shotId` took with it, to put back when the
+ * call is taken back: every stroke after it in video order, when each is a
+ * dead-ball tombstone (`dead_ball_after_point`, or `dead_ball_after_fault`
+ * behind a double fault). Empty when a live stroke or a tombstone with
+ * another reason follows: then what came after was not that call's alone.
+ */
+export function deadBallRun(
+  shots: readonly LabelShot[],
+  shotId: string,
+): string[] {
+  const ordered = orderLabelShots(shots);
+  const at = ordered.findIndex((shot) => shot.id === shotId);
+  if (at === -1) return [];
+  const after = ordered.slice(at + 1);
+  const dead = after.every(
+    (shot) =>
+      shot.status === "deleted" &&
+      (shot.deleteReason === "dead_ball_after_point" ||
+        shot.deleteReason === "dead_ball_after_fault"),
+  );
+  return dead ? after.map((shot) => shot.id) : [];
+}
+
 /** What a batched remove answers about each stroke it tombstoned. */
 export interface LabelShotRemoved {
   id: string;

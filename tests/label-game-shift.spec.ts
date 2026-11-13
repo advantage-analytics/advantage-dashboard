@@ -2515,6 +2515,7 @@ test.describe("combine a game with its neighbour", () => {
     const above = planGameCombine(points, "1·2", "above", false);
     expect(above).toEqual({
       ok: true,
+      // Every moved row lets go of a lock: the lower game is gone.
       writes: [UUID(3), UUID(4)].map((id) => ({
         id,
         set_number: 1,
@@ -2522,6 +2523,7 @@ test.describe("combine a game with its neighbour", () => {
         server: "p1",
         game_type: "game",
         status: "edited",
+        game_start_locked: false,
       })),
       shots: [],
       summary: {
@@ -2546,6 +2548,15 @@ test.describe("combine a game with its neighbour", () => {
     ]);
     // The input is read, never written.
     expect(points).toEqual(cut());
+    // A lock the lower game held does not follow its row into the upper.
+    const locked = cut().map((p) =>
+      p.id === UUID(3) ? { ...p, gameStartLocked: true } : p,
+    );
+    const merged = planGameCombine(locked, "1·2", "above", false);
+    if (!("ok" in merged)) throw new Error("no plan");
+    expect(
+      applyGameShift(locked, merged.writes).some((p) => p.gameStartLocked),
+    ).toBe(false);
   });
 
   test("refused with no neighbour, across a set, and with a tiebreak", () => {
@@ -2688,6 +2699,7 @@ test.describe("writeLabelGameCombine", () => {
           server: "p1",
           game_type: "game",
           status: "edited",
+          game_start_locked: false,
         },
         { id: [UUID(3), UUID(4)] },
       ],

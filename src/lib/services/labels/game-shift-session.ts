@@ -155,6 +155,7 @@ function groupWrites(
       values.status,
       presence("winner", values),
       presence("ended_by", values),
+      "game_start_locked" in values,
       was,
     ]);
     const group = groups.get(key);

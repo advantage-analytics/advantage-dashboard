@@ -13,6 +13,7 @@ import {
   applyShotsRemoved,
   applyShotsRestored,
   deadBallReason,
+  deadBallRun,
   deadBallsAfterMiss,
   destinationServerIn,
   gameServer,
@@ -270,6 +271,45 @@ test.describe("dead balls after a ball marked out", () => {
         true,
       ),
     ).toBe("dead_ball_after_point");
+  });
+
+  test("the strokes a miss call took, to put back when the call is taken back", () => {
+    const row = (
+      id: string,
+      videoTime: number,
+      over: Partial<LabelShot> = {},
+    ): LabelShot => ({
+      ...POINT_1_SHOTS[0],
+      id,
+      videoTime,
+      status: "kept",
+      siteRemoval: null,
+      deleteReason: null,
+      ...over,
+    });
+    const dead = (id: string, t: number, reason = "dead_ball_after_point") =>
+      row(id, t, {
+        status: "deleted",
+        deleteReason: reason as LabelShot["deleteReason"],
+      });
+    // Everything after the ball is a dead-ball tombstone: all of it.
+    expect(
+      deadBallRun([row("a", 1), row("b", 2), dead("c", 3), dead("d", 4)], "b"),
+    ).toEqual(["c", "d"]);
+    // A live stroke after it, or one deleted for another reason: nothing —
+    // what follows was not that call's alone.
+    expect(
+      deadBallRun([row("a", 1), row("b", 2), dead("c", 3), row("d", 4)], "b"),
+    ).toEqual([]);
+    expect(
+      deadBallRun(
+        [row("a", 1), row("b", 2), dead("c", 3, "not_a_stroke")],
+        "b",
+      ),
+    ).toEqual([]);
+    // The last stroke, or one not in the point: nothing to put back.
+    expect(deadBallRun([row("a", 1), row("b", 2)], "b")).toEqual([]);
+    expect(deadBallRun([row("a", 1)], "nope")).toEqual([]);
   });
 
   test("the live strokes after one, in video order; a tombstone or an unknown stroke counts for nothing", () => {

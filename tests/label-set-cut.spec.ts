@@ -314,11 +314,18 @@ test.describe("the console and the server", () => {
 test.describe("setJoin", () => {
   // A 5–7 set: the labeller made two of the vendor's games one, so eleven of
   // its twelve games are filed under set 2 and the twelfth heads set 3.
-  const merged = match([
-    ...won(1, "111111"),
-    ...won(2, "12121212122"),
-    ...won(3, "2112"),
-  ]);
+  // The first point of `set` seeded in a game no row holds any more: its
+  // game was emptied into the games beside it.
+  const emptied = (points: LabelPoint[], set: number): LabelPoint[] => {
+    const at = points.findIndex((p) => p.setNumber === set);
+    return points.map((p, i) =>
+      i === at ? { ...p, seed: { ...p.seed!, game_number: 99 } } : p,
+    );
+  };
+  const merged = emptied(
+    match([...won(1, "111111"), ...won(2, "12121212122"), ...won(3, "2112")]),
+    2,
+  );
   const entered = [
     [6, 0],
     [5, 7],
@@ -351,19 +358,51 @@ test.describe("setJoin", () => {
   });
 
   test("counted in games, not winners: it runs while the set's endings are still wrong", () => {
-    const wrong = match([
-      ...won(1, "111111"),
-      ...won(2, "1111111 111".replace(" ", "")),
-      ...won(3, "2112"),
-    ]);
+    const wrong = emptied(
+      match([
+        ...won(1, "111111"),
+        ...won(2, "1111111 111".replace(" ", "")),
+        ...won(3, "2112"),
+      ]),
+      2,
+    );
     expect(setJoin(wrong, true, entered, null, null)?.setNumber).toBe(2);
     // …and with a game of the set still unfinished.
-    const unfinished = match([
+    const unfinished = emptied(
+      match([...won(1, "111111"), ...won(2, "1212121212?"), ...won(3, "2112")]),
+      2,
+    );
+    expect(setJoin(unfinished, true, entered, null, null)?.setNumber).toBe(2);
+  });
+
+  test("only where a seeded game is gone from the set: a game the video never had is no reason to join", () => {
+    // The same short set with every row still in the game it was seeded in:
+    // nothing was merged, so the video simply lacks a game. Left alone —
+    // taking set 3's first game would shift every set after it.
+    const untouched = match([
       ...won(1, "111111"),
-      ...won(2, "1212121212?"),
+      ...won(2, "12121212122"),
       ...won(3, "2112"),
     ]);
-    expect(setJoin(unfinished, true, entered, null, null)?.setNumber).toBe(2);
+    expect(setJoin(untouched, true, entered, null, null)).toBeNull();
+    // A game handed to the set before by an earlier join counts: the set
+    // it left is short for a reason the rows show.
+    const first = planSetCut(merged, true, entered, null, null);
+    if ("error" in first) throw new Error(first.error);
+    const after = applyGameShift(merged, first.writes);
+    expect(
+      setJoin(
+        after,
+        true,
+        [
+          [6, 0],
+          [5, 7],
+          [3, 1],
+        ],
+        null,
+        null,
+      ),
+    ).toBeNull();
   });
 
   test("never for the last set on the rows, with nothing entered, or from a match tiebreak", () => {
@@ -390,8 +429,8 @@ test.describe("setJoin", () => {
     if ("error" in first) throw new Error(first.error);
     expect(first.cut).toEqual({ setNumber: 1, gameKeys: ["1·7"] });
     const after = applyGameShift(both, first.writes);
-    const second = planSetCut(after, true, entered, null, null);
-    if ("error" in second) throw new Error(second.error);
-    expect(second.cut).toMatchObject({ setNumber: 2, join: true });
+    // Set 2 is still a game short, but none it was seeded with is gone
+    // from it: no join without that.
+    expect(setJoin(after, true, entered, null, null)).toBeNull();
   });
 });

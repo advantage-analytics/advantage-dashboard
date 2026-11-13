@@ -21,12 +21,14 @@ import { letResultError } from "./edit";
 import type { Planned } from "./operations";
 import {
   applyShotSwaps,
+  moveSwapsPlayers,
   planShotHitter,
   type ShotSwapWrite,
   type SwapShot,
 } from "./player-swap";
 import {
   isWithdrawnAdd,
+  opponent,
   type LabelPoint,
   type LabelPointSeedValues,
   type LabelPointStatus,
@@ -123,25 +125,48 @@ export function planPointReset(current: {
         "This point's original values were not stored, so it cannot be reset.",
     };
   }
+  const { game_type: _gameType, ...values } = current.seed;
+  const { setNumber, gameNumber } = current;
+  const moved =
+    setNumber != null &&
+    gameNumber != null &&
+    (setNumber !== values.set_number || gameNumber !== values.game_number);
+  const server = moved ? (current.server ?? values.server) : values.server;
+  // A moved point keeps its game's server. Where that is not the server it
+  // was seeded under and the seeded serve is the other player's, the seeded
+  // rows are the wrong way round for the game: the players switch, as a move
+  // into that game switches them (player-swap.ts `moveSwapsPlayers`).
+  const seeded: SwapShot[] = current.shots.map((shot) =>
+    shot.seed === null ? shot : { ...shot, hitter: shot.seed.hitter },
+  );
+  const switched =
+    moved &&
+    moveSwapsPlayers(
+      {
+        server: values.server,
+        winner: values.winner,
+        endedBy: values.ended_by,
+        shots: seeded,
+      },
+      server,
+    );
+  const side = (hitter: SwapShot["hitter"]) =>
+    switched && hitter !== null ? opponent(hitter) : hitter;
   const shots: ShotSwapWrite[] = [];
   for (const shot of current.shots) {
-    if (shot.seed === null || shot.seed.hitter === shot.hitter) continue;
-    shots.push(planShotHitter(shot, shot.seed.hitter));
+    if (shot.seed === null) continue;
+    const hitter = side(shot.seed.hitter);
+    if (hitter === shot.hitter) continue;
+    shots.push(planShotHitter(shot, hitter));
   }
   // The seeded game type is for the opening scorecard, never a value Reset
   // puts back: a game's type is set for the whole game by its own operation.
-  const { game_type: _gameType, ...values } = current.seed;
   // Which game a point belongs to is the game's to say, not the point's:
   // the labeller moved it there with a game operation, and putting its
   // seeded set and game back would lift it out of the game its neighbours
   // are in — one row scored against a game elsewhere in the match. So a
   // moved point keeps its set, its game and that game's server, and is
   // still `edited`: it differs from its seed by where it sits.
-  const { setNumber, gameNumber } = current;
-  const moved =
-    setNumber != null &&
-    gameNumber != null &&
-    (setNumber !== values.set_number || gameNumber !== values.game_number);
   if (moved) {
     return {
       ok: true,
@@ -149,7 +174,9 @@ export function planPointReset(current: {
         ...values,
         set_number: setNumber,
         game_number: gameNumber,
-        server: current.server ?? values.server,
+        server,
+        winner: side(values.winner),
+        ended_by: side(values.ended_by),
         status: "edited",
       },
       shots,

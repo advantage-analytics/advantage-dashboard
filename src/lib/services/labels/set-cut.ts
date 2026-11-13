@@ -28,7 +28,10 @@
  * of the next set: that set's first game moves back, one game a pass, until
  * the count is the entered one. Counted in games, not winners — a set short
  * of games is short whoever won them — so it runs while the labeller is
- * still putting the set's endings right. Never from a match tiebreak, never
+ * still putting the set's endings right. Only where a game the set was
+ * seeded with is gone from it (`lostSeededGame`): a set short because the
+ * video never held one of its games is left alone, since joining there would
+ * shift every set after it. Never from a match tiebreak, never
  * into a set waiting on its 6–6 fold, and never for the last set on the
  * rows: with nothing after it, a short set is a video that ends early or a
  * game still to split, and the mismatch slot says so. A cut needs more
@@ -145,11 +148,39 @@ export function setJoin(
     if (played >= want1 + want2) continue;
     const first = games.find((band) => band.setNumber === next);
     if (!first || first.gameType !== "game") continue;
+    // Only where the rows say why the set is short: a game it was seeded
+    // with is gone from it — emptied into its neighbours by the labeller,
+    // or handed to the set before by a join. A game the video never had
+    // was never seeded, and a set short for that reason is left alone:
+    // taking the next set's first game there would shift every set after.
+    if (!lostSeededGame(points, setNumber)) continue;
     const folding = tiebreakFolds(points, adScoring, matchTiebreakSet, start);
     if (folding.some((fold) => fold.setNumber === setNumber)) continue;
     return { setNumber, gameKeys: [gameKey(first)], join: true };
   }
   return null;
+}
+
+/**
+ * Whether set `setNumber` was seeded with a game no live point holds in it
+ * any more: its points were moved into other games, or to another set.
+ */
+function lostSeededGame(
+  points: readonly ShiftPoint[],
+  setNumber: number,
+): boolean {
+  const held = new Set<number>();
+  for (const point of points) {
+    if (point.status === "deleted" || point.setNumber !== setNumber) continue;
+    if (point.gameNumber !== null) held.add(point.gameNumber);
+  }
+  return points.some(
+    (point) =>
+      point.status !== "deleted" &&
+      point.seed?.set_number === setNumber &&
+      point.seed.game_number !== null &&
+      !held.has(point.seed.game_number),
+  );
 }
 
 /** What identifies a cut, so the console never runs the same one twice. */

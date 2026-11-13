@@ -384,6 +384,11 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     expect(source).toContain(
       "if (anchor.shots.some((shot) => shot.id === placement.shotId)) {",
     );
+    // N again takes the call back, and the strokes that call removed with it.
+    expect(source).toContain('if (patch.result !== "net") {');
+    expect(source).toContain(
+      "if (owner && run.length > 0) restoreShots(owner.id, run);",
+    );
     expect(source).toContain(
       "if (kept && expanded.shots.some((shot) => shot.id === kept.id))",
     );

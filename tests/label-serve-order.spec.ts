@@ -24,9 +24,12 @@ import {
 } from "@/lib/services/labels/marks-state";
 import {
   openFlags,
+  consoleSlotStops,
+  courtEndStops,
   slotStops,
   tiebreakServeStops,
 } from "@/lib/services/labels/flag-nav";
+import { labelScores } from "@/lib/services/labels/score";
 import {
   liveRowMarks,
   withLiveScoreMarks,
@@ -625,6 +628,23 @@ test("every amber slot between the rows is a stop", () => {
   expect(slotStops(rows, true).map((s) => [s.pointId, s.label])).toEqual([
     ["p5", "Game already won, with points after it"],
     ["p7", "Game 2 isn’t finished at 30–0"],
+  ]);
+  // The console's one pass reads the folds and the servers once and gives
+  // the same stops; with no entered score the wrong-end stops add none.
+  const input = {
+    points: rows,
+    games: labelScores(rows, true).games,
+    finalScore: null,
+    matchScore: null,
+    videoEndsEarly: null,
+    startScore: null,
+    adScoring: true,
+    matchTiebreakSet: null,
+  };
+  expect(consoleSlotStops(input, false)).toEqual(slotStops(rows, true));
+  expect(consoleSlotStops(input, true)).toEqual([
+    ...slotStops(rows, true),
+    ...courtEndStops(input),
   ]);
 });
 

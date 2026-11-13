@@ -94,6 +94,11 @@ export interface GameShiftWrite {
   /** Present only when the point's players switch (player-swap.ts). */
   winner?: LabelSide | null;
   ended_by?: LabelSide | null;
+  /**
+   * Present, and false, only on a row that can no longer be a game's first:
+   * a combine's moved rows (`planGameCombine`), which let go of any lock.
+   */
+  game_start_locked?: false;
 }
 
 /** A game as the console names it: its set and its rank within the set. */
@@ -587,6 +592,7 @@ export function applyGameShift<
       status: write.status,
       winner: "winner" in write ? (write.winner ?? null) : point.winner,
       endedBy: "ended_by" in write ? (write.ended_by ?? null) : point.endedBy,
+      ...("game_start_locked" in write ? { gameStartLocked: false } : {}),
     };
   });
 }
@@ -852,8 +858,9 @@ export type PlannedGameCombine =
  * Ordinary games of one set only: a tiebreak's pieces are folded
  * (tiebreak-fold.ts), and a game is never carried across a set — that is the
  * set cut's and join's to move (set-cut.ts). A lock on the lower game's old
- * first row is left where it is: a lock reads from a game's first live row
- * alone (game-boundary.ts `lockedGames`), and that row is no longer one.
+ * first row is let go in the same write: the game it locked no longer
+ * exists, and left on it would lock the upper game if that row ever became
+ * its first.
  *
  * What follows the merge is not planned here. The games below now sit one
  * turn off, which "Same server two games in a row" flags (it counts a game
@@ -907,6 +914,11 @@ export function planGameCombine(
     const { write, swap } = shiftWrite(point, to);
     writes.push(write);
     swaps.set(point.id, swap);
+    // The lower game is gone, and its lock with it: left on, it would make
+    // the upper game a locked one the moment this row became its first. No
+    // moved row is the upper game's first, so each lets go — written whether
+    // or not it held one, since the server's rows do not carry the lock.
+    writes[writes.length - 1] = { ...write, game_start_locked: false };
   }
   const { shots, swapped } = flippedShots(swaps);
   const ref = (band: LabelGameBand): GameShiftGameRef => ({

@@ -97,6 +97,7 @@ import {
   applyPointMove,
   applyPointRestore,
   applyShotDelete,
+  deadBallRun,
   deadBallsAfterMiss,
   suggestedDeleteReason,
   applyShotRestore,
@@ -286,8 +287,7 @@ import {
   errorStops,
   openFlags,
   scoreStop,
-  courtEndStops,
-  slotStops,
+  consoleSlotStops,
   stepFlag,
   type FlagList,
   type FlagStop,
@@ -468,6 +468,8 @@ const GAME_WRITE_FIELDS = [
 const GAME_SHIFT_FIELDS = [
   "setNumber",
   "gameNumber",
+  // A combine lets go of the merged game's lock: put back with the rest.
+  "gameStartLocked",
   ...GAME_WRITE_FIELDS,
 ] as const;
 
@@ -3270,23 +3272,22 @@ export function LabelConsole({
   const slotJumpStops = useMemo(
     () =>
       operable
-        ? [
-            ...slotStops(points, adScoring, matchTiebreakSetNumber, startScore),
-            // "Players at the wrong end" (court-end.ts) leans on the entered
-            // score, which slotStops never reads.
-            ...(operations?.switchPlayersByEnd
-              ? courtEndStops({
-                  points,
-                  games: scores.games,
-                  finalScore: sessionFields.finalScore,
-                  matchScore: session.matchScore,
-                  videoEndsEarly: sessionFields.videoEndsEarly,
-                  startScore,
-                  adScoring,
-                  matchTiebreakSet: matchTiebreakSetNumber,
-                })
-              : []),
-          ]
+        ? // The rail's amber slots and, where the console can switch players,
+          // "Players at the wrong end" (court-end.ts), which leans on the
+          // entered score — off one reading of the folds and the servers.
+          consoleSlotStops(
+            {
+              points,
+              games: scores.games,
+              finalScore: sessionFields.finalScore,
+              matchScore: session.matchScore,
+              videoEndsEarly: sessionFields.videoEndsEarly,
+              startScore,
+              adScoring,
+              matchTiebreakSet: matchTiebreakSetNumber,
+            },
+            Boolean(operations?.switchPlayersByEnd),
+          )
         : NO_SLOT_STOPS,
     [
       operable,
@@ -3804,6 +3805,13 @@ export function LabelConsole({
       const patch = shot && netKeyPatch(shot);
       if (!shot || !patch) return false;
       requestPatchShot(shot.id, patch);
+      // N again takes the call back: the strokes the call removed come back
+      // with it, where they are all that follows this one (`deadBallRun`).
+      if (patch.result !== "net") {
+        const owner = pointOfShot(points, shot.id);
+        const run = owner ? deadBallRun(owner.shots, shot.id) : [];
+        if (owner && run.length > 0) restoreShots(owner.id, run);
+      }
       return true;
     };
     // G / D / P toggle the selected rally stroke's kind (`tagKeyPatch`):
@@ -5221,7 +5229,7 @@ function replacePoint(
   return points.map((point) => (point.id === pointId ? change(point) : point));
 }
 
-const NO_SLOT_STOPS: ReturnType<typeof slotStops> = [];
+const NO_SLOT_STOPS: ReturnType<typeof consoleSlotStops> = [];
 
 /** A planned point move (`planPointMove`), as the rows take it at once. */
 function pointMoved(
