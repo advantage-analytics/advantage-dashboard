@@ -121,6 +121,23 @@ test.describe("pointEndedEarly", () => {
         true,
       )?.params,
     ).toEqual({ shotId: "b", after: ["d", "e"] });
+    // Once the called miss is dismissed, the end of the rally is still read:
+    // an out read on the second-to-last stroke asks as it always did.
+    expect(
+      pointEndedEarly(
+        {
+          dismissed: ["point_ended:b"],
+          shots: [
+            stroke("a", IN),
+            stroke("b", LONG, { ...called, seed }),
+            stroke("c", IN),
+            stroke("d", LONG),
+            stroke("e", IN),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "d", after: ["e"] });
     // A net call counts where a net read never does.
     expect(
       pointEndedEarly(

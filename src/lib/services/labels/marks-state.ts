@@ -379,43 +379,54 @@ export function pointEndedEarly(
 ): Extract<LabelMark, { code: "shot_after_point_end" }> | null {
   const live = liveShotsInOrder(point, ghosts);
   if (live.length < 2) return null;
-  const called = calledMissPlayedOn(live);
-  const i = called === -1 ? live.length - 2 : called;
-  const shot = live[i];
-  if (called === -1) {
-    if (!endsPointWhenMissed(shot.stroke)) return null;
-    if (effectiveShotResult(shot) !== "out") return null;
-    // Met in the air where it reads out: played on, not a point over.
-    if (landingTakesContact(shot, live[i + 1], false)) return null;
-  }
-  // Settled once the labeller has looked at this stroke or one after it:
-  // dismissed the question there, or edited, added or deleted a stroke
-  // after it.
   const ordered = orderLabelShots(point.shots);
   const dismissed = new Set(point.dismissed ?? []);
-  const at = ordered.findIndex((s) => s.id === shot.id);
-  const settled =
-    dismissed.has(pointEndedKey(shot.id)) ||
-    ordered.slice(at + 1).some(
-      (s) =>
-        dismissed.has(pointEndedKey(s.id)) ||
-        s.status === "edited" ||
-        s.status === "added" ||
-        // A stroke added and deleted by mistake was never looked at. After a
-        // miss the labeller called, deleting one stroke of several answers
-        // nothing about the rest: the question stays while any is live.
-        (called === -1 && s.status === "deleted" && !isWithdrawnAdd(s)),
-    );
-  if (settled) return null;
-  return {
-    code: "shot_after_point_end",
-    tier: "hint",
-    scope: "point",
-    params: {
-      shotId: shot.id,
-      after: live.slice(i + 1).map((s) => s.id),
-    },
+  // The question at `live[i]`, unless it is settled: the labeller has looked
+  // at this stroke or one after it — dismissed the question there, or
+  // edited, added or deleted a stroke after it.
+  const askedAt = (
+    i: number,
+    called: boolean,
+  ): Extract<LabelMark, { code: "shot_after_point_end" }> | null => {
+    const shot = live[i];
+    const at = ordered.findIndex((s) => s.id === shot.id);
+    const settled =
+      dismissed.has(pointEndedKey(shot.id)) ||
+      ordered.slice(at + 1).some(
+        (s) =>
+          dismissed.has(pointEndedKey(s.id)) ||
+          s.status === "edited" ||
+          s.status === "added" ||
+          // A stroke added and deleted by mistake was never looked at. After
+          // a miss the labeller called, deleting one stroke of several
+          // answers nothing about the rest: the question stays while any is
+          // live.
+          (!called && s.status === "deleted" && !isWithdrawnAdd(s)),
+      );
+    if (settled) return null;
+    return {
+      code: "shot_after_point_end",
+      tier: "hint",
+      scope: "point",
+      params: {
+        shotId: shot.id,
+        after: live.slice(i + 1).map((s) => s.id),
+      },
+    };
   };
+  // A miss the labeller called comes first; once that one is settled, the
+  // end of the rally is still read as before.
+  const called = calledMissPlayedOn(live);
+  const asked = called === -1 ? null : askedAt(called, true);
+  if (asked) return asked;
+  const i = live.length - 2;
+  if (i === called) return null;
+  const shot = live[i];
+  if (!endsPointWhenMissed(shot.stroke)) return null;
+  if (effectiveShotResult(shot) !== "out") return null;
+  // Met in the air where it reads out: played on, not a point over.
+  if (landingTakesContact(shot, live[i + 1], false)) return null;
+  return askedAt(i, false);
 }
 
 /**
@@ -967,6 +978,25 @@ export function lastBallAgainstGame(
 }
 
 /**
+ * "Serve in, landing outside the box" as the well and the flag lists draw it:
+ * `serveInLandingOut`, unless "Did the point end here?" already asks about
+ * that same serve. A second serve stored in whose landing reads out raises
+ * both off the one bounce, and the first is the question that settles it:
+ * answered yes, the serve is a double fault and no placement is owed;
+ * dismissed, this one is asked again.
+ */
+export function serveLandingHint(
+  point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "dismissed">>,
+  ghosts: boolean,
+): ReturnType<typeof serveInLandingOut> {
+  const outside = serveInLandingOut(point, ghosts);
+  if (!outside) return null;
+  return pointEndedEarly(point, ghosts)?.params.shotId === outside.params.shotId
+    ? null
+    : outside;
+}
+
+/**
  * The point's own hints less a locked game's "Was the last ball out?" where
  * the vendor's call already asks the same of the same ball
  * (`lastCallAnswer`): one question, one answer. Kept when the two ask
@@ -1075,7 +1105,7 @@ export function openHintMarks(
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
     servesFromBothSides(point, ghosts),
-    serveInLandingOut(point, ghosts),
+    serveLandingHint(point, ghosts),
     placementMissing(point, ghosts),
     // Not twice: the derivation's own "Into the net?" already asks.
     own.some((mark) => mark.code === "net_by_trajectory") ||

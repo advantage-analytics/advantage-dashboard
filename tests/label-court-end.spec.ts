@@ -164,6 +164,17 @@ test.describe("players at the wrong end", () => {
     expect([...trustedLockedGames(games, new Set())]).toEqual([
       `${games[0].setNumber}·${games[0].gameNumber}`,
     ]);
+    // With no score entered no set is ever settled: a set before then counts
+    // as sound when every game of it is decided, so a later set keeps its slot.
+    const two = [
+      { ...games[1], setNumber: 1, gameNumber: 1 },
+      { ...games[1], setNumber: 2, gameNumber: 2 },
+    ];
+    expect([...trustedLockedGames(two, new Set(), true)]).toEqual(["1·1"]);
+    expect([...trustedLockedGames(two, new Set(), false)]).toEqual([
+      "1·1",
+      "2·2",
+    ]);
     // A repeat on another game leaves this one's slot.
     expect(
       sessionCourtEndSwaps({

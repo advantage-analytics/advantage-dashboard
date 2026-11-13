@@ -1325,9 +1325,6 @@ function BlackEndedSuggestion({
   const first = accepted ? firstHintAction(hint) : null;
   // "Shot placement" can't move the score, so it never wears the amber.
   const grey = hint.code === "placement_missing";
-  // As the hint lists them: its yes first, the one the accept key answers
-  // (`firstHintAction`), then the split.
-  const actions = hint.actions;
   return (
     <div
       data-row="suggested-end"
@@ -1356,7 +1353,8 @@ function BlackEndedSuggestion({
           <span className="min-w-0 truncate">{hint.label}</span>
         </span>
       </ChromeTooltip>
-      {actions.map((action) => (
+      {/* As the hint lists them: its yes first (`firstHintAction`), then the split. */}
+      {hint.actions.map((action) => (
         <BlackTextAction
           key={action.label}
           ink="plain"

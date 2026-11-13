@@ -253,6 +253,23 @@ test.describe("dead balls after a ball marked out", () => {
     expect(
       suggestedDeleteReason(rally(["in", "in", "in"]), "nope", true),
     ).toBeNull();
+    // A miss the vendor's bounce read further back, with the rally carrying
+    // on after it, says nothing: only the ball straight before, or one the
+    // labeller called.
+    const long = [
+      row("serve", 1, "first_serve", "in"),
+      row("stale", 2, "forehand", "out"),
+      row("on", 3, "backhand", "in"),
+      row("dead", 4, "forehand", "in"),
+    ];
+    expect(suggestedDeleteReason(long, "dead", true)).toBeNull();
+    expect(
+      suggestedDeleteReason(
+        long.map((s) => (s.id === "stale" ? { ...s, resultCalled: true } : s)),
+        "dead",
+        true,
+      ),
+    ).toBe("dead_ball_after_point");
   });
 
   test("the live strokes after one, in video order; a tombstone or an unknown stroke counts for nothing", () => {

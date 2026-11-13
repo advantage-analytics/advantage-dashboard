@@ -182,6 +182,21 @@ export function gameDropPoints(
 }
 
 /**
+ * Game `game`'s own first live point: where its header already sits. A drop
+ * nearest it is the band put back — no move — so the rail measures it beside
+ * `gameDropPoints` and treats it as a cancel.
+ */
+export function gameStartPoint(
+  points: readonly BoundaryPoint[],
+  game: LabelGame,
+): string | null {
+  return (
+    points.find((point) => point.status !== "deleted" && inGame(point, game))
+      ?.id ?? null
+  );
+}
+
+/**
  * The drop position nearest the cursor: of `gaps` — each a point a header can
  * land above, with the height its drop line is drawn at — the one whose line
  * is closest to `y`, the earlier on a tie. Null with none. The line follows

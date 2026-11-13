@@ -304,11 +304,13 @@ export function sessionCourtEndSwaps(input: {
    */
   serveRepeats?: readonly { game: LabelGame }[];
 }): CourtEndSwap[] {
-  const settledSets = settledSetNumbers(
-    labelSetScores(input.points, input.games, input.startScore),
+  const entered =
     input.videoEndsEarly === true
       ? null
-      : enteredScore(input.finalScore, input.matchScore),
+      : enteredScore(input.finalScore, input.matchScore);
+  const settledSets = settledSetNumbers(
+    labelSetScores(input.points, input.games, input.startScore),
+    entered,
   );
   const repeated = new Set(
     (input.serveRepeats ?? []).map((repeat) => gameKey(repeat.game)),
@@ -316,7 +318,11 @@ export function sessionCourtEndSwaps(input: {
   return courtEndSwaps(input.points, {
     settledSets,
     startScore: input.startScore,
-    trustedLocks: trustedLockedGames(input.games, settledSets),
+    trustedLocks: trustedLockedGames(
+      input.games,
+      settledSets,
+      entered !== null,
+    ),
   }).filter((swap) => !repeated.has(gameKey(swap.game)));
 }
 
@@ -334,13 +340,25 @@ export function sessionCourtEndSwaps(input: {
 export function trustedLockedGames(
   games: readonly LabelGameBand[],
   settledSets: ReadonlySet<number>,
+  /**
+   * Whether there is an entered score to settle a set against. Without one
+   * (none entered, or the video ends early) no set is ever settled, so a set
+   * before counts as sound when every game of it is decided.
+   */
+  scored = true,
 ): Set<string> {
   const trusted = new Set<string>();
   const sets = [...new Set(games.map((band) => band.setNumber))].sort(
     (a, b) => a - b,
   );
+  const sound = (setNumber: number) =>
+    scored
+      ? settledSets.has(setNumber)
+      : games
+          .filter((band) => band.setNumber === setNumber)
+          .every((band) => band.outcome.kind === "decided");
   for (const [i, setNumber] of sets.entries()) {
-    if (!sets.slice(0, i).every((before) => settledSets.has(before))) break;
+    if (!sets.slice(0, i).every(sound)) break;
     for (const band of games) {
       if (band.setNumber !== setNumber) continue;
       trusted.add(gameKey(band));

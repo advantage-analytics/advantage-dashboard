@@ -36,7 +36,7 @@ import {
   serveAfterServeIn,
   servesFromBothSides,
   withoutRepeatedLastCall,
-  serveInLandingOut,
+  serveLandingHint,
   staleEndingPatch,
   stateHoverParts,
   strokeHintKey,
@@ -349,7 +349,7 @@ export function pointHints(
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
     servesFromBothSides(point, ghosts),
-    serveInLandingOut(point, ghosts),
+    serveLandingHint(point, ghosts),
     placementMissing(point, ghosts),
   ];
   const { hints: own, count } = pointRowMarkList(point, marks);

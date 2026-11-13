@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import { labelConfirmCopy } from "@/components/admin/labels/label-confirm";
 import {
   gameDropPoints,
+  gameStartPoint,
   nearestGameDrop,
   planGameBoundary,
 } from "@/lib/services/labels/game-boundary";
@@ -17,7 +18,9 @@ import {
   firstServeFaultAlone,
   serveByReceiver,
   markState,
+  pointEndedEarly,
   serveInLandingOut,
+  serveLandingHint,
 } from "@/lib/services/labels/marks-state";
 import {
   openFlags,
@@ -451,6 +454,11 @@ test.describe("a game's header dragged to where the game starts", () => {
     expect(nearestGameDrop(gaps, 2000)).toBe("p5");
     expect(nearestGameDrop(gaps, -50)).toBe("p2");
     expect(nearestGameDrop([], 100)).toBeNull();
+    // The band's own place is measured too, and is never a drop position:
+    // released nearest it, the band is put back and nothing moves.
+    const start = gameStartPoint(withGap, game2);
+    expect(start).not.toBeNull();
+    expect(drops.has(start!)).toBe(false);
   });
 
   test("the dragged game's lock: its new first point takes it, its old first lets go", () => {
@@ -653,6 +661,26 @@ test.describe("a serve stored in whose landing is outside the box", () => {
     expect(serveInLandingOut({ shots }, true)).toBeNull();
     expect(firstServeFaultAlone({ shots, ending: null }, true)?.code).toBe(
       "first_serve_fault_alone",
+    );
+  });
+
+  test("one question, not two: “Did the point end here?” on that serve stands for this hint until it is dismissed", () => {
+    // A second serve stored in, landing long, with the return after it: the
+    // one bounce raises both, and the point-ended question is the one drawn.
+    const shots = [
+      placed("in", LONG, "second_serve"),
+      { ...shot("b", "p2", "forehand", 2), result: "in" } as LabelShot,
+    ];
+    expect(pointEndedEarly({ shots }, true)?.params.shotId).toBe("a");
+    expect(serveInLandingOut({ shots }, true)).not.toBeNull();
+    expect(serveLandingHint({ shots }, true)).toBeNull();
+    // Dismissed, the landing is still to place: this hint is asked again.
+    const dismissed = { shots, dismissed: ["point_ended:a"] };
+    expect(pointEndedEarly(dismissed, true)).toBeNull();
+    expect(serveLandingHint(dismissed, true)?.params.shotId).toBe("a");
+    // With no stroke after it nothing else asks: the hint stands.
+    expect(serveLandingHint({ shots: [placed("in", LONG)] }, true)?.code).toBe(
+      "serve_in_landing_out",
     );
   });
 

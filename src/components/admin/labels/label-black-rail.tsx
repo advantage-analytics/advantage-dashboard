@@ -89,6 +89,7 @@ import { acceptedHint, pointHints } from "./label-black-mark";
 import { BlackTextAction, gameSlot } from "./label-black-parts";
 import {
   gameDropPoints,
+  gameStartPoint,
   nearestGameDrop,
   planGameBoundary,
 } from "@/lib/services/labels/game-boundary";
@@ -673,6 +674,11 @@ export function LabelBlackRail({
     () => (draggedGame ? gameDropPoints(points, draggedGame) : null),
     [points, draggedGame],
   );
+  // Where the band already sits: nearest it, the drop is the band put back.
+  const dragStart = useMemo(
+    () => (draggedGame ? gameStartPoint(points, draggedGame) : null),
+    [points, draggedGame],
+  );
   // The drop position nearest the cursor, read off the gap markers drawn
   // between the rows while a band is dragged (`data-game-gap`), not off the
   // row under the cursor: a tall open point, a band or a slot is no point
@@ -684,11 +690,13 @@ export function LabelBlackRail({
       "[data-game-gap]",
     )) {
       const pointId = gap.dataset.gameGap;
-      if (pointId && dropPoints.has(pointId)) {
+      if (pointId && (dropPoints.has(pointId) || pointId === dragStart)) {
         gaps.push({ pointId, y: gap.getBoundingClientRect().top });
       }
     }
-    return nearestGameDrop(gaps, event.clientY);
+    const nearest = nearestGameDrop(gaps, event.clientY);
+    // Back where it started: no line, and the drop moves nothing.
+    return nearest === dragStart ? null : nearest;
   };
   // The tiebreaks off their serve order, by the first point that is off it.
   const serveOrderBefore = useMemo(

@@ -28,6 +28,7 @@ import {
   type LabelShotPatch,
   type LivePointStatus,
 } from "./edit";
+import { labellerCall } from "./shot-derived";
 import {
   planPlayerSwap,
   type ShotSwapWrite,
@@ -304,8 +305,9 @@ export function deadBallReason(
 
 /**
  * The reason the delete dialog opens on for `shotId`, read off the live
- * strokes before it: hit after the point ended when an earlier rally ball is
- * out or in the net, hit after a fault when that miss is a second serve (a
+ * strokes before it: hit after the point ended when the ball straight before
+ * it — or an earlier one the labeller called — is out or in the net, hit
+ * after a fault when that miss is a second serve (a
  * double fault) or the stroke straight before is a faulted first serve the
  * returner swung at. Null when nothing before it says the ball was dead: the
  * labeller picks.
@@ -322,11 +324,17 @@ export function suggestedDeleteReason(
   const at = ordered.findIndex((shot) => shot.id === shotId);
   if (at === -1) return null;
   const before = ordered.slice(0, at).filter((s) => isLiveShot(s, ghosts));
-  const ended = before.find(
-    (s) => endsPointWhenMissed(s.stroke) && isMissedResult(s.result),
-  );
-  if (ended) return deadBallReason(ended.stroke);
   const previous = before.at(-1);
+  const endedPoint = (s: LabelShot) =>
+    endsPointWhenMissed(s.stroke) && isMissedResult(s.result);
+  // The stroke straight before, or an earlier one the labeller called: a
+  // miss the vendor's bounce read further back in a rally that carried on is
+  // most often a ball in play, and says nothing about this stroke.
+  const ended =
+    previous && endedPoint(previous)
+      ? previous
+      : before.find((s) => endedPoint(s) && labellerCall(s));
+  if (ended) return deadBallReason(ended.stroke);
   return previous?.stroke === "first_serve" && isMissedResult(previous.result)
     ? "dead_ball_after_fault"
     : null;
