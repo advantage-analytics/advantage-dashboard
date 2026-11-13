@@ -72,7 +72,7 @@ ready).
 
 ## T5 · Admin resubmit of a failed analysis
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** guess — src/lib/services/splitstep/resubmit-job.ts, src/app/admin/matches/resubmit-action.ts (new, or a route under src/app/api/admin/splitstep/), tests/admin-resubmit.spec.ts (new)
 - **done when:**

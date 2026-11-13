@@ -9,8 +9,8 @@
  * match-fallback matcher picks "newest job wins", so deliveries for the new
  * submission route themselves correctly without any change there.
  *
- * Two callers share this function and nothing else may write the lineage
- * columns:
+ * Three callers share this function (the third is the admin retry, below)
+ * and nothing else may write the lineage columns:
  *   • the webhook's `job_failed` branch (auto — one automatic attempt per
  *     chain, download-step failures only)
  *   • POST /api/splitstep/jobs/[jobId]/resubmit (manual — "Retry analysis"
@@ -96,6 +96,25 @@
  *   • the adopted-failure auto-retry — a reprocess that fails stays failed.
  * The duplicate, blob and metadata checks run unchanged. What a reprocess
  * child changes downstream is listed in `reprocess.ts`.
+ *
+ * ── Admin retry (admin only) ─────────────────────────────────────────────────
+ * `adminRetry: { requestedBy }` is an admin pressing retry on someone else's
+ * FAILED analysis, reached only from `adminResubmitFailedAnalysis()`
+ * (`admin-resubmit.ts`), which checks `users.is_admin` itself. It is the
+ * manual path with exactly two differences, both because the person asking is
+ * not the uploader:
+ *   • the upload contract (step 5b) is skipped, by name and logged. Its roster
+ *     read is bound to the UPLOADER's session and an admin has no such session
+ *     — the same reason, and the same exemption, as the auto path above;
+ *   • the child is billed to the MATCH's own workspace, resolved by
+ *     `resolveAutoRetryWorkspace()` for the uploader at retry time, exactly as
+ *     an automatic retry resolves it. A `workspace` handed in beside it is
+ *     ignored: nothing of the admin's is ever charged.
+ * Everything else runs unchanged and is NOT skipped: the failed-state check,
+ * `classifyFailure()`, the attempt ceiling, the duplicate, blob and metadata
+ * checks, and the full `reserveQuota()` gauntlet. It is not a reprocess — a
+ * completed parent stays refused — and it does not undo an athlete's cancel.
+ * The child is `auto_resubmitted: false`: a person asked for it.
  *
  * ── The vendor POST fragment ─────────────────────────────────────────────────
  * Steps mint → POST → parse id → record queued mirror api/splitstep/jobs
@@ -352,6 +371,14 @@ export async function resubmitJob(params: {
   reprocess?: boolean;
   /** Who asked for a reprocess, for the log: an admin's id, or `"cron"`. */
   requestedBy?: string;
+  /**
+   * An admin retrying someone else's FAILED analysis — see the header. Skips
+   * only the upload contract's session-bound roster read (logged, with the
+   * admin's id), and bills the match's own workspace as the auto path
+   * resolves it. Never together with `auto` or `reprocess`; `workspace` and
+   * `session` are not read.
+   */
+  adminRetry?: { requestedBy: string };
   /** Test seams — see `ResubmitIo`. Production omits this. */
   io?: Partial<ResubmitIo>;
 }): Promise<ResubmitResult> {
@@ -363,6 +390,7 @@ export async function resubmitJob(params: {
     session,
     reprocess = false,
     requestedBy,
+    adminRetry,
   } = params;
   const io: ResubmitIo = { ...defaultIo(supabase, session), ...params.io };
 
@@ -372,6 +400,16 @@ export async function resubmitJob(params: {
       ok: false,
       reason: "not_failed",
       message: "A reprocess is only ever started by an admin.",
+    };
+  }
+
+  if (adminRetry && (auto || reprocess)) {
+    // An admin retry is a person retrying a failure: never the system's
+    // retry, and never the free resend of a finished analysis.
+    return {
+      ok: false,
+      reason: "not_failed",
+      message: "An admin retry is only ever a retry of a failed analysis.",
     };
   }
 
@@ -435,8 +473,9 @@ export async function resubmitJob(params: {
   }
 
   const cancelled = parent.status === "cancelled";
-  if (cancelled && auto) {
-    // A cancel is the athlete's decision; the system never reverses it.
+  if (cancelled && (auto || adminRetry)) {
+    // A cancel is the athlete's decision; neither the system nor an admin
+    // reverses it — the resend would spend the athlete's own allowance.
     return {
       ok: false,
       reason: "not_failed",
@@ -756,7 +795,21 @@ export async function resubmitJob(params: {
   //     refused on eligibility would only have to be handed straight back.
   //     A reprocess skips it too: an admin is resending a match that was
   //     admitted and analysed already, and there is no session to ask with.
-  if (!auto && !reprocess) {
+  //
+  //     An admin retry skips it for the auto path's reason: the roster read is
+  //     bound to the uploader's session, and the admin is not the uploader.
+  //     The facts that can have changed — approval, role, "Can send video" —
+  //     are re-derived for the uploader and asked by `reserveQuota()` below.
+  if (adminRetry) {
+    console.log(
+      `${LOG} admin retry — upload contract skipped (its roster read needs the uploader's session)`,
+      {
+        parentId: parent.id,
+        matchId: parent.match_id,
+        requestedBy: adminRetry.requestedBy,
+      },
+    );
+  } else if (!auto && !reprocess) {
     const roster =
       workspace?.kind === "team"
         ? await io.loadRoster(workspace.id, parent.created_by)
@@ -876,6 +929,7 @@ export async function resubmitJob(params: {
         io,
         auto,
         workspace,
+        resolveFromMatch: adminRetry !== undefined,
         parent,
         childId,
         programId: match.program_id,
@@ -981,6 +1035,7 @@ export async function resubmitJob(params: {
       externalJobId,
       auto,
       reprocess,
+      requestedBy: adminRetry?.requestedBy ?? requestedBy ?? null,
       billableSeconds,
     });
 
@@ -1129,21 +1184,36 @@ async function loadChain(
  * Reserve the child's quota. Both paths funnel through `reserveQuota()` — the
  * SAME policy gate a manual first submission uses — so an auto-retry cannot
  * spend a cent that current permission would refuse. See the file header.
+ *
+ * `resolveFromMatch` is the admin retry: nobody's session names the billing
+ * workspace, so it is the match's own, resolved for the uploader exactly as
+ * the auto path resolves it — and `workspace` is not read.
  */
 async function reserveForChild(params: {
   supabase: SupabaseClient;
   io: ResubmitIo;
   auto: boolean;
   workspace: Workspace | undefined;
+  resolveFromMatch: boolean;
   parent: ParentJob;
   childId: string;
   programId: string | null;
   seconds: number;
 }): Promise<{ ok: true } | { ok: false; message: string }> {
-  const { supabase, io, auto, workspace, parent, childId, programId, seconds } =
-    params;
+  const {
+    supabase,
+    io,
+    auto,
+    workspace,
+    resolveFromMatch,
+    parent,
+    childId,
+    programId,
+    seconds,
+  } = params;
+  const derived = auto || resolveFromMatch;
 
-  const effectiveWorkspace = auto
+  const effectiveWorkspace = derived
     ? await resolveAutoRetryWorkspace({
         supabase,
         programId,
@@ -1154,7 +1224,7 @@ async function reserveForChild(params: {
   if (!effectiveWorkspace) {
     return {
       ok: false,
-      message: auto
+      message: derived
         ? "The uploader no longer has permission to submit video for this program."
         : "A billing workspace is required to retry this analysis.",
     };

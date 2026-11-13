@@ -50,3 +50,17 @@ is the runner's. Newest entries at the bottom.
 2. Every row action is an outline button; decide whether the first one should be primary.
 3. The artboard bolds overdue waits; there is no due time to drive that until piece 2.
 4. `/admin` has had no eyes-on check yet.
+
+## T5 · Admin resubmit of a failed analysis — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new server action `resubmitFailedAnalysisAction` (`src/app/admin/matches/resubmit-action.ts`) over the deps-injected core `adminResubmitFailedAnalysis` (`src/lib/services/splitstep/admin-resubmit.ts`): admin check before any read, takes a job id or a match id, refuses verified and non-failed jobs with the existing sentences, returns `{ ok, error, code }`, logs every attempt with the admin's id. `resubmit-job.ts` gains the `adminRetry` parameter that bills through `resolveAutoRetryWorkspace()` and skips only the roster read. `tests/admin-resubmit.spec.ts` (17 tests). `docs/ui-revamp-guardrails.md` records the exception to the frozen file.
+
+**follow-ups:**
+
+1. A job the admin console created bills the administrator who uploaded it (uncapped for personal, refused for a team the admin is not in). Same gap as the auto-retry; resolving billing from the match's audit row would close it.
+2. This path does not check for a label session in progress, unlike `/api/admin/splitstep/reprocess`.
+3. A cancelled job is refused for an admin ("only sent again by the athlete"); confirm that is wanted.
+4. `quota` and `attempt_ceiling` are the two refusal codes worth their own copy in T8.
+5. The spec README still says no admin resubmit exists; it is a point-in-time record.
