@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Labeller board, free to claim</title>
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+        />
+        <style>
+          body {
+            margin: 0;
+            background: #ffffff;
+          }
+          a {
+            color: #0d0d0d;
+            text-decoration: none;
+          }
+          a:hover {
+            color: #0d0d0d;
+          }
+        </style>
+      </helmet>
+      <div
+        style="
+          min-height: 760px;
+          background: #ffffff;
+          color: #0d0d0d;
+          font-family: Inter, system-ui, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          font-size: 13px;
+          line-height: 1.45;
+        "
+      >
+        <main
+          style="
+            max-width: 1360px;
+            margin: 0 auto;
+            box-sizing: border-box;
+            padding: 48px clamp(16px, 4vw, 56px) 64px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: flex-end;
+              justify-content: space-between;
+              gap: 20px 48px;
+            "
+          >
+            <div style="min-width: 0; flex: 1 1 420px">
+              <h1
+                style="
+                  margin: 0;
+                  font-size: 30px;
+                  font-weight: 300;
+                  line-height: 1.2;
+                  letter-spacing: -0.01em;
+                "
+              >
+                14 matches to label
+              </h1>
+              <p style="margin: 8px 0 0; font-size: 13px; color: #6b6b76">
+                Work from the top. Express first, then Priority, then Standard.
+              </p>
+            </div>
+            <dl style="margin: 0; display: flex; gap: 32px">
+              <div>
+                <dt style="font-size: 12px; color: #6b6b76">
+                  Your hours approved, November
+                </dt>
+                <dd
+                  style="
+                    margin: 2px 0 0;
+                    font-size: 20px;
+                    line-height: 1.2;
+                    font-variant-numeric: tabular-nums;
+                  "
+                >
+                  6.40 <span style="font-size: 13px; color: #6b6b76">h</span>
+                </dd>
+              </div>
+              <div>
+                <dt style="font-size: 12px; color: #6b6b76">Awaiting review</dt>
+                <dd
+                  style="
+                    margin: 2px 0 0;
+                    font-size: 20px;
+                    line-height: 1.2;
+                    font-variant-numeric: tabular-nums;
+                  "
+                >
+                  2.40 <span style="font-size: 13px; color: #6b6b76">h</span>
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          <div
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: flex-start;
+              gap: 16px;
+            "
+          >
+            <section
+              aria-labelledby="fr-todo"
+              style="
+                flex: 1 1 300px;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 16px 8px 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+              "
+            >
+              <h2
+                id="fr-todo"
+                style="
+                  margin: 0;
+                  padding: 0 12px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: baseline;
+                  gap: 12px;
+                  font-size: 13px;
+                  font-weight: 600;
+                "
+              >
+                <span>To do</span
+                ><span
+                  style="
+                    font-size: 12px;
+                    font-weight: 400;
+                    color: #6b6b76;
+                    font-variant-numeric: tabular-nums;
+                  "
+                  >14 matches · 15.90 h</span
+                >
+              </h2>
+              <sc-for list="{{ todo }}" as="g" hint-placeholder-count="3">
+                <div style="display: flex; flex-direction: column; gap: 4px">
+                  <sc-for list="{{ g.rows }}" as="m" hint-placeholder-count="2">
+                    <div
+                      style="
+                        box-sizing: border-box;
+                        height: 44px;
+                        padding: 0 12px;
+                        border-radius: 8px;
+                        background: #ffffff;
+                        display: grid;
+                        grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                        align-items: center;
+                        column-gap: 8px;
+                      "
+                    >
+                      <span
+                        style="
+                          font-size: 14px;
+                          font-weight: 500;
+                          font-variant-numeric: tabular-nums;
+                          white-space: nowrap;
+                        "
+                        >{{ m.hours }}
+                        <span style="font-weight: 400; color: #6b6b76"
+                          >h</span
+                        ></span
+                      >
+                      <dc-import
+                        name="Urgency"
+                        level="{{ m.lv }}"
+                        hint-size="88px,22px"
+                      ></dc-import>
+                      <sc-if
+                        value="{{ m.open }}"
+                        hint-placeholder-val="{{ false }}"
+                        ><a
+                          href="#claim"
+                          style="
+                            grid-column: 4;
+                            display: inline-flex;
+                            align-items: center;
+                            height: 28px;
+                            padding: 0 12px;
+                            border-radius: 6px;
+                            background: #3b82f6;
+                            color: #ffffff;
+                            font-size: 12px;
+                            font-weight: 500;
+                            white-space: nowrap;
+                          "
+                          >Claim</a
+                        ></sc-if
+                      >
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+              <div
+                style="
+                  display: flex;
+                  flex-wrap: wrap;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 4px 12px;
+                  padding: 4px 12px 8px;
+                  font-size: 12px;
+                "
+              >
+                <a href="#more" style="font-weight: 500; color: #52525b"
+                  >Show 6 more</a
+                >
+                <span style="color: #6b6b76"
+                  >Priority opens when Express is clear.</span
+                >
+              </div>
+            </section>
+
+            <section
+              aria-labelledby="fr-doing"
+              style="
+                flex: 1 1 300px;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 16px 8px 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+              "
+            >
+              <h2
+                id="fr-doing"
+                style="
+                  margin: 0;
+                  padding: 0 12px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: baseline;
+                  gap: 12px;
+                  font-size: 13px;
+                  font-weight: 600;
+                "
+              >
+                <span>In progress</span
+                ><span
+                  style="
+                    font-size: 12px;
+                    font-weight: 400;
+                    color: #6b6b76;
+                    font-variant-numeric: tabular-nums;
+                  "
+                  >3 matches · 3.80 h</span
+                >
+              </h2>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <p
+                  style="
+                    margin: 0;
+                    box-sizing: border-box;
+                    min-height: 44px;
+                    padding: 0 12px;
+                    border-radius: 8px;
+                    border: 1px dashed #c4c4cc;
+                    display: flex;
+                    align-items: center;
+                    font-size: 12px;
+                    color: #6b6b76;
+                  "
+                >
+                  Claim an Express match and it appears here.
+                </p>
+                <sc-for list="{{ doing }}" as="m" hint-placeholder-count="3">
+                  <div
+                    style="
+                      box-sizing: border-box;
+                      height: 44px;
+                      padding: 0 12px;
+                      border-radius: 8px;
+                      background: #ffffff;
+                      display: grid;
+                      grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                      align-items: center;
+                      column-gap: 8px;
+                    "
+                  >
+                    <span
+                      style="
+                        font-size: 14px;
+                        font-weight: 500;
+                        font-variant-numeric: tabular-nums;
+                        white-space: nowrap;
+                      "
+                      >{{ m.hours }}
+                      <span style="font-weight: 400; color: #6b6b76"
+                        >h</span
+                      ></span
+                    >
+                    <dc-import
+                      name="Urgency"
+                      level="{{ m.lv }}"
+                      hint-size="88px,22px"
+                    ></dc-import>
+                    <span
+                      style="
+                        min-width: 0;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        text-align: right;
+                        font-size: 12px;
+                        color: #6b6b76;
+                        white-space: nowrap;
+                      "
+                      >{{ m.first }}</span
+                    >
+                    <span
+                      aria-hidden="true"
+                      style="
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 999px;
+                        background: #ededf0;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 10px;
+                        font-weight: 600;
+                        color: #52525b;
+                      "
+                      >{{ m.ini }}</span
+                    >
+                  </div>
+                </sc-for>
+              </div>
+            </section>
+
+            <section
+              aria-labelledby="fr-review"
+              style="
+                flex: 1 1 300px;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 16px 8px 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+              "
+            >
+              <h2
+                id="fr-review"
+                style="
+                  margin: 0;
+                  padding: 0 12px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: baseline;
+                  gap: 12px;
+                  font-size: 13px;
+                  font-weight: 600;
+                "
+              >
+                <span>Awaiting review</span
+                ><span
+                  style="
+                    font-size: 12px;
+                    font-weight: 400;
+                    color: #6b6b76;
+                    font-variant-numeric: tabular-nums;
+                  "
+                  >4 matches · 4.85 h</span
+                >
+              </h2>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <sc-for list="{{ review }}" as="m" hint-placeholder-count="4">
+                  <div
+                    style="
+                      box-sizing: border-box;
+                      height: 44px;
+                      padding: 0 12px;
+                      border-radius: 8px;
+                      background: #ffffff;
+                      display: grid;
+                      grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                      align-items: center;
+                      column-gap: 8px;
+                    "
+                  >
+                    <span
+                      style="
+                        font-size: 14px;
+                        font-weight: 500;
+                        font-variant-numeric: tabular-nums;
+                        white-space: nowrap;
+                      "
+                      >{{ m.hours }}
+                      <span style="font-weight: 400; color: #6b6b76"
+                        >h</span
+                      ></span
+                    >
+                    <dc-import
+                      name="Urgency"
+                      level="{{ m.lv }}"
+                      hint-size="88px,22px"
+                    ></dc-import>
+                    <span
+                      style="
+                        min-width: 0;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        text-align: right;
+                        font-size: 12px;
+                        color: #6b6b76;
+                        white-space: nowrap;
+                      "
+                      >{{ m.first }}</span
+                    >
+                    <span
+                      aria-hidden="true"
+                      style="
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 999px;
+                        background: #ededf0;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 10px;
+                        font-weight: 600;
+                        color: #52525b;
+                      "
+                      >{{ m.ini }}</span
+                    >
+                  </div>
+                </sc-for>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </x-dc>
+    <script
+      type="text/x-dc"
+      data-dc-script
+      data-props='{"$preview":{"width":1360,"height":760}}'
+    >
+      class Component extends DCLogic {
+      renderVals() {
+      const m = (lv, hours, name) => Object.assign({ lv: lv, hours: hours, open: lv === 'e' && !name }, name ? { first: name === 'Sam Ortiz' ? 'You' : name.split(' ')[0], ini: name.split(' ').map((w) => w[0]).join('') } : {});
+      return {
+      todo: [
+      { rows: [m('e', '1.40'), m('e', '0.85')] },
+      { rows: [m('p', '1.65'), m('p', '1.10')] },
+      { rows: [m('s', '1.30'), m('s', '0.95'), m('s', '1.50'), m('s', '1.05')] }
+      ],
+      doing: [m('e', '1.05', 'Maya Rao'), m('p', '1.45', 'Tobi Adler'), m('s', '1.30', 'Lena Kovac')],
+      review: [m('p', '1.20', 'Sam Ortiz'), m('p', '1.55', 'Dev Patel'), m('s', '1.20', 'Sam Ortiz'), m('s', '0.90', 'Maya Rao')]
+      };
+      }
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Admin Labels board, published matches to check</title>
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+        />
+        <style>
+          body {
+            margin: 0;
+            background: #ffffff;
+          }
+          a {
+            color: #0d0d0d;
+            text-decoration: none;
+          }
+          a:hover {
+            color: #0d0d0d;
+          }
+        </style>
+      </helmet>
+      <div
+        style="
+          min-height: 980px;
+          background: #ffffff;
+          color: #0d0d0d;
+          font-family: Inter, system-ui, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          font-size: 13px;
+          line-height: 1.45;
+        "
+      >
+        <header
+          style="
+            min-height: 44px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px 24px;
+            padding: 0 24px;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 10px">
+            <img
+              src="/_blob/cdac635f71902c44dea602e8af131551"
+              alt="Advantage"
+              style="width: 105px; height: 18px"
+            />
+            <span
+              aria-hidden="true"
+              style="width: 1px; height: 14px; background: #e5e5ea"
+            ></span>
+            <span style="font-size: 12px; color: #6b6b76">Admin</span>
+          </div>
+          <nav
+            aria-label="Admin"
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              gap: 4px;
+            "
+          >
+            <a
+              href="#today"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Today</a
+            >
+            <a
+              href="#labels-now"
+              aria-current="page"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 500;
+                background: #f5f5f5;
+              "
+              >Labels</a
+            >
+            <a
+              href="#matches"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Matches</a
+            >
+            <a
+              href="#teams"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Teams</a
+            >
+          </nav>
+          <span
+            aria-label="Signed in as CG"
+            style="
+              width: 24px;
+              height: 24px;
+              border-radius: 999px;
+              background: #ededf0;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 10px;
+              font-weight: 600;
+              color: #52525b;
+            "
+            >CG</span
+          >
+        </header>
+
+        <main
+          style="
+            max-width: 1360px;
+            margin: 0 auto;
+            box-sizing: border-box;
+            padding: 48px clamp(16px, 4vw, 56px) 64px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: flex-end;
+              justify-content: space-between;
+              gap: 20px 48px;
+            "
+          >
+            <div style="min-width: 0; flex: 1 1 420px">
+              <h1
+                style="
+                  margin: 0;
+                  font-size: 30px;
+                  font-weight: 300;
+                  line-height: 1.2;
+                  letter-spacing: -0.01em;
+                "
+              >
+                3 published matches to check
+              </h1>
+              <p style="margin: 8px 0 0; font-size: 13px; color: #6b6b76">
+                2 matches are overdue for labelling. 1 is back with its labeller
+                for fixes.
+              </p>
+            </div>
+          </div>
+
+          <div
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: flex-start;
+              gap: 16px;
+            "
+          >
+            <section
+              aria-labelledby="au-todo"
+              style="
+                flex: 1 1 300px;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 16px 8px 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+              "
+            >
+              <h2
+                id="au-todo"
+                style="
+                  margin: 0;
+                  padding: 0 12px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: baseline;
+                  gap: 12px;
+                  font-size: 13px;
+                  font-weight: 600;
+                "
+              >
+                <span>To do</span
+                ><span
+                  style="
+                    font-size: 12px;
+                    font-weight: 400;
+                    color: #6b6b76;
+                    font-variant-numeric: tabular-nums;
+                  "
+                  >13 matches · 14.50 h</span
+                >
+              </h2>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <sc-for list="{{ todo }}" as="m" hint-placeholder-count="6">
+                  <div
+                    style="
+                      box-sizing: border-box;
+                      padding: 0 12px 10px;
+                      border-radius: 8px;
+                      background: #ffffff;
+                      display: flex;
+                      flex-direction: column;
+                    "
+                  >
+                    <div
+                      style="
+                        height: 40px;
+                        display: grid;
+                        grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                        align-items: center;
+                        column-gap: 8px;
+                      "
+                    >
+                      <span
+                        style="
+                          font-size: 14px;
+                          font-weight: 500;
+                          font-variant-numeric: tabular-nums;
+                          white-space: nowrap;
+                        "
+                        >{{ m.hours }}
+                        <span style="font-weight: 400; color: #6b6b76"
+                          >h</span
+                        ></span
+                      >
+                      <dc-import
+                        name="Urgency"
+                        level="{{ m.lv }}"
+                        hint-size="88px,22px"
+                      ></dc-import>
+                      <sc-if
+                        value="{{ m.late }}"
+                        hint-placeholder-val="{{ false }}"
+                        ><span
+                          style="
+                            grid-column: 4;
+                            font-size: 12px;
+                            font-weight: 600;
+                            font-variant-numeric: tabular-nums;
+                            white-space: nowrap;
+                          "
+                          >{{ m.due }}</span
+                        ></sc-if
+                      >
+                      <sc-if
+                        value="{{ m.ok }}"
+                        hint-placeholder-val="{{ true }}"
+                        ><span
+                          style="
+                            grid-column: 4;
+                            font-size: 12px;
+                            color: #6b6b76;
+                            font-variant-numeric: tabular-nums;
+                            white-space: nowrap;
+                          "
+                          >{{ m.due }}</span
+                        ></sc-if
+                      >
+                    </div>
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 12px;
+                        min-height: 28px;
+                      "
+                    >
+                      <span
+                        style="
+                          min-width: 0;
+                          font-size: 12px;
+                          overflow: hidden;
+                          text-overflow: ellipsis;
+                          white-space: nowrap;
+                        "
+                        >{{ m.players }}
+                        <span style="color: #6b6b76">· {{ m.team }}</span></span
+                      >
+                      <a
+                        href="#open"
+                        aria-label="Open this match"
+                        style="
+                          flex-shrink: 0;
+                          display: inline-flex;
+                          align-items: center;
+                          justify-content: center;
+                          width: 28px;
+                          height: 28px;
+                          margin-right: -8px;
+                          color: #9a9aa3;
+                        "
+                        ><svg
+                          aria-hidden="true"
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path d="m9 6 6 6-6 6"></path></svg
+                      ></a>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+              <a
+                href="#more"
+                style="
+                  padding: 4px 12px 8px;
+                  font-size: 12px;
+                  font-weight: 500;
+                  color: #52525b;
+                "
+                >Show 7 more</a
+              >
+            </section>
+
+            <section
+              aria-labelledby="au-doing"
+              style="
+                flex: 1 1 300px;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 16px 8px 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+              "
+            >
+              <h2
+                id="au-doing"
+                style="
+                  margin: 0;
+                  padding: 0 12px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: baseline;
+                  gap: 12px;
+                  font-size: 13px;
+                  font-weight: 600;
+                "
+              >
+                <span>In progress</span
+                ><span
+                  style="
+                    font-size: 12px;
+                    font-weight: 400;
+                    color: #6b6b76;
+                    font-variant-numeric: tabular-nums;
+                  "
+                  >5 matches · 6.40 h</span
+                >
+              </h2>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <article
+                  style="
+                    box-sizing: border-box;
+                    padding: 0 12px 12px;
+                    border-radius: 8px;
+                    background: #ffffff;
+                    box-shadow: 0 0 0 1px #d4d4db;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                  "
+                >
+                  <div>
+                    <div
+                      style="
+                        height: 40px;
+                        display: grid;
+                        grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                        align-items: center;
+                        column-gap: 8px;
+                      "
+                    >
+                      <span
+                        style="
+                          font-size: 14px;
+                          font-weight: 500;
+                          font-variant-numeric: tabular-nums;
+                          white-space: nowrap;
+                        "
+                        >1.40
+                        <span style="font-weight: 400; color: #6b6b76"
+                          >h</span
+                        ></span
+                      >
+                      <dc-import
+                        name="Urgency"
+                        level="e"
+                        hint-size="88px,22px"
+                      ></dc-import>
+                      <span
+                        style="
+                          grid-column: 4;
+                          font-size: 12px;
+                          color: #6b6b76;
+                          font-variant-numeric: tabular-nums;
+                          white-space: nowrap;
+                        "
+                        >Due in 4 h</span
+                      >
+                    </div>
+                    <div
+                      style="
+                        font-size: 12px;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                      "
+                    >
+                      R. Okafor vs D. Lindqvist
+                      <span style="color: #6b6b76">· Westbrook University</span>
+                    </div>
+                  </div>
+                  <div
+                    role="progressbar"
+                    aria-label="Flags resolved"
+                    aria-valuemin="0"
+                    aria-valuemax="40"
+                    aria-valuenow="21"
+                    style="
+                      height: 3px;
+                      border-radius: 999px;
+                      overflow: hidden;
+                      background: #e6e6ea;
+                    "
+                  >
+                    <div
+                      style="
+                        width: 53%;
+                        height: 100%;
+                        border-radius: 999px;
+                        background: #3b82f6;
+                      "
+                    ></div>
+                  </div>
+                  <div
+                    style="
+                      display: flex;
+                      align-items: center;
+                      justify-content: space-between;
+                      gap: 12px;
+                    "
+                  >
+                    <span
+                      style="
+                        min-width: 0;
+                        font-size: 12px;
+                        color: #6b6b76;
+                        font-variant-numeric: tabular-nums;
+                      "
+                      ><span style="color: #0d0d0d; font-weight: 600">You</span>
+                      · 21 of 40 flags resolved · left: 9 score, 6 data, 4
+                      errors</span
+                    >
+                    <a
+                      href="#continue"
+                      style="
+                        flex-shrink: 0;
+                        display: inline-flex;
+                        align-items: center;
+                        height: 28px;
+                        padding: 0 12px;
+                        border-radius: 6px;
+                        background: #3b82f6;
+                        color: #ffffff;
+                        font-size: 12px;
+                        font-weight: 500;
+                        white-space: nowrap;
+                      "
+                      >Continue labelling</a
+                    >
+                  </div>
+                </article>
+                <div
+                  style="
+                    box-sizing: border-box;
+                    padding: 0 12px 12px;
+                    border-radius: 8px;
+                    background: #ffffff;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                  "
+                >
+                  <div>
+                    <div
+                      style="
+                        height: 40px;
+                        display: grid;
+                        grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                        align-items: center;
+                        column-gap: 8px;
+                      "
+                    >
+                      <span
+                        style="
+                          font-size: 14px;
+                          font-weight: 500;
+                          font-variant-numeric: tabular-nums;
+                          white-space: nowrap;
+                        "
+                        >1.20
+                        <span style="font-weight: 400; color: #6b6b76"
+                          >h</span
+                        ></span
+                      >
+                      <dc-import
+                        name="Urgency"
+                        level="p"
+                        hint-size="88px,22px"
+                      ></dc-import>
+                      <span
+                        style="
+                          grid-column: 4;
+                          display: inline-flex;
+                          align-items: center;
+                          height: 20px;
+                          padding: 0 8px;
+                          border-radius: 999px;
+                          background: #f1f2f4;
+                          font-size: 11px;
+                          font-weight: 500;
+                          color: #52525b;
+                          white-space: nowrap;
+                        "
+                        >Sent back</span
+                      >
+                    </div>
+                    <div
+                      style="
+                        font-size: 12px;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                      "
+                    >
+                      E. Halloran vs V. Petrov
+                      <span style="color: #6b6b76">· Lakeside College</span>
+                    </div>
+                  </div>
+                  <div style="font-size: 12px; color: #6b6b76">
+                    Sam Ortiz · sent back 2 h ago · first version still
+                    published
+                  </div>
+                  <div style="font-size: 12px; color: #525252">
+                    Your note: Set 2, game 5 has two points merged into one.
+                  </div>
+                </div>
+                <sc-for list="{{ doing }}" as="m" hint-placeholder-count="3">
+                  <div
+                    style="
+                      box-sizing: border-box;
+                      padding: 0 12px 12px;
+                      border-radius: 8px;
+                      background: #ffffff;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 8px;
+                    "
+                  >
+                    <div>
+                      <div
+                        style="
+                          height: 40px;
+                          display: grid;
+                          grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                          align-items: center;
+                          column-gap: 8px;
+                        "
+                      >
+                        <span
+                          style="
+                            font-size: 14px;
+                            font-weight: 500;
+                            font-variant-numeric: tabular-nums;
+                            white-space: nowrap;
+                          "
+                          >{{ m.hours }}
+                          <span style="font-weight: 400; color: #6b6b76"
+                            >h</span
+                          ></span
+                        >
+                        <dc-import
+                          name="Urgency"
+                          level="{{ m.lv }}"
+                          hint-size="88px,22px"
+                        ></dc-import>
+                        <sc-if
+                          value="{{ m.late }}"
+                          hint-placeholder-val="{{ false }}"
+                          ><span
+                            style="
+                              grid-column: 4;
+                              font-size: 12px;
+                              font-weight: 600;
+                              font-variant-numeric: tabular-nums;
+                              white-space: nowrap;
+                            "
+                            >{{ m.due }}</span
+                          ></sc-if
+                        >
+                        <sc-if
+                          value="{{ m.ok }}"
+                          hint-placeholder-val="{{ true }}"
+                          ><span
+                            style="
+                              grid-column: 4;
+                              font-size: 12px;
+                              color: #6b6b76;
+                              font-variant-numeric: tabular-nums;
+                              white-space: nowrap;
+                            "
+                            >{{ m.due }}</span
+                          ></sc-if
+                        >
+                      </div>
+                      <div
+                        style="
+                          font-size: 12px;
+                          overflow: hidden;
+                          text-overflow: ellipsis;
+                          white-space: nowrap;
+                        "
+                      >
+                        {{ m.players }}
+                        <span style="color: #6b6b76">· {{ m.team }}</span>
+                      </div>
+                    </div>
+                    <div
+                      aria-hidden="true"
+                      style="
+                        height: 3px;
+                        border-radius: 999px;
+                        overflow: hidden;
+                        background: #e6e6ea;
+                        display: flex;
+                      "
+                    >
+                      <svg
+                        width="100%"
+                        height="3"
+                        viewBox="0 0 100 3"
+                        preserveAspectRatio="none"
+                      >
+                        <rect
+                          width="{{ m.pct }}"
+                          height="3"
+                          fill="#3B82F6"
+                        ></rect>
+                      </svg>
+                    </div>
+                    <div
+                      style="
+                        font-size: 12px;
+                        color: #6b6b76;
+                        font-variant-numeric: tabular-nums;
+                      "
+                    >
+                      {{ m.name }} ·
+                      <sc-if
+                        value="{{ m.stalled }}"
+                        hint-placeholder-val="{{ false }}"
+                        ><span style="color: #0d0d0d; font-weight: 500"
+                          >{{ m.stalled }}</span
+                        >
+                        · </sc-if
+                      >{{ m.status }}
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </section>
+
+            <section
+              aria-labelledby="au-check"
+              style="
+                flex: 1 1 300px;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 16px 8px 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+              "
+            >
+              <h2
+                id="au-check"
+                style="
+                  margin: 0;
+                  padding: 0 12px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: baseline;
+                  gap: 12px;
+                  font-size: 13px;
+                  font-weight: 600;
+                "
+              >
+                <span>Published, to check</span
+                ><span
+                  style="
+                    font-size: 12px;
+                    font-weight: 400;
+                    color: #6b6b76;
+                    font-variant-numeric: tabular-nums;
+                  "
+                  >3 matches · 3.65 h</span
+                >
+              </h2>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <sc-for list="{{ check }}" as="m" hint-placeholder-count="3">
+                  <div
+                    style="
+                      box-sizing: border-box;
+                      padding: 0 12px 12px;
+                      border-radius: 8px;
+                      background: #ffffff;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 8px;
+                    "
+                  >
+                    <div>
+                      <div
+                        style="
+                          height: 40px;
+                          display: grid;
+                          grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                          align-items: center;
+                          column-gap: 8px;
+                        "
+                      >
+                        <span
+                          style="
+                            font-size: 14px;
+                            font-weight: 500;
+                            font-variant-numeric: tabular-nums;
+                            white-space: nowrap;
+                          "
+                          >{{ m.hours }}
+                          <span style="font-weight: 400; color: #6b6b76"
+                            >h</span
+                          ></span
+                        >
+                        <dc-import
+                          name="Urgency"
+                          level="{{ m.lv }}"
+                          hint-size="88px,22px"
+                        ></dc-import>
+                        <sc-if
+                          value="{{ m.late }}"
+                          hint-placeholder-val="{{ false }}"
+                          ><span
+                            style="
+                              grid-column: 4;
+                              font-size: 12px;
+                              font-weight: 600;
+                              white-space: nowrap;
+                            "
+                            >{{ m.kept }}</span
+                          ></sc-if
+                        >
+                        <sc-if
+                          value="{{ m.ok }}"
+                          hint-placeholder-val="{{ true }}"
+                          ><span
+                            style="
+                              grid-column: 4;
+                              font-size: 12px;
+                              color: #6b6b76;
+                              white-space: nowrap;
+                            "
+                            >{{ m.kept }}</span
+                          ></sc-if
+                        >
+                      </div>
+                      <div
+                        style="
+                          font-size: 12px;
+                          overflow: hidden;
+                          text-overflow: ellipsis;
+                          white-space: nowrap;
+                        "
+                      >
+                        {{ m.players }}
+                        <span style="color: #6b6b76">· {{ m.team }}</span>
+                      </div>
+                    </div>
+                    <div
+                      style="
+                        font-size: 12px;
+                        color: #6b6b76;
+                        font-variant-numeric: tabular-nums;
+                      "
+                    >
+                      {{ m.name }} · published {{ m.when }} · {{ m.changed }}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <a
+                        href="#check"
+                        style="
+                          display: inline-flex;
+                          align-items: center;
+                          height: 28px;
+                          padding: 0 12px;
+                          border-radius: 6px;
+                          background: #3b82f6;
+                          color: #ffffff;
+                          font-size: 12px;
+                          font-weight: 500;
+                          white-space: nowrap;
+                        "
+                        >Check</a
+                      >
+                      <a
+                        href="#send-back"
+                        style="
+                          display: inline-flex;
+                          align-items: center;
+                          height: 28px;
+                          padding: 0 12px;
+                          border: 1px solid #d9d9de;
+                          border-radius: 6px;
+                          background: #ffffff;
+                          font-size: 12px;
+                          font-weight: 500;
+                          white-space: nowrap;
+                        "
+                        >Send back</a
+                      >
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+              <p
+                style="
+                  margin: 0;
+                  padding: 0 12px 8px;
+                  font-size: 12px;
+                  color: #6b6b76;
+                "
+              >
+                These are already live for the player. Checked matches leave
+                this list. Matches you label yourself skip it. Click any match
+                on this board to open it.
+              </p>
+            </section>
+          </div>
+        </main>
+      </div>
+    </x-dc>
+    <script
+      type="text/x-dc"
+      data-dc-script
+      data-props='{"$preview":{"width":1360,"height":980}}'
+    >
+      class Component extends DCLogic {
+      renderVals() {
+      const t = (lv, hours, players, team, due, late) => ({ lv: lv, hours: hours, players: players, team: team, due: due, late: !!late, ok: !late });
+      const d = (lv, hours, players, team, due, late, name, done, total, flags, stalled) => Object.assign(t(lv, hours, players, team, due, late), { name: name, pct: Math.round(done / total * 100), stalled: stalled || '', status: done + ' of ' + total + ' flags' + (flags ? ' · left: ' + flags : '') });
+      const c = (lv, hours, players, team, kept, late, name, when, changed) => ({ lv: lv, hours: hours, players: players, team: team, kept: kept, late: !!late, ok: !late, name: name, when: when, changed: changed });
+      return {
+      todo: [
+      t('s', '1.30', 'L. Brandt vs P. Nwosu', 'Personal', 'Overdue by 1 h', true),
+      t('e', '0.85', 'M. Tanaka vs J. Bellamy', 'Personal', 'Due in 5 h'),
+      t('p', '1.65', 'S. Varga vs T. Moreau', 'Lakeside College', 'Due in 17 h'),
+      t('p', '1.10', 'A. Castell vs K. Iyer', 'Westbrook University', 'Due in 21 h'),
+      t('s', '0.95', 'O. Reyes vs G. Marchetti', 'Lakeside College', 'Due tomorrow')
+      ],
+      doing: [
+      d('s', '1.30', 'F. Adeyemi vs W. Kowalski', 'Lakeside College', 'Overdue by 2 days', true, 'Lena Kovac', 38, 41, '', 'no work in 3 days'),
+      d('e', '1.05', 'I. Novak vs Z. Ferreira', 'Personal', 'Due in 2 h', false, 'Maya Rao', 22, 36, '6 score, 5 data, 3 errors'),
+      d('p', '1.45', 'Y. Hoang vs Q. Mbeki', 'Westbrook University', 'Due in 14 h', false, 'Tobi Adler', 5, 36, '12 score, 11 data, 8 errors')
+      ],
+      check: [
+      c('s', '0.90', 'K. Lindahl vs T. Abara', 'Lakeside College', '3 h late', true, 'Maya Rao', 'yesterday', '34 of 126 points changed'),
+      c('p', '1.55', 'C. Amato vs N. Fields', 'Westbrook University', 'On time', false, 'Dev Patel', '2 h ago', '21 of 138 points changed'),
+      c('s', '1.20', 'B. Sorensen vs H. Diallo', 'Personal', 'On time', false, 'Sam Ortiz', '5 h ago', '9 of 131 points changed')
+      ]
+      };
+      }
+      }
+    </script>
+  </body>
+</html>

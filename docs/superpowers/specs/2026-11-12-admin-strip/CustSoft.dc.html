@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Customer report, verification pending without a time</title>
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+        />
+        <style>
+          body {
+            margin: 0;
+            background: #ffffff;
+          }
+        </style>
+      </helmet>
+      <div
+        style="
+          width: 880px;
+          height: 400px;
+          box-sizing: border-box;
+          padding: 40px 48px;
+          background: #ffffff;
+          color: #0d0d0d;
+          font-family: Inter, system-ui, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          font-size: 13px;
+          line-height: 1.45;
+        "
+      >
+        <div style="font-size: 11px; color: #6b6b76">Matches / Nov 12</div>
+        <h1
+          style="
+            margin: 14px 0 0;
+            font-size: 30px;
+            font-weight: 300;
+            line-height: 1.2;
+            letter-spacing: -0.01em;
+          "
+        >
+          E. Halloran vs V. Petrov
+        </h1>
+        <div
+          style="
+            margin-top: 10px;
+            display: flex;
+            align-items: baseline;
+            gap: 14px;
+            font-variant-numeric: tabular-nums;
+          "
+        >
+          <span style="font-size: 16px">7-6 &nbsp;6-3</span
+          ><span style="font-size: 12px; color: #6b6b76"
+            >Won in 1 h 12 min</span
+          >
+        </div>
+        <div
+          style="
+            margin-top: 18px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 18px;
+          "
+        >
+          <span style="font-size: 11px; color: #525252; white-space: nowrap"
+            >Nov 12, 2026</span
+          >
+          <span style="font-size: 11px; color: #525252; white-space: nowrap"
+            >Singles</span
+          >
+          <span style="font-size: 11px; color: #525252; white-space: nowrap"
+            >Hard court</span
+          >
+          <span style="position: relative">
+            <button
+              type="button"
+              aria-expanded="true"
+              style="
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                height: 22px;
+                margin: -4px -6px;
+                padding: 0 6px;
+                border: 0;
+                border-radius: 6px;
+                background: #f5f5f5;
+                font-family: inherit;
+                font-size: 11px;
+                color: #525252;
+                white-space: nowrap;
+                cursor: pointer;
+              "
+            >
+              <img
+                src="/_blob/8dc400743f71ee0897f4461b274b65d4"
+                alt=""
+                style="
+                  width: 13px;
+                  height: 13px;
+                  filter: grayscale(1);
+                  opacity: 0.55;
+                "
+              />Verification pending
+            </button>
+            <div
+              role="dialog"
+              aria-label="Verification pending"
+              style="
+                position: absolute;
+                top: 30px;
+                left: -6px;
+                width: 250px;
+                box-sizing: border-box;
+                padding: 14px 16px;
+                border-radius: 12px;
+                background: #ffffff;
+                box-shadow:
+                  0 8px 30px rgba(0, 0, 0, 0.08),
+                  0 1px 3px rgba(0, 0, 0, 0.04),
+                  0 0 0 1px #ededf0;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  font-size: 12px;
+                  font-weight: 500;
+                "
+              >
+                <img
+                  src="/_blob/8dc400743f71ee0897f4461b274b65d4"
+                  alt=""
+                  style="
+                    width: 14px;
+                    height: 14px;
+                    filter: grayscale(1);
+                    opacity: 0.55;
+                  "
+                />Verification pending
+              </div>
+              <p style="margin: 0; font-size: 12px; color: #525252">
+                We are checking every point against the video: who won and how
+                it ended. This is usually done within 24 hours of your results.
+              </p>
+              <p style="margin: 0; font-size: 12px; color: #6b6b76">
+                Until then, your statistics come from the automatic analysis and
+                may change.
+              </p>
+            </div>
+          </span>
+        </div>
+      </div>
+    </x-dc>
+    <script
+      type="text/x-dc"
+      data-dc-script
+      data-props='{"$preview":{"width":880,"height":400}}'
+    >
+      class Component extends DCLogic {
+      renderVals() { return {}; }
+      }
+    </script>
+  </body>
+</html>

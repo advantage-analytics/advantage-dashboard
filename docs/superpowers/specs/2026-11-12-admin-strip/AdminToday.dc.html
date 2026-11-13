@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Admin Today, stripped back</title>
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+        />
+        <style>
+          body {
+            margin: 0;
+            background: #ffffff;
+          }
+          a {
+            color: #0d0d0d;
+            text-decoration: none;
+          }
+          a:hover {
+            color: #0d0d0d;
+          }
+        </style>
+      </helmet>
+      <div
+        style="
+          min-height: 800px;
+          background: #ffffff;
+          color: #0d0d0d;
+          font-family: Inter, system-ui, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          font-size: 13px;
+          line-height: 1.45;
+        "
+      >
+        <header
+          style="
+            min-height: 44px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px 24px;
+            padding: 0 24px;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 10px">
+            <img
+              src="/_blob/cdac635f71902c44dea602e8af131551"
+              alt="Advantage"
+              style="width: 105px; height: 18px"
+            />
+            <span
+              aria-hidden="true"
+              style="width: 1px; height: 14px; background: #e5e5ea"
+            ></span>
+            <span style="font-size: 12px; color: #6b6b76">Admin</span>
+          </div>
+          <nav
+            aria-label="Admin"
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              gap: 4px;
+            "
+          >
+            <a
+              href="#today"
+              aria-current="page"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 500;
+                background: #f5f5f5;
+              "
+              >Today</a
+            >
+            <a
+              href="#labels"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Labels</a
+            >
+            <a
+              href="#matches"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Matches</a
+            >
+            <a
+              href="#teams"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Teams</a
+            >
+          </nav>
+          <span
+            aria-label="Account menu, signed in as CG"
+            style="
+              width: 24px;
+              height: 24px;
+              border-radius: 999px;
+              background: #ededf0;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 11px;
+              font-weight: 600;
+              color: #52525b;
+            "
+            >CG</span
+          >
+        </header>
+
+        <main
+          style="
+            max-width: 1040px;
+            margin: 0 auto;
+            box-sizing: border-box;
+            padding: 48px clamp(16px, 4vw, 56px) 64px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+          "
+        >
+          <div>
+            <h1
+              style="
+                margin: 0;
+                font-size: 30px;
+                font-weight: 300;
+                line-height: 1.2;
+                letter-spacing: -0.01em;
+              "
+            >
+              7 things need you
+            </h1>
+            <p
+              style="
+                margin: 8px 0 0;
+                font-size: 13px;
+                color: #6b6b76;
+                font-variant-numeric: tabular-nums;
+              "
+            >
+              Longest wait first. This month: 57 matches analysed, 1 failed, 14
+              waiting to be labelled.
+            </p>
+          </div>
+
+          <div style="overflow-x: auto">
+            <section
+              aria-label="Needs you"
+              style="
+                min-width: 680px;
+                box-sizing: border-box;
+                padding: 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+              "
+            >
+              <div
+                aria-hidden="true"
+                style="
+                  display: grid;
+                  grid-template-columns: 110px minmax(0, 1fr) 64px 176px;
+                  column-gap: 16px;
+                  padding: 6px 8px 4px 16px;
+                  font-size: 11px;
+                  color: #6b6b76;
+                "
+              >
+                <span>Kind</span><span>What</span><span>Waiting</span
+                ><span></span>
+              </div>
+              <sc-for list="{{ rows }}" as="r" hint-placeholder-count="7">
+                <div
+                  style="
+                    box-sizing: border-box;
+                    min-height: 56px;
+                    padding: 8px 8px 8px 16px;
+                    border-radius: 8px;
+                    background: #ffffff;
+                    display: grid;
+                    grid-template-columns: 110px minmax(0, 1fr) 64px 176px;
+                    align-items: center;
+                    column-gap: 16px;
+                  "
+                >
+                  <span style="font-size: 12px; color: #6b6b76"
+                    >{{ r.kind }}</span
+                  >
+                  <a href="#open" style="min-width: 0"
+                    ><span
+                      style="
+                        display: block;
+                        font-size: 13px;
+                        font-weight: 500;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                      "
+                      >{{ r.title }}</span
+                    ><span
+                      style="
+                        display: block;
+                        font-size: 12px;
+                        color: #6b6b76;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                      "
+                      >{{ r.sub }}</span
+                    ></a
+                  >
+                  <sc-if value="{{ r.late }}" hint-placeholder-val="{{ false }}"
+                    ><span
+                      style="
+                        font-size: 12px;
+                        font-weight: 600;
+                        font-variant-numeric: tabular-nums;
+                        white-space: nowrap;
+                      "
+                      >{{ r.age }}</span
+                    ></sc-if
+                  >
+                  <sc-if value="{{ r.ok }}" hint-placeholder-val="{{ true }}"
+                    ><span
+                      style="
+                        font-size: 12px;
+                        color: #6b6b76;
+                        font-variant-numeric: tabular-nums;
+                        white-space: nowrap;
+                      "
+                      >{{ r.age }}</span
+                    ></sc-if
+                  >
+                  <span
+                    style="display: flex; justify-content: flex-end; gap: 6px"
+                  >
+                    <a
+                      href="#act"
+                      style="
+                        height: 28px;
+                        box-sizing: border-box;
+                        display: inline-flex;
+                        align-items: center;
+                        padding: 0 11px;
+                        border-radius: 7px;
+                        border: 1px solid #e0e0e5;
+                        font-size: 12px;
+                        font-weight: 500;
+                        white-space: nowrap;
+                      "
+                      >{{ r.a1 }}</a
+                    >
+                    <sc-if value="{{ r.a2 }}" hint-placeholder-val="{{ false }}"
+                      ><a
+                        href="#act2"
+                        style="
+                          height: 28px;
+                          box-sizing: border-box;
+                          display: inline-flex;
+                          align-items: center;
+                          padding: 0 11px;
+                          border-radius: 7px;
+                          border: 1px solid #e0e0e5;
+                          font-size: 12px;
+                          font-weight: 500;
+                          white-space: nowrap;
+                        "
+                        >{{ r.a2 }}</a
+                      ></sc-if
+                    >
+                  </span>
+                </div>
+              </sc-for>
+            </section>
+          </div>
+
+          <p style="margin: 0; font-size: 12px; color: #6b6b76">
+            Click a row's title to open it. Pilots, Conferences, Outreach and
+            the Pay report are in the account menu, top right.
+          </p>
+        </main>
+      </div>
+    </x-dc>
+    <script
+      type="text/x-dc"
+      data-dc-script
+      data-props='{"$preview":{"width":1360,"height":800}}'
+    >
+      class Component extends DCLogic {
+        renderVals() {
+          const r = (kind, title, sub, age, late, a1, a2) => ({ kind: kind, title: title, sub: sub, age: age, late: !!late, ok: !late, a1: a1, a2: a2 || '' });
+          return {
+            rows: [
+              r('Request', 'Lakeside College', 'R. Dunn is claiming the head coach seat', '2 days', false, 'Approve', 'Decline'),
+              r('To check', 'K. Lindahl vs T. Abara', 'Maya Rao published it yesterday, 3 h after it was due', '39 h', true, 'Check'),
+              r('Ask feedback', 'Thumbs down', '"Why did I lose more points on second serve?"', '1 day', false, 'Open'),
+              r('Analysis failed', 'J. Whitfield vs A. Moreno', 'The vendor returned an error', '6 h', false, 'Resubmit'),
+              r('Message', 'P. Nwosu', '"My score looks wrong in set 2."', '5 h', false, 'Reply'),
+              r('To check', 'C. Amato vs N. Fields', 'Dev Patel published it 2 h ago, on time', '2 h', false, 'Check'),
+              r('Pilot', 'M. Tanaka', '92% of this month’s video hours used', 'Today', false, 'Add hours')
+            ]
+          };
+        }
+      }
+    </script>
+  </body>
+</html>
