@@ -424,9 +424,11 @@ function FilmRoom({
   );
   // Fetch the room's code once the tab is idle, so the fullscreen glyph opens
   // it on the click rather than after a network round trip with nothing on
-  // screen. Still off the page's first load. A failed fetch here is harmless —
-  // the click loads it again through `dynamic`, and a failure there reaches the
-  // error boundary — so it is swallowed rather than left an unhandled rejection.
+  // screen. Still off the page's first load. A failed fetch here changes
+  // nothing on screen, so it is swallowed rather than left an unhandled
+  // rejection. It is not retried: the bundler keeps a failed chunk load, so the
+  // click then fails the same way through `dynamic` and reaches the route's
+  // error boundary, which is where a load the viewer asked for should report.
   useEffect(() => {
     const warm = () => {
       loadFilmFullscreen().catch(() => {});
