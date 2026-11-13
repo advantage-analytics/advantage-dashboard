@@ -734,7 +734,8 @@ test.describe("the labels-only flags", () => {
     // A serve the point ends on is never asked: deleting it is no fix.
     const ace = rallyOf(4, [["B", "serve"]]);
     ace.strokes[0].ballUntracked = true;
-    // Seen bouncing but not fitted: the same question, with its own words.
+    // Seen bouncing but not fitted: not asked. That stroke was the point's
+    // real last one on 52 of 92 hand-labelled points (2026-11-13).
     const poor = rallyOf(5, [
       ["A", "serve"],
       ["B", "groundstroke"],
@@ -746,14 +747,7 @@ test.describe("the labels-only flags", () => {
     );
     const of = (id: string) =>
       (marks.points[id] ?? []).filter((m) => m.code === "last_shot_untracked");
-    expect(of("p5")).toEqual([
-      {
-        code: "last_shot_untracked",
-        tier: "count",
-        scope: "point",
-        params: { eventId: poor.strokes[1].eventId, fit: "poor" },
-      },
-    ]);
+    expect(of("p5")).toEqual([]);
     expect(of("p1")).toEqual([
       {
         code: "last_shot_untracked",

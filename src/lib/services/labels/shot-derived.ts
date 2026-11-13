@@ -300,7 +300,7 @@ export function effectiveShotResult(
  * the column existed, or a caller that does not pass it) has nothing to
  * compare, so its ends win.
  */
-function labellerCall(shot: ResultReadableShot): boolean {
+export function labellerCall(shot: ResultReadableShot): boolean {
   if (shot.resultCalled === true) return true;
   if (shot.status === "added") return true;
   // A kept row holds its seed by definition; only an edit can carry a call.

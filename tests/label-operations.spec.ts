@@ -29,6 +29,7 @@ import {
   planPointRestore,
   planShotDelete,
   planShotRestore,
+  suggestedDeleteReason,
   hitterAfter,
   switchedHitter,
 } from "@/lib/services/labels/operations";
@@ -211,6 +212,48 @@ test.describe("delete and Undo", () => {
 test.describe("dead balls after a ball marked out", () => {
   const shots = orderLabelShots(POINT_1_SHOTS);
   const back = shots.find((s) => s.id === "s-return")!;
+
+  test("the delete dialog opens on the reason the strokes before it give", () => {
+    const row = (
+      id: string,
+      videoTime: number,
+      stroke: LabelShot["stroke"],
+      result: LabelShot["result"],
+    ): LabelShot => ({
+      ...POINT_1_SHOTS[0],
+      id,
+      videoTime,
+      stroke,
+      result,
+      status: "kept",
+      siteRemoval: null,
+    });
+    const rally = (results: LabelShot["result"][]) => [
+      row("serve", 1, "first_serve", results[0]),
+      row("second", 2, "second_serve", results[1]),
+      row("ball", 3, "forehand", results[2]),
+      row("dead", 4, "backhand", "in"),
+    ];
+    // After a rally ball out: the point had ended.
+    expect(
+      suggestedDeleteReason(rally(["net", "in", "out"]), "dead", true),
+    ).toBe("dead_ball_after_point");
+    // After a second serve out: a double fault.
+    expect(
+      suggestedDeleteReason(rally(["net", "out", "in"]), "ball", true),
+    ).toBe("dead_ball_after_fault");
+    // Straight after a faulted first serve: the returner swung at it.
+    expect(
+      suggestedDeleteReason(rally(["out", "in", "in"]), "second", true),
+    ).toBe("dead_ball_after_fault");
+    // Nothing before it says the ball was dead: the labeller picks.
+    expect(
+      suggestedDeleteReason(rally(["net", "in", "in"]), "dead", true),
+    ).toBeNull();
+    expect(
+      suggestedDeleteReason(rally(["in", "in", "in"]), "nope", true),
+    ).toBeNull();
+  });
 
   test("the live strokes after one, in video order; a tombstone or an unknown stroke counts for nothing", () => {
     // Serve, return, the deleted phantom, the added forehand.

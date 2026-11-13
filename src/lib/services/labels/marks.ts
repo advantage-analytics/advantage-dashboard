@@ -187,6 +187,12 @@ export const LABEL_ONLY_FLAGS = {
  * the labelled point at all, 16% with the rally going on past it) and 15% of
  * 84 untracked ones. So it is asked, in the grey list, with its own words.
  *
+ * 2026-11-13: the poorly fitted ball is no longer asked. On the checked
+ * points of the nine analyst sessions that carry the fit columns, the
+ * flagged stroke was kept as the point's last on 52 of 92 poorly fitted
+ * balls (57%), deleted on 25 (27%) and played past on 15; an untracked one
+ * was deleted on 13 of 19 (68%). Only the untracked ball asks "Extra shots?".
+ *
  * 2026-11-11: `serve_by_receiver` is new and counted. Emon van Loben Sels v
  * Eli Stephenson point 120 published a receiver's overhead as the counted
  * serve (the vendor had cut the rally in two there and the points were
@@ -309,11 +315,8 @@ export interface LabelMarkParams {
    * which stroke that ball was — the answer is written to that stroke only.
    */
   last_call_overruled: { vendorCall: "in" | "out" | "net"; eventId: number };
-  /**
-   * The vendor stroke the point ends on, whose ball was not tracked — or,
-   * with `fit: "poor"`, was seen bouncing but not tracked well.
-   */
-  last_shot_untracked: { eventId: number; fit?: "poor" };
+  /** The vendor stroke the point ends on, whose ball was not tracked. */
+  last_shot_untracked: { eventId: number };
   /**
    * The last ball (`shotId`), the call that would hand the point to the side
    * its locked game needs (`gameWinner`), and that side.
@@ -639,16 +642,12 @@ function pointMarks(
   const called = last
     ? rally?.strokes.find((stroke) => stroke.eventId === last.event_id)
     : undefined;
-  // A serve is never asked: deleting the point's only serve is no fix.
-  if (
-    (called?.ballUntracked || called?.ballFitPoor) &&
-    called.strokeType !== "serve"
-  ) {
+  // A serve is never asked: deleting the point's only serve is no fix. Nor
+  // a ball seen bouncing but fitted poorly (`ballFitPoor`): that stroke is
+  // the point's real last one more often than not.
+  if (called?.ballUntracked && called.strokeType !== "serve") {
     marks.push(
-      mark(LABEL_ONLY_FLAGS.LAST_SHOT_UNTRACKED, {
-        eventId: called.eventId,
-        ...(called.ballUntracked ? {} : { fit: "poor" as const }),
-      }),
+      mark(LABEL_ONLY_FLAGS.LAST_SHOT_UNTRACKED, { eventId: called.eventId }),
     );
   }
   if (last && called) {

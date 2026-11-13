@@ -181,9 +181,7 @@ export function reviewItemThenLabel(item: ReviewItem): string {
     case 2:
       return has("shot_after_point_end")
         ? "split or remove the shots after"
-        : has("last_shot_untracked")
-          ? "check the last shot"
-          : "check for two points in one";
+        : "check the last shot";
     case 3:
       return has("first_serve_fault_alone")
         ? "say how the serve ended"
@@ -736,7 +734,13 @@ function stepAnswers(
       for (const { mark } of openMembers(item)) {
         if (mark.code === "shot_after_point_end") {
           answers.push(...afterPointEndAnswers(mark, point));
-        } else if (mark.code === "serve_after_serve_in") {
+        }
+      }
+      break;
+    }
+    case 3: {
+      for (const { mark } of openMembers(item)) {
+        if (mark.code === "serve_after_serve_in") {
           answers.push({
             id: "split",
             label: SPLIT_ANSWER,
@@ -744,11 +748,6 @@ function stepAnswers(
             writes: [{ write: "split", shotId: mark.params.shotId }],
           });
         }
-      }
-      break;
-    }
-    case 3: {
-      for (const { mark } of openMembers(item)) {
         if (mark.code === "second_serve_as_first") {
           answers.push({
             id: "second-serve",

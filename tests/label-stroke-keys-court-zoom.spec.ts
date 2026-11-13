@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import {
   errorKindKeyPatch,
   errorKindShotId,
+  flagKeyShot,
   frameTimePatch,
   hasEarlierServe,
   isErrorKindKey,
@@ -375,6 +376,22 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     expect(source).toContain(
       "if (kept && expanded.shots.some((shot) => shot.id === kept.id))",
     );
+    // With none selected, a flag's own stroke comes before the point's
+    // first: "Extra shots?" lands on the last shot with nothing selected,
+    // and its keys must not go to the serve.
+    // Once the question is answered the court lets the stroke go; a key
+    // pressed then (a spin, say) is still about the stroke it landed on.
+    expect(source).toContain(
+      "reviewMode ? (step?.target.shotId ?? landedShotId.current) : null,",
+    );
+    expect(source).toContain(
+      "landedShotId.current = step?.target.shotId ?? null;",
+    );
+    const rally = [{ id: "serve" }, { id: "return" }, { id: "last" }];
+    expect(flagKeyShot(rally, "last")).toEqual({ id: "last" });
+    // No question about a stroke, or one no longer live: the first, as before.
+    expect(flagKeyShot(rally, null)).toBeNull();
+    expect(flagKeyShot(rally, "gone")).toBeNull();
     expect(source).toContain(
       "if (expanded && owner.id !== expanded.id) return false;",
     );

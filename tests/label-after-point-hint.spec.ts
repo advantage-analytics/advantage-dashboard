@@ -83,6 +83,91 @@ test.describe("pointEndedEarly", () => {
     expect(three).toBeNull();
   });
 
+  test("a miss the labeller called, anywhere, with any number of strokes after it", () => {
+    // Marked out by the labeller (the stored call left its seed): three
+    // strokes after it are more than the edit removes on its own.
+    const called = { status: "edited", result: "out" } as const;
+    const seed = { ...POINT_1_SHOTS[0].seed!, result: "in" as const };
+    const three = pointEndedEarly(
+      {
+        shots: [
+          stroke("a", IN),
+          stroke("b", LONG, { ...called, seed }),
+          stroke("c", IN),
+          stroke("d", IN),
+          stroke("e", IN),
+        ],
+      },
+      true,
+    );
+    expect(three?.params).toEqual({ shotId: "b", after: ["c", "d", "e"] });
+    expect(hintLabel(three!)).toBe("Did the point end here? 3 shots follow");
+    expect(markHover(three!, NAMES)).toBe(
+      "This shot is marked as a miss, yet 3 more strokes follow it. If the point ended here, answer yes to remove them, or split them into their own point. If the call is wrong, change the result or dismiss this.",
+    );
+    // Deleting one of them by hand leaves the question on the rest.
+    expect(
+      pointEndedEarly(
+        {
+          shots: [
+            stroke("a", IN),
+            stroke("b", LONG, { ...called, seed }),
+            stroke("c", IN, { status: "deleted", statusBeforeDelete: "kept" }),
+            stroke("d", IN),
+            stroke("e", IN),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "b", after: ["d", "e"] });
+    // A net call counts where a net read never does.
+    expect(
+      pointEndedEarly(
+        {
+          shots: [
+            stroke("a", IN, { result: "net", resultCalled: true }),
+            stroke("b", IN),
+            stroke("c", IN),
+            stroke("d", IN),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "a", after: ["b", "c", "d"] });
+    // Not a first serve's fault, not the last stroke, and not once a stroke
+    // after it has been looked at.
+    expect(
+      pointEndedEarly(
+        {
+          shots: [
+            stroke("a", LONG, {
+              stroke: "first_serve",
+              result: "out",
+              resultCalled: true,
+            }),
+            stroke("b", IN, { stroke: "second_serve" }),
+            stroke("c", IN),
+            stroke("d", IN, { result: "out", resultCalled: true }),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
+    expect(
+      pointEndedEarly(
+        {
+          shots: [
+            stroke("a", IN, { result: "out", resultCalled: true }),
+            stroke("b", IN),
+            stroke("c", IN, { status: "edited" }),
+            stroke("d", IN),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
+  });
+
   test("only the second-to-last stroke: an earlier out read is the point still going", () => {
     const hint = pointEndedEarly(
       {

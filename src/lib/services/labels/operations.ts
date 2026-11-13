@@ -296,6 +296,36 @@ export function deadBallReason(
     : "dead_ball_after_point";
 }
 
+/**
+ * The reason the delete dialog opens on for `shotId`, read off the live
+ * strokes before it: hit after the point ended when an earlier rally ball is
+ * out or in the net, hit after a fault when that miss is a second serve (a
+ * double fault) or the stroke straight before is a faulted first serve the
+ * returner swung at. Null when nothing before it says the ball was dead: the
+ * labeller picks.
+ */
+export function suggestedDeleteReason(
+  shots: readonly LabelShot[],
+  shotId: string,
+  ghosts: boolean,
+): Extract<
+  LabelDeleteReason,
+  "dead_ball_after_fault" | "dead_ball_after_point"
+> | null {
+  const ordered = orderLabelShots(shots);
+  const at = ordered.findIndex((shot) => shot.id === shotId);
+  if (at === -1) return null;
+  const before = ordered.slice(0, at).filter((s) => isLiveShot(s, ghosts));
+  const ended = before.find(
+    (s) => endsPointWhenMissed(s.stroke) && isMissedResult(s.result),
+  );
+  if (ended) return deadBallReason(ended.stroke);
+  const previous = before.at(-1);
+  return previous?.stroke === "first_serve" && isMissedResult(previous.result)
+    ? "dead_ball_after_fault"
+    : null;
+}
+
 /** What a batched remove answers about each stroke it tombstoned. */
 export interface LabelShotRemoved {
   id: string;

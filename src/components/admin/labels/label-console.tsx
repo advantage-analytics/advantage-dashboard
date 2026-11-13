@@ -96,6 +96,7 @@ import {
   applyPointRestore,
   applyShotDelete,
   deadBallsAfterMiss,
+  suggestedDeleteReason,
   applyShotRestore,
   applyShotsRemoved,
   deadBallReason,
@@ -342,6 +343,7 @@ import { useBrowserFullscreen } from "./use-browser-fullscreen";
 import {
   errorKindKeyPatch,
   errorKindShotId,
+  flagKeyShot,
   isLetKey,
   isNetKey,
   netKeyPatch,
@@ -1024,6 +1026,10 @@ export function LabelConsole({
   // Let go when the labeller clicks or selects in another point, or drives
   // the film a point on (`stepFilm`).
   const lastFlagPointId = useRef<string | null>(null);
+  // The stroke the last step landed on (`landOnStep`). Once its question is
+  // answered and nothing is left to ask, the court lets go of the stroke;
+  // a shot key pressed then is still about it (`keyShot`), not the serve.
+  const landedShotId = useRef<string | null>(null);
 
   // A row click makes its point current, seeks to its first stroke and holds
   // the rail, or re-follows when the point is the one already playing.
@@ -2299,6 +2305,7 @@ export function LabelConsole({
    */
   function landOnStep(point: LabelPoint, step: ReviewStep | null) {
     stopReplay();
+    landedShotId.current = step?.target.shotId ?? null;
     const active = document.activeElement as HTMLElement | null;
     if (active?.closest?.(JUMP_BLURS_SELECTOR)) active.blur();
     const target = step?.target ?? null;
@@ -3613,8 +3620,11 @@ export function LabelConsole({
       return true;
     };
     // The stroke a shot key acts on: the selected one while it is the open
-    // point's; else the open point's first, selected first so the next key
-    // lands on it too. A selection left behind in another point — the film
+    // point's; else the stroke the flag's question is about, while its
+    // review lasts (`flagKeyShot` — a step with nothing to place lands with
+    // no stroke selected, `landOnStep`), or the one its last question was
+    // about once all are answered; else the open point's first. Either
+    // is selected first so the next key lands on it too. A selection left behind in another point — the film
     // played or was clicked on into this one — never takes a key meant for
     // the point on screen. `accept`, when given, turns down a stroke before
     // it is selected, so a key with nothing to write moves nothing.
@@ -3629,7 +3639,12 @@ export function LabelConsole({
       if (kept && expanded.shots.some((shot) => shot.id === kept.id)) {
         return live;
       }
-      const first = liveShotsInOrder(expanded, drawsGhosts(marks))[0];
+      const strokes = liveShotsInOrder(expanded, drawsGhosts(marks));
+      const first =
+        flagKeyShot(
+          strokes,
+          reviewMode ? (step?.target.shotId ?? landedShotId.current) : null,
+        ) ?? strokes[0];
       if (!first || !accept(first)) return null;
       (document.activeElement as HTMLElement | null)?.blur?.();
       selectShot(first.id, undefined, { seek: false });
@@ -4826,6 +4841,15 @@ export function LabelConsole({
           names={names}
           onCancel={() => setConfirm(null)}
           onConfirm={confirmed}
+          initialReason={
+            confirm?.kind === "delete-shot"
+              ? suggestedDeleteReason(
+                  pointOfShot(points, confirm.shotId)?.shots ?? [],
+                  confirm.shotId,
+                  drawsGhosts(marks),
+                )
+              : null
+          }
           // A submitted session takes no edits, so Mark complete's "Mark
           // errors" has nowhere to go: Reopen is the way back to them.
           onAlternative={

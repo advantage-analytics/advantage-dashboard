@@ -480,15 +480,13 @@ export function acceptedHint(
   return answerable.toSorted((a, b) => at(a) - at(b))[0] ?? null;
 }
 
-/** A hint's first answer as its row orders them: a split before the rest. */
+/**
+ * The answer the accept key gives a hint: its yes — "Yes, remove N" under
+ * "Did the point end here?", not the split its row draws before it. A split
+ * is the answer only where it is the one offered.
+ */
 export function firstHintAction(hint: PointHint): PointHintAction | null {
-  return (
-    hint.actions.find(
-      (action) => action.label === HINT_ACTION_LABEL.shot_after_point_end,
-    ) ??
-    hint.actions[0] ??
-    null
-  );
+  return hint.actions[0] ?? null;
 }
 
 /**

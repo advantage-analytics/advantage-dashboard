@@ -1325,10 +1325,9 @@ function BlackEndedSuggestion({
   const first = accepted ? firstHintAction(hint) : null;
   // "Shot placement" can't move the score, so it never wears the amber.
   const grey = hint.code === "placement_missing";
-  // Split first, as the tray orders it; then the removal.
-  const actions = [...hint.actions].sort(
-    (x, y) => Number(!isSplit(x.label)) - Number(!isSplit(y.label)),
-  );
+  // As the hint lists them: its yes first, the one the accept key answers
+  // (`firstHintAction`), then the split.
+  const actions = hint.actions;
   return (
     <div
       data-row="suggested-end"

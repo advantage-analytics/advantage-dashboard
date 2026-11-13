@@ -52,6 +52,7 @@ import {
 } from "./session";
 import {
   effectiveShotResult,
+  labellerCall,
   inServeLandingMiss,
   isServeByReceiver,
   pastNet,
@@ -364,6 +365,12 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
  * the incoming one on the hitter's own side, which reads as a net ball. Held to
  * the second-to-last stroke, an out read ended the point 25 times in 47, and
  * a net read 6 times in 40.
+ *
+ * A miss the labeller called is no read (`calledMissPlayedOn`): out or net,
+ * anywhere in the rally, with any number of strokes after it. Marking a ball
+ * out takes one or two strokes with it (operations.ts `deadBallsAfterMiss`);
+ * three or more stay, and this is where "Yes, remove N" and "Split here" are
+ * offered for them.
  */
 export function pointEndedEarly(
   point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "dismissed">>,
@@ -371,12 +378,15 @@ export function pointEndedEarly(
 ): Extract<LabelMark, { code: "shot_after_point_end" }> | null {
   const live = liveShotsInOrder(point, ghosts);
   if (live.length < 2) return null;
-  const i = live.length - 2;
+  const called = calledMissPlayedOn(live);
+  const i = called === -1 ? live.length - 2 : called;
   const shot = live[i];
-  if (!endsPointWhenMissed(shot.stroke)) return null;
-  if (effectiveShotResult(shot) !== "out") return null;
-  // Met in the air where it reads out: played on, not a point over.
-  if (landingTakesContact(shot, live[i + 1], false)) return null;
+  if (called === -1) {
+    if (!endsPointWhenMissed(shot.stroke)) return null;
+    if (effectiveShotResult(shot) !== "out") return null;
+    // Met in the air where it reads out: played on, not a point over.
+    if (landingTakesContact(shot, live[i + 1], false)) return null;
+  }
   // Settled once the labeller has looked at this stroke or one after it:
   // dismissed the question there, or edited, added or deleted a stroke
   // after it.
@@ -390,8 +400,10 @@ export function pointEndedEarly(
         dismissed.has(pointEndedKey(s.id)) ||
         s.status === "edited" ||
         s.status === "added" ||
-        // A stroke added and deleted by mistake was never looked at.
-        (s.status === "deleted" && !isWithdrawnAdd(s)),
+        // A stroke added and deleted by mistake was never looked at. After a
+        // miss the labeller called, deleting one stroke of several answers
+        // nothing about the rest: the question stays while any is live.
+        (called === -1 && s.status === "deleted" && !isWithdrawnAdd(s)),
     );
   if (settled) return null;
   return {
@@ -403,6 +415,23 @@ export function pointEndedEarly(
       after: live.slice(i + 1).map((s) => s.id),
     },
   };
+}
+
+/**
+ * The index in `live` of the first stroke the labeller called out or into the
+ * net that ends the point (`endsPointWhenMissed`) and still has a live stroke
+ * after it; -1 when there is none. The stored call, and the labeller's
+ * (`labellerCall`): a seeded miss is the vendor's read, which
+ * `pointEndedEarly` trusts only at the end.
+ */
+function calledMissPlayedOn(live: readonly LabelShot[]): number {
+  return live.findIndex(
+    (shot, at) =>
+      at < live.length - 1 &&
+      endsPointWhenMissed(shot.stroke) &&
+      isMissedResult(shot.result) &&
+      labellerCall(shot),
+  );
 }
 
 /** A stroke with no landing placed, the labeller not having called it unclear. */
@@ -1193,12 +1222,7 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
   {
     id: 2,
     question: REVIEW_ITEM_QUESTION[2],
-    codes: [
-      "shot_after_point_end",
-      "last_shot_untracked",
-      "serve_after_serve_in",
-      "reserve_after_in",
-    ],
+    codes: ["shot_after_point_end", "last_shot_untracked"],
   },
   {
     id: 3,
@@ -1209,6 +1233,10 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
       "serve_by_receiver",
       "second_serve_called_out",
       "serve_in_landing_out",
+      // A serve after a serve in play is a question about the serves, not
+      // about a stroke too many at the end: asked here, apart from item 2.
+      "serve_after_serve_in",
+      "reserve_after_in",
     ],
   },
   {
@@ -1350,9 +1378,10 @@ function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
 /**
  * An item's tone from its members. Item 1 is `markTone`'s call (a missing
  * stroke near the end of the rally decides who hit the last ball); item 2 is
- * never amber ("Serve replayed" moved the winner on 22% of its points, the
- * base rate, 2026-11-05); item 3 only for a double
- * fault in question or a point stopping on a faulted first serve; item 4
+ * never amber; item 3 only for a double
+ * fault in question or a point stopping on a faulted first serve — not for
+ * "Serve replayed", which moved the winner on 22% of its points, the base
+ * rate (2026-11-05); item 4
  * when a counted mark or "Was the last ball out?" for a locked game
  * (`last_ball_against_game`) sits under it, or the point's winner is the
  * player its strokes say lost; item 5 is always the score; item 6 only for "Game cut
