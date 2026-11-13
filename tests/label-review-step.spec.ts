@@ -626,6 +626,22 @@ test.describe("end-of-point answers", () => {
     );
     expect(line?.target.shotId).toBe("c");
     expect(line?.replay).toEqual({ fromShotId: "d", toShotId: "d" });
+    // The real last ball with a phantom swing after it: the film starts at
+    // the ball asked about, not on the swing that follows it.
+    const phantom = step(
+      rally({}, ["d", { result: null }]),
+      marksOf({
+        [POINT]: [
+          mark("last_call_overruled", { vendorCall: "out", eventId: 103 }),
+        ],
+      }),
+    );
+    expect(phantom?.target.shotId).toBe("c");
+    expect(phantom?.replay).toEqual({ fromShotId: "c", toShotId: "d" });
+    // A last stroke with no time: the nearest timed stroke before it starts.
+    expect(
+      step(rally({}, ["d", { videoTime: null }]), disputed())?.replay,
+    ).toEqual({ fromShotId: "c", toShotId: "d" });
     // Not an ending question: no replay.
     expect(
       step(rally(), marksOf({ [POINT]: [mark("pick_winner", {})] }))?.replay,

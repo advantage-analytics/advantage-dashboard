@@ -31,6 +31,7 @@ import {
   type ReviewMember,
 } from "./marks-state";
 import {
+  BALL_BEFORE_WINNER,
   openMissingShot,
   reviewItemTarget,
   type ReviewTarget,
@@ -806,20 +807,35 @@ function stepAnswers(
 }
 
 /**
- * The film an end-of-point question plays: the last ball, whichever stroke
- * the question is about — a line call's court still opens on the ball before
- * the winner, but the film goes to the last shot as every other question's
+ * The film an end-of-point question plays: from the point's last ball through
+ * its last stroke. The last ball is the stroke the question is about
+ * (`target.shotId`, else the last stroke) — the last stroke itself, or the
+ * real last ball a phantom swing follows — except for a question asked of the
+ * ball before the winner (`BALL_BEFORE_WINNER`): its court still opens on
+ * that ball, but the film goes to the last shot as every other question's
  * does. Until 2026-11-11 it started three strokes before the last, and until
- * 2026-11-13 at the stroke asked about; either way the labeller sat through
- * balls on the way to the ending.
+ * 2026-11-13 a line call started a ball early; either way the labeller sat
+ * through balls on the way to the ending.
  */
-function stepReplay(point: LabelPoint, ghosts: boolean): ReviewReplay | null {
+function stepReplay(
+  item: ReviewItem,
+  point: LabelPoint,
+  target: ReviewTarget,
+  ghosts: boolean,
+): ReviewReplay | null {
   const live = liveShotsInOrder(point, ghosts);
   const last = live.at(-1);
   if (!last) return null;
+  const asked = live.findIndex((shot) => shot.id === target.shotId);
+  const beforeWinner =
+    asked === live.length - 2 &&
+    openMembers(item).some((m) => BALL_BEFORE_WINNER.has(m.mark.code));
+  const at = asked === -1 || beforeWinner ? live.length - 1 : asked;
   // A stroke with no time cannot start a replay: the nearest timed stroke
   // before it does.
-  const from = live.findLast((shot) => shot.videoTime !== null) ?? last;
+  const from =
+    live.slice(0, at + 1).findLast((shot) => shot.videoTime !== null) ??
+    live[at];
   return { fromShotId: from.id, toShotId: last.id };
 }
 
@@ -871,7 +887,7 @@ export function reviewStep(
       open.length === 1,
     ),
     then: stepThen(item, open[1]),
-    replay: item.id === 4 ? stepReplay(point, ghosts) : null,
+    replay: item.id === 4 ? stepReplay(item, point, target, ghosts) : null,
   };
 }
 

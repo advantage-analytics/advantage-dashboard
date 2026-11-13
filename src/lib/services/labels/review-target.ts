@@ -91,6 +91,15 @@ const ENDING_ONLY: ReadonlySet<LabelMarkCode> = new Set([
 ]);
 
 /**
+ * Item 4's members asked of the ball before the winner (`memberTarget`): a
+ * line call on it, and a winner its bounce reads as an error.
+ */
+export const BALL_BEFORE_WINNER: ReadonlySet<LabelMarkCode> = new Set([
+  "ending_suspect_line",
+  "winner_to_error_by_bounce",
+]);
+
+/**
  * Where a jump to `item` lands: the stroke it is about and the end of the
  * court to open on it.
  *
