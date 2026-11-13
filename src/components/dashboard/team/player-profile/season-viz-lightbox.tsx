@@ -1,5 +1,6 @@
 "use client";
 
+import type { PlayerChipLabels } from "@/components/dashboard/matches/match-detail/shots/player-chips";
 import {
   lazy,
   Suspense,
@@ -269,6 +270,7 @@ const NO_ADVANCED_OPTIONS = seasonAdvancedOptions([]);
 
 export function SeasonVizLightbox({
   data,
+  playerLabels,
   wallPlayer,
   analyzed,
   errorSplitJudged,
@@ -278,6 +280,8 @@ export function SeasonVizLightbox({
   /** The server's answer for the URL it last rendered; `null` on the wall
    *  and until the first answer for an opened card lands. */
   data: SeasonLightboxData | null;
+  /** The player switch's two words (`player-chips.tsx`). */
+  playerLabels: PlayerChipLabels;
   /** The wall's own You | Opponent, which closing restores — a player
    *  switched inside the lightbox does not leak onto the wall. */
   wallPlayer: PlayerFilter;
@@ -584,7 +588,11 @@ export function SeasonVizLightbox({
         panelActive={court.panelActive}
         onClose={close}
         onClearFilters={clearFilters}
-        player={{ value: state.filters.player, onChange: choosePlayer }}
+        player={{
+          value: state.filters.player,
+          onChange: choosePlayer,
+          labels: playerLabels,
+        }}
         filterPanel={{
           onChange: setFilters,
           sets: court.sets,

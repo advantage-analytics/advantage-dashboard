@@ -377,6 +377,7 @@ export default async function PlayerProfilePage({
                       playerId={playerId}
                       playerName={profile.name}
                       firstName={profile.firstName}
+                      isSelf={isSelf}
                       workspaceName={active.name}
                       workspaceRole={active.role}
                       query={query}
@@ -476,6 +477,7 @@ async function ProfileVisualizationsBody({
   playerId,
   playerName,
   firstName,
+  isSelf,
   workspaceName,
   workspaceRole,
   query,
@@ -484,6 +486,8 @@ async function ProfileVisualizationsBody({
   playerId: string;
   playerName: string;
   firstName: string;
+  /** The viewer is this player: the player switch says "You". */
+  isSelf: boolean;
   /** The program's name, for the Save dialog's "Share with team" row. */
   workspaceName: string;
   /** The viewer's role in the program: who may rename or delete a view. */
@@ -535,6 +539,7 @@ async function ProfileVisualizationsBody({
       <ProfileVisualizationsView
         playerName={playerName}
         firstName={firstName}
+        isSelf={isSelf}
         analyzed={season.analyzed}
         side={side}
         cards={buildSeasonCards(season.perMatch, side, bands)}

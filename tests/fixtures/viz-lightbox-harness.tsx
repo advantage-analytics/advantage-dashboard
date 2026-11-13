@@ -33,6 +33,8 @@ const match = {
   player1: { name: "Avery Kim", school: "West" },
   player2: { name: "Blake Rivera", school: "East" },
   isUserPlayer1: true,
+  // The player reading their own report: the player switch says "You".
+  viewerIsYou: true,
   score: {
     sets: [{ player1: 6, player2: 4 }],
     winner: "player1",

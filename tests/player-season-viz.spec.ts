@@ -1040,7 +1040,7 @@ test.describe("the Visualizations view, rendered", () => {
     expect(html).toContain('aria-label="View"');
     expect(html).toContain('aria-label="Player"');
     expect(html).toContain('aria-label="Legend"');
-    for (const chip of ["Default", "Saved", "You", "Opponent"])
+    for (const chip of ["Default", "Saved", "Chen", "Opponents"])
       expect(html).toContain(`>${chip}</button>`);
     // The empty wall, in the card's hairline, with a sentence about the season.
     expect(html).toContain('data-testid="season-viz-empty"');
@@ -1443,7 +1443,7 @@ test.describe("the Visualizations view, rendered", () => {
       { analyzed: 2, side: "you", cards: yours, lightbox: null },
       "tab=visualizations&player=opponent",
     );
-    expect(stale.html).toMatch(/aria-pressed="true"[^>]*>Opponent<\/button>/);
+    expect(stale.html).toMatch(/aria-pressed="true"[^>]*>Opponents<\/button>/);
     expect(stale.html).toContain('aria-busy="true"');
     expect(stale.html).toContain("pointer-events-none");
     expect(stale.html).toContain('data-stale=""');
@@ -1501,7 +1501,7 @@ test.describe("the Visualizations view, rendered", () => {
       { analyzed: 2, side: "opponent", cards, lightbox },
       "tab=visualizations&cut=returnPlacement&player=opponent",
     );
-    expect(html).toMatch(/aria-pressed="true"[^>]*>Opponent<\/button>/);
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Opponents<\/button>/);
     expect(shellProps).toHaveLength(1);
     const shell = shellProps[0];
     expect(shell.player!.value).toBe("opponent");

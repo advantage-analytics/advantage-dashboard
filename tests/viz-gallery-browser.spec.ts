@@ -112,7 +112,7 @@ test("the wall's Default and Saved collections open cards over the wall", async 
     "aria-pressed",
     "true",
   );
-  await page.getByRole("button", { name: "Opponent" }).click();
+  await page.getByRole("button", { name: "Blake" }).click();
   await expect(page).toHaveURL(/player=opponent/);
   await expect(
     defaults.locator('a[href*="cut=serve"][href*="player=opponent"]'),
