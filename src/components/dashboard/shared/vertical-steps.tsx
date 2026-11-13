@@ -175,6 +175,13 @@ function DashRing({ ink }: { ink: string }) {
   );
 }
 
+/**
+ * Every mark is `relative` (the spinner is already a containing block through
+ * its transform) so its `sr-only` label stays inside it. `sr-only` is
+ * `position: absolute`: with no positioned ancestor it is laid out against the
+ * document, escapes the dashboard's scrolling column, and makes the page itself
+ * scroll into blank space below the shell — the help centre did exactly that.
+ */
 export function StepMark({
   state,
   size = "default",
@@ -188,7 +195,7 @@ export function StepMark({
     case "done":
       return (
         <span
-          className={`flex ${box} items-center justify-center rounded-full bg-[var(--ink-100)]`}
+          className={`relative flex ${box} items-center justify-center rounded-full bg-[var(--ink-100)]`}
         >
           <Check
             className={`${glyph} text-[var(--ink-600)]`}
@@ -211,7 +218,7 @@ export function StepMark({
     case "fail":
       return (
         <span
-          className={`flex ${box} items-center justify-center rounded-full bg-[rgba(229,24,55,0.08)]`}
+          className={`relative flex ${box} items-center justify-center rounded-full bg-[rgba(229,24,55,0.08)]`}
         >
           <X
             className={`${glyph} text-[var(--danger)]`}
@@ -224,7 +231,7 @@ export function StepMark({
     case "stopped":
       return (
         <span
-          className={`flex ${box} items-center justify-center rounded-full bg-[var(--ink-100)]`}
+          className={`relative flex ${box} items-center justify-center rounded-full bg-[var(--ink-100)]`}
         >
           <X
             className={`${glyph} text-[var(--ink-600)]`}
@@ -236,7 +243,7 @@ export function StepMark({
       );
     case "wait":
       return (
-        <span className={`flex ${box}`} role="status">
+        <span className={`relative flex ${box}`} role="status">
           <DashRing ink="var(--ink-400)" />
           <span className="sr-only">Waiting:</span>
         </span>
@@ -244,7 +251,7 @@ export function StepMark({
     case "later":
       // Dashed means waiting for something real.
       return (
-        <span className={`flex ${box}`}>
+        <span className={`relative flex ${box}`}>
           <DashRing ink="var(--ink-300)" />
           <span className="sr-only">Not started:</span>
         </span>
@@ -253,7 +260,7 @@ export function StepMark({
       // Solid, not dashed: nothing is coming. `later`'s box, one ink lighter.
       return (
         <span
-          className={`${box} rounded-full border-[1.5px] border-[var(--ink-200)]`}
+          className={`relative ${box} rounded-full border-[1.5px] border-[var(--ink-200)]`}
         >
           <span className="sr-only">Not analyzed:</span>
         </span>
