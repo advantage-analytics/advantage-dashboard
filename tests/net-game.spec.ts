@@ -221,6 +221,30 @@ test.describe("netEntryOf", () => {
     expect(netEntryOf(OPP_ERROR, true)).toBe("approach");
   });
 
+  test("serve and volley needs the server's next shot to be a volley", () => {
+    const plusOne = (type: string, returnLy: number) =>
+      netEntryOf(
+        p("x", {
+          server: 1,
+          winner: 1,
+          resultType: "Forehand Winner",
+          shots: [
+            s(1, true, "First Serve", { cy: 0, ly: 17 }),
+            s(2, false, "Backhand", { cy: 22, ly: returnLy }),
+            s(3, true, type, { cy: 9 }),
+          ],
+        }),
+        true,
+      );
+    expect(plusOne("Backhand Volley", 2)).toBe("serve-volley");
+    // A groundstroke from inside the service line, or an overhead: the server
+    // came in, but not by serving and volleying.
+    expect(plusOne("Forehand", 2)).toBe("approach");
+    expect(plusOne("Overhead", 2)).toBe("approach");
+    // ...and off a short return it was drawn in.
+    expect(plusOne("Forehand", 10)).toBe("drawn-in");
+  });
+
   test("null when the side never came in", () => {
     expect(netEntryOf(YOU_LOB, true)).toBeNull();
     expect(netEntryOf(SERVE_VOLLEY, false)).toBeNull();
